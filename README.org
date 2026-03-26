@@ -27,10 +27,10 @@ Within the Clinkz architecture, this crate acts as the "source of truth" for:
 This project is a modernized "friendly fork" and the designated spiritual successor to the original      [[https://github.com/wot-rust/wot][wot]]. We are refactoring the codebase to ensure long-term maintainability and alignment with the Clinkz platform's performance requirements.
 
 * Roadmap [0/4]
-** [ ] Port core ~Thing~ models to WoT 1.1 Spec.
-** [ ] Ensure seamless ~no_std~ compatibility for heterogeneous edge nodes.
-** [ ] Implement Clinkz-specific vocabulary extensions for industrial AI.
-** [ ] Integrate with Clinkz-Engine for automated asset twin generation.
+- [ ] Port core ~Thing~ models to WoT 1.1 Spec.
+- [ ] Ensure seamless ~no_std~ compatibility for heterogeneous edge nodes.
+- [ ] Implement Clinkz-specific vocabulary extensions for industrial AI.
+- [ ] Integrate with Clinkz-Engine for automated asset twin generation.
 
 * License
 This project is licensed under the MIT License. See the ~LICENSE~ file for details.
