@@ -1,0 +1,13 @@
+[package]
+name = "clinkz-wot-td"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+
+[features]
+default = ["std"]
+std = ["serde/std", "serde_json/std"]
+alloc = ["serde/alloc", "serde_json/alloc"]

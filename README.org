@@ -1,0 +1,36 @@
+#+title: clinkz-wot
+#+description: The core Thing Description implementation for the Clinkz IoT Platform.
+#+LANGUAGE: en
+
+* Introduction
+clinkz-wot is a high-performance Rust implementation of the W3C Web of Things (WoT) 1.1 Specification. It serves as the Schema & Modeling Engine for the [[https://github.com/clinkz][Clinkz]] ecosystem, providing a standardized way to describe, discover, and interoperate with physical and virtual assets across the entire platform.
+
+* Role in Clinkz Ecosystem
+Within the Clinkz architecture, this crate acts as the "source of truth" for:
+- *Identity*: Integrating with Clinkz-Auth (OAuth2/OIDC) for secure interaction.
+
+- *Persistence*: Defining the data schemas stored in QuestDB and IoTDB.
+
+- *Edge-to-Cloud*: Providing a unified model that scales from bare-metal edge nodes to distributed backend services.
+
+* Key Features
+
+- *Standard-Compliant*: Full support for WoT 1.1 Thing Descriptions (TD).
+
+- *Infrastructure-Agnostic*: Designed for ~no_std~ environments by default, but fully optimized for high-throughput cloud services.
+
+- *Type-Driven Design*: Enforces W3C specification constraints at compile-time using Rust's powerful type system.
+
+- *Extensible*: Built-in support for custom Clinkz-specific protocol bindings and security schemes.
+
+* Project Status
+This project is a modernized "friendly fork" and the designated spiritual successor to the original      [[https://github.com/wot-rust/wot][wot]]. We are refactoring the codebase to ensure long-term maintainability and alignment with the Clinkz platform's performance requirements.
+
+* Roadmap [0/4]
+** [ ] Port core ~Thing~ models to WoT 1.1 Spec.
+** [ ] Ensure seamless ~no_std~ compatibility for heterogeneous edge nodes.
+** [ ] Implement Clinkz-specific vocabulary extensions for industrial AI.
+** [ ] Integrate with Clinkz-Engine for automated asset twin generation.
+
+* License
+This project is licensed under the MIT License. See the ~LICENSE~ file for details.
