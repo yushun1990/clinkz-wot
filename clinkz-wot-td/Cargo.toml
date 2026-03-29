@@ -4,10 +4,12 @@ version.workspace = true
 edition.workspace = true
 
 [dependencies]
-serde.workspace = true
-serde_json.workspace = true
+fluent-uri = { version = "0.4", features = ["alloc", "serde"], default-features = false }
+
+serde = { workspace = true, features = ["derive", "alloc"] }
+serde_json = { workspace = true, features = ["alloc"] }
+serde_with = { version = "3.18", features = ["macros", "alloc"], default-features = false }
 
 [features]
 default = ["std"]
-std = ["serde/std", "serde_json/std"]
-alloc = ["serde/alloc", "serde_json/alloc"]
+std = ["serde/std", "serde_json/std", "serde_with/std", "fluent-uri/std"]
