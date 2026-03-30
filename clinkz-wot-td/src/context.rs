@@ -4,34 +4,11 @@ use alloc::string::String;
 use fluent_uri::Uri;
 use serde::{Deserialize, Serialize};
 
+use crate::data_type::AnyUri;
+
 pub const WOT_CONTEXT_1_0: &str = "https://www.w3c.org/2019/wot/td/v1";
 pub const WOT_CONTEXT_1_1: &str = "https://www.w3c.org/2022/wot/td/v1.1";
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(transparent)]
-pub struct AnyUri(Uri<String>);
-
-impl AnyUri {
-    /// Creates an AnyUri from a static string, panicking on invalid input.
-    /// Internal use only for known-good constants.
-    pub(crate) fn from_static(s: &'static str) -> Self {
-        Self(Uri::parse(s).expect("Invalid static URI").to_owned())
-    }
-
-    pub fn as_str(&self) -> &str {
-        self.0.as_str()
-    }
-
-    pub fn parse(s: &str) -> Result<Self, fluent_uri::ParseError> {
-        Ok(Self(Uri::parse(s)?.to_owned()))
-    }
-}
-
-impl PartialEq<str> for AnyUri {
-    fn eq(&self, other: &str) -> bool {
-        self.0.as_str() == other
-    }
-}
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(untagged)]

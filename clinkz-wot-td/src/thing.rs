@@ -1,29 +1,11 @@
-use alloc::{collections::BTreeMap, string::String};
+use alloc::string::String;
+use time::format_description::well_known::Rfc3339;
 
 use serde::{Deserialize, Serialize};
 use serde_with::{serde_as, skip_serializing_none};
+use time::OffsetDateTime;
 
-use crate::context::Context;
-
-
-#[derive(Debug, Default, Deserialize, Serialize, Clone, Copy, PartialEq, Eq)]
-pub struct Nil;
-
-/// A map of language tags to strings (e.g., {"en": "Light", "zh": "灯"})
-///
-/// Using BTreeMap instead of HashMap to ensure daterministic serialization order.
-#[derive(Debug, Default, Deserialize, Serialize, Clone, PartialEq, Eq)]
-pub struct MultiLanguage(BTreeMap<String, String>);
-
-impl MultiLanguage {
-    pub fn new() -> Self {
-        Self(BTreeMap::new())
-    }
-
-    pub fn add(&mut self, lang: &str, text: &str) {
-        self.0.insert(String::from(lang), String::from(text));
-    }
-}
+use crate::{context::Context, data_type::{AnyUri, MultiLanguage, Nil, VersionInfo}};
 
 
 #[serde_as]
@@ -53,6 +35,26 @@ pub struct Thing<Ext = Nil> {
 
     /// Multi-language descriptions (optional).
     pub descriptions: Option<MultiLanguage>,
+
+    /// Provides a version information.
+    pub version: Option<VersionInfo>,
+
+    /// Provides information when the TD instance was created.
+    #[serde_as(as = "Option<Rfc3339>")]
+    pub created: Option<OffsetDateTime>,
+
+    /// Provides information when the TD instance was last modified.
+    #[serde_as(as = "Option<Rfc3339>")]
+    pub modified: Option<OffsetDateTime>,
+
+    /// Provides information about the TD maintainer as URI scheme.
+    pub support: Option<AnyUri>,
+
+    /// Define the base URI that is used for all relative URI references
+    /// throughout a TD document. In TD instances, all relative URIs
+    /// are resovled relative to the base URI using the algorithm defnied
+    /// in [RFC3986]
+    pub base: Option<AnyUri>,
 
     #[serde(flatten)]
     pub _extra_fields: Ext
