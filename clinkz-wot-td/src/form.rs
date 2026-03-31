@@ -13,7 +13,7 @@ use crate::data_type::{AdditionalExpectedResponse, AnyUri, ExpectedResponse, Ope
 /// itself for meta-interactions.
 #[serde_as]
 #[skip_serializing_none]
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Form {
     /// Target IRI of the resource or service.

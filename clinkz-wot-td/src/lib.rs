@@ -9,4 +9,8 @@ pub mod thing;
 pub mod context;
 pub mod form;
 pub mod link;
+pub mod affordance;
+pub mod data_schema;
+pub mod security_schema;
+pub mod util;
 pub mod data_type;

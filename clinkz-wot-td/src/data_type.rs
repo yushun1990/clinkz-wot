@@ -1,11 +1,14 @@
+use alloc::vec::Vec;
 use alloc::string::String;
 use alloc::collections::BTreeMap;
 
 use fluent_uri::Uri;
 use serde::{Deserialize, Serialize};
-use serde_with::skip_serializing_none;
+use serde_with::{serde_as, skip_serializing_none, OneOrMany};
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+use crate::util::deserialize_bool_flexible;
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(transparent)]
 pub struct AnyUri(pub Uri<String>);
 
@@ -31,13 +34,13 @@ impl PartialEq<str> for AnyUri {
     }
 }
 
-#[derive(Debug, Default, Deserialize, Serialize, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Default, Deserialize, Serialize, Clone, Copy, PartialEq)]
 pub struct Nil;
 
 /// A map of language tags to strings (e.g., {"en": "Light", "zh": "灯"})
 ///
 /// Using BTreeMap instead of HashMap to ensure daterministic serialization order.
-#[derive(Debug, Default, Deserialize, Serialize, Clone, PartialEq, Eq)]
+#[derive(Debug, Default, Deserialize, Serialize, Clone, PartialEq)]
 pub struct MultiLanguage(BTreeMap<String, String>);
 
 impl MultiLanguage {
@@ -51,7 +54,7 @@ impl MultiLanguage {
 }
 
 /// Metadata of a Thing that provides version information about the TD document.
-#[derive(Debug, Default, Serialize, Deserialize, Clone, PartialEq, Eq)]
+#[derive(Debug, Default, Serialize, Deserialize, Clone, PartialEq)]
 pub struct VersionInfo {
     /// Provides a version indicator of this TD.
     instance: String,
@@ -60,7 +63,7 @@ pub struct VersionInfo {
 }
 
 /// Operation types of form.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Operation {
     ReadProperty,
@@ -83,7 +86,7 @@ pub enum Operation {
 /// Communication metadata describing the expected response message for the
 /// primary response.
 #[skip_serializing_none]
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ExpectedResponse {
     /// Media type of the response payload (e.g., "application/json").
@@ -93,7 +96,7 @@ pub struct ExpectedResponse {
 /// Communication metadata describing the expected response message for
 /// additional responses.
 #[skip_serializing_none]
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AdditionalExpectedResponse {
     /// Flatten the core fields into this struct.
@@ -104,6 +107,30 @@ pub struct AdditionalExpectedResponse {
     pub schema: Option<String>,
 
     /// Indicates if this response is for an error case.
-    #[serde(default)]
+    #[serde(default, deserialize_with = "deserialize_bool_flexible")]
     pub success: bool,
+}
+
+#[serde_as]
+#[skip_serializing_none]
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Metadata {
+    /// JSON-LD keyword to label the object with semantic tags.
+    #[serde(rename = "@type")]
+    #[serde_as(as = "Option<OneOrMany<_>>")]
+    pub tags: Option<Vec<String>>,
+
+    /// Provides a human-readable title.
+    pub title: Option<String>,
+
+    /// Provides multi-language human-readable titles.
+    pub titles: Option<MultiLanguage>,
+
+    /// Provides additional (human-readable) information based on a
+    /// default language.
+    pub description: Option<String>,
+
+    /// Multi-language descriptions.
+    pub descriptions: Option<MultiLanguage>,
 }

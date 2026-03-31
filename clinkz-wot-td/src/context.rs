@@ -10,7 +10,7 @@ pub const WOT_CONTEXT_1_0: &str = "https://www.w3.org/2019/wot/td/v1";
 pub const WOT_CONTEXT_1_1: &str = "https://www.w3.org/2022/wot/td/v1.1";
 
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum ContextEntry {
     Uri(AnyUri),
@@ -18,7 +18,7 @@ pub enum ContextEntry {
 }
 
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Context {
     entries: Vec<ContextEntry>
 }

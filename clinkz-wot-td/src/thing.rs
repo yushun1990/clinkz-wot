@@ -1,13 +1,12 @@
-use alloc::vec::Vec;
-
 use alloc::string::String;
+
+use time::OffsetDateTime;
 use time::format_description::well_known::Rfc3339;
 
 use serde::{Deserialize, Serialize};
-use serde_with::{serde_as, skip_serializing_none, OneOrMany};
-use time::OffsetDateTime;
+use serde_with::{serde_as, skip_serializing_none};
 
-use crate::{context::Context, data_type::{AnyUri, MultiLanguage, Nil, VersionInfo}};
+use crate::{context::Context, data_type::{AnyUri, Metadata, Nil, VersionInfo}};
 
 
 /// An abstraction of a physical or virtual entity whose metadata and interfaces are
@@ -27,25 +26,12 @@ pub struct Thing<Ext = Nil> {
     #[serde(rename = "@context")]
     pub context: Context,
 
-    /// JSON-LD keyword to label the object with semantic tags(or types).
-    #[serde(rename = "@type")]
-    #[serde_as(as = "Option<OneOrMany<_>>")]
-    pub tags: Option<Vec<String>>,
-
     /// Unique identifier of the Thing (optional by recommended).
     pub id: Option<String>,
 
-    /// Human-readable title.
-    pub title: String,
-
-    /// Multi-language titles (optional).
-    pub titles: Option<MultiLanguage>,
-
-    /// Human-readable additional information (optional).
-    pub description: Option<String>,
-
-    /// Multi-language descriptions (optional).
-    pub descriptions: Option<MultiLanguage>,
+    /// metadata
+    #[serde(flatten)]
+    pub _metadata: Metadata,
 
     /// Provides a version information.
     pub version: Option<VersionInfo>,

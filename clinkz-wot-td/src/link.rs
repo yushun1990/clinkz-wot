@@ -1,11 +1,14 @@
+use alloc::vec::Vec;
 use alloc::string::String;
+
 use serde::{Deserialize, Serialize};
-use serde_with::skip_serializing_none;
+use serde_with::{serde_as, skip_serializing_none, OneOrMany};
 
 use crate::data_type::AnyUri;
 
+#[serde_as]
 #[skip_serializing_none]
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Link {
     /// Target IRI of the link.
@@ -27,5 +30,6 @@ pub struct Link {
     pub sizes: Option<String>,
 
     /// Language of the target resource (BCP47).
-    pub hreflang: Option<String>,
+    #[serde_as(as = "Option<OneOrMany<_>>")]
+    pub hreflang: Option<Vec<String>>,
 }
