@@ -3,6 +3,7 @@ use alloc::collections::BTreeMap;
 
 use fluent_uri::Uri;
 use serde::{Deserialize, Serialize};
+use serde_with::skip_serializing_none;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(transparent)]
@@ -56,4 +57,53 @@ pub struct VersionInfo {
     instance: String,
     /// Provides a version indicator of underlying TM.
     model: Option<String>
+}
+
+/// Operation types of form.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Operation {
+    ReadProperty,
+    WriteProperty,
+    ObserveProperty,
+    UnobserveProperty,
+    InvokeAction,
+    QueryAction,
+    CancelAction,
+    SubscribeEvent,
+    UnsubscribeEvent,
+    ReadAllProperties,
+    WriteAllProperties,
+    ObserveAllProperties,
+    UnobserveAllProperties,
+    SubscribeAllEvents,
+    UnsubscribeAllEvents,
+}
+
+/// Communication metadata describing the expected response message for the
+/// primary response.
+#[skip_serializing_none]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ExpectedResponse {
+    /// Media type of the response payload (e.g., "application/json").
+    pub content_type: String,
+}
+
+/// Communication metadata describing the expected response message for
+/// additional responses.
+#[skip_serializing_none]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AdditionalExpectedResponse {
+    /// Flatten the core fields into this struct.
+    #[serde(flatten)]
+    pub _expected_response: ExpectedResponse,
+
+    /// For HTTP, this might be "Content-Range".
+    pub schema: Option<String>,
+
+    /// Indicates if this response is for an error case.
+    #[serde(default)]
+    pub success: bool,
 }

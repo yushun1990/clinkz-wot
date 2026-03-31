@@ -1,13 +1,18 @@
+use alloc::vec::Vec;
+
 use alloc::string::String;
 use time::format_description::well_known::Rfc3339;
 
 use serde::{Deserialize, Serialize};
-use serde_with::{serde_as, skip_serializing_none};
+use serde_with::{serde_as, skip_serializing_none, OneOrMany};
 use time::OffsetDateTime;
 
 use crate::{context::Context, data_type::{AnyUri, MultiLanguage, Nil, VersionInfo}};
 
 
+/// An abstraction of a physical or virtual entity whose metadata and interfaces are
+/// described by a WoT Thing Description, whereas a virtual entity is the composition
+/// os one or more Things.
 #[serde_as]
 #[skip_serializing_none]
 #[derive(Deserialize, Serialize)]
@@ -17,9 +22,15 @@ use crate::{context::Context, data_type::{AnyUri, MultiLanguage, Nil, VersionInf
     deserialize = "Ext: Deserialize<'de>"
 ))]
 pub struct Thing<Ext = Nil> {
-    /// The JONS-LD Context.
+    /// JSON-LD keyword to define short-hand names called terms that are used throughout
+    /// a TD document.
     #[serde(rename = "@context")]
     pub context: Context,
+
+    /// JSON-LD keyword to label the object with semantic tags(or types).
+    #[serde(rename = "@type")]
+    #[serde_as(as = "Option<OneOrMany<_>>")]
+    pub tags: Option<Vec<String>>,
 
     /// Unique identifier of the Thing (optional by recommended).
     pub id: Option<String>,

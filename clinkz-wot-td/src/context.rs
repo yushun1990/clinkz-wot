@@ -6,8 +6,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::data_type::AnyUri;
 
-pub const WOT_CONTEXT_1_0: &str = "https://www.w3c.org/2019/wot/td/v1";
-pub const WOT_CONTEXT_1_1: &str = "https://www.w3c.org/2022/wot/td/v1.1";
+pub const WOT_CONTEXT_1_0: &str = "https://www.w3.org/2019/wot/td/v1";
+pub const WOT_CONTEXT_1_1: &str = "https://www.w3.org/2022/wot/td/v1.1";
 
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
