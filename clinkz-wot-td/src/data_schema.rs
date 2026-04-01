@@ -39,7 +39,7 @@ pub struct DataSchemaContext {
 
     /// Indicate whether a property value is write only.
     #[serde(default, deserialize_with = "deserialize_bool_flexible")]
-    pub write_onle: bool,
+    pub write_only: bool,
 
     /// Allows validation based on a format pattern such as
     /// "date-time", "email", "uri", etc.
@@ -66,7 +66,7 @@ pub struct ArraySchema {
     /// Define the minimum number of items that have to be in the array.
     pub min_items: Option<u32>,
 
-    /// Define the maximum number of items that hava to be in the array.
+    /// Define the maximum number of items that have to be in the array.
     pub max_items: Option<u32>,
 }
 

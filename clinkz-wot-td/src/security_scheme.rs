@@ -26,11 +26,11 @@ pub struct SecuritySchemeContext {
     /// access to.
     pub proxy: Option<AnyUri>,
 
-    /// Identification of the scurity mechanism being configured.
+    /// Identification of the security mechanism being configured.
     pub schema: String,
 }
 
-/// A scurity configuration corresponding to identified by the
+/// A security configuration corresponding to identified by the
 /// Vocabulary Term `nosec`.
 #[skip_serializing_none]
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
@@ -40,7 +40,7 @@ pub struct NoSecurityScheme {
     pub _context: SecuritySchemeContext,
 }
 
-/// A scurity configuration corresponding to identified by the
+/// A security configuration corresponding to identified by the
 /// Vocabulary Term `auto`.
 #[skip_serializing_none]
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
@@ -50,7 +50,7 @@ pub struct AutoSecurityScheme {
     pub _context: SecuritySchemeContext,
 }
 
-/// A scurity configuration corresponding to identified by the
+/// A security configuration corresponding to identified by the
 /// Vocabulary Term `combo`.
 #[skip_serializing_none]
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
@@ -59,12 +59,12 @@ pub struct ComboSecurityScheme {
     #[serde(flatten)]
     pub _context: SecuritySchemeContext,
 
-    /// Array of two or more strings identifying other named scurity
+    /// Array of two or more strings identifying other named security
     /// scheme definitions, any one of which, when satisfied, will
     /// allow access.
     pub one_of: Vec<String>,
 
-    /// Array of two or more strings identifying other named scurity
+    /// Array of two or more strings identifying other named security
     /// scheme definitions, all of which must be satisfied for access.
     pub all_of: Vec<String>,
 }
@@ -85,7 +85,7 @@ impl Default for SecurityLocation {
     }
 }
 
-/// A scurity configuration corresponding to identified by the
+/// A security configuration corresponding to identified by the
 /// Vocabulary Term `basic`.
 #[skip_serializing_none]
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
@@ -97,7 +97,7 @@ pub struct BasicSecurityScheme {
     /// Name for query, header, cookie, or uri parameters.
     pub name: Option<String>,
 
-    /// Specifies the location of scurity authentication information.
+    /// Specifies the location of security authentication information.
     #[serde(default, rename = "in")]
     pub location: SecurityLocation,
 }
@@ -117,7 +117,7 @@ impl Default for Qop {
     }
 }
 
-/// A scurity configuration corresponding to identified by the
+/// A security configuration corresponding to identified by the
 /// Vocabulary Term `digest`.
 #[skip_serializing_none]
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
@@ -129,7 +129,7 @@ pub struct DigestSecurityScheme {
     /// Name for query, header, cookie, or uri parameters.
     pub name: Option<String>,
 
-    /// Specifies the location of scurity authentication information.
+    /// Specifies the location of security authentication information.
     #[serde(default, rename = "in")]
     pub location: SecurityLocation,
 
@@ -138,7 +138,7 @@ pub struct DigestSecurityScheme {
     pub qop: Qop
 }
 
-/// A scurity configuration corresponding to identified by the
+/// A security configuration corresponding to identified by the
 /// Vocabulary Term `apikey`.
 #[skip_serializing_none]
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
@@ -150,7 +150,7 @@ pub struct APIKeySecurityScheme {
     /// Name for query, header, cookie, or uri parameters.
     pub name: Option<String>,
 
-    /// Specifies the location of scurity authentication information.
+    /// Specifies the location of security authentication information.
     #[serde(default, rename = "in")]
     pub location: SecurityLocation,
 }
@@ -165,7 +165,7 @@ fn default_format() -> String {
     "jwt".to_string()
 }
 
-/// A scurity configuration corresponding to identified by the
+/// A security configuration corresponding to identified by the
 /// Vocabulary Term `bearer`.
 #[skip_serializing_none]
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
@@ -188,12 +188,12 @@ pub struct BearerSecurityScheme {
     #[serde(default = "default_format")]
     pub format: String,
 
-    /// Specifies the location of scurity authentication information.
+    /// Specifies the location of security authentication information.
     #[serde(default, rename = "in")]
     pub location: SecurityLocation,
 }
 
-/// A scurity configuration corresponding to identified by the
+/// A security configuration corresponding to identified by the
 /// Vocabulary Term `psk`.
 #[skip_serializing_none]
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
@@ -207,7 +207,7 @@ pub struct PSKSecurityScheme {
     pub identity: Option<String>,
 }
 
-/// A scurity configuration corresponding to identified by the
+/// A security configuration corresponding to identified by the
 /// Vocabulary Term `oauth2`.
 #[serde_as]
 #[skip_serializing_none]
@@ -236,7 +236,7 @@ pub struct OAuth2SecurityScheme {
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "lowercase")]
-pub enum ScurityScheme {
+pub enum SecurityScheme {
     NoSec(NoSecurityScheme),
     Auto(AutoSecurityScheme),
     Combo(ComboSecurityScheme),

@@ -53,6 +53,8 @@ pub struct Thing<Ext = Nil> {
     /// in [RFC3986]
     pub base: Option<AnyUri>,
 
+
+
     #[serde(flatten)]
     pub _extra_fields: Ext
 }
