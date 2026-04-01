@@ -39,7 +39,7 @@ pub struct Nil;
 
 /// A map of language tags to strings (e.g., {"en": "Light", "zh": "灯"})
 ///
-/// Using BTreeMap instead of HashMap to ensure daterministic serialization order.
+/// Using BTreeMap instead of HashMap to ensure deterministic serialization order.
 #[derive(Debug, Default, Deserialize, Serialize, Clone, PartialEq)]
 pub struct MultiLanguage(BTreeMap<String, String>);
 
