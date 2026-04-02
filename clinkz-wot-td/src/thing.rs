@@ -1,4 +1,4 @@
-use alloc::{string::String, collections::BTreeMap, vec::Vec};
+use alloc::{string::{String, ToString}, format, collections::BTreeMap, vec::Vec};
 
 use time::OffsetDateTime;
 use time::format_description::well_known::Rfc3339;
@@ -13,7 +13,7 @@ use crate::{
     data_type::{AnyUri, Metadata, Nil, VersionInfo},
     form::Form,
     link::Link,
-    security_scheme::SecurityScheme
+    security_scheme::SecurityScheme, validate::{Validate, ValidateError}
 };
 
 
@@ -102,4 +102,54 @@ pub struct Thing<Ext = Nil> {
 
     #[serde(flatten)]
     pub _extra_fields: Ext
+}
+
+impl <Ext> Validate for Thing<Ext>
+where
+    Ext: Serialize + Validate,
+{
+    fn validate(&self) -> Result<(), crate::validate::ValidateError> {
+        // title is mandatory
+        if self._metadata.title.as_deref().unwrap_or("").is_empty() {
+            return Err(ValidateError::MissingRequiredField("title".to_string()));
+        }
+
+        if self.security.is_empty() {
+            return Err(ValidateError::MissingRequiredField("security".to_string()));
+        }
+
+        // Validate Properties
+        if let Some(properties) = &self.properties {
+            for (name, property) in properties {
+                property.validate().map_err(|e| ValidateError::InvalidOperation {
+                    context: format!("Property '{}'", name),
+                    found: e.to_string(),
+                })?;
+            }
+        }
+
+        // Validate Actions
+        if let Some(actions) = &self.actions {
+            for (name, action) in actions {
+                action.validate().map_err(|e| ValidateError::InvalidOperation {
+                    context: format!("Action '{}'", name),
+                    found: e.to_string(),
+                })?;
+            }
+        }
+
+        // Validate Events
+        if let Some(events) = &self.events {
+            for (name, event) in events {
+                event.validate().map_err(|e| ValidateError::InvalidOperation {
+                    context: format!("Event '{}'", name),
+                    found: e.to_string(),
+                })?;
+            }
+        }
+
+        self._extra_fields.validate()?;
+
+        Ok(())
+    }
 }

@@ -5,8 +5,8 @@ use alloc::collections::BTreeMap;
 use fluent_uri::Uri;
 use serde::{Deserialize, Serialize};
 use serde_with::{serde_as, skip_serializing_none, OneOrMany};
-
 use crate::util::deserialize_bool_flexible;
+
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(transparent)]

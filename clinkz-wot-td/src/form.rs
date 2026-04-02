@@ -1,6 +1,6 @@
 use alloc::string::String;
 use alloc::vec::Vec;
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
 use serde_with::{serde_as, skip_serializing_none, OneOrMany};
 
 use crate::data_type::{AdditionalExpectedResponse, AnyUri, ExpectedResponse, Operation};
@@ -13,7 +13,7 @@ use crate::data_type::{AdditionalExpectedResponse, AnyUri, ExpectedResponse, Ope
 /// itself for meta-interactions.
 #[serde_as]
 #[skip_serializing_none]
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Form {
     /// Target IRI of the resource or service.
@@ -61,4 +61,53 @@ pub struct Form {
 
 fn default_content_type() -> Option<String> {
     Some(String::from("application/form"))
+}
+
+impl<'de> Deserialize<'de> for Form {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        // Internal shadow struct to capture raw JSON data.
+        #[serde_as]
+        #[derive(Deserialize)]
+        #[serde(rename_all = "camelCase")]
+        struct FormShadow {
+            pub href: AnyUri,
+            #[serde(default = "default_content_type")]
+            pub content_type: Option<String>,
+            pub content_coding: Option<String>,
+            #[serde_as(as = "Option<OneOrMany<_>>")]
+            pub security: Option<Vec<String>>,
+            #[serde_as(as = "Option<OneOrMany<_>>")]
+            pub scopes: Option<Vec<String>>,
+            pub response: Option<ExpectedResponse>,
+            pub additional_responses: Option<Vec<AdditionalExpectedResponse>>,
+            pub subprotocol: Option<String>,
+            #[serde_as(as = "Option<OneOrMany<_>>")]
+            pub op: Option<Vec<Operation>>,
+        }
+
+        let raw = FormShadow::deserialize(deserializer)?;
+
+        // Logic: If response exists but lacks contentType, inherit from the parent Form.
+        let mut processed_response = raw.response;
+        if let Some(ref mut resp) = processed_response {
+            if resp.content_type.is_none() {
+                resp.content_type = raw.content_type.clone();
+            }
+        }
+
+        Ok(Form {
+            href: raw.href,
+            content_type: raw.content_type,
+            content_coding: raw.content_coding,
+            security: raw.security,
+            scopes: raw.scopes,
+            response: processed_response,
+            additional_responses: raw.additional_responses,
+            subprotocol: raw.subprotocol,
+            op: raw.op,
+        })
+    }
 }
