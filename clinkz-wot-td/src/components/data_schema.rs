@@ -3,7 +3,7 @@ use alloc::{vec::Vec, string::String, collections::BTreeMap};
 use serde::{Deserialize, Serialize};
 use serde_with::{serde_as, skip_serializing_none, OneOrMany};
 
-use crate::{data_type::Metadata, util::deserialize_bool_flexible};
+use crate::{data_type::Metadata, components_util::deserialize_bool_flexible};
 
 #[skip_serializing_none]
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]

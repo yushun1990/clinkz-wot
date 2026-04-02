@@ -6,7 +6,7 @@ use crate::{
     data_schema::{DataSchema, DataSchemaContext},
     data_type::{Metadata, Operation},
     form::Form,
-    util::{deserialize_bool_flexible, deserialize_option_bool_flexible},
+    components_util::{deserialize_bool_flexible, deserialize_option_bool_flexible},
     validate::{Validate, ValidateError}
 };
 
