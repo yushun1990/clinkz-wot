@@ -1,4 +1,4 @@
-use alloc::{string::{String, ToString}, format, vec::Vec};
+use alloc::{string::{String, ToString}, collections::BTreeMap, format, vec::Vec};
 use serde::{Deserialize, Serialize};
 use serde_with::skip_serializing_none;
 
@@ -22,14 +22,16 @@ pub struct InteractionAffordance {
 
     /// Define URI template variables according to as collection based on
     /// DataSchema declarations.
-    pub uri_variables: Option<serde_json::Map<String, serde_json::Value>>,
+    pub uri_variables: Option<BTreeMap<String, DataSchema>>,
 }
 
 impl InteractionAffordance {
-    /// Generic helper to validate that all operations in all forms satisfy a predicate.
+    /// Generic helper to validate that all operations in all forms satisfy
+    /// a predicate.
     ///
     /// # Arguments
-    /// * `context` - A string describing the caller (e.g., "PropertyAffordance") for error reporting.
+    /// * `context` - A string describing the caller (e.g., "PropertyAffordance")
+    ///    for error reporting.
     /// * `f` - A closure that returns true if the specific Operation is allowed.
     pub fn validate_ops<F>(&self, context: &str, f: F) -> Result<(), ValidateError>
     where

@@ -1,5 +1,4 @@
-use alloc::vec::Vec;
-use alloc::string::String;
+use alloc::{string::String, vec::Vec, collections::BTreeMap};
 
 use fluent_uri::Uri;
 use serde::{Deserialize, Serialize};
@@ -14,7 +13,7 @@ pub const WOT_CONTEXT_1_1: &str = "https://www.w3.org/2022/wot/td/v1.1";
 #[serde(untagged)]
 pub enum ContextEntry {
     Uri(AnyUri),
-    Object(serde_json::Map<String, serde_json::Value>)
+    Object(BTreeMap<String, serde_json::Value>)
 }
 
 

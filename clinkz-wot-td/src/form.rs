@@ -1,5 +1,4 @@
-use alloc::string::String;
-use alloc::vec::Vec;
+use alloc::{vec::Vec, string::String};
 use serde::{Deserialize, Deserializer, Serialize};
 use serde_with::{serde_as, skip_serializing_none, OneOrMany};
 
@@ -19,9 +18,9 @@ pub struct Form {
     /// Target IRI of the resource or service.
     pub href: AnyUri,
 
-    #[serde(default="default_content_type")]
     /// Media type of data sent/received (e.g., "application/json").
-    pub content_type: Option<String>,
+    #[serde(default="default_content_type")]
+    pub content_type: String,
 
     /// Content coding (e.g., "gzip").
     pub content_coding: Option<String>,
@@ -59,8 +58,8 @@ pub struct Form {
     pub op: Option<Vec<Operation>>,
 }
 
-fn default_content_type() -> Option<String> {
-    Some(String::from("application/form"))
+fn default_content_type() -> String {
+    String::from("application/json")
 }
 
 impl<'de> Deserialize<'de> for Form {
@@ -75,7 +74,7 @@ impl<'de> Deserialize<'de> for Form {
         struct FormShadow {
             pub href: AnyUri,
             #[serde(default = "default_content_type")]
-            pub content_type: Option<String>,
+            pub content_type: String,
             pub content_coding: Option<String>,
             #[serde_as(as = "Option<OneOrMany<_>>")]
             pub security: Option<Vec<String>>,
@@ -93,8 +92,8 @@ impl<'de> Deserialize<'de> for Form {
         // Logic: If response exists but lacks contentType, inherit from the parent Form.
         let mut processed_response = raw.response;
         if let Some(ref mut resp) = processed_response {
-            if resp.content_type.is_none() {
-                resp.content_type = raw.content_type.clone();
+            if resp.content_type.is_empty() {
+                resp.content_type = raw.content_type.clone()
             }
         }
 

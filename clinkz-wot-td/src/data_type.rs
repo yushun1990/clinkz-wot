@@ -90,6 +90,7 @@ pub enum Operation {
 #[serde(rename_all = "camelCase")]
 pub struct ExpectedResponse {
     /// Media type of the response payload (e.g., "application/json").
+    #[serde(default)]
     pub content_type: String,
 }
 

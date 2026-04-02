@@ -203,7 +203,7 @@ pub struct PSKSecurityScheme {
     pub _context: SecuritySchemeContext,
 
     /// Identifier providing information which can be used for
-    /// seclection or confirmation.
+    /// selection or confirmation.
     pub identity: Option<String>,
 }
 

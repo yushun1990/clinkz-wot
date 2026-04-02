@@ -35,7 +35,7 @@ pub struct Thing<Ext = Nil> {
     pub context: Context,
 
     /// Unique identifier of the Thing (optional by recommended).
-    pub id: Option<String>,
+    pub id: Option<AnyUri>,
 
     /// metadata
     #[serde(flatten)]
@@ -88,7 +88,8 @@ pub struct Thing<Ext = Nil> {
 
     /// Indicates the WoT Profile mechanisms followed by this
     /// Thing Description and the corresponding Thing  implementation.
-    pub profile: Option<AnyUri>,
+    #[serde_as(as = "Option<OneOrMany<_>>")]
+    pub profile: Option<Vec<AnyUri>>,
 
     /// Set of named data schemas.
     ///
