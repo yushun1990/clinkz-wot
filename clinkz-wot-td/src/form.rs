@@ -52,7 +52,7 @@ pub struct Form {
     /// Events.
     pub subprotocol: Option<String>,
 
-    /// Indicates the semantic intention of performing the operations decribed
+    /// Indicates the semantic intention of performing the operations described
     /// by the form.
     #[serde_as(as = "Option<OneOrMany<_>>")]
     pub op: Option<Vec<Operation>>,

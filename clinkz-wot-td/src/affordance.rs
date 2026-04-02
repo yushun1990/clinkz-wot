@@ -20,7 +20,7 @@ pub struct InteractionAffordance {
     /// can be performed.
     pub forms: Vec<Form>,
 
-    /// Define URI template variables according to as collection based on
+    /// Define URI template variables according to a collection based on
     /// DataSchema declarations.
     pub uri_variables: Option<BTreeMap<String, DataSchema>>,
 }
