@@ -5,7 +5,7 @@ use alloc::collections::BTreeMap;
 use fluent_uri::Uri;
 use serde::{Deserialize, Serialize};
 use serde_with::{serde_as, skip_serializing_none, OneOrMany};
-use crate::components_util::deserialize_bool_flexible;
+use crate::{components_util::deserialize_bool_flexible, validate::Validate};
 
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -36,6 +36,12 @@ impl PartialEq<str> for AnyUri {
 
 #[derive(Debug, Default, Deserialize, Serialize, Clone, Copy, PartialEq)]
 pub struct Nil;
+
+impl Validate for Nil {
+    fn validate(&self) -> Result<(), crate::validate::ValidateError> {
+        Ok(())
+    }
+}
 
 /// A map of language tags to strings (e.g., {"en": "Light", "zh": "灯"})
 ///

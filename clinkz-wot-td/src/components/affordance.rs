@@ -13,7 +13,7 @@ use crate::{
 /// Metadata of a Thing that shows the possible choices to Consumers,
 /// thereby suggesting how Consumers may interact with the Thing.
 #[skip_serializing_none]
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Default, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct InteractionAffordance {
     /// Set of form hypermedia controls that describe how an operation
@@ -55,7 +55,7 @@ impl InteractionAffordance {
 
 /// An Interaction Affordance that exposes state of the Thing.
 #[skip_serializing_none]
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PropertyAffordance {
     #[serde(flatten)]

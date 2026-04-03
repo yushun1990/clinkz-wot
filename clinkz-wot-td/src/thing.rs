@@ -22,7 +22,7 @@ use crate::{
 /// of one or more Things.
 #[serde_as]
 #[skip_serializing_none]
-#[derive(Deserialize, Serialize)]
+#[derive(Default, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 #[serde(bound(
     serialize = "Ext: Serialize",
@@ -105,6 +105,17 @@ pub struct Thing<Ext = Nil> {
     pub _extra_fields: Ext
 }
 
+impl <Ext> Thing<Ext>
+where
+    Ext: Default + Serialize
+{
+    /// Creates a new ThingBuilder with a default "nosec" security configuration.
+    pub fn builder(title: impl Into<String>) -> ThingBuilder<Ext> {
+        ThingBuilder::new(title.into())
+    }
+
+}
+
 impl <Ext> Validate for Thing<Ext>
 where
     Ext: Serialize + Validate,
@@ -152,5 +163,42 @@ where
         self._extra_fields.validate()?;
 
         Ok(())
+    }
+}
+
+pub struct ThingBuilder<Ext> {
+    thing: Thing<Ext>
+}
+
+impl <Ext> ThingBuilder<Ext>
+where
+    Ext: Default + Serialize
+{
+    pub fn new(title: String) -> Self {
+        let mut security_definitions = BTreeMap::new();
+        // Default to 'nosec' to satisfy minimal validation requirements.
+        security_definitions.insert(
+            "nosec".into(),
+            SecurityScheme::NoSec(Default::default())
+        );
+
+        Self {
+            thing: Thing {
+                _metadata:  Metadata {
+                    title: Some(title),
+                    ..Default::default()
+                },
+                security: alloc::vec!["nosec".into()],
+                security_definitions,
+                _extra_fields: Ext::default(),
+                ..Default::default()
+            }
+        }
+    }
+
+    /// Sets the Things's unique identifier
+    pub fn id(mut self, id: &str) -> Self {
+        self.thing.id = AnyUri::parse(id).ok();
+        self
     }
 }
