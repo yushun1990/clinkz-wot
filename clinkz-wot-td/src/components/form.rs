@@ -12,7 +12,7 @@ use crate::data_type::{AdditionalExpectedResponse, AnyUri, ExpectedResponse, Ope
 /// itself for meta-interactions.
 #[serde_as]
 #[skip_serializing_none]
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Default, Clone, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Form {
     /// Target IRI of the resource or service.
@@ -108,5 +108,38 @@ impl<'de> Deserialize<'de> for Form {
             subprotocol: raw.subprotocol,
             op: raw.op,
         })
+    }
+}
+
+impl Form {
+    pub fn builder(href: &str) -> FormBuilder {
+        FormBuilder::new(href)
+    }
+}
+
+
+pub struct FormBuilder {
+    form: Form,
+    /// We keep a result state to avoid panicking during chain calls.
+    /// Errors are caught at the final .build() or .try_build() stage.
+    error: Option<fluent_uri::ParseError>
+}
+
+
+impl FormBuilder {
+    pub fn new(href: &str) -> Self {
+        match AnyUri::parse(href) {
+            Ok(uri) => Self {
+                form: Form {
+                    href: uri,
+                    ..Default::default()
+                },
+                error: None,
+            },
+            Err(e) => Self {
+                form: Default::default(),
+                error: Some(e)
+            }
+        }
     }
 }

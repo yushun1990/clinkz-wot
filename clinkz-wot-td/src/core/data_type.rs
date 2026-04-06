@@ -8,7 +8,7 @@ use serde_with::{serde_as, skip_serializing_none, OneOrMany};
 use crate::{components_util::deserialize_bool_flexible, validate::Validate};
 
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Default, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(transparent)]
 pub struct AnyUri(pub Uri<String>);
 
