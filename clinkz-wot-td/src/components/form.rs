@@ -1,4 +1,4 @@
-use alloc::{vec::Vec, string::String};
+use alloc::{vec::Vec, string::{String, ToString}};
 use serde::{Deserialize, Deserializer, Serialize};
 use serde_with::{serde_as, skip_serializing_none, OneOrMany};
 
@@ -119,27 +119,34 @@ impl Form {
 
 
 pub struct FormBuilder {
+    href: String,
     form: Form,
-    /// We keep a result state to avoid panicking during chain calls.
-    /// Errors are caught at the final .build() or .try_build() stage.
-    error: Option<fluent_uri::ParseError>
 }
 
 
 impl FormBuilder {
     pub fn new(href: &str) -> Self {
-        match AnyUri::parse(href) {
-            Ok(uri) => Self {
-                form: Form {
-                    href: uri,
-                    ..Default::default()
-                },
-                error: None,
-            },
-            Err(e) => Self {
-                form: Default::default(),
-                error: Some(e)
-            }
+        Self {
+            href: href.to_string(),
+            form: Default::default()
         }
+    }
+
+    /// Set the content type (e.g., "application/cbor").
+    pub fn content_type(mut self, content_type: impl Into<String>) -> Self {
+        self.form.content_type = content_type.into();
+        self
+    }
+
+    /// Set the content encoding (e.g., "gzip")
+    pub fn content_coding(mut self, coding: impl Into<String>) -> Self {
+        self.form.content_coding = Some(coding.into());
+        self
+    }
+
+    /// Assign a scurity scheme by name.
+    pub fn security(mut self, security: impl Into<String>) -> Self {
+        self.form.security.get_or_insert_with(Vec::new()).push(security.into());
+        self
     }
 }
