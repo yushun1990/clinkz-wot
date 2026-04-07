@@ -1,4 +1,5 @@
-use alloc::{vec::Vec, string::{String, ToString}};
+use alloc::{vec::Vec, string::String, borrow::Cow};
+use fluent_uri::ParseError;
 use serde::{Deserialize, Deserializer, Serialize};
 use serde_with::{serde_as, skip_serializing_none, OneOrMany};
 
@@ -118,16 +119,16 @@ impl Form {
 }
 
 
-pub struct FormBuilder {
-    href: String,
+pub struct FormBuilder<'a> {
+    href: Cow<'a, str>,
     form: Form,
 }
 
 
-impl FormBuilder {
-    pub fn new(href: &str) -> Self {
+impl <'a> FormBuilder <'a> {
+    pub fn new(href: impl Into<Cow<'a, str>>) -> Self {
         Self {
-            href: href.to_string(),
+            href: href.into(),
             form: Default::default()
         }
     }
@@ -144,21 +145,63 @@ impl FormBuilder {
         self
     }
 
-    /// Assign a scurity scheme by name.
-    pub fn security(mut self, security: impl Into<String>) -> Self {
-        self.form.security.get_or_insert_with(Vec::new).push(security.into());
-        self
+    /// Add security.
+    pub fn security<I, S>(mut self, security: I) -> Self
+    where
+        I: IntoIterator<Item=S>,
+        S: Into<String> {
+
+            let mut items: Vec<String> = security.into_iter().map(|s| s.into()).collect();
+            self.form.security.get_or_insert_with(Vec::new).append(&mut items);
+            self
     }
 
-    /// Assign a scope
-    pub fn scopes(mut self, scope: impl Into<String>) -> Self {
-        self.form.scopes.get_or_insert_with(Vec::new).push(scope.into());
-        self
+    /// Assign scopes
+    pub fn scopes<I, S>(mut self, scopes: I) -> Self
+    where
+        I: IntoIterator<Item=S>,
+        S: Into<String> {
+
+            let mut items: Vec<String> = scopes.into_iter().map(|s| s.into()).collect();
+            self.form.scopes.get_or_insert_with(Vec::new).append(&mut items);
+            self
     }
 
     /// Set the response (e.g., "application/json")
-    pub fn response(mut self, content_type: impl Into<String>) -> Self {
-        self.form.response = Some(ExpectedResponse::new(content_type.into()));
+    pub fn response(mut self, response: impl Into<ExpectedResponse>) -> Self {
+        self.form.response = Some(response.into());
         self
+    }
+
+    /// Add additional response with schema as null.
+    pub fn additional_response(mut self, response: impl Into<ExpectedResponse>, success: bool) -> Self {
+        self.form.additional_responses.get_or_insert_with(Vec::new)
+            .push(AdditionalExpectedResponse::new(response, success));
+        self
+    }
+
+    /// Add multiple additional responses.
+    pub fn additonal_responses(
+        mut self,
+        responses: impl IntoIterator<Item=AdditionalExpectedResponse>) -> Self {
+            let mut items: Vec<_> = responses.into_iter().collect();
+            self.form.additional_responses.get_or_insert_with(Vec::new).append(&mut items);
+
+            self
+        }
+
+    /// Add operations.
+    pub fn op(mut self, op: impl IntoIterator<Item=Operation>) -> Self {
+        let mut items: Vec<Operation> = op.into_iter().collect();
+        self.form.op.get_or_insert_with(Vec::new).append(&mut items);
+
+        self
+    }
+
+    /// Build the form.
+    pub fn build(mut self) -> Result<Form, ParseError> {
+        self.form.href = AnyUri::parse(&self.href)?;
+
+        Ok(self.form)
     }
 }

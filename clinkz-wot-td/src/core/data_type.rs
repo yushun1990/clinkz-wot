@@ -100,10 +100,10 @@ pub struct ExpectedResponse {
     pub content_type: String,
 }
 
-impl ExpectedResponse {
-    pub fn new(content_type: String) -> Self {
+impl From<String> for ExpectedResponse {
+    fn from(value: String) -> Self {
         Self {
-            content_type
+            content_type: value
         }
     }
 }
@@ -118,12 +118,30 @@ pub struct AdditionalExpectedResponse {
     #[serde(flatten)]
     pub _expected_response: ExpectedResponse,
 
-    /// For HTTP, this might be "Content-Range".
+    /// Used to define the output data schema for an additional response
+    /// if it differs from the default output data schema.
+    /// Rather than a DataSchema object, the name of a previous definition
+    /// given in a schemaDefinitions map must be used.
     pub schema: Option<String>,
 
     /// Indicates if this response is for an error case.
     #[serde(default, deserialize_with = "deserialize_bool_flexible")]
     pub success: bool,
+}
+
+impl AdditionalExpectedResponse {
+    pub fn new (response: impl Into<ExpectedResponse>, success: bool) -> Self {
+        Self {
+            _expected_response: response.into(),
+            schema: None,
+            success,
+        }
+    }
+
+    pub fn with_schema(mut self, schema: impl Into<String>) -> Self {
+        self.schema = Some(schema.into());
+        self
+    }
 }
 
 #[serde_as]
