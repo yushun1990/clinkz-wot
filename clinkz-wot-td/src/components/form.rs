@@ -146,7 +146,19 @@ impl FormBuilder {
 
     /// Assign a scurity scheme by name.
     pub fn security(mut self, security: impl Into<String>) -> Self {
-        self.form.security.get_or_insert_with(Vec::new()).push(security.into());
+        self.form.security.get_or_insert_with(Vec::new).push(security.into());
+        self
+    }
+
+    /// Assign a scope
+    pub fn scopes(mut self, scope: impl Into<String>) -> Self {
+        self.form.scopes.get_or_insert_with(Vec::new).push(scope.into());
+        self
+    }
+
+    /// Set the response (e.g., "application/json")
+    pub fn response(mut self, content_type: impl Into<String>) -> Self {
+        self.form.response = Some(ExpectedResponse::new(content_type.into()));
         self
     }
 }

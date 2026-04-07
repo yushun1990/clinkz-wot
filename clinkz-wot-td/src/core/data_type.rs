@@ -100,6 +100,14 @@ pub struct ExpectedResponse {
     pub content_type: String,
 }
 
+impl ExpectedResponse {
+    pub fn new(content_type: String) -> Self {
+        Self {
+            content_type
+        }
+    }
+}
+
 /// Communication metadata describing the expected response message for
 /// additional responses.
 #[skip_serializing_none]
