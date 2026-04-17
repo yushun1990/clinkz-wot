@@ -113,7 +113,7 @@ impl<'de> Deserialize<'de> for Form {
 }
 
 impl Form {
-    pub fn builder(href: &str) -> FormBuilder {
+    pub fn builder(href: &str) -> FormBuilder<'_> {
         FormBuilder::new(href)
     }
 }

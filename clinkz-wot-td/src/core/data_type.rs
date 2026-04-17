@@ -57,6 +57,59 @@ impl MultiLanguage {
     pub fn add(&mut self, lang: &str, text: &str) {
         self.0.insert(String::from(lang), String::from(text));
     }
+
+    /// Adds a language-text pair and returns self for method chaining.
+    pub fn with(mut self, lang: &str, text: &str) -> Self {
+        self.add(lang, text);
+        self
+    }
+
+    /// Creates a MultiLanguage from a BTreeMap.
+    pub fn from_map(map: BTreeMap<String, String>) -> Self {
+        Self(map)
+    }
+
+    /// Creates a MultiLanguage from an iterator of (lang, text) pairs.
+    pub fn from_iter<I>(iter: I) -> Self
+    where
+        I: IntoIterator<Item=(String, String)> {
+        Self(BTreeMap::from_iter(iter))
+    }
+
+    /// Checks if a language is present.
+    pub fn contains(&self, lang: &str) -> bool {
+        self.0.contains_key(lang)
+    }
+
+    /// Gets the text for a specific language, or None if not present.
+    pub fn get(&self, lang: &str) -> Option<&String> {
+        self.0.get(lang)
+    }
+
+    /// Merges another MultiLanguage into this one.
+    pub fn merge(&mut self, other: &MultiLanguage) {
+        self.0.extend(other.0.iter().map(|(k, v)| (k.clone(), v.clone())));
+    }
+
+    /// Returns a reference to the underlying BTreeMap.
+    pub fn as_map(&self) -> &BTreeMap<String, String> {
+        &self.0
+    }
+
+    /// Converts self into the underlying BTreeMap.
+    pub fn into_map(self) -> BTreeMap<String, String> {
+        self.0
+    }
+
+    /// Returns the number of language-text pairs.
+    pub fn len(&self) -> usize {
+        self.0.len()
+    }
+
+    /// Returns true if there are no language-text pairs.
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
 }
 
 /// Metadata of a Thing that provides version information about the TD document.
@@ -147,7 +200,7 @@ impl AdditionalExpectedResponse {
 #[serde_as]
 #[skip_serializing_none]
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all="camelCase")]
 pub struct Metadata {
     /// JSON-LD keyword to label the object with semantic tags.
     #[serde(rename = "@type")]
@@ -166,4 +219,77 @@ pub struct Metadata {
 
     /// Multi-language descriptions.
     pub descriptions: Option<MultiLanguage>,
+}
+
+impl Metadata {
+    pub fn builder() -> MetadataBuilder {
+        MetadataBuilder::new()
+    }
+}
+
+/// Builder for creating `Metadata` instances.
+pub struct MetadataBuilder {
+    metadata: Metadata,
+}
+
+impl MetadataBuilder {
+    /// Creates a new `MetadataBuilder`.
+    pub fn new() -> Self {
+        Self {
+            metadata: Metadata::default(),
+        }
+    }
+
+    /// Adds tags.
+    pub fn tags<I, S>(mut self, tags: I) -> Self
+    where
+        I: IntoIterator<Item=S>,
+        S: Into<String> {
+        let mut items: Vec<String> = tags.into_iter().map(|s| s.into()).collect();
+        self.metadata.tags.get_or_insert_with(Vec::new).append(&mut items);
+        self
+    }
+
+    /// Sets the title.
+    pub fn title(mut self, title: impl Into<String>) -> Self {
+        self.metadata.title = Some(title.into());
+        self
+    }
+
+    /// Sets the multi-language titles.
+    pub fn titles(mut self, titles: impl Into<MultiLanguage>) -> Self {
+        self.metadata.titles = Some(titles.into());
+        self
+    }
+
+    /// Adds a title for a specific language.
+    pub fn title_for(mut self, lang: &str, title: &str) -> Self {
+        let titles = self.metadata.titles.get_or_insert_with(MultiLanguage::new);
+        titles.add(lang, title);
+        self
+    }
+
+    /// Sets the description.
+    pub fn description(mut self, description: impl Into<String>) -> Self {
+        self.metadata.description = Some(description.into());
+        self
+    }
+
+    /// Sets the multi-language descriptions.
+    pub fn descriptions(mut self, descriptions: impl Into<MultiLanguage>) -> Self {
+        self.metadata.descriptions = Some(descriptions.into());
+        self
+    }
+
+    /// Adds a description for a specific language.
+    pub fn description_with_lang(mut self, lang: &str, description: &str) -> Self {
+        let descriptions = self.metadata.descriptions.get_or_insert_with(MultiLanguage::new);
+        descriptions.add(lang, description);
+        self
+    }
+
+    /// Builds and returns the `Metadata` instance.
+    pub fn build(self) -> Metadata {
+        self.metadata
+    }
 }

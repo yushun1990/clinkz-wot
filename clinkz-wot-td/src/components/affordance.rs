@@ -51,6 +51,58 @@ impl InteractionAffordance {
         }
         Ok(())
     }
+
+    /// Creates a builder for `InteractionAffordance`.
+    pub fn builder() -> InteractionAffordanceBuilder {
+        InteractionAffordanceBuilder::new()
+    }
+}
+
+/// Builder for creating `InteractionAffordance` instances.
+pub struct InteractionAffordanceBuilder {
+    affordance: InteractionAffordance,
+}
+
+impl InteractionAffordanceBuilder {
+    /// Creates a new `InteractionAffordanceBuilder`.
+    pub fn new() -> Self {
+        Self {
+            affordance: InteractionAffordance::default(),
+        }
+    }
+
+    /// Adds a form to the interaction affordance.
+    pub fn form(mut self, form: Form) -> Self {
+        self.affordance.forms.push(form);
+        self
+    }
+
+    /// Adds multiple forms to the interaction affordance.
+    pub fn forms<I>(mut self, forms: I) -> Self
+    where
+        I: IntoIterator<Item=Form> {
+        let mut items: Vec<Form> = forms.into_iter().collect();
+        self.affordance.forms.append(&mut items);
+        self
+    }
+
+    /// Sets the URI variables.
+    pub fn uri_variables(mut self, uri_variables: BTreeMap<String, DataSchema>) -> Self {
+        self.affordance.uri_variables = Some(uri_variables);
+        self
+    }
+
+    /// Adds a URI variable.
+    pub fn uri_variable(mut self, name: impl Into<String>, schema: DataSchema) -> Self {
+        let uri_variables = self.affordance.uri_variables.get_or_insert_with(BTreeMap::new);
+        uri_variables.insert(name.into(), schema);
+        self
+    }
+
+    /// Builds and returns the `InteractionAffordance` instance.
+    pub fn build(self) -> InteractionAffordance {
+        self.affordance
+    }
 }
 
 /// An Interaction Affordance that exposes state of the Thing.
@@ -80,6 +132,78 @@ impl Validate for PropertyAffordance {
             Operation::ObserveProperty |
             Operation::UnobserveProperty
         ))
+    }
+}
+
+impl PropertyAffordance {
+    /// Creates a builder for `PropertyAffordance`.
+    pub fn builder() -> PropertyAffordanceBuilder {
+        PropertyAffordanceBuilder::new()
+    }
+}
+
+/// Builder for creating `PropertyAffordance` instances.
+pub struct PropertyAffordanceBuilder {
+    affordance: PropertyAffordance,
+}
+
+impl PropertyAffordanceBuilder {
+    /// Creates a new `PropertyAffordanceBuilder`.
+    pub fn new() -> Self {
+        Self {
+            affordance: PropertyAffordance::default(),
+        }
+    }
+
+    /// Sets the schema context.
+    pub fn schema(mut self, schema: impl Into<DataSchemaContext>) -> Self {
+        self.affordance._schema = schema.into();
+        self
+    }
+
+    /// Sets the interaction affordance.
+    pub fn interaction(mut self, interaction: impl Into<InteractionAffordance>) -> Self {
+        self.affordance._interaction = interaction.into();
+        self
+    }
+
+    /// Adds a form to the interaction affordance.
+    pub fn form(mut self, form: Form) -> Self {
+        self.affordance._interaction.forms.push(form);
+        self
+    }
+
+    /// Adds multiple forms to the interaction affordance.
+    pub fn forms<I>(mut self, forms: I) -> Self
+    where
+        I: IntoIterator<Item=Form> {
+        let mut items: Vec<Form> = forms.into_iter().collect();
+        self.affordance._interaction.forms.append(&mut items);
+        self
+    }
+
+    /// Sets the URI variables.
+    pub fn uri_variables(mut self, uri_variables: BTreeMap<String, DataSchema>) -> Self {
+        self.affordance._interaction.uri_variables = Some(uri_variables);
+        self
+    }
+
+    /// Adds a URI variable.
+    pub fn uri_variable(mut self, name: impl Into<String>, schema: DataSchema) -> Self {
+        let uri_variables = self.affordance._interaction.uri_variables.get_or_insert_with(BTreeMap::new);
+        uri_variables.insert(name.into(), schema);
+        self
+    }
+
+    /// Sets the observable flag.
+    pub fn observable(mut self, observable: bool) -> Self {
+        self.affordance.observable = observable;
+        self
+    }
+
+    /// Builds and returns the `PropertyAffordance` instance.
+    pub fn build(self) -> PropertyAffordance {
+        self.affordance
     }
 }
 
@@ -127,6 +251,110 @@ impl Validate for ActionAffordance {
     }
 }
 
+impl ActionAffordance {
+    /// Creates a builder for `ActionAffordance`.
+    pub fn builder() -> ActionAffordanceBuilder {
+        ActionAffordanceBuilder::new()
+    }
+}
+
+/// Builder for creating `ActionAffordance` instances.
+pub struct ActionAffordanceBuilder {
+    affordance: ActionAffordance,
+}
+
+impl ActionAffordanceBuilder {
+    /// Creates a new `ActionAffordanceBuilder`.
+    pub fn new() -> Self {
+        Self {
+            affordance: ActionAffordance {
+                _metadata: Metadata::default(),
+                _interaction: InteractionAffordance::default(),
+                input: None,
+                output: None,
+                safe: false,
+                idempotent: false,
+                synchronous: None,
+            },
+        }
+    }
+
+    /// Sets the metadata.
+    pub fn metadata(mut self, metadata: impl Into<Metadata>) -> Self {
+        self.affordance._metadata = metadata.into();
+        self
+    }
+
+    /// Sets the interaction affordance.
+    pub fn interaction(mut self, interaction: impl Into<InteractionAffordance>) -> Self {
+        self.affordance._interaction = interaction.into();
+        self
+    }
+
+    /// Adds a form to the interaction affordance.
+    pub fn form(mut self, form: Form) -> Self {
+        self.affordance._interaction.forms.push(form);
+        self
+    }
+
+    /// Adds multiple forms to the interaction affordance.
+    pub fn forms<I>(mut self, forms: I) -> Self
+    where
+        I: IntoIterator<Item=Form> {
+        let mut items: Vec<Form> = forms.into_iter().collect();
+        self.affordance._interaction.forms.append(&mut items);
+        self
+    }
+
+    /// Sets the URI variables.
+    pub fn uri_variables(mut self, uri_variables: BTreeMap<String, DataSchema>) -> Self {
+        self.affordance._interaction.uri_variables = Some(uri_variables);
+        self
+    }
+
+    /// Adds a URI variable.
+    pub fn uri_variable(mut self, name: impl Into<String>, schema: DataSchema) -> Self {
+        let uri_variables = self.affordance._interaction.uri_variables.get_or_insert_with(BTreeMap::new);
+        uri_variables.insert(name.into(), schema);
+        self
+    }
+
+    /// Sets the input data schema.
+    pub fn input(mut self, input: impl Into<DataSchema>) -> Self {
+        self.affordance.input = Some(input.into());
+        self
+    }
+
+    /// Sets the output data schema.
+    pub fn output(mut self, output: impl Into<DataSchema>) -> Self {
+        self.affordance.output = Some(output.into());
+        self
+    }
+
+    /// Sets the safe flag.
+    pub fn safe(mut self, safe: bool) -> Self {
+        self.affordance.safe = safe;
+        self
+    }
+
+    /// Sets the idempotent flag.
+    pub fn idempotent(mut self, idempotent: bool) -> Self {
+        self.affordance.idempotent = idempotent;
+        self
+    }
+
+    /// Sets the synchronous flag.
+    pub fn synchronous(mut self, synchronous: bool) -> Self {
+        self.affordance.synchronous = Some(synchronous);
+        self
+    }
+
+    /// Builds and returns the `ActionAffordance` instance.
+    pub fn build(self) -> ActionAffordance {
+        self.affordance
+    }
+}
+
 /// An interaction Affordance that describes an event source, which
 /// asynchronously pushes event data to Consumers.
 #[skip_serializing_none]
@@ -164,5 +392,102 @@ impl Validate for EventAffordance {
             Operation::SubscribeEvent |
             Operation::UnsubscribeEvent
         ))
+    }
+}
+
+impl EventAffordance {
+    /// Creates a builder for `EventAffordance`.
+    pub fn builder() -> EventAffordanceBuilder {
+        EventAffordanceBuilder::new()
+    }
+}
+
+/// Builder for creating `EventAffordance` instances.
+pub struct EventAffordanceBuilder {
+    affordance: EventAffordance,
+}
+
+impl EventAffordanceBuilder {
+    /// Creates a new `EventAffordanceBuilder`.
+    pub fn new() -> Self {
+        Self {
+            affordance: EventAffordance {
+                _metadata: Metadata::default(),
+                _interaction: InteractionAffordance::default(),
+                subscription: None,
+                data: None,
+                data_response: None,
+                cancellation: None,
+            },
+        }
+    }
+
+    /// Sets the metadata.
+    pub fn metadata(mut self, metadata: impl Into<Metadata>) -> Self {
+        self.affordance._metadata = metadata.into();
+        self
+    }
+
+    /// Sets the interaction affordance.
+    pub fn interaction(mut self, interaction: impl Into<InteractionAffordance>) -> Self {
+        self.affordance._interaction = interaction.into();
+        self
+    }
+
+    /// Adds a form to the interaction affordance.
+    pub fn form(mut self, form: Form) -> Self {
+        self.affordance._interaction.forms.push(form);
+        self
+    }
+
+    /// Adds multiple forms to the interaction affordance.
+    pub fn forms<I>(mut self, forms: I) -> Self
+    where
+        I: IntoIterator<Item=Form> {
+        let mut items: Vec<Form> = forms.into_iter().collect();
+        self.affordance._interaction.forms.append(&mut items);
+        self
+    }
+
+    /// Sets the URI variables.
+    pub fn uri_variables(mut self, uri_variables: BTreeMap<String, DataSchema>) -> Self {
+        self.affordance._interaction.uri_variables = Some(uri_variables);
+        self
+    }
+
+    /// Adds a URI variable.
+    pub fn uri_variable(mut self, name: impl Into<String>, schema: DataSchema) -> Self {
+        let uri_variables = self.affordance._interaction.uri_variables.get_or_insert_with(BTreeMap::new);
+        uri_variables.insert(name.into(), schema);
+        self
+    }
+
+    /// Sets the subscription data schema.
+    pub fn subscription(mut self, subscription: impl Into<DataSchema>) -> Self {
+        self.affordance.subscription = Some(subscription.into());
+        self
+    }
+
+    /// Sets the data schema.
+    pub fn data(mut self, data: impl Into<DataSchema>) -> Self {
+        self.affordance.data = Some(data.into());
+        self
+    }
+
+    /// Sets the data response schema.
+    pub fn data_response(mut self, data_response: impl Into<DataSchema>) -> Self {
+        self.affordance.data_response = Some(data_response.into());
+        self
+    }
+
+    /// Sets the cancellation schema.
+    pub fn cancellation(mut self, cancellation: impl Into<DataSchema>) -> Self {
+        self.affordance.cancellation = Some(cancellation.into());
+        self
+    }
+
+    /// Builds and returns the `EventAffordance` instance.
+    pub fn build(self) -> EventAffordance {
+        self.affordance
     }
 }

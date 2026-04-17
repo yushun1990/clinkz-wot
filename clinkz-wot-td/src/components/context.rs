@@ -64,6 +64,61 @@ impl Default for Context {
     }
 }
 
+impl Context {
+    /// Creates a builder for `Context`.
+    pub fn builder() -> ContextBuilder {
+        ContextBuilder::new()
+    }
+}
+
+/// Builder for creating `Context` instances.
+pub struct ContextBuilder {
+    context: Context,
+}
+
+impl ContextBuilder {
+    /// Creates a new `ContextBuilder` with the default WoT 1.1 context.
+    pub fn new() -> Self {
+        Self {
+            context: Context::new(),
+        }
+    }
+
+    /// Adds a URI to the context.
+    pub fn uri(mut self, uri: impl Into<String>) -> Self {
+        match AnyUri::parse(uri.into().as_str()) {
+            Ok(uri) => self.context.entries.push(ContextEntry::Uri(uri)),
+            Err(_) => {},
+        }
+        self
+    }
+
+    /// Adds an object to the context.
+    pub fn object(mut self, object: BTreeMap<String, serde_json::Value>) -> Self {
+        self.context.entries.push(ContextEntry::Object(object));
+        self
+    }
+
+    /// Adds a key-value pair to the context as an object entry.
+    pub fn pair(mut self, key: impl Into<String>, value: serde_json::Value) -> Self {
+        let mut object = BTreeMap::new();
+        object.insert(key.into(), value);
+        self.context.entries.push(ContextEntry::Object(object));
+        self
+    }
+
+    /// Enables compatibility with WoT 1.0 consumers.
+    pub fn with_1_0_compatibility(mut self) -> Self {
+        self.context = self.context.with_1_0_compatibility();
+        self
+    }
+
+    /// Builds and returns the `Context` instance.
+    pub fn build(self) -> Context {
+        self.context
+    }
+}
+
 impl Serialize for Context {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where

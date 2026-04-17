@@ -201,4 +201,151 @@ where
         self.thing.id = AnyUri::parse(id).ok();
         self
     }
+
+    /// Sets the context.
+    pub fn context(mut self, context: impl Into<Context>) -> Self {
+        self.thing.context = context.into();
+        self
+    }
+
+    /// Sets the version information.
+    pub fn version(mut self, version: VersionInfo) -> Self {
+        self.thing.version = Some(version);
+        self
+    }
+
+    /// Sets the creation time.
+    pub fn created(mut self, created: OffsetDateTime) -> Self {
+        self.thing.created = Some(created);
+        self
+    }
+
+    /// Sets the modification time.
+    pub fn modified(mut self, modified: OffsetDateTime) -> Self {
+        self.thing.modified = Some(modified);
+        self
+    }
+
+    /// Sets the support URI.
+    pub fn support(mut self, support: &str) -> Self {
+        self.thing.support = AnyUri::parse(support).ok();
+        self
+    }
+
+    /// Sets the base URI.
+    pub fn base(mut self, base: &str) -> Self {
+        self.thing.base = AnyUri::parse(base).ok();
+        self
+    }
+
+    /// Adds a profile URI.
+    pub fn profile(mut self, profile: &str) -> Self {
+        if let Some(profile) = AnyUri::parse(profile).ok() {
+            self.thing.profile.get_or_insert_with(Vec::new).push(profile);
+        }
+        self
+    }
+
+    /// Adds multiple profile URIs.
+    pub fn profiles<I>(mut self, profiles: I) -> Self
+    where
+        I: IntoIterator<Item=&'static str> {
+        let mut items: Vec<AnyUri> = profiles.into_iter()
+            .filter_map(|p| AnyUri::parse(p).ok())
+            .collect();
+        self.thing.profile.get_or_insert_with(Vec::new).append(&mut items);
+        self
+    }
+
+    /// Adds a property affordance.
+    pub fn property(mut self, name: impl Into<String>, property: PropertyAffordance) -> Self {
+        let properties = self.thing.properties.get_or_insert_with(BTreeMap::new);
+        properties.insert(name.into(), property);
+        self
+    }
+
+    /// Adds an action affordance.
+    pub fn action(mut self, name: impl Into<String>, action: ActionAffordance) -> Self {
+        let actions = self.thing.actions.get_or_insert_with(BTreeMap::new);
+        actions.insert(name.into(), action);
+        self
+    }
+
+    /// Adds an event affordance.
+    pub fn event(mut self, name: impl Into<String>, event: EventAffordance) -> Self {
+        let events = self.thing.events.get_or_insert_with(BTreeMap::new);
+        events.insert(name.into(), event);
+        self
+    }
+
+    /// Adds a link.
+    pub fn link(mut self, link: Link) -> Self {
+        self.thing.links.get_or_insert_with(Vec::new).push(link);
+        self
+    }
+
+    /// Adds multiple links.
+    pub fn links<I>(mut self, links: I) -> Self
+    where
+        I: IntoIterator<Item=Link> {
+        let mut items: Vec<Link> = links.into_iter().collect();
+        self.thing.links.get_or_insert_with(Vec::new).append(&mut items);
+        self
+    }
+
+    /// Adds a form.
+    pub fn form(mut self, form: Form) -> Self {
+        self.thing.forms.get_or_insert_with(Vec::new).push(form);
+        self
+    }
+
+    /// Adds multiple forms.
+    pub fn forms<I>(mut self, forms: I) -> Self
+    where
+        I: IntoIterator<Item=Form> {
+        let mut items: Vec<Form> = forms.into_iter().collect();
+        self.thing.forms.get_or_insert_with(Vec::new).append(&mut items);
+        self
+    }
+
+    /// Adds a security name.
+    pub fn security(mut self, security: impl Into<String>) -> Self {
+        self.thing.security.push(security.into());
+        self
+    }
+
+    /// Adds multiple security names.
+    pub fn securities<I, S>(mut self, securities: I) -> Self
+    where
+        I: IntoIterator<Item=S>,
+        S: Into<String> {
+        let mut items: Vec<String> = securities.into_iter().map(|s| s.into()).collect();
+        self.thing.security.append(&mut items);
+        self
+    }
+
+    /// Adds a security definition.
+    pub fn security_definition(mut self, name: impl Into<String>, scheme: SecurityScheme) -> Self {
+        self.thing.security_definitions.insert(name.into(), scheme);
+        self
+    }
+
+    /// Adds a schema definition.
+    pub fn schema_definition(mut self, name: impl Into<String>, schema: DataSchema) -> Self {
+        let schema_definitions = self.thing.schema_definitions.get_or_insert_with(BTreeMap::new);
+        schema_definitions.insert(name.into(), schema);
+        self
+    }
+
+    /// Adds a URI variable.
+    pub fn uri_variable(mut self, name: impl Into<String>, schema: DataSchema) -> Self {
+        let uri_variables = self.thing.uri_variables.get_or_insert_with(BTreeMap::new);
+        uri_variables.insert(name.into(), schema);
+        self
+    }
+
+    /// Builds and returns the `Thing` instance.
+    pub fn build(self) -> Thing<Ext> {
+        self.thing
+    }
 }
