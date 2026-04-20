@@ -7,7 +7,7 @@ extern crate alloc;
 
 pub mod thing;
 pub mod validate;
-mod core;
+pub mod core;
 pub use core::data_type;
 
 mod components;

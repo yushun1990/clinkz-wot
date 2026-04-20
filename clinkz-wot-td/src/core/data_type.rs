@@ -221,75 +221,74 @@ pub struct Metadata {
     pub descriptions: Option<MultiLanguage>,
 }
 
-impl Metadata {
-    pub fn builder() -> MetadataBuilder {
-        MetadataBuilder::new()
-    }
-}
+pub trait MetadataHelper: Sized {
+    fn metadata(&mut self) -> &mut Metadata;
 
-/// Builder for creating `Metadata` instances.
-pub struct MetadataBuilder {
-    metadata: Metadata,
-}
-
-impl MetadataBuilder {
-    /// Creates a new `MetadataBuilder`.
-    pub fn new() -> Self {
-        Self {
-            metadata: Metadata::default(),
-        }
-    }
-
-    /// Adds tags.
-    pub fn tags<I, S>(mut self, tags: I) -> Self
+     /// Adds tags.
+    fn tags<I, S>(mut self, tags: I) -> Self
     where
         I: IntoIterator<Item=S>,
-        S: Into<String> {
+        S: Into<String>,
+        Self: Sized
+    {
         let mut items: Vec<String> = tags.into_iter().map(|s| s.into()).collect();
-        self.metadata.tags.get_or_insert_with(Vec::new).append(&mut items);
+        self.metadata().tags.get_or_insert_with(Vec::new).append(&mut items);
         self
     }
 
     /// Sets the title.
-    pub fn title(mut self, title: impl Into<String>) -> Self {
-        self.metadata.title = Some(title.into());
+    fn title(mut self, title: impl Into<String>) -> Self
+    where
+        Self: Sized
+    {
+        self.metadata().title = Some(title.into());
         self
     }
 
     /// Sets the multi-language titles.
-    pub fn titles(mut self, titles: impl Into<MultiLanguage>) -> Self {
-        self.metadata.titles = Some(titles.into());
+    fn titles(mut self, titles: impl Into<MultiLanguage>) -> Self
+    where
+        Self: Sized
+    {
+        self.metadata().titles = Some(titles.into());
         self
     }
 
     /// Adds a title for a specific language.
-    pub fn title_for(mut self, lang: &str, title: &str) -> Self {
-        let titles = self.metadata.titles.get_or_insert_with(MultiLanguage::new);
+    fn title_with_lang(mut self, lang: &str, title: &str) -> Self
+    where
+        Self: Sized
+    {
+        let titles = self.metadata().titles.get_or_insert_with(MultiLanguage::new);
         titles.add(lang, title);
         self
     }
 
     /// Sets the description.
-    pub fn description(mut self, description: impl Into<String>) -> Self {
-        self.metadata.description = Some(description.into());
+    fn description(mut self, description: impl Into<String>) -> Self
+    where
+        Self: Sized
+    {
+        self.metadata().description = Some(description.into());
         self
     }
 
     /// Sets the multi-language descriptions.
-    pub fn descriptions(mut self, descriptions: impl Into<MultiLanguage>) -> Self {
-        self.metadata.descriptions = Some(descriptions.into());
+    fn descriptions(mut self, descriptions: impl Into<MultiLanguage>) -> Self
+    where
+        Self: Sized
+    {
+        self.metadata().descriptions = Some(descriptions.into());
         self
     }
 
     /// Adds a description for a specific language.
-    pub fn description_with_lang(mut self, lang: &str, description: &str) -> Self {
-        let descriptions = self.metadata.descriptions.get_or_insert_with(MultiLanguage::new);
+    fn description_with_lang(mut self, lang: &str, description: &str) -> Self
+    where
+        Self: Sized
+    {
+        let descriptions = self.metadata().descriptions.get_or_insert_with(MultiLanguage::new);
         descriptions.add(lang, description);
         self
-    }
-
-    /// Builds and returns the `Metadata` instance.
-    pub fn build(self) -> Metadata {
-        self.metadata
     }
 }

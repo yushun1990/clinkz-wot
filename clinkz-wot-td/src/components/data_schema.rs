@@ -3,14 +3,15 @@ use alloc::{vec::Vec, string::String, collections::BTreeMap};
 use serde::{Deserialize, Serialize};
 use serde_with::{serde_as, skip_serializing_none, OneOrMany};
 
-use crate::{data_type::{Metadata, MultiLanguage}, components_util::deserialize_bool_flexible};
+use super::util::deserialize_bool_flexible;
+use crate::data_type::{MetadataHelper, Metadata};
 
 #[skip_serializing_none]
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all="camelCase")]
 pub struct DataSchemaContext {
     #[serde(flatten)]
-    pub _metabase: Metadata,
+    pub _metadata: Metadata,
 
     /// Provides a const value.
     #[serde(rename = "const")]
@@ -47,103 +48,73 @@ pub struct DataSchemaContext {
     pub data_type: Option<String>
 }
 
-impl DataSchemaContext {
-    pub fn builder() -> DataSchemaContextBuilder {
-        DataSchemaContextBuilder::new()
-    }
-}
+pub trait ContextHelper: MetadataHelper {
+    fn context(&mut self) -> &mut DataSchemaContext;
 
-/// Builder for creating `DataSchemaContext` instances.
-pub struct DataSchemaContextBuilder {
-    context: DataSchemaContext,
-}
-
-impl DataSchemaContextBuilder {
-    /// Creates a new `DataSchemaContextBuilder`.
-    pub fn new() -> Self {
-        Self {
-            context: DataSchemaContext::default(),
-        }
-    }
-
-    /// Sets the metadata.
-    pub fn metadata(mut self, metadata: impl Into<Metadata>) -> Self {
-        self.context._metabase = metadata.into();
-        self
-    }
-
-    /// Sets the constant value.
-    pub fn constant(mut self, constant: serde_json::Value) -> Self {
-        self.context.constant = Some(constant);
+    /// Sets the const value.
+    fn constant(mut self, constant: serde_json::Value) -> Self {
+        self.context().constant = Some(constant);
         self
     }
 
     /// Sets the default value.
-    pub fn default(mut self, default: serde_json::Value) -> Self {
-        self.context.default = Some(default);
+    fn default(mut self, default: serde_json::Value) -> Self {
+        self.context().default = Some(default);
         self
     }
 
     /// Sets the unit.
-    pub fn unit(mut self, unit: impl Into<String>) -> Self {
-        self.context.unit = Some(unit.into());
+    fn unit(mut self, unit: impl Into<String>) -> Self {
+        self.context().unit = Some(unit.into());
         self
     }
 
     /// Adds schemas to one_of.
-    pub fn one_of<I>(mut self, schemas: I) -> Self
+    fn one_of<I>(mut self, schemas: I) -> Self
     where
-        I: IntoIterator<Item=DataSchema> {
+        I: IntoIterator<Item=DataSchema>
+    {
         let mut items: Vec<DataSchema> = schemas.into_iter().collect();
-        self.context.one_of.get_or_insert_with(Vec::new).append(&mut items);
+        self.context().one_of.get_or_insert_with(Vec::new).append(&mut items);
         self
     }
 
-    /// Adds values to enumerate.
-    pub fn enumerate<I>(mut self, values: I) -> Self
+    /// Adds values to enum.
+    fn enumerate<I>(mut self, values: I) -> Self
     where
-        I: IntoIterator<Item=serde_json::Value> {
+        I: IntoIterator<Item=serde_json::Value>
+    {
         let mut items: Vec<serde_json::Value> = values.into_iter().collect();
-        self.context.enumerate.get_or_insert_with(Vec::new).append(&mut items);
+        self.context().enumerate.get_or_insert_with(Vec::new).append(&mut items);
         self
     }
 
     /// Sets read_only.
-    pub fn read_only(mut self, read_only: bool) -> Self {
-        self.context.read_only = read_only;
+    fn read_only(mut self, read_only: bool) -> Self {
+        self.context().read_only = read_only;
         self
     }
 
     /// Sets write_only.
-    pub fn write_only(mut self, write_only: bool) -> Self {
-        self.context.write_only = write_only;
+    fn write_only(mut self, write_only: bool) -> Self {
+        self.context().write_only = write_only;
         self
     }
 
     /// Sets the format.
-    pub fn format(mut self, format: impl Into<String>) -> Self {
-        self.context.format = Some(format.into());
+    fn format(mut self, format: impl Into<String>) -> Self {
+        self.context().format = Some(format.into());
         self
     }
 
-    /// Sets the data type.
-    pub fn data_type(mut self, data_type: impl Into<String>) -> Self {
-        self.context.data_type = Some(data_type.into());
+    /// Sets the type.
+    fn data_type(mut self, data_type: impl Into<String>) -> Self {
+        self.context().data_type = Some(data_type.into());
         self
     }
 
-    /// Adds a description for a specific language.
-    pub fn description_with_lang(mut self, lang: &str, description: &str) -> Self {
-        let descriptions = self.context._metabase.descriptions.get_or_insert_with(MultiLanguage::new);
-        descriptions.add(lang, description);
-        self
-    }
-
-    /// Builds and returns the `DataSchemaContext` instance.
-    pub fn build(self) -> DataSchemaContext {
-        self.context
-    }
 }
+
 
 /// Metadata describing data of type array.
 #[serde_as]
@@ -189,12 +160,6 @@ impl ArraySchemaBuilder {
         }
     }
 
-    /// Sets the context.
-    pub fn context(mut self, context: impl Into<DataSchemaContext>) -> Self {
-        self.schema._context = context.into();
-        self
-    }
-
     /// Adds items schemas.
     pub fn items<I>(mut self, items: I) -> Self
     where
@@ -216,16 +181,21 @@ impl ArraySchemaBuilder {
         self
     }
 
-    /// Adds a description for a specific language.
-    pub fn description_with_lang(mut self, lang: &str, description: &str) -> Self {
-        let descriptions = self.schema._context._metabase.descriptions.get_or_insert_with(MultiLanguage::new);
-        descriptions.add(lang, description);
-        self
-    }
-
     /// Builds and returns the `ArraySchema` instance.
     pub fn build(self) -> ArraySchema {
         self.schema
+    }
+}
+
+impl ContextHelper for ArraySchemaBuilder {
+    fn context(&mut self) -> &mut DataSchemaContext {
+        &mut self.schema._context
+    }
+}
+
+impl MetadataHelper for ArraySchemaBuilder {
+    fn metadata(&mut self) -> &mut Metadata {
+        &mut self.context()._metadata
     }
 }
 
@@ -259,22 +229,21 @@ impl BooleanSchemaBuilder {
         }
     }
 
-    /// Sets the context.
-    pub fn context(mut self, context: impl Into<DataSchemaContext>) -> Self {
-        self.schema._context = context.into();
-        self
-    }
-
-    /// Adds a description for a specific language.
-    pub fn description_with_lang(mut self, lang: &str, description: &str) -> Self {
-        let descriptions = self.schema._context._metabase.descriptions.get_or_insert_with(MultiLanguage::new);
-        descriptions.add(lang, description);
-        self
-    }
-
     /// Builds and returns the `BooleanSchema` instance.
     pub fn build(self) -> BooleanSchema {
         self.schema
+    }
+}
+
+impl ContextHelper for BooleanSchemaBuilder {
+    fn context(&mut self) -> &mut DataSchemaContext {
+        &mut self.schema._context
+    }
+}
+
+impl MetadataHelper for BooleanSchemaBuilder {
+    fn metadata(&mut self) -> &mut Metadata {
+        &mut self.context()._metadata
     }
 }
 
@@ -333,12 +302,6 @@ impl NumberSchemaBuilder {
         }
     }
 
-    /// Sets the context.
-    pub fn context(mut self, context: impl Into<DataSchemaContext>) -> Self {
-        self.schema._context = context.into();
-        self
-    }
-
     /// Sets the minimum value.
     pub fn minimum(mut self, minimum: f64) -> Self {
         self.schema.minimum = Some(minimum);
@@ -371,16 +334,21 @@ impl NumberSchemaBuilder {
         self
     }
 
-    /// Adds a description for a specific language.
-    pub fn description_with_lang(mut self, lang: &str, description: &str) -> Self {
-        let descriptions = self.schema._context._metabase.descriptions.get_or_insert_with(MultiLanguage::new);
-        descriptions.add(lang, description);
-        self
-    }
-
     /// Builds and returns the `NumberSchema` instance.
     pub fn build(self) -> NumberSchema {
         self.schema
+    }
+}
+
+impl ContextHelper for NumberSchemaBuilder {
+    fn context(&mut self) -> &mut DataSchemaContext {
+        &mut self.schema._context
+    }
+}
+
+impl MetadataHelper for NumberSchemaBuilder {
+    fn metadata(&mut self) -> &mut Metadata {
+        &mut self.context()._metadata
     }
 }
 
@@ -439,12 +407,6 @@ impl IntegerSchemaBuilder {
         }
     }
 
-    /// Sets the context.
-    pub fn context(mut self, context: impl Into<DataSchemaContext>) -> Self {
-        self.schema._context = context.into();
-        self
-    }
-
     /// Sets the minimum value.
     pub fn minimum(mut self, minimum: i64) -> Self {
         self.schema.minimum = Some(minimum);
@@ -477,16 +439,21 @@ impl IntegerSchemaBuilder {
         self
     }
 
-    /// Adds a description for a specific language.
-    pub fn description_with_lang(mut self, lang: &str, description: &str) -> Self {
-        let descriptions = self.schema._context._metabase.descriptions.get_or_insert_with(MultiLanguage::new);
-        descriptions.add(lang, description);
-        self
-    }
-
     /// Builds and returns the `IntegerSchema` instance.
     pub fn build(self) -> IntegerSchema {
         self.schema
+    }
+}
+
+impl ContextHelper for IntegerSchemaBuilder {
+    fn context(&mut self) -> &mut DataSchemaContext {
+        &mut self.schema._context
+    }
+}
+
+impl MetadataHelper for IntegerSchemaBuilder {
+    fn metadata(&mut self) -> &mut Metadata {
+        &mut self.context()._metadata
     }
 }
 
@@ -528,12 +495,6 @@ impl ObjectSchemaBuilder {
         }
     }
 
-    /// Sets the context.
-    pub fn context(mut self, context: impl Into<DataSchemaContext>) -> Self {
-        self.schema._context = context.into();
-        self
-    }
-
     /// Adds a property.
     pub fn property(mut self, name: impl Into<String>, schema: DataSchema) -> Self {
         let properties = self.schema.properties.get_or_insert_with(BTreeMap::new);
@@ -563,16 +524,21 @@ impl ObjectSchemaBuilder {
         self
     }
 
-    /// Adds a description for a specific language.
-    pub fn description_with_lang(mut self, lang: &str, description: &str) -> Self {
-        let descriptions = self.schema._context._metabase.descriptions.get_or_insert_with(MultiLanguage::new);
-        descriptions.add(lang, description);
-        self
-    }
-
     /// Builds and returns the `ObjectSchema` instance.
     pub fn build(self) -> ObjectSchema {
         self.schema
+    }
+}
+
+impl ContextHelper for ObjectSchemaBuilder {
+    fn context(&mut self) -> &mut DataSchemaContext {
+        &mut self.schema._context
+    }
+}
+
+impl MetadataHelper for ObjectSchemaBuilder {
+    fn metadata(&mut self) -> &mut Metadata {
+        &mut self.context()._metadata
     }
 }
 
@@ -627,12 +593,6 @@ impl StringSchemaBuilder {
         }
     }
 
-    /// Sets the context.
-    pub fn context(mut self, context: impl Into<DataSchemaContext>) -> Self {
-        self.schema._context = context.into();
-        self
-    }
-
     /// Sets the minimum length.
     pub fn min_length(mut self, min_length: u32) -> Self {
         self.schema.min_length = Some(min_length);
@@ -663,16 +623,21 @@ impl StringSchemaBuilder {
         self
     }
 
-    /// Adds a description for a specific language.
-    pub fn description_with_lang(mut self, lang: &str, description: &str) -> Self {
-        let descriptions = self.schema._context._metabase.descriptions.get_or_insert_with(MultiLanguage::new);
-        descriptions.add(lang, description);
-        self
-    }
-
     /// Builds and returns the `StringSchema` instance.
     pub fn build(self) -> StringSchema {
         self.schema
+    }
+}
+
+impl ContextHelper for StringSchemaBuilder {
+    fn context(&mut self) -> &mut DataSchemaContext {
+        &mut self.schema._context
+    }
+}
+
+impl MetadataHelper for StringSchemaBuilder {
+    fn metadata(&mut self) -> &mut Metadata {
+        &mut self.context()._metadata
     }
 }
 
@@ -707,22 +672,21 @@ impl NullSchemaBuilder {
         }
     }
 
-    /// Sets the context.
-    pub fn context(mut self, context: impl Into<DataSchemaContext>) -> Self {
-        self.schema._context = context.into();
-        self
-    }
-
-    /// Adds a description for a specific language.
-    pub fn description_with_lang(mut self, lang: &str, description: &str) -> Self {
-        let descriptions = self.schema._context._metabase.descriptions.get_or_insert_with(MultiLanguage::new);
-        descriptions.add(lang, description);
-        self
-    }
-
     /// Builds and returns the `NullSchema` instance.
     pub fn build(self) -> NullSchema {
         self.schema
+    }
+}
+
+impl ContextHelper for NullSchemaBuilder {
+    fn context(&mut self) -> &mut DataSchemaContext {
+        &mut self.schema._context
+    }
+}
+
+impl MetadataHelper for NullSchemaBuilder {
+    fn metadata(&mut self) -> &mut Metadata {
+        &mut self.context()._metadata
     }
 }
 

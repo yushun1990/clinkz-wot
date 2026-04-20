@@ -27,74 +27,62 @@ pub struct SecuritySchemeContext {
     pub proxy: Option<AnyUri>,
 
     /// Identification of the security mechanism being configured.
-    pub schema: String,
+    pub scheme: String,
 }
 
 impl SecuritySchemeContext {
-    pub fn builder(schema: impl Into<String>) -> SecuritySchemeContextBuilder {
-        SecuritySchemeContextBuilder::new(schema)
-    }
-}
-
-/// Builder for creating `SecuritySchemeContext` instances.
-pub struct SecuritySchemeContextBuilder {
-    context: SecuritySchemeContext,
-}
-
-impl SecuritySchemeContextBuilder {
-    /// Creates a new `SecuritySchemeContextBuilder` with the required `schema` field.
-    pub fn new(schema: impl Into<String>) -> Self {
+    pub fn new(scheme: impl Into<String>) -> Self {
         Self {
-            context: SecuritySchemeContext {
-                schema: schema.into(),
-                ..Default::default()
-            },
+            scheme: scheme.into(),
+            ..Default::default()
         }
     }
+}
+
+pub trait ContextHelper: Sized {
+    fn context(&mut self) -> &mut SecuritySchemeContext;
 
     /// Adds tags.
-    pub fn tags<I, S>(mut self, tags: I) -> Self
+    fn tags<I, S>(mut self, tags: I) -> Self
     where
         I: IntoIterator<Item=S>,
-        S: Into<String> {
+        S: Into<String>
+    {
         let mut items: Vec<String> = tags.into_iter().map(|s| s.into()).collect();
-        self.context.tags.get_or_insert_with(Vec::new).append(&mut items);
+        self.context().tags.get_or_insert_with(Vec::new).append(&mut items);
         self
     }
 
     /// Sets the description.
-    pub fn description(mut self, description: impl Into<String>) -> Self {
-        self.context.description = Some(description.into());
+    fn description(mut self, description: impl Into<String>) -> Self {
+        self.context().description = Some(description.into());
         self
     }
 
     /// Sets the multi-language descriptions.
-    pub fn descriptions(mut self, descriptions: impl Into<MultiLanguage>) -> Self {
-        self.context.descriptions = Some(descriptions.into());
+    fn descriptions(mut self, descriptions: impl Into<MultiLanguage>) -> Self {
+        self.context().descriptions = Some(descriptions.into());
         self
     }
 
     /// Adds a description for a specific language.
-    pub fn description_with_lang(mut self, lang: &str, description: &str) -> Self {
-        let descriptions = self.context.descriptions.get_or_insert_with(MultiLanguage::new);
+    fn description_with_lang(mut self, lang: &str, description: &str) -> Self {
+        let descriptions = self.context().descriptions.get_or_insert_with(MultiLanguage::new);
         descriptions.add(lang, description);
         self
     }
 
     /// Sets the proxy URI.
-    pub fn proxy(mut self, proxy: impl Into<String>) -> Self {
+    fn proxy(mut self, proxy: impl Into<String>) -> Self {
         match AnyUri::parse(proxy.into().as_str()) {
-            Ok(uri) => self.context.proxy = Some(uri),
+            Ok(uri) => self.context().proxy = Some(uri),
             Err(_) => {},
         }
         self
     }
 
-    /// Builds and returns the `SecuritySchemeContext` instance.
-    pub fn build(self) -> SecuritySchemeContext {
-        self.context
-    }
 }
+
 
 /// A security configuration corresponding to identified by the
 /// Vocabulary Term `nosec`.
@@ -122,67 +110,20 @@ impl NoSecuritySchemeBuilder {
     pub fn new() -> Self {
         Self {
             scheme: NoSecurityScheme {
-                _context: SecuritySchemeContext::builder("nosec").build(),
+                _context: SecuritySchemeContext::new("nosec"),
             },
         }
-    }
-
-    /// Sets the context.
-    pub fn context(mut self, context: impl Into<SecuritySchemeContext>) -> Self {
-        self.scheme._context = context.into();
-        self
-    }
-
-    /// Adds tags.
-    pub fn tags<I, S>(mut self, tags: I) -> Self
-    where
-        I: IntoIterator<Item=S>,
-        S: Into<String> {
-        let mut context = self.scheme._context;
-        context.tags.get_or_insert_with(Vec::new).extend(tags.into_iter().map(|s| s.into()));
-        self.scheme._context = context;
-        self
-    }
-
-    /// Sets the description.
-    pub fn description(mut self, description: impl Into<String>) -> Self {
-        let mut context = self.scheme._context;
-        context.description = Some(description.into());
-        self.scheme._context = context;
-        self
-    }
-
-    /// Sets the multi-language descriptions.
-    pub fn descriptions(mut self, descriptions: impl Into<MultiLanguage>) -> Self {
-        let mut context = self.scheme._context;
-        context.descriptions = Some(descriptions.into());
-        self.scheme._context = context;
-        self
-    }
-
-    /// Sets the proxy URI.
-    pub fn proxy(mut self, proxy: impl Into<String>) -> Self {
-        let mut context = self.scheme._context;
-        match AnyUri::parse(proxy.into().as_str()) {
-            Ok(uri) => context.proxy = Some(uri),
-            Err(_) => {},
-        }
-        self.scheme._context = context;
-        self
-    }
-
-    /// Adds a description for a specific language.
-    pub fn description_with_lang(mut self, lang: &str, description: &str) -> Self {
-        let mut context = self.scheme._context;
-        let descriptions = context.descriptions.get_or_insert_with(MultiLanguage::new);
-        descriptions.add(lang, description);
-        self.scheme._context = context;
-        self
     }
 
     /// Builds and returns the `NoSecurityScheme` instance.
     pub fn build(self) -> NoSecurityScheme {
         self.scheme
+    }
+}
+
+impl ContextHelper for NoSecuritySchemeBuilder {
+    fn context(&mut self) -> &mut SecuritySchemeContext {
+        &mut self.scheme._context
     }
 }
 
@@ -212,67 +153,20 @@ impl AutoSecuritySchemeBuilder {
     pub fn new() -> Self {
         Self {
             scheme: AutoSecurityScheme {
-                _context: SecuritySchemeContext::builder("auto").build(),
+                _context: SecuritySchemeContext::new("auto"),
             },
         }
-    }
-
-    /// Sets the context.
-    pub fn context(mut self, context: impl Into<SecuritySchemeContext>) -> Self {
-        self.scheme._context = context.into();
-        self
-    }
-
-    /// Adds tags.
-    pub fn tags<I, S>(mut self, tags: I) -> Self
-    where
-        I: IntoIterator<Item=S>,
-        S: Into<String> {
-        let mut context = self.scheme._context;
-        context.tags.get_or_insert_with(Vec::new).extend(tags.into_iter().map(|s| s.into()));
-        self.scheme._context = context;
-        self
-    }
-
-    /// Sets the description.
-    pub fn description(mut self, description: impl Into<String>) -> Self {
-        let mut context = self.scheme._context;
-        context.description = Some(description.into());
-        self.scheme._context = context;
-        self
-    }
-
-    /// Sets the multi-language descriptions.
-    pub fn descriptions(mut self, descriptions: impl Into<MultiLanguage>) -> Self {
-        let mut context = self.scheme._context;
-        context.descriptions = Some(descriptions.into());
-        self.scheme._context = context;
-        self
-    }
-
-    /// Sets the proxy URI.
-    pub fn proxy(mut self, proxy: impl Into<String>) -> Self {
-        let mut context = self.scheme._context;
-        match AnyUri::parse(proxy.into().as_str()) {
-            Ok(uri) => context.proxy = Some(uri),
-            Err(_) => {},
-        }
-        self.scheme._context = context;
-        self
-    }
-
-    /// Adds a description for a specific language.
-    pub fn description_with_lang(mut self, lang: &str, description: &str) -> Self {
-        let mut context = self.scheme._context;
-        let descriptions = context.descriptions.get_or_insert_with(MultiLanguage::new);
-        descriptions.add(lang, description);
-        self.scheme._context = context;
-        self
     }
 
     /// Builds and returns the `AutoSecurityScheme` instance.
     pub fn build(self) -> AutoSecurityScheme {
         self.scheme
+    }
+}
+
+impl ContextHelper for AutoSecuritySchemeBuilder {
+    fn context(&mut self) -> &mut SecuritySchemeContext {
+        &mut self.scheme._context
     }
 }
 
@@ -311,62 +205,19 @@ impl ComboSecuritySchemeBuilder {
     pub fn new() -> Self {
         Self {
             scheme: ComboSecurityScheme {
-                _context: SecuritySchemeContext::builder("combo").build(),
+                _context: SecuritySchemeContext::new("combo"),
                 one_of: Vec::new(),
                 all_of: Vec::new(),
             },
         }
     }
 
-    /// Sets the context.
-    pub fn context(mut self, context: impl Into<SecuritySchemeContext>) -> Self {
-        self.scheme._context = context.into();
-        self
-    }
-
-    /// Adds tags.
-    pub fn tags<I, S>(mut self, tags: I) -> Self
-    where
-        I: IntoIterator<Item=S>,
-        S: Into<String> {
-        let mut context = self.scheme._context;
-        context.tags.get_or_insert_with(Vec::new).extend(tags.into_iter().map(|s| s.into()));
-        self.scheme._context = context;
-        self
-    }
-
-    /// Sets the description.
-    pub fn description(mut self, description: impl Into<String>) -> Self {
-        let mut context = self.scheme._context;
-        context.description = Some(description.into());
-        self.scheme._context = context;
-        self
-    }
-
-    /// Sets the multi-language descriptions.
-    pub fn descriptions(mut self, descriptions: impl Into<MultiLanguage>) -> Self {
-        let mut context = self.scheme._context;
-        context.descriptions = Some(descriptions.into());
-        self.scheme._context = context;
-        self
-    }
-
-    /// Sets the proxy URI.
-    pub fn proxy(mut self, proxy: impl Into<String>) -> Self {
-        let mut context = self.scheme._context;
-        match AnyUri::parse(proxy.into().as_str()) {
-            Ok(uri) => context.proxy = Some(uri),
-            Err(_) => {},
-        }
-        self.scheme._context = context;
-        self
-    }
-
     /// Adds security schemes to one_of.
     pub fn one_of<I, S>(mut self, schemes: I) -> Self
     where
         I: IntoIterator<Item=S>,
-        S: Into<String> {
+        S: Into<String>
+    {
         self.scheme.one_of.extend(schemes.into_iter().map(|s| s.into()));
         self
     }
@@ -375,23 +226,21 @@ impl ComboSecuritySchemeBuilder {
     pub fn all_of<I, S>(mut self, schemes: I) -> Self
     where
         I: IntoIterator<Item=S>,
-        S: Into<String> {
+        S: Into<String>
+    {
         self.scheme.all_of.extend(schemes.into_iter().map(|s| s.into()));
-        self
-    }
-
-    /// Adds a description for a specific language.
-    pub fn description_with_lang(mut self, lang: &str, description: &str) -> Self {
-        let mut context = self.scheme._context;
-        let descriptions = context.descriptions.get_or_insert_with(MultiLanguage::new);
-        descriptions.add(lang, description);
-        self.scheme._context = context;
         self
     }
 
     /// Builds and returns the `ComboSecurityScheme` instance.
     pub fn build(self) -> ComboSecurityScheme {
         self.scheme
+    }
+}
+
+impl ContextHelper for ComboSecuritySchemeBuilder {
+    fn context(&mut self) -> &mut SecuritySchemeContext {
+        &mut self.scheme._context
     }
 }
 
@@ -444,55 +293,11 @@ impl BasicSecuritySchemeBuilder {
     pub fn new() -> Self {
         Self {
             scheme: BasicSecurityScheme {
-                _context: SecuritySchemeContext::builder("basic").build(),
+                _context: SecuritySchemeContext::new("basic"),
                 name: None,
                 location: SecurityLocation::default(),
             },
         }
-    }
-
-    /// Sets the context.
-    pub fn context(mut self, context: impl Into<SecuritySchemeContext>) -> Self {
-        self.scheme._context = context.into();
-        self
-    }
-
-    /// Adds tags.
-    pub fn tags<I, S>(mut self, tags: I) -> Self
-    where
-        I: IntoIterator<Item=S>,
-        S: Into<String> {
-        let mut context = self.scheme._context;
-        context.tags.get_or_insert_with(Vec::new).extend(tags.into_iter().map(|s| s.into()));
-        self.scheme._context = context;
-        self
-    }
-
-    /// Sets the description.
-    pub fn description(mut self, description: impl Into<String>) -> Self {
-        let mut context = self.scheme._context;
-        context.description = Some(description.into());
-        self.scheme._context = context;
-        self
-    }
-
-    /// Sets the multi-language descriptions.
-    pub fn descriptions(mut self, descriptions: impl Into<MultiLanguage>) -> Self {
-        let mut context = self.scheme._context;
-        context.descriptions = Some(descriptions.into());
-        self.scheme._context = context;
-        self
-    }
-
-    /// Sets the proxy URI.
-    pub fn proxy(mut self, proxy: impl Into<String>) -> Self {
-        let mut context = self.scheme._context;
-        match AnyUri::parse(proxy.into().as_str()) {
-            Ok(uri) => context.proxy = Some(uri),
-            Err(_) => {},
-        }
-        self.scheme._context = context;
-        self
     }
 
     /// Sets the name.
@@ -507,18 +312,15 @@ impl BasicSecuritySchemeBuilder {
         self
     }
 
-    /// Adds a description for a specific language.
-    pub fn description_with_lang(mut self, lang: &str, description: &str) -> Self {
-        let mut context = self.scheme._context;
-        let descriptions = context.descriptions.get_or_insert_with(MultiLanguage::new);
-        descriptions.add(lang, description);
-        self.scheme._context = context;
-        self
-    }
-
     /// Builds and returns the `BasicSecurityScheme` instance.
     pub fn build(self) -> BasicSecurityScheme {
         self.scheme
+    }
+}
+
+impl ContextHelper for BasicSecuritySchemeBuilder {
+    fn context(&mut self) -> &mut SecuritySchemeContext {
+        &mut self.scheme._context
     }
 }
 
@@ -574,56 +376,12 @@ impl DigestSecuritySchemeBuilder {
     pub fn new() -> Self {
         Self {
             scheme: DigestSecurityScheme {
-                _context: SecuritySchemeContext::builder("digest").build(),
+                _context: SecuritySchemeContext::new("digest"),
                 name: None,
                 location: SecurityLocation::default(),
                 qop: Qop::default(),
             },
         }
-    }
-
-    /// Sets the context.
-    pub fn context(mut self, context: impl Into<SecuritySchemeContext>) -> Self {
-        self.scheme._context = context.into();
-        self
-    }
-
-    /// Adds tags.
-    pub fn tags<I, S>(mut self, tags: I) -> Self
-    where
-        I: IntoIterator<Item=S>,
-        S: Into<String> {
-        let mut context = self.scheme._context;
-        context.tags.get_or_insert_with(Vec::new).extend(tags.into_iter().map(|s| s.into()));
-        self.scheme._context = context;
-        self
-    }
-
-    /// Sets the description.
-    pub fn description(mut self, description: impl Into<String>) -> Self {
-        let mut context = self.scheme._context;
-        context.description = Some(description.into());
-        self.scheme._context = context;
-        self
-    }
-
-    /// Sets the multi-language descriptions.
-    pub fn descriptions(mut self, descriptions: impl Into<MultiLanguage>) -> Self {
-        let mut context = self.scheme._context;
-        context.descriptions = Some(descriptions.into());
-        self.scheme._context = context;
-        self
-    }
-
-    /// Sets the proxy URI.
-    pub fn proxy(mut self, proxy: impl Into<String>) -> Self {
-        let mut context = self.scheme._context;
-        match AnyUri::parse(proxy.into().as_str()) {
-            Ok(uri) => context.proxy = Some(uri),
-            Err(_) => {},
-        }
-        self.scheme._context = context;
-        self
     }
 
     /// Sets the name.
@@ -644,18 +402,15 @@ impl DigestSecuritySchemeBuilder {
         self
     }
 
-    /// Adds a description for a specific language.
-    pub fn description_with_lang(mut self, lang: &str, description: &str) -> Self {
-        let mut context = self.scheme._context;
-        let descriptions = context.descriptions.get_or_insert_with(MultiLanguage::new);
-        descriptions.add(lang, description);
-        self.scheme._context = context;
-        self
-    }
-
     /// Builds and returns the `DigestSecurityScheme` instance.
     pub fn build(self) -> DigestSecurityScheme {
         self.scheme
+    }
+}
+
+impl ContextHelper for DigestSecuritySchemeBuilder {
+    fn context(&mut self) -> &mut SecuritySchemeContext {
+        &mut self.scheme._context
     }
 }
 
@@ -692,55 +447,11 @@ impl APIKeySecuritySchemeBuilder {
     pub fn new() -> Self {
         Self {
             scheme: APIKeySecurityScheme {
-                _context: SecuritySchemeContext::builder("apikey").build(),
+                _context: SecuritySchemeContext::new("apikey"),
                 name: None,
                 location: SecurityLocation::default(),
             },
         }
-    }
-
-    /// Sets the context.
-    pub fn context(mut self, context: impl Into<SecuritySchemeContext>) -> Self {
-        self.scheme._context = context.into();
-        self
-    }
-
-    /// Adds tags.
-    pub fn tags<I, S>(mut self, tags: I) -> Self
-    where
-        I: IntoIterator<Item=S>,
-        S: Into<String> {
-        let mut context = self.scheme._context;
-        context.tags.get_or_insert_with(Vec::new).extend(tags.into_iter().map(|s| s.into()));
-        self.scheme._context = context;
-        self
-    }
-
-    /// Sets the description.
-    pub fn description(mut self, description: impl Into<String>) -> Self {
-        let mut context = self.scheme._context;
-        context.description = Some(description.into());
-        self.scheme._context = context;
-        self
-    }
-
-    /// Sets the multi-language descriptions.
-    pub fn descriptions(mut self, descriptions: impl Into<MultiLanguage>) -> Self {
-        let mut context = self.scheme._context;
-        context.descriptions = Some(descriptions.into());
-        self.scheme._context = context;
-        self
-    }
-
-    /// Sets the proxy URI.
-    pub fn proxy(mut self, proxy: impl Into<String>) -> Self {
-        let mut context = self.scheme._context;
-        match AnyUri::parse(proxy.into().as_str()) {
-            Ok(uri) => context.proxy = Some(uri),
-            Err(_) => {},
-        }
-        self.scheme._context = context;
-        self
     }
 
     /// Sets the name.
@@ -755,18 +466,15 @@ impl APIKeySecuritySchemeBuilder {
         self
     }
 
-    /// Adds a description for a specific language.
-    pub fn description_with_lang(mut self, lang: &str, description: &str) -> Self {
-        let mut context = self.scheme._context;
-        let descriptions = context.descriptions.get_or_insert_with(MultiLanguage::new);
-        descriptions.add(lang, description);
-        self.scheme._context = context;
-        self
-    }
-
     /// Builds and returns the `APIKeySecurityScheme` instance.
     pub fn build(self) -> APIKeySecurityScheme {
         self.scheme
+    }
+}
+
+impl ContextHelper for APIKeySecuritySchemeBuilder {
+    fn context(&mut self) -> &mut SecuritySchemeContext {
+        &mut self.scheme._context
     }
 }
 
@@ -824,7 +532,7 @@ impl BearerSecuritySchemeBuilder {
     pub fn new() -> Self {
         Self {
             scheme: BearerSecurityScheme {
-                _context: SecuritySchemeContext::builder("bearer").build(),
+                _context: SecuritySchemeContext::new("bearer"),
                 authorization: None,
                 name: None,
                 alg: default_alg(),
@@ -832,50 +540,6 @@ impl BearerSecuritySchemeBuilder {
                 location: SecurityLocation::default(),
             },
         }
-    }
-
-    /// Sets the context.
-    pub fn context(mut self, context: impl Into<SecuritySchemeContext>) -> Self {
-        self.scheme._context = context.into();
-        self
-    }
-
-    /// Adds tags.
-    pub fn tags<I, S>(mut self, tags: I) -> Self
-    where
-        I: IntoIterator<Item=S>,
-        S: Into<String> {
-        let mut context = self.scheme._context;
-        context.tags.get_or_insert_with(Vec::new).extend(tags.into_iter().map(|s| s.into()));
-        self.scheme._context = context;
-        self
-    }
-
-    /// Sets the description.
-    pub fn description(mut self, description: impl Into<String>) -> Self {
-        let mut context = self.scheme._context;
-        context.description = Some(description.into());
-        self.scheme._context = context;
-        self
-    }
-
-    /// Sets the multi-language descriptions.
-    pub fn descriptions(mut self, descriptions: impl Into<MultiLanguage>) -> Self {
-        let mut context = self.scheme._context;
-        context.descriptions = Some(descriptions.into());
-        self.scheme._context = context;
-        self
-    }
-
-    /// Sets the proxy URI.
-    pub fn proxy(mut self, proxy: impl Into<String>) -> Self {
-        let mut context = self.scheme._context;
-        match AnyUri::parse(proxy.into().as_str()) {
-            Ok(uri) => context.proxy = Some(uri),
-            Err(_) => {},
-        }
-        self.scheme._context = context;
-        self
     }
 
     /// Sets the authorization URI.
@@ -911,18 +575,15 @@ impl BearerSecuritySchemeBuilder {
         self
     }
 
-    /// Adds a description for a specific language.
-    pub fn description_with_lang(mut self, lang: &str, description: &str) -> Self {
-        let mut context = self.scheme._context;
-        let descriptions = context.descriptions.get_or_insert_with(MultiLanguage::new);
-        descriptions.add(lang, description);
-        self.scheme._context = context;
-        self
-    }
-
     /// Builds and returns the `BearerSecurityScheme` instance.
     pub fn build(self) -> BearerSecurityScheme {
         self.scheme
+    }
+}
+
+impl ContextHelper for BearerSecuritySchemeBuilder {
+    fn context(&mut self) -> &mut SecuritySchemeContext {
+        &mut self.scheme._context
     }
 }
 
@@ -956,54 +617,10 @@ impl PSKSecuritySchemeBuilder {
     pub fn new() -> Self {
         Self {
             scheme: PSKSecurityScheme {
-                _context: SecuritySchemeContext::builder("psk").build(),
+                _context: SecuritySchemeContext::new("psk"),
                 identity: None,
             },
         }
-    }
-
-    /// Sets the context.
-    pub fn context(mut self, context: impl Into<SecuritySchemeContext>) -> Self {
-        self.scheme._context = context.into();
-        self
-    }
-
-    /// Adds tags.
-    pub fn tags<I, S>(mut self, tags: I) -> Self
-    where
-        I: IntoIterator<Item=S>,
-        S: Into<String> {
-        let mut context = self.scheme._context;
-        context.tags.get_or_insert_with(Vec::new).extend(tags.into_iter().map(|s| s.into()));
-        self.scheme._context = context;
-        self
-    }
-
-    /// Sets the description.
-    pub fn description(mut self, description: impl Into<String>) -> Self {
-        let mut context = self.scheme._context;
-        context.description = Some(description.into());
-        self.scheme._context = context;
-        self
-    }
-
-    /// Sets the multi-language descriptions.
-    pub fn descriptions(mut self, descriptions: impl Into<MultiLanguage>) -> Self {
-        let mut context = self.scheme._context;
-        context.descriptions = Some(descriptions.into());
-        self.scheme._context = context;
-        self
-    }
-
-    /// Sets the proxy URI.
-    pub fn proxy(mut self, proxy: impl Into<String>) -> Self {
-        let mut context = self.scheme._context;
-        match AnyUri::parse(proxy.into().as_str()) {
-            Ok(uri) => context.proxy = Some(uri),
-            Err(_) => {},
-        }
-        self.scheme._context = context;
-        self
     }
 
     /// Sets the identity.
@@ -1012,18 +629,15 @@ impl PSKSecuritySchemeBuilder {
         self
     }
 
-    /// Adds a description for a specific language.
-    pub fn description_with_lang(mut self, lang: &str, description: &str) -> Self {
-        let mut context = self.scheme._context;
-        let descriptions = context.descriptions.get_or_insert_with(MultiLanguage::new);
-        descriptions.add(lang, description);
-        self.scheme._context = context;
-        self
-    }
-
     /// Builds and returns the `PSKSecurityScheme` instance.
     pub fn build(self) -> PSKSecurityScheme {
         self.scheme
+    }
+}
+
+impl ContextHelper for PSKSecuritySchemeBuilder {
+    fn context(&mut self) -> &mut SecuritySchemeContext {
+        &mut self.scheme._context
     }
 }
 
@@ -1070,7 +684,7 @@ impl OAuth2SecuritySchemeBuilder {
     pub fn new(flow: impl Into<String>) -> Self {
         Self {
             scheme: OAuth2SecurityScheme {
-                _context: SecuritySchemeContext::builder("oauth2").build(),
+                _context: SecuritySchemeContext::new("oauth2"),
                 authorization: None,
                 token: None,
                 refresh: None,
@@ -1078,50 +692,6 @@ impl OAuth2SecuritySchemeBuilder {
                 flow: flow.into(),
             },
         }
-    }
-
-    /// Sets the context.
-    pub fn context(mut self, context: impl Into<SecuritySchemeContext>) -> Self {
-        self.scheme._context = context.into();
-        self
-    }
-
-    /// Adds tags.
-    pub fn tags<I, S>(mut self, tags: I) -> Self
-    where
-        I: IntoIterator<Item=S>,
-        S: Into<String> {
-        let mut context = self.scheme._context;
-        context.tags.get_or_insert_with(Vec::new).extend(tags.into_iter().map(|s| s.into()));
-        self.scheme._context = context;
-        self
-    }
-
-    /// Sets the description.
-    pub fn description(mut self, description: impl Into<String>) -> Self {
-        let mut context = self.scheme._context;
-        context.description = Some(description.into());
-        self.scheme._context = context;
-        self
-    }
-
-    /// Sets the multi-language descriptions.
-    pub fn descriptions(mut self, descriptions: impl Into<MultiLanguage>) -> Self {
-        let mut context = self.scheme._context;
-        context.descriptions = Some(descriptions.into());
-        self.scheme._context = context;
-        self
-    }
-
-    /// Sets the proxy URI.
-    pub fn proxy(mut self, proxy: impl Into<String>) -> Self {
-        let mut context = self.scheme._context;
-        match AnyUri::parse(proxy.into().as_str()) {
-            Ok(uri) => context.proxy = Some(uri),
-            Err(_) => {},
-        }
-        self.scheme._context = context;
-        self
     }
 
     /// Sets the authorization URI.
@@ -1161,18 +731,15 @@ impl OAuth2SecuritySchemeBuilder {
         self
     }
 
-    /// Adds a description for a specific language.
-    pub fn description_with_lang(mut self, lang: &str, description: &str) -> Self {
-        let mut context = self.scheme._context;
-        let descriptions = context.descriptions.get_or_insert_with(MultiLanguage::new);
-        descriptions.add(lang, description);
-        self.scheme._context = context;
-        self
-    }
-
     /// Builds and returns the `OAuth2SecurityScheme` instance.
     pub fn build(self) -> OAuth2SecurityScheme {
         self.scheme
+    }
+}
+
+impl ContextHelper for OAuth2SecuritySchemeBuilder {
+    fn context(&mut self) -> &mut SecuritySchemeContext {
+        &mut self.scheme._context
     }
 }
 
@@ -1188,4 +755,18 @@ pub enum SecurityScheme {
     Bearer(BearerSecurityScheme),
     PSK(PSKSecurityScheme),
     OAuth2(OAuth2SecurityScheme),
+}
+
+impl SecurityScheme {
+    pub fn scheme(&self) -> &str {
+        macro_rules! get_scheme {
+            ($($variant:ident),*) => {
+                match self {
+                    $(Self::$variant(s) => s._context.scheme.as_ref(),)*
+                }
+            };
+        }
+
+        get_scheme!(NoSec, Auto, Combo, Basic, Digest, APIKey, Bearer, PSK, OAuth2)
+    }
 }

@@ -10,7 +10,7 @@ use crate::{
     affordance::{ActionAffordance, EventAffordance, PropertyAffordance},
     context::Context,
     data_schema::DataSchema,
-    data_type::{AnyUri, Metadata, Nil, VersionInfo},
+    data_type::{AnyUri, Metadata, MetadataHelper, Nil, VersionInfo},
     form::Form,
     link::Link,
     security_scheme::SecurityScheme, validate::{Validate, ValidateError}
@@ -107,11 +107,11 @@ pub struct Thing<Ext = Nil> {
 
 impl <Ext> Thing<Ext>
 where
-    Ext: Default + Serialize
+    Ext: Default + Serialize + Validate
 {
     /// Creates a new ThingBuilder with a default "nosec" security configuration.
     pub fn builder(title: impl Into<String>) -> ThingBuilder<Ext> {
-        ThingBuilder::new(title.into())
+        ThingBuilder::new(title)
     }
 
 }
@@ -172,24 +172,17 @@ pub struct ThingBuilder<Ext> {
 
 impl <Ext> ThingBuilder<Ext>
 where
-    Ext: Default + Serialize
+    Ext: Default + Serialize + Validate
 {
-    pub fn new(title: String) -> Self {
-        let mut security_definitions = BTreeMap::new();
-        // Default to 'nosec' to satisfy minimal validation requirements.
-        security_definitions.insert(
-            "nosec".into(),
-            SecurityScheme::NoSec(Default::default())
-        );
-
+    pub fn new(title: impl Into<String>) -> Self{
         Self {
             thing: Thing {
-                _metadata:  Metadata {
-                    title: Some(title),
+                _metadata: Metadata {
+                    title: Some(title.into()),
                     ..Default::default()
                 },
-                security: alloc::vec!["nosec".into()],
-                security_definitions,
+                security: alloc::vec![],
+                security_definitions: BTreeMap::new(),
                 _extra_fields: Ext::default(),
                 ..Default::default()
             }
@@ -309,8 +302,11 @@ where
     }
 
     /// Adds a security name.
-    pub fn security(mut self, security: impl Into<String>) -> Self {
-        self.thing.security.push(security.into());
+    pub fn security(mut self, security: impl Into<SecurityScheme>) -> Self {
+        let security = security.into();
+        let scheme = security.scheme().to_string();
+        self.thing.security.push(scheme.clone());
+        self.thing.security_definitions.insert(scheme, security);
         self
     }
 
@@ -318,15 +314,11 @@ where
     pub fn securities<I, S>(mut self, securities: I) -> Self
     where
         I: IntoIterator<Item=S>,
-        S: Into<String> {
-        let mut items: Vec<String> = securities.into_iter().map(|s| s.into()).collect();
-        self.thing.security.append(&mut items);
-        self
-    }
-
-    /// Adds a security definition.
-    pub fn security_definition(mut self, name: impl Into<String>, scheme: SecurityScheme) -> Self {
-        self.thing.security_definitions.insert(name.into(), scheme);
+        S: Into<SecurityScheme>
+    {
+        for s in securities {
+            self = self.security(s);
+        }
         self
     }
 
@@ -345,7 +337,17 @@ where
     }
 
     /// Builds and returns the `Thing` instance.
-    pub fn build(self) -> Thing<Ext> {
-        self.thing
+    pub fn build(self) -> Result<Thing<Ext>, ValidateError> {
+        self.thing.validate()?;
+        Ok(self.thing)
+    }
+}
+
+impl <Ext> MetadataHelper for Thing<Ext>
+where
+    Ext: Default + Serialize
+{
+    fn metadata(&mut self) -> &mut Metadata {
+        &mut self._metadata
     }
 }
