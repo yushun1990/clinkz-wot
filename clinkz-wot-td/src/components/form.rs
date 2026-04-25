@@ -1,6 +1,6 @@
 use alloc::{vec::Vec, string::String, borrow::Cow};
 use fluent_uri::ParseError;
-use serde::{Deserialize, Deserializer, Serialize};
+use serde::{Deserialize, Serialize};
 use serde_with::{serde_as, skip_serializing_none, OneOrMany};
 
 use crate::data_type::{AdditionalExpectedResponse, AnyUri, ExpectedResponse, Operation};
@@ -13,14 +13,14 @@ use crate::data_type::{AdditionalExpectedResponse, AnyUri, ExpectedResponse, Ope
 /// itself for meta-interactions.
 #[serde_as]
 #[skip_serializing_none]
-#[derive(Debug, Default, Clone, PartialEq, Serialize)]
+#[derive(Debug, Default, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct Form {
+pub struct Form<Ext> {
     /// Target IRI of the resource or service.
     pub href: AnyUri,
 
     /// Media type of data sent/received (e.g., "application/json").
-    #[serde(default="default_content_type")]
+    #[serde(default="default_content_type", skip_serializing_if = "is_default_content_type")]
     pub content_type: String,
 
     /// Content coding (e.g., "gzip").
@@ -57,75 +57,39 @@ pub struct Form {
     /// by the form.
     #[serde_as(as = "Option<OneOrMany<_>>")]
     pub op: Option<Vec<Operation>>,
+
+    #[serde(flatten)]
+    pub _extra_fields: Ext,
 }
 
 fn default_content_type() -> String {
     String::from("application/json")
 }
 
-impl<'de> Deserialize<'de> for Form {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        // Internal shadow struct to capture raw JSON data.
-        #[serde_as]
-        #[derive(Deserialize)]
-        #[serde(rename_all = "camelCase")]
-        struct FormShadow {
-            pub href: AnyUri,
-            #[serde(default = "default_content_type")]
-            pub content_type: String,
-            pub content_coding: Option<String>,
-            #[serde_as(as = "Option<OneOrMany<_>>")]
-            pub security: Option<Vec<String>>,
-            #[serde_as(as = "Option<OneOrMany<_>>")]
-            pub scopes: Option<Vec<String>>,
-            pub response: Option<ExpectedResponse>,
-            pub additional_responses: Option<Vec<AdditionalExpectedResponse>>,
-            pub subprotocol: Option<String>,
-            #[serde_as(as = "Option<OneOrMany<_>>")]
-            pub op: Option<Vec<Operation>>,
-        }
-
-        let raw = FormShadow::deserialize(deserializer)?;
-
-        // Logic: If response exists but lacks contentType, inherit from the parent Form.
-        let mut processed_response = raw.response;
-        if let Some(ref mut resp) = processed_response {
-            if resp.content_type.is_empty() {
-                resp.content_type = raw.content_type.clone()
-            }
-        }
-
-        Ok(Form {
-            href: raw.href,
-            content_type: raw.content_type,
-            content_coding: raw.content_coding,
-            security: raw.security,
-            scopes: raw.scopes,
-            response: processed_response,
-            additional_responses: raw.additional_responses,
-            subprotocol: raw.subprotocol,
-            op: raw.op,
-        })
-    }
+fn is_default_content_type(content_type: &String) -> bool {
+    content_type == &default_content_type()
 }
 
-impl Form {
-    pub fn builder(href: &str) -> FormBuilder<'_> {
+impl <Ext> Form<Ext>
+where
+    Ext: Default,
+{
+    pub fn builder(href: &str) -> FormBuilder<'_, Ext> {
         FormBuilder::new(href)
     }
 }
 
 
-pub struct FormBuilder<'a> {
+pub struct FormBuilder<'a, Ext> {
     href: Cow<'a, str>,
-    form: Form,
+    form: Form<Ext>,
 }
 
 
-impl <'a> FormBuilder <'a> {
+impl <'a, Ext> FormBuilder <'a, Ext>
+where
+    Ext: Default,
+{
     pub fn new(href: impl Into<Cow<'a, str>>) -> Self {
         Self {
             href: href.into(),
@@ -174,9 +138,9 @@ impl <'a> FormBuilder <'a> {
     }
 
     /// Add additional response with schema as null.
-    pub fn additional_response(mut self, response: impl Into<ExpectedResponse>, success: bool) -> Self {
+    pub fn additional_response(mut self, response: impl Into<AdditionalExpectedResponse>) -> Self {
         self.form.additional_responses.get_or_insert_with(Vec::new)
-            .push(AdditionalExpectedResponse::new(response, success));
+            .push(response.into());
         self
     }
 
@@ -199,7 +163,7 @@ impl <'a> FormBuilder <'a> {
     }
 
     /// Build the form.
-    pub fn build(mut self) -> Result<Form, ParseError> {
+    pub fn build(mut self) -> Result<Form<Ext>, ParseError> {
         self.form.href = AnyUri::parse(&self.href)?;
 
         Ok(self.form)

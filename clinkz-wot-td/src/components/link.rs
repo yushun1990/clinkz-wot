@@ -3,13 +3,13 @@ use fluent_uri::ParseError;
 use serde::{Deserialize, Serialize};
 use serde_with::{serde_as, skip_serializing_none, OneOrMany};
 
-use crate::data_type::AnyUri;
+use crate::data_type::{AnyUri, DefaultExt};
 
 #[serde_as]
 #[skip_serializing_none]
 #[derive(Debug, Default, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct Link {
+pub struct Link<Ext=DefaultExt> {
     /// Target IRI of the link.
     pub href: AnyUri,
 
@@ -31,21 +31,30 @@ pub struct Link {
     /// Language of the target resource (BCP47).
     #[serde_as(as = "Option<OneOrMany<_>>")]
     pub hreflang: Option<Vec<String>>,
+
+    #[serde(flatten)]
+    pub _extra_fields: Ext
 }
 
-impl Link {
-    pub fn builder(href: &str) -> LinkBuilder<'_> {
-        LinkBuilder::new(href)
+impl<Ext> Link<Ext>
+where
+    Ext: Default
+{
+    pub fn builder(href: &str) -> LinkBuilder<'_, Ext> {
+        LinkBuilder::<Ext>::new(href)
     }
 }
 
 /// Builder for creating `Link` instances.
-pub struct LinkBuilder<'a> {
+pub struct LinkBuilder<'a, Ext> {
     href: Cow<'a, str>,
-    link: Link,
+    link: Link<Ext>,
 }
 
-impl<'a> LinkBuilder<'a> {
+impl<'a, Ext> LinkBuilder<'a, Ext>
+where
+    Ext: Default
+{
     /// Creates a new `LinkBuilder` with the required `href` field.
     pub fn new(href: impl Into<Cow<'a, str>>) -> Self {
         Self {
@@ -98,7 +107,7 @@ impl<'a> LinkBuilder<'a> {
     }
 
     /// Builds and returns the `Link` instance.
-    pub fn build(mut self) -> Result<Link, ParseError> {
+    pub fn build(mut self) -> Result<Link<Ext>, ParseError> {
         self.link.href = AnyUri::parse(&self.href)?;
         Ok(self.link)
     }

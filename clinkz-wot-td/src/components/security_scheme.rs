@@ -3,13 +3,13 @@ use alloc::{string::{String, ToString}, vec::Vec};
 use serde::{Deserialize, Serialize};
 use serde_with::{serde_as, skip_serializing_none, OneOrMany};
 
-use crate::data_type::{AnyUri, MultiLanguage};
+use crate::data_type::{AnyUri, DefaultExt, MultiLanguage};
 
 #[serde_as]
 #[skip_serializing_none]
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all="camelCase")]
-pub struct SecuritySchemeContext {
+pub struct SecuritySchemeContext<Ext> {
     /// JSON-LD keyword to label the object with semantic tags.
     #[serde(rename = "@type")]
     #[serde_as(as = "Option<OneOrMany<_>>")]
@@ -28,9 +28,15 @@ pub struct SecuritySchemeContext {
 
     /// Identification of the security mechanism being configured.
     pub scheme: String,
+
+    #[serde(flatten)]
+    pub _extra_fields: Ext,
 }
 
-impl SecuritySchemeContext {
+impl <Ext> SecuritySchemeContext<Ext>
+where
+    Ext: Default
+{
     pub fn new(scheme: impl Into<String>) -> Self {
         Self {
             scheme: scheme.into(),
@@ -40,7 +46,9 @@ impl SecuritySchemeContext {
 }
 
 pub trait ContextHelper: Sized {
-    fn context(&mut self) -> &mut SecuritySchemeContext;
+    type Ext;
+
+    fn context(&mut self) -> &mut SecuritySchemeContext<Self::Ext>;
 
     /// Adds tags.
     fn tags<I, S>(mut self, tags: I) -> Self
@@ -81,6 +89,10 @@ pub trait ContextHelper: Sized {
         self
     }
 
+    fn extra_fields(mut self, extra_fields: impl Into<Self::Ext>) -> Self {
+        self.context()._extra_fields =  extra_fields.into();
+        self
+    }
 }
 
 
@@ -89,40 +101,47 @@ pub trait ContextHelper: Sized {
 #[skip_serializing_none]
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all="camelCase")]
-pub struct NoSecurityScheme {
+pub struct NoSecurityScheme<Ext=DefaultExt> {
     #[serde(flatten)]
-    pub _context: SecuritySchemeContext,
+    pub _context: SecuritySchemeContext<Ext>,
 }
 
-impl NoSecurityScheme {
-    pub fn builder() -> NoSecuritySchemeBuilder {
-        NoSecuritySchemeBuilder::new()
+impl <Ext> NoSecurityScheme<Ext>
+where
+    Ext: Default
+{
+    pub fn builder() -> NoSecuritySchemeBuilder<Ext> {
+        NoSecuritySchemeBuilder::<Ext>::new()
     }
 }
 
 /// Builder for creating `NoSecurityScheme` instances.
-pub struct NoSecuritySchemeBuilder {
-    scheme: NoSecurityScheme,
+pub struct NoSecuritySchemeBuilder<Ext> {
+    scheme: NoSecurityScheme<Ext>,
 }
 
-impl NoSecuritySchemeBuilder {
+impl <Ext> NoSecuritySchemeBuilder<Ext>
+where
+    Ext: Default
+{
     /// Creates a new `NoSecuritySchemeBuilder`.
     pub fn new() -> Self {
         Self {
             scheme: NoSecurityScheme {
-                _context: SecuritySchemeContext::new("nosec"),
+                _context: SecuritySchemeContext::<Ext>::new("nosec"),
             },
         }
     }
 
     /// Builds and returns the `NoSecurityScheme` instance.
-    pub fn build(self) -> NoSecurityScheme {
+    pub fn build(self) -> NoSecurityScheme<Ext> {
         self.scheme
     }
 }
 
-impl ContextHelper for NoSecuritySchemeBuilder {
-    fn context(&mut self) -> &mut SecuritySchemeContext {
+impl <Ext> ContextHelper for NoSecuritySchemeBuilder<Ext> {
+    type Ext = Ext;
+    fn context(&mut self) -> &mut SecuritySchemeContext<Self::Ext> {
         &mut self.scheme._context
     }
 }
@@ -132,40 +151,46 @@ impl ContextHelper for NoSecuritySchemeBuilder {
 #[skip_serializing_none]
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all="camelCase")]
-pub struct AutoSecurityScheme {
+pub struct AutoSecurityScheme<Ext=DefaultExt> {
     #[serde(flatten)]
-    pub _context: SecuritySchemeContext,
+    pub _context: SecuritySchemeContext<Ext>,
 }
 
-impl AutoSecurityScheme {
-    pub fn builder() -> AutoSecuritySchemeBuilder {
-        AutoSecuritySchemeBuilder::new()
+impl <Ext> AutoSecurityScheme<Ext>
+where
+    Ext: Default {
+    pub fn builder() -> AutoSecuritySchemeBuilder<Ext> {
+        AutoSecuritySchemeBuilder::<Ext>::new()
     }
 }
 
 /// Builder for creating `AutoSecurityScheme` instances.
-pub struct AutoSecuritySchemeBuilder {
-    scheme: AutoSecurityScheme,
+pub struct AutoSecuritySchemeBuilder<Ext> {
+    scheme: AutoSecurityScheme<Ext>,
 }
 
-impl AutoSecuritySchemeBuilder {
+impl <Ext> AutoSecuritySchemeBuilder<Ext>
+where
+    Ext: Default {
     /// Creates a new `AutoSecuritySchemeBuilder`.
     pub fn new() -> Self {
         Self {
             scheme: AutoSecurityScheme {
-                _context: SecuritySchemeContext::new("auto"),
+                _context: SecuritySchemeContext::<Ext>::new("auto"),
             },
         }
     }
 
     /// Builds and returns the `AutoSecurityScheme` instance.
-    pub fn build(self) -> AutoSecurityScheme {
+    pub fn build(self) -> AutoSecurityScheme<Ext> {
         self.scheme
     }
 }
 
-impl ContextHelper for AutoSecuritySchemeBuilder {
-    fn context(&mut self) -> &mut SecuritySchemeContext {
+impl <Ext> ContextHelper for AutoSecuritySchemeBuilder<Ext> {
+    type Ext = Ext;
+
+    fn context(&mut self) -> &mut SecuritySchemeContext<Self::Ext> {
         &mut self.scheme._context
     }
 }
@@ -175,9 +200,9 @@ impl ContextHelper for AutoSecuritySchemeBuilder {
 #[skip_serializing_none]
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all="camelCase")]
-pub struct ComboSecurityScheme {
+pub struct ComboSecurityScheme<Ext=DefaultExt> {
     #[serde(flatten)]
-    pub _context: SecuritySchemeContext,
+    pub _context: SecuritySchemeContext<Ext>,
 
     /// Array of two or more strings identifying other named security
     /// scheme definitions, any one of which, when satisfied, will
@@ -189,23 +214,28 @@ pub struct ComboSecurityScheme {
     pub all_of: Vec<String>,
 }
 
-impl ComboSecurityScheme {
-    pub fn builder() -> ComboSecuritySchemeBuilder {
-        ComboSecuritySchemeBuilder::new()
+impl <Ext> ComboSecurityScheme<Ext>
+where
+    Ext: Default {
+    pub fn builder() -> ComboSecuritySchemeBuilder<Ext> {
+        ComboSecuritySchemeBuilder::<Ext>::new()
     }
 }
 
 /// Builder for creating `ComboSecurityScheme` instances.
-pub struct ComboSecuritySchemeBuilder {
-    scheme: ComboSecurityScheme,
+pub struct ComboSecuritySchemeBuilder<Ext> {
+    scheme: ComboSecurityScheme<Ext>,
 }
 
-impl ComboSecuritySchemeBuilder {
+impl <Ext> ComboSecuritySchemeBuilder<Ext>
+where
+    Ext: Default
+{
     /// Creates a new `ComboSecuritySchemeBuilder`.
     pub fn new() -> Self {
         Self {
             scheme: ComboSecurityScheme {
-                _context: SecuritySchemeContext::new("combo"),
+                _context: SecuritySchemeContext::<Ext>::new("combo"),
                 one_of: Vec::new(),
                 all_of: Vec::new(),
             },
@@ -233,13 +263,15 @@ impl ComboSecuritySchemeBuilder {
     }
 
     /// Builds and returns the `ComboSecurityScheme` instance.
-    pub fn build(self) -> ComboSecurityScheme {
+    pub fn build(self) -> ComboSecurityScheme<Ext> {
         self.scheme
     }
 }
 
-impl ContextHelper for ComboSecuritySchemeBuilder {
-    fn context(&mut self) -> &mut SecuritySchemeContext {
+impl <Ext> ContextHelper for ComboSecuritySchemeBuilder<Ext> {
+    type Ext = Ext;
+
+    fn context(&mut self) -> &mut SecuritySchemeContext<Self::Ext> {
         &mut self.scheme._context
     }
 }
@@ -260,40 +292,54 @@ impl Default for SecurityLocation {
     }
 }
 
+fn is_default_location(location: &SecurityLocation) -> bool {
+    location == &SecurityLocation::Header
+}
+
 /// A security configuration corresponding to identified by the
 /// Vocabulary Term `basic`.
 #[skip_serializing_none]
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all="camelCase")]
-pub struct BasicSecurityScheme {
+pub struct BasicSecurityScheme<Ext=DefaultExt> {
     #[serde(flatten)]
-    pub _context: SecuritySchemeContext,
+    pub _context: SecuritySchemeContext<Ext>,
 
     /// Name for query, header, cookie, or uri parameters.
     pub name: Option<String>,
 
     /// Specifies the location of security authentication information.
-    #[serde(default, rename = "in")]
+    #[serde(
+        default,
+        rename = "in",
+        skip_serializing_if = "is_default_location"
+    )]
     pub location: SecurityLocation,
 }
 
-impl BasicSecurityScheme {
-    pub fn builder() -> BasicSecuritySchemeBuilder {
-        BasicSecuritySchemeBuilder::new()
+impl <Ext> BasicSecurityScheme<Ext>
+where
+    Ext: Default
+{
+    pub fn builder() -> BasicSecuritySchemeBuilder<Ext> {
+        BasicSecuritySchemeBuilder::<Ext>::new()
     }
 }
 
 /// Builder for creating `BasicSecurityScheme` instances.
-pub struct BasicSecuritySchemeBuilder {
-    scheme: BasicSecurityScheme,
+pub struct BasicSecuritySchemeBuilder<Ext> {
+    scheme: BasicSecurityScheme<Ext>,
 }
 
-impl BasicSecuritySchemeBuilder {
+impl <Ext> BasicSecuritySchemeBuilder<Ext>
+where
+    Ext: Default
+{
     /// Creates a new `BasicSecuritySchemeBuilder`.
     pub fn new() -> Self {
         Self {
             scheme: BasicSecurityScheme {
-                _context: SecuritySchemeContext::new("basic"),
+                _context: SecuritySchemeContext::<Ext>::new("basic"),
                 name: None,
                 location: SecurityLocation::default(),
             },
@@ -313,13 +359,14 @@ impl BasicSecuritySchemeBuilder {
     }
 
     /// Builds and returns the `BasicSecurityScheme` instance.
-    pub fn build(self) -> BasicSecurityScheme {
+    pub fn build(self) -> BasicSecurityScheme<Ext> {
         self.scheme
     }
 }
 
-impl ContextHelper for BasicSecuritySchemeBuilder {
-    fn context(&mut self) -> &mut SecuritySchemeContext {
+impl <Ext> ContextHelper for BasicSecuritySchemeBuilder<Ext> {
+    type Ext = Ext;
+    fn context(&mut self) -> &mut SecuritySchemeContext<Self::Ext> {
         &mut self.scheme._context
     }
 }
@@ -339,44 +386,58 @@ impl Default for Qop {
     }
 }
 
+fn is_default_qop(qop: &Qop) -> bool {
+    qop == &Qop::Auth
+}
+
 /// A security configuration corresponding to identified by the
 /// Vocabulary Term `digest`.
 #[skip_serializing_none]
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all="camelCase")]
-pub struct DigestSecurityScheme {
+pub struct DigestSecurityScheme<Ext=DefaultExt> {
     #[serde(flatten)]
-    pub _context: SecuritySchemeContext,
+    pub _context: SecuritySchemeContext<Ext>,
 
     /// Name for query, header, cookie, or uri parameters.
     pub name: Option<String>,
 
     /// Specifies the location of security authentication information.
-    #[serde(default, rename = "in")]
+    #[serde(
+        default,
+        rename = "in",
+        skip_serializing_if = "is_default_location"
+    )]
     pub location: SecurityLocation,
 
     /// Quality of protection.
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "is_default_qop")]
     pub qop: Qop
 }
 
-impl DigestSecurityScheme {
-    pub fn builder() -> DigestSecuritySchemeBuilder {
-        DigestSecuritySchemeBuilder::new()
+impl <Ext> DigestSecurityScheme<Ext>
+where
+    Ext: Default
+{
+    pub fn builder() -> DigestSecuritySchemeBuilder<Ext> {
+        DigestSecuritySchemeBuilder::<Ext>::new()
     }
 }
 
 /// Builder for creating `DigestSecurityScheme` instances.
-pub struct DigestSecuritySchemeBuilder {
-    scheme: DigestSecurityScheme,
+pub struct DigestSecuritySchemeBuilder<Ext> {
+    scheme: DigestSecurityScheme<Ext>,
 }
 
-impl DigestSecuritySchemeBuilder {
+impl <Ext> DigestSecuritySchemeBuilder<Ext>
+where
+    Ext: Default
+{
     /// Creates a new `DigestSecuritySchemeBuilder`.
     pub fn new() -> Self {
         Self {
             scheme: DigestSecurityScheme {
-                _context: SecuritySchemeContext::new("digest"),
+                _context: SecuritySchemeContext::<Ext>::new("digest"),
                 name: None,
                 location: SecurityLocation::default(),
                 qop: Qop::default(),
@@ -403,13 +464,15 @@ impl DigestSecuritySchemeBuilder {
     }
 
     /// Builds and returns the `DigestSecurityScheme` instance.
-    pub fn build(self) -> DigestSecurityScheme {
+    pub fn build(self) -> DigestSecurityScheme<Ext> {
         self.scheme
     }
 }
 
-impl ContextHelper for DigestSecuritySchemeBuilder {
-    fn context(&mut self) -> &mut SecuritySchemeContext {
+impl <Ext> ContextHelper for DigestSecuritySchemeBuilder<Ext> {
+    type Ext = Ext;
+
+    fn context(&mut self) -> &mut SecuritySchemeContext<Self::Ext> {
         &mut self.scheme._context
     }
 }
@@ -419,35 +482,44 @@ impl ContextHelper for DigestSecuritySchemeBuilder {
 #[skip_serializing_none]
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all="camelCase")]
-pub struct APIKeySecurityScheme {
+pub struct APIKeySecurityScheme<Ext=DefaultExt> {
     #[serde(flatten)]
-    pub _context: SecuritySchemeContext,
+    pub _context: SecuritySchemeContext<Ext>,
 
     /// Name for query, header, cookie, or uri parameters.
     pub name: Option<String>,
 
     /// Specifies the location of security authentication information.
-    #[serde(default, rename = "in")]
+    #[serde(
+        default,
+        rename = "in",
+        skip_serializing_if = "is_default_location"
+    )]
     pub location: SecurityLocation,
 }
 
-impl APIKeySecurityScheme {
-    pub fn builder() -> APIKeySecuritySchemeBuilder {
-        APIKeySecuritySchemeBuilder::new()
+impl <Ext> APIKeySecurityScheme<Ext>
+where
+    Ext: Default
+{
+    pub fn builder() -> APIKeySecuritySchemeBuilder<Ext> {
+        APIKeySecuritySchemeBuilder::<Ext>::new()
     }
 }
 
 /// Builder for creating `APIKeySecurityScheme` instances.
-pub struct APIKeySecuritySchemeBuilder {
-    scheme: APIKeySecurityScheme,
+pub struct APIKeySecuritySchemeBuilder<Ext> {
+    scheme: APIKeySecurityScheme<Ext>,
 }
 
-impl APIKeySecuritySchemeBuilder {
+impl <Ext> APIKeySecuritySchemeBuilder<Ext>
+where
+    Ext: Default {
     /// Creates a new `APIKeySecuritySchemeBuilder`.
     pub fn new() -> Self {
         Self {
             scheme: APIKeySecurityScheme {
-                _context: SecuritySchemeContext::new("apikey"),
+                _context: SecuritySchemeContext::<Ext>::new("apikey"),
                 name: None,
                 location: SecurityLocation::default(),
             },
@@ -467,13 +539,15 @@ impl APIKeySecuritySchemeBuilder {
     }
 
     /// Builds and returns the `APIKeySecurityScheme` instance.
-    pub fn build(self) -> APIKeySecurityScheme {
+    pub fn build(self) -> APIKeySecurityScheme<Ext> {
         self.scheme
     }
 }
 
-impl ContextHelper for APIKeySecuritySchemeBuilder {
-    fn context(&mut self) -> &mut SecuritySchemeContext {
+impl <Ext> ContextHelper for APIKeySecuritySchemeBuilder<Ext> {
+    type Ext = Ext;
+
+    fn context(&mut self) -> &mut SecuritySchemeContext<Self::Ext> {
         &mut self.scheme._context
     }
 }
@@ -483,9 +557,17 @@ fn default_alg() -> String {
     "ES256".to_string()
 }
 
+fn is_default_alg(alg: &String) -> bool {
+    alg == &default_alg()
+}
+
 /// Helper function to provide the default format "jwt"
 fn default_format() -> String {
     "jwt".to_string()
+}
+
+fn is_default_format(format: &String) -> bool {
+    format == &default_format()
 }
 
 /// A security configuration corresponding to identified by the
@@ -493,9 +575,9 @@ fn default_format() -> String {
 #[skip_serializing_none]
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all="camelCase")]
-pub struct BearerSecurityScheme {
+pub struct BearerSecurityScheme<Ext=DefaultExt> {
     #[serde(flatten)]
-    pub _context: SecuritySchemeContext,
+    pub _context: SecuritySchemeContext<Ext>,
 
     /// URI of the authorization server.
     pub authorization: Option<AnyUri>,
@@ -504,35 +586,41 @@ pub struct BearerSecurityScheme {
     pub name: Option<String>,
 
     /// Encoding, encryption, or digest algorithm.
-    #[serde(default = "default_alg")]
+    #[serde(default = "default_alg", skip_serializing_if = "is_default_alg")]
     pub alg: String,
 
     /// Specifies format of security authentication information.
-    #[serde(default = "default_format")]
+    #[serde(default = "default_format", skip_serializing_if = "is_default_format")]
     pub format: String,
 
     /// Specifies the location of security authentication information.
-    #[serde(default, rename = "in")]
+    #[serde(default, rename = "in", skip_serializing_if = "is_default_location")]
     pub location: SecurityLocation,
 }
 
-impl BearerSecurityScheme {
-    pub fn builder() -> BearerSecuritySchemeBuilder {
-        BearerSecuritySchemeBuilder::new()
+impl <Ext> BearerSecurityScheme<Ext>
+where
+    Ext: Default
+{
+    pub fn builder() -> BearerSecuritySchemeBuilder<Ext> {
+        BearerSecuritySchemeBuilder::<Ext>::new()
     }
 }
 
 /// Builder for creating `BearerSecurityScheme` instances.
-pub struct BearerSecuritySchemeBuilder {
-    scheme: BearerSecurityScheme,
+pub struct BearerSecuritySchemeBuilder<Ext> {
+    scheme: BearerSecurityScheme<Ext>,
 }
 
-impl BearerSecuritySchemeBuilder {
+impl <Ext> BearerSecuritySchemeBuilder<Ext>
+where
+    Ext: Default
+{
     /// Creates a new `BearerSecuritySchemeBuilder`.
     pub fn new() -> Self {
         Self {
             scheme: BearerSecurityScheme {
-                _context: SecuritySchemeContext::new("bearer"),
+                _context: SecuritySchemeContext::<Ext>::new("bearer"),
                 authorization: None,
                 name: None,
                 alg: default_alg(),
@@ -576,13 +664,15 @@ impl BearerSecuritySchemeBuilder {
     }
 
     /// Builds and returns the `BearerSecurityScheme` instance.
-    pub fn build(self) -> BearerSecurityScheme {
+    pub fn build(self) -> BearerSecurityScheme<Ext> {
         self.scheme
     }
 }
 
-impl ContextHelper for BearerSecuritySchemeBuilder {
-    fn context(&mut self) -> &mut SecuritySchemeContext {
+impl <Ext> ContextHelper for BearerSecuritySchemeBuilder<Ext> {
+    type Ext = Ext;
+
+    fn context(&mut self) -> &mut SecuritySchemeContext<Self::Ext> {
         &mut self.scheme._context
     }
 }
@@ -592,32 +682,38 @@ impl ContextHelper for BearerSecuritySchemeBuilder {
 #[skip_serializing_none]
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all="camelCase")]
-pub struct PSKSecurityScheme {
+pub struct PSKSecurityScheme<Ext=DefaultExt> {
     #[serde(flatten)]
-    pub _context: SecuritySchemeContext,
+    pub _context: SecuritySchemeContext<Ext>,
 
     /// Identifier providing information which can be used for
     /// selection or confirmation.
     pub identity: Option<String>,
 }
 
-impl PSKSecurityScheme {
-    pub fn builder() -> PSKSecuritySchemeBuilder {
-        PSKSecuritySchemeBuilder::new()
+impl <Ext> PSKSecurityScheme<Ext>
+where
+   Ext: Default
+{
+    pub fn builder() -> PSKSecuritySchemeBuilder<Ext> {
+        PSKSecuritySchemeBuilder::<Ext>::new()
     }
 }
 
 /// Builder for creating `PSKSecurityScheme` instances.
-pub struct PSKSecuritySchemeBuilder {
-    scheme: PSKSecurityScheme,
+pub struct PSKSecuritySchemeBuilder<Ext> {
+    scheme: PSKSecurityScheme<Ext>,
 }
 
-impl PSKSecuritySchemeBuilder {
+impl<Ext> PSKSecuritySchemeBuilder<Ext>
+where
+    Ext: Default
+{
     /// Creates a new `PSKSecuritySchemeBuilder`.
     pub fn new() -> Self {
         Self {
             scheme: PSKSecurityScheme {
-                _context: SecuritySchemeContext::new("psk"),
+                _context: SecuritySchemeContext::<Ext>::new("psk"),
                 identity: None,
             },
         }
@@ -630,13 +726,15 @@ impl PSKSecuritySchemeBuilder {
     }
 
     /// Builds and returns the `PSKSecurityScheme` instance.
-    pub fn build(self) -> PSKSecurityScheme {
+    pub fn build(self) -> PSKSecurityScheme<Ext> {
         self.scheme
     }
 }
 
-impl ContextHelper for PSKSecuritySchemeBuilder {
-    fn context(&mut self) -> &mut SecuritySchemeContext {
+impl <Ext> ContextHelper for PSKSecuritySchemeBuilder<Ext> {
+    type Ext = Ext;
+
+    fn context(&mut self) -> &mut SecuritySchemeContext<Ext> {
         &mut self.scheme._context
     }
 }
@@ -647,9 +745,9 @@ impl ContextHelper for PSKSecuritySchemeBuilder {
 #[skip_serializing_none]
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all="camelCase")]
-pub struct OAuth2SecurityScheme {
+pub struct OAuth2SecurityScheme<Ext=DefaultExt> {
     #[serde(flatten)]
-    pub _context: SecuritySchemeContext,
+    pub _context: SecuritySchemeContext<Ext>,
 
     /// URI of the authorization server.
     pub authorization: Option<AnyUri>,
@@ -668,23 +766,29 @@ pub struct OAuth2SecurityScheme {
     pub flow: String,
 }
 
-impl OAuth2SecurityScheme {
-    pub fn builder(flow: impl Into<String>) -> OAuth2SecuritySchemeBuilder {
-        OAuth2SecuritySchemeBuilder::new(flow)
+impl <Ext> OAuth2SecurityScheme<Ext>
+where
+    Ext: Default
+{
+    pub fn builder(flow: impl Into<String>) -> OAuth2SecuritySchemeBuilder<Ext> {
+        OAuth2SecuritySchemeBuilder::<Ext>::new(flow)
     }
 }
 
 /// Builder for creating `OAuth2SecurityScheme` instances.
-pub struct OAuth2SecuritySchemeBuilder {
-    scheme: OAuth2SecurityScheme,
+pub struct OAuth2SecuritySchemeBuilder<Ext> {
+    scheme: OAuth2SecurityScheme<Ext>,
 }
 
-impl OAuth2SecuritySchemeBuilder {
+impl <Ext> OAuth2SecuritySchemeBuilder<Ext>
+where
+    Ext: Default
+{
     /// Creates a new `OAuth2SecuritySchemeBuilder` with the required `flow` field.
     pub fn new(flow: impl Into<String>) -> Self {
         Self {
             scheme: OAuth2SecurityScheme {
-                _context: SecuritySchemeContext::new("oauth2"),
+                _context: SecuritySchemeContext::<Ext>::new("oauth2"),
                 authorization: None,
                 token: None,
                 refresh: None,
@@ -732,32 +836,37 @@ impl OAuth2SecuritySchemeBuilder {
     }
 
     /// Builds and returns the `OAuth2SecurityScheme` instance.
-    pub fn build(self) -> OAuth2SecurityScheme {
+    pub fn build(self) -> OAuth2SecurityScheme<Ext> {
         self.scheme
     }
 }
 
-impl ContextHelper for OAuth2SecuritySchemeBuilder {
-    fn context(&mut self) -> &mut SecuritySchemeContext {
+impl <Ext> ContextHelper for OAuth2SecuritySchemeBuilder<Ext> {
+    type Ext = Ext;
+
+    fn context(&mut self) -> &mut SecuritySchemeContext<Self::Ext> {
         &mut self.scheme._context
     }
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-#[serde(tag = "type", rename_all = "lowercase")]
-pub enum SecurityScheme {
-    NoSec(NoSecurityScheme),
-    Auto(AutoSecurityScheme),
-    Combo(ComboSecurityScheme),
-    Basic(BasicSecurityScheme),
-    Digest(DigestSecurityScheme),
-    APIKey(APIKeySecurityScheme),
-    Bearer(BearerSecurityScheme),
-    PSK(PSKSecurityScheme),
-    OAuth2(OAuth2SecurityScheme),
+#[serde(untagged)]
+pub enum SecurityScheme<Ext=DefaultExt> {
+    NoSec(NoSecurityScheme<Ext>),
+    Auto(AutoSecurityScheme<Ext>),
+    Combo(ComboSecurityScheme<Ext>),
+    Basic(BasicSecurityScheme<Ext>),
+    Digest(DigestSecurityScheme<Ext>),
+    APIKey(APIKeySecurityScheme<Ext>),
+    Bearer(BearerSecurityScheme<Ext>),
+    PSK(PSKSecurityScheme<Ext>),
+    OAuth2(OAuth2SecurityScheme<Ext>),
 }
 
-impl SecurityScheme {
+impl <Ext> SecurityScheme<Ext>
+where
+    Ext: Default {
+
     pub fn scheme(&self) -> &str {
         macro_rules! get_scheme {
             ($($variant:ident),*) => {

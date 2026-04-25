@@ -1,43 +1,108 @@
-use alloc::vec::Vec;
-use alloc::string::String;
-use alloc::collections::BTreeMap;
+use alloc::{borrow::ToOwned, vec::Vec, string::String, collections::BTreeMap};
 
-use fluent_uri::Uri;
-use serde::{Deserialize, Serialize};
+use fluent_uri::{ParseError, UriRef};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde_with::{serde_as, skip_serializing_none, OneOrMany};
 use crate::{components_util::deserialize_bool_flexible, validate::Validate};
 
-
-#[derive(Debug, Default, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(transparent)]
-pub struct AnyUri(pub Uri<String>);
+/// Represents a WoT AnyUri which can be either a standard URI reference or a URI template.
+///
+/// This enum ensures fidelity during round-trip serialization by preserving the original
+/// string representation while providing structured access for standard URIs.
+#[derive(Debug, Clone, PartialEq)]
+pub enum AnyUri {
+    /// A standard URI or URI Reference compliant with RFC 3986 (e.g., "http://example.com" or "#td").
+    Standard(UriRef<String>),
+    /// A URI Template compliant with RFC 6570 containing placeholders (e.g., "/count{?fill}").
+    Template(String),
+}
 
 impl AnyUri {
-    /// Creates an AnyUri from a static string, panicking on invalid input.
+    /// Creates an AnyUri from a static string. Panics if the input is invalid.
     /// Internal use only for known-good constants.
     pub(crate) fn from_static(s: &'static str) -> Self {
-        Self(Uri::parse(s).expect("Invalid static URI").to_owned())
+        Self::parse(s).expect("Invalid static URI")
     }
 
+    /// Parses a string into an AnyUri.
+    ///
+    /// It first checks for URI Template characters ('{' and '}').
+    /// If found, it treats the string as a Template. Otherwise, it attempts
+    /// to parse it as a standard URI Reference using fluent-uri.
+    pub fn parse(s: &str) -> Result<Self, ParseError> {
+        // Rule 1: Check for URI Template indicators
+        if s.contains('{') && s.contains('}') {
+            return Ok(Self::Template(s.to_owned()));
+        }
+
+        // Rule 2: Attempt strict URI Reference parsing
+        let uri = UriRef::parse(s)?;
+        Ok(Self::Standard(uri.into()))
+    }
+
+    /// Returns the string representation of the URI.
     pub fn as_str(&self) -> &str {
-        self.0.as_str()
+        match self {
+            Self::Standard(u) => u.as_str(),
+            Self::Template(s) => s.as_str(),
+        }
     }
 
-    pub fn parse(s: &str) -> Result<Self, fluent_uri::ParseError> {
-        Ok(Self(Uri::parse(s)?.to_owned()))
+    /// Checks if the URI is a template (RFC 6570).
+    pub fn is_template(&self) -> bool {
+        matches!(self, Self::Template(_))
     }
 }
 
+/// Allows comparison between AnyUri and string slices.
 impl PartialEq<str> for AnyUri {
     fn eq(&self, other: &str) -> bool {
-        self.0.as_str() == other
+        self.as_str() == other
     }
 }
 
-#[derive(Debug, Default, Deserialize, Serialize, Clone, Copy, PartialEq)]
+/// Serializes AnyUri back into its original string form for transparent JSON output.
+impl Serialize for AnyUri {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.serialize_str(self.as_str())
+    }
+}
+
+/// Deserializes a string into AnyUri by identifying its type (Standard vs Template).
+impl<'de> Deserialize<'de> for AnyUri {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let s = String::deserialize(deserializer)?;
+        AnyUri::parse(&s).map_err(serde::de::Error::custom)
+    }
+}
+
+/// Provides an empty standard URI as the default value.
+impl Default for AnyUri {
+    fn default() -> Self {
+        Self::Standard(UriRef::parse("").unwrap().to_owned())
+    }
+}
+
+/// Empty extended type.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Nil;
 
 impl Validate for Nil {
+    fn validate(&self) -> Result<(), crate::validate::ValidateError> {
+        Ok(())
+    }
+}
+
+/// Default extra fields type.
+pub type DefaultExt = BTreeMap<String, serde_json::Value>;
+
+impl Validate for DefaultExt {
     fn validate(&self) -> Result<(), crate::validate::ValidateError> {
         Ok(())
     }
@@ -113,12 +178,16 @@ impl MultiLanguage {
 }
 
 /// Metadata of a Thing that provides version information about the TD document.
+#[skip_serializing_none]
 #[derive(Debug, Default, Serialize, Deserialize, Clone, PartialEq)]
-pub struct VersionInfo {
+pub struct VersionInfo<Ext=DefaultExt> {
     /// Provides a version indicator of this TD.
-    instance: String,
+    pub instance: String,
     /// Provides a version indicator of underlying TM.
-    model: Option<String>
+    pub model: Option<String>,
+
+    #[serde(flatten)]
+    pub _extra_fields: Ext
 }
 
 /// Operation types of form.
@@ -136,8 +205,11 @@ pub enum Operation {
     UnsubscribeEvent,
     ReadAllProperties,
     WriteAllProperties,
+    ReadMultipleProperties,
+    WriteMultipleProperties,
     ObserveAllProperties,
     UnobserveAllProperties,
+    QueryAllActions,
     SubscribeAllEvents,
     UnsubscribeAllEvents,
 }
@@ -147,29 +219,49 @@ pub enum Operation {
 #[skip_serializing_none]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct ExpectedResponse {
+pub struct ExpectedResponse<Ext=DefaultExt> {
     /// Media type of the response payload (e.g., "application/json").
-    #[serde(default)]
     pub content_type: String,
+
+    #[serde(flatten)]
+    pub _extra_fields: Ext,
 }
 
-impl From<String> for ExpectedResponse {
+impl <Ext> From<String> for ExpectedResponse<Ext>
+where
+   Ext: Default
+{
     fn from(value: String) -> Self {
+        Self::new(value)
+    }
+}
+
+impl <Ext> ExpectedResponse<Ext>
+where
+    Ext: Default
+{
+    pub fn new(value: String) -> Self {
         Self {
-            content_type: value
+            content_type: value,
+            _extra_fields: Default::default()
         }
+    }
+
+    pub fn extra_fields(mut self, extra_fields: impl Into<Ext>) -> Self {
+        self._extra_fields = extra_fields.into();
+        self
     }
 }
 
 /// Communication metadata describing the expected response message for
 /// additional responses.
 #[skip_serializing_none]
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Default, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct AdditionalExpectedResponse {
-    /// Flatten the core fields into this struct.
+pub struct AdditionalExpectedResponse<Ext=DefaultExt> {
+    /// Mandatory, default to value of the contentType of the Form element it belongs to.
     #[serde(flatten)]
-    pub _expected_response: ExpectedResponse,
+    pub content_type: Option<String>,
 
     /// Used to define the output data schema for an additional response
     /// if it differs from the default output data schema.
@@ -178,21 +270,40 @@ pub struct AdditionalExpectedResponse {
     pub schema: Option<String>,
 
     /// Indicates if this response is for an error case.
-    #[serde(default, deserialize_with = "deserialize_bool_flexible")]
+    #[serde(
+        default,
+        deserialize_with = "deserialize_bool_flexible",
+        skip_serializing_if = "core::ops::Not::not"
+    )]
     pub success: bool,
+
+    #[serde(flatten)]
+    pub _extra_fields: Ext,
 }
 
-impl AdditionalExpectedResponse {
-    pub fn new (response: impl Into<ExpectedResponse>, success: bool) -> Self {
+impl <Ext> AdditionalExpectedResponse<Ext>
+where
+    Ext: Default
+{
+    pub fn new (content_type: String) -> Self {
         Self {
-            _expected_response: response.into(),
-            schema: None,
-            success,
+            content_type: Some(content_type),
+            ..Default::default()
         }
     }
 
-    pub fn with_schema(mut self, schema: impl Into<String>) -> Self {
+    pub fn success(mut self, success: bool) -> Self {
+        self.success = success;
+        self
+    }
+
+    pub fn schema(mut self, schema: impl Into<String>) -> Self {
         self.schema = Some(schema.into());
+        self
+    }
+
+    pub fn extra_fields(mut self, extra_fields: impl Into<Ext>) -> Self {
+        self._extra_fields = extra_fields.into();
         self
     }
 }

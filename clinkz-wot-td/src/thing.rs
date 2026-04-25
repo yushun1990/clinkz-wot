@@ -10,12 +10,13 @@ use crate::{
     affordance::{ActionAffordance, EventAffordance, PropertyAffordance},
     context::Context,
     data_schema::DataSchema,
-    data_type::{AnyUri, Metadata, MetadataHelper, Nil, VersionInfo},
+    data_type::{AnyUri, DefaultExt, Metadata, MetadataHelper, Nil, VersionInfo},
     form::Form,
     link::Link,
     security_scheme::SecurityScheme, validate::{Validate, ValidateError}
 };
 
+pub type CommonThing = Thing<DefaultExt, DefaultExt>;
 
 /// An abstraction of a physical or virtual entity whose metadata and interfaces are
 /// described by a WoT Thing Description, whereas a virtual entity is the composition
@@ -25,10 +26,10 @@ use crate::{
 #[derive(Default, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 #[serde(bound(
-    serialize = "Ext: Serialize",
-    deserialize = "Ext: Deserialize<'de>"
+    serialize = "Ext: Serialize, FormExt: Serialize",
+    deserialize = "Ext: Deserialize<'de>, FormExt: Deserialize<'de>",
 ))]
-pub struct Thing<Ext = Nil> {
+pub struct Thing<Ext = Nil, FormExt = DefaultExt> {
     /// JSON-LD keyword to define short-hand names called terms that are used throughout
     /// a TD document.
     #[serde(rename = "@context")]
@@ -62,13 +63,13 @@ pub struct Thing<Ext = Nil> {
     pub base: Option<AnyUri>,
 
     /// All Property-based Interaction Affordances of the Thing.
-    pub properties: Option<BTreeMap<String, PropertyAffordance>>,
+    pub properties: Option<BTreeMap<String, PropertyAffordance<FormExt>>>,
 
     /// All Action-based Interaction Affordances of the Thing.
-    pub actions: Option<BTreeMap<String, ActionAffordance>>,
+    pub actions: Option<BTreeMap<String, ActionAffordance<FormExt>>>,
 
     /// All Event-based Interaction Affordances of the Thing.
-    pub events: Option<BTreeMap<String, EventAffordance>>,
+    pub events: Option<BTreeMap<String, EventAffordance<FormExt>>>,
 
     /// Provides Web links to arbitrary resources that relate to the
     /// specified Thing Description.
@@ -76,7 +77,7 @@ pub struct Thing<Ext = Nil> {
 
     /// Set of form hypermedia controls that describe how an operation
     /// can be performed.
-    pub forms: Option<Vec<Form>>,
+    pub forms: Option<Vec<Form<FormExt>>>,
 
     /// Set of security definition names, chosen from those defined in
     /// securityDefinitions.
@@ -105,20 +106,22 @@ pub struct Thing<Ext = Nil> {
     pub _extra_fields: Ext
 }
 
-impl <Ext> Thing<Ext>
+impl <Ext, FormExt> Thing<Ext, FormExt>
 where
-    Ext: Default + Serialize + Validate
+    Ext: Default + Serialize + Validate,
+    FormExt: Default + Serialize + Validate,
 {
     /// Creates a new ThingBuilder with a default "nosec" security configuration.
-    pub fn builder(title: impl Into<String>) -> ThingBuilder<Ext> {
+    pub fn builder(title: impl Into<String>) -> ThingBuilder<Ext, FormExt> {
         ThingBuilder::new(title)
     }
 
 }
 
-impl <Ext> Validate for Thing<Ext>
+impl <Ext, FormExt> Validate for Thing<Ext, FormExt>
 where
     Ext: Serialize + Validate,
+    FormExt: Serialize + Validate,
 {
     fn validate(&self) -> Result<(), crate::validate::ValidateError> {
         // title is mandatory
@@ -166,13 +169,14 @@ where
     }
 }
 
-pub struct ThingBuilder<Ext> {
-    thing: Thing<Ext>
+pub struct ThingBuilder<Ext, FormExt> {
+    thing: Thing<Ext, FormExt>
 }
 
-impl <Ext> ThingBuilder<Ext>
+impl <Ext, FormExt> ThingBuilder<Ext, FormExt>
 where
-    Ext: Default + Serialize + Validate
+    Ext: Default + Serialize + Validate,
+    FormExt: Default + Serialize + Validate,
 {
     pub fn new(title: impl Into<String>) -> Self{
         Self {
@@ -251,21 +255,21 @@ where
     }
 
     /// Adds a property affordance.
-    pub fn property(mut self, name: impl Into<String>, property: PropertyAffordance) -> Self {
+    pub fn property(mut self, name: impl Into<String>, property: PropertyAffordance<FormExt>) -> Self {
         let properties = self.thing.properties.get_or_insert_with(BTreeMap::new);
         properties.insert(name.into(), property);
         self
     }
 
     /// Adds an action affordance.
-    pub fn action(mut self, name: impl Into<String>, action: ActionAffordance) -> Self {
+    pub fn action(mut self, name: impl Into<String>, action: ActionAffordance<FormExt>) -> Self {
         let actions = self.thing.actions.get_or_insert_with(BTreeMap::new);
         actions.insert(name.into(), action);
         self
     }
 
     /// Adds an event affordance.
-    pub fn event(mut self, name: impl Into<String>, event: EventAffordance) -> Self {
+    pub fn event(mut self, name: impl Into<String>, event: EventAffordance<FormExt>) -> Self {
         let events = self.thing.events.get_or_insert_with(BTreeMap::new);
         events.insert(name.into(), event);
         self
@@ -287,16 +291,16 @@ where
     }
 
     /// Adds a form.
-    pub fn form(mut self, form: Form) -> Self {
-        self.thing.forms.get_or_insert_with(Vec::new).push(form);
+    pub fn form(mut self, form: impl Into<Form<FormExt>>) -> Self {
+        self.thing.forms.get_or_insert_with(Vec::new).push(form.into());
         self
     }
 
     /// Adds multiple forms.
     pub fn forms<I>(mut self, forms: I) -> Self
     where
-        I: IntoIterator<Item=Form> {
-        let mut items: Vec<Form> = forms.into_iter().collect();
+        I: IntoIterator<Item=Form<FormExt>> {
+        let mut items: Vec<Form<FormExt>> = forms.into_iter().collect();
         self.thing.forms.get_or_insert_with(Vec::new).append(&mut items);
         self
     }
@@ -337,7 +341,7 @@ where
     }
 
     /// Builds and returns the `Thing` instance.
-    pub fn build(self) -> Result<Thing<Ext>, ValidateError> {
+    pub fn build(self) -> Result<Thing<Ext, FormExt>, ValidateError> {
         self.thing.validate()?;
         Ok(self.thing)
     }

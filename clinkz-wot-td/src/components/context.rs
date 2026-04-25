@@ -1,6 +1,5 @@
 use alloc::{string::String, vec::Vec, collections::BTreeMap};
 
-use fluent_uri::Uri;
 use serde::{Deserialize, Serialize};
 
 use crate::data_type::AnyUri;
@@ -26,9 +25,8 @@ impl Context {
     /// Create a standard WoT 1.1 Context.
     /// By default, it contains only the 1.1 URI.
     pub fn new() -> Self {
-        let uri = Uri::parse(WOT_CONTEXT_1_1).unwrap().to_owned();
         Self {
-            entries: alloc::vec![ContextEntry::Uri(AnyUri(uri))]
+            entries: alloc::vec![ContextEntry::Uri(AnyUri::from_static(WOT_CONTEXT_1_1))]
         }
     }
 
