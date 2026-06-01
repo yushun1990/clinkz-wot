@@ -1,30 +1,212 @@
 use alloc::{borrow::ToOwned, vec::Vec, string::String, collections::BTreeMap};
 
-use fluent_uri::{ParseError, UriRef};
+use fluent_uri::{ParseError, Uri, UriRef};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde_with::{serde_as, skip_serializing_none, OneOrMany};
 use crate::{components_util::deserialize_bool_flexible, validate::Validate};
 
-/// Represents a WoT AnyUri which can be either a standard URI reference or a URI template.
-///
-/// This enum ensures fidelity during round-trip serialization by preserving the original
-/// string representation while providing structured access for standard URIs.
+/// URI reference compliant with RFC 3986.
 #[derive(Debug, Clone, PartialEq)]
-pub enum AnyUri {
-    /// A standard URI or URI Reference compliant with RFC 3986 (e.g., "http://example.com" or "#td").
-    Standard(UriRef<String>),
-    /// A URI Template compliant with RFC 6570 containing placeholders (e.g., "/count{?fill}").
+pub struct UriReference(UriRef<String>);
+
+impl UriReference {
+    /// Parses an absolute URI or relative URI reference.
+    pub fn parse(s: &str) -> Result<Self, ParseError> {
+        let uri = UriRef::parse(s)?;
+        Ok(Self(uri.into()))
+    }
+
+    /// Returns the string representation of the URI reference.
+    pub fn as_str(&self) -> &str {
+        self.0.as_str()
+    }
+}
+
+impl PartialEq<str> for UriReference {
+    fn eq(&self, other: &str) -> bool {
+        self.as_str() == other
+    }
+}
+
+impl Serialize for UriReference {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.serialize_str(self.as_str())
+    }
+}
+
+impl<'de> Deserialize<'de> for UriReference {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let s = String::deserialize(deserializer)?;
+        UriReference::parse(&s).map_err(serde::de::Error::custom)
+    }
+}
+
+impl Default for UriReference {
+    fn default() -> Self {
+        Self(UriRef::parse("").unwrap().to_owned())
+    }
+}
+
+/// Form submission target.
+///
+/// Form `href` can be a URI reference or a URI template. This type should not
+/// be reused for fields that only permit plain URI references.
+#[derive(Debug, Clone, PartialEq)]
+pub enum FormHref {
+    /// A URI reference compliant with RFC 3986.
+    Reference(UriReference),
+    /// A URI Template compliant with RFC 6570 containing placeholders.
     Template(String),
 }
 
-impl AnyUri {
-    /// Creates an AnyUri from a static string. Panics if the input is invalid.
+/// Absolute URI value for TD fields that cannot be relative references.
+///
+/// WoT TD uses the JSON Schema `anyURI` lexical type in several places, but
+/// individual fields narrow that range differently. Use `AbsoluteUri` for
+/// fields that must identify an absolute resource, and `FormHref` for form
+/// targets that may be relative references or URI templates.
+#[derive(Debug, Clone, PartialEq)]
+pub struct AbsoluteUri(String);
+
+impl AbsoluteUri {
+    /// Creates an absolute URI from a static string. Panics if the input is invalid.
     /// Internal use only for known-good constants.
     pub(crate) fn from_static(s: &'static str) -> Self {
-        Self::parse(s).expect("Invalid static URI")
+        Self::parse(s).expect("Invalid static absolute URI")
     }
 
-    /// Parses a string into an AnyUri.
+    /// Parses an absolute URI. Relative references and URI templates are rejected.
+    pub fn parse(s: &str) -> Result<Self, ParseError> {
+        Uri::parse(s)?;
+        Ok(Self(s.to_owned()))
+    }
+
+    /// Returns the string representation of the URI.
+    pub fn as_str(&self) -> &str {
+        self.0.as_str()
+    }
+}
+
+impl PartialEq<str> for AbsoluteUri {
+    fn eq(&self, other: &str) -> bool {
+        self.as_str() == other
+    }
+}
+
+impl Serialize for AbsoluteUri {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.serialize_str(self.as_str())
+    }
+}
+
+impl<'de> Deserialize<'de> for AbsoluteUri {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let s = String::deserialize(deserializer)?;
+        AbsoluteUri::parse(&s).map_err(serde::de::Error::custom)
+    }
+}
+
+/// Thing-level base URI.
+///
+/// A base URI must provide an absolute base for resolving relative form
+/// targets. Some real TDs use URI template expressions in `base`, so this type
+/// permits absolute URI templates while still rejecting relative references.
+#[derive(Debug, Clone, PartialEq)]
+pub enum BaseUri {
+    /// Absolute URI without template expressions.
+    Absolute(AbsoluteUri),
+    /// Absolute URI template.
+    Template(String),
+}
+
+impl BaseUri {
+    /// Parses a Thing-level base URI.
+    pub fn parse(s: &str) -> Result<Self, ParseError> {
+        if s.contains('{') && s.contains('}') {
+            if let Some(static_uri) = strip_uri_template_expressions(s) {
+                Uri::parse(static_uri.as_str())?;
+                return Ok(Self::Template(s.to_owned()));
+            }
+        }
+
+        AbsoluteUri::parse(s).map(Self::Absolute)
+    }
+
+    /// Returns the string representation of the base URI.
+    pub fn as_str(&self) -> &str {
+        match self {
+            Self::Absolute(uri) => uri.as_str(),
+            Self::Template(template) => template.as_str(),
+        }
+    }
+
+    /// Returns true when this base contains URI template expressions.
+    pub fn is_template(&self) -> bool {
+        matches!(self, Self::Template(_))
+    }
+}
+
+impl PartialEq<str> for BaseUri {
+    fn eq(&self, other: &str) -> bool {
+        self.as_str() == other
+    }
+}
+
+impl Serialize for BaseUri {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.serialize_str(self.as_str())
+    }
+}
+
+impl<'de> Deserialize<'de> for BaseUri {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let s = String::deserialize(deserializer)?;
+        BaseUri::parse(&s).map_err(serde::de::Error::custom)
+    }
+}
+
+fn strip_uri_template_expressions(s: &str) -> Option<String> {
+    let mut stripped = String::new();
+    let mut in_expression = false;
+
+    for c in s.chars() {
+        match (c, in_expression) {
+            ('{', false) => in_expression = true,
+            ('{', true) => return None,
+            ('}', true) => in_expression = false,
+            ('}', false) => return None,
+            (_, false) => stripped.push(c),
+            (_, true) => {}
+        }
+    }
+
+    if in_expression {
+        return None;
+    }
+
+    Some(stripped)
+}
+
+impl FormHref {
+    /// Parses a form target.
     ///
     /// It first checks for URI Template characters ('{' and '}').
     /// If found, it treats the string as a Template. Otherwise, it attempts
@@ -36,14 +218,13 @@ impl AnyUri {
         }
 
         // Rule 2: Attempt strict URI Reference parsing
-        let uri = UriRef::parse(s)?;
-        Ok(Self::Standard(uri.into()))
+        UriReference::parse(s).map(Self::Reference)
     }
 
-    /// Returns the string representation of the URI.
+    /// Returns the string representation of the target.
     pub fn as_str(&self) -> &str {
         match self {
-            Self::Standard(u) => u.as_str(),
+            Self::Reference(u) => u.as_str(),
             Self::Template(s) => s.as_str(),
         }
     }
@@ -54,15 +235,13 @@ impl AnyUri {
     }
 }
 
-/// Allows comparison between AnyUri and string slices.
-impl PartialEq<str> for AnyUri {
+impl PartialEq<str> for FormHref {
     fn eq(&self, other: &str) -> bool {
         self.as_str() == other
     }
 }
 
-/// Serializes AnyUri back into its original string form for transparent JSON output.
-impl Serialize for AnyUri {
+impl Serialize for FormHref {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: Serializer,
@@ -71,21 +250,19 @@ impl Serialize for AnyUri {
     }
 }
 
-/// Deserializes a string into AnyUri by identifying its type (Standard vs Template).
-impl<'de> Deserialize<'de> for AnyUri {
+impl<'de> Deserialize<'de> for FormHref {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: Deserializer<'de>,
     {
         let s = String::deserialize(deserializer)?;
-        AnyUri::parse(&s).map_err(serde::de::Error::custom)
+        FormHref::parse(&s).map_err(serde::de::Error::custom)
     }
 }
 
-/// Provides an empty standard URI as the default value.
-impl Default for AnyUri {
+impl Default for FormHref {
     fn default() -> Self {
-        Self::Standard(UriRef::parse("").unwrap().to_owned())
+        Self::Reference(UriReference::default())
     }
 }
 

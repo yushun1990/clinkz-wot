@@ -2,7 +2,7 @@ use alloc::{string::String, vec::Vec, collections::BTreeMap};
 
 use serde::{Deserialize, Serialize};
 
-use crate::data_type::AnyUri;
+use crate::data_type::AbsoluteUri;
 
 pub const WOT_CONTEXT_1_0: &str = "https://www.w3.org/2019/wot/td/v1";
 pub const WOT_CONTEXT_1_1: &str = "https://www.w3.org/2022/wot/td/v1.1";
@@ -11,7 +11,7 @@ pub const WOT_CONTEXT_1_1: &str = "https://www.w3.org/2022/wot/td/v1.1";
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum ContextEntry {
-    Uri(AnyUri),
+    Uri(AbsoluteUri),
     Object(BTreeMap<String, serde_json::Value>)
 }
 
@@ -26,7 +26,7 @@ impl Context {
     /// By default, it contains only the 1.1 URI.
     pub fn new() -> Self {
         Self {
-            entries: alloc::vec![ContextEntry::Uri(AnyUri::from_static(WOT_CONTEXT_1_1))]
+            entries: alloc::vec![ContextEntry::Uri(AbsoluteUri::from_static(WOT_CONTEXT_1_1))]
         }
     }
 
@@ -45,8 +45,8 @@ impl Context {
                 !matches!(e, ContextEntry::Uri(u) if u == WOT_CONTEXT_1_1)
             });
 
-            let uri_v1 = AnyUri::from_static(WOT_CONTEXT_1_0);
-            let uri_v11 = AnyUri::from_static(WOT_CONTEXT_1_1);
+            let uri_v1 = AbsoluteUri::from_static(WOT_CONTEXT_1_0);
+            let uri_v11 = AbsoluteUri::from_static(WOT_CONTEXT_1_1);
 
             self.entries.insert(0, ContextEntry::Uri(uri_v11));
             self.entries.insert(0, ContextEntry::Uri(uri_v1));
@@ -84,7 +84,7 @@ impl ContextBuilder {
 
     /// Adds a URI to the context.
     pub fn uri(mut self, uri: impl Into<String>) -> Self {
-        match AnyUri::parse(uri.into().as_str()) {
+        match AbsoluteUri::parse(uri.into().as_str()) {
             Ok(uri) => self.context.entries.push(ContextEntry::Uri(uri)),
             Err(_) => {},
         }

@@ -3,7 +3,7 @@ use fluent_uri::ParseError;
 use serde::{Deserialize, Serialize};
 use serde_with::{serde_as, skip_serializing_none, OneOrMany};
 
-use crate::data_type::{AnyUri, DefaultExt};
+use crate::data_type::{DefaultExt, UriReference};
 
 #[serde_as]
 #[skip_serializing_none]
@@ -11,7 +11,7 @@ use crate::data_type::{AnyUri, DefaultExt};
 #[serde(rename_all = "camelCase")]
 pub struct Link<Ext=DefaultExt> {
     /// Target IRI of the link.
-    pub href: AnyUri,
+    pub href: UriReference,
 
     /// Target media type of the link.
     #[serde(rename = "type")]
@@ -22,7 +22,7 @@ pub struct Link<Ext=DefaultExt> {
     pub rel: Option<String>,
 
     /// The anchor should be used as the context of the link.
-    pub anchor: Option<AnyUri>,
+    pub anchor: Option<UriReference>,
 
     /// Target attributes that specifies one or more sizes for the
     /// referenced icon.
@@ -77,7 +77,7 @@ where
 
     /// Sets the `anchor` field.
     pub fn anchor(mut self, anchor: impl Into<String>) -> Self {
-        match AnyUri::parse(anchor.into().as_str()) {
+        match UriReference::parse(anchor.into().as_str()) {
             Ok(uri) => self.link.anchor = Some(uri),
             Err(_) => {},
         }
@@ -108,7 +108,7 @@ where
 
     /// Builds and returns the `Link` instance.
     pub fn build(mut self) -> Result<Link<Ext>, ParseError> {
-        self.link.href = AnyUri::parse(&self.href)?;
+        self.link.href = UriReference::parse(&self.href)?;
         Ok(self.link)
     }
 }

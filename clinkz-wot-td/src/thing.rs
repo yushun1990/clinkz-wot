@@ -10,7 +10,7 @@ use crate::{
     affordance::{ActionAffordance, EventAffordance, PropertyAffordance},
     context::Context,
     data_schema::DataSchema,
-    data_type::{AnyUri, DefaultExt, Metadata, MetadataHelper, Nil, VersionInfo},
+    data_type::{AbsoluteUri, BaseUri, DefaultExt, Metadata, MetadataHelper, Nil, VersionInfo},
     form::Form,
     link::Link,
     security_scheme::SecurityScheme, validate::{Validate, ValidateError}
@@ -36,7 +36,7 @@ pub struct Thing<Ext = Nil, FormExt = DefaultExt> {
     pub context: Context,
 
     /// Unique identifier of the Thing (optional by recommended).
-    pub id: Option<AnyUri>,
+    pub id: Option<AbsoluteUri>,
 
     /// metadata
     #[serde(flatten)]
@@ -54,13 +54,13 @@ pub struct Thing<Ext = Nil, FormExt = DefaultExt> {
     pub modified: Option<OffsetDateTime>,
 
     /// Provides information about the TD maintainer as URI scheme.
-    pub support: Option<AnyUri>,
+    pub support: Option<AbsoluteUri>,
 
     /// Define the base URI that is used for all relative URI references
     /// throughout a TD document. In TD instances, all relative URIs
     /// are resovled relative to the base URI using the algorithm defnied
     /// in [RFC3986]
-    pub base: Option<AnyUri>,
+    pub base: Option<BaseUri>,
 
     /// All Property-based Interaction Affordances of the Thing.
     pub properties: Option<BTreeMap<String, PropertyAffordance<FormExt>>>,
@@ -90,7 +90,7 @@ pub struct Thing<Ext = Nil, FormExt = DefaultExt> {
     /// Indicates the WoT Profile mechanisms followed by this
     /// Thing Description and the corresponding Thing  implementation.
     #[serde_as(as = "Option<OneOrMany<_>>")]
-    pub profile: Option<Vec<AnyUri>>,
+    pub profile: Option<Vec<AbsoluteUri>>,
 
     /// Set of named data schemas.
     ///
@@ -195,7 +195,7 @@ where
 
     /// Sets the Things's unique identifier
     pub fn id(mut self, id: &str) -> Self {
-        self.thing.id = AnyUri::parse(id).ok();
+        self.thing.id = AbsoluteUri::parse(id).ok();
         self
     }
 
@@ -225,19 +225,19 @@ where
 
     /// Sets the support URI.
     pub fn support(mut self, support: &str) -> Self {
-        self.thing.support = AnyUri::parse(support).ok();
+        self.thing.support = AbsoluteUri::parse(support).ok();
         self
     }
 
     /// Sets the base URI.
     pub fn base(mut self, base: &str) -> Self {
-        self.thing.base = AnyUri::parse(base).ok();
+        self.thing.base = BaseUri::parse(base).ok();
         self
     }
 
     /// Adds a profile URI.
     pub fn profile(mut self, profile: &str) -> Self {
-        if let Some(profile) = AnyUri::parse(profile).ok() {
+        if let Some(profile) = AbsoluteUri::parse(profile).ok() {
             self.thing.profile.get_or_insert_with(Vec::new).push(profile);
         }
         self
@@ -247,8 +247,8 @@ where
     pub fn profiles<I>(mut self, profiles: I) -> Self
     where
         I: IntoIterator<Item=&'static str> {
-        let mut items: Vec<AnyUri> = profiles.into_iter()
-            .filter_map(|p| AnyUri::parse(p).ok())
+        let mut items: Vec<AbsoluteUri> = profiles.into_iter()
+            .filter_map(|p| AbsoluteUri::parse(p).ok())
             .collect();
         self.thing.profile.get_or_insert_with(Vec::new).append(&mut items);
         self

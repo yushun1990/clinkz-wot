@@ -3,7 +3,7 @@ use fluent_uri::ParseError;
 use serde::{Deserialize, Serialize};
 use serde_with::{serde_as, skip_serializing_none, OneOrMany};
 
-use crate::data_type::{AdditionalExpectedResponse, AnyUri, ExpectedResponse, Operation};
+use crate::data_type::{AdditionalExpectedResponse, ExpectedResponse, FormHref, Operation};
 
 /// A form can be viewed as a statement of "To perform an operation type
 /// operation on form context, make a request method request to submission
@@ -17,7 +17,7 @@ use crate::data_type::{AdditionalExpectedResponse, AnyUri, ExpectedResponse, Ope
 #[serde(rename_all = "camelCase")]
 pub struct Form<Ext> {
     /// Target IRI of the resource or service.
-    pub href: AnyUri,
+    pub href: FormHref,
 
     /// Media type of data sent/received (e.g., "application/json").
     #[serde(default="default_content_type", skip_serializing_if = "is_default_content_type")]
@@ -164,7 +164,7 @@ where
 
     /// Build the form.
     pub fn build(mut self) -> Result<Form<Ext>, ParseError> {
-        self.form.href = AnyUri::parse(&self.href)?;
+        self.form.href = FormHref::parse(&self.href)?;
 
         Ok(self.form)
     }

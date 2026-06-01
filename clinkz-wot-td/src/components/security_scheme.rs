@@ -3,7 +3,7 @@ use alloc::{string::{String, ToString}, vec::Vec};
 use serde::{Deserialize, Serialize};
 use serde_with::{serde_as, skip_serializing_none, OneOrMany};
 
-use crate::data_type::{AnyUri, DefaultExt, MultiLanguage};
+use crate::data_type::{AbsoluteUri, DefaultExt, MultiLanguage};
 
 #[serde_as]
 #[skip_serializing_none]
@@ -24,7 +24,7 @@ pub struct SecuritySchemeContext<Ext> {
 
     /// URI of the proxy server this security configuration provides
     /// access to.
-    pub proxy: Option<AnyUri>,
+    pub proxy: Option<AbsoluteUri>,
 
     /// Identification of the security mechanism being configured.
     pub scheme: String,
@@ -82,7 +82,7 @@ pub trait ContextHelper: Sized {
 
     /// Sets the proxy URI.
     fn proxy(mut self, proxy: impl Into<String>) -> Self {
-        match AnyUri::parse(proxy.into().as_str()) {
+        match AbsoluteUri::parse(proxy.into().as_str()) {
             Ok(uri) => self.context().proxy = Some(uri),
             Err(_) => {},
         }
@@ -580,7 +580,7 @@ pub struct BearerSecurityScheme<Ext=DefaultExt> {
     pub _context: SecuritySchemeContext<Ext>,
 
     /// URI of the authorization server.
-    pub authorization: Option<AnyUri>,
+    pub authorization: Option<AbsoluteUri>,
 
     /// Name for query, header, cookie, or uri parameters.
     pub name: Option<String>,
@@ -632,7 +632,7 @@ where
 
     /// Sets the authorization URI.
     pub fn authorization(mut self, authorization: impl Into<String>) -> Self {
-        match AnyUri::parse(authorization.into().as_str()) {
+        match AbsoluteUri::parse(authorization.into().as_str()) {
             Ok(uri) => self.scheme.authorization = Some(uri),
             Err(_) => {},
         }
@@ -750,13 +750,13 @@ pub struct OAuth2SecurityScheme<Ext=DefaultExt> {
     pub _context: SecuritySchemeContext<Ext>,
 
     /// URI of the authorization server.
-    pub authorization: Option<AnyUri>,
+    pub authorization: Option<AbsoluteUri>,
 
     /// URI of the token server.
-    pub token: Option<AnyUri>,
+    pub token: Option<AbsoluteUri>,
 
     /// URI of the refresh server.
-    pub refresh: Option<AnyUri>,
+    pub refresh: Option<AbsoluteUri>,
 
     /// Set of authorization scope identifier provided as an array.
     #[serde_as(as = "Option<OneOrMany<_>>")]
@@ -800,7 +800,7 @@ where
 
     /// Sets the authorization URI.
     pub fn authorization(mut self, authorization: impl Into<String>) -> Self {
-        match AnyUri::parse(authorization.into().as_str()) {
+        match AbsoluteUri::parse(authorization.into().as_str()) {
             Ok(uri) => self.scheme.authorization = Some(uri),
             Err(_) => {},
         }
@@ -809,7 +809,7 @@ where
 
     /// Sets the token URI.
     pub fn token(mut self, token: impl Into<String>) -> Self {
-        match AnyUri::parse(token.into().as_str()) {
+        match AbsoluteUri::parse(token.into().as_str()) {
             Ok(uri) => self.scheme.token = Some(uri),
             Err(_) => {},
         }
@@ -818,7 +818,7 @@ where
 
     /// Sets the refresh URI.
     pub fn refresh(mut self, refresh: impl Into<String>) -> Self {
-        match AnyUri::parse(refresh.into().as_str()) {
+        match AbsoluteUri::parse(refresh.into().as_str()) {
             Ok(uri) => self.scheme.refresh = Some(uri),
             Err(_) => {},
         }
