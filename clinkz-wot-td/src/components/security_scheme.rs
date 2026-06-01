@@ -94,7 +94,12 @@ pub trait ContextHelper: Sized {
     }
 
     fn extra_fields(mut self, extra_fields: impl Into<ExtensionMap>) -> Self {
-        self.context()._extra_fields = extra_fields.into();
+        self.context()._extra_fields.extend(extra_fields.into());
+        self
+    }
+
+    fn extra_field(mut self, key: impl Into<String>, value: serde_json::Value) -> Self {
+        self.context()._extra_fields.insert(key.into(), value);
         self
     }
 }

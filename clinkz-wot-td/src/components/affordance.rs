@@ -281,6 +281,18 @@ impl ActionAffordanceBuilder {
         self
     }
 
+    /// Sets extension fields.
+    pub fn extra_fields(mut self, extra_fields: impl Into<ExtensionMap>) -> Self {
+        self.affordance._extra_fields.extend(extra_fields.into());
+        self
+    }
+
+    /// Adds an extension field.
+    pub fn extra_field(mut self, key: impl Into<String>, value: serde_json::Value) -> Self {
+        self.affordance._extra_fields.insert(key.into(), value);
+        self
+    }
+
     /// Builds and returns the `ActionAffordance` instance.
     pub fn build(self) -> Result<ActionAffordance, ValidateError> {
         self.affordance.validate()?;
@@ -382,6 +394,18 @@ impl EventAffordanceBuilder {
     /// Sets the cancellation schema.
     pub fn cancellation(mut self, cancellation: impl Into<DataSchema>) -> Self {
         self.affordance.cancellation = Some(cancellation.into());
+        self
+    }
+
+    /// Sets extension fields.
+    pub fn extra_fields(mut self, extra_fields: impl Into<ExtensionMap>) -> Self {
+        self.affordance._extra_fields.extend(extra_fields.into());
+        self
+    }
+
+    /// Adds an extension field.
+    pub fn extra_field(mut self, key: impl Into<String>, value: serde_json::Value) -> Self {
+        self.affordance._extra_fields.insert(key.into(), value);
         self
     }
 

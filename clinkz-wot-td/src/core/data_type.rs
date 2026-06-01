@@ -359,6 +359,20 @@ pub struct VersionInfo {
     pub _extra_fields: ExtensionMap,
 }
 
+impl VersionInfo {
+    /// Sets extension fields.
+    pub fn extra_fields(mut self, extra_fields: impl Into<ExtensionMap>) -> Self {
+        self._extra_fields.extend(extra_fields.into());
+        self
+    }
+
+    /// Adds an extension field.
+    pub fn extra_field(mut self, key: impl Into<String>, value: serde_json::Value) -> Self {
+        self._extra_fields.insert(key.into(), value);
+        self
+    }
+}
+
 /// Operation types of form.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -411,7 +425,12 @@ impl ExpectedResponse {
     }
 
     pub fn extra_fields(mut self, extra_fields: impl Into<ExtensionMap>) -> Self {
-        self._extra_fields = extra_fields.into();
+        self._extra_fields.extend(extra_fields.into());
+        self
+    }
+
+    pub fn extra_field(mut self, key: impl Into<String>, value: serde_json::Value) -> Self {
+        self._extra_fields.insert(key.into(), value);
         self
     }
 }
@@ -423,7 +442,6 @@ impl ExpectedResponse {
 #[serde(rename_all = "camelCase")]
 pub struct AdditionalExpectedResponse {
     /// Mandatory, default to value of the contentType of the Form element it belongs to.
-    #[serde(flatten)]
     pub content_type: Option<String>,
 
     /// Used to define the output data schema for an additional response
@@ -463,7 +481,12 @@ impl AdditionalExpectedResponse {
     }
 
     pub fn extra_fields(mut self, extra_fields: impl Into<ExtensionMap>) -> Self {
-        self._extra_fields = extra_fields.into();
+        self._extra_fields.extend(extra_fields.into());
+        self
+    }
+
+    pub fn extra_field(mut self, key: impl Into<String>, value: serde_json::Value) -> Self {
+        self._extra_fields.insert(key.into(), value);
         self
     }
 }

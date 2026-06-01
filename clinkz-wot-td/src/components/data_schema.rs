@@ -129,6 +129,18 @@ pub trait ContextHelper: MetadataHelper {
         self.context().data_type = Some(data_type.into());
         self
     }
+
+    /// Sets extension fields.
+    fn extra_fields(mut self, extra_fields: impl Into<ExtensionMap>) -> Self {
+        self.context()._extra_fields.extend(extra_fields.into());
+        self
+    }
+
+    /// Adds an extension field.
+    fn extra_field(mut self, key: impl Into<String>, value: serde_json::Value) -> Self {
+        self.context()._extra_fields.insert(key.into(), value);
+        self
+    }
 }
 
 /// Metadata describing data of type array.

@@ -171,6 +171,18 @@ impl<'a> FormBuilder<'a> {
         self
     }
 
+    /// Sets extension fields.
+    pub fn extra_fields(mut self, extra_fields: impl Into<ExtensionMap>) -> Self {
+        self.form._extra_fields.extend(extra_fields.into());
+        self
+    }
+
+    /// Adds an extension field.
+    pub fn extra_field(mut self, key: impl Into<String>, value: serde_json::Value) -> Self {
+        self.form._extra_fields.insert(key.into(), value);
+        self
+    }
+
     /// Build the form.
     pub fn build(mut self) -> Result<Form, ParseError> {
         self.form.href = FormHref::parse(&self.href)?;

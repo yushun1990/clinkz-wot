@@ -107,6 +107,18 @@ impl<'a> LinkBuilder<'a> {
         self
     }
 
+    /// Sets extension fields.
+    pub fn extra_fields(mut self, extra_fields: impl Into<ExtensionMap>) -> Self {
+        self.link._extra_fields.extend(extra_fields.into());
+        self
+    }
+
+    /// Adds an extension field.
+    pub fn extra_field(mut self, key: impl Into<String>, value: serde_json::Value) -> Self {
+        self.link._extra_fields.insert(key.into(), value);
+        self
+    }
+
     /// Builds and returns the `Link` instance.
     pub fn build(mut self) -> Result<Link, ParseError> {
         self.link.href = UriReference::parse(&self.href)?;

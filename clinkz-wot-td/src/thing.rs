@@ -355,6 +355,18 @@ impl ThingBuilder {
         self
     }
 
+    /// Sets extension fields.
+    pub fn extra_fields(mut self, extra_fields: impl Into<ExtensionMap>) -> Self {
+        self.thing._extra_fields.extend(extra_fields.into());
+        self
+    }
+
+    /// Adds an extension field.
+    pub fn extra_field(mut self, key: impl Into<String>, value: serde_json::Value) -> Self {
+        self.thing._extra_fields.insert(key.into(), value);
+        self
+    }
+
     /// Builds and returns the `Thing` instance.
     pub fn build(self) -> Result<Thing, ValidateError> {
         self.thing.validate()?;
