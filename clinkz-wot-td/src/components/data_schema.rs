@@ -1,15 +1,15 @@
-use alloc::{vec::Vec, string::String, collections::BTreeMap};
+use alloc::{collections::BTreeMap, string::String, vec::Vec};
 
 use serde::{Deserialize, Serialize};
-use serde_with::{serde_as, skip_serializing_none, OneOrMany};
+use serde_with::{OneOrMany, serde_as, skip_serializing_none};
 
 use super::util::deserialize_bool_flexible;
-use crate::data_type::{Metadata, MetadataHelper, DefaultExt};
+use crate::data_type::{ExtensionMap, Metadata, MetadataHelper};
 
 #[skip_serializing_none]
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all="camelCase")]
-pub struct DataSchemaContext<Ext=DefaultExt> {
+#[serde(rename_all = "camelCase")]
+pub struct DataSchemaContext {
     #[serde(flatten)]
     pub _metadata: Metadata,
 
@@ -56,13 +56,11 @@ pub struct DataSchemaContext<Ext=DefaultExt> {
     pub data_type: Option<String>,
 
     #[serde(flatten)]
-    pub _extra_fields: Ext,
+    pub _extra_fields: ExtensionMap,
 }
 
 pub trait ContextHelper: MetadataHelper {
-    type Ext;
-
-    fn context(&mut self) -> &mut DataSchemaContext<Self::Ext>;
+    fn context(&mut self) -> &mut DataSchemaContext;
 
     /// Sets the const value.
     fn constant(mut self, constant: serde_json::Value) -> Self {
@@ -85,20 +83,26 @@ pub trait ContextHelper: MetadataHelper {
     /// Adds schemas to one_of.
     fn one_of<I>(mut self, schemas: I) -> Self
     where
-        I: IntoIterator<Item=DataSchema>
+        I: IntoIterator<Item = DataSchema>,
     {
         let mut items: Vec<DataSchema> = schemas.into_iter().collect();
-        self.context().one_of.get_or_insert_with(Vec::new).append(&mut items);
+        self.context()
+            .one_of
+            .get_or_insert_with(Vec::new)
+            .append(&mut items);
         self
     }
 
     /// Adds values to enum.
     fn enumerate<I>(mut self, values: I) -> Self
     where
-        I: IntoIterator<Item=serde_json::Value>
+        I: IntoIterator<Item = serde_json::Value>,
     {
         let mut items: Vec<serde_json::Value> = values.into_iter().collect();
-        self.context().enumerate.get_or_insert_with(Vec::new).append(&mut items);
+        self.context()
+            .enumerate
+            .get_or_insert_with(Vec::new)
+            .append(&mut items);
         self
     }
 
@@ -125,18 +129,16 @@ pub trait ContextHelper: MetadataHelper {
         self.context().data_type = Some(data_type.into());
         self
     }
-
 }
-
 
 /// Metadata describing data of type array.
 #[serde_as]
 #[skip_serializing_none]
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all="camelCase")]
-pub struct ArraySchema<Ext=DefaultExt> {
+#[serde(rename_all = "camelCase")]
+pub struct ArraySchema {
     #[serde(flatten)]
-    pub _context: DataSchemaContext<Ext>,
+    pub _context: DataSchemaContext,
 
     /// Used to define the characteristic of an array.
     #[serde_as(as = "Option<OneOrMany<_>>")]
@@ -149,29 +151,23 @@ pub struct ArraySchema<Ext=DefaultExt> {
     pub max_items: Option<u32>,
 }
 
-impl<Ext> ArraySchema<Ext>
-where
-    Ext: Default
-{
-    pub fn builder() -> ArraySchemaBuilder<Ext> {
-        ArraySchemaBuilder::<Ext>::new()
+impl ArraySchema {
+    pub fn builder() -> ArraySchemaBuilder {
+        ArraySchemaBuilder::new()
     }
 }
 
 /// Builder for creating `ArraySchema` instances.
-pub struct ArraySchemaBuilder<Ext> {
-    schema: ArraySchema<Ext>,
+pub struct ArraySchemaBuilder {
+    schema: ArraySchema,
 }
 
-impl <Ext> ArraySchemaBuilder <Ext>
-where
-    Ext: Default
-{
+impl ArraySchemaBuilder {
     /// Creates a new `ArraySchemaBuilder`.
     pub fn new() -> Self {
         Self {
             schema: ArraySchema {
-                _context: DataSchemaContext::<Ext>::default(),
+                _context: DataSchemaContext::default(),
                 items: None,
                 min_items: None,
                 max_items: None,
@@ -182,9 +178,13 @@ where
     /// Adds items schemas.
     pub fn items<I>(mut self, items: I) -> Self
     where
-        I: IntoIterator<Item=DataSchema> {
+        I: IntoIterator<Item = DataSchema>,
+    {
         let mut schemas: Vec<DataSchema> = items.into_iter().collect();
-        self.schema.items.get_or_insert_with(Vec::new).append(&mut schemas);
+        self.schema
+            .items
+            .get_or_insert_with(Vec::new)
+            .append(&mut schemas);
         self
     }
 
@@ -201,20 +201,18 @@ where
     }
 
     /// Builds and returns the `ArraySchema` instance.
-    pub fn build(self) -> ArraySchema<Ext> {
+    pub fn build(self) -> ArraySchema {
         self.schema
     }
 }
 
-impl <Ext> ContextHelper for ArraySchemaBuilder<Ext> {
-    type Ext = Ext;
-
-    fn context(&mut self) -> &mut DataSchemaContext<Self::Ext> {
+impl ContextHelper for ArraySchemaBuilder {
+    fn context(&mut self) -> &mut DataSchemaContext {
         &mut self.schema._context
     }
 }
 
-impl <Ext> MetadataHelper for ArraySchemaBuilder<Ext> {
+impl MetadataHelper for ArraySchemaBuilder {
     fn metadata(&mut self) -> &mut Metadata {
         &mut self.context()._metadata
     }
@@ -223,54 +221,46 @@ impl <Ext> MetadataHelper for ArraySchemaBuilder<Ext> {
 /// Metadata describing data of type boolean.
 #[skip_serializing_none]
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all="camelCase")]
-pub struct BooleanSchema<Ext=DefaultExt> {
+#[serde(rename_all = "camelCase")]
+pub struct BooleanSchema {
     #[serde(flatten)]
-    pub _context: DataSchemaContext<Ext>,
+    pub _context: DataSchemaContext,
 }
 
-impl <Ext> BooleanSchema<Ext>
-where
-    Ext: Default
-{
-    pub fn builder() -> BooleanSchemaBuilder<Ext> {
-        BooleanSchemaBuilder::<Ext>::new()
+impl BooleanSchema {
+    pub fn builder() -> BooleanSchemaBuilder {
+        BooleanSchemaBuilder::new()
     }
 }
 
 /// Builder for creating `BooleanSchema` instances.
-pub struct BooleanSchemaBuilder<Ext> {
-    schema: BooleanSchema<Ext>,
+pub struct BooleanSchemaBuilder {
+    schema: BooleanSchema,
 }
 
-impl <Ext> BooleanSchemaBuilder<Ext>
-where
-    Ext: Default
-{
+impl BooleanSchemaBuilder {
     /// Creates a new `BooleanSchemaBuilder`.
     pub fn new() -> Self {
         Self {
             schema: BooleanSchema {
-                _context: DataSchemaContext::<Ext>::default(),
+                _context: DataSchemaContext::default(),
             },
         }
     }
 
     /// Builds and returns the `BooleanSchema` instance.
-    pub fn build(self) -> BooleanSchema<Ext> {
+    pub fn build(self) -> BooleanSchema {
         self.schema
     }
 }
 
-impl <Ext> ContextHelper for BooleanSchemaBuilder<Ext> {
-    type Ext = Ext;
-
-    fn context(&mut self) -> &mut DataSchemaContext<Self::Ext> {
+impl ContextHelper for BooleanSchemaBuilder {
+    fn context(&mut self) -> &mut DataSchemaContext {
         &mut self.schema._context
     }
 }
 
-impl <Ext> MetadataHelper for BooleanSchemaBuilder<Ext> {
+impl MetadataHelper for BooleanSchemaBuilder {
     fn metadata(&mut self) -> &mut Metadata {
         &mut self.context()._metadata
     }
@@ -279,10 +269,10 @@ impl <Ext> MetadataHelper for BooleanSchemaBuilder<Ext> {
 /// Metadata describing data of type number.
 #[skip_serializing_none]
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all="camelCase")]
-pub struct NumberSchema<Ext=DefaultExt> {
+#[serde(rename_all = "camelCase")]
+pub struct NumberSchema {
     #[serde(flatten)]
-    pub _context: DataSchemaContext<Ext>,
+    pub _context: DataSchemaContext,
 
     /// Specifies a minimum numeric value, representing an inclusive
     /// lower limit.
@@ -305,28 +295,23 @@ pub struct NumberSchema<Ext=DefaultExt> {
     pub multiple_of: Option<f64>,
 }
 
-impl <Ext> NumberSchema<Ext>
-where
-    Ext: Default
-{
-    pub fn builder() -> NumberSchemaBuilder<Ext> {
-        NumberSchemaBuilder::<Ext>::new()
+impl NumberSchema {
+    pub fn builder() -> NumberSchemaBuilder {
+        NumberSchemaBuilder::new()
     }
 }
 
 /// Builder for creating `NumberSchema` instances.
-pub struct NumberSchemaBuilder<Ext> {
-    schema: NumberSchema<Ext>,
+pub struct NumberSchemaBuilder {
+    schema: NumberSchema,
 }
 
-impl <Ext> NumberSchemaBuilder<Ext>
-where
-    Ext: Default {
+impl NumberSchemaBuilder {
     /// Creates a new `NumberSchemaBuilder`.
     pub fn new() -> Self {
         Self {
             schema: NumberSchema {
-                _context: DataSchemaContext::<Ext>::default(),
+                _context: DataSchemaContext::default(),
                 minimum: None,
                 exclusive_minimum: None,
                 maximum: None,
@@ -369,20 +354,18 @@ where
     }
 
     /// Builds and returns the `NumberSchema` instance.
-    pub fn build(self) -> NumberSchema<Ext> {
+    pub fn build(self) -> NumberSchema {
         self.schema
     }
 }
 
-impl <Ext> ContextHelper for NumberSchemaBuilder<Ext> {
-    type Ext = Ext;
-
-    fn context(&mut self) -> &mut DataSchemaContext<Self::Ext> {
+impl ContextHelper for NumberSchemaBuilder {
+    fn context(&mut self) -> &mut DataSchemaContext {
         &mut self.schema._context
     }
 }
 
-impl <Ext> MetadataHelper for NumberSchemaBuilder<Ext> {
+impl MetadataHelper for NumberSchemaBuilder {
     fn metadata(&mut self) -> &mut Metadata {
         &mut self.context()._metadata
     }
@@ -391,10 +374,10 @@ impl <Ext> MetadataHelper for NumberSchemaBuilder<Ext> {
 /// Metadata describing data of type integer.
 #[skip_serializing_none]
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all="camelCase")]
-pub struct IntegerSchema<Ext=DefaultExt> {
+#[serde(rename_all = "camelCase")]
+pub struct IntegerSchema {
     #[serde(flatten)]
-    pub _context: DataSchemaContext<Ext>,
+    pub _context: DataSchemaContext,
 
     /// Specifies a minimum numeric value, representing an inclusive
     /// lower limit.
@@ -417,29 +400,23 @@ pub struct IntegerSchema<Ext=DefaultExt> {
     pub multiple_of: Option<i64>,
 }
 
-impl <Ext> IntegerSchema<Ext>
-where
-    Ext: Default
-{
-    pub fn builder() -> IntegerSchemaBuilder<Ext> {
-        IntegerSchemaBuilder::<Ext>::new()
+impl IntegerSchema {
+    pub fn builder() -> IntegerSchemaBuilder {
+        IntegerSchemaBuilder::new()
     }
 }
 
 /// Builder for creating `IntegerSchema` instances.
-pub struct IntegerSchemaBuilder<Ext> {
-    schema: IntegerSchema<Ext>,
+pub struct IntegerSchemaBuilder {
+    schema: IntegerSchema,
 }
 
-impl <Ext> IntegerSchemaBuilder<Ext>
-where
-    Ext: Default
-{
+impl IntegerSchemaBuilder {
     /// Creates a new `IntegerSchemaBuilder`.
     pub fn new() -> Self {
         Self {
             schema: IntegerSchema {
-                _context: DataSchemaContext::<Ext>::default(),
+                _context: DataSchemaContext::default(),
                 minimum: None,
                 exclusive_minimum: None,
                 maximum: None,
@@ -482,20 +459,18 @@ where
     }
 
     /// Builds and returns the `IntegerSchema` instance.
-    pub fn build(self) -> IntegerSchema<Ext> {
+    pub fn build(self) -> IntegerSchema {
         self.schema
     }
 }
 
-impl <Ext> ContextHelper for IntegerSchemaBuilder<Ext> {
-    type Ext = Ext;
-
-    fn context(&mut self) -> &mut DataSchemaContext<Self::Ext> {
+impl ContextHelper for IntegerSchemaBuilder {
+    fn context(&mut self) -> &mut DataSchemaContext {
         &mut self.schema._context
     }
 }
 
-impl <Ext> MetadataHelper for IntegerSchemaBuilder<Ext> {
+impl MetadataHelper for IntegerSchemaBuilder {
     fn metadata(&mut self) -> &mut Metadata {
         &mut self.context()._metadata
     }
@@ -504,10 +479,10 @@ impl <Ext> MetadataHelper for IntegerSchemaBuilder<Ext> {
 /// Metadata describing data of type Object.
 #[skip_serializing_none]
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all="camelCase")]
-pub struct ObjectSchema<Ext=DefaultExt> {
+#[serde(rename_all = "camelCase")]
+pub struct ObjectSchema {
     #[serde(flatten)]
-    pub _context: DataSchemaContext<Ext>,
+    pub _context: DataSchemaContext,
 
     /// Data schema nested definitions.
     pub properties: Option<BTreeMap<String, DataSchema>>,
@@ -516,29 +491,23 @@ pub struct ObjectSchema<Ext=DefaultExt> {
     pub required: Option<Vec<String>>,
 }
 
-impl <Ext> ObjectSchema<Ext>
-where
-    Ext: Default
-{
-    pub fn builder() -> ObjectSchemaBuilder<Ext> {
-        ObjectSchemaBuilder::<Ext>::new()
+impl ObjectSchema {
+    pub fn builder() -> ObjectSchemaBuilder {
+        ObjectSchemaBuilder::new()
     }
 }
 
 /// Builder for creating `ObjectSchema` instances.
-pub struct ObjectSchemaBuilder<Ext> {
-    schema: ObjectSchema<Ext>,
+pub struct ObjectSchemaBuilder {
+    schema: ObjectSchema,
 }
 
-impl <Ext> ObjectSchemaBuilder<Ext>
-where
-    Ext: Default
-{
+impl ObjectSchemaBuilder {
     /// Creates a new `ObjectSchemaBuilder`.
     pub fn new() -> Self {
         Self {
             schema: ObjectSchema {
-                _context: DataSchemaContext::<Ext>::default(),
+                _context: DataSchemaContext::default(),
                 properties: None,
                 required: None,
             },
@@ -555,8 +524,9 @@ where
     /// Adds multiple properties.
     pub fn properties<I, S>(mut self, properties: I) -> Self
     where
-        I: IntoIterator<Item=(S, DataSchema)>,
-        S: Into<String> {
+        I: IntoIterator<Item = (S, DataSchema)>,
+        S: Into<String>,
+    {
         let map = self.schema.properties.get_or_insert_with(BTreeMap::new);
         for (name, schema) in properties {
             map.insert(name.into(), schema);
@@ -567,28 +537,30 @@ where
     /// Adds required fields.
     pub fn required<I, S>(mut self, fields: I) -> Self
     where
-        I: IntoIterator<Item=S>,
-        S: Into<String> {
+        I: IntoIterator<Item = S>,
+        S: Into<String>,
+    {
         let mut items: Vec<String> = fields.into_iter().map(|s| s.into()).collect();
-        self.schema.required.get_or_insert_with(Vec::new).append(&mut items);
+        self.schema
+            .required
+            .get_or_insert_with(Vec::new)
+            .append(&mut items);
         self
     }
 
     /// Builds and returns the `ObjectSchema` instance.
-    pub fn build(self) -> ObjectSchema<Ext> {
+    pub fn build(self) -> ObjectSchema {
         self.schema
     }
 }
 
-impl <Ext> ContextHelper for ObjectSchemaBuilder<Ext> {
-    type Ext = Ext;
-
-    fn context(&mut self) -> &mut DataSchemaContext<Self::Ext> {
+impl ContextHelper for ObjectSchemaBuilder {
+    fn context(&mut self) -> &mut DataSchemaContext {
         &mut self.schema._context
     }
 }
 
-impl <Ext> MetadataHelper for ObjectSchemaBuilder<Ext> {
+impl MetadataHelper for ObjectSchemaBuilder {
     fn metadata(&mut self) -> &mut Metadata {
         &mut self.context()._metadata
     }
@@ -597,10 +569,10 @@ impl <Ext> MetadataHelper for ObjectSchemaBuilder<Ext> {
 /// Metadata describing data of type string.
 #[skip_serializing_none]
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all="camelCase")]
-pub struct StringSchema<Ext=DefaultExt> {
+#[serde(rename_all = "camelCase")]
+pub struct StringSchema {
     #[serde(flatten)]
-    pub _context: DataSchemaContext<Ext>,
+    pub _context: DataSchemaContext,
 
     /// Specifies the minimum length of a string.
     pub min_length: Option<u32>,
@@ -619,28 +591,23 @@ pub struct StringSchema<Ext=DefaultExt> {
     pub content_media_type: Option<String>,
 }
 
-impl <Ext> StringSchema<Ext>
-where
-    Ext: Default {
-    pub fn builder() -> StringSchemaBuilder<Ext> {
-        StringSchemaBuilder::<Ext>::new()
+impl StringSchema {
+    pub fn builder() -> StringSchemaBuilder {
+        StringSchemaBuilder::new()
     }
 }
 
 /// Builder for creating `StringSchema` instances.
-pub struct StringSchemaBuilder<Ext> {
-    schema: StringSchema<Ext>,
+pub struct StringSchemaBuilder {
+    schema: StringSchema,
 }
 
-impl <Ext> StringSchemaBuilder<Ext>
-where
-    Ext: Default
-{
+impl StringSchemaBuilder {
     /// Creates a new `StringSchemaBuilder`.
     pub fn new() -> Self {
         Self {
             schema: StringSchema {
-                _context: DataSchemaContext::<Ext>::default(),
+                _context: DataSchemaContext::default(),
                 min_length: None,
                 max_length: None,
                 pattern: None,
@@ -681,53 +648,44 @@ where
     }
 
     /// Builds and returns the `StringSchema` instance.
-    pub fn build(self) -> StringSchema<Ext> {
+    pub fn build(self) -> StringSchema {
         self.schema
     }
 }
 
-impl <Ext> ContextHelper for StringSchemaBuilder<Ext> {
-    type Ext = Ext;
-
-    fn context(&mut self) -> &mut DataSchemaContext<Self::Ext> {
+impl ContextHelper for StringSchemaBuilder {
+    fn context(&mut self) -> &mut DataSchemaContext {
         &mut self.schema._context
     }
 }
 
-impl <Ext> MetadataHelper for StringSchemaBuilder<Ext> {
+impl MetadataHelper for StringSchemaBuilder {
     fn metadata(&mut self) -> &mut Metadata {
         &mut self.context()._metadata
     }
 }
 
-
 /// Metadata describing data of type string.
 #[skip_serializing_none]
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all="camelCase")]
-pub struct NullSchema<Ext=DefaultExt> {
+#[serde(rename_all = "camelCase")]
+pub struct NullSchema {
     #[serde(flatten)]
-    pub _context: DataSchemaContext<Ext>
+    pub _context: DataSchemaContext,
 }
 
-impl <Ext> NullSchema<Ext>
-where
-    Ext: Default
-{
-    pub fn builder() -> NullSchemaBuilder<Ext> {
-        NullSchemaBuilder::<Ext>::new()
+impl NullSchema {
+    pub fn builder() -> NullSchemaBuilder {
+        NullSchemaBuilder::new()
     }
 }
 
 /// Builder for creating `NullSchema` instances.
-pub struct NullSchemaBuilder<Ext> {
-    schema: NullSchema<Ext>,
+pub struct NullSchemaBuilder {
+    schema: NullSchema,
 }
 
-impl <Ext> NullSchemaBuilder<Ext>
-where
-    Ext: Default
-{
+impl NullSchemaBuilder {
     /// Creates a new `NullSchemaBuilder`.
     pub fn new() -> Self {
         Self {
@@ -738,74 +696,68 @@ where
     }
 
     /// Builds and returns the `NullSchema` instance.
-    pub fn build(self) -> NullSchema<Ext> {
+    pub fn build(self) -> NullSchema {
         self.schema
     }
 }
 
-impl <Ext> ContextHelper for NullSchemaBuilder<Ext> {
-    type Ext = Ext;
-
-    fn context(&mut self) -> &mut DataSchemaContext<Self::Ext> {
+impl ContextHelper for NullSchemaBuilder {
+    fn context(&mut self) -> &mut DataSchemaContext {
         &mut self.schema._context
     }
 }
 
-impl <Ext> MetadataHelper for NullSchemaBuilder<Ext> {
+impl MetadataHelper for NullSchemaBuilder {
     fn metadata(&mut self) -> &mut Metadata {
         &mut self.context()._metadata
     }
 }
 
-
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(untagged)]
-pub enum DataSchema<Ext=DefaultExt> {
-    Array(ArraySchema<Ext>),
-    Boolean(BooleanSchema<Ext>),
-    Number(NumberSchema<Ext>),
-    Integer(IntegerSchema<Ext>),
-    Object(ObjectSchema<Ext>),
-    String(StringSchema<Ext>),
-    Null(NullSchema<Ext>)
+pub enum DataSchema {
+    Array(ArraySchema),
+    Boolean(BooleanSchema),
+    Number(NumberSchema),
+    Integer(IntegerSchema),
+    Object(ObjectSchema),
+    String(StringSchema),
+    Null(NullSchema),
 }
 
-impl <Ext> DataSchema<Ext>
-where
-    Ext: Default + Clone
-{
+impl DataSchema {
     /// Creates an ArraySchema using the builder pattern.
-    pub fn array() -> ArraySchemaBuilder<Ext> {
-        ArraySchema::<Ext>::builder()
+    pub fn array() -> ArraySchemaBuilder {
+        ArraySchema::builder()
     }
 
     /// Creates a BooleanSchema using the builder pattern.
-    pub fn boolean() -> BooleanSchemaBuilder<Ext> {
-        BooleanSchema::<Ext>::builder()
+    pub fn boolean() -> BooleanSchemaBuilder {
+        BooleanSchema::builder()
     }
 
     /// Creates a NumberSchema using the builder pattern.
-    pub fn number() -> NumberSchemaBuilder<Ext> {
-        NumberSchema::<Ext>::builder()
+    pub fn number() -> NumberSchemaBuilder {
+        NumberSchema::builder()
     }
 
     /// Creates an IntegerSchema using the builder pattern.
-    pub fn integer() -> IntegerSchemaBuilder<Ext> {
-        IntegerSchema::<Ext>::builder()
+    pub fn integer() -> IntegerSchemaBuilder {
+        IntegerSchema::builder()
     }
 
     /// Creates an ObjectSchema using the builder pattern.
-    pub fn object() -> ObjectSchemaBuilder<Ext> {
-        ObjectSchema::<Ext>::builder()
+    pub fn object() -> ObjectSchemaBuilder {
+        ObjectSchema::builder()
     }
 
     /// Creates a StringSchema using the builder pattern.
-    pub fn string() -> StringSchemaBuilder<Ext> {
-        StringSchema::<Ext>::builder()
+    pub fn string() -> StringSchemaBuilder {
+        StringSchema::builder()
     }
 
     /// Creates a NullSchema using the builder pattern.
-    pub fn null() -> NullSchemaBuilder<Ext> {
-        NullSchema::<Ext>::builder()
+    pub fn null() -> NullSchemaBuilder {
+        NullSchema::builder()
     }
 }

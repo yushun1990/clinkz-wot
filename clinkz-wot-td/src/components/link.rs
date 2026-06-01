@@ -1,15 +1,15 @@
-use alloc::{vec::Vec, string::String, borrow::Cow};
+use alloc::{borrow::Cow, string::String, vec::Vec};
 use fluent_uri::ParseError;
 use serde::{Deserialize, Serialize};
-use serde_with::{serde_as, skip_serializing_none, OneOrMany};
+use serde_with::{OneOrMany, serde_as, skip_serializing_none};
 
-use crate::data_type::{DefaultExt, UriReference};
+use crate::data_type::{ExtensionMap, UriReference};
 
 #[serde_as]
 #[skip_serializing_none]
 #[derive(Debug, Default, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct Link<Ext=DefaultExt> {
+pub struct Link {
     /// Target IRI of the link.
     pub href: UriReference,
 
@@ -33,28 +33,22 @@ pub struct Link<Ext=DefaultExt> {
     pub hreflang: Option<Vec<String>>,
 
     #[serde(flatten)]
-    pub _extra_fields: Ext
+    pub _extra_fields: ExtensionMap,
 }
 
-impl<Ext> Link<Ext>
-where
-    Ext: Default
-{
-    pub fn builder(href: &str) -> LinkBuilder<'_, Ext> {
-        LinkBuilder::<Ext>::new(href)
+impl Link {
+    pub fn builder(href: &str) -> LinkBuilder<'_> {
+        LinkBuilder::new(href)
     }
 }
 
 /// Builder for creating `Link` instances.
-pub struct LinkBuilder<'a, Ext> {
+pub struct LinkBuilder<'a> {
     href: Cow<'a, str>,
-    link: Link<Ext>,
+    link: Link,
 }
 
-impl<'a, Ext> LinkBuilder<'a, Ext>
-where
-    Ext: Default
-{
+impl<'a> LinkBuilder<'a> {
     /// Creates a new `LinkBuilder` with the required `href` field.
     pub fn new(href: impl Into<Cow<'a, str>>) -> Self {
         Self {
@@ -79,7 +73,7 @@ where
     pub fn anchor(mut self, anchor: impl Into<String>) -> Self {
         match UriReference::parse(anchor.into().as_str()) {
             Ok(uri) => self.link.anchor = Some(uri),
-            Err(_) => {},
+            Err(_) => {}
         }
         self
     }
@@ -92,22 +86,29 @@ where
 
     /// Adds a single `hreflang`.
     pub fn hreflang(mut self, hreflang: impl Into<String>) -> Self {
-        self.link.hreflang.get_or_insert_with(Vec::new).push(hreflang.into());
+        self.link
+            .hreflang
+            .get_or_insert_with(Vec::new)
+            .push(hreflang.into());
         self
     }
 
     /// Adds multiple `hreflang` values.
     pub fn hreflangs<I, S>(mut self, hreflangs: I) -> Self
     where
-        I: IntoIterator<Item=S>,
-        S: Into<String> {
+        I: IntoIterator<Item = S>,
+        S: Into<String>,
+    {
         let mut items: Vec<String> = hreflangs.into_iter().map(|s| s.into()).collect();
-        self.link.hreflang.get_or_insert_with(Vec::new).append(&mut items);
+        self.link
+            .hreflang
+            .get_or_insert_with(Vec::new)
+            .append(&mut items);
         self
     }
 
     /// Builds and returns the `Link` instance.
-    pub fn build(mut self) -> Result<Link<Ext>, ParseError> {
+    pub fn build(mut self) -> Result<Link, ParseError> {
         self.link.href = UriReference::parse(&self.href)?;
         Ok(self.link)
     }

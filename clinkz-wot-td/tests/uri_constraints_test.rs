@@ -1,7 +1,7 @@
 use clinkz_wot_td::{
-    data_type::{AbsoluteUri, BaseUri, DefaultExt, UriReference},
+    data_type::{AbsoluteUri, BaseUri, UriReference},
     form::Form,
-    thing::CommonThing,
+    thing::Thing,
 };
 
 #[test]
@@ -27,12 +27,12 @@ fn base_uri_accepts_absolute_uri_templates_but_rejects_relative_references() {
 
 #[test]
 fn form_href_accepts_relative_references_and_templates() {
-    let relative = Form::<DefaultExt>::builder("/properties/temperature")
+    let relative = Form::builder("/properties/temperature")
         .build()
         .expect("relative form href should be accepted");
     assert_eq!(relative.href, *"/properties/temperature");
 
-    let template = Form::<DefaultExt>::builder("/properties/{propertyName}")
+    let template = Form::builder("/properties/{propertyName}")
         .build()
         .expect("URI template form href should be accepted");
     assert!(template.href.is_template());
@@ -60,7 +60,7 @@ fn deserialization_accepts_absolute_uri_template_base() {
         ]
     }"#;
 
-    let thing: CommonThing = serde_json::from_str(raw).expect("TD should deserialize losslessly");
+    let thing: Thing = serde_json::from_str(raw).expect("TD should deserialize losslessly");
     let base = thing.base.expect("base should be preserved");
     assert_eq!(base.as_str(), "https://example.com/{tenant}/");
     assert!(base.is_template());

@@ -1,9 +1,9 @@
-use alloc::{borrow::ToOwned, vec::Vec, string::String, collections::BTreeMap};
+use alloc::{borrow::ToOwned, collections::BTreeMap, string::String, vec::Vec};
 
+use crate::{components_util::deserialize_bool_flexible, validate::Validate};
 use fluent_uri::{ParseError, Uri, UriRef};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
-use serde_with::{serde_as, skip_serializing_none, OneOrMany};
-use crate::{components_util::deserialize_bool_flexible, validate::Validate};
+use serde_with::{OneOrMany, serde_as, skip_serializing_none};
 
 /// URI reference compliant with RFC 3986.
 #[derive(Debug, Clone, PartialEq)]
@@ -266,20 +266,10 @@ impl Default for FormHref {
     }
 }
 
-/// Empty extended type.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-pub struct Nil;
+/// Extension fields preserved from unknown TD terms.
+pub type ExtensionMap = BTreeMap<String, serde_json::Value>;
 
-impl Validate for Nil {
-    fn validate(&self) -> Result<(), crate::validate::ValidateError> {
-        Ok(())
-    }
-}
-
-/// Default extra fields type.
-pub type DefaultExt = BTreeMap<String, serde_json::Value>;
-
-impl Validate for DefaultExt {
+impl Validate for ExtensionMap {
     fn validate(&self) -> Result<(), crate::validate::ValidateError> {
         Ok(())
     }
@@ -314,7 +304,8 @@ impl MultiLanguage {
     /// Creates a MultiLanguage from an iterator of (lang, text) pairs.
     pub fn from_iter<I>(iter: I) -> Self
     where
-        I: IntoIterator<Item=(String, String)> {
+        I: IntoIterator<Item = (String, String)>,
+    {
         Self(BTreeMap::from_iter(iter))
     }
 
@@ -330,7 +321,8 @@ impl MultiLanguage {
 
     /// Merges another MultiLanguage into this one.
     pub fn merge(&mut self, other: &MultiLanguage) {
-        self.0.extend(other.0.iter().map(|(k, v)| (k.clone(), v.clone())));
+        self.0
+            .extend(other.0.iter().map(|(k, v)| (k.clone(), v.clone())));
     }
 
     /// Returns a reference to the underlying BTreeMap.
@@ -357,14 +349,14 @@ impl MultiLanguage {
 /// Metadata of a Thing that provides version information about the TD document.
 #[skip_serializing_none]
 #[derive(Debug, Default, Serialize, Deserialize, Clone, PartialEq)]
-pub struct VersionInfo<Ext=DefaultExt> {
+pub struct VersionInfo {
     /// Provides a version indicator of this TD.
     pub instance: String,
     /// Provides a version indicator of underlying TM.
     pub model: Option<String>,
 
     #[serde(flatten)]
-    pub _extra_fields: Ext
+    pub _extra_fields: ExtensionMap,
 }
 
 /// Operation types of form.
@@ -396,35 +388,29 @@ pub enum Operation {
 #[skip_serializing_none]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct ExpectedResponse<Ext=DefaultExt> {
+pub struct ExpectedResponse {
     /// Media type of the response payload (e.g., "application/json").
     pub content_type: String,
 
     #[serde(flatten)]
-    pub _extra_fields: Ext,
+    pub _extra_fields: ExtensionMap,
 }
 
-impl <Ext> From<String> for ExpectedResponse<Ext>
-where
-   Ext: Default
-{
+impl From<String> for ExpectedResponse {
     fn from(value: String) -> Self {
         Self::new(value)
     }
 }
 
-impl <Ext> ExpectedResponse<Ext>
-where
-    Ext: Default
-{
+impl ExpectedResponse {
     pub fn new(value: String) -> Self {
         Self {
             content_type: value,
-            _extra_fields: Default::default()
+            _extra_fields: Default::default(),
         }
     }
 
-    pub fn extra_fields(mut self, extra_fields: impl Into<Ext>) -> Self {
+    pub fn extra_fields(mut self, extra_fields: impl Into<ExtensionMap>) -> Self {
         self._extra_fields = extra_fields.into();
         self
     }
@@ -435,7 +421,7 @@ where
 #[skip_serializing_none]
 #[derive(Debug, Default, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct AdditionalExpectedResponse<Ext=DefaultExt> {
+pub struct AdditionalExpectedResponse {
     /// Mandatory, default to value of the contentType of the Form element it belongs to.
     #[serde(flatten)]
     pub content_type: Option<String>,
@@ -455,14 +441,11 @@ pub struct AdditionalExpectedResponse<Ext=DefaultExt> {
     pub success: bool,
 
     #[serde(flatten)]
-    pub _extra_fields: Ext,
+    pub _extra_fields: ExtensionMap,
 }
 
-impl <Ext> AdditionalExpectedResponse<Ext>
-where
-    Ext: Default
-{
-    pub fn new (content_type: String) -> Self {
+impl AdditionalExpectedResponse {
+    pub fn new(content_type: String) -> Self {
         Self {
             content_type: Some(content_type),
             ..Default::default()
@@ -479,7 +462,7 @@ where
         self
     }
 
-    pub fn extra_fields(mut self, extra_fields: impl Into<Ext>) -> Self {
+    pub fn extra_fields(mut self, extra_fields: impl Into<ExtensionMap>) -> Self {
         self._extra_fields = extra_fields.into();
         self
     }
@@ -488,7 +471,7 @@ where
 #[serde_as]
 #[skip_serializing_none]
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all="camelCase")]
+#[serde(rename_all = "camelCase")]
 pub struct Metadata {
     /// JSON-LD keyword to label the object with semantic tags.
     #[serde(rename = "@type")]
@@ -512,22 +495,25 @@ pub struct Metadata {
 pub trait MetadataHelper: Sized {
     fn metadata(&mut self) -> &mut Metadata;
 
-     /// Adds tags.
+    /// Adds tags.
     fn tags<I, S>(mut self, tags: I) -> Self
     where
-        I: IntoIterator<Item=S>,
+        I: IntoIterator<Item = S>,
         S: Into<String>,
-        Self: Sized
+        Self: Sized,
     {
         let mut items: Vec<String> = tags.into_iter().map(|s| s.into()).collect();
-        self.metadata().tags.get_or_insert_with(Vec::new).append(&mut items);
+        self.metadata()
+            .tags
+            .get_or_insert_with(Vec::new)
+            .append(&mut items);
         self
     }
 
     /// Sets the title.
     fn title(mut self, title: impl Into<String>) -> Self
     where
-        Self: Sized
+        Self: Sized,
     {
         self.metadata().title = Some(title.into());
         self
@@ -536,7 +522,7 @@ pub trait MetadataHelper: Sized {
     /// Sets the multi-language titles.
     fn titles(mut self, titles: impl Into<MultiLanguage>) -> Self
     where
-        Self: Sized
+        Self: Sized,
     {
         self.metadata().titles = Some(titles.into());
         self
@@ -545,9 +531,12 @@ pub trait MetadataHelper: Sized {
     /// Adds a title for a specific language.
     fn title_with_lang(mut self, lang: &str, title: &str) -> Self
     where
-        Self: Sized
+        Self: Sized,
     {
-        let titles = self.metadata().titles.get_or_insert_with(MultiLanguage::new);
+        let titles = self
+            .metadata()
+            .titles
+            .get_or_insert_with(MultiLanguage::new);
         titles.add(lang, title);
         self
     }
@@ -555,7 +544,7 @@ pub trait MetadataHelper: Sized {
     /// Sets the description.
     fn description(mut self, description: impl Into<String>) -> Self
     where
-        Self: Sized
+        Self: Sized,
     {
         self.metadata().description = Some(description.into());
         self
@@ -564,7 +553,7 @@ pub trait MetadataHelper: Sized {
     /// Sets the multi-language descriptions.
     fn descriptions(mut self, descriptions: impl Into<MultiLanguage>) -> Self
     where
-        Self: Sized
+        Self: Sized,
     {
         self.metadata().descriptions = Some(descriptions.into());
         self
@@ -573,9 +562,12 @@ pub trait MetadataHelper: Sized {
     /// Adds a description for a specific language.
     fn description_with_lang(mut self, lang: &str, description: &str) -> Self
     where
-        Self: Sized
+        Self: Sized,
     {
-        let descriptions = self.metadata().descriptions.get_or_insert_with(MultiLanguage::new);
+        let descriptions = self
+            .metadata()
+            .descriptions
+            .get_or_insert_with(MultiLanguage::new);
         descriptions.add(lang, description);
         self
     }

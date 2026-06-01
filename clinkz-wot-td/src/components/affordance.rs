@@ -1,16 +1,21 @@
-use alloc::{string::{String, ToString}, collections::BTreeMap, format, vec::Vec};
+use alloc::{
+    collections::BTreeMap,
+    format,
+    string::{String, ToString},
+    vec::Vec,
+};
 use serde::{Deserialize, Serialize};
 use serde_with::skip_serializing_none;
 
 use crate::{
-    data_type::{Metadata, MetadataHelper, Operation},
-    validate::{Validate, ValidateError}
+    data_type::{ExtensionMap, Metadata, MetadataHelper, Operation},
+    validate::{Validate, ValidateError},
 };
 
 use super::{
+    data_schema::DataSchema,
     form::Form,
     util::{deserialize_bool_flexible, deserialize_option_bool_flexible},
-    data_schema::DataSchema,
 };
 
 /// Metadata of a Thing that shows the possible choices to Consumers,
@@ -18,17 +23,17 @@ use super::{
 #[skip_serializing_none]
 #[derive(Debug, Default, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct InteractionAffordance<Ext> {
+pub struct InteractionAffordance {
     /// Set of form hypermedia controls that describe how an operation
     /// can be performed.
-    pub forms: Vec<Form<Ext>>,
+    pub forms: Vec<Form>,
 
     /// Define URI template variables according to a collection based on
     /// DataSchema declarations.
     pub uri_variables: Option<BTreeMap<String, DataSchema>>,
 }
 
-impl <Ext> InteractionAffordance<Ext> {
+impl InteractionAffordance {
     /// Generic helper to validate that all operations in all forms satisfy
     /// a predicate.
     ///
@@ -57,11 +62,10 @@ impl <Ext> InteractionAffordance<Ext> {
 }
 
 pub trait InteractionHelper: Sized {
-    type Ext;
-    fn interaction(&mut self) -> &mut InteractionAffordance<Self::Ext>;
+    fn interaction(&mut self) -> &mut InteractionAffordance;
 
     /// Adds a form to the interaction affordance.
-    fn form(mut self, form: Form<Self::Ext>) -> Self {
+    fn form(mut self, form: Form) -> Self {
         self.interaction().forms.push(form);
         self
     }
@@ -69,8 +73,9 @@ pub trait InteractionHelper: Sized {
     /// Adds multiple forms to the interaction affordance.
     fn forms<I>(mut self, forms: I) -> Self
     where
-        I: IntoIterator<Item=Form<Self::Ext>> {
-        let mut items: Vec<Form<Self::Ext>> = forms.into_iter().collect();
+        I: IntoIterator<Item = Form>,
+    {
+        let mut items: Vec<Form> = forms.into_iter().collect();
         self.interaction().forms.append(&mut items);
         self
     }
@@ -83,23 +88,25 @@ pub trait InteractionHelper: Sized {
 
     /// Adds a URI variable.
     fn uri_variable(mut self, name: impl Into<String>, schema: DataSchema) -> Self {
-        let uri_variables = self.interaction().uri_variables.get_or_insert_with(BTreeMap::new);
+        let uri_variables = self
+            .interaction()
+            .uri_variables
+            .get_or_insert_with(BTreeMap::new);
         uri_variables.insert(name.into(), schema);
         self
     }
 }
 
-
 /// An Interaction Affordance that exposes state of the Thing.
 #[skip_serializing_none]
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct PropertyAffordance<Ext> {
+pub struct PropertyAffordance {
     #[serde(flatten)]
     pub _schema: DataSchema,
 
     #[serde(flatten)]
-    pub _interaction: InteractionAffordance<Ext>,
+    pub _interaction: InteractionAffordance,
 
     /// A hint that indicates whether Servients hosting the Thing and
     /// Intermediaries should provide a Protocol Binding that supports
@@ -112,37 +119,33 @@ pub struct PropertyAffordance<Ext> {
     pub observable: bool,
 }
 
-impl <Ext> Validate for PropertyAffordance<Ext> {
+impl Validate for PropertyAffordance {
     fn validate(&self) -> Result<(), ValidateError> {
-        self._interaction.validate_ops("PropertyAffordance", |op| matches!(
-            op,
-            Operation::ReadProperty |
-            Operation::WriteProperty |
-            Operation::ObserveProperty |
-            Operation::UnobserveProperty
-        ))
+        self._interaction.validate_ops("PropertyAffordance", |op| {
+            matches!(
+                op,
+                Operation::ReadProperty
+                    | Operation::WriteProperty
+                    | Operation::ObserveProperty
+                    | Operation::UnobserveProperty
+            )
+        })
     }
 }
 
-impl<Ext> PropertyAffordance<Ext>
-where
-    Ext: Default
-{
+impl PropertyAffordance {
     /// Creates a builder for `PropertyAffordance`.
-    pub fn builder(schema: impl Into<DataSchema>) -> PropertyAffordanceBuilder<Ext> {
-        PropertyAffordanceBuilder::<Ext>::new(schema.into())
+    pub fn builder(schema: impl Into<DataSchema>) -> PropertyAffordanceBuilder {
+        PropertyAffordanceBuilder::new(schema.into())
     }
 }
 
 /// Builder for creating `PropertyAffordance` instances.
-pub struct PropertyAffordanceBuilder<Ext> {
-    affordance: PropertyAffordance<Ext>,
+pub struct PropertyAffordanceBuilder {
+    affordance: PropertyAffordance,
 }
 
-impl <Ext> PropertyAffordanceBuilder<Ext>
-where
-    Ext: Default
-{
+impl PropertyAffordanceBuilder {
     /// Creates a new `PropertyAffordanceBuilder`.
     pub fn new(schema: DataSchema) -> Self {
         Self {
@@ -161,31 +164,29 @@ where
     }
 
     /// Builds and returns the `PropertyAffordance` instance.
-    pub fn build(self) -> Result<PropertyAffordance<Ext>, ValidateError> {
+    pub fn build(self) -> Result<PropertyAffordance, ValidateError> {
         self.affordance.validate()?;
         Ok(self.affordance)
     }
 }
 
-impl <Ext> InteractionHelper for PropertyAffordanceBuilder<Ext> {
-    type Ext = Ext;
-    fn interaction(&mut self) -> &mut InteractionAffordance<Ext> {
+impl InteractionHelper for PropertyAffordanceBuilder {
+    fn interaction(&mut self) -> &mut InteractionAffordance {
         &mut self.affordance._interaction
     }
 }
-
 
 /// An Interaction Affordance that allows to invoke a function of
 /// the Thing.
 #[skip_serializing_none]
 #[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct ActionAffordance<Ext> {
+pub struct ActionAffordance {
     #[serde(flatten)]
     pub _metadata: Metadata,
 
     #[serde(flatten)]
-    pub _interaction: InteractionAffordance<Ext>,
+    pub _interaction: InteractionAffordance,
 
     /// Used to define the input data schema of the Action.
     pub input: Option<DataSchema>,
@@ -216,43 +217,37 @@ pub struct ActionAffordance<Ext> {
     pub synchronous: Option<bool>,
 
     #[serde(flatten)]
-    pub _extra_fields: Ext,
+    pub _extra_fields: ExtensionMap,
 }
 
-impl <Ext> Validate for ActionAffordance<Ext> {
+impl Validate for ActionAffordance {
     fn validate(&self) -> Result<(), ValidateError> {
-        self._interaction.validate_ops("ActionAffordance", |op| matches!(
-            op,
-            Operation::InvokeAction |
-            Operation::QueryAction |
-            Operation::CancelAction
-        ))
+        self._interaction.validate_ops("ActionAffordance", |op| {
+            matches!(
+                op,
+                Operation::InvokeAction | Operation::QueryAction | Operation::CancelAction
+            )
+        })
     }
 }
 
-impl <Ext> ActionAffordance<Ext>
-where
-    Ext: Default
-{
+impl ActionAffordance {
     /// Creates a builder for `ActionAffordance`.
-    pub fn builder() -> ActionAffordanceBuilder<Ext> {
-        ActionAffordanceBuilder::<Ext>::new()
+    pub fn builder() -> ActionAffordanceBuilder {
+        ActionAffordanceBuilder::new()
     }
 }
 
 /// Builder for creating `ActionAffordance` instances.
-pub struct ActionAffordanceBuilder<Ext> {
-    affordance: ActionAffordance<Ext>,
+pub struct ActionAffordanceBuilder {
+    affordance: ActionAffordance,
 }
 
-impl <Ext> ActionAffordanceBuilder<Ext>
-where
-    Ext: Default
-{
+impl ActionAffordanceBuilder {
     /// Creates a new `ActionAffordanceBuilder`.
     pub fn new() -> Self {
         Self {
-            affordance: Default::default()
+            affordance: Default::default(),
         }
     }
 
@@ -287,22 +282,20 @@ where
     }
 
     /// Builds and returns the `ActionAffordance` instance.
-    pub fn build(self) -> Result<ActionAffordance<Ext>, ValidateError> {
+    pub fn build(self) -> Result<ActionAffordance, ValidateError> {
         self.affordance.validate()?;
         Ok(self.affordance)
     }
 }
 
-impl <Ext> MetadataHelper for ActionAffordanceBuilder<Ext> {
+impl MetadataHelper for ActionAffordanceBuilder {
     fn metadata(&mut self) -> &mut Metadata {
         &mut self.affordance._metadata
     }
 }
 
-impl <Ext> InteractionHelper for ActionAffordanceBuilder<Ext> {
-    type Ext = Ext;
-
-    fn interaction(&mut self) -> &mut InteractionAffordance<Ext> {
+impl InteractionHelper for ActionAffordanceBuilder {
+    fn interaction(&mut self) -> &mut InteractionAffordance {
         &mut self.affordance._interaction
     }
 }
@@ -312,12 +305,12 @@ impl <Ext> InteractionHelper for ActionAffordanceBuilder<Ext> {
 #[skip_serializing_none]
 #[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct EventAffordance<Ext> {
+pub struct EventAffordance {
     #[serde(flatten)]
     pub _metadata: Metadata,
 
     #[serde(flatten)]
-    pub _interaction: InteractionAffordance<Ext>,
+    pub _interaction: InteractionAffordance,
 
     /// Defines data that needs to be passed upon subscription,
     /// e.g., filters or message format for setting up Webhooks.
@@ -337,38 +330,30 @@ pub struct EventAffordance<Ext> {
     pub cancellation: Option<DataSchema>,
 
     #[serde(flatten)]
-    pub _extra_fields: Ext,
+    pub _extra_fields: ExtensionMap,
 }
 
-impl <Ext> Validate for EventAffordance<Ext> {
+impl Validate for EventAffordance {
     fn validate(&self) -> Result<(), ValidateError> {
-        self._interaction.validate_ops("EventAffordance", |op| matches!(
-            op,
-            Operation::SubscribeEvent |
-            Operation::UnsubscribeEvent
-        ))
+        self._interaction.validate_ops("EventAffordance", |op| {
+            matches!(op, Operation::SubscribeEvent | Operation::UnsubscribeEvent)
+        })
     }
 }
 
-impl <Ext> EventAffordance<Ext>
-where
-    Ext: Default
-{
+impl EventAffordance {
     /// Creates a builder for `EventAffordance`.
-    pub fn builder() -> EventAffordanceBuilder<Ext> {
-        EventAffordanceBuilder::<Ext>::new()
+    pub fn builder() -> EventAffordanceBuilder {
+        EventAffordanceBuilder::new()
     }
 }
 
 /// Builder for creating `EventAffordance` instances.
-pub struct EventAffordanceBuilder<Ext> {
-    affordance: EventAffordance<Ext>,
+pub struct EventAffordanceBuilder {
+    affordance: EventAffordance,
 }
 
-impl <Ext> EventAffordanceBuilder<Ext>
-where
-    Ext: Default
-{
+impl EventAffordanceBuilder {
     /// Creates a new `EventAffordanceBuilder`.
     pub fn new() -> Self {
         Self {
@@ -401,22 +386,20 @@ where
     }
 
     /// Builds and returns the `EventAffordance` instance.
-    pub fn build(self) -> Result<EventAffordance<Ext>, ValidateError> {
+    pub fn build(self) -> Result<EventAffordance, ValidateError> {
         self.affordance.validate()?;
         Ok(self.affordance)
     }
 }
 
-impl <Ext> MetadataHelper for EventAffordanceBuilder<Ext> {
+impl MetadataHelper for EventAffordanceBuilder {
     fn metadata(&mut self) -> &mut Metadata {
         &mut self.affordance._metadata
     }
 }
 
-impl <Ext> InteractionHelper for EventAffordanceBuilder<Ext> {
-    type Ext = Ext;
-
-    fn interaction(&mut self) -> &mut InteractionAffordance<Ext> {
+impl InteractionHelper for EventAffordanceBuilder {
+    fn interaction(&mut self) -> &mut InteractionAffordance {
         &mut self.affordance._interaction
     }
 }

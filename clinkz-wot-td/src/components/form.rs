@@ -1,9 +1,11 @@
-use alloc::{vec::Vec, string::String, borrow::Cow};
+use alloc::{borrow::Cow, string::String, vec::Vec};
 use fluent_uri::ParseError;
 use serde::{Deserialize, Serialize};
-use serde_with::{serde_as, skip_serializing_none, OneOrMany};
+use serde_with::{OneOrMany, serde_as, skip_serializing_none};
 
-use crate::data_type::{AdditionalExpectedResponse, ExpectedResponse, FormHref, Operation};
+use crate::data_type::{
+    AdditionalExpectedResponse, ExpectedResponse, ExtensionMap, FormHref, Operation,
+};
 
 /// A form can be viewed as a statement of "To perform an operation type
 /// operation on form context, make a request method request to submission
@@ -15,12 +17,15 @@ use crate::data_type::{AdditionalExpectedResponse, ExpectedResponse, FormHref, O
 #[skip_serializing_none]
 #[derive(Debug, Default, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct Form<Ext> {
+pub struct Form {
     /// Target IRI of the resource or service.
     pub href: FormHref,
 
     /// Media type of data sent/received (e.g., "application/json").
-    #[serde(default="default_content_type", skip_serializing_if = "is_default_content_type")]
+    #[serde(
+        default = "default_content_type",
+        skip_serializing_if = "is_default_content_type"
+    )]
     pub content_type: String,
 
     /// Content coding (e.g., "gzip").
@@ -59,7 +64,7 @@ pub struct Form<Ext> {
     pub op: Option<Vec<Operation>>,
 
     #[serde(flatten)]
-    pub _extra_fields: Ext,
+    pub _extra_fields: ExtensionMap,
 }
 
 fn default_content_type() -> String {
@@ -70,30 +75,22 @@ fn is_default_content_type(content_type: &String) -> bool {
     content_type == &default_content_type()
 }
 
-impl <Ext> Form<Ext>
-where
-    Ext: Default,
-{
-    pub fn builder(href: &str) -> FormBuilder<'_, Ext> {
+impl Form {
+    pub fn builder(href: &str) -> FormBuilder<'_> {
         FormBuilder::new(href)
     }
 }
 
-
-pub struct FormBuilder<'a, Ext> {
+pub struct FormBuilder<'a> {
     href: Cow<'a, str>,
-    form: Form<Ext>,
+    form: Form,
 }
 
-
-impl <'a, Ext> FormBuilder <'a, Ext>
-where
-    Ext: Default,
-{
+impl<'a> FormBuilder<'a> {
     pub fn new(href: impl Into<Cow<'a, str>>) -> Self {
         Self {
             href: href.into(),
-            form: Default::default()
+            form: Default::default(),
         }
     }
 
@@ -112,23 +109,29 @@ where
     /// Add security.
     pub fn security<I, S>(mut self, security: I) -> Self
     where
-        I: IntoIterator<Item=S>,
-        S: Into<String> {
-
-            let mut items: Vec<String> = security.into_iter().map(|s| s.into()).collect();
-            self.form.security.get_or_insert_with(Vec::new).append(&mut items);
-            self
+        I: IntoIterator<Item = S>,
+        S: Into<String>,
+    {
+        let mut items: Vec<String> = security.into_iter().map(|s| s.into()).collect();
+        self.form
+            .security
+            .get_or_insert_with(Vec::new)
+            .append(&mut items);
+        self
     }
 
     /// Assign scopes
     pub fn scopes<I, S>(mut self, scopes: I) -> Self
     where
-        I: IntoIterator<Item=S>,
-        S: Into<String> {
-
-            let mut items: Vec<String> = scopes.into_iter().map(|s| s.into()).collect();
-            self.form.scopes.get_or_insert_with(Vec::new).append(&mut items);
-            self
+        I: IntoIterator<Item = S>,
+        S: Into<String>,
+    {
+        let mut items: Vec<String> = scopes.into_iter().map(|s| s.into()).collect();
+        self.form
+            .scopes
+            .get_or_insert_with(Vec::new)
+            .append(&mut items);
+        self
     }
 
     /// Set the response (e.g., "application/json")
@@ -139,7 +142,9 @@ where
 
     /// Add additional response with schema as null.
     pub fn additional_response(mut self, response: impl Into<AdditionalExpectedResponse>) -> Self {
-        self.form.additional_responses.get_or_insert_with(Vec::new)
+        self.form
+            .additional_responses
+            .get_or_insert_with(Vec::new)
             .push(response.into());
         self
     }
@@ -147,15 +152,19 @@ where
     /// Add multiple additional responses.
     pub fn additonal_responses(
         mut self,
-        responses: impl IntoIterator<Item=AdditionalExpectedResponse>) -> Self {
-            let mut items: Vec<_> = responses.into_iter().collect();
-            self.form.additional_responses.get_or_insert_with(Vec::new).append(&mut items);
+        responses: impl IntoIterator<Item = AdditionalExpectedResponse>,
+    ) -> Self {
+        let mut items: Vec<_> = responses.into_iter().collect();
+        self.form
+            .additional_responses
+            .get_or_insert_with(Vec::new)
+            .append(&mut items);
 
-            self
-        }
+        self
+    }
 
     /// Add operations.
-    pub fn op(mut self, op: impl IntoIterator<Item=Operation>) -> Self {
+    pub fn op(mut self, op: impl IntoIterator<Item = Operation>) -> Self {
         let mut items: Vec<Operation> = op.into_iter().collect();
         self.form.op.get_or_insert_with(Vec::new).append(&mut items);
 
@@ -163,7 +172,7 @@ where
     }
 
     /// Build the form.
-    pub fn build(mut self) -> Result<Form<Ext>, ParseError> {
+    pub fn build(mut self) -> Result<Form, ParseError> {
         self.form.href = FormHref::parse(&self.href)?;
 
         Ok(self.form)
