@@ -1,10 +1,11 @@
-use alloc::{collections::BTreeMap, string::String, vec::Vec};
+use alloc::{collections::BTreeMap, format, string::String, vec::Vec};
 
 use serde::{Deserialize, Serialize};
 use serde_with::{OneOrMany, serde_as, skip_serializing_none};
 
 use super::util::deserialize_bool_flexible;
 use crate::data_type::{ExtensionMap, Metadata, MetadataHelper};
+use crate::validate::{Validate, ValidateError, ValidationLevel};
 
 #[skip_serializing_none]
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
@@ -771,5 +772,256 @@ impl DataSchema {
     /// Creates a NullSchema using the builder pattern.
     pub fn null() -> NullSchemaBuilder {
         NullSchema::builder()
+    }
+
+    fn context(&self) -> &DataSchemaContext {
+        match self {
+            Self::Array(schema) => &schema._context,
+            Self::Boolean(schema) => &schema._context,
+            Self::Number(schema) => &schema._context,
+            Self::Integer(schema) => &schema._context,
+            Self::Object(schema) => &schema._context,
+            Self::String(schema) => &schema._context,
+            Self::Null(schema) => &schema._context,
+        }
+    }
+}
+
+impl Validate for DataSchema {
+    fn validate_with_level(&self, level: ValidationLevel) -> Result<(), ValidateError> {
+        if matches!(level, ValidationLevel::Minimal) {
+            return Ok(());
+        }
+
+        validate_schema_context(self.context(), level)?;
+
+        match self {
+            Self::Array(schema) => {
+                validate_ordered_u32("minItems", schema.min_items, "maxItems", schema.max_items)?;
+                validate_nested_schemas(schema.items.as_deref(), level)?;
+            }
+            Self::Number(schema) => {
+                validate_number_bounds(
+                    schema.minimum,
+                    schema.exclusive_minimum,
+                    schema.maximum,
+                    schema.exclusive_maximum,
+                )?;
+                validate_positive_f64("multipleOf", schema.multiple_of)?;
+            }
+            Self::Integer(schema) => {
+                validate_integer_bounds(
+                    schema.minimum,
+                    schema.exclusive_minimum,
+                    schema.maximum,
+                    schema.exclusive_maximum,
+                )?;
+                validate_positive_i64("multipleOf", schema.multiple_of)?;
+            }
+            Self::Object(schema) => {
+                if let Some(properties) = &schema.properties {
+                    for (name, schema) in properties {
+                        schema.validate_with_level(level).map_err(|err| {
+                            ValidateError::InvalidSchema(format_schema_path(
+                                format_args!("properties.{}", name),
+                                err,
+                            ))
+                        })?;
+                    }
+                }
+            }
+            Self::String(schema) => {
+                validate_ordered_u32(
+                    "minLength",
+                    schema.min_length,
+                    "maxLength",
+                    schema.max_length,
+                )?;
+            }
+            Self::Boolean(_) | Self::Null(_) => {}
+        }
+
+        Ok(())
+    }
+}
+
+fn validate_schema_context(
+    context: &DataSchemaContext,
+    level: ValidationLevel,
+) -> Result<(), ValidateError> {
+    validate_nested_schemas(context.one_of.as_deref(), level)?;
+
+    let fields = &context._extra_fields;
+    validate_ordered_u64(
+        "minItems",
+        value_as_u64(fields.get("minItems")),
+        "maxItems",
+        value_as_u64(fields.get("maxItems")),
+    )?;
+    validate_ordered_u64(
+        "minLength",
+        value_as_u64(fields.get("minLength")),
+        "maxLength",
+        value_as_u64(fields.get("maxLength")),
+    )?;
+    validate_json_number_bounds(fields)?;
+
+    if let Some(multiple_of) = value_as_f64(fields.get("multipleOf")) {
+        validate_positive_f64("multipleOf", Some(multiple_of))?;
+    }
+
+    Ok(())
+}
+
+fn validate_nested_schemas(
+    schemas: Option<&[DataSchema]>,
+    level: ValidationLevel,
+) -> Result<(), ValidateError> {
+    if let Some(schemas) = schemas {
+        for (index, schema) in schemas.iter().enumerate() {
+            schema.validate_with_level(level).map_err(|err| {
+                ValidateError::InvalidSchema(format_schema_path(format_args!("[{}]", index), err))
+            })?;
+        }
+    }
+
+    Ok(())
+}
+
+fn validate_ordered_u32(
+    min_name: &str,
+    min: Option<u32>,
+    max_name: &str,
+    max: Option<u32>,
+) -> Result<(), ValidateError> {
+    match (min, max) {
+        (Some(min), Some(max)) if min > max => Err(ValidateError::InvalidSchema(format!(
+            "{} must be less than or equal to {}",
+            min_name, max_name
+        ))),
+        _ => Ok(()),
+    }
+}
+
+fn validate_ordered_u64(
+    min_name: &str,
+    min: Option<u64>,
+    max_name: &str,
+    max: Option<u64>,
+) -> Result<(), ValidateError> {
+    match (min, max) {
+        (Some(min), Some(max)) if min > max => Err(ValidateError::InvalidSchema(format!(
+            "{} must be less than or equal to {}",
+            min_name, max_name
+        ))),
+        _ => Ok(()),
+    }
+}
+
+fn validate_number_bounds(
+    minimum: Option<f64>,
+    exclusive_minimum: Option<f64>,
+    maximum: Option<f64>,
+    exclusive_maximum: Option<f64>,
+) -> Result<(), ValidateError> {
+    validate_ordered_f64("minimum", minimum, "maximum", maximum)?;
+    validate_ordered_f64("minimum", minimum, "exclusiveMaximum", exclusive_maximum)?;
+    validate_ordered_f64("exclusiveMinimum", exclusive_minimum, "maximum", maximum)?;
+    validate_ordered_f64(
+        "exclusiveMinimum",
+        exclusive_minimum,
+        "exclusiveMaximum",
+        exclusive_maximum,
+    )
+}
+
+fn validate_json_number_bounds(fields: &ExtensionMap) -> Result<(), ValidateError> {
+    validate_number_bounds(
+        value_as_f64(fields.get("minimum")),
+        value_as_f64(fields.get("exclusiveMinimum")),
+        value_as_f64(fields.get("maximum")),
+        value_as_f64(fields.get("exclusiveMaximum")),
+    )
+}
+
+fn validate_ordered_f64(
+    min_name: &str,
+    min: Option<f64>,
+    max_name: &str,
+    max: Option<f64>,
+) -> Result<(), ValidateError> {
+    match (min, max) {
+        (Some(min), Some(max)) if min > max => Err(ValidateError::InvalidSchema(format!(
+            "{} must be less than or equal to {}",
+            min_name, max_name
+        ))),
+        _ => Ok(()),
+    }
+}
+
+fn validate_integer_bounds(
+    minimum: Option<i64>,
+    exclusive_minimum: Option<i64>,
+    maximum: Option<i64>,
+    exclusive_maximum: Option<i64>,
+) -> Result<(), ValidateError> {
+    validate_ordered_i64("minimum", minimum, "maximum", maximum)?;
+    validate_ordered_i64("minimum", minimum, "exclusiveMaximum", exclusive_maximum)?;
+    validate_ordered_i64("exclusiveMinimum", exclusive_minimum, "maximum", maximum)?;
+    validate_ordered_i64(
+        "exclusiveMinimum",
+        exclusive_minimum,
+        "exclusiveMaximum",
+        exclusive_maximum,
+    )
+}
+
+fn validate_ordered_i64(
+    min_name: &str,
+    min: Option<i64>,
+    max_name: &str,
+    max: Option<i64>,
+) -> Result<(), ValidateError> {
+    match (min, max) {
+        (Some(min), Some(max)) if min > max => Err(ValidateError::InvalidSchema(format!(
+            "{} must be less than or equal to {}",
+            min_name, max_name
+        ))),
+        _ => Ok(()),
+    }
+}
+
+fn validate_positive_f64(name: &str, value: Option<f64>) -> Result<(), ValidateError> {
+    match value {
+        Some(value) if value <= 0.0 => Err(ValidateError::InvalidSchema(format!(
+            "{} must be greater than 0",
+            name
+        ))),
+        _ => Ok(()),
+    }
+}
+
+fn validate_positive_i64(name: &str, value: Option<i64>) -> Result<(), ValidateError> {
+    match value {
+        Some(value) if value <= 0 => Err(ValidateError::InvalidSchema(format!(
+            "{} must be greater than 0",
+            name
+        ))),
+        _ => Ok(()),
+    }
+}
+
+fn value_as_u64(value: Option<&serde_json::Value>) -> Option<u64> {
+    value.and_then(serde_json::Value::as_u64)
+}
+
+fn value_as_f64(value: Option<&serde_json::Value>) -> Option<f64> {
+    value.and_then(serde_json::Value::as_f64)
+}
+
+fn format_schema_path(path: core::fmt::Arguments<'_>, err: ValidateError) -> String {
+    match err {
+        ValidateError::InvalidSchema(message) => alloc::format!("{}: {}", path, message),
+        other => alloc::format!("{}: {}", path, other),
     }
 }

@@ -23,6 +23,8 @@ pub enum ValidateError {
     InvalidOperation { context: String, found: String },
     /// The data schema constraints are violated.
     InvalidSchema(String),
+    /// The security scheme constraints are violated.
+    InvalidSecurity(String),
     /// The provided URI does not conform to the expected format.
     InvalidUri(String),
     /// A named reference points to an item that is not defined in this document.
@@ -37,6 +39,7 @@ impl fmt::Display for ValidateError {
                 write!(f, "Invalid operation '{}' in context '{}'", found, context)
             }
             Self::InvalidSchema(msg) => write!(f, "Invalid schema: {}", msg),
+            Self::InvalidSecurity(msg) => write!(f, "Invalid security scheme: {}", msg),
             Self::InvalidUri(uri) => write!(f, "Invalid URI: {}", uri),
             Self::InvalidReference { context, reference } => {
                 write!(

@@ -1,4 +1,6 @@
 use clinkz_wot_td::{
+    data_schema::DataSchema,
+    security_scheme::SecurityScheme,
     thing::Thing,
     validate::{Validate, ValidateError, ValidationLevel},
 };
@@ -245,6 +247,103 @@ fn basic_validation_rejects_unknown_form_security_reference() {
 }
 
 #[test]
+fn security_scheme_deserialization_preserves_untyped_security_fields() {
+    let raw = r#"{
+        "scheme": "apikey",
+        "name": "X-API-Key",
+        "in": "header",
+        "cz:credentialSource": "platform"
+    }"#;
+
+    let scheme: SecurityScheme =
+        serde_json::from_str(raw).expect("security scheme should deserialize");
+
+    let SecurityScheme::NoSec(scheme) = scheme else {
+        panic!("broad untagged security parsing should preserve fields in the first variant");
+    };
+    assert_eq!(scheme._context.scheme, "apikey");
+    assert_eq!(
+        scheme._context._extra_fields.get("name"),
+        Some(&serde_json::json!("X-API-Key"))
+    );
+}
+
+#[test]
+fn basic_validation_rejects_apikey_without_name() {
+    let raw = r#"{
+        "@context": "https://www.w3.org/2022/wot/td/v1.1",
+        "title": "Invalid API Key",
+        "security": "apikey_sc",
+        "securityDefinitions": {
+            "apikey_sc": {
+                "scheme": "apikey",
+                "in": "header"
+            }
+        }
+    }"#;
+
+    let thing: Thing = serde_json::from_str(raw).expect("TD shape should deserialize");
+    let err = thing
+        .validate_with_level(ValidationLevel::Basic)
+        .expect_err("basic validation should reject apikey schemes without name");
+
+    assert!(
+        matches!(err, ValidateError::MissingRequiredField(field) if field.contains("securityDefinitions.apikey_sc") && field.contains("name"))
+    );
+}
+
+#[test]
+fn basic_validation_rejects_combo_security_unknown_references() {
+    let raw = r#"{
+        "@context": "https://www.w3.org/2022/wot/td/v1.1",
+        "title": "Invalid Combo",
+        "security": "combo_sc",
+        "securityDefinitions": {
+            "basic_sc": { "scheme": "basic" },
+            "combo_sc": {
+                "scheme": "combo",
+                "oneOf": ["basic_sc", "missing_sc"]
+            }
+        }
+    }"#;
+
+    let thing: Thing = serde_json::from_str(raw).expect("TD shape should deserialize");
+    let err = thing
+        .validate_with_level(ValidationLevel::Basic)
+        .expect_err("basic validation should reject unknown combo references");
+
+    assert!(
+        matches!(err, ValidateError::InvalidReference { context, reference }
+            if context == "securityDefinitions.combo_sc.oneOf" && reference == "missing_sc")
+    );
+}
+
+#[test]
+fn basic_validation_rejects_oauth2_code_without_token_endpoint() {
+    let raw = r#"{
+        "@context": "https://www.w3.org/2022/wot/td/v1.1",
+        "title": "Invalid OAuth2",
+        "security": "oauth_sc",
+        "securityDefinitions": {
+            "oauth_sc": {
+                "scheme": "oauth2",
+                "flow": "code",
+                "authorization": "https://example.com/oauth/authorize"
+            }
+        }
+    }"#;
+
+    let thing: Thing = serde_json::from_str(raw).expect("TD shape should deserialize");
+    let err = thing
+        .validate_with_level(ValidationLevel::Basic)
+        .expect_err("basic validation should reject code flow without token endpoint");
+
+    assert!(
+        matches!(err, ValidateError::MissingRequiredField(field) if field.contains("securityDefinitions.oauth_sc") && field.contains("token"))
+    );
+}
+
+#[test]
 fn validation_levels_control_affordance_operation_checks() {
     let raw = r#"{
         "@context": "https://www.w3.org/2022/wot/td/v1.1",
@@ -277,5 +376,101 @@ fn validation_levels_control_affordance_operation_checks() {
 
     assert!(
         matches!(err, ValidateError::InvalidOperation { context, .. } if context == "Property 'status'")
+    );
+}
+
+#[test]
+fn basic_validation_rejects_direct_data_schema_constraint_conflicts() {
+    let schema = DataSchema::String(DataSchema::string().min_length(8).max_length(4).build());
+
+    let err = schema
+        .validate_with_level(ValidationLevel::Basic)
+        .expect_err("basic validation should reject minLength greater than maxLength");
+
+    assert!(matches!(err, ValidateError::InvalidSchema(message) if message.contains("minLength")));
+}
+
+#[test]
+fn basic_validation_rejects_deserialized_property_schema_constraint_conflicts() {
+    let raw = r#"{
+        "@context": "https://www.w3.org/2022/wot/td/v1.1",
+        "title": "Invalid Property Schema",
+        "security": "nosec_sc",
+        "securityDefinitions": {
+            "nosec_sc": { "scheme": "nosec" }
+        },
+        "properties": {
+            "label": {
+                "type": "string",
+                "minLength": 8,
+                "maxLength": 4,
+                "forms": [
+                    {
+                        "href": "/properties/label",
+                        "op": "readproperty"
+                    }
+                ]
+            }
+        }
+    }"#;
+
+    let thing: Thing = serde_json::from_str(raw).expect("TD shape should deserialize");
+    thing
+        .validate_with_level(ValidationLevel::Minimal)
+        .expect("minimal validation should not run schema constraint checks");
+
+    let err = thing
+        .validate_with_level(ValidationLevel::Basic)
+        .expect_err("basic validation should reject invalid property schema constraints");
+
+    assert!(
+        matches!(err, ValidateError::InvalidSchema(message) if message.contains("Property 'label'") && message.contains("minLength"))
+    );
+}
+
+#[test]
+fn basic_validation_rejects_schema_definition_multiple_of_zero() {
+    let raw = r#"{
+        "@context": "https://www.w3.org/2022/wot/td/v1.1",
+        "title": "Invalid Schema Definition",
+        "security": "nosec_sc",
+        "securityDefinitions": {
+            "nosec_sc": { "scheme": "nosec" }
+        },
+        "schemaDefinitions": {
+            "badNumber": {
+                "type": "number",
+                "multipleOf": 0
+            }
+        }
+    }"#;
+
+    let thing: Thing = serde_json::from_str(raw).expect("TD shape should deserialize");
+    let err = thing
+        .validate_with_level(ValidationLevel::Basic)
+        .expect_err("basic validation should reject non-positive multipleOf");
+
+    assert!(
+        matches!(err, ValidateError::InvalidSchema(message) if message.contains("schemaDefinitions.badNumber") && message.contains("multipleOf"))
+    );
+}
+
+#[test]
+fn basic_validation_rejects_nested_data_schema_constraint_conflicts() {
+    let schema = DataSchema::Object(
+        DataSchema::object()
+            .property(
+                "items",
+                DataSchema::Array(DataSchema::array().min_items(3).max_items(1).build()),
+            )
+            .build(),
+    );
+
+    let err = schema
+        .validate_with_level(ValidationLevel::Basic)
+        .expect_err("basic validation should reject nested schema conflicts");
+
+    assert!(
+        matches!(err, ValidateError::InvalidSchema(message) if message.contains("properties.items") && message.contains("minItems"))
     );
 }

@@ -384,7 +384,7 @@ Completion notes:
 
 ### TD-P2.1 DataSchema TD Subset
 
-Status: planned.
+Status: complete.
 
 Goal: model the TD 1.1 DataSchema vocabulary accurately without pretending to
 be a full JSON Schema implementation.
@@ -407,9 +407,26 @@ Acceptance criteria:
   validation.
 - Existing round-trip fixtures continue to pass.
 
+Completion notes:
+
+- Added `Validate` support for `DataSchema`, including local Basic-level checks
+  for ordered array, string, numeric, and integer constraints plus non-positive
+  `multipleOf` values.
+- DataSchema validation now recurses through `oneOf`, array `items`, object
+  `properties`, Thing-level `schemaDefinitions`, Thing-level and interaction
+  `uriVariables`, property schemas, action input/output schemas, and event
+  subscription/data/dataResponse/cancellation schemas.
+- Validation also checks known schema constraint fields preserved in extension
+  maps, which keeps Basic validation effective for the current tolerant
+  untagged DataSchema deserialization path.
+- Verified with:
+  - `cargo fmt --check`
+  - `cargo test -p clinkz-wot-td`
+  - `cargo check -p clinkz-wot-td --no-default-features`
+
 ### TD-P2.2 Security Scheme Validation
 
-Status: planned.
+Status: complete.
 
 Goal: make security metadata structurally reliable while remaining
 protocol-neutral.
@@ -427,6 +444,22 @@ Acceptance criteria:
 - Combo security schemes reject empty or unknown references.
 - OAuth2 validation checks flow names and endpoint requirements without
   performing network or authorization behavior.
+
+Completion notes:
+
+- Added `Validate` support for `SecurityScheme`, including Basic-level checks
+  for API key `name`, combo `oneOf`/`allOf` shape, OAuth2 flow names, and
+  OAuth2 code-flow `authorization` plus `token` endpoints.
+- Thing validation now checks every `securityDefinitions` entry and validates
+  combo references against the same protocol-neutral definition map used by
+  Thing-level and form-level security references.
+- Security validation reads both typed builder fields and preserved extension
+  fields so tolerant TD deserialization and fixture round-trip fidelity remain
+  intact.
+- Verified with:
+  - `cargo fmt --check`
+  - `cargo test -p clinkz-wot-td`
+  - `cargo check -p clinkz-wot-td --no-default-features`
 
 ## TD-P3: Thing Model Support
 
@@ -482,7 +515,7 @@ Acceptance criteria:
 
 ## Recommended Next Tasks
 
-1. Implement TD-P2.1 DataSchema Basic-level constraint validation.
-2. Implement TD-P2.2 SecurityScheme Basic-level validation.
-3. Start TD-P3 Thing Model support after TD-P1.3, TD-P1.4, and TD-P2 are
+1. Start TD-P3 Thing Model support now that TD-P1.3, TD-P1.4, and TD-P2 are
    complete.
+2. Keep fixture expansion and `no_std + alloc` checks in the regular
+   verification path as TM support is introduced.

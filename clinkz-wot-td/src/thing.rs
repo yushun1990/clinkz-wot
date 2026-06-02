@@ -132,15 +132,20 @@ impl Validate for Thing {
             return Err(ValidateError::MissingRequiredField("security".to_string()));
         }
         validate_security_references("Thing.security", &self.security, &self.security_definitions)?;
+        validate_security_definitions(&self.security_definitions, level)?;
+
+        if let Some(schema_definitions) = &self.schema_definitions {
+            validate_schema_map("schemaDefinitions", schema_definitions, level)?;
+        }
+        if let Some(uri_variables) = &self.uri_variables {
+            validate_schema_map("uriVariables", uri_variables, level)?;
+        }
 
         // Validate Properties
         if let Some(properties) = &self.properties {
             for (name, property) in properties {
                 property.validate_with_level(level).map_err(|e| {
-                    ValidateError::InvalidOperation {
-                        context: format!("Property '{}'", name),
-                        found: e.to_string(),
-                    }
+                    contextualize_affordance_error(format!("Property '{}'", name), e)
                 })?;
                 validate_form_security_references(
                     format!("Property '{}'", name),
@@ -155,10 +160,7 @@ impl Validate for Thing {
             for (name, action) in actions {
                 action
                     .validate_with_level(level)
-                    .map_err(|e| ValidateError::InvalidOperation {
-                        context: format!("Action '{}'", name),
-                        found: e.to_string(),
-                    })?;
+                    .map_err(|e| contextualize_affordance_error(format!("Action '{}'", name), e))?;
                 validate_form_security_references(
                     format!("Action '{}'", name),
                     &action._interaction.forms,
@@ -172,10 +174,7 @@ impl Validate for Thing {
             for (name, event) in events {
                 event
                     .validate_with_level(level)
-                    .map_err(|e| ValidateError::InvalidOperation {
-                        context: format!("Event '{}'", name),
-                        found: e.to_string(),
-                    })?;
+                    .map_err(|e| contextualize_affordance_error(format!("Event '{}'", name), e))?;
                 validate_form_security_references(
                     format!("Event '{}'", name),
                     &event._interaction.forms,
@@ -195,6 +194,78 @@ impl Validate for Thing {
         self._extra_fields.validate_with_level(level)?;
 
         Ok(())
+    }
+}
+
+fn validate_schema_map(
+    context: &str,
+    schemas: &BTreeMap<String, DataSchema>,
+    level: ValidationLevel,
+) -> Result<(), ValidateError> {
+    for (name, schema) in schemas {
+        schema.validate_with_level(level).map_err(|err| {
+            ValidateError::InvalidSchema(format!(
+                "{}.{}: {}",
+                context,
+                name,
+                schema_error_message(err)
+            ))
+        })?;
+    }
+
+    Ok(())
+}
+
+fn validate_security_definitions(
+    security_definitions: &BTreeMap<String, SecurityScheme>,
+    level: ValidationLevel,
+) -> Result<(), ValidateError> {
+    for (name, scheme) in security_definitions {
+        let context = format!("securityDefinitions.{}", name);
+        scheme
+            .validate_with_level(level)
+            .map_err(|err| contextualize_security_error(context.clone(), err))?;
+        scheme.validate_references(context.as_str(), security_definitions)?;
+    }
+
+    Ok(())
+}
+
+fn contextualize_affordance_error(context: String, err: ValidateError) -> ValidateError {
+    match err {
+        ValidateError::InvalidSchema(message) => {
+            ValidateError::InvalidSchema(format!("{}: {}", context, message))
+        }
+        other => ValidateError::InvalidOperation {
+            context,
+            found: other.to_string(),
+        },
+    }
+}
+
+fn contextualize_security_error(context: String, err: ValidateError) -> ValidateError {
+    match err {
+        ValidateError::InvalidSecurity(message) => {
+            ValidateError::InvalidSecurity(format!("{}: {}", context, message))
+        }
+        ValidateError::MissingRequiredField(field) => {
+            ValidateError::MissingRequiredField(format!("{}: {}", context, field))
+        }
+        ValidateError::InvalidReference {
+            context: nested,
+            reference,
+        } => ValidateError::InvalidReference {
+            context: format!("{}: {}", context, nested),
+            reference,
+        },
+        other => ValidateError::InvalidSecurity(format!("{}: {}", context, other)),
+    }
+}
+
+fn schema_error_message(err: ValidateError) -> String {
+    match err {
+        ValidateError::InvalidSchema(message) => message,
+        other => other.to_string(),
     }
 }
 

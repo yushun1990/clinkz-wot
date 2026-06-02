@@ -1,4 +1,5 @@
 use alloc::{
+    collections::BTreeMap,
     format,
     string::{String, ToString},
     vec::Vec,
@@ -9,7 +10,7 @@ use serde_with::{OneOrMany, serde_as, skip_serializing_none};
 
 use crate::{
     data_type::{AbsoluteUri, ExtensionMap, MultiLanguage},
-    validate::ValidateError,
+    validate::{Validate, ValidateError, ValidationLevel},
 };
 
 #[serde_as]
@@ -867,5 +868,194 @@ impl SecurityScheme {
         get_scheme!(
             NoSec, Auto, Combo, Basic, Digest, APIKey, Bearer, PSK, OAuth2
         )
+    }
+
+    pub(crate) fn validate_references(
+        &self,
+        context: &str,
+        security_definitions: &BTreeMap<String, SecurityScheme>,
+    ) -> Result<(), ValidateError> {
+        if self.scheme() != "combo" {
+            return Ok(());
+        }
+
+        validate_combo_references(
+            format!("{}.oneOf", context).as_str(),
+            &self.one_of_references(),
+            security_definitions,
+        )?;
+        validate_combo_references(
+            format!("{}.allOf", context).as_str(),
+            &self.all_of_references(),
+            security_definitions,
+        )
+    }
+
+    fn context(&self) -> &SecuritySchemeContext {
+        match self {
+            Self::NoSec(scheme) => &scheme._context,
+            Self::Auto(scheme) => &scheme._context,
+            Self::Combo(scheme) => &scheme._context,
+            Self::Basic(scheme) => &scheme._context,
+            Self::Digest(scheme) => &scheme._context,
+            Self::APIKey(scheme) => &scheme._context,
+            Self::Bearer(scheme) => &scheme._context,
+            Self::PSK(scheme) => &scheme._context,
+            Self::OAuth2(scheme) => &scheme._context,
+        }
+    }
+
+    fn string_field(&self, name: &str) -> Option<&str> {
+        self.context()
+            ._extra_fields
+            .get(name)
+            .and_then(serde_json::Value::as_str)
+    }
+
+    fn one_of_references(&self) -> Vec<String> {
+        match self {
+            Self::Combo(scheme) => scheme.one_of.clone(),
+            _ => string_array_field(self.context()._extra_fields.get("oneOf")),
+        }
+    }
+
+    fn all_of_references(&self) -> Vec<String> {
+        match self {
+            Self::Combo(scheme) => scheme.all_of.clone(),
+            _ => string_array_field(self.context()._extra_fields.get("allOf")),
+        }
+    }
+
+    fn apikey_name(&self) -> Option<&str> {
+        match self {
+            Self::APIKey(scheme) => scheme.name.as_deref(),
+            _ => self.string_field("name"),
+        }
+    }
+
+    fn oauth2_flow(&self) -> Option<&str> {
+        match self {
+            Self::OAuth2(scheme) => Some(scheme.flow.as_str()),
+            _ => self.string_field("flow"),
+        }
+    }
+
+    fn oauth2_has_endpoint(&self, name: &str) -> bool {
+        match (self, name) {
+            (Self::OAuth2(scheme), "authorization") => scheme.authorization.is_some(),
+            (Self::OAuth2(scheme), "token") => scheme.token.is_some(),
+            _ => self
+                .string_field(name)
+                .is_some_and(|value| !value.is_empty()),
+        }
+    }
+}
+
+impl Validate for SecurityScheme {
+    fn validate_with_level(&self, level: ValidationLevel) -> Result<(), ValidateError> {
+        if matches!(level, ValidationLevel::Minimal) {
+            return Ok(());
+        }
+
+        match self.scheme() {
+            "combo" => {
+                let one_of = self.one_of_references();
+                let all_of = self.all_of_references();
+                if one_of.is_empty() && all_of.is_empty() {
+                    return Err(invalid_security(
+                        "combo schemes must define at least one of oneOf or allOf",
+                    ));
+                }
+                validate_combo_members("oneOf", &one_of)?;
+                validate_combo_members("allOf", &all_of)?;
+            }
+            "apikey" => {
+                if self.apikey_name().unwrap_or("").is_empty() {
+                    return Err(ValidateError::MissingRequiredField("name".to_string()));
+                }
+            }
+            "oauth2" => validate_oauth2_scheme(self)?,
+            "nosec" | "auto" | "basic" | "digest" | "bearer" | "psk" => {}
+            scheme => return Err(invalid_security(format!("unsupported scheme '{}'", scheme))),
+        }
+
+        Ok(())
+    }
+}
+
+fn validate_combo_members(context: &str, references: &[String]) -> Result<(), ValidateError> {
+    if !references.is_empty() && references.len() < 2 {
+        return Err(invalid_security(format!(
+            "{} must contain at least two references",
+            context
+        )));
+    }
+
+    for reference in references {
+        if reference.is_empty() {
+            return Err(invalid_security(format!(
+                "{} must not contain empty references",
+                context
+            )));
+        }
+    }
+
+    Ok(())
+}
+
+fn validate_combo_references(
+    context: &str,
+    references: &[String],
+    security_definitions: &BTreeMap<String, SecurityScheme>,
+) -> Result<(), ValidateError> {
+    for reference in references {
+        if !security_definitions.contains_key(reference) {
+            return Err(ValidateError::InvalidReference {
+                context: context.to_string(),
+                reference: reference.clone(),
+            });
+        }
+    }
+
+    Ok(())
+}
+
+fn validate_oauth2_scheme(scheme: &SecurityScheme) -> Result<(), ValidateError> {
+    match scheme.oauth2_flow().unwrap_or("") {
+        "code" => {
+            if !scheme.oauth2_has_endpoint("authorization") {
+                return Err(ValidateError::MissingRequiredField(
+                    "authorization".to_string(),
+                ));
+            }
+            if !scheme.oauth2_has_endpoint("token") {
+                return Err(ValidateError::MissingRequiredField("token".to_string()));
+            }
+        }
+        "client" | "device" => {}
+        flow => {
+            return Err(invalid_security(format!(
+                "unsupported OAuth2 flow '{}'",
+                flow
+            )));
+        }
+    }
+
+    Ok(())
+}
+
+fn invalid_security(message: impl Into<String>) -> ValidateError {
+    ValidateError::InvalidSecurity(message.into())
+}
+
+fn string_array_field(value: Option<&serde_json::Value>) -> Vec<String> {
+    match value {
+        Some(serde_json::Value::Array(values)) => values
+            .iter()
+            .filter_map(serde_json::Value::as_str)
+            .map(ToString::to_string)
+            .collect(),
+        Some(serde_json::Value::String(value)) => alloc::vec![value.clone()],
+        _ => Vec::new(),
     }
 }
