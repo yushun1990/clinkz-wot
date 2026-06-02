@@ -1,4 +1,7 @@
-use clinkz_wot_td::{thing::Thing, validate::Validate};
+use clinkz_wot_td::{
+    thing::Thing,
+    validate::{Validate, ValidateError, ValidationLevel},
+};
 use serde_json;
 use std::{fs, path::PathBuf};
 
@@ -167,4 +170,117 @@ fn is_default_value(key: &str, value: &serde_json::Value) -> bool {
         "contentType" => value == "application/json",
         _ => false,
     }
+}
+
+#[test]
+fn minimal_validation_accepts_deserialized_shape_without_basic_requirements() {
+    let raw = r#"{
+        "@context": "https://www.w3.org/2022/wot/td/v1.1",
+        "security": [],
+        "securityDefinitions": {}
+    }"#;
+
+    let thing: Thing = serde_json::from_str(raw).expect("TD shape should deserialize");
+    thing
+        .validate_with_level(ValidationLevel::Minimal)
+        .expect("minimal validation should accept serde-valid TD shape");
+
+    let err = thing
+        .validate_with_level(ValidationLevel::Basic)
+        .expect_err("basic validation should reject missing title");
+    assert!(matches!(err, ValidateError::MissingRequiredField(field) if field == "title"));
+}
+
+#[test]
+fn basic_validation_rejects_unknown_thing_security_reference() {
+    let raw = r#"{
+        "@context": "https://www.w3.org/2022/wot/td/v1.1",
+        "title": "Unknown Security",
+        "security": "missing_sc",
+        "securityDefinitions": {
+            "nosec_sc": { "scheme": "nosec" }
+        }
+    }"#;
+
+    let thing: Thing = serde_json::from_str(raw).expect("TD shape should deserialize");
+    let err = thing
+        .validate_with_level(ValidationLevel::Basic)
+        .expect_err("unknown security reference should fail basic validation");
+
+    assert!(matches!(
+        err,
+        ValidateError::InvalidReference { context, reference }
+            if context == "Thing.security" && reference == "missing_sc"
+    ));
+}
+
+#[test]
+fn basic_validation_rejects_unknown_form_security_reference() {
+    let raw = r#"{
+        "@context": "https://www.w3.org/2022/wot/td/v1.1",
+        "title": "Unknown Form Security",
+        "security": "nosec_sc",
+        "securityDefinitions": {
+            "nosec_sc": { "scheme": "nosec" }
+        },
+        "properties": {
+            "status": {
+                "type": "string",
+                "forms": [
+                    {
+                        "href": "/properties/status",
+                        "op": "readproperty",
+                        "security": "missing_sc"
+                    }
+                ]
+            }
+        }
+    }"#;
+
+    let thing: Thing = serde_json::from_str(raw).expect("TD shape should deserialize");
+    let err = thing
+        .validate_with_level(ValidationLevel::Basic)
+        .expect_err("unknown form security reference should fail basic validation");
+
+    assert!(matches!(
+        err,
+        ValidateError::InvalidReference { context, reference }
+            if context == "Property 'status'.forms[0].security" && reference == "missing_sc"
+    ));
+}
+
+#[test]
+fn validation_levels_control_affordance_operation_checks() {
+    let raw = r#"{
+        "@context": "https://www.w3.org/2022/wot/td/v1.1",
+        "title": "Invalid Property Operation",
+        "security": "nosec_sc",
+        "securityDefinitions": {
+            "nosec_sc": { "scheme": "nosec" }
+        },
+        "properties": {
+            "status": {
+                "type": "string",
+                "forms": [
+                    {
+                        "href": "/properties/status",
+                        "op": "invokeaction"
+                    }
+                ]
+            }
+        }
+    }"#;
+
+    let thing: Thing = serde_json::from_str(raw).expect("TD shape should deserialize");
+    thing
+        .validate_with_level(ValidationLevel::Minimal)
+        .expect("minimal validation should not run operation context checks");
+
+    let err = thing
+        .validate_with_level(ValidationLevel::Basic)
+        .expect_err("basic validation should reject invalid property operation");
+
+    assert!(
+        matches!(err, ValidateError::InvalidOperation { context, .. } if context == "Property 'status'")
+    );
 }

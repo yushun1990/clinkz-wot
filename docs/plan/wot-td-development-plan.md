@@ -223,6 +223,8 @@ Completion notes:
 
 ### TD-P1.2 Explicit Validation Levels
 
+Status: complete.
+
 Goal: keep parsing tolerant and make validation explicit.
 
 Validation levels:
@@ -248,6 +250,20 @@ Acceptance criteria:
   with a level-aware API.
 - Tests cover operation constraints per affordance type.
 - Tests cover security name references against `securityDefinitions`.
+
+Completion notes:
+
+- Added `ValidationLevel` with `Minimal`, `Basic`, `Profile`, and `Full`.
+- `Validate::validate()` now maps to `Basic`, preserving existing call-site
+  behavior, while `validate_with_level()` allows explicit validation mode
+  selection.
+- `Minimal` accepts serde-valid documents without running required-field,
+  operation-context, or reference checks.
+- `Basic` validates required Thing fields, affordance operation context, root
+  security references, and form-level security references against
+  `securityDefinitions`.
+- `Profile` and `Full` currently reuse the Basic checks and remain available
+  for stricter rules introduced by later Profile and semantic-validation work.
 
 ### TD-P1.3 Round-Trip and Fixture Expansion
 

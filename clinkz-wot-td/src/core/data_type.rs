@@ -270,7 +270,10 @@ impl Default for FormHref {
 pub type ExtensionMap = BTreeMap<String, serde_json::Value>;
 
 impl Validate for ExtensionMap {
-    fn validate(&self) -> Result<(), crate::validate::ValidateError> {
+    fn validate_with_level(
+        &self,
+        _level: crate::validate::ValidationLevel,
+    ) -> Result<(), crate::validate::ValidateError> {
         Ok(())
     }
 }

@@ -18,7 +18,7 @@ use crate::{
     form::Form,
     link::Link,
     security_scheme::SecurityScheme,
-    validate::{Validate, ValidateError},
+    validate::{Validate, ValidateError, ValidationLevel},
 };
 
 /// An abstraction of a physical or virtual entity whose metadata and interfaces are
@@ -115,7 +115,14 @@ impl Thing {
 }
 
 impl Validate for Thing {
-    fn validate(&self) -> Result<(), crate::validate::ValidateError> {
+    fn validate_with_level(
+        &self,
+        level: ValidationLevel,
+    ) -> Result<(), crate::validate::ValidateError> {
+        if matches!(level, ValidationLevel::Minimal) {
+            return Ok(());
+        }
+
         // title is mandatory
         if self._metadata.title.as_deref().unwrap_or("").is_empty() {
             return Err(ValidateError::MissingRequiredField("title".to_string()));
@@ -124,16 +131,22 @@ impl Validate for Thing {
         if self.security.is_empty() {
             return Err(ValidateError::MissingRequiredField("security".to_string()));
         }
+        validate_security_references("Thing.security", &self.security, &self.security_definitions)?;
 
         // Validate Properties
         if let Some(properties) = &self.properties {
             for (name, property) in properties {
-                property
-                    .validate()
-                    .map_err(|e| ValidateError::InvalidOperation {
+                property.validate_with_level(level).map_err(|e| {
+                    ValidateError::InvalidOperation {
                         context: format!("Property '{}'", name),
                         found: e.to_string(),
-                    })?;
+                    }
+                })?;
+                validate_form_security_references(
+                    format!("Property '{}'", name),
+                    &property._interaction.forms,
+                    &self.security_definitions,
+                )?;
             }
         }
 
@@ -141,11 +154,16 @@ impl Validate for Thing {
         if let Some(actions) = &self.actions {
             for (name, action) in actions {
                 action
-                    .validate()
+                    .validate_with_level(level)
                     .map_err(|e| ValidateError::InvalidOperation {
                         context: format!("Action '{}'", name),
                         found: e.to_string(),
                     })?;
+                validate_form_security_references(
+                    format!("Action '{}'", name),
+                    &action._interaction.forms,
+                    &self.security_definitions,
+                )?;
             }
         }
 
@@ -153,18 +171,66 @@ impl Validate for Thing {
         if let Some(events) = &self.events {
             for (name, event) in events {
                 event
-                    .validate()
+                    .validate_with_level(level)
                     .map_err(|e| ValidateError::InvalidOperation {
                         context: format!("Event '{}'", name),
                         found: e.to_string(),
                     })?;
+                validate_form_security_references(
+                    format!("Event '{}'", name),
+                    &event._interaction.forms,
+                    &self.security_definitions,
+                )?;
             }
         }
 
-        self._extra_fields.validate()?;
+        if let Some(forms) = &self.forms {
+            validate_form_security_references(
+                "Thing.forms".to_string(),
+                forms,
+                &self.security_definitions,
+            )?;
+        }
+
+        self._extra_fields.validate_with_level(level)?;
 
         Ok(())
     }
+}
+
+fn validate_form_security_references(
+    context: String,
+    forms: &[Form],
+    security_definitions: &BTreeMap<String, SecurityScheme>,
+) -> Result<(), ValidateError> {
+    for (index, form) in forms.iter().enumerate() {
+        if let Some(security) = &form.security {
+            validate_security_references(
+                format!("{}.forms[{}].security", context, index).as_str(),
+                security,
+                security_definitions,
+            )?;
+        }
+    }
+
+    Ok(())
+}
+
+fn validate_security_references(
+    context: &str,
+    security: &[String],
+    security_definitions: &BTreeMap<String, SecurityScheme>,
+) -> Result<(), ValidateError> {
+    for reference in security {
+        if !security_definitions.contains_key(reference) {
+            return Err(ValidateError::InvalidReference {
+                context: context.to_string(),
+                reference: reference.clone(),
+            });
+        }
+    }
+
+    Ok(())
 }
 
 pub struct ThingBuilder {

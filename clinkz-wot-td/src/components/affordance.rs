@@ -9,7 +9,7 @@ use serde_with::skip_serializing_none;
 
 use crate::{
     data_type::{ExtensionMap, Metadata, MetadataHelper, Operation},
-    validate::{Validate, ValidateError},
+    validate::{Validate, ValidateError, ValidationLevel},
 };
 
 use super::{
@@ -120,7 +120,11 @@ pub struct PropertyAffordance {
 }
 
 impl Validate for PropertyAffordance {
-    fn validate(&self) -> Result<(), ValidateError> {
+    fn validate_with_level(&self, level: ValidationLevel) -> Result<(), ValidateError> {
+        if matches!(level, ValidationLevel::Minimal) {
+            return Ok(());
+        }
+
         self._interaction.validate_ops("PropertyAffordance", |op| {
             matches!(
                 op,
@@ -221,7 +225,11 @@ pub struct ActionAffordance {
 }
 
 impl Validate for ActionAffordance {
-    fn validate(&self) -> Result<(), ValidateError> {
+    fn validate_with_level(&self, level: ValidationLevel) -> Result<(), ValidateError> {
+        if matches!(level, ValidationLevel::Minimal) {
+            return Ok(());
+        }
+
         self._interaction.validate_ops("ActionAffordance", |op| {
             matches!(
                 op,
@@ -346,7 +354,11 @@ pub struct EventAffordance {
 }
 
 impl Validate for EventAffordance {
-    fn validate(&self) -> Result<(), ValidateError> {
+    fn validate_with_level(&self, level: ValidationLevel) -> Result<(), ValidateError> {
+        if matches!(level, ValidationLevel::Minimal) {
+            return Ok(());
+        }
+
         self._interaction.validate_ops("EventAffordance", |op| {
             matches!(op, Operation::SubscribeEvent | Operation::UnsubscribeEvent)
         })
