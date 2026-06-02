@@ -1,7 +1,14 @@
-use alloc::{borrow::ToOwned, collections::BTreeMap, string::String, vec::Vec};
+use alloc::{
+    borrow::ToOwned,
+    collections::BTreeMap,
+    format,
+    string::{String, ToString},
+    vec::Vec,
+};
+use core::fmt;
 
 use crate::{components_util::deserialize_bool_flexible, validate::Validate};
-use fluent_uri::{ParseError, Uri, UriRef};
+use fluent_uri::{ParseError, Uri, UriRef, resolve::ResolveError};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde_with::{OneOrMany, serde_as, skip_serializing_none};
 
@@ -266,6 +273,107 @@ impl Default for FormHref {
     }
 }
 
+/// A protocol-neutral form target after applying the Thing-level `base` when
+/// that can be done without URI template expansion.
+#[derive(Debug, Clone, PartialEq)]
+pub enum ResolvedFormHref {
+    /// A URI reference or absolute URI.
+    Reference(UriReference),
+    /// A URI template that must be expanded by a later binding/runtime step.
+    Template(String),
+}
+
+impl ResolvedFormHref {
+    /// Returns the string representation of the resolved target.
+    pub fn as_str(&self) -> &str {
+        match self {
+            Self::Reference(reference) => reference.as_str(),
+            Self::Template(template) => template.as_str(),
+        }
+    }
+
+    /// Returns true when the target is still a URI template.
+    pub fn is_template(&self) -> bool {
+        matches!(self, Self::Template(_))
+    }
+}
+
+impl PartialEq<str> for ResolvedFormHref {
+    fn eq(&self, other: &str) -> bool {
+        self.as_str() == other
+    }
+}
+
+/// Errors returned while resolving a form target.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ResolveFormHrefError {
+    /// `base` contains URI template expressions and therefore cannot be used
+    /// for concrete URI resolution without variable values.
+    TemplateBase(String),
+    /// RFC 3986 reference resolution failed.
+    Resolve(String),
+}
+
+impl fmt::Display for ResolveFormHrefError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::TemplateBase(base) => {
+                write!(
+                    f,
+                    "Cannot resolve form href against URI template base: {}",
+                    base
+                )
+            }
+            Self::Resolve(message) => write!(f, "Failed to resolve form href: {}", message),
+        }
+    }
+}
+
+impl From<ResolveError> for ResolveFormHrefError {
+    fn from(value: ResolveError) -> Self {
+        Self::Resolve(value.to_string())
+    }
+}
+
+/// Resolves a TD form `href` against an optional Thing-level `base`.
+///
+/// Absolute references are returned unchanged. Relative references are resolved
+/// when `base` is a concrete absolute URI. URI templates are preserved because
+/// this crate does not know the runtime variable values needed for expansion.
+/// Relative references without a base are preserved for callers that use a
+/// document URL or another protocol binding base outside the TD document.
+pub fn resolve_form_href(
+    base: Option<&BaseUri>,
+    href: &FormHref,
+) -> Result<ResolvedFormHref, ResolveFormHrefError> {
+    let reference = match href {
+        FormHref::Template(template) => {
+            return Ok(ResolvedFormHref::Template(template.clone()));
+        }
+        FormHref::Reference(reference) => reference,
+    };
+
+    if reference.0.has_scheme() {
+        return Ok(ResolvedFormHref::Reference(reference.clone()));
+    }
+
+    let Some(base) = base else {
+        return Ok(ResolvedFormHref::Reference(reference.clone()));
+    };
+
+    let base = match base {
+        BaseUri::Absolute(base) => Uri::parse(base.as_str()).map_err(|err| {
+            ResolveFormHrefError::Resolve(format!("invalid base '{}': {}", base.as_str(), err))
+        })?,
+        BaseUri::Template(template) => {
+            return Err(ResolveFormHrefError::TemplateBase(template.clone()));
+        }
+    };
+
+    let resolved = reference.0.resolve_against(&base)?;
+    Ok(ResolvedFormHref::Reference(UriReference(resolved.into())))
+}
+
 /// Extension fields preserved from unknown TD terms.
 pub type ExtensionMap = BTreeMap<String, serde_json::Value>;
 
@@ -278,7 +386,7 @@ impl Validate for ExtensionMap {
     }
 }
 
-/// A map of language tags to strings (e.g., {"en": "Light", "zh": "灯"})
+/// A map of language tags to strings (e.g., {"en": "Light", "fr": "Lampe"}).
 ///
 /// Using BTreeMap instead of HashMap to ensure deterministic serialization order.
 #[derive(Debug, Default, Deserialize, Serialize, Clone, PartialEq)]

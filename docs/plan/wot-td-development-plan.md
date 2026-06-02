@@ -53,15 +53,41 @@ The current TD crate already provides:
   - `FormHref` for form targets that may be URI references or URI templates.
   - `AbsoluteUri` for fields requiring absolute URIs.
   - `BaseUri` for Thing-level base values, including absolute URI templates.
+- Protocol-neutral target resolution for concrete Thing-level `base` plus
+  relative form `href` values through `resolve_form_href`.
+- Explicit `ValidationLevel` support with `Minimal`, `Basic`, `Profile`, and
+  `Full`.
+- Basic validation for required Thing fields, affordance operation context,
+  Thing-level security references, and form-level security references.
+- A TD 1.1 field coverage matrix in `docs/td-1.1-field-coverage.md`.
 - `cargo check -p clinkz-wot-td --no-default-features` passes after replacing
   the `Thing.created` and `Thing.modified` RFC3339 serde adapter with the
   `time` crate's `no_std + alloc` compatible RFC3339 option helper.
 
-Known baseline gaps:
+Current development gaps:
 
-- Validation is present but not yet separated into explicit validation levels.
-- TD 1.1 model coverage has not yet been audited field by field.
+- Round-trip fixtures need targeted expansion for extension preservation,
+  Clinkz JSON-LD context entries, compact `OneOrMany` forms, and multiple
+  forms per affordance.
+- Default operation inference is not yet exposed as a shared helper.
+- Security scheme validation still needs scheme-specific checks, combo
+  references, and OAuth2 flow semantics.
+- DataSchema validation still needs practical Basic-level constraint checks.
 - Thing Model support has not yet been introduced.
+
+## Current Development Sequence
+
+The next development order is:
+
+1. Finish TD-P1.3 fixture expansion so existing TD behavior is protected before
+   adding stricter semantics.
+2. Add shared helpers for TD defaults that binding-core consumers will need,
+   starting with operation inference and security inheritance.
+3. Complete DataSchema and SecurityScheme Basic validation in TD-P2.
+4. Start Thing Model support only after TD round-trip, default-resolution, and
+   validation behavior are stable.
+5. Move to repository-level M3 protocol-neutral core traits after TD/TM-owned
+   contracts are reliable enough for downstream runtime crates.
 
 ## TD-P0: Stabilize the Foundation
 
@@ -106,6 +132,8 @@ Completion notes:
 
 ### TD-P0.2 Finish URI Type Model Cleanup
 
+Status: complete.
+
 Goal: URI type names and invariants must match the TD field semantics.
 
 Current intended mapping:
@@ -133,6 +161,15 @@ Acceptance criteria:
 - URI constraint tests cover absolute URI, base URI, form href, and link href.
 - Round-trip fixture tests continue to pass.
 - No field uses a wider URI type than its TD semantics require.
+
+Completion notes:
+
+- `AbsoluteUri`, `BaseUri`, `FormHref`, and `UriReference` are used according
+  to TD field semantics.
+- Added `resolve_form_href` and `ResolvedFormHref` as a protocol-neutral helper
+  for applying Thing-level `base` to relative form `href` values.
+- URI constraint tests cover concrete base resolution, absolute form targets,
+  URI template preservation, and template-base error handling.
 
 ### TD-P0.3 Stop Silent Builder Error Loss
 
@@ -267,6 +304,8 @@ Completion notes:
 
 ### TD-P1.3 Round-Trip and Fixture Expansion
 
+Status: next.
+
 Goal: protect compatibility as the model becomes stricter.
 
 Required fixture cases:
@@ -287,10 +326,38 @@ Acceptance criteria:
 
 - Round-trip fixture tests preserve unknown terms and compact forms.
 - New targeted fixtures fail when field-specific URI constraints regress.
+- `cargo test -p clinkz-wot-td` continues to pass.
+
+### TD-P1.4 Shared TD Default Resolution Helpers
+
+Status: planned.
+
+Goal: expose protocol-neutral helpers for defaults that bindings and runtime
+crates need without embedding protocol behavior in the TD crate.
+
+Work items:
+
+- Add operation inference helpers for Thing-level forms and property, action,
+  and event affordance forms.
+- Add security inheritance helpers that return the effective form security
+  names from form-level overrides or Thing-level defaults.
+- Keep helpers side-effect-free and allocation-light so they remain compatible
+  with `no_std + alloc`.
+- Add tests for explicit operations, missing operations, form-level security
+  overrides, and inherited Thing-level security.
+
+Acceptance criteria:
+
+- Binding-core consumers can obtain effective operations and security names
+  without duplicating TD default rules.
+- Helpers preserve existing tolerant parsing and do not mutate TD structures.
+- `cargo check -p clinkz-wot-td --no-default-features` continues to pass.
 
 ## TD-P2: Complete Data Schema and Security Semantics
 
 ### TD-P2.1 DataSchema TD Subset
+
+Status: planned.
 
 Goal: model the TD 1.1 DataSchema vocabulary accurately without pretending to
 be a full JSON Schema implementation.
@@ -304,7 +371,18 @@ Work items:
 - Avoid adding a full JSON Schema validator unless a later milestone requires
   it.
 
+Acceptance criteria:
+
+- Basic validation rejects obvious local contradictions such as minimum greater
+  than maximum, minItems greater than maxItems, minLength greater than
+  maxLength, and non-positive multipleOf values.
+- Validation stays local to TD structure and does not attempt full payload
+  validation.
+- Existing round-trip fixtures continue to pass.
+
 ### TD-P2.2 Security Scheme Validation
+
+Status: planned.
 
 Goal: make security metadata structurally reliable while remaining
 protocol-neutral.
@@ -316,7 +394,16 @@ Work items:
 - Validate OAuth2 endpoint URI fields using `AbsoluteUri`.
 - Keep protocol-specific behavior out of the TD crate.
 
+Acceptance criteria:
+
+- Basic validation rejects missing scheme-specific required fields.
+- Combo security schemes reject empty or unknown references.
+- OAuth2 validation checks flow names and endpoint requirements without
+  performing network or authorization behavior.
+
 ## TD-P3: Thing Model Support
+
+Status: planned.
 
 Goal: add Thing Model support after TD 1.1 parsing, serialization, URI typing,
 and validation are stable.
@@ -335,7 +422,17 @@ Non-goals for the first TM pass:
 - Full JSON-LD expansion.
 - Protocol-specific form generation.
 
+Acceptance criteria:
+
+- Thing Model documents can be deserialized, serialized, validated, and
+  round-tripped with extension fields preserved.
+- TM support compiles under the same `no_std + alloc` constraints as TD.
+- TM-to-TD generation remains a separate later step and does not require
+  protocol-specific bindings.
+
 ## TD-P4: Prepare Binding-Core Consumers
+
+Status: planned.
 
 Goal: expose clean TD data types that binding crates can consume without
 duplicating field semantics.
@@ -345,7 +442,8 @@ should consume TD types for:
 
 - Form selection.
 - Operation-to-form matching.
-- Target URI resolution from `base` plus `href`.
+- Target URI resolution from `base` plus `href`, using the shared TD helper
+  added during TD-P0.2 where applicable.
 - Security inheritance resolution.
 - Content type and subprotocol selection.
 
@@ -357,8 +455,11 @@ Acceptance criteria:
 
 ## Recommended Next Tasks
 
-1. Add the TD 1.1 field coverage matrix.
-2. Introduce validation levels.
-3. Expand targeted fixtures for URI, context, security, defaults, and
-   `OneOrMany`.
-4. Start Thing Model support only after TD 1.1 hardening is stable.
+1. Complete TD-P1.3 with targeted round-trip fixtures for extension
+   preservation, `cz:` JSON-LD context entries, compact `OneOrMany`, and
+   multiple forms per affordance.
+2. Implement TD-P1.4 operation inference and security inheritance helpers.
+3. Implement TD-P2.1 DataSchema Basic-level constraint validation.
+4. Implement TD-P2.2 SecurityScheme Basic-level validation.
+5. Start TD-P3 Thing Model support after TD-P1.3, TD-P1.4, and TD-P2 are
+   complete.

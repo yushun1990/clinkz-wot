@@ -18,12 +18,29 @@ sections reference those module plans when they exist.
 
 ## Milestones
 
+Current focus:
+
+- Finish the remaining TD 1.1 hardening work in M1 before starting M2.
+- Start M2 Thing Model support only after TD fixture coverage, default
+  resolution helpers, DataSchema validation, and SecurityScheme validation are
+  stable.
+- Start M3 protocol-neutral core only after the TD/TM contract surface is
+  reliable enough for runtime and binding crates to consume.
+
 ### M1: TD 1.1 Hardening
 
 Plan: `docs/plan/wot-td-development-plan.md`.
 
 Harden the TD 1.1 data model, validation, extension preservation, and
 round-trip compatibility in `clinkz-wot-td`.
+
+Current status:
+
+- Foundation work is complete for `no_std + alloc`, URI field typing, builder
+  error reporting, validation levels, security reference checks, field coverage
+  audit, and shared `base` plus form `href` target resolution.
+- Remaining M1 work is targeted fixture expansion, shared TD default helpers,
+  DataSchema Basic validation, and SecurityScheme Basic validation.
 
 ### M2: Thing Model Support
 
@@ -32,11 +49,24 @@ Plan: `docs/plan/wot-td-development-plan.md`.
 Add Thing Model modeling, validation, extension preservation, and a future path
 from reusable TM templates to concrete TD documents.
 
+Entry criteria:
+
+- M1 fixture expansion and TD Basic validation hardening are complete.
+- TM data structures can reuse TD component patterns without changing protocol
+  boundaries or adding `std`-only dependencies.
+
 ### M3: Protocol-Neutral Core
 
 Define the protocol-neutral engine trait surface for exposed Things, consumed
 Things, interaction handlers, bindings, payload codecs, security providers, and
 transport adapters.
+
+Entry criteria:
+
+- TD/TM public types expose effective operation, target, and security metadata
+  needed by binding-core consumers.
+- The core trait surface remains independent of zenoh and other concrete
+  transports.
 
 ### M4: Protocol Binding Core and Zenoh Binding
 

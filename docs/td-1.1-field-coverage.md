@@ -27,13 +27,13 @@ Status values:
 | `created` | `Thing::created` | `Option<OffsetDateTime>` | No | No | None | N/A | covered | RFC3339 serde helper works under `no_std + alloc`. |
 | `modified` | `Thing::modified` | `Option<OffsetDateTime>` | No | No | None | N/A | covered | RFC3339 serde helper works under `no_std + alloc`. |
 | `support` | `Thing::support` | `Option<AbsoluteUri>` | No | No | None | N/A | covered | Absolute URI enforced. |
-| `base` | `Thing::base` | `Option<BaseUri>` | No | No | None | N/A | partial | Type accepts absolute URI and absolute URI template. Shared target resolution helper is still pending. |
+| `base` | `Thing::base` | `Option<BaseUri>` | No | No | None | N/A | covered | Type accepts absolute URI and absolute URI template. `resolve_form_href` applies concrete base values to relative form `href` values and preserves URI templates for runtime expansion. |
 | `properties` | `Thing::properties` | `Option<BTreeMap<String, PropertyAffordance>>` | No | No | None | Via affordance/schema extension maps | covered | Map of property affordances represented. |
 | `actions` | `Thing::actions` | `Option<BTreeMap<String, ActionAffordance>>` | No | No | None | `ActionAffordance::_extra_fields` | covered | Map of action affordances represented. |
 | `events` | `Thing::events` | `Option<BTreeMap<String, EventAffordance>>` | No | No | None | `EventAffordance::_extra_fields` | covered | Map of event affordances represented. |
 | `links` | `Thing::links` | `Option<Vec<Link>>` | No | No | None | `Link::_extra_fields` | covered | Array of links represented. |
 | `forms` | `Thing::forms` | `Option<Vec<Form>>` | No | No | None | `Form::_extra_fields` | covered | Top-level forms represented. |
-| `security` | `Thing::security` | `Vec<String>` | Yes | Yes | None | N/A | partial | OneOrMany represented. Validation checks non-empty but does not yet resolve names against `securityDefinitions`. |
+| `security` | `Thing::security` | `Vec<String>` | Yes | Yes | None | N/A | covered | OneOrMany represented. Basic validation checks non-empty values and resolves names against `securityDefinitions`. |
 | `securityDefinitions` | `Thing::security_definitions` | `BTreeMap<String, SecurityScheme>` | Yes | No | None | Via scheme extension maps | partial | Map represented. Validation of scheme-specific requirements is pending. |
 | `profile` | `Thing::profile` | `Option<Vec<AbsoluteUri>>` | No | Yes | None | N/A | covered | OneOrMany absolute URI list represented. |
 | `schemaDefinitions` | `Thing::schema_definitions` | `Option<BTreeMap<String, DataSchema>>` | No | No | None | Via schema extension maps | covered | Map represented. |
@@ -164,13 +164,9 @@ Status values:
 
 - Add explicit validation levels so this matrix can drive `Minimal`, `Basic`,
   `Profile`, and `Full` validation behavior.
-- Validate Thing-level and form-level `security` references against
-  `securityDefinitions`.
 - Validate scheme-specific security requirements, including combo references
   and OAuth2 flow-specific endpoint requirements.
 - Add default operation inference for forms based on the affordance context.
-- Add target URI resolution support for `base` plus relative form `href` in a
-  protocol-neutral helper.
 - Add fixtures for property-level extension preservation, `cz:` JSON-LD
   context entries, multiple forms per affordance, and compact `OneOrMany`
   round trips.

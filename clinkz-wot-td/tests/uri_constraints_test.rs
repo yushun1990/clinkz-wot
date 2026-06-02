@@ -1,6 +1,6 @@
 use clinkz_wot_td::{
     context::Context,
-    data_type::{AbsoluteUri, BaseUri, UriReference},
+    data_type::{AbsoluteUri, BaseUri, ResolveFormHrefError, UriReference, resolve_form_href},
     form::Form,
     link::Link,
     security_scheme::{
@@ -42,6 +42,68 @@ fn form_href_accepts_relative_references_and_templates() {
         .build()
         .expect("URI template form href should be accepted");
     assert!(template.href.is_template());
+}
+
+#[test]
+fn form_href_resolution_uses_thing_base_for_relative_references() {
+    let base =
+        BaseUri::parse("zenoh://clinkz/gateways/gw001/").expect("absolute base should parse");
+    let form = Form::builder("properties/temperature")
+        .build()
+        .expect("relative form href should parse");
+
+    let resolved = resolve_form_href(Some(&base), &form.href)
+        .expect("relative href should resolve against absolute base");
+
+    assert_eq!(
+        resolved,
+        *"zenoh://clinkz/gateways/gw001/properties/temperature"
+    );
+}
+
+#[test]
+fn form_href_resolution_preserves_absolute_references_without_using_base() {
+    let base =
+        BaseUri::parse("https://example.com/things/lamp/").expect("absolute base should parse");
+    let form = Form::builder("zenoh://clinkz/things/lamp/properties/status")
+        .build()
+        .expect("absolute form href should parse");
+
+    let resolved = resolve_form_href(Some(&base), &form.href)
+        .expect("absolute href should not need base resolution");
+
+    assert_eq!(resolved, *"zenoh://clinkz/things/lamp/properties/status");
+}
+
+#[test]
+fn form_href_resolution_preserves_templates_for_runtime_expansion() {
+    let base =
+        BaseUri::parse("https://example.com/things/lamp/").expect("absolute base should parse");
+    let form = Form::builder("properties/{propertyName}")
+        .build()
+        .expect("template form href should parse");
+
+    let resolved =
+        resolve_form_href(Some(&base), &form.href).expect("template href should be preserved");
+
+    assert_eq!(resolved, *"properties/{propertyName}");
+    assert!(resolved.is_template());
+}
+
+#[test]
+fn form_href_resolution_rejects_concrete_resolution_against_template_base() {
+    let base = BaseUri::parse("https://example.com/{tenant}/")
+        .expect("absolute template base should parse");
+    let form = Form::builder("properties/temperature")
+        .build()
+        .expect("relative form href should parse");
+
+    let err = resolve_form_href(Some(&base), &form.href)
+        .expect_err("relative href cannot be resolved against a template base");
+
+    assert!(
+        matches!(err, ResolveFormHrefError::TemplateBase(template) if template == "https://example.com/{tenant}/")
+    );
 }
 
 #[test]
