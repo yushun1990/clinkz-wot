@@ -1,6 +1,12 @@
 use clinkz_wot_td::{
+    context::Context,
     data_type::{AbsoluteUri, BaseUri, UriReference},
     form::Form,
+    link::Link,
+    security_scheme::{
+        BearerSecurityScheme, ContextHelper as SecurityContextHelper, NoSecurityScheme,
+        OAuth2SecurityScheme,
+    },
     thing::Thing,
 };
 
@@ -64,4 +70,73 @@ fn deserialization_accepts_absolute_uri_template_base() {
     let base = thing.base.expect("base should be preserved");
     assert_eq!(base.as_str(), "https://example.com/{tenant}/");
     assert!(base.is_template());
+}
+
+#[test]
+fn thing_builder_reports_invalid_uri_inputs() {
+    let err = match Thing::builder("Invalid URI Thing")
+        .id("/relative-id")
+        .build()
+    {
+        Ok(_) => panic!("invalid id should fail the builder"),
+        Err(err) => err,
+    };
+
+    assert!(err.to_string().contains("id: /relative-id"));
+}
+
+#[test]
+fn thing_builder_reports_invalid_profile_in_iterators() {
+    let err = match Thing::builder("Invalid Profile Thing")
+        .profiles(["https://example.com/profile", "/relative-profile"])
+        .build()
+    {
+        Ok(_) => panic!("invalid profile should fail the builder"),
+        Err(err) => err,
+    };
+
+    assert!(err.to_string().contains("profile: /relative-profile"));
+}
+
+#[test]
+fn context_builder_reports_invalid_uri_inputs() {
+    let err = Context::builder()
+        .uri("/relative-context")
+        .build()
+        .expect_err("invalid context URI should fail the builder");
+
+    assert!(err.to_string().contains("@context: /relative-context"));
+}
+
+#[test]
+fn link_builder_reports_invalid_anchor_inputs() {
+    Link::builder("/things/lamp")
+        .anchor("/things/{thingId}")
+        .build()
+        .expect_err("invalid link anchor should fail the builder");
+}
+
+#[test]
+fn security_builders_report_invalid_uri_inputs() {
+    let proxy_err = NoSecurityScheme::builder()
+        .proxy("/relative-proxy")
+        .build()
+        .expect_err("invalid proxy should fail the builder");
+    assert!(proxy_err.to_string().contains("proxy: /relative-proxy"));
+
+    let bearer_err = BearerSecurityScheme::builder()
+        .authorization("/relative-auth")
+        .build()
+        .expect_err("invalid authorization should fail the builder");
+    assert!(
+        bearer_err
+            .to_string()
+            .contains("authorization: /relative-auth")
+    );
+
+    let oauth_err = OAuth2SecurityScheme::builder("code")
+        .token("/relative-token")
+        .build()
+        .expect_err("invalid token should fail the builder");
+    assert!(oauth_err.to_string().contains("token: /relative-token"));
 }

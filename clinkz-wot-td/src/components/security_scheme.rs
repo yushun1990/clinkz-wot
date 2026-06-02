@@ -1,4 +1,5 @@
 use alloc::{
+    format,
     string::{String, ToString},
     vec::Vec,
 };
@@ -6,7 +7,10 @@ use alloc::{
 use serde::{Deserialize, Serialize};
 use serde_with::{OneOrMany, serde_as, skip_serializing_none};
 
-use crate::data_type::{AbsoluteUri, ExtensionMap, MultiLanguage};
+use crate::{
+    data_type::{AbsoluteUri, ExtensionMap, MultiLanguage},
+    validate::ValidateError,
+};
 
 #[serde_as]
 #[skip_serializing_none]
@@ -34,6 +38,9 @@ pub struct SecuritySchemeContext {
 
     #[serde(flatten)]
     pub _extra_fields: ExtensionMap,
+
+    #[serde(skip)]
+    pub(crate) _builder_errors: Vec<ValidateError>,
 }
 
 impl SecuritySchemeContext {
@@ -86,9 +93,13 @@ pub trait ContextHelper: Sized {
 
     /// Sets the proxy URI.
     fn proxy(mut self, proxy: impl Into<String>) -> Self {
-        match AbsoluteUri::parse(proxy.into().as_str()) {
+        let proxy = proxy.into();
+        match AbsoluteUri::parse(proxy.as_str()) {
             Ok(uri) => self.context().proxy = Some(uri),
-            Err(_) => {}
+            Err(_) => self
+                .context()
+                ._builder_errors
+                .push(ValidateError::InvalidUri(format!("proxy: {}", proxy))),
         }
         self
     }
@@ -102,6 +113,13 @@ pub trait ContextHelper: Sized {
         self.context()._extra_fields.insert(key.into(), value);
         self
     }
+}
+
+fn check_builder_errors(errors: Vec<ValidateError>) -> Result<(), ValidateError> {
+    if let Some(error) = errors.into_iter().next() {
+        return Err(error);
+    }
+    Ok(())
 }
 
 /// A security configuration corresponding to identified by the
@@ -136,8 +154,9 @@ impl NoSecuritySchemeBuilder {
     }
 
     /// Builds and returns the `NoSecurityScheme` instance.
-    pub fn build(self) -> NoSecurityScheme {
-        self.scheme
+    pub fn build(self) -> Result<NoSecurityScheme, ValidateError> {
+        check_builder_errors(self.scheme._context._builder_errors.clone())?;
+        Ok(self.scheme)
     }
 }
 
@@ -179,8 +198,9 @@ impl AutoSecuritySchemeBuilder {
     }
 
     /// Builds and returns the `AutoSecurityScheme` instance.
-    pub fn build(self) -> AutoSecurityScheme {
-        self.scheme
+    pub fn build(self) -> Result<AutoSecurityScheme, ValidateError> {
+        check_builder_errors(self.scheme._context._builder_errors.clone())?;
+        Ok(self.scheme)
     }
 }
 
@@ -257,8 +277,9 @@ impl ComboSecuritySchemeBuilder {
     }
 
     /// Builds and returns the `ComboSecurityScheme` instance.
-    pub fn build(self) -> ComboSecurityScheme {
-        self.scheme
+    pub fn build(self) -> Result<ComboSecurityScheme, ValidateError> {
+        check_builder_errors(self.scheme._context._builder_errors.clone())?;
+        Ok(self.scheme)
     }
 }
 
@@ -341,8 +362,9 @@ impl BasicSecuritySchemeBuilder {
     }
 
     /// Builds and returns the `BasicSecurityScheme` instance.
-    pub fn build(self) -> BasicSecurityScheme {
-        self.scheme
+    pub fn build(self) -> Result<BasicSecurityScheme, ValidateError> {
+        check_builder_errors(self.scheme._context._builder_errors.clone())?;
+        Ok(self.scheme)
     }
 }
 
@@ -435,8 +457,9 @@ impl DigestSecuritySchemeBuilder {
     }
 
     /// Builds and returns the `DigestSecurityScheme` instance.
-    pub fn build(self) -> DigestSecurityScheme {
-        self.scheme
+    pub fn build(self) -> Result<DigestSecurityScheme, ValidateError> {
+        check_builder_errors(self.scheme._context._builder_errors.clone())?;
+        Ok(self.scheme)
     }
 }
 
@@ -499,8 +522,9 @@ impl APIKeySecuritySchemeBuilder {
     }
 
     /// Builds and returns the `APIKeySecurityScheme` instance.
-    pub fn build(self) -> APIKeySecurityScheme {
-        self.scheme
+    pub fn build(self) -> Result<APIKeySecurityScheme, ValidateError> {
+        check_builder_errors(self.scheme._context._builder_errors.clone())?;
+        Ok(self.scheme)
     }
 }
 
@@ -584,9 +608,17 @@ impl BearerSecuritySchemeBuilder {
 
     /// Sets the authorization URI.
     pub fn authorization(mut self, authorization: impl Into<String>) -> Self {
-        match AbsoluteUri::parse(authorization.into().as_str()) {
+        let authorization = authorization.into();
+        match AbsoluteUri::parse(authorization.as_str()) {
             Ok(uri) => self.scheme.authorization = Some(uri),
-            Err(_) => {}
+            Err(_) => self
+                .scheme
+                ._context
+                ._builder_errors
+                .push(ValidateError::InvalidUri(format!(
+                    "authorization: {}",
+                    authorization
+                ))),
         }
         self
     }
@@ -616,8 +648,9 @@ impl BearerSecuritySchemeBuilder {
     }
 
     /// Builds and returns the `BearerSecurityScheme` instance.
-    pub fn build(self) -> BearerSecurityScheme {
-        self.scheme
+    pub fn build(self) -> Result<BearerSecurityScheme, ValidateError> {
+        check_builder_errors(self.scheme._context._builder_errors.clone())?;
+        Ok(self.scheme)
     }
 }
 
@@ -670,8 +703,9 @@ impl PSKSecuritySchemeBuilder {
     }
 
     /// Builds and returns the `PSKSecurityScheme` instance.
-    pub fn build(self) -> PSKSecurityScheme {
-        self.scheme
+    pub fn build(self) -> Result<PSKSecurityScheme, ValidateError> {
+        check_builder_errors(self.scheme._context._builder_errors.clone())?;
+        Ok(self.scheme)
     }
 }
 
@@ -736,27 +770,45 @@ impl OAuth2SecuritySchemeBuilder {
 
     /// Sets the authorization URI.
     pub fn authorization(mut self, authorization: impl Into<String>) -> Self {
-        match AbsoluteUri::parse(authorization.into().as_str()) {
+        let authorization = authorization.into();
+        match AbsoluteUri::parse(authorization.as_str()) {
             Ok(uri) => self.scheme.authorization = Some(uri),
-            Err(_) => {}
+            Err(_) => self
+                .scheme
+                ._context
+                ._builder_errors
+                .push(ValidateError::InvalidUri(format!(
+                    "authorization: {}",
+                    authorization
+                ))),
         }
         self
     }
 
     /// Sets the token URI.
     pub fn token(mut self, token: impl Into<String>) -> Self {
-        match AbsoluteUri::parse(token.into().as_str()) {
+        let token = token.into();
+        match AbsoluteUri::parse(token.as_str()) {
             Ok(uri) => self.scheme.token = Some(uri),
-            Err(_) => {}
+            Err(_) => self
+                .scheme
+                ._context
+                ._builder_errors
+                .push(ValidateError::InvalidUri(format!("token: {}", token))),
         }
         self
     }
 
     /// Sets the refresh URI.
     pub fn refresh(mut self, refresh: impl Into<String>) -> Self {
-        match AbsoluteUri::parse(refresh.into().as_str()) {
+        let refresh = refresh.into();
+        match AbsoluteUri::parse(refresh.as_str()) {
             Ok(uri) => self.scheme.refresh = Some(uri),
-            Err(_) => {}
+            Err(_) => self
+                .scheme
+                ._context
+                ._builder_errors
+                .push(ValidateError::InvalidUri(format!("refresh: {}", refresh))),
         }
         self
     }
@@ -776,8 +828,9 @@ impl OAuth2SecuritySchemeBuilder {
     }
 
     /// Builds and returns the `OAuth2SecurityScheme` instance.
-    pub fn build(self) -> OAuth2SecurityScheme {
-        self.scheme
+    pub fn build(self) -> Result<OAuth2SecurityScheme, ValidateError> {
+        check_builder_errors(self.scheme._context._builder_errors.clone())?;
+        Ok(self.scheme)
     }
 }
 

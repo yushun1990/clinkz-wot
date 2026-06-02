@@ -49,14 +49,12 @@ The current TD crate already provides:
   - `FormHref` for form targets that may be URI references or URI templates.
   - `AbsoluteUri` for fields requiring absolute URIs.
   - `BaseUri` for Thing-level base values, including absolute URI templates.
+- `cargo check -p clinkz-wot-td --no-default-features` passes after replacing
+  the `Thing.created` and `Thing.modified` RFC3339 serde adapter with the
+  `time` crate's `no_std + alloc` compatible RFC3339 option helper.
 
 Known baseline gaps:
 
-- `cargo check -p clinkz-wot-td --no-default-features` currently fails because
-  `Thing.created` and `Thing.modified` use a `serde_with` RFC3339 adapter that
-  is not available in the no-default-features configuration.
-- Builder methods still silently discard invalid URI input in several places by
-  using `.ok()`.
 - Validation is present but not yet separated into explicit validation levels.
 - TD 1.1 model coverage has not yet been audited field by field.
 - Thing Model support has not yet been introduced.
@@ -64,6 +62,8 @@ Known baseline gaps:
 ## TD-P0: Stabilize the Foundation
 
 ### TD-P0.1 Fix `no_std + alloc` Compilation
+
+Status: complete.
 
 Goal: the TD crate must compile without default features.
 
@@ -88,6 +88,17 @@ Acceptance criteria:
 - `cargo check -p clinkz-wot-td --no-default-features` passes.
 - No `std` imports are introduced in the TD crate outside `#[cfg(feature =
   "std")]` sections.
+
+Completion notes:
+
+- `Thing.created` and `Thing.modified` now use
+  `time::serde::rfc3339::option` with serde defaults, preserving optional field
+  behavior while avoiding the `serde_with` RFC3339 adapter that failed without
+  default features.
+- Verified with:
+  - `cargo fmt --check`
+  - `cargo check -p clinkz-wot-td --no-default-features`
+  - `cargo test -p clinkz-wot-td`
 
 ### TD-P0.2 Finish URI Type Model Cleanup
 
@@ -121,6 +132,8 @@ Acceptance criteria:
 
 ### TD-P0.3 Stop Silent Builder Error Loss
 
+Status: complete.
+
 Goal: builders must not silently ignore invalid typed values.
 
 Current risk:
@@ -140,6 +153,18 @@ Acceptance criteria:
 
 - Invalid URI values cannot be silently omitted by builder APIs.
 - Existing successful builder flows remain ergonomic.
+
+Completion notes:
+
+- `ThingBuilder` now records invalid `id`, `support`, `base`, and `profile`
+  URI inputs and returns the first error from `build()`.
+- `ContextBuilder` now returns `Result<Context, ValidateError>` so invalid
+  context URIs are reported.
+- `LinkBuilder` now parses `anchor` during `build()` together with `href`
+  instead of discarding invalid anchor input.
+- Security scheme builders now return `Result<_, ValidateError>` and report
+  invalid `proxy`, `authorization`, `token`, and `refresh` URI inputs.
+- Added focused builder tests for invalid URI inputs.
 
 ## TD-P1: Harden TD 1.1
 
@@ -300,10 +325,8 @@ Acceptance criteria:
 
 ## Recommended Next Tasks
 
-1. Fix the no-default-features RFC3339 serde failure.
-2. Remove silent URI parse loss from builders.
-3. Add the TD 1.1 field coverage matrix.
-4. Introduce validation levels.
-5. Expand targeted fixtures for URI, context, security, defaults, and
+1. Add the TD 1.1 field coverage matrix.
+2. Introduce validation levels.
+3. Expand targeted fixtures for URI, context, security, defaults, and
    `OneOrMany`.
-6. Start Thing Model support only after TD 1.1 hardening is stable.
+4. Start Thing Model support only after TD 1.1 hardening is stable.

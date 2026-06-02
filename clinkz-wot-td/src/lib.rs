@@ -5,13 +5,12 @@ extern crate std;
 
 extern crate alloc;
 
+pub mod core;
 pub mod thing;
 pub mod validate;
-pub mod core;
 pub use core::data_type;
 
 mod components;
-pub use components:: {
-    context, form, link, affordance, data_schema, security_scheme,
-    util as components_util
+pub use components::{
+    affordance, context, data_schema, form, link, security_scheme, util as components_util,
 };

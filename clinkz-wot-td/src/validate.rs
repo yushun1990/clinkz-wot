@@ -7,10 +7,7 @@ pub enum ValidateError {
     /// A required field according to the W3C WoT specification is missing.
     MissingRequiredField(String),
     /// An operation type is not allowed in the current context (e.g., 'invokeaction' in a Property).
-    InvalidOperation {
-        context: String,
-        found: String,
-    },
+    InvalidOperation { context: String, found: String },
     /// The data schema constraints are violated.
     InvalidSchema(String),
     /// The provided URI does not conform to the expected format.

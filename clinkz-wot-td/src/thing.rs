@@ -6,7 +6,6 @@ use alloc::{
 };
 
 use time::OffsetDateTime;
-use time::format_description::well_known::Rfc3339;
 
 use serde::{Deserialize, Serialize};
 use serde_with::{OneOrMany, serde_as, skip_serializing_none};
@@ -46,11 +45,13 @@ pub struct Thing {
     pub version: Option<VersionInfo>,
 
     /// Provides information when the TD instance was created.
-    #[serde_as(as = "Option<Rfc3339>")]
+    #[serde(with = "time::serde::rfc3339::option")]
+    #[serde(default)]
     pub created: Option<OffsetDateTime>,
 
     /// Provides information when the TD instance was last modified.
-    #[serde_as(as = "Option<Rfc3339>")]
+    #[serde(with = "time::serde::rfc3339::option")]
+    #[serde(default)]
     pub modified: Option<OffsetDateTime>,
 
     /// Provides information about the TD maintainer as URI scheme.
@@ -168,6 +169,7 @@ impl Validate for Thing {
 
 pub struct ThingBuilder {
     thing: Thing,
+    errors: Vec<ValidateError>,
 }
 
 impl ThingBuilder {
@@ -183,12 +185,18 @@ impl ThingBuilder {
                 _extra_fields: ExtensionMap::default(),
                 ..Default::default()
             },
+            errors: Vec::new(),
         }
     }
 
     /// Sets the Things's unique identifier
     pub fn id(mut self, id: &str) -> Self {
-        self.thing.id = AbsoluteUri::parse(id).ok();
+        match AbsoluteUri::parse(id) {
+            Ok(id) => self.thing.id = Some(id),
+            Err(_) => self
+                .errors
+                .push(ValidateError::InvalidUri(format!("id: {}", id))),
+        }
         self
     }
 
@@ -218,40 +226,60 @@ impl ThingBuilder {
 
     /// Sets the support URI.
     pub fn support(mut self, support: &str) -> Self {
-        self.thing.support = AbsoluteUri::parse(support).ok();
+        match AbsoluteUri::parse(support) {
+            Ok(support) => self.thing.support = Some(support),
+            Err(_) => self
+                .errors
+                .push(ValidateError::InvalidUri(format!("support: {}", support))),
+        }
         self
     }
 
     /// Sets the base URI.
     pub fn base(mut self, base: &str) -> Self {
-        self.thing.base = BaseUri::parse(base).ok();
+        match BaseUri::parse(base) {
+            Ok(base) => self.thing.base = Some(base),
+            Err(_) => self
+                .errors
+                .push(ValidateError::InvalidUri(format!("base: {}", base))),
+        }
         self
     }
 
     /// Adds a profile URI.
     pub fn profile(mut self, profile: &str) -> Self {
-        if let Some(profile) = AbsoluteUri::parse(profile).ok() {
-            self.thing
+        match AbsoluteUri::parse(profile) {
+            Ok(profile) => self
+                .thing
                 .profile
                 .get_or_insert_with(Vec::new)
-                .push(profile);
+                .push(profile),
+            Err(_) => self
+                .errors
+                .push(ValidateError::InvalidUri(format!("profile: {}", profile))),
         }
         self
     }
 
     /// Adds multiple profile URIs.
-    pub fn profiles<I>(mut self, profiles: I) -> Self
+    pub fn profiles<I, S>(mut self, profiles: I) -> Self
     where
-        I: IntoIterator<Item = &'static str>,
+        I: IntoIterator<Item = S>,
+        S: AsRef<str>,
     {
-        let mut items: Vec<AbsoluteUri> = profiles
-            .into_iter()
-            .filter_map(|p| AbsoluteUri::parse(p).ok())
-            .collect();
-        self.thing
-            .profile
-            .get_or_insert_with(Vec::new)
-            .append(&mut items);
+        for profile in profiles {
+            let profile = profile.as_ref();
+            match AbsoluteUri::parse(profile) {
+                Ok(profile) => self
+                    .thing
+                    .profile
+                    .get_or_insert_with(Vec::new)
+                    .push(profile),
+                Err(_) => self
+                    .errors
+                    .push(ValidateError::InvalidUri(format!("profile: {}", profile))),
+            }
+        }
         self
     }
 
@@ -369,6 +397,9 @@ impl ThingBuilder {
 
     /// Builds and returns the `Thing` instance.
     pub fn build(self) -> Result<Thing, ValidateError> {
+        if let Some(error) = self.errors.into_iter().next() {
+            return Err(error);
+        }
         self.thing.validate()?;
         Ok(self.thing)
     }

@@ -1,6 +1,9 @@
 use core::fmt;
 
-use serde::{Deserializer, de::{self, Visitor}};
+use serde::{
+    Deserializer,
+    de::{self, Visitor},
+};
 
 /// Supports deserializing from boolean, numbers (0/1), or strings ("true"/"false"/"1"/"0")
 /// into bool.
@@ -30,7 +33,10 @@ where
             match v {
                 0 => Ok(false),
                 1 => Ok(true),
-                _ => Err(de::Error::invalid_value(de::Unexpected::Unsigned(v), &"0 or 1")),
+                _ => Err(de::Error::invalid_value(
+                    de::Unexpected::Unsigned(v),
+                    &"0 or 1",
+                )),
             }
         }
 
@@ -41,7 +47,10 @@ where
             match v {
                 0 => Ok(false),
                 1 => Ok(true),
-                _ => Err(de::Error::invalid_value(de::Unexpected::Signed(v), &"0 or 1")),
+                _ => Err(de::Error::invalid_value(
+                    de::Unexpected::Signed(v),
+                    &"0 or 1",
+                )),
             }
         }
 
@@ -60,7 +69,6 @@ where
 
     deserializer.deserialize_any(BoolVisitor)
 }
-
 
 /// Supports deserializing from boolean, numbers (0/1), or strings ("true"/"false"/"1"/"0")
 /// into Option<bool>.
@@ -109,7 +117,10 @@ where
             match v {
                 0 => Ok(Some(false)),
                 1 => Ok(Some(true)),
-                _ => Err(de::Error::invalid_value(de::Unexpected::Unsigned(v), &"0 or 1")),
+                _ => Err(de::Error::invalid_value(
+                    de::Unexpected::Unsigned(v),
+                    &"0 or 1",
+                )),
             }
         }
 
@@ -121,7 +132,10 @@ where
             match v {
                 0 => Ok(Some(false)),
                 1 => Ok(Some(true)),
-                _ => Err(de::Error::invalid_value(de::Unexpected::Signed(v), &"0 or 1")),
+                _ => Err(de::Error::invalid_value(
+                    de::Unexpected::Signed(v),
+                    &"0 or 1",
+                )),
             }
         }
 

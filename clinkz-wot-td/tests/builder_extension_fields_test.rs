@@ -26,7 +26,11 @@ fn field(value: &Value, key: &str) -> Value {
 #[test]
 fn thing_builder_sets_extension_fields() {
     let thing = Thing::builder("Demo Thing")
-        .security(SecurityScheme::NoSec(NoSecurityScheme::builder().build()))
+        .security(SecurityScheme::NoSec(
+            NoSecurityScheme::builder()
+                .build()
+                .expect("security should build"),
+        ))
         .extra_field("cz:binding", json!({ "transport": "zenoh" }))
         .extra_fields(extension_map([("cz:owner", json!("platform"))]))
         .version(
@@ -97,7 +101,8 @@ fn link_and_schema_builders_set_extension_fields() {
 fn security_and_affordance_builders_set_extension_fields() {
     let security = NoSecurityScheme::builder()
         .extra_field("cz:authProfile", json!("local"))
-        .build();
+        .build()
+        .expect("security should build");
     let security_value = serde_json::to_value(security).expect("security should serialize");
     assert_eq!(field(&security_value, "cz:authProfile"), json!("local"));
 

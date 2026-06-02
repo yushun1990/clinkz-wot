@@ -45,6 +45,7 @@ impl Link {
 /// Builder for creating `Link` instances.
 pub struct LinkBuilder<'a> {
     href: Cow<'a, str>,
+    anchor: Option<Cow<'a, str>>,
     link: Link,
 }
 
@@ -53,6 +54,7 @@ impl<'a> LinkBuilder<'a> {
     pub fn new(href: impl Into<Cow<'a, str>>) -> Self {
         Self {
             href: href.into(),
+            anchor: None,
             link: Default::default(),
         }
     }
@@ -70,11 +72,8 @@ impl<'a> LinkBuilder<'a> {
     }
 
     /// Sets the `anchor` field.
-    pub fn anchor(mut self, anchor: impl Into<String>) -> Self {
-        match UriReference::parse(anchor.into().as_str()) {
-            Ok(uri) => self.link.anchor = Some(uri),
-            Err(_) => {}
-        }
+    pub fn anchor(mut self, anchor: impl Into<Cow<'a, str>>) -> Self {
+        self.anchor = Some(anchor.into());
         self
     }
 
@@ -122,6 +121,9 @@ impl<'a> LinkBuilder<'a> {
     /// Builds and returns the `Link` instance.
     pub fn build(mut self) -> Result<Link, ParseError> {
         self.link.href = UriReference::parse(&self.href)?;
+        if let Some(anchor) = self.anchor {
+            self.link.anchor = Some(UriReference::parse(&anchor)?);
+        }
         Ok(self.link)
     }
 }
