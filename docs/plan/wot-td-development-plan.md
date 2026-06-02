@@ -304,7 +304,7 @@ Completion notes:
 
 ### TD-P1.3 Round-Trip and Fixture Expansion
 
-Status: next.
+Status: complete.
 
 Goal: protect compatibility as the model becomes stricter.
 
@@ -327,6 +327,19 @@ Acceptance criteria:
 - Round-trip fixture tests preserve unknown terms and compact forms.
 - New targeted fixtures fail when field-specific URI constraints regress.
 - `cargo test -p clinkz-wot-td` continues to pass.
+
+Completion notes:
+
+- Added `clinkz-extension-defaults.td.jsonld` to cover Clinkz JSON-LD context
+  aliases, `cz:` and `cz-zenoh:` extension fields, compact `OneOrMany`
+  values, multiple forms per affordance, form-level security overrides, and
+  Thing-level security inheritance inputs.
+- Added `uri-template-targets.td.jsonld` to cover absolute URI template
+  `base` values, form `href` URI templates, and relative link `href` URI
+  references.
+- Verified with:
+  - `cargo test -p clinkz-wot-td`
+  - `cargo check -p clinkz-wot-td --no-default-features`
 
 ### TD-P1.4 Shared TD Default Resolution Helpers
 

@@ -1,0 +1,148 @@
+{
+  "@context": [
+    "https://www.w3.org/2022/wot/td/v1.1",
+    {
+      "cz": "https://clinkz.io/ns/wot#",
+      "cz-zenoh": "https://clinkz.io/ns/wot/zenoh#"
+    }
+  ],
+  "@type": "cz:VirtualThing",
+  "title": "Clinkz Targeted Round Trip Thing",
+  "titles": {
+    "en": "Clinkz Targeted Round Trip Thing"
+  },
+  "id": "urn:clinkz:thing:targeted-roundtrip",
+  "version": {
+    "instance": "1.0.0",
+    "cz:revision": "fixture"
+  },
+  "base": "zenoh://clinkz/things/targeted-roundtrip/",
+  "support": "https://clinkz.io/support",
+  "profile": "https://www.w3.org/2022/wot/profile/http-basic/v1",
+  "security": "nosec_sc",
+  "securityDefinitions": {
+    "nosec_sc": {
+      "scheme": "nosec",
+      "cz:authProfile": "local"
+    },
+    "apikey_sc": {
+      "scheme": "apikey",
+      "name": "X-Clinkz-Key",
+      "in": "header",
+      "cz:credentialSource": "platform"
+    }
+  },
+  "schemaDefinitions": {
+    "problem": {
+      "type": "object",
+      "properties": {
+        "code": {
+          "type": "string",
+          "cz:schemaHint": "error-code"
+        }
+      },
+      "cz:schemaDefinition": "problem-details"
+    }
+  },
+  "uriVariables": {
+    "tenant": {
+      "type": "string",
+      "cz:variableScope": "tenant"
+    }
+  },
+  "properties": {
+    "status": {
+      "type": "string",
+      "observable": true,
+      "cz:propertyRole": "state",
+      "forms": [
+        {
+          "href": "properties/status",
+          "op": "readproperty",
+          "cz-zenoh:keyExpr": "things/targeted-roundtrip/properties/status"
+        },
+        {
+          "href": "properties/status",
+          "op": [
+            "writeproperty"
+          ],
+          "security": "apikey_sc",
+          "scopes": "things.write",
+          "contentType": "application/cbor",
+          "response": {
+            "contentType": "application/cbor",
+            "cz:responseHint": "compact"
+          },
+          "additionalResponses": [
+            {
+              "contentType": "application/json",
+              "schema": "problem",
+              "cz:errorCode": 401
+            }
+          ],
+          "cz:formRole": "override-security"
+        }
+      ]
+    }
+  },
+  "actions": {
+    "reboot": {
+      "title": "Reboot",
+      "input": {
+        "type": "object",
+        "properties": {
+          "delayMs": {
+            "type": "integer",
+            "minimum": 0,
+            "cz:schemaHint": "milliseconds"
+          }
+        }
+      },
+      "forms": [
+        {
+          "href": "actions/reboot",
+          "op": "invokeaction"
+        }
+      ],
+      "cz:computePlacement": "edge"
+    }
+  },
+  "events": {
+    "alarm": {
+      "data": {
+        "type": "string",
+        "cz:schemaHint": "alarm-code"
+      },
+      "forms": [
+        {
+          "href": "events/alarm",
+          "op": "subscribeevent"
+        },
+        {
+          "href": "events/alarm",
+          "op": "unsubscribeevent",
+          "security": "apikey_sc"
+        }
+      ],
+      "cz:eventStream": "alarms"
+    }
+  },
+  "forms": [
+    {
+      "href": "properties",
+      "op": "readallproperties"
+    }
+  ],
+  "links": [
+    {
+      "href": "../directory",
+      "rel": "collection",
+      "type": "application/td+json",
+      "cz:linkRole": "thing-directory"
+    }
+  ],
+  "cz:binding": {
+    "transport": "zenoh"
+  },
+  "cz:owner": "platform"
+}

@@ -1,0 +1,46 @@
+{
+  "@context": "https://www.w3.org/2022/wot/td/v1.1",
+  "title": "URI Template Target Round Trip Thing",
+  "id": "urn:clinkz:thing:uri-template-targets",
+  "base": "https://example.com/{tenant}/things/",
+  "security": "nosec_sc",
+  "securityDefinitions": {
+    "nosec_sc": {
+      "scheme": "nosec"
+    }
+  },
+  "properties": {
+    "reading": {
+      "type": "number",
+      "forms": [
+        {
+          "href": "properties/{propertyName}",
+          "op": "readproperty"
+        }
+      ]
+    }
+  },
+  "actions": {
+    "setMode": {
+      "input": {
+        "type": "string",
+        "enum": [
+          "auto",
+          "manual"
+        ]
+      },
+      "forms": [
+        {
+          "href": "actions/{actionName}",
+          "op": "invokeaction"
+        }
+      ]
+    }
+  },
+  "links": [
+    {
+      "href": "../catalog",
+      "rel": "collection"
+    }
+  ]
+}
