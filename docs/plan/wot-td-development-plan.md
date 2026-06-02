@@ -81,12 +81,10 @@ The next development order is:
 
 1. Finish TD-P1.3 fixture expansion so existing TD behavior is protected before
    adding stricter semantics.
-2. Add shared helpers for TD defaults that binding-core consumers will need,
-   starting with operation inference and security inheritance.
-3. Complete DataSchema and SecurityScheme Basic validation in TD-P2.
-4. Start Thing Model support only after TD round-trip, default-resolution, and
+2. Complete DataSchema and SecurityScheme Basic validation in TD-P2.
+3. Start Thing Model support only after TD round-trip, default-resolution, and
    validation behavior are stable.
-5. Move to repository-level M3 protocol-neutral core traits after TD/TM-owned
+4. Move to repository-level M3 protocol-neutral core traits after TD/TM-owned
    contracts are reliable enough for downstream runtime crates.
 
 ## TD-P0: Stabilize the Foundation
@@ -343,7 +341,7 @@ Completion notes:
 
 ### TD-P1.4 Shared TD Default Resolution Helpers
 
-Status: planned.
+Status: complete.
 
 Goal: expose protocol-neutral helpers for defaults that bindings and runtime
 crates need without embedding protocol behavior in the TD crate.
@@ -365,6 +363,22 @@ Acceptance criteria:
   without duplicating TD default rules.
 - Helpers preserve existing tolerant parsing and do not mutate TD structures.
 - `cargo check -p clinkz-wot-td --no-default-features` continues to pass.
+
+Completion notes:
+
+- Added the public `td_defaults` module with protocol-neutral helpers for
+  effective form operations and effective form security.
+- Operation inference now covers Thing-level forms, property forms with
+  `readOnly` and `writeOnly`, action forms, and event forms without mutating
+  deserialized TD structures.
+- Form security inheritance now returns form-level overrides when present and
+  falls back to Thing-level security otherwise.
+- Added focused tests for explicit operations, inferred defaults, form-level
+  security overrides, and inherited Thing-level security.
+- Verified with:
+  - `cargo fmt --check`
+  - `cargo test -p clinkz-wot-td`
+  - `cargo check -p clinkz-wot-td --no-default-features`
 
 ## TD-P2: Complete Data Schema and Security Semantics
 
@@ -468,11 +482,7 @@ Acceptance criteria:
 
 ## Recommended Next Tasks
 
-1. Complete TD-P1.3 with targeted round-trip fixtures for extension
-   preservation, `cz:` JSON-LD context entries, compact `OneOrMany`, and
-   multiple forms per affordance.
-2. Implement TD-P1.4 operation inference and security inheritance helpers.
-3. Implement TD-P2.1 DataSchema Basic-level constraint validation.
-4. Implement TD-P2.2 SecurityScheme Basic-level validation.
-5. Start TD-P3 Thing Model support after TD-P1.3, TD-P1.4, and TD-P2 are
+1. Implement TD-P2.1 DataSchema Basic-level constraint validation.
+2. Implement TD-P2.2 SecurityScheme Basic-level validation.
+3. Start TD-P3 Thing Model support after TD-P1.3, TD-P1.4, and TD-P2 are
    complete.
