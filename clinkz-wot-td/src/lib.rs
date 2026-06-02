@@ -8,6 +8,7 @@ extern crate alloc;
 pub mod core;
 pub mod td_defaults;
 pub mod thing;
+pub mod thing_model;
 pub mod validate;
 pub use core::data_type;
 

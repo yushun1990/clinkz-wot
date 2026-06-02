@@ -463,7 +463,7 @@ Completion notes:
 
 ## TD-P3: Thing Model Support
 
-Status: planned.
+Status: complete.
 
 Goal: add Thing Model support after TD 1.1 parsing, serialization, URI typing,
 and validation are stable.
@@ -490,6 +490,27 @@ Acceptance criteria:
 - TM-to-TD generation remains a separate later step and does not require
   protocol-specific bindings.
 
+Completion notes:
+
+- Added `ThingModel` with TM-owned fields including `tm:optional`, optional
+  security metadata, links for relationships such as `tm:extends`, TD
+  affordance reuse, schema definitions, URI variables, forms, and extension
+  preservation.
+- Added `ThingModelBuilder` with fallible URI handling and reusable metadata,
+  property, action, event, link, form, schema, URI variable, security, optional
+  interaction, and extension field helpers.
+- Basic validation now checks the required model title, `@type:
+  tm:ThingModel`, nested DataSchema and affordance constraints, optional model
+  security references, security definition constraints, and `tm:optional` JSON
+  Pointer references to complete interaction affordances.
+- Added TM tests for round-trip extension preservation, builder behavior,
+  minimal-vs-basic validation behavior, invalid `tm:optional` pointers, and
+  optional security references.
+- Verified with:
+  - `cargo fmt --check`
+  - `cargo test -p clinkz-wot-td`
+  - `cargo check -p clinkz-wot-td --no-default-features`
+
 ## TD-P4: Prepare Binding-Core Consumers
 
 Status: planned.
@@ -515,7 +536,7 @@ Acceptance criteria:
 
 ## Recommended Next Tasks
 
-1. Start TD-P3 Thing Model support now that TD-P1.3, TD-P1.4, and TD-P2 are
-   complete.
+1. Start repository-level M3 protocol-neutral core traits now that TD and TM
+   contract structures are available.
 2. Keep fixture expansion and `no_std + alloc` checks in the regular
-   verification path as TM support is introduced.
+   verification path as runtime-facing contracts are introduced.

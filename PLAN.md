@@ -20,11 +20,9 @@ sections reference those module plans when they exist.
 
 Current focus:
 
-- Finish the remaining TD 1.1 hardening work in M1 before starting M2.
-- Start M2 Thing Model support only after TD fixture coverage, default
-  resolution helpers, DataSchema validation, and SecurityScheme validation are
-  stable.
-- Start M3 protocol-neutral core only after the TD/TM contract surface is
+- TD 1.1 hardening in M1 is complete for the current crate scope.
+- Thing Model support has a first complete TD-crate implementation.
+- Start M3 protocol-neutral core now that the TD/TM contract surface is
   reliable enough for runtime and binding crates to consume.
 
 ### M1: TD 1.1 Hardening
@@ -39,12 +37,14 @@ Current status:
 - Foundation work is complete for `no_std + alloc`, URI field typing, builder
   error reporting, validation levels, security reference checks, field coverage
   audit, and shared `base` plus form `href` target resolution.
-- Remaining M1 work is targeted fixture expansion, shared TD default helpers,
-  DataSchema Basic validation, and SecurityScheme Basic validation.
+- Fixture expansion, shared TD default helpers, DataSchema Basic validation,
+  and SecurityScheme Basic validation are complete.
 
 ### M2: Thing Model Support
 
 Plan: `docs/plan/wot-td-development-plan.md`.
+
+Status: complete for the first TD-crate pass.
 
 Add Thing Model modeling, validation, extension preservation, and a future path
 from reusable TM templates to concrete TD documents.
@@ -54,6 +54,13 @@ Entry criteria:
 - M1 fixture expansion and TD Basic validation hardening are complete.
 - TM data structures can reuse TD component patterns without changing protocol
   boundaries or adding `std`-only dependencies.
+
+Completion notes:
+
+- Added `ThingModel` data structures and builders in `clinkz-wot-td`.
+- TM parsing, serialization, validation, and extension preservation are covered
+  by focused tests.
+- TM support compiles under the same `no_std + alloc` check as TD.
 
 ### M3: Protocol-Neutral Core
 
