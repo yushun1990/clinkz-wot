@@ -1,10 +1,14 @@
-# wot-td Subplan
+# clinkz-wot-td Development Plan
 
 ## Parent Plan Relationship
 
 This document is a crate-level subplan under the repository-level
 `PLAN.md`. It refines the parts of the main plan that belong specifically to
 `clinkz-wot-td`.
+
+Use this document as the detailed task order for TD/TM-owned work. Use
+`PLAN.md` as the milestone index and acceptance target for the whole
+repository.
 
 Parent milestones covered by this subplan:
 

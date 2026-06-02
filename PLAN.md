@@ -8,59 +8,57 @@ The engine uses TD and TM as the semantic contract layer. Protocol bindings are 
 
 The default specification target is W3C WoT TD 1.1, Architecture 1.1, Discovery, and Profile. TD 2.0 is tracked as experimental work behind a feature flag.
 
+## Scope
+
+This file is the repository-level blueprint and milestone index. It defines the
+intended delivery sequence and repository-wide acceptance criteria.
+
+Detailed development tasks belong in module plans under `docs/plan/`. Milestone
+sections reference those module plans when they exist.
+
 ## Milestones
 
 ### M1: TD 1.1 Hardening
 
-- Complete TD 1.1 data model coverage.
-- Preserve unknown extension fields.
-- Preserve round-trip fidelity for existing and new fixtures.
-- Strengthen validation for required fields, `OneOrMany`, operations, URI references, URI templates, defaults, and security definitions.
-- Add shared support for resolving `base` plus relative form `href` values.
+Plan: `docs/plan/wot-td-development-plan.md`.
+
+Harden the TD 1.1 data model, validation, extension preservation, and
+round-trip compatibility in `clinkz-wot-td`.
 
 ### M2: Thing Model Support
 
-- Add Thing Model types and builders.
-- Support TM parsing, serialization, validation, and extension fields.
-- Support TM inheritance and optional affordance metadata.
-- Add a TM-to-TD generation path for reducing authoring repetition.
+Plan: `docs/plan/wot-td-development-plan.md`.
+
+Add Thing Model modeling, validation, extension preservation, and a future path
+from reusable TM templates to concrete TD documents.
 
 ### M3: Protocol-Neutral Core
 
-- Add core traits for exposed Things, consumed Things, interaction handlers, protocol bindings, payload codecs, security providers, and transport adapters.
-- Keep the core crate compatible with `no_std + alloc`.
-- Define operation dispatch by WoT semantic intent, not by protocol-specific assumptions.
+Define the protocol-neutral engine trait surface for exposed Things, consumed
+Things, interaction handlers, bindings, payload codecs, security providers, and
+transport adapters.
 
 ### M4: Protocol Binding Core and Zenoh Binding
 
-- Add binding traits and form selection utilities.
-- Implement `clinkz-wot-binding-zenoh` as the first optional binding.
-- Define Clinkz zenoh extension vocabulary under a `cz:` namespace.
-- Map WoT operations to zenoh query, put, publish, subscribe, and reply patterns.
-- Keep zenoh dependency out of TD/TM/core crates.
+Add shared binding utilities and implement zenoh as the first optional protocol
+binding without making it a dependency of TD, TM, or core runtime crates.
 
 ### M5: Discovery and TDD
 
-- Implement W3C Discovery concepts: Introduction and Exploration.
-- Provide Thing Description Directory repository traits.
-- Add in-memory and platform-backed repository implementations.
-- Support TD registration, update, delete, lookup, and query flows.
-- Allow Clinkz Platform to publish discovery information over zenoh without making zenoh mandatory for the engine.
+Implement W3C Discovery concepts and Thing Description Directory behavior for
+registration, lookup, update, deletion, and query flows.
 
 ### M6: Servient Runtime
 
-- Compose TD/TM, protocol bindings, discovery, security providers, and runtime observability.
-- Support exposed and consumed Things.
-- Provide platform APIs for devices, databases, external APIs, and compute tasks as Things.
-- Keep host/cloud runtime features in `std` crates or behind `std` features.
+Compose TD/TM, protocol bindings, discovery, security, and observability into a
+host/runtime Servient that supports exposed and consumed Things.
 
 ### M7: Conformance and Embedded Support
 
-- Add W3C example and fixture compatibility tests.
-- Add TD 1.0/1.1 compatibility tests where practical.
-- Add `no_std + alloc` checks for embedded-ready crates.
-- Add embedded-oriented tests for local Thing registration, dispatch, validation, and serialization.
-- Keep TD 2.0 support experimental until the specification stabilizes.
+TD/TM plan: `docs/plan/wot-td-development-plan.md`.
+
+Add W3C compatibility checks, fixture coverage, and embedded-oriented
+`no_std + alloc` verification for crates that claim embedded support.
 
 ## Acceptance Criteria
 
@@ -70,10 +68,3 @@ The default specification target is W3C WoT TD 1.1, Architecture 1.1, Discovery,
 - The zenoh binding can be enabled as an optional crate or feature.
 - Protocol bindings all use the same protocol-neutral trait surface.
 - Technical documentation and comments are English-only.
-
-## Current Repository Notes
-
-- The existing `clinkz-wot-td` crate already starts from a `no_std` layout and uses `alloc`.
-- The TD model already includes `base` and form `href`.
-- The current implementation stores `base` and relative `href` values but should add a shared resolution helper for runtime and binding use.
-- The current context model supports JSON-LD context objects, which can represent prefixes such as `cz`.

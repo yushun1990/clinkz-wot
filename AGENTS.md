@@ -7,6 +7,11 @@ This repository implements `clinkz-wot`, a Rust Web of Things engine for the Cli
 - All technical specifications, Rust doc comments, inline comments, public API documentation, examples, and error messages must be written in English.
 - Product discussions may happen in other languages, but committed technical artifacts should stay English-only.
 
+## Session Preparation
+
+- Before each task session, read the relevant documentation under `docs/`.
+- If `PLAN.md` already instructs which `docs/` documents to read, follow `PLAN.md` and skip the separate default `docs/` reading step.
+
 ## Architecture Boundaries
 
 - Keep the engine protocol-neutral.
