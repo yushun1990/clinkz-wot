@@ -174,6 +174,8 @@ Completion notes:
 
 ### TD-P1.1 TD 1.1 Field Coverage Audit
 
+Status: complete.
+
 Goal: confirm that the Rust model covers W3C WoT TD 1.1 with correct field
 types and extension preservation.
 
@@ -208,6 +210,16 @@ Acceptance criteria:
 
 - A TD 1.1 coverage matrix exists in `docs/` or crate-level developer notes.
 - Missing or weakly typed fields are tracked as explicit follow-up tasks.
+
+Completion notes:
+
+- Added `docs/td-1.1-field-coverage.md`.
+- The matrix records covered, partial, and gap-level follow-up items for Thing,
+  affordance, form, link, data schema, security, response, and JSON-LD context
+  structures.
+- Follow-up work is concentrated in validation levels, security reference
+  checks, default operation inference, shared `base` plus `href` resolution,
+  and targeted fixture expansion.
 
 ### TD-P1.2 Explicit Validation Levels
 
