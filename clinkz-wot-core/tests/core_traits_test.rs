@@ -1,12 +1,13 @@
 use std::borrow::Cow;
 
 use clinkz_wot_core::{
-    AffordanceTarget, BindingRequest, CodecInput, CoreError, CoreResult, InteractionInput,
-    InteractionOutput, Payload, PayloadCodec, ProtocolBinding, TransportAdapter, TransportRequest,
+    ActionHandler, AffordanceTarget, BindingRequest, CodecInput, CoreError, CoreResult,
+    EventHandler, EventSink, ExposedThing, InteractionInput, InteractionOutput, LocalThing,
+    Payload, PayloadCodec, PropertyHandler, ProtocolBinding, TransportAdapter, TransportRequest,
     TransportResponse,
 };
 use clinkz_wot_td::{
-    affordance::InteractionHelper,
+    affordance::{ActionAffordance, EventAffordance, InteractionHelper, PropertyAffordance},
     data_schema::DataSchema,
     data_type::Operation,
     form::Form,
@@ -76,6 +77,96 @@ impl RequestPayloadExt for TransportRequest {
     }
 }
 
+struct StoredProperty {
+    value: Payload,
+}
+
+impl PropertyHandler for StoredProperty {
+    fn read(&mut self, _input: InteractionInput) -> CoreResult<InteractionOutput> {
+        Ok(InteractionOutput::with_payload(self.value.clone()))
+    }
+
+    fn write(&mut self, input: InteractionInput) -> CoreResult<InteractionOutput> {
+        self.value = input
+            .payload
+            .ok_or_else(|| CoreError::InvalidInteraction("Missing property payload".into()))?;
+        Ok(InteractionOutput::empty())
+    }
+}
+
+struct EchoAction;
+
+impl ActionHandler for EchoAction {
+    fn invoke(&mut self, input: InteractionInput) -> CoreResult<InteractionOutput> {
+        Ok(InteractionOutput {
+            payload: input.payload,
+        })
+    }
+}
+
+struct StartupEvent;
+
+impl EventHandler for StartupEvent {
+    fn subscribe(
+        &mut self,
+        _input: InteractionInput,
+        sink: &mut dyn EventSink,
+    ) -> CoreResult<InteractionOutput> {
+        sink.emit(Payload::new(b"ready".to_vec(), "text/plain"))?;
+        Ok(InteractionOutput::empty())
+    }
+}
+
+#[derive(Default)]
+struct CollectSink {
+    payloads: Vec<Payload>,
+}
+
+impl EventSink for CollectSink {
+    fn emit(&mut self, payload: Payload) -> CoreResult<()> {
+        self.payloads.push(payload);
+        Ok(())
+    }
+}
+
+fn local_thing_description() -> Thing {
+    let property = PropertyAffordance::builder(DataSchema::String(DataSchema::string().build()))
+        .form(
+            Form::builder("wot://thing/properties/status")
+                .op([Operation::ReadProperty, Operation::WriteProperty])
+                .build()
+                .unwrap(),
+        )
+        .build()
+        .unwrap();
+    let action = ActionAffordance::builder()
+        .form(
+            Form::builder("wot://thing/actions/echo")
+                .op([Operation::InvokeAction])
+                .build()
+                .unwrap(),
+        )
+        .build()
+        .unwrap();
+    let event = EventAffordance::builder()
+        .form(
+            Form::builder("wot://thing/events/startup")
+                .op([Operation::SubscribeEvent])
+                .build()
+                .unwrap(),
+        )
+        .build()
+        .unwrap();
+
+    Thing::builder("Local Lamp")
+        .nosec()
+        .property("status", property)
+        .action("echo", action)
+        .event("startup", event)
+        .build()
+        .unwrap()
+}
+
 #[test]
 fn codec_round_trips_payload_bytes() {
     let codec = EchoCodec;
@@ -131,6 +222,92 @@ fn binding_invokes_selected_form_without_protocol_assumptions() {
         .unwrap();
 
     assert_eq!(output.payload.unwrap().body, b"payload");
+}
+
+#[test]
+fn local_thing_dispatches_registered_handlers() {
+    let mut thing = LocalThing::new(local_thing_description());
+    thing.register_property_handler(
+        "status",
+        StoredProperty {
+            value: Payload::new(b"off".to_vec(), "text/plain"),
+        },
+    );
+    thing.register_action_handler("echo", EchoAction);
+    thing.register_event_handler("startup", StartupEvent);
+
+    let status = thing
+        .read_property("status", InteractionInput::empty())
+        .unwrap()
+        .payload
+        .unwrap();
+    assert_eq!(status.body, b"off");
+
+    thing
+        .write_property(
+            "status",
+            InteractionInput::with_payload(Payload::new(b"on".to_vec(), "text/plain")),
+        )
+        .unwrap();
+    let status = thing
+        .read_property("status", InteractionInput::empty())
+        .unwrap()
+        .payload
+        .unwrap();
+    assert_eq!(status.body, b"on");
+
+    let action = thing
+        .invoke_action(
+            "echo",
+            InteractionInput::with_payload(Payload::new(b"hello".to_vec(), "text/plain")),
+        )
+        .unwrap()
+        .payload
+        .unwrap();
+    assert_eq!(action.body, b"hello");
+
+    let mut sink = CollectSink::default();
+    thing
+        .subscribe_event("startup", InteractionInput::empty(), &mut sink)
+        .unwrap();
+    assert_eq!(sink.payloads[0].body, b"ready");
+}
+
+#[test]
+fn local_thing_rejects_unknown_affordance_before_dispatch() {
+    let mut thing = LocalThing::new(local_thing_description());
+    thing.register_property_handler(
+        "missing",
+        StoredProperty {
+            value: Payload::new(b"value".to_vec(), "text/plain"),
+        },
+    );
+
+    let err = thing
+        .read_property("missing", InteractionInput::empty())
+        .unwrap_err();
+
+    assert_eq!(
+        err,
+        CoreError::UnknownAffordance {
+            kind: "property",
+            name: "missing".into()
+        }
+    );
+}
+
+#[test]
+fn local_thing_reports_missing_registered_handler() {
+    let mut thing = LocalThing::new(local_thing_description());
+
+    let err = thing
+        .invoke_action("echo", InteractionInput::empty())
+        .unwrap_err();
+
+    assert_eq!(
+        err,
+        CoreError::InvalidInteraction("No action handler registered for 'echo'".into())
+    );
 }
 
 #[test]

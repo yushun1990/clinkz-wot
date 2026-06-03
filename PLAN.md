@@ -74,6 +74,8 @@ Current status:
 - Added the first protocol-neutral trait surface for payload codecs, exposed
   Things, consumed Things, protocol bindings, security providers, and transport
   adapters.
+- Added protocol-neutral local Thing handler traits and a reusable dispatcher
+  for property reads/writes, action invocation, and event subscription.
 - Kept form selection, target URI resolution, and concrete protocol behavior
   outside the core crate for the later binding-core and binding milestones.
 
