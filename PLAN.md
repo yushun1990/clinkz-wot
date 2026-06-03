@@ -118,6 +118,22 @@ Current status:
   and `cz-zenoh:keyExpr` extension metadata, extracts key expressions, and
   implements the shared `ProtocolBinding` support check without introducing a
   required zenoh runtime dependency.
+- Added zenoh operation planning that maps WoT form operations to
+  transport-level zenoh operation kinds while still avoiding a required zenoh
+  runtime dependency.
+- Extended zenoh operation planning with first-pass Clinkz extension metadata
+  parsing for encoding, QoS, priority, and congestion control hints.
+- Added shared predicate-based form selection and a zenoh affordance operation
+  planner so concrete bindings can choose protocol-supported forms from
+  multi-form affordances before runtime transport execution is wired in.
+- Extended the zenoh affordance planner to accept shared form selection
+  criteria, with zenoh planner coverage for content type and subprotocol
+  filters.
+- Improved shared form selection diagnostics so operation mismatches are
+  distinguished from metadata or caller-filter mismatches.
+- Added an injected zenoh transport adapter boundary to the generic
+  `ZenohBinding<T>` so planned zenoh operations can be executed by host or test
+  integrations without adding a required zenoh runtime dependency.
 
 ### M5: Discovery and TDD
 

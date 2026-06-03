@@ -10,6 +10,10 @@ mod form;
 
 pub use error::{ZenohBindingError, ZenohBindingResult};
 pub use form::{
-    CZ_ZENOH_KEY_EXPR, ZENOH_SCHEME, ZenohBinding, ZenohFormTarget, extract_zenoh_target,
-    is_zenoh_form,
+    CZ_ZENOH_CONGESTION_CONTROL, CZ_ZENOH_ENCODING, CZ_ZENOH_KEY_EXPR, CZ_ZENOH_PRIORITY,
+    CZ_ZENOH_QOS, NoZenohTransport, ZENOH_SCHEME, ZenohAffordanceOperationPlan, ZenohBinding,
+    ZenohFormMetadata, ZenohFormTarget, ZenohOperationKind, ZenohOperationPlan, ZenohTransport,
+    ZenohTransportRequest, build_zenoh_transport_request, extract_zenoh_metadata,
+    extract_zenoh_target, is_zenoh_form, plan_zenoh_affordance_operation,
+    plan_zenoh_affordance_operation_with_criteria, plan_zenoh_operation, zenoh_operation_kind,
 };

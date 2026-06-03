@@ -11,6 +11,7 @@ pub mod form;
 pub use error::{BindingCoreError, BindingCoreResult};
 pub use form::{
     AffordanceRef, FormSelectionCriteria, ResolvedFormTarget, SelectedAffordanceForm, SelectedForm,
-    resolve_form_target, select_affordance_form, select_affordance_form_with_criteria, select_form,
-    select_form_with_criteria,
+    resolve_form_target, select_affordance_form, select_affordance_form_with_criteria,
+    select_affordance_form_with_filter, select_form, select_form_with_criteria,
+    select_form_with_filter,
 };

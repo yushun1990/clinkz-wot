@@ -1,7 +1,8 @@
 use clinkz_wot_protocol_bindings::{
     AffordanceRef, BindingCoreError, FormSelectionCriteria, resolve_form_target,
-    select_affordance_form, select_affordance_form_with_criteria, select_form,
-    select_form_with_criteria,
+    select_affordance_form, select_affordance_form_with_criteria,
+    select_affordance_form_with_filter, select_form, select_form_with_criteria,
+    select_form_with_filter,
 };
 use clinkz_wot_td::{
     affordance::{ActionAffordance, EventAffordance, InteractionHelper, PropertyAffordance},
@@ -135,6 +136,57 @@ fn selects_form_matching_subprotocol_criteria() {
 }
 
 #[test]
+fn selects_form_matching_caller_filter() {
+    let http_form = Form::read_property("https://example.com/things/lamp/properties/status")
+        .build()
+        .unwrap();
+    let bus_form = Form::read_property("bus:things/lamp/properties/status")
+        .build()
+        .unwrap();
+    let property = PropertyAffordance::builder(DataSchema::String(DataSchema::string().build()))
+        .forms([http_form, bus_form.clone()])
+        .build()
+        .unwrap();
+
+    let selected = select_form_with_filter(
+        FormContext::Property(&property),
+        property._interaction.forms.as_slice(),
+        FormSelectionCriteria::operation(Operation::ReadProperty),
+        |form| form.href.as_str().starts_with("bus:"),
+    )
+    .unwrap();
+
+    assert_eq!(selected.index, 1);
+    assert_eq!(selected.form, &bus_form);
+}
+
+#[test]
+fn reports_filter_mismatch_when_operation_exists() {
+    let http_form = Form::read_property("https://example.com/things/lamp/properties/status")
+        .build()
+        .unwrap();
+    let property = PropertyAffordance::builder(DataSchema::String(DataSchema::string().build()))
+        .form(http_form)
+        .build()
+        .unwrap();
+
+    let err = select_form_with_filter(
+        FormContext::Property(&property),
+        property._interaction.forms.as_slice(),
+        FormSelectionCriteria::operation(Operation::ReadProperty),
+        |form| form.href.as_str().starts_with("bus:"),
+    )
+    .unwrap_err();
+
+    assert_eq!(
+        err,
+        BindingCoreError::UnsupportedOperation(
+            "No form supports ReadProperty after applying caller filter".into()
+        )
+    );
+}
+
+#[test]
 fn resolves_form_target_against_thing_base() {
     let form = Form::read_property("properties/status").build().unwrap();
     let property = PropertyAffordance::builder(DataSchema::String(DataSchema::string().build()))
@@ -246,6 +298,36 @@ fn selects_and_resolves_affordance_form_with_metadata_criteria() {
         }
         ResolvedFormHref::Template(_) => panic!("expected resolved URI reference"),
     }
+}
+
+#[test]
+fn selects_and_resolves_affordance_form_with_caller_filter() {
+    let http_form = Form::read_property("https://example.com/things/lamp/properties/status")
+        .build()
+        .unwrap();
+    let bus_form = Form::read_property("bus:things/lamp/properties/status")
+        .build()
+        .unwrap();
+    let property = PropertyAffordance::builder(DataSchema::String(DataSchema::string().build()))
+        .forms([http_form, bus_form.clone()])
+        .build()
+        .unwrap();
+    let thing = Thing::builder("Lamp")
+        .nosec()
+        .property("status", property)
+        .build()
+        .unwrap();
+
+    let selected = select_affordance_form_with_filter(
+        &thing,
+        AffordanceRef::Property("status"),
+        FormSelectionCriteria::operation(Operation::ReadProperty),
+        |form| form.href.as_str().starts_with("bus:"),
+    )
+    .unwrap();
+
+    assert_eq!(selected.selection.index, 1);
+    assert_eq!(selected.selection.form, &bus_form);
 }
 
 #[test]

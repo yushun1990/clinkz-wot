@@ -61,18 +61,27 @@ impl<'a> FormSelectionCriteria<'a> {
         self
     }
 
-    fn matches(&self, operations: &[Operation], form: &Form) -> bool {
+    fn matches_operation(&self, operations: &[Operation]) -> bool {
         operations
             .iter()
             .any(|candidate| *candidate == self.operation)
-            && match self.content_type {
-                Some(content_type) => form.content_type == content_type,
-                None => true,
-            }
-            && match self.subprotocol {
-                Some(subprotocol) => form.subprotocol.as_deref() == Some(subprotocol),
-                None => true,
-            }
+    }
+
+    fn matches_metadata(&self, form: &Form) -> bool {
+        let content_type_matches = match self.content_type {
+            Some(content_type) => form.content_type == content_type,
+            None => true,
+        };
+        let subprotocol_matches = match self.subprotocol {
+            Some(subprotocol) => form.subprotocol.as_deref() == Some(subprotocol),
+            None => true,
+        };
+
+        content_type_matches && subprotocol_matches
+    }
+
+    fn matches(&self, operations: &[Operation], form: &Form) -> bool {
+        self.matches_operation(operations) && self.matches_metadata(form)
     }
 }
 
@@ -120,9 +129,25 @@ pub fn select_form_with_criteria<'a>(
     forms: &'a [Form],
     criteria: FormSelectionCriteria<'_>,
 ) -> BindingCoreResult<SelectedForm<'a>> {
+    select_form_with_filter(context, forms, criteria, |_| true)
+}
+
+/// Selects the first form matching the requested criteria and caller filter.
+pub fn select_form_with_filter<'a, F>(
+    context: FormContext<'a>,
+    forms: &'a [Form],
+    criteria: FormSelectionCriteria<'_>,
+    filter: F,
+) -> BindingCoreResult<SelectedForm<'a>>
+where
+    F: Fn(&Form) -> bool,
+{
+    let mut operation_supported = false;
+
     for (index, form) in forms.iter().enumerate() {
         let operations = effective_form_operations(context, form);
-        if criteria.matches(operations.as_ref(), form) {
+        operation_supported |= criteria.matches_operation(operations.as_ref());
+        if criteria.matches(operations.as_ref(), form) && filter(form) {
             return Ok(SelectedForm {
                 index,
                 form,
@@ -132,13 +157,21 @@ pub fn select_form_with_criteria<'a>(
     }
 
     Err(BindingCoreError::UnsupportedOperation(
-        unsupported_operation_message(criteria),
+        unsupported_operation_message(criteria, operation_supported),
     ))
 }
 
-fn unsupported_operation_message(criteria: FormSelectionCriteria<'_>) -> String {
-    if criteria.content_type.is_none() && criteria.subprotocol.is_none() {
+fn unsupported_operation_message(
+    criteria: FormSelectionCriteria<'_>,
+    operation_supported: bool,
+) -> String {
+    if !operation_supported {
         format!("No form supports {:?}", criteria.operation)
+    } else if criteria.content_type.is_none() && criteria.subprotocol.is_none() {
+        format!(
+            "No form supports {:?} after applying caller filter",
+            criteria.operation
+        )
     } else {
         format!("No form matches {:?}", criteria)
     }
@@ -170,8 +203,21 @@ pub fn select_affordance_form_with_criteria<'a>(
     affordance: AffordanceRef<'a>,
     criteria: FormSelectionCriteria<'_>,
 ) -> BindingCoreResult<SelectedAffordanceForm<'a>> {
+    select_affordance_form_with_filter(thing, affordance, criteria, |_| true)
+}
+
+/// Selects and resolves a form from a Thing affordance using criteria and a caller filter.
+pub fn select_affordance_form_with_filter<'a, F>(
+    thing: &'a Thing,
+    affordance: AffordanceRef<'a>,
+    criteria: FormSelectionCriteria<'_>,
+    filter: F,
+) -> BindingCoreResult<SelectedAffordanceForm<'a>>
+where
+    F: Fn(&Form) -> bool,
+{
     let form_set = forms_for_affordance(thing, affordance)?;
-    let selection = select_form_with_criteria(form_set.context, form_set.forms, criteria)?;
+    let selection = select_form_with_filter(form_set.context, form_set.forms, criteria, filter)?;
     let target = resolve_form_target(thing, selection.form)?;
 
     Ok(SelectedAffordanceForm {

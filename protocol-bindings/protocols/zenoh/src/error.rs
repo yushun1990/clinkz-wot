@@ -7,6 +7,8 @@ pub type ZenohBindingResult<T> = Result<T, ZenohBindingError>;
 /// Errors surfaced by the zenoh protocol binding.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ZenohBindingError {
+    /// A zenoh form could not be selected for the requested interaction.
+    Selection(String),
     /// A TD form does not describe a zenoh target.
     UnsupportedForm(String),
     /// A TD form target cannot be resolved to a concrete zenoh key expression.
@@ -18,6 +20,7 @@ pub enum ZenohBindingError {
 impl fmt::Display for ZenohBindingError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            Self::Selection(message) => write!(f, "Zenoh form selection error: {}", message),
             Self::UnsupportedForm(message) => write!(f, "Unsupported zenoh form: {}", message),
             Self::Target(message) => write!(f, "Zenoh target error: {}", message),
             Self::TransportUnavailable(message) => {
