@@ -64,28 +64,30 @@ The current TD crate already provides:
   the `Thing.created` and `Thing.modified` RFC3339 serde adapter with the
   `time` crate's `no_std + alloc` compatible RFC3339 option helper.
 
-Current development gaps:
+Current maintenance gaps:
 
-- Round-trip fixtures need targeted expansion for extension preservation,
-  Clinkz JSON-LD context entries, compact `OneOrMany` forms, and multiple
-  forms per affordance.
-- Default operation inference is not yet exposed as a shared helper.
-- Security scheme validation still needs scheme-specific checks, combo
-  references, and OAuth2 flow semantics.
-- DataSchema validation still needs practical Basic-level constraint checks.
-- Thing Model support has not yet been introduced.
+- Keep TD/TM fixtures aligned with runtime-facing contracts as protocol
+  bindings, Discovery, and Servient crates add integration coverage.
+- Continue expanding conformance fixtures for extension preservation, Clinkz
+  JSON-LD context entries, compact `OneOrMany` forms, and multiple forms per
+  affordance.
+- Support binding-core consumers with protocol-neutral helpers only when the
+  helper belongs to TD/TM field semantics rather than concrete binding
+  behavior.
+- Keep SecurityScheme and DataSchema validation protocol-neutral as additional
+  W3C Profile or runtime use cases are introduced.
 
 ## Current Development Sequence
 
-The next development order is:
+The TD/TM-owned foundation work for M1 and M2 is complete for the current crate
+scope. The next TD/TM development order is:
 
-1. Finish TD-P1.3 fixture expansion so existing TD behavior is protected before
-   adding stricter semantics.
-2. Complete DataSchema and SecurityScheme Basic validation in TD-P2.
-3. Start Thing Model support only after TD round-trip, default-resolution, and
-   validation behavior are stable.
-4. Move to repository-level M3 protocol-neutral core traits after TD/TM-owned
-   contracts are reliable enough for downstream runtime crates.
+1. Treat new binding, Discovery, and Servient requirements as feedback about
+   whether a missing helper belongs in TD/TM or in the consuming crate.
+2. Add TD/TM helpers only for protocol-neutral document semantics such as
+   defaults, typed fields, validation, and round-trip preservation.
+3. Keep TD/TM conformance and `no_std + alloc` checks in the regular
+   verification path while M4-M7 add downstream crates.
 
 ## TD-P0: Stabilize the Foundation
 
@@ -513,7 +515,7 @@ Completion notes:
 
 ## TD-P4: Prepare Binding-Core Consumers
 
-Status: planned.
+Status: in progress.
 
 Goal: expose clean TD data types that binding crates can consume without
 duplicating field semantics.
@@ -534,9 +536,21 @@ Acceptance criteria:
 - No zenoh, HTTP, CoAP, MQTT, or other protocol behavior leaks into the TD
   crate.
 
+Current status:
+
+- Form and link target typing is complete for the current binding-core needs.
+- `resolve_form_href` provides shared protocol-neutral `base` plus `href`
+  resolution.
+- TD default operation helpers are consumed by core and shared binding crates.
+- Further work should focus on protocol-neutral effective security metadata
+  helpers if M4 shared binding hardening proves they belong in the TD crate
+  rather than the binding utility crate.
+
 ## Recommended Next Tasks
 
-1. Start repository-level M3 protocol-neutral core traits now that TD and TM
-   contract structures are available.
-2. Keep fixture expansion and `no_std + alloc` checks in the regular
-   verification path as runtime-facing contracts are introduced.
+1. Finish repository-level M4 protocol binding hardening.
+2. Add TD/TM fixture coverage only when it protects document semantics shared
+   by multiple downstream crates.
+3. Keep `cargo test -p clinkz-wot-td` and
+   `cargo check -p clinkz-wot-td --no-default-features` in the regular
+   verification path.

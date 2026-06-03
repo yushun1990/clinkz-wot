@@ -16,6 +16,8 @@ pub enum BindingCoreError {
     },
     /// The requested operation is not supported by any candidate form.
     UnsupportedOperation(String),
+    /// The selected form does not belong to the requested affordance.
+    FormNotInAffordance,
     /// The selected form target could not be resolved.
     TargetResolution(String),
 }
@@ -27,6 +29,12 @@ impl fmt::Display for BindingCoreError {
                 write!(f, "Unknown {} affordance: {}", kind, name)
             }
             Self::UnsupportedOperation(message) => write!(f, "Unsupported operation: {}", message),
+            Self::FormNotInAffordance => {
+                write!(
+                    f,
+                    "Selected form does not belong to the requested affordance"
+                )
+            }
             Self::TargetResolution(message) => write!(f, "Target resolution error: {}", message),
         }
     }

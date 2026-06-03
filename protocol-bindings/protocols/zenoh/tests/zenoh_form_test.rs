@@ -1,6 +1,6 @@
 use clinkz_wot_core::{
-    AffordanceTarget, BindingRequest, CoreResult, InteractionInput, InteractionOutput, Payload,
-    ProtocolBinding,
+    AffordanceTarget, BindingRequest, CoreError, CoreResult, InteractionInput, InteractionOutput,
+    Payload, ProtocolBinding,
 };
 use clinkz_wot_protocol_bindings::{AffordanceRef, FormSelectionCriteria};
 use clinkz_wot_protocol_bindings_zenoh::{
@@ -171,7 +171,15 @@ fn runtime_binding_delegates_planned_operation_to_transport() {
         .extra_field(CZ_ZENOH_ENCODING, json!("application/json"))
         .build()
         .unwrap();
-    let thing = Thing::builder("Lamp").nosec().build().unwrap();
+    let property = PropertyAffordance::builder(DataSchema::String(DataSchema::string().build()))
+        .form(form.clone())
+        .build()
+        .unwrap();
+    let thing = Thing::builder("Lamp")
+        .nosec()
+        .property("status", property)
+        .build()
+        .unwrap();
     let mut input =
         InteractionInput::with_payload(Payload::new(b"on".to_vec(), "application/json"));
     input.parameters.insert("source".into(), "test".into());
@@ -188,6 +196,38 @@ fn runtime_binding_delegates_planned_operation_to_transport() {
         .unwrap();
 
     assert_eq!(output.payload.unwrap().body, b"accepted");
+}
+
+#[test]
+fn runtime_binding_rejects_form_that_does_not_support_requested_operation() {
+    let form = Form::read_property("zenoh://clinkz/things/lamp/status")
+        .build()
+        .unwrap();
+    let property = PropertyAffordance::builder(DataSchema::String(DataSchema::string().build()))
+        .form(form.clone())
+        .build()
+        .unwrap();
+    let thing = Thing::builder("Lamp")
+        .nosec()
+        .property("status", property)
+        .build()
+        .unwrap();
+    let mut binding = ZenohBinding::with_transport(RecordingZenohTransport);
+
+    let err = binding
+        .invoke(BindingRequest {
+            thing: &thing,
+            target: AffordanceTarget::Property("status"),
+            operation: Operation::WriteProperty,
+            form: &form,
+            input: InteractionInput::empty(),
+        })
+        .unwrap_err();
+
+    assert_eq!(
+        err,
+        CoreError::UnsupportedOperation("Selected form does not support WriteProperty".into())
+    );
 }
 
 #[test]

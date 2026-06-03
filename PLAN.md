@@ -22,8 +22,24 @@ Current focus:
 
 - TD 1.1 hardening in M1 is complete for the current crate scope.
 - Thing Model support has a first complete TD-crate implementation.
-- Start M3 protocol-neutral core now that the TD/TM contract surface is
-  reliable enough for runtime and binding crates to consume.
+- M3 protocol-neutral core has the first trait and dispatcher surface needed by
+  binding crates.
+- Complete M4 protocol binding hardening before starting M5 Discovery.
+- After M4, build M5 Discovery first, then M6 Servient runtime composition, and
+  keep M7 conformance and embedded checks running across every crate that
+  claims `no_std + alloc` support.
+
+Immediate next sequence:
+
+1. Finish M4 with protocol binding API polish, zenoh metadata vocabulary
+   documentation, focused multi-form tests, and optional host-runtime zenoh
+   integration boundaries.
+2. Start M5 by introducing `clinkz-wot-discovery` with a std-first in-memory
+   Thing Description Directory and protocol-neutral storage/query traits.
+3. Start M6 only after M5 has registration, lookup, update, deletion, and
+   validation behavior that a Servient can consume.
+4. Expand M7 checks as each milestone adds crates or public compatibility
+   surfaces.
 
 ### M1: TD 1.1 Hardening
 
@@ -93,6 +109,8 @@ Entry criteria:
 
 ### M4: Protocol Bindings and Zenoh Binding
 
+Plan: `docs/plan/protocol-bindings-development-plan.md`.
+
 Add shared binding utilities and implement zenoh as the first optional protocol
 binding without making it a dependency of TD, TM, or core runtime crates.
 
@@ -134,16 +152,94 @@ Current status:
 - Added an injected zenoh transport adapter boundary to the generic
   `ZenohBinding<T>` so planned zenoh operations can be executed by host or test
   integrations without adding a required zenoh runtime dependency.
+- Added shared validation for caller-selected affordance forms and wired zenoh
+  runtime invocation to reject forms that do not belong to the requested
+  affordance or do not support the requested effective operation before
+  transport execution.
+
+Remaining work:
+
+- Stabilize shared binding utility naming, error categories, and affordance/form
+  validation behavior before additional concrete bindings depend on it.
+- Document the first Clinkz zenoh extension vocabulary and distinguish stable
+  terms from experimental metadata hints.
+- Add focused tests for Thing-level forms, bulk operation forms, form-level
+  security/scopes propagation, relative `base` plus zenoh target resolution, and
+  multi-form protocol fallback.
+- Keep concrete zenoh runtime integration optional. If a real zenoh adapter is
+  added, gate it behind a host/runtime feature and keep the default crate free
+  of required zenoh runtime dependencies.
+
+Exit criteria:
+
+- `clinkz-wot-protocol-bindings` and
+  `clinkz-wot-protocol-bindings-zenoh` pass `cargo test`.
+- Both protocol binding crates pass `cargo check --no-default-features`.
+- Shared utilities cover form selection, target resolution, selected-form
+  validation, diagnostics, and security metadata extraction needed by runtime
+  crates.
+- Zenoh-specific code remains outside TD, TM, and core crates.
 
 ### M5: Discovery and TDD
 
 Implement W3C Discovery concepts and Thing Description Directory behavior for
 registration, lookup, update, deletion, and query flows.
 
+Entry criteria:
+
+- M4 shared binding APIs are stable enough for Discovery and Servient crates to
+  refer to TD forms without duplicating form selection or target resolution.
+- TD validation exposes the Basic checks needed to reject invalid directory
+  entries explicitly instead of during deserialization.
+
+Planned work:
+
+- Add `clinkz-wot-discovery` as a `std` crate in the workspace.
+- Define protocol-neutral directory traits for registration, retrieval, update,
+  deletion, listing, and query.
+- Implement a deterministic in-memory directory backend first.
+- Validate TD inputs explicitly at configurable validation levels before
+  registration and update.
+- Preserve full TD round-trip data, including unknown extension fields and
+  JSON-LD contexts, through directory storage.
+- Add tests for duplicate registration policy, overwrite/update behavior,
+  deletion, lookup by id, listing, and basic query predicates.
+
+Exit criteria:
+
+- The discovery crate has focused tests for CRUD and query behavior.
+- Discovery does not depend on zenoh or any concrete binding.
+- Directory storage keeps TD/TM semantic data and extension fields intact.
+
 ### M6: Servient Runtime
 
 Compose TD/TM, protocol bindings, discovery, security, and observability into a
 host/runtime Servient that supports exposed and consumed Things.
+
+Entry criteria:
+
+- M5 provides a usable directory abstraction and in-memory backend.
+- Core consumed/exposed Thing dispatch can route through protocol bindings with
+  validated forms.
+
+Planned work:
+
+- Add `clinkz-wot-servient` as a `std` crate in the workspace.
+- Introduce a Servient builder for registering local Things, consumed Things,
+  protocol bindings, codecs, security providers, and discovery backends.
+- Compose `LocalThing`, `BoundConsumedThing`, protocol bindings, and discovery
+  registration without making zenoh mandatory.
+- Add host-level error handling and lifecycle APIs for start, stop, register,
+  unregister, expose, and consume flows.
+- Add integration tests for exposing a local Thing, consuming a discovered TD,
+  and invoking interactions through an injected test binding.
+
+Exit criteria:
+
+- Servient runtime can expose and consume Things through protocol-neutral core
+  traits.
+- Zenoh remains optional and can be omitted from Servient builds.
+- Runtime integration tests cover discovery plus binding dispatch.
 
 ### M7: Conformance and Embedded Support
 
@@ -151,6 +247,27 @@ TD/TM plan: `docs/plan/wot-td-development-plan.md`.
 
 Add W3C compatibility checks, fixture coverage, and embedded-oriented
 `no_std + alloc` verification for crates that claim embedded support.
+
+Planned work:
+
+- Keep TD/TM round-trip fixtures aligned with TD 1.1 field coverage and
+  extension preservation requirements.
+- Add workspace-level verification documentation for `cargo test` and
+  `--no-default-features` checks.
+- Add no-default-features checks for every embedded-ready crate as it is added
+  or changed.
+- Add conformance-oriented fixtures for multi-form affordances, form security,
+  `base` plus relative `href`, JSON-LD context preservation, and Clinkz
+  extension terms.
+- Keep TD 2.0 behavior behind an experimental feature and out of default
+  compatibility expectations.
+
+Exit criteria:
+
+- All crates that claim embedded support pass no-default-features checks.
+- Public fixtures cover the TD/TM, core dispatch, binding selection, discovery,
+  and Servient flows needed for a first compatibility baseline.
+- No protocol-specific behavior leaks into TD/TM/core crates.
 
 ## Acceptance Criteria
 

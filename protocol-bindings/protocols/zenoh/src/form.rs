@@ -7,11 +7,12 @@ use alloc::{
 };
 
 use clinkz_wot_core::{
-    BindingRequest, CoreError, CoreResult, InteractionInput, InteractionOutput, Payload,
-    ProtocolBinding,
+    AffordanceTarget, BindingRequest, CoreError, CoreResult, InteractionInput, InteractionOutput,
+    Payload, ProtocolBinding,
 };
 use clinkz_wot_protocol_bindings::{
-    AffordanceRef, FormSelectionCriteria, resolve_form_target, select_affordance_form_with_filter,
+    AffordanceRef, BindingCoreError, FormSelectionCriteria, resolve_form_target,
+    select_affordance_form_with_filter, validate_affordance_form,
 };
 use clinkz_wot_td::{data_type::Operation, form::Form};
 use serde_json::Value;
@@ -193,6 +194,14 @@ where
     }
 
     fn invoke(&mut self, request: BindingRequest<'_>) -> CoreResult<InteractionOutput> {
+        validate_affordance_form(
+            request.thing,
+            affordance_ref_from_target(request.target),
+            request.form,
+            request.operation,
+        )
+        .map_err(core_error_from_binding_error)?;
+
         let plan = plan_zenoh_operation(request.thing, request.form, request.operation)
             .map_err(|err| CoreError::Transport(err.to_string()))?;
         let transport_request = build_zenoh_transport_request(plan, request.input);
@@ -319,6 +328,26 @@ pub fn extract_zenoh_metadata(form: &Form) -> ZenohBindingResult<ZenohFormMetada
         priority: extension_string(form, CZ_ZENOH_PRIORITY)?,
         congestion_control: extension_string(form, CZ_ZENOH_CONGESTION_CONTROL)?,
     })
+}
+
+fn core_error_from_binding_error(err: BindingCoreError) -> CoreError {
+    match err {
+        BindingCoreError::UnknownAffordance { kind, name } => {
+            CoreError::UnknownAffordance { kind, name }
+        }
+        BindingCoreError::UnsupportedOperation(message) => CoreError::UnsupportedOperation(message),
+        BindingCoreError::FormNotInAffordance => CoreError::InvalidInteraction(err.to_string()),
+        BindingCoreError::TargetResolution(message) => CoreError::Transport(message),
+    }
+}
+
+fn affordance_ref_from_target(target: AffordanceTarget<'_>) -> AffordanceRef<'_> {
+    match target {
+        AffordanceTarget::Thing => AffordanceRef::Thing,
+        AffordanceTarget::Property(name) => AffordanceRef::Property(name),
+        AffordanceTarget::Action(name) => AffordanceRef::Action(name),
+        AffordanceTarget::Event(name) => AffordanceRef::Event(name),
+    }
 }
 
 fn extension_key_expr(form: &Form) -> ZenohBindingResult<Option<String>> {

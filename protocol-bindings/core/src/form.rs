@@ -227,6 +227,53 @@ where
     })
 }
 
+/// Validates that a selected form belongs to an affordance and matches the requested operation.
+pub fn validate_affordance_form<'a>(
+    thing: &'a Thing,
+    affordance: AffordanceRef<'a>,
+    form: &Form,
+    operation: Operation,
+) -> BindingCoreResult<SelectedForm<'a>> {
+    validate_affordance_form_with_criteria(
+        thing,
+        affordance,
+        form,
+        FormSelectionCriteria::operation(operation),
+    )
+}
+
+/// Validates that a selected form belongs to an affordance and matches the requested criteria.
+pub fn validate_affordance_form_with_criteria<'a>(
+    thing: &'a Thing,
+    affordance: AffordanceRef<'a>,
+    form: &Form,
+    criteria: FormSelectionCriteria<'_>,
+) -> BindingCoreResult<SelectedForm<'a>> {
+    let form_set = forms_for_affordance(thing, affordance)?;
+
+    for (index, candidate) in form_set.forms.iter().enumerate() {
+        if candidate != form {
+            continue;
+        }
+
+        let operations = effective_form_operations(form_set.context, candidate);
+        if criteria.matches(operations.as_ref(), candidate) {
+            return Ok(SelectedForm {
+                index,
+                form: candidate,
+                operations,
+            });
+        }
+
+        return Err(BindingCoreError::UnsupportedOperation(format!(
+            "Selected form does not support {:?}",
+            criteria.operation
+        )));
+    }
+
+    Err(BindingCoreError::FormNotInAffordance)
+}
+
 struct FormSet<'a> {
     context: FormContext<'a>,
     forms: &'a [Form],

@@ -2,7 +2,7 @@ use clinkz_wot_protocol_bindings::{
     AffordanceRef, BindingCoreError, FormSelectionCriteria, resolve_form_target,
     select_affordance_form, select_affordance_form_with_criteria,
     select_affordance_form_with_filter, select_form, select_form_with_criteria,
-    select_form_with_filter,
+    select_form_with_filter, validate_affordance_form,
 };
 use clinkz_wot_td::{
     affordance::{ActionAffordance, EventAffordance, InteractionHelper, PropertyAffordance},
@@ -393,4 +393,84 @@ fn reports_unknown_affordance_from_thing_lookup() {
             name: "status".into()
         }
     );
+}
+
+#[test]
+fn validates_selected_affordance_form_against_effective_operation() {
+    let form = Form::builder("actions/ping").build().unwrap();
+    let action = ActionAffordance::builder()
+        .form(form.clone())
+        .build()
+        .unwrap();
+    let thing = Thing::builder("Lamp")
+        .nosec()
+        .action("ping", action)
+        .build()
+        .unwrap();
+
+    let selected = validate_affordance_form(
+        &thing,
+        AffordanceRef::Action("ping"),
+        &form,
+        Operation::InvokeAction,
+    )
+    .unwrap();
+
+    assert_eq!(selected.index, 0);
+    assert_eq!(selected.form, &form);
+    assert_eq!(selected.operations.as_ref(), &[Operation::InvokeAction]);
+}
+
+#[test]
+fn rejects_selected_affordance_form_when_operation_does_not_match() {
+    let form = Form::read_property("properties/status").build().unwrap();
+    let property = PropertyAffordance::builder(DataSchema::String(DataSchema::string().build()))
+        .form(form.clone())
+        .build()
+        .unwrap();
+    let thing = Thing::builder("Lamp")
+        .nosec()
+        .property("status", property)
+        .build()
+        .unwrap();
+
+    let err = validate_affordance_form(
+        &thing,
+        AffordanceRef::Property("status"),
+        &form,
+        Operation::WriteProperty,
+    )
+    .unwrap_err();
+
+    assert_eq!(
+        err,
+        BindingCoreError::UnsupportedOperation(
+            "Selected form does not support WriteProperty".into()
+        )
+    );
+}
+
+#[test]
+fn rejects_selected_form_that_does_not_belong_to_affordance() {
+    let property_form = Form::read_property("properties/status").build().unwrap();
+    let other_form = Form::read_property("properties/other").build().unwrap();
+    let property = PropertyAffordance::builder(DataSchema::String(DataSchema::string().build()))
+        .form(property_form)
+        .build()
+        .unwrap();
+    let thing = Thing::builder("Lamp")
+        .nosec()
+        .property("status", property)
+        .build()
+        .unwrap();
+
+    let err = validate_affordance_form(
+        &thing,
+        AffordanceRef::Property("status"),
+        &other_form,
+        Operation::ReadProperty,
+    )
+    .unwrap_err();
+
+    assert_eq!(err, BindingCoreError::FormNotInAffordance);
 }
