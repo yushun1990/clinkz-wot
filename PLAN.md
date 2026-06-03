@@ -81,6 +81,8 @@ Current status:
   matching bindings.
 - Kept form selection, target URI resolution, and concrete protocol behavior
   outside the core crate for the later binding-core and binding milestones.
+- Verified `clinkz-wot-core` with `cargo check -p clinkz-wot-core
+  --no-default-features`.
 
 Entry criteria:
 
@@ -93,6 +95,15 @@ Entry criteria:
 
 Add shared binding utilities and implement zenoh as the first optional protocol
 binding without making it a dependency of TD, TM, or core runtime crates.
+
+Current status:
+
+- Started `clinkz-wot-binding-core` as a `no_std + alloc` workspace crate.
+- Added shared form selection based on TD effective operations and affordance
+  context.
+- Added shared form target resolution using the TD crate's `base` plus `href`
+  helper.
+- Kept zenoh and other concrete protocol behavior out of binding-core.
 
 ### M5: Discovery and TDD
 
