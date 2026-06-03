@@ -126,6 +126,12 @@ impl<'a> FormBuilder<'a> {
         self
     }
 
+    /// Set the subprotocol (e.g., "sse").
+    pub fn subprotocol(mut self, subprotocol: impl Into<String>) -> Self {
+        self.form.subprotocol = Some(subprotocol.into());
+        self
+    }
+
     /// Add security.
     pub fn security<I, S>(mut self, security: I) -> Self
     where

@@ -28,6 +28,54 @@ pub enum AffordanceRef<'a> {
     Event(&'a str),
 }
 
+/// Protocol-neutral criteria used to choose a TD form.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct FormSelectionCriteria<'a> {
+    /// Required effective operation.
+    pub operation: Operation,
+    /// Optional required form content type.
+    pub content_type: Option<&'a str>,
+    /// Optional required form subprotocol.
+    pub subprotocol: Option<&'a str>,
+}
+
+impl<'a> FormSelectionCriteria<'a> {
+    /// Creates criteria for an operation without extra form metadata filters.
+    pub fn operation(operation: Operation) -> Self {
+        Self {
+            operation,
+            content_type: None,
+            subprotocol: None,
+        }
+    }
+
+    /// Requires a form content type.
+    pub fn content_type(mut self, content_type: &'a str) -> Self {
+        self.content_type = Some(content_type);
+        self
+    }
+
+    /// Requires a form subprotocol.
+    pub fn subprotocol(mut self, subprotocol: &'a str) -> Self {
+        self.subprotocol = Some(subprotocol);
+        self
+    }
+
+    fn matches(&self, operations: &[Operation], form: &Form) -> bool {
+        operations
+            .iter()
+            .any(|candidate| *candidate == self.operation)
+            && match self.content_type {
+                Some(content_type) => form.content_type == content_type,
+                None => true,
+            }
+            && match self.subprotocol {
+                Some(subprotocol) => form.subprotocol.as_deref() == Some(subprotocol),
+                None => true,
+            }
+    }
+}
+
 /// A TD form selected for an interaction operation.
 #[derive(Debug, Clone, PartialEq)]
 pub struct SelectedForm<'a> {
@@ -63,9 +111,18 @@ pub fn select_form<'a>(
     forms: &'a [Form],
     operation: Operation,
 ) -> BindingCoreResult<SelectedForm<'a>> {
+    select_form_with_criteria(context, forms, FormSelectionCriteria::operation(operation))
+}
+
+/// Selects the first form matching the requested operation and metadata criteria.
+pub fn select_form_with_criteria<'a>(
+    context: FormContext<'a>,
+    forms: &'a [Form],
+    criteria: FormSelectionCriteria<'_>,
+) -> BindingCoreResult<SelectedForm<'a>> {
     for (index, form) in forms.iter().enumerate() {
         let operations = effective_form_operations(context, form);
-        if operations.iter().any(|candidate| *candidate == operation) {
+        if criteria.matches(operations.as_ref(), form) {
             return Ok(SelectedForm {
                 index,
                 form,
@@ -74,10 +131,17 @@ pub fn select_form<'a>(
         }
     }
 
-    Err(BindingCoreError::UnsupportedOperation(format!(
-        "No form supports {:?}",
-        operation
-    )))
+    Err(BindingCoreError::UnsupportedOperation(
+        unsupported_operation_message(criteria),
+    ))
+}
+
+fn unsupported_operation_message(criteria: FormSelectionCriteria<'_>) -> String {
+    if criteria.content_type.is_none() && criteria.subprotocol.is_none() {
+        format!("No form supports {:?}", criteria.operation)
+    } else {
+        format!("No form matches {:?}", criteria)
+    }
 }
 
 /// Resolves a selected form target using the Thing-level `base` value.
@@ -93,8 +157,21 @@ pub fn select_affordance_form<'a>(
     affordance: AffordanceRef<'a>,
     operation: Operation,
 ) -> BindingCoreResult<SelectedAffordanceForm<'a>> {
+    select_affordance_form_with_criteria(
+        thing,
+        affordance,
+        FormSelectionCriteria::operation(operation),
+    )
+}
+
+/// Selects and resolves a form from a Thing affordance using metadata criteria.
+pub fn select_affordance_form_with_criteria<'a>(
+    thing: &'a Thing,
+    affordance: AffordanceRef<'a>,
+    criteria: FormSelectionCriteria<'_>,
+) -> BindingCoreResult<SelectedAffordanceForm<'a>> {
     let form_set = forms_for_affordance(thing, affordance)?;
-    let selection = select_form(form_set.context, form_set.forms, operation)?;
+    let selection = select_form_with_criteria(form_set.context, form_set.forms, criteria)?;
     let target = resolve_form_target(thing, selection.form)?;
 
     Ok(SelectedAffordanceForm {

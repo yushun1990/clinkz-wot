@@ -1,5 +1,7 @@
 use clinkz_wot_binding_core::{
-    AffordanceRef, BindingCoreError, resolve_form_target, select_affordance_form, select_form,
+    AffordanceRef, BindingCoreError, FormSelectionCriteria, resolve_form_target,
+    select_affordance_form, select_affordance_form_with_criteria, select_form,
+    select_form_with_criteria,
 };
 use clinkz_wot_td::{
     affordance::{ActionAffordance, EventAffordance, InteractionHelper, PropertyAffordance},
@@ -79,6 +81,60 @@ fn reports_unsupported_operation_when_no_form_matches() {
 }
 
 #[test]
+fn selects_form_matching_content_type_criteria() {
+    let json_form = Form::read_property("properties/status")
+        .content_type("application/json")
+        .build()
+        .unwrap();
+    let cbor_form = Form::read_property("properties/status")
+        .content_type("application/cbor")
+        .build()
+        .unwrap();
+    let property = PropertyAffordance::builder(DataSchema::String(DataSchema::string().build()))
+        .forms([json_form, cbor_form.clone()])
+        .build()
+        .unwrap();
+
+    let selected = select_form_with_criteria(
+        FormContext::Property(&property),
+        property._interaction.forms.as_slice(),
+        FormSelectionCriteria::operation(Operation::ReadProperty).content_type("application/cbor"),
+    )
+    .unwrap();
+
+    assert_eq!(selected.index, 1);
+    assert_eq!(selected.form, &cbor_form);
+}
+
+#[test]
+fn selects_form_matching_subprotocol_criteria() {
+    let longpoll_form = Form::subscribe_event("events/ready")
+        .content_type("application/json")
+        .subprotocol("longpoll")
+        .build()
+        .unwrap();
+    let sse_form = Form::subscribe_event("events/ready")
+        .content_type("text/event-stream")
+        .subprotocol("sse")
+        .build()
+        .unwrap();
+    let event = EventAffordance::builder()
+        .forms([longpoll_form, sse_form.clone()])
+        .build()
+        .unwrap();
+
+    let selected = select_form_with_criteria(
+        FormContext::Event(&event),
+        event._interaction.forms.as_slice(),
+        FormSelectionCriteria::operation(Operation::SubscribeEvent).subprotocol("sse"),
+    )
+    .unwrap();
+
+    assert_eq!(selected.index, 1);
+    assert_eq!(selected.form, &sse_form);
+}
+
+#[test]
 fn resolves_form_target_against_thing_base() {
     let form = Form::read_property("properties/status").build().unwrap();
     let property = PropertyAffordance::builder(DataSchema::String(DataSchema::string().build()))
@@ -140,6 +196,47 @@ fn selects_and_resolves_property_form_from_thing_affordance() {
         selected.selection.operations.as_ref(),
         &[Operation::WriteProperty]
     );
+    match selected.target.href {
+        ResolvedFormHref::Reference(reference) => {
+            assert_eq!(
+                reference.as_str(),
+                "https://example.com/things/lamp/properties/status"
+            );
+        }
+        ResolvedFormHref::Template(_) => panic!("expected resolved URI reference"),
+    }
+}
+
+#[test]
+fn selects_and_resolves_affordance_form_with_metadata_criteria() {
+    let json_form = Form::read_property("properties/status")
+        .content_type("application/json")
+        .build()
+        .unwrap();
+    let cbor_form = Form::read_property("properties/status")
+        .content_type("application/cbor")
+        .build()
+        .unwrap();
+    let property = PropertyAffordance::builder(DataSchema::String(DataSchema::string().build()))
+        .forms([json_form, cbor_form.clone()])
+        .build()
+        .unwrap();
+    let thing = Thing::builder("Lamp")
+        .base("https://example.com/things/lamp/")
+        .nosec()
+        .property("status", property)
+        .build()
+        .unwrap();
+
+    let selected = select_affordance_form_with_criteria(
+        &thing,
+        AffordanceRef::Property("status"),
+        FormSelectionCriteria::operation(Operation::ReadProperty).content_type("application/cbor"),
+    )
+    .unwrap();
+
+    assert_eq!(selected.selection.index, 1);
+    assert_eq!(selected.selection.form, &cbor_form);
     match selected.target.href {
         ResolvedFormHref::Reference(reference) => {
             assert_eq!(

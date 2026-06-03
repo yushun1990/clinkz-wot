@@ -10,6 +10,7 @@ pub mod form;
 
 pub use error::{BindingCoreError, BindingCoreResult};
 pub use form::{
-    AffordanceRef, ResolvedFormTarget, SelectedAffordanceForm, SelectedForm, resolve_form_target,
-    select_affordance_form, select_form,
+    AffordanceRef, FormSelectionCriteria, ResolvedFormTarget, SelectedAffordanceForm, SelectedForm,
+    resolve_form_target, select_affordance_form, select_affordance_form_with_criteria, select_form,
+    select_form_with_criteria,
 };

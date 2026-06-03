@@ -105,6 +105,9 @@ Current status:
   helper.
 - Added shared affordance-level form selection and target resolution for Thing,
   property, action, and event forms, including unknown-affordance errors.
+- Added protocol-neutral form selection criteria for content type and
+  subprotocol matching while preserving the existing operation-only selection
+  API.
 - Kept zenoh and other concrete protocol behavior out of binding-core.
 
 ### M5: Discovery and TDD
