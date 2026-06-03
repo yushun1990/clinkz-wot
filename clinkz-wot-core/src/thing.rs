@@ -1,8 +1,13 @@
-use alloc::{boxed::Box, collections::BTreeMap, format, string::String};
+use alloc::{boxed::Box, collections::BTreeMap, format, string::String, vec::Vec};
 
-use clinkz_wot_td::{data_type::Operation, form::Form, thing::Thing};
+use clinkz_wot_td::{
+    data_type::Operation,
+    form::Form,
+    td_defaults::{FormContext, effective_form_operations},
+    thing::Thing,
+};
 
-use crate::{CoreError, CoreResult, Payload};
+use crate::{BindingRequest, CoreError, CoreResult, Payload, ProtocolBinding};
 
 /// Location of an affordance within a Thing Description.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -102,6 +107,147 @@ pub struct LocalThing {
     property_handlers: BTreeMap<String, Box<dyn PropertyHandler>>,
     action_handlers: BTreeMap<String, Box<dyn ActionHandler>>,
     event_handlers: BTreeMap<String, Box<dyn EventHandler>>,
+}
+
+/// Protocol-neutral dispatcher for consuming a remote Thing through bindings.
+pub struct BoundConsumedThing {
+    thing: Thing,
+    bindings: Vec<Box<dyn ProtocolBinding>>,
+}
+
+impl BoundConsumedThing {
+    /// Creates a consumed Thing dispatcher for a Thing Description.
+    pub fn new(thing: Thing) -> Self {
+        Self {
+            thing,
+            bindings: Vec::new(),
+        }
+    }
+
+    /// Returns the Thing Description owned by this dispatcher.
+    pub fn thing_description(&self) -> &Thing {
+        &self.thing
+    }
+
+    /// Registers a protocol binding.
+    pub fn register_binding(&mut self, binding: impl ProtocolBinding + 'static) {
+        self.bindings.push(Box::new(binding));
+    }
+
+    fn forms_for_target<'a>(&'a self, target: AffordanceTarget<'_>) -> CoreResult<FormSet<'a>> {
+        match target {
+            AffordanceTarget::Thing => Ok(FormSet {
+                context: FormContext::Thing,
+                forms: self.thing.forms.as_deref().unwrap_or(&[]),
+            }),
+            AffordanceTarget::Property(name) => {
+                let property = find_affordance("property", name, &self.thing.properties)?;
+                Ok(FormSet {
+                    context: FormContext::Property(property),
+                    forms: property._interaction.forms.as_slice(),
+                })
+            }
+            AffordanceTarget::Action(name) => {
+                let action = find_affordance("action", name, &self.thing.actions)?;
+                Ok(FormSet {
+                    context: FormContext::Action(action),
+                    forms: action._interaction.forms.as_slice(),
+                })
+            }
+            AffordanceTarget::Event(name) => {
+                let event = find_affordance("event", name, &self.thing.events)?;
+                Ok(FormSet {
+                    context: FormContext::Event(event),
+                    forms: event._interaction.forms.as_slice(),
+                })
+            }
+        }
+    }
+
+    fn validate_selected_form(
+        &self,
+        target: AffordanceTarget<'_>,
+        operation: Operation,
+        form: &Form,
+    ) -> CoreResult<()> {
+        let form_set = self.forms_for_target(target)?;
+        let selected = form_set
+            .forms
+            .iter()
+            .find(|candidate| *candidate == form)
+            .ok_or_else(|| {
+                CoreError::InvalidInteraction(
+                    "Selected form does not belong to the requested affordance".into(),
+                )
+            })?;
+
+        if effective_form_operations(form_set.context, selected)
+            .iter()
+            .any(|candidate| *candidate == operation)
+        {
+            Ok(())
+        } else {
+            Err(CoreError::UnsupportedOperation(format!(
+                "Form does not support {:?}",
+                operation
+            )))
+        }
+    }
+}
+
+struct FormSet<'a> {
+    context: FormContext<'a>,
+    forms: &'a [Form],
+}
+
+fn find_affordance<'a, T>(
+    kind: &'static str,
+    name: &str,
+    affordances: &'a Option<BTreeMap<String, T>>,
+) -> CoreResult<&'a T> {
+    affordances
+        .as_ref()
+        .and_then(|affordances| affordances.get(name))
+        .ok_or_else(|| CoreError::UnknownAffordance {
+            kind,
+            name: name.into(),
+        })
+}
+
+impl ConsumedThing for BoundConsumedThing {
+    fn thing_description(&self) -> &Thing {
+        &self.thing
+    }
+
+    fn request(
+        &mut self,
+        target: AffordanceTarget<'_>,
+        operation: Operation,
+        form: &Form,
+        input: InteractionInput,
+    ) -> CoreResult<InteractionOutput> {
+        self.validate_selected_form(target, operation, form)?;
+
+        let binding = self
+            .bindings
+            .iter_mut()
+            .find(|binding| binding.supports(form, operation))
+            .ok_or_else(|| {
+                CoreError::UnsupportedBinding(format!(
+                    "No binding supports {:?} for {}",
+                    operation,
+                    form.href.as_str()
+                ))
+            })?;
+
+        binding.invoke(BindingRequest {
+            thing: &self.thing,
+            target,
+            operation,
+            form,
+            input,
+        })
+    }
 }
 
 impl LocalThing {

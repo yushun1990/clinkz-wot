@@ -17,7 +17,7 @@ pub use error::{CoreError, CoreResult};
 pub use payload::{CodecInput, Payload, PayloadCodec};
 pub use security::{SecurityContext, SecurityProvider};
 pub use thing::{
-    ActionHandler, AffordanceTarget, ConsumedThing, EventHandler, EventSink, ExposedThing,
-    InteractionInput, InteractionOutput, LocalThing, PropertyHandler,
+    ActionHandler, AffordanceTarget, BoundConsumedThing, ConsumedThing, EventHandler, EventSink,
+    ExposedThing, InteractionInput, InteractionOutput, LocalThing, PropertyHandler,
 };
 pub use transport::{TransportAdapter, TransportRequest, TransportResponse};

@@ -1,10 +1,10 @@
 use std::borrow::Cow;
 
 use clinkz_wot_core::{
-    ActionHandler, AffordanceTarget, BindingRequest, CodecInput, CoreError, CoreResult,
-    EventHandler, EventSink, ExposedThing, InteractionInput, InteractionOutput, LocalThing,
-    Payload, PayloadCodec, PropertyHandler, ProtocolBinding, TransportAdapter, TransportRequest,
-    TransportResponse,
+    ActionHandler, AffordanceTarget, BindingRequest, BoundConsumedThing, CodecInput, ConsumedThing,
+    CoreError, CoreResult, EventHandler, EventSink, ExposedThing, InteractionInput,
+    InteractionOutput, LocalThing, Payload, PayloadCodec, PropertyHandler, ProtocolBinding,
+    TransportAdapter, TransportRequest, TransportResponse,
 };
 use clinkz_wot_td::{
     affordance::{ActionAffordance, EventAffordance, InteractionHelper, PropertyAffordance},
@@ -63,6 +63,30 @@ impl ProtocolBinding for EchoBinding {
         Ok(InteractionOutput {
             payload: response.payload,
         })
+    }
+}
+
+struct RecordingBinding {
+    content_type: &'static str,
+    response: Payload,
+}
+
+impl ProtocolBinding for RecordingBinding {
+    fn supports(&self, form: &Form, operation: Operation) -> bool {
+        form.content_type == self.content_type && operation == Operation::ReadProperty
+    }
+
+    fn invoke(&mut self, request: BindingRequest<'_>) -> CoreResult<InteractionOutput> {
+        assert!(matches!(
+            request.target,
+            AffordanceTarget::Property("status")
+        ));
+        assert_eq!(request.operation, Operation::ReadProperty);
+        assert_eq!(
+            request.thing._metadata.title.as_deref(),
+            Some("Remote Lamp")
+        );
+        Ok(InteractionOutput::with_payload(self.response.clone()))
     }
 }
 
@@ -167,6 +191,30 @@ fn local_thing_description() -> Thing {
         .unwrap()
 }
 
+fn remote_thing_description() -> (Thing, Form) {
+    let read_form = Form::builder("wot://thing/properties/status")
+        .content_type("application/octet-stream")
+        .build()
+        .unwrap();
+    let write_form = Form::write_property("wot://thing/properties/status")
+        .content_type("application/json")
+        .build()
+        .unwrap();
+    let property = PropertyAffordance::builder(DataSchema::String(DataSchema::string().build()))
+        .forms([read_form.clone(), write_form])
+        .build()
+        .unwrap();
+
+    (
+        Thing::builder("Remote Lamp")
+            .nosec()
+            .property("status", property)
+            .build()
+            .unwrap(),
+        read_form,
+    )
+}
+
 #[test]
 fn codec_round_trips_payload_bytes() {
     let codec = EchoCodec;
@@ -222,6 +270,108 @@ fn binding_invokes_selected_form_without_protocol_assumptions() {
         .unwrap();
 
     assert_eq!(output.payload.unwrap().body, b"payload");
+}
+
+#[test]
+fn consumed_thing_dispatches_selected_form_to_matching_binding() {
+    let (td, read_form) = remote_thing_description();
+    let mut thing = BoundConsumedThing::new(td);
+    thing.register_binding(RecordingBinding {
+        content_type: "application/octet-stream",
+        response: Payload::new(b"on".to_vec(), "text/plain"),
+    });
+
+    let output = thing
+        .request(
+            AffordanceTarget::Property("status"),
+            Operation::ReadProperty,
+            &read_form,
+            InteractionInput::empty(),
+        )
+        .unwrap();
+
+    assert_eq!(output.payload.unwrap().body, b"on");
+}
+
+#[test]
+fn consumed_thing_rejects_unknown_affordance_before_binding_dispatch() {
+    let (td, read_form) = remote_thing_description();
+    let mut thing = BoundConsumedThing::new(td);
+    thing.register_binding(RecordingBinding {
+        content_type: "application/octet-stream",
+        response: Payload::new(b"on".to_vec(), "text/plain"),
+    });
+
+    let err = thing
+        .request(
+            AffordanceTarget::Property("missing"),
+            Operation::ReadProperty,
+            &read_form,
+            InteractionInput::empty(),
+        )
+        .unwrap_err();
+
+    assert_eq!(
+        err,
+        CoreError::UnknownAffordance {
+            kind: "property",
+            name: "missing".into()
+        }
+    );
+}
+
+#[test]
+fn consumed_thing_rejects_operation_not_declared_by_selected_form() {
+    let read_form = Form::read_property("wot://thing/properties/status")
+        .content_type("application/octet-stream")
+        .build()
+        .unwrap();
+    let property = PropertyAffordance::builder(DataSchema::String(DataSchema::string().build()))
+        .form(read_form.clone())
+        .build()
+        .unwrap();
+    let td = Thing::builder("Remote Lamp")
+        .nosec()
+        .property("status", property)
+        .build()
+        .unwrap();
+    let mut thing = BoundConsumedThing::new(td);
+
+    let err = thing
+        .request(
+            AffordanceTarget::Property("status"),
+            Operation::WriteProperty,
+            &read_form,
+            InteractionInput::empty(),
+        )
+        .unwrap_err();
+
+    assert_eq!(
+        err,
+        CoreError::UnsupportedOperation("Form does not support WriteProperty".into())
+    );
+}
+
+#[test]
+fn consumed_thing_reports_missing_matching_binding() {
+    let (td, read_form) = remote_thing_description();
+    let mut thing = BoundConsumedThing::new(td);
+
+    let err = thing
+        .request(
+            AffordanceTarget::Property("status"),
+            Operation::ReadProperty,
+            &read_form,
+            InteractionInput::empty(),
+        )
+        .unwrap_err();
+
+    assert_eq!(
+        err,
+        CoreError::UnsupportedBinding(
+            "No binding supports ReadProperty for wot://thing/properties/status".into()
+        )
+    );
 }
 
 #[test]

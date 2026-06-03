@@ -76,6 +76,9 @@ Current status:
   adapters.
 - Added protocol-neutral local Thing handler traits and a reusable dispatcher
   for property reads/writes, action invocation, and event subscription.
+- Added a protocol-neutral consumed Thing dispatcher that validates selected
+  affordance forms against TD effective operations and routes requests to
+  matching bindings.
 - Kept form selection, target URI resolution, and concrete protocol behavior
   outside the core crate for the later binding-core and binding milestones.
 
