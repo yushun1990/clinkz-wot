@@ -84,9 +84,10 @@ pub trait ContextHelper: MetadataHelper {
     /// Adds schemas to one_of.
     fn one_of<I>(mut self, schemas: I) -> Self
     where
-        I: IntoIterator<Item = DataSchema>,
+        I: IntoIterator,
+        I::Item: Into<DataSchema>,
     {
-        let mut items: Vec<DataSchema> = schemas.into_iter().collect();
+        let mut items: Vec<DataSchema> = schemas.into_iter().map(Into::into).collect();
         self.context()
             .one_of
             .get_or_insert_with(Vec::new)
@@ -191,9 +192,10 @@ impl ArraySchemaBuilder {
     /// Adds items schemas.
     pub fn items<I>(mut self, items: I) -> Self
     where
-        I: IntoIterator<Item = DataSchema>,
+        I: IntoIterator,
+        I::Item: Into<DataSchema>,
     {
-        let mut schemas: Vec<DataSchema> = items.into_iter().collect();
+        let mut schemas: Vec<DataSchema> = items.into_iter().map(Into::into).collect();
         self.schema
             .items
             .get_or_insert_with(Vec::new)
@@ -535,14 +537,15 @@ impl ObjectSchemaBuilder {
     }
 
     /// Adds multiple properties.
-    pub fn properties<I, S>(mut self, properties: I) -> Self
+    pub fn properties<I, S, D>(mut self, properties: I) -> Self
     where
-        I: IntoIterator<Item = (S, DataSchema)>,
+        I: IntoIterator<Item = (S, D)>,
         S: Into<String>,
+        D: Into<DataSchema>,
     {
         let map = self.schema.properties.get_or_insert_with(BTreeMap::new);
         for (name, schema) in properties {
-            map.insert(name.into(), schema);
+            map.insert(name.into(), schema.into());
         }
         self
     }

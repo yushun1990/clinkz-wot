@@ -38,6 +38,17 @@ This repository implements `clinkz-wot`, a Rust Web of Things engine for the Cli
 ## Implementation Style
 
 - Prefer the existing crate and module patterns before adding new abstractions.
+- When developing a new crate or module, treat gaps discovered in dependency
+  crates as design feedback, not only as local implementation blockers. Early
+  versions of dependency crates are expected to be incomplete; if the new work
+  reveals a missing API, missing trait implementation, weak data model, or
+  design error in a dependency crate, evaluate whether the missing capability
+  belongs to that dependency crate's responsibility. If it does, fix the
+  dependency crate first and cover the change with focused tests before relying
+  on it from the new crate. If the capability would violate the dependency
+  crate's responsibility boundary, do not force it into the dependency; keep the
+  behavior in the appropriate crate and record the dependency gap or follow-up
+  explicitly.
 - Keep TD/TM crates focused on data models, builders, serialization, deserialization, and validation.
 - Put protocol behavior in binding crates.
 - Put Discovery and Servient/runtime behavior in dedicated crates.

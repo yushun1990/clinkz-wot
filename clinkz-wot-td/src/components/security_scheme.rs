@@ -936,6 +936,17 @@ impl SecurityScheme {
         .into()
     }
 
+    /// Creates a `digest` security scheme with the required name.
+    pub fn digest(name: impl Into<String>) -> Self {
+        DigestSecurityScheme {
+            _context: SecuritySchemeContext::new("digest"),
+            name: Some(name.into()),
+            location: SecurityLocation::default(),
+            qop: Qop::default(),
+        }
+        .into()
+    }
+
     /// Creates an `apikey` security scheme with the required name.
     pub fn apikey(name: impl Into<String>) -> Self {
         APIKeySecurityScheme {
@@ -944,6 +955,103 @@ impl SecurityScheme {
             location: SecurityLocation::default(),
         }
         .into()
+    }
+
+    /// Creates a `bearer` security scheme with the required name.
+    pub fn bearer(name: impl Into<String>) -> Self {
+        BearerSecurityScheme {
+            _context: SecuritySchemeContext::new("bearer"),
+            authorization: None,
+            name: Some(name.into()),
+            alg: default_alg(),
+            format: default_format(),
+            location: SecurityLocation::default(),
+        }
+        .into()
+    }
+
+    /// Creates a `bearer` security scheme with an authorization endpoint.
+    pub fn bearer_authorization(
+        name: impl Into<String>,
+        authorization: impl Into<String>,
+    ) -> Result<Self, ValidateError> {
+        Ok(BearerSecurityScheme::builder()
+            .name(name)
+            .authorization(authorization)
+            .build()?
+            .into())
+    }
+
+    /// Creates a `psk` security scheme with an identity hint.
+    pub fn psk(identity: impl Into<String>) -> Self {
+        PSKSecurityScheme {
+            _context: SecuritySchemeContext::new("psk"),
+            identity: Some(identity.into()),
+        }
+        .into()
+    }
+
+    /// Creates a `combo` security scheme where any referenced scheme may satisfy access.
+    pub fn combo_one_of<I, S>(schemes: I) -> Self
+    where
+        I: IntoIterator<Item = S>,
+        S: Into<String>,
+    {
+        ComboSecurityScheme {
+            _context: SecuritySchemeContext::new("combo"),
+            one_of: schemes.into_iter().map(Into::into).collect(),
+            all_of: Vec::new(),
+        }
+        .into()
+    }
+
+    /// Creates a `combo` security scheme where all referenced schemes must satisfy access.
+    pub fn combo_all_of<I, S>(schemes: I) -> Self
+    where
+        I: IntoIterator<Item = S>,
+        S: Into<String>,
+    {
+        ComboSecurityScheme {
+            _context: SecuritySchemeContext::new("combo"),
+            one_of: Vec::new(),
+            all_of: schemes.into_iter().map(Into::into).collect(),
+        }
+        .into()
+    }
+
+    /// Creates an `oauth2` security scheme with an explicit flow.
+    pub fn oauth2(flow: impl Into<String>) -> Self {
+        OAuth2SecurityScheme {
+            _context: SecuritySchemeContext::new("oauth2"),
+            authorization: None,
+            token: None,
+            refresh: None,
+            scopes: None,
+            flow: flow.into(),
+        }
+        .into()
+    }
+
+    /// Creates an OAuth2 authorization-code flow security scheme.
+    pub fn oauth2_code(
+        authorization: impl Into<String>,
+        token: impl Into<String>,
+    ) -> Result<Self, ValidateError> {
+        Ok(OAuth2SecurityScheme::builder("code")
+            .authorization(authorization)
+            .token(token)
+            .build()?
+            .into())
+    }
+
+    /// Creates an OAuth2 client credentials flow security scheme.
+    pub fn oauth2_client() -> Self {
+        Self::oauth2("client")
+    }
+
+    /// Creates an OAuth2 device flow security scheme.
+    pub fn oauth2_device() -> Self {
+        Self::oauth2("device")
     }
 
     pub fn scheme(&self) -> &str {

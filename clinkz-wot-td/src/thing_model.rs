@@ -384,18 +384,115 @@ impl ThingModelBuilder {
     }
 
     /// Adds a named security definition.
-    pub fn security_definition(mut self, name: impl Into<String>, scheme: SecurityScheme) -> Self {
+    pub fn security_definition(
+        mut self,
+        name: impl Into<String>,
+        scheme: impl Into<SecurityScheme>,
+    ) -> Self {
         self.model
             .security_definitions
             .get_or_insert_with(BTreeMap::new)
-            .insert(name.into(), scheme);
+            .insert(name.into(), scheme.into());
         self
+    }
+
+    /// Adds a named security definition and references it from `security`.
+    pub fn security_named(
+        self,
+        name: impl Into<String>,
+        scheme: impl Into<SecurityScheme>,
+    ) -> Self {
+        let name = name.into();
+        self.security_definition(name.clone(), scheme)
+            .security_name(name)
     }
 
     /// Adds the default `nosec` security scheme and reference.
     pub fn nosec(self) -> Self {
-        self.security_definition("nosec", SecurityScheme::nosec())
-            .security_name("nosec")
+        self.security_named("nosec", SecurityScheme::nosec())
+    }
+
+    /// Adds a named `basic` security scheme and references it from `security`.
+    pub fn basic_security(self, name: impl Into<String>, parameter: impl Into<String>) -> Self {
+        self.security_named(name, SecurityScheme::basic(parameter))
+    }
+
+    /// Adds a named `apikey` security scheme and references it from `security`.
+    pub fn apikey_security(self, name: impl Into<String>, parameter: impl Into<String>) -> Self {
+        self.security_named(name, SecurityScheme::apikey(parameter))
+    }
+
+    /// Adds a named `digest` security scheme and references it from `security`.
+    pub fn digest_security(self, name: impl Into<String>, parameter: impl Into<String>) -> Self {
+        self.security_named(name, SecurityScheme::digest(parameter))
+    }
+
+    /// Adds a named `bearer` security scheme and references it from `security`.
+    pub fn bearer_security(self, name: impl Into<String>, parameter: impl Into<String>) -> Self {
+        self.security_named(name, SecurityScheme::bearer(parameter))
+    }
+
+    /// Adds a named `bearer` security scheme with an authorization endpoint.
+    pub fn bearer_authorization_security(
+        mut self,
+        name: impl Into<String>,
+        parameter: impl Into<String>,
+        authorization: impl Into<String>,
+    ) -> Self {
+        let name = name.into();
+        match SecurityScheme::bearer_authorization(parameter, authorization) {
+            Ok(security) => self = self.security_named(name, security),
+            Err(err) => self.errors.push(err),
+        }
+        self
+    }
+
+    /// Adds a named `psk` security scheme and references it from `security`.
+    pub fn psk_security(self, name: impl Into<String>, identity: impl Into<String>) -> Self {
+        self.security_named(name, SecurityScheme::psk(identity))
+    }
+
+    /// Adds a named `combo` security scheme with `oneOf` references.
+    pub fn combo_one_of_security<I, S>(self, name: impl Into<String>, schemes: I) -> Self
+    where
+        I: IntoIterator<Item = S>,
+        S: Into<String>,
+    {
+        self.security_named(name, SecurityScheme::combo_one_of(schemes))
+    }
+
+    /// Adds a named `combo` security scheme with `allOf` references.
+    pub fn combo_all_of_security<I, S>(self, name: impl Into<String>, schemes: I) -> Self
+    where
+        I: IntoIterator<Item = S>,
+        S: Into<String>,
+    {
+        self.security_named(name, SecurityScheme::combo_all_of(schemes))
+    }
+
+    /// Adds a named OAuth2 authorization-code flow security scheme.
+    pub fn oauth2_code_security(
+        mut self,
+        name: impl Into<String>,
+        authorization: impl Into<String>,
+        token: impl Into<String>,
+    ) -> Self {
+        let name = name.into();
+        match SecurityScheme::oauth2_code(authorization, token) {
+            Ok(security) => self = self.security_named(name, security),
+            Err(err) => self.errors.push(err),
+        }
+        self
+    }
+
+    /// Adds a named OAuth2 client credentials flow security scheme.
+    pub fn oauth2_client_security(self, name: impl Into<String>) -> Self {
+        self.security_named(name, SecurityScheme::oauth2_client())
+    }
+
+    /// Adds a named OAuth2 device flow security scheme.
+    pub fn oauth2_device_security(self, name: impl Into<String>) -> Self {
+        self.security_named(name, SecurityScheme::oauth2_device())
     }
 
     /// Adds a schema definition.

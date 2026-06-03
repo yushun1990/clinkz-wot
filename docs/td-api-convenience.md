@@ -26,6 +26,16 @@ Security scheme helpers:
 - `SecurityScheme::auto()`
 - `SecurityScheme::basic(name)`
 - `SecurityScheme::apikey(name)`
+- `SecurityScheme::digest(name)`
+- `SecurityScheme::bearer(name)`
+- `SecurityScheme::bearer_authorization(name, authorization)`
+- `SecurityScheme::psk(identity)`
+- `SecurityScheme::combo_one_of(names)`
+- `SecurityScheme::combo_all_of(names)`
+- `SecurityScheme::oauth2(flow)`
+- `SecurityScheme::oauth2_code(authorization, token)`
+- `SecurityScheme::oauth2_client()`
+- `SecurityScheme::oauth2_device()`
 - `From<ConcreteSecurityScheme> for SecurityScheme`
 
 Thing helpers:
@@ -36,27 +46,54 @@ Thing helpers:
 - `ThingBuilder::nosec()`
 - `ThingBuilder::basic_security(name, parameter)`
 - `ThingBuilder::apikey_security(name, parameter)`
+- `ThingBuilder::digest_security(name, parameter)`
+- `ThingBuilder::bearer_security(name, parameter)`
+- `ThingBuilder::bearer_authorization_security(name, parameter, authorization)`
+- `ThingBuilder::psk_security(name, identity)`
+- `ThingBuilder::combo_one_of_security(name, names)`
+- `ThingBuilder::combo_all_of_security(name, names)`
+- `ThingBuilder::oauth2_code_security(name, authorization, token)`
+- `ThingBuilder::oauth2_client_security(name)`
+- `ThingBuilder::oauth2_device_security(name)`
 
 Thing Model helpers:
 
 - `ThingModelBuilder::nosec()`
+- `ThingModelBuilder::security_named(name, scheme)`
+- `ThingModelBuilder::basic_security(name, parameter)`
+- `ThingModelBuilder::apikey_security(name, parameter)`
+- `ThingModelBuilder::digest_security(name, parameter)`
+- `ThingModelBuilder::bearer_security(name, parameter)`
+- `ThingModelBuilder::bearer_authorization_security(name, parameter, authorization)`
+- `ThingModelBuilder::psk_security(name, identity)`
+- `ThingModelBuilder::combo_one_of_security(name, names)`
+- `ThingModelBuilder::combo_all_of_security(name, names)`
+- `ThingModelBuilder::oauth2_code_security(name, authorization, token)`
+- `ThingModelBuilder::oauth2_client_security(name)`
+- `ThingModelBuilder::oauth2_device_security(name)`
 
 Data schema helpers:
 
 - `From<ConcreteSchema> for DataSchema`
 - `From<ConcreteSchemaBuilder> for DataSchema`
-- Selected schema receiver methods now accept `impl Into<DataSchema>`.
+- Common schema receiver methods now accept `impl Into<DataSchema>`, including
+  schema definitions, URI variables, action input/output, event schemas, object
+  properties, array items, and `oneOf`.
+
+Form operation helpers:
+
+- `Form::read_property(href)`
+- `Form::write_property(href)`
+- `Form::invoke_action(href)`
+- `Form::subscribe_event(href)`
+- `FormBuilder` operation methods for all TD 1.1 operation enum values,
+  including property, action, event, and Thing-level meta-interaction
+  operations.
 
 ## Follow-Up Candidates
 
 Useful next API improvements:
 
-- Add `SecurityScheme` constructors for bearer, digest, PSK, combo, and OAuth2
-  flows where the required fields are clear.
-- Accept `impl Into<DataSchema>` consistently for all schema receiver methods,
-  including interaction URI variables and batch object properties.
-- Add form operation shortcuts such as `Form::read_property`, `Form::invoke_action`,
-  or builder methods like `.read_property()` and `.invoke_action()`.
 - Add affordance shortcuts for common schemas, for example `PropertyAffordance::string()`.
 - Add examples that build a minimal TD, a named-secured TD, and a TM using only
   convenience APIs.

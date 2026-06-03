@@ -79,6 +79,26 @@ impl Form {
     pub fn builder(href: &str) -> FormBuilder<'_> {
         FormBuilder::new(href)
     }
+
+    /// Creates a form builder with `readproperty` operation metadata.
+    pub fn read_property(href: &str) -> FormBuilder<'_> {
+        Self::builder(href).read_property()
+    }
+
+    /// Creates a form builder with `writeproperty` operation metadata.
+    pub fn write_property(href: &str) -> FormBuilder<'_> {
+        Self::builder(href).write_property()
+    }
+
+    /// Creates a form builder with `invokeaction` operation metadata.
+    pub fn invoke_action(href: &str) -> FormBuilder<'_> {
+        Self::builder(href).invoke_action()
+    }
+
+    /// Creates a form builder with `subscribeevent` operation metadata.
+    pub fn subscribe_event(href: &str) -> FormBuilder<'_> {
+        Self::builder(href).subscribe_event()
+    }
 }
 
 pub struct FormBuilder<'a> {
@@ -169,6 +189,100 @@ impl<'a> FormBuilder<'a> {
         self.form.op.get_or_insert_with(Vec::new).append(&mut items);
 
         self
+    }
+
+    fn single_op(self, operation: Operation) -> Self {
+        self.op([operation])
+    }
+
+    /// Adds `readproperty` operation metadata.
+    pub fn read_property(self) -> Self {
+        self.single_op(Operation::ReadProperty)
+    }
+
+    /// Adds `writeproperty` operation metadata.
+    pub fn write_property(self) -> Self {
+        self.single_op(Operation::WriteProperty)
+    }
+
+    /// Adds `observeproperty` operation metadata.
+    pub fn observe_property(self) -> Self {
+        self.single_op(Operation::ObserveProperty)
+    }
+
+    /// Adds `unobserveproperty` operation metadata.
+    pub fn unobserve_property(self) -> Self {
+        self.single_op(Operation::UnobserveProperty)
+    }
+
+    /// Adds `invokeaction` operation metadata.
+    pub fn invoke_action(self) -> Self {
+        self.single_op(Operation::InvokeAction)
+    }
+
+    /// Adds `queryaction` operation metadata.
+    pub fn query_action(self) -> Self {
+        self.single_op(Operation::QueryAction)
+    }
+
+    /// Adds `cancelaction` operation metadata.
+    pub fn cancel_action(self) -> Self {
+        self.single_op(Operation::CancelAction)
+    }
+
+    /// Adds `subscribeevent` operation metadata.
+    pub fn subscribe_event(self) -> Self {
+        self.single_op(Operation::SubscribeEvent)
+    }
+
+    /// Adds `unsubscribeevent` operation metadata.
+    pub fn unsubscribe_event(self) -> Self {
+        self.single_op(Operation::UnsubscribeEvent)
+    }
+
+    /// Adds `readallproperties` operation metadata.
+    pub fn read_all_properties(self) -> Self {
+        self.single_op(Operation::ReadAllProperties)
+    }
+
+    /// Adds `writeallproperties` operation metadata.
+    pub fn write_all_properties(self) -> Self {
+        self.single_op(Operation::WriteAllProperties)
+    }
+
+    /// Adds `readmultipleproperties` operation metadata.
+    pub fn read_multiple_properties(self) -> Self {
+        self.single_op(Operation::ReadMultipleProperties)
+    }
+
+    /// Adds `writemultipleproperties` operation metadata.
+    pub fn write_multiple_properties(self) -> Self {
+        self.single_op(Operation::WriteMultipleProperties)
+    }
+
+    /// Adds `observeallproperties` operation metadata.
+    pub fn observe_all_properties(self) -> Self {
+        self.single_op(Operation::ObserveAllProperties)
+    }
+
+    /// Adds `unobserveallproperties` operation metadata.
+    pub fn unobserve_all_properties(self) -> Self {
+        self.single_op(Operation::UnobserveAllProperties)
+    }
+
+    /// Adds `queryallactions` operation metadata.
+    pub fn query_all_actions(self) -> Self {
+        self.single_op(Operation::QueryAllActions)
+    }
+
+    /// Adds `subscribeallevents` operation metadata.
+    pub fn subscribe_all_events(self) -> Self {
+        self.single_op(Operation::SubscribeAllEvents)
+    }
+
+    /// Adds `unsubscribeallevents` operation metadata.
+    pub fn unsubscribe_all_events(self) -> Self {
+        self.single_op(Operation::UnsubscribeAllEvents)
     }
 
     /// Sets extension fields.

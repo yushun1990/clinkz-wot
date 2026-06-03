@@ -535,6 +535,79 @@ impl ThingBuilder {
         self.security_named(name, SecurityScheme::apikey(parameter))
     }
 
+    /// Adds a named `digest` security scheme and references it from `security`.
+    pub fn digest_security(self, name: impl Into<String>, parameter: impl Into<String>) -> Self {
+        self.security_named(name, SecurityScheme::digest(parameter))
+    }
+
+    /// Adds a named `bearer` security scheme and references it from `security`.
+    pub fn bearer_security(self, name: impl Into<String>, parameter: impl Into<String>) -> Self {
+        self.security_named(name, SecurityScheme::bearer(parameter))
+    }
+
+    /// Adds a named `bearer` security scheme with an authorization endpoint.
+    pub fn bearer_authorization_security(
+        mut self,
+        name: impl Into<String>,
+        parameter: impl Into<String>,
+        authorization: impl Into<String>,
+    ) -> Self {
+        let name = name.into();
+        match SecurityScheme::bearer_authorization(parameter, authorization) {
+            Ok(security) => self = self.security_named(name, security),
+            Err(err) => self.errors.push(err),
+        }
+        self
+    }
+
+    /// Adds a named `psk` security scheme and references it from `security`.
+    pub fn psk_security(self, name: impl Into<String>, identity: impl Into<String>) -> Self {
+        self.security_named(name, SecurityScheme::psk(identity))
+    }
+
+    /// Adds a named `combo` security scheme with `oneOf` references.
+    pub fn combo_one_of_security<I, S>(self, name: impl Into<String>, schemes: I) -> Self
+    where
+        I: IntoIterator<Item = S>,
+        S: Into<String>,
+    {
+        self.security_named(name, SecurityScheme::combo_one_of(schemes))
+    }
+
+    /// Adds a named `combo` security scheme with `allOf` references.
+    pub fn combo_all_of_security<I, S>(self, name: impl Into<String>, schemes: I) -> Self
+    where
+        I: IntoIterator<Item = S>,
+        S: Into<String>,
+    {
+        self.security_named(name, SecurityScheme::combo_all_of(schemes))
+    }
+
+    /// Adds a named OAuth2 authorization-code flow security scheme.
+    pub fn oauth2_code_security(
+        mut self,
+        name: impl Into<String>,
+        authorization: impl Into<String>,
+        token: impl Into<String>,
+    ) -> Self {
+        let name = name.into();
+        match SecurityScheme::oauth2_code(authorization, token) {
+            Ok(security) => self = self.security_named(name, security),
+            Err(err) => self.errors.push(err),
+        }
+        self
+    }
+
+    /// Adds a named OAuth2 client credentials flow security scheme.
+    pub fn oauth2_client_security(self, name: impl Into<String>) -> Self {
+        self.security_named(name, SecurityScheme::oauth2_client())
+    }
+
+    /// Adds a named OAuth2 device flow security scheme.
+    pub fn oauth2_device_security(self, name: impl Into<String>) -> Self {
+        self.security_named(name, SecurityScheme::oauth2_device())
+    }
+
     /// Adds multiple security names.
     pub fn securities<I, S>(mut self, securities: I) -> Self
     where

@@ -87,12 +87,12 @@ pub trait InteractionHelper: Sized {
     }
 
     /// Adds a URI variable.
-    fn uri_variable(mut self, name: impl Into<String>, schema: DataSchema) -> Self {
+    fn uri_variable(mut self, name: impl Into<String>, schema: impl Into<DataSchema>) -> Self {
         let uri_variables = self
             .interaction()
             .uri_variables
             .get_or_insert_with(BTreeMap::new);
-        uri_variables.insert(name.into(), schema);
+        uri_variables.insert(name.into(), schema.into());
         self
     }
 }
