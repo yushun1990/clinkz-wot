@@ -346,6 +346,8 @@ fn core_error_from_binding_error(err: BindingCoreError) -> CoreError {
             CoreError::UnknownAffordance { kind, name }
         }
         BindingCoreError::UnsupportedOperation(message) => CoreError::UnsupportedOperation(message),
+        BindingCoreError::MetadataMismatch(message) => CoreError::InvalidInteraction(message),
+        BindingCoreError::CallerFilterMismatch(message) => CoreError::InvalidInteraction(message),
         BindingCoreError::FormNotInAffordance => CoreError::InvalidInteraction(err.to_string()),
         BindingCoreError::TargetResolution(message) => CoreError::Transport(message),
     }

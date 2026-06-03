@@ -154,11 +154,15 @@ where
     F: Fn(&Form) -> bool,
 {
     let mut operation_supported = false;
+    let mut metadata_supported = false;
 
     for (index, form) in forms.iter().enumerate() {
         let operations = effective_form_operations(context, form);
-        operation_supported |= criteria.matches_operation(operations.as_ref());
-        if criteria.matches(operations.as_ref(), form) && filter(form) {
+        let matches_operation = criteria.matches_operation(operations.as_ref());
+        let matches_metadata = criteria.matches_metadata(form);
+        operation_supported |= matches_operation;
+        metadata_supported |= matches_operation && matches_metadata;
+        if matches_operation && matches_metadata && filter(form) {
             return Ok(SelectedForm {
                 index,
                 form,
@@ -167,25 +171,24 @@ where
         }
     }
 
-    Err(BindingCoreError::UnsupportedOperation(
-        unsupported_operation_message(criteria, operation_supported),
-    ))
-}
-
-fn unsupported_operation_message(
-    criteria: FormSelectionCriteria<'_>,
-    operation_supported: bool,
-) -> String {
     if !operation_supported {
-        format!("No form supports {:?}", criteria.operation)
-    } else if criteria.content_type.is_none() && criteria.subprotocol.is_none() {
-        format!(
-            "No form supports {:?} after applying caller filter",
+        return Err(BindingCoreError::UnsupportedOperation(format!(
+            "No form supports {:?}",
             criteria.operation
-        )
-    } else {
-        format!("No form matches {:?}", criteria)
+        )));
     }
+
+    if !metadata_supported {
+        return Err(BindingCoreError::MetadataMismatch(format!(
+            "No form matches {:?}",
+            criteria
+        )));
+    }
+
+    Err(BindingCoreError::CallerFilterMismatch(format!(
+        "No form matches {:?} after applying caller filter",
+        criteria
+    )))
 }
 
 /// Resolves a selected form target using the Thing-level `base` value.
@@ -288,6 +291,20 @@ pub fn validate_affordance_form_with_criteria<'a>(
         }
 
         let operations = effective_form_operations(form_set.context, candidate);
+        if !criteria.matches_operation(operations.as_ref()) {
+            return Err(BindingCoreError::UnsupportedOperation(format!(
+                "Selected form does not support {:?}",
+                criteria.operation
+            )));
+        }
+
+        if !criteria.matches_metadata(candidate) {
+            return Err(BindingCoreError::MetadataMismatch(format!(
+                "Selected form does not match {:?}",
+                criteria
+            )));
+        }
+
         if criteria.matches(operations.as_ref(), candidate) {
             return Ok(SelectedForm {
                 index,
@@ -295,11 +312,6 @@ pub fn validate_affordance_form_with_criteria<'a>(
                 operations,
             });
         }
-
-        return Err(BindingCoreError::UnsupportedOperation(format!(
-            "Selected form does not support {:?}",
-            criteria.operation
-        )));
     }
 
     Err(BindingCoreError::FormNotInAffordance)

@@ -24,20 +24,19 @@ Current focus:
 - Thing Model support has a first complete TD-crate implementation.
 - M3 protocol-neutral core has the first trait and dispatcher surface needed by
   binding crates.
-- Complete M4 protocol binding hardening before starting M5 Discovery.
-- After M4, build M5 Discovery first, then M6 Servient runtime composition, and
+- M4 protocol binding hardening is complete for the current shared and zenoh
+  binding scope.
+- Build M5 Discovery first, then M6 Servient runtime composition, and
   keep M7 conformance and embedded checks running across every crate that
   claims `no_std + alloc` support.
 
 Immediate next sequence:
 
-1. Finish M4 by stabilizing shared selected-form validation coverage and shared
-   binding diagnostics.
-2. Start M5 by introducing `clinkz-wot-discovery` with a std-first in-memory
+1. Start M5 by introducing `clinkz-wot-discovery` with a std-first in-memory
    Thing Description Directory and protocol-neutral storage/query traits.
-3. Start M6 only after M5 has registration, lookup, update, deletion, and
+2. Start M6 only after M5 has registration, lookup, update, deletion, and
    validation behavior that a Servient can consume.
-4. Expand M7 checks as each milestone adds crates or public compatibility
+3. Expand M7 checks as each milestone adds crates or public compatibility
    surfaces.
 
 ### M1: TD 1.1 Hardening
@@ -166,14 +165,24 @@ Current status:
   values resolved against a zenoh `base`.
 - Kept concrete zenoh execution optional behind `ZenohTransport`, with tests
   for fake transport propagation and the default no-transport error path.
+- Stabilized shared selected-form validation coverage for Thing-level forms,
+  property forms, action defaults, event defaults, copied selected form values,
+  and selected-form mismatch cases.
+- Finalized shared binding diagnostics with distinct errors for unknown
+  affordances, unsupported operations, metadata mismatches, caller-filter
+  mismatches, target resolution failures, and selected forms outside the
+  requested affordance.
+- Documented the runtime backend policy for future Rust `zenoh` and
+  `zenoh-pico` adapters: the current zenoh planning crate remains
+  `no_std + alloc`, while concrete runtime backends stay optional and
+  feature-gated or crate-separated.
 
-Remaining work:
+Completion notes:
 
-- Stabilize shared binding utility naming, error categories, and affordance/form
-  validation behavior before additional concrete bindings depend on it.
-- Finalize shared diagnostics so missing affordance, missing operation,
-  metadata mismatch, protocol filter mismatch, target resolution failure, and
-  selected-form validation failure are clearly distinguishable.
+- `clinkz-wot-protocol-bindings` and
+  `clinkz-wot-protocol-bindings-zenoh` pass `cargo test`.
+- Both protocol binding crates pass `cargo check --no-default-features`.
+- Zenoh-specific code remains outside TD, TM, and core crates.
 
 Exit criteria:
 

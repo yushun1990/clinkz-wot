@@ -36,12 +36,35 @@ The shared protocol binding crate owns form selection, affordance form lookup,
 and target resolution helpers. Concrete protocol crates own transport-specific
 metadata parsing and operation mapping.
 
+Runtime crates should own concrete transport sessions and platform integration.
+For zenoh, the planning crate remains independent from both the Rust `zenoh`
+runtime and `zenoh-pico`; backend selection belongs in runtime adapters that
+implement the shared transport trait.
+
 ## Zenoh Binding
 
 Zenoh is the first implemented binding because Clinkz Platform uses zenoh as its default communication bus.
 
 Zenoh is not a required dependency of the engine. It belongs in
 `clinkz-wot-protocol-bindings-zenoh` or an equivalent optional crate.
+
+The `clinkz-wot-protocol-bindings-zenoh` crate is a protocol binding planning
+crate, not a concrete session runtime. It recognizes zenoh TD forms, resolves
+key expressions, parses `cz-zenoh` metadata, maps WoT operations to zenoh
+operation kinds, and exposes a `ZenohTransport` adapter boundary. It must stay
+usable under `no_std + alloc`.
+
+Concrete zenoh execution should be added through optional runtime backends:
+
+- A Rust `zenoh` backend for host deployments. This backend is `std` because
+  the Rust `zenoh` runtime depends on host async and socket capabilities.
+- A `zenoh-pico` backend for constrained deployments. This backend should live
+  behind its own feature or crate and handle C ABI, platform I/O, memory, and
+  polling concerns without adding them to TD, core, or shared binding crates.
+
+When both backends are exposed from one runtime crate, their feature flags must
+be mutually exclusive, for example `zenoh` and `zenoh-pico`. The shared
+planning crate should not depend on either backend.
 
 Expected operation mapping:
 

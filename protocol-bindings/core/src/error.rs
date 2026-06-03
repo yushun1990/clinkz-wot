@@ -16,6 +16,10 @@ pub enum BindingCoreError {
     },
     /// The requested operation is not supported by any candidate form.
     UnsupportedOperation(String),
+    /// Candidate forms support the operation but not the requested metadata criteria.
+    MetadataMismatch(String),
+    /// Candidate forms support the operation and metadata criteria, but not the caller filter.
+    CallerFilterMismatch(String),
     /// The selected form does not belong to the requested affordance.
     FormNotInAffordance,
     /// The selected form target could not be resolved.
@@ -29,6 +33,10 @@ impl fmt::Display for BindingCoreError {
                 write!(f, "Unknown {} affordance: {}", kind, name)
             }
             Self::UnsupportedOperation(message) => write!(f, "Unsupported operation: {}", message),
+            Self::MetadataMismatch(message) => write!(f, "Metadata mismatch: {}", message),
+            Self::CallerFilterMismatch(message) => {
+                write!(f, "Caller filter mismatch: {}", message)
+            }
             Self::FormNotInAffordance => {
                 write!(
                     f,

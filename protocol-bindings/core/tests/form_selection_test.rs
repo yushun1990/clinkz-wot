@@ -3,6 +3,7 @@ use clinkz_wot_protocol_bindings::{
     resolve_selected_affordance_form_security, select_affordance_form,
     select_affordance_form_with_criteria, select_affordance_form_with_filter, select_form,
     select_form_with_criteria, select_form_with_filter, validate_affordance_form,
+    validate_affordance_form_with_criteria,
 };
 use clinkz_wot_td::{
     affordance::{ActionAffordance, EventAffordance, InteractionHelper, PropertyAffordance},
@@ -180,8 +181,34 @@ fn reports_filter_mismatch_when_operation_exists() {
 
     assert_eq!(
         err,
-        BindingCoreError::UnsupportedOperation(
-            "No form supports ReadProperty after applying caller filter".into()
+        BindingCoreError::CallerFilterMismatch(
+            "No form matches FormSelectionCriteria { operation: ReadProperty, content_type: None, subprotocol: None } after applying caller filter".into()
+        )
+    );
+}
+
+#[test]
+fn reports_metadata_mismatch_when_operation_exists() {
+    let json_form = Form::read_property("properties/status")
+        .content_type("application/json")
+        .build()
+        .unwrap();
+    let property = PropertyAffordance::builder(DataSchema::String(DataSchema::string().build()))
+        .form(json_form)
+        .build()
+        .unwrap();
+
+    let err = select_form_with_criteria(
+        FormContext::Property(&property),
+        property._interaction.forms.as_slice(),
+        FormSelectionCriteria::operation(Operation::ReadProperty).content_type("application/cbor"),
+    )
+    .unwrap_err();
+
+    assert_eq!(
+        err,
+        BindingCoreError::MetadataMismatch(
+            "No form matches FormSelectionCriteria { operation: ReadProperty, content_type: Some(\"application/cbor\"), subprotocol: None }".into()
         )
     );
 }
@@ -211,6 +238,36 @@ fn resolves_form_target_against_thing_base() {
         }
         ResolvedFormHref::Template(_) => panic!("expected resolved URI reference"),
     }
+}
+
+#[test]
+fn reports_target_resolution_failure_from_affordance_selection() {
+    let form = Form::read_property("properties/status").build().unwrap();
+    let property = PropertyAffordance::builder(DataSchema::String(DataSchema::string().build()))
+        .form(form)
+        .build()
+        .unwrap();
+    let thing = Thing::builder("Lamp")
+        .base("https://example.com/{tenant}/")
+        .nosec()
+        .property("status", property)
+        .build()
+        .unwrap();
+
+    let err = select_affordance_form(
+        &thing,
+        AffordanceRef::Property("status"),
+        Operation::ReadProperty,
+    )
+    .unwrap_err();
+
+    assert_eq!(
+        err,
+        BindingCoreError::TargetResolution(
+            "Cannot resolve form href against URI template base: https://example.com/{tenant}/"
+                .into()
+        )
+    );
 }
 
 #[test]
@@ -422,6 +479,88 @@ fn validates_selected_affordance_form_against_effective_operation() {
 }
 
 #[test]
+fn validates_selected_thing_level_form() {
+    let form = Form::builder("properties")
+        .op([Operation::ReadAllProperties])
+        .build()
+        .unwrap();
+    let thing = Thing::builder("Lamp")
+        .nosec()
+        .form(form.clone())
+        .build()
+        .unwrap();
+
+    let selected = validate_affordance_form(
+        &thing,
+        AffordanceRef::Thing,
+        &form,
+        Operation::ReadAllProperties,
+    )
+    .unwrap();
+
+    assert_eq!(selected.index, 0);
+    assert_eq!(selected.form, &form);
+    assert_eq!(
+        selected.operations.as_ref(),
+        &[Operation::ReadAllProperties]
+    );
+}
+
+#[test]
+fn validates_selected_event_form_with_default_operations() {
+    let form = Form::builder("events/ready").build().unwrap();
+    let event = EventAffordance::builder()
+        .form(form.clone())
+        .build()
+        .unwrap();
+    let thing = Thing::builder("Lamp")
+        .nosec()
+        .event("ready", event)
+        .build()
+        .unwrap();
+
+    let selected = validate_affordance_form(
+        &thing,
+        AffordanceRef::Event("ready"),
+        &form,
+        Operation::UnsubscribeEvent,
+    )
+    .unwrap();
+
+    assert_eq!(selected.index, 0);
+    assert_eq!(
+        selected.operations.as_ref(),
+        &[Operation::SubscribeEvent, Operation::UnsubscribeEvent]
+    );
+}
+
+#[test]
+fn validates_copied_selected_form_value() {
+    let form = Form::read_property("properties/status").build().unwrap();
+    let copied_form = form.clone();
+    let property = PropertyAffordance::builder(DataSchema::String(DataSchema::string().build()))
+        .form(form)
+        .build()
+        .unwrap();
+    let thing = Thing::builder("Lamp")
+        .nosec()
+        .property("status", property)
+        .build()
+        .unwrap();
+
+    let selected = validate_affordance_form(
+        &thing,
+        AffordanceRef::Property("status"),
+        &copied_form,
+        Operation::ReadProperty,
+    )
+    .unwrap();
+
+    assert_eq!(selected.index, 0);
+    assert_eq!(selected.form, &copied_form);
+}
+
+#[test]
 fn rejects_selected_affordance_form_when_operation_does_not_match() {
     let form = Form::read_property("properties/status").build().unwrap();
     let property = PropertyAffordance::builder(DataSchema::String(DataSchema::string().build()))
@@ -473,6 +612,38 @@ fn rejects_selected_form_that_does_not_belong_to_affordance() {
     .unwrap_err();
 
     assert_eq!(err, BindingCoreError::FormNotInAffordance);
+}
+
+#[test]
+fn rejects_selected_affordance_form_when_metadata_does_not_match() {
+    let form = Form::read_property("properties/status")
+        .content_type("application/json")
+        .build()
+        .unwrap();
+    let property = PropertyAffordance::builder(DataSchema::String(DataSchema::string().build()))
+        .form(form.clone())
+        .build()
+        .unwrap();
+    let thing = Thing::builder("Lamp")
+        .nosec()
+        .property("status", property)
+        .build()
+        .unwrap();
+
+    let err = validate_affordance_form_with_criteria(
+        &thing,
+        AffordanceRef::Property("status"),
+        &form,
+        FormSelectionCriteria::operation(Operation::ReadProperty).content_type("application/cbor"),
+    )
+    .unwrap_err();
+
+    assert_eq!(
+        err,
+        BindingCoreError::MetadataMismatch(
+            "Selected form does not match FormSelectionCriteria { operation: ReadProperty, content_type: Some(\"application/cbor\"), subprotocol: None }".into()
+        )
+    );
 }
 
 #[test]

@@ -510,8 +510,7 @@ fn reports_selection_error_when_affordance_has_no_zenoh_form() {
     assert_eq!(
         err,
         ZenohBindingError::Selection(
-            "Unsupported operation: No form supports ReadProperty after applying caller filter"
-                .into()
+            "Caller filter mismatch: No form matches FormSelectionCriteria { operation: ReadProperty, content_type: None, subprotocol: None } after applying caller filter".into()
         )
     );
 }

@@ -34,6 +34,11 @@ planning, and transport adapter boundaries. Zenoh is the first concrete
 binding, but it must remain optional and must not become a dependency of TD,
 TM, or core runtime crates.
 
+Concrete runtime backends are separate from planning crates. The zenoh planning
+crate must stay independent from both the Rust `zenoh` runtime and
+`zenoh-pico`; backend-specific session, I/O, and platform integration belongs
+behind `ZenohTransport` implementations.
+
 ## Current Baseline
 
 The current protocol binding crates provide:
@@ -61,25 +66,35 @@ The current protocol binding crates provide:
   runtime dependency.
 - Runtime tests for fake transport propagation and the default no-transport
   error path.
+- A documented runtime backend policy that keeps Rust `zenoh` and
+  `zenoh-pico` integration out of the shared planning crate.
 
 ## Current Development Sequence
 
 The next development order is:
 
-1. Finish PB-P0.1 by completing shared selected-form validation coverage for
-   Thing-level forms, event defaults, copied form values, and any remaining
-   edge cases.
-2. Finish PB-P0.2 by making shared diagnostics explicit enough for Discovery
-   and Servient callers to distinguish operation, metadata, protocol-filter,
-   target-resolution, unknown-affordance, and selected-form validation failures.
-3. Run the M4 verification checks and move to M5 Discovery once M4 exit
-   criteria pass.
+1. Run M4 verification checks whenever shared or zenoh binding APIs change.
+2. Move to M5 Discovery once repository-level M5 work starts.
+3. Add concrete zenoh runtime backends later as runtime crates or feature-gated
+   adapter modules, keeping Rust `zenoh` and `zenoh-pico` mutually exclusive
+   when exposed from the same crate.
+
+Completion notes:
+
+- PB-P0.1 and PB-P0.2 are complete for the current M4 scope.
+- Shared selected-form validation now covers Thing-level forms, property forms,
+  action defaults, event defaults, copied selected form values, operation
+  mismatches, metadata mismatches, and forms outside the requested affordance.
+- Shared diagnostics distinguish missing affordance, missing operation,
+  metadata mismatch, protocol filter mismatch, target resolution failure, and
+  selected-form validation failure.
+- M4 verification passed for both shared and zenoh binding crates.
 
 ## PB-P0: Shared Binding Utility Hardening
 
 ### PB-P0.1 Stabilize Selected Form Validation
 
-Status: in progress.
+Status: complete.
 
 Goal: every runtime path that accepts a caller-selected form can verify that
 the form belongs to the requested affordance and supports the requested
@@ -100,9 +115,17 @@ Acceptance criteria:
   execution.
 - Error messages are stable enough for downstream runtime crates.
 
+Completion notes:
+
+- Added focused shared validation tests for Thing-level forms, event default
+  operations, copied selected form values, operation mismatches, metadata
+  mismatches, and forms that do not belong to the requested affordance.
+- Existing zenoh runtime invocation keeps rejecting invalid selected forms
+  before transport execution through the shared validation helper.
+
 ### PB-P0.2 Finalize Shared Diagnostics
 
-Status: planned.
+Status: complete.
 
 Goal: make form selection and validation failures actionable for Discovery and
 Servient users without encoding protocol-specific behavior in the shared crate.
@@ -120,6 +143,15 @@ Acceptance criteria:
 - Shared diagnostics distinguish missing affordance, missing operation,
   metadata mismatch, protocol filter mismatch, target resolution failure, and
   selected-form validation failure.
+
+Completion notes:
+
+- Added explicit `BindingCoreError` variants for metadata mismatches and caller
+  filter mismatches.
+- Kept unsupported operations, unknown affordances, target resolution failures,
+  and selected forms outside the requested affordance as distinct variants.
+- Added focused tests for metadata mismatch, protocol filter mismatch, and
+  target resolution failure diagnostics.
 
 ### PB-P0.3 Add Security Metadata Helpers
 
@@ -243,6 +275,35 @@ Completion notes:
   the default no-transport error path.
 - Confirmed the zenoh binding crate has no concrete zenoh runtime dependency in
   its default feature set.
+
+### PB-P1.4 Plan Concrete Zenoh Runtime Backends
+
+Status: planned.
+
+Goal: support host and constrained zenoh execution without weakening the
+`no_std + alloc` boundary of TD, core, shared bindings, or the zenoh planning
+crate.
+
+Work items:
+
+- Add a host runtime backend that depends on the Rust `zenoh` crate behind a
+  `std` feature or in a separate `std` runtime crate.
+- Add a constrained runtime backend path for `zenoh-pico` behind its own
+  feature or crate, handling C ABI, platform I/O, memory, and polling details
+  outside the planning crate.
+- If both backends are exposed from one crate, enforce mutually exclusive
+  `zenoh` and `zenoh-pico` features with a compile-time error.
+- Keep backend implementations behind `ZenohTransport` so form planning and TD
+  traversal remain reusable across both runtimes.
+
+Acceptance criteria:
+
+- Enabling the Rust `zenoh` backend does not affect `--no-default-features`
+  checks for TD, core, shared bindings, or the zenoh planning crate.
+- Enabling the `zenoh-pico` backend does not introduce `std` into crates that
+  claim `no_std + alloc`.
+- Backend feature combinations fail clearly when incompatible features are
+  enabled together.
 
 ## Verification
 
