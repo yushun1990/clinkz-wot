@@ -14,6 +14,6 @@ pub use form::{
     CZ_ZENOH_QOS, NoZenohTransport, ZENOH_SCHEME, ZenohAffordanceOperationPlan, ZenohBinding,
     ZenohFormMetadata, ZenohFormTarget, ZenohOperationKind, ZenohOperationPlan, ZenohTransport,
     ZenohTransportRequest, build_zenoh_transport_request, extract_zenoh_metadata,
-    extract_zenoh_target, is_zenoh_form, plan_zenoh_affordance_operation,
+    extract_zenoh_target, is_zenoh_form, is_zenoh_form_target, plan_zenoh_affordance_operation,
     plan_zenoh_affordance_operation_with_criteria, plan_zenoh_operation, zenoh_operation_kind,
 };

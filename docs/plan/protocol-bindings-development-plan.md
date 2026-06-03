@@ -45,29 +45,35 @@ The current protocol binding crates provide:
 - Predicate-based protocol filtering for concrete bindings.
 - Target resolution through the TD crate's `base` plus form `href` helper.
 - Caller-selected affordance form validation.
+- Protocol-neutral helpers for selected-form security references and scopes.
 - A zenoh binding crate that recognizes `zenoh://` targets and
   `cz-zenoh:keyExpr`.
 - Zenoh operation planning from WoT operations to transport-level operation
   kinds.
 - First-pass zenoh extension metadata parsing for encoding, QoS, priority, and
   congestion control hints.
+- Documented `cz-zenoh` extension vocabulary with stable and experimental term
+  status.
+- Zenoh affordance planning for Thing-level forms, bulk property and event
+  operations, relative `href` targets resolved against zenoh `base`, and
+  content type/subprotocol criteria.
 - An injected `ZenohTransport` adapter boundary that avoids a required zenoh
   runtime dependency.
+- Runtime tests for fake transport propagation and the default no-transport
+  error path.
 
 ## Current Development Sequence
 
 The next development order is:
 
-1. Stabilize shared binding validation and diagnostics before more concrete
-   bindings depend on them.
-2. Document the first Clinkz zenoh extension vocabulary and clearly mark any
-   unstable metadata hints.
-3. Expand protocol binding fixtures around multi-form affordances, bulk
-   operations, Thing-level forms, security metadata, and `base` plus relative
-   `href` handling.
-4. Add optional host-runtime zenoh integration only behind an explicit feature
-   and only after the adapter boundary is fully tested with fake transports.
-5. Move to M5 Discovery once M4 exit criteria pass.
+1. Finish PB-P0.1 by completing shared selected-form validation coverage for
+   Thing-level forms, event defaults, copied form values, and any remaining
+   edge cases.
+2. Finish PB-P0.2 by making shared diagnostics explicit enough for Discovery
+   and Servient callers to distinguish operation, metadata, protocol-filter,
+   target-resolution, unknown-affordance, and selected-form validation failures.
+3. Run the M4 verification checks and move to M5 Discovery once M4 exit
+   criteria pass.
 
 ## PB-P0: Shared Binding Utility Hardening
 
@@ -117,7 +123,7 @@ Acceptance criteria:
 
 ### PB-P0.3 Add Security Metadata Helpers
 
-Status: planned.
+Status: complete.
 
 Goal: expose protocol-neutral helpers for form-level security and scope
 metadata so runtime crates and concrete bindings do not duplicate TD traversal
@@ -138,11 +144,20 @@ Acceptance criteria:
   form.
 - Tests cover inherited security, overridden security, and nosec forms.
 
+Completion notes:
+
+- Added protocol-neutral helpers for resolving effective form security
+  references and form-level scopes from selected affordance forms.
+- Kept authentication mechanism interpretation outside the shared binding
+  crate.
+- Added tests for inherited Thing-level security, form-level overrides with
+  scopes, and nosec metadata.
+
 ## PB-P1: Zenoh Binding Hardening
 
 ### PB-P1.1 Document Zenoh Extension Vocabulary
 
-Status: planned.
+Status: complete.
 
 Goal: document the first Clinkz zenoh JSON-LD extension terms before they are
 treated as stable TD authoring vocabulary.
@@ -161,9 +176,18 @@ Acceptance criteria:
   validation behavior.
 - Tests continue to reject non-string and empty extension values.
 
+Completion notes:
+
+- Documented the `cz-zenoh` namespace, `keyExpr` target term, and metadata hint
+  terms in `docs/protocol-bindings.md`.
+- Marked `cz-zenoh:keyExpr` stable and encoding, QoS, priority, and congestion
+  control terms as experimental hints.
+- Documented `cz-zenoh:keyExpr` precedence over `zenoh://` `href` targets and
+  the string/non-empty validation behavior.
+
 ### PB-P1.2 Expand Zenoh Operation Planning Coverage
 
-Status: planned.
+Status: complete.
 
 Goal: cover all operation families currently mapped by `ZenohOperationKind`.
 
@@ -180,9 +204,18 @@ Acceptance criteria:
 - Every supported operation family has at least one planning test.
 - Multi-form affordance tests verify protocol filtering and metadata criteria.
 
+Completion notes:
+
+- Added planning tests for Thing-level forms, bulk property operations, and bulk
+  event operations.
+- Added coverage for relative form `href` values resolved against a zenoh
+  Thing-level `base`.
+- Kept existing multi-form criteria coverage for content type and subprotocol
+  selection.
+
 ### PB-P1.3 Keep Runtime Integration Optional
 
-Status: planned.
+Status: complete.
 
 Goal: allow host deployments to attach real zenoh execution without making the
 default zenoh binding crate depend on a concrete zenoh runtime.
@@ -202,6 +235,14 @@ Acceptance criteria:
   continues to pass.
 - Default builds do not require a concrete zenoh runtime dependency.
 - Host-runtime integration can be omitted without changing TD/TM/core crates.
+
+Completion notes:
+
+- Kept concrete zenoh execution behind the injected `ZenohTransport` adapter.
+- Added runtime tests for injected fake transport request/output propagation and
+  the default no-transport error path.
+- Confirmed the zenoh binding crate has no concrete zenoh runtime dependency in
+  its default feature set.
 
 ## Verification
 

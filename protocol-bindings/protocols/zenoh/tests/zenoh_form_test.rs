@@ -7,8 +7,8 @@ use clinkz_wot_protocol_bindings_zenoh::{
     CZ_ZENOH_CONGESTION_CONTROL, CZ_ZENOH_ENCODING, CZ_ZENOH_KEY_EXPR, CZ_ZENOH_PRIORITY,
     CZ_ZENOH_QOS, ZenohBinding, ZenohBindingError, ZenohOperationKind, ZenohTransport,
     ZenohTransportRequest, extract_zenoh_metadata, extract_zenoh_target, is_zenoh_form,
-    plan_zenoh_affordance_operation, plan_zenoh_affordance_operation_with_criteria,
-    plan_zenoh_operation, zenoh_operation_kind,
+    is_zenoh_form_target, plan_zenoh_affordance_operation,
+    plan_zenoh_affordance_operation_with_criteria, plan_zenoh_operation, zenoh_operation_kind,
 };
 use clinkz_wot_td::{
     affordance::{EventAffordance, InteractionHelper, PropertyAffordance},
@@ -199,6 +199,41 @@ fn runtime_binding_delegates_planned_operation_to_transport() {
 }
 
 #[test]
+fn runtime_binding_without_transport_reports_unavailable() {
+    let form = Form::read_property("zenoh://clinkz/things/lamp/status")
+        .build()
+        .unwrap();
+    let property = PropertyAffordance::builder(DataSchema::String(DataSchema::string().build()))
+        .form(form.clone())
+        .build()
+        .unwrap();
+    let thing = Thing::builder("Lamp")
+        .nosec()
+        .property("status", property)
+        .build()
+        .unwrap();
+    let mut binding = ZenohBinding::new();
+
+    let err = binding
+        .invoke(BindingRequest {
+            thing: &thing,
+            target: AffordanceTarget::Property("status"),
+            operation: Operation::ReadProperty,
+            form: &form,
+            input: InteractionInput::empty(),
+        })
+        .unwrap_err();
+
+    match err {
+        CoreError::Transport(message) => {
+            assert!(message.contains("Zenoh transport unavailable"));
+            assert!(message.contains("clinkz/things/lamp/status"));
+        }
+        other => panic!("expected transport error, got {:?}", other),
+    }
+}
+
+#[test]
 fn runtime_binding_rejects_form_that_does_not_support_requested_operation() {
     let form = Form::read_property("zenoh://clinkz/things/lamp/status")
         .build()
@@ -347,6 +382,110 @@ fn plans_zenoh_affordance_operation_with_subprotocol_criteria() {
 }
 
 #[test]
+fn plans_thing_level_zenoh_form() {
+    let form = Form::builder("zenoh://clinkz/things/lamp")
+        .op([Operation::ReadAllProperties])
+        .build()
+        .unwrap();
+    let thing = Thing::builder("Lamp").nosec().form(form).build().unwrap();
+
+    let plan =
+        plan_zenoh_affordance_operation(&thing, AffordanceRef::Thing, Operation::ReadAllProperties)
+            .unwrap();
+
+    assert_eq!(plan.affordance, AffordanceRef::Thing);
+    assert_eq!(plan.form_index, 0);
+    assert_eq!(plan.operation.kind, ZenohOperationKind::Query);
+    assert_eq!(plan.operation.key_expr, "clinkz/things/lamp");
+}
+
+#[test]
+fn plans_bulk_property_operation_from_thing_level_form() {
+    let read_form = Form::builder("zenoh://clinkz/things/lamp/properties")
+        .op([Operation::ReadAllProperties])
+        .build()
+        .unwrap();
+    let write_form = Form::builder("zenoh://clinkz/things/lamp/properties")
+        .op([Operation::WriteMultipleProperties])
+        .build()
+        .unwrap();
+    let thing = Thing::builder("Lamp")
+        .nosec()
+        .forms([read_form, write_form])
+        .build()
+        .unwrap();
+
+    let plan = plan_zenoh_affordance_operation(
+        &thing,
+        AffordanceRef::Thing,
+        Operation::WriteMultipleProperties,
+    )
+    .unwrap();
+
+    assert_eq!(plan.form_index, 1);
+    assert_eq!(plan.operation.kind, ZenohOperationKind::Put);
+    assert_eq!(plan.operation.key_expr, "clinkz/things/lamp/properties");
+}
+
+#[test]
+fn plans_bulk_event_operation_from_thing_level_form() {
+    let subscribe_form = Form::builder("zenoh://clinkz/things/lamp/events")
+        .op([Operation::SubscribeAllEvents])
+        .build()
+        .unwrap();
+    let unsubscribe_form = Form::builder("zenoh://clinkz/things/lamp/events")
+        .op([Operation::UnsubscribeAllEvents])
+        .build()
+        .unwrap();
+    let thing = Thing::builder("Lamp")
+        .nosec()
+        .forms([subscribe_form, unsubscribe_form])
+        .build()
+        .unwrap();
+
+    let plan = plan_zenoh_affordance_operation(
+        &thing,
+        AffordanceRef::Thing,
+        Operation::UnsubscribeAllEvents,
+    )
+    .unwrap();
+
+    assert_eq!(plan.form_index, 1);
+    assert_eq!(plan.operation.kind, ZenohOperationKind::Unsubscribe);
+    assert_eq!(plan.operation.key_expr, "clinkz/things/lamp/events");
+}
+
+#[test]
+fn plans_relative_href_against_zenoh_base() {
+    let form = Form::read_property("properties/status").build().unwrap();
+    let property = PropertyAffordance::builder(DataSchema::String(DataSchema::string().build()))
+        .form(form.clone())
+        .build()
+        .unwrap();
+    let thing = Thing::builder("Lamp")
+        .base("zenoh://clinkz/things/lamp/")
+        .nosec()
+        .property("status", property)
+        .build()
+        .unwrap();
+
+    assert!(is_zenoh_form_target(&thing, &form));
+
+    let plan = plan_zenoh_affordance_operation(
+        &thing,
+        AffordanceRef::Property("status"),
+        Operation::ReadProperty,
+    )
+    .unwrap();
+
+    assert_eq!(
+        plan.operation.key_expr,
+        "clinkz/things/lamp/properties/status"
+    );
+    assert_eq!(plan.operation.kind, ZenohOperationKind::Query);
+}
+
+#[test]
 fn reports_selection_error_when_affordance_has_no_zenoh_form() {
     let form = Form::read_property("https://example.com/things/lamp/properties/status")
         .build()
@@ -389,6 +528,21 @@ fn rejects_non_string_zenoh_metadata_extension() {
     assert_eq!(
         err,
         ZenohBindingError::Target("cz-zenoh:qos must be a string".into())
+    );
+}
+
+#[test]
+fn rejects_empty_zenoh_metadata_extension() {
+    let form = Form::read_property("zenoh://clinkz/things/lamp/status")
+        .extra_field(CZ_ZENOH_ENCODING, json!(""))
+        .build()
+        .unwrap();
+
+    let err = extract_zenoh_metadata(&form).unwrap_err();
+
+    assert_eq!(
+        err,
+        ZenohBindingError::Target("cz-zenoh:encoding must not be empty".into())
     );
 }
 

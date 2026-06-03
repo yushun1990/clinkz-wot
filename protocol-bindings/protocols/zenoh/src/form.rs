@@ -216,6 +216,14 @@ pub fn is_zenoh_form(form: &Form) -> bool {
         || form._extra_fields.contains_key(CZ_ZENOH_KEY_EXPR)
 }
 
+/// Returns true when a form resolves to a zenoh target for a Thing.
+pub fn is_zenoh_form_target(thing: &clinkz_wot_td::thing::Thing, form: &Form) -> bool {
+    form._extra_fields.contains_key(CZ_ZENOH_KEY_EXPR)
+        || resolve_form_target(thing, form)
+            .map(|target| target.href.as_str().starts_with(ZENOH_SCHEME))
+            .unwrap_or(false)
+}
+
 /// Extracts a zenoh key expression from a TD form.
 ///
 /// `cz-zenoh:keyExpr` takes precedence over `href` so TDs can keep a transport
@@ -288,8 +296,10 @@ pub fn plan_zenoh_affordance_operation_with_criteria<'a>(
     affordance: AffordanceRef<'a>,
     criteria: FormSelectionCriteria<'_>,
 ) -> ZenohBindingResult<ZenohAffordanceOperationPlan<'a>> {
-    let selected = select_affordance_form_with_filter(thing, affordance, criteria, is_zenoh_form)
-        .map_err(|err| ZenohBindingError::Selection(err.to_string()))?;
+    let selected = select_affordance_form_with_filter(thing, affordance, criteria, |form| {
+        is_zenoh_form_target(thing, form)
+    })
+    .map_err(|err| ZenohBindingError::Selection(err.to_string()))?;
     let plan = plan_zenoh_operation(thing, selected.selection.form, criteria.operation)?;
 
     Ok(ZenohAffordanceOperationPlan {

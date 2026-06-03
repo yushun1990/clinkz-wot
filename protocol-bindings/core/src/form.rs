@@ -9,11 +9,13 @@ use clinkz_wot_td::{
     affordance::{ActionAffordance, EventAffordance, PropertyAffordance},
     data_type::{Operation, ResolvedFormHref, resolve_form_href},
     form::Form,
-    td_defaults::{FormContext, effective_form_operations},
+    td_defaults::{FormContext, effective_form_operations, effective_form_security},
     thing::Thing,
 };
 
 use crate::{BindingCoreError, BindingCoreResult};
+
+const NO_SCOPES: &[String] = &[];
 
 /// Location of an affordance within a Thing Description.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -114,6 +116,15 @@ pub struct SelectedAffordanceForm<'a> {
     pub target: ResolvedFormTarget,
 }
 
+/// Effective protocol-neutral security metadata for a selected TD form.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct EffectiveFormSecurity<'a> {
+    /// Security definition names after TD form-level inheritance is resolved.
+    pub security: &'a [String],
+    /// Scope names declared on the form.
+    pub scopes: &'a [String],
+}
+
 /// Selects the first form whose effective operations include the requested operation.
 pub fn select_form<'a>(
     context: FormContext<'a>,
@@ -182,6 +193,26 @@ pub fn resolve_form_target(thing: &Thing, form: &Form) -> BindingCoreResult<Reso
     resolve_form_href(thing.base.as_ref(), &form.href)
         .map(|href| ResolvedFormTarget { href })
         .map_err(|err| BindingCoreError::TargetResolution(err.to_string()))
+}
+
+/// Resolves protocol-neutral security metadata for a form.
+///
+/// Form-level `security` overrides Thing-level `security` according to TD
+/// inheritance rules. `scopes` are returned from the selected form without
+/// interpreting concrete authentication mechanisms.
+pub fn resolve_form_security<'a>(thing: &'a Thing, form: &'a Form) -> EffectiveFormSecurity<'a> {
+    EffectiveFormSecurity {
+        security: effective_form_security(thing, form),
+        scopes: form.scopes.as_deref().unwrap_or(NO_SCOPES),
+    }
+}
+
+/// Resolves protocol-neutral security metadata for a selected affordance form.
+pub fn resolve_selected_affordance_form_security<'a>(
+    thing: &'a Thing,
+    selected: &SelectedAffordanceForm<'a>,
+) -> EffectiveFormSecurity<'a> {
+    resolve_form_security(thing, selected.selection.form)
 }
 
 /// Selects and resolves a form from a Thing affordance for the requested operation.

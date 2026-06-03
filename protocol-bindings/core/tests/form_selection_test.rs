@@ -1,8 +1,8 @@
 use clinkz_wot_protocol_bindings::{
     AffordanceRef, BindingCoreError, FormSelectionCriteria, resolve_form_target,
-    select_affordance_form, select_affordance_form_with_criteria,
-    select_affordance_form_with_filter, select_form, select_form_with_criteria,
-    select_form_with_filter, validate_affordance_form,
+    resolve_selected_affordance_form_security, select_affordance_form,
+    select_affordance_form_with_criteria, select_affordance_form_with_filter, select_form,
+    select_form_with_criteria, select_form_with_filter, validate_affordance_form,
 };
 use clinkz_wot_td::{
     affordance::{ActionAffordance, EventAffordance, InteractionHelper, PropertyAffordance},
@@ -473,4 +473,84 @@ fn rejects_selected_form_that_does_not_belong_to_affordance() {
     .unwrap_err();
 
     assert_eq!(err, BindingCoreError::FormNotInAffordance);
+}
+
+#[test]
+fn resolves_inherited_thing_level_security_for_selected_form() {
+    let form = Form::read_property("properties/status").build().unwrap();
+    let property = PropertyAffordance::builder(DataSchema::String(DataSchema::string().build()))
+        .form(form)
+        .build()
+        .unwrap();
+    let thing = Thing::builder("Lamp")
+        .basic_security("basic_auth", "Authorization")
+        .property("status", property)
+        .build()
+        .unwrap();
+    let selected = select_affordance_form(
+        &thing,
+        AffordanceRef::Property("status"),
+        Operation::ReadProperty,
+    )
+    .unwrap();
+
+    let security = resolve_selected_affordance_form_security(&thing, &selected);
+
+    assert_eq!(security.security, &["basic_auth".to_string()]);
+    assert!(security.scopes.is_empty());
+}
+
+#[test]
+fn resolves_form_level_security_and_scopes_for_selected_form() {
+    let form = Form::read_property("properties/status")
+        .security(["oauth"])
+        .scopes(["status:read", "status:audit"])
+        .build()
+        .unwrap();
+    let property = PropertyAffordance::builder(DataSchema::String(DataSchema::string().build()))
+        .form(form)
+        .build()
+        .unwrap();
+    let thing = Thing::builder("Lamp")
+        .basic_security("basic_auth", "Authorization")
+        .oauth2_client_security("oauth")
+        .property("status", property)
+        .build()
+        .unwrap();
+    let selected = select_affordance_form(
+        &thing,
+        AffordanceRef::Property("status"),
+        Operation::ReadProperty,
+    )
+    .unwrap();
+
+    let security = resolve_selected_affordance_form_security(&thing, &selected);
+
+    assert_eq!(security.security, &["oauth".to_string()]);
+    assert_eq!(
+        security.scopes,
+        &["status:read".to_string(), "status:audit".to_string()]
+    );
+}
+
+#[test]
+fn resolves_nosec_metadata_for_selected_form() {
+    let form = Form::invoke_action("actions/ping").build().unwrap();
+    let action = ActionAffordance::builder().form(form).build().unwrap();
+    let thing = Thing::builder("Lamp")
+        .nosec()
+        .action("ping", action)
+        .build()
+        .unwrap();
+    let selected = select_affordance_form(
+        &thing,
+        AffordanceRef::Action("ping"),
+        Operation::InvokeAction,
+    )
+    .unwrap();
+
+    let security = resolve_selected_affordance_form_security(&thing, &selected);
+
+    assert_eq!(security.security, &["nosec".to_string()]);
+    assert!(security.scopes.is_empty());
 }

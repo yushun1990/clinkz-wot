@@ -31,9 +31,8 @@ Current focus:
 
 Immediate next sequence:
 
-1. Finish M4 with protocol binding API polish, zenoh metadata vocabulary
-   documentation, focused multi-form tests, and optional host-runtime zenoh
-   integration boundaries.
+1. Finish M4 by stabilizing shared selected-form validation coverage and shared
+   binding diagnostics.
 2. Start M5 by introducing `clinkz-wot-discovery` with a std-first in-memory
    Thing Description Directory and protocol-neutral storage/query traits.
 3. Start M6 only after M5 has registration, lookup, update, deletion, and
@@ -156,19 +155,25 @@ Current status:
   runtime invocation to reject forms that do not belong to the requested
   affordance or do not support the requested effective operation before
   transport execution.
+- Added shared protocol-neutral helpers for selected-form security references
+  and scopes, including inherited Thing-level security, form-level overrides,
+  and nosec coverage.
+- Documented the first Clinkz zenoh extension vocabulary, including stable
+  `cz-zenoh:keyExpr`, experimental metadata hints, string validation, and
+  `keyExpr` precedence over `href`.
+- Expanded zenoh planning coverage for Thing-level forms, bulk property and
+  event operations, content type and subprotocol criteria, and relative `href`
+  values resolved against a zenoh `base`.
+- Kept concrete zenoh execution optional behind `ZenohTransport`, with tests
+  for fake transport propagation and the default no-transport error path.
 
 Remaining work:
 
 - Stabilize shared binding utility naming, error categories, and affordance/form
   validation behavior before additional concrete bindings depend on it.
-- Document the first Clinkz zenoh extension vocabulary and distinguish stable
-  terms from experimental metadata hints.
-- Add focused tests for Thing-level forms, bulk operation forms, form-level
-  security/scopes propagation, relative `base` plus zenoh target resolution, and
-  multi-form protocol fallback.
-- Keep concrete zenoh runtime integration optional. If a real zenoh adapter is
-  added, gate it behind a host/runtime feature and keep the default crate free
-  of required zenoh runtime dependencies.
+- Finalize shared diagnostics so missing affordance, missing operation,
+  metadata mismatch, protocol filter mismatch, target resolution failure, and
+  selected-form validation failure are clearly distinguishable.
 
 Exit criteria:
 

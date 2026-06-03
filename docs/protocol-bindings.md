@@ -70,15 +70,61 @@ Zenoh-specific terms may use a more specific namespace if needed:
 }
 ```
 
-Examples of extension terms:
+## Zenoh Extension Vocabulary
 
-- `cz-zenoh:keyExpr`
-- `cz-zenoh:qos`
-- `cz-zenoh:encoding`
-- `cz-zenoh:priority`
-- `cz-zenoh:congestionControl`
+Zenoh-specific extension terms belong to the `cz-zenoh` namespace:
 
-The exact vocabulary should be versioned and documented before being used in stable TDs.
+```json
+{
+  "cz-zenoh": "https://clinkz.io/wot/zenoh#"
+}
+```
+
+These terms are valid on TD forms. The zenoh binding treats every term below as
+an optional string-valued extension and rejects non-string or empty string
+values.
+
+| Term | Status | JSON type | Purpose |
+| --- | --- | --- | --- |
+| `cz-zenoh:keyExpr` | Stable | string | Explicit zenoh key expression for the form target. |
+| `cz-zenoh:encoding` | Experimental hint | string | Preferred zenoh payload encoding metadata. |
+| `cz-zenoh:qos` | Experimental hint | string | Preferred zenoh QoS metadata. |
+| `cz-zenoh:priority` | Experimental hint | string | Preferred zenoh priority metadata. |
+| `cz-zenoh:congestionControl` | Experimental hint | string | Preferred zenoh congestion control metadata. |
+
+`cz-zenoh:keyExpr` is the stable Clinkz term for declaring the concrete zenoh
+key expression when `href` is not itself a `zenoh://` target. When both
+`cz-zenoh:keyExpr` and a `zenoh://` `href` are present, `cz-zenoh:keyExpr`
+takes precedence. This allows a TD form to keep a general transport target in
+`href` while carrying the concrete zenoh key expression separately.
+
+The metadata hint terms are parsed and preserved in the zenoh operation plan,
+but the shared engine does not assign mandatory runtime behavior to them. Host
+runtime adapters may choose how to translate these hints to a concrete zenoh
+session or publication API.
+
+Example form:
+
+```json
+{
+  "href": "zenoh://clinkz/things/lamp/properties/status",
+  "op": "readproperty",
+  "contentType": "application/json",
+  "cz-zenoh:encoding": "application/json",
+  "cz-zenoh:qos": "express"
+}
+```
+
+Example form with an explicit key expression:
+
+```json
+{
+  "href": "properties/status",
+  "op": "readproperty",
+  "contentType": "application/json",
+  "cz-zenoh:keyExpr": "clinkz/things/lamp/properties/status"
+}
+```
 
 ## Future Bindings
 
