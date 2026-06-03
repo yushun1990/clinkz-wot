@@ -9,4 +9,7 @@ pub mod error;
 pub mod form;
 
 pub use error::{BindingCoreError, BindingCoreResult};
-pub use form::{ResolvedFormTarget, SelectedForm, resolve_form_target, select_form};
+pub use form::{
+    AffordanceRef, ResolvedFormTarget, SelectedAffordanceForm, SelectedForm, resolve_form_target,
+    select_affordance_form, select_form,
+};

@@ -103,6 +103,8 @@ Current status:
   context.
 - Added shared form target resolution using the TD crate's `base` plus `href`
   helper.
+- Added shared affordance-level form selection and target resolution for Thing,
+  property, action, and event forms, including unknown-affordance errors.
 - Kept zenoh and other concrete protocol behavior out of binding-core.
 
 ### M5: Discovery and TDD

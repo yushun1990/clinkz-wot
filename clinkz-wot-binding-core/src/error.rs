@@ -7,6 +7,13 @@ pub type BindingCoreResult<T> = Result<T, BindingCoreError>;
 /// Protocol-neutral errors surfaced by shared binding utilities.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum BindingCoreError {
+    /// The requested affordance does not exist on the Thing Description.
+    UnknownAffordance {
+        /// Affordance collection name.
+        kind: &'static str,
+        /// Requested affordance name.
+        name: String,
+    },
     /// The requested operation is not supported by any candidate form.
     UnsupportedOperation(String),
     /// The selected form target could not be resolved.
@@ -16,6 +23,9 @@ pub enum BindingCoreError {
 impl fmt::Display for BindingCoreError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            Self::UnknownAffordance { kind, name } => {
+                write!(f, "Unknown {} affordance: {}", kind, name)
+            }
             Self::UnsupportedOperation(message) => write!(f, "Unsupported operation: {}", message),
             Self::TargetResolution(message) => write!(f, "Target resolution error: {}", message),
         }
