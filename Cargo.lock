@@ -64,6 +64,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "clinkz-wot-core"
+version = "0.1.0"
+dependencies = [
+ "clinkz-wot-td",
+]
+
+[[package]]
 name = "clinkz-wot-td"
 version = "0.1.0"
 dependencies = [

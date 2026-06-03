@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["clinkz-wot-td"]
+members = ["clinkz-wot-core", "clinkz-wot-td"]
 
 [workspace.package]
 version = "0.1.0"

@@ -528,9 +528,9 @@ impl ObjectSchemaBuilder {
     }
 
     /// Adds a property.
-    pub fn property(mut self, name: impl Into<String>, schema: DataSchema) -> Self {
+    pub fn property(mut self, name: impl Into<String>, schema: impl Into<DataSchema>) -> Self {
         let properties = self.schema.properties.get_or_insert_with(BTreeMap::new);
-        properties.insert(name.into(), schema);
+        properties.insert(name.into(), schema.into());
         self
     }
 
@@ -736,6 +736,90 @@ pub enum DataSchema {
     Object(ObjectSchema),
     String(StringSchema),
     Null(NullSchema),
+}
+
+impl From<ArraySchema> for DataSchema {
+    fn from(schema: ArraySchema) -> Self {
+        Self::Array(schema)
+    }
+}
+
+impl From<ArraySchemaBuilder> for DataSchema {
+    fn from(builder: ArraySchemaBuilder) -> Self {
+        builder.build().into()
+    }
+}
+
+impl From<BooleanSchema> for DataSchema {
+    fn from(schema: BooleanSchema) -> Self {
+        Self::Boolean(schema)
+    }
+}
+
+impl From<BooleanSchemaBuilder> for DataSchema {
+    fn from(builder: BooleanSchemaBuilder) -> Self {
+        builder.build().into()
+    }
+}
+
+impl From<NumberSchema> for DataSchema {
+    fn from(schema: NumberSchema) -> Self {
+        Self::Number(schema)
+    }
+}
+
+impl From<NumberSchemaBuilder> for DataSchema {
+    fn from(builder: NumberSchemaBuilder) -> Self {
+        builder.build().into()
+    }
+}
+
+impl From<IntegerSchema> for DataSchema {
+    fn from(schema: IntegerSchema) -> Self {
+        Self::Integer(schema)
+    }
+}
+
+impl From<IntegerSchemaBuilder> for DataSchema {
+    fn from(builder: IntegerSchemaBuilder) -> Self {
+        builder.build().into()
+    }
+}
+
+impl From<ObjectSchema> for DataSchema {
+    fn from(schema: ObjectSchema) -> Self {
+        Self::Object(schema)
+    }
+}
+
+impl From<ObjectSchemaBuilder> for DataSchema {
+    fn from(builder: ObjectSchemaBuilder) -> Self {
+        builder.build().into()
+    }
+}
+
+impl From<StringSchema> for DataSchema {
+    fn from(schema: StringSchema) -> Self {
+        Self::String(schema)
+    }
+}
+
+impl From<StringSchemaBuilder> for DataSchema {
+    fn from(builder: StringSchemaBuilder) -> Self {
+        builder.build().into()
+    }
+}
+
+impl From<NullSchema> for DataSchema {
+    fn from(schema: NullSchema) -> Self {
+        Self::Null(schema)
+    }
+}
+
+impl From<NullSchemaBuilder> for DataSchema {
+    fn from(builder: NullSchemaBuilder) -> Self {
+        builder.build().into()
+    }
 }
 
 impl DataSchema {

@@ -68,6 +68,15 @@ Define the protocol-neutral engine trait surface for exposed Things, consumed
 Things, interaction handlers, bindings, payload codecs, security providers, and
 transport adapters.
 
+Current status:
+
+- Started `clinkz-wot-core` as a `no_std + alloc` workspace crate.
+- Added the first protocol-neutral trait surface for payload codecs, exposed
+  Things, consumed Things, protocol bindings, security providers, and transport
+  adapters.
+- Kept form selection, target URI resolution, and concrete protocol behavior
+  outside the core crate for the later binding-core and binding milestones.
+
 Entry criteria:
 
 - TD/TM public types expose effective operation, target, and security metadata

@@ -855,7 +855,97 @@ pub enum SecurityScheme {
     OAuth2(OAuth2SecurityScheme),
 }
 
+impl From<NoSecurityScheme> for SecurityScheme {
+    fn from(scheme: NoSecurityScheme) -> Self {
+        Self::NoSec(scheme)
+    }
+}
+
+impl From<AutoSecurityScheme> for SecurityScheme {
+    fn from(scheme: AutoSecurityScheme) -> Self {
+        Self::Auto(scheme)
+    }
+}
+
+impl From<ComboSecurityScheme> for SecurityScheme {
+    fn from(scheme: ComboSecurityScheme) -> Self {
+        Self::Combo(scheme)
+    }
+}
+
+impl From<BasicSecurityScheme> for SecurityScheme {
+    fn from(scheme: BasicSecurityScheme) -> Self {
+        Self::Basic(scheme)
+    }
+}
+
+impl From<DigestSecurityScheme> for SecurityScheme {
+    fn from(scheme: DigestSecurityScheme) -> Self {
+        Self::Digest(scheme)
+    }
+}
+
+impl From<APIKeySecurityScheme> for SecurityScheme {
+    fn from(scheme: APIKeySecurityScheme) -> Self {
+        Self::APIKey(scheme)
+    }
+}
+
+impl From<BearerSecurityScheme> for SecurityScheme {
+    fn from(scheme: BearerSecurityScheme) -> Self {
+        Self::Bearer(scheme)
+    }
+}
+
+impl From<PSKSecurityScheme> for SecurityScheme {
+    fn from(scheme: PSKSecurityScheme) -> Self {
+        Self::PSK(scheme)
+    }
+}
+
+impl From<OAuth2SecurityScheme> for SecurityScheme {
+    fn from(scheme: OAuth2SecurityScheme) -> Self {
+        Self::OAuth2(scheme)
+    }
+}
+
 impl SecurityScheme {
+    /// Creates a `nosec` security scheme.
+    pub fn nosec() -> Self {
+        NoSecurityScheme {
+            _context: SecuritySchemeContext::new("nosec"),
+        }
+        .into()
+    }
+
+    /// Creates an `auto` security scheme.
+    pub fn auto() -> Self {
+        AutoSecurityScheme {
+            _context: SecuritySchemeContext::new("auto"),
+        }
+        .into()
+    }
+
+    /// Creates a `basic` security scheme with the required name.
+    pub fn basic(name: impl Into<String>) -> Self {
+        BasicSecurityScheme {
+            _context: SecuritySchemeContext::new("basic"),
+            name: Some(name.into()),
+            location: SecurityLocation::default(),
+        }
+        .into()
+    }
+
+    /// Creates an `apikey` security scheme with the required name.
+    pub fn apikey(name: impl Into<String>) -> Self {
+        APIKeySecurityScheme {
+            _context: SecuritySchemeContext::new("apikey"),
+            name: Some(name.into()),
+            location: SecurityLocation::default(),
+        }
+        .into()
+    }
+
     pub fn scheme(&self) -> &str {
         macro_rules! get_scheme {
             ($($variant:ident),*) => {

@@ -392,21 +392,31 @@ impl ThingModelBuilder {
         self
     }
 
+    /// Adds the default `nosec` security scheme and reference.
+    pub fn nosec(self) -> Self {
+        self.security_definition("nosec", SecurityScheme::nosec())
+            .security_name("nosec")
+    }
+
     /// Adds a schema definition.
-    pub fn schema_definition(mut self, name: impl Into<String>, schema: DataSchema) -> Self {
+    pub fn schema_definition(
+        mut self,
+        name: impl Into<String>,
+        schema: impl Into<DataSchema>,
+    ) -> Self {
         self.model
             .schema_definitions
             .get_or_insert_with(BTreeMap::new)
-            .insert(name.into(), schema);
+            .insert(name.into(), schema.into());
         self
     }
 
     /// Adds a URI variable.
-    pub fn uri_variable(mut self, name: impl Into<String>, schema: DataSchema) -> Self {
+    pub fn uri_variable(mut self, name: impl Into<String>, schema: impl Into<DataSchema>) -> Self {
         self.model
             .uri_variables
             .get_or_insert_with(BTreeMap::new)
-            .insert(name.into(), schema);
+            .insert(name.into(), schema.into());
         self
     }
 

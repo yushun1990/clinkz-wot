@@ -26,7 +26,7 @@ use crate::{
 /// of one or more Things.
 #[serde_as]
 #[skip_serializing_none]
-#[derive(Default, Deserialize, Serialize)]
+#[derive(Debug, Default, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Thing {
     /// JSON-LD keyword to define short-hand names called terms that are used throughout
@@ -491,6 +491,50 @@ impl ThingBuilder {
         self
     }
 
+    /// Adds a security definition reference name.
+    pub fn security_name(mut self, name: impl Into<String>) -> Self {
+        self.thing.security.push(name.into());
+        self
+    }
+
+    /// Adds a named security definition.
+    pub fn security_definition(
+        mut self,
+        name: impl Into<String>,
+        security: impl Into<SecurityScheme>,
+    ) -> Self {
+        self.thing
+            .security_definitions
+            .insert(name.into(), security.into());
+        self
+    }
+
+    /// Adds a named security definition and references it from `security`.
+    pub fn security_named(
+        self,
+        name: impl Into<String>,
+        security: impl Into<SecurityScheme>,
+    ) -> Self {
+        let name = name.into();
+        self.security_definition(name.clone(), security)
+            .security_name(name)
+    }
+
+    /// Adds the default `nosec` security scheme.
+    pub fn nosec(self) -> Self {
+        self.security_named("nosec", SecurityScheme::nosec())
+    }
+
+    /// Adds a named `basic` security scheme and references it from `security`.
+    pub fn basic_security(self, name: impl Into<String>, parameter: impl Into<String>) -> Self {
+        self.security_named(name, SecurityScheme::basic(parameter))
+    }
+
+    /// Adds a named `apikey` security scheme and references it from `security`.
+    pub fn apikey_security(self, name: impl Into<String>, parameter: impl Into<String>) -> Self {
+        self.security_named(name, SecurityScheme::apikey(parameter))
+    }
+
     /// Adds multiple security names.
     pub fn securities<I, S>(mut self, securities: I) -> Self
     where
@@ -504,19 +548,23 @@ impl ThingBuilder {
     }
 
     /// Adds a schema definition.
-    pub fn schema_definition(mut self, name: impl Into<String>, schema: DataSchema) -> Self {
+    pub fn schema_definition(
+        mut self,
+        name: impl Into<String>,
+        schema: impl Into<DataSchema>,
+    ) -> Self {
         let schema_definitions = self
             .thing
             .schema_definitions
             .get_or_insert_with(BTreeMap::new);
-        schema_definitions.insert(name.into(), schema);
+        schema_definitions.insert(name.into(), schema.into());
         self
     }
 
     /// Adds a URI variable.
-    pub fn uri_variable(mut self, name: impl Into<String>, schema: DataSchema) -> Self {
+    pub fn uri_variable(mut self, name: impl Into<String>, schema: impl Into<DataSchema>) -> Self {
         let uri_variables = self.thing.uri_variables.get_or_insert_with(BTreeMap::new);
-        uri_variables.insert(name.into(), schema);
+        uri_variables.insert(name.into(), schema.into());
         self
     }
 
