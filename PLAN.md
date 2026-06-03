@@ -80,25 +80,27 @@ Current status:
   affordance forms against TD effective operations and routes requests to
   matching bindings.
 - Kept form selection, target URI resolution, and concrete protocol behavior
-  outside the core crate for the later binding-core and binding milestones.
+  outside the core crate for the later protocol-bindings milestone.
 - Verified `clinkz-wot-core` with `cargo check -p clinkz-wot-core
   --no-default-features`.
 
 Entry criteria:
 
 - TD/TM public types expose effective operation, target, and security metadata
-  needed by binding-core consumers.
+  needed by protocol binding consumers.
 - The core trait surface remains independent of zenoh and other concrete
   transports.
 
-### M4: Protocol Binding Core and Zenoh Binding
+### M4: Protocol Bindings and Zenoh Binding
 
 Add shared binding utilities and implement zenoh as the first optional protocol
 binding without making it a dependency of TD, TM, or core runtime crates.
 
 Current status:
 
-- Started `clinkz-wot-binding-core` as a `no_std + alloc` workspace crate.
+- Organized protocol binding crates under `protocol-bindings/`.
+- Started `clinkz-wot-protocol-bindings` as a `no_std + alloc` workspace crate
+  for shared protocol binding utilities.
 - Added shared form selection based on TD effective operations and affordance
   context.
 - Added shared form target resolution using the TD crate's `base` plus `href`
@@ -108,7 +110,14 @@ Current status:
 - Added protocol-neutral form selection criteria for content type and
   subprotocol matching while preserving the existing operation-only selection
   API.
-- Kept zenoh and other concrete protocol behavior out of binding-core.
+- Kept zenoh and other concrete protocol behavior out of
+  `clinkz-wot-protocol-bindings`.
+- Started `clinkz-wot-protocol-bindings-zenoh` as the first optional concrete
+  protocol binding crate under `protocol-bindings/protocols/zenoh`.
+- Added first-pass zenoh form support that recognizes `zenoh://` form targets
+  and `cz-zenoh:keyExpr` extension metadata, extracts key expressions, and
+  implements the shared `ProtocolBinding` support check without introducing a
+  required zenoh runtime dependency.
 
 ### M5: Discovery and TDD
 

@@ -518,7 +518,7 @@ Status: planned.
 Goal: expose clean TD data types that binding crates can consume without
 duplicating field semantics.
 
-The TD crate should not implement binding behavior. Later binding-core work
+The TD crate should not implement binding behavior. Later protocol binding work
 should consume TD types for:
 
 - Form selection.

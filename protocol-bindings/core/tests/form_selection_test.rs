@@ -1,4 +1,4 @@
-use clinkz_wot_binding_core::{
+use clinkz_wot_protocol_bindings::{
     AffordanceRef, BindingCoreError, FormSelectionCriteria, resolve_form_target,
     select_affordance_form, select_affordance_form_with_criteria, select_form,
     select_form_with_criteria,

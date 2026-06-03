@@ -4,11 +4,15 @@
 
 ### `clinkz-wot-td`
 
+Path: `td`.
+
 Owns TD and TM data structures, builders, serialization, deserialization, validation, and extension preservation.
 
 This crate must remain `no_std + alloc` compatible. It must not depend on networking, async runtimes, zenoh, databases, filesystems, or operating-system APIs.
 
 ### `clinkz-wot-core`
+
+Path: `core`.
 
 Defines protocol-neutral engine traits and local runtime abstractions.
 
@@ -23,9 +27,11 @@ Expected responsibilities:
 
 This crate should also support `no_std + alloc`.
 
-### `clinkz-wot-binding-core`
+### `clinkz-wot-protocol-bindings`
 
-Defines common binding utilities:
+Path: `protocol-bindings/core`.
+
+Defines common protocol binding utilities:
 
 - Form selection.
 - Operation-to-form resolution.
@@ -34,7 +40,9 @@ Defines common binding utilities:
 
 This crate should avoid protocol-specific behavior.
 
-### `clinkz-wot-binding-zenoh`
+### `clinkz-wot-protocol-bindings-zenoh`
+
+Path: `protocol-bindings/protocols/zenoh`.
 
 Implements the first concrete binding because Clinkz Platform uses zenoh as its default communication bus.
 

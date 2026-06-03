@@ -1,6 +1,11 @@
 [workspace]
 resolver = "3"
-members = ["clinkz-wot-binding-core", "clinkz-wot-core", "clinkz-wot-td"]
+members = [
+    "core",
+    "protocol-bindings/core",
+    "protocol-bindings/protocols/zenoh",
+    "td",
+]
 
 [workspace.package]
 version = "0.1.0"
@@ -11,4 +16,4 @@ edition = "2024"
 time = { version = "0.3", default-features = false }
 
 serde = { version = "1.0", default-features = false }
-serde_json = { version = "1.0", default-features = false}
+serde_json = { version = "1.0", default-features = false }

@@ -23,11 +23,25 @@ Relevant form fields include:
 
 Bindings must use the same protocol-neutral trait surface.
 
+## Crate Organization
+
+Protocol binding crates are grouped under `protocol-bindings/`:
+
+- `core`: shared protocol binding utilities published as
+  `clinkz-wot-protocol-bindings`.
+- `protocols/zenoh`: the concrete zenoh binding published as
+  `clinkz-wot-protocol-bindings-zenoh`.
+
+The shared protocol binding crate owns form selection, affordance form lookup,
+and target resolution helpers. Concrete protocol crates own transport-specific
+metadata parsing and operation mapping.
+
 ## Zenoh Binding
 
 Zenoh is the first implemented binding because Clinkz Platform uses zenoh as its default communication bus.
 
-Zenoh is not a required dependency of the engine. It belongs in `clinkz-wot-binding-zenoh` or an equivalent optional crate.
+Zenoh is not a required dependency of the engine. It belongs in
+`clinkz-wot-protocol-bindings-zenoh` or an equivalent optional crate.
 
 Expected operation mapping:
 

@@ -64,17 +64,27 @@ dependencies = [
 ]
 
 [[package]]
-name = "clinkz-wot-binding-core"
+name = "clinkz-wot-core"
 version = "0.1.0"
 dependencies = [
  "clinkz-wot-td",
 ]
 
 [[package]]
-name = "clinkz-wot-core"
+name = "clinkz-wot-protocol-bindings"
 version = "0.1.0"
 dependencies = [
  "clinkz-wot-td",
+]
+
+[[package]]
+name = "clinkz-wot-protocol-bindings-zenoh"
+version = "0.1.0"
+dependencies = [
+ "clinkz-wot-core",
+ "clinkz-wot-protocol-bindings",
+ "clinkz-wot-td",
+ "serde_json",
 ]
 
 [[package]]

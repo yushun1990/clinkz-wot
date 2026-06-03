@@ -1,10 +1,10 @@
 [package]
-name = "clinkz-wot-binding-core"
+name = "clinkz-wot-core"
 version.workspace = true
 edition.workspace = true
 
 [dependencies]
-clinkz-wot-td = { path = "../clinkz-wot-td", default-features = false }
+clinkz-wot-td = { path = "../td", default-features = false }
 
 [features]
 default = ["std"]
