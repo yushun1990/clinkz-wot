@@ -5,6 +5,7 @@ members = [
     "discovery",
     "protocol-bindings/core",
     "protocol-bindings/protocols/zenoh",
+    "servient",
     "td",
 ]
 

@@ -26,17 +26,23 @@ Current focus:
   binding crates.
 - M4 protocol binding hardening is complete for the current shared and zenoh
   binding scope.
-- Build M5 Discovery first, then M6 Servient runtime composition, and
-  keep M7 conformance and embedded checks running across every crate that
+- M5 Discovery has the first in-memory Thing Description Directory and query
+  surface needed by runtime crates.
+- M6 Servient runtime composition has started with a std host crate that wires
+  Discovery, local Things, consumed Things, and injected protocol bindings.
+- Keep M7 conformance and embedded checks running across every crate that
   claims `no_std + alloc` support.
 
 Immediate next sequence:
 
-1. Start M5 by introducing `clinkz-wot-discovery` with a std-first in-memory
-   Thing Description Directory and protocol-neutral storage/query traits.
-2. Start M6 only after M5 has registration, lookup, update, deletion, and
-   validation behavior that a Servient can consume.
-3. Expand M7 checks as each milestone adds crates or public compatibility
+1. Harden M6 lifecycle semantics, runtime registries, and Servient-level
+   consumed Thing invocation APIs.
+2. Add Servient integration coverage for remote property writes, action
+   invocation, event subscription, binding selection, and missing binding
+   diagnostics.
+3. Introduce the first production-oriented runtime extension points: TD/form
+   caches, exposed Thing registry backends, and shared transport ownership.
+4. Expand M7 checks as each milestone adds crates or public compatibility
    surfaces.
 
 ### M1: TD 1.1 Hardening
@@ -247,6 +253,29 @@ Exit criteria:
 Compose TD/TM, protocol bindings, discovery, security, and observability into a
 host/runtime Servient that supports exposed and consumed Things.
 
+Current status:
+
+- Started `clinkz-wot-servient` as a `std` workspace crate.
+- Added a host Servient builder backed by an injectable Thing Directory and
+  protocol binding factories.
+- Added lifecycle APIs for start and stop.
+- Added directory APIs for register, update, unregister, list, and query.
+- Added local Thing exposure and unexposure flows that keep the directory in
+  sync with exposed TDs.
+- Added Servient-level dispatch APIs for property reads, property writes, action
+  invocation, and event subscription on locally exposed Things.
+- Added consumed Thing creation from directory entries or direct TDs, with
+  registered protocol bindings injected into each consumed dispatcher.
+- Added post-build protocol binding factory registration for runtime
+  composition flows that cannot provide all bindings at builder construction
+  time.
+- Added a boxed `ProtocolBinding` forwarding implementation in core so runtime
+  crates can pass protocol-neutral binding instances without knowing concrete
+  binding types.
+- Added integration tests for exposing a local Thing, consuming a discovered TD,
+  dispatching all local interaction kinds, and invoking through an injected test
+  binding.
+
 Entry criteria:
 
 - M5 provides a usable directory abstraction and in-memory backend.
@@ -255,15 +284,27 @@ Entry criteria:
 
 Planned work:
 
-- Add `clinkz-wot-servient` as a `std` crate in the workspace.
-- Introduce a Servient builder for registering local Things, consumed Things,
-  protocol bindings, codecs, security providers, and discovery backends.
-- Compose `LocalThing`, `BoundConsumedThing`, protocol bindings, and discovery
-  registration without making zenoh mandatory.
-- Add host-level error handling and lifecycle APIs for start, stop, register,
-  unregister, expose, and consume flows.
-- Add integration tests for exposing a local Thing, consuming a discovered TD,
-  and invoking interactions through an injected test binding.
+- Define lifecycle behavior more precisely, including idempotent start/stop
+  expectations and whether expose/register mutations are allowed while running.
+- Add Servient-level consumed Thing convenience APIs for remote property read,
+  property write, action invocation, and event subscription when callers already
+  have a selected form or selection criteria.
+- Keep low-level `BoundConsumedThing` access available for callers that need to
+  cache TDs, selected forms, or dispatchers directly.
+- Introduce a protocol-neutral cache boundary for TDs, selected forms, and
+  binding plans so production services do not need to query Discovery before
+  every device interaction.
+- Extract the current in-memory exposed Thing map behind a registry boundary so
+  platform services can use dynamic, sharded, or actor-backed registries without
+  changing TD, Discovery, or binding crates.
+- Add builder slots for payload codecs and security providers, then wire them
+  into local and consumed interaction paths without making any concrete
+  provider mandatory.
+- Add runtime integration tests for remote property writes, action invocation,
+  event subscription, late binding factory registration, unknown Thing ids,
+  missing bindings, and directory update/unregister flows.
+- Add a zenoh runtime integration test using the existing fake transport so M6
+  exercises the first concrete binding while keeping zenoh optional.
 
 Exit criteria:
 

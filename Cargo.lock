@@ -95,6 +95,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "clinkz-wot-servient"
+version = "0.1.0"
+dependencies = [
+ "clinkz-wot-core",
+ "clinkz-wot-discovery",
+ "clinkz-wot-td",
+]
+
+[[package]]
 name = "clinkz-wot-td"
 version = "0.1.0"
 dependencies = [

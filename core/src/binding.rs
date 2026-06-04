@@ -1,3 +1,5 @@
+use alloc::boxed::Box;
+
 use clinkz_wot_td::{data_type::Operation, form::Form, thing::Thing};
 
 use crate::{AffordanceTarget, CoreResult, InteractionInput, InteractionOutput};
@@ -23,4 +25,14 @@ pub trait ProtocolBinding {
 
     /// Performs the requested interaction through the concrete protocol.
     fn invoke(&mut self, request: BindingRequest<'_>) -> CoreResult<InteractionOutput>;
+}
+
+impl ProtocolBinding for Box<dyn ProtocolBinding> {
+    fn supports(&self, form: &Form, operation: Operation) -> bool {
+        self.as_ref().supports(form, operation)
+    }
+
+    fn invoke(&mut self, request: BindingRequest<'_>) -> CoreResult<InteractionOutput> {
+        self.as_mut().invoke(request)
+    }
 }
