@@ -199,6 +199,21 @@ Exit criteria:
 Implement W3C Discovery concepts and Thing Description Directory behavior for
 registration, lookup, update, deletion, and query flows.
 
+Current status:
+
+- Started `clinkz-wot-discovery` as a std-first workspace crate.
+- Added protocol-neutral Thing Description Directory traits for registration,
+  retrieval, update, deletion, listing, and query.
+- Added backend-portable structured directory queries with exact-match filters,
+  conjunctive matching, pagination metadata, and owned result entries suitable
+  for memory, SQL, RDF/SPARQL, HTTP, or other runtime backends.
+- Added a deterministic in-memory directory backend with configurable TD
+  validation level and a local predicate-query convenience API for tests and
+  host-local filtering.
+- Added focused tests for duplicate registration, update behavior, deletion,
+  lookup by id, deterministic listing, structured query predicates, pagination,
+  missing ids, validation failures, and owned result cloning.
+
 Entry criteria:
 
 - M4 shared binding APIs are stable enough for Discovery and Servient crates to
@@ -212,6 +227,8 @@ Planned work:
 - Define protocol-neutral directory traits for registration, retrieval, update,
   deletion, listing, and query.
 - Implement a deterministic in-memory directory backend first.
+- Keep concrete production storage backends separate from the shared Discovery
+  query model, following the same adapter boundary used by protocol bindings.
 - Validate TD inputs explicitly at configurable validation levels before
   registration and update.
 - Preserve full TD round-trip data, including unknown extension fields and

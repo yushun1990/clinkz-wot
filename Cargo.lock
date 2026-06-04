@@ -71,6 +71,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "clinkz-wot-discovery"
+version = "0.1.0"
+dependencies = [
+ "clinkz-wot-td",
+]
+
+[[package]]
 name = "clinkz-wot-protocol-bindings"
 version = "0.1.0"
 dependencies = [

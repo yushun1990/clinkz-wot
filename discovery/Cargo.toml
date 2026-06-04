@@ -1,0 +1,11 @@
+[package]
+name = "clinkz-wot-discovery"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+clinkz-wot-td = { path = "../td" }
+
+[features]
+default = ["std"]
+std = []

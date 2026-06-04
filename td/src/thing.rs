@@ -26,7 +26,7 @@ use crate::{
 /// of one or more Things.
 #[serde_as]
 #[skip_serializing_none]
-#[derive(Debug, Default, Deserialize, Serialize)]
+#[derive(Debug, Default, Clone, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Thing {
     /// JSON-LD keyword to define short-hand names called terms that are used throughout
