@@ -8,14 +8,14 @@ use std::collections::BTreeMap;
 use std::fmt;
 
 use clinkz_wot_core::{
-    BoundConsumedThing, CoreError, EventSink, ExposedThing, InteractionInput, InteractionOutput,
-    LocalThing, ProtocolBinding,
+    AffordanceTarget, BoundConsumedThing, ConsumedThing, CoreError, EventSink, ExposedThing,
+    InteractionInput, InteractionOutput, LocalThing, ProtocolBinding,
 };
 use clinkz_wot_discovery::{
     DirectoryEntry, DirectoryPage, DirectoryQuery, DiscoveryError, InMemoryThingDirectory,
     ThingDirectory,
 };
-use clinkz_wot_td::thing::Thing;
+use clinkz_wot_td::{data_type::Operation, form::Form, thing::Thing};
 
 /// Result type used by Servient runtime composition APIs.
 pub type ServientResult<T> = Result<T, ServientError>;
@@ -303,6 +303,78 @@ where
     /// Creates a consumed Thing dispatcher directly from a TD.
     pub fn consume_thing(&self, thing: Thing) -> BoundConsumedThing {
         self.bound_consumed_thing(thing)
+    }
+
+    /// Reads a property on a remote Thing through a caller-selected form.
+    pub fn read_remote_property(
+        &self,
+        id: &str,
+        name: &str,
+        form: &Form,
+        input: InteractionInput,
+    ) -> ServientResult<InteractionOutput> {
+        self.consume(id)?
+            .request(
+                AffordanceTarget::Property(name),
+                Operation::ReadProperty,
+                form,
+                input,
+            )
+            .map_err(Into::into)
+    }
+
+    /// Writes a property on a remote Thing through a caller-selected form.
+    pub fn write_remote_property(
+        &self,
+        id: &str,
+        name: &str,
+        form: &Form,
+        input: InteractionInput,
+    ) -> ServientResult<InteractionOutput> {
+        self.consume(id)?
+            .request(
+                AffordanceTarget::Property(name),
+                Operation::WriteProperty,
+                form,
+                input,
+            )
+            .map_err(Into::into)
+    }
+
+    /// Invokes an action on a remote Thing through a caller-selected form.
+    pub fn invoke_remote_action(
+        &self,
+        id: &str,
+        name: &str,
+        form: &Form,
+        input: InteractionInput,
+    ) -> ServientResult<InteractionOutput> {
+        self.consume(id)?
+            .request(
+                AffordanceTarget::Action(name),
+                Operation::InvokeAction,
+                form,
+                input,
+            )
+            .map_err(Into::into)
+    }
+
+    /// Subscribes to a remote event through a caller-selected form.
+    pub fn subscribe_remote_event(
+        &self,
+        id: &str,
+        name: &str,
+        form: &Form,
+        input: InteractionInput,
+    ) -> ServientResult<InteractionOutput> {
+        self.consume(id)?
+            .request(
+                AffordanceTarget::Event(name),
+                Operation::SubscribeEvent,
+                form,
+                input,
+            )
+            .map_err(Into::into)
     }
 
     fn bound_consumed_thing(&self, thing: Thing) -> BoundConsumedThing {

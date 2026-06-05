@@ -68,41 +68,70 @@ struct TestBinding {
 
 impl ProtocolBinding for TestBinding {
     fn supports(&self, form: &Form, operation: Operation) -> bool {
-        form.href.as_str().starts_with("test://") && operation == Operation::ReadProperty
+        form.href.as_str().starts_with("test://")
+            && matches!(
+                operation,
+                Operation::ReadProperty
+                    | Operation::WriteProperty
+                    | Operation::InvokeAction
+                    | Operation::SubscribeEvent
+            )
     }
 
     fn invoke(&mut self, request: BindingRequest<'_>) -> CoreResult<InteractionOutput> {
-        assert!(matches!(
-            request.target,
-            AffordanceTarget::Property("status")
-        ));
-        Ok(InteractionOutput::with_payload(self.response.clone()))
+        match (request.target, request.operation) {
+            (AffordanceTarget::Property("status"), Operation::ReadProperty) => {
+                Ok(InteractionOutput::with_payload(self.response.clone()))
+            }
+            (AffordanceTarget::Property("status"), Operation::WriteProperty) => {
+                assert_eq!(request.input.payload.unwrap().body, b"off");
+                Ok(InteractionOutput::empty())
+            }
+            (AffordanceTarget::Action("echo"), Operation::InvokeAction) => Ok(InteractionOutput {
+                payload: request.input.payload,
+            }),
+            (AffordanceTarget::Event("startup"), Operation::SubscribeEvent) => Ok(
+                InteractionOutput::with_payload(Payload::new(b"subscribed".to_vec(), "text/plain")),
+            ),
+            _ => panic!("unexpected binding request"),
+        }
     }
 }
 
-fn thing(id: &str, title: &str) -> (Thing, Form) {
-    let form = Form::read_property("test://things/lamp/properties/status")
+struct TestForms {
+    read_property: Form,
+    write_property: Form,
+    invoke_action: Form,
+    subscribe_event: Form,
+}
+
+fn thing(id: &str, title: &str) -> (Thing, TestForms) {
+    let read_property = Form::read_property("test://things/lamp/properties/status")
+        .content_type("text/plain")
+        .build()
+        .unwrap();
+    let write_property = Form::write_property("test://things/lamp/properties/status")
+        .content_type("text/plain")
+        .build()
+        .unwrap();
+    let invoke_action = Form::invoke_action("test://things/lamp/actions/echo")
+        .content_type("text/plain")
+        .build()
+        .unwrap();
+    let subscribe_event = Form::subscribe_event("test://things/lamp/events/startup")
         .content_type("text/plain")
         .build()
         .unwrap();
     let property = PropertyAffordance::builder(DataSchema::String(DataSchema::string().build()))
-        .form(form.clone())
+        .forms([read_property.clone(), write_property.clone()])
         .build()
         .unwrap();
     let action = ActionAffordance::builder()
-        .form(
-            Form::invoke_action("test://things/lamp/actions/echo")
-                .build()
-                .unwrap(),
-        )
+        .form(invoke_action.clone())
         .build()
         .unwrap();
     let event = EventAffordance::builder()
-        .form(
-            Form::subscribe_event("test://things/lamp/events/startup")
-                .build()
-                .unwrap(),
-        )
+        .form(subscribe_event.clone())
         .build()
         .unwrap();
     let thing = Thing::builder(title)
@@ -114,7 +143,15 @@ fn thing(id: &str, title: &str) -> (Thing, Form) {
         .build()
         .unwrap();
 
-    (thing, form)
+    (
+        thing,
+        TestForms {
+            read_property,
+            write_property,
+            invoke_action,
+            subscribe_event,
+        },
+    )
 }
 
 #[test]
@@ -183,7 +220,7 @@ fn exposes_local_thing_and_dispatches_handler() {
 
 #[test]
 fn consumes_discovered_td_through_registered_binding_factory() {
-    let (td, form) = thing("urn:thing:remote-lamp", "Remote Lamp");
+    let (td, forms) = thing("urn:thing:remote-lamp", "Remote Lamp");
     let mut servient = Servient::builder()
         .binding_factory(|| {
             Box::new(TestBinding {
@@ -198,12 +235,114 @@ fn consumes_discovered_td_through_registered_binding_factory() {
         .request(
             AffordanceTarget::Property("status"),
             Operation::ReadProperty,
-            &form,
+            &forms.read_property,
             InteractionInput::empty(),
         )
         .unwrap();
 
     assert_eq!(output.payload.unwrap().body, b"on");
+}
+
+#[test]
+fn servient_remote_convenience_methods_route_through_registered_bindings() {
+    let (td, forms) = thing("urn:thing:remote-lamp", "Remote Lamp");
+    let mut servient = Servient::builder()
+        .binding_factory(|| {
+            Box::new(TestBinding {
+                response: Payload::new(b"on".to_vec(), "text/plain"),
+            })
+        })
+        .build();
+    servient.register(td).unwrap();
+
+    let read = servient
+        .read_remote_property(
+            "urn:thing:remote-lamp",
+            "status",
+            &forms.read_property,
+            InteractionInput::empty(),
+        )
+        .unwrap();
+    assert_eq!(read.payload.unwrap().body, b"on");
+
+    servient
+        .write_remote_property(
+            "urn:thing:remote-lamp",
+            "status",
+            &forms.write_property,
+            InteractionInput::with_payload(Payload::new(b"off".to_vec(), "text/plain")),
+        )
+        .unwrap();
+
+    let action = servient
+        .invoke_remote_action(
+            "urn:thing:remote-lamp",
+            "echo",
+            &forms.invoke_action,
+            InteractionInput::with_payload(Payload::new(b"hello".to_vec(), "text/plain")),
+        )
+        .unwrap();
+    assert_eq!(action.payload.unwrap().body, b"hello");
+
+    let event = servient
+        .subscribe_remote_event(
+            "urn:thing:remote-lamp",
+            "startup",
+            &forms.subscribe_event,
+            InteractionInput::empty(),
+        )
+        .unwrap();
+    assert_eq!(event.payload.unwrap().body, b"subscribed");
+}
+
+#[test]
+fn late_binding_factory_registration_is_used_by_new_consumed_requests() {
+    let (td, forms) = thing("urn:thing:remote-lamp", "Remote Lamp");
+    let mut servient = Servient::new();
+    servient.register(td).unwrap();
+    servient.register_binding_factory(|| {
+        Box::new(TestBinding {
+            response: Payload::new(b"late".to_vec(), "text/plain"),
+        })
+    });
+
+    let output = servient
+        .read_remote_property(
+            "urn:thing:remote-lamp",
+            "status",
+            &forms.read_property,
+            InteractionInput::empty(),
+        )
+        .unwrap();
+
+    assert_eq!(output.payload.unwrap().body, b"late");
+}
+
+#[test]
+fn remote_requests_report_missing_bindings_and_unknown_things() {
+    let (td, forms) = thing("urn:thing:remote-lamp", "Remote Lamp");
+    let mut servient = Servient::new();
+    servient.register(td).unwrap();
+
+    let err = servient
+        .read_remote_property(
+            "urn:thing:remote-lamp",
+            "status",
+            &forms.read_property,
+            InteractionInput::empty(),
+        )
+        .unwrap_err();
+    assert!(matches!(err, ServientError::Core(_)));
+
+    let err = servient
+        .read_remote_property(
+            "urn:thing:missing",
+            "status",
+            &forms.read_property,
+            InteractionInput::empty(),
+        )
+        .unwrap_err();
+    assert!(matches!(err, ServientError::Discovery(_)));
 }
 
 #[test]

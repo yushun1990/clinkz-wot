@@ -266,6 +266,9 @@ Current status:
   invocation, and event subscription on locally exposed Things.
 - Added consumed Thing creation from directory entries or direct TDs, with
   registered protocol bindings injected into each consumed dispatcher.
+- Added Servient-level consumed Thing convenience APIs for remote property
+  reads, property writes, action invocation, and event subscription when callers
+  already have a selected form.
 - Added post-build protocol binding factory registration for runtime
   composition flows that cannot provide all bindings at builder construction
   time.
@@ -275,6 +278,9 @@ Current status:
 - Added integration tests for exposing a local Thing, consuming a discovered TD,
   dispatching all local interaction kinds, and invoking through an injected test
   binding.
+- Added runtime integration coverage for remote property writes, remote action
+  invocation, remote event subscription, late binding factory registration,
+  unknown Thing ids, and missing binding diagnostics.
 
 Entry criteria:
 
@@ -286,9 +292,9 @@ Planned work:
 
 - Define lifecycle behavior more precisely, including idempotent start/stop
   expectations and whether expose/register mutations are allowed while running.
-- Add Servient-level consumed Thing convenience APIs for remote property read,
-  property write, action invocation, and event subscription when callers already
-  have a selected form or selection criteria.
+- Extend Servient-level consumed Thing convenience APIs with selection criteria
+  based form selection, while keeping selected-form calls available for callers
+  that cache form choices.
 - Keep low-level `BoundConsumedThing` access available for callers that need to
   cache TDs, selected forms, or dispatchers directly.
 - Introduce a protocol-neutral cache boundary for TDs, selected forms, and
@@ -300,9 +306,7 @@ Planned work:
 - Add builder slots for payload codecs and security providers, then wire them
   into local and consumed interaction paths without making any concrete
   provider mandatory.
-- Add runtime integration tests for remote property writes, action invocation,
-  event subscription, late binding factory registration, unknown Thing ids,
-  missing bindings, and directory update/unregister flows.
+- Add runtime integration tests for directory update/unregister flows.
 - Add a zenoh runtime integration test using the existing fake transport so M6
   exercises the first concrete binding while keeping zenoh optional.
 
