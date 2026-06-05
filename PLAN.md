@@ -284,12 +284,17 @@ Current status:
 - Added a boxed `ProtocolBinding` forwarding implementation in core so runtime
   crates can pass protocol-neutral binding instances without knowing concrete
   binding types.
+- Added an injectable consumed Thing TD cache boundary in Servient, with a
+  deterministic in-memory default and synchronization from register, update,
+  expose, unregister, and unexpose flows.
 - Added integration tests for exposing a local Thing, consuming a discovered TD,
   dispatching all local interaction kinds, and invoking through an injected test
   binding.
 - Added runtime integration coverage for remote property writes, remote action
   invocation, remote event subscription, late binding factory registration,
   unknown Thing ids, and missing binding diagnostics.
+- Added runtime integration coverage for consumed TD cache synchronization,
+  cache-preferred consumption, directory update, and unregister flows.
 
 Entry criteria:
 
@@ -301,7 +306,7 @@ Planned work:
 
 - Keep low-level `BoundConsumedThing` access available for callers that need to
   cache TDs, selected forms, or dispatchers directly.
-- Introduce a protocol-neutral cache boundary for TDs, selected forms, and
+- Extend the protocol-neutral cache boundary from TDs to selected forms and
   binding plans so production services do not need to query Discovery before
   every device interaction.
 - Add builder slots for payload codecs and security providers, then wire them

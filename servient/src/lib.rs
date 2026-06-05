@@ -149,55 +149,145 @@ impl ExposedThingRegistry for InMemoryExposedThingRegistry {
     }
 }
 
-/// Builder for a host Servient.
-pub struct ServientBuilder<D = InMemoryThingDirectory, R = InMemoryExposedThingRegistry> {
-    directory: D,
-    exposed_registry: R,
-    binding_factories: Vec<BindingFactory>,
+/// Cache boundary for consumed Thing TDs used by Servient-level invocation APIs.
+pub trait ConsumedThingCache {
+    /// Retrieves a cached Thing Description by Thing id.
+    fn get(&self, id: &str) -> Option<Thing>;
+
+    /// Inserts or replaces a cached Thing Description by Thing id.
+    fn insert(&mut self, id: String, thing: Thing) -> Option<Thing>;
+
+    /// Removes a cached Thing Description by Thing id.
+    fn remove(&mut self, id: &str) -> Option<Thing>;
 }
 
-impl ServientBuilder<InMemoryThingDirectory, InMemoryExposedThingRegistry> {
-    /// Creates a builder using an in-memory Thing Description Directory.
+/// Deterministic in-memory cache for consumed Thing TDs.
+pub struct InMemoryConsumedThingCache {
+    things: BTreeMap<String, Thing>,
+}
+
+impl InMemoryConsumedThingCache {
+    /// Creates an empty consumed Thing cache.
     pub fn new() -> Self {
         Self {
-            directory: InMemoryThingDirectory::new(),
-            exposed_registry: InMemoryExposedThingRegistry::new(),
-            binding_factories: Vec::new(),
+            things: BTreeMap::new(),
         }
+    }
+
+    /// Returns the number of cached Thing Descriptions.
+    pub fn len(&self) -> usize {
+        self.things.len()
+    }
+
+    /// Returns true when the cache contains no Thing Descriptions.
+    pub fn is_empty(&self) -> bool {
+        self.things.is_empty()
     }
 }
 
-impl Default for ServientBuilder<InMemoryThingDirectory, InMemoryExposedThingRegistry> {
+impl Default for InMemoryConsumedThingCache {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl<D, R> ServientBuilder<D, R>
+impl ConsumedThingCache for InMemoryConsumedThingCache {
+    fn get(&self, id: &str) -> Option<Thing> {
+        self.things.get(id).cloned()
+    }
+
+    fn insert(&mut self, id: String, thing: Thing) -> Option<Thing> {
+        self.things.insert(id, thing)
+    }
+
+    fn remove(&mut self, id: &str) -> Option<Thing> {
+        self.things.remove(id)
+    }
+}
+
+/// Builder for a host Servient.
+pub struct ServientBuilder<
+    D = InMemoryThingDirectory,
+    R = InMemoryExposedThingRegistry,
+    C = InMemoryConsumedThingCache,
+> {
+    directory: D,
+    exposed_registry: R,
+    consumed_cache: C,
+    binding_factories: Vec<BindingFactory>,
+}
+
+impl
+    ServientBuilder<
+        InMemoryThingDirectory,
+        InMemoryExposedThingRegistry,
+        InMemoryConsumedThingCache,
+    >
+{
+    /// Creates a builder using an in-memory Thing Description Directory.
+    pub fn new() -> Self {
+        Self {
+            directory: InMemoryThingDirectory::new(),
+            exposed_registry: InMemoryExposedThingRegistry::new(),
+            consumed_cache: InMemoryConsumedThingCache::new(),
+            binding_factories: Vec::new(),
+        }
+    }
+}
+
+impl Default
+    for ServientBuilder<
+        InMemoryThingDirectory,
+        InMemoryExposedThingRegistry,
+        InMemoryConsumedThingCache,
+    >
+{
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl<D, R, C> ServientBuilder<D, R, C>
 where
     D: ThingDirectory,
     R: ExposedThingRegistry,
+    C: ConsumedThingCache,
 {
     /// Uses a caller-provided Thing Description Directory backend.
-    pub fn with_directory<N>(self, directory: N) -> ServientBuilder<N, R>
+    pub fn with_directory<N>(self, directory: N) -> ServientBuilder<N, R, C>
     where
         N: ThingDirectory,
     {
         ServientBuilder {
             directory,
             exposed_registry: self.exposed_registry,
+            consumed_cache: self.consumed_cache,
             binding_factories: self.binding_factories,
         }
     }
 
     /// Uses a caller-provided exposed Thing registry backend.
-    pub fn with_exposed_registry<N>(self, exposed_registry: N) -> ServientBuilder<D, N>
+    pub fn with_exposed_registry<N>(self, exposed_registry: N) -> ServientBuilder<D, N, C>
     where
         N: ExposedThingRegistry,
     {
         ServientBuilder {
             directory: self.directory,
             exposed_registry,
+            consumed_cache: self.consumed_cache,
+            binding_factories: self.binding_factories,
+        }
+    }
+
+    /// Uses a caller-provided consumed Thing cache backend.
+    pub fn with_consumed_cache<N>(self, consumed_cache: N) -> ServientBuilder<D, R, N>
+    where
+        N: ConsumedThingCache,
+    {
+        ServientBuilder {
+            directory: self.directory,
+            exposed_registry: self.exposed_registry,
+            consumed_cache,
             binding_factories: self.binding_factories,
         }
     }
@@ -212,10 +302,11 @@ where
     }
 
     /// Builds the Servient.
-    pub fn build(self) -> Servient<D, R> {
+    pub fn build(self) -> Servient<D, R, C> {
         Servient {
             directory: self.directory,
             exposed_registry: self.exposed_registry,
+            consumed_cache: self.consumed_cache,
             binding_factories: self.binding_factories,
             running: false,
         }
@@ -223,16 +314,25 @@ where
 }
 
 /// Host Servient that composes discovery, exposed Things, and consumed Things.
-pub struct Servient<D = InMemoryThingDirectory, R = InMemoryExposedThingRegistry> {
+pub struct Servient<
+    D = InMemoryThingDirectory,
+    R = InMemoryExposedThingRegistry,
+    C = InMemoryConsumedThingCache,
+> {
     directory: D,
     exposed_registry: R,
+    consumed_cache: C,
     binding_factories: Vec<BindingFactory>,
     running: bool,
 }
 
-impl Servient<InMemoryThingDirectory, InMemoryExposedThingRegistry> {
+impl Servient<InMemoryThingDirectory, InMemoryExposedThingRegistry, InMemoryConsumedThingCache> {
     /// Creates a Servient backed by an in-memory Thing Description Directory.
-    pub fn builder() -> ServientBuilder<InMemoryThingDirectory, InMemoryExposedThingRegistry> {
+    pub fn builder() -> ServientBuilder<
+        InMemoryThingDirectory,
+        InMemoryExposedThingRegistry,
+        InMemoryConsumedThingCache,
+    > {
         ServientBuilder::new()
     }
 
@@ -242,16 +342,19 @@ impl Servient<InMemoryThingDirectory, InMemoryExposedThingRegistry> {
     }
 }
 
-impl Default for Servient<InMemoryThingDirectory, InMemoryExposedThingRegistry> {
+impl Default
+    for Servient<InMemoryThingDirectory, InMemoryExposedThingRegistry, InMemoryConsumedThingCache>
+{
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl<D, R> Servient<D, R>
+impl<D, R, C> Servient<D, R, C>
 where
     D: ThingDirectory,
     R: ExposedThingRegistry,
+    C: ConsumedThingCache,
 {
     /// Starts the host runtime lifecycle.
     ///
@@ -296,6 +399,16 @@ where
         &mut self.exposed_registry
     }
 
+    /// Returns the underlying consumed Thing cache.
+    pub fn consumed_cache(&self) -> &C {
+        &self.consumed_cache
+    }
+
+    /// Returns the underlying consumed Thing cache mutably.
+    pub fn consumed_cache_mut(&mut self) -> &mut C {
+        &mut self.consumed_cache
+    }
+
     /// Registers a protocol binding factory after the Servient has been built.
     pub fn register_binding_factory<F>(&mut self, factory: F) -> ServientResult<()>
     where
@@ -309,20 +422,28 @@ where
     /// Registers a TD in the directory without exposing local handlers.
     pub fn register(&mut self, thing: Thing) -> ServientResult<DirectoryEntry> {
         self.ensure_stopped()?;
-        self.directory.register(thing).map_err(Into::into)
+        let entry = self.directory.register(thing)?;
+        self.consumed_cache
+            .insert(entry.id.clone(), entry.thing.clone());
+        Ok(entry)
     }
 
     /// Updates a TD in the directory.
     pub fn update(&mut self, thing: Thing) -> ServientResult<DirectoryEntry> {
         self.ensure_stopped()?;
-        self.directory.update(thing).map_err(Into::into)
+        let entry = self.directory.update(thing)?;
+        self.consumed_cache
+            .insert(entry.id.clone(), entry.thing.clone());
+        Ok(entry)
     }
 
     /// Removes a TD from the directory.
     pub fn unregister(&mut self, id: &str) -> ServientResult<Thing> {
         self.ensure_stopped()?;
+        let thing = self.directory.delete(id)?;
         self.exposed_registry.remove(id);
-        self.directory.delete(id).map_err(Into::into)
+        self.consumed_cache.remove(id);
+        Ok(thing)
     }
 
     /// Lists directory entries in deterministic backend order.
@@ -344,6 +465,8 @@ where
         }
 
         let entry = self.directory.register(thing.thing_description().clone())?;
+        self.consumed_cache
+            .insert(entry.id.clone(), entry.thing.clone());
         self.exposed_registry.insert(id, thing);
         Ok(entry)
     }
@@ -355,6 +478,7 @@ where
             .exposed_registry
             .remove(id)
             .ok_or_else(|| ServientError::ExposedThingNotFound(id.to_owned()))?;
+        self.consumed_cache.remove(id);
         self.directory.delete(id)?;
         Ok(thing)
     }
@@ -417,7 +541,10 @@ where
 
     /// Creates a consumed Thing dispatcher from a directory entry.
     pub fn consume(&self, id: &str) -> ServientResult<BoundConsumedThing> {
-        let thing = self.directory.get(id)?;
+        let thing = match self.consumed_cache.get(id) {
+            Some(thing) => thing,
+            None => self.directory.get(id)?,
+        };
         Ok(self.bound_consumed_thing(thing))
     }
 

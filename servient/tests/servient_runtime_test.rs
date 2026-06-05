@@ -5,7 +5,8 @@ use clinkz_wot_core::{
 };
 use clinkz_wot_protocol_bindings::{BindingCoreError, FormSelectionCriteria};
 use clinkz_wot_servient::{
-    ExposedThingRegistry, InMemoryExposedThingRegistry, Servient, ServientError,
+    ConsumedThingCache, ExposedThingRegistry, InMemoryConsumedThingCache,
+    InMemoryExposedThingRegistry, Servient, ServientError,
 };
 use clinkz_wot_td::{
     affordance::{ActionAffordance, EventAffordance, InteractionHelper, PropertyAffordance},
@@ -132,6 +133,29 @@ impl ExposedThingRegistry for TestExposedRegistry {
 
     fn get_mut(&mut self, id: &str) -> Option<&mut LocalThing> {
         self.inner.get_mut(id)
+    }
+}
+
+#[derive(Default)]
+struct TestConsumedCache {
+    inner: InMemoryConsumedThingCache,
+    inserted: usize,
+    removed: usize,
+}
+
+impl ConsumedThingCache for TestConsumedCache {
+    fn get(&self, id: &str) -> Option<Thing> {
+        self.inner.get(id)
+    }
+
+    fn insert(&mut self, id: String, thing: Thing) -> Option<Thing> {
+        self.inserted += 1;
+        self.inner.insert(id, thing)
+    }
+
+    fn remove(&mut self, id: &str) -> Option<Thing> {
+        self.removed += 1;
+        self.inner.remove(id)
     }
 }
 
@@ -510,6 +534,63 @@ fn servient_uses_injected_exposed_thing_registry() {
 
     servient.unexpose("urn:thing:local-lamp").unwrap();
     assert_eq!(servient.exposed_registry().removed, 1);
+}
+
+#[test]
+fn servient_syncs_consumed_cache_with_directory_mutations() {
+    let (td, _) = thing("urn:thing:remote-lamp", "Remote Lamp");
+    let (updated_td, _) = thing("urn:thing:remote-lamp", "Updated Remote Lamp");
+    let mut servient = Servient::builder()
+        .with_consumed_cache(TestConsumedCache::default())
+        .build();
+
+    servient.register(td).unwrap();
+    assert_eq!(servient.consumed_cache().inserted, 1);
+    assert_eq!(servient.consumed_cache().inner.len(), 1);
+
+    let consumed = servient.consume("urn:thing:remote-lamp").unwrap();
+    assert_eq!(
+        consumed.thing_description()._metadata.title.as_deref(),
+        Some("Remote Lamp")
+    );
+
+    servient.update(updated_td).unwrap();
+    assert_eq!(servient.consumed_cache().inserted, 2);
+    let consumed = servient.consume("urn:thing:remote-lamp").unwrap();
+    assert_eq!(
+        consumed.thing_description()._metadata.title.as_deref(),
+        Some("Updated Remote Lamp")
+    );
+
+    servient.unregister("urn:thing:remote-lamp").unwrap();
+    assert_eq!(servient.consumed_cache().removed, 1);
+    assert!(servient.consumed_cache().inner.is_empty());
+    let err = match servient.consume("urn:thing:remote-lamp") {
+        Ok(_) => panic!("unregistered Thing should not be consumable"),
+        Err(err) => err,
+    };
+    assert!(matches!(err, ServientError::Discovery(_)));
+}
+
+#[test]
+fn consume_prefers_cached_td_when_present() {
+    let (directory_td, _) = thing("urn:thing:remote-lamp", "Directory Lamp");
+    let (cached_td, _) = thing("urn:thing:remote-lamp", "Cached Lamp");
+    let mut cache = InMemoryConsumedThingCache::new();
+    cache.insert("urn:thing:remote-lamp".to_owned(), cached_td);
+    let mut servient = Servient::builder().with_consumed_cache(cache).build();
+    servient.register(directory_td).unwrap();
+    let (cached_td, _) = thing("urn:thing:remote-lamp", "Cached Lamp");
+    servient
+        .consumed_cache_mut()
+        .insert("urn:thing:remote-lamp".to_owned(), cached_td);
+
+    let consumed = servient.consume("urn:thing:remote-lamp").unwrap();
+
+    assert_eq!(
+        consumed.thing_description()._metadata.title.as_deref(),
+        Some("Cached Lamp")
+    );
 }
 
 #[test]
