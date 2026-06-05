@@ -343,17 +343,114 @@ impl SelectedFormCache for InMemorySelectedFormCache {
     }
 }
 
+/// Protocol-neutral cached binding plan for a criteria-selected remote request.
+#[derive(Debug, Clone, PartialEq)]
+pub struct BindingPlan {
+    /// Selected TD form for the remote interaction.
+    pub form: Form,
+    /// Index of the protocol binding factory selected for this form.
+    pub binding_factory_index: usize,
+}
+
+/// Cache boundary for criteria-selected forms and protocol binding factories.
+pub trait BindingPlanCache {
+    /// Retrieves a cached binding plan by the same key used for selected forms.
+    fn get(&self, key: &SelectedFormCacheKey) -> Option<BindingPlan>;
+
+    /// Inserts or replaces a cached binding plan.
+    fn insert(&self, key: SelectedFormCacheKey, plan: BindingPlan) -> Option<BindingPlan>;
+
+    /// Removes a cached binding plan.
+    fn remove(&self, key: &SelectedFormCacheKey) -> Option<BindingPlan>;
+
+    /// Removes all cached binding plans for a Thing id.
+    fn remove_thing(&self, id: &str);
+}
+
+/// Deterministic in-memory cache for Servient binding plans.
+pub struct InMemoryBindingPlanCache {
+    plans: std::cell::RefCell<Vec<(SelectedFormCacheKey, BindingPlan)>>,
+}
+
+impl InMemoryBindingPlanCache {
+    /// Creates an empty binding plan cache.
+    pub fn new() -> Self {
+        Self {
+            plans: std::cell::RefCell::new(Vec::new()),
+        }
+    }
+
+    /// Returns the number of cached binding plans.
+    pub fn len(&self) -> usize {
+        self.plans.borrow().len()
+    }
+
+    /// Returns true when the cache contains no binding plans.
+    pub fn is_empty(&self) -> bool {
+        self.plans.borrow().is_empty()
+    }
+}
+
+impl Default for InMemoryBindingPlanCache {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl BindingPlanCache for InMemoryBindingPlanCache {
+    fn get(&self, key: &SelectedFormCacheKey) -> Option<BindingPlan> {
+        self.plans
+            .borrow()
+            .iter()
+            .find(|(candidate, _)| candidate == key)
+            .map(|(_, plan)| plan.clone())
+    }
+
+    fn insert(&self, key: SelectedFormCacheKey, plan: BindingPlan) -> Option<BindingPlan> {
+        let mut plans = self.plans.borrow_mut();
+        if let Some((_, cached_plan)) = plans.iter_mut().find(|(candidate, _)| *candidate == key) {
+            let previous = cached_plan.clone();
+            *cached_plan = plan;
+            Some(previous)
+        } else {
+            plans.push((key, plan));
+            None
+        }
+    }
+
+    fn remove(&self, key: &SelectedFormCacheKey) -> Option<BindingPlan> {
+        let mut plans = self.plans.borrow_mut();
+        plans
+            .iter()
+            .position(|(candidate, _)| candidate == key)
+            .map(|index| plans.remove(index).1)
+    }
+
+    fn remove_thing(&self, id: &str) {
+        self.plans
+            .borrow_mut()
+            .retain(|(key, _)| key.thing_id != id);
+    }
+}
+
+struct ActiveBindingPlan {
+    form: Form,
+    binding: Box<dyn ProtocolBinding>,
+}
+
 /// Builder for a host Servient.
 pub struct ServientBuilder<
     D = InMemoryThingDirectory,
     R = InMemoryExposedThingRegistry,
     C = InMemoryConsumedThingCache,
     S = InMemorySelectedFormCache,
+    P = InMemoryBindingPlanCache,
 > {
     directory: D,
     exposed_registry: R,
     consumed_cache: C,
     selected_form_cache: S,
+    binding_plan_cache: P,
     binding_factories: Vec<BindingFactory>,
 }
 
@@ -363,6 +460,7 @@ impl
         InMemoryExposedThingRegistry,
         InMemoryConsumedThingCache,
         InMemorySelectedFormCache,
+        InMemoryBindingPlanCache,
     >
 {
     /// Creates a builder using an in-memory Thing Description Directory.
@@ -372,6 +470,7 @@ impl
             exposed_registry: InMemoryExposedThingRegistry::new(),
             consumed_cache: InMemoryConsumedThingCache::new(),
             selected_form_cache: InMemorySelectedFormCache::new(),
+            binding_plan_cache: InMemoryBindingPlanCache::new(),
             binding_factories: Vec::new(),
         }
     }
@@ -383,6 +482,7 @@ impl Default
         InMemoryExposedThingRegistry,
         InMemoryConsumedThingCache,
         InMemorySelectedFormCache,
+        InMemoryBindingPlanCache,
     >
 {
     fn default() -> Self {
@@ -390,15 +490,16 @@ impl Default
     }
 }
 
-impl<D, R, C, S> ServientBuilder<D, R, C, S>
+impl<D, R, C, S, P> ServientBuilder<D, R, C, S, P>
 where
     D: ThingDirectory,
     R: ExposedThingRegistry,
     C: ConsumedThingCache,
     S: SelectedFormCache,
+    P: BindingPlanCache,
 {
     /// Uses a caller-provided Thing Description Directory backend.
-    pub fn with_directory<N>(self, directory: N) -> ServientBuilder<N, R, C, S>
+    pub fn with_directory<N>(self, directory: N) -> ServientBuilder<N, R, C, S, P>
     where
         N: ThingDirectory,
     {
@@ -407,12 +508,13 @@ where
             exposed_registry: self.exposed_registry,
             consumed_cache: self.consumed_cache,
             selected_form_cache: self.selected_form_cache,
+            binding_plan_cache: self.binding_plan_cache,
             binding_factories: self.binding_factories,
         }
     }
 
     /// Uses a caller-provided exposed Thing registry backend.
-    pub fn with_exposed_registry<N>(self, exposed_registry: N) -> ServientBuilder<D, N, C, S>
+    pub fn with_exposed_registry<N>(self, exposed_registry: N) -> ServientBuilder<D, N, C, S, P>
     where
         N: ExposedThingRegistry,
     {
@@ -421,12 +523,13 @@ where
             exposed_registry,
             consumed_cache: self.consumed_cache,
             selected_form_cache: self.selected_form_cache,
+            binding_plan_cache: self.binding_plan_cache,
             binding_factories: self.binding_factories,
         }
     }
 
     /// Uses a caller-provided consumed Thing cache backend.
-    pub fn with_consumed_cache<N>(self, consumed_cache: N) -> ServientBuilder<D, R, N, S>
+    pub fn with_consumed_cache<N>(self, consumed_cache: N) -> ServientBuilder<D, R, N, S, P>
     where
         N: ConsumedThingCache,
     {
@@ -435,12 +538,16 @@ where
             exposed_registry: self.exposed_registry,
             consumed_cache,
             selected_form_cache: self.selected_form_cache,
+            binding_plan_cache: self.binding_plan_cache,
             binding_factories: self.binding_factories,
         }
     }
 
     /// Uses a caller-provided selected form cache backend.
-    pub fn with_selected_form_cache<N>(self, selected_form_cache: N) -> ServientBuilder<D, R, C, N>
+    pub fn with_selected_form_cache<N>(
+        self,
+        selected_form_cache: N,
+    ) -> ServientBuilder<D, R, C, N, P>
     where
         N: SelectedFormCache,
     {
@@ -449,6 +556,22 @@ where
             exposed_registry: self.exposed_registry,
             consumed_cache: self.consumed_cache,
             selected_form_cache,
+            binding_plan_cache: self.binding_plan_cache,
+            binding_factories: self.binding_factories,
+        }
+    }
+
+    /// Uses a caller-provided binding plan cache backend.
+    pub fn with_binding_plan_cache<N>(self, binding_plan_cache: N) -> ServientBuilder<D, R, C, S, N>
+    where
+        N: BindingPlanCache,
+    {
+        ServientBuilder {
+            directory: self.directory,
+            exposed_registry: self.exposed_registry,
+            consumed_cache: self.consumed_cache,
+            selected_form_cache: self.selected_form_cache,
+            binding_plan_cache,
             binding_factories: self.binding_factories,
         }
     }
@@ -463,12 +586,13 @@ where
     }
 
     /// Builds the Servient.
-    pub fn build(self) -> Servient<D, R, C, S> {
+    pub fn build(self) -> Servient<D, R, C, S, P> {
         Servient {
             directory: self.directory,
             exposed_registry: self.exposed_registry,
             consumed_cache: self.consumed_cache,
             selected_form_cache: self.selected_form_cache,
+            binding_plan_cache: self.binding_plan_cache,
             binding_factories: self.binding_factories,
             running: false,
         }
@@ -481,11 +605,13 @@ pub struct Servient<
     R = InMemoryExposedThingRegistry,
     C = InMemoryConsumedThingCache,
     S = InMemorySelectedFormCache,
+    P = InMemoryBindingPlanCache,
 > {
     directory: D,
     exposed_registry: R,
     consumed_cache: C,
     selected_form_cache: S,
+    binding_plan_cache: P,
     binding_factories: Vec<BindingFactory>,
     running: bool,
 }
@@ -496,6 +622,7 @@ impl
         InMemoryExposedThingRegistry,
         InMemoryConsumedThingCache,
         InMemorySelectedFormCache,
+        InMemoryBindingPlanCache,
     >
 {
     /// Creates a Servient backed by an in-memory Thing Description Directory.
@@ -504,6 +631,7 @@ impl
         InMemoryExposedThingRegistry,
         InMemoryConsumedThingCache,
         InMemorySelectedFormCache,
+        InMemoryBindingPlanCache,
     > {
         ServientBuilder::new()
     }
@@ -520,6 +648,7 @@ impl Default
         InMemoryExposedThingRegistry,
         InMemoryConsumedThingCache,
         InMemorySelectedFormCache,
+        InMemoryBindingPlanCache,
     >
 {
     fn default() -> Self {
@@ -527,12 +656,13 @@ impl Default
     }
 }
 
-impl<D, R, C, S> Servient<D, R, C, S>
+impl<D, R, C, S, P> Servient<D, R, C, S, P>
 where
     D: ThingDirectory,
     R: ExposedThingRegistry,
     C: ConsumedThingCache,
     S: SelectedFormCache,
+    P: BindingPlanCache,
 {
     /// Starts the host runtime lifecycle.
     ///
@@ -597,6 +727,16 @@ where
         &mut self.selected_form_cache
     }
 
+    /// Returns the underlying binding plan cache.
+    pub fn binding_plan_cache(&self) -> &P {
+        &self.binding_plan_cache
+    }
+
+    /// Returns the underlying binding plan cache mutably.
+    pub fn binding_plan_cache_mut(&mut self) -> &mut P {
+        &mut self.binding_plan_cache
+    }
+
     /// Registers a protocol binding factory after the Servient has been built.
     pub fn register_binding_factory<F>(&mut self, factory: F) -> ServientResult<()>
     where
@@ -614,6 +754,7 @@ where
         self.consumed_cache
             .insert(entry.id.clone(), entry.thing.clone());
         self.selected_form_cache.remove_thing(&entry.id);
+        self.binding_plan_cache.remove_thing(&entry.id);
         Ok(entry)
     }
 
@@ -624,6 +765,7 @@ where
         self.consumed_cache
             .insert(entry.id.clone(), entry.thing.clone());
         self.selected_form_cache.remove_thing(&entry.id);
+        self.binding_plan_cache.remove_thing(&entry.id);
         Ok(entry)
     }
 
@@ -634,6 +776,7 @@ where
         self.exposed_registry.remove(id);
         self.consumed_cache.remove(id);
         self.selected_form_cache.remove_thing(id);
+        self.binding_plan_cache.remove_thing(id);
         Ok(thing)
     }
 
@@ -659,6 +802,7 @@ where
         self.consumed_cache
             .insert(entry.id.clone(), entry.thing.clone());
         self.selected_form_cache.remove_thing(&entry.id);
+        self.binding_plan_cache.remove_thing(&entry.id);
         self.exposed_registry.insert(id, thing);
         Ok(entry)
     }
@@ -672,6 +816,7 @@ where
             .ok_or_else(|| ServientError::ExposedThingNotFound(id.to_owned()))?;
         self.consumed_cache.remove(id);
         self.selected_form_cache.remove_thing(id);
+        self.binding_plan_cache.remove_thing(id);
         self.directory.delete(id)?;
         Ok(thing)
     }
@@ -734,10 +879,7 @@ where
 
     /// Creates a consumed Thing dispatcher from a directory entry.
     pub fn consume(&self, id: &str) -> ServientResult<BoundConsumedThing> {
-        let thing = match self.consumed_cache.get(id) {
-            Some(thing) => thing,
-            None => self.directory.get(id)?,
-        };
+        let thing = self.consumed_thing_description(id)?;
         Ok(self.bound_consumed_thing(thing))
     }
 
@@ -894,13 +1036,74 @@ where
         criteria: FormSelectionCriteria<'_>,
         input: InteractionInput,
     ) -> ServientResult<InteractionOutput> {
-        let mut consumed = self.consume(id)?;
-        let form =
-            self.cached_or_select_form(consumed.thing_description(), id, affordance, criteria)?;
+        let thing = self.consumed_thing_description(id)?;
+        let active_plan = self.cached_or_select_binding_plan(&thing, id, affordance, criteria)?;
+        let mut consumed = self.bound_consumed_thing_with_binding(thing, active_plan.binding);
 
         consumed
-            .request(target, criteria.operation, &form, input)
+            .request(target, criteria.operation, &active_plan.form, input)
             .map_err(Into::into)
+    }
+
+    fn cached_or_select_binding_plan(
+        &self,
+        thing: &Thing,
+        id: &str,
+        affordance: AffordanceRef<'_>,
+        criteria: FormSelectionCriteria<'_>,
+    ) -> ServientResult<ActiveBindingPlan> {
+        let key = SelectedFormCacheKey::new(
+            id,
+            SelectedFormCacheAffordance::from_affordance_ref(affordance),
+            criteria,
+        );
+
+        if let Some(plan) = self.binding_plan_cache.get(&key) {
+            match self.active_binding_plan_from_cache(thing, affordance, criteria, plan) {
+                Ok(active_plan) => return Ok(active_plan),
+                Err(_) => {
+                    self.binding_plan_cache.remove(&key);
+                }
+            }
+        }
+
+        let form = self.cached_or_select_form(thing, id, affordance, criteria)?;
+        let (binding_factory_index, binding) =
+            self.select_binding_factory_for_form(&form, criteria.operation)?;
+        self.binding_plan_cache.insert(
+            key,
+            BindingPlan {
+                form: form.clone(),
+                binding_factory_index,
+            },
+        );
+
+        Ok(ActiveBindingPlan { form, binding })
+    }
+
+    fn active_binding_plan_from_cache(
+        &self,
+        thing: &Thing,
+        affordance: AffordanceRef<'_>,
+        criteria: FormSelectionCriteria<'_>,
+        plan: BindingPlan,
+    ) -> ServientResult<ActiveBindingPlan> {
+        validate_affordance_form_with_criteria(thing, affordance, &plan.form, criteria)?;
+        let binding = self.binding_from_factory_index(plan.binding_factory_index)?;
+        if binding.supports(&plan.form, criteria.operation) {
+            Ok(ActiveBindingPlan {
+                form: plan.form,
+                binding,
+            })
+        } else {
+            Err(CoreError::UnsupportedBinding(format!(
+                "Cached binding factory {} no longer supports {:?} for {}",
+                plan.binding_factory_index,
+                criteria.operation,
+                plan.form.href.as_str()
+            ))
+            .into())
+        }
     }
 
     fn cached_or_select_form(
@@ -931,11 +1134,61 @@ where
         Ok(form)
     }
 
+    fn select_binding_factory_for_form(
+        &self,
+        form: &Form,
+        operation: Operation,
+    ) -> ServientResult<(usize, Box<dyn ProtocolBinding>)> {
+        for (index, factory) in self.binding_factories.iter().enumerate() {
+            let binding = factory();
+            if binding.supports(form, operation) {
+                return Ok((index, binding));
+            }
+        }
+
+        Err(CoreError::UnsupportedBinding(format!(
+            "No binding supports {:?} for {}",
+            operation,
+            form.href.as_str()
+        ))
+        .into())
+    }
+
+    fn binding_from_factory_index(&self, index: usize) -> ServientResult<Box<dyn ProtocolBinding>> {
+        self.binding_factories
+            .get(index)
+            .map(|factory| factory())
+            .ok_or_else(|| {
+                CoreError::UnsupportedBinding(format!(
+                    "Binding factory index {} is not registered",
+                    index
+                ))
+                .into()
+            })
+    }
+
+    fn consumed_thing_description(&self, id: &str) -> ServientResult<Thing> {
+        match self.consumed_cache.get(id) {
+            Some(thing) => Ok(thing),
+            None => self.directory.get(id).map_err(Into::into),
+        }
+    }
+
     fn bound_consumed_thing(&self, thing: Thing) -> BoundConsumedThing {
         let mut consumed = BoundConsumedThing::new(thing);
         for factory in &self.binding_factories {
             consumed.register_binding(factory());
         }
+        consumed
+    }
+
+    fn bound_consumed_thing_with_binding(
+        &self,
+        thing: Thing,
+        binding: Box<dyn ProtocolBinding>,
+    ) -> BoundConsumedThing {
+        let mut consumed = BoundConsumedThing::new(thing);
+        consumed.register_binding(binding);
         consumed
     }
 

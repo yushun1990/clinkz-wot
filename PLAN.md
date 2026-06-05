@@ -28,22 +28,22 @@ Current focus:
   binding scope.
 - M5 Discovery has the first in-memory Thing Description Directory and query
   surface needed by runtime crates.
-- M6 Servient runtime composition has started with a std host crate that wires
-  Discovery, local Things, consumed Things, and injected protocol bindings.
+- M6 Servient runtime composition now has the first std host runtime surface
+  that wires Discovery, local Things, consumed Things, injected protocol
+  bindings, runtime registries, and TD/form/binding-plan caches.
 - Keep M7 conformance and embedded checks running across every crate that
   claims `no_std + alloc` support.
 
 Immediate next sequence:
 
-1. Harden M6 lifecycle semantics, runtime registries, and Servient-level
-   consumed Thing invocation APIs.
-2. Add Servient integration coverage for remote property writes, action
-   invocation, event subscription, binding selection, and missing binding
-   diagnostics.
-3. Introduce the first production-oriented runtime extension points: TD/form
-   caches, exposed Thing registry backends, and shared transport ownership.
-4. Expand M7 checks as each milestone adds crates or public compatibility
-   surfaces.
+1. Add builder slots for payload codecs and security providers, then wire them
+   into local and consumed interaction paths without making any concrete
+   provider mandatory.
+2. Introduce production-oriented shared transport ownership for protocol
+   bindings, then add the first concrete zenoh runtime backend behind an
+   optional host/runtime boundary.
+3. Expand M7 checks and update compatibility documentation as each milestone
+   adds crates or public surfaces.
 
 ### M1: TD 1.1 Hardening
 
@@ -290,6 +290,10 @@ Current status:
 - Added an injectable selected form cache boundary in Servient, with a
   deterministic in-memory default, cache invalidation on TD lifecycle
   mutations, and criteria-based remote invocation reuse.
+- Added an injectable binding plan cache boundary in Servient, with a
+  deterministic in-memory default, cache invalidation on TD lifecycle
+  mutations, and criteria-based remote invocation reuse of both selected TD
+  forms and selected protocol binding factories.
 - Added integration tests for exposing a local Thing, consuming a discovered TD,
   dispatching all local interaction kinds, and invoking through an injected test
   binding.
@@ -313,12 +317,12 @@ Planned work:
 
 - Keep low-level `BoundConsumedThing` access available for callers that need to
   cache TDs, selected forms, or dispatchers directly.
-- Extend the protocol-neutral cache boundary from selected forms to binding
-  plans so production services do not need to query Discovery before every
-  device interaction.
 - Add builder slots for payload codecs and security providers, then wire them
   into local and consumed interaction paths without making any concrete
   provider mandatory.
+- Add shared transport ownership support so binding factories can reuse host
+  sessions or connection pools without requiring concrete protocol types in
+  Servient.
 
 Exit criteria:
 

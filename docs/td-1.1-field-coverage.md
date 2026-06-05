@@ -34,7 +34,7 @@ Status values:
 | `links` | `Thing::links` | `Option<Vec<Link>>` | No | No | None | `Link::_extra_fields` | covered | Array of links represented. |
 | `forms` | `Thing::forms` | `Option<Vec<Form>>` | No | No | None | `Form::_extra_fields` | covered | Top-level forms represented. |
 | `security` | `Thing::security` | `Vec<String>` | Yes | Yes | None | N/A | covered | OneOrMany represented. Basic validation checks non-empty values and resolves names against `securityDefinitions`. |
-| `securityDefinitions` | `Thing::security_definitions` | `BTreeMap<String, SecurityScheme>` | Yes | No | None | Via scheme extension maps | partial | Map represented. Validation of scheme-specific requirements is pending. |
+| `securityDefinitions` | `Thing::security_definitions` | `BTreeMap<String, SecurityScheme>` | Yes | No | None | Via scheme extension maps | covered | Map represented. Basic validation checks security definitions, selected scheme constraints, and combo references against the definition map. |
 | `profile` | `Thing::profile` | `Option<Vec<AbsoluteUri>>` | No | Yes | None | N/A | covered | OneOrMany absolute URI list represented. |
 | `schemaDefinitions` | `Thing::schema_definitions` | `Option<BTreeMap<String, DataSchema>>` | No | No | None | Via schema extension maps | covered | Map represented. |
 | `uriVariables` | `Thing::uri_variables` | `Option<BTreeMap<String, DataSchema>>` | No | No | None | Via schema extension maps | covered | Thing-level URI variables represented. |
@@ -49,7 +49,7 @@ Status values:
 | `titles` | `_metadata.titles` or schema metadata | `Option<MultiLanguage>` | Action, Event, Property via schema flattening | No | No | None | N/A | covered | Multi-language titles represented. |
 | `description` | `_metadata.description` or schema metadata | `Option<String>` | Action, Event, Property via schema flattening | No | No | None | N/A | covered | Optional affordance description represented. |
 | `descriptions` | `_metadata.descriptions` or schema metadata | `Option<MultiLanguage>` | Action, Event, Property via schema flattening | No | No | None | N/A | covered | Multi-language descriptions represented. |
-| `forms` | `InteractionAffordance::forms` | `Vec<Form>` | Property, Action, Event | No | No | Empty vector | Via forms | partial | Represented, but default operation inference and required form semantics need validation-level coverage. |
+| `forms` | `InteractionAffordance::forms` | `Vec<Form>` | Property, Action, Event | No | No | Empty vector | Via forms | partial | Represented. Default operation inference and explicit operation-context validation are implemented; stricter Profile-level form presence rules remain future work. |
 | `uriVariables` | `InteractionAffordance::uri_variables` | `Option<BTreeMap<String, DataSchema>>` | Property, Action, Event | No | No | None | Via schema extension maps | covered | Interaction-level URI variables represented. |
 | `observable` | `PropertyAffordance::observable` | `bool` | Property | No | No | `false` | N/A | covered | Flexible bool deserializer preserves default behavior. |
 | `input` | `ActionAffordance::input` | `Option<DataSchema>` | Action | No | No | None | Via schema extension maps | covered | Represented. |
@@ -61,7 +61,7 @@ Status values:
 | `data` | `EventAffordance::data` | `Option<DataSchema>` | Event | No | No | None | Via schema extension maps | covered | Represented. |
 | `dataResponse` | `EventAffordance::data_response` | `Option<DataSchema>` | Event | No | No | None | Via schema extension maps | covered | Represented. |
 | `cancellation` | `EventAffordance::cancellation` | `Option<DataSchema>` | Event | No | No | None | Via schema extension maps | covered | Represented. |
-| Unknown affordance terms | `_extra_fields` or schema extension map | `ExtensionMap` | Property, Action, Event | No | N/A | N/A | Yes | partial | Action and Event have dedicated extension maps. Property relies on the flattened `DataSchema` extension map, which should be covered by targeted fixtures. |
+| Unknown affordance terms | `_extra_fields` or schema extension map | `ExtensionMap` | Property, Action, Event | No | N/A | N/A | Yes | covered | Action and Event have dedicated extension maps. Property extension preservation is handled through the flattened `DataSchema` extension map and builder/round-trip coverage. |
 
 ## Form
 
@@ -70,12 +70,12 @@ Status values:
 | `href` | `Form::href` | `FormHref` | Yes | No | None | N/A | covered | URI references and URI templates represented. |
 | `contentType` | `Form::content_type` | `String` | No | No | `application/json` | N/A | covered | Default is applied and skipped during serialization when unchanged. |
 | `contentCoding` | `Form::content_coding` | `Option<String>` | No | No | None | N/A | covered | Represented. |
-| `security` | `Form::security` | `Option<Vec<String>>` | No | Yes | Inherit from Thing/interactions | N/A | partial | OneOrMany represented. Security inheritance resolution is pending. |
+| `security` | `Form::security` | `Option<Vec<String>>` | No | Yes | Inherit from Thing/interactions | N/A | covered | OneOrMany represented. Basic validation checks form-level references, and `td_defaults::effective_form_security` resolves form overrides versus Thing-level inheritance. |
 | `scopes` | `Form::scopes` | `Option<Vec<String>>` | No | Yes | None | N/A | covered | OneOrMany represented. |
 | `response` | `Form::response` | `Option<ExpectedResponse>` | No | No | None | `ExpectedResponse::_extra_fields` | covered | Primary response metadata represented. |
 | `additionalResponses` | `Form::additional_responses` | `Option<Vec<AdditionalExpectedResponse>>` | No | No | None | `AdditionalExpectedResponse::_extra_fields` | covered | Additional response metadata represented. |
 | `subprotocol` | `Form::subprotocol` | `Option<String>` | No | No | None | N/A | covered | Represented. |
-| `op` | `Form::op` | `Option<Vec<Operation>>` | No | Yes | Context-dependent | N/A | partial | Operations are typed and affordance-level validation exists. Default operation inference remains pending. |
+| `op` | `Form::op` | `Option<Vec<Operation>>` | No | Yes | Context-dependent | N/A | covered | Operations are typed. Basic validation rejects operations outside the affordance context, and `td_defaults::effective_form_operations` implements TD 1.1 default inference. |
 | Unknown form terms | `Form::_extra_fields` | `ExtensionMap` | No | N/A | N/A | Yes | covered | Unknown form fields are preserved. |
 
 ## Link
@@ -115,7 +115,7 @@ Status values:
 | `exclusiveMinimum` | `NumberSchema::exclusive_minimum`, `IntegerSchema::exclusive_minimum` | `Option<f64>`, `Option<i64>` | Number, Integer | No | No | None | N/A | covered | Represented. |
 | `maximum` | `NumberSchema::maximum`, `IntegerSchema::maximum` | `Option<f64>`, `Option<i64>` | Number, Integer | No | No | None | N/A | covered | Represented. |
 | `exclusiveMaximum` | `NumberSchema::exclusive_maximum`, `IntegerSchema::exclusive_maximum` | `Option<f64>`, `Option<i64>` | Number, Integer | No | No | None | N/A | covered | Represented. |
-| `multipleOf` | `NumberSchema::multiple_of`, `IntegerSchema::multiple_of` | `Option<f64>`, `Option<i64>` | Number, Integer | No | No | None | N/A | partial | Builders ignore non-positive values, but deserialization does not yet validate conflicts. |
+| `multipleOf` | `NumberSchema::multiple_of`, `IntegerSchema::multiple_of` | `Option<f64>`, `Option<i64>` | Number, Integer | No | No | None | N/A | covered | Builders avoid non-positive values, and Basic validation rejects non-positive typed or preserved extension-map `multipleOf` values. |
 | `properties` | `ObjectSchema::properties` | `Option<BTreeMap<String, DataSchema>>` | Object | No | No | None | Via nested schemas | covered | Represented. |
 | `required` | `ObjectSchema::required` | `Option<Vec<String>>` | Object | No | No | None | N/A | covered | Represented. |
 | `minLength` | `StringSchema::min_length` | `Option<u32>` | String | No | No | None | N/A | covered | Represented. |
@@ -134,19 +134,19 @@ Status values:
 | `descriptions` | `SecuritySchemeContext::descriptions` | `Option<MultiLanguage>` | All schemes | No | No | None | N/A | covered | Represented. |
 | `proxy` | `SecuritySchemeContext::proxy` | `Option<AbsoluteUri>` | All schemes | No | No | None | N/A | covered | Absolute URI enforced. |
 | `scheme` | `SecuritySchemeContext::scheme` | `String` | All schemes | Yes | No | Scheme-specific builder default | N/A | partial | Represented, but untagged enum deserialization and scheme-to-variant consistency need validation. |
-| `oneOf` | `ComboSecurityScheme::one_of` | `Vec<String>` | Combo | Conditional | No | Empty vector | N/A | partial | Represented. Validation of references and minimum cardinality is pending. |
-| `allOf` | `ComboSecurityScheme::all_of` | `Vec<String>` | Combo | Conditional | No | Empty vector | N/A | partial | Represented. Validation of references and minimum cardinality is pending. |
-| `name` | `name` fields | `Option<String>` | Basic, Digest, APIKey, Bearer | Conditional | No | None | N/A | partial | Represented. Scheme-specific required checks are pending. |
+| `oneOf` | `ComboSecurityScheme::one_of` | `Vec<String>` | Combo | Conditional | No | Empty vector | N/A | covered | Represented. Basic validation checks minimum cardinality, empty references, and references against `securityDefinitions`. |
+| `allOf` | `ComboSecurityScheme::all_of` | `Vec<String>` | Combo | Conditional | No | Empty vector | N/A | covered | Represented. Basic validation checks minimum cardinality, empty references, and references against `securityDefinitions`. |
+| `name` | `name` fields | `Option<String>` | Basic, Digest, APIKey, Bearer | Conditional | No | None | N/A | partial | Represented. Basic validation checks API key `name`; additional scheme-specific name requirements remain future work. |
 | `in` | `location` fields | `SecurityLocation` | Basic, Digest, APIKey, Bearer | Conditional | No | `header` | N/A | covered | Represented with default. |
 | `qop` | `DigestSecurityScheme::qop` | `Qop` | Digest | No | No | `auth` | N/A | covered | Represented. |
-| `authorization` | `BearerSecurityScheme::authorization`, `OAuth2SecurityScheme::authorization` | `Option<AbsoluteUri>` | Bearer, OAuth2 | Conditional | No | None | N/A | partial | Absolute URI enforced. Flow-specific required checks are pending. |
+| `authorization` | `BearerSecurityScheme::authorization`, `OAuth2SecurityScheme::authorization` | `Option<AbsoluteUri>` | Bearer, OAuth2 | Conditional | No | None | N/A | covered | Absolute URI enforced. Basic validation requires OAuth2 code-flow authorization endpoints. |
 | `alg` | `BearerSecurityScheme::alg` | `String` | Bearer | No | No | `ES256` | N/A | covered | Represented with default. |
 | `format` | `BearerSecurityScheme::format` | `String` | Bearer | No | No | `jwt` | N/A | covered | Represented with default. |
 | `identity` | `PSKSecurityScheme::identity` | `Option<String>` | PSK | No | No | None | N/A | covered | Represented. |
-| `token` | `OAuth2SecurityScheme::token` | `Option<AbsoluteUri>` | OAuth2 | Conditional | No | None | N/A | partial | Absolute URI enforced. Flow-specific required checks are pending. |
+| `token` | `OAuth2SecurityScheme::token` | `Option<AbsoluteUri>` | OAuth2 | Conditional | No | None | N/A | covered | Absolute URI enforced. Basic validation requires OAuth2 code-flow token endpoints. |
 | `refresh` | `OAuth2SecurityScheme::refresh` | `Option<AbsoluteUri>` | OAuth2 | No | No | None | N/A | covered | Absolute URI enforced. |
 | `scopes` | `OAuth2SecurityScheme::scopes` | `Option<Vec<String>>` | OAuth2 | No | Yes | None | N/A | covered | OneOrMany represented. |
-| `flow` | `OAuth2SecurityScheme::flow` | `String` | OAuth2 | Yes | No | Builder requires value | N/A | partial | Represented. Allowed-value validation is pending. |
+| `flow` | `OAuth2SecurityScheme::flow` | `String` | OAuth2 | Yes | No | Builder requires value | N/A | covered | Represented. Basic validation accepts `code`, `client`, and `device`, and rejects unsupported flow names. |
 | Unknown security terms | `SecuritySchemeContext::_extra_fields` | `ExtensionMap` | All schemes | No | N/A | N/A | Yes | covered | Unknown security fields are preserved. |
 
 ## ExpectedResponse and AdditionalExpectedResponse
@@ -162,11 +162,14 @@ Status values:
 
 ## Follow-Up Tasks
 
-- Add explicit validation levels so this matrix can drive `Minimal`, `Basic`,
-  `Profile`, and `Full` validation behavior.
-- Validate scheme-specific security requirements, including combo references
-  and OAuth2 flow-specific endpoint requirements.
-- Add default operation inference for forms based on the affordance context.
-- Add fixtures for property-level extension preservation, `cz:` JSON-LD
-  context entries, multiple forms per affordance, and compact `OneOrMany`
-  round trips.
+- Add Profile and Full validation rules beyond the current Basic checks,
+  including standard-context requirements and Profile-specific form
+  constraints.
+- Validate remaining scheme-specific security details that are not covered by
+  the current API key, combo, and OAuth2 checks.
+- Add default inheritance helpers for `additionalResponses.contentType` and
+  validate `additionalResponses.schema` references against schema definitions
+  when a strict validation level requires it.
+- Keep fixtures aligned with downstream runtime contracts, especially
+  property-level extension preservation, Clinkz JSON-LD context aliases,
+  multiple forms per affordance, and compact `OneOrMany` round trips.

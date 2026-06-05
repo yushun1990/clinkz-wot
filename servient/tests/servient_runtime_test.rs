@@ -8,7 +8,7 @@ use clinkz_wot_protocol_bindings_zenoh::{
     ZenohBinding, ZenohOperationKind, ZenohTransport, ZenohTransportRequest,
 };
 use clinkz_wot_servient::{
-    ConsumedThingCache, ExposedThingRegistry, InMemoryConsumedThingCache,
+    ConsumedThingCache, ExposedThingRegistry, InMemoryBindingPlanCache, InMemoryConsumedThingCache,
     InMemoryExposedThingRegistry, InMemorySelectedFormCache, SelectedFormCache,
     SelectedFormCacheAffordance, SelectedFormCacheKey, Servient, ServientError,
 };
@@ -110,6 +110,39 @@ struct HrefBinding;
 
 impl ProtocolBinding for HrefBinding {
     fn supports(&self, form: &Form, operation: Operation) -> bool {
+        form.href.as_str().starts_with("test://") && operation == Operation::ReadProperty
+    }
+
+    fn invoke(&mut self, request: BindingRequest<'_>) -> CoreResult<InteractionOutput> {
+        Ok(InteractionOutput::with_payload(Payload::new(
+            request.form.href.as_str().as_bytes().to_vec(),
+            "text/plain",
+        )))
+    }
+}
+
+struct CountingUnsupportedBinding {
+    supports_calls: std::rc::Rc<std::cell::RefCell<usize>>,
+}
+
+impl ProtocolBinding for CountingUnsupportedBinding {
+    fn supports(&self, _form: &Form, _operation: Operation) -> bool {
+        *self.supports_calls.borrow_mut() += 1;
+        false
+    }
+
+    fn invoke(&mut self, _request: BindingRequest<'_>) -> CoreResult<InteractionOutput> {
+        panic!("unsupported test binding should not be invoked")
+    }
+}
+
+struct CountingHrefBinding {
+    supports_calls: std::rc::Rc<std::cell::RefCell<usize>>,
+}
+
+impl ProtocolBinding for CountingHrefBinding {
+    fn supports(&self, form: &Form, operation: Operation) -> bool {
+        *self.supports_calls.borrow_mut() += 1;
         form.href.as_str().starts_with("test://") && operation == Operation::ReadProperty
     }
 
@@ -585,6 +618,90 @@ fn servient_remote_criteria_methods_reuse_cached_selected_forms() {
         b"test://things/lamp/properties/status/cached"
     );
     assert_eq!(servient.selected_form_cache().len(), 1);
+}
+
+#[test]
+fn servient_remote_criteria_methods_reuse_cached_binding_plans() {
+    let (td, _) = thing("urn:thing:planned-lamp", "Planned Lamp");
+    let unsupported_calls = std::rc::Rc::new(std::cell::RefCell::new(0));
+    let supported_calls = std::rc::Rc::new(std::cell::RefCell::new(0));
+    let unsupported_factory_calls = unsupported_calls.clone();
+    let supported_factory_calls = supported_calls.clone();
+    let mut servient = Servient::builder()
+        .with_binding_plan_cache(InMemoryBindingPlanCache::new())
+        .binding_factory(move || {
+            Box::new(CountingUnsupportedBinding {
+                supports_calls: unsupported_factory_calls.clone(),
+            })
+        })
+        .binding_factory(move || {
+            Box::new(CountingHrefBinding {
+                supports_calls: supported_factory_calls.clone(),
+            })
+        })
+        .build();
+    servient.register(td).unwrap();
+
+    let read = servient
+        .read_remote_property_with_criteria(
+            "urn:thing:planned-lamp",
+            "status",
+            FormSelectionCriteria::operation(Operation::ReadProperty).content_type("text/plain"),
+            InteractionInput::empty(),
+        )
+        .unwrap();
+    assert_eq!(
+        read.payload.unwrap().body,
+        b"test://things/lamp/properties/status"
+    );
+    assert_eq!(*unsupported_calls.borrow(), 1);
+    assert_eq!(servient.binding_plan_cache().len(), 1);
+
+    let read = servient
+        .read_remote_property_with_criteria(
+            "urn:thing:planned-lamp",
+            "status",
+            FormSelectionCriteria::operation(Operation::ReadProperty).content_type("text/plain"),
+            InteractionInput::empty(),
+        )
+        .unwrap();
+    assert_eq!(
+        read.payload.unwrap().body,
+        b"test://things/lamp/properties/status"
+    );
+    assert_eq!(
+        *unsupported_calls.borrow(),
+        1,
+        "cached plan should skip probing earlier unsupported factories"
+    );
+    assert_eq!(servient.binding_plan_cache().len(), 1);
+    assert!(*supported_calls.borrow() >= 2);
+}
+
+#[test]
+fn servient_invalidates_binding_plan_cache_on_td_update() {
+    let (td, _) = thing("urn:thing:planned-lamp", "Planned Lamp");
+    let (updated_td, _) = thing("urn:thing:planned-lamp", "Updated Planned Lamp");
+    let mut servient = Servient::builder()
+        .binding_factory(|| Box::new(HrefBinding))
+        .build();
+    servient.register(td).unwrap();
+
+    servient
+        .read_remote_property_with_criteria(
+            "urn:thing:planned-lamp",
+            "status",
+            FormSelectionCriteria::operation(Operation::ReadProperty).content_type("text/plain"),
+            InteractionInput::empty(),
+        )
+        .unwrap();
+    assert_eq!(servient.selected_form_cache().len(), 1);
+    assert_eq!(servient.binding_plan_cache().len(), 1);
+
+    servient.update(updated_td).unwrap();
+
+    assert!(servient.selected_form_cache().is_empty());
+    assert!(servient.binding_plan_cache().is_empty());
 }
 
 #[test]
