@@ -1,370 +1,18 @@
-use clinkz_wot_core::{
-    ActionHandler, AffordanceTarget, BindingRequest, ConsumedThing, CoreResult, EventHandler,
-    EventSink, InteractionInput, InteractionOutput, LocalThing, Payload, PropertyHandler,
-    ProtocolBinding,
-};
+mod support;
+
+use std::{cell::Cell, rc::Rc};
+
+use clinkz_wot_core::{AffordanceTarget, ConsumedThing, InteractionInput, LocalThing, Payload};
 use clinkz_wot_protocol_bindings::{BindingCoreError, FormSelectionCriteria};
-use clinkz_wot_protocol_bindings_zenoh::{
-    ZenohBinding, ZenohOperationKind, ZenohTransport, ZenohTransportRequest,
-};
+use clinkz_wot_protocol_bindings_zenoh::ZenohBinding;
 use clinkz_wot_servient::{
-    ConsumedThingCache, ExposedThingRegistry, InMemoryBindingPlanCache, InMemoryConsumedThingCache,
-    InMemoryExposedThingRegistry, InMemorySelectedFormCache, SelectedFormCache,
-    SelectedFormCacheAffordance, SelectedFormCacheKey, Servient, ServientError,
+    ConsumedThingCache, InMemoryBindingPlanCache, InMemoryConsumedThingCache,
+    InMemorySelectedFormCache, SelectedFormCache, SelectedFormCacheAffordance,
+    SelectedFormCacheKey, Servient, ServientError,
 };
-use clinkz_wot_td::{
-    affordance::{ActionAffordance, EventAffordance, InteractionHelper, PropertyAffordance},
-    data_schema::DataSchema,
-    data_type::Operation,
-    form::Form,
-    thing::Thing,
-};
+use clinkz_wot_td::data_type::Operation;
 
-struct StatusProperty {
-    value: Payload,
-}
-
-impl PropertyHandler for StatusProperty {
-    fn read(&mut self, _input: InteractionInput) -> CoreResult<InteractionOutput> {
-        Ok(InteractionOutput::with_payload(self.value.clone()))
-    }
-
-    fn write(&mut self, input: InteractionInput) -> CoreResult<InteractionOutput> {
-        self.value = input.payload.expect("test write payload");
-        Ok(InteractionOutput::empty())
-    }
-}
-
-struct EchoAction;
-
-impl ActionHandler for EchoAction {
-    fn invoke(&mut self, input: InteractionInput) -> CoreResult<InteractionOutput> {
-        Ok(InteractionOutput {
-            payload: input.payload,
-        })
-    }
-}
-
-struct StartupEvent;
-
-impl EventHandler for StartupEvent {
-    fn subscribe(
-        &mut self,
-        _input: InteractionInput,
-        sink: &mut dyn EventSink,
-    ) -> CoreResult<InteractionOutput> {
-        sink.emit(Payload::new(b"ready".to_vec(), "text/plain"))?;
-        Ok(InteractionOutput::empty())
-    }
-}
-
-#[derive(Default)]
-struct CollectSink {
-    payloads: Vec<Payload>,
-}
-
-impl EventSink for CollectSink {
-    fn emit(&mut self, payload: Payload) -> CoreResult<()> {
-        self.payloads.push(payload);
-        Ok(())
-    }
-}
-
-struct TestBinding {
-    response: Payload,
-}
-
-impl ProtocolBinding for TestBinding {
-    fn supports(&self, form: &Form, operation: Operation) -> bool {
-        form.href.as_str().starts_with("test://")
-            && matches!(
-                operation,
-                Operation::ReadProperty
-                    | Operation::WriteProperty
-                    | Operation::InvokeAction
-                    | Operation::SubscribeEvent
-            )
-    }
-
-    fn invoke(&mut self, request: BindingRequest<'_>) -> CoreResult<InteractionOutput> {
-        match (request.target, request.operation) {
-            (AffordanceTarget::Property("status"), Operation::ReadProperty) => {
-                Ok(InteractionOutput::with_payload(self.response.clone()))
-            }
-            (AffordanceTarget::Property("status"), Operation::WriteProperty) => {
-                assert_eq!(request.input.payload.unwrap().body, b"off");
-                Ok(InteractionOutput::empty())
-            }
-            (AffordanceTarget::Action("echo"), Operation::InvokeAction) => Ok(InteractionOutput {
-                payload: request.input.payload,
-            }),
-            (AffordanceTarget::Event("startup"), Operation::SubscribeEvent) => Ok(
-                InteractionOutput::with_payload(Payload::new(b"subscribed".to_vec(), "text/plain")),
-            ),
-            _ => panic!("unexpected binding request"),
-        }
-    }
-}
-
-struct HrefBinding;
-
-impl ProtocolBinding for HrefBinding {
-    fn supports(&self, form: &Form, operation: Operation) -> bool {
-        form.href.as_str().starts_with("test://") && operation == Operation::ReadProperty
-    }
-
-    fn invoke(&mut self, request: BindingRequest<'_>) -> CoreResult<InteractionOutput> {
-        Ok(InteractionOutput::with_payload(Payload::new(
-            request.form.href.as_str().as_bytes().to_vec(),
-            "text/plain",
-        )))
-    }
-}
-
-struct CountingUnsupportedBinding {
-    supports_calls: std::rc::Rc<std::cell::RefCell<usize>>,
-}
-
-impl ProtocolBinding for CountingUnsupportedBinding {
-    fn supports(&self, _form: &Form, _operation: Operation) -> bool {
-        *self.supports_calls.borrow_mut() += 1;
-        false
-    }
-
-    fn invoke(&mut self, _request: BindingRequest<'_>) -> CoreResult<InteractionOutput> {
-        panic!("unsupported test binding should not be invoked")
-    }
-}
-
-struct CountingHrefBinding {
-    supports_calls: std::rc::Rc<std::cell::RefCell<usize>>,
-}
-
-impl ProtocolBinding for CountingHrefBinding {
-    fn supports(&self, form: &Form, operation: Operation) -> bool {
-        *self.supports_calls.borrow_mut() += 1;
-        form.href.as_str().starts_with("test://") && operation == Operation::ReadProperty
-    }
-
-    fn invoke(&mut self, request: BindingRequest<'_>) -> CoreResult<InteractionOutput> {
-        Ok(InteractionOutput::with_payload(Payload::new(
-            request.form.href.as_str().as_bytes().to_vec(),
-            "text/plain",
-        )))
-    }
-}
-
-struct TestForms {
-    read_property: Form,
-    write_property: Form,
-    invoke_action: Form,
-    subscribe_event: Form,
-}
-
-#[derive(Default)]
-struct ServientZenohTransport;
-
-impl ZenohTransport for ServientZenohTransport {
-    fn execute(&mut self, request: ZenohTransportRequest) -> CoreResult<InteractionOutput> {
-        match (request.plan.kind, request.plan.key_expr.as_str()) {
-            (ZenohOperationKind::Query, "clinkz/things/lamp/properties/status") => Ok(
-                InteractionOutput::with_payload(Payload::new(b"zenoh-on".to_vec(), "text/plain")),
-            ),
-            (ZenohOperationKind::Put, "clinkz/things/lamp/properties/status") => {
-                assert_eq!(
-                    request
-                        .payload
-                        .as_ref()
-                        .map(|payload| payload.body.as_slice()),
-                    Some(&b"zenoh-off"[..])
-                );
-                Ok(InteractionOutput::empty())
-            }
-            (ZenohOperationKind::RequestReply, "clinkz/things/lamp/actions/echo") => {
-                Ok(InteractionOutput {
-                    payload: request.payload,
-                })
-            }
-            (ZenohOperationKind::Subscribe, "clinkz/things/lamp/events/startup") => {
-                Ok(InteractionOutput::with_payload(Payload::new(
-                    b"zenoh-subscribed".to_vec(),
-                    "text/plain",
-                )))
-            }
-            _ => panic!("unexpected zenoh transport request: {:?}", request),
-        }
-    }
-}
-
-#[derive(Default)]
-struct TestExposedRegistry {
-    inner: InMemoryExposedThingRegistry,
-    inserted: usize,
-    removed: usize,
-}
-
-impl ExposedThingRegistry for TestExposedRegistry {
-    fn contains_id(&self, id: &str) -> bool {
-        self.inner.contains_id(id)
-    }
-
-    fn insert(&mut self, id: String, thing: LocalThing) -> Option<LocalThing> {
-        self.inserted += 1;
-        self.inner.insert(id, thing)
-    }
-
-    fn remove(&mut self, id: &str) -> Option<LocalThing> {
-        self.removed += 1;
-        self.inner.remove(id)
-    }
-
-    fn get_mut(&mut self, id: &str) -> Option<&mut LocalThing> {
-        self.inner.get_mut(id)
-    }
-}
-
-#[derive(Default)]
-struct TestConsumedCache {
-    inner: InMemoryConsumedThingCache,
-    inserted: usize,
-    removed: usize,
-}
-
-impl ConsumedThingCache for TestConsumedCache {
-    fn get(&self, id: &str) -> Option<Thing> {
-        self.inner.get(id)
-    }
-
-    fn insert(&mut self, id: String, thing: Thing) -> Option<Thing> {
-        self.inserted += 1;
-        self.inner.insert(id, thing)
-    }
-
-    fn remove(&mut self, id: &str) -> Option<Thing> {
-        self.removed += 1;
-        self.inner.remove(id)
-    }
-}
-
-fn thing(id: &str, title: &str) -> (Thing, TestForms) {
-    let json_read_property = Form::read_property("other://things/lamp/properties/status")
-        .content_type("application/json")
-        .build()
-        .unwrap();
-    let read_property = Form::read_property("test://things/lamp/properties/status")
-        .content_type("text/plain")
-        .build()
-        .unwrap();
-    let write_property = Form::write_property("test://things/lamp/properties/status")
-        .content_type("text/plain")
-        .build()
-        .unwrap();
-    let invoke_action = Form::invoke_action("test://things/lamp/actions/echo")
-        .content_type("text/plain")
-        .build()
-        .unwrap();
-    let subscribe_event = Form::subscribe_event("test://things/lamp/events/startup")
-        .content_type("text/plain")
-        .build()
-        .unwrap();
-    let property = PropertyAffordance::builder(DataSchema::String(DataSchema::string().build()))
-        .forms([
-            json_read_property.clone(),
-            read_property.clone(),
-            write_property.clone(),
-        ])
-        .build()
-        .unwrap();
-    let action = ActionAffordance::builder()
-        .form(invoke_action.clone())
-        .build()
-        .unwrap();
-    let event = EventAffordance::builder()
-        .form(subscribe_event.clone())
-        .build()
-        .unwrap();
-    let thing = Thing::builder(title)
-        .id(id)
-        .nosec()
-        .property("status", property)
-        .action("echo", action)
-        .event("startup", event)
-        .build()
-        .unwrap();
-
-    (
-        thing,
-        TestForms {
-            read_property,
-            write_property,
-            invoke_action,
-            subscribe_event,
-        },
-    )
-}
-
-fn cacheable_thing(id: &str, title: &str) -> (Thing, Form, Form) {
-    let first_form = Form::read_property("test://things/lamp/properties/status/first")
-        .content_type("text/plain")
-        .build()
-        .unwrap();
-    let cached_form = Form::read_property("test://things/lamp/properties/status/cached")
-        .content_type("text/plain")
-        .build()
-        .unwrap();
-    let property = PropertyAffordance::builder(DataSchema::String(DataSchema::string().build()))
-        .forms([first_form.clone(), cached_form.clone()])
-        .build()
-        .unwrap();
-    let thing = Thing::builder(title)
-        .id(id)
-        .nosec()
-        .property("status", property)
-        .build()
-        .unwrap();
-
-    (thing, first_form, cached_form)
-}
-
-fn zenoh_thing(id: &str, title: &str) -> Thing {
-    let read_property = Form::read_property("zenoh://clinkz/things/lamp/properties/status")
-        .content_type("text/plain")
-        .build()
-        .unwrap();
-    let write_property = Form::write_property("zenoh://clinkz/things/lamp/properties/status")
-        .content_type("text/plain")
-        .build()
-        .unwrap();
-    let invoke_action = Form::invoke_action("zenoh://clinkz/things/lamp/actions/echo")
-        .content_type("text/plain")
-        .build()
-        .unwrap();
-    let subscribe_event = Form::subscribe_event("zenoh://clinkz/things/lamp/events/startup")
-        .content_type("text/plain")
-        .build()
-        .unwrap();
-    let property = PropertyAffordance::builder(DataSchema::String(DataSchema::string().build()))
-        .forms([read_property, write_property])
-        .build()
-        .unwrap();
-    let action = ActionAffordance::builder()
-        .form(invoke_action)
-        .build()
-        .unwrap();
-    let event = EventAffordance::builder()
-        .form(subscribe_event)
-        .build()
-        .unwrap();
-
-    Thing::builder(title)
-        .id(id)
-        .nosec()
-        .property("status", property)
-        .action("echo", action)
-        .event("startup", event)
-        .build()
-        .unwrap()
-}
+use support::*;
 
 #[test]
 fn exposes_local_thing_and_dispatches_handler() {
@@ -505,6 +153,134 @@ fn servient_remote_convenience_methods_route_through_registered_bindings() {
         )
         .unwrap();
     assert_eq!(event.payload.unwrap().body, b"subscribed");
+}
+
+#[test]
+fn payload_codecs_are_used_for_local_and_remote_interactions() {
+    let encode_calls = Rc::new(Cell::new(0));
+    let decode_calls = Rc::new(Cell::new(0));
+
+    let (local_td, _) = thing("urn:thing:local-codec-lamp", "Local Codec Lamp");
+    let mut local = LocalThing::new(local_td);
+    local.register_property_handler(
+        "status",
+        StatusProperty {
+            value: Payload::new(b"local".to_vec(), "text/plain"),
+        },
+    );
+
+    let (remote_td, remote_forms) = thing("urn:thing:remote-codec-lamp", "Remote Codec Lamp");
+    let mut servient = Servient::builder()
+        .payload_codec(CountingCodec {
+            encode_calls: encode_calls.clone(),
+            decode_calls: decode_calls.clone(),
+        })
+        .binding_factory(|| {
+            Box::new(TestBinding {
+                response: Payload::new(b"remote".to_vec(), "text/plain"),
+            })
+        })
+        .build();
+
+    servient.expose(local).unwrap();
+    let local = servient
+        .read_property(
+            "urn:thing:local-codec-lamp",
+            "status",
+            InteractionInput::empty(),
+        )
+        .unwrap();
+    assert_eq!(local.payload.unwrap().body, b"local");
+
+    servient.register(remote_td).unwrap();
+    let remote = servient
+        .read_remote_property(
+            "urn:thing:remote-codec-lamp",
+            "status",
+            &remote_forms.read_property,
+            InteractionInput::empty(),
+        )
+        .unwrap();
+    assert_eq!(remote.payload.unwrap().body, b"remote");
+    assert_eq!(decode_calls.get(), 2);
+    assert_eq!(encode_calls.get(), 2);
+}
+
+#[test]
+fn security_providers_are_used_for_local_and_remote_interactions() {
+    let applied_calls = Rc::new(Cell::new(0));
+
+    let (local_td, _) = secure_thing("urn:thing:local-secure-lamp", "Local Secure Lamp");
+    let mut local = LocalThing::new(local_td);
+    local.register_property_handler("status", AuthenticatedStatusProperty);
+
+    let (remote_td, remote_form) =
+        secure_thing("urn:thing:remote-secure-lamp", "Remote Secure Lamp");
+    let mut servient = Servient::builder()
+        .security_provider(RecordingSecurityProvider {
+            applied_calls: applied_calls.clone(),
+        })
+        .binding_factory(|| Box::new(AuthenticatedReadBinding))
+        .build();
+
+    servient.expose(local).unwrap();
+    let local = servient
+        .read_property(
+            "urn:thing:local-secure-lamp",
+            "status",
+            InteractionInput::empty(),
+        )
+        .unwrap();
+    assert_eq!(local.payload.unwrap().body, b"secure-local");
+
+    servient.register(remote_td).unwrap();
+    let remote = servient
+        .read_remote_property(
+            "urn:thing:remote-secure-lamp",
+            "status",
+            &remote_form,
+            InteractionInput::empty(),
+        )
+        .unwrap();
+    assert_eq!(remote.payload.unwrap().body, b"secure-remote");
+    assert_eq!(applied_calls.get(), 2);
+}
+
+#[test]
+fn late_codec_and_security_provider_registration_is_guarded_by_lifecycle() {
+    let encode_calls = Rc::new(Cell::new(0));
+    let decode_calls = Rc::new(Cell::new(0));
+    let applied_calls = Rc::new(Cell::new(0));
+    let mut servient = Servient::new();
+
+    servient
+        .register_payload_codec(CountingCodec {
+            encode_calls: encode_calls.clone(),
+            decode_calls: decode_calls.clone(),
+        })
+        .unwrap();
+    servient
+        .register_security_provider(RecordingSecurityProvider {
+            applied_calls: applied_calls.clone(),
+        })
+        .unwrap();
+    assert_eq!(servient.payload_codecs().len(), 1);
+    assert_eq!(servient.security_providers().len(), 1);
+
+    servient.start().unwrap();
+
+    let err = servient
+        .register_payload_codec(CountingCodec {
+            encode_calls,
+            decode_calls,
+        })
+        .unwrap_err();
+    assert!(matches!(err, ServientError::Running));
+
+    let err = servient
+        .register_security_provider(RecordingSecurityProvider { applied_calls })
+        .unwrap_err();
+    assert!(matches!(err, ServientError::Running));
 }
 
 #[test]

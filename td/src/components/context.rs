@@ -32,10 +32,10 @@ impl Context {
     /// According to the spec, 1.0 URI MUST be the first entry,
     /// and 1.1 URI MUST be the second entry in this case.
     pub fn with_1_0_compatibility(mut self) -> Self {
-        let already_v1_first = self.entries.first().map_or(
-            false,
-            |e| matches!(e, ContextEntry::Uri(u) if u == WOT_CONTEXT_1_0),
-        );
+        let already_v1_first = self
+            .entries
+            .first()
+            .is_some_and(|e| matches!(e, ContextEntry::Uri(u) if u == WOT_CONTEXT_1_0));
 
         if !already_v1_first {
             self.entries
@@ -118,6 +118,12 @@ impl ContextBuilder {
             return Err(error);
         }
         Ok(self.context)
+    }
+}
+
+impl Default for ContextBuilder {
+    fn default() -> Self {
+        Self::new()
     }
 }
 

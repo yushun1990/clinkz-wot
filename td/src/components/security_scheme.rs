@@ -290,20 +290,15 @@ impl ContextHelper for ComboSecuritySchemeBuilder {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum SecurityLocation {
+    #[default]
     Header,
     Query,
     Body,
     Cookie,
     Auto,
-}
-
-impl Default for SecurityLocation {
-    fn default() -> Self {
-        SecurityLocation::Header
-    }
 }
 
 fn is_default_location(location: &SecurityLocation) -> bool {
@@ -375,19 +370,14 @@ impl ContextHelper for BasicSecuritySchemeBuilder {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum Qop {
     /// Authentication only
+    #[default]
     Auth,
     /// Authentication with integrity protection
     AuthInt,
-}
-
-impl Default for Qop {
-    fn default() -> Self {
-        Self::Auth
-    }
 }
 
 fn is_default_qop(qop: &Qop) -> bool {
@@ -840,6 +830,17 @@ impl ContextHelper for OAuth2SecuritySchemeBuilder {
         &mut self.scheme._context
     }
 }
+
+impl_builder_default!(
+    NoSecuritySchemeBuilder,
+    AutoSecuritySchemeBuilder,
+    ComboSecuritySchemeBuilder,
+    BasicSecuritySchemeBuilder,
+    DigestSecuritySchemeBuilder,
+    APIKeySecuritySchemeBuilder,
+    BearerSecuritySchemeBuilder,
+    PSKSecuritySchemeBuilder,
+);
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(untagged)]

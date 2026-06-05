@@ -729,6 +729,16 @@ impl MetadataHelper for NullSchemaBuilder {
     }
 }
 
+impl_builder_default!(
+    ArraySchemaBuilder,
+    BooleanSchemaBuilder,
+    NumberSchemaBuilder,
+    IntegerSchemaBuilder,
+    ObjectSchemaBuilder,
+    StringSchemaBuilder,
+    NullSchemaBuilder,
+);
+
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum DataSchema {

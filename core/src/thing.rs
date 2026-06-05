@@ -181,10 +181,7 @@ impl BoundConsumedThing {
                 )
             })?;
 
-        if effective_form_operations(form_set.context, selected)
-            .iter()
-            .any(|candidate| *candidate == operation)
-        {
+        if effective_form_operations(form_set.context, selected).contains(&operation) {
             Ok(())
         } else {
             Err(CoreError::UnsupportedOperation(format!(

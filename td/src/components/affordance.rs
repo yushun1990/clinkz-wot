@@ -39,7 +39,7 @@ impl InteractionAffordance {
     ///
     /// # Arguments
     /// * `context` - A string describing the caller (e.g., "PropertyAffordance")
-    ///    for error reporting.
+    ///   for error reporting.
     /// * `f` - A closure that returns true if the specific Operation is allowed.
     pub fn validate_ops<F>(&self, context: &str, f: F) -> Result<(), ValidateError>
     where
@@ -323,6 +323,12 @@ impl ActionAffordanceBuilder {
     }
 }
 
+impl Default for ActionAffordanceBuilder {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl MetadataHelper for ActionAffordanceBuilder {
     fn metadata(&mut self) -> &mut Metadata {
         &mut self.affordance._metadata
@@ -462,6 +468,12 @@ impl EventAffordanceBuilder {
     pub fn build(self) -> Result<EventAffordance, ValidateError> {
         self.affordance.validate()?;
         Ok(self.affordance)
+    }
+}
+
+impl Default for EventAffordanceBuilder {
+    fn default() -> Self {
+        Self::new()
     }
 }
 

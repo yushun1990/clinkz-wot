@@ -4,7 +4,6 @@ use clinkz_wot_td::{
     thing::Thing,
     validate::{Validate, ValidateError, ValidationLevel},
 };
-use serde_json;
 use std::{fs, path::PathBuf};
 
 #[test]
@@ -14,7 +13,7 @@ fn test_thing_roundtrip_fidelity() {
     fixtures_path.push("tests/fixtures");
 
     let paths = fs::read_dir(&fixtures_path)
-        .expect(&format!("Failed to read fixtures at {:?}", fixtures_path));
+        .unwrap_or_else(|_| panic!("Failed to read fixtures at {:?}", fixtures_path));
 
     for entry in paths {
         let path_buf = entry.unwrap().path();
@@ -28,21 +27,21 @@ fn test_thing_roundtrip_fidelity() {
         // Parse the original fixture into a generic JSON value for structural comparison.
         let raw_json = fs::read_to_string(&path_buf).expect("Read failed");
         let mut original_value: serde_json::Value = serde_json::from_str(&raw_json)
-            .expect(&format!("Original JSON is invalid: {:?}", path_buf));
+            .unwrap_or_else(|_| panic!("Original JSON is invalid: {:?}", path_buf));
         sanitize_json(&mut original_value);
 
         // Deserialize the fixture into the Thing model.
         let thing: Thing = serde_json::from_str(&raw_json)
-            .expect(&format!("Failed to deserialize into Thing: {:?}", path_buf));
+            .unwrap_or_else(|_| panic!("Failed to deserialize into Thing: {:?}", path_buf));
 
         // Run explicit TD validation.
         thing
             .validate()
-            .expect(&format!("Logic validation failed: {:?}", path_buf));
+            .unwrap_or_else(|_| panic!("Logic validation failed: {:?}", path_buf));
 
         // Serialize the Thing back to JSON.
-        let serialized_json =
-            serde_json::to_string(&thing).expect(&format!("Failed to serialize: {:?}", path_buf));
+        let serialized_json = serde_json::to_string(&thing)
+            .unwrap_or_else(|_| panic!("Failed to serialize: {:?}", path_buf));
 
         // Parse the serialized JSON for semantic comparison.
         let mut serialized_value: serde_json::Value =
@@ -61,9 +60,9 @@ fn sanitize_json(value: &mut serde_json::Value) {
             map.values_mut().for_each(sanitize_json);
             // Remove empty objects, empty arrays, and null values.
             map.retain(|_, v| {
-                !v.is_null()
-                    && !(v.is_object() && v.as_object().unwrap().is_empty())
-                    && !(v.is_array() && v.as_array().unwrap().is_empty())
+                !(v.is_null()
+                    || v.is_object() && v.as_object().unwrap().is_empty()
+                    || v.is_array() && v.as_array().unwrap().is_empty())
             });
         }
         serde_json::Value::Array(arr) => {

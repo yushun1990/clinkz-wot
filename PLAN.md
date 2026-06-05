@@ -30,19 +30,17 @@ Current focus:
   surface needed by runtime crates.
 - M6 Servient runtime composition now has the first std host runtime surface
   that wires Discovery, local Things, consumed Things, injected protocol
-  bindings, runtime registries, and TD/form/binding-plan caches.
+  bindings, runtime registries, TD/form/binding-plan caches, payload codecs,
+  and security providers.
 - Keep M7 conformance and embedded checks running across every crate that
   claims `no_std + alloc` support.
 
 Immediate next sequence:
 
-1. Add builder slots for payload codecs and security providers, then wire them
-   into local and consumed interaction paths without making any concrete
-   provider mandatory.
-2. Introduce production-oriented shared transport ownership for protocol
+1. Introduce production-oriented shared transport ownership for protocol
    bindings, then add the first concrete zenoh runtime backend behind an
    optional host/runtime boundary.
-3. Expand M7 checks and update compatibility documentation as each milestone
+2. Expand M7 checks and update compatibility documentation as each milestone
    adds crates or public surfaces.
 
 ### M1: TD 1.1 Hardening
@@ -294,6 +292,12 @@ Current status:
   deterministic in-memory default, cache invalidation on TD lifecycle
   mutations, and criteria-based remote invocation reuse of both selected TD
   forms and selected protocol binding factories.
+- Added Servient builder and post-build slots for protocol-neutral payload
+  codecs and security providers, with hooks for local interactions and
+  Servient-level consumed Thing calls.
+- Split Servient implementation into focused builder, cache, error, registry,
+  runtime, and interaction modules while keeping the crate-root public API
+  stable.
 - Added integration tests for exposing a local Thing, consuming a discovered TD,
   dispatching all local interaction kinds, and invoking through an injected test
   binding.
@@ -317,9 +321,6 @@ Planned work:
 
 - Keep low-level `BoundConsumedThing` access available for callers that need to
   cache TDs, selected forms, or dispatchers directly.
-- Add builder slots for payload codecs and security providers, then wire them
-  into local and consumed interaction paths without making any concrete
-  provider mandatory.
 - Add shared transport ownership support so binding factories can reuse host
   sessions or connection pools without requiring concrete protocol types in
   Servient.

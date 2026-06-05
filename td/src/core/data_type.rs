@@ -141,11 +141,12 @@ pub enum BaseUri {
 impl BaseUri {
     /// Parses a Thing-level base URI.
     pub fn parse(s: &str) -> Result<Self, ParseError> {
-        if s.contains('{') && s.contains('}') {
-            if let Some(static_uri) = strip_uri_template_expressions(s) {
-                Uri::parse(static_uri.as_str())?;
-                return Ok(Self::Template(s.to_owned()));
-            }
+        if s.contains('{')
+            && s.contains('}')
+            && let Some(static_uri) = strip_uri_template_expressions(s)
+        {
+            Uri::parse(static_uri.as_str())?;
+            return Ok(Self::Template(s.to_owned()));
         }
 
         AbsoluteUri::parse(s).map(Self::Absolute)
@@ -413,11 +414,11 @@ impl MultiLanguage {
     }
 
     /// Creates a MultiLanguage from an iterator of (lang, text) pairs.
-    pub fn from_iter<I>(iter: I) -> Self
+    pub fn from_pairs<I>(iter: I) -> Self
     where
         I: IntoIterator<Item = (String, String)>,
     {
-        Self(BTreeMap::from_iter(iter))
+        iter.into_iter().collect()
     }
 
     /// Checks if a language is present.
@@ -454,6 +455,15 @@ impl MultiLanguage {
     /// Returns true if there are no language-text pairs.
     pub fn is_empty(&self) -> bool {
         self.0.is_empty()
+    }
+}
+
+impl FromIterator<(String, String)> for MultiLanguage {
+    fn from_iter<T>(iter: T) -> Self
+    where
+        T: IntoIterator<Item = (String, String)>,
+    {
+        Self(BTreeMap::from_iter(iter))
     }
 }
 

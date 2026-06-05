@@ -64,9 +64,7 @@ impl<'a> FormSelectionCriteria<'a> {
     }
 
     fn matches_operation(&self, operations: &[Operation]) -> bool {
-        operations
-            .iter()
-            .any(|candidate| *candidate == self.operation)
+        operations.contains(&self.operation)
     }
 
     fn matches_metadata(&self, form: &Form) -> bool {

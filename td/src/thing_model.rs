@@ -262,15 +262,15 @@ fn has_interaction(model: &ThingModel, collection: &str, name: &str) -> bool {
         "properties" => model
             .properties
             .as_ref()
-            .map_or(false, |items| items.contains_key(name)),
+            .is_some_and(|items| items.contains_key(name)),
         "actions" => model
             .actions
             .as_ref()
-            .map_or(false, |items| items.contains_key(name)),
+            .is_some_and(|items| items.contains_key(name)),
         "events" => model
             .events
             .as_ref()
-            .map_or(false, |items| items.contains_key(name)),
+            .is_some_and(|items| items.contains_key(name)),
         _ => false,
     }
 }
