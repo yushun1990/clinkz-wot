@@ -259,9 +259,15 @@ Current status:
 - Added a host Servient builder backed by an injectable Thing Directory and
   protocol binding factories.
 - Added lifecycle APIs for start and stop.
+- Defined first lifecycle semantics: `start` and `stop` are idempotent, while
+  directory, exposed Thing, and binding factory mutations are rejected while the
+  Servient is running.
 - Added directory APIs for register, update, unregister, list, and query.
 - Added local Thing exposure and unexposure flows that keep the directory in
   sync with exposed TDs.
+- Extracted the in-memory exposed Thing map behind an injectable registry
+  boundary so runtime services can replace local Thing storage without changing
+  TD, Discovery, or core crates.
 - Added Servient-level dispatch APIs for property reads, property writes, action
   invocation, and event subscription on locally exposed Things.
 - Added consumed Thing creation from directory entries or direct TDs, with
@@ -269,6 +275,9 @@ Current status:
 - Added Servient-level consumed Thing convenience APIs for remote property
   reads, property writes, action invocation, and event subscription when callers
   already have a selected form.
+- Added Servient-level consumed Thing convenience APIs that select remote
+  property, action, and event forms from shared `FormSelectionCriteria` while
+  preserving selected-form calls for callers that cache form choices.
 - Added post-build protocol binding factory registration for runtime
   composition flows that cannot provide all bindings at builder construction
   time.
@@ -290,19 +299,11 @@ Entry criteria:
 
 Planned work:
 
-- Define lifecycle behavior more precisely, including idempotent start/stop
-  expectations and whether expose/register mutations are allowed while running.
-- Extend Servient-level consumed Thing convenience APIs with selection criteria
-  based form selection, while keeping selected-form calls available for callers
-  that cache form choices.
 - Keep low-level `BoundConsumedThing` access available for callers that need to
   cache TDs, selected forms, or dispatchers directly.
 - Introduce a protocol-neutral cache boundary for TDs, selected forms, and
   binding plans so production services do not need to query Discovery before
   every device interaction.
-- Extract the current in-memory exposed Thing map behind a registry boundary so
-  platform services can use dynamic, sharded, or actor-backed registries without
-  changing TD, Discovery, or binding crates.
 - Add builder slots for payload codecs and security providers, then wire them
   into local and consumed interaction paths without making any concrete
   provider mandatory.

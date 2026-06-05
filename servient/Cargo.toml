@@ -6,6 +6,7 @@ edition.workspace = true
 [dependencies]
 clinkz-wot-core = { path = "../core" }
 clinkz-wot-discovery = { path = "../discovery" }
+clinkz-wot-protocol-bindings = { path = "../protocol-bindings/core" }
 clinkz-wot-td = { path = "../td" }
 
 [features]

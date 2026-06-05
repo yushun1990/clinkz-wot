@@ -3,7 +3,10 @@ use clinkz_wot_core::{
     EventSink, InteractionInput, InteractionOutput, LocalThing, Payload, PropertyHandler,
     ProtocolBinding,
 };
-use clinkz_wot_servient::{Servient, ServientError};
+use clinkz_wot_protocol_bindings::{BindingCoreError, FormSelectionCriteria};
+use clinkz_wot_servient::{
+    ExposedThingRegistry, InMemoryExposedThingRegistry, Servient, ServientError,
+};
 use clinkz_wot_td::{
     affordance::{ActionAffordance, EventAffordance, InteractionHelper, PropertyAffordance},
     data_schema::DataSchema,
@@ -105,7 +108,38 @@ struct TestForms {
     subscribe_event: Form,
 }
 
+#[derive(Default)]
+struct TestExposedRegistry {
+    inner: InMemoryExposedThingRegistry,
+    inserted: usize,
+    removed: usize,
+}
+
+impl ExposedThingRegistry for TestExposedRegistry {
+    fn contains_id(&self, id: &str) -> bool {
+        self.inner.contains_id(id)
+    }
+
+    fn insert(&mut self, id: String, thing: LocalThing) -> Option<LocalThing> {
+        self.inserted += 1;
+        self.inner.insert(id, thing)
+    }
+
+    fn remove(&mut self, id: &str) -> Option<LocalThing> {
+        self.removed += 1;
+        self.inner.remove(id)
+    }
+
+    fn get_mut(&mut self, id: &str) -> Option<&mut LocalThing> {
+        self.inner.get_mut(id)
+    }
+}
+
 fn thing(id: &str, title: &str) -> (Thing, TestForms) {
+    let json_read_property = Form::read_property("other://things/lamp/properties/status")
+        .content_type("application/json")
+        .build()
+        .unwrap();
     let read_property = Form::read_property("test://things/lamp/properties/status")
         .content_type("text/plain")
         .build()
@@ -123,7 +157,11 @@ fn thing(id: &str, title: &str) -> (Thing, TestForms) {
         .build()
         .unwrap();
     let property = PropertyAffordance::builder(DataSchema::String(DataSchema::string().build()))
-        .forms([read_property.clone(), write_property.clone()])
+        .forms([
+            json_read_property.clone(),
+            read_property.clone(),
+            write_property.clone(),
+        ])
         .build()
         .unwrap();
     let action = ActionAffordance::builder()
@@ -168,8 +206,8 @@ fn exposes_local_thing_and_dispatches_handler() {
     local.register_event_handler("startup", StartupEvent);
 
     let mut servient = Servient::new();
-    servient.start().unwrap();
     servient.expose(local).unwrap();
+    servient.start().unwrap();
 
     let payload = servient
         .read_property("urn:thing:local-lamp", "status", InteractionInput::empty())
@@ -296,15 +334,96 @@ fn servient_remote_convenience_methods_route_through_registered_bindings() {
 }
 
 #[test]
+fn servient_remote_criteria_methods_select_matching_forms() {
+    let (td, _) = thing("urn:thing:remote-lamp", "Remote Lamp");
+    let mut servient = Servient::builder()
+        .binding_factory(|| {
+            Box::new(TestBinding {
+                response: Payload::new(b"on".to_vec(), "text/plain"),
+            })
+        })
+        .build();
+    servient.register(td).unwrap();
+
+    let read = servient
+        .read_remote_property_with_criteria(
+            "urn:thing:remote-lamp",
+            "status",
+            FormSelectionCriteria::operation(Operation::ReadProperty).content_type("text/plain"),
+            InteractionInput::empty(),
+        )
+        .unwrap();
+    assert_eq!(read.payload.unwrap().body, b"on");
+
+    servient
+        .write_remote_property_with_criteria(
+            "urn:thing:remote-lamp",
+            "status",
+            FormSelectionCriteria::operation(Operation::ReadProperty).content_type("text/plain"),
+            InteractionInput::with_payload(Payload::new(b"off".to_vec(), "text/plain")),
+        )
+        .unwrap();
+
+    let action = servient
+        .invoke_remote_action_with_criteria(
+            "urn:thing:remote-lamp",
+            "echo",
+            FormSelectionCriteria::operation(Operation::ReadProperty).content_type("text/plain"),
+            InteractionInput::with_payload(Payload::new(b"hello".to_vec(), "text/plain")),
+        )
+        .unwrap();
+    assert_eq!(action.payload.unwrap().body, b"hello");
+
+    let event = servient
+        .subscribe_remote_event_with_criteria(
+            "urn:thing:remote-lamp",
+            "startup",
+            FormSelectionCriteria::operation(Operation::ReadProperty).content_type("text/plain"),
+            InteractionInput::empty(),
+        )
+        .unwrap();
+    assert_eq!(event.payload.unwrap().body, b"subscribed");
+}
+
+#[test]
+fn servient_remote_criteria_methods_report_binding_selection_errors() {
+    let (td, _) = thing("urn:thing:remote-lamp", "Remote Lamp");
+    let mut servient = Servient::builder()
+        .binding_factory(|| {
+            Box::new(TestBinding {
+                response: Payload::new(b"on".to_vec(), "text/plain"),
+            })
+        })
+        .build();
+    servient.register(td).unwrap();
+
+    let err = servient
+        .read_remote_property_with_criteria(
+            "urn:thing:remote-lamp",
+            "status",
+            FormSelectionCriteria::operation(Operation::ReadProperty).content_type("image/png"),
+            InteractionInput::empty(),
+        )
+        .unwrap_err();
+
+    assert!(matches!(
+        err,
+        ServientError::Binding(BindingCoreError::MetadataMismatch(_))
+    ));
+}
+
+#[test]
 fn late_binding_factory_registration_is_used_by_new_consumed_requests() {
     let (td, forms) = thing("urn:thing:remote-lamp", "Remote Lamp");
     let mut servient = Servient::new();
     servient.register(td).unwrap();
-    servient.register_binding_factory(|| {
-        Box::new(TestBinding {
-            response: Payload::new(b"late".to_vec(), "text/plain"),
+    servient
+        .register_binding_factory(|| {
+            Box::new(TestBinding {
+                response: Payload::new(b"late".to_vec(), "text/plain"),
+            })
         })
-    });
+        .unwrap();
 
     let output = servient
         .read_remote_property(
@@ -363,4 +482,81 @@ fn unexposes_local_thing_and_removes_directory_entry() {
         Err(err) => err,
     };
     assert!(matches!(err, ServientError::Discovery(_)));
+}
+
+#[test]
+fn servient_uses_injected_exposed_thing_registry() {
+    let (td, _) = thing("urn:thing:local-lamp", "Local Lamp");
+    let mut local = LocalThing::new(td);
+    local.register_property_handler(
+        "status",
+        StatusProperty {
+            value: Payload::new(b"off".to_vec(), "text/plain"),
+        },
+    );
+
+    let mut servient = Servient::builder()
+        .with_exposed_registry(TestExposedRegistry::default())
+        .build();
+    servient.expose(local).unwrap();
+
+    let payload = servient
+        .read_property("urn:thing:local-lamp", "status", InteractionInput::empty())
+        .unwrap()
+        .payload
+        .unwrap();
+    assert_eq!(payload.body, b"off");
+    assert_eq!(servient.exposed_registry().inserted, 1);
+
+    servient.unexpose("urn:thing:local-lamp").unwrap();
+    assert_eq!(servient.exposed_registry().removed, 1);
+}
+
+#[test]
+fn lifecycle_start_stop_are_idempotent_and_guard_runtime_composition() {
+    let (td, _) = thing("urn:thing:remote-lamp", "Remote Lamp");
+    let (updated_td, _) = thing("urn:thing:remote-lamp", "Updated Remote Lamp");
+    let (local_td, _) = thing("urn:thing:local-lamp", "Local Lamp");
+    let (new_td, _) = thing("urn:thing:new-lamp", "New Lamp");
+    let mut servient = Servient::new();
+
+    servient.register(td).unwrap();
+    servient.expose(LocalThing::new(local_td.clone())).unwrap();
+    servient.start().unwrap();
+    servient.start().unwrap();
+    assert!(servient.is_running());
+
+    let err = servient.register(new_td).unwrap_err();
+    assert!(matches!(err, ServientError::Running));
+
+    let err = servient.update(updated_td).unwrap_err();
+    assert!(matches!(err, ServientError::Running));
+
+    let err = servient.unregister("urn:thing:remote-lamp").unwrap_err();
+    assert!(matches!(err, ServientError::Running));
+
+    let err = servient.expose(LocalThing::new(local_td)).unwrap_err();
+    assert!(matches!(err, ServientError::Running));
+
+    let err = match servient.unexpose("urn:thing:local-lamp") {
+        Ok(_) => panic!("running Servient should reject unexpose"),
+        Err(err) => err,
+    };
+    assert!(matches!(err, ServientError::Running));
+
+    let err = servient
+        .register_binding_factory(|| {
+            Box::new(TestBinding {
+                response: Payload::new(b"late".to_vec(), "text/plain"),
+            })
+        })
+        .unwrap_err();
+    assert!(matches!(err, ServientError::Running));
+
+    servient.stop().unwrap();
+    servient.stop().unwrap();
+    assert!(!servient.is_running());
+
+    servient.unregister("urn:thing:remote-lamp").unwrap();
+    servient.unexpose("urn:thing:local-lamp").unwrap();
 }
