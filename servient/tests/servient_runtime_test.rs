@@ -4,9 +4,13 @@ use clinkz_wot_core::{
     ProtocolBinding,
 };
 use clinkz_wot_protocol_bindings::{BindingCoreError, FormSelectionCriteria};
+use clinkz_wot_protocol_bindings_zenoh::{
+    ZenohBinding, ZenohOperationKind, ZenohTransport, ZenohTransportRequest,
+};
 use clinkz_wot_servient::{
     ConsumedThingCache, ExposedThingRegistry, InMemoryConsumedThingCache,
-    InMemoryExposedThingRegistry, Servient, ServientError,
+    InMemoryExposedThingRegistry, InMemorySelectedFormCache, SelectedFormCache,
+    SelectedFormCacheAffordance, SelectedFormCacheKey, Servient, ServientError,
 };
 use clinkz_wot_td::{
     affordance::{ActionAffordance, EventAffordance, InteractionHelper, PropertyAffordance},
@@ -102,11 +106,61 @@ impl ProtocolBinding for TestBinding {
     }
 }
 
+struct HrefBinding;
+
+impl ProtocolBinding for HrefBinding {
+    fn supports(&self, form: &Form, operation: Operation) -> bool {
+        form.href.as_str().starts_with("test://") && operation == Operation::ReadProperty
+    }
+
+    fn invoke(&mut self, request: BindingRequest<'_>) -> CoreResult<InteractionOutput> {
+        Ok(InteractionOutput::with_payload(Payload::new(
+            request.form.href.as_str().as_bytes().to_vec(),
+            "text/plain",
+        )))
+    }
+}
+
 struct TestForms {
     read_property: Form,
     write_property: Form,
     invoke_action: Form,
     subscribe_event: Form,
+}
+
+#[derive(Default)]
+struct ServientZenohTransport;
+
+impl ZenohTransport for ServientZenohTransport {
+    fn execute(&mut self, request: ZenohTransportRequest) -> CoreResult<InteractionOutput> {
+        match (request.plan.kind, request.plan.key_expr.as_str()) {
+            (ZenohOperationKind::Query, "clinkz/things/lamp/properties/status") => Ok(
+                InteractionOutput::with_payload(Payload::new(b"zenoh-on".to_vec(), "text/plain")),
+            ),
+            (ZenohOperationKind::Put, "clinkz/things/lamp/properties/status") => {
+                assert_eq!(
+                    request
+                        .payload
+                        .as_ref()
+                        .map(|payload| payload.body.as_slice()),
+                    Some(&b"zenoh-off"[..])
+                );
+                Ok(InteractionOutput::empty())
+            }
+            (ZenohOperationKind::RequestReply, "clinkz/things/lamp/actions/echo") => {
+                Ok(InteractionOutput {
+                    payload: request.payload,
+                })
+            }
+            (ZenohOperationKind::Subscribe, "clinkz/things/lamp/events/startup") => {
+                Ok(InteractionOutput::with_payload(Payload::new(
+                    b"zenoh-subscribed".to_vec(),
+                    "text/plain",
+                )))
+            }
+            _ => panic!("unexpected zenoh transport request: {:?}", request),
+        }
+    }
 }
 
 #[derive(Default)]
@@ -214,6 +268,69 @@ fn thing(id: &str, title: &str) -> (Thing, TestForms) {
             subscribe_event,
         },
     )
+}
+
+fn cacheable_thing(id: &str, title: &str) -> (Thing, Form, Form) {
+    let first_form = Form::read_property("test://things/lamp/properties/status/first")
+        .content_type("text/plain")
+        .build()
+        .unwrap();
+    let cached_form = Form::read_property("test://things/lamp/properties/status/cached")
+        .content_type("text/plain")
+        .build()
+        .unwrap();
+    let property = PropertyAffordance::builder(DataSchema::String(DataSchema::string().build()))
+        .forms([first_form.clone(), cached_form.clone()])
+        .build()
+        .unwrap();
+    let thing = Thing::builder(title)
+        .id(id)
+        .nosec()
+        .property("status", property)
+        .build()
+        .unwrap();
+
+    (thing, first_form, cached_form)
+}
+
+fn zenoh_thing(id: &str, title: &str) -> Thing {
+    let read_property = Form::read_property("zenoh://clinkz/things/lamp/properties/status")
+        .content_type("text/plain")
+        .build()
+        .unwrap();
+    let write_property = Form::write_property("zenoh://clinkz/things/lamp/properties/status")
+        .content_type("text/plain")
+        .build()
+        .unwrap();
+    let invoke_action = Form::invoke_action("zenoh://clinkz/things/lamp/actions/echo")
+        .content_type("text/plain")
+        .build()
+        .unwrap();
+    let subscribe_event = Form::subscribe_event("zenoh://clinkz/things/lamp/events/startup")
+        .content_type("text/plain")
+        .build()
+        .unwrap();
+    let property = PropertyAffordance::builder(DataSchema::String(DataSchema::string().build()))
+        .forms([read_property, write_property])
+        .build()
+        .unwrap();
+    let action = ActionAffordance::builder()
+        .form(invoke_action)
+        .build()
+        .unwrap();
+    let event = EventAffordance::builder()
+        .form(subscribe_event)
+        .build()
+        .unwrap();
+
+    Thing::builder(title)
+        .id(id)
+        .nosec()
+        .property("status", property)
+        .action("echo", action)
+        .event("startup", event)
+        .build()
+        .unwrap()
 }
 
 #[test]
@@ -407,6 +524,7 @@ fn servient_remote_criteria_methods_select_matching_forms() {
         )
         .unwrap();
     assert_eq!(event.payload.unwrap().body, b"subscribed");
+    assert_eq!(servient.selected_form_cache().len(), 4);
 }
 
 #[test]
@@ -434,6 +552,87 @@ fn servient_remote_criteria_methods_report_binding_selection_errors() {
         err,
         ServientError::Binding(BindingCoreError::MetadataMismatch(_))
     ));
+}
+
+#[test]
+fn servient_remote_criteria_methods_reuse_cached_selected_forms() {
+    let (td, _first_form, cached_form) = cacheable_thing("urn:thing:cached-lamp", "Cached Lamp");
+    let mut servient = Servient::builder()
+        .with_selected_form_cache(InMemorySelectedFormCache::new())
+        .binding_factory(|| Box::new(HrefBinding))
+        .build();
+    servient.register(td).unwrap();
+    servient.selected_form_cache().insert(
+        SelectedFormCacheKey::new(
+            "urn:thing:cached-lamp",
+            SelectedFormCacheAffordance::Property("status".to_owned()),
+            FormSelectionCriteria::operation(Operation::ReadProperty).content_type("text/plain"),
+        ),
+        cached_form,
+    );
+
+    let read = servient
+        .read_remote_property_with_criteria(
+            "urn:thing:cached-lamp",
+            "status",
+            FormSelectionCriteria::operation(Operation::ReadProperty).content_type("text/plain"),
+            InteractionInput::empty(),
+        )
+        .unwrap();
+
+    assert_eq!(
+        read.payload.unwrap().body,
+        b"test://things/lamp/properties/status/cached"
+    );
+    assert_eq!(servient.selected_form_cache().len(), 1);
+}
+
+#[test]
+fn servient_routes_remote_requests_through_zenoh_binding_transport() {
+    let td = zenoh_thing("urn:thing:zenoh-lamp", "Zenoh Lamp");
+    let mut servient = Servient::builder()
+        .binding_factory(|| Box::new(ZenohBinding::with_transport(ServientZenohTransport)))
+        .build();
+    servient.register(td).unwrap();
+
+    let read = servient
+        .read_remote_property_with_criteria(
+            "urn:thing:zenoh-lamp",
+            "status",
+            FormSelectionCriteria::operation(Operation::ReadProperty).content_type("text/plain"),
+            InteractionInput::empty(),
+        )
+        .unwrap();
+    assert_eq!(read.payload.unwrap().body, b"zenoh-on");
+
+    servient
+        .write_remote_property_with_criteria(
+            "urn:thing:zenoh-lamp",
+            "status",
+            FormSelectionCriteria::operation(Operation::WriteProperty).content_type("text/plain"),
+            InteractionInput::with_payload(Payload::new(b"zenoh-off".to_vec(), "text/plain")),
+        )
+        .unwrap();
+
+    let action = servient
+        .invoke_remote_action_with_criteria(
+            "urn:thing:zenoh-lamp",
+            "echo",
+            FormSelectionCriteria::operation(Operation::InvokeAction).content_type("text/plain"),
+            InteractionInput::with_payload(Payload::new(b"zenoh-echo".to_vec(), "text/plain")),
+        )
+        .unwrap();
+    assert_eq!(action.payload.unwrap().body, b"zenoh-echo");
+
+    let event = servient
+        .subscribe_remote_event_with_criteria(
+            "urn:thing:zenoh-lamp",
+            "startup",
+            FormSelectionCriteria::operation(Operation::SubscribeEvent).content_type("text/plain"),
+            InteractionInput::empty(),
+        )
+        .unwrap();
+    assert_eq!(event.payload.unwrap().body, b"zenoh-subscribed");
 }
 
 #[test]

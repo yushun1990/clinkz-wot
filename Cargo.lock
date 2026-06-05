@@ -101,6 +101,7 @@ dependencies = [
  "clinkz-wot-core",
  "clinkz-wot-discovery",
  "clinkz-wot-protocol-bindings",
+ "clinkz-wot-protocol-bindings-zenoh",
  "clinkz-wot-td",
 ]
 

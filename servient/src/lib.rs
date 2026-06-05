@@ -17,6 +17,7 @@ use clinkz_wot_discovery::{
 };
 use clinkz_wot_protocol_bindings::{
     AffordanceRef, BindingCoreError, FormSelectionCriteria, select_affordance_form_with_criteria,
+    validate_affordance_form_with_criteria,
 };
 use clinkz_wot_td::{data_type::Operation, form::Form, thing::Thing};
 
@@ -205,15 +206,154 @@ impl ConsumedThingCache for InMemoryConsumedThingCache {
     }
 }
 
+/// Owned affordance location used by selected form cache keys.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum SelectedFormCacheAffordance {
+    /// A form declared at Thing level.
+    Thing,
+    /// A property affordance by name.
+    Property(String),
+    /// An action affordance by name.
+    Action(String),
+    /// An event affordance by name.
+    Event(String),
+}
+
+impl SelectedFormCacheAffordance {
+    fn from_affordance_ref(affordance: AffordanceRef<'_>) -> Self {
+        match affordance {
+            AffordanceRef::Thing => Self::Thing,
+            AffordanceRef::Property(name) => Self::Property(name.to_owned()),
+            AffordanceRef::Action(name) => Self::Action(name.to_owned()),
+            AffordanceRef::Event(name) => Self::Event(name.to_owned()),
+        }
+    }
+}
+
+/// Cache key for a Servient-selected TD form.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SelectedFormCacheKey {
+    /// Thing id used for the consumed interaction.
+    pub thing_id: String,
+    /// Affordance location used for form selection.
+    pub affordance: SelectedFormCacheAffordance,
+    /// Required effective operation.
+    pub operation: Operation,
+    /// Optional required form content type.
+    pub content_type: Option<String>,
+    /// Optional required form subprotocol.
+    pub subprotocol: Option<String>,
+}
+
+impl SelectedFormCacheKey {
+    /// Creates a cache key from a Thing id, affordance location, and selection criteria.
+    pub fn new(
+        thing_id: impl Into<String>,
+        affordance: SelectedFormCacheAffordance,
+        criteria: FormSelectionCriteria<'_>,
+    ) -> Self {
+        Self {
+            thing_id: thing_id.into(),
+            affordance,
+            operation: criteria.operation,
+            content_type: criteria.content_type.map(str::to_owned),
+            subprotocol: criteria.subprotocol.map(str::to_owned),
+        }
+    }
+}
+
+/// Cache boundary for selected TD forms used by Servient-level invocation APIs.
+pub trait SelectedFormCache {
+    /// Retrieves a cached form selection.
+    fn get(&self, key: &SelectedFormCacheKey) -> Option<Form>;
+
+    /// Inserts or replaces a cached form selection.
+    fn insert(&self, key: SelectedFormCacheKey, form: Form) -> Option<Form>;
+
+    /// Removes a cached form selection.
+    fn remove(&self, key: &SelectedFormCacheKey) -> Option<Form>;
+
+    /// Removes all cached form selections for a Thing id.
+    fn remove_thing(&self, id: &str);
+}
+
+/// Deterministic in-memory cache for Servient-selected TD forms.
+pub struct InMemorySelectedFormCache {
+    forms: std::cell::RefCell<Vec<(SelectedFormCacheKey, Form)>>,
+}
+
+impl InMemorySelectedFormCache {
+    /// Creates an empty selected form cache.
+    pub fn new() -> Self {
+        Self {
+            forms: std::cell::RefCell::new(Vec::new()),
+        }
+    }
+
+    /// Returns the number of cached form selections.
+    pub fn len(&self) -> usize {
+        self.forms.borrow().len()
+    }
+
+    /// Returns true when the cache contains no selected forms.
+    pub fn is_empty(&self) -> bool {
+        self.forms.borrow().is_empty()
+    }
+}
+
+impl Default for InMemorySelectedFormCache {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl SelectedFormCache for InMemorySelectedFormCache {
+    fn get(&self, key: &SelectedFormCacheKey) -> Option<Form> {
+        self.forms
+            .borrow()
+            .iter()
+            .find(|(candidate, _)| candidate == key)
+            .map(|(_, form)| form.clone())
+    }
+
+    fn insert(&self, key: SelectedFormCacheKey, form: Form) -> Option<Form> {
+        let mut forms = self.forms.borrow_mut();
+        if let Some((_, cached_form)) = forms.iter_mut().find(|(candidate, _)| *candidate == key) {
+            let previous = cached_form.clone();
+            *cached_form = form;
+            Some(previous)
+        } else {
+            forms.push((key, form));
+            None
+        }
+    }
+
+    fn remove(&self, key: &SelectedFormCacheKey) -> Option<Form> {
+        let mut forms = self.forms.borrow_mut();
+        forms
+            .iter()
+            .position(|(candidate, _)| candidate == key)
+            .map(|index| forms.remove(index).1)
+    }
+
+    fn remove_thing(&self, id: &str) {
+        self.forms
+            .borrow_mut()
+            .retain(|(key, _)| key.thing_id != id);
+    }
+}
+
 /// Builder for a host Servient.
 pub struct ServientBuilder<
     D = InMemoryThingDirectory,
     R = InMemoryExposedThingRegistry,
     C = InMemoryConsumedThingCache,
+    S = InMemorySelectedFormCache,
 > {
     directory: D,
     exposed_registry: R,
     consumed_cache: C,
+    selected_form_cache: S,
     binding_factories: Vec<BindingFactory>,
 }
 
@@ -222,6 +362,7 @@ impl
         InMemoryThingDirectory,
         InMemoryExposedThingRegistry,
         InMemoryConsumedThingCache,
+        InMemorySelectedFormCache,
     >
 {
     /// Creates a builder using an in-memory Thing Description Directory.
@@ -230,6 +371,7 @@ impl
             directory: InMemoryThingDirectory::new(),
             exposed_registry: InMemoryExposedThingRegistry::new(),
             consumed_cache: InMemoryConsumedThingCache::new(),
+            selected_form_cache: InMemorySelectedFormCache::new(),
             binding_factories: Vec::new(),
         }
     }
@@ -240,6 +382,7 @@ impl Default
         InMemoryThingDirectory,
         InMemoryExposedThingRegistry,
         InMemoryConsumedThingCache,
+        InMemorySelectedFormCache,
     >
 {
     fn default() -> Self {
@@ -247,14 +390,15 @@ impl Default
     }
 }
 
-impl<D, R, C> ServientBuilder<D, R, C>
+impl<D, R, C, S> ServientBuilder<D, R, C, S>
 where
     D: ThingDirectory,
     R: ExposedThingRegistry,
     C: ConsumedThingCache,
+    S: SelectedFormCache,
 {
     /// Uses a caller-provided Thing Description Directory backend.
-    pub fn with_directory<N>(self, directory: N) -> ServientBuilder<N, R, C>
+    pub fn with_directory<N>(self, directory: N) -> ServientBuilder<N, R, C, S>
     where
         N: ThingDirectory,
     {
@@ -262,12 +406,13 @@ where
             directory,
             exposed_registry: self.exposed_registry,
             consumed_cache: self.consumed_cache,
+            selected_form_cache: self.selected_form_cache,
             binding_factories: self.binding_factories,
         }
     }
 
     /// Uses a caller-provided exposed Thing registry backend.
-    pub fn with_exposed_registry<N>(self, exposed_registry: N) -> ServientBuilder<D, N, C>
+    pub fn with_exposed_registry<N>(self, exposed_registry: N) -> ServientBuilder<D, N, C, S>
     where
         N: ExposedThingRegistry,
     {
@@ -275,12 +420,13 @@ where
             directory: self.directory,
             exposed_registry,
             consumed_cache: self.consumed_cache,
+            selected_form_cache: self.selected_form_cache,
             binding_factories: self.binding_factories,
         }
     }
 
     /// Uses a caller-provided consumed Thing cache backend.
-    pub fn with_consumed_cache<N>(self, consumed_cache: N) -> ServientBuilder<D, R, N>
+    pub fn with_consumed_cache<N>(self, consumed_cache: N) -> ServientBuilder<D, R, N, S>
     where
         N: ConsumedThingCache,
     {
@@ -288,6 +434,21 @@ where
             directory: self.directory,
             exposed_registry: self.exposed_registry,
             consumed_cache,
+            selected_form_cache: self.selected_form_cache,
+            binding_factories: self.binding_factories,
+        }
+    }
+
+    /// Uses a caller-provided selected form cache backend.
+    pub fn with_selected_form_cache<N>(self, selected_form_cache: N) -> ServientBuilder<D, R, C, N>
+    where
+        N: SelectedFormCache,
+    {
+        ServientBuilder {
+            directory: self.directory,
+            exposed_registry: self.exposed_registry,
+            consumed_cache: self.consumed_cache,
+            selected_form_cache,
             binding_factories: self.binding_factories,
         }
     }
@@ -302,11 +463,12 @@ where
     }
 
     /// Builds the Servient.
-    pub fn build(self) -> Servient<D, R, C> {
+    pub fn build(self) -> Servient<D, R, C, S> {
         Servient {
             directory: self.directory,
             exposed_registry: self.exposed_registry,
             consumed_cache: self.consumed_cache,
+            selected_form_cache: self.selected_form_cache,
             binding_factories: self.binding_factories,
             running: false,
         }
@@ -318,20 +480,30 @@ pub struct Servient<
     D = InMemoryThingDirectory,
     R = InMemoryExposedThingRegistry,
     C = InMemoryConsumedThingCache,
+    S = InMemorySelectedFormCache,
 > {
     directory: D,
     exposed_registry: R,
     consumed_cache: C,
+    selected_form_cache: S,
     binding_factories: Vec<BindingFactory>,
     running: bool,
 }
 
-impl Servient<InMemoryThingDirectory, InMemoryExposedThingRegistry, InMemoryConsumedThingCache> {
+impl
+    Servient<
+        InMemoryThingDirectory,
+        InMemoryExposedThingRegistry,
+        InMemoryConsumedThingCache,
+        InMemorySelectedFormCache,
+    >
+{
     /// Creates a Servient backed by an in-memory Thing Description Directory.
     pub fn builder() -> ServientBuilder<
         InMemoryThingDirectory,
         InMemoryExposedThingRegistry,
         InMemoryConsumedThingCache,
+        InMemorySelectedFormCache,
     > {
         ServientBuilder::new()
     }
@@ -343,18 +515,24 @@ impl Servient<InMemoryThingDirectory, InMemoryExposedThingRegistry, InMemoryCons
 }
 
 impl Default
-    for Servient<InMemoryThingDirectory, InMemoryExposedThingRegistry, InMemoryConsumedThingCache>
+    for Servient<
+        InMemoryThingDirectory,
+        InMemoryExposedThingRegistry,
+        InMemoryConsumedThingCache,
+        InMemorySelectedFormCache,
+    >
 {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl<D, R, C> Servient<D, R, C>
+impl<D, R, C, S> Servient<D, R, C, S>
 where
     D: ThingDirectory,
     R: ExposedThingRegistry,
     C: ConsumedThingCache,
+    S: SelectedFormCache,
 {
     /// Starts the host runtime lifecycle.
     ///
@@ -409,6 +587,16 @@ where
         &mut self.consumed_cache
     }
 
+    /// Returns the underlying selected form cache.
+    pub fn selected_form_cache(&self) -> &S {
+        &self.selected_form_cache
+    }
+
+    /// Returns the underlying selected form cache mutably.
+    pub fn selected_form_cache_mut(&mut self) -> &mut S {
+        &mut self.selected_form_cache
+    }
+
     /// Registers a protocol binding factory after the Servient has been built.
     pub fn register_binding_factory<F>(&mut self, factory: F) -> ServientResult<()>
     where
@@ -425,6 +613,7 @@ where
         let entry = self.directory.register(thing)?;
         self.consumed_cache
             .insert(entry.id.clone(), entry.thing.clone());
+        self.selected_form_cache.remove_thing(&entry.id);
         Ok(entry)
     }
 
@@ -434,6 +623,7 @@ where
         let entry = self.directory.update(thing)?;
         self.consumed_cache
             .insert(entry.id.clone(), entry.thing.clone());
+        self.selected_form_cache.remove_thing(&entry.id);
         Ok(entry)
     }
 
@@ -443,6 +633,7 @@ where
         let thing = self.directory.delete(id)?;
         self.exposed_registry.remove(id);
         self.consumed_cache.remove(id);
+        self.selected_form_cache.remove_thing(id);
         Ok(thing)
     }
 
@@ -467,6 +658,7 @@ where
         let entry = self.directory.register(thing.thing_description().clone())?;
         self.consumed_cache
             .insert(entry.id.clone(), entry.thing.clone());
+        self.selected_form_cache.remove_thing(&entry.id);
         self.exposed_registry.insert(id, thing);
         Ok(entry)
     }
@@ -479,6 +671,7 @@ where
             .remove(id)
             .ok_or_else(|| ServientError::ExposedThingNotFound(id.to_owned()))?;
         self.consumed_cache.remove(id);
+        self.selected_form_cache.remove_thing(id);
         self.directory.delete(id)?;
         Ok(thing)
     }
@@ -702,18 +895,40 @@ where
         input: InteractionInput,
     ) -> ServientResult<InteractionOutput> {
         let mut consumed = self.consume(id)?;
-        let form = select_affordance_form_with_criteria(
-            consumed.thing_description(),
-            affordance,
-            criteria,
-        )?
-        .selection
-        .form
-        .clone();
+        let form =
+            self.cached_or_select_form(consumed.thing_description(), id, affordance, criteria)?;
 
         consumed
             .request(target, criteria.operation, &form, input)
             .map_err(Into::into)
+    }
+
+    fn cached_or_select_form(
+        &self,
+        thing: &Thing,
+        id: &str,
+        affordance: AffordanceRef<'_>,
+        criteria: FormSelectionCriteria<'_>,
+    ) -> ServientResult<Form> {
+        let key = SelectedFormCacheKey::new(
+            id,
+            SelectedFormCacheAffordance::from_affordance_ref(affordance),
+            criteria,
+        );
+
+        if let Some(form) = self.selected_form_cache.get(&key) {
+            if validate_affordance_form_with_criteria(thing, affordance, &form, criteria).is_ok() {
+                return Ok(form);
+            }
+            self.selected_form_cache.remove(&key);
+        }
+
+        let form = select_affordance_form_with_criteria(thing, affordance, criteria)?
+            .selection
+            .form
+            .clone();
+        self.selected_form_cache.insert(key, form.clone());
+        Ok(form)
     }
 
     fn bound_consumed_thing(&self, thing: Thing) -> BoundConsumedThing {

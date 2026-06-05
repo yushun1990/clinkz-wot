@@ -287,6 +287,9 @@ Current status:
 - Added an injectable consumed Thing TD cache boundary in Servient, with a
   deterministic in-memory default and synchronization from register, update,
   expose, unregister, and unexpose flows.
+- Added an injectable selected form cache boundary in Servient, with a
+  deterministic in-memory default, cache invalidation on TD lifecycle
+  mutations, and criteria-based remote invocation reuse.
 - Added integration tests for exposing a local Thing, consuming a discovered TD,
   dispatching all local interaction kinds, and invoking through an injected test
   binding.
@@ -295,6 +298,10 @@ Current status:
   unknown Thing ids, and missing binding diagnostics.
 - Added runtime integration coverage for consumed TD cache synchronization,
   cache-preferred consumption, directory update, and unregister flows.
+- Added a Servient integration test that routes remote property reads, property
+  writes, action invocation, and event subscription through the optional zenoh
+  binding with an injected fake transport, keeping zenoh out of Servient's
+  required dependencies.
 
 Entry criteria:
 
@@ -306,15 +313,12 @@ Planned work:
 
 - Keep low-level `BoundConsumedThing` access available for callers that need to
   cache TDs, selected forms, or dispatchers directly.
-- Extend the protocol-neutral cache boundary from TDs to selected forms and
-  binding plans so production services do not need to query Discovery before
-  every device interaction.
+- Extend the protocol-neutral cache boundary from selected forms to binding
+  plans so production services do not need to query Discovery before every
+  device interaction.
 - Add builder slots for payload codecs and security providers, then wire them
   into local and consumed interaction paths without making any concrete
   provider mandatory.
-- Add runtime integration tests for directory update/unregister flows.
-- Add a zenoh runtime integration test using the existing fake transport so M6
-  exercises the first concrete binding while keeping zenoh optional.
 
 Exit criteria:
 

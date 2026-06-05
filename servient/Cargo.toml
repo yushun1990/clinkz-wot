@@ -9,6 +9,9 @@ clinkz-wot-discovery = { path = "../discovery" }
 clinkz-wot-protocol-bindings = { path = "../protocol-bindings/core" }
 clinkz-wot-td = { path = "../td" }
 
+[dev-dependencies]
+clinkz-wot-protocol-bindings-zenoh = { path = "../protocol-bindings/protocols/zenoh" }
+
 [features]
 default = ["std"]
 std = []
