@@ -1,3 +1,5 @@
+use alloc::{borrow::ToOwned, boxed::Box, string::String, vec::Vec};
+
 use clinkz_wot_core::{LocalThing, PayloadCodec, ProtocolBinding, SecurityProvider};
 use clinkz_wot_discovery::{
     DirectoryEntry, DirectoryPage, DirectoryQuery, InMemoryThingDirectory, ThingDirectory,

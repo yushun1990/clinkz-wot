@@ -26,12 +26,12 @@ Current focus:
   binding crates.
 - M4 protocol binding hardening is complete for the current shared and zenoh
   binding scope.
-- M5 Discovery has the first in-memory Thing Description Directory and query
-  surface needed by runtime crates.
-- M6 Servient runtime composition now has the first std host runtime surface
-  that wires Discovery, local Things, consumed Things, injected protocol
-  bindings, runtime registries, TD/form/binding-plan caches, payload codecs,
-  and security providers.
+- M5 Discovery has the first embedded-ready in-memory Thing Description
+  Directory and query surface needed by runtime crates.
+- M6 Servient runtime composition now has the first embedded-ready runtime
+  surface that wires Discovery, local Things, consumed Things, injected
+  protocol bindings, runtime registries, TD/form/binding-plan caches, payload
+  codecs, and security providers.
 - Keep M7 conformance and embedded checks running across every crate that
   claims `no_std + alloc` support.
 
@@ -205,7 +205,7 @@ registration, lookup, update, deletion, and query flows.
 
 Current status:
 
-- Started `clinkz-wot-discovery` as a std-first workspace crate.
+- Started `clinkz-wot-discovery` as a workspace crate.
 - Added protocol-neutral Thing Description Directory traits for registration,
   retrieval, update, deletion, listing, and query.
 - Added backend-portable structured directory queries with exact-match filters,
@@ -227,7 +227,8 @@ Entry criteria:
 
 Planned work:
 
-- Add `clinkz-wot-discovery` as a `std` crate in the workspace.
+- Add `clinkz-wot-discovery` as a workspace crate with `no_std + alloc`
+  embedded APIs and `std` host extension points.
 - Define protocol-neutral directory traits for registration, retrieval, update,
   deletion, listing, and query.
 - Implement a deterministic in-memory directory backend first.
@@ -253,7 +254,8 @@ host/runtime Servient that supports exposed and consumed Things.
 
 Current status:
 
-- Started `clinkz-wot-servient` as a `std` workspace crate.
+- Started `clinkz-wot-servient` as a workspace crate with embedded-ready
+  runtime composition and `std` host extension points.
 - Added a host Servient builder backed by an injectable Thing Directory and
   protocol binding factories.
 - Added lifecycle APIs for start and stop.

@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use alloc::{borrow::ToOwned, collections::BTreeMap, string::String, vec::Vec};
 
 use clinkz_wot_td::{
     thing::Thing,

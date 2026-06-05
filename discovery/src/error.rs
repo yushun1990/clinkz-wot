@@ -1,3 +1,4 @@
+use alloc::string::String;
 use core::fmt;
 
 use clinkz_wot_td::validate::ValidateError;

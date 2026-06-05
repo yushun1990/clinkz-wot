@@ -1,3 +1,5 @@
+use alloc::{boxed::Box, vec::Vec};
+
 use clinkz_wot_core::{PayloadCodec, ProtocolBinding, SecurityProvider};
 use clinkz_wot_discovery::{InMemoryThingDirectory, ThingDirectory};
 

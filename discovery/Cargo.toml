@@ -4,8 +4,8 @@ version.workspace = true
 edition.workspace = true
 
 [dependencies]
-clinkz-wot-td = { path = "../td" }
+clinkz-wot-td = { path = "../td", default-features = false }
 
 [features]
 default = ["std"]
-std = []
+std = ["clinkz-wot-td/std"]

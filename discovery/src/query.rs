@@ -1,3 +1,5 @@
+use alloc::{string::String, vec::Vec};
+
 use clinkz_wot_td::thing::Thing;
 
 /// A local predicate for in-memory Thing Directory filtering.

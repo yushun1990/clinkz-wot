@@ -1,3 +1,5 @@
+use alloc::{boxed::Box, format};
+
 use clinkz_wot_core::{
     AffordanceTarget, BoundConsumedThing, CodecInput, ConsumedThing, CoreError, EventSink,
     ExposedThing, InteractionInput, InteractionOutput, Payload, PayloadCodec, ProtocolBinding,

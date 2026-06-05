@@ -26,10 +26,11 @@ Current implementation highlights:
 - The zenoh binding is an optional planning and adapter crate. It recognizes
   zenoh TD forms and `cz-zenoh` extension metadata without depending on a
   concrete zenoh runtime.
-- Discovery includes a deterministic in-memory Thing Description Directory.
-- Servient includes the first host runtime composition layer for discovery,
-  exposed Things, consumed Things, binding factories, caches, payload codecs,
-  and security provider hooks.
+- Discovery includes an embedded-ready query model and deterministic in-memory
+  Thing Description Directory.
+- Servient includes embedded-ready runtime composition for discovery, local
+  exposure, remote consumption, binding factories, caches, payload codecs, and
+  security provider hooks.
 
 Next focus areas are production-oriented shared transport ownership, optional
 concrete zenoh runtime backends, and continued conformance plus embedded checks.
@@ -42,8 +43,8 @@ concrete zenoh runtime backends, and continued conformance plus embedded checks.
 | `clinkz-wot-core` | `core` | Protocol-neutral engine traits and local/consumed Thing dispatch abstractions. | `no_std + alloc`, `std` by default |
 | `clinkz-wot-protocol-bindings` | `protocol-bindings/core` | Shared form selection, target resolution, selected-form validation, diagnostics, and security helpers. | `no_std + alloc`, `std` by default |
 | `clinkz-wot-protocol-bindings-zenoh` | `protocol-bindings/protocols/zenoh` | Optional zenoh form parsing, operation planning, metadata extraction, and injected transport boundary. | `no_std + alloc`, `std` by default |
-| `clinkz-wot-discovery` | `discovery` | Protocol-neutral Discovery and Thing Description Directory traits with an in-memory backend. | `std` |
-| `clinkz-wot-servient` | `servient` | Host Servient runtime composition for discovery, local exposure, remote consumption, caches, and injected bindings. | `std` |
+| `clinkz-wot-discovery` | `discovery` | Protocol-neutral Discovery and Thing Description Directory traits with an in-memory backend. | `no_std + alloc`, `std` by default |
+| `clinkz-wot-servient` | `servient` | Servient runtime composition for discovery, local exposure, remote consumption, caches, and injected bindings. | `no_std + alloc`, `std` by default |
 
 ## Architecture Principles
 
@@ -74,7 +75,15 @@ cargo check -p clinkz-wot-td --no-default-features
 cargo check -p clinkz-wot-core --no-default-features
 cargo check -p clinkz-wot-protocol-bindings --no-default-features
 cargo check -p clinkz-wot-protocol-bindings-zenoh --no-default-features
+cargo check -p clinkz-wot-discovery --no-default-features
+cargo check -p clinkz-wot-servient --no-default-features
 ```
+
+`discovery` and `servient` keep embedded and host surfaces inside their own
+crates. Use the `embedded` modules for `no_std + alloc` composition and the
+`host` modules, available with the default `std` feature, for future
+host-only backends. The project avoids naming these modules `core` because
+`clinkz-wot-core` already owns the protocol-neutral engine trait surface.
 
 Run Clippy when changing Rust code:
 

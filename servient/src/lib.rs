@@ -1,12 +1,22 @@
-//! Host runtime composition for Web of Things Servient flows.
+#![no_std]
+//!
+//! Runtime composition for Web of Things Servient flows.
 //!
 //! This crate wires protocol-neutral core dispatch, Discovery directory
 //! storage, and protocol binding factories without making any concrete
 //! protocol binding mandatory.
 
+#[cfg(feature = "std")]
+extern crate std;
+
+extern crate alloc;
+
 mod builder;
 mod cache;
+pub mod embedded;
 mod error;
+#[cfg(feature = "std")]
+pub mod host;
 mod interaction;
 mod registry;
 mod runtime;

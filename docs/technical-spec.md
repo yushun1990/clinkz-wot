@@ -52,13 +52,18 @@ This crate is optional and must not be required by TD/TM/core crates.
 
 Implements W3C WoT Discovery concepts and Thing Description Directory behavior.
 
-This crate is expected to require `std` for its first implementation.
+This crate supports `no_std + alloc` for the protocol-neutral query model,
+directory traits, and deterministic in-memory directory. Host-only production
+storage backends should live behind the crate's `std` feature.
 
 ### `clinkz-wot-servient`
 
 Composes TD/TM, bindings, discovery, security, and runtime services into a usable WoT Servient.
 
-This crate is expected to be `std` by default.
+This crate supports `no_std + alloc` for embedded-ready runtime composition and
+uses `std` by default for host convenience. Concrete host-only sessions,
+filesystems, async runtimes, databases, and observability integrations should
+stay behind the crate's `std` feature.
 
 ## Feature Policy
 
@@ -67,6 +72,11 @@ This crate is expected to be `std` by default.
 - `std` enables host networking, filesystems, async runtimes, integration tests, and richer diagnostics.
 - `embedded` enables embedded-friendly APIs and disables hidden OS dependencies.
 - `td2-preview` enables experimental TD 2.0 tracking.
+
+Crates that expose both embedded and host surfaces should keep both surfaces in
+the same crate when the split is only a feature boundary. Prefer module names
+such as `embedded` and `host`; avoid a module named `core` because
+`clinkz-wot-core` already names the protocol-neutral engine trait crate.
 
 ## Validation Levels
 

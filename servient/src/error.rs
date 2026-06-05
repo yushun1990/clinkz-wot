@@ -1,4 +1,5 @@
-use std::fmt;
+use alloc::string::String;
+use core::fmt;
 
 use clinkz_wot_core::CoreError;
 use clinkz_wot_discovery::DiscoveryError;
@@ -48,6 +49,7 @@ impl fmt::Display for ServientError {
     }
 }
 
+#[cfg(feature = "std")]
 impl std::error::Error for ServientError {}
 
 impl From<DiscoveryError> for ServientError {

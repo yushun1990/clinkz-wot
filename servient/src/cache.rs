@@ -1,4 +1,5 @@
-use std::{cell::RefCell, collections::BTreeMap};
+use alloc::{borrow::ToOwned, collections::BTreeMap, string::String, vec::Vec};
+use core::cell::RefCell;
 
 use clinkz_wot_protocol_bindings::{AffordanceRef, FormSelectionCriteria};
 use clinkz_wot_td::{data_type::Operation, form::Form, thing::Thing};
