@@ -64,20 +64,24 @@ The current protocol binding crates provide:
   content type/subprotocol criteria.
 - An injected `ZenohTransport` adapter boundary that avoids a required zenoh
   runtime dependency.
+- A std-only shared zenoh transport handle so host binding factories can reuse
+  one session, connection pool, or runtime adapter across cloned bindings.
 - Runtime tests for fake transport propagation and the default no-transport
   error path.
 - A documented runtime backend policy that keeps Rust `zenoh` and
   `zenoh-pico` integration out of the shared planning crate.
+- A first host runtime adapter, `ZenohSessionTransport`, behind the explicit
+  `zenoh-runtime` feature. The default build still has no concrete Rust
+  `zenoh` dependency.
 
 ## Current Development Sequence
 
 The next development order is:
 
 1. Run M4 verification checks whenever shared or zenoh binding APIs change.
-2. Move to M5 Discovery once repository-level M5 work starts.
-3. Add concrete zenoh runtime backends later as runtime crates or feature-gated
-   adapter modules, keeping Rust `zenoh` and `zenoh-pico` mutually exclusive
-   when exposed from the same crate.
+2. Harden the first Rust `zenoh` host backend with broader request/reply,
+   subscription lifecycle, and metadata mapping coverage.
+3. Expand M7 verification coverage as each backend boundary is added.
 
 Completion notes:
 
@@ -276,9 +280,9 @@ Completion notes:
 - Confirmed the zenoh binding crate has no concrete zenoh runtime dependency in
   its default feature set.
 
-### PB-P1.4 Plan Concrete Zenoh Runtime Backends
+### PB-P1.4 Add First Concrete Rust Zenoh Runtime Backend
 
-Status: planned.
+Status: complete for the first Rust `zenoh` host backend.
 
 Goal: support host and constrained zenoh execution without weakening the
 `no_std + alloc` boundary of TD, core, shared bindings, or the zenoh planning
@@ -304,6 +308,56 @@ Acceptance criteria:
   claim `no_std + alloc`.
 - Backend feature combinations fail clearly when incompatible features are
   enabled together.
+
+Completion notes:
+
+- Added `ZenohSessionTransport` behind the explicit `zenoh-runtime` feature.
+- Kept the default feature set free of a concrete Rust `zenoh` dependency and
+  preserved `cargo check -p clinkz-wot-protocol-bindings-zenoh
+  --no-default-features`.
+- Implemented first-pass host execution for put, get/request-reply, one-shot
+  subscribe, and unsubscribe acknowledgement through the existing
+  `ZenohTransport` trait.
+- Added first-pass runtime metadata mapping for encoding, express QoS,
+  priority, and congestion control hints on put and get/request-reply builders.
+- Left broader subscription lifecycle management, additional metadata mapping,
+  `zenoh-pico`, and incompatible backend feature guards as follow-up hardening
+  work.
+
+### PB-P1.5 Add Shared Zenoh Transport Ownership
+
+Status: complete.
+
+Goal: allow Servient binding factories and host runtime adapters to reuse one
+transport session, connection pool, or runtime adapter without making Servient
+depend on concrete protocol types.
+
+Work items:
+
+- Add a cloneable shared transport handle for `ZenohTransport`
+  implementations.
+- Keep the shared handle behind the `std` feature so the zenoh planning crate's
+  `no_std + alloc` checks continue to pass.
+- Add tests that prove cloned bindings share the same underlying transport
+  state.
+
+Acceptance criteria:
+
+- Binding factories can clone a shared transport handle into newly created
+  `ZenohBinding` values.
+- `cargo check -p clinkz-wot-protocol-bindings-zenoh --no-default-features`
+  continues to pass.
+- Servient can reuse a shared zenoh transport without adding a required zenoh
+  dependency.
+
+Completion notes:
+
+- Added `SharedZenohTransport<T>` as a std-only `Arc<Mutex<T>>` wrapper that
+  implements `ZenohTransport` by forwarding to the shared adapter.
+- Added zenoh binding tests for cloned bindings reusing one underlying
+  transport state.
+- Added Servient integration coverage for a binding factory that clones a
+  shared zenoh transport handle into each `ZenohBinding`.
 
 ## Verification
 

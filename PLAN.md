@@ -37,9 +37,8 @@ Current focus:
 
 Immediate next sequence:
 
-1. Introduce production-oriented shared transport ownership for protocol
-   bindings, then add the first concrete zenoh runtime backend behind an
-   optional host/runtime boundary.
+1. Harden the first concrete Rust `zenoh` host runtime backend with broader
+   request/reply, subscription lifecycle, and metadata mapping coverage.
 2. Expand M7 checks and update compatibility documentation as each milestone
    adds crates or public surfaces.
 
@@ -180,6 +179,9 @@ Current status:
   `zenoh-pico` adapters: the current zenoh planning crate remains
   `no_std + alloc`, while concrete runtime backends stay optional and
   feature-gated or crate-separated.
+- Added the first concrete Rust `zenoh` host runtime backend behind the
+  explicit `zenoh-runtime` feature while keeping the default and
+  `--no-default-features` builds free of a concrete zenoh runtime dependency.
 
 Completion notes:
 
@@ -312,6 +314,9 @@ Current status:
   writes, action invocation, and event subscription through the optional zenoh
   binding with an injected fake transport, keeping zenoh out of Servient's
   required dependencies.
+- Added shared zenoh transport ownership support so binding factories can reuse
+  host sessions or connection pools without requiring concrete protocol types
+  in Servient.
 
 Entry criteria:
 
@@ -323,9 +328,6 @@ Planned work:
 
 - Keep low-level `BoundConsumedThing` access available for callers that need to
   cache TDs, selected forms, or dispatchers directly.
-- Add shared transport ownership support so binding factories can reuse host
-  sessions or connection pools without requiring concrete protocol types in
-  Servient.
 
 Exit criteria:
 

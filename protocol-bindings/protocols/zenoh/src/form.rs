@@ -19,6 +19,9 @@ use serde_json::Value;
 
 use crate::{ZenohBindingError, ZenohBindingResult};
 
+#[cfg(feature = "std")]
+use std::sync::{Arc, Mutex};
+
 /// URI scheme used by TD forms that directly target zenoh.
 pub const ZENOH_SCHEME: &str = "zenoh://";
 
@@ -108,6 +111,59 @@ pub struct ZenohTransportRequest {
 pub trait ZenohTransport {
     /// Executes a planned zenoh operation.
     fn execute(&mut self, request: ZenohTransportRequest) -> CoreResult<InteractionOutput>;
+}
+
+/// Shareable zenoh transport handle for host runtime integrations.
+///
+/// This wrapper lets binding factories clone a handle to the same underlying
+/// session, connection pool, or runtime adapter while each `ZenohBinding`
+/// still owns its protocol binding value.
+#[cfg(feature = "std")]
+#[derive(Debug)]
+pub struct SharedZenohTransport<T> {
+    inner: Arc<Mutex<T>>,
+}
+
+#[cfg(feature = "std")]
+impl<T> SharedZenohTransport<T> {
+    /// Creates a shared transport handle from a concrete transport adapter.
+    pub fn new(transport: T) -> Self {
+        Self {
+            inner: Arc::new(Mutex::new(transport)),
+        }
+    }
+
+    /// Creates a shared transport handle from an existing `Arc<Mutex<T>>`.
+    pub fn from_arc(inner: Arc<Mutex<T>>) -> Self {
+        Self { inner }
+    }
+
+    /// Returns the underlying shared transport container.
+    pub fn inner(&self) -> &Arc<Mutex<T>> {
+        &self.inner
+    }
+}
+
+#[cfg(feature = "std")]
+impl<T> Clone for SharedZenohTransport<T> {
+    fn clone(&self) -> Self {
+        Self {
+            inner: self.inner.clone(),
+        }
+    }
+}
+
+#[cfg(feature = "std")]
+impl<T> ZenohTransport for SharedZenohTransport<T>
+where
+    T: ZenohTransport,
+{
+    fn execute(&mut self, request: ZenohTransportRequest) -> CoreResult<InteractionOutput> {
+        self.inner
+            .lock()
+            .map_err(|_| CoreError::Transport("Zenoh shared transport lock is poisoned".into()))?
+            .execute(request)
+    }
 }
 
 /// Placeholder transport used when no concrete zenoh runtime is attached.

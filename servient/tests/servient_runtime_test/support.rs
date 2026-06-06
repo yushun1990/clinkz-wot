@@ -280,6 +280,36 @@ impl ZenohTransport for ServientZenohTransport {
 }
 
 #[derive(Default)]
+pub(crate) struct CountingServientZenohTransport {
+    pub(crate) calls: usize,
+}
+
+impl ZenohTransport for CountingServientZenohTransport {
+    fn execute(&mut self, request: ZenohTransportRequest) -> CoreResult<InteractionOutput> {
+        self.calls += 1;
+        match (request.plan.kind, request.plan.key_expr.as_str()) {
+            (ZenohOperationKind::Query, "clinkz/things/lamp/properties/status") => {
+                Ok(InteractionOutput::with_payload(Payload::new(
+                    format!("zenoh-read-{}", self.calls).into_bytes(),
+                    "text/plain",
+                )))
+            }
+            (ZenohOperationKind::Put, "clinkz/things/lamp/properties/status") => {
+                assert_eq!(
+                    request
+                        .payload
+                        .as_ref()
+                        .map(|payload| payload.body.as_slice()),
+                    Some(&b"zenoh-off"[..])
+                );
+                Ok(InteractionOutput::empty())
+            }
+            _ => panic!("unexpected shared zenoh transport request: {:?}", request),
+        }
+    }
+}
+
+#[derive(Default)]
 pub(crate) struct TestExposedRegistry {
     pub(crate) inner: InMemoryExposedThingRegistry,
     pub(crate) inserted: usize,

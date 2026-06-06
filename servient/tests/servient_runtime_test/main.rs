@@ -4,7 +4,7 @@ use std::{cell::Cell, rc::Rc};
 
 use clinkz_wot_core::{AffordanceTarget, ConsumedThing, InteractionInput, LocalThing, Payload};
 use clinkz_wot_protocol_bindings::{BindingCoreError, FormSelectionCriteria};
-use clinkz_wot_protocol_bindings_zenoh::ZenohBinding;
+use clinkz_wot_protocol_bindings_zenoh::{SharedZenohTransport, ZenohBinding};
 use clinkz_wot_servient::{
     ConsumedThingCache, InMemoryBindingPlanCache, InMemoryConsumedThingCache,
     InMemorySelectedFormCache, SelectedFormCache, SelectedFormCacheAffordance,
@@ -526,6 +526,47 @@ fn servient_routes_remote_requests_through_zenoh_binding_transport() {
         )
         .unwrap();
     assert_eq!(event.payload.unwrap().body, b"zenoh-subscribed");
+}
+
+#[test]
+fn servient_binding_factories_can_share_zenoh_transport_state() {
+    let td = zenoh_thing("urn:thing:shared-zenoh-lamp", "Shared Zenoh Lamp");
+    let shared = SharedZenohTransport::new(CountingServientZenohTransport::default());
+    let factory_transport = shared.clone();
+    let mut servient = Servient::builder()
+        .binding_factory(move || Box::new(ZenohBinding::with_transport(factory_transport.clone())))
+        .build();
+    servient.register(td).unwrap();
+
+    let first = servient
+        .read_remote_property_with_criteria(
+            "urn:thing:shared-zenoh-lamp",
+            "status",
+            FormSelectionCriteria::operation(Operation::ReadProperty).content_type("text/plain"),
+            InteractionInput::empty(),
+        )
+        .unwrap();
+    assert_eq!(first.payload.unwrap().body, b"zenoh-read-1");
+
+    servient
+        .write_remote_property_with_criteria(
+            "urn:thing:shared-zenoh-lamp",
+            "status",
+            FormSelectionCriteria::operation(Operation::WriteProperty).content_type("text/plain"),
+            InteractionInput::with_payload(Payload::new(b"zenoh-off".to_vec(), "text/plain")),
+        )
+        .unwrap();
+
+    let second = servient
+        .read_remote_property_with_criteria(
+            "urn:thing:shared-zenoh-lamp",
+            "status",
+            FormSelectionCriteria::operation(Operation::ReadProperty).content_type("text/plain"),
+            InteractionInput::empty(),
+        )
+        .unwrap();
+    assert_eq!(second.payload.unwrap().body, b"zenoh-read-3");
+    assert_eq!(shared.inner().lock().unwrap().calls, 3);
 }
 
 #[test]

@@ -54,6 +54,20 @@ key expressions, parses `cz-zenoh` metadata, maps WoT operations to zenoh
 operation kinds, and exposes a `ZenohTransport` adapter boundary. It must stay
 usable under `no_std + alloc`.
 
+Host runtimes can wrap a concrete `ZenohTransport` implementation in
+`SharedZenohTransport<T>` to reuse one session, connection pool, or runtime
+adapter across multiple binding instances created by Servient binding
+factories. The shared handle is available only with the planning crate's `std`
+feature and does not affect `no_std + alloc` checks.
+
+The first Rust `zenoh` host adapter is `ZenohSessionTransport`, available only
+when the zenoh binding crate is built with the `zenoh-runtime` feature. It wraps
+a concrete `zenoh::Session`, supports put, get/request-reply, and one-shot
+subscribe execution through the protocol-neutral `ZenohTransport` trait, and
+maps the first encoding, express QoS, priority, and congestion control metadata
+hints onto put and get/request-reply builders. The default crate build remains
+free of the Rust `zenoh` dependency.
+
 Concrete zenoh execution should be added through optional runtime backends:
 
 - A Rust `zenoh` backend for host deployments. This backend is `std` because

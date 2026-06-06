@@ -5,9 +5,9 @@ use clinkz_wot_core::{
 use clinkz_wot_protocol_bindings::{AffordanceRef, FormSelectionCriteria};
 use clinkz_wot_protocol_bindings_zenoh::{
     CZ_ZENOH_CONGESTION_CONTROL, CZ_ZENOH_ENCODING, CZ_ZENOH_KEY_EXPR, CZ_ZENOH_PRIORITY,
-    CZ_ZENOH_QOS, ZenohBinding, ZenohBindingError, ZenohOperationKind, ZenohTransport,
-    ZenohTransportRequest, extract_zenoh_metadata, extract_zenoh_target, is_zenoh_form,
-    is_zenoh_form_target, plan_zenoh_affordance_operation,
+    CZ_ZENOH_QOS, SharedZenohTransport, ZenohBinding, ZenohBindingError, ZenohOperationKind,
+    ZenohTransport, ZenohTransportRequest, extract_zenoh_metadata, extract_zenoh_target,
+    is_zenoh_form, is_zenoh_form_target, plan_zenoh_affordance_operation,
     plan_zenoh_affordance_operation_with_criteria, plan_zenoh_operation, zenoh_operation_kind,
 };
 use clinkz_wot_td::{
@@ -43,6 +43,21 @@ impl ZenohTransport for RecordingZenohTransport {
 
         Ok(InteractionOutput::with_payload(Payload::new(
             b"accepted".to_vec(),
+            "text/plain",
+        )))
+    }
+}
+
+#[derive(Default)]
+struct CountingZenohTransport {
+    calls: usize,
+}
+
+impl ZenohTransport for CountingZenohTransport {
+    fn execute(&mut self, request: ZenohTransportRequest) -> CoreResult<InteractionOutput> {
+        self.calls += 1;
+        Ok(InteractionOutput::with_payload(Payload::new(
+            format!("{}:{}", self.calls, request.plan.key_expr).into_bytes(),
             "text/plain",
         )))
     }
@@ -196,6 +211,48 @@ fn runtime_binding_delegates_planned_operation_to_transport() {
         .unwrap();
 
     assert_eq!(output.payload.unwrap().body, b"accepted");
+}
+
+#[test]
+fn shared_transport_reuses_underlying_runtime_state() {
+    let form = Form::read_property("zenoh://clinkz/things/lamp/status")
+        .build()
+        .unwrap();
+    let property = PropertyAffordance::builder(DataSchema::String(DataSchema::string().build()))
+        .form(form.clone())
+        .build()
+        .unwrap();
+    let thing = Thing::builder("Lamp")
+        .nosec()
+        .property("status", property)
+        .build()
+        .unwrap();
+    let shared = SharedZenohTransport::new(CountingZenohTransport::default());
+    let mut first_binding = ZenohBinding::with_transport(shared.clone());
+    let mut second_binding = ZenohBinding::with_transport(shared.clone());
+
+    let first = first_binding
+        .invoke(BindingRequest {
+            thing: &thing,
+            target: AffordanceTarget::Property("status"),
+            operation: Operation::ReadProperty,
+            form: &form,
+            input: InteractionInput::empty(),
+        })
+        .unwrap();
+    let second = second_binding
+        .invoke(BindingRequest {
+            thing: &thing,
+            target: AffordanceTarget::Property("status"),
+            operation: Operation::ReadProperty,
+            form: &form,
+            input: InteractionInput::empty(),
+        })
+        .unwrap();
+
+    assert_eq!(first.payload.unwrap().body, b"1:clinkz/things/lamp/status");
+    assert_eq!(second.payload.unwrap().body, b"2:clinkz/things/lamp/status");
+    assert_eq!(shared.inner().lock().unwrap().calls, 2);
 }
 
 #[test]
