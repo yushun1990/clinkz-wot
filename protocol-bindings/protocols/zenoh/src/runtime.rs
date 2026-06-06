@@ -259,7 +259,9 @@ fn selector_with_parameters(
 
     let mut selector = String::with_capacity(key_expr.len() + encoded_parameters_len(parameters));
     selector.push_str(key_expr);
-    selector.push('?');
+    if let Some(separator) = selector_parameter_separator(key_expr)? {
+        selector.push(separator);
+    }
 
     let mut first = true;
     for (key, value) in parameters {
@@ -278,6 +280,25 @@ fn selector_with_parameters(
     }
 
     Ok(selector)
+}
+
+fn selector_parameter_separator(key_expr: &str) -> CoreResult<Option<char>> {
+    let mut parameter_separator_count = 0;
+    for char_ in key_expr.chars() {
+        if char_ == '?' {
+            parameter_separator_count += 1;
+        }
+    }
+
+    match parameter_separator_count {
+        0 => Ok(Some('?')),
+        1 if key_expr.ends_with(['?', ';']) => Ok(None),
+        1 => Ok(Some(';')),
+        _ => Err(CoreError::Transport(format!(
+            "Zenoh selector '{}' contains multiple parameter separators",
+            key_expr
+        ))),
+    }
 }
 
 fn encoded_parameters_len(parameters: &BTreeMap<String, String>) -> usize {
@@ -404,6 +425,53 @@ mod tests {
         assert_eq!(
             selector,
             "clinkz/things/lamp/actions/reboot?reply=full;trace"
+        );
+    }
+
+    #[test]
+    fn appends_request_parameters_to_existing_selector_parameters() {
+        let mut parameters = BTreeMap::new();
+        parameters.insert("trace".into(), "true".into());
+
+        let selector = selector_with_parameters(
+            "clinkz/things/lamp/actions/reboot?reply=summary",
+            &parameters,
+        )
+        .unwrap();
+
+        assert_eq!(
+            selector,
+            "clinkz/things/lamp/actions/reboot?reply=summary;trace=true"
+        );
+    }
+
+    #[test]
+    fn appends_request_parameters_to_open_selector_parameter_list() {
+        let mut parameters = BTreeMap::new();
+        parameters.insert("trace".into(), "true".into());
+
+        let selector =
+            selector_with_parameters("clinkz/things/lamp/actions/reboot?", &parameters).unwrap();
+
+        assert_eq!(selector, "clinkz/things/lamp/actions/reboot?trace=true");
+    }
+
+    #[test]
+    fn rejects_selectors_with_multiple_parameter_separators() {
+        let mut parameters = BTreeMap::new();
+        parameters.insert("trace".into(), "true".into());
+
+        let err = selector_with_parameters(
+            "clinkz/things/lamp/actions/reboot?reply=summary?trace=false",
+            &parameters,
+        )
+        .unwrap_err();
+
+        assert_eq!(
+            err,
+            CoreError::Transport(
+                "Zenoh selector 'clinkz/things/lamp/actions/reboot?reply=summary?trace=false' contains multiple parameter separators".into()
+            )
         );
     }
 

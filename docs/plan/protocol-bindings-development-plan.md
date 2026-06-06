@@ -327,6 +327,10 @@ Completion notes:
   priority, and congestion control hints on put and get/request-reply builders.
 - Added request/reply selector parameter propagation from runtime interaction
   parameters, with validation for ambiguous zenoh selector separators.
+- Expanded request/reply selector parameter coverage so runtime interaction
+  parameters are appended correctly when a planned zenoh selector already
+  contains query parameters, while malformed selectors with multiple parameter
+  separators fail clearly.
 - Added runtime-feature tests for request/reply parameter selector building,
   metadata case and whitespace normalization, and unsupported priority and
   congestion control diagnostics.
