@@ -22,4 +22,4 @@ pub use form::{
     plan_zenoh_affordance_operation_with_criteria, plan_zenoh_operation, zenoh_operation_kind,
 };
 #[cfg(feature = "zenoh-runtime")]
-pub use runtime::ZenohSessionTransport;
+pub use runtime::{ZenohSessionTransport, ZenohSubscription};

@@ -9,14 +9,21 @@ use clinkz_wot_core::{CoreError, CoreResult, InteractionOutput, Payload};
 use zenoh::{
     Wait,
     bytes::{Encoding, ZBytes},
+    handlers::FifoChannelHandler,
+    pubsub::Subscriber,
     qos::{CongestionControl, Priority},
     sample::Sample,
 };
 
-use crate::{ZenohOperationKind, ZenohTransport, ZenohTransportRequest};
+use crate::{
+    ZenohFormMetadata, ZenohOperationKind, ZenohOperationPlan, ZenohTransport,
+    ZenohTransportRequest,
+};
 
 const DEFAULT_REPLY_TIMEOUT: Duration = Duration::from_secs(5);
 const DEFAULT_CONTENT_TYPE: &str = "application/octet-stream";
+
+type DefaultZenohSubscriber = Subscriber<FifoChannelHandler<Sample>>;
 
 /// Host transport backed by a concrete Rust `zenoh` session.
 ///
@@ -27,6 +34,54 @@ const DEFAULT_CONTENT_TYPE: &str = "application/octet-stream";
 pub struct ZenohSessionTransport {
     session: zenoh::Session,
     reply_timeout: Duration,
+}
+
+/// Active host zenoh subscription returned by [`ZenohSessionTransport`].
+///
+/// The binding-level [`ZenohTransport`] trait still exposes a one-shot
+/// interaction result for protocol-neutral dispatch. Host runtimes that need
+/// explicit event lifecycle control can use this handle directly.
+#[derive(Debug)]
+pub struct ZenohSubscription {
+    subscriber: DefaultZenohSubscriber,
+    content_type_hint: Option<String>,
+    reply_timeout: Duration,
+}
+
+impl ZenohSubscription {
+    /// Returns the zenoh key expression this subscription listens on.
+    pub fn key_expr(&self) -> &str {
+        self.subscriber.key_expr().as_str()
+    }
+
+    /// Waits for the next subscription sample using the default runtime timeout.
+    pub fn next(&mut self) -> CoreResult<InteractionOutput> {
+        self.next_timeout(self.reply_timeout)
+    }
+
+    /// Waits for the next subscription sample using an explicit timeout.
+    pub fn next_timeout(&mut self, timeout: Duration) -> CoreResult<InteractionOutput> {
+        let sample = self
+            .subscriber
+            .recv_timeout(timeout)
+            .map_err(transport_error)?
+            .ok_or_else(|| {
+                CoreError::Transport(format!(
+                    "Zenoh subscription for '{}' timed out",
+                    self.key_expr()
+                ))
+            })?;
+
+        Ok(InteractionOutput::with_payload(payload_from_sample(
+            &sample,
+            self.content_type_hint.as_deref(),
+        )))
+    }
+
+    /// Explicitly undeclares the underlying zenoh subscriber.
+    pub fn undeclare(self) -> CoreResult<()> {
+        self.subscriber.undeclare().wait().map_err(transport_error)
+    }
 }
 
 impl ZenohSessionTransport {
@@ -58,6 +113,18 @@ impl ZenohSessionTransport {
     /// Returns the configured query and subscription reply timeout.
     pub fn reply_timeout(&self) -> Duration {
         self.reply_timeout
+    }
+
+    /// Declares a long-lived zenoh subscription from a planned subscribe operation.
+    pub fn subscribe(&self, plan: ZenohOperationPlan) -> CoreResult<ZenohSubscription> {
+        if plan.kind != ZenohOperationKind::Subscribe {
+            return Err(CoreError::UnsupportedOperation(format!(
+                "Zenoh {:?} operation cannot be opened as a subscription",
+                plan.kind
+            )));
+        }
+
+        self.declare_subscription(plan.key_expr, plan.metadata)
     }
 }
 
@@ -132,29 +199,30 @@ impl ZenohSessionTransport {
     }
 
     fn subscribe_once(&self, request: ZenohTransportRequest) -> CoreResult<InteractionOutput> {
+        let mut subscription =
+            self.declare_subscription(request.plan.key_expr, request.plan.metadata)?;
+        let output = subscription.next_timeout(self.reply_timeout)?;
+        subscription.undeclare()?;
+
+        Ok(output)
+    }
+
+    fn declare_subscription(
+        &self,
+        key_expr: String,
+        metadata: ZenohFormMetadata,
+    ) -> CoreResult<ZenohSubscription> {
         let subscriber = self
             .session
-            .declare_subscriber(request.plan.key_expr.as_str())
-            .wait()
-            .map_err(transport_error)?;
-        let sample = subscriber
-            .recv_timeout(self.reply_timeout)
-            .map_err(transport_error)?
-            .ok_or_else(|| {
-                CoreError::Transport(format!(
-                    "Zenoh subscription for '{}' timed out",
-                    request.plan.key_expr
-                ))
-            })?;
-        self.session
-            .undeclare(subscriber)
+            .declare_subscriber(key_expr.as_str())
             .wait()
             .map_err(transport_error)?;
 
-        Ok(InteractionOutput::with_payload(payload_from_sample(
-            &sample,
-            request.plan.metadata.encoding.as_deref(),
-        )))
+        Ok(ZenohSubscription {
+            subscriber,
+            content_type_hint: metadata.encoding,
+            reply_timeout: self.reply_timeout,
+        })
     }
 }
 

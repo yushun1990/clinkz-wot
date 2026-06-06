@@ -318,11 +318,13 @@ Completion notes:
 - Implemented first-pass host execution for put, get/request-reply, one-shot
   subscribe, and unsubscribe acknowledgement through the existing
   `ZenohTransport` trait.
+- Added `ZenohSubscription` so host runtimes can keep a subscription open,
+  receive multiple samples over time, and explicitly undeclare it when the
+  `zenoh-runtime` feature is enabled.
 - Added first-pass runtime metadata mapping for encoding, express QoS,
   priority, and congestion control hints on put and get/request-reply builders.
-- Left broader subscription lifecycle management, additional metadata mapping,
-  `zenoh-pico`, and incompatible backend feature guards as follow-up hardening
-  work.
+- Left additional metadata mapping, `zenoh-pico`, and incompatible backend
+  feature guards as follow-up hardening work.
 
 ### PB-P1.5 Add Shared Zenoh Transport Ownership
 
