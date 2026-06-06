@@ -70,11 +70,11 @@ The current protocol binding crates provide:
   error path.
 - A documented runtime backend policy that keeps Rust `zenoh` and
   `zenoh-pico` integration out of the shared planning crate.
-- A first host runtime adapter, `ZenohSessionTransport`, behind the explicit
-  `zenoh-runtime` feature. The default build still has no concrete Rust
+- A first Rust `zenoh` runtime adapter, `ZenohSessionTransport`, behind the explicit
+  `runtime-zenoh` feature. The default build still has no concrete Rust
   `zenoh` dependency.
 - First host runtime hardening for request/reply parameter propagation and
-  broader metadata parser coverage under the explicit `zenoh-runtime` feature.
+  broader metadata parser coverage under the explicit `runtime-zenoh` feature.
 - Host subscription lifecycle state exposes the selected key expression,
   content type hint, configured reply timeout, next-sample waiting, and explicit
   undeclaration APIs.
@@ -84,9 +84,10 @@ The current protocol binding crates provide:
 The next development order is:
 
 1. Run M4 verification checks whenever shared or zenoh binding APIs change.
-2. Harden the first Rust `zenoh` host backend with broader request/reply,
-   subscription lifecycle, and metadata mapping coverage.
-3. Expand M7 verification coverage as each backend boundary is added.
+2. Keep M7 embedded checks and compatibility documentation aligned with the
+   current shared, zenoh planning, and optional host runtime surfaces.
+3. Define the next runtime/backend acceptance target before adding another
+   concrete backend increment.
 
 Completion notes:
 
@@ -98,6 +99,11 @@ Completion notes:
   metadata mismatch, protocol filter mismatch, target resolution failure, and
   selected-form validation failure.
 - M4 verification passed for both shared and zenoh binding crates.
+- The first Rust `zenoh` host backend hardening pass is complete for
+  request/reply selector parameter validation, subscription lifecycle metadata,
+  explicit undeclaration, and metadata mapping coverage.
+- M7 embedded checks now include both protocol binding crates through
+  `scripts/check-embedded.sh`.
 
 ## PB-P0: Shared Binding Utility Hardening
 
@@ -316,7 +322,7 @@ Acceptance criteria:
 
 Completion notes:
 
-- Added `ZenohSessionTransport` behind the explicit `zenoh-runtime` feature.
+- Added `ZenohSessionTransport` behind the explicit `runtime-zenoh` feature.
 - Kept the default feature set free of a concrete Rust `zenoh` dependency and
   preserved `cargo check -p clinkz-wot-protocol-bindings-zenoh
   --no-default-features`.
@@ -325,7 +331,7 @@ Completion notes:
   `ZenohTransport` trait.
 - Added `ZenohSubscription` so host runtimes can keep a subscription open,
   receive multiple samples over time, and explicitly undeclare it when the
-  `zenoh-runtime` feature is enabled.
+  `runtime-zenoh` feature is enabled.
 - Added first-pass runtime metadata mapping for encoding, express QoS,
   priority, and congestion control hints on put and get/request-reply builders.
 - Added request/reply selector parameter propagation from runtime interaction
@@ -342,7 +348,7 @@ Completion notes:
   congestion control diagnostics.
 - Hardened request/reply selector parameter validation so empty or blank
   runtime parameter names fail before an invalid zenoh selector is built.
-- Reserved the `zenoh-pico-runtime` feature with a clear compile-time error so
+- Reserved the `runtime-zenoh-pico` feature with a clear compile-time error so
   constrained runtime work cannot be enabled accidentally before a real backend
   exists.
 - Left the actual `zenoh-pico` backend implementation as follow-up work once

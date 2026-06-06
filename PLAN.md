@@ -37,10 +37,10 @@ Current focus:
 
 Immediate next sequence:
 
-1. Harden the first concrete Rust `zenoh` host runtime backend with broader
-   request/reply, subscription lifecycle, and metadata mapping coverage.
-2. Expand M7 checks and update compatibility documentation as each milestone
-   adds crates or public surfaces.
+1. Keep M7 checks and compatibility documentation aligned with the current
+   TD/TM, core, protocol binding, Discovery, and Servient surfaces.
+2. Start the next concrete runtime/backend increment only after documenting the
+   acceptance target and keeping the existing embedded checks green.
 
 ### M1: TD 1.1 Hardening
 
@@ -180,8 +180,14 @@ Current status:
   `no_std + alloc`, while concrete runtime backends stay optional and
   feature-gated or crate-separated.
 - Added the first concrete Rust `zenoh` host runtime backend behind the
-  explicit `zenoh-runtime` feature while keeping the default and
+  explicit `runtime-zenoh` feature while keeping the default and
   `--no-default-features` builds free of a concrete zenoh runtime dependency.
+- Hardened the Rust `zenoh` host runtime backend with request/reply selector
+  parameter validation, subscription lifecycle metadata and undeclaration, and
+  first-pass metadata mapping for encoding, express QoS, priority, and
+  congestion control.
+- Added a std-only shared zenoh transport handle so Servient binding factories
+  can reuse a session, pool, or runtime adapter across cloned bindings.
 
 Completion notes:
 
@@ -358,6 +364,16 @@ Planned work:
   extension terms.
 - Keep TD 2.0 behavior behind an experimental feature and out of default
   compatibility expectations.
+
+Current status:
+
+- `scripts/check-embedded.sh` covers every current workspace crate that claims
+  `no_std + alloc` support: TD, core, shared protocol bindings, zenoh binding,
+  Discovery, and Servient.
+- The current protocol binding M7 verification path passes:
+  - `cargo fmt --check`
+  - `cargo test -p clinkz-wot-protocol-bindings -p clinkz-wot-protocol-bindings-zenoh`
+  - `scripts/check-embedded.sh`
 
 Exit criteria:
 

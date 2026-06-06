@@ -1,10 +1,17 @@
 #![no_std]
 
-#[cfg(feature = "zenoh-pico-runtime")]
+#[cfg(all(feature = "runtime-zenoh", feature = "runtime-zenoh-pico"))]
 compile_error!(
-    "The zenoh-pico runtime backend is reserved but not implemented yet. Use \
-     `zenoh-runtime` for the host Rust zenoh backend, or keep runtime execution \
-     behind an injected ZenohTransport."
+    "Only one concrete zenoh runtime backend can be enabled. Choose \
+     `runtime-zenoh` for the host Rust zenoh backend or `runtime-zenoh-pico` \
+     for the constrained zenoh-pico backend."
+);
+
+#[cfg(all(feature = "runtime-zenoh-pico", not(feature = "runtime-zenoh")))]
+compile_error!(
+    "The zenoh-pico runtime backend is reserved but not implemented yet. Keep \
+     runtime execution behind an injected ZenohTransport or enable \
+     `runtime-zenoh` for the host Rust zenoh backend."
 );
 
 #[cfg(feature = "std")]
@@ -14,7 +21,7 @@ extern crate alloc;
 
 mod error;
 mod form;
-#[cfg(feature = "zenoh-runtime")]
+#[cfg(any(feature = "runtime-zenoh", feature = "runtime-zenoh-pico"))]
 mod runtime;
 
 pub use error::{ZenohBindingError, ZenohBindingResult};
@@ -28,5 +35,5 @@ pub use form::{
     extract_zenoh_target, is_zenoh_form, is_zenoh_form_target, plan_zenoh_affordance_operation,
     plan_zenoh_affordance_operation_with_criteria, plan_zenoh_operation, zenoh_operation_kind,
 };
-#[cfg(feature = "zenoh-runtime")]
+#[cfg(feature = "runtime-zenoh")]
 pub use runtime::{ZenohSessionTransport, ZenohSubscription};

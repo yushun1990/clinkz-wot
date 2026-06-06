@@ -60,8 +60,8 @@ adapter across multiple binding instances created by Servient binding
 factories. The shared handle is available only with the planning crate's `std`
 feature and does not affect `no_std + alloc` checks.
 
-The first Rust `zenoh` host adapter is `ZenohSessionTransport`, available only
-when the zenoh binding crate is built with the `zenoh-runtime` feature. It wraps
+The first Rust `zenoh` runtime adapter is `ZenohSessionTransport`, available only
+when the zenoh binding crate is built with the `runtime-zenoh` feature. It wraps
 a concrete `zenoh::Session`, supports put, get/request-reply, and one-shot
 subscribe execution through the protocol-neutral `ZenohTransport` trait, and
 also exposes `ZenohSubscription` for host runtimes that need explicit
@@ -78,14 +78,18 @@ Concrete zenoh execution should be added through optional runtime backends:
   behind its own feature or crate and handle C ABI, platform I/O, memory, and
   polling concerns without adding them to TD, core, or shared binding crates.
 
-The `zenoh-pico-runtime` feature name is reserved in the zenoh binding crate,
-but it intentionally fails to compile until a real constrained backend is
-implemented. This prevents deployments from enabling an empty feature and
-mistaking the planning crate for a constrained runtime adapter.
+Concrete runtime backend features use the `runtime-*` prefix:
 
-When both backends are exposed from one runtime crate, their feature flags must
-be mutually exclusive, for example `zenoh` and `zenoh-pico`. The shared
-planning crate should not depend on either backend.
+- `runtime-zenoh`: Rust `zenoh` backend.
+- `runtime-zenoh-pico`: reserved constrained `zenoh-pico` backend.
+
+The `runtime-zenoh-pico` backend intentionally fails to compile until a real
+constrained backend is implemented. This prevents deployments from enabling an
+empty feature and mistaking the planning crate for a constrained runtime
+adapter.
+
+Concrete backend features are mutually exclusive. The shared planning surface
+remains available without selecting either backend.
 
 Expected operation mapping:
 

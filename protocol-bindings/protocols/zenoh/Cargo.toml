@@ -18,5 +18,5 @@ std = [
     "clinkz-wot-td/std",
     "serde_json/std",
 ]
-zenoh-runtime = ["std", "dep:zenoh"]
-zenoh-pico-runtime = []
+runtime-zenoh = ["std", "dep:zenoh"]
+runtime-zenoh-pico = []

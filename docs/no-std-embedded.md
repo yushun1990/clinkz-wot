@@ -50,6 +50,15 @@ Embedded-ready crates should pass checks similar to:
 scripts/check-embedded.sh
 ```
 
+The current embedded check script covers:
+
+- `clinkz-wot-td`
+- `clinkz-wot-core`
+- `clinkz-wot-protocol-bindings`
+- `clinkz-wot-protocol-bindings-zenoh`
+- `clinkz-wot-discovery`
+- `clinkz-wot-servient`
+
 When an explicit `alloc` feature is introduced, checks should include:
 
 ```sh
