@@ -55,6 +55,16 @@ impl ZenohSubscription {
         self.subscriber.key_expr().as_str()
     }
 
+    /// Returns the content type hint applied to subscription samples, if any.
+    pub fn content_type_hint(&self) -> Option<&str> {
+        self.content_type_hint.as_deref()
+    }
+
+    /// Returns the default timeout used by [`ZenohSubscription::next`].
+    pub fn reply_timeout(&self) -> Duration {
+        self.reply_timeout
+    }
+
     /// Waits for the next subscription sample using the default runtime timeout.
     pub fn next(&mut self) -> CoreResult<InteractionOutput> {
         self.next_timeout(self.reply_timeout)

@@ -75,6 +75,9 @@ The current protocol binding crates provide:
   `zenoh` dependency.
 - First host runtime hardening for request/reply parameter propagation and
   broader metadata parser coverage under the explicit `zenoh-runtime` feature.
+- Host subscription lifecycle state exposes the selected key expression,
+  content type hint, configured reply timeout, next-sample waiting, and explicit
+  undeclaration APIs.
 
 ## Current Development Sequence
 
@@ -331,11 +334,14 @@ Completion notes:
   parameters are appended correctly when a planned zenoh selector already
   contains query parameters, while malformed selectors with multiple parameter
   separators fail clearly.
+- Exposed subscription lifecycle metadata on `ZenohSubscription`, including the
+  selected key expression, content type hint, and default reply timeout used by
+  `next`.
 - Added runtime-feature tests for request/reply parameter selector building,
   metadata case and whitespace normalization, and unsupported priority and
   congestion control diagnostics.
-- Left additional metadata mapping, `zenoh-pico`, and incompatible backend
-  feature guards as follow-up hardening work.
+- Left `zenoh-pico` and incompatible backend feature guards as follow-up
+  hardening work once a constrained backend feature or crate is introduced.
 
 ### PB-P1.5 Add Shared Zenoh Transport Ownership
 
