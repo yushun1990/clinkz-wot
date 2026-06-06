@@ -1,5 +1,12 @@
 #![no_std]
 
+#[cfg(feature = "zenoh-pico-runtime")]
+compile_error!(
+    "The zenoh-pico runtime backend is reserved but not implemented yet. Use \
+     `zenoh-runtime` for the host Rust zenoh backend, or keep runtime execution \
+     behind an injected ZenohTransport."
+);
+
 #[cfg(feature = "std")]
 extern crate std;
 

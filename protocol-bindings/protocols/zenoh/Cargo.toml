@@ -19,3 +19,4 @@ std = [
     "serde_json/std",
 ]
 zenoh-runtime = ["std", "dep:zenoh"]
+zenoh-pico-runtime = []

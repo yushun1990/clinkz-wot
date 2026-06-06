@@ -342,8 +342,11 @@ Completion notes:
   congestion control diagnostics.
 - Hardened request/reply selector parameter validation so empty or blank
   runtime parameter names fail before an invalid zenoh selector is built.
-- Left `zenoh-pico` and incompatible backend feature guards as follow-up
-  hardening work once a constrained backend feature or crate is introduced.
+- Reserved the `zenoh-pico-runtime` feature with a clear compile-time error so
+  constrained runtime work cannot be enabled accidentally before a real backend
+  exists.
+- Left the actual `zenoh-pico` backend implementation as follow-up work once
+  constrained C ABI, platform I/O, memory, and polling boundaries are designed.
 
 ### PB-P1.5 Add Shared Zenoh Transport Ownership
 
