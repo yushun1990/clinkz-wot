@@ -351,6 +351,8 @@ Planned work:
   `--no-default-features` checks.
 - Add no-default-features checks for every embedded-ready crate as it is added
   or changed.
+- Keep `scripts/check-embedded.sh` aligned with every crate that claims
+  `no_std + alloc` support.
 - Add conformance-oriented fixtures for multi-form affordances, form security,
   `base` plus relative `href`, JSON-LD context preservation, and Clinkz
   extension terms.

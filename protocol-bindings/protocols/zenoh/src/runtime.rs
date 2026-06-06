@@ -323,6 +323,12 @@ fn encoded_parameters_len(parameters: &BTreeMap<String, String>) -> usize {
 }
 
 fn validate_selector_parameter(kind: &str, value: &str) -> CoreResult<()> {
+    if kind == "key" && value.trim().is_empty() {
+        return Err(CoreError::Transport(
+            "Zenoh selector parameter key must not be empty".into(),
+        ));
+    }
+
     if value.contains(['?', ';', '=', '|']) {
         return Err(CoreError::Transport(format!(
             "Zenoh selector parameter {} '{}' contains a reserved separator",
@@ -507,6 +513,34 @@ mod tests {
             CoreError::Transport(
                 "Zenoh selector parameter key 'reply;mode' contains a reserved separator".into()
             )
+        );
+    }
+
+    #[test]
+    fn rejects_empty_selector_parameter_keys() {
+        let mut parameters = BTreeMap::new();
+        parameters.insert(String::new(), "full".into());
+
+        let err =
+            selector_with_parameters("clinkz/things/lamp/actions/reboot", &parameters).unwrap_err();
+
+        assert_eq!(
+            err,
+            CoreError::Transport("Zenoh selector parameter key must not be empty".into())
+        );
+    }
+
+    #[test]
+    fn rejects_blank_selector_parameter_keys() {
+        let mut parameters = BTreeMap::new();
+        parameters.insert("  ".into(), "full".into());
+
+        let err =
+            selector_with_parameters("clinkz/things/lamp/actions/reboot", &parameters).unwrap_err();
+
+        assert_eq!(
+            err,
+            CoreError::Transport("Zenoh selector parameter key must not be empty".into())
         );
     }
 

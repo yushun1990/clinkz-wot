@@ -340,6 +340,8 @@ Completion notes:
 - Added runtime-feature tests for request/reply parameter selector building,
   metadata case and whitespace normalization, and unsupported priority and
   congestion control diagnostics.
+- Hardened request/reply selector parameter validation so empty or blank
+  runtime parameter names fail before an invalid zenoh selector is built.
 - Left `zenoh-pico` and incompatible backend feature guards as follow-up
   hardening work once a constrained backend feature or crate is introduced.
 

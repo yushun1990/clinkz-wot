@@ -71,12 +71,7 @@ Run the embedded-oriented checks for crates that claim `no_std + alloc`
 support:
 
 ```sh
-cargo check -p clinkz-wot-td --no-default-features
-cargo check -p clinkz-wot-core --no-default-features
-cargo check -p clinkz-wot-protocol-bindings --no-default-features
-cargo check -p clinkz-wot-protocol-bindings-zenoh --no-default-features
-cargo check -p clinkz-wot-discovery --no-default-features
-cargo check -p clinkz-wot-servient --no-default-features
+scripts/check-embedded.sh
 ```
 
 `discovery` and `servient` keep embedded and host surfaces inside their own
