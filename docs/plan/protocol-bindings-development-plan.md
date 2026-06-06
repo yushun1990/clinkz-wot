@@ -73,6 +73,8 @@ The current protocol binding crates provide:
 - A first host runtime adapter, `ZenohSessionTransport`, behind the explicit
   `zenoh-runtime` feature. The default build still has no concrete Rust
   `zenoh` dependency.
+- First host runtime hardening for request/reply parameter propagation and
+  broader metadata parser coverage under the explicit `zenoh-runtime` feature.
 
 ## Current Development Sequence
 
@@ -323,6 +325,11 @@ Completion notes:
   `zenoh-runtime` feature is enabled.
 - Added first-pass runtime metadata mapping for encoding, express QoS,
   priority, and congestion control hints on put and get/request-reply builders.
+- Added request/reply selector parameter propagation from runtime interaction
+  parameters, with validation for ambiguous zenoh selector separators.
+- Added runtime-feature tests for request/reply parameter selector building,
+  metadata case and whitespace normalization, and unsupported priority and
+  congestion control diagnostics.
 - Left additional metadata mapping, `zenoh-pico`, and incompatible backend
   feature guards as follow-up hardening work.
 

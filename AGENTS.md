@@ -64,6 +64,9 @@ This repository implements `clinkz-wot`, a Rust Web of Things engine for the Cli
   modules, colocate implementation details with the types or traits they
   support, and expose stable public items through deliberate `pub use`
   surfaces.
+- Do not use `mod.rs` files for Rust modules. Use module-name-matching files
+  and directories instead, such as `foo.rs` or `foo/bar.rs`, following the
+  modern Rust module layout.
 - Separate integration-test scenarios from bulky test support code. Put fake
   handlers, fake bindings, fake transports, reusable fixtures, and helper
   registries in test support modules when they start to obscure the behavior

@@ -1,4 +1,5 @@
 use alloc::{
+    collections::BTreeMap,
     format,
     string::{String, ToString},
     vec::Vec,
@@ -163,7 +164,8 @@ impl ZenohSessionTransport {
     }
 
     fn get(&self, request: ZenohTransportRequest) -> CoreResult<InteractionOutput> {
-        let mut builder = self.session.get(request.plan.key_expr.as_str());
+        let selector = selector_with_parameters(&request.plan.key_expr, &request.parameters)?;
+        let mut builder = self.session.get(selector.as_str());
         if let Some(payload) = request.payload {
             builder = builder.payload(payload.body);
         }
@@ -247,6 +249,59 @@ fn transport_error(error: impl core::fmt::Display) -> CoreError {
     CoreError::Transport(error.to_string())
 }
 
+fn selector_with_parameters(
+    key_expr: &str,
+    parameters: &BTreeMap<String, String>,
+) -> CoreResult<String> {
+    if parameters.is_empty() {
+        return Ok(key_expr.into());
+    }
+
+    let mut selector = String::with_capacity(key_expr.len() + encoded_parameters_len(parameters));
+    selector.push_str(key_expr);
+    selector.push('?');
+
+    let mut first = true;
+    for (key, value) in parameters {
+        validate_selector_parameter("key", key)?;
+        validate_selector_parameter("value", value)?;
+
+        if !first {
+            selector.push(';');
+        }
+        selector.push_str(key);
+        if !value.is_empty() {
+            selector.push('=');
+            selector.push_str(value);
+        }
+        first = false;
+    }
+
+    Ok(selector)
+}
+
+fn encoded_parameters_len(parameters: &BTreeMap<String, String>) -> usize {
+    let mut len = 1;
+    for (key, value) in parameters {
+        len += key.len() + 1;
+        if !value.is_empty() {
+            len += value.len() + 1;
+        }
+    }
+    len
+}
+
+fn validate_selector_parameter(kind: &str, value: &str) -> CoreResult<()> {
+    if value.contains(['?', ';', '=', '|']) {
+        return Err(CoreError::Transport(format!(
+            "Zenoh selector parameter {} '{}' contains a reserved separator",
+            kind, value
+        )));
+    }
+
+    Ok(())
+}
+
 fn parse_express_qos(value: &str) -> CoreResult<bool> {
     match normalized_metadata_value(value).as_str() {
         "express" | "true" | "yes" | "1" => Ok(true),
@@ -292,6 +347,7 @@ fn unsupported_metadata(term: &str, value: &str) -> CoreError {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use alloc::collections::BTreeMap;
 
     #[test]
     fn parses_express_qos_metadata() {
@@ -333,6 +389,99 @@ mod tests {
         assert_eq!(
             parse_congestion_control("block").unwrap(),
             CongestionControl::Block
+        );
+    }
+
+    #[test]
+    fn builds_selector_with_request_parameters() {
+        let mut parameters = BTreeMap::new();
+        parameters.insert("reply".into(), "full".into());
+        parameters.insert("trace".into(), String::new());
+
+        let selector =
+            selector_with_parameters("clinkz/things/lamp/actions/reboot", &parameters).unwrap();
+
+        assert_eq!(
+            selector,
+            "clinkz/things/lamp/actions/reboot?reply=full;trace"
+        );
+    }
+
+    #[test]
+    fn returns_plain_selector_without_request_parameters() {
+        let selector =
+            selector_with_parameters("clinkz/things/lamp/properties/status", &BTreeMap::new())
+                .unwrap();
+
+        assert_eq!(selector, "clinkz/things/lamp/properties/status");
+    }
+
+    #[test]
+    fn rejects_ambiguous_selector_parameter_keys() {
+        let mut parameters = BTreeMap::new();
+        parameters.insert("reply;mode".into(), "full".into());
+
+        let err =
+            selector_with_parameters("clinkz/things/lamp/actions/reboot", &parameters).unwrap_err();
+
+        assert_eq!(
+            err,
+            CoreError::Transport(
+                "Zenoh selector parameter key 'reply;mode' contains a reserved separator".into()
+            )
+        );
+    }
+
+    #[test]
+    fn rejects_ambiguous_selector_parameter_values() {
+        let mut parameters = BTreeMap::new();
+        parameters.insert("reply".into(), "full;trace=true".into());
+
+        let err =
+            selector_with_parameters("clinkz/things/lamp/actions/reboot", &parameters).unwrap_err();
+
+        assert_eq!(
+            err,
+            CoreError::Transport(
+                "Zenoh selector parameter value 'full;trace=true' contains a reserved separator"
+                    .into()
+            )
+        );
+    }
+
+    #[test]
+    fn parses_metadata_case_and_whitespace_variants() {
+        assert!(parse_express_qos(" YES ").unwrap());
+        assert!(!parse_express_qos(" No ").unwrap());
+        assert_eq!(parse_priority("DATA_HIGH").unwrap(), Priority::DataHigh);
+        assert_eq!(parse_priority("data-low").unwrap(), Priority::DataLow);
+        assert_eq!(
+            parse_congestion_control(" BLOCK ").unwrap(),
+            CongestionControl::Block
+        );
+    }
+
+    #[test]
+    fn rejects_unknown_priority_metadata() {
+        let err = parse_priority("urgent").unwrap_err();
+
+        assert_eq!(
+            err,
+            CoreError::Transport(
+                "Unsupported zenoh metadata cz-zenoh:priority value 'urgent'".into()
+            )
+        );
+    }
+
+    #[test]
+    fn rejects_unknown_congestion_control_metadata() {
+        let err = parse_congestion_control("queue").unwrap_err();
+
+        assert_eq!(
+            err,
+            CoreError::Transport(
+                "Unsupported zenoh metadata cz-zenoh:congestionControl value 'queue'".into()
+            )
         );
     }
 }
