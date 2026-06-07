@@ -90,10 +90,14 @@ Form operation helpers:
   including property, action, event, and Thing-level meta-interaction
   operations.
 
+Crate-level examples:
+
+- Minimal no-security TD construction.
+- Named-security TD construction.
+- Thing Model construction with property and event affordances.
+
 ## Follow-Up Candidates
 
 Useful next API improvements:
 
 - Add affordance shortcuts for common schemas, for example `PropertyAffordance::string()`.
-- Add examples that build a minimal TD, a named-secured TD, and a TM using only
-  convenience APIs.
