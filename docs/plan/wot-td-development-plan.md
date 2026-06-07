@@ -76,6 +76,9 @@ Current maintenance gaps:
   behavior.
 - Keep SecurityScheme and DataSchema validation protocol-neutral as additional
   W3C Profile or runtime use cases are introduced.
+- SecurityScheme variant selection is now aligned with the explicit `scheme`
+  field during deserialization; the next TD type-consistency target is the
+  remaining `DataSchema.type` to concrete variant alignment.
 
 ## Current Development Sequence
 
@@ -548,7 +551,8 @@ Current status:
 
 ## Recommended Next Tasks
 
-1. Finish repository-level M4 protocol binding hardening.
+1. Add `DataSchema.type` to concrete variant consistency checks while keeping
+   tolerant parsing and round-trip preservation.
 2. Add TD/TM fixture coverage only when it protects document semantics shared
    by multiple downstream crates.
 3. Keep `cargo test -p clinkz-wot-td` and

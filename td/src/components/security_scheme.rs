@@ -5,7 +5,7 @@ use alloc::{
     vec::Vec,
 };
 
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
 use serde_with::{OneOrMany, serde_as, skip_serializing_none};
 
 use crate::{
@@ -223,10 +223,12 @@ pub struct ComboSecurityScheme {
     /// Array of two or more strings identifying other named security
     /// scheme definitions, any one of which, when satisfied, will
     /// allow access.
+    #[serde(default)]
     pub one_of: Vec<String>,
 
     /// Array of two or more strings identifying other named security
     /// scheme definitions, all of which must be satisfied for access.
+    #[serde(default)]
     pub all_of: Vec<String>,
 }
 
@@ -296,6 +298,7 @@ pub enum SecurityLocation {
     #[default]
     Header,
     Query,
+    Uri,
     Body,
     Cookie,
     Auto,
@@ -842,7 +845,7 @@ impl_builder_default!(
     PSKSecuritySchemeBuilder,
 );
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(untagged)]
 pub enum SecurityScheme {
     NoSec(NoSecurityScheme),
@@ -854,6 +857,53 @@ pub enum SecurityScheme {
     Bearer(BearerSecurityScheme),
     PSK(PSKSecurityScheme),
     OAuth2(OAuth2SecurityScheme),
+}
+
+impl<'de> Deserialize<'de> for SecurityScheme {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let value = serde_json::Value::deserialize(deserializer)?;
+        let scheme = value
+            .get("scheme")
+            .and_then(serde_json::Value::as_str)
+            .ok_or_else(|| serde::de::Error::custom("missing or invalid security scheme"))?;
+
+        match scheme {
+            "nosec" => serde_json::from_value::<NoSecurityScheme>(value)
+                .map(Self::NoSec)
+                .map_err(serde::de::Error::custom),
+            "auto" => serde_json::from_value::<AutoSecurityScheme>(value)
+                .map(Self::Auto)
+                .map_err(serde::de::Error::custom),
+            "combo" => serde_json::from_value::<ComboSecurityScheme>(value)
+                .map(Self::Combo)
+                .map_err(serde::de::Error::custom),
+            "basic" => serde_json::from_value::<BasicSecurityScheme>(value)
+                .map(Self::Basic)
+                .map_err(serde::de::Error::custom),
+            "digest" => serde_json::from_value::<DigestSecurityScheme>(value)
+                .map(Self::Digest)
+                .map_err(serde::de::Error::custom),
+            "apikey" => serde_json::from_value::<APIKeySecurityScheme>(value)
+                .map(Self::APIKey)
+                .map_err(serde::de::Error::custom),
+            "bearer" => serde_json::from_value::<BearerSecurityScheme>(value)
+                .map(Self::Bearer)
+                .map_err(serde::de::Error::custom),
+            "psk" => serde_json::from_value::<PSKSecurityScheme>(value)
+                .map(Self::PSK)
+                .map_err(serde::de::Error::custom),
+            "oauth2" => serde_json::from_value::<OAuth2SecurityScheme>(value)
+                .map(Self::OAuth2)
+                .map_err(serde::de::Error::custom),
+            other => Err(serde::de::Error::custom(format!(
+                "unsupported security scheme '{}'",
+                other
+            ))),
+        }
+    }
 }
 
 impl From<NoSecurityScheme> for SecurityScheme {

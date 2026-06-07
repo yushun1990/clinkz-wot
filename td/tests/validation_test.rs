@@ -1,6 +1,6 @@
 use clinkz_wot_td::{
     data_schema::DataSchema,
-    security_scheme::SecurityScheme,
+    security_scheme::{SecurityLocation, SecurityScheme},
     thing::Thing,
     validate::{Validate, ValidateError, ValidationLevel},
 };
@@ -164,6 +164,10 @@ fn is_default_value(key: &str, value: &serde_json::Value) -> bool {
             value == &serde_json::Value::Bool(false)
         }
         "contentType" => value == "application/json",
+        "in" => value == "header",
+        "qop" => value == "auth",
+        "alg" => value == "ES256",
+        "format" => value == "jwt",
         _ => false,
     }
 }
@@ -246,7 +250,7 @@ fn basic_validation_rejects_unknown_form_security_reference() {
 }
 
 #[test]
-fn security_scheme_deserialization_preserves_untyped_security_fields() {
+fn security_scheme_deserialization_uses_scheme_to_select_the_concrete_variant() {
     let raw = r#"{
         "scheme": "apikey",
         "name": "X-API-Key",
@@ -257,14 +261,49 @@ fn security_scheme_deserialization_preserves_untyped_security_fields() {
     let scheme: SecurityScheme =
         serde_json::from_str(raw).expect("security scheme should deserialize");
 
-    let SecurityScheme::NoSec(scheme) = scheme else {
-        panic!("broad untagged security parsing should preserve fields in the first variant");
+    let SecurityScheme::APIKey(scheme) = scheme else {
+        panic!("scheme-based deserialization should select the API key variant");
     };
     assert_eq!(scheme._context.scheme, "apikey");
+    assert_eq!(scheme.name.as_deref(), Some("X-API-Key"));
     assert_eq!(
         scheme._context._extra_fields.get("name"),
-        Some(&serde_json::json!("X-API-Key"))
+        None
     );
+    assert_eq!(
+        scheme._context._extra_fields.get("cz:credentialSource"),
+        Some(&serde_json::json!("platform"))
+    );
+}
+
+#[test]
+fn security_scheme_deserialization_rejects_unknown_scheme_values() {
+    let raw = r#"{
+        "scheme": "custom-scheme"
+    }"#;
+
+    let err = serde_json::from_str::<SecurityScheme>(raw)
+        .expect_err("unknown security schemes should fail during deserialization");
+
+    assert!(err.to_string().contains("unsupported security scheme"));
+}
+
+#[test]
+fn security_scheme_deserialization_accepts_uri_api_key_locations() {
+    let raw = r#"{
+        "scheme": "apikey",
+        "in": "uri",
+        "name": "urlKey"
+    }"#;
+
+    let scheme: SecurityScheme =
+        serde_json::from_str(raw).expect("API key security scheme should deserialize");
+
+    let SecurityScheme::APIKey(scheme) = scheme else {
+        panic!("scheme-based deserialization should preserve the API key variant");
+    };
+    assert_eq!(scheme.location, SecurityLocation::Uri);
+    assert_eq!(scheme.name.as_deref(), Some("urlKey"));
 }
 
 #[test]
@@ -298,7 +337,7 @@ fn basic_validation_rejects_combo_security_unknown_references() {
         "title": "Invalid Combo",
         "security": "combo_sc",
         "securityDefinitions": {
-            "basic_sc": { "scheme": "basic" },
+            "basic_sc": { "scheme": "basic", "name": "Authorization" },
             "combo_sc": {
                 "scheme": "combo",
                 "oneOf": ["basic_sc", "missing_sc"]

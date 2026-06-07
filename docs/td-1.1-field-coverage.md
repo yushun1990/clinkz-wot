@@ -133,7 +133,7 @@ Status values:
 | `description` | `SecuritySchemeContext::description` | `Option<String>` | All schemes | No | No | None | N/A | covered | Represented. |
 | `descriptions` | `SecuritySchemeContext::descriptions` | `Option<MultiLanguage>` | All schemes | No | No | None | N/A | covered | Represented. |
 | `proxy` | `SecuritySchemeContext::proxy` | `Option<AbsoluteUri>` | All schemes | No | No | None | N/A | covered | Absolute URI enforced. |
-| `scheme` | `SecuritySchemeContext::scheme` | `String` | All schemes | Yes | No | Scheme-specific builder default | N/A | partial | Represented, but untagged enum deserialization and scheme-to-variant consistency need validation. |
+| `scheme` | `SecuritySchemeContext::scheme` | `String` | All schemes | Yes | No | Scheme-specific builder default | N/A | covered | Represented and used as the discriminator for scheme-directed deserialization into the concrete security scheme variant. |
 | `oneOf` | `ComboSecurityScheme::one_of` | `Vec<String>` | Combo | Conditional | No | Empty vector | N/A | covered | Represented. Basic validation checks minimum cardinality, empty references, and references against `securityDefinitions`. |
 | `allOf` | `ComboSecurityScheme::all_of` | `Vec<String>` | Combo | Conditional | No | Empty vector | N/A | covered | Represented. Basic validation checks minimum cardinality, empty references, and references against `securityDefinitions`. |
 | `name` | `name` fields | `Option<String>` | Basic, Digest, APIKey, Bearer | Conditional | No | None | N/A | partial | Represented. Basic validation checks API key `name`; additional scheme-specific name requirements remain future work. |

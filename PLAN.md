@@ -56,6 +56,9 @@ Current status:
   audit, and shared `base` plus form `href` target resolution.
 - Fixture expansion, shared TD default helpers, DataSchema Basic validation,
   and SecurityScheme Basic validation are complete.
+- SecurityScheme deserialization now uses the `scheme` field as the concrete
+  variant discriminator, keeps fixture-compatible API key `in: "uri"` values,
+  and preserves TD round-trip behavior for the current fixture corpus.
 
 ### M2: Thing Model Support
 
