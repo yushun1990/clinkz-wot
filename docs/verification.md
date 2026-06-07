@@ -71,7 +71,7 @@ Real Rust `zenoh` runtime tests are opt-in and are documented in
 `docs/zenoh-runtime-integration-test.md`. They must not be required by the
 default workspace test path.
 
-Run reserved feature checks when changing feature gates or planned backend
+Run backend feature checks when changing feature gates or planned backend
 surfaces:
 
 ```sh

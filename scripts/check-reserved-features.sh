@@ -5,14 +5,9 @@ set -eu
 OUTPUT_FILE=$(mktemp)
 trap 'rm -f "$OUTPUT_FILE"' EXIT
 
-if cargo check -p clinkz-wot-protocol-bindings-zenoh --features runtime-zenoh-pico >"$OUTPUT_FILE" 2>&1; then
-    echo "expected runtime-zenoh-pico to fail until the constrained backend is implemented" >&2
-    exit 1
-fi
-
-if ! grep -q "zenoh-pico runtime backend is reserved but not implemented yet" "$OUTPUT_FILE"; then
+if ! cargo check -p clinkz-wot-protocol-bindings-zenoh --no-default-features --features runtime-zenoh-pico >"$OUTPUT_FILE" 2>&1; then
     cat "$OUTPUT_FILE" >&2
-    echo "runtime-zenoh-pico failed without the expected reserved-backend diagnostic" >&2
+    echo "expected runtime-zenoh-pico platform-hook backend to compile" >&2
     exit 1
 fi
 

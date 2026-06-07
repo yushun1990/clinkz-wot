@@ -7,13 +7,6 @@ compile_error!(
      for the constrained zenoh-pico backend."
 );
 
-#[cfg(all(feature = "runtime-zenoh-pico", not(feature = "runtime-zenoh")))]
-compile_error!(
-    "The zenoh-pico runtime backend is reserved but not implemented yet. Keep \
-     runtime execution behind an injected ZenohTransport or enable \
-     `runtime-zenoh` for the std Rust zenoh backend."
-);
-
 #[cfg(feature = "std")]
 extern crate std;
 
@@ -35,5 +28,7 @@ pub use form::{
     extract_zenoh_target, is_zenoh_form, is_zenoh_form_target, plan_zenoh_affordance_operation,
     plan_zenoh_affordance_operation_with_criteria, plan_zenoh_operation, zenoh_operation_kind,
 };
+#[cfg(feature = "runtime-zenoh-pico")]
+pub use runtime::{ZenohPicoError, ZenohPicoPlatform, ZenohPicoRequest, ZenohPicoTransport};
 #[cfg(feature = "runtime-zenoh")]
 pub use runtime::{ZenohSessionTransport, ZenohSubscription};

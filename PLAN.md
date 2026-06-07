@@ -382,9 +382,11 @@ Current status:
 - `docs/zenoh-runtime-integration-test.md` records the acceptance target for
   opt-in real Rust `zenoh` runtime smoke tests.
 - `docs/zenoh-pico-runtime-target.md` records the acceptance target for the
-  future constrained zenoh-pico runtime backend before implementation starts.
-- `scripts/check-reserved-features.sh` covers reserved and incompatible runtime
-  backend feature diagnostics for the current zenoh binding feature policy.
+  constrained zenoh-pico runtime backend and its target-specific C ABI follow-up
+  boundary.
+- `scripts/check-reserved-features.sh` covers constrained zenoh-pico feature
+  compilation and incompatible runtime backend feature diagnostics for the
+  current zenoh binding feature policy.
 - The zenoh binding tests consume the shared
   `clinkz-extension-defaults.td.jsonld` fixture to verify Clinkz JSON-LD
   extension terms, multi-form affordance selection, `base` plus relative
@@ -400,7 +402,9 @@ Current status:
 - The current workspace M7 baseline passes:
   - `cargo fmt --check`
   - `cargo test --workspace`
+  - `cargo clippy --workspace --all-targets`
   - `scripts/check-no-std.sh`
+  - `scripts/check-reserved-features.sh`
 - The opt-in Rust `zenoh` runtime smoke test passes with:
   - `CLINKZ_WOT_RUN_ZENOH_RUNTIME_TESTS=1 cargo test -p clinkz-wot-protocol-bindings-zenoh --features runtime-zenoh runtime_zenoh_transport_executes_put_and_get_smoke_paths`
 

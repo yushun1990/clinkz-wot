@@ -1,12 +1,13 @@
 # Zenoh-Pico Runtime Target
 
-This document defines the acceptance target for the future constrained
-`zenoh-pico` runtime backend.
+This document defines the acceptance target for the constrained `zenoh-pico`
+runtime backend.
 
 The current `clinkz-wot-protocol-bindings-zenoh` crate already exposes the
 protocol-neutral zenoh planning surface and the `ZenohTransport` adapter
-boundary. The `runtime-zenoh-pico` feature is reserved and intentionally fails
-to compile until a real backend is implemented.
+boundary. The `runtime-zenoh-pico` feature exposes a `no_std + alloc`
+platform-hook backend through `ZenohPicoPlatform` and `ZenohPicoTransport`.
+The real C ABI binding remains target-specific platform work.
 
 ## Goal
 
@@ -50,9 +51,8 @@ Platform-specific pieces should be injectable:
 The `runtime-zenoh-pico` feature must remain mutually exclusive with
 `runtime-zenoh`.
 
-Before the backend is implemented, enabling `runtime-zenoh-pico` must fail with
-a clear compile-time error. After implementation, enabling it must not pull
-`std` into crates that claim `no_std + alloc` support.
+Enabling `runtime-zenoh-pico` must not pull `std` into crates that claim
+`no_std + alloc` support.
 
 ## Acceptance Criteria
 
@@ -63,9 +63,11 @@ a clear compile-time error. After implementation, enabling it must not pull
 - `scripts/check-no-std.sh` passes.
 - `runtime-zenoh` and `runtime-zenoh-pico` remain mutually exclusive with a
   clear diagnostic.
-- `scripts/check-reserved-features.sh` confirms that the reserved
-  `runtime-zenoh-pico` feature and incompatible backend feature combination
-  fail with the expected diagnostics until implementation starts.
+- `cargo check -p clinkz-wot-protocol-bindings-zenoh --no-default-features
+  --features runtime-zenoh-pico` passes.
+- `scripts/check-reserved-features.sh` confirms that `runtime-zenoh-pico`
+  compiles and that incompatible backend feature combinations fail with the
+  expected diagnostic.
 - The constrained backend uses shared planning outputs and does not duplicate
   form selection or target resolution logic.
 - Tests cover request planning handoff, payload propagation, error mapping,
@@ -83,5 +85,5 @@ scripts/check-no-std.sh
 scripts/check-reserved-features.sh
 ```
 
-When the real backend exists, add a focused feature check for the constrained
-backend and document any target-specific toolchain requirements here.
+When the real C ABI integration exists, document any target-specific toolchain
+requirements here.

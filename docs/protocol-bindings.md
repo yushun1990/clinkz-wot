@@ -81,12 +81,12 @@ Concrete zenoh execution should be added through optional runtime backends:
 Concrete runtime backend features use the `runtime-*` prefix:
 
 - `runtime-zenoh`: Rust `zenoh` backend.
-- `runtime-zenoh-pico`: reserved constrained `zenoh-pico` backend.
+- `runtime-zenoh-pico`: constrained `zenoh-pico` platform-hook backend.
 
-The `runtime-zenoh-pico` backend intentionally fails to compile until a real
-constrained backend is implemented. This prevents deployments from enabling an
-empty feature and mistaking the planning crate for a constrained runtime
-adapter. The acceptance target for that backend is documented in
+The `runtime-zenoh-pico` backend provides a `no_std + alloc` adapter boundary
+through `ZenohPicoPlatform` and `ZenohPicoTransport`. Target-specific code
+still owns the real zenoh-pico C ABI calls, session handle, polling, timeout
+handling, and buffer ownership. The constrained backend target is documented in
 `docs/zenoh-pico-runtime-target.md`.
 
 Concrete backend features are mutually exclusive. The shared planning surface

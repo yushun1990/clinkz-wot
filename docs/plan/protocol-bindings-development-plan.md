@@ -78,6 +78,9 @@ The current protocol binding crates provide:
 - Host subscription lifecycle state exposes the selected key expression,
   content type hint, configured reply timeout, next-sample waiting, and explicit
   undeclaration APIs.
+- A constrained `runtime-zenoh-pico` platform-hook backend compiles without
+  `std`, maps shared planner requests into injectable platform hooks, and keeps
+  real C ABI, polling, session, and buffer ownership in target-specific code.
 
 ## Current Development Sequence
 
@@ -350,10 +353,7 @@ Completion notes:
   congestion control diagnostics.
 - Hardened request/reply selector parameter validation so empty or blank
   runtime parameter names fail before an invalid zenoh selector is built.
-- Reserved the `runtime-zenoh-pico` feature with a clear compile-time error so
-  constrained runtime work cannot be enabled accidentally before a real backend
-  exists.
-- Left the actual `zenoh-pico` backend implementation as follow-up work once
+- Left `runtime-zenoh-pico` as follow-up work for a real backend once
   constrained C ABI, platform I/O, memory, and polling boundaries are designed.
 
 ### PB-P1.5 Add Shared Zenoh Transport Ownership
@@ -401,8 +401,7 @@ target-specific integration code.
 
 Work items:
 
-- Keep the current `runtime-zenoh-pico` feature reserved with a clear
-  compile-time error until a real backend exists.
+- Keep the constrained backend target explicit before binding real C ABI calls.
 - Define the required adapter boundary for constrained execution through
   `ZenohTransport` and `ZenohTransportRequest`.
 - Record what platform-specific responsibilities must stay injectable rather
@@ -414,10 +413,10 @@ Acceptance criteria:
 - The acceptance target is documented in
   `docs/zenoh-pico-runtime-target.md`.
 - `runtime-zenoh` and `runtime-zenoh-pico` remain mutually exclusive.
-- Enabling the reserved `runtime-zenoh-pico` feature continues to fail clearly
-  until implementation starts.
-- `scripts/check-reserved-features.sh` covers the reserved backend and
-  incompatible backend feature diagnostics.
+- Enabling the `runtime-zenoh-pico` feature compiles the no-std platform-hook
+  backend.
+- `scripts/check-reserved-features.sh` covers the constrained backend feature
+  check and incompatible backend feature diagnostics.
 - `cargo check -p clinkz-wot-protocol-bindings-zenoh --no-default-features`
   continues to pass.
 - `scripts/check-no-std.sh` continues to pass.
@@ -427,10 +426,10 @@ Completion notes:
 - Added `docs/zenoh-pico-runtime-target.md` with the constrained backend goal,
   non-goals, adapter boundary, feature policy, acceptance criteria, and
   verification path.
-- Added `scripts/check-reserved-features.sh` to lock the reserved
-  `runtime-zenoh-pico` diagnostic and the concrete backend feature conflict
+- Added `scripts/check-reserved-features.sh` to lock the constrained
+  `runtime-zenoh-pico` feature check and the concrete backend feature conflict
   diagnostic.
-- Verified the regular workspace, no-std, and reserved feature checks.
+- Verified the regular workspace, no-std, and backend feature checks.
 
 ### PB-P1.7 Add Opt-In Rust Zenoh Runtime Smoke Tests
 
@@ -471,6 +470,36 @@ Completion notes:
   router or peer when required.
 - Default workspace tests continue to skip real runtime execution unless the
   explicit environment variable is set.
+
+### PB-P1.8 Add Constrained Zenoh-Pico Platform Hooks
+
+Status: complete for the first platform-hook backend.
+
+Goal: provide a `no_std + alloc` constrained backend surface that maps shared
+zenoh planning output into target-specific zenoh-pico hooks without taking a
+hard dependency on the zenoh-pico C ABI.
+
+Work items:
+
+- Add a `ZenohPicoPlatform` trait for put, query/request-reply, subscribe, and
+  unsubscribe hooks.
+- Add a `ZenohPicoTransport` adapter implementing `ZenohTransport`.
+- Preserve planner ownership of TD traversal, affordance lookup, operation
+  inference, target resolution, and Clinkz extension parsing.
+- Map platform status codes and timeout behavior into protocol-neutral
+  `CoreError` values.
+- Cover payload propagation, runtime parameters, timeout configuration, error
+  mapping, and subscription lifecycle handoff with fake platform tests.
+
+Acceptance criteria:
+
+- `cargo test -p clinkz-wot-protocol-bindings-zenoh --features
+  runtime-zenoh-pico` passes.
+- `cargo check -p clinkz-wot-protocol-bindings-zenoh --no-default-features
+  --features runtime-zenoh-pico` passes.
+- Default zenoh binding builds still have no concrete zenoh runtime dependency.
+- Real zenoh-pico C ABI, session, polling, and buffer ownership remain outside
+  TD, core, shared bindings, Discovery, and Servient.
 
 ## Verification
 
