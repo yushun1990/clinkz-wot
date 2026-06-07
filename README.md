@@ -32,8 +32,9 @@ Current implementation highlights:
   exposure, remote consumption, binding factories, caches, payload codecs, and
   security provider hooks.
 
-Next focus areas are production-oriented shared transport ownership, optional
-concrete zenoh runtime backends, and continued conformance plus no-std checks.
+Next focus areas are continued conformance plus no-std checks and documenting
+the acceptance target before starting the next concrete runtime or backend
+increment.
 
 ## Workspace Crates
 
@@ -72,6 +73,11 @@ Run the no-std checks for crates that claim `no_std + alloc` support:
 ```sh
 scripts/check-no-std.sh
 ```
+
+The full workspace verification path is documented in `docs/verification.md`.
+Real Rust `zenoh` runtime integration tests are opt-in and documented in
+`docs/zenoh-runtime-integration-test.md`; default workspace tests do not
+require a zenoh router.
 
 `discovery` keeps its shared directory and query model at the crate root,
 exposes no-std local directory capabilities through `discovery::local`, and

@@ -543,6 +543,63 @@ fn plans_relative_href_against_zenoh_base() {
 }
 
 #[test]
+fn plans_operations_from_clinkz_extension_fixture() {
+    let thing: Thing = serde_json::from_str(include_str!(
+        "../../../../td/tests/fixtures/clinkz-extension-defaults.td.jsonld"
+    ))
+    .expect("fixture TD should deserialize");
+
+    let read = plan_zenoh_affordance_operation(
+        &thing,
+        AffordanceRef::Property("status"),
+        Operation::ReadProperty,
+    )
+    .unwrap();
+    assert_eq!(read.form_index, 0);
+    assert_eq!(read.operation.kind, ZenohOperationKind::Query);
+    assert_eq!(
+        read.operation.key_expr,
+        "things/targeted-roundtrip/properties/status"
+    );
+
+    let write = plan_zenoh_affordance_operation_with_criteria(
+        &thing,
+        AffordanceRef::Property("status"),
+        FormSelectionCriteria::operation(Operation::WriteProperty).content_type("application/cbor"),
+    )
+    .unwrap();
+    assert_eq!(write.form_index, 1);
+    assert_eq!(write.operation.kind, ZenohOperationKind::Put);
+    assert_eq!(
+        write.operation.key_expr,
+        "clinkz/things/targeted-roundtrip/properties/status"
+    );
+
+    let unsubscribe = plan_zenoh_affordance_operation(
+        &thing,
+        AffordanceRef::Event("alarm"),
+        Operation::UnsubscribeEvent,
+    )
+    .unwrap();
+    assert_eq!(unsubscribe.form_index, 1);
+    assert_eq!(unsubscribe.operation.kind, ZenohOperationKind::Unsubscribe);
+    assert_eq!(
+        unsubscribe.operation.key_expr,
+        "clinkz/things/targeted-roundtrip/events/alarm"
+    );
+
+    let read_all =
+        plan_zenoh_affordance_operation(&thing, AffordanceRef::Thing, Operation::ReadAllProperties)
+            .unwrap();
+    assert_eq!(read_all.form_index, 0);
+    assert_eq!(read_all.operation.kind, ZenohOperationKind::Query);
+    assert_eq!(
+        read_all.operation.key_expr,
+        "clinkz/things/targeted-roundtrip/properties"
+    );
+}
+
+#[test]
 fn reports_selection_error_when_affordance_has_no_zenoh_form() {
     let form = Form::read_property("https://example.com/things/lamp/properties/status")
         .build()

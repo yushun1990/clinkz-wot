@@ -50,6 +50,9 @@ Embedded-ready crates should pass no-std checks similar to:
 scripts/check-no-std.sh
 ```
 
+The repository-level verification path is documented in
+`docs/verification.md`.
+
 The current no-std check script covers:
 
 - `clinkz-wot-td`

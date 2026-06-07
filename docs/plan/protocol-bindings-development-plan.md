@@ -86,7 +86,9 @@ The next development order is:
 1. Run M4 verification checks whenever shared or zenoh binding APIs change.
 2. Keep M7 no-std checks and compatibility documentation aligned with the
    current shared, zenoh planning, and optional std runtime surfaces.
-3. Define the next runtime/backend acceptance target before adding another
+3. Add opt-in real Rust `zenoh` runtime smoke tests behind the explicit
+   `runtime-zenoh` feature and environment-variable gate.
+4. Define the next runtime/backend acceptance target before adding another
    concrete backend increment.
 
 Completion notes:
@@ -388,6 +390,75 @@ Completion notes:
   transport state.
 - Added Servient integration coverage for a binding factory that clones a
   shared zenoh transport handle into each `ZenohBinding`.
+
+### PB-P1.6 Define the Constrained Zenoh-Pico Runtime Target
+
+Status: complete.
+
+Goal: document the acceptance target for the future constrained `zenoh-pico`
+runtime backend before implementing C ABI, platform I/O, memory, polling, or
+target-specific integration code.
+
+Work items:
+
+- Keep the current `runtime-zenoh-pico` feature reserved with a clear
+  compile-time error until a real backend exists.
+- Define the required adapter boundary for constrained execution through
+  `ZenohTransport` and `ZenohTransportRequest`.
+- Record what platform-specific responsibilities must stay injectable rather
+  than becoming TD, core, shared binding, Discovery, or Servient dependencies.
+- Document the feature policy and verification checks for the future backend.
+
+Acceptance criteria:
+
+- The acceptance target is documented in
+  `docs/zenoh-pico-runtime-target.md`.
+- `runtime-zenoh` and `runtime-zenoh-pico` remain mutually exclusive.
+- Enabling the reserved `runtime-zenoh-pico` feature continues to fail clearly
+  until implementation starts.
+- `scripts/check-reserved-features.sh` covers the reserved backend and
+  incompatible backend feature diagnostics.
+- `cargo check -p clinkz-wot-protocol-bindings-zenoh --no-default-features`
+  continues to pass.
+- `scripts/check-no-std.sh` continues to pass.
+
+Completion notes:
+
+- Added `docs/zenoh-pico-runtime-target.md` with the constrained backend goal,
+  non-goals, adapter boundary, feature policy, acceptance criteria, and
+  verification path.
+- Added `scripts/check-reserved-features.sh` to lock the reserved
+  `runtime-zenoh-pico` diagnostic and the concrete backend feature conflict
+  diagnostic.
+- Verified the regular workspace, no-std, and reserved feature checks.
+
+### PB-P1.7 Add Opt-In Rust Zenoh Runtime Smoke Tests
+
+Status: planned.
+
+Goal: add focused integration coverage for `ZenohSessionTransport` against a
+real Rust `zenoh` runtime without making default workspace tests depend on a
+router, network port, or host-specific setup.
+
+Work items:
+
+- Keep real runtime tests behind the `runtime-zenoh` feature.
+- Skip runtime tests unless `CLINKZ_WOT_RUN_ZENOH_RUNTIME_TESTS=1` is set.
+- Allow externally managed router or peer configuration through
+  `CLINKZ_WOT_ZENOH_ENDPOINT` when needed.
+- Start with smoke coverage for concrete session creation, put execution,
+  get/request-reply behavior with deterministic replies, and error mapping.
+- Keep planner, form selection, and TD traversal coverage in the existing unit
+  and fixture-driven tests.
+
+Acceptance criteria:
+
+- The acceptance target is documented in
+  `docs/zenoh-runtime-integration-test.md`.
+- `cargo test --workspace` continues to pass without a zenoh router.
+- `scripts/check-no-std.sh` continues to pass.
+- The opt-in runtime command is documented and does not run accidentally in
+  default CI or local verification.
 
 ## Verification
 

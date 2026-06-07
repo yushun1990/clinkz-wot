@@ -39,8 +39,11 @@ Immediate next sequence:
 
 1. Keep M7 checks and compatibility documentation aligned with the current
    TD/TM, core, protocol binding, Discovery, and Servient surfaces.
-2. Start the next concrete runtime/backend increment only after documenting the
-   acceptance target and keeping the existing no-std checks green.
+2. Add an opt-in Rust `zenoh` runtime integration smoke test behind the
+   `runtime-zenoh` feature and an explicit environment variable, without
+   requiring a router for default workspace tests.
+3. Start additional concrete runtime/backend increments only after documenting
+   the acceptance target and keeping the existing no-std checks green.
 
 ### M1: TD 1.1 Hardening
 
@@ -354,8 +357,9 @@ Planned work:
 
 - Keep TD/TM round-trip fixtures aligned with TD 1.1 field coverage and
   extension preservation requirements.
-- Add workspace-level verification documentation for `cargo test` and
-  `--no-default-features` checks.
+- Keep workspace-level verification documentation for `cargo test`,
+  `cargo fmt`, Clippy, and `--no-default-features` checks in
+  `docs/verification.md`.
 - Add no-default-features checks for every embedded-ready crate as it is added
   or changed.
 - Keep `scripts/check-no-std.sh` aligned with every crate that claims
@@ -368,6 +372,20 @@ Planned work:
 
 Current status:
 
+- `docs/verification.md` defines the regular workspace verification path for
+  formatting, tests, Clippy, no-default-features checks, focused crate checks,
+  and documentation updates.
+- `docs/zenoh-runtime-integration-test.md` records the acceptance target for
+  opt-in real Rust `zenoh` runtime smoke tests.
+- `docs/zenoh-pico-runtime-target.md` records the acceptance target for the
+  future constrained zenoh-pico runtime backend before implementation starts.
+- `scripts/check-reserved-features.sh` covers reserved and incompatible runtime
+  backend feature diagnostics for the current zenoh binding feature policy.
+- The zenoh binding tests consume the shared
+  `clinkz-extension-defaults.td.jsonld` fixture to verify Clinkz JSON-LD
+  extension terms, multi-form affordance selection, `base` plus relative
+  `href` resolution, form security overrides, content type criteria, and
+  Thing-level forms through the binding planner.
 - `scripts/check-no-std.sh` covers every current workspace crate that claims
   `no_std + alloc` support: TD, core, shared protocol bindings, zenoh binding,
   Discovery, and Servient.

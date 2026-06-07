@@ -86,7 +86,8 @@ Concrete runtime backend features use the `runtime-*` prefix:
 The `runtime-zenoh-pico` backend intentionally fails to compile until a real
 constrained backend is implemented. This prevents deployments from enabling an
 empty feature and mistaking the planning crate for a constrained runtime
-adapter.
+adapter. The acceptance target for that backend is documented in
+`docs/zenoh-pico-runtime-target.md`.
 
 Concrete backend features are mutually exclusive. The shared planning surface
 remains available without selecting either backend.
