@@ -398,7 +398,9 @@ Current status:
 - The current protocol binding M7 verification path passes:
   - `cargo fmt --check`
   - `cargo test -p clinkz-wot-protocol-bindings -p clinkz-wot-protocol-bindings-zenoh`
+  - `cargo test -p clinkz-wot-protocol-bindings-zenoh --features runtime-zenoh-pico`
   - `scripts/check-no-std.sh`
+  - `scripts/check-reserved-features.sh`
 - The current workspace M7 baseline passes:
   - `cargo fmt --check`
   - `cargo test --workspace`

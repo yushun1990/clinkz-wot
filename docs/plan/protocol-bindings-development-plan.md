@@ -89,9 +89,11 @@ The next development order is:
 1. Run M4 verification checks whenever shared or zenoh binding APIs change.
 2. Keep M7 no-std checks and compatibility documentation aligned with the
    current shared, zenoh planning, and optional std runtime surfaces.
-3. Add opt-in real Rust `zenoh` runtime smoke tests behind the explicit
+3. Keep opt-in real Rust `zenoh` runtime smoke tests behind the explicit
    `runtime-zenoh` feature and environment-variable gate.
-4. Define the next runtime/backend acceptance target before adding another
+4. Keep constrained `runtime-zenoh-pico` platform-hook coverage behind its
+   explicit feature and outside default workspace tests.
+5. Define the next runtime/backend acceptance target before adding another
    concrete backend increment.
 
 Completion notes:
@@ -109,6 +111,8 @@ Completion notes:
   explicit undeclaration, and metadata mapping coverage.
 - M7 no-std checks now include both protocol binding crates through
   `scripts/check-no-std.sh`.
+- The constrained `runtime-zenoh-pico` platform-hook backend and fake platform
+  tests are complete for the current no-std adapter-boundary scope.
 
 ## PB-P0: Shared Binding Utility Hardening
 
@@ -298,7 +302,8 @@ Completion notes:
 
 ### PB-P1.4 Add First Concrete Rust Zenoh Runtime Backend
 
-Status: complete for the first Rust `zenoh` std backend.
+Status: complete for the first Rust `zenoh` std backend and the first
+constrained `runtime-zenoh-pico` platform-hook backend.
 
 Goal: support std and constrained zenoh execution without weakening the
 `no_std + alloc` boundary of TD, core, shared bindings, or the zenoh planning
@@ -353,8 +358,9 @@ Completion notes:
   congestion control diagnostics.
 - Hardened request/reply selector parameter validation so empty or blank
   runtime parameter names fail before an invalid zenoh selector is built.
-- Left `runtime-zenoh-pico` as follow-up work for a real backend once
-  constrained C ABI, platform I/O, memory, and polling boundaries are designed.
+- Added a constrained `runtime-zenoh-pico` platform-hook backend in PB-P1.8.
+  Real C ABI, platform I/O, memory, and polling integration remain
+  target-specific platform work.
 
 ### PB-P1.5 Add Shared Zenoh Transport Ownership
 
@@ -508,8 +514,10 @@ Required checks for this subplan:
 ```sh
 cargo fmt --check
 cargo test -p clinkz-wot-protocol-bindings -p clinkz-wot-protocol-bindings-zenoh
+cargo test -p clinkz-wot-protocol-bindings-zenoh --features runtime-zenoh-pico
 cargo check -p clinkz-wot-protocol-bindings --no-default-features
 cargo check -p clinkz-wot-protocol-bindings-zenoh --no-default-features
+scripts/check-reserved-features.sh
 ```
 
 Run broader workspace checks before moving from M4 to M5:

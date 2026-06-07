@@ -67,6 +67,13 @@ For protocol binding work, keep shared and concrete binding checks together:
 cargo test -p clinkz-wot-protocol-bindings -p clinkz-wot-protocol-bindings-zenoh
 ```
 
+When changing the constrained zenoh-pico backend surface, run its
+feature-gated fake platform tests:
+
+```sh
+cargo test -p clinkz-wot-protocol-bindings-zenoh --features runtime-zenoh-pico
+```
+
 Real Rust `zenoh` runtime tests are opt-in and are documented in
 `docs/zenoh-runtime-integration-test.md`. They must not be required by the
 default workspace test path.
