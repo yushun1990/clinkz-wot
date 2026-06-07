@@ -409,6 +409,8 @@ Current status:
   - `cargo clippy --workspace --all-targets`
   - `scripts/check-no-std.sh`
   - `scripts/check-reserved-features.sh`
+- `scripts/check-m7.sh` is the aggregate entry point for the current workspace
+  M7 baseline.
 - The opt-in Rust `zenoh` runtime smoke test passes with:
   - `CLINKZ_WOT_RUN_ZENOH_RUNTIME_TESTS=1 cargo test -p clinkz-wot-protocol-bindings-zenoh --features runtime-zenoh runtime_zenoh_transport_executes_put_and_get_smoke_paths`
 

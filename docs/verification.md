@@ -85,6 +85,15 @@ surfaces:
 scripts/check-reserved-features.sh
 ```
 
+For a full M7 baseline pass, use the aggregate check:
+
+```sh
+scripts/check-m7.sh
+```
+
+This script runs formatting, workspace tests, Clippy, embedded checks, and
+reserved backend feature checks in the same order documented above.
+
 ## Documentation Updates
 
 Update this document, `docs/no-std-embedded.md`, and the relevant milestone
