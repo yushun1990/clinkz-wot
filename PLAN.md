@@ -328,6 +328,9 @@ Current status:
 - Added shared zenoh transport ownership support so binding factories can reuse
   std sessions or connection pools without requiring concrete protocol types
   in Servient.
+- Kept low-level `BoundConsumedThing` access available through
+  `Servient::consume` and `Servient::consume_thing` for callers that need to
+  cache TDs, selected forms, or dispatchers directly.
 
 Entry criteria:
 
@@ -337,8 +340,8 @@ Entry criteria:
 
 Planned work:
 
-- Keep low-level `BoundConsumedThing` access available for callers that need to
-  cache TDs, selected forms, or dispatchers directly.
+- Add the next concrete runtime or backend increment only after documenting
+  its acceptance target and keeping the M7 verification path green.
 
 Exit criteria:
 
@@ -393,6 +396,10 @@ Current status:
 - The current protocol binding M7 verification path passes:
   - `cargo fmt --check`
   - `cargo test -p clinkz-wot-protocol-bindings -p clinkz-wot-protocol-bindings-zenoh`
+  - `scripts/check-no-std.sh`
+- The current workspace M7 baseline passes:
+  - `cargo fmt --check`
+  - `cargo test --workspace`
   - `scripts/check-no-std.sh`
 - The opt-in Rust `zenoh` runtime smoke test passes with:
   - `CLINKZ_WOT_RUN_ZENOH_RUNTIME_TESTS=1 cargo test -p clinkz-wot-protocol-bindings-zenoh --features runtime-zenoh runtime_zenoh_transport_executes_put_and_get_smoke_paths`
