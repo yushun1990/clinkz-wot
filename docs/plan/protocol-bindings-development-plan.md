@@ -434,7 +434,7 @@ Completion notes:
 
 ### PB-P1.7 Add Opt-In Rust Zenoh Runtime Smoke Tests
 
-Status: planned.
+Status: complete.
 
 Goal: add focused integration coverage for `ZenohSessionTransport` against a
 real Rust `zenoh` runtime without making default workspace tests depend on a
@@ -459,6 +459,18 @@ Acceptance criteria:
 - `scripts/check-no-std.sh` continues to pass.
 - The opt-in runtime command is documented and does not run accidentally in
   default CI or local verification.
+
+Completion notes:
+
+- Added an opt-in real Rust `zenoh` smoke test gated behind the
+  `runtime-zenoh` feature and `CLINKZ_WOT_RUN_ZENOH_RUNTIME_TESTS=1`.
+- The smoke test opens a concrete `zenoh::Session`, executes a planned put
+  operation through `ZenohSessionTransport`, and verifies a deterministic
+  request/reply path.
+- `CLINKZ_WOT_ZENOH_ENDPOINT` can point the test at an externally managed
+  router or peer when required.
+- Default workspace tests continue to skip real runtime execution unless the
+  explicit environment variable is set.
 
 ## Verification
 
