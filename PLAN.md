@@ -39,10 +39,7 @@ Immediate next sequence:
 
 1. Keep M7 checks and compatibility documentation aligned with the current
    TD/TM, core, protocol binding, Discovery, and Servient surfaces.
-2. Add an opt-in Rust `zenoh` runtime integration smoke test behind the
-   `runtime-zenoh` feature and an explicit environment variable, without
-   requiring a router for default workspace tests.
-3. Start additional concrete runtime/backend increments only after documenting
+2. Start additional concrete runtime/backend increments only after documenting
    the acceptance target and keeping the existing no-std checks green.
 
 ### M1: TD 1.1 Hardening
@@ -191,6 +188,10 @@ Current status:
   congestion control.
 - Added a std-only shared zenoh transport handle so Servient binding factories
   can reuse a session, pool, or runtime adapter across cloned bindings.
+- Added an opt-in Rust `zenoh` runtime smoke test behind the `runtime-zenoh`
+  feature and `CLINKZ_WOT_RUN_ZENOH_RUNTIME_TESTS=1`, covering concrete
+  `ZenohSessionTransport` put and get/request-reply execution without requiring
+  it in default workspace tests.
 
 Completion notes:
 
@@ -393,6 +394,8 @@ Current status:
   - `cargo fmt --check`
   - `cargo test -p clinkz-wot-protocol-bindings -p clinkz-wot-protocol-bindings-zenoh`
   - `scripts/check-no-std.sh`
+- The opt-in Rust `zenoh` runtime smoke test passes with:
+  - `CLINKZ_WOT_RUN_ZENOH_RUNTIME_TESTS=1 cargo test -p clinkz-wot-protocol-bindings-zenoh --features runtime-zenoh runtime_zenoh_transport_executes_put_and_get_smoke_paths`
 
 Exit criteria:
 
