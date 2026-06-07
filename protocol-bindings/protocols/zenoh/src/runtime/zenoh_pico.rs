@@ -12,6 +12,7 @@ use core::{fmt, time::Duration};
 
 use clinkz_wot_core::{CoreError, CoreResult, InteractionOutput, Payload};
 
+use super::selector::selector_with_parameters;
 use crate::{ZenohFormMetadata, ZenohOperationKind, ZenohTransport, ZenohTransportRequest};
 
 const DEFAULT_REPLY_TIMEOUT: Duration = Duration::from_secs(5);
@@ -31,6 +32,14 @@ pub struct ZenohPicoRequest<'a> {
     pub parameters: &'a alloc::collections::BTreeMap<String, String>,
     /// Maximum time the platform hook should wait for a reply or sample.
     pub timeout: Duration,
+}
+
+impl<'a> ZenohPicoRequest<'a> {
+    /// Builds a zenoh selector by appending validated request parameters to the
+    /// selected key expression.
+    pub fn selector(&self) -> Result<String, ZenohPicoError> {
+        selector_with_parameters(self.key_expr, self.parameters).map_err(parameter_error)
+    }
 }
 
 /// Error returned by a constrained zenoh-pico platform hook.
@@ -232,4 +241,11 @@ fn timeout_error(operation: &str, key_expr: &str) -> CoreError {
 
 fn timeout_message(operation: &str, key_expr: &str) -> String {
     format!("Zenoh-pico {} for '{}' timed out", operation, key_expr)
+}
+
+fn parameter_error(error: CoreError) -> ZenohPicoError {
+    match error {
+        CoreError::Transport(message) => ZenohPicoError::new(message),
+        _ => ZenohPicoError::new(error.to_string()),
+    }
 }

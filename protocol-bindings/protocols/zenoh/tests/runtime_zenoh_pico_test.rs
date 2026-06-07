@@ -32,15 +32,8 @@ impl ZenohPicoPlatform for FakePicoPlatform {
     }
 
     fn query(&mut self, request: ZenohPicoRequest<'_>) -> Result<Option<Payload>, ZenohPicoError> {
-        self.calls.push(format!(
-            "query:{}:{}",
-            request.key_expr,
-            request
-                .parameters
-                .get("trace")
-                .map(String::as_str)
-                .unwrap_or("")
-        ));
+        self.calls
+            .push(format!("query:{}", request.selector()?.as_str()));
         self.take_error()?;
         Ok(self.query_reply.take())
     }
@@ -113,7 +106,7 @@ fn pico_transport_routes_put_and_query_requests_to_platform_hooks() {
         transport.platform().calls,
         [
             "put:clinkz/things/lamp/status:text/plain:2:250",
-            "query:clinkz/things/lamp/status:full"
+            "query:clinkz/things/lamp/status?trace=full"
         ]
     );
 }
@@ -208,5 +201,49 @@ fn pico_transport_maps_platform_errors_and_timeouts() {
     assert_eq!(
         err,
         CoreError::Transport("Zenoh-pico query for 'clinkz/things/lamp/status' timed out".into())
+    );
+}
+
+#[test]
+fn pico_request_builds_selector_from_request_parameters() {
+    let mut parameters = std::collections::BTreeMap::new();
+    parameters.insert("reply".into(), "summary".into());
+    parameters.insert("trace".into(), String::new());
+
+    let request = ZenohPicoRequest {
+        key_expr: "clinkz/things/lamp/actions/reboot",
+        kind: ZenohOperationKind::RequestReply,
+        metadata: &ZenohFormMetadata::default(),
+        payload: None,
+        parameters: &parameters,
+        timeout: Duration::from_secs(1),
+    };
+
+    assert_eq!(
+        request.selector().unwrap(),
+        "clinkz/things/lamp/actions/reboot?reply=summary;trace"
+    );
+}
+
+#[test]
+fn pico_request_rejects_invalid_selector_parameters() {
+    let mut parameters = std::collections::BTreeMap::new();
+    parameters.insert("reply;mode".into(), "summary".into());
+
+    let request = ZenohPicoRequest {
+        key_expr: "clinkz/things/lamp/actions/reboot",
+        kind: ZenohOperationKind::RequestReply,
+        metadata: &ZenohFormMetadata::default(),
+        payload: None,
+        parameters: &parameters,
+        timeout: Duration::from_secs(1),
+    };
+
+    let err = request.selector().unwrap_err();
+    assert_eq!(err.kind(), ZenohPicoErrorKind::Platform);
+    assert_eq!(err.code(), None);
+    assert_eq!(
+        err.message(),
+        "Zenoh selector parameter key 'reply;mode' contains a reserved separator"
     );
 }

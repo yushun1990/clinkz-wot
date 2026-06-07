@@ -11,13 +11,12 @@ use zenoh::{
 
 mod metadata;
 mod sample;
-mod selector;
 
 use self::{
     metadata::{parse_congestion_control, parse_express_qos, parse_priority},
     sample::payload_from_sample,
-    selector::selector_with_parameters,
 };
+use super::selector::selector_with_parameters;
 use crate::{
     ZenohFormMetadata, ZenohOperationKind, ZenohOperationPlan, ZenohTransport,
     ZenohTransportRequest,
