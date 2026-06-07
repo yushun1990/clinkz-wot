@@ -3,7 +3,7 @@
 #[cfg(all(feature = "runtime-zenoh", feature = "runtime-zenoh-pico"))]
 compile_error!(
     "Only one concrete zenoh runtime backend can be enabled. Choose \
-     `runtime-zenoh` for the host Rust zenoh backend or `runtime-zenoh-pico` \
+     `runtime-zenoh` for the std Rust zenoh backend or `runtime-zenoh-pico` \
      for the constrained zenoh-pico backend."
 );
 
@@ -11,7 +11,7 @@ compile_error!(
 compile_error!(
     "The zenoh-pico runtime backend is reserved but not implemented yet. Keep \
      runtime execution behind an injected ZenohTransport or enable \
-     `runtime-zenoh` for the host Rust zenoh backend."
+     `runtime-zenoh` for the std Rust zenoh backend."
 );
 
 #[cfg(feature = "std")]

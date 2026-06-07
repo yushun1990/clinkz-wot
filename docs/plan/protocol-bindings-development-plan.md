@@ -64,7 +64,7 @@ The current protocol binding crates provide:
   content type/subprotocol criteria.
 - An injected `ZenohTransport` adapter boundary that avoids a required zenoh
   runtime dependency.
-- A std-only shared zenoh transport handle so host binding factories can reuse
+- A std-only shared zenoh transport handle so runtime binding factories can reuse
   one session, connection pool, or runtime adapter across cloned bindings.
 - Runtime tests for fake transport propagation and the default no-transport
   error path.
@@ -73,7 +73,7 @@ The current protocol binding crates provide:
 - A first Rust `zenoh` runtime adapter, `ZenohSessionTransport`, behind the explicit
   `runtime-zenoh` feature. The default build still has no concrete Rust
   `zenoh` dependency.
-- First host runtime hardening for request/reply parameter propagation and
+- First std runtime hardening for request/reply parameter propagation and
   broader metadata parser coverage under the explicit `runtime-zenoh` feature.
 - Host subscription lifecycle state exposes the selected key expression,
   content type hint, configured reply timeout, next-sample waiting, and explicit
@@ -84,8 +84,8 @@ The current protocol binding crates provide:
 The next development order is:
 
 1. Run M4 verification checks whenever shared or zenoh binding APIs change.
-2. Keep M7 embedded checks and compatibility documentation aligned with the
-   current shared, zenoh planning, and optional host runtime surfaces.
+2. Keep M7 no-std checks and compatibility documentation aligned with the
+   current shared, zenoh planning, and optional std runtime surfaces.
 3. Define the next runtime/backend acceptance target before adding another
    concrete backend increment.
 
@@ -99,11 +99,11 @@ Completion notes:
   metadata mismatch, protocol filter mismatch, target resolution failure, and
   selected-form validation failure.
 - M4 verification passed for both shared and zenoh binding crates.
-- The first Rust `zenoh` host backend hardening pass is complete for
+- The first Rust `zenoh` std backend hardening pass is complete for
   request/reply selector parameter validation, subscription lifecycle metadata,
   explicit undeclaration, and metadata mapping coverage.
-- M7 embedded checks now include both protocol binding crates through
-  `scripts/check-embedded.sh`.
+- M7 no-std checks now include both protocol binding crates through
+  `scripts/check-no-std.sh`.
 
 ## PB-P0: Shared Binding Utility Hardening
 
@@ -264,7 +264,7 @@ Completion notes:
 
 Status: complete.
 
-Goal: allow host deployments to attach real zenoh execution without making the
+Goal: allow std deployments to attach real zenoh execution without making the
 default zenoh binding crate depend on a concrete zenoh runtime.
 
 Work items:
@@ -273,7 +273,7 @@ Work items:
 - Add more fake transport tests for request payloads, parameters, and output
   propagation.
 - If a concrete zenoh dependency is introduced, gate it behind an explicit
-  host/runtime feature.
+  std runtime feature.
 - Avoid async runtime requirements in the default feature set.
 
 Acceptance criteria:
@@ -281,7 +281,7 @@ Acceptance criteria:
 - `cargo check -p clinkz-wot-protocol-bindings-zenoh --no-default-features`
   continues to pass.
 - Default builds do not require a concrete zenoh runtime dependency.
-- Host-runtime integration can be omitted without changing TD/TM/core crates.
+- Std runtime integration can be omitted without changing TD/TM/core crates.
 
 Completion notes:
 
@@ -293,15 +293,15 @@ Completion notes:
 
 ### PB-P1.4 Add First Concrete Rust Zenoh Runtime Backend
 
-Status: complete for the first Rust `zenoh` host backend.
+Status: complete for the first Rust `zenoh` std backend.
 
-Goal: support host and constrained zenoh execution without weakening the
+Goal: support std and constrained zenoh execution without weakening the
 `no_std + alloc` boundary of TD, core, shared bindings, or the zenoh planning
 crate.
 
 Work items:
 
-- Add a host runtime backend that depends on the Rust `zenoh` crate behind a
+- Add a std runtime backend that depends on the Rust `zenoh` crate behind a
   `std` feature or in a separate `std` runtime crate.
 - Add a constrained runtime backend path for `zenoh-pico` behind its own
   feature or crate, handling C ABI, platform I/O, memory, and polling details
@@ -326,10 +326,10 @@ Completion notes:
 - Kept the default feature set free of a concrete Rust `zenoh` dependency and
   preserved `cargo check -p clinkz-wot-protocol-bindings-zenoh
   --no-default-features`.
-- Implemented first-pass host execution for put, get/request-reply, one-shot
+- Implemented first-pass std execution for put, get/request-reply, one-shot
   subscribe, and unsubscribe acknowledgement through the existing
   `ZenohTransport` trait.
-- Added `ZenohSubscription` so host runtimes can keep a subscription open,
+- Added `ZenohSubscription` so std runtimes can keep a subscription open,
   receive multiple samples over time, and explicitly undeclare it when the
   `runtime-zenoh` feature is enabled.
 - Added first-pass runtime metadata mapping for encoding, express QoS,
@@ -358,7 +358,7 @@ Completion notes:
 
 Status: complete.
 
-Goal: allow Servient binding factories and host runtime adapters to reuse one
+Goal: allow Servient binding factories and std runtime adapters to reuse one
 transport session, connection pool, or runtime adapter without making Servient
 depend on concrete protocol types.
 

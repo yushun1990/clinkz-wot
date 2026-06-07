@@ -2,9 +2,6 @@
 
 set -eu
 
-cargo check -p clinkz-wot-td --no-default-features
-cargo check -p clinkz-wot-core --no-default-features
-cargo check -p clinkz-wot-protocol-bindings --no-default-features
-cargo check -p clinkz-wot-protocol-bindings-zenoh --no-default-features
-cargo check -p clinkz-wot-discovery --no-default-features
-cargo check -p clinkz-wot-servient --no-default-features
+SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+
+exec "$SCRIPT_DIR/check-no-std.sh" "$@"

@@ -64,7 +64,7 @@ The first Rust `zenoh` runtime adapter is `ZenohSessionTransport`, available onl
 when the zenoh binding crate is built with the `runtime-zenoh` feature. It wraps
 a concrete `zenoh::Session`, supports put, get/request-reply, and one-shot
 subscribe execution through the protocol-neutral `ZenohTransport` trait, and
-also exposes `ZenohSubscription` for host runtimes that need explicit
+also exposes `ZenohSubscription` for std runtimes that need explicit
 subscription receive and undeclare lifecycle control. It maps the first
 encoding, express QoS, priority, and congestion control metadata hints onto put
 and get/request-reply builders. The default crate build remains free of the
@@ -72,8 +72,8 @@ Rust `zenoh` dependency.
 
 Concrete zenoh execution should be added through optional runtime backends:
 
-- A Rust `zenoh` backend for host deployments. This backend is `std` because
-  the Rust `zenoh` runtime depends on host async and socket capabilities.
+- A Rust `zenoh` backend for std deployments. This backend is `std` because
+  the Rust `zenoh` runtime depends on async and socket capabilities.
 - A `zenoh-pico` backend for constrained deployments. This backend should live
   behind its own feature or crate and handle C ABI, platform I/O, memory, and
   polling concerns without adding them to TD, core, or shared binding crates.

@@ -53,30 +53,32 @@ This crate is optional and must not be required by TD/TM/core crates.
 Implements W3C WoT Discovery concepts and Thing Description Directory behavior.
 
 This crate supports `no_std + alloc` for the protocol-neutral query model,
-directory traits, and deterministic in-memory directory. Host-only production
-storage backends should live behind the crate's `std` feature.
+directory traits, and deterministic in-memory directory. The `local` module
+contains no-std local directory capabilities. The `storage` module is available
+only with the `std` feature for shared storage adapters and future production
+storage extension points.
 
 ### `clinkz-wot-servient`
 
 Composes TD/TM, bindings, discovery, security, and runtime services into a usable WoT Servient.
 
-This crate supports `no_std + alloc` for embedded-ready runtime composition and
-uses `std` by default for host convenience. Concrete host-only sessions,
-filesystems, async runtimes, databases, and observability integrations should
-stay behind the crate's `std` feature.
+This crate supports `no_std + alloc` for runtime composition through the crate
+root. Concrete std-only sessions, filesystems, async runtimes, databases, and
+observability integrations should stay behind the crate's `std` feature.
 
 ## Feature Policy
 
-- `default = ["std"]` may be used for host and cloud convenience.
+- `default = ["std"]` may be used for std runtime and cloud convenience.
 - `alloc` enables dynamic data structures in `no_std` environments.
-- `std` enables host networking, filesystems, async runtimes, integration tests, and richer diagnostics.
-- `embedded` enables embedded-friendly APIs and disables hidden OS dependencies.
+- `std` enables networking, filesystems, async runtimes, integration tests, and richer diagnostics.
 - `td2-preview` enables experimental TD 2.0 tracking.
 
-Crates that expose both embedded and host surfaces should keep both surfaces in
-the same crate when the split is only a feature boundary. Prefer module names
-such as `embedded` and `host`; avoid a module named `core` because
-`clinkz-wot-core` already names the protocol-neutral engine trait crate.
+Crates that expose both embedded-ready and std-only surfaces should keep both
+surfaces in the same crate when the split is only a feature boundary. Use
+module names that describe the capability or backend rather than naming a
+module solely after `std` or `no_std` availability. Avoid a module named `core`
+because `clinkz-wot-core` already names the protocol-neutral engine trait
+crate.
 
 ## Validation Levels
 

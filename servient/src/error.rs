@@ -5,7 +5,7 @@ use clinkz_wot_core::CoreError;
 use clinkz_wot_discovery::DiscoveryError;
 use clinkz_wot_protocol_bindings::BindingCoreError;
 
-/// Result type used by Servient runtime composition APIs.
+/// Result type used by Servient composition APIs.
 pub type ServientResult<T> = Result<T, ServientError>;
 
 /// Errors produced while composing local Things, consumed Things, bindings,
@@ -40,10 +40,7 @@ impl fmt::Display for ServientError {
             Self::ExposedThingNotFound(id) => {
                 write!(f, "Servient does not expose Thing id '{}'", id)
             }
-            Self::Running => write!(
-                f,
-                "Servient runtime composition cannot be changed while running"
-            ),
+            Self::Running => write!(f, "Servient composition cannot be changed while running"),
             Self::MissingThingId => write!(f, "Thing Description is missing required id"),
         }
     }

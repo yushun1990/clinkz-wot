@@ -44,13 +44,13 @@ The initial embedded target does not require:
 
 ## Checks
 
-Embedded-ready crates should pass checks similar to:
+Embedded-ready crates should pass no-std checks similar to:
 
 ```sh
-scripts/check-embedded.sh
+scripts/check-no-std.sh
 ```
 
-The current embedded check script covers:
+The current no-std check script covers:
 
 - `clinkz-wot-td`
 - `clinkz-wot-core`
@@ -73,8 +73,14 @@ Embedded support should not force every binding to be embedded-compatible.
 
 The engine should allow a device to expose local Thing behavior through a platform-provided adapter. If zenoh is available in a constrained deployment, the zenoh binding can be used. If not, another binding or adapter can be used without changing TD/TM/core logic.
 
-`discovery` and `servient` keep embedded and host surfaces inside their own
-crates. The embedded surface is exposed through an `embedded` module. The host
-surface is exposed through a `host` module behind the default `std` feature.
-The project avoids naming these modules `core` because `clinkz-wot-core`
-already denotes the protocol-neutral engine trait crate.
+`discovery` separates its `no_std + alloc` and `std` capabilities by
+responsibility rather than by environment labels. The crate root keeps the
+shared directory and query model. `discovery::local` exposes local
+allocation-backed directory capabilities usable without `std`.
+`discovery::storage` is available only with the `std` feature for shared
+storage adapters and future production storage extension points.
+
+`servient` exposes no-std Servient APIs through the crate root. Std-only
+Servient integrations should stay behind the `std` feature when they provide
+concrete capabilities. The project avoids naming these modules `core` because
+`clinkz-wot-core` already denotes the protocol-neutral engine trait crate.

@@ -7,10 +7,10 @@ use crate::{
     BindingPlanCache, ConsumedThingCache, ExposedThingRegistry, InMemoryBindingPlanCache,
     InMemoryConsumedThingCache, InMemoryExposedThingRegistry, InMemorySelectedFormCache,
     SelectedFormCache,
-    runtime::{BindingFactory, Servient},
+    servient::{BindingFactory, Servient},
 };
 
-/// Builder for a host Servient.
+/// Builder for a Web of Things Servient.
 pub struct ServientBuilder<
     D = InMemoryThingDirectory,
     R = InMemoryExposedThingRegistry,

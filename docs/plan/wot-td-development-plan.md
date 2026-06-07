@@ -32,7 +32,7 @@ and extension preservation.
 
 The crate must remain compatible with `no_std + alloc`. It must not depend on
 networking, async runtimes, filesystems, zenoh, databases, process APIs, or
-other host-only runtime facilities.
+other std-only runtime facilities.
 
 Protocol behavior belongs in binding crates. Discovery, Servient runtime
 composition, and operation dispatch belong in dedicated crates and are only

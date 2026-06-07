@@ -232,3 +232,25 @@ fn rejects_registration_without_id() {
 
     assert_eq!(err, DiscoveryError::MissingThingId);
 }
+
+#[cfg(feature = "std")]
+#[test]
+fn std_storage_handle_shares_directory_backend() {
+    let shared =
+        clinkz_wot_discovery::storage::SharedThingDirectory::new(InMemoryThingDirectory::new());
+    let cloned = shared.clone();
+
+    shared
+        .lock()
+        .expect("shared directory lock succeeds")
+        .register(thing("urn:thing:lamp", "Lamp"))
+        .expect("registration succeeds");
+
+    let page = cloned
+        .lock()
+        .expect("shared directory lock succeeds")
+        .list();
+
+    assert_eq!(page.total, 1);
+    assert_eq!(page.entries[0].id, "urn:thing:lamp");
+}

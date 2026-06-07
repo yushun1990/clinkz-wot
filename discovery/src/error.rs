@@ -17,6 +17,9 @@ pub enum DiscoveryError {
     ThingNotFound(String),
     /// TD validation failed before a directory write.
     InvalidThingDescription(ValidateError),
+    /// A shared directory backend lock is poisoned.
+    #[cfg(feature = "std")]
+    SharedDirectoryLockPoisoned,
 }
 
 impl fmt::Display for DiscoveryError {
@@ -37,6 +40,10 @@ impl fmt::Display for DiscoveryError {
             }
             Self::InvalidThingDescription(err) => {
                 write!(f, "Invalid Thing Description: {}", err)
+            }
+            #[cfg(feature = "std")]
+            Self::SharedDirectoryLockPoisoned => {
+                write!(f, "Shared Thing Directory lock is poisoned")
             }
         }
     }

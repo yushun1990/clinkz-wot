@@ -727,7 +727,7 @@ fn consume_prefers_cached_td_when_present() {
 }
 
 #[test]
-fn lifecycle_start_stop_are_idempotent_and_guard_runtime_composition() {
+fn lifecycle_start_stop_are_idempotent_and_guard_servient_composition() {
     let (td, _) = thing("urn:thing:remote-lamp", "Remote Lamp");
     let (updated_td, _) = thing("urn:thing:remote-lamp", "Updated Remote Lamp");
     let (local_td, _) = thing("urn:thing:local-lamp", "Local Lamp");

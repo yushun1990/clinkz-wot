@@ -32,7 +32,7 @@ Current focus:
   surface that wires Discovery, local Things, consumed Things, injected
   protocol bindings, runtime registries, TD/form/binding-plan caches, payload
   codecs, and security providers.
-- Keep M7 conformance and embedded checks running across every crate that
+- Keep M7 conformance and no-std checks running across every crate that
   claims `no_std + alloc` support.
 
 Immediate next sequence:
@@ -40,7 +40,7 @@ Immediate next sequence:
 1. Keep M7 checks and compatibility documentation aligned with the current
    TD/TM, core, protocol binding, Discovery, and Servient surfaces.
 2. Start the next concrete runtime/backend increment only after documenting the
-   acceptance target and keeping the existing embedded checks green.
+   acceptance target and keeping the existing no-std checks green.
 
 ### M1: TD 1.1 Hardening
 
@@ -151,7 +151,7 @@ Current status:
 - Improved shared form selection diagnostics so operation mismatches are
   distinguished from metadata or caller-filter mismatches.
 - Added an injected zenoh transport adapter boundary to the generic
-  `ZenohBinding<T>` so planned zenoh operations can be executed by host or test
+  `ZenohBinding<T>` so planned zenoh operations can be executed by std or test
   integrations without adding a required zenoh runtime dependency.
 - Added shared validation for caller-selected affordance forms and wired zenoh
   runtime invocation to reject forms that do not belong to the requested
@@ -179,10 +179,10 @@ Current status:
   `zenoh-pico` adapters: the current zenoh planning crate remains
   `no_std + alloc`, while concrete runtime backends stay optional and
   feature-gated or crate-separated.
-- Added the first concrete Rust `zenoh` host runtime backend behind the
+- Added the first concrete Rust `zenoh` std runtime backend behind the
   explicit `runtime-zenoh` feature while keeping the default and
   `--no-default-features` builds free of a concrete zenoh runtime dependency.
-- Hardened the Rust `zenoh` host runtime backend with request/reply selector
+- Hardened the Rust `zenoh` std runtime backend with request/reply selector
   parameter validation, subscription lifecycle metadata and undeclaration, and
   first-pass metadata mapping for encoding, express QoS, priority, and
   congestion control.
@@ -221,7 +221,7 @@ Current status:
   for memory, SQL, RDF/SPARQL, HTTP, or other runtime backends.
 - Added a deterministic in-memory directory backend with configurable TD
   validation level and a local predicate-query convenience API for tests and
-  host-local filtering.
+  local filtering.
 - Added focused tests for duplicate registration, update behavior, deletion,
   lookup by id, deterministic listing, structured query predicates, pagination,
   missing ids, validation failures, and owned result cloning.
@@ -235,8 +235,9 @@ Entry criteria:
 
 Planned work:
 
-- Add `clinkz-wot-discovery` as a workspace crate with `no_std + alloc`
-  embedded APIs and `std` host extension points.
+- Add `clinkz-wot-discovery` as a workspace crate with crate-root shared
+  directory and query APIs, no-std local directory capabilities, and std-only
+  storage extension points.
 - Define protocol-neutral directory traits for registration, retrieval, update,
   deletion, listing, and query.
 - Implement a deterministic in-memory directory backend first.
@@ -258,13 +259,13 @@ Exit criteria:
 ### M6: Servient Runtime
 
 Compose TD/TM, protocol bindings, discovery, security, and observability into a
-host/runtime Servient that supports exposed and consumed Things.
+Servient runtime that supports exposed and consumed Things.
 
 Current status:
 
 - Started `clinkz-wot-servient` as a workspace crate with embedded-ready
-  runtime composition and `std` host extension points.
-- Added a host Servient builder backed by an injectable Thing Directory and
+  runtime composition and `std` platform extension points.
+- Added a Servient builder backed by an injectable Thing Directory and
   protocol binding factories.
 - Added lifecycle APIs for start and stop.
 - Defined first lifecycle semantics: `start` and `stop` are idempotent, while
@@ -321,7 +322,7 @@ Current status:
   binding with an injected fake transport, keeping zenoh out of Servient's
   required dependencies.
 - Added shared zenoh transport ownership support so binding factories can reuse
-  host sessions or connection pools without requiring concrete protocol types
+  std sessions or connection pools without requiring concrete protocol types
   in Servient.
 
 Entry criteria:
@@ -346,7 +347,7 @@ Exit criteria:
 
 TD/TM plan: `docs/plan/wot-td-development-plan.md`.
 
-Add W3C compatibility checks, fixture coverage, and embedded-oriented
+Add W3C compatibility checks, fixture coverage, and no-std-oriented
 `no_std + alloc` verification for crates that claim embedded support.
 
 Planned work:
@@ -357,7 +358,7 @@ Planned work:
   `--no-default-features` checks.
 - Add no-default-features checks for every embedded-ready crate as it is added
   or changed.
-- Keep `scripts/check-embedded.sh` aligned with every crate that claims
+- Keep `scripts/check-no-std.sh` aligned with every crate that claims
   `no_std + alloc` support.
 - Add conformance-oriented fixtures for multi-form affordances, form security,
   `base` plus relative `href`, JSON-LD context preservation, and Clinkz
@@ -367,13 +368,13 @@ Planned work:
 
 Current status:
 
-- `scripts/check-embedded.sh` covers every current workspace crate that claims
+- `scripts/check-no-std.sh` covers every current workspace crate that claims
   `no_std + alloc` support: TD, core, shared protocol bindings, zenoh binding,
   Discovery, and Servient.
 - The current protocol binding M7 verification path passes:
   - `cargo fmt --check`
   - `cargo test -p clinkz-wot-protocol-bindings -p clinkz-wot-protocol-bindings-zenoh`
-  - `scripts/check-embedded.sh`
+  - `scripts/check-no-std.sh`
 
 Exit criteria:
 
@@ -385,7 +386,7 @@ Exit criteria:
 ## Acceptance Criteria
 
 - Core TD/TM documents can be parsed, validated, serialized, and round-tripped without losing extension data.
-- The TD/TM/core crates compile without `std` when built with the embedded feature set.
+- The TD/TM/core crates compile without `std` when built with the no-default-features set.
 - The engine core has no dependency on zenoh.
 - The zenoh binding can be enabled as an optional crate or feature.
 - Protocol bindings all use the same protocol-neutral trait surface.

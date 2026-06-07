@@ -107,13 +107,13 @@ pub struct ZenohTransportRequest {
 /// Transport adapter contract for concrete zenoh runtime integrations.
 ///
 /// This trait deliberately avoids depending on a concrete zenoh session type so
-/// host, embedded, and test runtimes can provide their own integration layer.
+/// std, constrained, and test runtimes can provide their own integration layer.
 pub trait ZenohTransport {
     /// Executes a planned zenoh operation.
     fn execute(&mut self, request: ZenohTransportRequest) -> CoreResult<InteractionOutput>;
 }
 
-/// Shareable zenoh transport handle for host runtime integrations.
+/// Shareable zenoh transport handle for std runtime integrations.
 ///
 /// This wrapper lets binding factories clone a handle to the same underlying
 /// session, connection pool, or runtime adapter while each `ZenohBinding`

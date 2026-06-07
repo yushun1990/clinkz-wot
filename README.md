@@ -33,7 +33,7 @@ Current implementation highlights:
   security provider hooks.
 
 Next focus areas are production-oriented shared transport ownership, optional
-concrete zenoh runtime backends, and continued conformance plus embedded checks.
+concrete zenoh runtime backends, and continued conformance plus no-std checks.
 
 ## Workspace Crates
 
@@ -44,7 +44,7 @@ concrete zenoh runtime backends, and continued conformance plus embedded checks.
 | `clinkz-wot-protocol-bindings` | `protocol-bindings/core` | Shared form selection, target resolution, selected-form validation, diagnostics, and security helpers. | `no_std + alloc`, `std` by default |
 | `clinkz-wot-protocol-bindings-zenoh` | `protocol-bindings/protocols/zenoh` | Optional zenoh form parsing, operation planning, metadata extraction, and injected transport boundary. | `no_std + alloc`, `std` by default |
 | `clinkz-wot-discovery` | `discovery` | Protocol-neutral Discovery and Thing Description Directory traits with an in-memory backend. | `no_std + alloc`, `std` by default |
-| `clinkz-wot-servient` | `servient` | Servient runtime composition for discovery, local exposure, remote consumption, caches, and injected bindings. | `no_std + alloc`, `std` by default |
+| `clinkz-wot-servient` | `servient` | Servient composition for discovery, local exposure, remote consumption, caches, and injected bindings. | `no_std + alloc`, `std` by default |
 
 ## Architecture Principles
 
@@ -54,7 +54,7 @@ concrete zenoh runtime backends, and continued conformance plus embedded checks.
   `cz:` and zenoh-specific terms through `cz-zenoh:`.
 - Keep zenoh-specific behavior in optional protocol binding crates.
 - Keep TD, TM, and core runtime abstractions compatible with `no_std + alloc`.
-- Put host/runtime capabilities, storage backends, sockets, and concrete
+- Put std runtime capabilities, storage backends, sockets, and concrete
   protocol sessions behind `std` boundaries or separate runtime adapters.
 
 ## Quick Start
@@ -67,18 +67,20 @@ cd clinkz-wot
 cargo test --workspace
 ```
 
-Run the embedded-oriented checks for crates that claim `no_std + alloc`
-support:
+Run the no-std checks for crates that claim `no_std + alloc` support:
 
 ```sh
-scripts/check-embedded.sh
+scripts/check-no-std.sh
 ```
 
-`discovery` and `servient` keep embedded and host surfaces inside their own
-crates. Use the `embedded` modules for `no_std + alloc` composition and the
-`host` modules, available with the default `std` feature, for future
-host-only backends. The project avoids naming these modules `core` because
-`clinkz-wot-core` already owns the protocol-neutral engine trait surface.
+`discovery` keeps its shared directory and query model at the crate root,
+exposes no-std local directory capabilities through `discovery::local`, and
+keeps std-only storage adapters behind `discovery::storage`. `servient`
+exposes no-std Servient APIs through the crate root. Std-only Servient
+integrations should stay behind the `std` feature when they provide concrete
+capabilities.
+The project avoids naming these modules `core` because `clinkz-wot-core`
+already owns the protocol-neutral engine trait surface.
 
 Run Clippy when changing Rust code:
 
@@ -130,7 +132,7 @@ selected-form validation, and security metadata extraction.
 The zenoh crate currently acts as a planning and adapter layer. It supports
 `zenoh://` targets and `cz-zenoh:keyExpr` metadata, maps WoT operations to
 zenoh operation kinds, and exposes an injected `ZenohTransport` boundary for
-host or test integrations. Concrete Rust `zenoh` and `zenoh-pico` runtime
+std or test integrations. Concrete Rust `zenoh` and `zenoh-pico` runtime
 backends should remain optional and feature-gated or crate-separated.
 
 ## Documentation

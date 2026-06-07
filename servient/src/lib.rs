@@ -1,6 +1,6 @@
 #![no_std]
 //!
-//! Runtime composition for Web of Things Servient flows.
+//! Servient composition for Web of Things flows.
 //!
 //! This crate wires protocol-neutral core dispatch, Discovery directory
 //! storage, and protocol binding factories without making any concrete
@@ -13,13 +13,10 @@ extern crate alloc;
 
 mod builder;
 mod cache;
-pub mod embedded;
 mod error;
-#[cfg(feature = "std")]
-pub mod host;
 mod interaction;
 mod registry;
-mod runtime;
+mod servient;
 
 pub use builder::ServientBuilder;
 pub use cache::{
@@ -29,4 +26,4 @@ pub use cache::{
 };
 pub use error::{ServientError, ServientResult};
 pub use registry::{ExposedThingRegistry, InMemoryExposedThingRegistry};
-pub use runtime::Servient;
+pub use servient::Servient;

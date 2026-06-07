@@ -14,7 +14,7 @@ use crate::{
 
 pub(crate) type BindingFactory = Box<dyn Fn() -> Box<dyn ProtocolBinding>>;
 
-/// Host Servient that composes discovery, exposed Things, and consumed Things.
+/// Web of Things Servient that composes discovery, exposed Things, and consumed Things.
 pub struct Servient<
     D = InMemoryThingDirectory,
     R = InMemoryExposedThingRegistry,
@@ -81,19 +81,19 @@ where
     S: SelectedFormCache,
     P: BindingPlanCache,
 {
-    /// Starts the host runtime lifecycle.
+    /// Starts the Servient lifecycle.
     ///
-    /// Starting is idempotent. Runtime composition changes must be made before
-    /// start or after stop.
+    /// Starting is idempotent. Composition changes must be made before start or
+    /// after stop.
     pub fn start(&mut self) -> ServientResult<()> {
         self.running = true;
         Ok(())
     }
 
-    /// Stops the host runtime lifecycle.
+    /// Stops the Servient lifecycle.
     ///
     /// Stopping is idempotent. Directory and exposure mutations are allowed
-    /// after the runtime has stopped.
+    /// after the Servient has stopped.
     pub fn stop(&mut self) -> ServientResult<()> {
         self.running = false;
         Ok(())
