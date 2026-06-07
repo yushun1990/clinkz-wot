@@ -1,6 +1,6 @@
 use alloc::{collections::BTreeMap, format, string::String, vec::Vec};
 
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
 use serde_with::{OneOrMany, serde_as, skip_serializing_none};
 
 use super::util::deserialize_bool_flexible;
@@ -305,8 +305,9 @@ pub struct NumberSchema {
     /// upper limit.
     pub exclusive_maximum: Option<f64>,
 
-    /// Specifies the multipleOf value number. The value must strictly
-    /// greater than 0.
+    /// Specifies the `multipleOf` value.
+    ///
+    /// Basic validation requires this value to be strictly greater than 0.
     pub multiple_of: Option<f64>,
 }
 
@@ -360,11 +361,9 @@ impl NumberSchemaBuilder {
         self
     }
 
-    /// Sets the multiple of value.
+    /// Sets the `multipleOf` value.
     pub fn multiple_of(mut self, multiple_of: f64) -> Self {
-        if multiple_of > 0.0 {
-            self.schema.multiple_of = Some(multiple_of);
-        }
+        self.schema.multiple_of = Some(multiple_of);
         self
     }
 
@@ -410,8 +409,9 @@ pub struct IntegerSchema {
     /// upper limit.
     pub exclusive_maximum: Option<i64>,
 
-    /// Specifies the multipleOf value number. The value must strictly
-    /// greater than 0.
+    /// Specifies the `multipleOf` value.
+    ///
+    /// Basic validation requires this value to be strictly greater than 0.
     pub multiple_of: Option<i64>,
 }
 
@@ -465,11 +465,9 @@ impl IntegerSchemaBuilder {
         self
     }
 
-    /// Sets the multiple of value.
+    /// Sets the `multipleOf` value.
     pub fn multiple_of(mut self, multiple_of: i64) -> Self {
-        if multiple_of > 0 {
-            self.schema.multiple_of = Some(multiple_of);
-        }
+        self.schema.multiple_of = Some(multiple_of);
         self
     }
 
@@ -739,7 +737,7 @@ impl_builder_default!(
     NullSchemaBuilder,
 );
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(untagged)]
 pub enum DataSchema {
     Array(ArraySchema),
@@ -749,6 +747,21 @@ pub enum DataSchema {
     Object(ObjectSchema),
     String(StringSchema),
     Null(NullSchema),
+}
+
+impl<'de> Deserialize<'de> for DataSchema {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let value = serde_json::Value::deserialize(deserializer)?;
+
+        if let Some(schema) = deserialize_typed_data_schema(&value) {
+            return schema.map_err(serde::de::Error::custom);
+        }
+
+        deserialize_untyped_data_schema(value).map_err(serde::de::Error::custom)
+    }
 }
 
 impl From<ArraySchema> for DataSchema {
@@ -882,6 +895,18 @@ impl DataSchema {
             Self::Null(schema) => &schema._context,
         }
     }
+
+    fn expected_data_type(&self) -> &'static str {
+        match self {
+            Self::Array(_) => "array",
+            Self::Boolean(_) => "boolean",
+            Self::Number(_) => "number",
+            Self::Integer(_) => "integer",
+            Self::Object(_) => "object",
+            Self::String(_) => "string",
+            Self::Null(_) => "null",
+        }
+    }
 }
 
 impl Validate for DataSchema {
@@ -890,6 +915,7 @@ impl Validate for DataSchema {
             return Ok(());
         }
 
+        validate_schema_type_consistency(self)?;
         validate_schema_context(self.context(), level)?;
 
         match self {
@@ -940,6 +966,69 @@ impl Validate for DataSchema {
 
         Ok(())
     }
+}
+
+fn deserialize_typed_data_schema(
+    value: &serde_json::Value,
+) -> Option<Result<DataSchema, serde_json::Error>> {
+    let data_type = value.get("type").and_then(serde_json::Value::as_str)?;
+
+    Some(match data_type {
+        "array" => serde_json::from_value::<ArraySchema>(value.clone()).map(DataSchema::Array),
+        "boolean" => {
+            serde_json::from_value::<BooleanSchema>(value.clone()).map(DataSchema::Boolean)
+        }
+        "number" => serde_json::from_value::<NumberSchema>(value.clone()).map(DataSchema::Number),
+        "integer" => {
+            serde_json::from_value::<IntegerSchema>(value.clone()).map(DataSchema::Integer)
+        }
+        "object" => serde_json::from_value::<ObjectSchema>(value.clone()).map(DataSchema::Object),
+        "string" => serde_json::from_value::<StringSchema>(value.clone()).map(DataSchema::String),
+        "null" => serde_json::from_value::<NullSchema>(value.clone()).map(DataSchema::Null),
+        _ => return None,
+    })
+}
+
+fn deserialize_untyped_data_schema(
+    value: serde_json::Value,
+) -> Result<DataSchema, serde_json::Error> {
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum UntaggedDataSchema {
+        Array(ArraySchema),
+        Boolean(BooleanSchema),
+        Number(NumberSchema),
+        Integer(IntegerSchema),
+        Object(ObjectSchema),
+        String(StringSchema),
+        Null(NullSchema),
+    }
+
+    match serde_json::from_value::<UntaggedDataSchema>(value)? {
+        UntaggedDataSchema::Array(schema) => Ok(DataSchema::Array(schema)),
+        UntaggedDataSchema::Boolean(schema) => Ok(DataSchema::Boolean(schema)),
+        UntaggedDataSchema::Number(schema) => Ok(DataSchema::Number(schema)),
+        UntaggedDataSchema::Integer(schema) => Ok(DataSchema::Integer(schema)),
+        UntaggedDataSchema::Object(schema) => Ok(DataSchema::Object(schema)),
+        UntaggedDataSchema::String(schema) => Ok(DataSchema::String(schema)),
+        UntaggedDataSchema::Null(schema) => Ok(DataSchema::Null(schema)),
+    }
+}
+
+fn validate_schema_type_consistency(schema: &DataSchema) -> Result<(), ValidateError> {
+    let Some(data_type) = schema.context().data_type.as_deref() else {
+        return Ok(());
+    };
+
+    let expected = schema.expected_data_type();
+    if data_type == expected {
+        return Ok(());
+    }
+
+    Err(ValidateError::InvalidSchema(format!(
+        "type '{}' does not match {} schema",
+        data_type, expected
+    )))
 }
 
 fn validate_schema_context(

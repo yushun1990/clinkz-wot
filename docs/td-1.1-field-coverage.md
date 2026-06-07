@@ -107,7 +107,7 @@ Status values:
 | `readOnly` | `DataSchemaContext::read_only` | `bool` | All schemas | No | No | `false` | N/A | covered | Flexible bool deserializer. |
 | `writeOnly` | `DataSchemaContext::write_only` | `bool` | All schemas | No | No | `false` | N/A | covered | Flexible bool deserializer. |
 | `format` | `DataSchemaContext::format` | `Option<String>` | All schemas | No | No | None | N/A | covered | Represented. |
-| `type` | `DataSchemaContext::data_type` | `Option<String>` | All schemas | No | No | None | N/A | partial | Represented as string. Variant deserialization is untagged, so type-to-variant consistency needs validation. |
+| `type` | `DataSchemaContext::data_type` | `Option<String>` | All schemas | No | No | None | N/A | covered | Represented as string. Deserialization prefers the explicit `type` field for concrete variant selection, and Basic validation rejects type-to-variant mismatches. |
 | `items` | `ArraySchema::items` | `Option<Vec<DataSchema>>` | Array | No | Yes | None | Via nested schemas | covered | OneOrMany represented. |
 | `minItems` | `ArraySchema::min_items` | `Option<u32>` | Array | No | No | None | N/A | covered | Represented. |
 | `maxItems` | `ArraySchema::max_items` | `Option<u32>` | Array | No | No | None | N/A | covered | Represented. |
@@ -115,7 +115,7 @@ Status values:
 | `exclusiveMinimum` | `NumberSchema::exclusive_minimum`, `IntegerSchema::exclusive_minimum` | `Option<f64>`, `Option<i64>` | Number, Integer | No | No | None | N/A | covered | Represented. |
 | `maximum` | `NumberSchema::maximum`, `IntegerSchema::maximum` | `Option<f64>`, `Option<i64>` | Number, Integer | No | No | None | N/A | covered | Represented. |
 | `exclusiveMaximum` | `NumberSchema::exclusive_maximum`, `IntegerSchema::exclusive_maximum` | `Option<f64>`, `Option<i64>` | Number, Integer | No | No | None | N/A | covered | Represented. |
-| `multipleOf` | `NumberSchema::multiple_of`, `IntegerSchema::multiple_of` | `Option<f64>`, `Option<i64>` | Number, Integer | No | No | None | N/A | covered | Builders avoid non-positive values, and Basic validation rejects non-positive typed or preserved extension-map `multipleOf` values. |
+| `multipleOf` | `NumberSchema::multiple_of`, `IntegerSchema::multiple_of` | `Option<f64>`, `Option<i64>` | Number, Integer | No | No | None | N/A | covered | Builders preserve the provided value, and Basic validation rejects non-positive typed or preserved extension-map `multipleOf` values. |
 | `properties` | `ObjectSchema::properties` | `Option<BTreeMap<String, DataSchema>>` | Object | No | No | None | Via nested schemas | covered | Represented. |
 | `required` | `ObjectSchema::required` | `Option<Vec<String>>` | Object | No | No | None | N/A | covered | Represented. |
 | `minLength` | `StringSchema::min_length` | `Option<u32>` | String | No | No | None | N/A | covered | Represented. |

@@ -59,6 +59,9 @@ Current status:
 - SecurityScheme deserialization now uses the `scheme` field as the concrete
   variant discriminator, keeps fixture-compatible API key `in: "uri"` values,
   and preserves TD round-trip behavior for the current fixture corpus.
+- DataSchema deserialization now prefers the explicit `type` field as the
+  concrete variant discriminator, while Basic validation still rejects
+  inconsistent explicit type declarations and keeps round-trip behavior intact.
 
 ### M2: Thing Model Support
 

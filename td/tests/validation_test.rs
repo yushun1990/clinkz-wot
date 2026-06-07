@@ -1,5 +1,5 @@
 use clinkz_wot_td::{
-    data_schema::DataSchema,
+    data_schema::{ContextHelper, DataSchema},
     security_scheme::{SecurityLocation, SecurityScheme},
     thing::Thing,
     validate::{Validate, ValidateError, ValidationLevel},
@@ -151,6 +151,9 @@ fn is_semantic_eq(a: &serde_json::Value, b: &serde_json::Value) -> bool {
                 .all(|(ia, ib)| is_semantic_eq(ia, ib))
         }
 
+        // Treat JSON numbers with the same numeric value as equivalent.
+        (Number(_), Number(_)) => a.as_f64() == b.as_f64(),
+
         // Compare primitive values directly.
         (v1, v2) => v1 == v2,
     }
@@ -266,10 +269,7 @@ fn security_scheme_deserialization_uses_scheme_to_select_the_concrete_variant() 
     };
     assert_eq!(scheme._context.scheme, "apikey");
     assert_eq!(scheme.name.as_deref(), Some("X-API-Key"));
-    assert_eq!(
-        scheme._context._extra_fields.get("name"),
-        None
-    );
+    assert_eq!(scheme._context._extra_fields.get("name"), None);
     assert_eq!(
         scheme._context._extra_fields.get("cz:credentialSource"),
         Some(&serde_json::json!("platform"))
@@ -429,6 +429,39 @@ fn basic_validation_rejects_direct_data_schema_constraint_conflicts() {
 }
 
 #[test]
+fn basic_validation_rejects_explicit_data_schema_type_mismatches() {
+    let schema = DataSchema::String(DataSchema::string().data_type("integer").build());
+
+    schema
+        .validate_with_level(ValidationLevel::Minimal)
+        .expect("minimal validation should keep tolerant data schema parsing");
+
+    let err = schema
+        .validate_with_level(ValidationLevel::Basic)
+        .expect_err("basic validation should reject mismatched explicit data schema types");
+
+    assert!(
+        matches!(err, ValidateError::InvalidSchema(message) if message.contains("type 'integer'") && message.contains("string schema"))
+    );
+}
+
+#[test]
+fn basic_validation_contextualizes_explicit_data_schema_type_mismatches() {
+    let err = Thing::builder("Invalid Schema Type")
+        .nosec()
+        .schema_definition(
+            "badString",
+            DataSchema::String(DataSchema::string().data_type("integer").build()),
+        )
+        .build()
+        .expect_err("thing validation should reject mismatched schema definition types");
+
+    assert!(
+        matches!(err, ValidateError::InvalidSchema(message) if message.contains("schemaDefinitions.badString") && message.contains("type 'integer'") && message.contains("string schema"))
+    );
+}
+
+#[test]
 fn basic_validation_rejects_deserialized_property_schema_constraint_conflicts() {
     let raw = r#"{
         "@context": "https://www.w3.org/2022/wot/td/v1.1",
@@ -491,6 +524,28 @@ fn basic_validation_rejects_schema_definition_multiple_of_zero() {
     assert!(
         matches!(err, ValidateError::InvalidSchema(message) if message.contains("schemaDefinitions.badNumber") && message.contains("multipleOf"))
     );
+}
+
+#[test]
+fn basic_validation_rejects_builder_number_schema_multiple_of_zero() {
+    let schema = DataSchema::Number(DataSchema::number().multiple_of(0.0).build());
+
+    let err = schema
+        .validate_with_level(ValidationLevel::Basic)
+        .expect_err("basic validation should reject non-positive builder multipleOf");
+
+    assert!(matches!(err, ValidateError::InvalidSchema(message) if message.contains("multipleOf")));
+}
+
+#[test]
+fn basic_validation_rejects_builder_integer_schema_multiple_of_zero() {
+    let schema = DataSchema::Integer(DataSchema::integer().multiple_of(0).build());
+
+    let err = schema
+        .validate_with_level(ValidationLevel::Basic)
+        .expect_err("basic validation should reject non-positive builder multipleOf");
+
+    assert!(matches!(err, ValidateError::InvalidSchema(message) if message.contains("multipleOf")));
 }
 
 #[test]
