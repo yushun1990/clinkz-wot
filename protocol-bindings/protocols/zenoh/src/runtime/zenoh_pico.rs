@@ -36,14 +36,25 @@ pub struct ZenohPicoRequest<'a> {
 /// Error returned by a constrained zenoh-pico platform hook.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ZenohPicoError {
+    kind: ZenohPicoErrorKind,
     code: Option<i32>,
     message: String,
+}
+
+/// Category of a constrained zenoh-pico platform hook error.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ZenohPicoErrorKind {
+    /// A platform, C ABI, session, polling, or buffer-management operation failed.
+    Platform,
+    /// The platform hook timed out while waiting for a reply or sample.
+    Timeout,
 }
 
 impl ZenohPicoError {
     /// Creates an error from a human-readable message.
     pub fn new(message: impl Into<String>) -> Self {
         Self {
+            kind: ZenohPicoErrorKind::Platform,
             code: None,
             message: message.into(),
         }
@@ -52,9 +63,29 @@ impl ZenohPicoError {
     /// Creates an error from a zenoh-pico status code and message.
     pub fn with_code(code: i32, message: impl Into<String>) -> Self {
         Self {
+            kind: ZenohPicoErrorKind::Platform,
             code: Some(code),
             message: message.into(),
         }
+    }
+
+    /// Creates an error for a platform hook timeout.
+    pub fn timeout(operation: &str, key_expr: &str) -> Self {
+        Self {
+            kind: ZenohPicoErrorKind::Timeout,
+            code: None,
+            message: timeout_message(operation, key_expr),
+        }
+    }
+
+    /// Returns the error category.
+    pub fn kind(&self) -> ZenohPicoErrorKind {
+        self.kind
+    }
+
+    /// Returns whether this error represents a timeout.
+    pub fn is_timeout(&self) -> bool {
+        self.kind == ZenohPicoErrorKind::Timeout
     }
 
     /// Returns the platform status code, if one was supplied.
@@ -196,8 +227,9 @@ fn transport_error(error: ZenohPicoError) -> CoreError {
 }
 
 fn timeout_error(operation: &str, key_expr: &str) -> CoreError {
-    CoreError::Transport(format!(
-        "Zenoh-pico {} for '{}' timed out",
-        operation, key_expr
-    ))
+    CoreError::Transport(timeout_message(operation, key_expr))
+}
+
+fn timeout_message(operation: &str, key_expr: &str) -> String {
+    format!("Zenoh-pico {} for '{}' timed out", operation, key_expr)
 }

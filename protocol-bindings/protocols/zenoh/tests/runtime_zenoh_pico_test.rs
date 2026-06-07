@@ -4,8 +4,8 @@ use std::time::Duration;
 
 use clinkz_wot_core::{CoreError, Payload};
 use clinkz_wot_protocol_bindings_zenoh::{
-    ZenohFormMetadata, ZenohOperationKind, ZenohOperationPlan, ZenohPicoError, ZenohPicoPlatform,
-    ZenohPicoRequest, ZenohPicoTransport, ZenohTransport, ZenohTransportRequest,
+    ZenohFormMetadata, ZenohOperationKind, ZenohOperationPlan, ZenohPicoError, ZenohPicoErrorKind,
+    ZenohPicoPlatform, ZenohPicoRequest, ZenohPicoTransport, ZenohTransport, ZenohTransportRequest,
 };
 
 #[derive(Debug, Default)]
@@ -181,6 +181,15 @@ fn pico_transport_maps_platform_errors_and_timeouts() {
     assert_eq!(
         err,
         CoreError::Transport("zenoh-pico status -7: platform rejected put".into())
+    );
+
+    let timeout = ZenohPicoError::timeout("query", "clinkz/things/lamp/status");
+    assert_eq!(timeout.kind(), ZenohPicoErrorKind::Timeout);
+    assert!(timeout.is_timeout());
+    assert_eq!(timeout.code(), None);
+    assert_eq!(
+        timeout.message(),
+        "Zenoh-pico query for 'clinkz/things/lamp/status' timed out"
     );
 
     let mut timing_out = ZenohPicoTransport::new(FakePicoPlatform::default());

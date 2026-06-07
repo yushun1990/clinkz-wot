@@ -81,6 +81,9 @@ The current protocol binding crates provide:
 - A constrained `runtime-zenoh-pico` platform-hook backend compiles without
   `std`, maps shared planner requests into injectable platform hooks, and keeps
   real C ABI, polling, session, and buffer ownership in target-specific code.
+- The target-specific acceptance boundary for real zenoh-pico C ABI
+  integrations is documented in
+  `docs/zenoh-pico-c-abi-integration-target.md`.
 
 ## Current Development Sequence
 
@@ -93,8 +96,8 @@ The next development order is:
    `runtime-zenoh` feature and environment-variable gate.
 4. Keep constrained `runtime-zenoh-pico` platform-hook coverage behind its
    explicit feature and outside default workspace tests.
-5. Define the next runtime/backend acceptance target before adding another
-   concrete backend increment.
+5. Keep real zenoh-pico C ABI integrations outside the shared planning crate
+   and aligned with `docs/zenoh-pico-c-abi-integration-target.md`.
 
 Completion notes:
 
@@ -506,6 +509,37 @@ Acceptance criteria:
 - Default zenoh binding builds still have no concrete zenoh runtime dependency.
 - Real zenoh-pico C ABI, session, polling, and buffer ownership remain outside
   TD, core, shared bindings, Discovery, and Servient.
+
+### PB-P1.9 Document Zenoh-Pico C ABI Integration Boundary
+
+Status: complete for the acceptance-target pass.
+
+Goal: define the boundary for target-specific code that connects
+`ZenohPicoPlatform` to a real zenoh-pico C ABI without adding hardware,
+toolchain, or C library ownership to the shared zenoh planning crate.
+
+Work items:
+
+- Document which responsibilities stay in target-specific crates or
+  applications.
+- Keep TD traversal, form selection, target resolution, and Clinkz extension
+  parsing owned by the existing zenoh planner.
+- Define acceptance criteria for put, query or request/reply, subscribe, and
+  unsubscribe paths through `ZenohPicoRequest`.
+- Document status-code and timeout mapping expectations for
+  `ZenohPicoError`.
+- Keep default workspace verification independent of target hardware and C
+  toolchains.
+
+Acceptance criteria:
+
+- `docs/zenoh-pico-c-abi-integration-target.md` defines the target-specific C
+  ABI ownership boundary, non-goals, feature policy, acceptance criteria, and
+  verification path.
+- The protocol binding plan points future real zenoh-pico integration work at
+  that document before implementation starts.
+- The existing `runtime-zenoh-pico` feature remains a platform-hook backend,
+  not a mandatory C ABI dependency.
 
 ## Verification
 

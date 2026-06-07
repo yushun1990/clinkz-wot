@@ -384,6 +384,8 @@ Current status:
 - `docs/zenoh-pico-runtime-target.md` records the acceptance target for the
   constrained zenoh-pico runtime backend and its target-specific C ABI follow-up
   boundary.
+- `docs/zenoh-pico-c-abi-integration-target.md` records the target-specific
+  acceptance boundary for real zenoh-pico C ABI integrations.
 - `scripts/check-reserved-features.sh` covers constrained zenoh-pico feature
   compilation and incompatible runtime backend feature diagnostics for the
   current zenoh binding feature policy.

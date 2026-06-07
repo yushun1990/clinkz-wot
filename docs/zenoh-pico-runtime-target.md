@@ -85,5 +85,5 @@ scripts/check-no-std.sh
 scripts/check-reserved-features.sh
 ```
 
-When the real C ABI integration exists, document any target-specific toolchain
-requirements here.
+The target-specific acceptance boundary for real C ABI integrations is defined
+in `docs/zenoh-pico-c-abi-integration-target.md`.
