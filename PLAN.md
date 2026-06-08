@@ -32,6 +32,11 @@ Current focus:
   surface that wires Discovery, local Things, consumed Things, injected
   protocol bindings, runtime registries, TD/form/binding-plan caches, payload
   codecs, and security providers.
+- The next concrete backend increment is the opt-in Rust `zenoh` runtime path
+  behind `runtime-zenoh`, with live smoke and integration coverage kept outside
+  the default workspace test path.
+- Defer `runtime-zenoh-pico` runtime injection until the target hardware
+  platform, C ABI strategy, and polling model are confirmed.
 - Keep M7 conformance and no-std checks running across every crate that
   claims `no_std + alloc` support.
 
@@ -39,8 +44,12 @@ Immediate next sequence:
 
 1. Keep M7 checks and compatibility documentation aligned with the current
    TD/TM, core, protocol binding, Discovery, and Servient surfaces.
-2. Start additional concrete runtime/backend increments only after documenting
-   the acceptance target and keeping the existing no-std checks green.
+2. Treat `runtime-zenoh` as the only active concrete runtime increment and
+   expand its opt-in smoke and integration coverage without changing the
+   default workspace verification path.
+3. Keep `runtime-zenoh-pico` at the planning boundary until the target
+   hardware platform is selected and the runtime injection strategy is
+   documented for that platform.
 
 ### M1: TD 1.1 Hardening
 
@@ -346,8 +355,11 @@ Entry criteria:
 
 Planned work:
 
-- Add the next concrete runtime or backend increment only after documenting
-  its acceptance target and keeping the M7 verification path green.
+- Keep the current Servient runtime surface stable while the next concrete
+  backend increment is implemented in the optional Rust `zenoh` runtime path.
+- Route any additional Servient-side runtime validation for zenoh through
+  opt-in tests and injected bindings without making zenoh a required Servient
+  dependency.
 
 Exit criteria:
 
@@ -386,10 +398,10 @@ Current status:
   formatting, tests, Clippy, no-default-features checks, focused crate checks,
   and documentation updates.
 - `docs/zenoh-runtime-integration-test.md` records the acceptance target for
-  opt-in real Rust `zenoh` runtime smoke tests.
+  the current active opt-in real Rust `zenoh` runtime increment.
 - `docs/zenoh-pico-runtime-target.md` records the acceptance target for the
-  constrained zenoh-pico runtime backend and its target-specific C ABI follow-up
-  boundary.
+  deferred constrained zenoh-pico runtime backend and its target-specific C ABI
+  follow-up boundary.
 - `docs/zenoh-pico-c-abi-integration-target.md` records the target-specific
   acceptance boundary for real zenoh-pico C ABI integrations.
 - `scripts/check-reserved-features.sh` covers constrained zenoh-pico feature

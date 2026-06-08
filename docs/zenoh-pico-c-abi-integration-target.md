@@ -48,6 +48,8 @@ The `clinkz-wot-protocol-bindings-zenoh` crate continues to own:
 - `base` plus relative form `href` target resolution.
 - `cz-zenoh:*` metadata parsing.
 - The `ZenohPicoPlatform` trait and `ZenohPicoTransport` adapter.
+- The `ZenohPicoRequest` helper methods that expose a validated selector or key
+  expression target string for the selected zenoh operation.
 - Feature-gate checks that keep `runtime-zenoh` and `runtime-zenoh-pico`
   mutually exclusive.
 

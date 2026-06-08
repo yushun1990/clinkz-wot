@@ -9,6 +9,10 @@ boundary. The `runtime-zenoh-pico` feature exposes a `no_std + alloc`
 platform-hook backend through `ZenohPicoPlatform` and `ZenohPicoTransport`.
 The real C ABI binding remains target-specific platform work.
 
+This backend is currently deferred at the runtime-injection stage until the
+target hardware platform, C ABI approach, polling model, and allocation
+constraints are confirmed.
+
 ## Goal
 
 Add constrained zenoh execution without weakening the `no_std + alloc`

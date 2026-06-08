@@ -20,7 +20,7 @@ impl ZenohPicoPlatform for FakePicoPlatform {
     fn put(&mut self, request: ZenohPicoRequest<'_>) -> Result<(), ZenohPicoError> {
         self.calls.push(format!(
             "put:{}:{}:{}:{}",
-            request.key_expr,
+            request.target_expr()?.as_ref(),
             request.metadata.encoding.as_deref().unwrap_or(""),
             request
                 .payload
@@ -32,8 +32,11 @@ impl ZenohPicoPlatform for FakePicoPlatform {
     }
 
     fn query(&mut self, request: ZenohPicoRequest<'_>) -> Result<Option<Payload>, ZenohPicoError> {
-        self.calls
-            .push(format!("query:{}", request.selector()?.as_str()));
+        self.calls.push(format!(
+            "{}:{}",
+            request.operation_name(),
+            request.target_expr()?.as_ref()
+        ));
         self.take_error()?;
         Ok(self.query_reply.take())
     }
@@ -42,13 +45,21 @@ impl ZenohPicoPlatform for FakePicoPlatform {
         &mut self,
         request: ZenohPicoRequest<'_>,
     ) -> Result<Option<Payload>, ZenohPicoError> {
-        self.calls.push(format!("subscribe:{}", request.key_expr));
+        self.calls.push(format!(
+            "{}:{}",
+            request.operation_name(),
+            request.target_expr()?.as_ref()
+        ));
         self.take_error()?;
         Ok(self.subscription_reply.take())
     }
 
     fn unsubscribe(&mut self, request: ZenohPicoRequest<'_>) -> Result<(), ZenohPicoError> {
-        self.calls.push(format!("unsubscribe:{}", request.key_expr));
+        self.calls.push(format!(
+            "{}:{}",
+            request.operation_name(),
+            request.target_expr()?.as_ref()
+        ));
         self.take_error()
     }
 }
@@ -106,7 +117,7 @@ fn pico_transport_routes_put_and_query_requests_to_platform_hooks() {
         transport.platform().calls,
         [
             "put:clinkz/things/lamp/status:text/plain:2:250",
-            "query:clinkz/things/lamp/status?trace=full"
+            "request-reply:clinkz/things/lamp/status?trace=full"
         ]
     );
 }
@@ -233,6 +244,31 @@ fn pico_request_builds_selector_from_request_parameters() {
         request.selector().unwrap(),
         "clinkz/things/lamp/actions/reboot?reply=summary;trace"
     );
+    assert_eq!(
+        request.target_expr().unwrap().as_ref(),
+        "clinkz/things/lamp/actions/reboot?reply=summary;trace"
+    );
+    assert_eq!(request.operation_name(), "request-reply");
+}
+
+#[test]
+fn pico_request_keeps_key_expression_for_non_query_operations() {
+    let metadata = ZenohFormMetadata::default();
+    let parameters = std::collections::BTreeMap::new();
+    let request = ZenohPicoRequest {
+        key_expr: "clinkz/things/lamp/events/status",
+        kind: ZenohOperationKind::Subscribe,
+        metadata: &metadata,
+        payload: None,
+        parameters: &parameters,
+        timeout: Duration::from_secs(1),
+    };
+
+    assert_eq!(
+        request.target_expr().unwrap().as_ref(),
+        "clinkz/things/lamp/events/status"
+    );
+    assert_eq!(request.operation_name(), "subscribe");
 }
 
 #[test]

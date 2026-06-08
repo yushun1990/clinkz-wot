@@ -5,6 +5,7 @@
 //! platform code that implements [`ZenohPicoPlatform`].
 
 use alloc::{
+    borrow::Cow,
     format,
     string::{String, ToString},
 };
@@ -39,6 +40,33 @@ impl<'a> ZenohPicoRequest<'a> {
     /// selected key expression.
     pub fn selector(&self) -> Result<String, ZenohPicoError> {
         selector_with_parameters(self.key_expr, self.parameters).map_err(parameter_error)
+    }
+
+    /// Returns the wire target string for this request.
+    ///
+    /// Query-style operations require a zenoh selector so validated request
+    /// parameters can be appended to the selected key expression. Other
+    /// operations use the raw key expression directly.
+    pub fn target_expr(&self) -> Result<Cow<'a, str>, ZenohPicoError> {
+        match self.kind {
+            ZenohOperationKind::Query | ZenohOperationKind::RequestReply => {
+                self.selector().map(Cow::Owned)
+            }
+            ZenohOperationKind::Put
+            | ZenohOperationKind::Subscribe
+            | ZenohOperationKind::Unsubscribe => Ok(Cow::Borrowed(self.key_expr)),
+        }
+    }
+
+    /// Returns a human-readable transport operation name for diagnostics.
+    pub fn operation_name(&self) -> &'static str {
+        match self.kind {
+            ZenohOperationKind::Put => "put",
+            ZenohOperationKind::Query => "query",
+            ZenohOperationKind::RequestReply => "request-reply",
+            ZenohOperationKind::Subscribe => "subscribe",
+            ZenohOperationKind::Unsubscribe => "unsubscribe",
+        }
     }
 }
 

@@ -7,6 +7,10 @@ The default zenoh binding tests intentionally stop at planning and injected
 transport boundaries. They do not require a zenoh router. Real router coverage
 belongs behind the explicit `runtime-zenoh` feature and an opt-in test gate.
 
+This runtime path is the current active concrete backend increment for the
+repository. Work on it should strengthen live Rust `zenoh` execution coverage
+without changing the default workspace verification baseline.
+
 ## Goal
 
 Add a small smoke-test path for `ZenohSessionTransport` against a real zenoh
