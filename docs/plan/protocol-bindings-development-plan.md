@@ -94,9 +94,12 @@ The next development order is:
    current shared, zenoh planning, and optional std runtime surfaces.
 3. Keep opt-in real Rust `zenoh` runtime smoke tests behind the explicit
    `runtime-zenoh` feature and environment-variable gate.
-4. Keep constrained `runtime-zenoh-pico` platform-hook coverage behind its
+4. Prioritize live metadata coverage for the Rust `zenoh` runtime on
+   observable paths, starting with put-path express QoS, priority, and
+   congestion control verification.
+5. Keep constrained `runtime-zenoh-pico` platform-hook coverage behind its
    explicit feature and outside default workspace tests.
-5. Keep real zenoh-pico C ABI integrations outside the shared planning crate
+6. Keep real zenoh-pico C ABI integrations outside the shared planning crate
    and aligned with `docs/zenoh-pico-c-abi-integration-target.md`.
 
 Completion notes:
@@ -478,7 +481,10 @@ Completion notes:
   the observed zenoh query selector, and covers `ZenohSubscription`
   declaration, repeated sample receipt across multiple `next_sample` calls,
   live request/reply and subscription timeout mapping to
-  `CoreError::Transport`, and explicit undeclaration.
+  `CoreError::Transport`, explicit undeclaration, one-shot subscribe
+  execution, request payload propagation into a live query, and observable
+  put-path metadata mapping for encoding, express QoS, priority, and
+  congestion control.
 - `CLINKZ_WOT_ZENOH_ENDPOINT` can point the test at an externally managed
   router or peer when required.
 - Default workspace tests continue to skip real runtime execution unless the

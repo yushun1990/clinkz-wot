@@ -35,6 +35,8 @@ Current focus:
 - The next concrete backend increment is the opt-in Rust `zenoh` runtime path
   behind `runtime-zenoh`, with live smoke and integration coverage kept outside
   the default workspace test path.
+- The current `runtime-zenoh` next-step target is live metadata coverage for
+  express QoS, priority, and congestion control on observable runtime paths.
 - Defer `runtime-zenoh-pico` runtime injection until the target hardware
   platform, C ABI strategy, and polling model are confirmed.
 - Keep M7 conformance and no-std checks running across every crate that
@@ -46,7 +48,8 @@ Immediate next sequence:
    TD/TM, core, protocol binding, Discovery, and Servient surfaces.
 2. Treat `runtime-zenoh` as the only active concrete runtime increment and
    expand its opt-in smoke and integration coverage without changing the
-   default workspace verification path.
+   default workspace verification path, starting with live metadata coverage
+   for observable put and subscription paths.
 3. Keep `runtime-zenoh-pico` at the planning boundary until the target
    hardware platform is selected and the runtime injection strategy is
    documented for that platform.

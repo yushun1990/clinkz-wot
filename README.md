@@ -80,6 +80,17 @@ Real Rust `zenoh` runtime integration tests are opt-in and documented in
 `docs/zenoh-runtime-integration-test.md`; default workspace tests do not
 require a zenoh router.
 
+Run the concrete Rust `zenoh` runtime smoke tests only when you want live
+router coverage:
+
+```sh
+CLINKZ_WOT_RUN_ZENOH_RUNTIME_TESTS=1 \
+cargo test -p clinkz-wot-protocol-bindings-zenoh --features runtime-zenoh
+```
+
+If the router is not reachable through the default local configuration, set
+`CLINKZ_WOT_ZENOH_ENDPOINT`, for example `tcp/127.0.0.1:7447`.
+
 `discovery` keeps its shared directory and query model at the crate root,
 exposes no-std local directory capabilities through `discovery::local`, and
 keeps std-only storage adapters behind `discovery::storage`. `servient`

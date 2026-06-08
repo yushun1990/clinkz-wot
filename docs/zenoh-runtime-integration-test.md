@@ -47,12 +47,17 @@ The current smoke-test increment covers:
 
 - Opening or receiving a concrete `zenoh::Session`.
 - Executing a planned put operation through `ZenohSessionTransport`.
+- Verifying live put-path metadata mapping for encoding, express QoS,
+  priority, and congestion control on the observed `zenoh::Sample`.
 - Executing a get/request-reply path where the test can provide a deterministic
   reply.
+- Propagating a request payload and encoding through the live runtime so a
+  queryable can observe the incoming body and request encoding.
 - Propagating request/reply selector parameters through the live runtime so a
   queryable can observe the final selector and appended parameters.
 - Mapping a live request/reply timeout through `ZenohSessionTransport` into
   `CoreError::Transport` without panics.
+- Executing the one-shot subscribe path used by `ZenohTransport::execute`.
 - Declaring a long-lived `ZenohSubscription`, receiving multiple samples
   through repeated `next_sample` calls, and explicitly undeclaring the
   subscriber.
@@ -67,7 +72,9 @@ The first runtime integration increment does not need to:
 - Require router availability in default CI.
 - Cover constrained `zenoh-pico`.
 - Duplicate fake transport tests for planner handoff.
-- Test every metadata mapping path against a live runtime.
+- Test every metadata mapping path against a live runtime, especially request
+  metadata that the current query observer API does not expose beyond payload
+  and encoding.
 
 ## Verification
 

@@ -11,7 +11,10 @@ use clinkz_wot_protocol_bindings_zenoh::{
     ZenohFormMetadata, ZenohOperationKind, ZenohOperationPlan, ZenohSessionTransport,
     ZenohTransport, ZenohTransportRequest,
 };
-use zenoh::{Config, Wait};
+use zenoh::{
+    Config, Wait,
+    qos::{CongestionControl, Priority},
+};
 
 const RUN_ZENOH_RUNTIME_TESTS: &str = "CLINKZ_WOT_RUN_ZENOH_RUNTIME_TESTS";
 const ZENOH_ENDPOINT: &str = "CLINKZ_WOT_ZENOH_ENDPOINT";
@@ -101,6 +104,110 @@ fn runtime_zenoh_transport_executes_put_and_get_smoke_paths() {
 
     reply_thread.join().expect("join query reply thread");
     subscriber.undeclare().wait().expect("undeclare subscriber");
+}
+
+#[test]
+fn runtime_zenoh_transport_executes_subscribe_once_smoke_path() {
+    if !should_run_runtime_tests() {
+        return;
+    }
+
+    zenoh::init_log_from_env_or("error");
+
+    let session = open_runtime_session();
+    let key_expr = unique_key_expr("runtime-subscribe-once");
+    let publish_session = session.clone();
+    let publish_key_expr = key_expr.clone();
+
+    let publish_thread = thread::spawn(move || {
+        thread::sleep(DECLARATION_PROPAGATION_DELAY);
+        publish_session
+            .put(publish_key_expr.as_str(), "runtime-subscribe-once-event")
+            .wait()
+            .expect("publish one-shot subscription event");
+    });
+
+    let mut transport = ZenohSessionTransport::new(session).with_reply_timeout(REPLY_TIMEOUT);
+    let output = transport
+        .execute(ZenohTransportRequest {
+            plan: ZenohOperationPlan {
+                key_expr,
+                kind: ZenohOperationKind::Subscribe,
+                metadata: ZenohFormMetadata {
+                    encoding: Some("text/plain".into()),
+                    ..Default::default()
+                },
+            },
+            payload: None,
+            parameters: Default::default(),
+        })
+        .expect("execute one-shot subscribe");
+    let payload = output.payload.expect("one-shot subscription payload");
+
+    assert_eq!(payload.content_type, "text/plain");
+    assert_eq!(payload.body, b"runtime-subscribe-once-event");
+
+    publish_thread.join().expect("join one-shot publish thread");
+}
+
+#[test]
+fn runtime_zenoh_put_propagates_live_metadata() {
+    if !should_run_runtime_tests() {
+        return;
+    }
+
+    zenoh::init_log_from_env_or("error");
+
+    let session = open_runtime_session();
+    let key_expr = unique_key_expr("runtime-put-metadata");
+    let subscriber = session
+        .declare_subscriber(key_expr.as_str())
+        .wait()
+        .expect("declare metadata subscriber");
+
+    thread::sleep(DECLARATION_PROPAGATION_DELAY);
+
+    let mut transport = ZenohSessionTransport::new(session).with_reply_timeout(REPLY_TIMEOUT);
+    let put_output = transport
+        .execute(ZenohTransportRequest {
+            plan: ZenohOperationPlan {
+                key_expr,
+                kind: ZenohOperationKind::Put,
+                metadata: ZenohFormMetadata {
+                    encoding: Some("application/json".into()),
+                    qos: Some("express".into()),
+                    priority: Some("background".into()),
+                    congestion_control: Some("block".into()),
+                },
+            },
+            payload: Some(Payload::new(
+                br#"{"runtime":"metadata"}"#.to_vec(),
+                "application/json",
+            )),
+            parameters: Default::default(),
+        })
+        .expect("execute metadata put");
+
+    assert!(put_output.payload.is_none());
+
+    let sample = subscriber
+        .recv_timeout(REPLY_TIMEOUT)
+        .expect("receive metadata sample")
+        .expect("metadata sample should arrive");
+
+    assert_eq!(
+        sample.payload().to_bytes().as_ref(),
+        br#"{"runtime":"metadata"}"#
+    );
+    assert_eq!(sample.encoding().to_string(), "application/json");
+    assert!(sample.express());
+    assert_eq!(sample.priority(), Priority::Background);
+    assert_eq!(sample.congestion_control(), CongestionControl::Block);
+
+    subscriber
+        .undeclare()
+        .wait()
+        .expect("undeclare metadata subscriber");
 }
 
 #[test]
@@ -304,6 +411,82 @@ fn runtime_zenoh_request_reply_propagates_selector_parameters() {
     assert_eq!(payload.body, b"runtime-query-parameters-ok");
 
     reply_thread.join().expect("join parameter query thread");
+}
+
+#[test]
+fn runtime_zenoh_request_reply_propagates_request_payload() {
+    if !should_run_runtime_tests() {
+        return;
+    }
+
+    zenoh::init_log_from_env_or("error");
+
+    let session = open_runtime_session();
+    let key_expr = unique_key_expr("runtime-query-payload");
+    let reply_key_expr = key_expr.clone();
+    let queryable = session
+        .declare_queryable(key_expr.as_str())
+        .wait()
+        .expect("declare payload queryable");
+
+    thread::sleep(DECLARATION_PROPAGATION_DELAY);
+
+    let request_body = b"runtime-request-body".to_vec();
+    let expected_request_body = request_body.clone();
+    let reply_thread = thread::spawn(move || {
+        let query = queryable
+            .handler()
+            .recv_timeout(REPLY_TIMEOUT)
+            .expect("receive payload query")
+            .expect("payload query should arrive");
+
+        assert_eq!(
+            query
+                .payload()
+                .expect("payload query should include a request body")
+                .to_bytes()
+                .as_ref(),
+            expected_request_body
+        );
+        assert_eq!(
+            query
+                .encoding()
+                .expect("payload query should include request encoding")
+                .to_string(),
+            "text/plain"
+        );
+
+        query
+            .reply(reply_key_expr.as_str(), "runtime-query-payload-ok")
+            .wait()
+            .expect("reply to payload query");
+        queryable
+            .undeclare()
+            .wait()
+            .expect("undeclare payload queryable");
+    });
+
+    let mut transport = ZenohSessionTransport::new(session).with_reply_timeout(REPLY_TIMEOUT);
+    let output = transport
+        .execute(ZenohTransportRequest {
+            plan: ZenohOperationPlan {
+                key_expr,
+                kind: ZenohOperationKind::RequestReply,
+                metadata: ZenohFormMetadata {
+                    encoding: Some("text/plain".into()),
+                    ..Default::default()
+                },
+            },
+            payload: Some(Payload::new(request_body, "text/plain")),
+            parameters: Default::default(),
+        })
+        .expect("execute payload query");
+    let payload = output.payload.expect("payload query reply payload");
+
+    assert_eq!(payload.content_type, "text/plain");
+    assert_eq!(payload.body, b"runtime-query-payload-ok");
+
+    reply_thread.join().expect("join payload query thread");
 }
 
 fn should_run_runtime_tests() -> bool {
