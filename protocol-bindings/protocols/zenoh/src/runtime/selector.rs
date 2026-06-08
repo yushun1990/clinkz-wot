@@ -130,6 +130,23 @@ mod tests {
     }
 
     #[test]
+    fn appends_request_parameters_to_selector_with_trailing_parameter_separator() {
+        let mut parameters = BTreeMap::new();
+        parameters.insert("trace".into(), "true".into());
+
+        let selector = selector_with_parameters(
+            "clinkz/things/lamp/actions/reboot?reply=summary;",
+            &parameters,
+        )
+        .unwrap();
+
+        assert_eq!(
+            selector,
+            "clinkz/things/lamp/actions/reboot?reply=summary;trace=true"
+        );
+    }
+
+    #[test]
     fn rejects_selectors_with_multiple_parameter_separators() {
         let mut parameters = BTreeMap::new();
         parameters.insert("trace".into(), "true".into());
