@@ -3,7 +3,7 @@ use alloc::{borrow::Cow, string::String};
 use crate::{
     affordance::{ActionAffordance, EventAffordance, PropertyAffordance},
     data_schema::{DataSchema, DataSchemaContext},
-    data_type::Operation,
+    data_type::{AdditionalExpectedResponse, Operation},
     form::Form,
     thing::Thing,
 };
@@ -55,6 +55,22 @@ pub fn effective_form_security<'a>(thing: &'a Thing, form: &'a Form) -> &'a [Str
     form.security
         .as_deref()
         .unwrap_or(thing.security.as_slice())
+}
+
+/// Returns the content type that applies to an additional response after TD
+/// defaults are resolved.
+///
+/// An explicit `additionalResponses[*].contentType` value is returned
+/// unchanged. When the additional response omits `contentType`, the parent
+/// form's `contentType` is inherited.
+pub fn effective_additional_response_content_type<'a>(
+    form: &'a Form,
+    response: &'a AdditionalExpectedResponse,
+) -> &'a str {
+    response
+        .content_type
+        .as_deref()
+        .unwrap_or(form.content_type.as_str())
 }
 
 /// Returns the default operations for a form context.

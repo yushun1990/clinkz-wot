@@ -304,8 +304,8 @@ Completion notes:
 - `Basic` validates required Thing fields, affordance operation context, root
   security references, and form-level security references against
   `securityDefinitions`.
-- `Profile` and `Full` currently reuse the Basic checks and remain available
-  for stricter rules introduced by later Profile and semantic-validation work.
+- `Profile` and `Full` retain the Basic checks and additionally validate
+  `additionalResponses.schema` references against `schemaDefinitions`.
 
 ### TD-P1.3 Round-Trip and Fixture Expansion
 

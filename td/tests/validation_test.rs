@@ -527,6 +527,91 @@ fn basic_validation_rejects_schema_definition_multiple_of_zero() {
 }
 
 #[test]
+fn profile_validation_rejects_unknown_additional_response_schema_reference() {
+    let raw = r#"{
+        "@context": "https://www.w3.org/2022/wot/td/v1.1",
+        "title": "Invalid Additional Response Schema",
+        "security": "nosec_sc",
+        "securityDefinitions": {
+            "nosec_sc": { "scheme": "nosec" }
+        },
+        "forms": [
+            {
+                "href": "/actions/reboot",
+                "contentType": "application/cbor",
+                "additionalResponses": [
+                    {
+                        "schema": "problem"
+                    }
+                ]
+            }
+        ]
+    }"#;
+
+    let thing: Thing = serde_json::from_str(raw).expect("TD shape should deserialize");
+    thing
+        .validate_with_level(ValidationLevel::Basic)
+        .expect("basic validation should keep tolerant additional response schema references");
+
+    let err = thing
+        .validate_with_level(ValidationLevel::Profile)
+        .expect_err(
+            "profile validation should reject unknown additional response schema references",
+        );
+
+    assert!(matches!(
+        err,
+        ValidateError::InvalidReference { context, reference }
+            if context == "Thing.forms[0].additionalResponses[0].schema"
+                && reference == "problem"
+    ));
+}
+
+#[test]
+fn profile_validation_accepts_known_additional_response_schema_reference() {
+    let raw = r#"{
+        "@context": "https://www.w3.org/2022/wot/td/v1.1",
+        "title": "Valid Additional Response Schema",
+        "security": "nosec_sc",
+        "securityDefinitions": {
+            "nosec_sc": { "scheme": "nosec" }
+        },
+        "schemaDefinitions": {
+            "problem": {
+                "type": "object",
+                "properties": {
+                    "detail": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "actions": {
+            "reboot": {
+                "forms": [
+                    {
+                        "href": "/actions/reboot",
+                        "additionalResponses": [
+                            {
+                                "schema": "problem"
+                            }
+                        ]
+                    }
+                ]
+            }
+        }
+    }"#;
+
+    let thing: Thing = serde_json::from_str(raw).expect("TD shape should deserialize");
+    thing
+        .validate_with_level(ValidationLevel::Profile)
+        .expect("profile validation should accept additional response schema references present in schemaDefinitions");
+    thing
+        .validate_with_level(ValidationLevel::Full)
+        .expect("full validation should accept the same valid schema reference");
+}
+
+#[test]
 fn basic_validation_rejects_builder_number_schema_multiple_of_zero() {
     let schema = DataSchema::Number(DataSchema::number().multiple_of(0.0).build());
 

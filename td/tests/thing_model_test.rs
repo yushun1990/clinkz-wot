@@ -169,3 +169,44 @@ fn basic_validation_checks_optional_security_references() {
 
     built.validate().expect("built model should validate");
 }
+
+#[test]
+fn profile_validation_rejects_unknown_additional_response_schema_reference_in_thing_model() {
+    let raw = r#"{
+        "@context": "https://www.w3.org/2022/wot/td/v1.1",
+        "@type": "tm:ThingModel",
+        "title": "Template With Invalid Response Schema",
+        "actions": {
+            "reboot": {
+                "forms": [
+                    {
+                        "href": "actions/reboot",
+                        "additionalResponses": [
+                            {
+                                "schema": "problem"
+                            }
+                        ]
+                    }
+                ]
+            }
+        }
+    }"#;
+
+    let model: ThingModel = serde_json::from_str(raw).expect("TM shape should deserialize");
+    model
+        .validate_with_level(ValidationLevel::Basic)
+        .expect("basic validation should keep tolerant additional response schema references");
+
+    let err = model
+        .validate_with_level(ValidationLevel::Profile)
+        .expect_err(
+            "profile validation should reject unknown additional response schema references",
+        );
+
+    assert!(matches!(
+        err,
+        ValidateError::InvalidReference { context, reference }
+            if context == "actions.reboot.forms[0].additionalResponses[0].schema"
+                && reference == "problem"
+    ));
+}

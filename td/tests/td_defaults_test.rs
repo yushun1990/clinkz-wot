@@ -1,9 +1,12 @@
 use clinkz_wot_td::{
     affordance::{ActionAffordance, EventAffordance, InteractionHelper, PropertyAffordance},
     data_schema::{ContextHelper, DataSchema},
-    data_type::Operation,
+    data_type::{AdditionalExpectedResponse, Operation},
     form::Form,
-    td_defaults::{FormContext, effective_form_operations, effective_form_security},
+    td_defaults::{
+        FormContext, effective_additional_response_content_type, effective_form_operations,
+        effective_form_security,
+    },
     thing::Thing,
 };
 
@@ -136,4 +139,30 @@ fn form_security_overrides_or_inherits_thing_security() {
 
     assert_eq!(effective_form_security(&thing, &forms[0]), &["nosec_sc"]);
     assert_eq!(effective_form_security(&thing, &forms[1]), &["oauth2_sc"]);
+}
+
+#[test]
+fn additional_response_content_type_inherits_from_parent_form() {
+    let form = Form::builder("/actions/reboot")
+        .content_type("application/cbor")
+        .additional_response(AdditionalExpectedResponse::default().schema("error"))
+        .additional_response(AdditionalExpectedResponse::new(
+            "application/problem+json".to_string(),
+        ))
+        .build()
+        .expect("form should build");
+
+    let additional_responses = form
+        .additional_responses
+        .as_ref()
+        .expect("additional responses should be present");
+
+    assert_eq!(
+        effective_additional_response_content_type(&form, &additional_responses[0]),
+        "application/cbor"
+    );
+    assert_eq!(
+        effective_additional_response_content_type(&form, &additional_responses[1]),
+        "application/problem+json"
+    );
 }

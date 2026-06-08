@@ -141,6 +141,12 @@ impl Validate for ThingModel {
                 property.validate_with_level(level).map_err(|err| {
                     ValidateError::InvalidSchema(format!("properties.{}: {}", name, err))
                 })?;
+                validate_form_response_references(
+                    format!("properties.{}.forms", name).as_str(),
+                    &property._interaction.forms,
+                    self.schema_definitions.as_ref(),
+                    level,
+                )?;
             }
         }
 
@@ -149,6 +155,12 @@ impl Validate for ThingModel {
                 action.validate_with_level(level).map_err(|err| {
                     ValidateError::InvalidSchema(format!("actions.{}: {}", name, err))
                 })?;
+                validate_form_response_references(
+                    format!("actions.{}.forms", name).as_str(),
+                    &action._interaction.forms,
+                    self.schema_definitions.as_ref(),
+                    level,
+                )?;
             }
         }
 
@@ -157,7 +169,22 @@ impl Validate for ThingModel {
                 event.validate_with_level(level).map_err(|err| {
                     ValidateError::InvalidSchema(format!("events.{}: {}", name, err))
                 })?;
+                validate_form_response_references(
+                    format!("events.{}.forms", name).as_str(),
+                    &event._interaction.forms,
+                    self.schema_definitions.as_ref(),
+                    level,
+                )?;
             }
+        }
+
+        if let Some(forms) = &self.forms {
+            validate_form_response_references(
+                "forms",
+                forms,
+                self.schema_definitions.as_ref(),
+                level,
+            )?;
         }
 
         if let Some(tm_optional) = &self.tm_optional {
@@ -221,6 +248,49 @@ fn validate_security_references(
     Ok(())
 }
 
+fn validate_form_response_references(
+    context: &str,
+    forms: &[Form],
+    schema_definitions: Option<&BTreeMap<String, DataSchema>>,
+    level: ValidationLevel,
+) -> Result<(), ValidateError> {
+    if !matches!(level, ValidationLevel::Profile | ValidationLevel::Full) {
+        return Ok(());
+    }
+
+    for (form_index, form) in forms.iter().enumerate() {
+        let Some(additional_responses) = &form.additional_responses else {
+            continue;
+        };
+
+        for (response_index, response) in additional_responses.iter().enumerate() {
+            let Some(schema) = &response.schema else {
+                continue;
+            };
+
+            let reference_context = format!(
+                "{}[{}].additionalResponses[{}].schema",
+                context, form_index, response_index
+            );
+
+            let Some(schema_definitions) = schema_definitions else {
+                return Err(ValidateError::InvalidReference {
+                    context: reference_context,
+                    reference: schema.clone(),
+                });
+            };
+
+            if !schema_definitions.contains_key(schema) {
+                return Err(ValidateError::InvalidReference {
+                    context: reference_context,
+                    reference: schema.clone(),
+                });
+            }
+        }
+    }
+
+    Ok(())
+}
 fn validate_tm_optional(model: &ThingModel, pointers: &[String]) -> Result<(), ValidateError> {
     for pointer in pointers {
         let trimmed = pointer.strip_prefix('#').unwrap_or(pointer.as_str());

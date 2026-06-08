@@ -473,8 +473,12 @@ Completion notes:
 - Added an opt-in real Rust `zenoh` smoke test gated behind the
   `runtime-zenoh` feature and `CLINKZ_WOT_RUN_ZENOH_RUNTIME_TESTS=1`.
 - The smoke test opens a concrete `zenoh::Session`, executes a planned put
-  operation through `ZenohSessionTransport`, and verifies a deterministic
-  request/reply path.
+  operation through `ZenohSessionTransport`, verifies a deterministic
+  request/reply path, covers live request selector parameter propagation into
+  the observed zenoh query selector, and covers `ZenohSubscription`
+  declaration, repeated sample receipt across multiple `next_sample` calls,
+  live request/reply and subscription timeout mapping to
+  `CoreError::Transport`, and explicit undeclaration.
 - `CLINKZ_WOT_ZENOH_ENDPOINT` can point the test at an externally managed
   router or peer when required.
 - Default workspace tests continue to skip real runtime execution unless the

@@ -155,8 +155,8 @@ Status values:
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | `contentType` | `ExpectedResponse::content_type` | `String` | Yes | No | None | N/A | covered | Primary response content type represented. |
 | Unknown expected response terms | `ExpectedResponse::_extra_fields` | `ExtensionMap` | No | N/A | N/A | Yes | covered | Unknown fields are preserved. |
-| `contentType` | `AdditionalExpectedResponse::content_type` | `Option<String>` | No | No | Form content type | N/A | partial | Default inheritance from parent form is not resolved yet. |
-| `schema` | `AdditionalExpectedResponse::schema` | `Option<String>` | No | No | None | N/A | partial | Represented as schema definition name. Validation against `schemaDefinitions` is pending. |
+| `contentType` | `AdditionalExpectedResponse::content_type` | `Option<String>` | No | No | Form content type | N/A | covered | Represented and resolved through the shared default helper for parent-form content type inheritance. |
+| `schema` | `AdditionalExpectedResponse::schema` | `Option<String>` | No | No | None | N/A | covered | Represented as a schema definition name. Profile and Full validation now check the reference against `schemaDefinitions`. |
 | `success` | `AdditionalExpectedResponse::success` | `bool` | No | No | `false` | N/A | covered | Flexible bool deserializer. |
 | Unknown additional response terms | `AdditionalExpectedResponse::_extra_fields` | `ExtensionMap` | No | N/A | N/A | Yes | covered | Unknown fields are preserved. |
 
@@ -167,9 +167,6 @@ Status values:
   constraints.
 - Validate remaining scheme-specific security details that are not covered by
   the current API key, combo, and OAuth2 checks.
-- Add default inheritance helpers for `additionalResponses.contentType` and
-  validate `additionalResponses.schema` references against schema definitions
-  when a strict validation level requires it.
 - Keep fixtures aligned with downstream runtime contracts, especially
   property-level extension preservation, Clinkz JSON-LD context aliases,
   multiple forms per affordance, and compact `OneOrMany` round trips.

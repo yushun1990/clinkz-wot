@@ -152,6 +152,12 @@ impl Validate for Thing {
                     &property._interaction.forms,
                     &self.security_definitions,
                 )?;
+                validate_form_response_references(
+                    format!("Property '{}'.forms", name).as_str(),
+                    &property._interaction.forms,
+                    self.schema_definitions.as_ref(),
+                    level,
+                )?;
             }
         }
 
@@ -165,6 +171,12 @@ impl Validate for Thing {
                     format!("Action '{}'", name),
                     &action._interaction.forms,
                     &self.security_definitions,
+                )?;
+                validate_form_response_references(
+                    format!("Action '{}'.forms", name).as_str(),
+                    &action._interaction.forms,
+                    self.schema_definitions.as_ref(),
+                    level,
                 )?;
             }
         }
@@ -180,6 +192,12 @@ impl Validate for Thing {
                     &event._interaction.forms,
                     &self.security_definitions,
                 )?;
+                validate_form_response_references(
+                    format!("Event '{}'.forms", name).as_str(),
+                    &event._interaction.forms,
+                    self.schema_definitions.as_ref(),
+                    level,
+                )?;
             }
         }
 
@@ -188,6 +206,12 @@ impl Validate for Thing {
                 "Thing.forms".to_string(),
                 forms,
                 &self.security_definitions,
+            )?;
+            validate_form_response_references(
+                "Thing.forms",
+                forms,
+                self.schema_definitions.as_ref(),
+                level,
             )?;
         }
 
@@ -281,6 +305,50 @@ fn validate_form_security_references(
                 security,
                 security_definitions,
             )?;
+        }
+    }
+
+    Ok(())
+}
+
+fn validate_form_response_references(
+    context: &str,
+    forms: &[Form],
+    schema_definitions: Option<&BTreeMap<String, DataSchema>>,
+    level: ValidationLevel,
+) -> Result<(), ValidateError> {
+    if !matches!(level, ValidationLevel::Profile | ValidationLevel::Full) {
+        return Ok(());
+    }
+
+    for (form_index, form) in forms.iter().enumerate() {
+        let Some(additional_responses) = &form.additional_responses else {
+            continue;
+        };
+
+        for (response_index, response) in additional_responses.iter().enumerate() {
+            let Some(schema) = &response.schema else {
+                continue;
+            };
+
+            let reference_context = format!(
+                "{}[{}].additionalResponses[{}].schema",
+                context, form_index, response_index
+            );
+
+            let Some(schema_definitions) = schema_definitions else {
+                return Err(ValidateError::InvalidReference {
+                    context: reference_context,
+                    reference: schema.clone(),
+                });
+            };
+
+            if !schema_definitions.contains_key(schema) {
+                return Err(ValidateError::InvalidReference {
+                    context: reference_context,
+                    reference: schema.clone(),
+                });
+            }
         }
     }
 

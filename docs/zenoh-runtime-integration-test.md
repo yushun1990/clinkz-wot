@@ -39,16 +39,21 @@ CLINKZ_WOT_ZENOH_ENDPOINT=tcp/127.0.0.1:7447
 
 ## Initial Smoke Coverage
 
-The first runtime integration increment should cover:
+The current smoke-test increment covers:
 
 - Opening or receiving a concrete `zenoh::Session`.
 - Executing a planned put operation through `ZenohSessionTransport`.
 - Executing a get/request-reply path where the test can provide a deterministic
   reply.
-- Mapping runtime errors into `CoreError` or `ZenohBindingError` without
-  panics.
-
-Subscription lifecycle tests can follow once the smoke path proves stable.
+- Propagating request/reply selector parameters through the live runtime so a
+  queryable can observe the final selector and appended parameters.
+- Mapping a live request/reply timeout through `ZenohSessionTransport` into
+  `CoreError::Transport` without panics.
+- Declaring a long-lived `ZenohSubscription`, receiving multiple samples
+  through repeated `next_sample` calls, and explicitly undeclaring the
+  subscriber.
+- Mapping a live subscription timeout through `next_timeout` into
+  `CoreError::Transport` without panics.
 
 ## Non-Goals
 
