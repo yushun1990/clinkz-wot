@@ -205,8 +205,7 @@ impl ZenohSessionTransport {
         let sample = reply.into_result().map_err(transport_error)?;
 
         Ok(InteractionOutput::with_payload(payload_from_sample(
-            &sample,
-            request.plan.metadata.encoding.as_deref(),
+            &sample, None,
         )))
     }
 

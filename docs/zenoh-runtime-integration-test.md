@@ -53,6 +53,8 @@ The current smoke-test increment covers:
   reply.
 - Propagating a request payload and encoding through the live runtime so a
   queryable can observe the incoming body and request encoding.
+- Verifying that request/reply output payload content types follow the live
+  reply sample encoding instead of reusing the request encoding hint.
 - Propagating request/reply selector parameters through the live runtime so a
   queryable can observe the final selector and appended parameters.
 - Mapping a live request/reply timeout through `ZenohSessionTransport` into

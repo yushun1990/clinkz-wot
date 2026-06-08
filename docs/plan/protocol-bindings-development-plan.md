@@ -482,7 +482,8 @@ Completion notes:
   declaration, repeated sample receipt across multiple `next_sample` calls,
   live request/reply and subscription timeout mapping to
   `CoreError::Transport`, explicit undeclaration, one-shot subscribe
-  execution, request payload propagation into a live query, and observable
+  execution, request payload propagation into a live query, live reply
+  encoding propagation back into the runtime output payload, and observable
   put-path metadata mapping for encoding, express QoS, priority, and
   congestion control.
 - `CLINKZ_WOT_ZENOH_ENDPOINT` can point the test at an externally managed

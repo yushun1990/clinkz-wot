@@ -54,6 +54,7 @@ fn runtime_zenoh_transport_executes_put_and_get_smoke_paths() {
             .expect("query should arrive");
         query
             .reply(query_key_expr.as_str(), "runtime-query-reply")
+            .encoding("text/plain")
             .wait()
             .expect("reply to query");
         queryable.undeclare().wait().expect("undeclare queryable");
@@ -378,6 +379,7 @@ fn runtime_zenoh_request_reply_propagates_selector_parameters() {
 
         query
             .reply(reply_key_expr.as_str(), "runtime-query-parameters-ok")
+            .encoding("text/plain")
             .wait()
             .expect("reply to parameterized query");
         queryable
@@ -458,6 +460,7 @@ fn runtime_zenoh_request_reply_propagates_request_payload() {
 
         query
             .reply(reply_key_expr.as_str(), "runtime-query-payload-ok")
+            .encoding("text/plain")
             .wait()
             .expect("reply to payload query");
         queryable
@@ -487,6 +490,78 @@ fn runtime_zenoh_request_reply_propagates_request_payload() {
     assert_eq!(payload.body, b"runtime-query-payload-ok");
 
     reply_thread.join().expect("join payload query thread");
+}
+
+#[test]
+fn runtime_zenoh_request_reply_uses_live_reply_encoding() {
+    if !should_run_runtime_tests() {
+        return;
+    }
+
+    zenoh::init_log_from_env_or("error");
+
+    let session = open_runtime_session();
+    let key_expr = unique_key_expr("runtime-query-reply-encoding");
+    let reply_key_expr = key_expr.clone();
+    let queryable = session
+        .declare_queryable(key_expr.as_str())
+        .wait()
+        .expect("declare reply encoding queryable");
+
+    thread::sleep(DECLARATION_PROPAGATION_DELAY);
+
+    let reply_thread = thread::spawn(move || {
+        let query = queryable
+            .handler()
+            .recv_timeout(REPLY_TIMEOUT)
+            .expect("receive reply encoding query")
+            .expect("reply encoding query should arrive");
+
+        assert_eq!(
+            query
+                .encoding()
+                .expect("reply encoding query should include request encoding")
+                .to_string(),
+            "application/json"
+        );
+
+        query
+            .reply(reply_key_expr.as_str(), "runtime-query-reply-encoding-ok")
+            .encoding("text/plain")
+            .wait()
+            .expect("reply to reply encoding query");
+        queryable
+            .undeclare()
+            .wait()
+            .expect("undeclare reply encoding queryable");
+    });
+
+    let mut transport = ZenohSessionTransport::new(session).with_reply_timeout(REPLY_TIMEOUT);
+    let output = transport
+        .execute(ZenohTransportRequest {
+            plan: ZenohOperationPlan {
+                key_expr,
+                kind: ZenohOperationKind::RequestReply,
+                metadata: ZenohFormMetadata {
+                    encoding: Some("application/json".into()),
+                    ..Default::default()
+                },
+            },
+            payload: Some(Payload::new(
+                br#"{"request":"reply-encoding"}"#.to_vec(),
+                "application/json",
+            )),
+            parameters: Default::default(),
+        })
+        .expect("execute reply encoding query");
+    let payload = output.payload.expect("reply encoding query reply payload");
+
+    assert_eq!(payload.content_type, "text/plain");
+    assert_eq!(payload.body, b"runtime-query-reply-encoding-ok");
+
+    reply_thread
+        .join()
+        .expect("join reply encoding query thread");
 }
 
 fn should_run_runtime_tests() -> bool {
