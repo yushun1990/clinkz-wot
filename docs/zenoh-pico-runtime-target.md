@@ -65,9 +65,11 @@ Enabling `runtime-zenoh-pico` must not pull `std` into crates that claim
   clear diagnostic.
 - `cargo check -p clinkz-wot-protocol-bindings-zenoh --no-default-features
   --features runtime-zenoh-pico` passes.
+- `cargo test -p clinkz-wot-protocol-bindings-zenoh --features
+  runtime-zenoh-pico` passes.
 - `scripts/check-reserved-features.sh` confirms that `runtime-zenoh-pico`
-  compiles and that incompatible backend feature combinations fail with the
-  expected diagnostic.
+  compiles, runs fake platform tests, and confirms that incompatible backend
+  feature combinations fail with the expected diagnostic.
 - The constrained backend uses shared planning outputs and does not duplicate
   form selection or target resolution logic.
 - Tests cover request planning handoff, payload propagation, error mapping,
@@ -81,6 +83,7 @@ Run the standard workspace path after each backend increment:
 ```sh
 cargo fmt --check
 cargo test --workspace
+cargo test -p clinkz-wot-protocol-bindings-zenoh --features runtime-zenoh-pico
 scripts/check-no-std.sh
 scripts/check-reserved-features.sh
 ```

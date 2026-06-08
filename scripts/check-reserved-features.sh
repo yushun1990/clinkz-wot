@@ -11,6 +11,12 @@ if ! cargo check -p clinkz-wot-protocol-bindings-zenoh --no-default-features --f
     exit 1
 fi
 
+if ! cargo test -p clinkz-wot-protocol-bindings-zenoh --features runtime-zenoh-pico >"$OUTPUT_FILE" 2>&1; then
+    cat "$OUTPUT_FILE" >&2
+    echo "expected runtime-zenoh-pico fake platform tests to pass" >&2
+    exit 1
+fi
+
 OUTPUT_FILE_CONFLICT=$(mktemp)
 trap 'rm -f "$OUTPUT_FILE" "$OUTPUT_FILE_CONFLICT"' EXIT
 

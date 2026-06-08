@@ -68,7 +68,8 @@ cargo test -p clinkz-wot-protocol-bindings -p clinkz-wot-protocol-bindings-zenoh
 ```
 
 When changing the constrained zenoh-pico backend surface, run its
-feature-gated fake platform tests:
+feature-gated fake platform tests. `scripts/check-reserved-features.sh` also
+executes this test command as part of the backend feature verification path:
 
 ```sh
 cargo test -p clinkz-wot-protocol-bindings-zenoh --features runtime-zenoh-pico
@@ -79,7 +80,9 @@ Real Rust `zenoh` runtime tests are opt-in and are documented in
 default workspace test path.
 
 Run backend feature checks when changing feature gates or planned backend
-surfaces:
+surfaces. This script compiles the constrained `runtime-zenoh-pico` backend,
+runs its fake platform tests, and verifies that incompatible runtime backend
+feature combinations fail with the expected diagnostic:
 
 ```sh
 scripts/check-reserved-features.sh

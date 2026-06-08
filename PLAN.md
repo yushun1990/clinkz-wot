@@ -393,8 +393,8 @@ Current status:
 - `docs/zenoh-pico-c-abi-integration-target.md` records the target-specific
   acceptance boundary for real zenoh-pico C ABI integrations.
 - `scripts/check-reserved-features.sh` covers constrained zenoh-pico feature
-  compilation and incompatible runtime backend feature diagnostics for the
-  current zenoh binding feature policy.
+  compilation, fake platform tests, and incompatible runtime backend feature
+  diagnostics for the current zenoh binding feature policy.
 - The zenoh binding tests consume the shared
   `clinkz-extension-defaults.td.jsonld` fixture to verify Clinkz JSON-LD
   extension terms, multi-form affordance selection, `base` plus relative
