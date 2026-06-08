@@ -205,6 +205,16 @@ fn pico_transport_maps_platform_errors_and_timeouts() {
 }
 
 #[test]
+fn pico_error_can_classify_rejected_requests() {
+    let err = ZenohPicoError::invalid_request("target rejects request parameters");
+
+    assert_eq!(err.kind(), ZenohPicoErrorKind::Request);
+    assert_eq!(err.code(), None);
+    assert!(!err.is_timeout());
+    assert_eq!(err.message(), "target rejects request parameters");
+}
+
+#[test]
 fn pico_request_builds_selector_from_request_parameters() {
     let mut parameters = std::collections::BTreeMap::new();
     parameters.insert("reply".into(), "summary".into());
@@ -240,7 +250,7 @@ fn pico_request_rejects_invalid_selector_parameters() {
     };
 
     let err = request.selector().unwrap_err();
-    assert_eq!(err.kind(), ZenohPicoErrorKind::Platform);
+    assert_eq!(err.kind(), ZenohPicoErrorKind::Request);
     assert_eq!(err.code(), None);
     assert_eq!(
         err.message(),

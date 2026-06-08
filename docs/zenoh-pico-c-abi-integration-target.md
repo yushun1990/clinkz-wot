@@ -77,6 +77,10 @@ Any reusable C ABI crate must document:
   paths.
 - Request parameters and timeout values are either mapped to supported
   zenoh-pico behavior or rejected with a clear `ZenohPicoError`.
+- Target-side request validation errors such as unsupported selector
+  parameters, unsupported timeout modes, or missing target prerequisites use
+  `ZenohPicoError::invalid_request` instead of being reported as platform
+  status-code failures.
 - Zenoh-pico status codes are mapped to `ZenohPicoError::with_code`, and
   timeout paths are mapped to `ZenohPicoError::timeout` when the platform can
   distinguish timeout from other platform failures.

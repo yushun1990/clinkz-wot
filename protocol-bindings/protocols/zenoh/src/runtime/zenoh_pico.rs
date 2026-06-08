@@ -53,6 +53,8 @@ pub struct ZenohPicoError {
 /// Category of a constrained zenoh-pico platform hook error.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ZenohPicoErrorKind {
+    /// The target-specific integration rejected the request before a platform call.
+    Request,
     /// A platform, C ABI, session, polling, or buffer-management operation failed.
     Platform,
     /// The platform hook timed out while waiting for a reply or sample.
@@ -60,10 +62,19 @@ pub enum ZenohPicoErrorKind {
 }
 
 impl ZenohPicoError {
-    /// Creates an error from a human-readable message.
+    /// Creates an error from a human-readable platform failure message.
     pub fn new(message: impl Into<String>) -> Self {
         Self {
             kind: ZenohPicoErrorKind::Platform,
+            code: None,
+            message: message.into(),
+        }
+    }
+
+    /// Creates an error for a rejected request before platform execution starts.
+    pub fn invalid_request(message: impl Into<String>) -> Self {
+        Self {
+            kind: ZenohPicoErrorKind::Request,
             code: None,
             message: message.into(),
         }
@@ -245,7 +256,7 @@ fn timeout_message(operation: &str, key_expr: &str) -> String {
 
 fn parameter_error(error: CoreError) -> ZenohPicoError {
     match error {
-        CoreError::Transport(message) => ZenohPicoError::new(message),
-        _ => ZenohPicoError::new(error.to_string()),
+        CoreError::Transport(message) => ZenohPicoError::invalid_request(message),
+        _ => ZenohPicoError::invalid_request(error.to_string()),
     }
 }
