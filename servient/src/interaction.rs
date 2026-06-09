@@ -7,8 +7,8 @@ use clinkz_wot_core::{
 };
 use clinkz_wot_discovery::ThingDirectory;
 use clinkz_wot_protocol_bindings::{
-    AffordanceRef, FormSelectionCriteria, resolve_form_security,
-    select_affordance_form_with_criteria, validate_affordance_form_with_criteria,
+    resolve_form_security, select_affordance_form_with_criteria,
+    validate_affordance_form_with_criteria, AffordanceRef, FormSelectionCriteria,
 };
 use clinkz_wot_td::{
     data_type::Operation, form::Form, security_scheme::SecurityScheme, thing::Thing,
@@ -331,7 +331,7 @@ where
         select_affordance_form_with_criteria(
             thing,
             affordance,
-            FormSelectionCriteria::operation(operation),
+            FormSelectionCriteria::new(operation),
         )
         .map(|selected| Some(selected.selection.form.clone()))
         .map_err(Into::into)

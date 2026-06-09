@@ -33,8 +33,8 @@ Current implementation highlights:
   security provider hooks.
 
 Next focus areas are continued conformance plus no-std checks, expanding the
-opt-in Rust `zenoh` runtime path behind `runtime-zenoh`, and deferring
-`runtime-zenoh-pico` runtime injection until the target hardware platform is
+opt-in Rust `zenoh` runtime path behind `zenoh`, and deferring
+`zenoh-pico` runtime injection until the target hardware platform is
 selected.
 
 ## Workspace Crates
@@ -85,7 +85,7 @@ router coverage:
 
 ```sh
 CLINKZ_WOT_RUN_ZENOH_RUNTIME_TESTS=1 \
-cargo test -p clinkz-wot-protocol-bindings-zenoh --features runtime-zenoh
+cargo test -p clinkz-wot-protocol-bindings-zenoh --features zenoh
 ```
 
 If the router is not reachable through the default local configuration, set

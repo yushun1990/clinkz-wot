@@ -4,7 +4,6 @@ use std::{cell::Cell, rc::Rc};
 
 use clinkz_wot_core::{AffordanceTarget, ConsumedThing, InteractionInput, LocalThing, Payload};
 use clinkz_wot_protocol_bindings::{BindingCoreError, FormSelectionCriteria};
-use clinkz_wot_protocol_bindings_zenoh::{SharedZenohTransport, ZenohBinding};
 use clinkz_wot_servient::{
     ConsumedThingCache, InMemoryBindingPlanCache, InMemoryConsumedThingCache,
     InMemorySelectedFormCache, SelectedFormCache, SelectedFormCacheAffordance,
@@ -299,7 +298,7 @@ fn servient_remote_criteria_methods_select_matching_forms() {
         .read_remote_property_with_criteria(
             "urn:thing:remote-lamp",
             "status",
-            FormSelectionCriteria::operation(Operation::ReadProperty).content_type("text/plain"),
+            FormSelectionCriteria::new(Operation::ReadProperty).content_type("text/plain"),
             InteractionInput::empty(),
         )
         .unwrap();
@@ -309,7 +308,7 @@ fn servient_remote_criteria_methods_select_matching_forms() {
         .write_remote_property_with_criteria(
             "urn:thing:remote-lamp",
             "status",
-            FormSelectionCriteria::operation(Operation::ReadProperty).content_type("text/plain"),
+            FormSelectionCriteria::new(Operation::ReadProperty).content_type("text/plain"),
             InteractionInput::with_payload(Payload::new(b"off".to_vec(), "text/plain")),
         )
         .unwrap();
@@ -318,7 +317,7 @@ fn servient_remote_criteria_methods_select_matching_forms() {
         .invoke_remote_action_with_criteria(
             "urn:thing:remote-lamp",
             "echo",
-            FormSelectionCriteria::operation(Operation::ReadProperty).content_type("text/plain"),
+            FormSelectionCriteria::new(Operation::ReadProperty).content_type("text/plain"),
             InteractionInput::with_payload(Payload::new(b"hello".to_vec(), "text/plain")),
         )
         .unwrap();
@@ -328,7 +327,7 @@ fn servient_remote_criteria_methods_select_matching_forms() {
         .subscribe_remote_event_with_criteria(
             "urn:thing:remote-lamp",
             "startup",
-            FormSelectionCriteria::operation(Operation::ReadProperty).content_type("text/plain"),
+            FormSelectionCriteria::new(Operation::ReadProperty).content_type("text/plain"),
             InteractionInput::empty(),
         )
         .unwrap();
@@ -352,7 +351,7 @@ fn servient_remote_criteria_methods_report_binding_selection_errors() {
         .read_remote_property_with_criteria(
             "urn:thing:remote-lamp",
             "status",
-            FormSelectionCriteria::operation(Operation::ReadProperty).content_type("image/png"),
+            FormSelectionCriteria::new(Operation::ReadProperty).content_type("image/png"),
             InteractionInput::empty(),
         )
         .unwrap_err();
@@ -375,7 +374,7 @@ fn servient_remote_criteria_methods_reuse_cached_selected_forms() {
         SelectedFormCacheKey::new(
             "urn:thing:cached-lamp",
             SelectedFormCacheAffordance::Property("status".to_owned()),
-            FormSelectionCriteria::operation(Operation::ReadProperty).content_type("text/plain"),
+            FormSelectionCriteria::new(Operation::ReadProperty).content_type("text/plain"),
         ),
         cached_form,
     );
@@ -384,7 +383,7 @@ fn servient_remote_criteria_methods_reuse_cached_selected_forms() {
         .read_remote_property_with_criteria(
             "urn:thing:cached-lamp",
             "status",
-            FormSelectionCriteria::operation(Operation::ReadProperty).content_type("text/plain"),
+            FormSelectionCriteria::new(Operation::ReadProperty).content_type("text/plain"),
             InteractionInput::empty(),
         )
         .unwrap();
@@ -422,7 +421,7 @@ fn servient_remote_criteria_methods_reuse_cached_binding_plans() {
         .read_remote_property_with_criteria(
             "urn:thing:planned-lamp",
             "status",
-            FormSelectionCriteria::operation(Operation::ReadProperty).content_type("text/plain"),
+            FormSelectionCriteria::new(Operation::ReadProperty).content_type("text/plain"),
             InteractionInput::empty(),
         )
         .unwrap();
@@ -437,7 +436,7 @@ fn servient_remote_criteria_methods_reuse_cached_binding_plans() {
         .read_remote_property_with_criteria(
             "urn:thing:planned-lamp",
             "status",
-            FormSelectionCriteria::operation(Operation::ReadProperty).content_type("text/plain"),
+            FormSelectionCriteria::new(Operation::ReadProperty).content_type("text/plain"),
             InteractionInput::empty(),
         )
         .unwrap();
@@ -467,7 +466,7 @@ fn servient_invalidates_binding_plan_cache_on_td_update() {
         .read_remote_property_with_criteria(
             "urn:thing:planned-lamp",
             "status",
-            FormSelectionCriteria::operation(Operation::ReadProperty).content_type("text/plain"),
+            FormSelectionCriteria::new(Operation::ReadProperty).content_type("text/plain"),
             InteractionInput::empty(),
         )
         .unwrap();
@@ -478,95 +477,6 @@ fn servient_invalidates_binding_plan_cache_on_td_update() {
 
     assert!(servient.selected_form_cache().is_empty());
     assert!(servient.binding_plan_cache().is_empty());
-}
-
-#[test]
-fn servient_routes_remote_requests_through_zenoh_binding_transport() {
-    let td = zenoh_thing("urn:thing:zenoh-lamp", "Zenoh Lamp");
-    let mut servient = Servient::builder()
-        .binding_factory(|| Box::new(ZenohBinding::with_transport(ServientZenohTransport)))
-        .build();
-    servient.register(td).unwrap();
-
-    let read = servient
-        .read_remote_property_with_criteria(
-            "urn:thing:zenoh-lamp",
-            "status",
-            FormSelectionCriteria::operation(Operation::ReadProperty).content_type("text/plain"),
-            InteractionInput::empty(),
-        )
-        .unwrap();
-    assert_eq!(read.payload.unwrap().body, b"zenoh-on");
-
-    servient
-        .write_remote_property_with_criteria(
-            "urn:thing:zenoh-lamp",
-            "status",
-            FormSelectionCriteria::operation(Operation::WriteProperty).content_type("text/plain"),
-            InteractionInput::with_payload(Payload::new(b"zenoh-off".to_vec(), "text/plain")),
-        )
-        .unwrap();
-
-    let action = servient
-        .invoke_remote_action_with_criteria(
-            "urn:thing:zenoh-lamp",
-            "echo",
-            FormSelectionCriteria::operation(Operation::InvokeAction).content_type("text/plain"),
-            InteractionInput::with_payload(Payload::new(b"zenoh-echo".to_vec(), "text/plain")),
-        )
-        .unwrap();
-    assert_eq!(action.payload.unwrap().body, b"zenoh-echo");
-
-    let event = servient
-        .subscribe_remote_event_with_criteria(
-            "urn:thing:zenoh-lamp",
-            "startup",
-            FormSelectionCriteria::operation(Operation::SubscribeEvent).content_type("text/plain"),
-            InteractionInput::empty(),
-        )
-        .unwrap();
-    assert_eq!(event.payload.unwrap().body, b"zenoh-subscribed");
-}
-
-#[test]
-fn servient_binding_factories_can_share_zenoh_transport_state() {
-    let td = zenoh_thing("urn:thing:shared-zenoh-lamp", "Shared Zenoh Lamp");
-    let shared = SharedZenohTransport::new(CountingServientZenohTransport::default());
-    let factory_transport = shared.clone();
-    let mut servient = Servient::builder()
-        .binding_factory(move || Box::new(ZenohBinding::with_transport(factory_transport.clone())))
-        .build();
-    servient.register(td).unwrap();
-
-    let first = servient
-        .read_remote_property_with_criteria(
-            "urn:thing:shared-zenoh-lamp",
-            "status",
-            FormSelectionCriteria::operation(Operation::ReadProperty).content_type("text/plain"),
-            InteractionInput::empty(),
-        )
-        .unwrap();
-    assert_eq!(first.payload.unwrap().body, b"zenoh-read-1");
-
-    servient
-        .write_remote_property_with_criteria(
-            "urn:thing:shared-zenoh-lamp",
-            "status",
-            FormSelectionCriteria::operation(Operation::WriteProperty).content_type("text/plain"),
-            InteractionInput::with_payload(Payload::new(b"zenoh-off".to_vec(), "text/plain")),
-        )
-        .unwrap();
-
-    let second = servient
-        .read_remote_property_with_criteria(
-            "urn:thing:shared-zenoh-lamp",
-            "status",
-            FormSelectionCriteria::operation(Operation::ReadProperty).content_type("text/plain"),
-            InteractionInput::empty(),
-        )
-        .unwrap();
-    assert_eq!(second.payload.unwrap().body, b"zenoh-read-3");
-    assert_eq!(shared.inner().lock().unwrap().calls, 3);
 }
 
 #[test]

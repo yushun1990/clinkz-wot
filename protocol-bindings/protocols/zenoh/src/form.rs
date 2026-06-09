@@ -11,15 +11,15 @@ use clinkz_wot_core::{
     Payload, ProtocolBinding,
 };
 use clinkz_wot_protocol_bindings::{
-    AffordanceRef, BindingCoreError, FormSelectionCriteria, resolve_form_target,
-    select_affordance_form_with_filter, validate_affordance_form,
+    resolve_form_target, select_affordance_form_with_filter, validate_affordance_form,
+    AffordanceRef, BindingCoreError, FormSelectionCriteria,
 };
 use clinkz_wot_td::{data_type::Operation, form::Form};
 use serde_json::Value;
 
 use crate::{ZenohBindingError, ZenohBindingResult};
 
-#[cfg(feature = "std")]
+#[cfg(feature = "zenoh")]
 use std::sync::{Arc, Mutex};
 
 /// URI scheme used by TD forms that directly target zenoh.
@@ -118,13 +118,13 @@ pub trait ZenohTransport {
 /// This wrapper lets binding factories clone a handle to the same underlying
 /// session, connection pool, or runtime adapter while each `ZenohBinding`
 /// still owns its protocol binding value.
-#[cfg(feature = "std")]
+#[cfg(feature = "zenoh")]
 #[derive(Debug)]
 pub struct SharedZenohTransport<T> {
     inner: Arc<Mutex<T>>,
 }
 
-#[cfg(feature = "std")]
+#[cfg(feature = "zenoh")]
 impl<T> SharedZenohTransport<T> {
     /// Creates a shared transport handle from a concrete transport adapter.
     pub fn new(transport: T) -> Self {
@@ -144,7 +144,7 @@ impl<T> SharedZenohTransport<T> {
     }
 }
 
-#[cfg(feature = "std")]
+#[cfg(feature = "zenoh")]
 impl<T> Clone for SharedZenohTransport<T> {
     fn clone(&self) -> Self {
         Self {
@@ -153,7 +153,7 @@ impl<T> Clone for SharedZenohTransport<T> {
     }
 }
 
-#[cfg(feature = "std")]
+#[cfg(feature = "zenoh")]
 impl<T> ZenohTransport for SharedZenohTransport<T>
 where
     T: ZenohTransport,
@@ -342,7 +342,7 @@ pub fn plan_zenoh_affordance_operation<'a>(
     plan_zenoh_affordance_operation_with_criteria(
         thing,
         affordance,
-        FormSelectionCriteria::operation(operation),
+        FormSelectionCriteria::new(operation),
     )
 }
 

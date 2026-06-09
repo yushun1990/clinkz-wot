@@ -1,9 +1,8 @@
 use clinkz_wot_protocol_bindings::{
-    AffordanceRef, BindingCoreError, FormSelectionCriteria, resolve_form_target,
-    resolve_selected_affordance_form_security, select_affordance_form,
+    resolve_form_target, resolve_selected_affordance_form_security, select_affordance_form,
     select_affordance_form_with_criteria, select_affordance_form_with_filter, select_form,
     select_form_with_criteria, select_form_with_filter, validate_affordance_form,
-    validate_affordance_form_with_criteria,
+    validate_affordance_form_with_criteria, AffordanceRef, BindingCoreError, FormSelectionCriteria,
 };
 use clinkz_wot_td::{
     affordance::{ActionAffordance, EventAffordance, InteractionHelper, PropertyAffordance},
@@ -100,7 +99,7 @@ fn selects_form_matching_content_type_criteria() {
     let selected = select_form_with_criteria(
         FormContext::Property(&property),
         property._interaction.forms.as_slice(),
-        FormSelectionCriteria::operation(Operation::ReadProperty).content_type("application/cbor"),
+        FormSelectionCriteria::new(Operation::ReadProperty).content_type("application/cbor"),
     )
     .unwrap();
 
@@ -128,7 +127,7 @@ fn selects_form_matching_subprotocol_criteria() {
     let selected = select_form_with_criteria(
         FormContext::Event(&event),
         event._interaction.forms.as_slice(),
-        FormSelectionCriteria::operation(Operation::SubscribeEvent).subprotocol("sse"),
+        FormSelectionCriteria::new(Operation::SubscribeEvent).subprotocol("sse"),
     )
     .unwrap();
 
@@ -152,7 +151,7 @@ fn selects_form_matching_caller_filter() {
     let selected = select_form_with_filter(
         FormContext::Property(&property),
         property._interaction.forms.as_slice(),
-        FormSelectionCriteria::operation(Operation::ReadProperty),
+        FormSelectionCriteria::new(Operation::ReadProperty),
         |form| form.href.as_str().starts_with("bus:"),
     )
     .unwrap();
@@ -174,7 +173,7 @@ fn reports_filter_mismatch_when_operation_exists() {
     let err = select_form_with_filter(
         FormContext::Property(&property),
         property._interaction.forms.as_slice(),
-        FormSelectionCriteria::operation(Operation::ReadProperty),
+        FormSelectionCriteria::new(Operation::ReadProperty),
         |form| form.href.as_str().starts_with("bus:"),
     )
     .unwrap_err();
@@ -201,7 +200,7 @@ fn reports_metadata_mismatch_when_operation_exists() {
     let err = select_form_with_criteria(
         FormContext::Property(&property),
         property._interaction.forms.as_slice(),
-        FormSelectionCriteria::operation(Operation::ReadProperty).content_type("application/cbor"),
+        FormSelectionCriteria::new(Operation::ReadProperty).content_type("application/cbor"),
     )
     .unwrap_err();
 
@@ -340,7 +339,7 @@ fn selects_and_resolves_affordance_form_with_metadata_criteria() {
     let selected = select_affordance_form_with_criteria(
         &thing,
         AffordanceRef::Property("status"),
-        FormSelectionCriteria::operation(Operation::ReadProperty).content_type("application/cbor"),
+        FormSelectionCriteria::new(Operation::ReadProperty).content_type("application/cbor"),
     )
     .unwrap();
 
@@ -378,7 +377,7 @@ fn selects_and_resolves_affordance_form_with_caller_filter() {
     let selected = select_affordance_form_with_filter(
         &thing,
         AffordanceRef::Property("status"),
-        FormSelectionCriteria::operation(Operation::ReadProperty),
+        FormSelectionCriteria::new(Operation::ReadProperty),
         |form| form.href.as_str().starts_with("bus:"),
     )
     .unwrap();
@@ -634,7 +633,7 @@ fn rejects_selected_affordance_form_when_metadata_does_not_match() {
         &thing,
         AffordanceRef::Property("status"),
         &form,
-        FormSelectionCriteria::operation(Operation::ReadProperty).content_type("application/cbor"),
+        FormSelectionCriteria::new(Operation::ReadProperty).content_type("application/cbor"),
     )
     .unwrap_err();
 

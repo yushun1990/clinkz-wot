@@ -1,7 +1,7 @@
 # Zenoh-Pico C ABI Integration Target
 
 This document defines the acceptance target for target-specific integrations
-that connect the `runtime-zenoh-pico` platform-hook backend to a real
+that connect the `zenoh-pico` platform-hook backend to a real
 `zenoh-pico` C ABI.
 
 The existing `clinkz-wot-protocol-bindings-zenoh` crate owns TD-driven zenoh
@@ -50,7 +50,7 @@ The `clinkz-wot-protocol-bindings-zenoh` crate continues to own:
 - The `ZenohPicoPlatform` trait and `ZenohPicoTransport` adapter.
 - The `ZenohPicoRequest` helper methods that expose a validated selector or key
   expression target string for the selected zenoh operation.
-- Feature-gate checks that keep `runtime-zenoh` and `runtime-zenoh-pico`
+- Feature-gate checks that keep `zenoh` and `zenoh-pico`
   mutually exclusive.
 
 ## Feature And Crate Policy
@@ -92,7 +92,7 @@ Any reusable C ABI crate must document:
 - Default workspace tests continue to pass without target hardware, a C
   toolchain, or a zenoh router.
 - `cargo check -p clinkz-wot-protocol-bindings-zenoh --no-default-features
-  --features runtime-zenoh-pico` continues to pass.
+  --features zenoh-pico` continues to pass.
 - `scripts/check-no-std.sh` and `scripts/check-reserved-features.sh` continue
   to pass.
 

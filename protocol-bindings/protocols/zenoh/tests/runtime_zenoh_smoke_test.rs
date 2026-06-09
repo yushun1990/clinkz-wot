@@ -1,4 +1,4 @@
-#![cfg(feature = "runtime-zenoh")]
+#![cfg(feature = "zenoh")]
 
 use std::{
     collections::BTreeMap,
@@ -12,8 +12,8 @@ use clinkz_wot_protocol_bindings_zenoh::{
     ZenohTransport, ZenohTransportRequest,
 };
 use zenoh::{
-    Config, Wait,
     qos::{CongestionControl, Priority},
+    Config, Wait,
 };
 
 const RUN_ZENOH_RUNTIME_TESTS: &str = "CLINKZ_WOT_RUN_ZENOH_RUNTIME_TESTS";

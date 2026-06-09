@@ -5,7 +5,7 @@ integration tests.
 
 The default zenoh binding tests intentionally stop at planning and injected
 transport boundaries. They do not require a zenoh router. Real router coverage
-belongs behind the explicit `runtime-zenoh` feature and an opt-in test gate.
+belongs behind the explicit `zenoh` feature and an opt-in test gate.
 
 This runtime path is the current active concrete backend increment for the
 repository. Work on it should strengthen live Rust `zenoh` execution coverage
@@ -21,7 +21,7 @@ network ports, or host-specific router configuration.
 
 Real runtime integration tests must be:
 
-- Compiled only with the `runtime-zenoh` feature.
+- Compiled only with the `zenoh` feature.
 - Skipped unless an explicit environment variable opts in.
 - Safe to leave out of `cargo test --workspace`.
 - Documented with the required router/session setup.
@@ -93,7 +93,7 @@ Opt-in runtime verification should use a focused command such as:
 
 ```sh
 CLINKZ_WOT_RUN_ZENOH_RUNTIME_TESTS=1 \
-cargo test -p clinkz-wot-protocol-bindings-zenoh --features runtime-zenoh
+cargo test -p clinkz-wot-protocol-bindings-zenoh --features zenoh
 ```
 
 If the test requires a specific router endpoint, set

@@ -1,12 +1,12 @@
 mod selector;
-#[cfg(feature = "runtime-zenoh")]
+#[cfg(feature = "zenoh")]
 pub mod zenoh;
-#[cfg(feature = "runtime-zenoh-pico")]
+#[cfg(feature = "zenoh-pico")]
 pub mod zenoh_pico;
 
-#[cfg(feature = "runtime-zenoh")]
+#[cfg(feature = "zenoh")]
 pub use zenoh::{ZenohSessionTransport, ZenohSubscription};
-#[cfg(feature = "runtime-zenoh-pico")]
+#[cfg(feature = "zenoh-pico")]
 pub use zenoh_pico::{
     ZenohPicoError, ZenohPicoErrorKind, ZenohPicoPlatform, ZenohPicoRequest, ZenohPicoTransport,
 };

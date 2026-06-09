@@ -71,14 +71,14 @@ The current protocol binding crates provide:
 - A documented runtime backend policy that keeps Rust `zenoh` and
   `zenoh-pico` integration out of the shared planning crate.
 - A first Rust `zenoh` runtime adapter, `ZenohSessionTransport`, behind the explicit
-  `runtime-zenoh` feature. The default build still has no concrete Rust
+  `zenoh` feature. The default build still has no concrete Rust
   `zenoh` dependency.
 - First std runtime hardening for request/reply parameter propagation and
-  broader metadata parser coverage under the explicit `runtime-zenoh` feature.
+  broader metadata parser coverage under the explicit `zenoh` feature.
 - Host subscription lifecycle state exposes the selected key expression,
   content type hint, configured reply timeout, next-sample waiting, and explicit
   undeclaration APIs.
-- A constrained `runtime-zenoh-pico` platform-hook backend compiles without
+- A constrained `zenoh-pico` platform-hook backend compiles without
   `std`, maps shared planner requests into injectable platform hooks, and keeps
   real C ABI, polling, session, and buffer ownership in target-specific code.
 - The target-specific acceptance boundary for real zenoh-pico C ABI
@@ -93,11 +93,11 @@ The next development order is:
 2. Keep M7 no-std checks and compatibility documentation aligned with the
    current shared, zenoh planning, and optional std runtime surfaces.
 3. Keep opt-in real Rust `zenoh` runtime smoke tests behind the explicit
-   `runtime-zenoh` feature and environment-variable gate.
+   `zenoh` feature and environment-variable gate.
 4. Prioritize live metadata coverage for the Rust `zenoh` runtime on
    observable paths, starting with put-path express QoS, priority, and
    congestion control verification.
-5. Keep constrained `runtime-zenoh-pico` platform-hook coverage behind its
+5. Keep constrained `zenoh-pico` platform-hook coverage behind its
    explicit feature and outside default workspace tests.
 6. Keep real zenoh-pico C ABI integrations outside the shared planning crate
    and aligned with `docs/zenoh-pico-c-abi-integration-target.md`.
@@ -117,7 +117,7 @@ Completion notes:
   explicit undeclaration, and metadata mapping coverage.
 - M7 no-std checks now include both protocol binding crates through
   `scripts/check-no-std.sh`.
-- The constrained `runtime-zenoh-pico` platform-hook backend and fake platform
+- The constrained `zenoh-pico` platform-hook backend and fake platform
   tests are complete for the current no-std adapter-boundary scope.
 
 ## PB-P0: Shared Binding Utility Hardening
@@ -309,7 +309,7 @@ Completion notes:
 ### PB-P1.4 Add First Concrete Rust Zenoh Runtime Backend
 
 Status: complete for the first Rust `zenoh` std backend and the first
-constrained `runtime-zenoh-pico` platform-hook backend.
+constrained `zenoh-pico` platform-hook backend.
 
 Goal: support std and constrained zenoh execution without weakening the
 `no_std + alloc` boundary of TD, core, shared bindings, or the zenoh planning
@@ -338,7 +338,7 @@ Acceptance criteria:
 
 Completion notes:
 
-- Added `ZenohSessionTransport` behind the explicit `runtime-zenoh` feature.
+- Added `ZenohSessionTransport` behind the explicit `zenoh` feature.
 - Kept the default feature set free of a concrete Rust `zenoh` dependency and
   preserved `cargo check -p clinkz-wot-protocol-bindings-zenoh
   --no-default-features`.
@@ -347,7 +347,7 @@ Completion notes:
   `ZenohTransport` trait.
 - Added `ZenohSubscription` so std runtimes can keep a subscription open,
   receive multiple samples over time, and explicitly undeclare it when the
-  `runtime-zenoh` feature is enabled.
+  `zenoh` feature is enabled.
 - Added first-pass runtime metadata mapping for encoding, express QoS,
   priority, and congestion control hints on put and get/request-reply builders.
 - Added request/reply selector parameter propagation from runtime interaction
@@ -364,7 +364,7 @@ Completion notes:
   congestion control diagnostics.
 - Hardened request/reply selector parameter validation so empty or blank
   runtime parameter names fail before an invalid zenoh selector is built.
-- Added a constrained `runtime-zenoh-pico` platform-hook backend in PB-P1.8.
+- Added a constrained `zenoh-pico` platform-hook backend in PB-P1.8.
   Real C ABI, platform I/O, memory, and polling integration remain
   target-specific platform work.
 
@@ -424,8 +424,8 @@ Acceptance criteria:
 
 - The acceptance target is documented in
   `docs/zenoh-pico-runtime-target.md`.
-- `runtime-zenoh` and `runtime-zenoh-pico` remain mutually exclusive.
-- Enabling the `runtime-zenoh-pico` feature compiles the no-std platform-hook
+- `zenoh` and `zenoh-pico` remain mutually exclusive.
+- Enabling the `zenoh-pico` feature compiles the no-std platform-hook
   backend.
 - `scripts/check-reserved-features.sh` covers the constrained backend feature
   check and incompatible backend feature diagnostics.
@@ -439,7 +439,7 @@ Completion notes:
   non-goals, adapter boundary, feature policy, acceptance criteria, and
   verification path.
 - Added `scripts/check-reserved-features.sh` to lock the constrained
-  `runtime-zenoh-pico` feature check and the concrete backend feature conflict
+  `zenoh-pico` feature check and the concrete backend feature conflict
   diagnostic.
 - Verified the regular workspace, no-std, and backend feature checks.
 
@@ -453,7 +453,7 @@ router, network port, or host-specific setup.
 
 Work items:
 
-- Keep real runtime tests behind the `runtime-zenoh` feature.
+- Keep real runtime tests behind the `zenoh` feature.
 - Skip runtime tests unless `CLINKZ_WOT_RUN_ZENOH_RUNTIME_TESTS=1` is set.
 - Allow externally managed router or peer configuration through
   `CLINKZ_WOT_ZENOH_ENDPOINT` when needed.
@@ -474,7 +474,7 @@ Acceptance criteria:
 Completion notes:
 
 - Added an opt-in real Rust `zenoh` smoke test gated behind the
-  `runtime-zenoh` feature and `CLINKZ_WOT_RUN_ZENOH_RUNTIME_TESTS=1`.
+  `zenoh` feature and `CLINKZ_WOT_RUN_ZENOH_RUNTIME_TESTS=1`.
 - The smoke test opens a concrete `zenoh::Session`, executes a planned put
   operation through `ZenohSessionTransport`, verifies a deterministic
   request/reply path, covers live request selector parameter propagation into
@@ -514,9 +514,9 @@ Work items:
 Acceptance criteria:
 
 - `cargo test -p clinkz-wot-protocol-bindings-zenoh --features
-  runtime-zenoh-pico` passes.
+  zenoh-pico` passes.
 - `cargo check -p clinkz-wot-protocol-bindings-zenoh --no-default-features
-  --features runtime-zenoh-pico` passes.
+  --features zenoh-pico` passes.
 - Default zenoh binding builds still have no concrete zenoh runtime dependency.
 - Real zenoh-pico C ABI, session, polling, and buffer ownership remain outside
   TD, core, shared bindings, Discovery, and Servient.
@@ -549,7 +549,7 @@ Acceptance criteria:
   verification path.
 - The protocol binding plan points future real zenoh-pico integration work at
   that document before implementation starts.
-- The existing `runtime-zenoh-pico` feature remains a platform-hook backend,
+- The existing `zenoh-pico` feature remains a platform-hook backend,
   not a mandatory C ABI dependency.
 
 ## Verification
@@ -559,7 +559,7 @@ Required checks for this subplan:
 ```sh
 cargo fmt --check
 cargo test -p clinkz-wot-protocol-bindings -p clinkz-wot-protocol-bindings-zenoh
-cargo test -p clinkz-wot-protocol-bindings-zenoh --features runtime-zenoh-pico
+cargo test -p clinkz-wot-protocol-bindings-zenoh --features zenoh-pico
 cargo check -p clinkz-wot-protocol-bindings --no-default-features
 cargo check -p clinkz-wot-protocol-bindings-zenoh --no-default-features
 scripts/check-reserved-features.sh

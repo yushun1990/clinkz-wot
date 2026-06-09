@@ -7,10 +7,8 @@ edition.workspace = true
 clinkz-wot-core = { path = "../core", default-features = false }
 clinkz-wot-discovery = { path = "../discovery", default-features = false }
 clinkz-wot-protocol-bindings = { path = "../protocol-bindings/core", default-features = false }
+clinkz-wot-protocol-bindings-zenoh = { path = "../protocol-bindings/protocols/zenoh", default-features = false, optional = true }
 clinkz-wot-td = { path = "../td", default-features = false }
-
-[dev-dependencies]
-clinkz-wot-protocol-bindings-zenoh = { path = "../protocol-bindings/protocols/zenoh" }
 
 [features]
 default = ["std"]
@@ -20,3 +18,12 @@ std = [
     "clinkz-wot-protocol-bindings/std",
     "clinkz-wot-td/std",
 ]
+test-zenoh = [
+    "dep:clinkz-wot-protocol-bindings-zenoh",
+    "clinkz-wot-protocol-bindings-zenoh/zenoh",
+]
+
+[[test]]
+name = "servient_zenoh"
+path = "tests/servient_zenoh.rs"
+required-features = ["test-zenoh"]

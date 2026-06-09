@@ -11,12 +11,12 @@ serde_json = { workspace = true, features = ["alloc"] }
 zenoh = { version = "1.9.0", optional = true }
 
 [features]
-default = ["std"]
-std = [
+default = ["zenoh"]
+zenoh = [
     "clinkz-wot-core/std",
     "clinkz-wot-protocol-bindings/std",
     "clinkz-wot-td/std",
     "serde_json/std",
+    "dep:zenoh"
 ]
-runtime-zenoh = ["std", "dep:zenoh"]
-runtime-zenoh-pico = []
+zenoh-pico = []

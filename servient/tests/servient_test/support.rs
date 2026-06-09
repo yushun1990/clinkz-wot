@@ -5,9 +5,6 @@ use clinkz_wot_core::{
     EventSink, InteractionInput, InteractionOutput, LocalThing, Payload, PayloadCodec,
     PropertyHandler, ProtocolBinding, SecurityContext, SecurityProvider, TransportRequest,
 };
-use clinkz_wot_protocol_bindings_zenoh::{
-    ZenohOperationKind, ZenohTransport, ZenohTransportRequest,
-};
 use clinkz_wot_servient::{
     ConsumedThingCache, ExposedThingRegistry, InMemoryConsumedThingCache,
     InMemoryExposedThingRegistry,
@@ -19,6 +16,11 @@ use clinkz_wot_td::{
     form::Form,
     security_scheme::SecurityScheme,
     thing::Thing,
+};
+
+#[cfg(feature = "test-zenoh")]
+use clinkz_wot_protocol_bindings_zenoh::{
+    ZenohOperationKind, ZenohTransport, ZenohTransportRequest,
 };
 
 pub(crate) struct StatusProperty {
@@ -244,9 +246,11 @@ pub(crate) struct TestForms {
     pub(crate) subscribe_event: Form,
 }
 
+#[cfg(feature = "test-zenoh")]
 #[derive(Default)]
 pub(crate) struct ServientZenohTransport;
 
+#[cfg(feature = "test-zenoh")]
 impl ZenohTransport for ServientZenohTransport {
     fn execute(&mut self, request: ZenohTransportRequest) -> CoreResult<InteractionOutput> {
         match (request.plan.kind, request.plan.key_expr.as_str()) {
@@ -279,11 +283,13 @@ impl ZenohTransport for ServientZenohTransport {
     }
 }
 
+#[cfg(feature = "test-zenoh")]
 #[derive(Default)]
 pub(crate) struct CountingServientZenohTransport {
     pub(crate) calls: usize,
 }
 
+#[cfg(feature = "test-zenoh")]
 impl ZenohTransport for CountingServientZenohTransport {
     fn execute(&mut self, request: ZenohTransportRequest) -> CoreResult<InteractionOutput> {
         self.calls += 1;
@@ -460,6 +466,7 @@ pub(crate) fn cacheable_thing(id: &str, title: &str) -> (Thing, Form, Form) {
     (thing, first_form, cached_form)
 }
 
+#[cfg(feature = "test-zenoh")]
 pub(crate) fn zenoh_thing(id: &str, title: &str) -> Thing {
     let read_property = Form::read_property("zenoh://clinkz/things/lamp/properties/status")
         .content_type("text/plain")

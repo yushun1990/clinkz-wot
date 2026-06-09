@@ -61,7 +61,7 @@ factories. The shared handle is available only with the planning crate's `std`
 feature and does not affect `no_std + alloc` checks.
 
 The first Rust `zenoh` runtime adapter is `ZenohSessionTransport`, available only
-when the zenoh binding crate is built with the `runtime-zenoh` feature. It wraps
+when the zenoh binding crate is built with the `zenoh` feature. It wraps
 a concrete `zenoh::Session`, supports put, get/request-reply, and one-shot
 subscribe execution through the protocol-neutral `ZenohTransport` trait, and
 also exposes `ZenohSubscription` for std runtimes that need explicit
@@ -80,10 +80,10 @@ Concrete zenoh execution should be added through optional runtime backends:
 
 Concrete runtime backend features use the `runtime-*` prefix:
 
-- `runtime-zenoh`: Rust `zenoh` backend.
-- `runtime-zenoh-pico`: constrained `zenoh-pico` platform-hook backend.
+- `zenoh`: Rust `zenoh` backend.
+- `zenoh-pico`: constrained `zenoh-pico` platform-hook backend.
 
-The `runtime-zenoh-pico` backend provides a `no_std + alloc` adapter boundary
+The `zenoh-pico` backend provides a `no_std + alloc` adapter boundary
 through `ZenohPicoPlatform` and `ZenohPicoTransport`. Target-specific code
 still owns the real zenoh-pico C ABI calls, session handle, polling, timeout
 handling, and buffer ownership. The constrained backend target is documented in

@@ -7,9 +7,9 @@ use alloc::{
 
 use clinkz_wot_td::{
     affordance::{ActionAffordance, EventAffordance, PropertyAffordance},
-    data_type::{Operation, ResolvedFormHref, resolve_form_href},
+    data_type::{resolve_form_href, Operation, ResolvedFormHref},
     form::Form,
-    td_defaults::{FormContext, effective_form_operations, effective_form_security},
+    td_defaults::{effective_form_operations, effective_form_security, FormContext},
     thing::Thing,
 };
 
@@ -43,7 +43,7 @@ pub struct FormSelectionCriteria<'a> {
 
 impl<'a> FormSelectionCriteria<'a> {
     /// Creates criteria for an operation without extra form metadata filters.
-    pub fn operation(operation: Operation) -> Self {
+    pub fn new(operation: Operation) -> Self {
         Self {
             operation,
             content_type: None,
@@ -129,7 +129,7 @@ pub fn select_form<'a>(
     forms: &'a [Form],
     operation: Operation,
 ) -> BindingCoreResult<SelectedForm<'a>> {
-    select_form_with_criteria(context, forms, FormSelectionCriteria::operation(operation))
+    select_form_with_criteria(context, forms, FormSelectionCriteria::<'a>::new(operation))
 }
 
 /// Selects the first form matching the requested operation and metadata criteria.
@@ -222,11 +222,7 @@ pub fn select_affordance_form<'a>(
     affordance: AffordanceRef<'a>,
     operation: Operation,
 ) -> BindingCoreResult<SelectedAffordanceForm<'a>> {
-    select_affordance_form_with_criteria(
-        thing,
-        affordance,
-        FormSelectionCriteria::operation(operation),
-    )
+    select_affordance_form_with_criteria(thing, affordance, FormSelectionCriteria::new(operation))
 }
 
 /// Selects and resolves a form from a Thing affordance using metadata criteria.
@@ -270,7 +266,7 @@ pub fn validate_affordance_form<'a>(
         thing,
         affordance,
         form,
-        FormSelectionCriteria::operation(operation),
+        FormSelectionCriteria::new(operation),
     )
 }
 

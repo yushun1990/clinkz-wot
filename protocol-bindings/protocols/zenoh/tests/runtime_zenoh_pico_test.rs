@@ -1,4 +1,4 @@
-#![cfg(feature = "runtime-zenoh-pico")]
+#![cfg(feature = "zenoh-pico")]
 
 use std::time::Duration;
 

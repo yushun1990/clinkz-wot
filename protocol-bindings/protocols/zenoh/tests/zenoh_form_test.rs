@@ -4,11 +4,11 @@ use clinkz_wot_core::{
 };
 use clinkz_wot_protocol_bindings::{AffordanceRef, FormSelectionCriteria};
 use clinkz_wot_protocol_bindings_zenoh::{
-    CZ_ZENOH_CONGESTION_CONTROL, CZ_ZENOH_ENCODING, CZ_ZENOH_KEY_EXPR, CZ_ZENOH_PRIORITY,
-    CZ_ZENOH_QOS, SharedZenohTransport, ZenohBinding, ZenohBindingError, ZenohOperationKind,
-    ZenohTransport, ZenohTransportRequest, extract_zenoh_metadata, extract_zenoh_target,
-    is_zenoh_form, is_zenoh_form_target, plan_zenoh_affordance_operation,
-    plan_zenoh_affordance_operation_with_criteria, plan_zenoh_operation, zenoh_operation_kind,
+    extract_zenoh_metadata, extract_zenoh_target, is_zenoh_form, is_zenoh_form_target,
+    plan_zenoh_affordance_operation, plan_zenoh_affordance_operation_with_criteria,
+    plan_zenoh_operation, zenoh_operation_kind, ZenohBinding, ZenohBindingError,
+    ZenohOperationKind, ZenohTransport, ZenohTransportRequest, CZ_ZENOH_CONGESTION_CONTROL,
+    CZ_ZENOH_ENCODING, CZ_ZENOH_KEY_EXPR, CZ_ZENOH_PRIORITY, CZ_ZENOH_QOS,
 };
 use clinkz_wot_td::{
     affordance::{EventAffordance, InteractionHelper, PropertyAffordance},
@@ -18,6 +18,9 @@ use clinkz_wot_td::{
     thing::Thing,
 };
 use serde_json::json;
+
+#[cfg(feature = "zenoh")]
+use clinkz_wot_protocol_bindings_zenoh::SharedZenohTransport;
 
 struct RecordingZenohTransport;
 
@@ -48,11 +51,13 @@ impl ZenohTransport for RecordingZenohTransport {
     }
 }
 
+#[cfg(feature = "zenoh")]
 #[derive(Default)]
 struct CountingZenohTransport {
     calls: usize,
 }
 
+#[cfg(feature = "zenoh")]
 impl ZenohTransport for CountingZenohTransport {
     fn execute(&mut self, request: ZenohTransportRequest) -> CoreResult<InteractionOutput> {
         self.calls += 1;
@@ -213,6 +218,7 @@ fn runtime_binding_delegates_planned_operation_to_transport() {
     assert_eq!(output.payload.unwrap().body, b"accepted");
 }
 
+#[cfg(feature = "zenoh")]
 #[test]
 fn shared_transport_reuses_underlying_runtime_state() {
     let form = Form::read_property("zenoh://clinkz/things/lamp/status")
@@ -385,7 +391,7 @@ fn plans_zenoh_affordance_operation_with_metadata_criteria() {
     let plan = plan_zenoh_affordance_operation_with_criteria(
         &thing,
         AffordanceRef::Property("status"),
-        FormSelectionCriteria::operation(Operation::ReadProperty).content_type("application/cbor"),
+        FormSelectionCriteria::new(Operation::ReadProperty).content_type("application/cbor"),
     )
     .unwrap();
 
@@ -426,7 +432,7 @@ fn plans_zenoh_affordance_operation_with_subprotocol_criteria() {
     let plan = plan_zenoh_affordance_operation_with_criteria(
         &thing,
         AffordanceRef::Event("status-change"),
-        FormSelectionCriteria::operation(Operation::SubscribeEvent).subprotocol("sse"),
+        FormSelectionCriteria::new(Operation::SubscribeEvent).subprotocol("sse"),
     )
     .unwrap();
 
@@ -565,7 +571,7 @@ fn plans_operations_from_clinkz_extension_fixture() {
     let write = plan_zenoh_affordance_operation_with_criteria(
         &thing,
         AffordanceRef::Property("status"),
-        FormSelectionCriteria::operation(Operation::WriteProperty).content_type("application/cbor"),
+        FormSelectionCriteria::new(Operation::WriteProperty).content_type("application/cbor"),
     )
     .unwrap();
     assert_eq!(write.form_index, 1);

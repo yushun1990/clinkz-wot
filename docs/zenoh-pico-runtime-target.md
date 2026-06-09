@@ -5,7 +5,7 @@ runtime backend.
 
 The current `clinkz-wot-protocol-bindings-zenoh` crate already exposes the
 protocol-neutral zenoh planning surface and the `ZenohTransport` adapter
-boundary. The `runtime-zenoh-pico` feature exposes a `no_std + alloc`
+boundary. The `zenoh-pico` feature exposes a `no_std + alloc`
 platform-hook backend through `ZenohPicoPlatform` and `ZenohPicoTransport`.
 The real C ABI binding remains target-specific platform work.
 
@@ -52,10 +52,10 @@ Platform-specific pieces should be injectable:
 
 ## Feature Policy
 
-The `runtime-zenoh-pico` feature must remain mutually exclusive with
-`runtime-zenoh`.
+The `zenoh-pico` feature must remain mutually exclusive with
+`zenoh`.
 
-Enabling `runtime-zenoh-pico` must not pull `std` into crates that claim
+Enabling `zenoh-pico` must not pull `std` into crates that claim
 `no_std + alloc` support.
 
 ## Acceptance Criteria
@@ -65,13 +65,13 @@ Enabling `runtime-zenoh-pico` must not pull `std` into crates that claim
 - `cargo check -p clinkz-wot-protocol-bindings-zenoh --no-default-features`
   passes.
 - `scripts/check-no-std.sh` passes.
-- `runtime-zenoh` and `runtime-zenoh-pico` remain mutually exclusive with a
+- `zenoh` and `zenoh-pico` remain mutually exclusive with a
   clear diagnostic.
 - `cargo check -p clinkz-wot-protocol-bindings-zenoh --no-default-features
-  --features runtime-zenoh-pico` passes.
+  --features zenoh-pico` passes.
 - `cargo test -p clinkz-wot-protocol-bindings-zenoh --features
-  runtime-zenoh-pico` passes.
-- `scripts/check-reserved-features.sh` confirms that `runtime-zenoh-pico`
+  zenoh-pico` passes.
+- `scripts/check-reserved-features.sh` confirms that `zenoh-pico`
   compiles, runs fake platform tests, and confirms that incompatible backend
   feature combinations fail with the expected diagnostic.
 - The constrained backend uses shared planning outputs and does not duplicate
@@ -87,7 +87,7 @@ Run the standard workspace path after each backend increment:
 ```sh
 cargo fmt --check
 cargo test --workspace
-cargo test -p clinkz-wot-protocol-bindings-zenoh --features runtime-zenoh-pico
+cargo test -p clinkz-wot-protocol-bindings-zenoh --features zenoh-pico
 scripts/check-no-std.sh
 scripts/check-reserved-features.sh
 ```

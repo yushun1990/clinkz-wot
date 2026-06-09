@@ -33,11 +33,11 @@ Current focus:
   protocol bindings, runtime registries, TD/form/binding-plan caches, payload
   codecs, and security providers.
 - The next concrete backend increment is the opt-in Rust `zenoh` runtime path
-  behind `runtime-zenoh`, with live smoke and integration coverage kept outside
+  behind `zenoh`, with live smoke and integration coverage kept outside
   the default workspace test path.
-- The current `runtime-zenoh` next-step target is live metadata coverage for
+- The current `zenoh` next-step target is live metadata coverage for
   express QoS, priority, and congestion control on observable runtime paths.
-- Defer `runtime-zenoh-pico` runtime injection until the target hardware
+- Defer `zenoh-pico` runtime injection until the target hardware
   platform, C ABI strategy, and polling model are confirmed.
 - Keep M7 conformance and no-std checks running across every crate that
   claims `no_std + alloc` support.
@@ -46,11 +46,11 @@ Immediate next sequence:
 
 1. Keep M7 checks and compatibility documentation aligned with the current
    TD/TM, core, protocol binding, Discovery, and Servient surfaces.
-2. Treat `runtime-zenoh` as the only active concrete runtime increment and
+2. Treat `zenoh` as the only active concrete runtime increment and
    expand its opt-in smoke and integration coverage without changing the
    default workspace verification path, starting with live metadata coverage
    for observable put and subscription paths.
-3. Keep `runtime-zenoh-pico` at the planning boundary until the target
+3. Keep `zenoh-pico` at the planning boundary until the target
    hardware platform is selected and the runtime injection strategy is
    documented for that platform.
 
@@ -198,7 +198,7 @@ Current status:
   `no_std + alloc`, while concrete runtime backends stay optional and
   feature-gated or crate-separated.
 - Added the first concrete Rust `zenoh` std runtime backend behind the
-  explicit `runtime-zenoh` feature while keeping the default and
+  explicit `zenoh` feature while keeping the default and
   `--no-default-features` builds free of a concrete zenoh runtime dependency.
 - Hardened the Rust `zenoh` std runtime backend with request/reply selector
   parameter validation, subscription lifecycle metadata and undeclaration, and
@@ -206,7 +206,7 @@ Current status:
   congestion control.
 - Added a std-only shared zenoh transport handle so Servient binding factories
   can reuse a session, pool, or runtime adapter across cloned bindings.
-- Added an opt-in Rust `zenoh` runtime smoke test behind the `runtime-zenoh`
+- Added an opt-in Rust `zenoh` runtime smoke test behind the `zenoh`
   feature and `CLINKZ_WOT_RUN_ZENOH_RUNTIME_TESTS=1`, covering concrete
   `ZenohSessionTransport` put and get/request-reply execution without requiring
   it in default workspace tests.
@@ -421,7 +421,7 @@ Current status:
 - The current protocol binding M7 verification path passes:
   - `cargo fmt --check`
   - `cargo test -p clinkz-wot-protocol-bindings -p clinkz-wot-protocol-bindings-zenoh`
-  - `cargo test -p clinkz-wot-protocol-bindings-zenoh --features runtime-zenoh-pico`
+  - `cargo test -p clinkz-wot-protocol-bindings-zenoh --features zenoh-pico`
   - `scripts/check-no-std.sh`
   - `scripts/check-reserved-features.sh`
 - The current workspace M7 baseline passes:
@@ -433,7 +433,7 @@ Current status:
 - `scripts/check-m7.sh` is the aggregate entry point for the current workspace
   M7 baseline.
 - The opt-in Rust `zenoh` runtime smoke test passes with:
-  - `CLINKZ_WOT_RUN_ZENOH_RUNTIME_TESTS=1 cargo test -p clinkz-wot-protocol-bindings-zenoh --features runtime-zenoh runtime_zenoh_transport_executes_put_and_get_smoke_paths`
+  - `CLINKZ_WOT_RUN_ZENOH_RUNTIME_TESTS=1 cargo test -p clinkz-wot-protocol-bindings-zenoh --features zenoh runtime_zenoh_transport_executes_put_and_get_smoke_paths`
 
 Exit criteria:
 

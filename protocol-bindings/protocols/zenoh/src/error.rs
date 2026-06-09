@@ -30,5 +30,5 @@ impl fmt::Display for ZenohBindingError {
     }
 }
 
-#[cfg(feature = "std")]
+#[cfg(feature = "zenoh")]
 impl std::error::Error for ZenohBindingError {}
