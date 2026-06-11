@@ -2,12 +2,12 @@ use clinkz_wot_protocol_bindings::{
     resolve_form_target, resolve_selected_affordance_form_security, select_affordance_form,
     select_affordance_form_with_criteria, select_affordance_form_with_filter, select_form,
     select_form_with_criteria, select_form_with_filter, validate_affordance_form,
-    validate_affordance_form_with_criteria, AffordanceRef, BindingCoreError, FormSelectionCriteria,
+    validate_affordance_form_with_criteria, AffordanceRef, BindingError, FormSelectionCriteria,
 };
 use clinkz_wot_td::{
     affordance::{ActionAffordance, EventAffordance, InteractionHelper, PropertyAffordance},
     data_schema::DataSchema,
-    data_type::{Operation, ResolvedFormHref},
+    data_type::{Operation, ResolveFormHrefError, ResolvedFormHref},
     form::Form,
     td_defaults::FormContext,
     thing::Thing,
@@ -77,7 +77,7 @@ fn reports_unsupported_operation_when_no_form_matches() {
 
     assert_eq!(
         err,
-        BindingCoreError::UnsupportedOperation("No form supports WriteProperty".into())
+        BindingError::UnsupportedOperation("No form supports WriteProperty".into())
     );
 }
 
@@ -180,7 +180,7 @@ fn reports_filter_mismatch_when_operation_exists() {
 
     assert_eq!(
         err,
-        BindingCoreError::CallerFilterMismatch(
+        BindingError::CallerFilterMismatch(
             "No form matches FormSelectionCriteria { operation: ReadProperty, content_type: None, subprotocol: None } after applying caller filter".into()
         )
     );
@@ -206,7 +206,7 @@ fn reports_metadata_mismatch_when_operation_exists() {
 
     assert_eq!(
         err,
-        BindingCoreError::MetadataMismatch(
+        BindingError::MetadataMismatch(
             "No form matches FormSelectionCriteria { operation: ReadProperty, content_type: Some(\"application/cbor\"), subprotocol: None }".into()
         )
     );
@@ -262,10 +262,9 @@ fn reports_target_resolution_failure_from_affordance_selection() {
 
     assert_eq!(
         err,
-        BindingCoreError::TargetResolution(
-            "Cannot resolve form href against URI template base: https://example.com/{tenant}/"
-                .into()
-        )
+        BindingError::TargetResolution(ResolveFormHrefError::TemplateBase(
+            "https://example.com/{tenant}/".into()
+        ))
     );
 }
 
@@ -444,7 +443,7 @@ fn reports_unknown_affordance_from_thing_lookup() {
 
     assert_eq!(
         err,
-        BindingCoreError::UnknownAffordance {
+        BindingError::UnknownAffordance {
             kind: "property",
             name: "status".into()
         }
@@ -582,7 +581,7 @@ fn rejects_selected_affordance_form_when_operation_does_not_match() {
 
     assert_eq!(
         err,
-        BindingCoreError::UnsupportedOperation(
+        BindingError::UnsupportedOperation(
             "Selected form does not support WriteProperty".into()
         )
     );
@@ -610,7 +609,7 @@ fn rejects_selected_form_that_does_not_belong_to_affordance() {
     )
     .unwrap_err();
 
-    assert_eq!(err, BindingCoreError::FormNotInAffordance);
+    assert_eq!(err, BindingError::FormNotInAffordance);
 }
 
 #[test]
@@ -639,7 +638,7 @@ fn rejects_selected_affordance_form_when_metadata_does_not_match() {
 
     assert_eq!(
         err,
-        BindingCoreError::MetadataMismatch(
+        BindingError::MetadataMismatch(
             "Selected form does not match FormSelectionCriteria { operation: ReadProperty, content_type: Some(\"application/cbor\"), subprotocol: None }".into()
         )
     );

@@ -162,7 +162,7 @@ Servient users without encoding protocol-specific behavior in the shared crate.
 
 Work items:
 
-- Audit `BindingCoreError` variants for selection, validation, and target
+- Audit `BindingError` variants for selection, validation, and target
   resolution.
 - Keep caller-filter mismatch diagnostics separate from operation mismatch
   diagnostics.
@@ -176,7 +176,7 @@ Acceptance criteria:
 
 Completion notes:
 
-- Added explicit `BindingCoreError` variants for metadata mismatches and caller
+- Added explicit `BindingError` variants for metadata mismatches and caller
   filter mismatches.
 - Kept unsupported operations, unknown affordances, target resolution failures,
   and selected forms outside the requested affordance as distinct variants.

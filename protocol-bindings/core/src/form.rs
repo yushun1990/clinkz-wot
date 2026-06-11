@@ -1,9 +1,4 @@
-use alloc::{
-    borrow::Cow,
-    collections::BTreeMap,
-    format,
-    string::{String, ToString},
-};
+use alloc::{borrow::Cow, collections::BTreeMap, format, string::String};
 
 use clinkz_wot_td::{
     affordance::{ActionAffordance, EventAffordance, PropertyAffordance},
@@ -13,7 +8,7 @@ use clinkz_wot_td::{
     thing::Thing,
 };
 
-use crate::{BindingCoreError, BindingCoreResult};
+use crate::{BindingError, BindingResult};
 
 const NO_SCOPES: &[String] = &[];
 
@@ -105,14 +100,17 @@ pub struct ResolvedFormTarget {
 
 /// A selected affordance form with its resolved target.
 #[derive(Debug, Clone, PartialEq)]
-pub struct SelectedAffordanceForm<'a> {
+pub struct SelectedAffordanceForm<'a, Target = ResolvedFormTarget> {
     /// Location used to find the selected form.
     pub affordance: AffordanceRef<'a>,
     /// Selected TD form and effective operation metadata.
     pub selection: SelectedForm<'a>,
-    /// Resolved binding target for the selected form.
-    pub target: ResolvedFormTarget,
+    /// Resolved binding target for the selected form, or unit while unresolved.
+    pub target: Target,
 }
+
+/// A selected affordance form without its resolved target.
+pub type SelectedAffordanceSelection<'a> = SelectedAffordanceForm<'a, ()>;
 
 /// Effective protocol-neutral security metadata for a selected TD form.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -128,7 +126,7 @@ pub fn select_form<'a>(
     context: FormContext<'a>,
     forms: &'a [Form],
     operation: Operation,
-) -> BindingCoreResult<SelectedForm<'a>> {
+) -> BindingResult<SelectedForm<'a>> {
     select_form_with_criteria(context, forms, FormSelectionCriteria::<'a>::new(operation))
 }
 
@@ -137,7 +135,7 @@ pub fn select_form_with_criteria<'a>(
     context: FormContext<'a>,
     forms: &'a [Form],
     criteria: FormSelectionCriteria<'_>,
-) -> BindingCoreResult<SelectedForm<'a>> {
+) -> BindingResult<SelectedForm<'a>> {
     select_form_with_filter(context, forms, criteria, |_| true)
 }
 
@@ -146,10 +144,24 @@ pub fn select_form_with_filter<'a, F>(
     context: FormContext<'a>,
     forms: &'a [Form],
     criteria: FormSelectionCriteria<'_>,
-    filter: F,
-) -> BindingCoreResult<SelectedForm<'a>>
+    mut filter: F,
+) -> BindingResult<SelectedForm<'a>>
 where
-    F: Fn(&Form) -> bool,
+    F: FnMut(&Form) -> bool,
+{
+    select_form_with_result_filter(context, forms, criteria, |form| Ok(filter(form)))
+}
+
+/// Selects the first form matching the requested criteria and a fallible caller filter.
+pub fn select_form_with_result_filter<'a, F, E>(
+    context: FormContext<'a>,
+    forms: &'a [Form],
+    criteria: FormSelectionCriteria<'_>,
+    mut filter: F,
+) -> Result<SelectedForm<'a>, E>
+where
+    F: FnMut(&Form) -> Result<bool, E>,
+    E: From<BindingError>,
 {
     let mut operation_supported = false;
     let mut metadata_supported = false;
@@ -160,7 +172,7 @@ where
         let matches_metadata = criteria.matches_metadata(form);
         operation_supported |= matches_operation;
         metadata_supported |= matches_operation && matches_metadata;
-        if matches_operation && matches_metadata && filter(form) {
+        if matches_operation && matches_metadata && filter(form)? {
             return Ok(SelectedForm {
                 index,
                 form,
@@ -170,30 +182,30 @@ where
     }
 
     if !operation_supported {
-        return Err(BindingCoreError::UnsupportedOperation(format!(
+        return Err(E::from(BindingError::UnsupportedOperation(format!(
             "No form supports {:?}",
             criteria.operation
-        )));
+        ))));
     }
 
     if !metadata_supported {
-        return Err(BindingCoreError::MetadataMismatch(format!(
+        return Err(E::from(BindingError::MetadataMismatch(format!(
             "No form matches {:?}",
             criteria
-        )));
+        ))));
     }
 
-    Err(BindingCoreError::CallerFilterMismatch(format!(
+    Err(E::from(BindingError::CallerFilterMismatch(format!(
         "No form matches {:?} after applying caller filter",
         criteria
-    )))
+    ))))
 }
 
 /// Resolves a selected form target using the Thing-level `base` value.
-pub fn resolve_form_target(thing: &Thing, form: &Form) -> BindingCoreResult<ResolvedFormTarget> {
+pub fn resolve_form_target(thing: &Thing, form: &Form) -> BindingResult<ResolvedFormTarget> {
     resolve_form_href(thing.base.as_ref(), &form.href)
         .map(|href| ResolvedFormTarget { href })
-        .map_err(|err| BindingCoreError::TargetResolution(err.to_string()))
+        .map_err(BindingError::TargetResolution)
 }
 
 /// Resolves protocol-neutral security metadata for a form.
@@ -209,9 +221,9 @@ pub fn resolve_form_security<'a>(thing: &'a Thing, form: &'a Form) -> EffectiveF
 }
 
 /// Resolves protocol-neutral security metadata for a selected affordance form.
-pub fn resolve_selected_affordance_form_security<'a>(
+pub fn resolve_selected_affordance_form_security<'a, TTarget>(
     thing: &'a Thing,
-    selected: &SelectedAffordanceForm<'a>,
+    selected: &SelectedAffordanceForm<'a, TTarget>,
 ) -> EffectiveFormSecurity<'a> {
     resolve_form_security(thing, selected.selection.form)
 }
@@ -221,7 +233,7 @@ pub fn select_affordance_form<'a>(
     thing: &'a Thing,
     affordance: AffordanceRef<'a>,
     operation: Operation,
-) -> BindingCoreResult<SelectedAffordanceForm<'a>> {
+) -> BindingResult<SelectedAffordanceForm<'a>> {
     select_affordance_form_with_criteria(thing, affordance, FormSelectionCriteria::new(operation))
 }
 
@@ -230,7 +242,7 @@ pub fn select_affordance_form_with_criteria<'a>(
     thing: &'a Thing,
     affordance: AffordanceRef<'a>,
     criteria: FormSelectionCriteria<'_>,
-) -> BindingCoreResult<SelectedAffordanceForm<'a>> {
+) -> BindingResult<SelectedAffordanceForm<'a>> {
     select_affordance_form_with_filter(thing, affordance, criteria, |_| true)
 }
 
@@ -240,17 +252,84 @@ pub fn select_affordance_form_with_filter<'a, F>(
     affordance: AffordanceRef<'a>,
     criteria: FormSelectionCriteria<'_>,
     filter: F,
-) -> BindingCoreResult<SelectedAffordanceForm<'a>>
+) -> BindingResult<SelectedAffordanceForm<'a>>
 where
-    F: Fn(&Form) -> bool,
+    F: FnMut(&Form) -> bool,
+{
+    let selected =
+        select_affordance_form_selection_with_filter(thing, affordance, criteria, filter)?;
+    let target = resolve_form_target(thing, selected.selection.form)?;
+
+    Ok(SelectedAffordanceForm {
+        affordance: selected.affordance,
+        selection: selected.selection,
+        target,
+    })
+}
+
+/// Selects a form from a Thing affordance using a fallible caller filter.
+///
+/// This helper returns the selected form without resolving its target. It is
+/// useful for bindings that need to inspect the form before deciding whether
+/// target resolution is required.
+pub fn select_affordance_form_selection_with_filter<'a, F>(
+    thing: &'a Thing,
+    affordance: AffordanceRef<'a>,
+    criteria: FormSelectionCriteria<'_>,
+    mut filter: F,
+) -> BindingResult<SelectedAffordanceSelection<'a>>
+where
+    F: FnMut(&Form) -> bool,
+{
+    select_affordance_form_selection_with_result_filter(thing, affordance, criteria, |form| {
+        Ok(filter(form))
+    })
+}
+
+/// Selects a form from a Thing affordance using a fallible caller filter.
+///
+/// This helper returns the selected form without resolving its target. It is
+/// useful for bindings that need to inspect the form before deciding whether
+/// target resolution is required.
+pub fn select_affordance_form_selection_with_result_filter<'a, F, E>(
+    thing: &'a Thing,
+    affordance: AffordanceRef<'a>,
+    criteria: FormSelectionCriteria<'_>,
+    filter: F,
+) -> Result<SelectedAffordanceSelection<'a>, E>
+where
+    F: FnMut(&Form) -> Result<bool, E>,
+    E: From<BindingError>,
 {
     let form_set = forms_for_affordance(thing, affordance)?;
-    let selection = select_form_with_filter(form_set.context, form_set.forms, criteria, filter)?;
-    let target = resolve_form_target(thing, selection.form)?;
+    let selection =
+        select_form_with_result_filter(form_set.context, form_set.forms, criteria, filter)?;
 
     Ok(SelectedAffordanceForm {
         affordance,
         selection,
+        target: (),
+    })
+}
+
+/// Selects and resolves a form from a Thing affordance using a fallible caller filter.
+pub fn select_affordance_form_with_result_filter<'a, F, E>(
+    thing: &'a Thing,
+    affordance: AffordanceRef<'a>,
+    criteria: FormSelectionCriteria<'_>,
+    filter: F,
+) -> Result<SelectedAffordanceForm<'a>, E>
+where
+    F: FnMut(&Form) -> Result<bool, E>,
+    E: From<BindingError>,
+{
+    let selection =
+        select_affordance_form_selection_with_result_filter(thing, affordance, criteria, filter)?;
+    let target = resolve_form_target(thing, selection.selection.form).map_err(E::from)?;
+
+    Ok(SelectedAffordanceForm {
+        affordance: selection.affordance,
+        selection: selection.selection,
         target,
     })
 }
@@ -261,7 +340,7 @@ pub fn validate_affordance_form<'a>(
     affordance: AffordanceRef<'a>,
     form: &Form,
     operation: Operation,
-) -> BindingCoreResult<SelectedForm<'a>> {
+) -> BindingResult<SelectedForm<'a>> {
     validate_affordance_form_with_criteria(
         thing,
         affordance,
@@ -276,7 +355,7 @@ pub fn validate_affordance_form_with_criteria<'a>(
     affordance: AffordanceRef<'a>,
     form: &Form,
     criteria: FormSelectionCriteria<'_>,
-) -> BindingCoreResult<SelectedForm<'a>> {
+) -> BindingResult<SelectedForm<'a>> {
     let form_set = forms_for_affordance(thing, affordance)?;
 
     for (index, candidate) in form_set.forms.iter().enumerate() {
@@ -286,14 +365,14 @@ pub fn validate_affordance_form_with_criteria<'a>(
 
         let operations = effective_form_operations(form_set.context, candidate);
         if !criteria.matches_operation(operations.as_ref()) {
-            return Err(BindingCoreError::UnsupportedOperation(format!(
+            return Err(BindingError::UnsupportedOperation(format!(
                 "Selected form does not support {:?}",
                 criteria.operation
             )));
         }
 
         if !criteria.matches_metadata(candidate) {
-            return Err(BindingCoreError::MetadataMismatch(format!(
+            return Err(BindingError::MetadataMismatch(format!(
                 "Selected form does not match {:?}",
                 criteria
             )));
@@ -308,7 +387,7 @@ pub fn validate_affordance_form_with_criteria<'a>(
         }
     }
 
-    Err(BindingCoreError::FormNotInAffordance)
+    Err(BindingError::FormNotInAffordance)
 }
 
 struct FormSet<'a> {
@@ -319,7 +398,7 @@ struct FormSet<'a> {
 fn forms_for_affordance<'a>(
     thing: &'a Thing,
     affordance: AffordanceRef<'_>,
-) -> BindingCoreResult<FormSet<'a>> {
+) -> BindingResult<FormSet<'a>> {
     match affordance {
         AffordanceRef::Thing => Ok(FormSet {
             context: FormContext::Thing,
@@ -359,11 +438,11 @@ fn find_affordance<'a, T: AffordanceMapValue>(
     kind: &'static str,
     name: &str,
     affordances: &'a Option<BTreeMap<String, T>>,
-) -> BindingCoreResult<&'a T> {
+) -> BindingResult<&'a T> {
     affordances
         .as_ref()
         .and_then(|affordances| affordances.get(name))
-        .ok_or_else(|| BindingCoreError::UnknownAffordance {
+        .ok_or_else(|| BindingError::UnknownAffordance {
             kind,
             name: name.into(),
         })

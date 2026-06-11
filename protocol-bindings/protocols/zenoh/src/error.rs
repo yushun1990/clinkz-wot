@@ -1,5 +1,8 @@
-use alloc::string::String;
+use alloc::string::{String, ToString};
 use core::fmt;
+
+use clinkz_wot_protocol_bindings::BindingError;
+use clinkz_wot_td::data_type::ResolveFormHrefError;
 
 /// Result type used by the zenoh protocol binding.
 pub type ZenohBindingResult<T> = Result<T, ZenohBindingError>;
@@ -12,7 +15,14 @@ pub enum ZenohBindingError {
     /// A TD form does not describe a zenoh target.
     UnsupportedForm(String),
     /// A TD form target cannot be resolved to a concrete zenoh key expression.
-    Target(String),
+    Target(ResolveFormHrefError),
+    /// A zenoh extension value is malformed.
+    InvalidExtension {
+        /// Extension term name.
+        term: &'static str,
+        /// Description of the malformed value.
+        message: String,
+    },
     /// Real zenoh transport execution is not wired into this crate version yet.
     TransportUnavailable(String),
 }
@@ -23,6 +33,9 @@ impl fmt::Display for ZenohBindingError {
             Self::Selection(message) => write!(f, "Zenoh form selection error: {}", message),
             Self::UnsupportedForm(message) => write!(f, "Unsupported zenoh form: {}", message),
             Self::Target(message) => write!(f, "Zenoh target error: {}", message),
+            Self::InvalidExtension { term, message } => {
+                write!(f, "Invalid zenoh extension {}: {}", term, message)
+            }
             Self::TransportUnavailable(message) => {
                 write!(f, "Zenoh transport unavailable: {}", message)
             }
@@ -32,3 +45,12 @@ impl fmt::Display for ZenohBindingError {
 
 #[cfg(feature = "zenoh")]
 impl std::error::Error for ZenohBindingError {}
+
+impl From<BindingError> for ZenohBindingError {
+    fn from(err: BindingError) -> Self {
+        match err {
+            BindingError::TargetResolution(message) => Self::Target(message),
+            other => Self::Selection(other.to_string()),
+        }
+    }
+}

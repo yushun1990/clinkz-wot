@@ -128,7 +128,10 @@ fn rejects_non_string_key_expression_extension() {
 
     assert_eq!(
         err,
-        ZenohBindingError::Target("cz-zenoh:keyExpr must be a string".into())
+        ZenohBindingError::InvalidExtension {
+            term: CZ_ZENOH_KEY_EXPR,
+            message: "must be a string".into()
+        }
     );
 }
 
@@ -549,6 +552,71 @@ fn plans_relative_href_against_zenoh_base() {
 }
 
 #[test]
+fn plans_explicit_key_expression_even_when_base_is_invalid() {
+    let form = Form::read_property("properties/status")
+        .extra_field(CZ_ZENOH_KEY_EXPR, json!("clinkz/things/lamp/properties/status"))
+        .build()
+        .unwrap();
+    let property = PropertyAffordance::builder(DataSchema::String(DataSchema::string().build()))
+        .form(form.clone())
+        .build()
+        .unwrap();
+    let thing = Thing::builder("Lamp")
+        .base("https://example.com/{tenant}/")
+        .nosec()
+        .property("status", property)
+        .build()
+        .unwrap();
+
+    let plan = plan_zenoh_affordance_operation(
+        &thing,
+        AffordanceRef::Property("status"),
+        Operation::ReadProperty,
+    )
+    .unwrap();
+
+    assert_eq!(plan.form_index, 0);
+    assert_eq!(
+        plan.operation.key_expr,
+        "clinkz/things/lamp/properties/status"
+    );
+}
+
+#[test]
+fn runtime_binding_reports_invalid_interaction_for_unresolvable_target() {
+    let form = Form::read_property("properties/status").build().unwrap();
+    let property = PropertyAffordance::builder(DataSchema::String(DataSchema::string().build()))
+        .form(form.clone())
+        .build()
+        .unwrap();
+    let thing = Thing::builder("Lamp")
+        .base("https://example.com/{tenant}/")
+        .nosec()
+        .property("status", property)
+        .build()
+        .unwrap();
+    let mut binding = ZenohBinding::with_transport(RecordingZenohTransport);
+
+    let err = binding
+        .invoke(BindingRequest {
+            thing: &thing,
+            target: AffordanceTarget::Property("status"),
+            operation: Operation::ReadProperty,
+            form: &form,
+            input: InteractionInput::empty(),
+        })
+        .unwrap_err();
+
+    match err {
+        CoreError::InvalidInteraction(message) => {
+            assert!(message.contains("Cannot resolve form href"));
+            assert!(message.contains("URI template base"));
+        }
+        other => panic!("expected invalid interaction error, got {:?}", other),
+    }
+}
+
+#[test]
 fn plans_operations_from_clinkz_extension_fixture() {
     let thing: Thing = serde_json::from_str(include_str!(
         "../../../../td/tests/fixtures/clinkz-extension-defaults.td.jsonld"
@@ -646,7 +714,10 @@ fn rejects_non_string_zenoh_metadata_extension() {
 
     assert_eq!(
         err,
-        ZenohBindingError::Target("cz-zenoh:qos must be a string".into())
+        ZenohBindingError::InvalidExtension {
+            term: CZ_ZENOH_QOS,
+            message: "must be a string".into()
+        }
     );
 }
 
@@ -661,7 +732,10 @@ fn rejects_empty_zenoh_metadata_extension() {
 
     assert_eq!(
         err,
-        ZenohBindingError::Target("cz-zenoh:encoding must not be empty".into())
+        ZenohBindingError::InvalidExtension {
+            term: CZ_ZENOH_ENCODING,
+            message: "must not be empty".into()
+        }
     );
 }
 

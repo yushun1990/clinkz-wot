@@ -3,7 +3,7 @@ mod support;
 use std::{cell::Cell, rc::Rc};
 
 use clinkz_wot_core::{AffordanceTarget, ConsumedThing, InteractionInput, LocalThing, Payload};
-use clinkz_wot_protocol_bindings::{BindingCoreError, FormSelectionCriteria};
+use clinkz_wot_protocol_bindings::{BindingError, FormSelectionCriteria};
 use clinkz_wot_servient::{
     ConsumedThingCache, InMemoryBindingPlanCache, InMemoryConsumedThingCache,
     InMemorySelectedFormCache, SelectedFormCache, SelectedFormCacheAffordance,
@@ -358,7 +358,7 @@ fn servient_remote_criteria_methods_report_binding_selection_errors() {
 
     assert!(matches!(
         err,
-        ServientError::Binding(BindingCoreError::MetadataMismatch(_))
+        ServientError::Binding(BindingError::MetadataMismatch(_))
     ));
 }
 

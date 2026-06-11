@@ -3,7 +3,7 @@ use core::fmt;
 
 use clinkz_wot_core::CoreError;
 use clinkz_wot_discovery::DiscoveryError;
-use clinkz_wot_protocol_bindings::BindingCoreError;
+use clinkz_wot_protocol_bindings::BindingError;
 
 /// Result type used by Servient composition APIs.
 pub type ServientResult<T> = Result<T, ServientError>;
@@ -15,7 +15,7 @@ pub enum ServientError {
     /// Discovery or directory storage failed.
     Discovery(DiscoveryError),
     /// Shared protocol binding form selection or target resolution failed.
-    Binding(BindingCoreError),
+    Binding(BindingError),
     /// Core dispatch or binding interaction failed.
     Core(CoreError),
     /// A local exposed Thing is already registered with this id.
@@ -55,8 +55,8 @@ impl From<DiscoveryError> for ServientError {
     }
 }
 
-impl From<BindingCoreError> for ServientError {
-    fn from(value: BindingCoreError) -> Self {
+impl From<BindingError> for ServientError {
+    fn from(value: BindingError) -> Self {
         Self::Binding(value)
     }
 }

@@ -1,12 +1,14 @@
 use alloc::string::String;
 use core::fmt;
 
+use clinkz_wot_td::data_type::ResolveFormHrefError;
+
 /// Result type used by protocol-neutral binding utilities.
-pub type BindingCoreResult<T> = Result<T, BindingCoreError>;
+pub type BindingResult<T> = Result<T, BindingError>;
 
 /// Protocol-neutral errors surfaced by shared binding utilities.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum BindingCoreError {
+pub enum BindingError {
     /// The requested affordance does not exist on the Thing Description.
     UnknownAffordance {
         /// Affordance collection name.
@@ -23,10 +25,10 @@ pub enum BindingCoreError {
     /// The selected form does not belong to the requested affordance.
     FormNotInAffordance,
     /// The selected form target could not be resolved.
-    TargetResolution(String),
+    TargetResolution(ResolveFormHrefError),
 }
 
-impl fmt::Display for BindingCoreError {
+impl fmt::Display for BindingError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::UnknownAffordance { kind, name } => {
@@ -49,4 +51,4 @@ impl fmt::Display for BindingCoreError {
 }
 
 #[cfg(feature = "std")]
-impl std::error::Error for BindingCoreError {}
+impl std::error::Error for BindingError {}

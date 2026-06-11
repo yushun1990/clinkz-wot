@@ -1,10 +1,21 @@
 use alloc::{
+    collections::BTreeMap,
     format,
     string::{String, ToString},
+    vec,
+    vec::Vec,
 };
 use core::time::Duration;
 
-use clinkz_wot_core::{CoreError, CoreResult, InteractionOutput};
+use clinkz_wot_core::{
+    AffordanceTarget, BindingRequest, CoreError, CoreResult, InteractionInput,
+    InteractionOutput, Payload, ProtocolBinding,
+};
+use clinkz_wot_protocol_bindings::{
+    validate_affordance_form, AffordanceRef, BindingError,
+};
+use clinkz_wot_td::{data_type::Operation, form::Form};
+use crate::{ZenohFormMetadata, ZenohOperationKind, ZenohOperationPlan};
 use zenoh::{
     Wait, bytes::Encoding, handlers::FifoChannelHandler, pubsub::Subscriber, sample::Sample,
 };
@@ -17,10 +28,6 @@ use self::{
     sample::payload_from_sample,
 };
 use super::selector::selector_with_parameters;
-use crate::{
-    ZenohFormMetadata, ZenohOperationKind, ZenohOperationPlan, ZenohTransport,
-    ZenohTransportRequest,
-};
 
 const DEFAULT_REPLY_TIMEOUT: Duration = Duration::from_secs(5);
 
@@ -239,4 +246,250 @@ impl ZenohSessionTransport {
 
 fn transport_error(error: impl core::fmt::Display) -> CoreError {
     CoreError::Transport(error.to_string())
+}
+
+/// Request passed from the zenoh binding planner to a zenoh transport adapter.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ZenohTransportRequest {
+    /// Concrete zenoh execution plan.
+    pub plan: ZenohOperationPlan,
+    /// Optional encoded payload from the WoT interaction input.
+    pub payload: Option<Payload>,
+    /// Runtime parameters supplied by the caller.
+    pub parameters: BTreeMap<String, String>,
+}
+
+/// Transport adapter contract for concrete zenoh runtime integrations.
+///
+/// This trait deliberately avoids depending on a concrete zenoh session type so
+/// std, constrained, and test runtimes can provide their own integration layer.
+pub trait ZenohTransport {
+    /// Executes a planned zenoh operation.
+    fn execute(&mut self, request: ZenohTransportRequest) -> CoreResult<InteractionOutput>;
+}
+
+/// Shareable zenoh transport handle for std runtime integrations.
+///
+/// This wrapper lets binding factories clone a handle to the same underlying
+/// session, connection pool, or runtime adapter while each `ZenohBinding`
+/// still owns its protocol binding value.
+#[cfg(feature = "zenoh")]
+#[derive(Debug)]
+pub struct SharedZenohTransport<T> {
+    inner: std::sync::Arc<std::sync::Mutex<T>>,
+}
+
+#[cfg(feature = "zenoh")]
+impl<T> SharedZenohTransport<T> {
+    /// Creates a shared transport handle from a concrete transport adapter.
+    pub fn new(transport: T) -> Self {
+        Self {
+            inner: std::sync::Arc::new(std::sync::Mutex::new(transport)),
+        }
+    }
+
+    /// Creates a shared transport handle from an existing `Arc<Mutex<T>>`.
+    pub fn from_arc(inner: std::sync::Arc<std::sync::Mutex<T>>) -> Self {
+        Self { inner }
+    }
+
+    /// Returns the underlying shared transport container.
+    pub fn inner(&self) -> &std::sync::Arc<std::sync::Mutex<T>> {
+        &self.inner
+    }
+}
+
+#[cfg(feature = "zenoh")]
+impl<T> Clone for SharedZenohTransport<T> {
+    fn clone(&self) -> Self {
+        Self {
+            inner: self.inner.clone(),
+        }
+    }
+}
+
+#[cfg(feature = "zenoh")]
+impl<T> ZenohTransport for SharedZenohTransport<T>
+where
+    T: ZenohTransport,
+{
+    fn execute(&mut self, request: ZenohTransportRequest) -> CoreResult<InteractionOutput> {
+        self.inner
+            .lock()
+            .map_err(|_| CoreError::Transport("Zenoh shared transport lock is poisoned".into()))?
+            .execute(request)
+    }
+}
+
+/// Placeholder transport used when no concrete zenoh runtime is attached.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub struct NoZenohTransport;
+
+/// Zenoh binding implementation.
+///
+/// This type implements protocol selection and target extraction while keeping
+/// concrete zenoh session execution behind an injected transport adapter.
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
+pub struct ZenohBinding<T = NoZenohTransport> {
+    supported_operations: Vec<Operation>,
+    transport: T,
+}
+
+impl ZenohBinding<NoZenohTransport> {
+    /// Creates a zenoh binding with the default WoT operation set and no attached transport.
+    pub fn new() -> Self {
+        Self {
+            supported_operations: default_supported_operations(),
+            transport: NoZenohTransport,
+        }
+    }
+
+    /// Creates a zenoh binding with an explicit supported operation set and no attached transport.
+    pub fn with_supported_operations(operations: impl IntoIterator<Item = Operation>) -> Self {
+        Self {
+            supported_operations: operations.into_iter().collect(),
+            transport: NoZenohTransport,
+        }
+    }
+}
+
+impl<T> ZenohBinding<T> {
+    /// Creates a zenoh binding with the default WoT operation set and an attached transport.
+    pub fn with_transport(transport: T) -> Self {
+        Self {
+            supported_operations: default_supported_operations(),
+            transport,
+        }
+    }
+
+    /// Creates a zenoh binding with an explicit supported operation set and an attached transport.
+    pub fn with_transport_and_supported_operations(
+        transport: T,
+        operations: impl IntoIterator<Item = Operation>,
+    ) -> Self {
+        Self {
+            supported_operations: operations.into_iter().collect(),
+            transport,
+        }
+    }
+
+    /// Returns a shared reference to the underlying transport.
+    pub fn transport(&self) -> &T {
+        &self.transport
+    }
+
+    /// Returns a mutable reference to the underlying transport.
+    pub fn transport_mut(&mut self) -> &mut T {
+        &mut self.transport
+    }
+}
+
+impl ZenohTransport for NoZenohTransport {
+    fn execute(&mut self, request: ZenohTransportRequest) -> CoreResult<InteractionOutput> {
+        Err(CoreError::Transport(
+            crate::ZenohBindingError::TransportUnavailable(format!(
+                "zenoh {:?} operation for '{}' is not implemented yet",
+                request.plan.kind, request.plan.key_expr
+            ))
+            .to_string(),
+        ))
+    }
+}
+
+impl<T> ProtocolBinding for ZenohBinding<T>
+where
+    T: ZenohTransport,
+{
+    fn supports(&self, form: &Form, operation: Operation) -> bool {
+        self.supported_operations.contains(&operation) && crate::form::is_zenoh_form(form)
+    }
+
+    fn invoke(&mut self, request: BindingRequest<'_>) -> CoreResult<InteractionOutput> {
+        validate_affordance_form(
+            request.thing,
+            affordance_ref_from_target(request.target),
+            request.form,
+            request.operation,
+        )
+        .map_err(core_error_from_binding_error)?;
+
+        let plan = crate::form::plan_zenoh_operation(request.thing, request.form, request.operation)
+            .map_err(core_error_from_zenoh_error)?;
+        let transport_request = build_zenoh_transport_request(plan, request.input);
+
+        self.transport.execute(transport_request)
+    }
+}
+
+/// Builds a transport request from a zenoh execution plan and WoT interaction input.
+pub fn build_zenoh_transport_request(
+    plan: ZenohOperationPlan,
+    input: InteractionInput,
+) -> ZenohTransportRequest {
+    ZenohTransportRequest {
+        plan,
+        payload: input.payload,
+        parameters: input.parameters,
+    }
+}
+
+fn core_error_from_binding_error(err: BindingError) -> CoreError {
+    match err {
+        BindingError::UnknownAffordance { kind, name } => {
+            CoreError::UnknownAffordance { kind, name }
+        }
+        BindingError::UnsupportedOperation(message) => CoreError::UnsupportedOperation(message),
+        BindingError::MetadataMismatch(message) => CoreError::InvalidInteraction(message),
+        BindingError::CallerFilterMismatch(message) => CoreError::InvalidInteraction(message),
+        BindingError::FormNotInAffordance => CoreError::InvalidInteraction(err.to_string()),
+        BindingError::TargetResolution(message) => CoreError::InvalidInteraction(message.to_string()),
+    }
+}
+
+fn core_error_from_zenoh_error(err: crate::ZenohBindingError) -> CoreError {
+    match err {
+        crate::ZenohBindingError::Selection(message)
+        | crate::ZenohBindingError::UnsupportedForm(message)
+        | crate::ZenohBindingError::InvalidExtension { message, .. } => {
+            CoreError::InvalidInteraction(message)
+        }
+        crate::ZenohBindingError::Target(message) => {
+            CoreError::InvalidInteraction(message.to_string())
+        }
+        crate::ZenohBindingError::TransportUnavailable(message) => CoreError::Transport(message),
+    }
+}
+
+fn affordance_ref_from_target(target: AffordanceTarget<'_>) -> AffordanceRef<'_> {
+    match target {
+        AffordanceTarget::Thing => AffordanceRef::Thing,
+        AffordanceTarget::Property(name) => AffordanceRef::Property(name),
+        AffordanceTarget::Action(name) => AffordanceRef::Action(name),
+        AffordanceTarget::Event(name) => AffordanceRef::Event(name),
+    }
+}
+
+fn default_supported_operations() -> Vec<Operation> {
+    use Operation::*;
+
+    vec![
+        ReadProperty,
+        WriteProperty,
+        ObserveProperty,
+        UnobserveProperty,
+        InvokeAction,
+        QueryAction,
+        CancelAction,
+        SubscribeEvent,
+        UnsubscribeEvent,
+        ReadAllProperties,
+        WriteAllProperties,
+        ReadMultipleProperties,
+        WriteMultipleProperties,
+        ObserveAllProperties,
+        UnobserveAllProperties,
+        QueryAllActions,
+        SubscribeAllEvents,
+        UnsubscribeAllEvents,
+    ]
 }
