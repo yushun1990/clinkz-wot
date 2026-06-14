@@ -152,9 +152,8 @@ Current status:
 - Started `clinkz-wot-protocol-bindings-zenoh` as the first optional concrete
   protocol binding crate under `protocol-bindings/protocols/zenoh`.
 - Added first-pass zenoh form support that recognizes `zenoh://` form targets
-  and `cz-zenoh:keyExpr` extension metadata, extracts key expressions, and
-  implements the shared `ProtocolBinding` support check without introducing a
-  required zenoh runtime dependency.
+  and resolves relative TD forms against Thing-level `base`, without
+  introducing a required zenoh runtime dependency.
 - Added zenoh operation planning that maps WoT form operations to
   transport-level zenoh operation kinds while still avoiding a required zenoh
   runtime dependency.
@@ -178,9 +177,9 @@ Current status:
 - Added shared protocol-neutral helpers for selected-form security references
   and scopes, including inherited Thing-level security, form-level overrides,
   and nosec coverage.
-- Documented the first Clinkz zenoh extension vocabulary, including stable
-  `cz-zenoh:keyExpr`, experimental metadata hints, string validation, and
-  `keyExpr` precedence over `href`.
+- Documented the first Clinkz zenoh extension vocabulary, limited to
+  experimental metadata hints while keeping TD `href` and `base` authoritative
+  for target resolution.
 - Expanded zenoh planning coverage for Thing-level forms, bulk property and
   event operations, content type and subprotocol criteria, and relative `href`
   values resolved against a zenoh `base`.

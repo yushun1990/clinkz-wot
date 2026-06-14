@@ -7,17 +7,15 @@ use alloc::{
 };
 use core::time::Duration;
 
-use clinkz_wot_core::{
-    AffordanceTarget, BindingRequest, CoreError, CoreResult, InteractionInput,
-    InteractionOutput, Payload, ProtocolBinding,
-};
-use clinkz_wot_protocol_bindings::{
-    validate_affordance_form, AffordanceRef, BindingError,
-};
-use clinkz_wot_td::{data_type::Operation, form::Form};
 use crate::{ZenohFormMetadata, ZenohOperationKind, ZenohOperationPlan};
+use clinkz_wot_core::{
+    AffordanceTarget, BindingRequest, CoreError, CoreResult, InteractionInput, InteractionOutput,
+    Payload, ProtocolBinding,
+};
+use clinkz_wot_protocol_bindings::{validate_affordance_form, AffordanceRef, BindingError};
+use clinkz_wot_td::{data_type::Operation, form::Form};
 use zenoh::{
-    Wait, bytes::Encoding, handlers::FifoChannelHandler, pubsub::Subscriber, sample::Sample,
+    bytes::Encoding, handlers::FifoChannelHandler, pubsub::Subscriber, sample::Sample, Wait,
 };
 
 mod metadata;
@@ -404,6 +402,16 @@ where
         self.supported_operations.contains(&operation) && crate::form::is_zenoh_form(form)
     }
 
+    fn supports_with_thing(
+        &self,
+        thing: &clinkz_wot_td::thing::Thing,
+        form: &Form,
+        operation: Operation,
+    ) -> bool {
+        self.supported_operations.contains(&operation)
+            && crate::form::is_zenoh_form_target(thing, form)
+    }
+
     fn invoke(&mut self, request: BindingRequest<'_>) -> CoreResult<InteractionOutput> {
         validate_affordance_form(
             request.thing,
@@ -413,8 +421,9 @@ where
         )
         .map_err(core_error_from_binding_error)?;
 
-        let plan = crate::form::plan_zenoh_operation(request.thing, request.form, request.operation)
-            .map_err(core_error_from_zenoh_error)?;
+        let plan =
+            crate::form::plan_zenoh_operation(request.thing, request.form, request.operation)
+                .map_err(core_error_from_zenoh_error)?;
         let transport_request = build_zenoh_transport_request(plan, request.input);
 
         self.transport.execute(transport_request)
@@ -442,7 +451,9 @@ fn core_error_from_binding_error(err: BindingError) -> CoreError {
         BindingError::MetadataMismatch(message) => CoreError::InvalidInteraction(message),
         BindingError::CallerFilterMismatch(message) => CoreError::InvalidInteraction(message),
         BindingError::FormNotInAffordance => CoreError::InvalidInteraction(err.to_string()),
-        BindingError::TargetResolution(message) => CoreError::InvalidInteraction(message.to_string()),
+        BindingError::TargetResolution(message) => {
+            CoreError::InvalidInteraction(message.to_string())
+        }
     }
 }
 

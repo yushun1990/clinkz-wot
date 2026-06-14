@@ -51,8 +51,8 @@ The current protocol binding crates provide:
 - Target resolution through the TD crate's `base` plus form `href` helper.
 - Caller-selected affordance form validation.
 - Protocol-neutral helpers for selected-form security references and scopes.
-- A zenoh binding crate that recognizes `zenoh://` targets and
-  `cz-zenoh:keyExpr`.
+- A zenoh binding crate that recognizes `zenoh://` targets and resolves
+  relative forms against Thing-level `base`.
 - Zenoh operation planning from WoT operations to transport-level operation
   kinds.
 - First-pass zenoh extension metadata parsing for encoding, QoS, priority, and
@@ -226,10 +226,8 @@ treated as stable TD authoring vocabulary.
 
 Work items:
 
-- Document `cz-zenoh:keyExpr` as the explicit zenoh key expression term.
 - Document `cz-zenoh:encoding`, `cz-zenoh:qos`, `cz-zenoh:priority`, and
   `cz-zenoh:congestionControl` as metadata hints.
-- State precedence rules between `href` and `cz-zenoh:keyExpr`.
 - Mark any terms that are still experimental.
 
 Acceptance criteria:
@@ -240,12 +238,11 @@ Acceptance criteria:
 
 Completion notes:
 
-- Documented the `cz-zenoh` namespace, `keyExpr` target term, and metadata hint
-  terms in `docs/protocol-bindings.md`.
-- Marked `cz-zenoh:keyExpr` stable and encoding, QoS, priority, and congestion
-  control terms as experimental hints.
-- Documented `cz-zenoh:keyExpr` precedence over `zenoh://` `href` targets and
-  the string/non-empty validation behavior.
+- Documented the `cz-zenoh` metadata hint terms in `docs/protocol-bindings.md`.
+- Removed the explicit zenoh target extension term in favor of W3C TD `href`
+  and `base` resolution.
+- Kept encoding, QoS, priority, and congestion control terms as experimental
+  hints.
 
 ### PB-P1.2 Expand Zenoh Operation Planning Coverage
 

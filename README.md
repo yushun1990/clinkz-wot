@@ -148,10 +148,11 @@ matching, affordance-level form lookup, `base` plus `href` target resolution,
 selected-form validation, and security metadata extraction.
 
 The zenoh crate currently acts as a planning and adapter layer. It supports
-`zenoh://` targets and `cz-zenoh:keyExpr` metadata, maps WoT operations to
-zenoh operation kinds, and exposes an injected `ZenohTransport` boundary for
-std, constrained, or test integrations. Concrete Rust `zenoh` and constrained
-`zenoh-pico` runtime paths remain optional and feature-gated.
+`zenoh://` targets, resolves relative forms against Thing-level `base`, maps
+WoT operations to zenoh operation kinds, and exposes an injected
+`ZenohTransport` boundary for std, constrained, or test integrations.
+Concrete Rust `zenoh` and constrained `zenoh-pico` runtime paths remain
+optional and feature-gated.
 
 ## Documentation
 

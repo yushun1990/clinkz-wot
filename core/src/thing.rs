@@ -3,7 +3,7 @@ use alloc::{boxed::Box, collections::BTreeMap, format, string::String, vec::Vec}
 use clinkz_wot_td::{
     data_type::Operation,
     form::Form,
-    td_defaults::{FormContext, effective_form_operations},
+    td_defaults::{effective_form_operations, FormContext},
     thing::Thing,
 };
 
@@ -228,7 +228,7 @@ impl ConsumedThing for BoundConsumedThing {
         let binding = self
             .bindings
             .iter_mut()
-            .find(|binding| binding.supports(form, operation))
+            .find(|binding| binding.supports_with_thing(&self.thing, form, operation))
             .ok_or_else(|| {
                 CoreError::UnsupportedBinding(format!(
                     "No binding supports {:?} for {}",

@@ -2,8 +2,7 @@
   "@context": [
     "https://www.w3.org/2022/wot/td/v1.1",
     {
-      "cz": "https://clinkz.io/ns/wot#",
-      "cz-zenoh": "https://clinkz.io/ns/wot/zenoh#"
+      "cz": "https://clinkz.io/ns/wot#"
     }
   ],
   "@type": "cz:VirtualThing",
@@ -58,8 +57,7 @@
       "forms": [
         {
           "href": "properties/status",
-          "op": "readproperty",
-          "cz-zenoh:keyExpr": "things/targeted-roundtrip/properties/status"
+          "op": "readproperty"
         },
         {
           "href": "properties/status",

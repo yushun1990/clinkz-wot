@@ -16,8 +16,6 @@ use crate::{ZenohBindingError, ZenohBindingResult};
 /// URI scheme used by TD forms that directly target zenoh.
 pub const ZENOH_SCHEME: &str = "zenoh://";
 
-/// Clinkz JSON-LD extension term for an explicit zenoh key expression.
-pub const CZ_ZENOH_KEY_EXPR: &str = "cz-zenoh:keyExpr";
 /// Clinkz JSON-LD extension term for zenoh payload encoding metadata.
 pub const CZ_ZENOH_ENCODING: &str = "cz-zenoh:encoding";
 /// Clinkz JSON-LD extension term for zenoh QoS metadata.
@@ -87,25 +85,19 @@ pub struct ZenohAffordanceOperationPlan<'a> {
 /// Returns true when a form carries zenoh-specific target metadata.
 pub fn is_zenoh_form(form: &Form) -> bool {
     form.href.as_str().starts_with(ZENOH_SCHEME)
-        || form._extra_fields.contains_key(CZ_ZENOH_KEY_EXPR)
 }
 
 /// Returns true when a form resolves to a zenoh target for a Thing.
 pub fn is_zenoh_form_target(thing: &clinkz_wot_td::thing::Thing, form: &Form) -> bool {
-    form._extra_fields.contains_key(CZ_ZENOH_KEY_EXPR)
-        || resolve_form_target(thing, form)
-            .map(|target| target.href.as_str().starts_with(ZENOH_SCHEME))
-            .unwrap_or(false)
+    resolve_form_target(thing, form)
+        .map(|target| target.href.as_str().starts_with(ZENOH_SCHEME))
+        .unwrap_or(false)
 }
 
 fn zenoh_target_matches(
     thing: &clinkz_wot_td::thing::Thing,
     form: &Form,
 ) -> ZenohBindingResult<bool> {
-    if extension_key_expr(form)?.is_some() {
-        return Ok(true);
-    }
-
     let target = resolve_form_target(thing, form).map_err(zenoh_target_error_from_binding)?;
 
     Ok(target.href.as_str().starts_with(ZENOH_SCHEME))
@@ -113,18 +105,13 @@ fn zenoh_target_matches(
 
 /// Extracts a zenoh key expression from a TD form.
 ///
-/// `cz-zenoh:keyExpr` takes precedence over `href` so TDs can keep a transport
-/// URL in `href` while declaring the concrete key expression separately.
+/// The resolved `href` remains authoritative.
 pub fn extract_zenoh_target(
     thing: &clinkz_wot_td::thing::Thing,
     form: &Form,
 ) -> ZenohBindingResult<ZenohFormTarget> {
-    if let Some(key_expr) = extension_key_expr(form)? {
-        return Ok(ZenohFormTarget { key_expr });
-    }
-
     let target = resolve_form_target(thing, form).map_err(zenoh_target_error_from_binding)?;
-    extract_zenoh_target_from_resolved_href(form, target.href.as_str())
+    extract_zenoh_target_from_resolved_href(target.href.as_str())
 }
 
 /// Builds the zenoh execution plan for a selected TD form and WoT operation.
@@ -162,19 +149,11 @@ pub fn plan_zenoh_affordance_operation_with_criteria<'a>(
     affordance: AffordanceRef<'a>,
     criteria: FormSelectionCriteria<'_>,
 ) -> ZenohBindingResult<ZenohAffordanceOperationPlan<'a>> {
-    let selected = select_affordance_form_selection_with_result_filter(thing, affordance, criteria, |form| {
-        zenoh_target_matches(thing, form)
-    })?;
-    let target = if extension_key_expr(selected.selection.form)?.is_some() {
-        extract_zenoh_target_from_resolved_href(selected.selection.form, ZENOH_SCHEME)?
-    } else {
-        let resolved = resolve_form_target(thing, selected.selection.form)
-            .map_err(zenoh_target_error_from_binding)?;
-        extract_zenoh_target_from_resolved_href(
-            selected.selection.form,
-            resolved.href.as_str(),
-        )?
-    };
+    let selected =
+        select_affordance_form_selection_with_result_filter(thing, affordance, criteria, |form| {
+            zenoh_target_matches(thing, form)
+        })?;
+    let target = extract_zenoh_target(thing, selected.selection.form)?;
     let plan = ZenohOperationPlan {
         key_expr: target.key_expr,
         kind: zenoh_operation_kind(criteria.operation),
@@ -219,25 +198,17 @@ pub fn extract_zenoh_metadata(form: &Form) -> ZenohBindingResult<ZenohFormMetada
     })
 }
 
-fn extension_key_expr(form: &Form) -> ZenohBindingResult<Option<String>> {
-    extension_string(form, CZ_ZENOH_KEY_EXPR)
-}
-
-fn extract_zenoh_target_from_resolved_href(
-    form: &Form,
-    href: &str,
-) -> ZenohBindingResult<ZenohFormTarget> {
-    if let Some(key_expr) = extension_key_expr(form)? {
-        return Ok(ZenohFormTarget { key_expr });
+fn extract_zenoh_target_from_resolved_href(href: &str) -> ZenohBindingResult<ZenohFormTarget> {
+    if let Some(key_expr) = href.strip_prefix(ZENOH_SCHEME) {
+        return Ok(ZenohFormTarget {
+            key_expr: key_expr.into(),
+        });
     }
 
-    href.strip_prefix(ZENOH_SCHEME)
-        .map(|key_expr| ZenohFormTarget {
-            key_expr: key_expr.into(),
-        })
-        .ok_or_else(|| {
-            ZenohBindingError::UnsupportedForm(format!("href '{}' is not a zenoh target", href))
-        })
+    Err(ZenohBindingError::UnsupportedForm(format!(
+        "href '{}' is not a zenoh target",
+        href
+    )))
 }
 
 fn extension_string(form: &Form, term: &'static str) -> ZenohBindingResult<Option<String>> {

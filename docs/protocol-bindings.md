@@ -50,7 +50,7 @@ Zenoh is not a required dependency of the engine. It belongs in
 
 The `clinkz-wot-protocol-bindings-zenoh` crate is a protocol binding planning
 crate, not a concrete session runtime. It recognizes zenoh TD forms, resolves
-key expressions, parses `cz-zenoh` metadata, maps WoT operations to zenoh
+resolved targets, parses `cz-zenoh` metadata, maps WoT operations to zenoh
 operation kinds, and exposes a `ZenohTransport` adapter boundary. It must stay
 usable under `no_std + alloc`.
 
@@ -135,17 +135,14 @@ values.
 
 | Term | Status | JSON type | Purpose |
 | --- | --- | --- | --- |
-| `cz-zenoh:keyExpr` | Stable | string | Explicit zenoh key expression for the form target. |
 | `cz-zenoh:encoding` | Experimental hint | string | Preferred zenoh payload encoding metadata. |
 | `cz-zenoh:qos` | Experimental hint | string | Preferred zenoh QoS metadata. |
 | `cz-zenoh:priority` | Experimental hint | string | Preferred zenoh priority metadata. |
 | `cz-zenoh:congestionControl` | Experimental hint | string | Preferred zenoh congestion control metadata. |
 
-`cz-zenoh:keyExpr` is the stable Clinkz term for declaring the concrete zenoh
-key expression when `href` is not itself a `zenoh://` target. When both
-`cz-zenoh:keyExpr` and a `zenoh://` `href` are present, `cz-zenoh:keyExpr`
-takes precedence. This allows a TD form to keep a general transport target in
-`href` while carrying the concrete zenoh key expression separately.
+The resolved `href` remains authoritative for the concrete target. Relative
+`href` values are resolved against Thing-level `base` before the binding turns
+them into zenoh key expressions.
 
 The metadata hint terms are parsed and preserved in the zenoh operation plan,
 but the shared engine does not assign mandatory runtime behavior to them. Host
@@ -156,22 +153,12 @@ Example form:
 
 ```json
 {
-  "href": "zenoh://clinkz/things/lamp/properties/status",
+  "base": "zenoh://clinkz/things/lamp/",
+  "href": "properties/status",
   "op": "readproperty",
   "contentType": "application/json",
   "cz-zenoh:encoding": "application/json",
   "cz-zenoh:qos": "express"
-}
-```
-
-Example form with an explicit key expression:
-
-```json
-{
-  "href": "properties/status",
-  "op": "readproperty",
-  "contentType": "application/json",
-  "cz-zenoh:keyExpr": "clinkz/things/lamp/properties/status"
 }
 ```
 

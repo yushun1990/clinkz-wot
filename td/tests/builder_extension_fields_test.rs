@@ -7,7 +7,7 @@ use clinkz_wot_td::{
     security_scheme::{ContextHelper as SecurityContextHelper, NoSecurityScheme, SecurityScheme},
     thing::Thing,
 };
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 
 fn extension_map(entries: impl IntoIterator<Item = (&'static str, Value)>) -> ExtensionMap {
     entries
@@ -53,7 +53,7 @@ fn thing_builder_sets_extension_fields() {
 #[test]
 fn form_and_response_builders_set_extension_fields() {
     let form = Form::builder("/properties/temperature")
-        .extra_field("cz-zenoh:keyExpr", json!("demo/temperature"))
+        .extra_field("cz-zenoh:encoding", json!("application/json"))
         .response(
             ExpectedResponse::new("application/cbor".to_string())
                 .extra_field("cz:responseHint", json!("compact")),
@@ -66,7 +66,10 @@ fn form_and_response_builders_set_extension_fields() {
         .expect("form should build");
 
     let value = serde_json::to_value(form).expect("form should serialize");
-    assert_eq!(field(&value, "cz-zenoh:keyExpr"), json!("demo/temperature"));
+    assert_eq!(
+        field(&value, "cz-zenoh:encoding"),
+        json!("application/json")
+    );
     assert_eq!(
         field(&value["response"], "cz:responseHint"),
         json!("compact")

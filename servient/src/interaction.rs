@@ -445,7 +445,7 @@ where
 
         let form = self.cached_or_select_form(thing, id, affordance, criteria)?;
         let (binding_factory_index, binding) =
-            self.select_binding_factory_for_form(&form, criteria.operation)?;
+            self.select_binding_factory_for_form(thing, &form, criteria.operation)?;
         self.binding_plan_cache.insert(
             key,
             BindingPlan {
@@ -466,7 +466,7 @@ where
     ) -> ServientResult<ActiveBindingPlan> {
         validate_affordance_form_with_criteria(thing, affordance, &plan.form, criteria)?;
         let binding = self.binding_from_factory_index(plan.binding_factory_index)?;
-        if binding.supports(&plan.form, criteria.operation) {
+        if binding.supports_with_thing(thing, &plan.form, criteria.operation) {
             Ok(ActiveBindingPlan {
                 form: plan.form,
                 binding,
@@ -512,12 +512,13 @@ where
 
     fn select_binding_factory_for_form(
         &self,
+        thing: &Thing,
         form: &Form,
         operation: Operation,
     ) -> ServientResult<(usize, Box<dyn ProtocolBinding>)> {
         for (index, factory) in self.binding_factories.iter().enumerate() {
             let binding = factory();
-            if binding.supports(form, operation) {
+            if binding.supports_with_thing(thing, form, operation) {
                 return Ok((index, binding));
             }
         }

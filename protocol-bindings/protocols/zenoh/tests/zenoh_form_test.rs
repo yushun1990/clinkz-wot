@@ -8,7 +8,7 @@ use clinkz_wot_protocol_bindings_zenoh::{
     plan_zenoh_affordance_operation, plan_zenoh_affordance_operation_with_criteria,
     plan_zenoh_operation, zenoh_operation_kind, ZenohBinding, ZenohBindingError,
     ZenohOperationKind, ZenohTransport, ZenohTransportRequest, CZ_ZENOH_CONGESTION_CONTROL,
-    CZ_ZENOH_ENCODING, CZ_ZENOH_KEY_EXPR, CZ_ZENOH_PRIORITY, CZ_ZENOH_QOS,
+    CZ_ZENOH_ENCODING, CZ_ZENOH_PRIORITY, CZ_ZENOH_QOS,
 };
 use clinkz_wot_td::{
     affordance::{EventAffordance, InteractionHelper, PropertyAffordance},
@@ -80,15 +80,18 @@ fn supports_forms_with_zenoh_href() {
 }
 
 #[test]
-fn supports_forms_with_explicit_key_expression_extension() {
-    let form = Form::read_property("properties/status")
-        .extra_field(CZ_ZENOH_KEY_EXPR, json!("clinkz/things/lamp/status"))
+fn supports_forms_with_relative_href_and_zenoh_base() {
+    let form = Form::read_property("properties/status").build().unwrap();
+    let thing = Thing::builder("Lamp")
+        .base("zenoh://clinkz/things/lamp/")
+        .nosec()
         .build()
         .unwrap();
     let binding = ZenohBinding::new();
 
-    assert!(is_zenoh_form(&form));
-    assert!(binding.supports(&form, Operation::ReadProperty));
+    assert!(!is_zenoh_form(&form));
+    assert!(!binding.supports(&form, Operation::ReadProperty));
+    assert!(binding.supports_with_thing(&thing, &form, Operation::ReadProperty));
 }
 
 #[test]
@@ -104,47 +107,13 @@ fn extracts_key_expression_from_zenoh_href() {
 }
 
 #[test]
-fn explicit_key_expression_takes_precedence_over_href() {
-    let form = Form::read_property("zenoh://fallback/key")
-        .extra_field(CZ_ZENOH_KEY_EXPR, json!("clinkz/things/lamp/status"))
+fn builds_operation_plan_from_href_resolved_against_base() {
+    let form = Form::invoke_action("actions/reboot").build().unwrap();
+    let thing = Thing::builder("Lamp")
+        .base("zenoh://clinkz/things/lamp/")
+        .nosec()
         .build()
         .unwrap();
-    let thing = Thing::builder("Lamp").nosec().build().unwrap();
-
-    let target = extract_zenoh_target(&thing, &form).unwrap();
-
-    assert_eq!(target.key_expr, "clinkz/things/lamp/status");
-}
-
-#[test]
-fn rejects_non_string_key_expression_extension() {
-    let form = Form::read_property("properties/status")
-        .extra_field(CZ_ZENOH_KEY_EXPR, json!(42))
-        .build()
-        .unwrap();
-    let thing = Thing::builder("Lamp").nosec().build().unwrap();
-
-    let err = extract_zenoh_target(&thing, &form).unwrap_err();
-
-    assert_eq!(
-        err,
-        ZenohBindingError::InvalidExtension {
-            term: CZ_ZENOH_KEY_EXPR,
-            message: "must be a string".into()
-        }
-    );
-}
-
-#[test]
-fn builds_operation_plan_from_key_expression_extension() {
-    let form = Form::invoke_action("actions/reboot")
-        .extra_field(
-            CZ_ZENOH_KEY_EXPR,
-            json!("clinkz/things/lamp/actions/reboot"),
-        )
-        .build()
-        .unwrap();
-    let thing = Thing::builder("Lamp").nosec().build().unwrap();
 
     let plan = plan_zenoh_operation(&thing, &form, Operation::InvokeAction).unwrap();
 
@@ -552,11 +521,8 @@ fn plans_relative_href_against_zenoh_base() {
 }
 
 #[test]
-fn plans_explicit_key_expression_even_when_base_is_invalid() {
-    let form = Form::read_property("properties/status")
-        .extra_field(CZ_ZENOH_KEY_EXPR, json!("clinkz/things/lamp/properties/status"))
-        .build()
-        .unwrap();
+fn rejects_relative_href_when_base_is_invalid() {
+    let form = Form::read_property("properties/status").build().unwrap();
     let property = PropertyAffordance::builder(DataSchema::String(DataSchema::string().build()))
         .form(form.clone())
         .build()
@@ -568,18 +534,17 @@ fn plans_explicit_key_expression_even_when_base_is_invalid() {
         .build()
         .unwrap();
 
-    let plan = plan_zenoh_affordance_operation(
+    let err = plan_zenoh_affordance_operation(
         &thing,
         AffordanceRef::Property("status"),
         Operation::ReadProperty,
     )
-    .unwrap();
+    .unwrap_err();
 
-    assert_eq!(plan.form_index, 0);
-    assert_eq!(
-        plan.operation.key_expr,
-        "clinkz/things/lamp/properties/status"
-    );
+    assert!(matches!(
+        err,
+        ZenohBindingError::Target(clinkz_wot_td::data_type::ResolveFormHrefError::TemplateBase(_))
+    ));
 }
 
 #[test]
@@ -633,7 +598,7 @@ fn plans_operations_from_clinkz_extension_fixture() {
     assert_eq!(read.operation.kind, ZenohOperationKind::Query);
     assert_eq!(
         read.operation.key_expr,
-        "things/targeted-roundtrip/properties/status"
+        "clinkz/things/targeted-roundtrip/properties/status"
     );
 
     let write = plan_zenoh_affordance_operation_with_criteria(
