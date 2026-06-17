@@ -226,8 +226,8 @@ treated as stable TD authoring vocabulary.
 
 Work items:
 
-- Document `cz-zenoh:encoding`, `cz-zenoh:qos`, `cz-zenoh:priority`, and
-  `cz-zenoh:congestionControl` as metadata hints.
+- Document `Form.contentType` plus `cz-zenoh:qos`, `cz-zenoh:priority`, and
+  `cz-zenoh:congestionControl` as zenoh planning metadata inputs.
 - Mark any terms that are still experimental.
 
 Acceptance criteria:

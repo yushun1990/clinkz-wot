@@ -21,7 +21,7 @@ impl ZenohPicoPlatform for FakePicoPlatform {
         self.calls.push(format!(
             "put:{}:{}:{}:{}",
             request.target_expr()?.as_ref(),
-            request.metadata.encoding.as_deref().unwrap_or(""),
+            request.metadata.content_type.as_deref().unwrap_or(""),
             request
                 .payload
                 .map(|payload| payload.body.len())
@@ -87,7 +87,7 @@ fn pico_transport_routes_put_and_query_requests_to_platform_hooks() {
                 key_expr: "clinkz/things/lamp/status".into(),
                 kind: ZenohOperationKind::Put,
                 metadata: ZenohFormMetadata {
-                    encoding: Some("text/plain".into()),
+                    content_type: Some("text/plain".into()),
                     ..Default::default()
                 },
             },

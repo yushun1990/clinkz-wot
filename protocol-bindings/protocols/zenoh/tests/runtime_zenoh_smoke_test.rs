@@ -67,7 +67,7 @@ fn runtime_zenoh_transport_executes_put_and_get_smoke_paths() {
                 key_expr: key_expr.clone(),
                 kind: ZenohOperationKind::Put,
                 metadata: ZenohFormMetadata {
-                    encoding: Some("text/plain".into()),
+                    content_type: Some("text/plain".into()),
                     ..Default::default()
                 },
             },
@@ -90,7 +90,7 @@ fn runtime_zenoh_transport_executes_put_and_get_smoke_paths() {
                 key_expr,
                 kind: ZenohOperationKind::RequestReply,
                 metadata: ZenohFormMetadata {
-                    encoding: Some("text/plain".into()),
+                    content_type: Some("text/plain".into()),
                     ..Default::default()
                 },
             },
@@ -135,7 +135,7 @@ fn runtime_zenoh_transport_executes_subscribe_once_smoke_path() {
                 key_expr,
                 kind: ZenohOperationKind::Subscribe,
                 metadata: ZenohFormMetadata {
-                    encoding: Some("text/plain".into()),
+                    content_type: Some("text/plain".into()),
                     ..Default::default()
                 },
             },
@@ -175,7 +175,7 @@ fn runtime_zenoh_put_propagates_live_metadata() {
                 key_expr,
                 kind: ZenohOperationKind::Put,
                 metadata: ZenohFormMetadata {
-                    encoding: Some("application/json".into()),
+                    content_type: Some("application/json".into()),
                     qos: Some("express".into()),
                     priority: Some("background".into()),
                     congestion_control: Some("block".into()),
@@ -227,7 +227,7 @@ fn runtime_zenoh_subscription_receives_multiple_samples_and_undeclares() {
             key_expr: key_expr.clone(),
             kind: ZenohOperationKind::Subscribe,
             metadata: ZenohFormMetadata {
-                encoding: Some("text/plain".into()),
+                content_type: Some("text/plain".into()),
                 ..Default::default()
             },
         })
@@ -288,7 +288,7 @@ fn runtime_zenoh_subscription_timeout_maps_to_transport_error() {
             key_expr: key_expr.clone(),
             kind: ZenohOperationKind::Subscribe,
             metadata: ZenohFormMetadata {
-                encoding: Some("text/plain".into()),
+                content_type: Some("text/plain".into()),
                 ..Default::default()
             },
         })
@@ -328,7 +328,7 @@ fn runtime_zenoh_request_reply_timeout_maps_to_transport_error() {
                 key_expr: key_expr.clone(),
                 kind: ZenohOperationKind::RequestReply,
                 metadata: ZenohFormMetadata {
-                    encoding: Some("text/plain".into()),
+                    content_type: Some("text/plain".into()),
                     ..Default::default()
                 },
             },
@@ -399,7 +399,7 @@ fn runtime_zenoh_request_reply_propagates_selector_parameters() {
                 key_expr: planned_key_expr,
                 kind: ZenohOperationKind::RequestReply,
                 metadata: ZenohFormMetadata {
-                    encoding: Some("text/plain".into()),
+                    content_type: Some("text/plain".into()),
                     ..Default::default()
                 },
             },
@@ -476,7 +476,7 @@ fn runtime_zenoh_request_reply_propagates_request_payload() {
                 key_expr,
                 kind: ZenohOperationKind::RequestReply,
                 metadata: ZenohFormMetadata {
-                    encoding: Some("text/plain".into()),
+                    content_type: Some("text/plain".into()),
                     ..Default::default()
                 },
             },
@@ -543,7 +543,7 @@ fn runtime_zenoh_request_reply_uses_live_reply_encoding() {
                 key_expr,
                 kind: ZenohOperationKind::RequestReply,
                 metadata: ZenohFormMetadata {
-                    encoding: Some("application/json".into()),
+                    content_type: Some("application/json".into()),
                     ..Default::default()
                 },
             },

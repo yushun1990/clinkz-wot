@@ -16,8 +16,6 @@ use crate::{ZenohBindingError, ZenohBindingResult};
 /// URI scheme used by TD forms that directly target zenoh.
 pub const ZENOH_SCHEME: &str = "zenoh://";
 
-/// Clinkz JSON-LD extension term for zenoh payload encoding metadata.
-pub const CZ_ZENOH_ENCODING: &str = "cz-zenoh:encoding";
 /// Clinkz JSON-LD extension term for zenoh QoS metadata.
 pub const CZ_ZENOH_QOS: &str = "cz-zenoh:qos";
 /// Clinkz JSON-LD extension term for zenoh priority metadata.
@@ -50,8 +48,8 @@ pub enum ZenohOperationKind {
 /// Zenoh-specific metadata parsed from Clinkz TD extension terms.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct ZenohFormMetadata {
-    /// Optional zenoh payload encoding hint.
-    pub encoding: Option<String>,
+    /// Content type carried by the WoT form.
+    pub content_type: Option<String>,
     /// Optional zenoh QoS hint.
     pub qos: Option<String>,
     /// Optional zenoh priority hint.
@@ -191,7 +189,7 @@ pub fn zenoh_operation_kind(operation: Operation) -> ZenohOperationKind {
 /// Extracts optional zenoh execution metadata from Clinkz extension terms.
 pub fn extract_zenoh_metadata(form: &Form) -> ZenohBindingResult<ZenohFormMetadata> {
     Ok(ZenohFormMetadata {
-        encoding: extension_string(form, CZ_ZENOH_ENCODING)?,
+        content_type: Some(form.content_type.clone()),
         qos: extension_string(form, CZ_ZENOH_QOS)?,
         priority: extension_string(form, CZ_ZENOH_PRIORITY)?,
         congestion_control: extension_string(form, CZ_ZENOH_CONGESTION_CONTROL)?,

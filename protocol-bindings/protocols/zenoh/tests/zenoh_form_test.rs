@@ -8,7 +8,7 @@ use clinkz_wot_protocol_bindings_zenoh::{
     plan_zenoh_affordance_operation, plan_zenoh_affordance_operation_with_criteria,
     plan_zenoh_operation, zenoh_operation_kind, ZenohBinding, ZenohBindingError,
     ZenohOperationKind, ZenohTransport, ZenohTransportRequest, CZ_ZENOH_CONGESTION_CONTROL,
-    CZ_ZENOH_ENCODING, CZ_ZENOH_PRIORITY, CZ_ZENOH_QOS,
+    CZ_ZENOH_PRIORITY, CZ_ZENOH_QOS,
 };
 use clinkz_wot_td::{
     affordance::{EventAffordance, InteractionHelper, PropertyAffordance},
@@ -29,7 +29,7 @@ impl ZenohTransport for RecordingZenohTransport {
         assert_eq!(request.plan.kind, ZenohOperationKind::Put);
         assert_eq!(request.plan.key_expr, "clinkz/things/lamp/status");
         assert_eq!(
-            request.plan.metadata.encoding.as_deref(),
+            request.plan.metadata.content_type.as_deref(),
             Some("application/json")
         );
         assert_eq!(
@@ -125,7 +125,7 @@ fn builds_operation_plan_from_href_resolved_against_base() {
 #[test]
 fn extracts_zenoh_metadata_extensions() {
     let form = Form::write_property("zenoh://clinkz/things/lamp/status")
-        .extra_field(CZ_ZENOH_ENCODING, json!("application/json"))
+        .content_type("application/json")
         .extra_field(CZ_ZENOH_QOS, json!("express"))
         .extra_field(CZ_ZENOH_PRIORITY, json!("real-time"))
         .extra_field(CZ_ZENOH_CONGESTION_CONTROL, json!("block"))
@@ -134,7 +134,7 @@ fn extracts_zenoh_metadata_extensions() {
 
     let metadata = extract_zenoh_metadata(&form).unwrap();
 
-    assert_eq!(metadata.encoding.as_deref(), Some("application/json"));
+    assert_eq!(metadata.content_type.as_deref(), Some("application/json"));
     assert_eq!(metadata.qos.as_deref(), Some("express"));
     assert_eq!(metadata.priority.as_deref(), Some("real-time"));
     assert_eq!(metadata.congestion_control.as_deref(), Some("block"));
@@ -143,7 +143,7 @@ fn extracts_zenoh_metadata_extensions() {
 #[test]
 fn includes_metadata_in_operation_plan() {
     let form = Form::write_property("zenoh://clinkz/things/lamp/status")
-        .extra_field(CZ_ZENOH_ENCODING, json!("application/json"))
+        .content_type("application/json")
         .extra_field(CZ_ZENOH_QOS, json!("express"))
         .build()
         .unwrap();
@@ -153,14 +153,14 @@ fn includes_metadata_in_operation_plan() {
 
     assert_eq!(plan.key_expr, "clinkz/things/lamp/status");
     assert_eq!(plan.kind, ZenohOperationKind::Put);
-    assert_eq!(plan.metadata.encoding.as_deref(), Some("application/json"));
+    assert_eq!(plan.metadata.content_type.as_deref(), Some("application/json"));
     assert_eq!(plan.metadata.qos.as_deref(), Some("express"));
 }
 
 #[test]
 fn runtime_binding_delegates_planned_operation_to_transport() {
     let form = Form::write_property("zenoh://clinkz/things/lamp/status")
-        .extra_field(CZ_ZENOH_ENCODING, json!("application/json"))
+        .content_type("application/json")
         .build()
         .unwrap();
     let property = PropertyAffordance::builder(DataSchema::String(DataSchema::string().build()))
@@ -306,7 +306,7 @@ fn plans_zenoh_affordance_operation_from_matching_form() {
         .build()
         .unwrap();
     let zenoh_form = Form::read_property("zenoh://clinkz/things/lamp/properties/status")
-        .extra_field(CZ_ZENOH_ENCODING, json!("application/json"))
+        .content_type("application/json")
         .build()
         .unwrap();
     let property = PropertyAffordance::builder(DataSchema::String(DataSchema::string().build()))
@@ -334,7 +334,7 @@ fn plans_zenoh_affordance_operation_from_matching_form() {
         "clinkz/things/lamp/properties/status"
     );
     assert_eq!(
-        plan.operation.metadata.encoding.as_deref(),
+        plan.operation.metadata.content_type.as_deref(),
         Some("application/json")
     );
 }
@@ -347,7 +347,6 @@ fn plans_zenoh_affordance_operation_with_metadata_criteria() {
         .unwrap();
     let cbor_form = Form::read_property("zenoh://clinkz/things/lamp/properties/status/cbor")
         .content_type("application/cbor")
-        .extra_field(CZ_ZENOH_ENCODING, json!("application/cbor"))
         .build()
         .unwrap();
     let property = PropertyAffordance::builder(DataSchema::String(DataSchema::string().build()))
@@ -373,7 +372,7 @@ fn plans_zenoh_affordance_operation_with_metadata_criteria() {
         "clinkz/things/lamp/properties/status/cbor"
     );
     assert_eq!(
-        plan.operation.metadata.encoding.as_deref(),
+        plan.operation.metadata.content_type.as_deref(),
         Some("application/cbor")
     );
 }
@@ -687,21 +686,14 @@ fn rejects_non_string_zenoh_metadata_extension() {
 }
 
 #[test]
-fn rejects_empty_zenoh_metadata_extension() {
+fn extracts_default_content_type_into_zenoh_metadata() {
     let form = Form::read_property("zenoh://clinkz/things/lamp/status")
-        .extra_field(CZ_ZENOH_ENCODING, json!(""))
         .build()
         .unwrap();
 
-    let err = extract_zenoh_metadata(&form).unwrap_err();
+    let metadata = extract_zenoh_metadata(&form).unwrap();
 
-    assert_eq!(
-        err,
-        ZenohBindingError::InvalidExtension {
-            term: CZ_ZENOH_ENCODING,
-            message: "must not be empty".into()
-        }
-    );
+    assert_eq!(metadata.content_type.as_deref(), Some("application/json"));
 }
 
 #[test]

@@ -65,8 +65,8 @@ when the zenoh binding crate is built with the `zenoh` feature. It wraps
 a concrete `zenoh::Session`, supports put, get/request-reply, and one-shot
 subscribe execution through the protocol-neutral `ZenohTransport` trait, and
 also exposes `ZenohSubscription` for std runtimes that need explicit
-subscription receive and undeclare lifecycle control. It maps the first
-encoding, express QoS, priority, and congestion control metadata hints onto put
+subscription receive and undeclare lifecycle control. It maps form
+`contentType`, express QoS, priority, and congestion control metadata onto put
 and get/request-reply builders. The default crate build remains free of the
 Rust `zenoh` dependency.
 
@@ -135,7 +135,6 @@ values.
 
 | Term | Status | JSON type | Purpose |
 | --- | --- | --- | --- |
-| `cz-zenoh:encoding` | Experimental hint | string | Preferred zenoh payload encoding metadata. |
 | `cz-zenoh:qos` | Experimental hint | string | Preferred zenoh QoS metadata. |
 | `cz-zenoh:priority` | Experimental hint | string | Preferred zenoh priority metadata. |
 | `cz-zenoh:congestionControl` | Experimental hint | string | Preferred zenoh congestion control metadata. |
@@ -157,7 +156,6 @@ Example form:
   "href": "properties/status",
   "op": "readproperty",
   "contentType": "application/json",
-  "cz-zenoh:encoding": "application/json",
   "cz-zenoh:qos": "express"
 }
 ```

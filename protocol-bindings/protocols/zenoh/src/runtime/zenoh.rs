@@ -162,8 +162,8 @@ impl ZenohSessionTransport {
             .map(|payload| payload.body)
             .unwrap_or_default();
         let mut builder = self.session.put(request.plan.key_expr.as_str(), body);
-        if let Some(encoding) = request.plan.metadata.encoding.as_deref() {
-            builder = builder.encoding(Encoding::from(encoding));
+        if let Some(content_type) = request.plan.metadata.content_type.as_deref() {
+            builder = builder.encoding(Encoding::from(content_type));
         }
         if let Some(qos) = request.plan.metadata.qos.as_deref() {
             builder = builder.express(parse_express_qos(qos)?);
@@ -184,8 +184,8 @@ impl ZenohSessionTransport {
         if let Some(payload) = request.payload {
             builder = builder.payload(payload.body);
         }
-        if let Some(encoding) = request.plan.metadata.encoding.as_deref() {
-            builder = builder.encoding(Encoding::from(encoding));
+        if let Some(content_type) = request.plan.metadata.content_type.as_deref() {
+            builder = builder.encoding(Encoding::from(content_type));
         }
         if let Some(qos) = request.plan.metadata.qos.as_deref() {
             builder = builder.express(parse_express_qos(qos)?);
@@ -236,7 +236,7 @@ impl ZenohSessionTransport {
 
         Ok(ZenohSubscription {
             subscriber,
-            content_type_hint: metadata.encoding,
+            content_type_hint: metadata.content_type,
             reply_timeout: self.reply_timeout,
         })
     }

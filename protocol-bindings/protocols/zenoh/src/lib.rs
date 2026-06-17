@@ -23,7 +23,7 @@ pub use form::{
     plan_zenoh_affordance_operation, plan_zenoh_affordance_operation_with_criteria,
     plan_zenoh_operation, zenoh_operation_kind, ZenohAffordanceOperationPlan, ZenohFormMetadata,
     ZenohFormTarget, ZenohOperationKind, ZenohOperationPlan, CZ_ZENOH_CONGESTION_CONTROL,
-    CZ_ZENOH_ENCODING, CZ_ZENOH_PRIORITY, CZ_ZENOH_QOS, ZENOH_SCHEME,
+    CZ_ZENOH_PRIORITY, CZ_ZENOH_QOS, ZENOH_SCHEME,
 };
 #[cfg(feature = "zenoh")]
 pub use runtime::{

@@ -53,7 +53,7 @@ fn thing_builder_sets_extension_fields() {
 #[test]
 fn form_and_response_builders_set_extension_fields() {
     let form = Form::builder("/properties/temperature")
-        .extra_field("cz-zenoh:encoding", json!("application/json"))
+        .extra_field("cz:testHint", json!("application/json"))
         .response(
             ExpectedResponse::new("application/cbor".to_string())
                 .extra_field("cz:responseHint", json!("compact")),
@@ -66,10 +66,7 @@ fn form_and_response_builders_set_extension_fields() {
         .expect("form should build");
 
     let value = serde_json::to_value(form).expect("form should serialize");
-    assert_eq!(
-        field(&value, "cz-zenoh:encoding"),
-        json!("application/json")
-    );
+    assert_eq!(field(&value, "cz:testHint"), json!("application/json"));
     assert_eq!(
         field(&value["response"], "cz:responseHint"),
         json!("compact")
