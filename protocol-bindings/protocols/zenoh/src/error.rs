@@ -23,8 +23,6 @@ pub enum ZenohBindingError {
         /// Description of the malformed value.
         message: String,
     },
-    /// Real zenoh transport execution is not wired into this crate version yet.
-    TransportUnavailable(String),
 }
 
 impl fmt::Display for ZenohBindingError {
@@ -35,9 +33,6 @@ impl fmt::Display for ZenohBindingError {
             Self::Target(message) => write!(f, "Zenoh target error: {}", message),
             Self::InvalidExtension { term, message } => {
                 write!(f, "Invalid zenoh extension {}: {}", term, message)
-            }
-            Self::TransportUnavailable(message) => {
-                write!(f, "Zenoh transport unavailable: {}", message)
             }
         }
     }

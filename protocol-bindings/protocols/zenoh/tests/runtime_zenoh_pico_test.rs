@@ -114,7 +114,11 @@ fn pico_transport_routes_put_and_query_requests_to_platform_hooks() {
 
     assert_eq!(query.payload.unwrap().body, b"query-reply");
     assert_eq!(
-        transport.platform().calls,
+        transport
+            .platform()
+            .downcast_ref::<FakePicoPlatform>()
+            .expect("fake platform")
+            .calls,
         [
             "put:clinkz/things/lamp/status:text/plain:2:250",
             "request-reply:clinkz/things/lamp/status?trace=full"
@@ -155,7 +159,11 @@ fn pico_transport_routes_subscription_lifecycle_hooks() {
     assert_eq!(subscribed.payload.unwrap().body, b"event");
     assert!(unsubscribed.payload.is_none());
     assert_eq!(
-        transport.platform().calls,
+        transport
+            .platform()
+            .downcast_ref::<FakePicoPlatform>()
+            .expect("fake platform")
+            .calls,
         [
             "subscribe:clinkz/things/lamp/events/status",
             "unsubscribe:clinkz/things/lamp/events/status"

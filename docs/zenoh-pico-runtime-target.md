@@ -6,8 +6,9 @@ runtime backend.
 The current `clinkz-wot-protocol-bindings-zenoh` crate already exposes the
 protocol-neutral zenoh planning surface and the `ZenohTransport` adapter
 boundary. The `zenoh-pico` feature exposes a `no_std + alloc`
-platform-hook backend through `ZenohPicoPlatform` and `ZenohPicoTransport`.
-The real C ABI binding remains target-specific platform work.
+platform-hook backend through `ZenohPicoPlatform` and the public
+`ZenohRuntimeTransport` alias, which resolves to `ZenohPicoTransport`. The
+real C ABI binding remains target-specific platform work.
 
 This backend is currently deferred at the runtime-injection stage until the
 target hardware platform, C ABI approach, polling model, and allocation

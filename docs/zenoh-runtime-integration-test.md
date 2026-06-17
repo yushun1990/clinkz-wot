@@ -13,7 +13,7 @@ without changing the default workspace verification baseline.
 
 ## Goal
 
-Add a small smoke-test path for `ZenohSessionTransport` against a real zenoh
+Add a small smoke-test path for `ZenohRuntimeTransport` against a real zenoh
 runtime without making normal workspace tests depend on external processes,
 network ports, or host-specific router configuration.
 
@@ -46,7 +46,7 @@ CLINKZ_WOT_ZENOH_ENDPOINT=tcp/127.0.0.1:7447
 The current smoke-test increment covers:
 
 - Opening or receiving a concrete `zenoh::Session`.
-- Executing a planned put operation through `ZenohSessionTransport`.
+- Executing a planned put operation through `ZenohRuntimeTransport`.
 - Verifying live put-path metadata mapping for encoding, express QoS,
   priority, and congestion control on the observed `zenoh::Sample`.
 - Executing a get/request-reply path where the test can provide a deterministic
@@ -57,7 +57,7 @@ The current smoke-test increment covers:
   reply sample encoding instead of reusing the request encoding hint.
 - Propagating request/reply selector parameters through the live runtime so a
   queryable can observe the final selector and appended parameters.
-- Mapping a live request/reply timeout through `ZenohSessionTransport` into
+- Mapping a live request/reply timeout through `ZenohRuntimeTransport` into
   `CoreError::Transport` without panics.
 - Executing the one-shot subscribe path used by `ZenohTransport::execute`.
 - Declaring a long-lived `ZenohSubscription`, receiving multiple samples

@@ -1,7 +1,7 @@
 use alloc::{borrow::Cow, string::String, vec::Vec};
 use fluent_uri::ParseError;
 use serde::{Deserialize, Serialize};
-use serde_with::{OneOrMany, serde_as, skip_serializing_none};
+use serde_with::{serde_as, skip_serializing_none, OneOrMany};
 
 use crate::data_type::{
     AdditionalExpectedResponse, ExpectedResponse, ExtensionMap, FormHref, Operation,
@@ -15,7 +15,7 @@ use crate::data_type::{
 /// itself for meta-interactions.
 #[serde_as]
 #[skip_serializing_none]
-#[derive(Debug, Default, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Form {
     /// Target IRI of the resource or service.
@@ -73,6 +73,23 @@ fn default_content_type() -> String {
 
 fn is_default_content_type(content_type: &String) -> bool {
     content_type == &default_content_type()
+}
+
+impl Default for Form {
+    fn default() -> Self {
+        Self {
+            href: Default::default(),
+            content_type: default_content_type(),
+            content_coding: None,
+            security: None,
+            scopes: None,
+            response: None,
+            additional_responses: None,
+            subprotocol: None,
+            op: None,
+            _extra_fields: Default::default(),
+        }
+    }
 }
 
 impl Form {

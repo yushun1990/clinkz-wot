@@ -6,7 +6,7 @@ use clinkz_wot_protocol_bindings::{AffordanceRef, FormSelectionCriteria};
 use clinkz_wot_protocol_bindings_zenoh::{
     extract_zenoh_metadata, extract_zenoh_target, is_zenoh_form, is_zenoh_form_target,
     plan_zenoh_affordance_operation, plan_zenoh_affordance_operation_with_criteria,
-    plan_zenoh_operation, zenoh_operation_kind, ZenohBinding, ZenohBindingError,
+    plan_zenoh_operation, zenoh_operation_kind, ZenohBindingError, ZenohBindingTransport,
     ZenohOperationKind, ZenohTransport, ZenohTransportRequest, CZ_ZENOH_CONGESTION_CONTROL,
     CZ_ZENOH_PRIORITY, CZ_ZENOH_QOS,
 };
@@ -73,7 +73,7 @@ fn supports_forms_with_zenoh_href() {
     let form = Form::read_property("zenoh://clinkz/things/lamp/status")
         .build()
         .unwrap();
-    let binding = ZenohBinding::new();
+    let binding = ZenohBindingTransport::with_transport(RecordingZenohTransport);
 
     assert!(is_zenoh_form(&form));
     assert!(binding.supports(&form, Operation::ReadProperty));
@@ -87,7 +87,7 @@ fn supports_forms_with_relative_href_and_zenoh_base() {
         .nosec()
         .build()
         .unwrap();
-    let binding = ZenohBinding::new();
+    let binding = ZenohBindingTransport::with_transport(RecordingZenohTransport);
 
     assert!(!is_zenoh_form(&form));
     assert!(!binding.supports(&form, Operation::ReadProperty));
@@ -119,7 +119,13 @@ fn builds_operation_plan_from_href_resolved_against_base() {
 
     assert_eq!(plan.key_expr, "clinkz/things/lamp/actions/reboot");
     assert_eq!(plan.kind, ZenohOperationKind::RequestReply);
-    assert_eq!(plan.metadata, Default::default());
+    assert_eq!(
+        plan.metadata,
+        clinkz_wot_protocol_bindings_zenoh::ZenohFormMetadata {
+            content_type: Some("application/json".into()),
+            ..Default::default()
+        }
+    );
 }
 
 #[test]
@@ -153,7 +159,10 @@ fn includes_metadata_in_operation_plan() {
 
     assert_eq!(plan.key_expr, "clinkz/things/lamp/status");
     assert_eq!(plan.kind, ZenohOperationKind::Put);
-    assert_eq!(plan.metadata.content_type.as_deref(), Some("application/json"));
+    assert_eq!(
+        plan.metadata.content_type.as_deref(),
+        Some("application/json")
+    );
     assert_eq!(plan.metadata.qos.as_deref(), Some("express"));
 }
 
@@ -175,7 +184,7 @@ fn runtime_binding_delegates_planned_operation_to_transport() {
     let mut input =
         InteractionInput::with_payload(Payload::new(b"on".to_vec(), "application/json"));
     input.parameters.insert("source".into(), "test".into());
-    let mut binding = ZenohBinding::with_transport(RecordingZenohTransport);
+    let mut binding = ZenohBindingTransport::with_transport(RecordingZenohTransport);
 
     let output = binding
         .invoke(BindingRequest {
@@ -206,8 +215,8 @@ fn shared_transport_reuses_underlying_runtime_state() {
         .build()
         .unwrap();
     let shared = SharedZenohTransport::new(CountingZenohTransport::default());
-    let mut first_binding = ZenohBinding::with_transport(shared.clone());
-    let mut second_binding = ZenohBinding::with_transport(shared.clone());
+    let mut first_binding = ZenohBindingTransport::with_transport(shared.clone());
+    let mut second_binding = ZenohBindingTransport::with_transport(shared.clone());
 
     let first = first_binding
         .invoke(BindingRequest {
@@ -234,41 +243,6 @@ fn shared_transport_reuses_underlying_runtime_state() {
 }
 
 #[test]
-fn runtime_binding_without_transport_reports_unavailable() {
-    let form = Form::read_property("zenoh://clinkz/things/lamp/status")
-        .build()
-        .unwrap();
-    let property = PropertyAffordance::builder(DataSchema::String(DataSchema::string().build()))
-        .form(form.clone())
-        .build()
-        .unwrap();
-    let thing = Thing::builder("Lamp")
-        .nosec()
-        .property("status", property)
-        .build()
-        .unwrap();
-    let mut binding = ZenohBinding::new();
-
-    let err = binding
-        .invoke(BindingRequest {
-            thing: &thing,
-            target: AffordanceTarget::Property("status"),
-            operation: Operation::ReadProperty,
-            form: &form,
-            input: InteractionInput::empty(),
-        })
-        .unwrap_err();
-
-    match err {
-        CoreError::Transport(message) => {
-            assert!(message.contains("Zenoh transport unavailable"));
-            assert!(message.contains("clinkz/things/lamp/status"));
-        }
-        other => panic!("expected transport error, got {:?}", other),
-    }
-}
-
-#[test]
 fn runtime_binding_rejects_form_that_does_not_support_requested_operation() {
     let form = Form::read_property("zenoh://clinkz/things/lamp/status")
         .build()
@@ -282,7 +256,7 @@ fn runtime_binding_rejects_form_that_does_not_support_requested_operation() {
         .property("status", property)
         .build()
         .unwrap();
-    let mut binding = ZenohBinding::with_transport(RecordingZenohTransport);
+    let mut binding = ZenohBindingTransport::with_transport(RecordingZenohTransport);
 
     let err = binding
         .invoke(BindingRequest {
@@ -559,7 +533,7 @@ fn runtime_binding_reports_invalid_interaction_for_unresolvable_target() {
         .property("status", property)
         .build()
         .unwrap();
-    let mut binding = ZenohBinding::with_transport(RecordingZenohTransport);
+    let mut binding = ZenohBindingTransport::with_transport(RecordingZenohTransport);
 
     let err = binding
         .invoke(BindingRequest {
@@ -749,7 +723,10 @@ fn does_not_support_unknown_operations_when_restricted() {
     let form = Form::write_property("zenoh://clinkz/things/lamp/status")
         .build()
         .unwrap();
-    let binding = ZenohBinding::with_supported_operations([Operation::ReadProperty]);
+    let binding = ZenohBindingTransport::with_transport_and_supported_operations(
+        RecordingZenohTransport,
+        [Operation::ReadProperty],
+    );
 
     assert!(!binding.supports(&form, Operation::WriteProperty));
 }

@@ -60,15 +60,15 @@ adapter across multiple binding instances created by Servient binding
 factories. The shared handle is available only with the planning crate's `std`
 feature and does not affect `no_std + alloc` checks.
 
-The first Rust `zenoh` runtime adapter is `ZenohSessionTransport`, available only
-when the zenoh binding crate is built with the `zenoh` feature. It wraps
-a concrete `zenoh::Session`, supports put, get/request-reply, and one-shot
-subscribe execution through the protocol-neutral `ZenohTransport` trait, and
-also exposes `ZenohSubscription` for std runtimes that need explicit
-subscription receive and undeclare lifecycle control. It maps form
-`contentType`, express QoS, priority, and congestion control metadata onto put
-and get/request-reply builders. The default crate build remains free of the
-Rust `zenoh` dependency.
+The feature-selected public runtime alias is `ZenohRuntimeTransport`. When the
+crate is built with the `zenoh` feature, that alias resolves to
+`ZenohSessionTransport`, which wraps a concrete `zenoh::Session`, supports put,
+get/request-reply, and one-shot subscribe execution through the protocol-neutral
+`ZenohTransport` trait, and also exposes `ZenohSubscription` for std runtimes
+that need explicit subscription receive and undeclare lifecycle control. It
+maps form `contentType`, express QoS, priority, and congestion control metadata
+onto put and get/request-reply builders. The default crate build remains free
+of the Rust `zenoh` dependency.
 
 Concrete zenoh execution should be added through optional runtime backends:
 
@@ -83,11 +83,12 @@ Concrete runtime backend features use the `runtime-*` prefix:
 - `zenoh`: Rust `zenoh` backend.
 - `zenoh-pico`: constrained `zenoh-pico` platform-hook backend.
 
-The `zenoh-pico` backend provides a `no_std + alloc` adapter boundary
-through `ZenohPicoPlatform` and `ZenohPicoTransport`. Target-specific code
-still owns the real zenoh-pico C ABI calls, session handle, polling, timeout
-handling, and buffer ownership. The constrained backend target is documented in
-`docs/zenoh-pico-runtime-target.md`.
+The `zenoh-pico` backend provides a `no_std + alloc` adapter boundary through
+`ZenohPicoPlatform` and `ZenohRuntimeTransport`, which resolves to
+`ZenohPicoTransport` under the `zenoh-pico` feature. Target-specific code still
+owns the real zenoh-pico C ABI calls, session handle, polling, timeout
+handling, and buffer ownership. The constrained backend target is documented
+in `docs/zenoh-pico-runtime-target.md`.
 
 Concrete backend features are mutually exclusive. The shared planning surface
 remains available without selecting either backend.

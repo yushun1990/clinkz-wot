@@ -1,5 +1,8 @@
 #![no_std]
 
+#[cfg(any(feature = "zenoh", feature = "zenoh-pico"))]
+mod zenoh;
+
 #[cfg(all(feature = "zenoh", feature = "zenoh-pico"))]
 compile_error!(
     "Only one concrete zenoh runtime backend can be enabled. Choose \
@@ -26,11 +29,16 @@ pub use form::{
     CZ_ZENOH_PRIORITY, CZ_ZENOH_QOS, ZENOH_SCHEME,
 };
 #[cfg(feature = "zenoh")]
-pub use runtime::{
-    build_zenoh_transport_request, NoZenohTransport, SharedZenohTransport, ZenohBinding,
-    ZenohSessionTransport, ZenohSubscription, ZenohTransport, ZenohTransportRequest,
-};
+pub use runtime::{SharedZenohTransport, ZenohSessionTransport, ZenohSubscription};
 #[cfg(feature = "zenoh-pico")]
 pub use runtime::{
     ZenohPicoError, ZenohPicoErrorKind, ZenohPicoPlatform, ZenohPicoRequest, ZenohPicoTransport,
+};
+#[cfg(any(feature = "zenoh", feature = "zenoh-pico"))]
+pub use runtime::ZenohRuntimeTransport;
+#[cfg(any(feature = "zenoh", feature = "zenoh-pico"))]
+pub type ZenohBinding = zenoh::ZenohBindingTransport<ZenohRuntimeTransport>;
+#[cfg(any(feature = "zenoh", feature = "zenoh-pico"))]
+pub use zenoh::{
+    build_zenoh_transport_request, ZenohBindingTransport, ZenohTransport, ZenohTransportRequest,
 };

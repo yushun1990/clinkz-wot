@@ -9,7 +9,7 @@ use alloc::{
     format,
     string::{String, ToString},
 };
-use core::{fmt, time::Duration};
+use core::{any::Any, fmt, time::Duration};
 
 use clinkz_wot_core::{CoreError, CoreResult, InteractionOutput, Payload};
 
@@ -161,7 +161,7 @@ impl fmt::Display for ZenohPicoError {
 /// Implementations own the real zenoh-pico session, C ABI calls, polling,
 /// timeout handling, and buffer ownership. The transport adapter only maps
 /// shared planner output to these hooks.
-pub trait ZenohPicoPlatform {
+pub trait ZenohPicoPlatform: Any {
     /// Executes a put-style operation.
     fn put(&mut self, request: ZenohPicoRequest<'_>) -> Result<(), ZenohPicoError>;
 
@@ -179,18 +179,44 @@ pub trait ZenohPicoPlatform {
     fn unsubscribe(&mut self, request: ZenohPicoRequest<'_>) -> Result<(), ZenohPicoError>;
 }
 
+impl dyn ZenohPicoPlatform {
+    /// Downcasts the platform hook to a concrete implementation for tests and diagnostics.
+    pub fn downcast_ref<T>(&self) -> Option<&T>
+    where
+        T: ZenohPicoPlatform + 'static,
+    {
+        (self as &dyn Any).downcast_ref::<T>()
+    }
+
+    /// Downcasts the platform hook to a mutable concrete implementation for tests and diagnostics.
+    pub fn downcast_mut<T>(&mut self) -> Option<&mut T>
+    where
+        T: ZenohPicoPlatform + 'static,
+    {
+        (self as &mut dyn Any).downcast_mut::<T>()
+    }
+}
+
 /// Transport backed by constrained zenoh-pico platform hooks.
-#[derive(Debug, Clone)]
-pub struct ZenohPicoTransport<P> {
-    platform: P,
+pub struct ZenohPicoTransport {
+    platform: alloc::boxed::Box<dyn ZenohPicoPlatform>,
     reply_timeout: Duration,
 }
 
-impl<P> ZenohPicoTransport<P> {
+impl fmt::Debug for ZenohPicoTransport {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("ZenohPicoTransport")
+            .field("platform", &"<dyn ZenohPicoPlatform>")
+            .field("reply_timeout", &self.reply_timeout)
+            .finish()
+    }
+}
+
+impl ZenohPicoTransport {
     /// Creates a transport from target-specific platform hooks.
-    pub fn new(platform: P) -> Self {
+    pub fn new(platform: impl ZenohPicoPlatform + 'static) -> Self {
         Self {
-            platform,
+            platform: alloc::boxed::Box::new(platform),
             reply_timeout: DEFAULT_REPLY_TIMEOUT,
         }
     }
@@ -202,13 +228,13 @@ impl<P> ZenohPicoTransport<P> {
     }
 
     /// Returns the underlying platform hook implementation.
-    pub fn platform(&self) -> &P {
-        &self.platform
+    pub fn platform(&self) -> &dyn ZenohPicoPlatform {
+        self.platform.as_ref()
     }
 
     /// Returns a mutable reference to the underlying platform hook implementation.
-    pub fn platform_mut(&mut self) -> &mut P {
-        &mut self.platform
+    pub fn platform_mut(&mut self) -> &mut dyn ZenohPicoPlatform {
+        self.platform.as_mut()
     }
 
     /// Returns the configured query and subscription reply timeout.
@@ -217,10 +243,7 @@ impl<P> ZenohPicoTransport<P> {
     }
 }
 
-impl<P> ZenohTransport for ZenohPicoTransport<P>
-where
-    P: ZenohPicoPlatform,
-{
+impl ZenohTransport for ZenohPicoTransport {
     fn execute(&mut self, request: ZenohTransportRequest) -> CoreResult<InteractionOutput> {
         match request.plan.kind {
             ZenohOperationKind::Put => {
@@ -257,7 +280,7 @@ where
     }
 }
 
-impl<P> ZenohPicoTransport<P> {
+impl ZenohPicoTransport {
     fn pico_request<'a>(&self, request: &'a ZenohTransportRequest) -> ZenohPicoRequest<'a> {
         ZenohPicoRequest {
             key_expr: request.plan.key_expr.as_str(),

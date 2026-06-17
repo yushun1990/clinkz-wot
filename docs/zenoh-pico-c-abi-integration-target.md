@@ -9,6 +9,10 @@ planning and the `ZenohPicoPlatform` hook contract. Target-specific crates or
 applications own the concrete C ABI binding, session lifecycle, polling,
 allocator choice, and buffer ownership.
 
+The feature-selected public runtime alias is `ZenohRuntimeTransport`. Under
+the `zenoh-pico` feature it resolves to `ZenohPicoTransport`, which remains the
+concrete adapter implementation.
+
 ## Goal
 
 Provide a repeatable integration pattern for constrained targets without
