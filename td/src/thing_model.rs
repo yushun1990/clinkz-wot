@@ -12,7 +12,10 @@ use crate::{
     affordance::{ActionAffordance, EventAffordance, PropertyAffordance},
     context::Context,
     data_schema::DataSchema,
-    data_type::{AbsoluteUri, BaseUri, ExtensionMap, Metadata, MetadataHelper},
+    data_type::{
+        AbsoluteUri, AdditionalExpectedResponse, BaseUri, ExtensionMap, FormHref, Metadata,
+        MetadataHelper, ThingModelVersionInfo,
+    },
     form::Form,
     link::Link,
     security_scheme::SecurityScheme,
@@ -41,6 +44,9 @@ pub struct ThingModel {
     #[serde(flatten)]
     pub _metadata: Metadata,
 
+    /// Thing Model version information.
+    pub version: Option<ThingModelVersionInfo>,
+
     /// Support contact or documentation URI.
     pub support: Option<AbsoluteUri>,
 
@@ -60,7 +66,7 @@ pub struct ThingModel {
     pub links: Option<Vec<Link>>,
 
     /// Optional form templates.
-    pub forms: Option<Vec<Form>>,
+    pub forms: Option<Vec<ThingModelForm>>,
 
     /// Optional model-level security names.
     #[serde_as(as = "Option<OneOrMany<_>>")]
@@ -86,6 +92,78 @@ pub struct ThingModel {
 
     #[serde(flatten)]
     pub _extra_fields: ExtensionMap,
+}
+
+/// A Thing Model form template.
+///
+/// Thing Model forms may omit `href` because they describe reusable templates
+/// that are instantiated into concrete Thing Description forms later.
+#[serde_as]
+#[skip_serializing_none]
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ThingModelForm {
+    /// Optional target IRI of the resource or service.
+    pub href: Option<FormHref>,
+
+    /// Media type of data sent or received.
+    #[serde(
+        default = "default_content_type",
+        skip_serializing_if = "is_default_content_type"
+    )]
+    pub content_type: String,
+
+    /// Content coding, such as `gzip`.
+    pub content_coding: Option<String>,
+
+    /// Reference to a security scheme definition by name.
+    #[serde_as(as = "Option<OneOrMany<_>>")]
+    pub security: Option<Vec<String>>,
+
+    /// Scope names required for OAuth2.
+    #[serde_as(as = "Option<OneOrMany<_>>")]
+    pub scopes: Option<Vec<String>>,
+
+    /// Metadata of the primary response.
+    pub response: Option<crate::data_type::ExpectedResponse>,
+
+    /// Additional expected responses.
+    pub additional_responses: Option<Vec<crate::data_type::AdditionalExpectedResponse>>,
+
+    /// Protocol-specific subprotocol hint.
+    pub subprotocol: Option<String>,
+
+    /// Intended operations for the form template.
+    #[serde_as(as = "Option<OneOrMany<_>>")]
+    pub op: Option<Vec<crate::data_type::Operation>>,
+
+    #[serde(flatten)]
+    pub _extra_fields: ExtensionMap,
+}
+
+impl From<Form> for ThingModelForm {
+    fn from(value: Form) -> Self {
+        Self {
+            href: Some(value.href),
+            content_type: value.content_type,
+            content_coding: value.content_coding,
+            security: value.security,
+            scopes: value.scopes,
+            response: value.response,
+            additional_responses: value.additional_responses,
+            subprotocol: value.subprotocol,
+            op: value.op,
+            _extra_fields: value._extra_fields,
+        }
+    }
+}
+
+fn default_content_type() -> String {
+    String::from("application/json")
+}
+
+fn is_default_content_type(content_type: &String) -> bool {
+    content_type == &default_content_type()
 }
 
 impl ThingModel {
@@ -248,18 +326,37 @@ fn validate_security_references(
     Ok(())
 }
 
-fn validate_form_response_references(
+trait HasAdditionalResponses {
+    fn additional_responses(&self) -> Option<&[AdditionalExpectedResponse]>;
+}
+
+impl HasAdditionalResponses for Form {
+    fn additional_responses(&self) -> Option<&[AdditionalExpectedResponse]> {
+        self.additional_responses.as_deref()
+    }
+}
+
+impl HasAdditionalResponses for ThingModelForm {
+    fn additional_responses(&self) -> Option<&[AdditionalExpectedResponse]> {
+        self.additional_responses.as_deref()
+    }
+}
+
+fn validate_form_response_references<T>(
     context: &str,
-    forms: &[Form],
+    forms: &[T],
     schema_definitions: Option<&BTreeMap<String, DataSchema>>,
     level: ValidationLevel,
-) -> Result<(), ValidateError> {
+) -> Result<(), ValidateError>
+where
+    T: HasAdditionalResponses,
+{
     if !matches!(level, ValidationLevel::Profile | ValidationLevel::Full) {
         return Ok(());
     }
 
     for (form_index, form) in forms.iter().enumerate() {
-        let Some(additional_responses) = &form.additional_responses else {
+        let Some(additional_responses) = form.additional_responses() else {
             continue;
         };
 
@@ -359,6 +456,7 @@ impl ThingModelBuilder {
                     title: Some(title.into()),
                     ..Default::default()
                 },
+                version: None,
                 _extra_fields: ExtensionMap::default(),
                 ..Default::default()
             },
@@ -391,6 +489,12 @@ impl ThingModelBuilder {
                 .errors
                 .push(ValidateError::InvalidUri(format!("support: {}", support))),
         }
+        self
+    }
+
+    /// Sets the Thing Model version information.
+    pub fn version(mut self, version: ThingModelVersionInfo) -> Self {
+        self.model.version = Some(version);
         self
     }
 
@@ -439,8 +543,11 @@ impl ThingModelBuilder {
     }
 
     /// Adds a form template.
-    pub fn form(mut self, form: Form) -> Self {
-        self.model.forms.get_or_insert_with(Vec::new).push(form);
+    pub fn form(mut self, form: impl Into<ThingModelForm>) -> Self {
+        self.model
+            .forms
+            .get_or_insert_with(Vec::new)
+            .push(form.into());
         self
     }
 

@@ -494,8 +494,36 @@ impl VersionInfo {
     }
 }
 
+/// Thing Model version metadata.
+///
+/// Thing Model versioning uses the `model` term and must not include an
+/// `instance` term.
+#[skip_serializing_none]
+#[derive(Debug, Default, Serialize, Deserialize, Clone, PartialEq)]
+pub struct ThingModelVersionInfo {
+    /// Provides a version indicator of the underlying Thing Model.
+    pub model: Option<String>,
+
+    #[serde(flatten)]
+    pub _extra_fields: ExtensionMap,
+}
+
+impl ThingModelVersionInfo {
+    /// Sets extension fields.
+    pub fn extra_fields(mut self, extra_fields: impl Into<ExtensionMap>) -> Self {
+        self._extra_fields.extend(extra_fields.into());
+        self
+    }
+
+    /// Adds an extension field.
+    pub fn extra_field(mut self, key: impl Into<String>, value: serde_json::Value) -> Self {
+        self._extra_fields.insert(key.into(), value);
+        self
+    }
+}
+
 /// Operation types of form.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Operation {
     ReadProperty,
@@ -516,6 +544,33 @@ pub enum Operation {
     QueryAllActions,
     SubscribeAllEvents,
     UnsubscribeAllEvents,
+}
+
+impl Operation {
+    /// Returns the canonical lowercase operation name matching the W3C WoT
+    /// TD serialization (`#[serde(rename_all = "lowercase")]`).
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::ReadProperty => "readproperty",
+            Self::WriteProperty => "writeproperty",
+            Self::ObserveProperty => "observeproperty",
+            Self::UnobserveProperty => "unobserveproperty",
+            Self::InvokeAction => "invokeaction",
+            Self::QueryAction => "queryaction",
+            Self::CancelAction => "cancelaction",
+            Self::SubscribeEvent => "subscribeevent",
+            Self::UnsubscribeEvent => "unsubscribeevent",
+            Self::ReadAllProperties => "readallproperties",
+            Self::WriteAllProperties => "writeallproperties",
+            Self::ReadMultipleProperties => "readmultipleproperties",
+            Self::WriteMultipleProperties => "writemultipleproperties",
+            Self::ObserveAllProperties => "observeallproperties",
+            Self::UnobserveAllProperties => "unobserveallproperties",
+            Self::QueryAllActions => "queryallactions",
+            Self::SubscribeAllEvents => "subscribeallevents",
+            Self::UnsubscribeAllEvents => "unsubscribeallevents",
+        }
+    }
 }
 
 /// Communication metadata describing the expected response message for the

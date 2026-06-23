@@ -1,8 +1,9 @@
 use clinkz_wot_protocol_bindings::{
-    resolve_form_target, resolve_selected_affordance_form_security, select_affordance_form,
+    AffordanceRef, BindingError, FormSelectionCriteria, resolve_form_target,
+    resolve_selected_affordance_form_security, select_affordance_form,
     select_affordance_form_with_criteria, select_affordance_form_with_filter, select_form,
     select_form_with_criteria, select_form_with_filter, validate_affordance_form,
-    validate_affordance_form_with_criteria, AffordanceRef, BindingError, FormSelectionCriteria,
+    validate_affordance_form_with_criteria,
 };
 use clinkz_wot_td::{
     affordance::{ActionAffordance, EventAffordance, InteractionHelper, PropertyAffordance},
@@ -581,9 +582,7 @@ fn rejects_selected_affordance_form_when_operation_does_not_match() {
 
     assert_eq!(
         err,
-        BindingError::UnsupportedOperation(
-            "Selected form does not support WriteProperty".into()
-        )
+        BindingError::UnsupportedOperation("Selected form does not support WriteProperty".into())
     );
 }
 

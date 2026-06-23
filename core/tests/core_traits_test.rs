@@ -1,10 +1,10 @@
-use std::borrow::Cow;
+use std::{borrow::Cow, cell::RefCell, sync::Arc};
 
 use clinkz_wot_core::{
-    ActionHandler, AffordanceTarget, BindingRequest, BoundConsumedThing, CodecInput, ConsumedThing,
-    CoreError, CoreResult, EventHandler, EventSink, ExposedThing, InteractionInput,
-    InteractionOutput, LocalThing, Payload, PayloadCodec, PropertyHandler, ProtocolBinding,
-    TransportAdapter, TransportRequest, TransportResponse,
+    ActionHandler, AffordanceTarget, BindingRequest, BoundConsumedThing, ClientBinding, CodecInput,
+    ConsumedThing, CoreError, CoreResult, EventSink, EventSubscribeHandler, ExposedThing,
+    InteractionInput, InteractionOutput, LocalThing, Payload, PayloadCodec, PropertyReadHandler,
+    PropertyWriteHandler, TransportAdapter, TransportRequest, TransportResponse,
 };
 use clinkz_wot_td::{
     affordance::{ActionAffordance, EventAffordance, InteractionHelper, PropertyAffordance},
@@ -47,17 +47,17 @@ impl TransportAdapter for EchoTransport {
 }
 
 struct EchoBinding {
-    transport: EchoTransport,
+    transport: RefCell<EchoTransport>,
 }
 
-impl ProtocolBinding for EchoBinding {
+impl ClientBinding for EchoBinding {
     fn supports(&self, form: &Form, operation: Operation) -> bool {
         form.content_type == "application/octet-stream" && operation == Operation::InvokeAction
     }
 
-    fn invoke(&mut self, request: BindingRequest<'_>) -> CoreResult<InteractionOutput> {
+    fn invoke(&self, request: BindingRequest) -> CoreResult<InteractionOutput> {
         let payload = request.input.payload;
-        let response = self.transport.exchange(
+        let response = self.transport.borrow_mut().exchange(
             TransportRequest::new(request.form.href.as_str(), "invoke").with_payload(payload),
         )?;
         Ok(InteractionOutput {
@@ -71,16 +71,13 @@ struct RecordingBinding {
     response: Payload,
 }
 
-impl ProtocolBinding for RecordingBinding {
+impl ClientBinding for RecordingBinding {
     fn supports(&self, form: &Form, operation: Operation) -> bool {
         form.content_type == self.content_type && operation == Operation::ReadProperty
     }
 
-    fn invoke(&mut self, request: BindingRequest<'_>) -> CoreResult<InteractionOutput> {
-        assert!(matches!(
-            request.target,
-            AffordanceTarget::Property("status")
-        ));
+    fn invoke(&self, request: BindingRequest) -> CoreResult<InteractionOutput> {
+        assert!(matches!(request.target, AffordanceTarget::Property(ref name) if name == "status"));
         assert_eq!(request.operation, Operation::ReadProperty);
         assert_eq!(
             request.thing._metadata.title.as_deref(),
@@ -101,17 +98,25 @@ impl RequestPayloadExt for TransportRequest {
     }
 }
 
-struct StoredProperty {
-    value: Payload,
+struct StoredRead {
+    value: Arc<std::sync::Mutex<Payload>>,
 }
 
-impl PropertyHandler for StoredProperty {
+impl PropertyReadHandler for StoredRead {
     fn read(&mut self, _input: InteractionInput) -> CoreResult<InteractionOutput> {
-        Ok(InteractionOutput::with_payload(self.value.clone()))
+        Ok(InteractionOutput::with_payload(
+            self.value.lock().unwrap().clone(),
+        ))
     }
+}
 
+struct StoredWrite {
+    value: Arc<std::sync::Mutex<Payload>>,
+}
+
+impl PropertyWriteHandler for StoredWrite {
     fn write(&mut self, input: InteractionInput) -> CoreResult<InteractionOutput> {
-        self.value = input
+        *self.value.lock().unwrap() = input
             .payload
             .ok_or_else(|| CoreError::InvalidInteraction("Missing property payload".into()))?;
         Ok(InteractionOutput::empty())
@@ -130,7 +135,7 @@ impl ActionHandler for EchoAction {
 
 struct StartupEvent;
 
-impl EventHandler for StartupEvent {
+impl EventSubscribeHandler for StartupEvent {
     fn subscribe(
         &mut self,
         _input: InteractionInput,
@@ -251,17 +256,17 @@ fn binding_invokes_selected_form_without_protocol_assumptions() {
         .unwrap();
     thing.validate().unwrap();
 
-    let mut binding = EchoBinding {
-        transport: EchoTransport,
+    let binding = EchoBinding {
+        transport: RefCell::new(EchoTransport),
     };
     assert!(binding.supports(&form, Operation::InvokeAction));
 
     let output = binding
         .invoke(BindingRequest {
-            thing: &thing,
-            target: AffordanceTarget::Action("ping"),
+            thing: Arc::new(thing.clone()),
+            target: AffordanceTarget::Action("ping".into()),
             operation: Operation::InvokeAction,
-            form: &form,
+            form: Arc::new(form.clone()),
             input: InteractionInput::with_payload(Payload::new(
                 b"payload".to_vec(),
                 "application/octet-stream",
@@ -283,7 +288,7 @@ fn consumed_thing_dispatches_selected_form_to_matching_binding() {
 
     let output = thing
         .request(
-            AffordanceTarget::Property("status"),
+            AffordanceTarget::Property("status".into()),
             Operation::ReadProperty,
             &read_form,
             InteractionInput::empty(),
@@ -304,7 +309,7 @@ fn consumed_thing_rejects_unknown_affordance_before_binding_dispatch() {
 
     let err = thing
         .request(
-            AffordanceTarget::Property("missing"),
+            AffordanceTarget::Property("missing".into()),
             Operation::ReadProperty,
             &read_form,
             InteractionInput::empty(),
@@ -339,7 +344,7 @@ fn consumed_thing_rejects_operation_not_declared_by_selected_form() {
 
     let err = thing
         .request(
-            AffordanceTarget::Property("status"),
+            AffordanceTarget::Property("status".into()),
             Operation::WriteProperty,
             &read_form,
             InteractionInput::empty(),
@@ -359,7 +364,7 @@ fn consumed_thing_reports_missing_matching_binding() {
 
     let err = thing
         .request(
-            AffordanceTarget::Property("status"),
+            AffordanceTarget::Property("status".into()),
             Operation::ReadProperty,
             &read_form,
             InteractionInput::empty(),
@@ -377,14 +382,24 @@ fn consumed_thing_reports_missing_matching_binding() {
 #[test]
 fn local_thing_dispatches_registered_handlers() {
     let mut thing = LocalThing::new(local_thing_description());
-    thing.register_property_handler(
+    let shared = Arc::new(std::sync::Mutex::new(Payload::new(
+        b"off".to_vec(),
+        "text/plain",
+    )));
+    thing.register_property_read_handler(
         "status",
-        StoredProperty {
-            value: Payload::new(b"off".to_vec(), "text/plain"),
+        StoredRead {
+            value: Arc::clone(&shared),
+        },
+    );
+    thing.register_property_write_handler(
+        "status",
+        StoredWrite {
+            value: Arc::clone(&shared),
         },
     );
     thing.register_action_handler("echo", EchoAction);
-    thing.register_event_handler("startup", StartupEvent);
+    thing.register_event_subscribe_handler("startup", StartupEvent);
 
     let status = thing
         .read_property("status", InteractionInput::empty())
@@ -426,10 +441,13 @@ fn local_thing_dispatches_registered_handlers() {
 #[test]
 fn local_thing_rejects_unknown_affordance_before_dispatch() {
     let mut thing = LocalThing::new(local_thing_description());
-    thing.register_property_handler(
+    thing.register_property_read_handler(
         "missing",
-        StoredProperty {
-            value: Payload::new(b"value".to_vec(), "text/plain"),
+        StoredRead {
+            value: Arc::new(std::sync::Mutex::new(Payload::new(
+                b"value".to_vec(),
+                "text/plain",
+            ))),
         },
     );
 
@@ -454,10 +472,7 @@ fn local_thing_reports_missing_registered_handler() {
         .invoke_action("echo", InteractionInput::empty())
         .unwrap_err();
 
-    assert_eq!(
-        err,
-        CoreError::InvalidInteraction("No action handler registered for 'echo'".into())
-    );
+    assert_eq!(err, CoreError::MissingHandler);
 }
 
 #[test]

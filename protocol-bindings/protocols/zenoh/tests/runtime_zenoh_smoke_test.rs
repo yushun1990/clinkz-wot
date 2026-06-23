@@ -12,8 +12,8 @@ use clinkz_wot_protocol_bindings_zenoh::{
     ZenohTransport, ZenohTransportRequest,
 };
 use zenoh::{
-    qos::{CongestionControl, Priority},
     Config, Wait,
+    qos::{CongestionControl, Priority},
 };
 
 const RUN_ZENOH_RUNTIME_TESTS: &str = "CLINKZ_WOT_RUN_ZENOH_RUNTIME_TESTS";
@@ -60,7 +60,7 @@ fn runtime_zenoh_transport_executes_put_and_get_smoke_paths() {
         queryable.undeclare().wait().expect("undeclare queryable");
     });
 
-    let mut transport = ZenohSessionTransport::new(session).with_reply_timeout(REPLY_TIMEOUT);
+    let transport = ZenohSessionTransport::new(session).with_reply_timeout(REPLY_TIMEOUT);
     let put_output = transport
         .execute(ZenohTransportRequest {
             plan: ZenohOperationPlan {
@@ -128,7 +128,7 @@ fn runtime_zenoh_transport_executes_subscribe_once_smoke_path() {
             .expect("publish one-shot subscription event");
     });
 
-    let mut transport = ZenohSessionTransport::new(session).with_reply_timeout(REPLY_TIMEOUT);
+    let transport = ZenohSessionTransport::new(session).with_reply_timeout(REPLY_TIMEOUT);
     let output = transport
         .execute(ZenohTransportRequest {
             plan: ZenohOperationPlan {
@@ -168,7 +168,7 @@ fn runtime_zenoh_put_propagates_live_metadata() {
 
     thread::sleep(DECLARATION_PROPAGATION_DELAY);
 
-    let mut transport = ZenohSessionTransport::new(session).with_reply_timeout(REPLY_TIMEOUT);
+    let transport = ZenohSessionTransport::new(session).with_reply_timeout(REPLY_TIMEOUT);
     let put_output = transport
         .execute(ZenohTransportRequest {
             plan: ZenohOperationPlan {
@@ -319,7 +319,7 @@ fn runtime_zenoh_request_reply_timeout_maps_to_transport_error() {
     zenoh::init_log_from_env_or("error");
 
     let key_expr = unique_key_expr("runtime-query-timeout");
-    let mut transport = ZenohSessionTransport::new(open_runtime_session())
+    let transport = ZenohSessionTransport::new(open_runtime_session())
         .with_reply_timeout(Duration::from_millis(100));
 
     let error = transport
@@ -392,7 +392,7 @@ fn runtime_zenoh_request_reply_propagates_selector_parameters() {
     parameters.insert("reply".into(), "summary".into());
     parameters.insert("trace".into(), String::new());
 
-    let mut transport = ZenohSessionTransport::new(session).with_reply_timeout(REPLY_TIMEOUT);
+    let transport = ZenohSessionTransport::new(session).with_reply_timeout(REPLY_TIMEOUT);
     let output = transport
         .execute(ZenohTransportRequest {
             plan: ZenohOperationPlan {
@@ -469,7 +469,7 @@ fn runtime_zenoh_request_reply_propagates_request_payload() {
             .expect("undeclare payload queryable");
     });
 
-    let mut transport = ZenohSessionTransport::new(session).with_reply_timeout(REPLY_TIMEOUT);
+    let transport = ZenohSessionTransport::new(session).with_reply_timeout(REPLY_TIMEOUT);
     let output = transport
         .execute(ZenohTransportRequest {
             plan: ZenohOperationPlan {
@@ -536,7 +536,7 @@ fn runtime_zenoh_request_reply_uses_live_reply_encoding() {
             .expect("undeclare reply encoding queryable");
     });
 
-    let mut transport = ZenohSessionTransport::new(session).with_reply_timeout(REPLY_TIMEOUT);
+    let transport = ZenohSessionTransport::new(session).with_reply_timeout(REPLY_TIMEOUT);
     let output = transport
         .execute(ZenohTransportRequest {
             plan: ZenohOperationPlan {

@@ -1,41 +1,62 @@
-use alloc::{format, string::String};
+use alloc::format;
 
 use clinkz_wot_core::{CoreError, CoreResult};
 use zenoh::qos::{CongestionControl, Priority};
 
+/// Returns true when `value` (after trimming whitespace) case-insensitively
+/// equals any of `candidates`. Avoids the per-call `String` allocation that the
+/// previous `to_ascii_lowercase` implementation paid on every QoS-bearing form.
+fn matches_any_ci(value: &str, candidates: &[&str]) -> bool {
+    let trimmed = value.trim();
+    candidates
+        .iter()
+        .any(|candidate| trimmed.eq_ignore_ascii_case(candidate))
+}
+
 pub(super) fn parse_express_qos(value: &str) -> CoreResult<bool> {
-    match normalized_metadata_value(value).as_str() {
-        "express" | "true" | "yes" | "1" => Ok(true),
-        "normal" | "default" | "false" | "no" | "0" => Ok(false),
-        _ => Err(unsupported_metadata("cz-zenoh:qos", value)),
+    if matches_any_ci(value, &["express", "true", "yes", "1"]) {
+        Ok(true)
+    } else if matches_any_ci(value, &["normal", "default", "false", "no", "0"]) {
+        Ok(false)
+    } else {
+        Err(unsupported_metadata("cz-zenoh:qos", value))
     }
 }
 
 pub(super) fn parse_priority(value: &str) -> CoreResult<Priority> {
-    match normalized_metadata_value(value).as_str() {
-        "real-time" | "realtime" | "real_time" => Ok(Priority::RealTime),
-        "interactive-high" | "interactivehigh" | "interactive_high" => {
-            Ok(Priority::InteractiveHigh)
-        }
-        "interactive-low" | "interactivelow" | "interactive_low" => Ok(Priority::InteractiveLow),
-        "data-high" | "datahigh" | "data_high" => Ok(Priority::DataHigh),
-        "data" | "default" => Ok(Priority::Data),
-        "data-low" | "datalow" | "data_low" => Ok(Priority::DataLow),
-        "background" => Ok(Priority::Background),
-        _ => Err(unsupported_metadata("cz-zenoh:priority", value)),
+    if matches_any_ci(value, &["real-time", "realtime", "real_time"]) {
+        Ok(Priority::RealTime)
+    } else if matches_any_ci(
+        value,
+        &["interactive-high", "interactivehigh", "interactive_high"],
+    ) {
+        Ok(Priority::InteractiveHigh)
+    } else if matches_any_ci(
+        value,
+        &["interactive-low", "interactivelow", "interactive_low"],
+    ) {
+        Ok(Priority::InteractiveLow)
+    } else if matches_any_ci(value, &["data-high", "datahigh", "data_high"]) {
+        Ok(Priority::DataHigh)
+    } else if matches_any_ci(value, &["data", "default"]) {
+        Ok(Priority::Data)
+    } else if matches_any_ci(value, &["data-low", "datalow", "data_low"]) {
+        Ok(Priority::DataLow)
+    } else if matches_any_ci(value, &["background"]) {
+        Ok(Priority::Background)
+    } else {
+        Err(unsupported_metadata("cz-zenoh:priority", value))
     }
 }
 
 pub(super) fn parse_congestion_control(value: &str) -> CoreResult<CongestionControl> {
-    match normalized_metadata_value(value).as_str() {
-        "drop" => Ok(CongestionControl::Drop),
-        "block" => Ok(CongestionControl::Block),
-        _ => Err(unsupported_metadata("cz-zenoh:congestionControl", value)),
+    if matches_any_ci(value, &["drop"]) {
+        Ok(CongestionControl::Drop)
+    } else if matches_any_ci(value, &["block"]) {
+        Ok(CongestionControl::Block)
+    } else {
+        Err(unsupported_metadata("cz-zenoh:congestionControl", value))
     }
-}
-
-fn normalized_metadata_value(value: &str) -> String {
-    value.trim().to_ascii_lowercase()
 }
 
 fn unsupported_metadata(term: &str, value: &str) -> CoreError {

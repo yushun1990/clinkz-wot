@@ -1,0 +1,13 @@
+[package]
+name = "clinkz-wot-codec-cbor"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+clinkz-wot-core = { path = "../../core", default-features = false }
+ciborium = { version = "0.2", default-features = false }
+serde = { workspace = true }
+
+[features]
+default = ["std"]
+std = ["clinkz-wot-core/std"]

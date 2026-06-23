@@ -5,6 +5,8 @@ edition.workspace = true
 
 [dependencies]
 clinkz-wot-td = { path = "../td", default-features = false }
+serde = { version = "1", default-features = false, features = ["alloc"] }
+serde_json = { version = "1", default-features = false, features = ["alloc"] }
 
 [features]
 default = ["std"]

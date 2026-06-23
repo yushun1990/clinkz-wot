@@ -5,7 +5,9 @@ edition.workspace = true
 
 [dependencies]
 clinkz-wot-td = { path = "../td", default-features = false }
+async-trait = { workspace = true, optional = true }
 
 [features]
 default = ["std"]
 std = ["clinkz-wot-td/std"]
+async = ["dep:async-trait"]

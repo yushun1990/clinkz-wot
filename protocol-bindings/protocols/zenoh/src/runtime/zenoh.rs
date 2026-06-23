@@ -1,4 +1,5 @@
 use alloc::{
+    boxed::Box,
     format,
     string::{String, ToString},
 };
@@ -6,9 +7,9 @@ use core::time::Duration;
 
 use crate::ZenohTransportRequest;
 use crate::{ZenohFormMetadata, ZenohOperationKind, ZenohOperationPlan, ZenohTransport};
-use clinkz_wot_core::{CoreError, CoreResult, InteractionOutput};
+use clinkz_wot_core::{CoreError, CoreResult, InteractionOutput, Subscription, SubscriptionGuard};
 use zenoh::{
-    bytes::Encoding, handlers::FifoChannelHandler, pubsub::Subscriber, sample::Sample, Wait,
+    Wait, bytes::Encoding, handlers::FifoChannelHandler, pubsub::Subscriber, sample::Sample,
 };
 
 mod metadata;
@@ -138,13 +139,43 @@ impl ZenohSessionTransport {
 }
 
 impl ZenohTransport for ZenohSessionTransport {
-    fn execute(&mut self, request: ZenohTransportRequest) -> CoreResult<InteractionOutput> {
+    fn execute(&self, request: ZenohTransportRequest) -> CoreResult<InteractionOutput> {
         match request.plan.kind {
             ZenohOperationKind::Put => self.put(request),
             ZenohOperationKind::Query | ZenohOperationKind::RequestReply => self.get(request),
             ZenohOperationKind::Subscribe => self.subscribe_once(request),
             ZenohOperationKind::Unsubscribe => Ok(InteractionOutput::empty()),
         }
+    }
+
+    fn open_subscription(
+        &self,
+        request: ZenohTransportRequest,
+    ) -> CoreResult<(Subscription, Box<dyn SubscriptionGuard>)> {
+        if request.plan.kind != ZenohOperationKind::Subscribe {
+            return Err(CoreError::UnsupportedOperation(format!(
+                "Zenoh {:?} operation cannot be opened as a subscription",
+                request.plan.kind
+            )));
+        }
+
+        let (sender, subscription) = Subscription::channel(0);
+        let content_type_hint = request.plan.metadata.content_type.clone();
+
+        let subscriber = self
+            .session
+            .declare_subscriber(request.plan.key_expr.as_str())
+            .callback(move |sample| {
+                let payload = payload_from_sample(&sample, content_type_hint.as_deref());
+                sender.push(payload);
+            })
+            .wait()
+            .map_err(transport_error)?;
+
+        let guard = Box::new(ZenohSubscriptionGuard {
+            subscriber: Some(Box::new(subscriber)),
+        });
+        Ok((subscription, guard))
     }
 }
 
@@ -239,31 +270,76 @@ fn transport_error(error: impl core::fmt::Display) -> CoreError {
     CoreError::Transport(error.to_string())
 }
 
+// ---------------------------------------------------------------------------
+// ZenohSubscriptionGuard — type-erased cleanup for streaming subscriptions
+// ---------------------------------------------------------------------------
+
+/// Type-erased zenoh subscriber handle for cleanup via `undeclare`.
+trait SubscriberHandle: Send + Sync {
+    fn undeclare_boxed(self: Box<Self>);
+}
+
+impl<H> SubscriberHandle for Subscriber<H>
+where
+    H: Send + Sync,
+{
+    fn undeclare_boxed(self: Box<Self>) {
+        let _ = Subscriber::undeclare(*self).wait();
+    }
+}
+
+/// [`SubscriptionGuard`] that undeclares a zenoh subscriber on close or drop.
+struct ZenohSubscriptionGuard {
+    subscriber: Option<Box<dyn SubscriberHandle>>,
+}
+
+impl SubscriptionGuard for ZenohSubscriptionGuard {
+    fn close(mut self: Box<Self>) {
+        if let Some(sub) = self.subscriber.take() {
+            sub.undeclare_boxed();
+        }
+    }
+}
+
+impl Drop for ZenohSubscriptionGuard {
+    fn drop(&mut self) {
+        if let Some(sub) = self.subscriber.take() {
+            sub.undeclare_boxed();
+        }
+    }
+}
+
 /// Shareable zenoh transport handle for std runtime integrations.
 ///
 /// This wrapper lets binding factories clone a handle to the same underlying
 /// session, connection pool, or runtime adapter while each `ZenohBinding`
 /// still owns its protocol binding value.
+///
+/// The inner transport is shared by `Arc` without an outer `Mutex`: the
+/// [`ZenohTransport`] contract requires each concrete backend to own its
+/// interior mutability (e.g. `zenoh::Session` is already `Arc`-shared and
+/// thread-safe), so the additional `Mutex` only serializes concurrent
+/// consumers without adding safety.
 #[derive(Debug)]
 pub struct SharedZenohTransport<T> {
-    inner: std::sync::Arc<std::sync::Mutex<T>>,
+    inner: std::sync::Arc<T>,
 }
 
 impl<T> SharedZenohTransport<T> {
     /// Creates a shared transport handle from a concrete transport adapter.
     pub fn new(transport: T) -> Self {
         Self {
-            inner: std::sync::Arc::new(std::sync::Mutex::new(transport)),
+            inner: std::sync::Arc::new(transport),
         }
     }
 
-    /// Creates a shared transport handle from an existing `Arc<Mutex<T>>`.
-    pub fn from_arc(inner: std::sync::Arc<std::sync::Mutex<T>>) -> Self {
+    /// Creates a shared transport handle from an existing `Arc<T>`.
+    pub fn from_arc(inner: std::sync::Arc<T>) -> Self {
         Self { inner }
     }
 
     /// Returns the underlying shared transport container.
-    pub fn inner(&self) -> &std::sync::Arc<std::sync::Mutex<T>> {
+    pub fn inner(&self) -> &std::sync::Arc<T> {
         &self.inner
     }
 }
@@ -271,7 +347,7 @@ impl<T> SharedZenohTransport<T> {
 impl<T> Clone for SharedZenohTransport<T> {
     fn clone(&self) -> Self {
         Self {
-            inner: self.inner.clone(),
+            inner: std::sync::Arc::clone(&self.inner),
         }
     }
 }
@@ -280,10 +356,14 @@ impl<T> ZenohTransport for SharedZenohTransport<T>
 where
     T: ZenohTransport,
 {
-    fn execute(&mut self, request: ZenohTransportRequest) -> CoreResult<InteractionOutput> {
-        self.inner
-            .lock()
-            .map_err(|_| CoreError::Transport("Zenoh shared transport lock is poisoned".into()))?
-            .execute(request)
+    fn execute(&self, request: ZenohTransportRequest) -> CoreResult<InteractionOutput> {
+        self.inner.execute(request)
+    }
+
+    fn open_subscription(
+        &self,
+        request: ZenohTransportRequest,
+    ) -> CoreResult<(Subscription, Box<dyn SubscriptionGuard>)> {
+        self.inner.open_subscription(request)
     }
 }

@@ -6,10 +6,11 @@
 
 use alloc::{
     borrow::Cow,
+    boxed::Box,
     format,
     string::{String, ToString},
 };
-use core::{any::Any, fmt, time::Duration};
+use core::{any::Any, cell::RefCell, fmt, time::Duration};
 
 use clinkz_wot_core::{CoreError, CoreResult, InteractionOutput, Payload};
 
@@ -198,8 +199,14 @@ impl dyn ZenohPicoPlatform {
 }
 
 /// Transport backed by constrained zenoh-pico platform hooks.
+///
+/// The platform hooks are `&mut self` because real C ABI calls mutate the
+/// pico session. To satisfy the `&self` [`ZenohTransport::execute`] contract
+/// (baseline addendum §2.4 / §7), the platform is wrapped in a [`RefCell`]:
+/// pico targets are single-threaded, so this is the interior-mutability seam
+/// that keeps the rest of the outbound path shared-reference.
 pub struct ZenohPicoTransport {
-    platform: alloc::boxed::Box<dyn ZenohPicoPlatform>,
+    platform: RefCell<Box<dyn ZenohPicoPlatform>>,
     reply_timeout: Duration,
 }
 
@@ -216,7 +223,7 @@ impl ZenohPicoTransport {
     /// Creates a transport from target-specific platform hooks.
     pub fn new(platform: impl ZenohPicoPlatform + 'static) -> Self {
         Self {
-            platform: alloc::boxed::Box::new(platform),
+            platform: RefCell::new(alloc::boxed::Box::new(platform)),
             reply_timeout: DEFAULT_REPLY_TIMEOUT,
         }
     }
@@ -227,14 +234,9 @@ impl ZenohPicoTransport {
         self
     }
 
-    /// Returns the underlying platform hook implementation.
-    pub fn platform(&self) -> &dyn ZenohPicoPlatform {
-        self.platform.as_ref()
-    }
-
-    /// Returns a mutable reference to the underlying platform hook implementation.
-    pub fn platform_mut(&mut self) -> &mut dyn ZenohPicoPlatform {
-        self.platform.as_mut()
+    /// Borrows the underlying platform hook implementation for diagnostics.
+    pub fn platform(&self) -> core::cell::Ref<'_, dyn ZenohPicoPlatform> {
+        core::cell::Ref::map(self.platform.borrow(), |boxed| boxed.as_ref())
     }
 
     /// Returns the configured query and subscription reply timeout.
@@ -244,17 +246,17 @@ impl ZenohPicoTransport {
 }
 
 impl ZenohTransport for ZenohPicoTransport {
-    fn execute(&mut self, request: ZenohTransportRequest) -> CoreResult<InteractionOutput> {
+    fn execute(&self, request: ZenohTransportRequest) -> CoreResult<InteractionOutput> {
+        let mut platform = self.platform.borrow_mut();
         match request.plan.kind {
             ZenohOperationKind::Put => {
                 let pico_request = self.pico_request(&request);
-                self.platform.put(pico_request).map_err(transport_error)?;
+                platform.put(pico_request).map_err(transport_error)?;
                 Ok(InteractionOutput::empty())
             }
             ZenohOperationKind::Query | ZenohOperationKind::RequestReply => {
                 let pico_request = self.pico_request(&request);
-                let payload = self
-                    .platform
+                let payload = platform
                     .query(pico_request)
                     .map_err(transport_error)?
                     .ok_or_else(|| timeout_error("query", &request.plan.key_expr))?;
@@ -262,8 +264,7 @@ impl ZenohTransport for ZenohPicoTransport {
             }
             ZenohOperationKind::Subscribe => {
                 let pico_request = self.pico_request(&request);
-                let payload = self
-                    .platform
+                let payload = platform
                     .subscribe(pico_request)
                     .map_err(transport_error)?
                     .ok_or_else(|| timeout_error("subscription", &request.plan.key_expr))?;
@@ -271,7 +272,7 @@ impl ZenohTransport for ZenohPicoTransport {
             }
             ZenohOperationKind::Unsubscribe => {
                 let pico_request = self.pico_request(&request);
-                self.platform
+                platform
                     .unsubscribe(pico_request)
                     .map_err(transport_error)?;
                 Ok(InteractionOutput::empty())

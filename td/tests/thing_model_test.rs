@@ -2,10 +2,12 @@ use clinkz_wot_td::{
     affordance::{InteractionHelper, PropertyAffordance},
     data_schema::DataSchema,
     data_type::MetadataHelper,
+    data_type::ThingModelVersionInfo,
     form::Form,
     link::Link,
     security_scheme::SecurityScheme,
     thing_model::ThingModel,
+    thing_model::ThingModelForm,
     validate::{Validate, ValidateError, ValidationLevel},
 };
 
@@ -18,6 +20,9 @@ fn thing_model_round_trips_extensions_and_tm_terms() {
         ],
         "@type": "tm:ThingModel",
         "title": "Lamp Model",
+        "version": {
+            "model": "1.0.0"
+        },
         "description": "Reusable lamp capabilities",
         "links": [
             {
@@ -56,6 +61,37 @@ fn thing_model_round_trips_extensions_and_tm_terms() {
         serde_json::to_value(&model).expect("TM should serialize to JSON");
 
     assert_eq!(original, serialized);
+}
+
+#[test]
+fn thing_model_builder_sets_version_metadata() {
+    let model = ThingModel::builder("Versioned Model")
+        .version(ThingModelVersionInfo {
+            model: Some("1.2.3".to_string()),
+            _extra_fields: Default::default(),
+        })
+        .build()
+        .expect("model should build");
+
+    let value = serde_json::to_value(model).expect("TM should serialize");
+    assert_eq!(value["version"]["model"], "1.2.3");
+    assert!(value["version"].get("instance").is_none());
+}
+
+#[test]
+fn thing_model_form_can_omit_href() {
+    let form = ThingModelForm {
+        content_type: "application/json".to_string(),
+        op: Some(vec![clinkz_wot_td::data_type::Operation::InvokeAction]),
+        ..Default::default()
+    };
+
+    let value = serde_json::to_value(&form).expect("TM form should serialize");
+    assert!(value.get("href").is_none());
+
+    let round_tripped: ThingModelForm =
+        serde_json::from_value(value).expect("TM form should deserialize");
+    assert_eq!(round_tripped, form);
 }
 
 #[test]

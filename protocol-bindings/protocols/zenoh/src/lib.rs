@@ -19,26 +19,30 @@ mod error;
 mod form;
 #[cfg(any(feature = "zenoh", feature = "zenoh-pico"))]
 mod runtime;
+#[cfg(feature = "zenoh")]
+mod server;
 
 pub use error::{ZenohBindingError, ZenohBindingResult};
 pub use form::{
-    extract_zenoh_metadata, extract_zenoh_target, is_zenoh_form, is_zenoh_form_target,
-    plan_zenoh_affordance_operation, plan_zenoh_affordance_operation_with_criteria,
-    plan_zenoh_operation, zenoh_operation_kind, ZenohAffordanceOperationPlan, ZenohFormMetadata,
-    ZenohFormTarget, ZenohOperationKind, ZenohOperationPlan, CZ_ZENOH_CONGESTION_CONTROL,
-    CZ_ZENOH_PRIORITY, CZ_ZENOH_QOS, ZENOH_SCHEME,
+    CZ_ZENOH_CONGESTION_CONTROL, CZ_ZENOH_PRIORITY, CZ_ZENOH_QOS, ZENOH_SCHEME,
+    ZenohAffordanceOperationPlan, ZenohFormMetadata, ZenohFormTarget, ZenohOperationKind,
+    ZenohOperationPlan, extract_zenoh_metadata, extract_zenoh_target, is_zenoh_form,
+    is_zenoh_form_target, plan_zenoh_affordance_operation,
+    plan_zenoh_affordance_operation_with_criteria, plan_zenoh_operation, zenoh_operation_kind,
 };
+#[cfg(any(feature = "zenoh", feature = "zenoh-pico"))]
+pub use runtime::ZenohRuntimeTransport;
 #[cfg(feature = "zenoh")]
 pub use runtime::{SharedZenohTransport, ZenohSessionTransport, ZenohSubscription};
 #[cfg(feature = "zenoh-pico")]
 pub use runtime::{
     ZenohPicoError, ZenohPicoErrorKind, ZenohPicoPlatform, ZenohPicoRequest, ZenohPicoTransport,
 };
-#[cfg(any(feature = "zenoh", feature = "zenoh-pico"))]
-pub use runtime::ZenohRuntimeTransport;
+#[cfg(feature = "zenoh")]
+pub use server::ZenohServerBinding;
 #[cfg(any(feature = "zenoh", feature = "zenoh-pico"))]
 pub type ZenohBinding = zenoh::ZenohBindingTransport<ZenohRuntimeTransport>;
 #[cfg(any(feature = "zenoh", feature = "zenoh-pico"))]
 pub use zenoh::{
-    build_zenoh_transport_request, ZenohBindingTransport, ZenohTransport, ZenohTransportRequest,
+    ZenohBindingTransport, ZenohTransport, ZenohTransportRequest, build_zenoh_transport_request,
 };

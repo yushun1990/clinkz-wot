@@ -1,6 +1,8 @@
 use alloc::string::String;
 use core::fmt;
 
+use crate::security::SecurityError;
+
 /// Result type used by protocol-neutral core traits.
 pub type CoreResult<T> = Result<T, CoreError>;
 
@@ -16,11 +18,16 @@ pub enum CoreError {
     /// Payload encoding or decoding failed.
     Payload(String),
     /// Security material could not be applied or validated.
-    Security(String),
+    Security(SecurityError),
     /// The transport adapter failed.
     Transport(String),
     /// The implementation returned an invalid interaction result.
     InvalidInteraction(String),
+    /// An inbound interaction targeted an affordance with no attached handler
+    /// (baseline addendum §4).
+    MissingHandler,
+    /// An inbound dispatch or routing failure with an opaque English reason.
+    InboundDispatch(String),
 }
 
 impl fmt::Display for CoreError {
@@ -32,9 +39,11 @@ impl fmt::Display for CoreError {
             Self::UnsupportedOperation(message) => write!(f, "Unsupported operation: {}", message),
             Self::UnsupportedBinding(message) => write!(f, "Unsupported binding: {}", message),
             Self::Payload(message) => write!(f, "Payload error: {}", message),
-            Self::Security(message) => write!(f, "Security error: {}", message),
+            Self::Security(error) => write!(f, "Security error: {}", error),
             Self::Transport(message) => write!(f, "Transport error: {}", message),
             Self::InvalidInteraction(message) => write!(f, "Invalid interaction: {}", message),
+            Self::MissingHandler => f.write_str("No handler attached for the requested affordance"),
+            Self::InboundDispatch(message) => write!(f, "Inbound dispatch error: {}", message),
         }
     }
 }

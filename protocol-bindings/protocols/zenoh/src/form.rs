@@ -4,8 +4,8 @@ use alloc::{
 };
 
 use clinkz_wot_protocol_bindings::{
-    resolve_form_target, select_affordance_form_selection_with_result_filter, AffordanceRef,
-    BindingError, FormSelectionCriteria,
+    AffordanceRef, BindingError, FormSelectionCriteria, resolve_form_target,
+    select_affordance_form_selection_with_result_filter,
 };
 use clinkz_wot_td::data_type::Operation;
 use clinkz_wot_td::form::Form;

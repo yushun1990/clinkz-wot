@@ -28,7 +28,7 @@ impl TransportRequest {
 }
 
 /// Protocol-neutral response returned by a transport adapter.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct TransportResponse {
     /// Header-like metadata.
     pub metadata: BTreeMap<String, String>,

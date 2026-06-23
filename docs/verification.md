@@ -38,11 +38,18 @@ scripts/check-no-std.sh
 The script currently checks:
 
 - `clinkz-wot-td`
-- `clinkz-wot-core`
+- `clinkz-wot-core` (includes the inbound surface: `ServerBinding`,
+  `AsyncServerBinding`, `InboundRequest`, `InboundResponse`, `EventBroker`,
+  `SecurityProvider::verify`)
 - `clinkz-wot-protocol-bindings`
-- `clinkz-wot-protocol-bindings-zenoh`
+- `clinkz-wot-protocol-bindings-zenoh` (planning layer only;
+  `ZenohServerBinding` is behind the `zenoh` feature)
 - `clinkz-wot-discovery`
-- `clinkz-wot-servient`
+- `clinkz-wot-servient` (sync flavor with `poll_serve_sync`)
+- `clinkz-wot-core --no-default-features --features async` (async `no_std`
+  flavor with `AsyncServerBinding`)
+- `clinkz-wot-servient --no-default-features --features async` (async `no_std`
+  flavor with `poll_serve` / `serve`)
 
 `scripts/check-embedded.sh` is the stable alias for the embedded verification
 entry point. It currently runs the same no-default-features checks.
@@ -78,6 +85,17 @@ cargo test -p clinkz-wot-protocol-bindings-zenoh --features zenoh-pico
 Real Rust `zenoh` runtime tests are opt-in and are documented in
 `docs/zenoh-runtime-integration-test.md`. They must not be required by the
 default workspace test path.
+
+The zenoh server binding has its own opt-in runtime smoke tests covering
+read-property, write-property (put-listener), invoke-action, error-reply, and
+unregister flows through the shared session:
+
+```sh
+CLINKZ_WOT_RUN_ZENOH_RUNTIME_TESTS=1 \
+  cargo test -p clinkz-wot-protocol-bindings-zenoh --test server_binding_smoke_test
+```
+
+These tests must also not be required by the default workspace test path.
 
 Run backend feature checks when changing feature gates or planned backend
 surfaces. This script compiles the constrained `zenoh-pico` backend,

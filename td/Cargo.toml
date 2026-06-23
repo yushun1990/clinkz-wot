@@ -15,3 +15,9 @@ serde_with = { version = "3.18", features = ["macros", "alloc", "time_0_3"], def
 [features]
 default = ["std"]
 std = ["serde/std", "serde_json/std", "serde_with/std", "fluent-uri/std", "time/std"]
+## Experimental, incomplete TD 2.0 data-model extensions.
+##
+## When enabled, TD 2.0 fields and behaviors are surfaced alongside the
+## TD 1.1 defaults. The feature is intentionally additive and must not alter
+## TD 1.1 round-trip fidelity when disabled.
+td2-preview = []

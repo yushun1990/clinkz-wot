@@ -28,13 +28,22 @@ Current focus:
   binding scope.
 - M5 Discovery has the first embedded-ready in-memory Thing Description
   Directory and query surface needed by runtime crates.
-- M6 Servient runtime composition now has the first embedded-ready runtime
+- M6 Servient runtime composition now has a first embedded-ready runtime
   surface that wires Discovery, local Things, consumed Things, injected
   protocol bindings, runtime registries, TD/form/binding-plan caches, payload
-  codecs, and security providers.
-- The next concrete backend increment is the opt-in Rust `zenoh` runtime path
-  behind `zenoh`, with live smoke and integration coverage kept outside
-  the default workspace test path.
+  codecs, and security providers. This first surface is about to be superseded
+  by the Servient runtime redesign.
+- The Servient runtime redesign is the active next major increment. It is
+  governed by the locked design baseline
+  `docs/baseline/servient-design-baseline.md` (v3.0), its implementation
+  refinements `docs/baseline/servient-design-baseline-addendum.md` (v3.1), and
+  the sequencing plan `docs/plan/servient-runtime-redesign-plan.md`. It is a
+  one-shot breaking refactor to a single-generic interior-mutable `Servient<D>`
+  with a sync/async driving layer, an inbound serving path, and a zenoh server
+  binding.
+- The next concrete backend increment alongside the redesign is the opt-in
+  Rust `zenoh` runtime path behind `zenoh`, with live smoke and integration
+  coverage kept outside the default workspace test path.
 - The current `zenoh` next-step target is live metadata coverage for
   express QoS, priority, and congestion control on observable runtime paths.
 - Defer `zenoh-pico` runtime injection until the target hardware
@@ -44,13 +53,18 @@ Current focus:
 
 Immediate next sequence:
 
-1. Keep M7 checks and compatibility documentation aligned with the current
-   TD/TM, core, protocol binding, Discovery, and Servient surfaces.
-2. Treat `zenoh` as the only active concrete runtime increment and
+1. Execute the Servient runtime redesign following
+   `docs/plan/servient-runtime-redesign-plan.md` (phases SR-P0 through SR-P5),
+   validating against the v3.0 baseline and v3.1 addendum. Each phase keeps
+   `cargo test --workspace` and the no-std checks green.
+2. Keep M7 checks and compatibility documentation aligned with the current
+   TD/TM, core, protocol binding, Discovery, and Servient surfaces as the
+   redesign lands.
+3. Treat `zenoh` as the only active concrete runtime increment and
    expand its opt-in smoke and integration coverage without changing the
    default workspace verification path, starting with live metadata coverage
    for observable put and subscription paths.
-3. Keep `zenoh-pico` at the planning boundary until the target
+4. Keep `zenoh-pico` at the planning boundary until the target
    hardware platform is selected and the runtime injection strategy is
    documented for that platform.
 
@@ -282,72 +296,128 @@ Exit criteria:
 Compose TD/TM, protocol bindings, discovery, security, and observability into a
 Servient runtime that supports exposed and consumed Things.
 
-Current status:
+The M6 target shape is defined by the locked design baseline
+`docs/baseline/servient-design-baseline.md` (v3.0) and its implementation
+refinements `docs/baseline/servient-design-baseline-addendum.md` (v3.1). The
+sequencing and acceptance details are in
+`docs/plan/servient-runtime-redesign-plan.md`. The redesign is a one-shot
+breaking refactor to a single-generic interior-mutable `Servient<D>` with a
+sync driving layer, an inbound serving path, directory-driven consumed-Thing
+invalidation, and a zenoh server binding.
 
-- Started `clinkz-wot-servient` as a workspace crate with embedded-ready
-  runtime composition and `std` platform extension points.
-- Added a Servient builder backed by an injectable Thing Directory and
-  protocol binding factories.
-- Added lifecycle APIs for start and stop.
-- Defined first lifecycle semantics: `start` and `stop` are idempotent, while
-  directory, exposed Thing, and binding factory mutations are rejected while the
-  Servient is running.
-- Added directory APIs for register, update, unregister, list, and query.
-- Added local Thing exposure and unexposure flows that keep the directory in
-  sync with exposed TDs.
-- Extracted the in-memory exposed Thing map behind an injectable registry
-  boundary so runtime services can replace local Thing storage without changing
-  TD, Discovery, or core crates.
-- Added Servient-level dispatch APIs for property reads, property writes, action
-  invocation, and event subscription on locally exposed Things.
-- Added consumed Thing creation from directory entries or direct TDs, with
-  registered protocol bindings injected into each consumed dispatcher.
-- Added Servient-level consumed Thing convenience APIs for remote property
-  reads, property writes, action invocation, and event subscription when callers
-  already have a selected form.
-- Added Servient-level consumed Thing convenience APIs that select remote
-  property, action, and event forms from shared `FormSelectionCriteria` while
-  preserving selected-form calls for callers that cache form choices.
-- Added post-build protocol binding factory registration for runtime
-  composition flows that cannot provide all bindings at builder construction
-  time.
-- Added a boxed `ProtocolBinding` forwarding implementation in core so runtime
-  crates can pass protocol-neutral binding instances without knowing concrete
-  binding types.
-- Added an injectable consumed Thing TD cache boundary in Servient, with a
-  deterministic in-memory default and synchronization from register, update,
-  expose, unregister, and unexpose flows.
-- Added an injectable selected form cache boundary in Servient, with a
-  deterministic in-memory default, cache invalidation on TD lifecycle
-  mutations, and criteria-based remote invocation reuse.
-- Added an injectable binding plan cache boundary in Servient, with a
-  deterministic in-memory default, cache invalidation on TD lifecycle
-  mutations, and criteria-based remote invocation reuse of both selected TD
-  forms and selected protocol binding factories.
-- Added Servient builder and post-build slots for protocol-neutral payload
-  codecs and security providers, with hooks for local interactions and
-  Servient-level consumed Thing calls.
-- Split Servient implementation into focused builder, cache, error, registry,
-  runtime, and interaction modules while keeping the crate-root public API
-  stable.
-- Added integration tests for exposing a local Thing, consuming a discovered TD,
-  dispatching all local interaction kinds, and invoking through an injected test
-  binding.
-- Added runtime integration coverage for remote property writes, remote action
-  invocation, remote event subscription, late binding factory registration,
-  unknown Thing ids, and missing binding diagnostics.
-- Added runtime integration coverage for consumed TD cache synchronization,
-  cache-preferred consumption, directory update, and unregister flows.
-- Added a Servient integration test that routes remote property reads, property
-  writes, action invocation, and event subscription through the optional zenoh
-  binding with an injected fake transport, keeping zenoh out of Servient's
-  required dependencies.
-- Added shared zenoh transport ownership support so binding factories can reuse
-  std sessions or connection pools without requiring concrete protocol types
-  in Servient.
-- Kept low-level `BoundConsumedThing` access available through
-  `Servient::consume` and `Servient::consume_thing` for callers that need to
-  cache TDs, selected forms, or dispatchers directly.
+Current status — redesign phases SR-P0 through SR-P5 landed, plus compliance
+fixes T1 (event pipeline) and T3 (principal threading):
+
+- **SR-P0** (core inbound surface and owned types): owned `AffordanceTarget`,
+  `BindingRequest`, `InboundRequest`, `InboundResponse`; `ThingId`,
+  `CorrelationId`, `Principal`, `SecurityError`; `ClientBinding` /
+  `ServerBinding` trait split replacing `ProtocolBinding`; `EventBroker` /
+  `Subscription`; `SecurityProvider::verify` + `check_scopes`.
+- **SR-P1** (`Servient<D>` collapse): single-generic `Servient<D>` that is
+  `Clone` with all `&self` methods; typed `ExposedThingHandle` /
+  `ConsumedThingHandle`; two-level `MapLock` + `DrainFlag` locking;
+  `ConsumedThingRegistry` interning with per-entry form/binding-plan caches.
+- **SR-P2.1** (sync driving layer): `poll_serve_sync` / `serve_sync`;
+  `InboundDispatcher` implementation resolving Thing, form security, and
+  handler dispatch; `CoreError::MissingHandler` for unhandled affordances.
+- **SR-P2.2** (async driving layer): `AsyncServerBinding` trait (dyn-compatible
+  via `#[async_trait]`) behind the `async` feature; `Servient::poll_serve` /
+  `Servient::serve` using `select_all` to race all async bindings concurrently;
+  `ZenohServerBinding` implements `AsyncServerBinding` using `tokio::sync::Notify`.
+- **SR-P2.3** (expose/destroy coordination): `expose` with route registration
+  + rollback on failure; `destroy` with route unregistration; directory
+  publish/unpublish as best-effort; `ServientError::Accept`,
+  `RouteRegistration`, `From<SecurityError>`.
+- **SR-P3** (directory-driven invalidation): Servient-mediated
+  `ConsumedThingRegistry::invalidate` after `update`, `unregister`, and
+  `destroy`.
+- **SR-P4** (zenoh server binding): `ZenohServerBinding` implementing
+  `ServerBinding` on the shared `zenoh::Session`; readproperty/invokeaction
+  via `declare_queryable`, writeproperty via put-listener; route planning
+  reusing the `no_std + alloc` zenoh planner; also implements
+  `AsyncServerBinding` for native-async driving.
+- **SR-P5** (M7 alignment): feature-matrix and no-std verification confirmed;
+  documentation updated.
+- **T1** (event pipeline): `EventBroker` wired into `ServientInner` as a
+  `Clone`-able shared broker (`Arc<MapLock<…>>`); `ServerBinding::set_event_broker`
+  default method feeds the broker to each binding during `build()` and
+  `register_server_binding()`; `ZenohServerBinding` registers
+  `ZenohPublisherSink`s (wrapping `session.put`) for each `subscribeevent` /
+  `observeproperty` form during `register_thing`; `ExposedThingHandle::emit_event`
+  fans payloads through the broker to all registered publisher sinks;
+  `dispatch_to_handler` routes `SubscribeEvent` / `UnsubscribeEvent` /
+  `ObserveProperty` / `UnobserveProperty` through the broker; `destroy` cleans
+  up all broker sinks for the Thing via `EventBroker::remove_thing`.
+- **T3** (principal threading): `verify_inbound` returns the real verified
+  `Principal` (or anonymous for NoSec) instead of discarding it;
+  `InteractionInput` gains a `principal: Option<Principal>` field;
+  `dispatch_inbound` injects the verified principal into the handler
+  `InteractionInput` so handlers can authorize per-caller.
+- **T2** (consumer streaming subscriptions): `ClientBinding::subscribe` method
+  (default `UnsupportedOperation`) opens a long-lived wire subscription and
+  returns `(Subscription, Box<dyn SubscriptionGuard>)`; `ZenohTransport::
+  open_subscription` on `ZenohSessionTransport` uses `session.declare_subscriber`
+  with a callback that pushes samples into a `SubscriptionSender`;
+  `ConsumedThingHandle::subscribe_event` / `observe_property` now return
+  `Subscription` instead of one-shot `InteractionOutput`; added
+  `unsubscribe_event` / `unobserve_property` for wire cleanup; subscription
+  guards stored in `ConsumedThingEntry` and cleaned up on invalidation.
+- **C5** (split handler traits): `PropertyHandler` replaced by separate
+  `PropertyReadHandler`, `PropertyWriteHandler`, `PropertyObserveHandler`;
+  `EventHandler` replaced by `EventSubscribeHandler`, `EventUnsubscribeHandler`;
+  `LocalThing` stores per-affordance `PropertyHandlerSet` / `EventHandlerSet`;
+  `ExposedThingHandle` has separate `set_property_read_handler` /
+  `set_property_write_handler` / `set_property_observe_handler` /
+  `set_event_subscribe_handler` / `set_event_unsubscribe_handler`; dispatcher
+  falls back to read+emit for observe and ack for unsubscribe when no dedicated
+  handler is registered.
+- **C6** (bulk property operations): `read_multiple_properties`,
+  `read_all_properties`, `write_multiple_properties` on both
+  `ExposedThingHandle` and `ConsumedThingHandle`; fan-out over individual
+  property operations for binding portability.
+- **C7** (Discovery API): `DiscoveryMethod` enum (`Local` / `Directory` /
+  `Multicast` / `Everything`); `ThingFilter` with method, url, query, fragment;
+  `ThingDiscovery` process object implementing `Iterator<Item = Thing>` with
+  `stop()` / `is_done()` / `error()` / `remaining()`; `Servient::discover(filter)`
+  backed by the local directory for `Local`/`Everything`; `Directory` and
+  `Multicast` methods set discovery error (deferred to protocol-specific
+  transports).
+- **M3+M4** (security end-to-end): `InteractionInput.security_metadata` field
+  separates transport-level auth headers from URI variables;
+  `apply_security` diffs provider-modified metadata into `security_metadata`;
+  zenoh server extracts `AuthMaterial::BearerToken` from `Query`/`Sample`
+  attachment via `attachment_to_auth`.
+- **M5** (error→status mapping): `clinkz_wot_protocol_bindings::error_status`
+  maps `CoreError` to HTTP-like status codes (404/401/403/501 etc.); zenoh
+  server includes `[status]` prefix in error replies.
+- **M12** (graceful shutdown): `Servient::shutdown_handle()` returns a `Clone`
+  `ShutdownHandle`; `serve_sync`, `serve`, and `poll_serve_sync` check the
+  `Arc<AtomicBool>` flag and exit gracefully.
+- **M7** (credential vault): `CredentialStore` trait +
+  `InMemoryCredentialStore` (`BTreeMap<(thing_id, scheme), Credentials>` backed
+  by `MapLock`); `Credentials` enum (BearerToken, Basic, ApiKey, Psk, Other);
+  `SecurityContext.credentials` field passes the store to
+  `SecurityProvider::apply`; `ServientBuilder::credential_store(store)`.
+- **M13** (runtime TD mutation): `ExposedThingHandle::add_property` /
+  `add_action` / `add_event` / `remove_property` / `remove_action` /
+  `remove_event` modify the TD after expose; handlers for removed affordances
+  are cleaned up automatically.
+- **M8** (async consumer API): `ConsumedThingHandle` gains async variants
+  (`read_property_async`, `write_property_async`, `invoke_action_async`,
+  `subscribe_event_async`, `observe_property_async`) behind the `async` feature;
+  current implementation delegates to sync path (resolves immediately) with
+  forward-compatible API for future native async bindings.
+- **M9** (async handlers): `AsyncPropertyReadHandler`, `AsyncPropertyWriteHandler`,
+  `AsyncActionHandler` traits (`#[async_trait]`, `Send`, behind `async` feature);
+  `LocalThing` stores async handlers alongside sync handlers; async driving loop
+  (`poll_serve`) calls `dispatch_inbound_async` which uses the take-out / await /
+  return pattern to avoid holding the thing slot lock across `.await`; falls
+  back to sync handlers when no async handler is registered.
+
+Deferred:
+
+- M6: Remote directory transport (`DirectoryWatch`, `Directory`/`Multicast`
+  discovery methods — requires HTTP/CoAP TDD client).
 
 Entry criteria:
 
@@ -355,20 +425,17 @@ Entry criteria:
 - Core consumed/exposed Thing dispatch can route through protocol bindings with
   validated forms.
 
-Planned work:
-
-- Keep the current Servient runtime surface stable while the next concrete
-  backend increment is implemented in the optional Rust `zenoh` runtime path.
-- Route any additional Servient-side runtime validation for zenoh through
-  opt-in tests and injected bindings without making zenoh a required Servient
-  dependency.
-
 Exit criteria:
 
-- Servient runtime can expose and consume Things through protocol-neutral core
-  traits.
+- `Servient<D>` exposes and consumes Things through the protocol-neutral core
+  `ClientBinding` / `ServerBinding` / `AsyncServerBinding` traits with both sync
+  and async driving flavors.
 - Zenoh remains optional and can be omitted from Servient builds.
-- Runtime integration tests cover discovery plus binding dispatch.
+- Runtime integration tests cover discovery, inbound serving, binding dispatch,
+  and zenoh server binding round-trips (read, write, invoke, error).
+- The workspace M7 baseline (formatting, tests, Clippy, no-default-features
+  checks, `scripts/check-no-std.sh`, `scripts/check-reserved-features.sh`, and
+  `scripts/check-m7.sh`) passes with the redesigned surfaces.
 
 ### M7: Conformance and Embedded Support
 

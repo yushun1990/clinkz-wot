@@ -1,4 +1,5 @@
 use alloc::{
+    boxed::Box,
     collections::BTreeMap,
     string::{String, ToString},
     vec,
@@ -6,10 +7,10 @@ use alloc::{
 };
 
 use clinkz_wot_core::{
-    AffordanceTarget, BindingRequest, CoreError, CoreResult, InteractionInput, InteractionOutput,
-    Payload, ProtocolBinding,
+    AffordanceTarget, BindingRequest, ClientBinding, CoreError, CoreResult, InteractionInput,
+    InteractionOutput, Payload, Subscription, SubscriptionGuard,
 };
-use clinkz_wot_protocol_bindings::{validate_affordance_form, AffordanceRef, BindingError};
+use clinkz_wot_protocol_bindings::{AffordanceRef, BindingError, validate_affordance_form};
 use clinkz_wot_td::{data_type::Operation, form::Form};
 
 use crate::ZenohOperationPlan;
@@ -29,9 +30,26 @@ pub struct ZenohTransportRequest {
 ///
 /// This trait deliberately avoids depending on a concrete zenoh session type so
 /// std, constrained, and test runtimes can provide their own integration layer.
+/// The receiver is `&self` (baseline addendum §2.4 / §7): each concrete backend
+/// owns its own interior mutability for I/O state.
 pub trait ZenohTransport {
     /// Executes a planned zenoh operation.
-    fn execute(&mut self, request: ZenohTransportRequest) -> CoreResult<InteractionOutput>;
+    fn execute(&self, request: ZenohTransportRequest) -> CoreResult<InteractionOutput>;
+
+    /// Opens a long-lived zenoh subscription for streaming observe/subscribe
+    /// operations.
+    ///
+    /// Returns a consumer-side [`Subscription`] for draining samples and a
+    /// [`SubscriptionGuard`] that owns the underlying zenoh subscriber.
+    /// The default implementation returns `UnsupportedOperation`.
+    fn open_subscription(
+        &self,
+        _request: ZenohTransportRequest,
+    ) -> CoreResult<(Subscription, Box<dyn SubscriptionGuard>)> {
+        Err(CoreError::UnsupportedOperation(
+            "Zenoh transport does not support streaming subscriptions".into(),
+        ))
+    }
 }
 
 /// Zenoh binding implementation.
@@ -75,7 +93,7 @@ impl<T> ZenohBindingTransport<T> {
     }
 }
 
-impl<T> ProtocolBinding for ZenohBindingTransport<T>
+impl<T> ClientBinding for ZenohBindingTransport<T>
 where
     T: ZenohTransport,
 {
@@ -93,21 +111,41 @@ where
             && crate::form::is_zenoh_form_target(thing, form)
     }
 
-    fn invoke(&mut self, request: BindingRequest<'_>) -> CoreResult<InteractionOutput> {
+    fn invoke(&self, request: BindingRequest) -> CoreResult<InteractionOutput> {
         validate_affordance_form(
-            request.thing,
-            affordance_ref_from_target(request.target),
-            request.form,
+            &request.thing,
+            affordance_ref_from_target(&request.target),
+            &request.form,
             request.operation,
         )
         .map_err(core_error_from_binding_error)?;
 
         let plan =
-            crate::form::plan_zenoh_operation(request.thing, request.form, request.operation)
+            crate::form::plan_zenoh_operation(&request.thing, &request.form, request.operation)
                 .map_err(core_error_from_zenoh_error)?;
         let transport_request = build_zenoh_transport_request(plan, request.input);
 
         self.transport.execute(transport_request)
+    }
+
+    fn subscribe(
+        &self,
+        request: BindingRequest,
+    ) -> CoreResult<(Subscription, Box<dyn SubscriptionGuard>)> {
+        validate_affordance_form(
+            &request.thing,
+            affordance_ref_from_target(&request.target),
+            &request.form,
+            request.operation,
+        )
+        .map_err(core_error_from_binding_error)?;
+
+        let plan =
+            crate::form::plan_zenoh_operation(&request.thing, &request.form, request.operation)
+                .map_err(core_error_from_zenoh_error)?;
+        let transport_request = build_zenoh_transport_request(plan, request.input);
+
+        self.transport.open_subscription(transport_request)
     }
 }
 
@@ -151,12 +189,12 @@ fn core_error_from_zenoh_error(err: crate::ZenohBindingError) -> CoreError {
     }
 }
 
-fn affordance_ref_from_target(target: AffordanceTarget<'_>) -> AffordanceRef<'_> {
+fn affordance_ref_from_target(target: &AffordanceTarget) -> AffordanceRef<'_> {
     match target {
         AffordanceTarget::Thing => AffordanceRef::Thing,
-        AffordanceTarget::Property(name) => AffordanceRef::Property(name),
-        AffordanceTarget::Action(name) => AffordanceRef::Action(name),
-        AffordanceTarget::Event(name) => AffordanceRef::Event(name),
+        AffordanceTarget::Property(name) => AffordanceRef::Property(name.as_str()),
+        AffordanceTarget::Action(name) => AffordanceRef::Action(name.as_str()),
+        AffordanceTarget::Event(name) => AffordanceRef::Event(name.as_str()),
     }
 }
 

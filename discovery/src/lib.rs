@@ -14,6 +14,7 @@ pub mod directory;
 pub mod error;
 pub mod local;
 pub mod query;
+pub mod scripting;
 #[cfg(feature = "std")]
 pub mod storage;
 
@@ -22,5 +23,6 @@ pub use directory::{
 };
 pub use error::{DiscoveryError, DiscoveryResult};
 pub use query::{DirectoryQuery, QueryFilter, QueryPredicate};
+pub use scripting::{ThingDiscovery, ThingFilter, discover};
 #[cfg(feature = "std")]
 pub use storage::SharedThingDirectory;

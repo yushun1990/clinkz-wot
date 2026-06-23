@@ -7,17 +7,37 @@ extern crate alloc;
 
 pub mod binding;
 pub mod error;
+pub mod event;
+pub mod identity;
+pub mod inbound;
 pub mod payload;
 pub mod security;
+pub mod sync;
 pub mod thing;
 pub mod transport;
 
-pub use binding::{BindingRequest, ProtocolBinding};
+pub use binding::{BindingRequest, ClientBinding, SubscriptionGuard};
 pub use error::{CoreError, CoreResult};
-pub use payload::{CodecInput, Payload, PayloadCodec};
-pub use security::{SecurityContext, SecurityProvider};
-pub use thing::{
-    ActionHandler, AffordanceTarget, BoundConsumedThing, ConsumedThing, EventHandler, EventSink,
-    ExposedThing, InteractionInput, InteractionOutput, LocalThing, PropertyHandler,
+pub use event::{
+    BrokerEventSink, DEFAULT_SUBSCRIPTION_CAPACITY, EventBroker, EventName, PublisherSink,
+    Subscription, SubscriptionSender,
 };
+pub use identity::{CorrelationId, ThingId};
+#[cfg(feature = "async")]
+pub use inbound::AsyncServerBinding;
+pub use inbound::{InboundDispatcher, InboundRequest, InboundResponse, ServerBinding};
+pub use payload::{CodecInput, Payload, PayloadCodec};
+pub use security::{
+    AuthMaterial, CredentialStore, Credentials, InMemoryCredentialStore, Principal, PrincipalId,
+    SecurityContext, SecurityError, SecurityProvider, check_scopes,
+};
+pub use sync::MapLock;
+pub use thing::{
+    ActionHandler, AffordanceTarget, BoundConsumedThing, ConsumedThing, EventSink,
+    EventSubscribeHandler, EventUnsubscribeHandler, ExposedThing, InteractionInput,
+    InteractionOutput, LocalThing, PropertyObserveHandler, PropertyReadHandler,
+    PropertyWriteHandler,
+};
+#[cfg(feature = "async")]
+pub use thing::{AsyncActionHandler, AsyncPropertyReadHandler, AsyncPropertyWriteHandler};
 pub use transport::{TransportAdapter, TransportRequest, TransportResponse};

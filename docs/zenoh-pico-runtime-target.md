@@ -95,3 +95,22 @@ scripts/check-reserved-features.sh
 
 The target-specific acceptance boundary for real C ABI integrations is defined
 in `docs/zenoh-pico-c-abi-integration-target.md`.
+
+## Server-Side Scope Note (SR-P4.3)
+
+The inbound [`ServerBinding`](../core/src/inbound.rs) implementation
+(`ZenohServerBinding`) currently targets the Rust `zenoh` (std) backend only.
+The server side requires `declare_queryable`, put-listener subscribers, and
+reply-sender primitives that are a larger scope than the existing outbound
+platform hooks.
+
+Constrained server-side support on zenoh-pico remains target-specific and
+depends on:
+
+- `z_queryable_declare` and related zenoh-pico C API availability.
+- A synchronous callback registration model compatible with the
+  `ZenohPicoPlatform` polling hooks.
+- Buffer and allocation strategy for inbound request queuing on the target.
+
+v1 acceptance does not depend on zenoh-pico server execution. The
+`zenoh-pico` feature remains outbound-only until the above are resolved.

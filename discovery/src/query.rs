@@ -28,6 +28,8 @@ pub enum QueryFilter {
     Id(String),
     /// Matches TDs whose default title equals the provided value.
     Title(String),
+    /// Matches TDs that define any affordance with the provided name.
+    Fragment(String),
     /// Matches TDs that define a property affordance with the provided name.
     Property(String),
     /// Matches TDs that define an action affordance with the provided name.
@@ -45,6 +47,11 @@ impl QueryFilter {
     /// Creates an exact default-title predicate.
     pub fn title(title: impl Into<String>) -> Self {
         Self::Title(title.into())
+    }
+
+    /// Creates a fragment-name predicate.
+    pub fn fragment(name: impl Into<String>) -> Self {
+        Self::Fragment(name.into())
     }
 
     /// Creates a property-name predicate.
@@ -71,6 +78,20 @@ impl QueryPredicate for QueryFilter {
                 .as_ref()
                 .is_some_and(|thing_id| thing_id.as_str() == id),
             Self::Title(title) => thing._metadata.title.as_ref() == Some(title),
+            Self::Fragment(name) => {
+                thing
+                    .properties
+                    .as_ref()
+                    .is_some_and(|properties| properties.contains_key(name))
+                    || thing
+                        .actions
+                        .as_ref()
+                        .is_some_and(|actions| actions.contains_key(name))
+                    || thing
+                        .events
+                        .as_ref()
+                        .is_some_and(|events| events.contains_key(name))
+            }
             Self::Property(name) => thing
                 .properties
                 .as_ref()
@@ -120,6 +141,11 @@ impl DirectoryQuery {
     /// Creates an exact default-title query.
     pub fn title(title: impl Into<String>) -> Self {
         Self::filter(QueryFilter::title(title))
+    }
+
+    /// Creates a fragment-name query.
+    pub fn fragment(name: impl Into<String>) -> Self {
+        Self::filter(QueryFilter::fragment(name))
     }
 
     /// Creates a property-name query.

@@ -1,345 +1,172 @@
 use alloc::{boxed::Box, format};
 
 use clinkz_wot_core::{
-    AffordanceTarget, BoundConsumedThing, CodecInput, ConsumedThing, CoreError, EventSink,
-    ExposedThing, InteractionInput, InteractionOutput, Payload, PayloadCodec, ProtocolBinding,
-    SecurityContext, TransportRequest,
+    AffordanceTarget, BoundConsumedThing, ClientBinding, CodecInput, ConsumedThing, CoreError,
+    CredentialStore, InteractionInput, InteractionOutput, Payload, SecurityContext, SecurityError,
+    Subscription, TransportRequest,
 };
 use clinkz_wot_discovery::ThingDirectory;
 use clinkz_wot_protocol_bindings::{
-    resolve_form_security, select_affordance_form_with_criteria,
-    validate_affordance_form_with_criteria, AffordanceRef, FormSelectionCriteria,
+    AffordanceRef, FormSelectionCriteria, resolve_form_security,
+    select_affordance_form_with_criteria, validate_affordance_form_with_criteria,
 };
-use clinkz_wot_td::{
-    data_type::Operation, form::Form, security_scheme::SecurityScheme, thing::Thing,
-};
+use clinkz_wot_td::{data_type::Operation, form::Form, security_scheme::SecurityScheme};
 
 use crate::{
-    BindingPlan, BindingPlanCache, ConsumedThingCache, ExposedThingRegistry, SelectedFormCache,
-    SelectedFormCacheAffordance, SelectedFormCacheKey, Servient, ServientError, ServientResult,
+    BindingPlan, SelectedFormCacheKey, ServientError, ServientResult,
+    cache::affordance_target_from_ref,
+    consumed::ConsumedThingEntry,
+    servient::Servient,
+    servient::{BindingFactoryRegistry, PayloadCodecRegistry, SecurityProviderRegistry},
 };
 
 struct ActiveBindingPlan {
     form: Form,
-    binding: Box<dyn ProtocolBinding>,
+    binding: Box<dyn ClientBinding>,
 }
 
-impl<D, R, C, S, P> Servient<D, R, C, S, P>
+pub(crate) struct InteractionRuntime {
+    binding_factories: BindingFactoryRegistry,
+    payload_codecs: PayloadCodecRegistry,
+    security_providers: SecurityProviderRegistry,
+    credential_store: Option<alloc::sync::Arc<dyn CredentialStore>>,
+}
+
+impl InteractionRuntime {
+    pub(crate) fn new(
+        binding_factories: BindingFactoryRegistry,
+        payload_codecs: PayloadCodecRegistry,
+        security_providers: SecurityProviderRegistry,
+        credential_store: Option<alloc::sync::Arc<dyn CredentialStore>>,
+    ) -> Self {
+        Self {
+            binding_factories,
+            payload_codecs,
+            security_providers,
+            credential_store,
+        }
+    }
+}
+
+impl<D> Servient<D>
 where
     D: ThingDirectory,
-    R: ExposedThingRegistry,
-    C: ConsumedThingCache,
-    S: SelectedFormCache,
-    P: BindingPlanCache,
 {
-    /// Reads a property on a locally exposed Thing.
-    pub fn read_property(
-        &mut self,
+    pub(crate) fn consumed_request(
+        &self,
+        entry: &ConsumedThingEntry,
         id: &str,
-        name: &str,
-        input: InteractionInput,
-    ) -> ServientResult<InteractionOutput> {
-        let thing = self.local_thing_description(id)?;
-        let form = self.select_interaction_form(
-            &thing,
-            AffordanceRef::Property(name),
-            Operation::ReadProperty,
-        )?;
-        let input =
-            self.prepare_interaction_input(&thing, form.as_ref(), Operation::ReadProperty, input)?;
-        let output = self
-            .exposed_thing_mut(id)?
-            .read_property(name, input)
-            .map_err(ServientError::from)?;
-        self.prepare_interaction_output(output)
-    }
-
-    /// Writes a property on a locally exposed Thing.
-    pub fn write_property(
-        &mut self,
-        id: &str,
-        name: &str,
-        input: InteractionInput,
-    ) -> ServientResult<InteractionOutput> {
-        let thing = self.local_thing_description(id)?;
-        let form = self.select_interaction_form(
-            &thing,
-            AffordanceRef::Property(name),
-            Operation::WriteProperty,
-        )?;
-        let input =
-            self.prepare_interaction_input(&thing, form.as_ref(), Operation::WriteProperty, input)?;
-        let output = self
-            .exposed_thing_mut(id)?
-            .write_property(name, input)
-            .map_err(ServientError::from)?;
-        self.prepare_interaction_output(output)
-    }
-
-    /// Invokes an action on a locally exposed Thing.
-    pub fn invoke_action(
-        &mut self,
-        id: &str,
-        name: &str,
-        input: InteractionInput,
-    ) -> ServientResult<InteractionOutput> {
-        let thing = self.local_thing_description(id)?;
-        let form = self.select_interaction_form(
-            &thing,
-            AffordanceRef::Action(name),
-            Operation::InvokeAction,
-        )?;
-        let input =
-            self.prepare_interaction_input(&thing, form.as_ref(), Operation::InvokeAction, input)?;
-        let output = self
-            .exposed_thing_mut(id)?
-            .invoke_action(name, input)
-            .map_err(ServientError::from)?;
-        self.prepare_interaction_output(output)
-    }
-
-    /// Subscribes to an event on a locally exposed Thing.
-    pub fn subscribe_event(
-        &mut self,
-        id: &str,
-        name: &str,
-        input: InteractionInput,
-        sink: &mut dyn EventSink,
-    ) -> ServientResult<InteractionOutput> {
-        let thing = self.local_thing_description(id)?;
-        let form = self.select_interaction_form(
-            &thing,
-            AffordanceRef::Event(name),
-            Operation::SubscribeEvent,
-        )?;
-        let input = self.prepare_interaction_input(
-            &thing,
-            form.as_ref(),
-            Operation::SubscribeEvent,
-            input,
-        )?;
-        let output = self
-            .exposed_thing_mut(id)?
-            .subscribe_event(name, input, sink)
-            .map_err(ServientError::from)?;
-        self.prepare_interaction_output(output)
-    }
-
-    /// Creates a consumed Thing dispatcher from a directory entry.
-    pub fn consume(&self, id: &str) -> ServientResult<BoundConsumedThing> {
-        let thing = self.consumed_thing_description(id)?;
-        Ok(self.bound_consumed_thing(thing))
-    }
-
-    /// Creates a consumed Thing dispatcher directly from a TD.
-    pub fn consume_thing(&self, thing: Thing) -> BoundConsumedThing {
-        self.bound_consumed_thing(thing)
-    }
-
-    /// Reads a property on a remote Thing through a caller-selected form.
-    pub fn read_remote_property(
-        &mut self,
-        id: &str,
-        name: &str,
-        form: &Form,
-        input: InteractionInput,
-    ) -> ServientResult<InteractionOutput> {
-        self.request_remote_selected_form(
-            id,
-            AffordanceTarget::Property(name),
-            Operation::ReadProperty,
-            form,
-            input,
-        )
-    }
-
-    /// Reads a property on a remote Thing through the first form matching criteria.
-    pub fn read_remote_property_with_criteria(
-        &mut self,
-        id: &str,
-        name: &str,
-        criteria: FormSelectionCriteria<'_>,
-        input: InteractionInput,
-    ) -> ServientResult<InteractionOutput> {
-        self.request_remote_with_criteria(
-            id,
-            AffordanceTarget::Property(name),
-            AffordanceRef::Property(name),
-            criteria_for_operation(criteria, Operation::ReadProperty),
-            input,
-        )
-    }
-
-    /// Writes a property on a remote Thing through a caller-selected form.
-    pub fn write_remote_property(
-        &mut self,
-        id: &str,
-        name: &str,
-        form: &Form,
-        input: InteractionInput,
-    ) -> ServientResult<InteractionOutput> {
-        self.request_remote_selected_form(
-            id,
-            AffordanceTarget::Property(name),
-            Operation::WriteProperty,
-            form,
-            input,
-        )
-    }
-
-    /// Writes a property on a remote Thing through the first form matching criteria.
-    pub fn write_remote_property_with_criteria(
-        &mut self,
-        id: &str,
-        name: &str,
-        criteria: FormSelectionCriteria<'_>,
-        input: InteractionInput,
-    ) -> ServientResult<InteractionOutput> {
-        self.request_remote_with_criteria(
-            id,
-            AffordanceTarget::Property(name),
-            AffordanceRef::Property(name),
-            criteria_for_operation(criteria, Operation::WriteProperty),
-            input,
-        )
-    }
-
-    /// Invokes an action on a remote Thing through a caller-selected form.
-    pub fn invoke_remote_action(
-        &mut self,
-        id: &str,
-        name: &str,
-        form: &Form,
-        input: InteractionInput,
-    ) -> ServientResult<InteractionOutput> {
-        self.request_remote_selected_form(
-            id,
-            AffordanceTarget::Action(name),
-            Operation::InvokeAction,
-            form,
-            input,
-        )
-    }
-
-    /// Invokes an action on a remote Thing through the first form matching criteria.
-    pub fn invoke_remote_action_with_criteria(
-        &mut self,
-        id: &str,
-        name: &str,
-        criteria: FormSelectionCriteria<'_>,
-        input: InteractionInput,
-    ) -> ServientResult<InteractionOutput> {
-        self.request_remote_with_criteria(
-            id,
-            AffordanceTarget::Action(name),
-            AffordanceRef::Action(name),
-            criteria_for_operation(criteria, Operation::InvokeAction),
-            input,
-        )
-    }
-
-    /// Subscribes to a remote event through a caller-selected form.
-    pub fn subscribe_remote_event(
-        &mut self,
-        id: &str,
-        name: &str,
-        form: &Form,
-        input: InteractionInput,
-    ) -> ServientResult<InteractionOutput> {
-        self.request_remote_selected_form(
-            id,
-            AffordanceTarget::Event(name),
-            Operation::SubscribeEvent,
-            form,
-            input,
-        )
-    }
-
-    /// Subscribes to a remote event through the first form matching criteria.
-    pub fn subscribe_remote_event_with_criteria(
-        &mut self,
-        id: &str,
-        name: &str,
-        criteria: FormSelectionCriteria<'_>,
-        input: InteractionInput,
-    ) -> ServientResult<InteractionOutput> {
-        self.request_remote_with_criteria(
-            id,
-            AffordanceTarget::Event(name),
-            AffordanceRef::Event(name),
-            criteria_for_operation(criteria, Operation::SubscribeEvent),
-            input,
-        )
-    }
-
-    fn request_remote_with_criteria(
-        &mut self,
-        id: &str,
-        target: AffordanceTarget<'_>,
+        target: AffordanceTarget,
         affordance: AffordanceRef<'_>,
         criteria: FormSelectionCriteria<'_>,
         input: InteractionInput,
     ) -> ServientResult<InteractionOutput> {
-        let thing = self.consumed_thing_description(id)?;
-        let active_plan = self.cached_or_select_binding_plan(&thing, id, affordance, criteria)?;
+        self.interaction_runtime()
+            .consumed_request(entry, id, target, affordance, criteria, input)
+    }
+
+    pub(crate) fn consumed_subscribe(
+        &self,
+        entry: &ConsumedThingEntry,
+        id: &str,
+        target: AffordanceTarget,
+        affordance: AffordanceRef<'_>,
+        criteria: FormSelectionCriteria<'_>,
+        input: InteractionInput,
+    ) -> ServientResult<Subscription> {
+        self.interaction_runtime()
+            .consumed_subscribe(entry, id, target, affordance, criteria, input)
+    }
+}
+
+impl InteractionRuntime {
+    // -----------------------------------------------------------------------
+    // Remote (consumed) interactions: form selection + binding invocation.
+    //
+    // Per baseline v3.0 §5.1, form selections and binding plans are internalized
+    // inside the interned ConsumedThingEntry, not recomputed per call.
+    // -----------------------------------------------------------------------
+
+    /// Performs a remote interaction against an interned consumed-Thing entry,
+    /// selecting a form, applying transport security, and invoking a binding.
+    pub(crate) fn consumed_request(
+        &mut self,
+        entry: &ConsumedThingEntry,
+        id: &str,
+        target: AffordanceTarget,
+        affordance: AffordanceRef<'_>,
+        criteria: FormSelectionCriteria<'_>,
+        input: InteractionInput,
+    ) -> ServientResult<InteractionOutput> {
+        let thing = entry.thing();
+        let active_plan =
+            self.cached_or_select_binding_plan(entry, thing, id, affordance, criteria)?;
         let input = self.prepare_interaction_input(
-            &thing,
+            thing,
             Some(&active_plan.form),
             criteria.operation,
             input,
         )?;
-        let mut consumed = self.bound_consumed_thing_with_binding(thing, active_plan.binding);
-
+        let thing_arc = entry.thing_arc();
+        let mut consumed = self.bound_consumed_thing_with_binding(thing_arc, active_plan.binding);
         let output = consumed
             .request(target, criteria.operation, &active_plan.form, input)
             .map_err(ServientError::from)?;
         self.prepare_interaction_output(output)
     }
 
-    fn request_remote_selected_form(
+    /// Opens a streaming subscription against an interned consumed-Thing entry,
+    /// selecting a form, applying transport security, and invoking the binding's
+    /// streaming `subscribe` path.
+    ///
+    /// The returned [`Subscription`] is for the caller to drain pushed samples.
+    /// The wire cleanup [`SubscriptionGuard`] is stored in the entry and cleaned
+    /// up by `unsubscribe_event` / `unobserve_property` / entry invalidation.
+    pub(crate) fn consumed_subscribe(
         &mut self,
+        entry: &ConsumedThingEntry,
         id: &str,
-        target: AffordanceTarget<'_>,
-        operation: Operation,
-        form: &Form,
-        input: InteractionInput,
-    ) -> ServientResult<InteractionOutput> {
-        let thing = self.consumed_thing_description(id)?;
-        let input = self.prepare_interaction_input(&thing, Some(form), operation, input)?;
-        let mut consumed = self.bound_consumed_thing(thing);
-        let output = consumed
-            .request(target, operation, form, input)
-            .map_err(ServientError::from)?;
-        self.prepare_interaction_output(output)
-    }
-
-    fn local_thing_description(&mut self, id: &str) -> ServientResult<Thing> {
-        self.exposed_thing_mut(id)
-            .map(|thing| thing.thing_description().clone())
-    }
-
-    fn select_interaction_form(
-        &self,
-        thing: &Thing,
+        target: AffordanceTarget,
         affordance: AffordanceRef<'_>,
-        operation: Operation,
-    ) -> ServientResult<Option<Form>> {
-        if thing_has_no_affordance_forms(thing, affordance) {
-            return Ok(None);
-        }
-
-        select_affordance_form_with_criteria(
+        criteria: FormSelectionCriteria<'_>,
+        input: InteractionInput,
+    ) -> ServientResult<Subscription> {
+        let thing = entry.thing();
+        let active_plan =
+            self.cached_or_select_binding_plan(entry, thing, id, affordance, criteria)?;
+        let input = self.prepare_interaction_input(
             thing,
-            affordance,
-            FormSelectionCriteria::new(operation),
-        )
-        .map(|selected| Some(selected.selection.form.clone()))
-        .map_err(Into::into)
+            Some(&active_plan.form),
+            criteria.operation,
+            input,
+        )?;
+
+        let request = clinkz_wot_core::BindingRequest {
+            thing: entry.thing_arc(),
+            target: target.clone(),
+            operation: criteria.operation,
+            form: alloc::sync::Arc::new(active_plan.form.clone()),
+            input,
+        };
+
+        let (subscription, guard) = active_plan
+            .binding
+            .subscribe(request)
+            .map_err(ServientError::from)?;
+
+        let key = crate::consumed::SubscriptionKey::new(&target, criteria.operation.as_str());
+        entry.store_subscription(key, guard);
+
+        Ok(subscription)
     }
+
+    // -----------------------------------------------------------------------
+    // Private form-selection / security / codec helpers.
+    // -----------------------------------------------------------------------
 
     fn prepare_interaction_input(
-        &mut self,
-        thing: &Thing,
+        &self,
+        thing: &clinkz_wot_td::thing::Thing,
         form: Option<&Form>,
         operation: Operation,
         input: InteractionInput,
@@ -359,98 +186,126 @@ where
     }
 
     fn apply_security(
-        &mut self,
-        thing: &Thing,
+        &self,
+        thing: &clinkz_wot_td::thing::Thing,
         form: &Form,
         operation: Operation,
         mut input: InteractionInput,
     ) -> ServientResult<InteractionInput> {
         let effective_security = resolve_form_security(thing, form);
-        for scheme_name in effective_security.security {
-            let scheme = thing.security_definitions.get(scheme_name).ok_or_else(|| {
-                CoreError::Security(format!(
-                    "Security definition '{}' is not declared",
-                    scheme_name
-                ))
-            })?;
-
-            if is_nosec_security(scheme) {
-                continue;
-            }
-
-            let provider = self
-                .security_providers
-                .iter_mut()
-                .find(|provider| provider.scheme_name() == scheme_name)
-                .ok_or_else(|| {
-                    CoreError::Security(format!(
-                        "No security provider registered for '{}'",
+        self.security_providers.with(|providers| {
+            for scheme_name in effective_security.security {
+                let scheme = thing.security_definitions.get(scheme_name).ok_or_else(|| {
+                    CoreError::Security(SecurityError::SchemeFailure(format!(
+                        "Security definition '{}' is not declared",
                         scheme_name
-                    ))
+                    )))
                 })?;
 
-            if !provider.supports_scopes(effective_security.scopes) {
-                return Err(CoreError::Security(format!(
-                    "Security provider '{}' does not support scopes {:?}",
-                    scheme_name, effective_security.scopes
-                ))
-                .into());
+                if is_nosec_security(scheme) {
+                    continue;
+                }
+
+                let provider = providers
+                    .iter_mut()
+                    .find(|provider| provider.scheme_name() == scheme_name)
+                    .ok_or_else(|| {
+                        CoreError::Security(SecurityError::SchemeFailure(format!(
+                            "No security provider registered for '{}'",
+                            scheme_name
+                        )))
+                    })?;
+
+                if !provider.supports_scopes(effective_security.scopes) {
+                    return Err(CoreError::Security(SecurityError::SchemeFailure(format!(
+                        "Security provider '{}' does not support scopes {:?}",
+                        scheme_name, effective_security.scopes
+                    )))
+                    .into());
+                }
+
+                let mut request = TransportRequest::new(form.href.as_str(), operation.as_str());
+                request.metadata = input.parameters.clone();
+                request.payload = input.payload.take();
+                provider.apply(
+                    SecurityContext {
+                        thing,
+                        form,
+                        scheme_name,
+                        scheme,
+                        credentials: self.credential_store.as_deref(),
+                    },
+                    &mut request,
+                )?;
+                // Security provider modifies request.metadata with auth headers.
+                // Diff to extract only the security-added metadata.
+                for (key, value) in &request.metadata {
+                    if input.parameters.get(key) != Some(value) {
+                        input.security_metadata.insert(key.clone(), value.clone());
+                    }
+                }
+                input.payload = request.payload;
             }
 
-            // Servient does not own a concrete transport request here, so
-            // provider metadata is carried through the protocol-neutral
-            // interaction parameters visible to handlers and bindings.
-            let mut request = TransportRequest::new(form.href.as_str(), format!("{:?}", operation));
-            request.metadata = input.parameters;
-            request.payload = input.payload;
-            provider.apply(
-                SecurityContext {
-                    thing,
-                    form,
-                    scheme_name,
-                    scheme,
-                },
-                &mut request,
-            )?;
-            input = InteractionInput {
-                payload: request.payload,
-                parameters: request.metadata,
-            };
-        }
-
-        Ok(input)
+            Ok(input)
+        })
     }
 
     fn cached_or_select_binding_plan(
         &self,
-        thing: &Thing,
+        entry: &ConsumedThingEntry,
+        thing: &clinkz_wot_td::thing::Thing,
         id: &str,
         affordance: AffordanceRef<'_>,
         criteria: FormSelectionCriteria<'_>,
     ) -> ServientResult<ActiveBindingPlan> {
-        let key = SelectedFormCacheKey::new(
-            id,
-            SelectedFormCacheAffordance::from_affordance_ref(affordance),
-            criteria,
-        );
+        let key = SelectedFormCacheKey::new(id, affordance_target_from_ref(affordance), criteria);
+        let current_generation = self.binding_factories.generation();
 
-        if let Some(plan) = self.binding_plan_cache.get(&key) {
-            match self.active_binding_plan_from_cache(thing, affordance, criteria, plan) {
-                Ok(active_plan) => return Ok(active_plan),
-                Err(_) => {
-                    self.binding_plan_cache.remove(&key);
+        if let Some(plan) = entry.get_plan(&key) {
+            // Fast path: the binding factory registry has not changed since
+            // this plan was validated, and the TD is immutable for the life of
+            // the entry (the entry is invalidated on TD update). Skip both the
+            // form revalidation and the `supports_with_thing` check; just
+            // reconstruct the binding.
+            if plan.factory_generation == current_generation {
+                if let Some(binding) = self
+                    .binding_factories
+                    .make_binding(plan.binding_factory_index)
+                {
+                    return Ok(ActiveBindingPlan {
+                        form: plan.form,
+                        binding,
+                    });
+                }
+                // Factory index is stale (registry shrank). Fall through to
+                // full recompute.
+                entry.remove_plan(&key);
+            } else {
+                // Generation changed: revalidate the cached plan against the
+                // current factory set. On success, refresh the cached
+                // generation so subsequent hits take the fast path.
+                match self.active_binding_plan_from_cache(thing, affordance, criteria, &plan) {
+                    Ok(active_plan) => {
+                        entry.update_plan_generation(&key, current_generation);
+                        return Ok(active_plan);
+                    }
+                    Err(_) => {
+                        entry.remove_plan(&key);
+                    }
                 }
             }
         }
 
-        let form = self.cached_or_select_form(thing, id, affordance, criteria)?;
+        let form = self.cached_or_select_form(entry, thing, id, affordance, criteria)?;
         let (binding_factory_index, binding) =
             self.select_binding_factory_for_form(thing, &form, criteria.operation)?;
-        self.binding_plan_cache.insert(
+        entry.insert_plan(
             key,
             BindingPlan {
                 form: form.clone(),
                 binding_factory_index,
+                factory_generation: current_generation,
             },
         );
 
@@ -459,16 +314,16 @@ where
 
     fn active_binding_plan_from_cache(
         &self,
-        thing: &Thing,
+        thing: &clinkz_wot_td::thing::Thing,
         affordance: AffordanceRef<'_>,
         criteria: FormSelectionCriteria<'_>,
-        plan: BindingPlan,
+        plan: &BindingPlan,
     ) -> ServientResult<ActiveBindingPlan> {
         validate_affordance_form_with_criteria(thing, affordance, &plan.form, criteria)?;
         let binding = self.binding_from_factory_index(plan.binding_factory_index)?;
         if binding.supports_with_thing(thing, &plan.form, criteria.operation) {
             Ok(ActiveBindingPlan {
-                form: plan.form,
+                form: plan.form.clone(),
                 binding,
             })
         } else {
@@ -484,105 +339,70 @@ where
 
     fn cached_or_select_form(
         &self,
-        thing: &Thing,
+        entry: &ConsumedThingEntry,
+        thing: &clinkz_wot_td::thing::Thing,
         id: &str,
         affordance: AffordanceRef<'_>,
         criteria: FormSelectionCriteria<'_>,
     ) -> ServientResult<Form> {
-        let key = SelectedFormCacheKey::new(
-            id,
-            SelectedFormCacheAffordance::from_affordance_ref(affordance),
-            criteria,
-        );
+        let key = SelectedFormCacheKey::new(id, affordance_target_from_ref(affordance), criteria);
 
-        if let Some(form) = self.selected_form_cache.get(&key) {
-            if validate_affordance_form_with_criteria(thing, affordance, &form, criteria).is_ok() {
-                return Ok(form);
-            }
-            self.selected_form_cache.remove(&key);
+        if let Some(form) = entry.get_form(&key) {
+            // The TD is immutable for the life of the entry, so a cached form
+            // is always still valid for the same affordance + criteria. Skip
+            // revalidation.
+            return Ok(form);
         }
 
         let form = select_affordance_form_with_criteria(thing, affordance, criteria)?
             .selection
             .form
             .clone();
-        self.selected_form_cache.insert(key, form.clone());
+        entry.insert_form(key, form.clone());
         Ok(form)
     }
 
     fn select_binding_factory_for_form(
         &self,
-        thing: &Thing,
+        thing: &clinkz_wot_td::thing::Thing,
         form: &Form,
         operation: Operation,
-    ) -> ServientResult<(usize, Box<dyn ProtocolBinding>)> {
-        for (index, factory) in self.binding_factories.iter().enumerate() {
-            let binding = factory();
-            if binding.supports_with_thing(thing, form, operation) {
-                return Ok((index, binding));
-            }
-        }
-
-        Err(CoreError::UnsupportedBinding(format!(
-            "No binding supports {:?} for {}",
-            operation,
-            form.href.as_str()
-        ))
-        .into())
-    }
-
-    fn binding_from_factory_index(&self, index: usize) -> ServientResult<Box<dyn ProtocolBinding>> {
+    ) -> ServientResult<(usize, Box<dyn ClientBinding>)> {
         self.binding_factories
-            .get(index)
-            .map(|factory| factory())
+            .find_supporting(thing, form, operation)
             .ok_or_else(|| {
                 CoreError::UnsupportedBinding(format!(
-                    "Binding factory index {} is not registered",
-                    index
+                    "No binding supports {:?} for {}",
+                    operation,
+                    form.href.as_str()
                 ))
                 .into()
             })
     }
 
-    fn consumed_thing_description(&self, id: &str) -> ServientResult<Thing> {
-        match self.consumed_cache.get(id) {
-            Some(thing) => Ok(thing),
-            None => self.directory.get(id).map_err(Into::into),
-        }
-    }
-
-    fn bound_consumed_thing(&self, thing: Thing) -> BoundConsumedThing {
-        let mut consumed = BoundConsumedThing::new(thing);
-        for factory in &self.binding_factories {
-            consumed.register_binding(factory());
-        }
-        consumed
+    fn binding_from_factory_index(&self, index: usize) -> ServientResult<Box<dyn ClientBinding>> {
+        self.binding_factories.make_binding(index).ok_or_else(|| {
+            CoreError::UnsupportedBinding(format!(
+                "Binding factory index {} is not registered",
+                index
+            ))
+            .into()
+        })
     }
 
     fn bound_consumed_thing_with_binding(
         &self,
-        thing: Thing,
-        binding: Box<dyn ProtocolBinding>,
+        thing: alloc::sync::Arc<clinkz_wot_td::thing::Thing>,
+        binding: Box<dyn ClientBinding>,
     ) -> BoundConsumedThing {
-        let mut consumed = BoundConsumedThing::new(thing);
+        let mut consumed = BoundConsumedThing::from_arc(thing);
         consumed.register_binding(binding);
         consumed
     }
 }
 
-fn criteria_for_operation<'a>(
-    criteria: FormSelectionCriteria<'a>,
-    operation: Operation,
-) -> FormSelectionCriteria<'a> {
-    FormSelectionCriteria {
-        operation,
-        content_type: criteria.content_type,
-        subprotocol: criteria.subprotocol,
-    }
-}
-
 fn normalize_interaction_input(
-    codecs: &[Box<dyn PayloadCodec>],
+    codecs: &PayloadCodecRegistry,
     mut input: InteractionInput,
 ) -> ServientResult<InteractionInput> {
     if let Some(payload) = input.payload.take() {
@@ -593,7 +413,7 @@ fn normalize_interaction_input(
 }
 
 fn normalize_interaction_output(
-    codecs: &[Box<dyn PayloadCodec>],
+    codecs: &PayloadCodecRegistry,
     mut output: InteractionOutput,
 ) -> ServientResult<InteractionOutput> {
     if let Some(payload) = output.payload.take() {
@@ -603,53 +423,38 @@ fn normalize_interaction_output(
     Ok(output)
 }
 
-fn normalize_payload(
-    codecs: &[Box<dyn PayloadCodec>],
-    payload: Payload,
-) -> ServientResult<Payload> {
-    let Some(codec) = codecs
-        .iter()
-        .find(|codec| codec.content_type().as_ref() == payload.content_type.as_str())
-    else {
-        return Ok(payload);
-    };
+/// Normalizes an interaction payload through its registered codec, if any.
+///
+/// When a `PayloadCodec` is registered for the payload's content type, the
+/// payload is decoded and re-encoded by that codec. This is intentional
+/// canonicalization/validation: it lets a codec reject malformed payloads and
+/// produce canonical bytes for downstream signing or hashing.
+///
+/// # Performance note
+///
+/// This round-trip allocates two `Vec<u8>` per call. Skipping it when the
+/// caller's bytes are already canonical would require a separate
+/// "target content type" or "validate-only" API on `PayloadCodec` so callers
+/// can opt into the fast path. Tracked as a follow-up.
+fn normalize_payload(codecs: &PayloadCodecRegistry, payload: Payload) -> ServientResult<Payload> {
+    codecs.with(|codecs| {
+        let Some(codec) = codecs
+            .iter()
+            .find(|codec| codec.content_type().as_ref() == payload.content_type.as_str())
+        else {
+            return Ok(payload);
+        };
 
-    let decoded = codec.decode(&payload)?;
-    codec
-        .encode(CodecInput {
-            body: decoded.as_slice(),
-            data_type: None,
-        })
-        .map_err(Into::into)
+        let decoded = codec.decode(&payload)?;
+        codec
+            .encode(CodecInput {
+                body: decoded.as_slice(),
+                data_type: None,
+            })
+            .map_err(Into::into)
+    })
 }
 
 fn is_nosec_security(scheme: &SecurityScheme) -> bool {
-    scheme.scheme() == "nosec"
-}
-
-fn thing_has_no_affordance_forms(thing: &Thing, affordance: AffordanceRef<'_>) -> bool {
-    match affordance {
-        AffordanceRef::Thing => match &thing.forms {
-            Some(forms) => forms.is_empty(),
-            None => true,
-        },
-        AffordanceRef::Property(name) => thing
-            .properties
-            .as_ref()
-            .and_then(|affordances| affordances.get(name))
-            .map(|property| property._interaction.forms.is_empty())
-            .unwrap_or(false),
-        AffordanceRef::Action(name) => thing
-            .actions
-            .as_ref()
-            .and_then(|affordances| affordances.get(name))
-            .map(|action| action._interaction.forms.is_empty())
-            .unwrap_or(false),
-        AffordanceRef::Event(name) => thing
-            .events
-            .as_ref()
-            .and_then(|affordances| affordances.get(name))
-            .map(|event| event._interaction.forms.is_empty())
-            .unwrap_or(false),
-    }
+    matches!(scheme, SecurityScheme::NoSec(_))
 }

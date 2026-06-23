@@ -1,7 +1,7 @@
 use alloc::{borrow::Cow, string::String, vec::Vec};
 
 /// An encoded interaction payload plus protocol-neutral media metadata.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct Payload {
     /// Encoded payload bytes.
     pub body: Vec<u8>,

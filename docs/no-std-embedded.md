@@ -21,6 +21,15 @@ Embedded-ready crates should support:
 - Embedded Servient composition with injected protocol bindings, payload
   codecs, security providers, and caches.
 - Abstract transport adapters supplied by the platform.
+- Owned inbound interaction model (`InboundRequest`, `InboundResponse`,
+  `AffordanceTarget`, `BindingRequest`) that is `'static` and usable across
+  spawnable boundaries (baseline v3.1 §2).
+- Sync inbound driving via `poll_serve_sync` on MCU super-loops (baseline
+  addendum §6.2). The native-async driving layer (`async` feature) is deferred.
+- `ServerBinding` trait is dyn-compatible, allowing `Vec<Arc<dyn ServerBinding>>`
+  storage in both sync and (future) async builds.
+- `MapLock` shared locking primitive in `clinkz-wot-core` usable across core
+  and servient.
 
 ## Non-Goals for v1
 
@@ -61,6 +70,8 @@ The current no-std check script covers:
 - `clinkz-wot-protocol-bindings-zenoh`
 - `clinkz-wot-discovery`
 - `clinkz-wot-servient`
+- `clinkz-wot-core --features async` (async `no_std` flavor)
+- `clinkz-wot-servient --features async` (async `no_std` flavor)
 
 When an explicit `alloc` feature is introduced, checks should include:
 
@@ -83,7 +94,16 @@ allocation-backed directory capabilities usable without `std`.
 `discovery::storage` is available only with the `std` feature for shared
 storage adapters and future production storage extension points.
 
-`servient` exposes no-std Servient APIs through the crate root. Std-only
-Servient integrations should stay behind the `std` feature when they provide
-concrete capabilities. The project avoids naming these modules `core` because
-`clinkz-wot-core` already denotes the protocol-neutral engine trait crate.
+`servient` exposes no-std Servient APIs through the crate root. The
+single-generic `Servient<D>` is `Clone` with `&self` methods, using `MapLock`
+from `clinkz-wot-core` for interior mutability. The sync driving layer
+(`poll_serve_sync`) is available without `std` and is intended to be called as
+a stepwise primitive from the MCU super-loop: one call processes at most one
+inbound request. Std-only Servient integrations (`serve_sync`,
+`std::eprintln!` diagnostics, host idle backoff) stay behind the `std` feature.
+This keeps the sync API usable in both embedded and host deployments without
+forcing the no-std super-loop semantics onto host runtimes. The native-async
+driving layer and `Send + Sync` lock primitives are deferred behind the
+`async` feature (SR-P2.2). The project avoids naming these modules `core`
+because `clinkz-wot-core` already denotes the
+protocol-neutral engine trait crate.

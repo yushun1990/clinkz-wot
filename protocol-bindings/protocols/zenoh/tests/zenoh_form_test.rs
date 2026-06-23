@@ -1,14 +1,16 @@
+use std::{cell::Cell, sync::Arc};
+
 use clinkz_wot_core::{
-    AffordanceTarget, BindingRequest, CoreError, CoreResult, InteractionInput, InteractionOutput,
-    Payload, ProtocolBinding,
+    AffordanceTarget, BindingRequest, ClientBinding, CoreError, CoreResult, InteractionInput,
+    InteractionOutput, Payload,
 };
 use clinkz_wot_protocol_bindings::{AffordanceRef, FormSelectionCriteria};
 use clinkz_wot_protocol_bindings_zenoh::{
+    CZ_ZENOH_CONGESTION_CONTROL, CZ_ZENOH_PRIORITY, CZ_ZENOH_QOS, ZenohBindingError,
+    ZenohBindingTransport, ZenohOperationKind, ZenohTransport, ZenohTransportRequest,
     extract_zenoh_metadata, extract_zenoh_target, is_zenoh_form, is_zenoh_form_target,
     plan_zenoh_affordance_operation, plan_zenoh_affordance_operation_with_criteria,
-    plan_zenoh_operation, zenoh_operation_kind, ZenohBindingError, ZenohBindingTransport,
-    ZenohOperationKind, ZenohTransport, ZenohTransportRequest, CZ_ZENOH_CONGESTION_CONTROL,
-    CZ_ZENOH_PRIORITY, CZ_ZENOH_QOS,
+    plan_zenoh_operation, zenoh_operation_kind,
 };
 use clinkz_wot_td::{
     affordance::{EventAffordance, InteractionHelper, PropertyAffordance},
@@ -25,7 +27,7 @@ use clinkz_wot_protocol_bindings_zenoh::SharedZenohTransport;
 struct RecordingZenohTransport;
 
 impl ZenohTransport for RecordingZenohTransport {
-    fn execute(&mut self, request: ZenohTransportRequest) -> CoreResult<InteractionOutput> {
+    fn execute(&self, request: ZenohTransportRequest) -> CoreResult<InteractionOutput> {
         assert_eq!(request.plan.kind, ZenohOperationKind::Put);
         assert_eq!(request.plan.key_expr, "clinkz/things/lamp/status");
         assert_eq!(
@@ -54,15 +56,16 @@ impl ZenohTransport for RecordingZenohTransport {
 #[cfg(feature = "zenoh")]
 #[derive(Default)]
 struct CountingZenohTransport {
-    calls: usize,
+    calls: Cell<usize>,
 }
 
 #[cfg(feature = "zenoh")]
 impl ZenohTransport for CountingZenohTransport {
-    fn execute(&mut self, request: ZenohTransportRequest) -> CoreResult<InteractionOutput> {
-        self.calls += 1;
+    fn execute(&self, request: ZenohTransportRequest) -> CoreResult<InteractionOutput> {
+        let count = self.calls.get().saturating_add(1);
+        self.calls.set(count);
         Ok(InteractionOutput::with_payload(Payload::new(
-            format!("{}:{}", self.calls, request.plan.key_expr).into_bytes(),
+            format!("{}:{}", count, request.plan.key_expr).into_bytes(),
             "text/plain",
         )))
     }
@@ -184,14 +187,14 @@ fn runtime_binding_delegates_planned_operation_to_transport() {
     let mut input =
         InteractionInput::with_payload(Payload::new(b"on".to_vec(), "application/json"));
     input.parameters.insert("source".into(), "test".into());
-    let mut binding = ZenohBindingTransport::with_transport(RecordingZenohTransport);
+    let binding = ZenohBindingTransport::with_transport(RecordingZenohTransport);
 
     let output = binding
         .invoke(BindingRequest {
-            thing: &thing,
-            target: AffordanceTarget::Property("status"),
+            thing: Arc::new(thing.clone()),
+            target: AffordanceTarget::Property("status".into()),
             operation: Operation::WriteProperty,
-            form: &form,
+            form: Arc::new(form.clone()),
             input,
         })
         .unwrap();
@@ -215,31 +218,31 @@ fn shared_transport_reuses_underlying_runtime_state() {
         .build()
         .unwrap();
     let shared = SharedZenohTransport::new(CountingZenohTransport::default());
-    let mut first_binding = ZenohBindingTransport::with_transport(shared.clone());
-    let mut second_binding = ZenohBindingTransport::with_transport(shared.clone());
+    let first_binding = ZenohBindingTransport::with_transport(shared.clone());
+    let second_binding = ZenohBindingTransport::with_transport(shared.clone());
 
     let first = first_binding
         .invoke(BindingRequest {
-            thing: &thing,
-            target: AffordanceTarget::Property("status"),
+            thing: Arc::new(thing.clone()),
+            target: AffordanceTarget::Property("status".into()),
             operation: Operation::ReadProperty,
-            form: &form,
+            form: Arc::new(form.clone()),
             input: InteractionInput::empty(),
         })
         .unwrap();
     let second = second_binding
         .invoke(BindingRequest {
-            thing: &thing,
-            target: AffordanceTarget::Property("status"),
+            thing: Arc::new(thing.clone()),
+            target: AffordanceTarget::Property("status".into()),
             operation: Operation::ReadProperty,
-            form: &form,
+            form: Arc::new(form.clone()),
             input: InteractionInput::empty(),
         })
         .unwrap();
 
     assert_eq!(first.payload.unwrap().body, b"1:clinkz/things/lamp/status");
     assert_eq!(second.payload.unwrap().body, b"2:clinkz/things/lamp/status");
-    assert_eq!(shared.inner().lock().unwrap().calls, 2);
+    assert_eq!(shared.inner().calls.get(), 2);
 }
 
 #[test]
@@ -256,14 +259,14 @@ fn runtime_binding_rejects_form_that_does_not_support_requested_operation() {
         .property("status", property)
         .build()
         .unwrap();
-    let mut binding = ZenohBindingTransport::with_transport(RecordingZenohTransport);
+    let binding = ZenohBindingTransport::with_transport(RecordingZenohTransport);
 
     let err = binding
         .invoke(BindingRequest {
-            thing: &thing,
-            target: AffordanceTarget::Property("status"),
+            thing: Arc::new(thing.clone()),
+            target: AffordanceTarget::Property("status".into()),
             operation: Operation::WriteProperty,
-            form: &form,
+            form: Arc::new(form.clone()),
             input: InteractionInput::empty(),
         })
         .unwrap_err();
@@ -533,14 +536,14 @@ fn runtime_binding_reports_invalid_interaction_for_unresolvable_target() {
         .property("status", property)
         .build()
         .unwrap();
-    let mut binding = ZenohBindingTransport::with_transport(RecordingZenohTransport);
+    let binding = ZenohBindingTransport::with_transport(RecordingZenohTransport);
 
     let err = binding
         .invoke(BindingRequest {
-            thing: &thing,
-            target: AffordanceTarget::Property("status"),
+            thing: Arc::new(thing.clone()),
+            target: AffordanceTarget::Property("status".into()),
             operation: Operation::ReadProperty,
-            form: &form,
+            form: Arc::new(form.clone()),
             input: InteractionInput::empty(),
         })
         .unwrap_err();

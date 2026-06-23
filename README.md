@@ -18,24 +18,33 @@ Current implementation highlights:
   typing, `base` plus relative form `href` resolution, and extension-field
   preservation are implemented for the current TD crate scope.
 - Thing Model support has a first complete implementation in the TD crate.
-- The protocol-neutral core exposes the first trait surface for local Things,
-  consumed Things, protocol bindings, payload codecs, security providers, and
-  transport adapters.
+- The protocol-neutral core exposes split handler traits
+  (`PropertyReadHandler` / `PropertyWriteHandler` / `PropertyObserveHandler`,
+  `EventSubscribeHandler` / `EventUnsubscribeHandler`, `ActionHandler`) and
+  inbound/outbound interaction models with verified `Principal` threading.
 - Shared protocol binding utilities cover form selection, target resolution,
-  selected-form validation, diagnostics, and security metadata extraction.
-- The zenoh binding is an optional planning and adapter crate. It recognizes
-  zenoh TD forms and `cz-zenoh` extension metadata without depending on a
-  concrete zenoh runtime.
-- Discovery includes an embedded-ready query model and deterministic in-memory
-  Thing Description Directory.
-- Servient includes embedded-ready runtime composition for discovery, local
-  exposure, remote consumption, binding factories, caches, payload codecs, and
-  security provider hooks.
+  selected-form validation, diagnostics, security metadata extraction, and
+  `CoreError` → HTTP-like status code mapping.
+- The zenoh binding includes a `no_std + alloc` planning layer and an optional
+  Rust `zenoh` std runtime backend (`zenoh` feature) with both outbound
+  (`ZenohSessionTransport`) and inbound (`ZenohServerBinding`) surfaces on a
+  shared `zenoh::Session`, including event publishing via `PublisherSink` and
+  attachment-based auth extraction.
+- Discovery includes an embedded-ready query model, deterministic in-memory
+  Thing Description Directory, and W3C Scripting API §5 discovery surface
+  (`ThingFilter`, `ThingDiscovery`, `discover()`, `DiscoveryMethod`).
+- Servient provides a `Clone`-able `Servient<D>` with sync and async driving
+  loops, `EventBroker`-backed event fan-out (`emit_event`), streaming consumer
+  subscriptions (`observe_property` / `subscribe_event` → `Subscription`),
+  bulk property operations, `CredentialStore`, graceful shutdown
+  (`ShutdownHandle`), runtime TD mutation, async handler traits (M9), and async
+  consumer methods (M8).
+- The workspace passes `cargo test --workspace`, `cargo clippy --workspace`,
+  `no_std + alloc` checks, and reserved-feature checks.
 
-Next focus areas are continued conformance plus no-std checks, expanding the
-opt-in Rust `zenoh` runtime path behind `zenoh`, and deferring
-`zenoh-pico` runtime injection until the target hardware platform is
-selected.
+Next focus areas are continued conformance plus no-std checks, adding a remote
+directory transport (HTTP/CoAP TDD client), and deferring `zenoh-pico` runtime
+injection until the target hardware platform is selected.
 
 ## Workspace Crates
 

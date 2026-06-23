@@ -1,7 +1,7 @@
 use alloc::string::String;
 use core::fmt;
 
-use clinkz_wot_core::CoreError;
+use clinkz_wot_core::{CoreError, SecurityError};
 use clinkz_wot_discovery::DiscoveryError;
 use clinkz_wot_protocol_bindings::BindingError;
 
@@ -16,16 +16,19 @@ pub enum ServientError {
     Discovery(DiscoveryError),
     /// Shared protocol binding form selection or target resolution failed.
     Binding(BindingError),
-    /// Core dispatch or binding interaction failed.
-    Core(CoreError),
+    /// A dispatch-level failure from the core runtime (baseline addendum §5.2).
+    Serve(CoreError),
     /// A local exposed Thing is already registered with this id.
     DuplicateExposedThing(String),
     /// No local exposed Thing is registered with this id.
     ExposedThingNotFound(String),
-    /// Runtime composition cannot be mutated while the Servient is running.
-    Running,
     /// A local Thing cannot be exposed without a stable TD id.
     MissingThingId,
+    /// A `ServerBinding` accept failure surfaced from the driving loop.
+    Accept(String),
+    /// An inbound route-registration failure during `expose` (baseline §10
+    /// step 3).
+    RouteRegistration(String),
 }
 
 impl fmt::Display for ServientError {
@@ -33,15 +36,18 @@ impl fmt::Display for ServientError {
         match self {
             Self::Discovery(err) => write!(f, "Discovery error: {}", err),
             Self::Binding(err) => write!(f, "Binding selection error: {}", err),
-            Self::Core(err) => write!(f, "Core error: {}", err),
+            Self::Serve(err) => write!(f, "Core error: {}", err),
             Self::DuplicateExposedThing(id) => {
                 write!(f, "Servient already exposes Thing id '{}'", id)
             }
             Self::ExposedThingNotFound(id) => {
                 write!(f, "Servient does not expose Thing id '{}'", id)
             }
-            Self::Running => write!(f, "Servient composition cannot be changed while running"),
             Self::MissingThingId => write!(f, "Thing Description is missing required id"),
+            Self::Accept(message) => write!(f, "Server binding accept error: {}", message),
+            Self::RouteRegistration(message) => {
+                write!(f, "Inbound route registration error: {}", message)
+            }
         }
     }
 }
@@ -63,6 +69,12 @@ impl From<BindingError> for ServientError {
 
 impl From<CoreError> for ServientError {
     fn from(value: CoreError) -> Self {
-        Self::Core(value)
+        Self::Serve(value)
+    }
+}
+
+impl From<SecurityError> for ServientError {
+    fn from(value: SecurityError) -> Self {
+        Self::Serve(value.into())
     }
 }

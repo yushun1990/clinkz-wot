@@ -1,6 +1,7 @@
 [workspace]
 resolver = "3"
 members = [
+    "codecs/cbor",
     "core",
     "discovery",
     "protocol-bindings/core",
@@ -19,3 +20,6 @@ time = { version = "0.3", default-features = false }
 
 serde = { version = "1.0", default-features = false }
 serde_json = { version = "1.0", default-features = false }
+
+async-trait = "0.1"
+futures-util = { version = "0.3", default-features = false, features = ["alloc"] }

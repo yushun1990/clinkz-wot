@@ -1,13 +1,19 @@
-use std::{borrow::Cow, cell::Cell, rc::Rc};
+#![allow(dead_code)]
+
+use std::{
+    borrow::Cow,
+    cell::Cell,
+    collections::VecDeque,
+    rc::Rc,
+    sync::{Arc, Mutex},
+};
 
 use clinkz_wot_core::{
-    ActionHandler, AffordanceTarget, BindingRequest, CodecInput, CoreResult, EventHandler,
-    EventSink, InteractionInput, InteractionOutput, LocalThing, Payload, PayloadCodec,
-    PropertyHandler, ProtocolBinding, SecurityContext, SecurityProvider, TransportRequest,
-};
-use clinkz_wot_servient::{
-    ConsumedThingCache, ExposedThingRegistry, InMemoryConsumedThingCache,
-    InMemoryExposedThingRegistry,
+    ActionHandler, AffordanceTarget, BindingRequest, ClientBinding, CodecInput, CoreResult,
+    EventSink, EventSubscribeHandler, EventUnsubscribeHandler, InboundRequest, InboundResponse,
+    InteractionInput, InteractionOutput, Payload, PayloadCodec, PropertyObserveHandler,
+    PropertyReadHandler, PropertyWriteHandler, SecurityContext, SecurityProvider,
+    ServerBinding as ServerBindingTrait, SubscriptionGuard, TransportRequest,
 };
 use clinkz_wot_td::{
     affordance::{ActionAffordance, EventAffordance, InteractionHelper, PropertyAffordance},
@@ -23,18 +29,66 @@ use clinkz_wot_protocol_bindings_zenoh::{
     ZenohOperationKind, ZenohTransport, ZenohTransportRequest,
 };
 
-pub(crate) struct StatusProperty {
+/// Shared-state property read/write handlers for tests that need both read and
+/// write on the same property (split handler model requires shared state).
+pub(crate) fn shared_status(value: Payload) -> (SharedStatusRead, SharedStatusWrite) {
+    let shared = Arc::new(Mutex::new(value));
+    (
+        SharedStatusRead {
+            value: Arc::clone(&shared),
+        },
+        SharedStatusWrite { value: shared },
+    )
+}
+
+pub(crate) struct SharedStatusRead {
+    value: Arc<Mutex<Payload>>,
+}
+
+impl PropertyReadHandler for SharedStatusRead {
+    fn read(&mut self, _input: InteractionInput) -> CoreResult<InteractionOutput> {
+        Ok(InteractionOutput::with_payload(
+            self.value.lock().unwrap().clone(),
+        ))
+    }
+}
+
+pub(crate) struct SharedStatusWrite {
+    value: Arc<Mutex<Payload>>,
+}
+
+impl PropertyWriteHandler for SharedStatusWrite {
+    fn write(&mut self, input: InteractionInput) -> CoreResult<InteractionOutput> {
+        *self.value.lock().unwrap() = input.payload.expect("test write payload");
+        Ok(InteractionOutput::empty())
+    }
+}
+
+/// Read-only status handler for tests that only need read property dispatch.
+#[derive(Clone)]
+pub(crate) struct StatusRead {
     pub(crate) value: Payload,
 }
 
-impl PropertyHandler for StatusProperty {
+impl PropertyReadHandler for StatusRead {
     fn read(&mut self, _input: InteractionInput) -> CoreResult<InteractionOutput> {
         Ok(InteractionOutput::with_payload(self.value.clone()))
     }
+}
 
-    fn write(&mut self, input: InteractionInput) -> CoreResult<InteractionOutput> {
-        self.value = input.payload.expect("test write payload");
-        Ok(InteractionOutput::empty())
+/// Property handler that captures the principal from the interaction input,
+/// verifying that inbound security context is threaded through to handlers.
+pub(crate) struct PrincipalCapturingProperty {
+    pub(crate) captured_principal: Rc<std::cell::RefCell<Option<clinkz_wot_core::Principal>>>,
+}
+
+impl PropertyReadHandler for PrincipalCapturingProperty {
+    fn read(&mut self, input: InteractionInput) -> CoreResult<InteractionOutput> {
+        *self.captured_principal.borrow_mut() = input.principal.clone();
+        Ok(InteractionOutput::with_payload(Payload::new(
+            b"ok".to_vec(),
+            "text/plain",
+        )))
     }
 }
 
@@ -48,15 +102,63 @@ impl ActionHandler for EchoAction {
     }
 }
 
+/// Action handler that calls `destroy(own_id)` during invocation, to verify
+/// the deferred-removal path does not self-deadlock (baseline §7 edge case).
+pub(crate) struct SelfDestroyingAction {
+    pub(crate) servient: clinkz_wot_servient::Servient,
+    pub(crate) thing_id: String,
+    pub(crate) destroyed: Rc<Cell<bool>>,
+}
+
+impl ActionHandler for SelfDestroyingAction {
+    fn invoke(&mut self, _input: InteractionInput) -> CoreResult<InteractionOutput> {
+        // Destroy from within the handler — this must not deadlock.
+        let result = self.servient.destroy(&self.thing_id);
+        self.destroyed.set(result.is_ok());
+        Ok(InteractionOutput::with_payload(Payload::new(
+            b"destroyed".to_vec(),
+            "text/plain",
+        )))
+    }
+}
+
 pub(crate) struct StartupEvent;
 
-impl EventHandler for StartupEvent {
+impl EventSubscribeHandler for StartupEvent {
     fn subscribe(
         &mut self,
         _input: InteractionInput,
         sink: &mut dyn EventSink,
     ) -> CoreResult<InteractionOutput> {
         sink.emit(Payload::new(b"ready".to_vec(), "text/plain"))?;
+        Ok(InteractionOutput::empty())
+    }
+}
+
+/// Event unsubscribe handler that records the unsubscribe call for testing.
+pub(crate) struct RecordingUnsubscribe {
+    pub(crate) called: Rc<Cell<bool>>,
+}
+
+impl EventUnsubscribeHandler for RecordingUnsubscribe {
+    fn unsubscribe(&mut self, _input: InteractionInput) -> CoreResult<InteractionOutput> {
+        self.called.set(true);
+        Ok(InteractionOutput::empty())
+    }
+}
+
+/// Property observe handler that emits an initial value through the sink.
+pub(crate) struct ObserveInitial {
+    pub(crate) initial: Payload,
+}
+
+impl PropertyObserveHandler for ObserveInitial {
+    fn observe(
+        &mut self,
+        _input: InteractionInput,
+        sink: &mut dyn EventSink,
+    ) -> CoreResult<InteractionOutput> {
+        sink.emit(self.initial.clone())?;
         Ok(InteractionOutput::empty())
     }
 }
@@ -94,19 +196,16 @@ impl PayloadCodec for CountingCodec {
     }
 }
 
-pub(crate) struct AuthenticatedStatusProperty;
+/// Property handler that does not assume transport security was applied, for
+/// testing the local direct-dispatch path (baseline §6).
+pub(crate) struct LocalUnsecuredStatusProperty;
 
-impl PropertyHandler for AuthenticatedStatusProperty {
-    fn read(&mut self, input: InteractionInput) -> CoreResult<InteractionOutput> {
-        assert_eq!(input.parameters.get("auth").map(String::as_str), Some("ok"));
+impl PropertyReadHandler for LocalUnsecuredStatusProperty {
+    fn read(&mut self, _input: InteractionInput) -> CoreResult<InteractionOutput> {
         Ok(InteractionOutput::with_payload(Payload::new(
-            b"secure-local".to_vec(),
+            b"local-direct".to_vec(),
             "text/plain",
         )))
-    }
-
-    fn write(&mut self, _input: InteractionInput) -> CoreResult<InteractionOutput> {
-        Ok(InteractionOutput::empty())
     }
 }
 
@@ -140,7 +239,7 @@ pub(crate) struct TestBinding {
     pub(crate) response: Payload,
 }
 
-impl ProtocolBinding for TestBinding {
+impl ClientBinding for TestBinding {
     fn supports(&self, form: &Form, operation: Operation) -> bool {
         form.href.as_str().starts_with("test://")
             && matches!(
@@ -149,54 +248,80 @@ impl ProtocolBinding for TestBinding {
                     | Operation::WriteProperty
                     | Operation::InvokeAction
                     | Operation::SubscribeEvent
+                    | Operation::ObserveProperty
             )
     }
 
-    fn invoke(&mut self, request: BindingRequest<'_>) -> CoreResult<InteractionOutput> {
+    fn invoke(&self, request: BindingRequest) -> CoreResult<InteractionOutput> {
         match (request.target, request.operation) {
-            (AffordanceTarget::Property("status"), Operation::ReadProperty) => {
+            (AffordanceTarget::Property(_), Operation::ReadProperty) => {
                 Ok(InteractionOutput::with_payload(self.response.clone()))
             }
-            (AffordanceTarget::Property("status"), Operation::WriteProperty) => {
+            (AffordanceTarget::Property(name), Operation::WriteProperty) if name == "status" => {
                 assert_eq!(request.input.payload.unwrap().body, b"off");
                 Ok(InteractionOutput::empty())
             }
-            (AffordanceTarget::Action("echo"), Operation::InvokeAction) => Ok(InteractionOutput {
-                payload: request.input.payload,
-            }),
-            (AffordanceTarget::Event("startup"), Operation::SubscribeEvent) => Ok(
-                InteractionOutput::with_payload(Payload::new(b"subscribed".to_vec(), "text/plain")),
-            ),
+            (AffordanceTarget::Property(_), Operation::WriteProperty) => {
+                Ok(InteractionOutput::empty())
+            }
+            (AffordanceTarget::Action(name), Operation::InvokeAction) if name == "echo" => {
+                Ok(InteractionOutput {
+                    payload: request.input.payload,
+                })
+            }
+            (AffordanceTarget::Event(_), Operation::SubscribeEvent) => {
+                // Fallback for one-shot invoke path; streaming path uses subscribe().
+                Ok(InteractionOutput::with_payload(Payload::new(
+                    b"subscribed".to_vec(),
+                    "text/plain",
+                )))
+            }
             _ => panic!("unexpected binding request"),
+        }
+    }
+
+    fn subscribe(
+        &self,
+        request: BindingRequest,
+    ) -> CoreResult<(clinkz_wot_core::Subscription, Box<dyn SubscriptionGuard>)> {
+        match (request.target, request.operation) {
+            (AffordanceTarget::Event(name), Operation::SubscribeEvent) if name == "startup" => {
+                let (sender, subscription) = clinkz_wot_core::Subscription::channel(0);
+                // Push an initial sample simulating a remote event delivery.
+                sender.push(Payload::new(b"subscribed".to_vec(), "text/plain"));
+                Ok((subscription, Box::new(NoopGuard)))
+            }
+            (AffordanceTarget::Property(name), Operation::ObserveProperty) if name == "status" => {
+                let (sender, subscription) = clinkz_wot_core::Subscription::channel(0);
+                sender.push(self.response.clone());
+                Ok((subscription, Box::new(NoopGuard)))
+            }
+            _ => panic!("unexpected subscribe request"),
         }
     }
 }
 
-pub(crate) struct HrefBinding;
+/// No-op subscription guard for test bindings.
+struct NoopGuard;
 
-impl ProtocolBinding for HrefBinding {
-    fn supports(&self, form: &Form, operation: Operation) -> bool {
-        form.href.as_str().starts_with("test://") && operation == Operation::ReadProperty
-    }
-
-    fn invoke(&mut self, request: BindingRequest<'_>) -> CoreResult<InteractionOutput> {
-        Ok(InteractionOutput::with_payload(Payload::new(
-            request.form.href.as_str().as_bytes().to_vec(),
-            "text/plain",
-        )))
-    }
+impl SubscriptionGuard for NoopGuard {
+    fn close(self: Box<Self>) {}
 }
 
 pub(crate) struct AuthenticatedReadBinding;
 
-impl ProtocolBinding for AuthenticatedReadBinding {
+impl ClientBinding for AuthenticatedReadBinding {
     fn supports(&self, form: &Form, operation: Operation) -> bool {
         form.href.as_str().starts_with("test://") && operation == Operation::ReadProperty
     }
 
-    fn invoke(&mut self, request: BindingRequest<'_>) -> CoreResult<InteractionOutput> {
+    fn invoke(&self, request: BindingRequest) -> CoreResult<InteractionOutput> {
         assert_eq!(
-            request.input.parameters.get("auth").map(String::as_str),
+            request
+                .input
+                .security_metadata
+                .get("auth")
+                .map(String::as_str),
             Some("ok")
         );
         Ok(InteractionOutput::with_payload(Payload::new(
@@ -210,13 +335,13 @@ pub(crate) struct CountingUnsupportedBinding {
     pub(crate) supports_calls: Rc<std::cell::RefCell<usize>>,
 }
 
-impl ProtocolBinding for CountingUnsupportedBinding {
+impl ClientBinding for CountingUnsupportedBinding {
     fn supports(&self, _form: &Form, _operation: Operation) -> bool {
         *self.supports_calls.borrow_mut() += 1;
         false
     }
 
-    fn invoke(&mut self, _request: BindingRequest<'_>) -> CoreResult<InteractionOutput> {
+    fn invoke(&self, _request: BindingRequest) -> CoreResult<InteractionOutput> {
         panic!("unsupported test binding should not be invoked")
     }
 }
@@ -225,13 +350,13 @@ pub(crate) struct CountingHrefBinding {
     pub(crate) supports_calls: Rc<std::cell::RefCell<usize>>,
 }
 
-impl ProtocolBinding for CountingHrefBinding {
+impl ClientBinding for CountingHrefBinding {
     fn supports(&self, form: &Form, operation: Operation) -> bool {
         *self.supports_calls.borrow_mut() += 1;
         form.href.as_str().starts_with("test://") && operation == Operation::ReadProperty
     }
 
-    fn invoke(&mut self, request: BindingRequest<'_>) -> CoreResult<InteractionOutput> {
+    fn invoke(&self, request: BindingRequest) -> CoreResult<InteractionOutput> {
         Ok(InteractionOutput::with_payload(Payload::new(
             request.form.href.as_str().as_bytes().to_vec(),
             "text/plain",
@@ -239,6 +364,7 @@ impl ProtocolBinding for CountingHrefBinding {
     }
 }
 
+#[allow(dead_code)]
 pub(crate) struct TestForms {
     pub(crate) read_property: Form,
     pub(crate) write_property: Form,
@@ -247,12 +373,13 @@ pub(crate) struct TestForms {
 }
 
 #[cfg(feature = "test-zenoh")]
+#[allow(dead_code)]
 #[derive(Default)]
 pub(crate) struct ServientZenohTransport;
 
 #[cfg(feature = "test-zenoh")]
 impl ZenohTransport for ServientZenohTransport {
-    fn execute(&mut self, request: ZenohTransportRequest) -> CoreResult<InteractionOutput> {
+    fn execute(&self, request: ZenohTransportRequest) -> CoreResult<InteractionOutput> {
         match (request.plan.kind, request.plan.key_expr.as_str()) {
             (ZenohOperationKind::Query, "clinkz/things/lamp/properties/status") => Ok(
                 InteractionOutput::with_payload(Payload::new(b"zenoh-on".to_vec(), "text/plain")),
@@ -284,19 +411,21 @@ impl ZenohTransport for ServientZenohTransport {
 }
 
 #[cfg(feature = "test-zenoh")]
+#[allow(dead_code)]
 #[derive(Default)]
 pub(crate) struct CountingServientZenohTransport {
-    pub(crate) calls: usize,
+    pub(crate) calls: Cell<usize>,
 }
 
 #[cfg(feature = "test-zenoh")]
 impl ZenohTransport for CountingServientZenohTransport {
-    fn execute(&mut self, request: ZenohTransportRequest) -> CoreResult<InteractionOutput> {
-        self.calls += 1;
+    fn execute(&self, request: ZenohTransportRequest) -> CoreResult<InteractionOutput> {
+        let count = self.calls.get().saturating_add(1);
+        self.calls.set(count);
         match (request.plan.kind, request.plan.key_expr.as_str()) {
             (ZenohOperationKind::Query, "clinkz/things/lamp/properties/status") => {
                 Ok(InteractionOutput::with_payload(Payload::new(
-                    format!("zenoh-read-{}", self.calls).into_bytes(),
+                    format!("zenoh-read-{}", count).into_bytes(),
                     "text/plain",
                 )))
             }
@@ -315,56 +444,6 @@ impl ZenohTransport for CountingServientZenohTransport {
     }
 }
 
-#[derive(Default)]
-pub(crate) struct TestExposedRegistry {
-    pub(crate) inner: InMemoryExposedThingRegistry,
-    pub(crate) inserted: usize,
-    pub(crate) removed: usize,
-}
-
-impl ExposedThingRegistry for TestExposedRegistry {
-    fn contains_id(&self, id: &str) -> bool {
-        self.inner.contains_id(id)
-    }
-
-    fn insert(&mut self, id: String, thing: LocalThing) -> Option<LocalThing> {
-        self.inserted += 1;
-        self.inner.insert(id, thing)
-    }
-
-    fn remove(&mut self, id: &str) -> Option<LocalThing> {
-        self.removed += 1;
-        self.inner.remove(id)
-    }
-
-    fn get_mut(&mut self, id: &str) -> Option<&mut LocalThing> {
-        self.inner.get_mut(id)
-    }
-}
-
-#[derive(Default)]
-pub(crate) struct TestConsumedCache {
-    pub(crate) inner: InMemoryConsumedThingCache,
-    pub(crate) inserted: usize,
-    pub(crate) removed: usize,
-}
-
-impl ConsumedThingCache for TestConsumedCache {
-    fn get(&self, id: &str) -> Option<Thing> {
-        self.inner.get(id)
-    }
-
-    fn insert(&mut self, id: String, thing: Thing) -> Option<Thing> {
-        self.inserted += 1;
-        self.inner.insert(id, thing)
-    }
-
-    fn remove(&mut self, id: &str) -> Option<Thing> {
-        self.removed += 1;
-        self.inner.remove(id)
-    }
-}
-
 pub(crate) fn thing(id: &str, title: &str) -> (Thing, TestForms) {
     let json_read_property = Form::read_property("other://things/lamp/properties/status")
         .content_type("application/json")
@@ -375,6 +454,11 @@ pub(crate) fn thing(id: &str, title: &str) -> (Thing, TestForms) {
         .build()
         .unwrap();
     let write_property = Form::write_property("test://things/lamp/properties/status")
+        .content_type("text/plain")
+        .build()
+        .unwrap();
+    let observe_property = Form::builder("test://things/lamp/properties/status")
+        .observe_property()
         .content_type("text/plain")
         .build()
         .unwrap();
@@ -391,6 +475,7 @@ pub(crate) fn thing(id: &str, title: &str) -> (Thing, TestForms) {
             json_read_property.clone(),
             read_property.clone(),
             write_property.clone(),
+            observe_property,
         ])
         .build()
         .unwrap();
@@ -443,30 +528,8 @@ pub(crate) fn secure_thing(id: &str, title: &str) -> (Thing, Form) {
     (thing, read_property)
 }
 
-pub(crate) fn cacheable_thing(id: &str, title: &str) -> (Thing, Form, Form) {
-    let first_form = Form::read_property("test://things/lamp/properties/status/first")
-        .content_type("text/plain")
-        .build()
-        .unwrap();
-    let cached_form = Form::read_property("test://things/lamp/properties/status/cached")
-        .content_type("text/plain")
-        .build()
-        .unwrap();
-    let property = PropertyAffordance::builder(DataSchema::String(DataSchema::string().build()))
-        .forms([first_form.clone(), cached_form.clone()])
-        .build()
-        .unwrap();
-    let thing = Thing::builder(title)
-        .id(id)
-        .nosec()
-        .property("status", property)
-        .build()
-        .unwrap();
-
-    (thing, first_form, cached_form)
-}
-
 #[cfg(feature = "test-zenoh")]
+#[allow(dead_code)]
 pub(crate) fn zenoh_thing(id: &str, title: &str) -> Thing {
     let read_property = Form::read_property("zenoh://clinkz/things/lamp/properties/status")
         .content_type("text/plain")
@@ -505,4 +568,53 @@ pub(crate) fn zenoh_thing(id: &str, title: &str) -> Thing {
         .event("startup", event)
         .build()
         .unwrap()
+}
+
+/// Fake [`ServerBinding`] for testing the sync driving layer and expose/destroy
+/// coordination (baseline §4 / §10).
+#[derive(Default)]
+pub(crate) struct FakeServerBinding {
+    pub(crate) pending_requests: Mutex<VecDeque<InboundRequest>>,
+    pub(crate) responses: Mutex<Vec<InboundResponse>>,
+    pub(crate) registered_things: Mutex<Vec<String>>,
+    pub(crate) unregistered_things: Mutex<Vec<String>>,
+    pub(crate) route_registration_fails: bool,
+}
+
+impl FakeServerBinding {
+    pub(crate) fn enqueue(&self, request: InboundRequest) {
+        self.pending_requests.lock().unwrap().push_back(request);
+    }
+
+    pub(crate) fn take_responses(&self) -> Vec<InboundResponse> {
+        std::mem::take(&mut *self.responses.lock().unwrap())
+    }
+}
+
+impl ServerBindingTrait for FakeServerBinding {
+    fn poll_accept_sync(&self) -> Option<InboundRequest> {
+        self.pending_requests.lock().unwrap().pop_front()
+    }
+
+    fn send_response(&self, response: InboundResponse) {
+        self.responses.lock().unwrap().push(response);
+    }
+
+    fn register_thing(&self, thing_id: &str, _td: &Thing) -> Result<(), String> {
+        if self.route_registration_fails {
+            return Err(format!("route registration failed for '{}'", thing_id));
+        }
+        self.registered_things
+            .lock()
+            .unwrap()
+            .push(thing_id.to_owned());
+        Ok(())
+    }
+
+    fn unregister_thing(&self, thing_id: &str) {
+        self.unregistered_things
+            .lock()
+            .unwrap()
+            .push(thing_id.to_owned());
+    }
 }

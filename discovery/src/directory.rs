@@ -176,19 +176,23 @@ impl ThingDirectory for InMemoryThingDirectory {
     }
 
     fn query(&self, query: DirectoryQuery) -> DirectoryPage {
-        let matches: Vec<_> = self
-            .things
-            .iter()
-            .filter(|(_, thing)| query.matches(thing))
-            .collect();
-        let total = matches.len();
+        // Single pass over filtered matches: count every match for `total`,
+        // but clone TDs only for the requested page. For directories with many
+        // entries and small page sizes this avoids both the previous full
+        // match-list allocation and the second filter pass.
         let limit = query.limit.unwrap_or(usize::MAX);
-        let entries = matches
-            .into_iter()
-            .skip(query.offset)
-            .take(limit)
-            .map(|(id, thing)| Self::owned_entry(id, thing))
-            .collect();
+        let mut total = 0usize;
+        let mut entries: Vec<DirectoryEntry> = Vec::new();
+        let page_start = query.offset;
+        let page_end = query.offset.saturating_add(limit);
+
+        for (id, thing) in self.things.iter().filter(|(_, thing)| query.matches(thing)) {
+            let index = total;
+            total += 1;
+            if index >= page_start && index < page_end {
+                entries.push(Self::owned_entry(id, thing));
+            }
+        }
 
         DirectoryPage {
             entries,

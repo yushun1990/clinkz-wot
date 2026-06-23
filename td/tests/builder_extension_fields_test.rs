@@ -1,13 +1,16 @@
 use clinkz_wot_td::{
     affordance::{ActionAffordance, EventAffordance},
     data_schema::ContextHelper as DataSchemaContextHelper,
-    data_type::{AdditionalExpectedResponse, ExpectedResponse, ExtensionMap, VersionInfo},
+    data_type::{
+        AdditionalExpectedResponse, ExpectedResponse, ExtensionMap, ThingModelVersionInfo,
+        VersionInfo,
+    },
     form::Form,
     link::Link,
     security_scheme::{ContextHelper as SecurityContextHelper, NoSecurityScheme, SecurityScheme},
     thing::Thing,
 };
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 fn extension_map(entries: impl IntoIterator<Item = (&'static str, Value)>) -> ExtensionMap {
     entries
@@ -48,6 +51,19 @@ fn thing_builder_sets_extension_fields() {
     assert_eq!(field(&value, "cz:binding"), json!({ "transport": "zenoh" }));
     assert_eq!(field(&value, "cz:owner"), json!("platform"));
     assert_eq!(field(&value["version"], "cz:versionTag"), json!("stable"));
+}
+
+#[test]
+fn thing_model_version_uses_model_term_only() {
+    let version = ThingModelVersionInfo {
+        model: Some("1.0.0".to_string()),
+        _extra_fields: extension_map([("cz:versionTag", json!("stable"))]),
+    };
+
+    let value = serde_json::to_value(version).expect("TM version should serialize");
+    assert_eq!(field(&value, "model"), json!("1.0.0"));
+    assert_eq!(field(&value, "cz:versionTag"), json!("stable"));
+    assert!(value.get("instance").is_none());
 }
 
 #[test]

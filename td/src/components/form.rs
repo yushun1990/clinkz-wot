@@ -1,7 +1,7 @@
 use alloc::{borrow::Cow, string::String, vec::Vec};
 use fluent_uri::ParseError;
 use serde::{Deserialize, Serialize};
-use serde_with::{serde_as, skip_serializing_none, OneOrMany};
+use serde_with::{OneOrMany, serde_as, skip_serializing_none};
 
 use crate::data_type::{
     AdditionalExpectedResponse, ExpectedResponse, ExtensionMap, FormHref, Operation,
