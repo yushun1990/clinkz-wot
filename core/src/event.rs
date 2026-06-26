@@ -34,6 +34,7 @@
 
 use alloc::{
     collections::{BTreeMap, VecDeque},
+    format,
     string::String,
     sync::Arc,
     vec::Vec,
@@ -117,7 +118,7 @@ pub(crate) type SharedPublisherSink = Arc<dyn PublisherSink + Send>;
 pub(crate) type SharedPublisherSink = Arc<dyn PublisherSink + Send + Sync>;
 
 /// Fan-out table keyed by Thing and event name.
-type EventSinkMap = BTreeMap<ThingId, BTreeMap<EventName, Vec<SharedPublisherSink>>>;
+type EventSinkMap = BTreeMap<ThingId, BTreeMap<EventName, Arc<[SharedPublisherSink]>>>;
 
 /// Inbound (exposed) event fan-out broker.
 ///
@@ -189,21 +190,30 @@ impl EventBroker {
         event: impl Into<EventName>,
         sink: SharedPublisherSink,
     ) {
-        self.sinks.with(|map| {
-            map.entry(thing.into())
-                .or_default()
-                .entry(event.into())
-                .or_default()
-                .push(sink);
+        // `with` (not `with_recover`): on poison the registration is skipped
+        // rather than written into potentially inconsistent state. A skipped
+        // registration leaves the broker with its pre-poison fan-out table.
+        let _ = self.sinks.with(|map| {
+            let events = map.entry(thing.into()).or_default();
+            let event = event.into();
+            let snapshot = if let Some(sinks) = events.get(&event) {
+                let mut sinks = sinks.to_vec();
+                sinks.push(sink);
+                Arc::from(sinks.into_boxed_slice())
+            } else {
+                let sinks = alloc::vec![sink];
+                Arc::from(sinks.into_boxed_slice())
+            };
+            events.insert(event, snapshot);
         });
     }
 
     /// Returns the number of registered publisher sinks for an event.
     pub fn subscriber_count(&self, thing: &ThingId, event: &EventName) -> usize {
-        self.sinks.with(|map| {
+        self.sinks.with_recover(|map| {
             map.get(thing)
                 .and_then(|events| events.get(event))
-                .map_or(0, Vec::len)
+                .map_or(0, |sinks| sinks.len())
         })
     }
 
@@ -212,14 +222,16 @@ impl EventBroker {
     /// Called by the Servient during `destroy` so that stale publisher sinks do
     /// not linger after a Thing is removed.
     pub fn remove_thing(&self, thing: &ThingId) {
-        self.sinks.with(|map| {
+        // `with` skips the removal on poison instead of mutating inconsistent
+        // state; stale sinks at worst linger until the next successful call.
+        let _ = self.sinks.with(|map| {
             map.remove(thing);
         });
     }
 
     /// Removes publisher sinks for a single event on a Thing.
     pub fn remove_event(&self, thing: &ThingId, event: &EventName) {
-        self.sinks.with(|map| {
+        let _ = self.sinks.with(|map| {
             if let Some(events) = map.get_mut(thing) {
                 events.remove(event);
             }
@@ -228,44 +240,47 @@ impl EventBroker {
 
     /// Fans `payload` out to every publisher sink registered for the event.
     ///
-    /// Every sink is attempted even if an earlier one errors; the first error
-    /// encountered is returned (others are still delivered). Publishing to an
-    /// unknown Thing or event succeeds as a no-op.
+    /// Every sink is attempted even if an earlier one errors. With a single
+    /// failure the structured error is returned as-is; with multiple failures a
+    /// composite [`CoreError::Transport`] surfaces every failure (count +
+    /// joined messages) so partial fan-out is observable instead of silently
+    /// dropping all but the first. Publishing to an unknown Thing or event
+    /// succeeds as a no-op.
     pub fn publish(&self, thing: &ThingId, event: &EventName, payload: &Payload) -> CoreResult<()> {
-        // Fast path: peek under the lock to see if there are any subscribers
-        // for this (thing, event). If not, return without allocating the
-        // snapshot Vec. The common case is "no subscribers" right after expose
-        // and before any consumer has subscribed, or after all consumers have
-        // unsubscribed.
-        let has_subscribers = self.sinks.with(|map| {
-            map.get(thing)
-                .and_then(|events| events.get(event))
-                .is_some_and(|sinks| !sinks.is_empty())
-        });
-        if !has_subscribers {
+        // Snapshot the sink list under a brief lock, then fan-out outside the
+        // lock so blocking sinks (e.g. zenoh `session.put`) don't hold the
+        // broker lock.
+        let snapshot: Option<Arc<[SharedPublisherSink]>> = self
+            .sinks
+            .with(|map| map.get(thing).and_then(|events| events.get(event)).cloned())?;
+        let Some(snapshot) = snapshot else {
             return Ok(());
-        }
+        };
 
-        // Slow path: snapshot the sink list under a brief lock, then fan-out
-        // outside the lock so blocking sinks (e.g. zenoh `session.put`) don't
-        // hold the broker lock.
-        let snapshot: Vec<SharedPublisherSink> = self.sinks.with(|map| {
-            map.get(thing)
-                .and_then(|events| events.get(event))
-                .map_or_else(Vec::new, |sinks| sinks.clone())
-        });
-
-        let mut first_err: Option<CoreError> = None;
-        for sink in &snapshot {
-            if let Err(err) = sink.publish(payload)
-                && first_err.is_none()
-            {
-                first_err = Some(err);
+        // Collect every failure so partial fan-out is observable. Returning
+        // only the first error (the previous behavior) silently dropped the
+        // rest, hiding which/how-many subscribers missed the event.
+        let mut errors: Vec<CoreError> = Vec::new();
+        for sink in snapshot.iter() {
+            if let Err(err) = sink.publish(payload) {
+                errors.push(err);
             }
         }
-        match first_err {
-            Some(err) => Err(err),
-            None => Ok(()),
+        match errors.len() {
+            0 => Ok(()),
+            1 => Err(errors
+                .into_iter()
+                .next()
+                .expect("exactly one error recorded")),
+            count => Err(CoreError::Transport(format!(
+                "Event fan-out failed for {count} of {} subscriber(s): {}",
+                snapshot.len(),
+                errors
+                    .iter()
+                    .map(|err| format!("{err}"))
+                    .collect::<Vec<_>>()
+                    .join("; ")
+            ))),
         }
     }
 
@@ -295,12 +310,12 @@ impl Default for EventBroker {
 
 impl fmt::Debug for EventBroker {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let (events, total_sinks) = self.sinks.with(|map| {
+        let (events, total_sinks) = self.sinks.with_recover(|map| {
             let events = map.values().map(BTreeMap::len).sum::<usize>();
             let total_sinks = map
                 .values()
                 .flat_map(BTreeMap::values)
-                .map(Vec::len)
+                .map(|sinks| sinks.len())
                 .sum::<usize>();
             (events, total_sinks)
         });
@@ -402,7 +417,7 @@ impl Subscription {
 
     /// Drains the next buffered payload, or `None` if the queue is empty.
     pub fn poll_next(&self) -> Option<Payload> {
-        self.inner.with(|q| q.buffer.pop_front())
+        self.inner.with_recover(|q| q.buffer.pop_front())
     }
 
     /// Marks the subscription as stopped.
@@ -410,27 +425,27 @@ impl Subscription {
     /// Prevents further producer pushes but leaves already-buffered samples
     /// drainable via [`poll_next`](Self::poll_next).
     pub fn stop(&self) {
-        self.inner.with(|q| q.stopped = true);
+        self.inner.with_recover(|q| q.stopped = true);
     }
 
     /// Returns whether the subscription has been stopped.
     pub fn is_stopped(&self) -> bool {
-        self.inner.with(|q| q.stopped)
+        self.inner.with_recover(|q| q.stopped)
     }
 
     /// Returns the number of samples dropped by overflow backpressure.
     pub fn overflow_count(&self) -> u64 {
-        self.inner.with(|q| q.overflow_count)
+        self.inner.with_recover(|q| q.overflow_count)
     }
 
     /// Returns the configured queue capacity.
     pub fn capacity(&self) -> usize {
-        self.inner.with(|q| q.capacity)
+        self.inner.with_recover(|q| q.capacity)
     }
 
     /// Returns the number of currently buffered samples.
     pub fn len(&self) -> usize {
-        self.inner.with(|q| q.buffer.len())
+        self.inner.with_recover(|q| q.buffer.len())
     }
 
     /// Returns whether no samples are currently buffered.
@@ -443,7 +458,7 @@ impl fmt::Debug for Subscription {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let (len, capacity, overflow_count, stopped) = self
             .inner
-            .with(|q| (q.buffer.len(), q.capacity, q.overflow_count, q.stopped));
+            .with_recover(|q| (q.buffer.len(), q.capacity, q.overflow_count, q.stopped));
         f.debug_struct("Subscription")
             .field("capacity", &capacity)
             .field("len", &len)
@@ -460,7 +475,7 @@ impl SubscriptionSender {
     /// counter is incremented; the producer is never blocked. Pushes after a
     /// [`stop`](Self::stop) are silently dropped and do not count as overflow.
     pub fn push(&self, payload: Payload) {
-        self.inner.with(|q| {
+        self.inner.with_recover(|q| {
             if q.stopped {
                 return;
             }
@@ -474,17 +489,17 @@ impl SubscriptionSender {
 
     /// Marks the subscription as stopped.
     pub fn stop(&self) {
-        self.inner.with(|q| q.stopped = true);
+        self.inner.with_recover(|q| q.stopped = true);
     }
 
     /// Returns whether the subscription has been stopped.
     pub fn is_stopped(&self) -> bool {
-        self.inner.with(|q| q.stopped)
+        self.inner.with_recover(|q| q.stopped)
     }
 
     /// Returns the number of samples dropped by overflow backpressure.
     pub fn overflow_count(&self) -> u64 {
-        self.inner.with(|q| q.overflow_count)
+        self.inner.with_recover(|q| q.overflow_count)
     }
 }
 
@@ -492,7 +507,7 @@ impl fmt::Debug for SubscriptionSender {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let (capacity, overflow_count, stopped) = self
             .inner
-            .with(|q| (q.capacity, q.overflow_count, q.stopped));
+            .with_recover(|q| (q.capacity, q.overflow_count, q.stopped));
         f.debug_struct("SubscriptionSender")
             .field("capacity", &capacity)
             .field("overflow_count", &overflow_count)
@@ -619,6 +634,36 @@ mod tests {
         );
         assert!(result.is_err());
         assert_eq!(rec.bodies(), vec![vec![9]]);
+    }
+
+    #[test]
+    fn publish_aggregates_multiple_sink_failures() {
+        let broker = EventBroker::new();
+        // Two failing subscribers: partial fan-out must surface every failure,
+        // not just the first.
+        broker.register("urn:t:1", "update", FailingSink);
+        broker.register("urn:t:1", "update", FailingSink);
+
+        let err = broker
+            .publish(
+                &ThingId::from("urn:t:1"),
+                &EventName::from("update"),
+                &payload(&[1]),
+            )
+            .expect_err("two failing sinks must surface an error");
+
+        let message = match &err {
+            CoreError::Transport(message) => message,
+            other => panic!("expected composite Transport error, got {other:?}"),
+        };
+        assert!(
+            message.contains("2 of 2 subscriber(s)"),
+            "expected failure count, message was: {message}"
+        );
+        assert!(
+            message.matches("publish failed").count() == 2,
+            "expected both failures joined, message was: {message}"
+        );
     }
 
     #[test]

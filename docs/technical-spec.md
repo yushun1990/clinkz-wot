@@ -93,6 +93,20 @@ The native-async driving layer (`poll_serve`, `serve`) is gated behind the
 bindings concurrently without rebuilding the whole wait set on each iteration
 (baseline v3.0 §4, addendum §2.4 / §6.2).
 
+The Servient keeps hot-path runtime state in snapshots rather than repeatedly
+cloning live vectors. Registered sync and async server bindings are mirrored in
+`Arc<[...]>` snapshots so the driving loops can clone a single shared pointer
+per poll. The shared `EventBroker` uses the same snapshot style for
+`ThingId`/`EventName` fan-out tables so `publish` can release the broker lock
+before delivering to sinks. Consumed-Thing entries intern both the selected
+form and the selected binding plan, and the form cache stores `Arc<Form>` so
+repeated consumed interactions avoid deep TD clones.
+
+Late binding factories may optionally provide a lightweight support predicate
+in addition to the factory constructor. Servient uses that predicate to skip
+instantiating bindings that cannot handle the selected form and operation,
+which shortens binding selection on consumed interactions.
+
 The shared `EventBroker` (baseline §9) is wired into the Servient inner state
 and fed to each `ServerBinding` via `set_event_broker` during build and late
 registration. `ExposedThingHandle::emit_event` fans event payloads through the
@@ -115,7 +129,15 @@ Handler traits follow the W3C Scripting API split: `PropertyReadHandler`,
 `EventUnsubscribeHandler` are registered independently, allowing read-only,
 write-only, and observable affordances. Bulk property operations
 (`read_multiple_properties`, `read_all_properties`, `write_multiple_properties`)
-are available on both handles as fan-out conveniences.
+are available on both handles. On the consumed side they prefer a single
+Thing-level form declaring the matching bulk meta-operation
+(`readallproperties`, `readmultipleproperties`, `writemultipleproperties`;
+W3C TD §6.3.3) when the consumed TD advertises one, splitting the combined
+JSON-object response into a per-property map; otherwise they fall back to one
+round trip per property. The inbound serving path dispatches the same
+meta-operations by fanning out across the exposed property handlers and
+combining their outputs into a single JSON-object response, so a Thing-level
+bulk form is servable end-to-end.
 
 Discovery follows the W3C Scripting API §5 process model: `Servient::discover`
 accepts a fragment-oriented `ThingFilter` and returns a `ThingDiscovery`

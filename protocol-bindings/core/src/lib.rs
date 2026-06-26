@@ -8,6 +8,7 @@ extern crate alloc;
 pub mod error;
 pub mod error_status;
 pub mod form;
+pub mod uri_template;
 
 pub use error::{BindingError, BindingResult};
 pub use error_status::error_status;
@@ -19,5 +20,6 @@ pub use form::{
     select_affordance_form_selection_with_result_filter, select_affordance_form_with_criteria,
     select_affordance_form_with_filter, select_affordance_form_with_result_filter, select_form,
     select_form_with_criteria, select_form_with_filter, select_form_with_result_filter,
-    validate_affordance_form, validate_affordance_form_with_criteria,
+    validate_affordance_form, validate_affordance_form_with_criteria, validate_form_operation,
 };
+pub use uri_template::{TemplateExpandError, expand_uri_template, expand_uri_template_strict};

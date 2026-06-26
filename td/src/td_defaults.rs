@@ -14,7 +14,10 @@ const PROPERTY_READ_WRITE_OPERATIONS: &[Operation] =
 const PROPERTY_READ_OPERATIONS: &[Operation] = &[Operation::ReadProperty];
 const PROPERTY_WRITE_OPERATIONS: &[Operation] = &[Operation::WriteProperty];
 const ACTION_OPERATIONS: &[Operation] = &[Operation::InvokeAction];
-const EVENT_OPERATIONS: &[Operation] = &[Operation::SubscribeEvent, Operation::UnsubscribeEvent];
+// TD 1.1 §5.3.3: a form of an Event affordance without an explicit `op`
+// defaults to `subscribeevent` only. `unsubscribeevent` is never inferred;
+// authors who want it must declare it explicitly on the form.
+const EVENT_OPERATIONS: &[Operation] = &[Operation::SubscribeEvent];
 
 /// Context used to resolve the effective operations of a TD form.
 #[derive(Debug, Clone, Copy)]

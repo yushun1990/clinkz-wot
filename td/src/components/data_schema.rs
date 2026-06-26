@@ -756,8 +756,20 @@ impl<'de> Deserialize<'de> for DataSchema {
     {
         let value = serde_json::Value::deserialize(deserializer)?;
 
-        if let Some(schema) = deserialize_typed_data_schema(&value) {
-            return schema.map_err(serde::de::Error::custom);
+        // Peek at "type" to decide whether a typed schema applies, without
+        // cloning the entire value tree.
+        let has_known_type = value
+            .get("type")
+            .and_then(serde_json::Value::as_str)
+            .is_some_and(|t| {
+                matches!(
+                    t,
+                    "array" | "boolean" | "number" | "integer" | "object" | "string" | "null"
+                )
+            });
+
+        if has_known_type {
+            return deserialize_typed_data_schema(value).map_err(serde::de::Error::custom);
         }
 
         deserialize_untyped_data_schema(value).map_err(serde::de::Error::custom)
@@ -969,50 +981,43 @@ impl Validate for DataSchema {
 }
 
 fn deserialize_typed_data_schema(
-    value: &serde_json::Value,
-) -> Option<Result<DataSchema, serde_json::Error>> {
-    let data_type = value.get("type").and_then(serde_json::Value::as_str)?;
-
-    Some(match data_type {
-        "array" => serde_json::from_value::<ArraySchema>(value.clone()).map(DataSchema::Array),
-        "boolean" => {
-            serde_json::from_value::<BooleanSchema>(value.clone()).map(DataSchema::Boolean)
-        }
-        "number" => serde_json::from_value::<NumberSchema>(value.clone()).map(DataSchema::Number),
-        "integer" => {
-            serde_json::from_value::<IntegerSchema>(value.clone()).map(DataSchema::Integer)
-        }
-        "object" => serde_json::from_value::<ObjectSchema>(value.clone()).map(DataSchema::Object),
-        "string" => serde_json::from_value::<StringSchema>(value.clone()).map(DataSchema::String),
-        "null" => serde_json::from_value::<NullSchema>(value.clone()).map(DataSchema::Null),
-        _ => return None,
-    })
+    value: serde_json::Value,
+) -> Result<DataSchema, serde_json::Error> {
+    let data_type = value
+        .get("type")
+        .and_then(serde_json::Value::as_str)
+        .unwrap_or_default();
+    match data_type {
+        "array" => serde_json::from_value::<ArraySchema>(value).map(DataSchema::Array),
+        "boolean" => serde_json::from_value::<BooleanSchema>(value).map(DataSchema::Boolean),
+        "number" => serde_json::from_value::<NumberSchema>(value).map(DataSchema::Number),
+        "integer" => serde_json::from_value::<IntegerSchema>(value).map(DataSchema::Integer),
+        "object" => serde_json::from_value::<ObjectSchema>(value).map(DataSchema::Object),
+        "string" => serde_json::from_value::<StringSchema>(value).map(DataSchema::String),
+        "null" => serde_json::from_value::<NullSchema>(value).map(DataSchema::Null),
+        // Defensive: the `has_known_type` pre-check in `deserialize()`
+        // guarantees one of the known types above. Surface a deserialization
+        // error instead of panicking if that invariant ever breaks (for
+        // example if a new type name is introduced without updating this
+        // match).
+        other => Err(serde::de::Error::custom(format!(
+            "unknown data schema type '{other}'"
+        ))),
+    }
 }
 
 fn deserialize_untyped_data_schema(
     value: serde_json::Value,
 ) -> Result<DataSchema, serde_json::Error> {
-    #[derive(Deserialize)]
-    #[serde(untagged)]
-    enum UntaggedDataSchema {
-        Array(ArraySchema),
-        Boolean(BooleanSchema),
-        Number(NumberSchema),
-        Integer(IntegerSchema),
-        Object(ObjectSchema),
-        String(StringSchema),
-        Null(NullSchema),
-    }
-
-    match serde_json::from_value::<UntaggedDataSchema>(value)? {
-        UntaggedDataSchema::Array(schema) => Ok(DataSchema::Array(schema)),
-        UntaggedDataSchema::Boolean(schema) => Ok(DataSchema::Boolean(schema)),
-        UntaggedDataSchema::Number(schema) => Ok(DataSchema::Number(schema)),
-        UntaggedDataSchema::Integer(schema) => Ok(DataSchema::Integer(schema)),
-        UntaggedDataSchema::Object(schema) => Ok(DataSchema::Object(schema)),
-        UntaggedDataSchema::String(schema) => Ok(DataSchema::String(schema)),
-        UntaggedDataSchema::Null(schema) => Ok(DataSchema::Null(schema)),
-    }
+    // A DataSchema without a recognized `type` is a generic schema (W3C TD
+    // permits omitting `type`). There is no dedicated "untyped" variant, so
+    // deserialize it as the most permissive canonical variant (`Object`)
+    // deterministically. The previous `#[serde(untagged)]` first-match logic
+    // arbitrarily picked `Array` (the first variant) for inputs like `{}`,
+    // misclassifying generic schemas as arrays (and letting array-only
+    // constraints apply). Any type-specific fields the input carries (e.g.
+    // `minLength`, `minimum`) are preserved via the schema's extension map.
+    serde_json::from_value::<ObjectSchema>(value).map(DataSchema::Object)
 }
 
 fn validate_schema_type_consistency(schema: &DataSchema) -> Result<(), ValidateError> {
@@ -1036,6 +1041,13 @@ fn validate_schema_context(
     level: ValidationLevel,
 ) -> Result<(), ValidateError> {
     validate_nested_schemas(context.one_of.as_deref(), level)?;
+
+    // JSON Schema / TD 1.1: a schema MUST NOT be both readOnly and writeOnly.
+    if context.read_only && context.write_only {
+        return Err(ValidateError::InvalidSchema(String::from(
+            "readOnly and writeOnly must not both be true",
+        )));
+    }
 
     let fields = &context._extra_fields;
     validate_ordered_u64(

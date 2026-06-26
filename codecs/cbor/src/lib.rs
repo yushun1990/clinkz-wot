@@ -2,26 +2,29 @@
 //!
 //! Implements [`PayloadCodec`] for the `application/cbor` media type. This is
 //! the first concrete codec in the workspace and the reference example for
-//! H6's "normalize round-trip" pattern: when an application registers a
+//! the "normalize round-trip" pattern: when an application registers a
 //! [`CborCodec`], every consumed `application/cbor` payload is parsed to
-//! [`ciborium::Value`] and re-encoded deterministically before being handed
-//! to interaction handlers.
+//! [`ciborium::Value`] and re-encoded through normalization before being
+//! handed to interaction handlers.
 //!
-//! # Canonicalization
+//! # Normalization (not RFC 8949 deterministic encoding)
 //!
-//! Both [`CborCodec::encode`] and [`CborCodec::decode`] canonicalize their
-//! input by round-tripping through [`ciborium::Value`]. The output uses the
-//! deterministic encoding rules that `ciborium` applies by default:
+//! Both [`CborCodec::encode`] and [`CborCodec::decode`] normalize their input
+//! by round-tripping through [`ciborium::Value`]. This is a *normalization*,
+//! **not** [RFC 8949] deterministic encoding:
 //!
 //! - Integers serialize to the smallest lossless width (RFC 8949 §3.1 / §4.2.1).
-//! - Map keys serialize in the order produced by `ciborium::Value`, which
-//!   preserves the input order rather than re-sorting. Applications that need
-//!   length-first map ordering (RFC 8949 §4.2.3) should pre-sort map keys
-//!   before encoding.
+//! - Map keys are **not** re-sorted: `ciborium::Value` preserves input order,
+//!   so two semantically equal maps with different key orders encode to
+//!   different bytes. RFC 8949 §4.2.3 deterministic encoding requires
+//!   length-first byte-sorted keys, which this codec does **not** perform.
 //!
-//! This is enough to give downstream code (signing, hashing, equality
-//! comparison) a stable byte representation for the common cases that matter
-//! in WoT interactions: integers, booleans, strings, bytes, arrays, and maps.
+//! Consequence: the output is a stable byte representation only when the input
+//! already has a stable key order. Applications that sign, hash, or
+//! byte-compare CBOR must pre-sort map keys (or use a dedicated deterministic
+//! encoder) — do **not** rely on this codec producing canonical bytes.
+//!
+//! [RFC 8949]: https://www.rfc-editor.org/rfc/rfc8949.html
 //!
 //! # Example
 //!
@@ -29,6 +32,7 @@
 //! use clinkz_wot_codec_cbor::CborCodec;
 //! use clinkz_wot_core::{CodecInput, PayloadCodec};
 //!
+//! # fn main() -> Result<(), Box<dyn std::error::Error>> {
 //! let codec = CborCodec::new();
 //! // Build CBOR bytes for `{ "status": 1 }` using ciborium directly.
 //! let mut wire = Vec::new();
@@ -40,10 +44,12 @@
 //!         ),
 //!     ].into_iter().collect::<Vec<_>>()),
 //!     &mut wire,
-//! ).unwrap();
+//! )?;
 //!
-//! let payload = codec.encode(CodecInput { body: &wire, data_type: None }).unwrap();
+//! let payload = codec.encode(CodecInput { body: &wire, data_type: None })?;
 //! assert_eq!(payload.content_type, "application/cbor");
+//! # Ok(())
+//! # }
 //! ```
 
 #![no_std]
@@ -63,9 +69,9 @@ pub const CBOR_CONTENT_TYPE: &str = "application/cbor";
 /// CBOR payload codec for the [`application/cbor`](CBOR_CONTENT_TYPE) media
 /// type.
 ///
-/// Canonicalizes CBOR by parsing to [`ciborium::Value`] and re-encoding
-/// deterministically. See the [crate-level docs](self) for the exact
-/// canonicalization rules and the H6 round-trip implications.
+/// Normalizes CBOR by parsing to [`ciborium::Value`] and re-encoding. See the
+/// [crate-level docs](self) for why this is a normalization and **not** RFC
+/// 8949 deterministic encoding (map keys are not re-sorted).
 ///
 /// `CborCodec` is zero-sized — register one instance per
 /// [`Servient`](clinkz_wot_core::PayloadCodec) and the engine will use it for
@@ -92,25 +98,30 @@ impl PayloadCodec for CborCodec {
     }
 
     fn encode(&self, input: CodecInput<'_>) -> CoreResult<Payload> {
-        let body = canonicalize(input.body)?;
+        let body = reencode(input.body)?;
         Ok(Payload::new(body, CBOR_CONTENT_TYPE))
     }
 
     fn decode(&self, payload: &Payload) -> CoreResult<Vec<u8>> {
-        // "Application bytes" for this codec are canonical CBOR, matching the
-        // encode() output so the normalize round-trip is stable and so callers
-        // that hash or sign decoded bytes see the same representation as the
-        // wire payload.
-        canonicalize(payload.body.as_slice())
+        // "Application bytes" for this codec are normalized CBOR, matching the
+        // encode() output so the round-trip is stable and so callers that hash
+        // or sign decoded bytes see the same representation as the wire payload
+        // (provided the input key order is itself stable — see crate-level
+        // docs).
+        reencode(payload.body.as_slice())
     }
 }
 
-/// Parses `bytes` as CBOR and re-serializes deterministically.
+/// Parses `bytes` as CBOR and re-serializes via [`ciborium::Value`].
+///
+/// This *normalizes* the byte representation (e.g. smallest lossless integer
+/// width) but does **not** make it canonical: map keys keep their input order
+/// instead of being re-sorted per RFC 8949 §4.2.3.
 ///
 /// Returns [`CoreError::Payload`] when the input is not well-formed CBOR or
 /// when re-serialization fails (the latter is exceedingly rare for in-memory
 /// `Vec<u8>` writes).
-fn canonicalize(bytes: &[u8]) -> CoreResult<Vec<u8>> {
+fn reencode(bytes: &[u8]) -> CoreResult<Vec<u8>> {
     let value: ciborium::Value = ciborium::de::from_reader(bytes)
         .map_err(|err| CoreError::Payload(format!("CBOR decode failed: {}", err)))?;
     let mut out = Vec::with_capacity(bytes.len());

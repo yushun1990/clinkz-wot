@@ -5,34 +5,48 @@ use core::future::Future;
 #[cfg(feature = "async")]
 use core::pin::Pin;
 use core::sync::atomic::{AtomicBool, Ordering};
+#[cfg(feature = "async")]
+use core::time::Duration;
 
 #[cfg(feature = "async")]
 use clinkz_wot_core::AsyncServerBinding;
 use clinkz_wot_core::{
-    ClientBinding, CoreError, CoreResult, CredentialStore, EventBroker, EventName, EventSink,
-    InboundRequest, InboundResponse, InteractionInput, InteractionOutput, LocalThing, MapLock,
-    PayloadCodec, SecurityProvider, ServerBinding, ThingId,
+    ActionHandler, ClientBinding, CoreError, CoreResult, CredentialStore, EventBroker, EventName,
+    EventSink, EventSubscribeHandler, EventUnsubscribeHandler, InboundRequest, InboundResponse,
+    InteractionInput, InteractionOutput, LocalThing, MapLock, Payload, PayloadCodec,
+    PropertyObserveHandler, PropertyReadHandler, PropertyWriteHandler, SecurityProvider,
+    ServerBinding, ThingId,
 };
 use clinkz_wot_discovery::{
     DirectoryEntry, DirectoryPage, DirectoryQuery, InMemoryThingDirectory, ThingDirectory,
     ThingDiscovery, ThingFilter, discover as run_discovery,
 };
-use clinkz_wot_td::thing::Thing;
+use clinkz_wot_td::{data_type::Operation, thing::Thing};
 #[cfg(feature = "async")]
 use futures_util::stream::{FuturesUnordered, StreamExt};
 
 use crate::{
-    ConsumedThingRegistry, InMemoryExposedThingRegistry, ServientBuilder, ServientError,
-    ServientResult,
+    ConsumedThingRegistry, ExposedThingRegistry, ServientBuilder, ServientError, ServientResult,
     handle::{ConsumedThingHandle, ExposedThingHandle},
     interaction::InteractionRuntime,
     registry::ResolvedInboundSecurity,
 };
 
-pub(crate) type BindingFactory = Box<dyn Fn() -> Box<dyn ClientBinding>>;
+pub(crate) type BindingFactory =
+    Box<dyn Fn() -> Box<dyn clinkz_wot_core::ClientBinding + Send + Sync>>;
+pub(crate) type BindingFactorySupports =
+    Arc<dyn Fn(&Thing, &clinkz_wot_td::form::Form, clinkz_wot_td::data_type::Operation) -> bool>;
 
-pub(crate) type PayloadCodecRegistry = Arc<MapLock<Vec<Box<dyn PayloadCodec>>>>;
-pub(crate) type SecurityProviderRegistry = Arc<MapLock<Vec<Box<dyn SecurityProvider>>>>;
+pub(crate) struct BindingFactoryEntry {
+    pub(crate) make: BindingFactory,
+    pub(crate) supports: BindingFactorySupports,
+}
+
+pub(crate) type PayloadCodecRegistry = Arc<MapLock<Vec<Arc<dyn PayloadCodec>>>>;
+pub(crate) type SecurityProviderRegistry = Arc<MapLock<Arc<Vec<Arc<dyn SecurityProvider>>>>>;
+pub(crate) type SyncServerBindingSnapshot = Arc<[Arc<dyn ServerBinding>]>;
+#[cfg(feature = "async")]
+pub(crate) type AsyncServerBindingSnapshot = Arc<[Arc<dyn AsyncServerBinding>]>;
 
 /// Interior-mutable registry of protocol binding factories with generation
 /// tracking.
@@ -47,13 +61,13 @@ pub(crate) struct BindingFactoryRegistry {
 }
 
 struct BindingFactoryState {
-    factories: Vec<BindingFactory>,
+    factories: Vec<BindingFactoryEntry>,
     generation: u64,
 }
 
 impl BindingFactoryRegistry {
     /// Wraps a pre-built factory vec (used by `ServientBuilder::build`).
-    pub(crate) fn from_factories(factories: Vec<BindingFactory>) -> Self {
+    pub(crate) fn from_factories(factories: Vec<BindingFactoryEntry>) -> Self {
         Self {
             #[allow(clippy::arc_with_non_send_sync)]
             state: Arc::new(MapLock::new(BindingFactoryState {
@@ -64,8 +78,8 @@ impl BindingFactoryRegistry {
     }
 
     /// Appends a factory and bumps the generation counter.
-    pub(crate) fn push(&self, factory: BindingFactory) {
-        self.state.with(|s| {
+    pub(crate) fn push(&self, factory: BindingFactoryEntry) {
+        self.state.with_recover(|s| {
             s.factories.push(factory);
             s.generation = s.generation.wrapping_add(1);
         });
@@ -77,34 +91,46 @@ impl BindingFactoryRegistry {
     /// if the current generation matches, the cached plan is still valid and
     /// the caller can skip revalidation.
     pub(crate) fn generation(&self) -> u64 {
-        self.state.with(|s| s.generation)
+        self.state.with_recover(|s| s.generation)
     }
 
     /// Constructs a fresh `Box<dyn ClientBinding>` from the factory at `index`.
     ///
     /// Returns `None` when `index` is out of bounds (the factory was removed
     /// or the registry shrank).
-    pub(crate) fn make_binding(&self, index: usize) -> Option<Box<dyn ClientBinding>> {
-        self.state.with(|s| s.factories.get(index).map(|f| f()))
+    pub(crate) fn make_binding(
+        &self,
+        index: usize,
+    ) -> Option<Box<dyn ClientBinding + Send + Sync>> {
+        self.state
+            .with_recover(|s| s.factories.get(index).map(|f| (f.make)()))
     }
 
-    /// Iterates factories to find one whose constructed binding supports the
-    /// given form/operation, returning `(factory_index, binding)`.
-    pub(crate) fn find_supporting(
+    /// Iterates factories to find one whose support predicate accepts the
+    /// given form/operation, returning the factory index.
+    pub(crate) fn find_supporting_index(
         &self,
         thing: &Thing,
         form: &clinkz_wot_td::form::Form,
         operation: clinkz_wot_td::data_type::Operation,
-    ) -> Option<(usize, Box<dyn ClientBinding>)> {
-        self.state.with(|s| {
-            for (index, factory) in s.factories.iter().enumerate() {
-                let binding = factory();
-                if binding.supports_with_thing(thing, form, operation) {
-                    return Some((index, binding));
-                }
+    ) -> Option<usize> {
+        // Snapshot the support predicates under a brief lock (cheap Arc
+        // clones), then run them outside the factory lock so a non-trivial /
+        // user-supplied predicate does not block factory registration or other
+        // lookups.
+        let predicates: Vec<(usize, BindingFactorySupports)> = self.state.with_recover(|s| {
+            s.factories
+                .iter()
+                .enumerate()
+                .map(|(i, factory)| (i, Arc::clone(&factory.supports)))
+                .collect()
+        });
+        for (index, supports) in predicates {
+            if supports(thing, form, operation) {
+                return Some(index);
             }
-            None
-        })
+        }
+        None
     }
 }
 
@@ -160,13 +186,17 @@ fn accept_future_for_binding(binding: Arc<dyn AsyncServerBinding>) -> AcceptFutu
 /// `interaction_runtime`, `dispatch_inbound`, and other hot paths clone shared
 /// `Arc` references without acquiring the outer Servient lock.
 pub(crate) struct ServientShared {
-    pub(crate) exposed_registry: Arc<InMemoryExposedThingRegistry>,
+    pub(crate) exposed_registry: Arc<ExposedThingRegistry>,
     pub(crate) consumed_registry: Arc<ConsumedThingRegistry>,
     pub(crate) binding_factories: BindingFactoryRegistry,
     pub(crate) payload_codecs: PayloadCodecRegistry,
     pub(crate) security_providers: SecurityProviderRegistry,
     pub(crate) credential_store: Option<Arc<dyn CredentialStore>>,
     pub(crate) event_broker: EventBroker,
+    pub(crate) normalize_payloads: bool,
+    pub(crate) sync_server_bindings: Arc<MapLock<SyncServerBindingSnapshot>>,
+    #[cfg(feature = "async")]
+    pub(crate) async_server_bindings: Arc<MapLock<AsyncServerBindingSnapshot>>,
 }
 
 /// Stateful Servient state protected by a single outer lock.
@@ -177,10 +207,7 @@ pub(crate) struct ServientShared {
 /// atomically from the driving loop's perspective.
 pub(crate) struct ServientState<D> {
     pub(crate) directory: D,
-    pub(crate) server_bindings: Vec<Arc<dyn ServerBinding>>,
     pub(crate) sync_binding_cursor: usize,
-    #[cfg(feature = "async")]
-    pub(crate) async_server_bindings: Vec<Arc<dyn AsyncServerBinding>>,
     #[cfg(feature = "async")]
     pub(crate) async_binding_generation: u64,
     #[cfg(feature = "async")]
@@ -277,7 +304,7 @@ impl<D> Servient<D> {
     /// would panic on a double `RefCell` borrow, and on the std flavor it
     /// would deadlock.
     pub(crate) fn with_state<R>(&self, f: impl FnOnce(&mut ServientState<D>) -> R) -> R {
-        self.state.with(f)
+        self.state.with_recover(f)
     }
 
     /// Constructs an [`InteractionRuntime`] snapshot without acquiring the
@@ -289,6 +316,7 @@ impl<D> Servient<D> {
             Arc::clone(&self.shared.payload_codecs),
             Arc::clone(&self.shared.security_providers),
             self.shared.credential_store.clone(),
+            self.shared.normalize_payloads,
         )
     }
 
@@ -389,22 +417,31 @@ impl<D> Servient<D> {
 
         // §10 step 3 + 4: register inbound routes and publish to directory
         // under the state lock so the sequence is consistent from the driving
-        // loop's perspective. `td` is moved into the closure (used by reference
-        // for binding registration, then moved into the directory).
+        // loop's perspective. The binding lists are snapshotted from the single
+        // authoritative source (`shared.*`) so expose and the driving loop can
+        // never observe divergent binding sets. `td` is moved into the closure
+        // (used by reference for binding registration, then moved into the
+        // directory).
+        let sync_bindings = self.shared.sync_server_bindings.with(|s| s.clone())?;
+        #[cfg(feature = "async")]
+        let async_bindings = self.shared.async_server_bindings.with(|s| s.clone())?;
+
         let registration: Result<(), ServientError> = self.with_state(|state| {
-            for binding in &state.server_bindings {
+            for binding in sync_bindings.iter() {
                 if let Err(message) = binding.register_thing(&id, &td) {
                     return Err(ServientError::RouteRegistration(message));
                 }
             }
             #[cfg(feature = "async")]
-            for binding in &state.async_server_bindings {
-                if let Err(message) = binding.register_thing(&id, &td) {
-                    // Rollback sync bindings that succeeded.
-                    for b in &state.server_bindings {
-                        b.unregister_thing(&id);
+            {
+                for binding in async_bindings.iter() {
+                    if let Err(message) = binding.register_thing(&id, &td) {
+                        // Rollback sync bindings that succeeded.
+                        for b in sync_bindings.iter() {
+                            b.unregister_thing(&id);
+                        }
+                        return Err(ServientError::RouteRegistration(message));
                     }
-                    return Err(ServientError::RouteRegistration(message));
                 }
             }
 
@@ -454,16 +491,18 @@ impl<D> Servient<D> {
         // Remove all event publisher sinks for this Thing (shared broker).
         self.shared.event_broker.remove_thing(&ThingId::from(id));
 
-        // §10 destroy step 1: unregister inbound routes first (state lock).
-        self.with_state(|state| {
-            for binding in &state.server_bindings {
-                binding.unregister_thing(id);
-            }
-            #[cfg(feature = "async")]
-            for binding in &state.async_server_bindings {
-                binding.unregister_thing(id);
-            }
-        });
+        // §10 destroy step 1: unregister inbound routes. The binding list comes
+        // from the single authoritative source (no second copy to diverge).
+        let sync_bindings = self.shared.sync_server_bindings.with(|s| s.clone())?;
+        #[cfg(feature = "async")]
+        let async_bindings = self.shared.async_server_bindings.with(|s| s.clone())?;
+        for binding in sync_bindings.iter() {
+            binding.unregister_thing(id);
+        }
+        #[cfg(feature = "async")]
+        for binding in async_bindings.iter() {
+            binding.unregister_thing(id);
+        }
 
         // §10 destroy step 2: remove the exposed-registry entry (own lock).
         if !self.shared.exposed_registry.destroy(id) {
@@ -500,6 +539,103 @@ impl<D> Servient<D> {
         self.destroy(id)
     }
 
+    /// Propagates a runtime-added affordance to the network side: registers the
+    /// affordance's routes on every server binding and re-publishes the
+    /// post-mutation TD to the directory (W3C Scripting API dynamic affordance
+    /// lifecycle). Without this, a new affordance is locally visible but not
+    /// remotely reachable or discoverable.
+    ///
+    /// Route-registration failure is fatal (returns `Err`) so the caller can
+    /// roll back the local TD mutation; directory-update failure is best-effort.
+    pub(crate) fn sync_added_affordance(
+        &self,
+        thing_id: &str,
+        target: &clinkz_wot_core::AffordanceTarget,
+    ) -> ServientResult<()>
+    where
+        D: ThingDirectory,
+    {
+        let td = self
+            .shared
+            .exposed_registry
+            .thing_description(thing_id)
+            .ok_or_else(|| ServientError::ExposedThingNotFound(thing_id.to_owned()))?;
+
+        let sync_bindings = self.shared.sync_server_bindings.with(|s| s.clone())?;
+        #[cfg(feature = "async")]
+        let async_bindings = self.shared.async_server_bindings.with(|s| s.clone())?;
+        for binding in sync_bindings.iter() {
+            binding
+                .register_affordance(thing_id, target, &td)
+                .map_err(ServientError::RouteRegistration)?;
+        }
+        #[cfg(feature = "async")]
+        for binding in async_bindings.iter() {
+            binding
+                .register_affordance(thing_id, target, &td)
+                .map_err(ServientError::RouteRegistration)?;
+        }
+
+        // Best-effort directory re-publish of the post-mutation TD.
+        if let Err(err) = self
+            .with_state(|state| state.directory.update(td))
+            .map_err(ServientError::from)
+        {
+            #[cfg(feature = "std")]
+            std::eprintln!(
+                "clinkz-wot: non-fatal directory update after affordance add: {}",
+                err
+            );
+            #[cfg(not(feature = "std"))]
+            let _ = err;
+        }
+        Ok(())
+    }
+
+    /// Propagates a runtime-removed affordance: unregisters its routes on every
+    /// server binding and re-publishes the post-mutation TD to the directory.
+    pub(crate) fn sync_removed_affordance(
+        &self,
+        thing_id: &str,
+        target: &clinkz_wot_core::AffordanceTarget,
+    ) where
+        D: ThingDirectory,
+    {
+        let sync_bindings = self
+            .shared
+            .sync_server_bindings
+            .with(|s| s.clone())
+            .unwrap_or_default();
+        #[cfg(feature = "async")]
+        let async_bindings = self
+            .shared
+            .async_server_bindings
+            .with(|s| s.clone())
+            .unwrap_or_default();
+        for binding in sync_bindings.iter() {
+            binding.unregister_affordance(thing_id, target);
+        }
+        #[cfg(feature = "async")]
+        for binding in async_bindings.iter() {
+            binding.unregister_affordance(thing_id, target);
+        }
+
+        // Best-effort directory re-publish of the post-mutation TD.
+        if let Some(td) = self.shared.exposed_registry.thing_description(thing_id)
+            && let Err(err) = self
+                .with_state(|state| state.directory.update(td))
+                .map_err(ServientError::from)
+        {
+            #[cfg(feature = "std")]
+            std::eprintln!(
+                "clinkz-wot: non-fatal directory update after affordance remove: {}",
+                err
+            );
+            #[cfg(not(feature = "std"))]
+            let _ = err;
+        }
+    }
+
     /// Consumes a remote Thing, returning a handle for outbound interactions
     /// (baseline §6).
     ///
@@ -510,7 +646,10 @@ impl<D> Servient<D> {
         let id = thing_id(&td)?;
         // No state lock needed — consumed_registry has its own interior
         // mutability.
-        let entry = self.shared.consumed_registry.get_or_insert(id.clone(), td);
+        let entry = self
+            .shared
+            .consumed_registry
+            .get_or_insert(id.clone(), td)?;
         Ok(ConsumedThingHandle::new(self.clone(), id, entry))
     }
 
@@ -531,9 +670,31 @@ impl<D> Servient<D> {
     /// Registers a protocol binding factory.
     pub fn register_binding_factory<F>(&self, factory: F) -> ServientResult<()>
     where
-        F: Fn() -> Box<dyn ClientBinding> + 'static,
+        F: Fn() -> Box<dyn ClientBinding + Send + Sync> + 'static,
     {
-        self.shared.binding_factories.push(Box::new(factory));
+        self.shared.binding_factories.push(BindingFactoryEntry {
+            make: Box::new(factory),
+            supports: Arc::new(|_, _, _| true),
+        });
+        Ok(())
+    }
+
+    /// Registers a protocol binding factory with a lightweight support
+    /// predicate.
+    pub fn register_binding_factory_with_support<F, S>(
+        &self,
+        factory: F,
+        supports: S,
+    ) -> ServientResult<()>
+    where
+        F: Fn() -> Box<dyn ClientBinding + Send + Sync> + 'static,
+        S: Fn(&Thing, &clinkz_wot_td::form::Form, clinkz_wot_td::data_type::Operation) -> bool
+            + 'static,
+    {
+        self.shared.binding_factories.push(BindingFactoryEntry {
+            make: Box::new(factory),
+            supports: Arc::new(supports),
+        });
         Ok(())
     }
 
@@ -541,7 +702,7 @@ impl<D> Servient<D> {
     pub fn register_payload_codec(&self, codec: impl PayloadCodec + 'static) -> ServientResult<()> {
         self.shared
             .payload_codecs
-            .with(|codecs| codecs.push(Box::new(codec)));
+            .with(|codecs| codecs.push(Arc::new(codec)))?;
         Ok(())
     }
 
@@ -550,9 +711,14 @@ impl<D> Servient<D> {
         &self,
         provider: impl SecurityProvider + 'static,
     ) -> ServientResult<()> {
-        self.shared
-            .security_providers
-            .with(|providers| providers.push(Box::new(provider)));
+        self.shared.security_providers.with(|snapshot| {
+            let mut vec = (**snapshot).clone();
+            vec.push(Arc::new(provider));
+            #[allow(clippy::arc_with_non_send_sync)]
+            {
+                *snapshot = Arc::new(vec);
+            }
+        })?;
         Ok(())
     }
 
@@ -563,7 +729,14 @@ impl<D> Servient<D> {
     /// `expose` calls.
     pub fn register_server_binding(&self, binding: Arc<dyn ServerBinding>) -> ServientResult<()> {
         binding.set_event_broker(self.shared.event_broker.clone());
-        self.with_state(|state| state.server_bindings.push(binding));
+        // Copy-on-write: clone the snapshot slice to a Vec, push, re-wrap in
+        // Arc<[...]>. Register is a cold (setup-time) operation; the hot-path
+        // poll benefits from a single Arc clone instead of N.
+        self.shared.sync_server_bindings.with(|snapshot| {
+            let mut vec: Vec<_> = snapshot.to_vec();
+            vec.push(binding);
+            *snapshot = Arc::from(vec);
+        })?;
         Ok(())
     }
 
@@ -575,8 +748,16 @@ impl<D> Servient<D> {
         binding: Arc<dyn AsyncServerBinding>,
     ) -> ServientResult<()> {
         binding.set_event_broker(self.shared.event_broker.clone());
+        // Push to the authoritative list first, THEN bump the generation so the
+        // driving loop only rebuilds its accept state once the new binding is
+        // visible (the previous order bumped generation before the list push,
+        // letting the loop rebuild against a stale list).
+        self.shared.async_server_bindings.with(|snapshot| {
+            let mut vec: Vec<_> = snapshot.to_vec();
+            vec.push(binding);
+            *snapshot = Arc::from(vec);
+        })?;
         self.with_state(|state| {
-            state.async_server_bindings.push(binding);
             state.async_binding_generation = state.async_binding_generation.wrapping_add(1);
         });
         Ok(())
@@ -673,15 +854,20 @@ impl<D> Servient<D> {
     /// Runs one synchronous driving step without holding the outer Servient
     /// lock across handler dispatch or `send_response`.
     fn poll_serve_sync_step(&self) -> ServientResult<bool> {
-        // Brief lock: snapshot the binding list (cheap Arc clone per binding)
-        // and the current cursor.
-        let (bindings, start_cursor) =
-            self.with_state(|state| (state.server_bindings.clone(), state.sync_binding_cursor));
+        // Clone the binding list (N Arc refcount bumps) outside the hot path.
+        let bindings = self
+            .shared
+            .sync_server_bindings
+            .with(|snapshot| snapshot.clone())?;
         let binding_count = bindings.len();
         if binding_count == 0 {
-            self.with_state(|state| state.sync_binding_cursor = 0);
+            self.with_state(|state| {
+                state.sync_binding_cursor = 0;
+            });
             return Ok(false);
         }
+
+        let start_cursor = self.with_state(|state| state.sync_binding_cursor);
 
         let start = start_cursor % binding_count;
         for offset in 0..binding_count {
@@ -736,22 +922,37 @@ impl<D> Servient<D> {
         };
 
         let registry = Arc::clone(&self.shared.exposed_registry);
-        let broker = self.shared.event_broker.clone();
+        let broker = &self.shared.event_broker;
 
-        // Inject the verified principal inside the dispatch closure so the
-        // request input is cloned exactly once per inbound request (instead of
-        // once for principal injection and again when handed to the handler).
-        let output = registry.dispatch(request.thing_id.as_str(), |thing| {
-            let mut input = request.input.clone();
-            input.principal = Some(principal);
-            dispatch_to_handler(thing, &request, input, &broker)
-        });
+        // Clone the handler `Arc` out under a brief slot lock and invoke it
+        // with the slot lock released (held only by the driving-loop
+        // serialization lock `sync_lock`), so the handler may re-enter the
+        // Servient for the same Thing without self-deadlock (C7). Emitted
+        // payloads are buffered under the run and drained through the broker
+        // afterwards.
+        let output: Option<CoreResult<InteractionOutput>> =
+            registry.slot_for(request.thing_id.as_str()).map(|slot| {
+                slot.with_sync_serialization(|| {
+                    let mut emitted: Vec<Payload> = Vec::new();
+                    let prepared = slot
+                        .with_thing(|thing| {
+                            let mut input = request.input.clone();
+                            input.principal = Some(principal);
+                            PreparedDispatch::prepare(thing, &request, input)
+                        })
+                        .ok_or(CoreError::MissingHandler)?;
+                    let prepared = prepared?;
+                    let output = prepared.run(&mut BufferingEventSink {
+                        buffer: &mut emitted,
+                    })?;
+                    drain_emitted(broker, &request.thing_id, &request.target, emitted);
+                    Ok(output)
+                })
+            });
 
         match output {
-            Some(result) => match result {
-                Ok(out) => InboundResponse::new(out, correlation),
-                Err(core_err) => InboundResponse::error(correlation, core_err),
-            },
+            Some(Ok(out)) => InboundResponse::new(out, correlation),
+            Some(Err(core_err)) => InboundResponse::error(correlation, core_err),
             None => InboundResponse::error(correlation, CoreError::MissingHandler),
         }
     }
@@ -773,10 +974,22 @@ where
     /// When a request arrives from any binding, the accept future for that
     /// binding is replenished, the request is dispatched, and the response is
     /// written back.
+    ///
+    /// # Concurrency model
+    ///
+    /// `poll_serve` dispatches **one request at a time** (it awaits the
+    /// dispatch before returning). For **concurrent cross-Thing dispatch**,
+    /// use [`serve`](Self::serve), which interleaves accept and dispatch via
+    /// `select!` + `FuturesUnordered` — no `tokio::spawn`, no `Send`
+    /// requirement. Within a single Thing, dispatch is always serialized by
+    /// the per-Thing `async_lock` ([`crate::registry::ThingSlot`]).
     pub async fn poll_serve(&self) -> ServientResult<()> {
         let mut accept_state = self.with_state(|state| {
             if state.async_accept_state.generation != state.async_binding_generation {
-                let bindings = state.async_server_bindings.clone();
+                let bindings = self
+                    .shared
+                    .async_server_bindings
+                    .with_recover(|snapshot| snapshot.clone());
                 state
                     .async_accept_state
                     .rebuild(state.async_binding_generation, &bindings);
@@ -788,8 +1001,13 @@ where
             return Ok(());
         }
 
+        // `next().await` on a non-empty `FuturesUnordered` either blocks
+        // (Pending) or yields an item (Ready(Some)). It only returns `None`
+        // when the collection becomes empty — which the `is_empty()` guard
+        // above prevents. The `let-else` is required by syntax; the branch is
+        // unreachable in practice.
         let Some((binding, request)) = accept_state.pending.next().await else {
-            return Ok(());
+            unreachable!("is_empty guard above guarantees pending is non-empty");
         };
         accept_state
             .pending
@@ -804,18 +1022,68 @@ where
         Ok(())
     }
 
-    /// Infinite-loop wrapper around [`poll_serve`](Self::poll_serve)
-    /// (baseline §4).
+    /// Infinite-loop wrapper that accepts requests and dispatches them
+    /// **concurrently** (baseline §4).
     ///
-    /// Takes `self` by value for `'static + Send` spawning.
+    /// Uses `select!` to interleave accept and dispatch: while one dispatch
+    /// `.await`s (e.g. a slow async handler), the loop continues accepting new
+    /// requests and polling other in-flight dispatches. This gives cross-Thing
+    /// async concurrency **without `tokio::spawn`** — the dispatch futures run
+    /// on the same task, so `Servient` does not need to be `Send`. Within a
+    /// single Thing, dispatch is still serialized by the per-Thing `async_lock`
+    /// (baseline §7).
+    ///
+    /// Takes `self` by value so the loop owns the Servient for its lifetime;
+    /// each in-flight dispatch receives a cheap `Servient` clone (Arc bumps).
     pub async fn serve(self) {
+        // Build a LOCAL accept state owned by this serve loop (poll_serve
+        // uses the one in ServientState for its take-out / put-back model).
+        let generation = self.with_state(|s| s.async_binding_generation);
+        let initial_bindings = self
+            .shared
+            .async_server_bindings
+            .with_recover(|s| s.clone());
+        let mut accept_state = AsyncAcceptState::new();
+        accept_state.rebuild(generation, &initial_bindings);
+
+        let mut in_flight: FuturesUnordered<Pin<Box<dyn Future<Output = ()>>>> =
+            FuturesUnordered::new();
+
         loop {
             if self.shutdown.load(Ordering::Relaxed) {
                 break;
             }
-            if let Err(_err) = self.poll_serve().await {
-                #[cfg(feature = "std")]
-                std::eprintln!("clinkz-wot serve error: {}", _err);
+
+            tokio::select! {
+                // Accept a new request from any binding.
+                Some((binding, request)) = accept_state.pending.next() => {
+                    // Replenish so this binding keeps accepting.
+                    accept_state
+                        .pending
+                        .push(accept_future_for_binding(binding.clone()));
+                    // Dispatch concurrently — push to in-flight instead of
+                    // awaiting inline. Multiple dispatches interleave via the
+                    // async runtime; a slow handler does not block other
+                    // Things' requests.
+                    let servient = self.clone();
+                    in_flight.push(Box::pin(async move {
+                        let response = servient.dispatch_inbound_async(request).await;
+                        binding.send_response(response);
+                    }));
+                }
+                // Drain a completed dispatch (response already sent).
+                _ = in_flight.next() => {}
+                // Periodic generation check + prevents hang when idle.
+                _ = tokio::time::sleep(Duration::from_millis(500)) => {
+                    let current_gen = self.with_state(|s| s.async_binding_generation);
+                    if current_gen != accept_state.generation {
+                        let bindings = self
+                            .shared
+                            .async_server_bindings
+                            .with_recover(|s| s.clone());
+                        accept_state.rebuild(current_gen, &bindings);
+                    }
+                }
             }
         }
     }
@@ -872,7 +1140,7 @@ where
         };
 
         let registry = Arc::clone(&self.shared.exposed_registry);
-        let broker = self.shared.event_broker.clone();
+        let broker = &self.shared.event_broker;
 
         // Phase 2: Async dispatch (no ServientInner lock held). The input is
         // cloned exactly once per inbound request: the principal moves in and
@@ -892,14 +1160,16 @@ where
 
 #[cfg(feature = "async")]
 async fn dispatch_to_handler_async(
-    registry: &InMemoryExposedThingRegistry,
+    registry: &ExposedThingRegistry,
     request: &InboundRequest,
     principal: clinkz_wot_core::Principal,
     broker: &EventBroker,
 ) -> Option<CoreResult<InteractionOutput>> {
-    use clinkz_wot_core::ExposedThing;
-
     let slot = registry.slot_for(request.thing_id.as_str())?;
+
+    // Serialize interactions within one Thing (baseline §7). The async lock
+    // guard is held across `.await`, which is safe for tokio::sync::Mutex.
+    let _async_guard = slot.lock_async().await;
 
     // Build the per-call input once: clone the request input and inject the
     // verified principal. This is the single `input` clone per inbound request.
@@ -909,127 +1179,408 @@ async fn dispatch_to_handler_async(
         input
     };
 
+    // Try async handlers first (read/write/invoke). When present, they run
+    // outside the slot lock (the `Arc` was cloned out under a brief lock).
     match (&request.target, request.operation) {
-        (
-            clinkz_wot_core::AffordanceTarget::Property(name),
-            clinkz_wot_td::data_type::Operation::ReadProperty,
-        ) => {
-            let handler = slot
-                .with_thing(|thing| thing.take_async_read_handler(name))
-                .flatten();
-            if let Some(mut handler) = handler {
-                let result = handler.read(build_input()).await;
-                slot.with_thing(|thing| thing.return_async_read_handler(name, handler));
-                return Some(result);
+        (clinkz_wot_core::AffordanceTarget::Property(name), Operation::ReadProperty) => {
+            if let Some(handler) = slot.with_thing(|t| t.async_read_handler(name)).flatten() {
+                return Some(handler.read(build_input()).await);
             }
-            slot.with_thing(|thing| thing.read_property(name, build_input()))
         }
-        (
-            clinkz_wot_core::AffordanceTarget::Property(name),
-            clinkz_wot_td::data_type::Operation::WriteProperty,
-        ) => {
-            let handler = slot
-                .with_thing(|thing| thing.take_async_write_handler(name))
-                .flatten();
-            if let Some(mut handler) = handler {
-                let result = handler.write(build_input()).await;
-                slot.with_thing(|thing| thing.return_async_write_handler(name, handler));
-                return Some(result);
+        (clinkz_wot_core::AffordanceTarget::Property(name), Operation::WriteProperty) => {
+            if let Some(handler) = slot.with_thing(|t| t.async_write_handler(name)).flatten() {
+                return Some(handler.write(build_input()).await);
             }
-            slot.with_thing(|thing| thing.write_property(name, build_input()))
         }
-        (
-            clinkz_wot_core::AffordanceTarget::Action(name),
-            clinkz_wot_td::data_type::Operation::InvokeAction,
-        ) => {
-            let handler = slot
-                .with_thing(|thing| thing.take_async_action_handler(name))
-                .flatten();
-            if let Some(mut handler) = handler {
-                let result = handler.invoke(build_input()).await;
-                slot.with_thing(|thing| thing.return_async_action_handler(name, handler));
-                return Some(result);
+        (clinkz_wot_core::AffordanceTarget::Action(name), Operation::InvokeAction) => {
+            if let Some(handler) = slot.with_thing(|t| t.async_action_handler(name)).flatten() {
+                return Some(handler.invoke(build_input()).await);
             }
-            slot.with_thing(|thing| thing.invoke_action(name, build_input()))
         }
-        // ObserveProperty, SubscribeEvent, UnsubscribeEvent, UnobserveProperty
-        // intentionally fall through to the sync dispatch path. These
-        // operations are registration-style (setup/teardown, not long-running
-        // I/O), so async handler variants are not provided. The sync handlers
-        // complete quickly and do not meaningfully block the async loop.
-        _ => slot.with_thing(|thing| dispatch_to_handler(thing, request, build_input(), broker)),
+        _ => {}
+    }
+
+    // Sync fallback: prepare (clone handler `Arc` out under the brief slot
+    // lock) and run outside that lock (async_lock still held), so the handler
+    // may re-enter the Servient without self-deadlock (C7). Covers sync
+    // read/write/invoke when no async handler is registered, plus the
+    // registration-style observe/subscribe/unsubscribe operations.
+    let mut emitted: Vec<Payload> = Vec::new();
+    let prepared =
+        slot.with_thing(|thing| PreparedDispatch::prepare(thing, request, build_input()));
+    let result = match prepared {
+        None => Err(CoreError::MissingHandler),
+        Some(Ok(dispatch)) => dispatch.run(&mut BufferingEventSink {
+            buffer: &mut emitted,
+        }),
+        Some(Err(err)) => Err(err),
+    };
+    drain_emitted(broker, &request.thing_id, &request.target, emitted);
+    Some(result)
+}
+
+/// A handler cloned out under the brief slot lock, ready to run with the slot
+/// lock released (C7 reentrancy fix).
+///
+/// [`PreparedDispatch::prepare`] runs under the per-Thing `thing` lock and
+/// captures the handler `Arc` plus its input; [`PreparedDispatch::run`] invokes
+/// the handler outside that lock (only the driving-loop serialization lock may
+/// remain held), so handler code may re-enter the Servient without self-deadlock.
+enum PreparedDispatch {
+    Read(Arc<dyn PropertyReadHandler>, InteractionInput),
+    Write(Arc<dyn PropertyWriteHandler>, InteractionInput),
+    Invoke(Arc<dyn ActionHandler>, InteractionInput),
+    Subscribe(Arc<dyn EventSubscribeHandler>, InteractionInput),
+    Unsubscribe(Arc<dyn EventUnsubscribeHandler>, InteractionInput),
+    Observe(Arc<dyn PropertyObserveHandler>, InteractionInput),
+    /// No unsubscribe handler registered — acknowledge the request inline.
+    UnsubscribeAck,
+    /// No observe handler registered — acknowledge the request inline.
+    UnobserveAck,
+    /// No observe handler registered — fall back to read + emit initial value.
+    ObserveFallbackRead(Arc<dyn PropertyReadHandler>, InteractionInput),
+    /// Fan out a `readallproperties` / `readmultipleproperties` request across
+    /// the listed property read handlers and combine the results into a single
+    /// JSON-object payload (W3C TD §6.3.3).
+    BulkReadProperties(
+        Vec<(String, Arc<dyn PropertyReadHandler>)>,
+        InteractionInput,
+    ),
+    /// Fan out a `writeallproperties` / `writemultipleproperties` request
+    /// across the listed property write handlers, each fed its slice of the
+    /// JSON-object request payload (W3C TD §6.3.3).
+    BulkWriteProperties(Vec<(String, Arc<dyn PropertyWriteHandler>, InteractionInput)>),
+}
+
+impl PreparedDispatch {
+    /// Resolves the affordance + clones the handler `Arc` under the slot lock.
+    fn prepare(
+        thing: &LocalThing,
+        request: &InboundRequest,
+        input: InteractionInput,
+    ) -> CoreResult<Self> {
+        match (&request.target, request.operation) {
+            (clinkz_wot_core::AffordanceTarget::Property(name), Operation::ReadProperty) => {
+                thing.ensure_property_affordance(name)?;
+                let handler = thing.read_handler(name).ok_or(CoreError::MissingHandler)?;
+                Ok(Self::Read(handler, input))
+            }
+            (clinkz_wot_core::AffordanceTarget::Property(name), Operation::WriteProperty) => {
+                thing.ensure_property_affordance(name)?;
+                let handler = thing.write_handler(name).ok_or(CoreError::MissingHandler)?;
+                Ok(Self::Write(handler, input))
+            }
+            (clinkz_wot_core::AffordanceTarget::Action(name), Operation::InvokeAction) => {
+                thing.ensure_action_affordance(name)?;
+                let handler = thing
+                    .action_handler(name)
+                    .ok_or(CoreError::MissingHandler)?;
+                Ok(Self::Invoke(handler, input))
+            }
+            (clinkz_wot_core::AffordanceTarget::Event(name), Operation::SubscribeEvent) => {
+                thing.ensure_event_affordance(name)?;
+                let handler = thing
+                    .subscribe_handler(name)
+                    .ok_or(CoreError::MissingHandler)?;
+                Ok(Self::Subscribe(handler, input))
+            }
+            (clinkz_wot_core::AffordanceTarget::Event(name), Operation::UnsubscribeEvent) => {
+                thing.ensure_event_affordance(name)?;
+                match thing.unsubscribe_handler(name) {
+                    Some(handler) => Ok(Self::Unsubscribe(handler, input)),
+                    None => Ok(Self::UnsubscribeAck),
+                }
+            }
+            (clinkz_wot_core::AffordanceTarget::Property(name), Operation::ObserveProperty) => {
+                thing.ensure_property_affordance(name)?;
+                match thing.observe_handler(name) {
+                    Some(handler) => Ok(Self::Observe(handler, input)),
+                    None => {
+                        let handler = thing.read_handler(name).ok_or(CoreError::MissingHandler)?;
+                        Ok(Self::ObserveFallbackRead(handler, input))
+                    }
+                }
+            }
+            (clinkz_wot_core::AffordanceTarget::Property(_), Operation::UnobserveProperty) => {
+                Ok(Self::UnobserveAck)
+            }
+            // Bulk property reads (W3C TD §6.3.3). Fan out across the property
+            // read handlers and combine the results into a single JSON-object
+            // payload. `readallproperties` targets every declared property;
+            // `readmultipleproperties` targets the names carried by the request
+            // payload as a JSON array (e.g. `["temp","hum"]`).
+            (clinkz_wot_core::AffordanceTarget::Thing, Operation::ReadAllProperties) => {
+                let names = thing
+                    .thing_description()
+                    .properties
+                    .as_ref()
+                    .map(|props| props.keys().cloned().collect::<Vec<_>>())
+                    .unwrap_or_default();
+                Ok(Self::BulkReadProperties(
+                    collect_read_handlers(thing, &names)?,
+                    input,
+                ))
+            }
+            (clinkz_wot_core::AffordanceTarget::Thing, Operation::ReadMultipleProperties) => {
+                let names = parse_read_multiple_names(&input)?;
+                Ok(Self::BulkReadProperties(
+                    collect_read_handlers(thing, &names)?,
+                    input,
+                ))
+            }
+            // Bulk property writes (W3C TD §6.3.3). The request payload is a
+            // JSON object mapping property names to their new values. Each
+            // (name, value) pair is dispatched to its write handler with the
+            // value serialized as the per-property interaction input payload.
+            (clinkz_wot_core::AffordanceTarget::Thing, Operation::WriteAllProperties)
+            | (clinkz_wot_core::AffordanceTarget::Thing, Operation::WriteMultipleProperties) => {
+                let content_type = bulk_content_type(&input);
+                Ok(Self::BulkWriteProperties(collect_write_handlers(
+                    thing,
+                    &input,
+                    content_type.as_str(),
+                )?))
+            }
+            _ => Err(CoreError::UnsupportedOperation(alloc::format!(
+                "Inbound dispatch does not support {:?} on {:?}",
+                request.operation,
+                request.target
+            ))),
+        }
+    }
+
+    /// Invokes the handler outside the slot lock. Emits go through `sink`.
+    fn run(self, sink: &mut dyn EventSink) -> CoreResult<InteractionOutput> {
+        match self {
+            Self::Read(handler, input) => handler.read(input),
+            Self::Write(handler, input) => handler.write(input),
+            Self::Invoke(handler, input) => handler.invoke(input),
+            Self::Subscribe(handler, input) => handler.subscribe(input, sink),
+            Self::Unsubscribe(handler, input) => handler.unsubscribe(input),
+            Self::Observe(handler, input) => handler.observe(input, sink),
+            Self::UnsubscribeAck | Self::UnobserveAck => Ok(InteractionOutput::empty()),
+            Self::ObserveFallbackRead(handler, input) => {
+                let output = handler.read(input)?;
+                if let Some(ref payload) = output.payload {
+                    let _ = sink.emit(payload.clone());
+                }
+                Ok(output)
+            }
+            Self::BulkReadProperties(entries, input) => run_bulk_read(entries, input),
+            Self::BulkWriteProperties(entries) => {
+                for (_name, handler, value_input) in entries {
+                    handler.write(value_input)?;
+                }
+                Ok(InteractionOutput::empty())
+            }
+        }
     }
 }
 
-fn dispatch_to_handler(
-    thing: &mut LocalThing,
-    request: &InboundRequest,
-    input: InteractionInput,
-    broker: &EventBroker,
-) -> CoreResult<InteractionOutput> {
-    use clinkz_wot_core::ExposedThing;
+// ---------------------------------------------------------------------------
+// Bulk property operation helpers (W3C TD §6.3.3).
+//
+// `readallproperties` / `readmultipleproperties` fan out across property read
+// handlers and combine their outputs into a single JSON-object payload keyed by
+// property name. `writeallproperties` / `writemultipleproperties` split a
+// JSON-object request payload into per-property write inputs. Both directions
+// treat the bulk payload as `application/json` (the TD default content type)
+// when no other content type is declared on the request.
+// ---------------------------------------------------------------------------
 
-    match (&request.target, request.operation) {
-        (
-            clinkz_wot_core::AffordanceTarget::Property(name),
-            clinkz_wot_td::data_type::Operation::ReadProperty,
-        ) => thing.read_property(name, input),
-        (
-            clinkz_wot_core::AffordanceTarget::Property(name),
-            clinkz_wot_td::data_type::Operation::WriteProperty,
-        ) => thing.write_property(name, input),
-        (
-            clinkz_wot_core::AffordanceTarget::Action(name),
-            clinkz_wot_td::data_type::Operation::InvokeAction,
-        ) => thing.invoke_action(name, input),
-        (
-            clinkz_wot_core::AffordanceTarget::Event(name),
-            clinkz_wot_td::data_type::Operation::SubscribeEvent,
-        ) => {
-            let mut sink =
-                broker.event_sink(request.thing_id.clone(), EventName::from(name.clone()));
-            thing.subscribe_event(name, input, &mut sink)
+/// Default content type used when assembling or parsing bulk payloads.
+const BULK_CONTENT_TYPE: &str = "application/json";
+
+/// A single `(name, write handler, per-property input)` entry prepared for a
+/// bulk write dispatch.
+type PreparedBulkWriteEntry = (String, Arc<dyn PropertyWriteHandler>, InteractionInput);
+
+/// Returns the content type carried by the bulk request payload, falling back
+/// to the WoT default when none is declared.
+fn bulk_content_type(input: &InteractionInput) -> String {
+    input
+        .payload
+        .as_ref()
+        .map(|payload| payload.content_type.clone())
+        .filter(|content_type| !content_type.is_empty())
+        .unwrap_or_else(|| String::from(BULK_CONTENT_TYPE))
+}
+
+/// Collects `(name, read handler)` pairs for the listed property names.
+///
+/// A property without a registered read handler is skipped rather than failing
+/// the whole bulk request, matching the tolerant fan-out semantics of
+/// [`ExposedThingHandle::read_all_properties`]. Returns `MissingHandler` only
+/// when no listed property has a handler at all.
+fn collect_read_handlers(
+    thing: &LocalThing,
+    names: &[String],
+) -> CoreResult<Vec<(String, Arc<dyn PropertyReadHandler>)>> {
+    let mut entries = Vec::new();
+    for name in names {
+        if let Some(handler) = thing.read_handler(name) {
+            entries.push((name.clone(), handler));
         }
-        (
-            clinkz_wot_core::AffordanceTarget::Event(name),
-            clinkz_wot_td::data_type::Operation::UnsubscribeEvent,
-        ) => {
-            // Try the unsubscribe handler; fall back to ack if none registered.
-            match thing.unsubscribe_event(name, input) {
-                Ok(output) => Ok(output),
-                Err(CoreError::MissingHandler) => Ok(InteractionOutput::empty()),
-                Err(e) => Err(e),
+    }
+    if entries.is_empty() {
+        return Err(CoreError::MissingHandler);
+    }
+    Ok(entries)
+}
+
+/// Parses a `readmultipleproperties` request payload (a JSON array of property
+/// names, e.g. `["temp","hum"]`) into an owned name list.
+///
+/// When the payload is missing or not a JSON array, an empty name list is
+/// returned so `collect_read_handlers` surfaces a clear `MissingHandler` error
+/// instead of a confusing deserialization failure.
+fn parse_read_multiple_names(input: &InteractionInput) -> CoreResult<Vec<String>> {
+    let Some(payload) = input.payload.as_ref() else {
+        return Ok(Vec::new());
+    };
+    let names: Vec<String> = serde_json::from_slice(payload.body.as_slice()).map_err(|err| {
+        CoreError::InvalidInteraction(alloc::format!(
+            "readmultipleproperties request payload is not a JSON array of names: {err}"
+        ))
+    })?;
+    Ok(names)
+}
+
+/// Collects `(name, write handler, per-property input)` triples for a bulk
+/// write request.
+///
+/// The request payload is a JSON object mapping property names to their new
+/// values. Each value is re-serialized into a standalone
+/// [`clinkz_wot_core::Payload`] and wrapped in an [`InteractionInput`] that
+/// preserves the caller's URI variables and security metadata.
+fn collect_write_handlers(
+    thing: &LocalThing,
+    input: &InteractionInput,
+    content_type: &str,
+) -> CoreResult<Vec<PreparedBulkWriteEntry>> {
+    let Some(payload) = input.payload.as_ref() else {
+        return Err(CoreError::InvalidInteraction(alloc::format!(
+            "{} request payload is missing",
+            "writeallproperties/writemultipleproperties"
+        )));
+    };
+    let map: serde_json::Map<String, serde_json::Value> =
+        serde_json::from_slice(payload.body.as_slice()).map_err(|err| {
+            CoreError::InvalidInteraction(alloc::format!(
+                "bulk write request payload is not a JSON object: {err}"
+            ))
+        })?;
+
+    let mut entries = Vec::new();
+    for (name, value) in map {
+        let Some(handler) = thing.write_handler(&name) else {
+            continue;
+        };
+        let body = serde_json::to_vec(&value).map_err(|err| {
+            CoreError::InvalidInteraction(alloc::format!(
+                "failed to serialize bulk write value for '{name}': {err}"
+            ))
+        })?;
+        let value_input = InteractionInput {
+            payload: Some(Payload::new(body, content_type)),
+            parameters: input.parameters.clone(),
+            principal: input.principal.clone(),
+            security_metadata: input.security_metadata.clone(),
+        };
+        entries.push((name, handler, value_input));
+    }
+
+    if entries.is_empty() {
+        return Err(CoreError::MissingHandler);
+    }
+    Ok(entries)
+}
+
+/// Runs a bulk read, combining each handler's output payload into a single
+/// JSON-object response keyed by property name.
+///
+/// Each handler output is parsed as a JSON value; non-JSON payloads are wrapped
+/// in a JSON string so the combined object stays valid JSON. An empty handler
+/// output contributes a JSON `null` entry.
+fn run_bulk_read(
+    entries: Vec<(String, Arc<dyn PropertyReadHandler>)>,
+    input: InteractionInput,
+) -> CoreResult<InteractionOutput> {
+    let mut combined = serde_json::Map::new();
+    for (name, handler) in entries {
+        let output = handler.read(input.clone())?;
+        let value = match output.payload {
+            Some(payload) if !payload.body.is_empty() => {
+                serde_json::from_slice::<serde_json::Value>(payload.body.as_slice()).unwrap_or_else(
+                    |_| {
+                        serde_json::Value::String(
+                            alloc::string::String::from_utf8_lossy(payload.body.as_slice())
+                                .into_owned(),
+                        )
+                    },
+                )
             }
-        }
-        (
-            clinkz_wot_core::AffordanceTarget::Property(name),
-            clinkz_wot_td::data_type::Operation::ObserveProperty,
-        ) => {
-            let mut sink =
-                broker.event_sink(request.thing_id.clone(), EventName::from(name.clone()));
-            // Try a dedicated observe handler; fall back to read + emit. The
-            // clone is only paid on the observe call so the fallback can move
-            // the original `input` into `read_property`.
-            match thing.observe_property(name, input.clone(), &mut sink) {
-                Ok(output) => Ok(output),
-                Err(CoreError::MissingHandler) => {
-                    let output = thing.read_property(name, input)?;
-                    if let Some(ref payload) = output.payload {
-                        let _ = sink.emit(payload.clone());
-                    }
-                    Ok(output)
-                }
-                Err(e) => Err(e),
-            }
-        }
-        (
-            clinkz_wot_core::AffordanceTarget::Property(_),
-            clinkz_wot_td::data_type::Operation::UnobserveProperty,
-        ) => Ok(InteractionOutput::empty()),
-        _ => Err(CoreError::UnsupportedOperation(format!(
-            "Inbound dispatch does not support {:?} on {:?}",
-            request.operation, request.target
-        ))),
+            _ => serde_json::Value::Null,
+        };
+        combined.insert(name, value);
+    }
+
+    let body = serde_json::to_vec(&serde_json::Value::Object(combined)).map_err(|err| {
+        CoreError::InvalidInteraction(alloc::format!(
+            "failed to serialize bulk read response: {err}"
+        ))
+    })?;
+    Ok(InteractionOutput::with_payload(Payload::new(
+        body,
+        BULK_CONTENT_TYPE,
+    )))
+}
+
+/// [`EventSink`] that buffers emitted payloads for deferred fan-out.
+///
+/// Used by the inbound dispatch path to collect payloads emitted while the
+/// per-Thing slot lock is held, so they can be pushed through the
+/// [`EventBroker`] after the lock is released.
+struct BufferingEventSink<'a> {
+    buffer: &'a mut Vec<Payload>,
+}
+
+impl<'a> EventSink for BufferingEventSink<'a> {
+    fn emit(&mut self, payload: Payload) -> CoreResult<()> {
+        self.buffer.push(payload);
+        Ok(())
+    }
+}
+
+/// Returns the broker event-name key for an affordance target, if it is one
+/// that emits through the broker (events and observed properties).
+fn event_name_for_target(target: &clinkz_wot_core::AffordanceTarget) -> Option<&str> {
+    match target {
+        clinkz_wot_core::AffordanceTarget::Event(name)
+        | clinkz_wot_core::AffordanceTarget::Property(name) => Some(name.as_str()),
+        _ => None,
+    }
+}
+
+/// Drains buffered payloads through the broker, keyed by the request target.
+///
+/// Only subscribe/observe operations emit; for any other target the buffer is
+/// expected to be empty and this is a no-op.
+fn drain_emitted(
+    broker: &EventBroker,
+    thing_id: &ThingId,
+    target: &clinkz_wot_core::AffordanceTarget,
+    emitted: Vec<Payload>,
+) {
+    if emitted.is_empty() {
+        return;
+    }
+    let Some(name) = event_name_for_target(target) else {
+        return;
+    };
+    let event = EventName::from(name);
+    for payload in emitted {
+        let _ = broker.publish(thing_id, &event, &payload);
     }
 }
 
@@ -1041,41 +1592,44 @@ fn verify_inbound(
     use clinkz_wot_core::{Principal, PrincipalId, SecurityError, check_scopes};
     use clinkz_wot_td::security_scheme::SecurityScheme;
 
-    security_providers.with(|providers| {
-        let mut resolved_principal: Option<Principal> = None;
+    // Snapshot provider handles under a brief lock, then verify *outside* the
+    // registry lock so a slow provider (e.g. JWT key fetch, network retrieval)
+    // does not serialize every inbound request across every Thing.
+    let providers = security_providers.with(|snapshot| Arc::clone(snapshot))?;
 
-        for (scheme_name, scheme) in &resolved_security.schemes {
-            if matches!(scheme, SecurityScheme::NoSec(_)) {
-                continue;
-            }
+    let mut resolved_principal: Option<Principal> = None;
 
-            let provider = providers
-                .iter()
-                .find(|provider| provider.scheme_name() == scheme_name.as_str())
-                .ok_or_else(|| {
-                    CoreError::Security(SecurityError::SchemeFailure(format!(
-                        "No security provider registered for '{}'",
-                        scheme_name
-                    )))
-                })?;
-
-            if !provider.supports_scopes(&resolved_security.scopes) {
-                return Err(CoreError::Security(SecurityError::SchemeFailure(format!(
-                    "Security provider '{}' does not support scopes {:?}",
-                    scheme_name, resolved_security.scopes
-                ))));
-            }
-
-            let principal = provider.verify(request, scheme).map_err(CoreError::from)?;
-            check_scopes(&resolved_security.scopes, &principal.scopes).map_err(CoreError::from)?;
-            resolved_principal = Some(principal);
+    for (scheme_name, scheme) in &resolved_security.schemes {
+        if matches!(scheme, SecurityScheme::NoSec(_)) {
+            continue;
         }
 
-        Ok(resolved_principal.unwrap_or(Principal {
-            id: PrincipalId::from("anonymous"),
-            scopes: alloc::vec::Vec::new(),
-        }))
-    })
+        let provider = providers
+            .iter()
+            .find(|provider| provider.scheme_name() == scheme_name.as_str())
+            .ok_or_else(|| {
+                CoreError::Security(SecurityError::SchemeFailure(format!(
+                    "No security provider registered for '{}'",
+                    scheme_name
+                )))
+            })?;
+
+        if !provider.supports_scopes(&resolved_security.scopes) {
+            return Err(CoreError::Security(SecurityError::SchemeFailure(format!(
+                "Security provider '{}' does not support scopes {:?}",
+                scheme_name, resolved_security.scopes
+            ))));
+        }
+
+        let principal = provider.verify(request, scheme).map_err(CoreError::from)?;
+        check_scopes(&resolved_security.scopes, &principal.scopes).map_err(CoreError::from)?;
+        resolved_principal = Some(principal);
+    }
+
+    Ok(resolved_principal.unwrap_or(Principal {
+        id: PrincipalId::from("anonymous"),
+        scopes: alloc::vec::Vec::new(),
+    }))
 }
 
 fn thing_id(thing: &Thing) -> ServientResult<String> {

@@ -247,8 +247,8 @@ fn std_storage_handle_shares_directory_backend() {
         .expect("registration succeeds");
 
     let page = cloned
-        .lock()
-        .expect("shared directory lock succeeds")
+        .read()
+        .expect("shared directory read lock succeeds")
         .list();
 
     assert_eq!(page.total, 1);

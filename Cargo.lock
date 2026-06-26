@@ -288,6 +288,7 @@ version = "0.1.0"
 dependencies = [
  "async-trait",
  "clinkz-wot-td",
+ "critical-section",
 ]
 
 [[package]]
@@ -315,6 +316,7 @@ dependencies = [
  "clinkz-wot-core",
  "clinkz-wot-protocol-bindings",
  "clinkz-wot-td",
+ "log",
  "serde_json",
  "tokio",
  "zenoh",
@@ -426,6 +428,12 @@ checksum = "9481c1c90cbf2ac953f07c8d4a58aa3945c425b7185c9154d67a65e4230da511"
 dependencies = [
  "cfg-if",
 ]
+
+[[package]]
+name = "critical-section"
+version = "1.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "790eea4361631c5e7d22598ecd5723ff611904e3344ce8720784c93e3d83d40b"
 
 [[package]]
 name = "crossbeam"

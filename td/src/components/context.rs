@@ -28,6 +28,60 @@ impl Context {
         }
     }
 
+    /// Returns `true` when the context contains at least one standard WoT
+    /// context URI (TD 1.0 or TD 1.1).
+    ///
+    /// This check mirrors the serialization-time validation in
+    /// [`Serialize for Context`](Self#impl-Serialize-for-Context) but is
+    /// available for explicit validation at
+    /// [`ValidationLevel::Profile`](crate::validate::ValidationLevel::Profile)
+    /// or stricter levels.
+    pub fn has_wot_context(&self) -> bool {
+        self.entries.iter().any(|entry| match entry {
+            ContextEntry::Uri(uri) => {
+                uri.as_str() == WOT_CONTEXT_1_0 || uri.as_str() == WOT_CONTEXT_1_1
+            }
+            ContextEntry::Object(_) => false,
+        })
+    }
+
+    /// Returns `true` when the first `@context` entry is a standard WoT context
+    /// URI (TD 1.0 or TD 1.1).
+    ///
+    /// TD 1.1 / JSON-LD require the standard TD context URI to be the first
+    /// value of `@context` so that consumers (and JSON-LD processors) resolve
+    /// the WoT vocabulary before any extension namespace. Extension-only first
+    /// entries or object entries first violate this rule.
+    pub fn is_wot_context_first(&self) -> bool {
+        self.entries.first().is_some_and(|entry| match entry {
+            ContextEntry::Uri(uri) => {
+                uri.as_str() == WOT_CONTEXT_1_0 || uri.as_str() == WOT_CONTEXT_1_1
+            }
+            ContextEntry::Object(_) => false,
+        })
+    }
+
+    /// Returns the standard WoT TD version URI present in this context, if any.
+    ///
+    /// Prefers TD 1.1 when both 1.0 and 1.1 are declared.
+    pub fn wot_version_uri(&self) -> Option<&'static str> {
+        let has_v11 = self
+            .entries
+            .iter()
+            .any(|e| matches!(e, ContextEntry::Uri(u) if u.as_str() == WOT_CONTEXT_1_1));
+        if has_v11 {
+            return Some(WOT_CONTEXT_1_1);
+        }
+        let has_v10 = self
+            .entries
+            .iter()
+            .any(|e| matches!(e, ContextEntry::Uri(u) if u.as_str() == WOT_CONTEXT_1_0));
+        if has_v10 {
+            return Some(WOT_CONTEXT_1_0);
+        }
+        None
+    }
+
     /// Enable compability with WoT 1.0 consumers.
     /// According to the spec, 1.0 URI MUST be the first entry,
     /// and 1.1 URI MUST be the second entry in this case.

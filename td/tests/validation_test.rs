@@ -6,6 +6,13 @@ use clinkz_wot_td::{
 };
 use std::{fs, path::PathBuf};
 
+/// Verifies that every fixture round-trips through `Thing` with *semantic*
+/// fidelity: the deserialized-then-serialized document equals the original
+/// under [`is_semantic_eq`], which treats W3C default values (e.g.
+/// `contentType: "application/json"`, security `in: "header"`) as equivalent
+/// whether present or omitted. Byte-identical round-trip is intentionally not
+/// required for defaulted fields; unknown extension fields are preserved
+/// exactly.
 #[test]
 fn test_thing_roundtrip_fidelity() {
     // Use CARGO_MANIFEST_DIR so the fixture path is stable from any workspace cwd.
@@ -50,6 +57,28 @@ fn test_thing_roundtrip_fidelity() {
 
         // Compare JSON values to ignore field order and whitespace while checking fidelity.
         assert_json_eq(&original_value, &serialized_value, &path_buf);
+    }
+}
+
+#[test]
+fn untyped_data_schema_deserializes_as_object_variant() {
+    // A DataSchema without a recognized `type` is a generic schema; it must
+    // deserialize deterministically as the Object variant rather than the
+    // previous arbitrary `#[serde(untagged)]` first-match (which picked Array
+    // for `{}` and let array-only constraints apply to generic schemas).
+    let empty: DataSchema = serde_json::from_str("{}").expect("empty schema deserializes");
+    assert!(
+        matches!(empty, DataSchema::Object(_)),
+        "untyped {{}} should be Object, got {empty:?}"
+    );
+
+    // A type-specific field carried by an untyped schema is preserved via the
+    // extension map and the variant stays Object.
+    let with_string_field: DataSchema =
+        serde_json::from_str(r#"{"minLength": 5}"#).expect("untyped schema deserializes");
+    match with_string_field {
+        DataSchema::Object(_) => {}
+        other => panic!("expected Object variant, got {other:?}"),
     }
 }
 
@@ -128,10 +157,18 @@ fn is_semantic_eq(a: &serde_json::Value, b: &serde_json::Value) -> bool {
                         continue;
                     }
 
-                    if is_default_value(key, val_a) && val_b.is_null() {
+                    // The fidelity contract is *semantic* equality, not byte
+                    // equality: a defaulted field may be present on one side
+                    // and absent on the other (W3C TD defaults — e.g.
+                    // contentType "application/json", security "in" "header").
+                    // Accommodate the omission in both directions so the
+                    // contract is symmetric and robust to future code paths.
+                    if val_a.is_null() && is_default_value(key, val_b) {
                         continue;
                     }
-                    // if is_default_value(key, val_b) && val_a.is_null() { continue; }
+                    if val_b.is_null() && is_default_value(key, val_a) {
+                        continue;
+                    }
                     if !is_semantic_eq(val_a, val_b) {
                         return false;
                     }
@@ -650,5 +687,277 @@ fn basic_validation_rejects_nested_data_schema_constraint_conflicts() {
 
     assert!(
         matches!(err, ValidateError::InvalidSchema(message) if message.contains("properties.items") && message.contains("minItems"))
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Profile-level @context and interaction-presence validation
+// ---------------------------------------------------------------------------
+
+#[test]
+fn profile_validation_rejects_missing_standard_wot_context() {
+    let raw = r#"{
+        "@context": ["https://example.com/extension"],
+        "title": "No Standard Context",
+        "security": "nosec_sc",
+        "securityDefinitions": {
+            "nosec_sc": { "scheme": "nosec" }
+        },
+        "properties": {
+            "temp": {
+                "type": "number",
+                "forms": [{ "href": "/temp" }]
+            }
+        }
+    }"#;
+
+    let thing: Thing = serde_json::from_str(raw).expect("TD should deserialize");
+
+    // Basic passes — context shape is valid (non-empty array).
+    thing
+        .validate_with_level(ValidationLevel::Basic)
+        .expect("basic validation accepts any non-empty context");
+
+    // Profile rejects — no standard WoT context URI present.
+    let err = thing
+        .validate_with_level(ValidationLevel::Profile)
+        .expect_err("profile validation should reject context without standard WoT URI");
+
+    assert!(
+        matches!(err, ValidateError::InvalidContext(ref msg) if msg.contains("@context")),
+        "got {:?}",
+        err
+    );
+}
+
+#[test]
+fn profile_validation_accepts_standard_wot_context_1_1() {
+    let raw = r#"{
+        "@context": "https://www.w3.org/2022/wot/td/v1.1",
+        "title": "Standard Context",
+        "security": "nosec_sc",
+        "securityDefinitions": {
+            "nosec_sc": { "scheme": "nosec" }
+        },
+        "properties": {
+            "temp": {
+                "type": "number",
+                "forms": [{ "href": "/temp" }]
+            }
+        }
+    }"#;
+
+    let thing: Thing = serde_json::from_str(raw).expect("TD should deserialize");
+    thing
+        .validate_with_level(ValidationLevel::Profile)
+        .expect("profile validation should accept standard WoT 1.1 context");
+    thing
+        .validate_with_level(ValidationLevel::Full)
+        .expect("full validation should accept standard WoT 1.1 context");
+}
+
+#[test]
+fn profile_validation_accepts_dual_context_with_1_0_and_1_1() {
+    let raw = r#"{
+        "@context": [
+            "https://www.w3.org/2019/wot/td/v1",
+            "https://www.w3.org/2022/wot/td/v1.1"
+        ],
+        "title": "Dual Context",
+        "security": "nosec_sc",
+        "securityDefinitions": {
+            "nosec_sc": { "scheme": "nosec" }
+        },
+        "properties": {
+            "temp": {
+                "type": "number",
+                "forms": [{ "href": "/temp" }]
+            }
+        }
+    }"#;
+
+    let thing: Thing = serde_json::from_str(raw).expect("TD should deserialize");
+    thing
+        .validate_with_level(ValidationLevel::Profile)
+        .expect("profile validation should accept dual context with 1.0 + 1.1");
+}
+
+#[test]
+fn profile_validation_rejects_thing_without_interaction_affordances() {
+    let raw = r#"{
+        "@context": "https://www.w3.org/2022/wot/td/v1.1",
+        "title": "Empty Thing",
+        "security": "nosec_sc",
+        "securityDefinitions": {
+            "nosec_sc": { "scheme": "nosec" }
+        }
+    }"#;
+
+    let thing: Thing = serde_json::from_str(raw).expect("TD should deserialize");
+
+    // Basic passes — no requirement for interaction affordances at Basic level.
+    thing
+        .validate_with_level(ValidationLevel::Basic)
+        .expect("basic validation does not require interaction affordances");
+
+    // Profile rejects — no properties, actions, events, or top-level forms.
+    let err = thing
+        .validate_with_level(ValidationLevel::Profile)
+        .expect_err("profile validation should reject Thing without interaction affordances");
+
+    assert!(
+        matches!(err, ValidateError::InvalidContext(ref msg) if msg.contains("interaction")),
+        "got {:?}",
+        err
+    );
+}
+
+#[test]
+fn profile_validation_accepts_thing_with_top_level_forms_only() {
+    let raw = r#"{
+        "@context": "https://www.w3.org/2022/wot/td/v1.1",
+        "title": "Top-Level Forms",
+        "security": "nosec_sc",
+        "securityDefinitions": {
+            "nosec_sc": { "scheme": "nosec" }
+        },
+        "forms": [{ "href": "/all", "op": "readallproperties" }]
+    }"#;
+
+    let thing: Thing = serde_json::from_str(raw).expect("TD should deserialize");
+    thing
+        .validate_with_level(ValidationLevel::Profile)
+        .expect("profile validation should accept top-level forms as interaction affordance");
+}
+
+// ---------------------------------------------------------------------------
+// Thing-level form operation whitelist (TD 1.1 §5.3.4)
+// ---------------------------------------------------------------------------
+
+#[test]
+fn basic_validation_rejects_affordance_operation_on_thing_level_form() {
+    let raw = r#"{
+        "@context": "https://www.w3.org/2022/wot/td/v1.1",
+        "title": "Bad Thing Form Op",
+        "security": "nosec_sc",
+        "securityDefinitions": {
+            "nosec_sc": { "scheme": "nosec" }
+        },
+        "forms": [{ "href": "/status", "op": "readproperty" }]
+    }"#;
+
+    let thing: Thing = serde_json::from_str(raw).expect("TD should deserialize");
+    let err = thing
+        .validate_with_level(ValidationLevel::Basic)
+        .expect_err("basic validation should reject an affordance op on a Thing-level form");
+
+    assert!(
+        matches!(err, ValidateError::InvalidOperation { ref context, ref found }
+            if context == "Thing.forms" && found == "readproperty"),
+        "got {:?}",
+        err
+    );
+}
+
+#[test]
+fn basic_validation_accepts_meta_operation_on_thing_level_form() {
+    let raw = r#"{
+        "@context": "https://www.w3.org/2022/wot/td/v1.1",
+        "title": "Valid Thing Form Ops",
+        "security": "nosec_sc",
+        "securityDefinitions": {
+            "nosec_sc": { "scheme": "nosec" }
+        },
+        "forms": [
+            { "href": "/all", "op": ["readallproperties", "writeallproperties"] },
+            { "href": "/multi", "op": ["readmultipleproperties", "writemultipleproperties"] },
+            { "href": "/obs", "op": ["observeallproperties", "unobserveallproperties"] },
+            { "href": "/actions", "op": "queryallactions" },
+            { "href": "/events", "op": ["subscribeallevents", "unsubscribeallevents"] }
+        ]
+    }"#;
+
+    let thing: Thing = serde_json::from_str(raw).expect("TD should deserialize");
+    thing
+        .validate_with_level(ValidationLevel::Basic)
+        .expect("basic validation should accept Thing-level meta-operations");
+}
+
+// ---------------------------------------------------------------------------
+// @context first-entry ordering (TD 1.1 / JSON-LD)
+// ---------------------------------------------------------------------------
+
+#[test]
+fn profile_validation_rejects_extension_context_before_standard_context() {
+    let raw = r#"{
+        "@context": [
+            "https://example.com/extension",
+            "https://www.w3.org/2022/wot/td/v1.1"
+        ],
+        "title": "Extension First",
+        "security": "nosec_sc",
+        "securityDefinitions": {
+            "nosec_sc": { "scheme": "nosec" }
+        },
+        "properties": {
+            "temp": {
+                "type": "number",
+                "forms": [{ "href": "/temp" }]
+            }
+        }
+    }"#;
+
+    let thing: Thing = serde_json::from_str(raw).expect("TD should deserialize");
+
+    // Basic passes — the standard context is present.
+    thing
+        .validate_with_level(ValidationLevel::Basic)
+        .expect("basic validation does not check context ordering");
+
+    // Profile rejects — standard context is not the first entry.
+    let err = thing
+        .validate_with_level(ValidationLevel::Profile)
+        .expect_err("profile validation should reject standard context not first");
+
+    assert!(
+        matches!(err, ValidateError::InvalidContext(ref msg) if msg.contains("first") || msg.contains("start")),
+        "got {:?}",
+        err
+    );
+}
+
+// ---------------------------------------------------------------------------
+// readOnly && writeOnly mutual exclusion (JSON Schema / TD 1.1)
+// ---------------------------------------------------------------------------
+
+#[test]
+fn basic_validation_rejects_schema_with_read_only_and_write_only() {
+    let raw = r#"{
+        "@context": "https://www.w3.org/2022/wot/td/v1.1",
+        "title": "Conflicting Flags",
+        "security": "nosec_sc",
+        "securityDefinitions": {
+            "nosec_sc": { "scheme": "nosec" }
+        },
+        "properties": {
+            "status": {
+                "type": "string",
+                "readOnly": true,
+                "writeOnly": true,
+                "forms": [{ "href": "/status", "op": "readproperty" }]
+            }
+        }
+    }"#;
+
+    let thing: Thing = serde_json::from_str(raw).expect("TD should deserialize");
+    let err = thing
+        .validate_with_level(ValidationLevel::Basic)
+        .expect_err("basic validation should reject readOnly and writeOnly both true");
+
+    assert!(
+        matches!(err, ValidateError::InvalidSchema(ref msg)
+            if msg.contains("readOnly") && msg.contains("writeOnly")),
+        "got {:?}",
+        err
     );
 }

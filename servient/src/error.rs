@@ -1,7 +1,7 @@
 use alloc::string::String;
 use core::fmt;
 
-use clinkz_wot_core::{CoreError, SecurityError};
+use clinkz_wot_core::{CoreError, MapLockError, SecurityError};
 use clinkz_wot_discovery::DiscoveryError;
 use clinkz_wot_protocol_bindings::BindingError;
 
@@ -29,6 +29,8 @@ pub enum ServientError {
     /// An inbound route-registration failure during `expose` (baseline §10
     /// step 3).
     RouteRegistration(String),
+    /// A shared engine lock was poisoned by a panicking thread.
+    Lock(MapLockError),
 }
 
 impl fmt::Display for ServientError {
@@ -48,6 +50,7 @@ impl fmt::Display for ServientError {
             Self::RouteRegistration(message) => {
                 write!(f, "Inbound route registration error: {}", message)
             }
+            Self::Lock(err) => write!(f, "{}", err),
         }
     }
 }
@@ -76,5 +79,11 @@ impl From<CoreError> for ServientError {
 impl From<SecurityError> for ServientError {
     fn from(value: SecurityError) -> Self {
         Self::Serve(value.into())
+    }
+}
+
+impl From<MapLockError> for ServientError {
+    fn from(value: MapLockError) -> Self {
+        Self::Lock(value)
     }
 }

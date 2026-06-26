@@ -1,4 +1,9 @@
-use alloc::{borrow::ToOwned, collections::BTreeMap, string::String, vec::Vec};
+use alloc::{
+    borrow::ToOwned,
+    collections::{BTreeMap, btree_map::Entry},
+    string::String,
+    vec::Vec,
+};
 
 use clinkz_wot_td::{
     thing::Thing,
@@ -57,10 +62,25 @@ pub trait ThingDirectory {
 
     /// Queries TDs using a backend-portable query model.
     fn query(&self, query: DirectoryQuery) -> DirectoryPage;
+
+    /// Visits each Thing in the directory with a borrowed reference, invoking
+    /// `f` for every entry.
+    ///
+    /// The default implementation clones every entry via
+    /// [`query`](Self::query). Backends with in-memory storage should override
+    /// this to iterate without cloning, so callers (e.g. [`discover`]) can
+    /// filter before cloning only the matching entries.
+    ///
+    /// [`discover`]: crate::discover
+    fn for_each_thing(&self, mut f: impl FnMut(&Thing)) {
+        for entry in self.query(DirectoryQuery::all()).entries {
+            f(&entry.thing);
+        }
+    }
 }
 
 /// Deterministic in-memory Thing Description Directory.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct InMemoryThingDirectory {
     things: BTreeMap<String, Thing>,
     validation_level: ValidationLevel,
@@ -140,12 +160,13 @@ impl Default for InMemoryThingDirectory {
 impl ThingDirectory for InMemoryThingDirectory {
     fn register(&mut self, thing: Thing) -> DiscoveryResult<DirectoryEntry> {
         let id = self.validate_for_write(&thing)?;
-        if self.things.contains_key(&id) {
-            return Err(DiscoveryError::DuplicateThingId(id));
+        match self.things.entry(id.clone()) {
+            Entry::Occupied(_) => Err(DiscoveryError::DuplicateThingId(id)),
+            Entry::Vacant(vacant) => {
+                let stored = vacant.insert(thing);
+                Ok(Self::owned_entry(&id, stored))
+            }
         }
-
-        let stored = self.things.entry(id.clone()).or_insert(thing);
-        Ok(Self::owned_entry(&id, stored))
     }
 
     fn update(&mut self, thing: Thing) -> DiscoveryResult<DirectoryEntry> {
@@ -199,6 +220,12 @@ impl ThingDirectory for InMemoryThingDirectory {
             total,
             offset: query.offset,
             limit: query.limit,
+        }
+    }
+
+    fn for_each_thing(&self, mut f: impl FnMut(&Thing)) {
+        for thing in self.things.values() {
+            f(thing);
         }
     }
 }

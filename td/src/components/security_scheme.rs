@@ -10,7 +10,7 @@ use serde_with::{OneOrMany, serde_as, skip_serializing_none};
 
 use crate::{
     data_type::{AbsoluteUri, ExtensionMap, MultiLanguage},
-    validate::{Validate, ValidateError, ValidationLevel},
+    validate::{Validate, ValidateError, ValidationLevel, parse_uri_field},
 };
 
 #[serde_as]
@@ -39,9 +39,6 @@ pub struct SecuritySchemeContext {
 
     #[serde(flatten)]
     pub _extra_fields: ExtensionMap,
-
-    #[serde(skip)]
-    pub(crate) _builder_errors: Vec<ValidateError>,
 }
 
 impl SecuritySchemeContext {
@@ -55,6 +52,11 @@ impl SecuritySchemeContext {
 
 pub trait ContextHelper: Sized {
     fn context(&mut self) -> &mut SecuritySchemeContext;
+
+    /// Returns a mutable reference to the builder's accumulated validation
+    /// errors. Provided methods that can fail (e.g. [`proxy`](Self::proxy))
+    /// push errors here so they are surfaced by `build()`.
+    fn builder_errors(&mut self) -> &mut Vec<ValidateError>;
 
     /// Adds tags.
     fn tags<I, S>(mut self, tags: I) -> Self
@@ -95,12 +97,13 @@ pub trait ContextHelper: Sized {
     /// Sets the proxy URI.
     fn proxy(mut self, proxy: impl Into<String>) -> Self {
         let proxy = proxy.into();
-        match AbsoluteUri::parse(proxy.as_str()) {
-            Ok(uri) => self.context().proxy = Some(uri),
-            Err(_) => self
-                .context()
-                ._builder_errors
-                .push(ValidateError::InvalidUri(format!("proxy: {}", proxy))),
+        if let Some(uri) = parse_uri_field(
+            "proxy",
+            proxy.as_str(),
+            AbsoluteUri::parse,
+            self.builder_errors(),
+        ) {
+            self.context().proxy = Some(uri);
         }
         self
     }
@@ -142,6 +145,7 @@ impl NoSecurityScheme {
 /// Builder for creating `NoSecurityScheme` instances.
 pub struct NoSecuritySchemeBuilder {
     scheme: NoSecurityScheme,
+    _builder_errors: Vec<ValidateError>,
 }
 
 impl NoSecuritySchemeBuilder {
@@ -151,12 +155,13 @@ impl NoSecuritySchemeBuilder {
             scheme: NoSecurityScheme {
                 _context: SecuritySchemeContext::new("nosec"),
             },
+            _builder_errors: Vec::new(),
         }
     }
 
     /// Builds and returns the `NoSecurityScheme` instance.
-    pub fn build(self) -> Result<NoSecurityScheme, ValidateError> {
-        check_builder_errors(self.scheme._context._builder_errors.clone())?;
+    pub fn build(mut self) -> Result<NoSecurityScheme, ValidateError> {
+        check_builder_errors(core::mem::take(&mut self._builder_errors))?;
         Ok(self.scheme)
     }
 }
@@ -164,6 +169,10 @@ impl NoSecuritySchemeBuilder {
 impl ContextHelper for NoSecuritySchemeBuilder {
     fn context(&mut self) -> &mut SecuritySchemeContext {
         &mut self.scheme._context
+    }
+
+    fn builder_errors(&mut self) -> &mut Vec<ValidateError> {
+        &mut self._builder_errors
     }
 }
 
@@ -186,6 +195,7 @@ impl AutoSecurityScheme {
 /// Builder for creating `AutoSecurityScheme` instances.
 pub struct AutoSecuritySchemeBuilder {
     scheme: AutoSecurityScheme,
+    _builder_errors: Vec<ValidateError>,
 }
 
 impl AutoSecuritySchemeBuilder {
@@ -195,12 +205,13 @@ impl AutoSecuritySchemeBuilder {
             scheme: AutoSecurityScheme {
                 _context: SecuritySchemeContext::new("auto"),
             },
+            _builder_errors: Vec::new(),
         }
     }
 
     /// Builds and returns the `AutoSecurityScheme` instance.
-    pub fn build(self) -> Result<AutoSecurityScheme, ValidateError> {
-        check_builder_errors(self.scheme._context._builder_errors.clone())?;
+    pub fn build(mut self) -> Result<AutoSecurityScheme, ValidateError> {
+        check_builder_errors(core::mem::take(&mut self._builder_errors))?;
         Ok(self.scheme)
     }
 }
@@ -208,6 +219,10 @@ impl AutoSecuritySchemeBuilder {
 impl ContextHelper for AutoSecuritySchemeBuilder {
     fn context(&mut self) -> &mut SecuritySchemeContext {
         &mut self.scheme._context
+    }
+
+    fn builder_errors(&mut self) -> &mut Vec<ValidateError> {
+        &mut self._builder_errors
     }
 }
 
@@ -241,6 +256,7 @@ impl ComboSecurityScheme {
 /// Builder for creating `ComboSecurityScheme` instances.
 pub struct ComboSecuritySchemeBuilder {
     scheme: ComboSecurityScheme,
+    _builder_errors: Vec<ValidateError>,
 }
 
 impl ComboSecuritySchemeBuilder {
@@ -252,6 +268,7 @@ impl ComboSecuritySchemeBuilder {
                 one_of: Vec::new(),
                 all_of: Vec::new(),
             },
+            _builder_errors: Vec::new(),
         }
     }
 
@@ -280,8 +297,8 @@ impl ComboSecuritySchemeBuilder {
     }
 
     /// Builds and returns the `ComboSecurityScheme` instance.
-    pub fn build(self) -> Result<ComboSecurityScheme, ValidateError> {
-        check_builder_errors(self.scheme._context._builder_errors.clone())?;
+    pub fn build(mut self) -> Result<ComboSecurityScheme, ValidateError> {
+        check_builder_errors(core::mem::take(&mut self._builder_errors))?;
         Ok(self.scheme)
     }
 }
@@ -289,6 +306,10 @@ impl ComboSecuritySchemeBuilder {
 impl ContextHelper for ComboSecuritySchemeBuilder {
     fn context(&mut self) -> &mut SecuritySchemeContext {
         &mut self.scheme._context
+    }
+
+    fn builder_errors(&mut self) -> &mut Vec<ValidateError> {
+        &mut self._builder_errors
     }
 }
 
@@ -334,6 +355,7 @@ impl BasicSecurityScheme {
 /// Builder for creating `BasicSecurityScheme` instances.
 pub struct BasicSecuritySchemeBuilder {
     scheme: BasicSecurityScheme,
+    _builder_errors: Vec<ValidateError>,
 }
 
 impl BasicSecuritySchemeBuilder {
@@ -345,6 +367,7 @@ impl BasicSecuritySchemeBuilder {
                 name: None,
                 location: SecurityLocation::default(),
             },
+            _builder_errors: Vec::new(),
         }
     }
 
@@ -361,8 +384,8 @@ impl BasicSecuritySchemeBuilder {
     }
 
     /// Builds and returns the `BasicSecurityScheme` instance.
-    pub fn build(self) -> Result<BasicSecurityScheme, ValidateError> {
-        check_builder_errors(self.scheme._context._builder_errors.clone())?;
+    pub fn build(mut self) -> Result<BasicSecurityScheme, ValidateError> {
+        check_builder_errors(core::mem::take(&mut self._builder_errors))?;
         Ok(self.scheme)
     }
 }
@@ -370,6 +393,10 @@ impl BasicSecuritySchemeBuilder {
 impl ContextHelper for BasicSecuritySchemeBuilder {
     fn context(&mut self) -> &mut SecuritySchemeContext {
         &mut self.scheme._context
+    }
+
+    fn builder_errors(&mut self) -> &mut Vec<ValidateError> {
+        &mut self._builder_errors
     }
 }
 
@@ -417,6 +444,7 @@ impl DigestSecurityScheme {
 /// Builder for creating `DigestSecurityScheme` instances.
 pub struct DigestSecuritySchemeBuilder {
     scheme: DigestSecurityScheme,
+    _builder_errors: Vec<ValidateError>,
 }
 
 impl DigestSecuritySchemeBuilder {
@@ -429,6 +457,7 @@ impl DigestSecuritySchemeBuilder {
                 location: SecurityLocation::default(),
                 qop: Qop::default(),
             },
+            _builder_errors: Vec::new(),
         }
     }
 
@@ -451,8 +480,8 @@ impl DigestSecuritySchemeBuilder {
     }
 
     /// Builds and returns the `DigestSecurityScheme` instance.
-    pub fn build(self) -> Result<DigestSecurityScheme, ValidateError> {
-        check_builder_errors(self.scheme._context._builder_errors.clone())?;
+    pub fn build(mut self) -> Result<DigestSecurityScheme, ValidateError> {
+        check_builder_errors(core::mem::take(&mut self._builder_errors))?;
         Ok(self.scheme)
     }
 }
@@ -460,6 +489,10 @@ impl DigestSecuritySchemeBuilder {
 impl ContextHelper for DigestSecuritySchemeBuilder {
     fn context(&mut self) -> &mut SecuritySchemeContext {
         &mut self.scheme._context
+    }
+
+    fn builder_errors(&mut self) -> &mut Vec<ValidateError> {
+        &mut self._builder_errors
     }
 }
 
@@ -489,6 +522,7 @@ impl APIKeySecurityScheme {
 /// Builder for creating `APIKeySecurityScheme` instances.
 pub struct APIKeySecuritySchemeBuilder {
     scheme: APIKeySecurityScheme,
+    _builder_errors: Vec<ValidateError>,
 }
 
 impl APIKeySecuritySchemeBuilder {
@@ -500,6 +534,7 @@ impl APIKeySecuritySchemeBuilder {
                 name: None,
                 location: SecurityLocation::default(),
             },
+            _builder_errors: Vec::new(),
         }
     }
 
@@ -516,8 +551,8 @@ impl APIKeySecuritySchemeBuilder {
     }
 
     /// Builds and returns the `APIKeySecurityScheme` instance.
-    pub fn build(self) -> Result<APIKeySecurityScheme, ValidateError> {
-        check_builder_errors(self.scheme._context._builder_errors.clone())?;
+    pub fn build(mut self) -> Result<APIKeySecurityScheme, ValidateError> {
+        check_builder_errors(core::mem::take(&mut self._builder_errors))?;
         Ok(self.scheme)
     }
 }
@@ -526,24 +561,32 @@ impl ContextHelper for APIKeySecuritySchemeBuilder {
     fn context(&mut self) -> &mut SecuritySchemeContext {
         &mut self.scheme._context
     }
+
+    fn builder_errors(&mut self) -> &mut Vec<ValidateError> {
+        &mut self._builder_errors
+    }
 }
 
 /// Helper function to provide the default algorithm "ES256"
+const DEFAULT_ALG: &str = "ES256";
+
 fn default_alg() -> String {
-    "ES256".to_string()
+    String::from(DEFAULT_ALG)
 }
 
-fn is_default_alg(alg: &String) -> bool {
-    alg == &default_alg()
+fn is_default_alg(alg: &str) -> bool {
+    alg == DEFAULT_ALG
 }
 
 /// Helper function to provide the default format "jwt"
+const DEFAULT_FORMAT: &str = "jwt";
+
 fn default_format() -> String {
-    "jwt".to_string()
+    String::from(DEFAULT_FORMAT)
 }
 
-fn is_default_format(format: &String) -> bool {
-    format == &default_format()
+fn is_default_format(format: &str) -> bool {
+    format == DEFAULT_FORMAT
 }
 
 /// A security configuration corresponding to identified by the
@@ -583,6 +626,7 @@ impl BearerSecurityScheme {
 /// Builder for creating `BearerSecurityScheme` instances.
 pub struct BearerSecuritySchemeBuilder {
     scheme: BearerSecurityScheme,
+    _builder_errors: Vec<ValidateError>,
 }
 
 impl BearerSecuritySchemeBuilder {
@@ -597,22 +641,20 @@ impl BearerSecuritySchemeBuilder {
                 format: default_format(),
                 location: SecurityLocation::default(),
             },
+            _builder_errors: Vec::new(),
         }
     }
 
     /// Sets the authorization URI.
     pub fn authorization(mut self, authorization: impl Into<String>) -> Self {
         let authorization = authorization.into();
-        match AbsoluteUri::parse(authorization.as_str()) {
-            Ok(uri) => self.scheme.authorization = Some(uri),
-            Err(_) => self
-                .scheme
-                ._context
-                ._builder_errors
-                .push(ValidateError::InvalidUri(format!(
-                    "authorization: {}",
-                    authorization
-                ))),
+        if let Some(uri) = parse_uri_field(
+            "authorization",
+            authorization.as_str(),
+            AbsoluteUri::parse,
+            &mut self._builder_errors,
+        ) {
+            self.scheme.authorization = Some(uri);
         }
         self
     }
@@ -642,8 +684,8 @@ impl BearerSecuritySchemeBuilder {
     }
 
     /// Builds and returns the `BearerSecurityScheme` instance.
-    pub fn build(self) -> Result<BearerSecurityScheme, ValidateError> {
-        check_builder_errors(self.scheme._context._builder_errors.clone())?;
+    pub fn build(mut self) -> Result<BearerSecurityScheme, ValidateError> {
+        check_builder_errors(core::mem::take(&mut self._builder_errors))?;
         Ok(self.scheme)
     }
 }
@@ -651,6 +693,10 @@ impl BearerSecuritySchemeBuilder {
 impl ContextHelper for BearerSecuritySchemeBuilder {
     fn context(&mut self) -> &mut SecuritySchemeContext {
         &mut self.scheme._context
+    }
+
+    fn builder_errors(&mut self) -> &mut Vec<ValidateError> {
+        &mut self._builder_errors
     }
 }
 
@@ -677,6 +723,7 @@ impl PSKSecurityScheme {
 /// Builder for creating `PSKSecurityScheme` instances.
 pub struct PSKSecuritySchemeBuilder {
     scheme: PSKSecurityScheme,
+    _builder_errors: Vec<ValidateError>,
 }
 
 impl PSKSecuritySchemeBuilder {
@@ -687,6 +734,7 @@ impl PSKSecuritySchemeBuilder {
                 _context: SecuritySchemeContext::new("psk"),
                 identity: None,
             },
+            _builder_errors: Vec::new(),
         }
     }
 
@@ -697,8 +745,8 @@ impl PSKSecuritySchemeBuilder {
     }
 
     /// Builds and returns the `PSKSecurityScheme` instance.
-    pub fn build(self) -> Result<PSKSecurityScheme, ValidateError> {
-        check_builder_errors(self.scheme._context._builder_errors.clone())?;
+    pub fn build(mut self) -> Result<PSKSecurityScheme, ValidateError> {
+        check_builder_errors(core::mem::take(&mut self._builder_errors))?;
         Ok(self.scheme)
     }
 }
@@ -706,6 +754,10 @@ impl PSKSecuritySchemeBuilder {
 impl ContextHelper for PSKSecuritySchemeBuilder {
     fn context(&mut self) -> &mut SecuritySchemeContext {
         &mut self.scheme._context
+    }
+
+    fn builder_errors(&mut self) -> &mut Vec<ValidateError> {
+        &mut self._builder_errors
     }
 }
 
@@ -745,6 +797,7 @@ impl OAuth2SecurityScheme {
 /// Builder for creating `OAuth2SecurityScheme` instances.
 pub struct OAuth2SecuritySchemeBuilder {
     scheme: OAuth2SecurityScheme,
+    _builder_errors: Vec<ValidateError>,
 }
 
 impl OAuth2SecuritySchemeBuilder {
@@ -759,22 +812,20 @@ impl OAuth2SecuritySchemeBuilder {
                 scopes: None,
                 flow: flow.into(),
             },
+            _builder_errors: Vec::new(),
         }
     }
 
     /// Sets the authorization URI.
     pub fn authorization(mut self, authorization: impl Into<String>) -> Self {
         let authorization = authorization.into();
-        match AbsoluteUri::parse(authorization.as_str()) {
-            Ok(uri) => self.scheme.authorization = Some(uri),
-            Err(_) => self
-                .scheme
-                ._context
-                ._builder_errors
-                .push(ValidateError::InvalidUri(format!(
-                    "authorization: {}",
-                    authorization
-                ))),
+        if let Some(uri) = parse_uri_field(
+            "authorization",
+            authorization.as_str(),
+            AbsoluteUri::parse,
+            &mut self._builder_errors,
+        ) {
+            self.scheme.authorization = Some(uri);
         }
         self
     }
@@ -782,13 +833,13 @@ impl OAuth2SecuritySchemeBuilder {
     /// Sets the token URI.
     pub fn token(mut self, token: impl Into<String>) -> Self {
         let token = token.into();
-        match AbsoluteUri::parse(token.as_str()) {
-            Ok(uri) => self.scheme.token = Some(uri),
-            Err(_) => self
-                .scheme
-                ._context
-                ._builder_errors
-                .push(ValidateError::InvalidUri(format!("token: {}", token))),
+        if let Some(uri) = parse_uri_field(
+            "token",
+            token.as_str(),
+            AbsoluteUri::parse,
+            &mut self._builder_errors,
+        ) {
+            self.scheme.token = Some(uri);
         }
         self
     }
@@ -796,13 +847,13 @@ impl OAuth2SecuritySchemeBuilder {
     /// Sets the refresh URI.
     pub fn refresh(mut self, refresh: impl Into<String>) -> Self {
         let refresh = refresh.into();
-        match AbsoluteUri::parse(refresh.as_str()) {
-            Ok(uri) => self.scheme.refresh = Some(uri),
-            Err(_) => self
-                .scheme
-                ._context
-                ._builder_errors
-                .push(ValidateError::InvalidUri(format!("refresh: {}", refresh))),
+        if let Some(uri) = parse_uri_field(
+            "refresh",
+            refresh.as_str(),
+            AbsoluteUri::parse,
+            &mut self._builder_errors,
+        ) {
+            self.scheme.refresh = Some(uri);
         }
         self
     }
@@ -822,8 +873,8 @@ impl OAuth2SecuritySchemeBuilder {
     }
 
     /// Builds and returns the `OAuth2SecurityScheme` instance.
-    pub fn build(self) -> Result<OAuth2SecurityScheme, ValidateError> {
-        check_builder_errors(self.scheme._context._builder_errors.clone())?;
+    pub fn build(mut self) -> Result<OAuth2SecurityScheme, ValidateError> {
+        check_builder_errors(core::mem::take(&mut self._builder_errors))?;
         Ok(self.scheme)
     }
 }
@@ -831,6 +882,10 @@ impl OAuth2SecuritySchemeBuilder {
 impl ContextHelper for OAuth2SecuritySchemeBuilder {
     fn context(&mut self) -> &mut SecuritySchemeContext {
         &mut self.scheme._context
+    }
+
+    fn builder_errors(&mut self) -> &mut Vec<ValidateError> {
+        &mut self._builder_errors
     }
 }
 

@@ -13,11 +13,23 @@ use support::{CountingServientZenohTransport, ServientZenohTransport, zenoh_thin
 fn consumed_handle_routes_remote_requests_through_zenoh_binding_transport() {
     let td = zenoh_thing("urn:thing:zenoh-lamp", "Zenoh Lamp");
     let servient = Servient::builder()
-        .binding_factory(|| {
-            Box::new(ZenohBindingTransport::with_transport(
-                ServientZenohTransport,
-            ))
-        })
+        .binding_factory_with_support(
+            || {
+                Box::new(ZenohBindingTransport::with_transport(
+                    ServientZenohTransport,
+                ))
+            },
+            |thing, form, operation| {
+                matches!(
+                    operation,
+                    Operation::ReadProperty
+                        | Operation::WriteProperty
+                        | Operation::InvokeAction
+                        | Operation::SubscribeEvent
+                        | Operation::ObserveProperty
+                ) && clinkz_wot_protocol_bindings_zenoh::is_zenoh_form_target(thing, form)
+            },
+        )
         .build();
 
     let consumed = servient.consume(td).unwrap();
@@ -66,11 +78,23 @@ fn consumed_handle_shares_zenoh_transport_state_across_requests() {
     let shared = SharedZenohTransport::new(CountingServientZenohTransport::default());
     let factory_transport = shared.clone();
     let servient = Servient::builder()
-        .binding_factory(move || {
-            Box::new(ZenohBindingTransport::with_transport(
-                factory_transport.clone(),
-            ))
-        })
+        .binding_factory_with_support(
+            move || {
+                Box::new(ZenohBindingTransport::with_transport(
+                    factory_transport.clone(),
+                ))
+            },
+            |thing, form, operation| {
+                matches!(
+                    operation,
+                    Operation::ReadProperty
+                        | Operation::WriteProperty
+                        | Operation::InvokeAction
+                        | Operation::SubscribeEvent
+                        | Operation::ObserveProperty
+                ) && clinkz_wot_protocol_bindings_zenoh::is_zenoh_form_target(thing, form)
+            },
+        )
         .build();
 
     let consumed = servient.consume(td).unwrap();
@@ -92,5 +116,5 @@ fn consumed_handle_shares_zenoh_transport_state_across_requests() {
         .read_property_with_criteria("status", criteria, InteractionInput::empty())
         .unwrap();
     assert_eq!(second.payload.unwrap().body, b"zenoh-read-3");
-    assert_eq!(shared.inner().lock().unwrap().calls.get(), 3);
+    assert_eq!(shared.inner().calls.get(), 3);
 }

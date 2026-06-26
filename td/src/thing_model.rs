@@ -19,7 +19,11 @@ use crate::{
     form::Form,
     link::Link,
     security_scheme::SecurityScheme,
-    validate::{Validate, ValidateError, ValidationLevel},
+    validate::{
+        HasAdditionalResponses, Validate, ValidateError, ValidationLevel, parse_uri_field,
+        validate_context_at_profile_level, validate_form_response_references, validate_schema_map,
+        validate_security_references,
+    },
 };
 
 /// A reusable WoT Thing Model template.
@@ -30,7 +34,7 @@ use crate::{
 /// protocol-specific forms.
 #[serde_as]
 #[skip_serializing_none]
-#[derive(Default, Deserialize, Serialize)]
+#[derive(Clone, Debug, Default, PartialEq, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ThingModel {
     /// JSON-LD context for the model.
@@ -158,12 +162,14 @@ impl From<Form> for ThingModelForm {
     }
 }
 
+const DEFAULT_CONTENT_TYPE: &str = "application/json";
+
 fn default_content_type() -> String {
-    String::from("application/json")
+    String::from(DEFAULT_CONTENT_TYPE)
 }
 
-fn is_default_content_type(content_type: &String) -> bool {
-    content_type == &default_content_type()
+fn is_default_content_type(content_type: &str) -> bool {
+    content_type == DEFAULT_CONTENT_TYPE
 }
 
 impl ThingModel {
@@ -178,6 +184,9 @@ impl Validate for ThingModel {
         if matches!(level, ValidationLevel::Minimal) {
             return Ok(());
         }
+
+        // Profile/Full: @context must contain a standard WoT context URI.
+        validate_context_at_profile_level(&self.context, level)?;
 
         if self._metadata.title.as_deref().unwrap_or("").is_empty() {
             return Err(ValidateError::MissingRequiredField("title".to_string()));
@@ -291,103 +300,12 @@ fn validate_thing_model_type(tags: &Option<Vec<String>>) -> Result<(), ValidateE
     ))
 }
 
-fn validate_schema_map(
-    context: &str,
-    schemas: Option<&BTreeMap<String, DataSchema>>,
-    level: ValidationLevel,
-) -> Result<(), ValidateError> {
-    let Some(schemas) = schemas else {
-        return Ok(());
-    };
-
-    for (name, schema) in schemas {
-        schema.validate_with_level(level).map_err(|err| {
-            ValidateError::InvalidSchema(format!("{}.{}: {}", context, name, err))
-        })?;
-    }
-
-    Ok(())
-}
-
-fn validate_security_references(
-    context: &str,
-    security: &[String],
-    security_definitions: &BTreeMap<String, SecurityScheme>,
-) -> Result<(), ValidateError> {
-    for reference in security {
-        if !security_definitions.contains_key(reference) {
-            return Err(ValidateError::InvalidReference {
-                context: context.to_string(),
-                reference: reference.clone(),
-            });
-        }
-    }
-
-    Ok(())
-}
-
-trait HasAdditionalResponses {
-    fn additional_responses(&self) -> Option<&[AdditionalExpectedResponse]>;
-}
-
-impl HasAdditionalResponses for Form {
-    fn additional_responses(&self) -> Option<&[AdditionalExpectedResponse]> {
-        self.additional_responses.as_deref()
-    }
-}
-
 impl HasAdditionalResponses for ThingModelForm {
     fn additional_responses(&self) -> Option<&[AdditionalExpectedResponse]> {
         self.additional_responses.as_deref()
     }
 }
 
-fn validate_form_response_references<T>(
-    context: &str,
-    forms: &[T],
-    schema_definitions: Option<&BTreeMap<String, DataSchema>>,
-    level: ValidationLevel,
-) -> Result<(), ValidateError>
-where
-    T: HasAdditionalResponses,
-{
-    if !matches!(level, ValidationLevel::Profile | ValidationLevel::Full) {
-        return Ok(());
-    }
-
-    for (form_index, form) in forms.iter().enumerate() {
-        let Some(additional_responses) = form.additional_responses() else {
-            continue;
-        };
-
-        for (response_index, response) in additional_responses.iter().enumerate() {
-            let Some(schema) = &response.schema else {
-                continue;
-            };
-
-            let reference_context = format!(
-                "{}[{}].additionalResponses[{}].schema",
-                context, form_index, response_index
-            );
-
-            let Some(schema_definitions) = schema_definitions else {
-                return Err(ValidateError::InvalidReference {
-                    context: reference_context,
-                    reference: schema.clone(),
-                });
-            };
-
-            if !schema_definitions.contains_key(schema) {
-                return Err(ValidateError::InvalidReference {
-                    context: reference_context,
-                    reference: schema.clone(),
-                });
-            }
-        }
-    }
-
-    Ok(())
-}
 fn validate_tm_optional(model: &ThingModel, pointers: &[String]) -> Result<(), ValidateError> {
     for pointer in pointers {
         let trimmed = pointer.strip_prefix('#').unwrap_or(pointer.as_str());
@@ -466,11 +384,8 @@ impl ThingModelBuilder {
 
     /// Sets the model identifier.
     pub fn id(mut self, id: &str) -> Self {
-        match AbsoluteUri::parse(id) {
-            Ok(id) => self.model.id = Some(id),
-            Err(_) => self
-                .errors
-                .push(ValidateError::InvalidUri(format!("id: {}", id))),
+        if let Some(uri) = parse_uri_field("id", id, AbsoluteUri::parse, &mut self.errors) {
+            self.model.id = Some(uri);
         }
         self
     }
@@ -483,11 +398,9 @@ impl ThingModelBuilder {
 
     /// Sets the support URI.
     pub fn support(mut self, support: &str) -> Self {
-        match AbsoluteUri::parse(support) {
-            Ok(support) => self.model.support = Some(support),
-            Err(_) => self
-                .errors
-                .push(ValidateError::InvalidUri(format!("support: {}", support))),
+        if let Some(uri) = parse_uri_field("support", support, AbsoluteUri::parse, &mut self.errors)
+        {
+            self.model.support = Some(uri);
         }
         self
     }
@@ -500,11 +413,8 @@ impl ThingModelBuilder {
 
     /// Sets the base URI.
     pub fn base(mut self, base: &str) -> Self {
-        match BaseUri::parse(base) {
-            Ok(base) => self.model.base = Some(base),
-            Err(_) => self
-                .errors
-                .push(ValidateError::InvalidUri(format!("base: {}", base))),
+        if let Some(uri) = parse_uri_field("base", base, BaseUri::parse, &mut self.errors) {
+            self.model.base = Some(uri);
         }
         self
     }

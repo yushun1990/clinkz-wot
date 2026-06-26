@@ -1,5 +1,18 @@
-use alloc::string::String;
+use alloc::{
+    collections::BTreeMap,
+    format,
+    string::{String, ToString},
+    vec::Vec,
+};
 use core::fmt;
+
+use crate::{
+    context::Context,
+    data_schema::DataSchema,
+    data_type::{AdditionalExpectedResponse, Operation},
+    form::Form,
+    security_scheme::SecurityScheme,
+};
 
 /// Validation strictness for Thing Description documents and components.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -29,6 +42,9 @@ pub enum ValidateError {
     InvalidUri(String),
     /// A named reference points to an item that is not defined in this document.
     InvalidReference { context: String, reference: String },
+    /// A semantic or profile-level constraint is violated (e.g., missing
+    /// standard `@context`, missing interaction affordances).
+    InvalidContext(String),
 }
 
 impl fmt::Display for ValidateError {
@@ -48,6 +64,7 @@ impl fmt::Display for ValidateError {
                     reference, context
                 )
             }
+            Self::InvalidContext(msg) => write!(f, "Invalid context: {}", msg),
         }
     }
 }
@@ -61,4 +78,257 @@ pub trait Validate {
 
     /// Validates the component at the requested strictness level.
     fn validate_with_level(&self, level: ValidationLevel) -> Result<(), ValidateError>;
+}
+
+/// Parses a URI-valued builder field using `parse`, returning the parsed value
+/// as `Some` on success or `None` after recording an
+/// [`ValidateError::InvalidUri`] on `errors`.
+///
+/// Builders share the same "parse-or-record-error" pattern for URI fields.
+/// Pass the concrete parser (e.g., `AbsoluteUri::parse` or `BaseUri::parse`)
+/// so the helper can serve both absolute and base URI fields.
+pub(crate) fn parse_uri_field<T, E>(
+    label: &str,
+    value: &str,
+    parse: impl FnOnce(&str) -> Result<T, E>,
+    errors: &mut Vec<ValidateError>,
+) -> Option<T> {
+    match parse(value) {
+        Ok(parsed) => Some(parsed),
+        Err(_) => {
+            errors.push(ValidateError::InvalidUri(format!("{}: {}", label, value)));
+            None
+        }
+    }
+}
+
+/// Flattens a [`ValidateError`] into a concise message string.
+///
+/// `InvalidSchema` is unwrapped to its inner message so that callers can wrap it
+/// again without producing a redundant `Invalid schema:` prefix; any other
+/// variant is rendered through its [`fmt::Display`] implementation.
+pub(crate) fn schema_error_message(err: ValidateError) -> String {
+    match err {
+        ValidateError::InvalidSchema(message) => message,
+        other => other.to_string(),
+    }
+}
+
+/// Validates that every name in `security` is defined in `security_definitions`.
+pub(crate) fn validate_security_references(
+    context: &str,
+    security: &[String],
+    security_definitions: &BTreeMap<String, SecurityScheme>,
+) -> Result<(), ValidateError> {
+    for reference in security {
+        if !security_definitions.contains_key(reference) {
+            return Err(ValidateError::InvalidReference {
+                context: context.to_string(),
+                reference: reference.clone(),
+            });
+        }
+    }
+
+    Ok(())
+}
+
+/// Validates each [`DataSchema`] in an optional schema map, contextualizing
+/// failures as `"{context}.{name}: {message}"`.
+///
+/// Accepts an `Option` so callers with optional maps (e.g., `schemaDefinitions`
+/// and `uriVariables`) can pass them through directly.
+pub(crate) fn validate_schema_map(
+    context: &str,
+    schemas: Option<&BTreeMap<String, DataSchema>>,
+    level: ValidationLevel,
+) -> Result<(), ValidateError> {
+    let Some(schemas) = schemas else {
+        return Ok(());
+    };
+
+    for (name, schema) in schemas {
+        schema.validate_with_level(level).map_err(|err| {
+            ValidateError::InvalidSchema(format!(
+                "{}.{}: {}",
+                context,
+                name,
+                schema_error_message(err)
+            ))
+        })?;
+    }
+
+    Ok(())
+}
+
+/// Abstraction over form-like types that expose `additionalResponses`.
+///
+/// Enables [`validate_form_response_references`] to serve both concrete TD forms
+/// and Thing Model form templates.
+pub(crate) trait HasAdditionalResponses {
+    /// Returns the additional expected responses, if any.
+    fn additional_responses(&self) -> Option<&[AdditionalExpectedResponse]>;
+}
+
+impl HasAdditionalResponses for Form {
+    fn additional_responses(&self) -> Option<&[AdditionalExpectedResponse]> {
+        self.additional_responses.as_deref()
+    }
+}
+
+/// Validates that every `additionalResponses[*].schema` reference resolves to a
+/// named entry in `schema_definitions`.
+///
+/// Only runs at [`ValidationLevel::Profile`] or stricter. At lower levels,
+/// dangling references are tolerated so that Basic validation stays lenient.
+pub(crate) fn validate_form_response_references<T>(
+    context: &str,
+    forms: &[T],
+    schema_definitions: Option<&BTreeMap<String, DataSchema>>,
+    level: ValidationLevel,
+) -> Result<(), ValidateError>
+where
+    T: HasAdditionalResponses,
+{
+    if !matches!(level, ValidationLevel::Profile | ValidationLevel::Full) {
+        return Ok(());
+    }
+
+    for (form_index, form) in forms.iter().enumerate() {
+        let Some(additional_responses) = form.additional_responses() else {
+            continue;
+        };
+
+        for (response_index, response) in additional_responses.iter().enumerate() {
+            let Some(schema) = &response.schema else {
+                continue;
+            };
+
+            let reference_context = format!(
+                "{}[{}].additionalResponses[{}].schema",
+                context, form_index, response_index
+            );
+
+            let Some(schema_definitions) = schema_definitions else {
+                return Err(ValidateError::InvalidReference {
+                    context: reference_context,
+                    reference: schema.clone(),
+                });
+            };
+
+            if !schema_definitions.contains_key(schema) {
+                return Err(ValidateError::InvalidReference {
+                    context: reference_context,
+                    reference: schema.clone(),
+                });
+            }
+        }
+    }
+
+    Ok(())
+}
+
+/// Validates that the `@context` contains at least one standard WoT context URI.
+///
+/// Only runs at [`ValidationLevel::Profile`] or stricter. At lower levels,
+/// the context shape is accepted as-is because serde parsing already rejected
+/// structurally invalid contexts (e.g., empty arrays).
+pub(crate) fn validate_context_at_profile_level(
+    context: &Context,
+    level: ValidationLevel,
+) -> Result<(), ValidateError> {
+    if !matches!(level, ValidationLevel::Profile | ValidationLevel::Full) {
+        return Ok(());
+    }
+
+    if !context.has_wot_context() {
+        return Err(ValidateError::InvalidContext(
+            "@context must contain at least one standard WoT context URI \
+             (https://www.w3.org/2019/wot/td/v1 or https://www.w3.org/2022/wot/td/v1.1)"
+                .to_string(),
+        ));
+    }
+
+    if !context.is_wot_context_first() {
+        return Err(ValidateError::InvalidContext(
+            "@context must start with a standard WoT context URI \
+             (https://www.w3.org/2019/wot/td/v1 or https://www.w3.org/2022/wot/td/v1.1); \
+             extension namespaces must follow the standard context"
+                .to_string(),
+        ));
+    }
+
+    Ok(())
+}
+
+/// Validates the `op` values declared on Thing-level forms (TD 1.1 §5.3.4).
+///
+/// Forms declared at the Thing level may only carry meta-interaction
+/// operations that target the Thing as a whole (`readallproperties`,
+/// `writeallproperties`, `readmultipleproperties`, `writemultipleproperties`,
+/// `observeallproperties`, `unobserveallproperties`, `queryallactions`,
+/// `subscribeallevents`, `unsubscribeallevents`). Operations that belong to a
+/// specific affordance (e.g. `readproperty`, `invokeaction`) are rejected.
+/// Forms without an explicit `op` are accepted: Thing-level forms have no
+/// default operation, so an omitted `op` simply makes the form unusable until a
+/// consumer selects it by an operation it advertises elsewhere.
+pub(crate) fn validate_thing_level_form_operations(forms: &[Form]) -> Result<(), ValidateError> {
+    for form in forms {
+        let Some(operations) = &form.op else {
+            continue;
+        };
+        for operation in operations {
+            if !is_thing_level_operation(operation) {
+                return Err(ValidateError::InvalidOperation {
+                    context: "Thing.forms".to_string(),
+                    found: operation.as_str().to_string(),
+                });
+            }
+        }
+    }
+
+    Ok(())
+}
+
+/// Returns `true` when `operation` is a valid meta-operation for a Thing-level
+/// form (TD 1.1 §5.3.4).
+fn is_thing_level_operation(operation: &Operation) -> bool {
+    matches!(
+        operation,
+        Operation::ReadAllProperties
+            | Operation::WriteAllProperties
+            | Operation::ReadMultipleProperties
+            | Operation::WriteMultipleProperties
+            | Operation::ObserveAllProperties
+            | Operation::UnobserveAllProperties
+            | Operation::QueryAllActions
+            | Operation::SubscribeAllEvents
+            | Operation::UnsubscribeAllEvents
+    )
+}
+/// Validates that the Thing declares at least one interaction affordance or
+/// top-level form at Profile/Full level.
+///
+/// A WoT Profile-conformant Thing MUST provide at least one interaction
+/// affordance (property, action, event) or a top-level form so that consumers
+/// can discover a usable operation.
+pub(crate) fn validate_profile_interaction_presence(
+    has_properties: bool,
+    has_actions: bool,
+    has_events: bool,
+    has_top_level_forms: bool,
+    level: ValidationLevel,
+) -> Result<(), ValidateError> {
+    if !matches!(level, ValidationLevel::Profile | ValidationLevel::Full) {
+        return Ok(());
+    }
+
+    if !has_properties && !has_actions && !has_events && !has_top_level_forms {
+        return Err(ValidateError::InvalidContext(
+            "Profile-conformant Thing must declare at least one interaction \
+             affordance (properties, actions, events) or a top-level form"
+                .to_string(),
+        ));
+    }
+
+    Ok(())
 }

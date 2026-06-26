@@ -33,19 +33,24 @@ Current focus:
   protocol bindings, runtime registries, TD/form/binding-plan caches, payload
   codecs, and security providers. This first surface is about to be superseded
   by the Servient runtime redesign.
-- The Servient runtime redesign is the active next major increment. It is
-  governed by the locked design baseline
-  `docs/baseline/servient-design-baseline.md` (v3.0), its implementation
-  refinements `docs/baseline/servient-design-baseline-addendum.md` (v3.1), and
-  the sequencing plan `docs/plan/servient-runtime-redesign-plan.md`. It is a
-  one-shot breaking refactor to a single-generic interior-mutable `Servient<D>`
-  with a sync/async driving layer, an inbound serving path, and a zenoh server
-  binding.
-- The next concrete backend increment alongside the redesign is the opt-in
-  Rust `zenoh` runtime path behind `zenoh`, with live smoke and integration
-  coverage kept outside the default workspace test path.
+- The Servient runtime redesign has landed (phases SR-P0 through SR-P5) and
+  the runtime has since been hardened — handler reentrancy (sync `&self`
+  handlers cloned out of the per-Thing TD lock + a driving-loop `sync_lock`),
+  dynamic affordance lifecycle (per-affordance `ServerBinding::register_affordance`
+  / `unregister_affordance` + directory re-publish), inbound/outbound security
+  moved out of registry locks, and several diagnostics/robustness fixes. See
+  `docs/baseline/servient-design-baseline-addendum.md` §9 for the refinement
+  record. The redesign baseline is
+  `docs/baseline/servient-design-baseline.md` (v3.0) + addendum (v3.1), sequenced
+  by `docs/plan/servient-runtime-redesign-plan.md`.
+- The next concrete backend increment is the opt-in Rust `zenoh` runtime path
+  behind `zenoh`, with live smoke and integration coverage kept outside the
+  default workspace test path.
 - The current `zenoh` next-step target is live metadata coverage for
   express QoS, priority, and congestion control on observable runtime paths.
+- Tracked follow-up (not blocking): align handler `Send`/`Sync` trait-object
+  bounds with v3.0 §7 (addendum §9.3) once multi-thread sync driving is in
+  scope.
 - Defer `zenoh-pico` runtime injection until the target hardware
   platform, C ABI strategy, and polling model are confirmed.
 - Keep M7 conformance and no-std checks running across every crate that
@@ -53,18 +58,13 @@ Current focus:
 
 Immediate next sequence:
 
-1. Execute the Servient runtime redesign following
-   `docs/plan/servient-runtime-redesign-plan.md` (phases SR-P0 through SR-P5),
-   validating against the v3.0 baseline and v3.1 addendum. Each phase keeps
-   `cargo test --workspace` and the no-std checks green.
-2. Keep M7 checks and compatibility documentation aligned with the current
-   TD/TM, core, protocol binding, Discovery, and Servient surfaces as the
-   redesign lands.
-3. Treat `zenoh` as the only active concrete runtime increment and
+1. Keep M7 checks and compatibility documentation aligned with the current
+   TD/TM, core, protocol binding, Discovery, and Servient surfaces.
+2. Treat `zenoh` as the only active concrete runtime increment and
    expand its opt-in smoke and integration coverage without changing the
    default workspace verification path, starting with live metadata coverage
    for observable put and subscription paths.
-4. Keep `zenoh-pico` at the planning boundary until the target
+3. Keep `zenoh-pico` at the planning boundary until the target
    hardware platform is selected and the runtime injection strategy is
    documented for that platform.
 
@@ -373,8 +373,11 @@ fixes T1 (event pipeline) and T3 (principal threading):
   handler is registered.
 - **C6** (bulk property operations): `read_multiple_properties`,
   `read_all_properties`, `write_multiple_properties` on both
-  `ExposedThingHandle` and `ConsumedThingHandle`; fan-out over individual
-  property operations for binding portability.
+  `ExposedThingHandle` and `ConsumedThingHandle`. The consumed side prefers a
+  single Thing-level form declaring the matching bulk meta-operation (W3C TD
+  §6.3.3) and otherwise fans out over individual property operations; the
+  inbound serving path fans out across exposed handlers and combines the
+  results so Thing-level bulk forms are servable end-to-end.
 - **C7** (Discovery API): `DiscoveryMethod` enum (`Local` / `Directory` /
   `Multicast` / `Everything`); `ThingFilter` with method, url, query, fragment;
   `ThingDiscovery` process object implementing `Iterator<Item = Thing>` with
@@ -401,7 +404,13 @@ fixes T1 (event pipeline) and T3 (principal threading):
 - **M13** (runtime TD mutation): `ExposedThingHandle::add_property` /
   `add_action` / `add_event` / `remove_property` / `remove_action` /
   `remove_event` modify the TD after expose; handlers for removed affordances
-  are cleaned up automatically.
+  are cleaned up automatically. Mutations also propagate to the network side
+  via the per-affordance `ServerBinding::register_affordance` /
+  `unregister_affordance` API (default no-op; the zenoh binding declares /
+  undeclares the affordance's routes incrementally, tracked per-affordance)
+  and re-publish the post-mutation TD to the directory, closing the dynamic
+  affordance lifecycle (W3C Scripting API) so new affordances become remotely
+  reachable and discoverable and removed ones stop being served.
 - **M8** (async consumer API): `ConsumedThingHandle` gains async variants
   (`read_property_async`, `write_property_async`, `invoke_action_async`,
   `subscribe_event_async`, `observe_property_async`) behind the `async` feature;

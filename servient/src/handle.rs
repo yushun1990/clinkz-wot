@@ -15,18 +15,22 @@
 //! Remote interactions select a form, apply transport security, and invoke a
 //! binding through shared runtime registries snapshot from the Servient.
 
-use alloc::{collections::BTreeMap, string::String, sync::Arc};
+use alloc::{collections::BTreeMap, string::String, string::ToString, sync::Arc, vec::Vec};
 
 use clinkz_wot_core::{
-    EventBroker, EventName, EventSink, ExposedThing, InteractionInput, InteractionOutput, Payload,
-    Subscription, ThingId,
+    AffordanceTarget, CoreError, EventBroker, EventName, EventSink, InteractionInput,
+    InteractionOutput, Payload, Subscription, ThingId,
 };
 use clinkz_wot_protocol_bindings::{AffordanceRef, FormSelectionCriteria};
-use clinkz_wot_td::{data_type::Operation, thing::Thing};
+use clinkz_wot_td::{
+    data_type::Operation,
+    td_defaults::{FormContext, effective_form_operations},
+    thing::Thing,
+};
 
 use crate::{
-    InMemoryExposedThingRegistry, ServientResult, consumed::ConsumedThingEntry,
-    consumed::SubscriptionKey, servient::Servient,
+    ExposedThingRegistry, ServientResult, consumed::ConsumedThingEntry, consumed::SubscriptionKey,
+    servient::Servient,
 };
 
 /// Handle for a locally exposed Thing (baseline v3.0 §6 / addendum §4).
@@ -39,9 +43,9 @@ use crate::{
 /// [`set_property_handler`](Self::set_property_handler) and friends.
 pub struct ExposedThingHandle<D> {
     servient: Servient<D>,
-    registry: Arc<InMemoryExposedThingRegistry>,
+    registry: Arc<ExposedThingRegistry>,
     event_broker: EventBroker,
-    id: String,
+    id: Arc<str>,
 }
 
 impl<D> core::fmt::Debug for ExposedThingHandle<D> {
@@ -58,7 +62,7 @@ impl<D> Clone for ExposedThingHandle<D> {
             servient: self.servient.clone(),
             registry: Arc::clone(&self.registry),
             event_broker: self.event_broker.clone(),
-            id: self.id.clone(),
+            id: Arc::clone(&self.id),
         }
     }
 }
@@ -66,7 +70,7 @@ impl<D> Clone for ExposedThingHandle<D> {
 impl<D> ExposedThingHandle<D> {
     pub(crate) fn new(
         servient: Servient<D>,
-        registry: Arc<InMemoryExposedThingRegistry>,
+        registry: Arc<ExposedThingRegistry>,
         event_broker: EventBroker,
         id: String,
     ) -> Self {
@@ -74,13 +78,13 @@ impl<D> ExposedThingHandle<D> {
             servient,
             registry,
             event_broker,
-            id,
+            id: Arc::from(id),
         }
     }
 
     /// Returns the exposed Thing identity.
     pub fn thing_id(&self) -> &str {
-        &self.id
+        self.id.as_ref()
     }
 }
 
@@ -89,15 +93,23 @@ where
     D: clinkz_wot_discovery::ThingDirectory,
 {
     /// Reads a property, dispatching directly to the attached handler.
+    ///
+    /// The handler `Arc` is cloned out under a brief slot lock and invoked with
+    /// the lock released, so a handler may re-enter the Servient (C7).
     pub fn read_property(
         &self,
         name: &str,
         input: InteractionInput,
     ) -> ServientResult<InteractionOutput> {
-        self.registry
-            .dispatch(&self.id, |thing| thing.read_property(name, input))
-            .ok_or_else(|| crate::ServientError::ExposedThingNotFound(self.id.clone()))?
-            .map_err(Into::into)
+        let handler = self
+            .registry
+            .dispatch(&self.id, |thing| {
+                thing.ensure_property_affordance(name)?;
+                thing.read_handler(name).ok_or(CoreError::MissingHandler)
+            })
+            .ok_or_else(|| crate::ServientError::ExposedThingNotFound(self.id.to_string()))?
+            .map_err(crate::ServientError::from)?;
+        handler.read(input).map_err(Into::into)
     }
 
     /// Writes a property, dispatching directly to the attached handler.
@@ -106,10 +118,15 @@ where
         name: &str,
         input: InteractionInput,
     ) -> ServientResult<InteractionOutput> {
-        self.registry
-            .dispatch(&self.id, |thing| thing.write_property(name, input))
-            .ok_or_else(|| crate::ServientError::ExposedThingNotFound(self.id.clone()))?
-            .map_err(Into::into)
+        let handler = self
+            .registry
+            .dispatch(&self.id, |thing| {
+                thing.ensure_property_affordance(name)?;
+                thing.write_handler(name).ok_or(CoreError::MissingHandler)
+            })
+            .ok_or_else(|| crate::ServientError::ExposedThingNotFound(self.id.to_string()))?
+            .map_err(crate::ServientError::from)?;
+        handler.write(input).map_err(Into::into)
     }
 
     /// Reads multiple properties in one call (W3C Scripting API
@@ -132,13 +149,18 @@ where
     /// Reads all properties declared in the TD (W3C Scripting API
     /// `readAllProperties`).
     pub fn read_all_properties(&self) -> ServientResult<BTreeMap<String, InteractionOutput>> {
-        let td = self.thing_description()?;
+        let names = self
+            .with_thing_description(|td| {
+                td.properties
+                    .as_ref()
+                    .map(|props| props.keys().cloned().collect::<Vec<String>>())
+                    .unwrap_or_default()
+            })
+            .ok_or_else(|| crate::ServientError::ExposedThingNotFound(self.id.to_string()))?;
         let mut results = BTreeMap::new();
-        if let Some(properties) = td.properties.as_ref() {
-            for name in properties.keys() {
-                let output = self.read_property(name, InteractionInput::empty())?;
-                results.insert(name.clone(), output);
-            }
+        for name in &names {
+            let output = self.read_property(name, InteractionInput::empty())?;
+            results.insert(name.clone(), output);
         }
         Ok(results)
     }
@@ -161,10 +183,15 @@ where
         name: &str,
         input: InteractionInput,
     ) -> ServientResult<InteractionOutput> {
-        self.registry
-            .dispatch(&self.id, |thing| thing.invoke_action(name, input))
-            .ok_or_else(|| crate::ServientError::ExposedThingNotFound(self.id.clone()))?
-            .map_err(Into::into)
+        let handler = self
+            .registry
+            .dispatch(&self.id, |thing| {
+                thing.ensure_action_affordance(name)?;
+                thing.action_handler(name).ok_or(CoreError::MissingHandler)
+            })
+            .ok_or_else(|| crate::ServientError::ExposedThingNotFound(self.id.to_string()))?
+            .map_err(crate::ServientError::from)?;
+        handler.invoke(input).map_err(Into::into)
     }
 
     /// Subscribes to an event, dispatching directly to the attached handler.
@@ -174,10 +201,17 @@ where
         input: InteractionInput,
         sink: &mut dyn EventSink,
     ) -> ServientResult<InteractionOutput> {
-        self.registry
-            .dispatch(&self.id, |thing| thing.subscribe_event(name, input, sink))
-            .ok_or_else(|| crate::ServientError::ExposedThingNotFound(self.id.clone()))?
-            .map_err(Into::into)
+        let handler = self
+            .registry
+            .dispatch(&self.id, |thing| {
+                thing.ensure_event_affordance(name)?;
+                thing
+                    .subscribe_handler(name)
+                    .ok_or(CoreError::MissingHandler)
+            })
+            .ok_or_else(|| crate::ServientError::ExposedThingNotFound(self.id.to_string()))?
+            .map_err(crate::ServientError::from)?;
+        handler.subscribe(input, sink).map_err(Into::into)
     }
 
     /// Emits an event payload to all subscribers (W3C Scripting API
@@ -190,7 +224,7 @@ where
     pub fn emit_event(&self, name: &str, payload: Payload) -> ServientResult<()> {
         self.event_broker
             .publish(
-                &ThingId::from(self.id.as_str()),
+                &ThingId::from(self.id.as_ref()),
                 &EventName::from(name),
                 &payload,
             )
@@ -336,7 +370,22 @@ where
     pub fn thing_description(&self) -> ServientResult<Thing> {
         self.registry
             .thing_description(&self.id)
-            .ok_or_else(|| crate::ServientError::ExposedThingNotFound(self.id.clone()))
+            .ok_or_else(|| crate::ServientError::ExposedThingNotFound(self.id.to_string()))
+    }
+
+    /// Borrows the exposed Thing Description read-only under the per-Thing lock
+    /// and runs `f` without cloning the TD (W3C Scripting API efficiency
+    /// helper).
+    ///
+    /// The closure must not call back into this handle's interaction methods
+    /// (they re-acquire the per-Thing lock). Extract any owned data needed
+    /// before returning.
+    ///
+    /// Returns `None` when the Thing is no longer registered (drained or
+    /// destroyed), matching [`thing_description`](Self::thing_description)'s
+    /// not-found case.
+    pub fn with_thing_description<R>(&self, f: impl FnOnce(&Thing) -> R) -> Option<R> {
+        self.registry.with_thing_description(&self.id, f)
     }
 
     /// Adds a property affordance to the exposed Thing at runtime (W3C
@@ -346,16 +395,22 @@ where
         name: impl Into<String>,
         property: clinkz_wot_td::affordance::PropertyAffordance,
     ) -> ServientResult<()> {
+        let name = name.into();
         self.registry
-            .mutate(&self.id, |thing| thing.add_property(name, property))
-            .ok_or_else(|| crate::ServientError::ExposedThingNotFound(self.id.clone()))?
-            .map_err(Into::into)
+            .mutate(&self.id, |thing| thing.add_property(name.clone(), property))
+            .ok_or_else(|| crate::ServientError::ExposedThingNotFound(self.id.to_string()))?
+            .map_err(crate::ServientError::from)?;
+        self.servient
+            .sync_added_affordance(&self.id, &AffordanceTarget::Property(name))?;
+        Ok(())
     }
 
     /// Removes a property affordance from the exposed Thing.
     pub fn remove_property(&self, name: &str) -> ServientResult<()> {
         self.registry
             .mutate(&self.id, |thing| thing.remove_property(name));
+        self.servient
+            .sync_removed_affordance(&self.id, &AffordanceTarget::Property(name.into()));
         Ok(())
     }
 
@@ -365,16 +420,22 @@ where
         name: impl Into<String>,
         action: clinkz_wot_td::affordance::ActionAffordance,
     ) -> ServientResult<()> {
+        let name = name.into();
         self.registry
-            .mutate(&self.id, |thing| thing.add_action(name, action))
-            .ok_or_else(|| crate::ServientError::ExposedThingNotFound(self.id.clone()))?
-            .map_err(Into::into)
+            .mutate(&self.id, |thing| thing.add_action(name.clone(), action))
+            .ok_or_else(|| crate::ServientError::ExposedThingNotFound(self.id.to_string()))?
+            .map_err(crate::ServientError::from)?;
+        self.servient
+            .sync_added_affordance(&self.id, &AffordanceTarget::Action(name))?;
+        Ok(())
     }
 
     /// Removes an action affordance from the exposed Thing.
     pub fn remove_action(&self, name: &str) -> ServientResult<()> {
         self.registry
             .mutate(&self.id, |thing| thing.remove_action(name));
+        self.servient
+            .sync_removed_affordance(&self.id, &AffordanceTarget::Action(name.into()));
         Ok(())
     }
 
@@ -384,16 +445,22 @@ where
         name: impl Into<String>,
         event: clinkz_wot_td::affordance::EventAffordance,
     ) -> ServientResult<()> {
+        let name = name.into();
         self.registry
-            .mutate(&self.id, |thing| thing.add_event(name, event))
-            .ok_or_else(|| crate::ServientError::ExposedThingNotFound(self.id.clone()))?
-            .map_err(Into::into)
+            .mutate(&self.id, |thing| thing.add_event(name.clone(), event))
+            .ok_or_else(|| crate::ServientError::ExposedThingNotFound(self.id.to_string()))?
+            .map_err(crate::ServientError::from)?;
+        self.servient
+            .sync_added_affordance(&self.id, &AffordanceTarget::Event(name))?;
+        Ok(())
     }
 
     /// Removes an event affordance from the exposed Thing.
     pub fn remove_event(&self, name: &str) -> ServientResult<()> {
         self.registry
             .mutate(&self.id, |thing| thing.remove_event(name));
+        self.servient
+            .sync_removed_affordance(&self.id, &AffordanceTarget::Event(name.into()));
         Ok(())
     }
 }
@@ -411,7 +478,7 @@ where
 /// protocol binding through the interned entry's caches.
 pub struct ConsumedThingHandle<D> {
     servient: Servient<D>,
-    id: String,
+    id: Arc<str>,
     entry: Arc<ConsumedThingEntry>,
 }
 
@@ -427,7 +494,7 @@ impl<D> Clone for ConsumedThingHandle<D> {
     fn clone(&self) -> Self {
         Self {
             servient: self.servient.clone(),
-            id: self.id.clone(),
+            id: Arc::clone(&self.id),
             entry: Arc::clone(&self.entry),
         }
     }
@@ -437,14 +504,14 @@ impl<D> ConsumedThingHandle<D> {
     pub(crate) fn new(servient: Servient<D>, id: String, entry: Arc<ConsumedThingEntry>) -> Self {
         Self {
             servient,
-            id,
+            id: Arc::from(id),
             entry,
         }
     }
 
     /// Returns the consumed Thing identity.
     pub fn thing_id(&self) -> &str {
-        &self.id
+        self.id.as_ref()
     }
 
     /// Returns the consumed Thing Description.
@@ -479,7 +546,6 @@ where
     ) -> ServientResult<InteractionOutput> {
         self.servient.consumed_request(
             &self.entry,
-            &self.id,
             clinkz_wot_core::AffordanceTarget::Property(name.into()),
             AffordanceRef::Property(name),
             criteria,
@@ -509,7 +575,6 @@ where
     ) -> ServientResult<InteractionOutput> {
         self.servient.consumed_request(
             &self.entry,
-            &self.id,
             clinkz_wot_core::AffordanceTarget::Property(name.into()),
             AffordanceRef::Property(name),
             criteria_for_operation(criteria, Operation::WriteProperty),
@@ -539,7 +604,6 @@ where
     ) -> ServientResult<InteractionOutput> {
         self.servient.consumed_request(
             &self.entry,
-            &self.id,
             clinkz_wot_core::AffordanceTarget::Action(name.into()),
             AffordanceRef::Action(name),
             criteria_for_operation(criteria, Operation::InvokeAction),
@@ -576,7 +640,6 @@ where
     ) -> ServientResult<Subscription> {
         self.servient.consumed_subscribe(
             &self.entry,
-            &self.id,
             clinkz_wot_core::AffordanceTarget::Event(name.into()),
             AffordanceRef::Event(name),
             criteria_for_operation(criteria, Operation::SubscribeEvent),
@@ -621,7 +684,6 @@ where
     ) -> ServientResult<Subscription> {
         self.servient.consumed_subscribe(
             &self.entry,
-            &self.id,
             clinkz_wot_core::AffordanceTarget::Property(name.into()),
             AffordanceRef::Property(name),
             criteria_for_operation(criteria, Operation::ObserveProperty),
@@ -642,12 +704,37 @@ where
     /// Reads multiple remote properties (W3C Scripting API
     /// `readMultipleProperties`).
     ///
-    /// Each property is read individually through its own form selection and
-    /// binding invocation.
+    /// Prefers a single Thing-level form declaring the `readmultipleproperties`
+    /// operation (one round trip, W3C TD §6.3.3) when the consumed TD advertises
+    /// one; otherwise falls back to one read per property.
     pub fn read_multiple_properties(
         &self,
         names: &[&str],
     ) -> ServientResult<BTreeMap<String, InteractionOutput>> {
+        let names_owned: Vec<String> = names.iter().map(|n| String::from(*n)).collect();
+        if let Some(result) = self.thing_level_bulk(Operation::ReadMultipleProperties, {
+            let body = serde_json::to_vec(&names_owned).map_err(|err| {
+                crate::ServientError::from(CoreError::InvalidInteraction(alloc::format!(
+                    "failed to serialize readmultipleproperties names: {err}"
+                )))
+            })?;
+            InteractionInput::with_payload(Payload::new(body, BULK_CONTENT_TYPE))
+        }) {
+            let output = result?;
+            if let Some(map) = split_bulk_object_output(output) {
+                // Keep only the requested names, in case the remote returned
+                // extra properties.
+                let requested: BTreeMap<String, InteractionOutput> = map
+                    .into_iter()
+                    .filter(|(name, _)| names_owned.iter().any(|n| n == name))
+                    .collect();
+                if !requested.is_empty() {
+                    return Ok(requested);
+                }
+            }
+            // Split failed or returned nothing — fall through to fan-out.
+        }
+
         let mut results = BTreeMap::new();
         for &name in names {
             let output = self.read_property(name, InteractionInput::empty())?;
@@ -658,7 +745,21 @@ where
 
     /// Reads all properties declared in the consumed TD (W3C Scripting API
     /// `readAllProperties`).
+    ///
+    /// Prefers a single Thing-level form declaring the `readallproperties`
+    /// operation (one round trip, W3C TD §6.3.3) when the consumed TD advertises
+    /// one; otherwise falls back to one read per property.
     pub fn read_all_properties(&self) -> ServientResult<BTreeMap<String, InteractionOutput>> {
+        if let Some(result) =
+            self.thing_level_bulk(Operation::ReadAllProperties, InteractionInput::empty())
+        {
+            let output = result?;
+            if let Some(map) = split_bulk_object_output(output) {
+                return Ok(map);
+            }
+            // Split failed — fall through to fan-out.
+        }
+
         let mut results = BTreeMap::new();
         if let Some(properties) = self.entry.thing().properties.as_ref() {
             for name in properties.keys() {
@@ -671,24 +772,138 @@ where
 
     /// Writes multiple remote properties (W3C Scripting API
     /// `writeMultipleProperties`).
+    ///
+    /// Prefers a single Thing-level form declaring the `writemultipleproperties`
+    /// operation (one round trip, W3C TD §6.3.3) when the consumed TD advertises
+    /// one; otherwise falls back to one write per property.
     pub fn write_multiple_properties(
         &self,
         values: &BTreeMap<String, InteractionInput>,
     ) -> ServientResult<()> {
+        if let Some(result) = self.write_via_thing_level(Operation::WriteMultipleProperties, values)
+        {
+            return result.map(|_| ());
+        }
+
         for (name, input) in values {
             self.write_property(name, input.clone())?;
         }
         Ok(())
+    }
+
+    // -----------------------------------------------------------------------
+    // Thing-level bulk form preference (W3C TD §6.3.3).
+    //
+    // When the consumed TD advertises a Thing-level form for a bulk
+    // meta-operation, route the request through it (one round trip) instead of
+    // fanning out across N per-property forms. Fall back to fan-out when no such
+    // form exists or the bulk response cannot be interpreted.
+    // -----------------------------------------------------------------------
+
+    /// Returns `true` when the consumed TD declares a Thing-level form that
+    /// supports `operation`.
+    fn has_thing_level_form_for(&self, operation: Operation) -> bool {
+        let thing = self.entry.thing();
+        thing
+            .forms
+            .as_deref()
+            .unwrap_or(&[])
+            .iter()
+            .any(|form| effective_form_operations(FormContext::Thing, form).contains(&operation))
+    }
+
+    /// Issues a Thing-level bulk read/write request when a matching form exists.
+    ///
+    /// Returns `None` when no Thing-level form supports `operation`, so callers
+    /// can fall back to per-property fan-out.
+    fn thing_level_bulk(
+        &self,
+        operation: Operation,
+        input: InteractionInput,
+    ) -> Option<ServientResult<InteractionOutput>> {
+        if !self.has_thing_level_form_for(operation) {
+            return None;
+        }
+        Some(self.servient.consumed_request(
+            &self.entry,
+            AffordanceTarget::Thing,
+            AffordanceRef::Thing,
+            criteria_for_operation(FormSelectionCriteria::new(operation), operation),
+            input,
+        ))
+    }
+
+    /// Combines per-property write inputs into a single JSON-object payload and
+    /// issues a Thing-level bulk write when a matching form exists.
+    ///
+    /// Each value's payload body is parsed as a JSON value and assembled into a
+    /// `{name: value}` object. Returns `None` when no Thing-level form supports
+    /// `operation`.
+    fn write_via_thing_level(
+        &self,
+        operation: Operation,
+        values: &BTreeMap<String, InteractionInput>,
+    ) -> Option<ServientResult<InteractionOutput>> {
+        if !self.has_thing_level_form_for(operation) {
+            return None;
+        }
+
+        let mut combined = serde_json::Map::new();
+        for (name, input) in values {
+            match input.payload.as_ref() {
+                Some(payload) if !payload.body.is_empty() => {
+                    match serde_json::from_slice::<serde_json::Value>(payload.body.as_slice()) {
+                        Ok(value) => {
+                            combined.insert(name.clone(), value);
+                        }
+                        Err(_) => {
+                            // Treat as an opaque JSON string when the payload
+                            // is not valid JSON so no value is silently lost.
+                            combined.insert(
+                                name.clone(),
+                                serde_json::Value::String(
+                                    String::from_utf8_lossy(payload.body.as_slice()).into_owned(),
+                                ),
+                            );
+                        }
+                    }
+                }
+                _ => {
+                    combined.insert(name.clone(), serde_json::Value::Null);
+                }
+            }
+        }
+
+        let body = match serde_json::to_vec(&serde_json::Value::Object(combined)) {
+            Ok(body) => body,
+            Err(err) => {
+                return Some(Err(crate::ServientError::from(
+                    CoreError::InvalidInteraction(alloc::format!(
+                        "failed to serialize bulk write payload: {err}"
+                    )),
+                )));
+            }
+        };
+
+        let input = InteractionInput::with_payload(Payload::new(body, BULK_CONTENT_TYPE));
+        Some(self.servient.consumed_request(
+            &self.entry,
+            AffordanceTarget::Thing,
+            AffordanceRef::Thing,
+            criteria_for_operation(FormSelectionCriteria::new(operation), operation),
+            input,
+        ))
     }
 }
 
 // ---------------------------------------------------------------------------
 // Async consumer methods (behind `async` feature — M8).
 //
-// These provide an async API surface for consumers in async contexts. The
-// current implementation delegates to the synchronous path, resolving
-// immediately. Future native async bindings can replace the delegation with
-// async I/O without changing the API.
+// These provide an async API surface for consumers in async contexts. When
+// the underlying binding implements `AsyncClientBinding`, the call routes
+// through native async I/O (e.g., `session.get().await` for zenoh). When it
+// does not, the sync path is used as a fallback (which may block the async
+// executor).
 // ---------------------------------------------------------------------------
 
 #[cfg(feature = "async")]
@@ -697,12 +912,27 @@ where
     D: clinkz_wot_discovery::ThingDirectory,
 {
     /// Async variant of [`read_property`](Self::read_property).
+    ///
+    /// Routes through `AsyncClientBinding::invoke_async` when the concrete
+    /// binding implements it, giving true non-blocking I/O. Otherwise falls
+    /// back to the synchronous `invoke` path.
     pub async fn read_property_async(
         &self,
         name: &str,
         input: InteractionInput,
     ) -> ServientResult<InteractionOutput> {
-        self.read_property(name, input)
+        self.servient
+            .consumed_request_async(
+                &self.entry,
+                clinkz_wot_core::AffordanceTarget::Property(name.into()),
+                AffordanceRef::Property(name),
+                criteria_for_operation(
+                    FormSelectionCriteria::new(Operation::ReadProperty),
+                    Operation::ReadProperty,
+                ),
+                input,
+            )
+            .await
     }
 
     /// Async variant of [`write_property`](Self::write_property).
@@ -711,7 +941,18 @@ where
         name: &str,
         input: InteractionInput,
     ) -> ServientResult<InteractionOutput> {
-        self.write_property(name, input)
+        self.servient
+            .consumed_request_async(
+                &self.entry,
+                clinkz_wot_core::AffordanceTarget::Property(name.into()),
+                AffordanceRef::Property(name),
+                criteria_for_operation(
+                    FormSelectionCriteria::new(Operation::WriteProperty),
+                    Operation::WriteProperty,
+                ),
+                input,
+            )
+            .await
     }
 
     /// Async variant of [`invoke_action`](Self::invoke_action).
@@ -720,7 +961,18 @@ where
         name: &str,
         input: InteractionInput,
     ) -> ServientResult<InteractionOutput> {
-        self.invoke_action(name, input)
+        self.servient
+            .consumed_request_async(
+                &self.entry,
+                clinkz_wot_core::AffordanceTarget::Action(name.into()),
+                AffordanceRef::Action(name),
+                criteria_for_operation(
+                    FormSelectionCriteria::new(Operation::InvokeAction),
+                    Operation::InvokeAction,
+                ),
+                input,
+            )
+            .await
     }
 
     /// Async variant of [`subscribe_event`](Self::subscribe_event).
@@ -729,7 +981,18 @@ where
         name: &str,
         input: InteractionInput,
     ) -> ServientResult<Subscription> {
-        self.subscribe_event(name, input)
+        self.servient
+            .consumed_subscribe_async(
+                &self.entry,
+                clinkz_wot_core::AffordanceTarget::Event(name.into()),
+                AffordanceRef::Event(name),
+                criteria_for_operation(
+                    FormSelectionCriteria::new(Operation::SubscribeEvent),
+                    Operation::SubscribeEvent,
+                ),
+                input,
+            )
+            .await
     }
 
     /// Async variant of [`observe_property`](Self::observe_property).
@@ -738,7 +1001,18 @@ where
         name: &str,
         input: InteractionInput,
     ) -> ServientResult<Subscription> {
-        self.observe_property(name, input)
+        self.servient
+            .consumed_subscribe_async(
+                &self.entry,
+                clinkz_wot_core::AffordanceTarget::Property(name.into()),
+                AffordanceRef::Property(name),
+                criteria_for_operation(
+                    FormSelectionCriteria::new(Operation::ObserveProperty),
+                    Operation::ObserveProperty,
+                ),
+                input,
+            )
+            .await
     }
 }
 
@@ -751,4 +1025,35 @@ fn criteria_for_operation<'a>(
         content_type: criteria.content_type,
         subprotocol: criteria.subprotocol,
     }
+}
+
+/// Content type used for assembled and parsed bulk payloads (the WoT default).
+const BULK_CONTENT_TYPE: &str = "application/json";
+
+/// Splits a bulk read response payload (a JSON object `{name: value}`) into a
+/// per-property [`InteractionOutput`] map.
+///
+/// Returns `None` when the payload is missing or not a JSON object, so callers
+/// can fall back to per-property fan-out instead of failing the whole bulk
+/// operation.
+fn split_bulk_object_output(
+    output: InteractionOutput,
+) -> Option<BTreeMap<String, InteractionOutput>> {
+    let payload = output.payload?;
+    let map: serde_json::Map<String, serde_json::Value> =
+        serde_json::from_slice(payload.body.as_slice()).ok()?;
+    let content_type = if payload.content_type.is_empty() {
+        BULK_CONTENT_TYPE
+    } else {
+        payload.content_type.as_str()
+    };
+    let mut results = BTreeMap::new();
+    for (name, value) in map {
+        let body = serde_json::to_vec(&value).ok()?;
+        results.insert(
+            name,
+            InteractionOutput::with_payload(Payload::new(body, content_type)),
+        );
+    }
+    Some(results)
 }

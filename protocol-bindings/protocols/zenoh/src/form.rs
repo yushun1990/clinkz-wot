@@ -1,10 +1,7 @@
-use alloc::{
-    format,
-    string::{String, ToString},
-};
+use alloc::{format, string::String};
 
 use clinkz_wot_protocol_bindings::{
-    AffordanceRef, BindingError, FormSelectionCriteria, resolve_form_target,
+    AffordanceRef, FormSelectionCriteria, resolve_form_target,
     select_affordance_form_selection_with_result_filter,
 };
 use clinkz_wot_td::data_type::Operation;
@@ -92,13 +89,26 @@ pub fn is_zenoh_form_target(thing: &clinkz_wot_td::thing::Thing, form: &Form) ->
         .unwrap_or(false)
 }
 
-fn zenoh_target_matches(
+/// Resolves a form target and returns the zenoh target when the resolved href
+/// uses the zenoh scheme, or `None` otherwise.
+///
+/// This combines the scheme check of [`is_zenoh_form_target`] with the key
+/// expression extraction of [`extract_zenoh_target`] in a single target
+/// resolution. Callers that need both the scheme check and the key expression
+/// should prefer this over calling the two functions separately to avoid
+/// resolving the form target twice.
+pub fn try_extract_zenoh_target(
     thing: &clinkz_wot_td::thing::Thing,
     form: &Form,
-) -> ZenohBindingResult<bool> {
-    let target = resolve_form_target(thing, form).map_err(zenoh_target_error_from_binding)?;
-
-    Ok(target.href.as_str().starts_with(ZENOH_SCHEME))
+) -> ZenohBindingResult<Option<ZenohFormTarget>> {
+    let target = resolve_form_target(thing, form).map_err(ZenohBindingError::from)?;
+    if target.href.as_str().starts_with(ZENOH_SCHEME) {
+        Ok(Some(extract_zenoh_target_from_resolved_href(
+            target.href.as_str(),
+        )?))
+    } else {
+        Ok(None)
+    }
 }
 
 /// Extracts a zenoh key expression from a TD form.
@@ -108,7 +118,7 @@ pub fn extract_zenoh_target(
     thing: &clinkz_wot_td::thing::Thing,
     form: &Form,
 ) -> ZenohBindingResult<ZenohFormTarget> {
-    let target = resolve_form_target(thing, form).map_err(zenoh_target_error_from_binding)?;
+    let target = resolve_form_target(thing, form).map_err(ZenohBindingError::from)?;
     extract_zenoh_target_from_resolved_href(target.href.as_str())
 }
 
@@ -147,11 +157,33 @@ pub fn plan_zenoh_affordance_operation_with_criteria<'a>(
     affordance: AffordanceRef<'a>,
     criteria: FormSelectionCriteria<'_>,
 ) -> ZenohBindingResult<ZenohAffordanceOperationPlan<'a>> {
-    let selected =
-        select_affordance_form_selection_with_result_filter(thing, affordance, criteria, |form| {
-            zenoh_target_matches(thing, form)
-        })?;
-    let target = extract_zenoh_target(thing, selected.selection.form)?;
+    // The result filter resolves each candidate's form target to check the
+    // zenoh scheme. Because the filter API only yields a boolean, we cache the
+    // resolved href of the first matching candidate so the key expression can
+    // be extracted without resolving the target a second time.
+    let mut resolved_href: Option<String> = None;
+    let selected = select_affordance_form_selection_with_result_filter(
+        thing,
+        affordance,
+        criteria,
+        |form| -> ZenohBindingResult<bool> {
+            let target = resolve_form_target(thing, form).map_err(ZenohBindingError::from)?;
+            if target.href.as_str().starts_with(ZENOH_SCHEME) {
+                resolved_href = Some(target.href.as_str().into());
+                Ok(true)
+            } else {
+                Ok(false)
+            }
+        },
+    )?;
+    // Invariant: the closure above sets `resolved_href` immediately before
+    // returning `Ok(true)`, and the selection loop stops at the first
+    // `Ok(true)`. Reaching this point means a form was selected, so the
+    // cached href must be present.
+    let href = resolved_href.ok_or_else(|| {
+        ZenohBindingError::Selection("form selected without caching a resolved zenoh href".into())
+    })?;
+    let target = extract_zenoh_target_from_resolved_href(&href)?;
     let plan = ZenohOperationPlan {
         key_expr: target.key_expr,
         kind: zenoh_operation_kind(criteria.operation),
@@ -221,12 +253,5 @@ fn extension_string(form: &Form, term: &'static str) -> ZenohBindingResult<Optio
             message: "must be a string".into(),
         }),
         None => Ok(None),
-    }
-}
-
-fn zenoh_target_error_from_binding(err: BindingError) -> ZenohBindingError {
-    match err {
-        BindingError::TargetResolution(message) => ZenohBindingError::Target(message),
-        other => ZenohBindingError::Selection(other.to_string()),
     }
 }

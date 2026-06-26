@@ -7,8 +7,10 @@ use clinkz_wot_core::{
 use clinkz_wot_discovery::{InMemoryThingDirectory, ThingDirectory};
 
 use crate::{
-    ConsumedThingRegistry, InMemoryExposedThingRegistry,
-    servient::{BindingFactory, BindingFactoryRegistry, Servient, ServientShared, ServientState},
+    ConsumedThingRegistry, ExposedThingRegistry,
+    servient::{
+        BindingFactoryEntry, BindingFactoryRegistry, Servient, ServientShared, ServientState,
+    },
 };
 
 /// Builder for a Web of Things Servient.
@@ -18,11 +20,12 @@ use crate::{
 /// caches are internal concrete types and are no longer injectable.
 pub struct ServientBuilder<D = InMemoryThingDirectory> {
     pub(crate) directory: D,
-    pub(crate) binding_factories: Vec<BindingFactory>,
-    pub(crate) payload_codecs: Vec<Box<dyn PayloadCodec>>,
-    pub(crate) security_providers: Vec<Box<dyn SecurityProvider>>,
+    pub(crate) binding_factories: Vec<BindingFactoryEntry>,
+    pub(crate) payload_codecs: Vec<Arc<dyn PayloadCodec>>,
+    pub(crate) security_providers: Vec<Arc<dyn SecurityProvider>>,
     pub(crate) credential_store: Option<Arc<dyn CredentialStore>>,
     pub(crate) server_bindings: Vec<Arc<dyn ServerBinding>>,
+    pub(crate) normalize_payloads: bool,
     #[cfg(feature = "async")]
     pub(crate) async_server_bindings: Vec<Arc<dyn clinkz_wot_core::AsyncServerBinding>>,
 }
@@ -37,6 +40,7 @@ impl ServientBuilder<InMemoryThingDirectory> {
             security_providers: Vec::new(),
             credential_store: None,
             server_bindings: Vec::new(),
+            normalize_payloads: true,
             #[cfg(feature = "async")]
             async_server_bindings: Vec::new(),
         }
@@ -65,6 +69,7 @@ where
             security_providers: self.security_providers,
             credential_store: self.credential_store,
             server_bindings: self.server_bindings,
+            normalize_payloads: self.normalize_payloads,
             #[cfg(feature = "async")]
             async_server_bindings: self.async_server_bindings,
         }
@@ -73,21 +78,45 @@ where
     /// Registers a factory used to attach protocol bindings to consumed Things.
     pub fn binding_factory<F>(mut self, factory: F) -> Self
     where
-        F: Fn() -> Box<dyn ClientBinding> + 'static,
+        F: Fn() -> Box<dyn ClientBinding + Send + Sync> + 'static,
     {
-        self.binding_factories.push(Box::new(factory));
+        self.binding_factories.push(BindingFactoryEntry {
+            make: Box::new(factory),
+            supports: Arc::new(|_, _, _| true),
+        });
+        self
+    }
+
+    /// Registers a factory used to attach protocol bindings to consumed Things.
+    ///
+    /// The `supports` predicate lets the Servient skip instantiating bindings
+    /// that cannot handle the selected form/operation.
+    pub fn binding_factory_with_support<F, S>(mut self, factory: F, supports: S) -> Self
+    where
+        F: Fn() -> Box<dyn ClientBinding + Send + Sync> + 'static,
+        S: Fn(
+                &clinkz_wot_td::thing::Thing,
+                &clinkz_wot_td::form::Form,
+                clinkz_wot_td::data_type::Operation,
+            ) -> bool
+            + 'static,
+    {
+        self.binding_factories.push(BindingFactoryEntry {
+            make: Box::new(factory),
+            supports: Arc::new(supports),
+        });
         self
     }
 
     /// Registers a payload codec used by Servient interaction hooks.
     pub fn payload_codec(mut self, codec: impl PayloadCodec + 'static) -> Self {
-        self.payload_codecs.push(Box::new(codec));
+        self.payload_codecs.push(Arc::new(codec));
         self
     }
 
     /// Registers a security provider used by Servient interaction hooks.
     pub fn security_provider(mut self, provider: impl SecurityProvider + 'static) -> Self {
-        self.security_providers.push(Box::new(provider));
+        self.security_providers.push(Arc::new(provider));
         self
     }
 
@@ -95,6 +124,20 @@ where
     /// secrets (baseline addendum §1.2 `cz:credentialSource`).
     pub fn credential_store(mut self, store: Arc<dyn CredentialStore>) -> Self {
         self.credential_store = Some(store);
+        self
+    }
+
+    /// Controls whether consumed-interaction payloads are decoded and
+    /// re-encoded through registered codecs for canonicalization (default
+    /// `true`).
+    ///
+    /// Set to `false` for high-frequency deployments that do not need canonical
+    /// bytes (e.g. no signing/hashing) — this skips two `Vec<u8>` allocations
+    /// and a full decode+encode round-trip per interaction whose content type
+    /// matches a registered codec. Malformed payloads are no longer rejected by
+    /// the codec in this mode; validation responsibility moves to the handler.
+    pub fn normalize_payloads(mut self, enabled: bool) -> Self {
+        self.normalize_payloads = enabled;
         self
     }
 
@@ -133,23 +176,30 @@ where
         Servient::from_parts(
             ServientShared {
                 #[allow(clippy::arc_with_non_send_sync)]
-                exposed_registry: Arc::new(InMemoryExposedThingRegistry::new()),
+                exposed_registry: Arc::new(ExposedThingRegistry::new()),
                 #[allow(clippy::arc_with_non_send_sync)]
                 consumed_registry: Arc::new(ConsumedThingRegistry::new()),
                 binding_factories: BindingFactoryRegistry::from_factories(self.binding_factories),
                 #[allow(clippy::arc_with_non_send_sync)]
                 payload_codecs: Arc::new(MapLock::new(self.payload_codecs)),
                 #[allow(clippy::arc_with_non_send_sync)]
-                security_providers: Arc::new(MapLock::new(self.security_providers)),
+                security_providers: Arc::new(MapLock::new(Arc::new(self.security_providers))),
                 credential_store: self.credential_store,
                 event_broker,
+                normalize_payloads: self.normalize_payloads,
+                #[allow(clippy::arc_with_non_send_sync)]
+                sync_server_bindings: Arc::new(MapLock::new(Arc::from(
+                    self.server_bindings.clone(),
+                ))),
+                #[cfg(feature = "async")]
+                #[allow(clippy::arc_with_non_send_sync)]
+                async_server_bindings: Arc::new(MapLock::new(Arc::from(
+                    self.async_server_bindings.clone(),
+                ))),
             },
             ServientState {
                 directory: self.directory,
-                server_bindings: self.server_bindings,
                 sync_binding_cursor: 0,
-                #[cfg(feature = "async")]
-                async_server_bindings: self.async_server_bindings,
                 #[cfg(feature = "async")]
                 async_binding_generation,
                 #[cfg(feature = "async")]

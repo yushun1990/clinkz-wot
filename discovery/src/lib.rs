@@ -23,6 +23,6 @@ pub use directory::{
 };
 pub use error::{DiscoveryError, DiscoveryResult};
 pub use query::{DirectoryQuery, QueryFilter, QueryPredicate};
-pub use scripting::{ThingDiscovery, ThingFilter, discover};
+pub use scripting::{DiscoveryMethod, ThingDiscovery, ThingFilter, discover};
 #[cfg(feature = "std")]
 pub use storage::SharedThingDirectory;

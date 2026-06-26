@@ -2,15 +2,13 @@ use alloc::{
     boxed::Box,
     collections::BTreeMap,
     string::{String, ToString},
-    vec,
-    vec::Vec,
 };
 
 use clinkz_wot_core::{
     AffordanceTarget, BindingRequest, ClientBinding, CoreError, CoreResult, InteractionInput,
     InteractionOutput, Payload, Subscription, SubscriptionGuard,
 };
-use clinkz_wot_protocol_bindings::{AffordanceRef, BindingError, validate_affordance_form};
+use clinkz_wot_protocol_bindings::{AffordanceRef, BindingError, validate_form_operation};
 use clinkz_wot_td::{data_type::Operation, form::Form};
 
 use crate::ZenohOperationPlan;
@@ -58,8 +56,15 @@ pub trait ZenohTransport {
 /// concrete zenoh session execution behind an injected transport adapter.
 #[derive(Debug, Clone)]
 pub struct ZenohBindingTransport<T> {
-    supported_operations: Vec<Operation>,
+    /// Bitset of supported [`Operation`]s (bit position = discriminant).
+    supported_operations: u32,
     transport: T,
+}
+
+fn ops_to_bitset(ops: impl IntoIterator<Item = Operation>) -> u32 {
+    ops.into_iter()
+        .map(|op| 1u32 << (op as u32))
+        .fold(0, |acc, bit| acc | bit)
 }
 
 impl<T> ZenohBindingTransport<T> {
@@ -69,7 +74,7 @@ impl<T> ZenohBindingTransport<T> {
         operations: impl IntoIterator<Item = Operation>,
     ) -> Self {
         Self {
-            supported_operations: operations.into_iter().collect(),
+            supported_operations: ops_to_bitset(operations),
             transport,
         }
     }
@@ -98,7 +103,8 @@ where
     T: ZenohTransport,
 {
     fn supports(&self, form: &Form, operation: Operation) -> bool {
-        self.supported_operations.contains(&operation) && crate::form::is_zenoh_form(form)
+        (self.supported_operations & (1u32 << (operation as u32))) != 0
+            && crate::form::is_zenoh_form(form)
     }
 
     fn supports_with_thing(
@@ -107,12 +113,12 @@ where
         form: &Form,
         operation: Operation,
     ) -> bool {
-        self.supported_operations.contains(&operation)
+        (self.supported_operations & (1u32 << (operation as u32))) != 0
             && crate::form::is_zenoh_form_target(thing, form)
     }
 
     fn invoke(&self, request: BindingRequest) -> CoreResult<InteractionOutput> {
-        validate_affordance_form(
+        validate_form_operation(
             &request.thing,
             affordance_ref_from_target(&request.target),
             &request.form,
@@ -132,7 +138,7 @@ where
         &self,
         request: BindingRequest,
     ) -> CoreResult<(Subscription, Box<dyn SubscriptionGuard>)> {
-        validate_affordance_form(
+        validate_form_operation(
             &request.thing,
             affordance_ref_from_target(&request.target),
             &request.form,
@@ -178,6 +184,13 @@ fn core_error_from_binding_error(err: BindingError) -> CoreError {
 
 fn core_error_from_zenoh_error(err: crate::ZenohBindingError) -> CoreError {
     match err {
+        // Preserve structured shared-binding errors (e.g. `UnknownAffordance`)
+        // by routing them through the same mapper used by the direct
+        // `validate_form_operation` path, instead of collapsing them to
+        // `InvalidInteraction(String)`.
+        crate::ZenohBindingError::Shared(binding_error) => {
+            core_error_from_binding_error(binding_error)
+        }
         crate::ZenohBindingError::Selection(message)
         | crate::ZenohBindingError::UnsupportedForm(message)
         | crate::ZenohBindingError::InvalidExtension { message, .. } => {
@@ -198,10 +211,10 @@ fn affordance_ref_from_target(target: &AffordanceTarget) -> AffordanceRef<'_> {
     }
 }
 
-fn default_supported_operations() -> Vec<Operation> {
+fn default_supported_operations() -> u32 {
     use Operation::*;
 
-    vec![
+    ops_to_bitset([
         ReadProperty,
         WriteProperty,
         ObserveProperty,
@@ -220,5 +233,5 @@ fn default_supported_operations() -> Vec<Operation> {
         QueryAllActions,
         SubscribeAllEvents,
         UnsubscribeAllEvents,
-    ]
+    ])
 }

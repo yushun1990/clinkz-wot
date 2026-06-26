@@ -427,7 +427,9 @@ fn selects_action_and_event_forms_with_default_operations() {
     assert_eq!(selected_event.selection.form, &event_form);
     assert_eq!(
         selected_event.selection.operations.as_ref(),
-        &[Operation::SubscribeEvent, Operation::UnsubscribeEvent]
+        // TD 1.1 §5.3.3: the default `op` for an Event form is subscribeevent
+        // only; unsubscribeevent must be declared explicitly when needed.
+        &[Operation::SubscribeEvent]
     );
 }
 
@@ -518,19 +520,29 @@ fn validates_selected_event_form_with_default_operations() {
         .build()
         .unwrap();
 
+    // The default Event form operation is `subscribeevent` (TD 1.1 §5.3.3), so
+    // validating against `SubscribeEvent` resolves the default and succeeds.
     let selected = validate_affordance_form(
+        &thing,
+        AffordanceRef::Event("ready"),
+        &form,
+        Operation::SubscribeEvent,
+    )
+    .unwrap();
+
+    assert_eq!(selected.index, 0);
+    assert_eq!(selected.operations.as_ref(), &[Operation::SubscribeEvent]);
+
+    // `unsubscribeevent` is not part of the default and must be rejected for a
+    // form that does not declare it explicitly.
+    let err = validate_affordance_form(
         &thing,
         AffordanceRef::Event("ready"),
         &form,
         Operation::UnsubscribeEvent,
     )
-    .unwrap();
-
-    assert_eq!(selected.index, 0);
-    assert_eq!(
-        selected.operations.as_ref(),
-        &[Operation::SubscribeEvent, Operation::UnsubscribeEvent]
-    );
+    .unwrap_err();
+    assert!(matches!(err, BindingError::UnsupportedOperation(_)));
 }
 
 #[test]

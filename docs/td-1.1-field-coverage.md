@@ -16,7 +16,7 @@ Status values:
 
 | TD term | Rust field | Rust type | Required | OneOrMany | Defaults | Extensions | Status | Notes |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| `@context` | `Thing::context` | `Context` | Yes | String or array | WoT TD 1.1 default in builder/default | Object context entries preserve extension vocabulary terms | partial | Deserialization accepts string/object array forms, but validation levels still need to check required standard context rules explicitly. |
+| `@context` | `Thing::context` | `Context` | Yes | String or array | WoT TD 1.1 default in builder/default | Object context entries preserve extension vocabulary terms | covered | Deserialization accepts string/object array forms. Basic validation checks required standard-context rules; Profile/Full validation additionally requires a standard WoT context URI to be the first `@context` entry. |
 | `@type` | `Thing::_metadata.tags` | `Option<Vec<String>>` | No | Yes | None | N/A | covered | Flattened through `Metadata`. |
 | `title` | `Thing::_metadata.title` | `Option<String>` | Yes | No | None | N/A | partial | Current validation checks non-empty title. Type is optional to keep deserialization tolerant. |
 | `titles` | `Thing::_metadata.titles` | `Option<MultiLanguage>` | No | No | None | N/A | covered | Multi-language map is represented. |
@@ -75,7 +75,7 @@ Status values:
 | `response` | `Form::response` | `Option<ExpectedResponse>` | No | No | None | `ExpectedResponse::_extra_fields` | covered | Primary response metadata represented. |
 | `additionalResponses` | `Form::additional_responses` | `Option<Vec<AdditionalExpectedResponse>>` | No | No | None | `AdditionalExpectedResponse::_extra_fields` | covered | Additional response metadata represented. |
 | `subprotocol` | `Form::subprotocol` | `Option<String>` | No | No | None | N/A | covered | Represented. |
-| `op` | `Form::op` | `Option<Vec<Operation>>` | No | Yes | Context-dependent | N/A | covered | Operations are typed. Basic validation rejects operations outside the affordance context, and `td_defaults::effective_form_operations` implements TD 1.1 default inference. |
+| `op` | `Form::op` | `Option<Vec<Operation>>` | No | Yes | Context-dependent | N/A | covered | Operations are typed. Basic validation rejects operations outside the affordance context, validates that Thing-level forms only declare meta-operations (TD 1.1 §5.3.4), and `td_defaults::effective_form_operations` implements TD 1.1 default inference. |
 | Unknown form terms | `Form::_extra_fields` | `ExtensionMap` | No | N/A | N/A | Yes | covered | Unknown form fields are preserved. |
 
 ## Link
@@ -104,8 +104,8 @@ Status values:
 | `unit` | `DataSchemaContext::unit` | `Option<String>` | All schemas | No | No | None | N/A | covered | Represented. |
 | `oneOf` | `DataSchemaContext::one_of` | `Option<Vec<DataSchema>>` | All schemas | No | No | None | Via nested schemas | covered | Represented. |
 | `enum` | `DataSchemaContext::enumerate` | `Option<Vec<serde_json::Value>>` | All schemas | No | No | None | N/A | covered | Represented as JSON values. |
-| `readOnly` | `DataSchemaContext::read_only` | `bool` | All schemas | No | No | `false` | N/A | covered | Flexible bool deserializer. |
-| `writeOnly` | `DataSchemaContext::write_only` | `bool` | All schemas | No | No | `false` | N/A | covered | Flexible bool deserializer. |
+| `readOnly` | `DataSchemaContext::read_only` | `bool` | All schemas | No | No | `false` | N/A | covered | Flexible bool deserializer. Basic validation rejects schemas where `readOnly` and `writeOnly` are both `true`. |
+| `writeOnly` | `DataSchemaContext::write_only` | `bool` | All schemas | No | No | `false` | N/A | covered | Flexible bool deserializer. Basic validation rejects schemas where `readOnly` and `writeOnly` are both `true`. |
 | `format` | `DataSchemaContext::format` | `Option<String>` | All schemas | No | No | None | N/A | covered | Represented. |
 | `type` | `DataSchemaContext::data_type` | `Option<String>` | All schemas | No | No | None | N/A | covered | Represented as string. Deserialization prefers the explicit `type` field for concrete variant selection, and Basic validation rejects type-to-variant mismatches. |
 | `items` | `ArraySchema::items` | `Option<Vec<DataSchema>>` | Array | No | Yes | None | Via nested schemas | covered | OneOrMany represented. |
@@ -162,9 +162,23 @@ Status values:
 
 ## Follow-Up Tasks
 
-- Add Profile and Full validation rules beyond the current Basic checks,
-  including standard-context requirements and Profile-specific form
-  constraints.
+Completed compliance hardening (TD 1.1 REC alignment):
+
+- Event affordance default `op` is `subscribeevent` only (TD 1.1 §5.3.3);
+  `unsubscribeevent` must be declared explicitly when needed.
+- Thing-level forms only accept meta-operations (`readallproperties`,
+  `queryallactions`, etc.) per TD 1.1 §5.3.4; affordance-scoped operations on a
+  Thing-level form are rejected at Basic validation.
+- Profile/Full validation requires a standard WoT context URI to be the first
+  `@context` entry so JSON-LD processors resolve the WoT vocabulary before any
+  extension namespace.
+- `DataSchema` instances where `readOnly` and `writeOnly` are both `true` are
+  rejected at Basic validation (JSON Schema / TD 1.1 mutual exclusion).
+
+Remaining follow-up work:
+
+- Add further Profile and Full validation rules beyond the current Basic checks,
+  including Profile-specific form presence constraints.
 - Validate remaining scheme-specific security details that are not covered by
   the current API key, combo, and OAuth2 checks.
 - Keep fixtures aligned with downstream runtime contracts, especially

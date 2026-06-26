@@ -2,33 +2,102 @@
 //!
 //! Provides a discovery process object with an async `next()` method and
 //! fragment-based filtering aligned with the W3C WoT Scripting API.
+//!
+//! # Discovery methods
+//!
+//! [`ThingFilter::method`] selects the discovery mechanism:
+//!
+//! - [`DiscoveryMethod::Local`] — search the local in-memory directory. Only
+//!   the `fragment` filter is applied.
+//! - [`DiscoveryMethod::Everything`] — search all available sources. In the
+//!   current implementation this is equivalent to `Local` because no remote
+//!   transports are wired.
+//! - [`DiscoveryMethod::Directory`] / [`DiscoveryMethod::Multicast`] — require
+//!   a protocol-specific transport that is not yet available. `discover()`
+//!   returns a [`ThingDiscovery`] whose first `next()` / `next_now()` call
+//!   yields `None` with an error message explaining the deferral.
 
 use alloc::{
     collections::{BTreeMap, VecDeque},
     string::{String, ToString},
-    vec::Vec,
 };
 
 use clinkz_wot_td::{data_type::ExtensionMap, thing::Thing};
 use serde::Serialize;
 use serde_json::Value;
 
-use crate::{DirectoryQuery, DiscoveryResult, ThingDirectory};
+use crate::{DiscoveryResult, ThingDirectory};
+
+/// Discovery mechanism selection (WoT Scripting API `DiscoveryMethod`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum DiscoveryMethod {
+    /// Search a local Thing Description Directory.
+    ///
+    /// Only the `fragment` and `query` filters are applied against the local
+    /// directory's contents.
+    #[default]
+    Local,
+    /// Search a remote Thing Description Directory at `ThingFilter::url`.
+    ///
+    /// Requires a protocol-specific transport (e.g., HTTP TDD client) that is
+    /// not yet wired. `discover()` returns a discovery with an error.
+    Directory,
+    /// Search via multicast (e.g., CoAP multicast discovery).
+    ///
+    /// Requires a protocol-specific transport that is not yet wired.
+    Multicast,
+    /// Search all available sources (local + remote + multicast).
+    ///
+    /// In the current implementation this is equivalent to `Local`.
+    Everything,
+}
 
 /// Fragment filter used by the discovery API.
 pub type ThingFragment = ExtensionMap;
 
 /// Filter for discovery.
+///
+/// Mirrors the W3C WoT Scripting API `ThingFilter` with `method`, `url`,
+/// `query`, and `fragment` dimensions.
 #[derive(Debug, Clone, Default)]
 pub struct ThingFilter {
-    /// Optional fragment filter matching TD fields.
+    /// Discovery mechanism to use.
+    pub method: DiscoveryMethod,
+    /// URL of the remote directory (used with [`DiscoveryMethod::Directory`]).
+    pub url: Option<String>,
+    /// Query string for structured queries (e.g., SPARQL, JSONPath).
+    ///
+    /// When set alongside `fragment`, both must match for a Thing to be
+    /// included in the results. The local directory applies `query` as a
+    /// substring match against the serialized TD when a structured query
+    /// backend is not available.
+    pub query: Option<String>,
+    /// Fragment filter matching TD fields.
     pub fragment: Option<ThingFragment>,
 }
 
 impl ThingFilter {
-    /// Creates an empty filter.
+    /// Creates an empty filter with the default method (`Local`).
     pub fn new() -> Self {
         Self::default()
+    }
+
+    /// Sets the discovery method.
+    pub fn method(mut self, method: DiscoveryMethod) -> Self {
+        self.method = method;
+        self
+    }
+
+    /// Sets the remote directory URL.
+    pub fn url(mut self, url: impl Into<String>) -> Self {
+        self.url = Some(url.into());
+        self
+    }
+
+    /// Sets the query string.
+    pub fn query(mut self, query: impl Into<String>) -> Self {
+        self.query = Some(query.into());
+        self
     }
 
     /// Sets the fragment filter.
@@ -72,8 +141,8 @@ impl ThingDiscovery {
     }
 
     /// Fills the result buffer from a completed directory query.
-    pub(crate) fn set_results(&mut self, things: Vec<Thing>) {
-        self.results = things.into_iter().collect();
+    pub(crate) fn set_results(&mut self, things: alloc::collections::VecDeque<Thing>) {
+        self.results = things;
     }
 
     /// Sets an error message on the discovery process.
@@ -140,6 +209,14 @@ impl core::fmt::Debug for ThingDiscovery {
 
 /// Runs discovery against a directory backend using the given filter.
 ///
+/// For [`DiscoveryMethod::Local`] and [`DiscoveryMethod::Everything`], this
+/// searches the directory with fragment and query filtering.
+///
+/// For [`DiscoveryMethod::Directory`] and [`DiscoveryMethod::Multicast`], the
+/// returned [`ThingDiscovery`] has an error set, because remote transports are
+/// not yet wired. Callers should check [`ThingDiscovery::error`] after
+/// draining results.
+///
 /// Fragment matching prefers direct `Thing` field comparison over
 /// `serde_json::to_value` for the common TD top-level fields (`id`, `title`,
 /// `base`, affordance maps, etc.), avoiding the cost of serializing each
@@ -150,23 +227,59 @@ pub fn discover<D>(directory: &D, filter: ThingFilter) -> DiscoveryResult<ThingD
 where
     D: ThingDirectory,
 {
-    let mut discovery = ThingDiscovery::new(filter);
-    let page = directory.query(DirectoryQuery::all());
-    let fragment = discovery.filter_ref().fragment.as_ref();
-
-    let mut things = Vec::with_capacity(page.entries.len());
-    for entry in page.entries {
-        if let Some(fragment) = fragment {
-            if matches_fragment(&entry.thing, fragment) {
-                things.push(entry.thing);
-            }
-        } else {
-            things.push(entry.thing);
+    // Methods that require a protocol-specific transport return an error
+    // discovery immediately.
+    match filter.method {
+        DiscoveryMethod::Directory => {
+            let mut discovery = ThingDiscovery::new(filter);
+            discovery.set_error(
+                "remote directory discovery requires a protocol-specific transport; \
+                 set ThingFilter::url and register a directory client binding",
+            );
+            return Ok(discovery);
         }
+        DiscoveryMethod::Multicast => {
+            let mut discovery = ThingDiscovery::new(filter);
+            discovery.set_error(
+                "multicast discovery requires a protocol-specific transport \
+                 (e.g., CoAP multicast)",
+            );
+            return Ok(discovery);
+        }
+        DiscoveryMethod::Local | DiscoveryMethod::Everything => {}
     }
 
-    discovery.set_results(things);
+    let mut discovery = ThingDiscovery::new(filter);
+    let fragment = discovery.filter_ref().fragment.as_ref();
+    let query = discovery.filter_ref().query.as_deref();
+
+    // Feed matches directly into the discovery's VecDeque (via set_results)
+    // without an intermediate Vec + collect→VecDeque conversion.
+    let mut results = alloc::collections::VecDeque::new();
+    directory.for_each_thing(|thing| {
+        if fragment.is_none_or(|frag| matches_fragment(thing, frag))
+            && query.is_none_or(|q| matches_query(thing, q))
+        {
+            results.push_back(thing.clone());
+        }
+    });
+    discovery.set_results(results);
     Ok(discovery)
+}
+
+/// Returns `true` when `thing` matches the query string.
+///
+/// The query is applied as a substring match against the serialized TD JSON
+/// when no structured query backend is available. This is a pragmatic local
+/// filter — remote directory backends may interpret `query` as SPARQL or
+/// JSONPath.
+fn matches_query(thing: &Thing, query: &str) -> bool {
+    if query.is_empty() {
+        return true;
+    }
+    serde_json::to_string(thing)
+        .unwrap_or_default()
+        .contains(query)
 }
 
 /// Returns `true` when `thing` matches every `(key, value)` pair in `fragment`.

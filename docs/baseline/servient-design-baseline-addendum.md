@@ -342,6 +342,10 @@ This keeps the sync flavor aligned with the mental model of native-async
 - multi-binding fairness is improved by resuming polling from the binding after
   the one that most recently produced work.
 
+Implementations may keep the registered sync binding list as an immutable
+snapshot, such as `Arc<[Arc<dyn ServerBinding>]>`, so each poll clones only a
+shared pointer instead of rebuilding the live binding vector.
+
 `serve_sync` remains the std host/cloud convenience wrapper that repeatedly
 invokes `poll_serve_sync`, but it should be understood as a host-facing loop,
 not the defining semantics of the sync flavor. Host implementations may apply
@@ -377,3 +381,125 @@ blocked a concrete implementation. With Sections 1–6 locked:
    no-std verification alignment.
 
 No LOCKED decision in v3.0 is changed by this addendum.
+
+## 9. Post-v3.1 Hardening Refinements
+
+The items below landed in post-redesign hardening passes. They are
+**implementation refinements consistent with v3.0** (no LOCKED decision is
+reversed); recorded here so the doc reflects the current runtime state.
+
+### 9.1 Handler reentrancy fully realized (closes the v3.0 §7 gap)
+
+v3.0 §7 states *"Locks are never held across `.await`, and never held across a
+handler that calls back into the Servient,"* but only enumerated `emitEvent`
+(EventBroker lock) and `destroy()` (map lock) as the reentrant cases. The
+implementation now honors that contract for **all** reentrant paths:
+
+- Sync handler trait objects are `&self` (not `&mut self`) and stored as
+  `Arc<dyn …>`, so the driving path clones the handler `Arc` out under a brief
+  per-Thing TD lock and invokes it with that lock **released**. A sync handler
+  may therefore freely re-enter the Servient (`read_property`, `add_property`,
+  `set_*_handler`, `destroy`, `emit_event`, …) without self-deadlock.
+- `ThingSlot` gained a `sync_lock` (`MapLock<()>`) held only by the **sync
+  driving loop** across a handler call, mirroring the async path's
+  `async_lock`. Application-facing handle methods and TD `mutate` take only the
+  brief TD lock, so re-entrant calls do not contend with it. Cross-thread
+  driving-loop interactions within one Thing still serialize (v3.0 §7);
+  application-facing handle calls are not serialized against an in-flight
+  driving handler (matching the async path's existing semantics). Handlers that
+  share mutable state across affordances must synchronize internally.
+- The async driving path's sync-handler fallback was brought under the same
+  clone-out discipline (it previously ran sync handlers under the TD lock).
+
+### 9.2 Dynamic affordance lifecycle (W3C Scripting API)
+
+Runtime TD mutation (`ExposedThingHandle::add_property` / `add_action` /
+`add_event` / `remove_*`) now propagates to the network side, not just the
+local TD:
+
+- `ServerBinding` (and `AsyncServerBinding`) gained
+  `register_affordance(thing_id, target, td)` / `unregister_affordance(thing_id,
+  target)` with **default no-op** implementations (backward compatible). The
+  zenoh binding implements them: route tracking is per-affordance
+  (`BTreeMap<thing_id, BTreeMap<affordance_key, routes>>`), so a single
+  affordance's zenoh routes are declared/undeclared incrementally without
+  re-declaring the whole Thing; event/observable-property broker sinks are
+  registered/removed in step.
+- After a mutation the Servient calls the new API on every server binding and
+  best-effort re-publishes the post-mutation TD to the directory
+  (`directory.update`). Route-registration failure on add is fatal (caller can
+  roll back the local mutation); directory failure is best-effort.
+
+This closes the previous "locally visible but remotely unreachable /
+undiscoverable" gap.
+
+### 9.3 Tracked divergence: handler `Send`/`Sync` bounds
+
+v3.0 §7 ("Handler and binding bounds") specifies sync trait objects `+ Send` and
+async `+ Send + Sync`. **ClientBinding trait objects are now `+ Send + Sync`**
+(forced by §9.4's binding-instance caching, which stores a live binding inside
+the `Send` consumed-Thing entry). The remaining divergence is that **sync
+handler trait objects are still non-`Send`** (and async handlers are `+ Send`
+but not `+ Sync`); aligning those with v3.0 §7 is tracked as a follow-up (it
+forces downstream handler impls off `Rc` onto `Arc`), not a reversal.
+
+### 9.4 Consumed hot-path binding reuse (live instance caching)
+
+The consumed-Thing interaction hot path previously reconstructed a fresh
+`Box<dyn ClientBinding>` via the factory's `make_binding()` and wrapped it in a
+temporary `BoundConsumedThing` on **every** request — even on plan-cache hit.
+This conflicted with v3.0 §5.1's "live instance/resource reuse" goal and would
+become a bottleneck if binding construction allocates session handles, buffers,
+or subscription state.
+
+The `BindingPlan` cached in `ConsumedThingEntry` now also holds the **live
+binding instance** (`Arc<dyn ClientBinding + Send + Sync>`). On plan-cache hit
+(factory-generation match), the cached binding is reused via a cheap `Arc`
+clone — no `make_binding`, no `BoundConsumedThing` allocation. The
+`consumed_request` path invokes `binding.invoke` directly (mirroring the
+existing `consumed_subscribe` path), and the generation-mismatch revalidation
+reuses the cached binding for its `supports` check (factories are append-only,
+so a cached binding's factory index stays valid).
+
+### 9.5 Deployment patterns and platform boundary
+
+The Servient is positioned for two deployment patterns (documented in
+`docs/clinkz-platform-context.md`):
+
+- **Embedded Servient** (devices, gateways): the engine IS the runtime.
+  Multiple Things can be exposed from one Servient sharing a single zenoh
+  session. Handlers implement device/gateway business logic.
+- **TD-only** (microservices, third-party systems): no engine is needed; the
+  service publishes a TD describing its existing HTTP/gRPC endpoints. WoT
+  consumers discover the TD via the TDD and call the service directly via a
+  ConsumedThing + protocol binding.
+
+**Edge governance** emerges naturally from Servient + Zenoh + TDD: device
+registration (`expose` → TDD `register`), semantic discovery (TD fields),
+cross-network routing (zenoh), and event streaming (broker + PublisherSink).
+This covers the core IoT/edge governance surface without the engine containing
+governance logic.
+
+**Architectural boundary**: the engine stays protocol-neutral and does not
+include governance features that are invasive to the protocol or dispatch flow
+(load balancing, circuit breaking, rate limiting, active health probing,
+distributed tracing). These belong to the Clinkz platform layer (above the
+engine, using the engine's trait surfaces) or to the protocol layer (zenoh
+router configuration, service mesh).
+
+### 9.6 Concurrent async dispatch in `serve()` (cross-Thing concurrency)
+
+The `serve()` loop now dispatches requests **concurrently** across different
+Things using `tokio::select!` + a local `FuturesUnordered` for in-flight
+dispatches. While one dispatch `.await`s (e.g. a slow async handler), the loop
+continues accepting new requests and polling other in-flight dispatches,
+giving cross-Thing async concurrency.
+
+This is achieved **without `tokio::spawn`**: all dispatch futures run on the
+same task, so `Servient` does **not** need to be `Send`. This sidesteps the
+handler `Send`/`Sync` divergence (§9.3) entirely. Within a single Thing,
+dispatch is still serialized by the per-Thing `async_lock` (baseline §7).
+
+`poll_serve()` (single-step API for fine-grained/manual driving) retains its
+sequential model. A periodic generation check (every 500 ms via a `select!`
+branch) detects runtime-added async bindings and rebuilds the accept state.

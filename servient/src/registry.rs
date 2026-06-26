@@ -1,6 +1,6 @@
 //! Two-level locking for the exposed-Thing registry (baseline v3.0 §7).
 //!
-//! [`InMemoryExposedThingRegistry`] holds an outer [`MapLock`] around a
+//! [`ExposedThingRegistry`] holds an outer [`MapLock`] around a
 //! `BTreeMap<ThingId, Arc<ThingSlot>>`. Each [`ThingSlot`] owns a [`DrainFlag`]
 //! (settable without the per-Thing lock) and an inner [`MapLock`] around
 //! `Option<LocalThing>` — the `Option` lets `destroy` take the thing out
@@ -10,13 +10,31 @@
 //!
 //! ```text
 //! lock map → clone Arc<ThingSlot> → drop map lock
-//! lock thing → run handler → drop thing lock
+//! driving path: acquire sync/async serialization lock →
+//!   lock thing (brief) → clone handler Arc out → drop thing lock →
+//!   run handler (thing lock released, serialization lock held) →
+//!   drop serialization lock
 //! ```
 //!
-//! Locks are never held across `.await` or across a handler that calls back
-//! into the Servient. A handler calling `destroy(own_id)` sets the drain flag
-//! (through `&self`, no lock needed) and the dispatch epilogue completes the
-//! removal after the handler returns.
+//! Handler code **never** runs under the per-Thing `thing` lock: the driving
+//! paths (sync via [`ThingSlot::with_sync_serialization`], async via
+//! [`ThingSlot::lock_async`]) clone the handler `Arc` out under a brief
+//! `thing` lock and invoke it with that lock released. A handler may therefore
+//! freely call back into the Servient —
+//! [`ExposedThingHandle::read_property`](crate::ExposedThingHandle::read_property),
+//! `add_property`, `set_*_handler`, `destroy`, `emit_event` — for the same or
+//! other Things, without self-deadlock.
+//!
+//! The serialization lock (`sync_lock` / `async_lock`) is held only by the
+//! driving loops; application-facing handle methods and TD `mutate` take only
+//! the brief `thing` lock, so re-entrant calls do not contend with it.
+//! Cross-thread driving-loop interactions within one Thing still serialize
+//! (baseline §7); application-facing handle calls are not serialized against
+//! an in-flight driving handler (matching the async path's semantics).
+//!
+//! Locks are never held across `.await`. A handler calling `destroy(own_id)`
+//! sets the drain flag (through `&self`, no lock needed) and the dispatch
+//! epilogue completes the removal after the handler returns.
 
 use alloc::{collections::BTreeMap, format, string::String, sync::Arc, vec::Vec};
 
@@ -60,6 +78,18 @@ pub(crate) struct ThingSlot {
     draining: DrainFlag,
     thing: MapLock<Option<LocalThing>>,
     inbound_security: MapLock<BTreeMap<InboundResolutionKey, ResolvedInboundSecurity>>,
+    /// Sync driving-loop serialization lock: ensures the sync driving loop
+    /// processes interactions within one Thing one at a time (baseline §7).
+    /// Held only across a driving-loop handler call; application-facing handle
+    /// methods and `mutate` take only `thing` (not `sync_lock`), so a handler
+    /// may re-enter the registry for the same Thing without self-deadlock.
+    sync_lock: MapLock<()>,
+    /// Async serialization lock: ensures interactions within one Thing execute
+    /// one at a time in the async build (baseline §7). Held across `.await`
+    /// via `tokio::sync::Mutex`, which is safe to hold across await points
+    /// unlike `std::sync::Mutex`.
+    #[cfg(feature = "async")]
+    async_lock: tokio::sync::Mutex<()>,
 }
 
 impl ThingSlot {
@@ -68,18 +98,37 @@ impl ThingSlot {
             draining: DrainFlag::new(),
             thing: MapLock::new(Some(thing)),
             inbound_security: MapLock::new(BTreeMap::new()),
+            sync_lock: MapLock::new(()),
+            #[cfg(feature = "async")]
+            async_lock: tokio::sync::Mutex::new(()),
         }
     }
 
     /// Briefly locks the thing slot and runs `f` with `&mut LocalThing`.
     /// Returns `None` if the thing was already taken out by `destroy`.
-    #[cfg(feature = "async")]
     pub(crate) fn with_thing<R>(&self, f: impl FnOnce(&mut LocalThing) -> R) -> Option<R> {
-        self.thing.with(|opt| opt.as_mut().map(f))
+        self.thing.with_recover(|opt| opt.as_mut().map(f))
+    }
+
+    /// Runs `f` while holding the sync driving-loop serialization lock for this
+    /// Thing (baseline §7). The lock is held across the handler call; handler
+    /// code re-enters the registry via handle methods (which take only `thing`)
+    /// or `mutate`, neither of which acquires `sync_lock`, so there is no
+    /// self-deadlock (this is the C7 reentrancy fix).
+    pub(crate) fn with_sync_serialization<R>(&self, f: impl FnOnce() -> R) -> R {
+        self.sync_lock.with_recover(|_| f())
+    }
+
+    /// Acquires the async serialization lock for this Thing (baseline §7).
+    /// The returned guard is held across `.await` to ensure interactions
+    /// within one Thing execute one at a time.
+    #[cfg(feature = "async")]
+    pub(crate) async fn lock_async(&self) -> tokio::sync::MutexGuard<'_, ()> {
+        self.async_lock.lock().await
     }
 
     fn clear_inbound_cache(&self) {
-        self.inbound_security.with(BTreeMap::clear);
+        self.inbound_security.with_recover(BTreeMap::clear);
     }
 }
 
@@ -88,11 +137,11 @@ impl ThingSlot {
 ///
 /// An internal concrete type; owned by the [`Servient`](crate::Servient) inner
 /// state. The registry is fully interior-mutable — every method takes `&self`.
-pub(crate) struct InMemoryExposedThingRegistry {
+pub(crate) struct ExposedThingRegistry {
     things: MapLock<BTreeMap<String, Arc<ThingSlot>>>,
 }
 
-impl InMemoryExposedThingRegistry {
+impl ExposedThingRegistry {
     /// Creates an empty exposed Thing registry.
     pub(crate) fn new() -> Self {
         Self {
@@ -113,7 +162,7 @@ impl InMemoryExposedThingRegistry {
             #[allow(clippy::arc_with_non_send_sync)]
             map.insert(id, Arc::new(ThingSlot::new(thing)));
             Ok(())
-        })
+        })?
     }
 
     /// Dispatches a closure against the locally exposed Thing under the
@@ -127,25 +176,25 @@ impl InMemoryExposedThingRegistry {
     /// Returns `None` when no entry exists for `id`, the entry is draining, or
     /// the thing was already taken out by a concurrent `destroy`.
     pub(crate) fn dispatch<R>(&self, id: &str, f: impl FnOnce(&mut LocalThing) -> R) -> Option<R> {
-        let slot = self.things.with(|map| map.get(id).cloned())?;
+        let slot = self.things.with_recover(|map| map.get(id).cloned())?;
 
         if slot.draining.get() {
             return None;
         }
 
-        slot.thing.with(|opt| opt.as_mut().map(f))
+        slot.thing.with_recover(|opt| opt.as_mut().map(f))
     }
 
     /// Dispatches a TD mutation and clears cached inbound metadata for the
     /// Thing so subsequent inbound requests re-resolve forms and security.
     pub(crate) fn mutate<R>(&self, id: &str, f: impl FnOnce(&mut LocalThing) -> R) -> Option<R> {
-        let slot = self.things.with(|map| map.get(id).cloned())?;
+        let slot = self.things.with_recover(|map| map.get(id).cloned())?;
 
         if slot.draining.get() {
             return None;
         }
 
-        let result = slot.thing.with(|opt| opt.as_mut().map(f));
+        let result = slot.thing.with_recover(|opt| opt.as_mut().map(f));
         if result.is_some() {
             slot.clear_inbound_cache();
         }
@@ -153,12 +202,12 @@ impl InMemoryExposedThingRegistry {
     }
 
     /// Returns the [`Arc<ThingSlot>`] for `id` without dispatching, for use by
-    /// async dispatch paths that need take-out / await / return semantics.
+    /// driving paths that need take-out / run-outside-lock / return semantics
+    /// (sync `sync_lock` serialization, async `async_lock`).
     ///
     /// Returns `None` when no entry exists or the entry is draining.
-    #[cfg(feature = "async")]
     pub(crate) fn slot_for(&self, id: &str) -> Option<Arc<ThingSlot>> {
-        let slot = self.things.with(|map| map.get(id).cloned())?;
+        let slot = self.things.with_recover(|map| map.get(id).cloned())?;
         if slot.draining.get() {
             return None;
         }
@@ -181,7 +230,7 @@ impl InMemoryExposedThingRegistry {
     /// does the caller self-deadlock, because the map lock and per-Thing lock
     /// are independent primitives.
     pub(crate) fn destroy(&self, id: &str) -> bool {
-        let slot = self.things.with(|map| {
+        let slot = self.things.with_recover(|map| {
             let slot = map.remove(id);
             if let Some(ref slot) = slot {
                 slot.draining.set();
@@ -206,6 +255,19 @@ impl InMemoryExposedThingRegistry {
         self.dispatch(id, |thing| thing.thing_description().clone())
     }
 
+    /// Borrows the exposed Thing Description read-only under the per-Thing lock,
+    /// running `f` without cloning the TD (baseline §7 dispatch discipline).
+    ///
+    /// Returns `None` when no entry exists for `id`, the entry is draining, or
+    /// the thing was already taken out by a concurrent `destroy`.
+    pub(crate) fn with_thing_description<R>(
+        &self,
+        id: &str,
+        f: impl FnOnce(&clinkz_wot_td::thing::Thing) -> R,
+    ) -> Option<R> {
+        self.dispatch(id, |thing| f(thing.thing_description()))
+    }
+
     /// Resolves and caches the security metadata for one inbound request.
     ///
     /// This avoids cloning the full TD and rescanning its forms for every
@@ -216,25 +278,28 @@ impl InMemoryExposedThingRegistry {
         target: &AffordanceTarget,
         operation: Operation,
     ) -> Option<Result<ResolvedInboundSecurity, CoreError>> {
-        let slot = self.things.with(|map| map.get(id).cloned())?;
+        let slot = self.things.with_recover(|map| map.get(id).cloned())?;
 
         if slot.draining.get() {
             return None;
         }
 
         let key = InboundResolutionKey::new(target, operation);
-        if let Some(cached) = slot.inbound_security.with(|cache| cache.get(&key).cloned()) {
+        if let Some(cached) = slot
+            .inbound_security
+            .with_recover(|cache| cache.get(&key).cloned())
+        {
             return Some(Ok(cached));
         }
 
-        let resolved = slot.thing.with(|opt| {
+        let resolved = slot.thing.with_recover(|opt| {
             opt.as_ref().map(|thing| {
                 resolve_inbound_security_from_thing(thing.thing_description(), target, operation)
             })
         })?;
 
         if let Ok(metadata) = &resolved {
-            slot.inbound_security.with(|cache| {
+            slot.inbound_security.with_recover(|cache| {
                 cache.insert(key, metadata.clone());
             });
         }
@@ -243,7 +308,7 @@ impl InMemoryExposedThingRegistry {
     }
 }
 
-impl Default for InMemoryExposedThingRegistry {
+impl Default for ExposedThingRegistry {
     fn default() -> Self {
         Self::new()
     }

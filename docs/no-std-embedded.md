@@ -30,6 +30,14 @@ Embedded-ready crates should support:
   storage in both sync and (future) async builds.
 - `MapLock` shared locking primitive in `clinkz-wot-core` usable across core
   and servient.
+- **Multi-thread RTOS support** via the optional `multithread` feature:
+  `MapLock` switches from `RefCell` (single-thread) to
+  `UnsafeCell<T>` + `critical_section::with` (interrupt-safe mutual
+  exclusion). `DrainFlag` switches from `Cell<bool>` to `AtomicBool`. This
+  enables the engine to run safely across RTOS tasks (FreeRTOS, Zephyr) on
+  multi-core MCU gateways without requiring `std` or async runtime.
+  Enable with `--features multithread` on `clinkz-wot-core` or
+  `clinkz-wot-servient` (propagates to core).
 
 ## Non-Goals for v1
 
@@ -107,3 +115,57 @@ driving layer and `Send + Sync` lock primitives are deferred behind the
 `async` feature (SR-P2.2). The project avoids naming these modules `core`
 because `clinkz-wot-core` already denotes the
 protocol-neutral engine trait crate.
+
+## MCU Gateway Path: Three-Layer Plan
+
+For MCU gateways (ESP32, STM32, nRF52) that serve multiple Things and need
+concurrent request handling across sub-devices (BLE, Modbus, SPI), the
+following three layers close the gap:
+
+### Layer 1: Multi-thread safe locks — IMPLEMENTED
+
+The `multithread` feature on `clinkz-wot-core` (and propagated from
+`clinkz-wot-servient`) switches `MapLock` from `RefCell` (single-thread) to
+`UnsafeCell<T>` + `critical_section::with` (interrupt/task-safe mutual
+exclusion). `DrainFlag` switches to `AtomicBool`.
+
+This lets two RTOS tasks safely share one `Servient` instance (e.g., one per
+core on an ESP32) and call `poll_serve_sync` independently. Sub-device I/O
+runs in dedicated tasks; handlers communicate via RTOS queues.
+
+Verified: `cargo check --features multithread` passes for core and
+servient on `no_std + alloc`.
+
+### Layer 2: zenoh-pico concrete platform — DEFERRED (hardware-specific)
+
+The `ZenohPicoPlatform` trait in
+`protocol-bindings/protocols/zenoh/src/runtime/zenoh_pico.rs` defines the
+platform hook for constrained zenoh-pico C ABI integrations. A concrete
+implementation requires:
+
+- Target MCU selection (ESP32, STM32, nRF52, etc.).
+- zenoh-pico C library compiled for the target.
+- Rust C ABI bindings (FFI) for session, get, put, subscribe, undeclare.
+- Buffer management and polling model (cooperative vs preemptive).
+- A `critical_section::Impl` registration for the target's interrupt model.
+
+Blocked by: PLAN.md "Defer `zenoh-pico` runtime injection until the target
+hardware platform, C ABI strategy, and polling model are confirmed."
+
+### Layer 3: Embassy async (concurrent dispatch on MCU) — DEFERRED
+
+With the `multithread` feature (Layer 1) and a concrete zenoh-pico
+platform (Layer 2), the engine is multi-thread safe and can communicate.
+Layer 3 adds the `embassy` async runtime for concurrent dispatch:
+
+- New `embassy` feature on `clinkz-wot-servient` (alongside existing `async`
+  which uses tokio).
+- `serve()` ported to embassy primitives (`embassy_futures::select`,
+  `embassy_time::Timer`).
+- No `tokio::select!` or `tokio::time::sleep` — embassy equivalents.
+- Enables cross-Thing concurrent dispatch on MCU (same `select!` +
+  `FuturesUnordered` pattern as the tokio `serve()`, but on no_std).
+
+Blocked by: requires embassy executor + target (or simulator) for testing.
+The serve() concurrent-dispatch design (addendum §9.6) is runtime-agnostic
+and portable to embassy once the target is available.

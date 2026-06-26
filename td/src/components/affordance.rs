@@ -9,7 +9,7 @@ use serde_with::skip_serializing_none;
 
 use crate::{
     data_type::{ExtensionMap, Metadata, MetadataHelper, Operation},
-    validate::{Validate, ValidateError, ValidationLevel},
+    validate::{Validate, ValidateError, ValidationLevel, schema_error_message},
 };
 
 use super::{
@@ -506,11 +506,4 @@ fn validate_interaction_schemas(
     }
 
     Ok(())
-}
-
-fn schema_error_message(err: ValidateError) -> String {
-    match err {
-        ValidateError::InvalidSchema(message) => message,
-        other => other.to_string(),
-    }
 }

@@ -9,8 +9,10 @@ clinkz-wot-discovery = { path = "../discovery", default-features = false }
 clinkz-wot-protocol-bindings = { path = "../protocol-bindings/core", default-features = false }
 clinkz-wot-protocol-bindings-zenoh = { path = "../protocol-bindings/protocols/zenoh", default-features = false, optional = true }
 clinkz-wot-td = { path = "../td", default-features = false }
+serde_json = { workspace = true }
 async-trait = { workspace = true, optional = true }
 futures-util = { workspace = true, optional = true }
+tokio = { version = "1", optional = true, features = ["sync", "macros", "time"] }
 
 [dev-dependencies]
 clinkz-wot-codec-cbor = { path = "../codecs/cbor" }
@@ -28,8 +30,10 @@ std = [
 async = [
     "dep:async-trait",
     "dep:futures-util",
+    "dep:tokio",
     "clinkz-wot-core/async",
 ]
+multithread = ["clinkz-wot-core/multithread"]
 test-zenoh = [
     "dep:clinkz-wot-protocol-bindings-zenoh",
     "clinkz-wot-protocol-bindings-zenoh/zenoh",

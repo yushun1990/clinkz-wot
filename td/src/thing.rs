@@ -18,7 +18,12 @@ use crate::{
     form::Form,
     link::Link,
     security_scheme::SecurityScheme,
-    validate::{Validate, ValidateError, ValidationLevel},
+    validate::{
+        Validate, ValidateError, ValidationLevel, parse_uri_field,
+        validate_context_at_profile_level, validate_form_response_references,
+        validate_profile_interaction_presence, validate_schema_map, validate_security_references,
+        validate_thing_level_form_operations,
+    },
 };
 
 /// An abstraction of a physical or virtual entity whose metadata and interfaces are
@@ -26,7 +31,7 @@ use crate::{
 /// of one or more Things.
 #[serde_as]
 #[skip_serializing_none]
-#[derive(Debug, Default, Clone, Deserialize, Serialize)]
+#[derive(Debug, Default, Clone, PartialEq, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Thing {
     /// JSON-LD keyword to define short-hand names called terms that are used throughout
@@ -59,7 +64,7 @@ pub struct Thing {
 
     /// Define the base URI that is used for all relative URI references
     /// throughout a TD document. In TD instances, all relative URIs
-    /// are resovled relative to the base URI using the algorithm defnied
+    /// are resolved relative to the base URI using the algorithm defined
     /// in [RFC3986]
     pub base: Option<BaseUri>,
 
@@ -123,6 +128,9 @@ impl Validate for Thing {
             return Ok(());
         }
 
+        // Profile/Full: @context must contain a standard WoT context URI.
+        validate_context_at_profile_level(&self.context, level)?;
+
         // title is mandatory
         if self._metadata.title.as_deref().unwrap_or("").is_empty() {
             return Err(ValidateError::MissingRequiredField("title".to_string()));
@@ -134,26 +142,23 @@ impl Validate for Thing {
         validate_security_references("Thing.security", &self.security, &self.security_definitions)?;
         validate_security_definitions(&self.security_definitions, level)?;
 
-        if let Some(schema_definitions) = &self.schema_definitions {
-            validate_schema_map("schemaDefinitions", schema_definitions, level)?;
-        }
-        if let Some(uri_variables) = &self.uri_variables {
-            validate_schema_map("uriVariables", uri_variables, level)?;
-        }
+        validate_schema_map("schemaDefinitions", self.schema_definitions.as_ref(), level)?;
+        validate_schema_map("uriVariables", self.uri_variables.as_ref(), level)?;
 
         // Validate Properties
         if let Some(properties) = &self.properties {
             for (name, property) in properties {
-                property.validate_with_level(level).map_err(|e| {
-                    contextualize_affordance_error(format!("Property '{}'", name), e)
-                })?;
+                let ctx = format!("Property '{}'", name);
+                property
+                    .validate_with_level(level)
+                    .map_err(|e| contextualize_affordance_error(ctx.clone(), e))?;
                 validate_form_security_references(
-                    format!("Property '{}'", name),
+                    ctx.as_str(),
                     &property._interaction.forms,
                     &self.security_definitions,
                 )?;
                 validate_form_response_references(
-                    format!("Property '{}'.forms", name).as_str(),
+                    format!("{}.forms", ctx).as_str(),
                     &property._interaction.forms,
                     self.schema_definitions.as_ref(),
                     level,
@@ -164,16 +169,17 @@ impl Validate for Thing {
         // Validate Actions
         if let Some(actions) = &self.actions {
             for (name, action) in actions {
+                let ctx = format!("Action '{}'", name);
                 action
                     .validate_with_level(level)
-                    .map_err(|e| contextualize_affordance_error(format!("Action '{}'", name), e))?;
+                    .map_err(|e| contextualize_affordance_error(ctx.clone(), e))?;
                 validate_form_security_references(
-                    format!("Action '{}'", name),
+                    ctx.as_str(),
                     &action._interaction.forms,
                     &self.security_definitions,
                 )?;
                 validate_form_response_references(
-                    format!("Action '{}'.forms", name).as_str(),
+                    format!("{}.forms", ctx).as_str(),
                     &action._interaction.forms,
                     self.schema_definitions.as_ref(),
                     level,
@@ -184,16 +190,17 @@ impl Validate for Thing {
         // Validate Events
         if let Some(events) = &self.events {
             for (name, event) in events {
+                let ctx = format!("Event '{}'", name);
                 event
                     .validate_with_level(level)
-                    .map_err(|e| contextualize_affordance_error(format!("Event '{}'", name), e))?;
+                    .map_err(|e| contextualize_affordance_error(ctx.clone(), e))?;
                 validate_form_security_references(
-                    format!("Event '{}'", name),
+                    ctx.as_str(),
                     &event._interaction.forms,
                     &self.security_definitions,
                 )?;
                 validate_form_response_references(
-                    format!("Event '{}'.forms", name).as_str(),
+                    format!("{}.forms", ctx).as_str(),
                     &event._interaction.forms,
                     self.schema_definitions.as_ref(),
                     level,
@@ -202,11 +209,10 @@ impl Validate for Thing {
         }
 
         if let Some(forms) = &self.forms {
-            validate_form_security_references(
-                "Thing.forms".to_string(),
-                forms,
-                &self.security_definitions,
-            )?;
+            validate_form_security_references("Thing.forms", forms, &self.security_definitions)?;
+            // TD 1.1 §5.3.4: only Thing-level meta-operations (readallproperties,
+            // queryallactions, etc.) are allowed on top-level forms.
+            validate_thing_level_form_operations(forms)?;
             validate_form_response_references(
                 "Thing.forms",
                 forms,
@@ -217,27 +223,17 @@ impl Validate for Thing {
 
         self._extra_fields.validate_with_level(level)?;
 
+        // Profile/Full: at least one interaction affordance or top-level form.
+        validate_profile_interaction_presence(
+            self.properties.as_ref().is_some_and(|p| !p.is_empty()),
+            self.actions.as_ref().is_some_and(|a| !a.is_empty()),
+            self.events.as_ref().is_some_and(|e| !e.is_empty()),
+            self.forms.as_ref().is_some_and(|f| !f.is_empty()),
+            level,
+        )?;
+
         Ok(())
     }
-}
-
-fn validate_schema_map(
-    context: &str,
-    schemas: &BTreeMap<String, DataSchema>,
-    level: ValidationLevel,
-) -> Result<(), ValidateError> {
-    for (name, schema) in schemas {
-        schema.validate_with_level(level).map_err(|err| {
-            ValidateError::InvalidSchema(format!(
-                "{}.{}: {}",
-                context,
-                name,
-                schema_error_message(err)
-            ))
-        })?;
-    }
-
-    Ok(())
 }
 
 fn validate_security_definitions(
@@ -286,15 +282,8 @@ fn contextualize_security_error(context: String, err: ValidateError) -> Validate
     }
 }
 
-fn schema_error_message(err: ValidateError) -> String {
-    match err {
-        ValidateError::InvalidSchema(message) => message,
-        other => other.to_string(),
-    }
-}
-
 fn validate_form_security_references(
-    context: String,
+    context: &str,
     forms: &[Form],
     security_definitions: &BTreeMap<String, SecurityScheme>,
 ) -> Result<(), ValidateError> {
@@ -305,67 +294,6 @@ fn validate_form_security_references(
                 security,
                 security_definitions,
             )?;
-        }
-    }
-
-    Ok(())
-}
-
-fn validate_form_response_references(
-    context: &str,
-    forms: &[Form],
-    schema_definitions: Option<&BTreeMap<String, DataSchema>>,
-    level: ValidationLevel,
-) -> Result<(), ValidateError> {
-    if !matches!(level, ValidationLevel::Profile | ValidationLevel::Full) {
-        return Ok(());
-    }
-
-    for (form_index, form) in forms.iter().enumerate() {
-        let Some(additional_responses) = &form.additional_responses else {
-            continue;
-        };
-
-        for (response_index, response) in additional_responses.iter().enumerate() {
-            let Some(schema) = &response.schema else {
-                continue;
-            };
-
-            let reference_context = format!(
-                "{}[{}].additionalResponses[{}].schema",
-                context, form_index, response_index
-            );
-
-            let Some(schema_definitions) = schema_definitions else {
-                return Err(ValidateError::InvalidReference {
-                    context: reference_context,
-                    reference: schema.clone(),
-                });
-            };
-
-            if !schema_definitions.contains_key(schema) {
-                return Err(ValidateError::InvalidReference {
-                    context: reference_context,
-                    reference: schema.clone(),
-                });
-            }
-        }
-    }
-
-    Ok(())
-}
-
-fn validate_security_references(
-    context: &str,
-    security: &[String],
-    security_definitions: &BTreeMap<String, SecurityScheme>,
-) -> Result<(), ValidateError> {
-    for reference in security {
-        if !security_definitions.contains_key(reference) {
-            return Err(ValidateError::InvalidReference {
-                context: context.to_string(),
-                reference: reference.clone(),
-            });
         }
     }
 
@@ -396,11 +324,8 @@ impl ThingBuilder {
 
     /// Sets the Things's unique identifier
     pub fn id(mut self, id: &str) -> Self {
-        match AbsoluteUri::parse(id) {
-            Ok(id) => self.thing.id = Some(id),
-            Err(_) => self
-                .errors
-                .push(ValidateError::InvalidUri(format!("id: {}", id))),
+        if let Some(uri) = parse_uri_field("id", id, AbsoluteUri::parse, &mut self.errors) {
+            self.thing.id = Some(uri);
         }
         self
     }
@@ -431,37 +356,26 @@ impl ThingBuilder {
 
     /// Sets the support URI.
     pub fn support(mut self, support: &str) -> Self {
-        match AbsoluteUri::parse(support) {
-            Ok(support) => self.thing.support = Some(support),
-            Err(_) => self
-                .errors
-                .push(ValidateError::InvalidUri(format!("support: {}", support))),
+        if let Some(uri) = parse_uri_field("support", support, AbsoluteUri::parse, &mut self.errors)
+        {
+            self.thing.support = Some(uri);
         }
         self
     }
 
     /// Sets the base URI.
     pub fn base(mut self, base: &str) -> Self {
-        match BaseUri::parse(base) {
-            Ok(base) => self.thing.base = Some(base),
-            Err(_) => self
-                .errors
-                .push(ValidateError::InvalidUri(format!("base: {}", base))),
+        if let Some(uri) = parse_uri_field("base", base, BaseUri::parse, &mut self.errors) {
+            self.thing.base = Some(uri);
         }
         self
     }
 
     /// Adds a profile URI.
     pub fn profile(mut self, profile: &str) -> Self {
-        match AbsoluteUri::parse(profile) {
-            Ok(profile) => self
-                .thing
-                .profile
-                .get_or_insert_with(Vec::new)
-                .push(profile),
-            Err(_) => self
-                .errors
-                .push(ValidateError::InvalidUri(format!("profile: {}", profile))),
+        if let Some(uri) = parse_uri_field("profile", profile, AbsoluteUri::parse, &mut self.errors)
+        {
+            self.thing.profile.get_or_insert_with(Vec::new).push(uri);
         }
         self
     }
@@ -474,15 +388,10 @@ impl ThingBuilder {
     {
         for profile in profiles {
             let profile = profile.as_ref();
-            match AbsoluteUri::parse(profile) {
-                Ok(profile) => self
-                    .thing
-                    .profile
-                    .get_or_insert_with(Vec::new)
-                    .push(profile),
-                Err(_) => self
-                    .errors
-                    .push(ValidateError::InvalidUri(format!("profile: {}", profile))),
+            if let Some(uri) =
+                parse_uri_field("profile", profile, AbsoluteUri::parse, &mut self.errors)
+            {
+                self.thing.profile.get_or_insert_with(Vec::new).push(uri);
             }
         }
         self

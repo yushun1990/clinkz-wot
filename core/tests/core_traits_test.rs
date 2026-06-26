@@ -103,7 +103,7 @@ struct StoredRead {
 }
 
 impl PropertyReadHandler for StoredRead {
-    fn read(&mut self, _input: InteractionInput) -> CoreResult<InteractionOutput> {
+    fn read(&self, _input: InteractionInput) -> CoreResult<InteractionOutput> {
         Ok(InteractionOutput::with_payload(
             self.value.lock().unwrap().clone(),
         ))
@@ -115,7 +115,7 @@ struct StoredWrite {
 }
 
 impl PropertyWriteHandler for StoredWrite {
-    fn write(&mut self, input: InteractionInput) -> CoreResult<InteractionOutput> {
+    fn write(&self, input: InteractionInput) -> CoreResult<InteractionOutput> {
         *self.value.lock().unwrap() = input
             .payload
             .ok_or_else(|| CoreError::InvalidInteraction("Missing property payload".into()))?;
@@ -126,7 +126,7 @@ impl PropertyWriteHandler for StoredWrite {
 struct EchoAction;
 
 impl ActionHandler for EchoAction {
-    fn invoke(&mut self, input: InteractionInput) -> CoreResult<InteractionOutput> {
+    fn invoke(&self, input: InteractionInput) -> CoreResult<InteractionOutput> {
         Ok(InteractionOutput {
             payload: input.payload,
         })
@@ -137,7 +137,7 @@ struct StartupEvent;
 
 impl EventSubscribeHandler for StartupEvent {
     fn subscribe(
-        &mut self,
+        &self,
         _input: InteractionInput,
         sink: &mut dyn EventSink,
     ) -> CoreResult<InteractionOutput> {
@@ -236,6 +236,38 @@ fn codec_round_trips_payload_bytes() {
 }
 
 #[test]
+fn consumed_request_rejects_form_not_in_affordance() {
+    // The public `ConsumedThing::request` entry point accepts a caller-supplied
+    // `Arc<Form>`; validation must reject a form that does not belong to the
+    // target affordance. Previously a no-`op` foreign form could pass by
+    // falling back to the affordance's default operations and dispatch to the
+    // wrong binding.
+    let (thing, _valid_form) = remote_thing_description();
+    let mut consumed = BoundConsumedThing::new(thing);
+
+    // A form with a different href, not present on the "status" affordance.
+    let foreign_form = Arc::new(
+        Form::read_property("wot://other/properties/x")
+            .content_type("application/octet-stream")
+            .build()
+            .unwrap(),
+    );
+
+    let err = consumed
+        .request(
+            AffordanceTarget::Property("status".into()),
+            Operation::ReadProperty,
+            foreign_form,
+            InteractionInput::empty(),
+        )
+        .unwrap_err();
+    assert!(
+        matches!(err, CoreError::InvalidInteraction(_)),
+        "expected InvalidInteraction for a foreign form, got {err:?}"
+    );
+}
+
+#[test]
 fn binding_invokes_selected_form_without_protocol_assumptions() {
     let form = Form::builder("wot://thing/actions/ping")
         .content_type("application/octet-stream")
@@ -290,7 +322,7 @@ fn consumed_thing_dispatches_selected_form_to_matching_binding() {
         .request(
             AffordanceTarget::Property("status".into()),
             Operation::ReadProperty,
-            &read_form,
+            Arc::new(read_form.clone()),
             InteractionInput::empty(),
         )
         .unwrap();
@@ -311,7 +343,7 @@ fn consumed_thing_rejects_unknown_affordance_before_binding_dispatch() {
         .request(
             AffordanceTarget::Property("missing".into()),
             Operation::ReadProperty,
-            &read_form,
+            Arc::new(read_form.clone()),
             InteractionInput::empty(),
         )
         .unwrap_err();
@@ -346,14 +378,14 @@ fn consumed_thing_rejects_operation_not_declared_by_selected_form() {
         .request(
             AffordanceTarget::Property("status".into()),
             Operation::WriteProperty,
-            &read_form,
+            Arc::new(read_form.clone()),
             InteractionInput::empty(),
         )
         .unwrap_err();
 
     assert_eq!(
         err,
-        CoreError::UnsupportedOperation("Form does not support WriteProperty".into())
+        CoreError::UnsupportedOperation("Form does not support writeproperty".into())
     );
 }
 
@@ -366,7 +398,7 @@ fn consumed_thing_reports_missing_matching_binding() {
         .request(
             AffordanceTarget::Property("status".into()),
             Operation::ReadProperty,
-            &read_form,
+            Arc::new(read_form.clone()),
             InteractionInput::empty(),
         )
         .unwrap_err();
@@ -374,7 +406,7 @@ fn consumed_thing_reports_missing_matching_binding() {
     assert_eq!(
         err,
         CoreError::UnsupportedBinding(
-            "No binding supports ReadProperty for wot://thing/properties/status".into()
+            "No binding supports readproperty for wot://thing/properties/status".into()
         )
     );
 }
@@ -466,7 +498,7 @@ fn local_thing_rejects_unknown_affordance_before_dispatch() {
 
 #[test]
 fn local_thing_reports_missing_registered_handler() {
-    let mut thing = LocalThing::new(local_thing_description());
+    let thing = LocalThing::new(local_thing_description());
 
     let err = thing
         .invoke_action("echo", InteractionInput::empty())

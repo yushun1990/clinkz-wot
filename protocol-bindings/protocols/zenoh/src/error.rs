@@ -1,4 +1,4 @@
-use alloc::string::{String, ToString};
+use alloc::string::String;
 use core::fmt;
 
 use clinkz_wot_protocol_bindings::BindingError;
@@ -16,6 +16,11 @@ pub enum ZenohBindingError {
     UnsupportedForm(String),
     /// A TD form target cannot be resolved to a concrete zenoh key expression.
     Target(ResolveFormHrefError),
+    /// A structured error from the shared protocol-binding utilities,
+    /// preserved (instead of collapsed to [`Selection`]/`InvalidInteraction`)
+    /// so callers can pattern-match variants like
+    /// [`BindingError::UnknownAffordance`] downstream.
+    Shared(BindingError),
     /// A zenoh extension value is malformed.
     InvalidExtension {
         /// Extension term name.
@@ -31,6 +36,7 @@ impl fmt::Display for ZenohBindingError {
             Self::Selection(message) => write!(f, "Zenoh form selection error: {}", message),
             Self::UnsupportedForm(message) => write!(f, "Unsupported zenoh form: {}", message),
             Self::Target(message) => write!(f, "Zenoh target error: {}", message),
+            Self::Shared(err) => write!(f, "Shared binding error: {}", err),
             Self::InvalidExtension { term, message } => {
                 write!(f, "Invalid zenoh extension {}: {}", term, message)
             }
@@ -45,7 +51,10 @@ impl From<BindingError> for ZenohBindingError {
     fn from(err: BindingError) -> Self {
         match err {
             BindingError::TargetResolution(message) => Self::Target(message),
-            other => Self::Selection(other.to_string()),
+            // Preserve structured shared-binding errors so the caller can still
+            // distinguish (e.g.) `UnknownAffordance` from a generic selection
+            // failure after the zenoh binding maps them into `CoreError`.
+            other => Self::Shared(other),
         }
     }
 }

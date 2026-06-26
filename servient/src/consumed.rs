@@ -14,8 +14,8 @@
 
 use alloc::{boxed::Box, collections::BTreeMap, string::String, sync::Arc, vec::Vec};
 
-use clinkz_wot_core::{MapLock, SubscriptionGuard};
-use clinkz_wot_td::{form::Form, thing::Thing};
+use clinkz_wot_core::{MapLock, MapLockError, SubscriptionGuard};
+use clinkz_wot_td::thing::Thing;
 
 use crate::{BindingPlan, SelectedFormCacheKey};
 
@@ -23,7 +23,7 @@ use crate::{BindingPlan, SelectedFormCacheKey};
 /// [`ConsumedThingEntry`].
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub(crate) struct SubscriptionKey {
-    target_kind: String,
+    target_kind: &'static str,
     target_name: String,
     operation: String,
 }
@@ -37,7 +37,7 @@ impl SubscriptionKey {
             clinkz_wot_core::AffordanceTarget::Thing => ("thing", ""),
         };
         Self {
-            target_kind: target_kind.into(),
+            target_kind,
             target_name: target_name.into(),
             operation: operation.into(),
         }
@@ -60,7 +60,6 @@ pub(crate) type BoxedGuard = Box<dyn SubscriptionGuard + Send + Sync>;
 /// reference instead of deep-cloning the full TD on every consumed request.
 pub(crate) struct ConsumedThingEntry {
     thing: Arc<Thing>,
-    form_cache: MapLock<BTreeMap<SelectedFormCacheKey, Form>>,
     plan_cache: MapLock<BTreeMap<SelectedFormCacheKey, BindingPlan>>,
     subscriptions: MapLock<BTreeMap<SubscriptionKey, Vec<BoxedGuard>>>,
 }
@@ -69,7 +68,6 @@ impl ConsumedThingEntry {
     fn new(thing: Thing) -> Self {
         Self {
             thing: Arc::new(thing),
-            form_cache: MapLock::new(BTreeMap::new()),
             plan_cache: MapLock::new(BTreeMap::new()),
             subscriptions: MapLock::new(BTreeMap::new()),
         }
@@ -88,41 +86,22 @@ impl ConsumedThingEntry {
         Arc::clone(&self.thing)
     }
 
-    /// Retrieves a cached form selection by key.
-    pub(crate) fn get_form(&self, key: &SelectedFormCacheKey) -> Option<Form> {
-        self.form_cache.with(|cache| cache.get(key).cloned())
-    }
-
-    /// Inserts or replaces a cached form selection.
-    pub(crate) fn insert_form(&self, key: SelectedFormCacheKey, form: Form) {
-        self.form_cache.with(|cache| {
-            cache.insert(key, form);
-        });
-    }
-
-    /// Removes a cached form selection.
-    #[allow(dead_code)]
-    pub(crate) fn remove_form(&self, key: &SelectedFormCacheKey) {
-        self.form_cache.with(|cache| {
-            cache.remove(key);
-        });
-    }
-
     /// Retrieves a cached binding plan by key.
     pub(crate) fn get_plan(&self, key: &SelectedFormCacheKey) -> Option<BindingPlan> {
-        self.plan_cache.with(|cache| cache.get(key).cloned())
+        self.plan_cache
+            .with_recover(|cache| cache.get(key).cloned())
     }
 
     /// Inserts or replaces a cached binding plan.
     pub(crate) fn insert_plan(&self, key: SelectedFormCacheKey, plan: BindingPlan) {
-        self.plan_cache.with(|cache| {
+        let _ = self.plan_cache.with(|cache| {
             cache.insert(key, plan);
         });
     }
 
     /// Removes a cached binding plan.
     pub(crate) fn remove_plan(&self, key: &SelectedFormCacheKey) {
-        self.plan_cache.with(|cache| {
+        let _ = self.plan_cache.with(|cache| {
             cache.remove(key);
         });
     }
@@ -131,7 +110,7 @@ impl ConsumedThingEntry {
     /// revalidating the form. Used after revalidation succeeds to keep the
     /// cache entry fresh against the current registry generation.
     pub(crate) fn update_plan_generation(&self, key: &SelectedFormCacheKey, generation: u64) {
-        self.plan_cache.with(|cache| {
+        let _ = self.plan_cache.with(|cache| {
             if let Some(plan) = cache.get_mut(key) {
                 plan.factory_generation = generation;
             }
@@ -141,14 +120,14 @@ impl ConsumedThingEntry {
     /// Stores a subscription guard so the underlying wire subscription stays
     /// alive until [`stop_subscriptions`](Self::stop_subscriptions) is called.
     pub(crate) fn store_subscription(&self, key: SubscriptionKey, guard: BoxedGuard) {
-        self.subscriptions.with(|map| {
+        let _ = self.subscriptions.with(|map| {
             map.entry(key).or_default().push(guard);
         });
     }
 
     /// Stops and removes all wire subscriptions matching `key`.
     pub(crate) fn stop_subscriptions(&self, key: &SubscriptionKey) {
-        let guards = self.subscriptions.with(|map| map.remove(key));
+        let guards = self.subscriptions.with_recover(|map| map.remove(key));
         if let Some(guards) = guards {
             for guard in guards {
                 guard.close();
@@ -158,14 +137,12 @@ impl ConsumedThingEntry {
 
     /// Stops and removes all wire subscriptions for this entry.
     pub(crate) fn stop_all_subscriptions(&self) {
-        self.subscriptions.with(|map| {
-            let drained = core::mem::take(map);
-            for (_, guards) in drained {
-                for guard in guards {
-                    guard.close();
-                }
+        let drained = self.subscriptions.with_recover(core::mem::take);
+        for (_, guards) in drained {
+            for guard in guards {
+                guard.close();
             }
-        });
+        }
     }
 }
 
@@ -189,7 +166,14 @@ impl ConsumedThingRegistry {
     ///
     /// The caller must supply the Thing id separately so the registry does not
     /// need to re-extract it from the TD.
-    pub(crate) fn get_or_insert(&self, id: String, thing: Thing) -> Arc<ConsumedThingEntry> {
+    ///
+    /// Returns [`MapLockError`] if the registry lock was poisoned; the interning
+    /// is then skipped rather than applied to inconsistent state.
+    pub(crate) fn get_or_insert(
+        &self,
+        id: String,
+        thing: Thing,
+    ) -> Result<Arc<ConsumedThingEntry>, MapLockError> {
         self.entries.with(|map| {
             if let Some(existing) = map.get(&id) {
                 Arc::clone(existing)
@@ -207,7 +191,7 @@ impl ConsumedThingRegistry {
     /// Also stops all active streaming subscriptions for this entry so wire
     /// resources are released.
     pub(crate) fn invalidate(&self, id: &str) {
-        let entry = self.entries.with(|map| map.remove(id));
+        let entry = self.entries.with_recover(|map| map.remove(id));
         if let Some(entry) = entry {
             entry.stop_all_subscriptions();
         }
@@ -245,7 +229,7 @@ mod tests {
             let missing = self
                 .registry
                 .entries
-                .with(|entries| !entries.contains_key(&self.id));
+                .with_recover(|entries| !entries.contains_key(&self.id));
             self.reentered.store(missing, Ordering::Relaxed);
         }
     }
@@ -258,7 +242,9 @@ mod tests {
             .nosec()
             .build()
             .unwrap();
-        let entry = registry.get_or_insert("urn:thing:reentrant-invalidate".to_string(), thing);
+        let entry = registry
+            .get_or_insert("urn:thing:reentrant-invalidate".to_string(), thing)
+            .unwrap();
         let reentered = Arc::new(AtomicBool::new(false));
 
         entry.store_subscription(
@@ -273,6 +259,6 @@ mod tests {
         registry.invalidate("urn:thing:reentrant-invalidate");
 
         assert!(reentered.load(Ordering::Relaxed));
-        assert!(registry.entries.with(|entries| entries.is_empty()));
+        assert!(registry.entries.with_recover(|entries| entries.is_empty()));
     }
 }

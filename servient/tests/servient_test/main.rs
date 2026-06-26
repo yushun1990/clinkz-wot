@@ -182,6 +182,42 @@ fn payload_codecs_are_used_for_remote_interactions() {
 }
 
 #[test]
+fn normalize_payloads_false_skips_codec_round_trip() {
+    let encode_calls = Rc::new(Cell::new(0));
+    let decode_calls = Rc::new(Cell::new(0));
+
+    let (remote_td, _) = thing("urn:thing:remote-no-norm", "Remote No-Norm Lamp");
+    let servient = Servient::builder()
+        .payload_codec(CountingCodec {
+            encode_calls: encode_calls.clone(),
+            decode_calls: decode_calls.clone(),
+        })
+        .normalize_payloads(false)
+        .binding_factory(|| {
+            Box::new(TestBinding {
+                response: Payload::new(b"remote".to_vec(), "text/plain"),
+            })
+        })
+        .build();
+
+    let consumed = servient.consume(remote_td).unwrap();
+    let remote = consumed
+        .read_property_with_criteria(
+            "status",
+            FormSelectionCriteria::new(Operation::ReadProperty).content_type("text/plain"),
+            InteractionInput::empty(),
+        )
+        .unwrap();
+    assert_eq!(remote.payload.unwrap().body, b"remote");
+    assert_eq!(
+        decode_calls.get(),
+        0,
+        "normalize_payloads(false) must skip the codec entirely"
+    );
+    assert_eq!(encode_calls.get(), 0);
+}
+
+#[test]
 fn cbor_codec_canonicalizes_remote_application_cbor_payloads() {
     use clinkz_wot_codec_cbor::CborCodec;
     use clinkz_wot_td::affordance::PropertyAffordance;
@@ -283,21 +319,31 @@ fn consumed_handle_reports_binding_selection_errors() {
 #[test]
 fn consumed_handle_reuses_cached_binding_plans() {
     let (td, _) = thing("urn:thing:planned-lamp", "Planned Lamp");
-    let unsupported_calls = std::rc::Rc::new(std::cell::RefCell::new(0));
-    let supported_calls = std::rc::Rc::new(std::cell::RefCell::new(0));
+    let unsupported_calls = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
     let unsupported_factory_calls = unsupported_calls.clone();
-    let supported_factory_calls = supported_calls.clone();
+    let unsupported_probe_calls = unsupported_calls.clone();
     let servient = Servient::builder()
-        .binding_factory(move || {
-            Box::new(CountingUnsupportedBinding {
-                supports_calls: unsupported_factory_calls.clone(),
-            })
-        })
-        .binding_factory(move || {
-            Box::new(CountingHrefBinding {
-                supports_calls: supported_factory_calls.clone(),
-            })
-        })
+        .binding_factory_with_support(
+            move || {
+                Box::new(CountingUnsupportedBinding {
+                    supports_calls: unsupported_factory_calls.clone(),
+                })
+            },
+            move |_thing, _form, _operation| {
+                unsupported_probe_calls.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                false
+            },
+        )
+        .binding_factory_with_support(
+            || {
+                Box::new(CountingHrefBinding {
+                    supports_calls: std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0)),
+                })
+            },
+            |_thing, form, operation| {
+                form.href.as_str().starts_with("test://") && operation == Operation::ReadProperty
+            },
+        )
         .build();
 
     let consumed = servient.consume(td).unwrap();
@@ -309,7 +355,10 @@ fn consumed_handle_reuses_cached_binding_plans() {
         read.payload.unwrap().body,
         b"test://things/lamp/properties/status"
     );
-    assert_eq!(*unsupported_calls.borrow(), 1);
+    assert_eq!(
+        unsupported_calls.load(std::sync::atomic::Ordering::Relaxed),
+        1
+    );
 
     let read = consumed
         .read_property_with_criteria("status", criteria, InteractionInput::empty())
@@ -319,11 +368,10 @@ fn consumed_handle_reuses_cached_binding_plans() {
         b"test://things/lamp/properties/status"
     );
     assert_eq!(
-        *unsupported_calls.borrow(),
+        unsupported_calls.load(std::sync::atomic::Ordering::Relaxed),
         1,
-        "cached plan should skip probing earlier unsupported factories"
+        "cached plan should skip unsupported factories entirely"
     );
-    assert!(*supported_calls.borrow() >= 2);
 }
 
 #[test]
@@ -580,25 +628,153 @@ fn destroy_from_within_handler_does_not_self_deadlock() {
 }
 
 #[test]
+fn handler_reentering_registry_does_not_self_deadlock() {
+    // C7 regression: a sync handler that calls back into the Servient for the
+    // SAME Thing — here, a property read handler that reads another property
+    // through the handle — must not self-deadlock. Before the reentrancy fix
+    // the handler ran under the per-Thing slot lock, so re-entering the
+    // registry deadlocked on `std` / panicked on `no_std`.
+    use clinkz_wot_core::{CoreError, CoreResult, InteractionOutput, PropertyReadHandler};
+    use clinkz_wot_discovery::InMemoryThingDirectory;
+    use clinkz_wot_servient::ExposedThingHandle;
+
+    type Handle = ExposedThingHandle<InMemoryThingDirectory>;
+
+    let make_prop = || {
+        PropertyAffordance::builder(DataSchema::String(DataSchema::string().build()))
+            .form(
+                Form::read_property("test://t/properties/x")
+                    .content_type("text/plain")
+                    .build()
+                    .unwrap(),
+            )
+            .build()
+            .unwrap()
+    };
+    let td = Thing::builder("Reentrant")
+        .id("urn:thing:reentrant")
+        .nosec()
+        .property("a", make_prop())
+        .property("b", make_prop())
+        .build()
+        .unwrap();
+
+    let servient = Servient::new();
+    let handle: Handle = servient.expose(td).unwrap();
+
+    // Reading "b" returns a fixed value.
+    handle
+        .set_property_read_handler(
+            "b",
+            StatusRead {
+                value: Payload::new(b"from-b".to_vec(), "text/plain"),
+            },
+        )
+        .unwrap();
+
+    // Reading "a" re-enters the registry to read "b" on the same Thing.
+    struct ReentrantReader {
+        handle: Handle,
+    }
+    impl PropertyReadHandler for ReentrantReader {
+        fn read(&self, _input: InteractionInput) -> CoreResult<InteractionOutput> {
+            self.handle
+                .read_property("b", InteractionInput::empty())
+                .map_err(|e| CoreError::InboundDispatch(e.to_string()))
+        }
+    }
+    handle
+        .set_property_read_handler(
+            "a",
+            ReentrantReader {
+                handle: handle.clone(),
+            },
+        )
+        .unwrap();
+
+    let body = handle
+        .read_property("a", InteractionInput::empty())
+        .expect("reentrant read must not deadlock")
+        .payload
+        .unwrap()
+        .body;
+    assert_eq!(body, b"from-b");
+}
+
+#[test]
+fn runtime_mutation_propagates_to_server_binding_routes() {
+    // Dynamic affordance lifecycle: add_property / remove_property must
+    // propagate to server-binding routes (and re-publish the TD to the
+    // directory). Previously they only updated the local TD, leaving remote
+    // routes and discovery stale.
+    use clinkz_wot_core::ServerBinding;
+
+    let (td, _) = thing("urn:thing:dyn-affordance", "Dyn");
+    let servient = Servient::new();
+    let binding = Arc::new(FakeServerBinding::default());
+    servient
+        .register_server_binding(Arc::clone(&binding) as Arc<dyn ServerBinding>)
+        .unwrap();
+    let handle = servient.expose(td).unwrap();
+
+    // add_property must trigger register_affordance on every server binding.
+    let prop = PropertyAffordance::builder(DataSchema::String(DataSchema::string().build()))
+        .form(
+            Form::read_property("test://t/properties/brightness")
+                .content_type("text/plain")
+                .build()
+                .unwrap(),
+        )
+        .build()
+        .unwrap();
+    handle.add_property("brightness", prop).unwrap();
+    let recorded = binding.registered_affordances.lock().unwrap().clone();
+    assert!(
+        recorded.iter().any(|r| r.contains("brightness")),
+        "register_affordance should fire for the added property, got {recorded:?}"
+    );
+
+    // remove_property must trigger unregister_affordance.
+    handle.remove_property("brightness").unwrap();
+    let removed = binding.unregistered_affordances.lock().unwrap().clone();
+    assert!(
+        removed.iter().any(|r| r.contains("brightness")),
+        "unregister_affordance should fire for the removed property, got {removed:?}"
+    );
+}
+
+#[test]
 fn repeated_consume_shares_interned_instance() {
     // Baseline v3.0 §5.1: consume() of the same Thing returns handles that
     // share one canonical live entry. A binding plan cached during an
     // interaction through one handle must be reused (not recomputed) when a
     // second handle to the same Thing interacts.
     let (td, _) = thing("urn:thing:interned-lamp", "Interned Lamp");
-    let unsupported_calls = std::rc::Rc::new(std::cell::RefCell::new(0));
+    let unsupported_calls = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
     let unsupported_factory_calls = unsupported_calls.clone();
+    let unsupported_probe_calls = unsupported_calls.clone();
     let servient = Servient::builder()
-        .binding_factory(move || {
-            Box::new(CountingUnsupportedBinding {
-                supports_calls: unsupported_factory_calls.clone(),
-            })
-        })
-        .binding_factory(|| {
-            Box::new(CountingHrefBinding {
-                supports_calls: std::rc::Rc::new(std::cell::RefCell::new(0)),
-            })
-        })
+        .binding_factory_with_support(
+            move || {
+                Box::new(CountingUnsupportedBinding {
+                    supports_calls: unsupported_factory_calls.clone(),
+                })
+            },
+            move |_thing, _form, _operation| {
+                unsupported_probe_calls.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                false
+            },
+        )
+        .binding_factory_with_support(
+            || {
+                Box::new(CountingHrefBinding {
+                    supports_calls: std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0)),
+                })
+            },
+            |_thing, form, operation| {
+                form.href.as_str().starts_with("test://") && operation == Operation::ReadProperty
+            },
+        )
         .build();
 
     let consumed_a = servient.consume(td.clone()).unwrap();
@@ -610,7 +786,10 @@ fn repeated_consume_shares_interned_instance() {
     consumed_a
         .read_property_with_criteria("status", criteria, InteractionInput::empty())
         .unwrap();
-    assert_eq!(*unsupported_calls.borrow(), 1);
+    assert_eq!(
+        unsupported_calls.load(std::sync::atomic::Ordering::Relaxed),
+        1
+    );
 
     // Second interaction through a different handle reuses the cached plan
     // from the same interned entry — the unsupported factory is not probed
@@ -619,7 +798,7 @@ fn repeated_consume_shares_interned_instance() {
         .read_property_with_criteria("status", criteria, InteractionInput::empty())
         .unwrap();
     assert_eq!(
-        *unsupported_calls.borrow(),
+        unsupported_calls.load(std::sync::atomic::Ordering::Relaxed),
         1,
         "second handle should share the interned entry's cached plan"
     );
@@ -630,19 +809,31 @@ fn invalidate_clears_interned_entry() {
     // Baseline v3.0 §5.2: invalidate(id) removes the interned entry so the
     // next consume() rebuilds form selections and binding plans.
     let (td, _) = thing("urn:thing:invalidated-lamp", "Invalidated Lamp");
-    let unsupported_calls = std::rc::Rc::new(std::cell::RefCell::new(0));
+    let unsupported_calls = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
     let unsupported_factory_calls = unsupported_calls.clone();
+    let unsupported_probe_calls = unsupported_calls.clone();
     let servient = Servient::builder()
-        .binding_factory(move || {
-            Box::new(CountingUnsupportedBinding {
-                supports_calls: unsupported_factory_calls.clone(),
-            })
-        })
-        .binding_factory(|| {
-            Box::new(CountingHrefBinding {
-                supports_calls: std::rc::Rc::new(std::cell::RefCell::new(0)),
-            })
-        })
+        .binding_factory_with_support(
+            move || {
+                Box::new(CountingUnsupportedBinding {
+                    supports_calls: unsupported_factory_calls.clone(),
+                })
+            },
+            move |_thing, _form, _operation| {
+                unsupported_probe_calls.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                false
+            },
+        )
+        .binding_factory_with_support(
+            || {
+                Box::new(CountingHrefBinding {
+                    supports_calls: std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0)),
+                })
+            },
+            |_thing, form, operation| {
+                form.href.as_str().starts_with("test://") && operation == Operation::ReadProperty
+            },
+        )
         .build();
 
     let consumed = servient.consume(td.clone()).unwrap();
@@ -652,7 +843,10 @@ fn invalidate_clears_interned_entry() {
     consumed
         .read_property_with_criteria("status", criteria, InteractionInput::empty())
         .unwrap();
-    assert_eq!(*unsupported_calls.borrow(), 1);
+    assert_eq!(
+        unsupported_calls.load(std::sync::atomic::Ordering::Relaxed),
+        1
+    );
 
     // Invalidate the interned entry.
     servient.invalidate(consumed.thing_id());
@@ -663,7 +857,7 @@ fn invalidate_clears_interned_entry() {
         .read_property_with_criteria("status", criteria, InteractionInput::empty())
         .unwrap();
     assert_eq!(
-        *unsupported_calls.borrow(),
+        unsupported_calls.load(std::sync::atomic::Ordering::Relaxed),
         2,
         "invalidate should force recompute on re-consume"
     );
@@ -723,6 +917,96 @@ fn poll_serve_sync_dispatches_read_property() {
     let response = &responses[0];
     assert!(response.error.is_none());
     assert_eq!(response.output.payload.as_ref().unwrap().body, b"on");
+}
+
+#[test]
+fn poll_serve_sync_dispatches_readallproperties_as_combined_bulk_response() {
+    // A Thing with two properties plus a Thing-level `readallproperties` form.
+    // The inbound `ReadAllProperties` request must fan out across the property
+    // read handlers and combine their outputs into one JSON-object response.
+    let td = Thing::builder("Bulk Read Server")
+        .id("urn:thing:bulk-read-server")
+        .nosec()
+        .property(
+            "a",
+            PropertyAffordance::builder(DataSchema::String(DataSchema::string().build()))
+                .form(
+                    Form::read_property("test://things/bulk-read/properties/a")
+                        .build()
+                        .unwrap(),
+                )
+                .build()
+                .unwrap(),
+        )
+        .property(
+            "b",
+            PropertyAffordance::builder(DataSchema::String(DataSchema::string().build()))
+                .form(
+                    Form::read_property("test://things/bulk-read/properties/b")
+                        .build()
+                        .unwrap(),
+                )
+                .build()
+                .unwrap(),
+        )
+        .form(
+            Form::builder("test://things/bulk-read/properties")
+                .op([Operation::ReadAllProperties])
+                .build()
+                .unwrap(),
+        )
+        .build()
+        .unwrap();
+    let server_binding = fake_server();
+    let servient = Servient::builder()
+        .server_binding(server_binding.clone())
+        .build();
+    let handle = servient.expose(td).unwrap();
+    handle
+        .set_property_read_handler(
+            "a",
+            StatusRead {
+                value: Payload::new(b"1".to_vec(), "application/json"),
+            },
+        )
+        .unwrap();
+    handle
+        .set_property_read_handler(
+            "b",
+            StatusRead {
+                value: Payload::new(b"2".to_vec(), "application/json"),
+            },
+        )
+        .unwrap();
+
+    server_binding.enqueue(InboundRequest::new(
+        ThingId::from("urn:thing:bulk-read-server"),
+        AffordanceTarget::Thing,
+        Operation::ReadAllProperties,
+        InteractionInput::empty(),
+    ));
+
+    servient.poll_serve_sync().unwrap();
+
+    let responses = server_binding.take_responses();
+    assert_eq!(responses.len(), 1);
+    let response = &responses[0];
+    assert!(response.error.is_none(), "got error: {:?}", response.error);
+    let combined: serde_json::Value = serde_json::from_slice(
+        response
+            .output
+            .payload
+            .as_ref()
+            .expect("combined payload")
+            .body
+            .as_ref(),
+    )
+    .expect("bulk response is valid JSON");
+    let map = combined
+        .as_object()
+        .expect("bulk response is a JSON object");
+    assert_eq!(map.get("a"), Some(&serde_json::json!(1)));
+    assert_eq!(map.get("b"), Some(&serde_json::json!(2)));
 }
 
 #[test]
@@ -863,20 +1147,32 @@ fn expose_rolls_back_on_route_registration_failure() {
 
 /// Shared helper: set up a Servient with a counting binding factory and
 /// return (servient, unsupported_calls_rc).
-fn invalidation_test_servient() -> (Servient, Rc<std::cell::RefCell<usize>>) {
-    let unsupported_calls = Rc::new(std::cell::RefCell::new(0));
+fn invalidation_test_servient() -> (Servient, std::sync::Arc<std::sync::atomic::AtomicUsize>) {
+    let unsupported_calls = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
     let factory_calls = unsupported_calls.clone();
+    let probe_calls = unsupported_calls.clone();
     let servient = Servient::builder()
-        .binding_factory(move || {
-            Box::new(CountingUnsupportedBinding {
-                supports_calls: factory_calls.clone(),
-            })
-        })
-        .binding_factory(|| {
-            Box::new(CountingHrefBinding {
-                supports_calls: Rc::new(std::cell::RefCell::new(0)),
-            })
-        })
+        .binding_factory_with_support(
+            move || {
+                Box::new(CountingUnsupportedBinding {
+                    supports_calls: factory_calls.clone(),
+                })
+            },
+            move |_thing, _form, _operation| {
+                probe_calls.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                false
+            },
+        )
+        .binding_factory_with_support(
+            || {
+                Box::new(CountingHrefBinding {
+                    supports_calls: std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0)),
+                })
+            },
+            |_thing, form, operation| {
+                form.href.as_str().starts_with("test://") && operation == Operation::ReadProperty
+            },
+        )
         .build();
     (servient, unsupported_calls)
 }
@@ -896,7 +1192,10 @@ fn directory_update_invalidates_consumed_thing() {
     consumed
         .read_property_with_criteria("status", criteria, InteractionInput::empty())
         .unwrap();
-    assert_eq!(*unsupported_calls.borrow(), 1);
+    assert_eq!(
+        unsupported_calls.load(std::sync::atomic::Ordering::Relaxed),
+        1
+    );
 
     // Directory update triggers invalidation (addendum §3).
     servient.update(td).unwrap();
@@ -909,7 +1208,7 @@ fn directory_update_invalidates_consumed_thing() {
         .read_property_with_criteria("status", criteria, InteractionInput::empty())
         .unwrap();
     assert_eq!(
-        *unsupported_calls.borrow(),
+        unsupported_calls.load(std::sync::atomic::Ordering::Relaxed),
         2,
         "directory update should invalidate consumed entry"
     );
@@ -929,7 +1228,10 @@ fn directory_unregister_invalidates_consumed_thing() {
     consumed
         .read_property_with_criteria("status", criteria, InteractionInput::empty())
         .unwrap();
-    assert_eq!(*unsupported_calls.borrow(), 1);
+    assert_eq!(
+        unsupported_calls.load(std::sync::atomic::Ordering::Relaxed),
+        1
+    );
 
     // Directory delete triggers invalidation (addendum §3).
     servient.unregister("urn:thing:dir-delete").unwrap();
@@ -942,7 +1244,7 @@ fn directory_unregister_invalidates_consumed_thing() {
         .read_property_with_criteria("status", criteria, InteractionInput::empty())
         .unwrap();
     assert_eq!(
-        *unsupported_calls.borrow(),
+        unsupported_calls.load(std::sync::atomic::Ordering::Relaxed),
         2,
         "directory delete should invalidate consumed entry"
     );
@@ -963,7 +1265,10 @@ fn destroy_invalidates_consumed_thing() {
     consumed
         .read_property_with_criteria("status", criteria, InteractionInput::empty())
         .unwrap();
-    assert_eq!(*unsupported_calls.borrow(), 1);
+    assert_eq!(
+        unsupported_calls.load(std::sync::atomic::Ordering::Relaxed),
+        1
+    );
 
     // Destroy the exposed Thing — directory delete triggers invalidation.
     servient.destroy("urn:thing:destroy-inv").unwrap();
@@ -976,7 +1281,7 @@ fn destroy_invalidates_consumed_thing() {
         .read_property_with_criteria("status", criteria, InteractionInput::empty())
         .unwrap();
     assert_eq!(
-        *unsupported_calls.borrow(),
+        unsupported_calls.load(std::sync::atomic::Ordering::Relaxed),
         2,
         "destroy should invalidate consumed entry"
     );
@@ -1314,7 +1619,7 @@ impl clinkz_wot_core::SecurityProvider for InboundBearerProvider {
     }
 
     fn apply(
-        &mut self,
+        &self,
         _: clinkz_wot_core::SecurityContext<'_>,
         _: &mut clinkz_wot_core::TransportRequest,
     ) -> clinkz_wot_core::CoreResult<()> {
@@ -1815,6 +2120,175 @@ fn read_all_properties_returns_every_td_property() {
 }
 
 // ---------------------------------------------------------------------------
+// Bulk property operations via Thing-level forms (W3C TD §6.3.3).
+//
+// When the consumed TD declares a Thing-level `readallproperties` /
+// `writemultipleproperties` form, the consumer should route through it in a
+// single round trip rather than fanning out across per-property forms.
+// ---------------------------------------------------------------------------
+
+#[test]
+fn read_all_properties_uses_thing_level_form_when_available() {
+    // A binding that answers Thing-level bulk reads with a combined JSON
+    // object and panics if a per-property read reaches it — proving the
+    // consumer took the bulk path instead of fanning out.
+    struct BulkBinding {
+        seen_bulk: Arc<Mutex<bool>>,
+    }
+    impl clinkz_wot_core::ClientBinding for BulkBinding {
+        fn supports(&self, form: &Form, operation: Operation) -> bool {
+            (form.href.as_str().starts_with("test://"))
+                && matches!(
+                    operation,
+                    Operation::ReadAllProperties | Operation::ReadMultipleProperties
+                )
+        }
+        fn invoke(
+            &self,
+            request: clinkz_wot_core::BindingRequest,
+        ) -> Result<clinkz_wot_core::InteractionOutput, clinkz_wot_core::CoreError> {
+            match (request.target.clone(), request.operation) {
+                (clinkz_wot_core::AffordanceTarget::Thing, Operation::ReadAllProperties) => {
+                    *self.seen_bulk.lock().unwrap() = true;
+                    let body = br#"{"a":1,"b":2}"#.to_vec();
+                    Ok(clinkz_wot_core::InteractionOutput::with_payload(
+                        Payload::new(body, "application/json"),
+                    ))
+                }
+                _ => panic!("expected a single Thing-level bulk read, got fan-out"),
+            }
+        }
+    }
+
+    let seen_bulk = Arc::new(Mutex::new(false));
+    let td = {
+        let prop_a = PropertyAffordance::builder(DataSchema::String(DataSchema::string().build()))
+            .form(
+                Form::read_property("test://things/x/properties/a")
+                    .build()
+                    .unwrap(),
+            )
+            .build()
+            .unwrap();
+        let prop_b = PropertyAffordance::builder(DataSchema::String(DataSchema::string().build()))
+            .form(
+                Form::read_property("test://things/x/properties/b")
+                    .build()
+                    .unwrap(),
+            )
+            .build()
+            .unwrap();
+        Thing::builder("BulkRead")
+            .id("urn:thing:bulk-read")
+            .nosec()
+            .property("a", prop_a)
+            .property("b", prop_b)
+            .form(
+                Form::builder("test://things/x/properties")
+                    .op([Operation::ReadAllProperties])
+                    .build()
+                    .unwrap(),
+            )
+            .build()
+            .unwrap()
+    };
+    let servient = Servient::builder()
+        .binding_factory({
+            let seen = Arc::clone(&seen_bulk);
+            move || {
+                Box::new(BulkBinding {
+                    seen_bulk: Arc::clone(&seen),
+                })
+            }
+        })
+        .build();
+    let consumed = servient.consume(td).unwrap();
+
+    let results = consumed.read_all_properties().unwrap();
+    assert_eq!(results.len(), 2);
+    assert_eq!(results["a"].payload.as_ref().unwrap().body, b"1");
+    assert_eq!(results["b"].payload.as_ref().unwrap().body, b"2");
+    assert!(
+        *seen_bulk.lock().unwrap(),
+        "the Thing-level readallproperties form must be used"
+    );
+}
+
+#[test]
+fn write_multiple_properties_uses_thing_level_form_when_available() {
+    // Records the body of the single bulk write request so the test can prove
+    // the consumer sent one combined `{name: value}` payload instead of N
+    // per-property writes.
+    let recorded_body = Arc::new(Mutex::new(Vec::<u8>::new()));
+    struct BulkWriteBinding {
+        recorded_body: Arc<Mutex<Vec<u8>>>,
+    }
+    impl clinkz_wot_core::ClientBinding for BulkWriteBinding {
+        fn supports(&self, form: &Form, operation: Operation) -> bool {
+            form.href.as_str().starts_with("test://")
+                && operation == Operation::WriteMultipleProperties
+        }
+        fn invoke(
+            &self,
+            request: clinkz_wot_core::BindingRequest,
+        ) -> Result<clinkz_wot_core::InteractionOutput, clinkz_wot_core::CoreError> {
+            match (request.target.clone(), request.operation) {
+                (clinkz_wot_core::AffordanceTarget::Thing, Operation::WriteMultipleProperties) => {
+                    if let Some(payload) = request.input.payload {
+                        *self.recorded_body.lock().unwrap() = payload.body;
+                    }
+                    Ok(clinkz_wot_core::InteractionOutput::empty())
+                }
+                _ => panic!("expected a single Thing-level bulk write, got fan-out"),
+            }
+        }
+    }
+
+    let td = {
+        Thing::builder("BulkWrite")
+            .id("urn:thing:bulk-write")
+            .nosec()
+            .form(
+                Form::builder("test://things/x/properties")
+                    .op([Operation::WriteMultipleProperties])
+                    .build()
+                    .unwrap(),
+            )
+            .build()
+            .unwrap()
+    };
+    let servient = Servient::builder()
+        .binding_factory({
+            let recorded = Arc::clone(&recorded_body);
+            move || {
+                Box::new(BulkWriteBinding {
+                    recorded_body: Arc::clone(&recorded),
+                })
+            }
+        })
+        .build();
+    let consumed = servient.consume(td).unwrap();
+
+    let mut values = BTreeMap::new();
+    values.insert(
+        String::from("a"),
+        InteractionInput::with_payload(Payload::new(b"1".to_vec(), "application/json")),
+    );
+    values.insert(
+        String::from("b"),
+        InteractionInput::with_payload(Payload::new(b"2".to_vec(), "application/json")),
+    );
+    consumed.write_multiple_properties(&values).unwrap();
+
+    let body = recorded_body.lock().unwrap().clone();
+    let parsed: serde_json::Value =
+        serde_json::from_slice(&body).expect("bulk write payload must be a JSON object");
+    let map = parsed.as_object().expect("bulk payload is an object");
+    assert_eq!(map.get("a"), Some(&serde_json::json!(1)));
+    assert_eq!(map.get("b"), Some(&serde_json::json!(2)));
+}
+
+// ---------------------------------------------------------------------------
 // M7: Credential store tests.
 // ---------------------------------------------------------------------------
 
@@ -1823,11 +2297,13 @@ fn in_memory_credential_store_stores_and_retrieves() {
     use clinkz_wot_core::{CredentialStore, Credentials, InMemoryCredentialStore};
 
     let store = InMemoryCredentialStore::new();
-    store.put(
-        "urn:thing:1",
-        "bearer",
-        Credentials::BearerToken(b"tok123".to_vec()),
-    );
+    store
+        .put(
+            "urn:thing:1",
+            "bearer",
+            Credentials::BearerToken(b"tok123".to_vec()),
+        )
+        .unwrap();
 
     let creds = store
         .get("urn:thing:1", "bearer")
@@ -1843,13 +2319,15 @@ fn credential_store_remove_clears_entry() {
     use clinkz_wot_core::{CredentialStore, Credentials, InMemoryCredentialStore};
 
     let store = InMemoryCredentialStore::new();
-    store.put(
-        "urn:thing:1",
-        "apikey",
-        Credentials::ApiKey("key123".into()),
-    );
+    store
+        .put(
+            "urn:thing:1",
+            "apikey",
+            Credentials::ApiKey("key123".into()),
+        )
+        .unwrap();
 
-    store.remove("urn:thing:1", "apikey");
+    store.remove("urn:thing:1", "apikey").unwrap();
     assert!(store.get("urn:thing:1", "apikey").is_none());
 }
 
@@ -2227,4 +2705,100 @@ fn poll_serve_sync_returns_after_shutdown() {
 
     // With shutdown set, poll_serve_sync should return immediately (Ok).
     servient.poll_serve_sync().unwrap();
+}
+
+// ---------------------------------------------------------------------------
+// URI template expansion (Finding #3 from WoT compliance audit).
+//
+// Verifies that consumed interactions expand RFC 6570 URI templates in form
+// hrefs using the caller-supplied uriVariables (InteractionInput.parameters)
+// before handing the form to the binding.
+// ---------------------------------------------------------------------------
+
+#[test]
+fn consumed_request_expands_uri_template_form_href() {
+    // Build a Thing whose property form uses a URI template.
+    let template_form = Form::builder("test://things/{thing_id}/properties/{prop}")
+        .read_property()
+        .content_type("text/plain")
+        .build()
+        .unwrap();
+    let property = PropertyAffordance::builder(DataSchema::String(DataSchema::string().build()))
+        .form(template_form)
+        .build()
+        .unwrap();
+    let td = Thing::builder("Template Thing")
+        .id("urn:thing:template-thing")
+        .nosec()
+        .property("temperature", property)
+        .build()
+        .unwrap();
+
+    let servient = Servient::builder()
+        .binding_factory(|| {
+            Box::new(CountingHrefBinding {
+                supports_calls: Arc::new(std::sync::atomic::AtomicUsize::new(0)),
+            })
+        })
+        .build();
+
+    let consumed = servient.consume(td).unwrap();
+
+    // Supply uriVariables through InteractionInput.parameters.
+    let mut input = InteractionInput::empty();
+    input
+        .parameters
+        .insert("thing_id".to_string(), "gw001".to_string());
+    input
+        .parameters
+        .insert("prop".to_string(), "temperature".to_string());
+
+    let output = consumed.read_property("temperature", input).unwrap();
+
+    // CountingHrefBinding returns the href it received; verify it was expanded.
+    let payload = output.payload.unwrap();
+    let received_href = std::str::from_utf8(&payload.body).unwrap();
+    assert_eq!(
+        received_href, "test://things/gw001/properties/temperature",
+        "binding should receive the expanded URI, not the template"
+    );
+}
+
+#[test]
+fn consumed_request_passes_non_template_form_unchanged() {
+    // Build a Thing with only concrete test:// forms (no other:// variants).
+    let read_form = Form::read_property("test://things/lamp/properties/status")
+        .content_type("text/plain")
+        .build()
+        .unwrap();
+    let property = PropertyAffordance::builder(DataSchema::String(DataSchema::string().build()))
+        .form(read_form)
+        .build()
+        .unwrap();
+    let td = Thing::builder("Concrete Href Thing")
+        .id("urn:thing:concrete-href")
+        .nosec()
+        .property("status", property)
+        .build()
+        .unwrap();
+
+    let servient = Servient::builder()
+        .binding_factory(|| {
+            Box::new(CountingHrefBinding {
+                supports_calls: Arc::new(std::sync::atomic::AtomicUsize::new(0)),
+            })
+        })
+        .build();
+
+    let consumed = servient.consume(td).unwrap();
+    let output = consumed
+        .read_property("status", InteractionInput::empty())
+        .unwrap();
+
+    let payload = output.payload.unwrap();
+    let received_href = std::str::from_utf8(&payload.body).unwrap();
+    assert_eq!(
+        received_href, "test://things/lamp/properties/status",
+        "non-template href should pass through unchanged"
+    );
 }

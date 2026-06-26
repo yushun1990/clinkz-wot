@@ -284,7 +284,9 @@ where
     H: Send + Sync,
 {
     fn undeclare_boxed(self: Box<Self>) {
-        let _ = Subscriber::undeclare(*self).wait();
+        if let Err(e) = Subscriber::undeclare(*self).wait() {
+            log::warn!("Zenoh subscription: failed to undeclare subscriber: {e}");
+        }
     }
 }
 
@@ -301,10 +303,35 @@ impl SubscriptionGuard for ZenohSubscriptionGuard {
     }
 }
 
+/// Best-effort cleanup that undeclares the underlying zenoh subscriber.
+///
+/// Per AGENTS.md — *"never rely on failing destructors; provide explicit
+/// alternatives for destructor behavior that may block"* — `Drop` must not
+/// block the caller. [`SubscriberHandle::undeclare_boxed`] resolves the
+/// undeclaration through `.wait()`, which is blocking, so it is moved onto a
+/// background thread and `Drop` returns immediately.
+///
+/// Callers that need deterministic, observable teardown should call
+/// [`ZenohSubscriptionGuard::close`] (via [`SubscriptionGuard::close`])
+/// explicitly, which performs the undeclaration inline on the calling thread.
 impl Drop for ZenohSubscriptionGuard {
     fn drop(&mut self) {
-        if let Some(sub) = self.subscriber.take() {
-            sub.undeclare_boxed();
+        let Some(sub) = self.subscriber.take() else {
+            return;
+        };
+        let spawned = std::thread::Builder::new()
+            .name("clinkz-wot-zenoh-undeclare".to_string())
+            .spawn(move || sub.undeclare_boxed())
+            .is_ok();
+        if !spawned {
+            // Thread spawn failed (e.g. OS resource limits). The failed
+            // `spawn` call already dropped the subscriber handle, letting
+            // zenoh reclaim it when the session closes. Log so the resource
+            // state is observable instead of silent.
+            log::warn!(
+                "Zenoh subscription: background undeclare thread could not \
+                 spawn; subscriber handle will be reclaimed on session close"
+            );
         }
     }
 }

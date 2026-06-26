@@ -37,7 +37,7 @@ pub struct Link {
 }
 
 impl Link {
-    pub fn builder(href: &str) -> LinkBuilder<'_> {
+    pub fn builder<'a>(href: impl Into<Cow<'a, str>>) -> LinkBuilder<'a> {
         LinkBuilder::new(href)
     }
 }

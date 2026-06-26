@@ -3,7 +3,9 @@
 //! Covers `ThingFilter`, `ThingDiscovery` iteration, and fragment-based
 //! discovery filtering.
 
-use clinkz_wot_discovery::{InMemoryThingDirectory, ThingDirectory, ThingFilter, discover};
+use clinkz_wot_discovery::{
+    DiscoveryMethod, InMemoryThingDirectory, ThingDirectory, ThingFilter, discover,
+};
 use clinkz_wot_td::thing::Thing;
 use serde_json::json;
 
@@ -140,4 +142,80 @@ fn discover_local_with_fragment_filters_by_property_name() {
     .map(|t| id_of(&t))
     .collect();
     assert_eq!(ids, vec!["urn:lamp"]);
+}
+
+// ---------------------------------------------------------------------------
+// DiscoveryMethod / query / url (WoT Scripting API alignment)
+// ---------------------------------------------------------------------------
+
+#[test]
+fn discover_directory_method_returns_error_without_transport() {
+    let dir = InMemoryThingDirectory::new();
+    let filter = ThingFilter::new()
+        .method(DiscoveryMethod::Directory)
+        .url("https://tdd.example.com");
+
+    let td = discover(&dir, filter).unwrap();
+    assert!(td.is_done());
+    assert!(td.error().is_some());
+    assert_eq!(td.remaining(), 0);
+}
+
+#[test]
+fn discover_multicast_method_returns_error_without_transport() {
+    let dir = InMemoryThingDirectory::new();
+    let filter = ThingFilter::new().method(DiscoveryMethod::Multicast);
+
+    let td = discover(&dir, filter).unwrap();
+    assert!(td.is_done());
+    assert!(td.error().is_some());
+}
+
+#[test]
+fn discover_everything_method_searches_local() {
+    let mut dir = InMemoryThingDirectory::new();
+    dir.register(thing("urn:1", "A")).unwrap();
+    dir.register(thing("urn:2", "B")).unwrap();
+
+    let filter = ThingFilter::new().method(DiscoveryMethod::Everything);
+    let td = discover(&dir, filter).unwrap();
+    assert_eq!(td.remaining(), 2);
+    assert!(td.error().is_none());
+}
+
+#[test]
+fn discover_query_filter_matches_serialized_td() {
+    let mut dir = InMemoryThingDirectory::new();
+    dir.register(thing("urn:1", "Temperature Sensor")).unwrap();
+    dir.register(thing("urn:2", "Pressure Gauge")).unwrap();
+
+    let filter = ThingFilter::new().query("Temperature");
+    let td = discover(&dir, filter).unwrap();
+    let ids: Vec<_> = std::iter::from_fn({
+        let mut td = td;
+        move || td.next_now()
+    })
+    .map(|t| id_of(&t))
+    .collect();
+    assert_eq!(ids, vec!["urn:1"]);
+}
+
+#[test]
+fn discover_query_and_fragment_combine_with_and() {
+    let mut dir = InMemoryThingDirectory::new();
+    dir.register(thing("urn:1", "Temperature Sensor")).unwrap();
+    dir.register(thing("urn:2", "Temperature Probe")).unwrap();
+
+    // Both fragment (title) and query must match.
+    let filter = ThingFilter::new()
+        .fragment_field("title", json!("Temperature Sensor"))
+        .query("Sensor");
+    let td = discover(&dir, filter).unwrap();
+    let ids: Vec<_> = std::iter::from_fn({
+        let mut td = td;
+        move || td.next_now()
+    })
+    .map(|t| id_of(&t))
+    .collect();
+    assert_eq!(ids, vec!["urn:1"]);
 }

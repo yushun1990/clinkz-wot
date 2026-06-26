@@ -52,6 +52,12 @@ impl AsRef<str> for ThingId {
     }
 }
 
+impl core::borrow::Borrow<str> for ThingId {
+    fn borrow(&self) -> &str {
+        &self.0
+    }
+}
+
 impl fmt::Display for ThingId {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(&self.0)

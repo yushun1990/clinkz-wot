@@ -28,4 +28,4 @@ pub use handle::{ConsumedThingHandle, ExposedThingHandle};
 pub use servient::{Servient, ShutdownHandle};
 
 pub(crate) use consumed::ConsumedThingRegistry;
-pub(crate) use registry::InMemoryExposedThingRegistry;
+pub(crate) use registry::ExposedThingRegistry;

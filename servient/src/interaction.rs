@@ -1,16 +1,19 @@
-use alloc::{boxed::Box, format};
+use alloc::{boxed::Box, format, string::ToString, sync::Arc};
 
 use clinkz_wot_core::{
-    AffordanceTarget, BoundConsumedThing, ClientBinding, CodecInput, ConsumedThing, CoreError,
-    CredentialStore, InteractionInput, InteractionOutput, Payload, SecurityContext, SecurityError,
-    Subscription, TransportRequest,
+    AffordanceTarget, ClientBinding, CodecInput, CoreError, CredentialStore, InteractionInput,
+    InteractionOutput, Payload, SecurityContext, SecurityError, Subscription, TransportRequest,
 };
 use clinkz_wot_discovery::ThingDirectory;
 use clinkz_wot_protocol_bindings::{
-    AffordanceRef, FormSelectionCriteria, resolve_form_security,
-    select_affordance_form_with_criteria, validate_affordance_form_with_criteria,
+    AffordanceRef, FormSelectionCriteria, expand_uri_template, resolve_form_security,
+    select_affordance_form_with_criteria, validate_form_operation,
 };
-use clinkz_wot_td::{data_type::Operation, form::Form, security_scheme::SecurityScheme};
+use clinkz_wot_td::{
+    data_type::{FormHref, Operation, UriReference},
+    form::Form,
+    security_scheme::SecurityScheme,
+};
 
 use crate::{
     BindingPlan, SelectedFormCacheKey, ServientError, ServientResult,
@@ -21,8 +24,37 @@ use crate::{
 };
 
 struct ActiveBindingPlan {
-    form: Form,
-    binding: Box<dyn ClientBinding>,
+    form: Arc<Form>,
+    binding: Arc<dyn ClientBinding + Send + Sync>,
+}
+
+/// Expands a form's URI template href using the caller-supplied uriVariables.
+///
+/// If the form href is a concrete reference (not a template), returns the
+/// original `Arc<Form>` unchanged (zero-cost fast path).
+///
+/// If the form href is a template, clones the form, expands the template
+/// using `input.parameters` (the uriVariables), and returns a new `Arc<Form>`
+/// with a concrete `FormHref::Reference`.
+fn expand_form_href_if_template(
+    form: &Arc<Form>,
+    input: &InteractionInput,
+) -> ServientResult<Arc<Form>> {
+    match &form.href {
+        FormHref::Template(template) => {
+            let expanded = expand_uri_template(template, &input.parameters)
+                .map_err(|err| ServientError::Accept(err.to_string()))?;
+
+            let resolved = UriReference::parse(&expanded).map_err(|err| {
+                ServientError::Accept(format!("expanded URI is invalid: {}", err))
+            })?;
+
+            let mut form_clone = (**form).clone();
+            form_clone.href = FormHref::Reference(resolved);
+            Ok(Arc::new(form_clone))
+        }
+        FormHref::Reference(_) => Ok(Arc::clone(form)),
+    }
 }
 
 pub(crate) struct InteractionRuntime {
@@ -30,6 +62,12 @@ pub(crate) struct InteractionRuntime {
     payload_codecs: PayloadCodecRegistry,
     security_providers: SecurityProviderRegistry,
     credential_store: Option<alloc::sync::Arc<dyn CredentialStore>>,
+    /// When `true` (default), every consumed interaction payload whose content
+    /// type matches a registered codec is decoded and re-encoded for
+    /// canonicalization/validation. When `false`, payloads pass through
+    /// untouched — saving two `Vec<u8>` allocations per interaction for
+    /// deployments that do not need canonical bytes (signing/hashing).
+    normalize_payloads: bool,
 }
 
 impl InteractionRuntime {
@@ -38,12 +76,14 @@ impl InteractionRuntime {
         payload_codecs: PayloadCodecRegistry,
         security_providers: SecurityProviderRegistry,
         credential_store: Option<alloc::sync::Arc<dyn CredentialStore>>,
+        normalize_payloads: bool,
     ) -> Self {
         Self {
             binding_factories,
             payload_codecs,
             security_providers,
             credential_store,
+            normalize_payloads,
         }
     }
 }
@@ -55,27 +95,53 @@ where
     pub(crate) fn consumed_request(
         &self,
         entry: &ConsumedThingEntry,
-        id: &str,
         target: AffordanceTarget,
         affordance: AffordanceRef<'_>,
         criteria: FormSelectionCriteria<'_>,
         input: InteractionInput,
     ) -> ServientResult<InteractionOutput> {
         self.interaction_runtime()
-            .consumed_request(entry, id, target, affordance, criteria, input)
+            .consumed_request(entry, target, affordance, criteria, input)
     }
 
     pub(crate) fn consumed_subscribe(
         &self,
         entry: &ConsumedThingEntry,
-        id: &str,
         target: AffordanceTarget,
         affordance: AffordanceRef<'_>,
         criteria: FormSelectionCriteria<'_>,
         input: InteractionInput,
     ) -> ServientResult<Subscription> {
         self.interaction_runtime()
-            .consumed_subscribe(entry, id, target, affordance, criteria, input)
+            .consumed_subscribe(entry, target, affordance, criteria, input)
+    }
+
+    #[cfg(feature = "async")]
+    pub(crate) async fn consumed_request_async(
+        &self,
+        entry: &ConsumedThingEntry,
+        target: AffordanceTarget,
+        affordance: AffordanceRef<'_>,
+        criteria: FormSelectionCriteria<'_>,
+        input: InteractionInput,
+    ) -> ServientResult<InteractionOutput> {
+        self.interaction_runtime()
+            .consumed_request_async(entry, target, affordance, criteria, input)
+            .await
+    }
+
+    #[cfg(feature = "async")]
+    pub(crate) async fn consumed_subscribe_async(
+        &self,
+        entry: &ConsumedThingEntry,
+        target: AffordanceTarget,
+        affordance: AffordanceRef<'_>,
+        criteria: FormSelectionCriteria<'_>,
+        input: InteractionInput,
+    ) -> ServientResult<Subscription> {
+        self.interaction_runtime()
+            .consumed_subscribe_async(entry, target, affordance, criteria, input)
+            .await
     }
 }
 
@@ -92,25 +158,38 @@ impl InteractionRuntime {
     pub(crate) fn consumed_request(
         &mut self,
         entry: &ConsumedThingEntry,
-        id: &str,
         target: AffordanceTarget,
         affordance: AffordanceRef<'_>,
         criteria: FormSelectionCriteria<'_>,
         input: InteractionInput,
     ) -> ServientResult<InteractionOutput> {
         let thing = entry.thing();
-        let active_plan =
-            self.cached_or_select_binding_plan(entry, thing, id, affordance, criteria)?;
+        let active_plan = self.cached_or_select_binding_plan(entry, thing, affordance, criteria)?;
         let input = self.prepare_interaction_input(
             thing,
             Some(&active_plan.form),
             criteria.operation,
             input,
         )?;
-        let thing_arc = entry.thing_arc();
-        let mut consumed = self.bound_consumed_thing_with_binding(thing_arc, active_plan.binding);
-        let output = consumed
-            .request(target, criteria.operation, &active_plan.form, input)
+
+        // Expand URI template form hrefs using caller-supplied uriVariables
+        // (InteractionInput.parameters) before handing the form to the binding.
+        let form = expand_form_href_if_template(&active_plan.form, &input)?;
+
+        // Invoke the cached binding directly (no per-request BoundConsumedThing
+        // reconstruction). The plan was validated at cache time and the TD is
+        // immutable for the entry's life, so re-validating the form on the hot
+        // path is unnecessary (mirrors `consumed_subscribe`).
+        let request = clinkz_wot_core::BindingRequest {
+            thing: entry.thing_arc(),
+            target,
+            operation: criteria.operation,
+            form,
+            input,
+        };
+        let output = active_plan
+            .binding
+            .invoke(request)
             .map_err(ServientError::from)?;
         self.prepare_interaction_output(output)
     }
@@ -125,15 +204,13 @@ impl InteractionRuntime {
     pub(crate) fn consumed_subscribe(
         &mut self,
         entry: &ConsumedThingEntry,
-        id: &str,
         target: AffordanceTarget,
         affordance: AffordanceRef<'_>,
         criteria: FormSelectionCriteria<'_>,
         input: InteractionInput,
     ) -> ServientResult<Subscription> {
         let thing = entry.thing();
-        let active_plan =
-            self.cached_or_select_binding_plan(entry, thing, id, affordance, criteria)?;
+        let active_plan = self.cached_or_select_binding_plan(entry, thing, affordance, criteria)?;
         let input = self.prepare_interaction_input(
             thing,
             Some(&active_plan.form),
@@ -141,11 +218,14 @@ impl InteractionRuntime {
             input,
         )?;
 
+        // Expand URI template form hrefs before handing to the binding.
+        let form = expand_form_href_if_template(&active_plan.form, &input)?;
+
         let request = clinkz_wot_core::BindingRequest {
             thing: entry.thing_arc(),
             target: target.clone(),
             operation: criteria.operation,
-            form: alloc::sync::Arc::new(active_plan.form.clone()),
+            form,
             input,
         };
 
@@ -153,6 +233,103 @@ impl InteractionRuntime {
             .binding
             .subscribe(request)
             .map_err(ServientError::from)?;
+
+        let key = crate::consumed::SubscriptionKey::new(&target, criteria.operation.as_str());
+        entry.store_subscription(key, guard);
+
+        Ok(subscription)
+    }
+
+    // -----------------------------------------------------------------------
+    // Async consumed interactions (behind `async` feature).
+    //
+    // These mirror the sync methods but route through `AsyncClientBinding`
+    // when the concrete binding implements it, giving true non-blocking I/O.
+    // When the binding does not implement `AsyncClientBinding`, the sync path
+    // is used as a fallback (which may block the async executor).
+    // -----------------------------------------------------------------------
+
+    #[cfg(feature = "async")]
+    pub(crate) async fn consumed_request_async(
+        &self,
+        entry: &ConsumedThingEntry,
+        target: AffordanceTarget,
+        affordance: AffordanceRef<'_>,
+        criteria: FormSelectionCriteria<'_>,
+        input: InteractionInput,
+    ) -> ServientResult<InteractionOutput> {
+        let thing = entry.thing();
+        let active_plan = self.cached_or_select_binding_plan(entry, thing, affordance, criteria)?;
+        let input = self.prepare_interaction_input(
+            thing,
+            Some(&active_plan.form),
+            criteria.operation,
+            input,
+        )?;
+        let form = expand_form_href_if_template(&active_plan.form, &input)?;
+
+        let request = clinkz_wot_core::BindingRequest {
+            thing: entry.thing_arc(),
+            target,
+            operation: criteria.operation,
+            form,
+            input,
+        };
+
+        let output = if let Some(async_binding) = active_plan.binding.as_async_binding() {
+            async_binding
+                .invoke_async(request)
+                .await
+                .map_err(ServientError::from)?
+        } else {
+            // Fallback: sync invoke (may block the async executor).
+            active_plan
+                .binding
+                .invoke(request)
+                .map_err(ServientError::from)?
+        };
+        self.prepare_interaction_output(output)
+    }
+
+    #[cfg(feature = "async")]
+    pub(crate) async fn consumed_subscribe_async(
+        &self,
+        entry: &ConsumedThingEntry,
+        target: AffordanceTarget,
+        affordance: AffordanceRef<'_>,
+        criteria: FormSelectionCriteria<'_>,
+        input: InteractionInput,
+    ) -> ServientResult<Subscription> {
+        let thing = entry.thing();
+        let active_plan = self.cached_or_select_binding_plan(entry, thing, affordance, criteria)?;
+        let input = self.prepare_interaction_input(
+            thing,
+            Some(&active_plan.form),
+            criteria.operation,
+            input,
+        )?;
+        let form = expand_form_href_if_template(&active_plan.form, &input)?;
+
+        let request = clinkz_wot_core::BindingRequest {
+            thing: entry.thing_arc(),
+            target: target.clone(),
+            operation: criteria.operation,
+            form,
+            input,
+        };
+
+        let (subscription, guard) =
+            if let Some(async_binding) = active_plan.binding.as_async_binding() {
+                async_binding
+                    .subscribe_async(request)
+                    .await
+                    .map_err(ServientError::from)?
+            } else {
+                active_plan
+                    .binding
+                    .subscribe(request)
+                    .map_err(ServientError::from)?
+            };
 
         let key = crate::consumed::SubscriptionKey::new(&target, criteria.operation.as_str());
         entry.store_subscription(key, guard);
@@ -171,7 +348,11 @@ impl InteractionRuntime {
         operation: Operation,
         input: InteractionInput,
     ) -> ServientResult<InteractionInput> {
-        let input = normalize_interaction_input(&self.payload_codecs, input)?;
+        let input = if self.normalize_payloads {
+            normalize_interaction_input(&self.payload_codecs, input)?
+        } else {
+            input
+        };
         match form {
             Some(form) => self.apply_security(thing, form, operation, input),
             None => Ok(input),
@@ -182,7 +363,11 @@ impl InteractionRuntime {
         &self,
         output: InteractionOutput,
     ) -> ServientResult<InteractionOutput> {
-        normalize_interaction_output(&self.payload_codecs, output)
+        if self.normalize_payloads {
+            normalize_interaction_output(&self.payload_codecs, output)
+        } else {
+            Ok(output)
+        }
     }
 
     fn apply_security(
@@ -193,118 +378,118 @@ impl InteractionRuntime {
         mut input: InteractionInput,
     ) -> ServientResult<InteractionInput> {
         let effective_security = resolve_form_security(thing, form);
-        self.security_providers.with(|providers| {
-            for scheme_name in effective_security.security {
-                let scheme = thing.security_definitions.get(scheme_name).ok_or_else(|| {
+        // Snapshot provider handles under a brief lock, then apply *outside*
+        // the registry lock so a slow provider (e.g. token refresh, signing)
+        // does not serialize every outbound security application. `apply` takes
+        // `&self`, so an `Arc` clone is sufficient to release the handle.
+        let providers = self
+            .security_providers
+            .with(|snapshot| Arc::clone(snapshot))?;
+
+        for scheme_name in effective_security.security {
+            let scheme = thing.security_definitions.get(scheme_name).ok_or_else(|| {
+                CoreError::Security(SecurityError::SchemeFailure(format!(
+                    "Security definition '{}' is not declared",
+                    scheme_name
+                )))
+            })?;
+
+            if is_nosec_security(scheme) {
+                continue;
+            }
+
+            let provider = providers
+                .iter()
+                .find(|provider| provider.scheme_name() == scheme_name)
+                .ok_or_else(|| {
                     CoreError::Security(SecurityError::SchemeFailure(format!(
-                        "Security definition '{}' is not declared",
+                        "No security provider registered for '{}'",
                         scheme_name
                     )))
                 })?;
 
-                if is_nosec_security(scheme) {
-                    continue;
-                }
-
-                let provider = providers
-                    .iter_mut()
-                    .find(|provider| provider.scheme_name() == scheme_name)
-                    .ok_or_else(|| {
-                        CoreError::Security(SecurityError::SchemeFailure(format!(
-                            "No security provider registered for '{}'",
-                            scheme_name
-                        )))
-                    })?;
-
-                if !provider.supports_scopes(effective_security.scopes) {
-                    return Err(CoreError::Security(SecurityError::SchemeFailure(format!(
-                        "Security provider '{}' does not support scopes {:?}",
-                        scheme_name, effective_security.scopes
-                    )))
-                    .into());
-                }
-
-                let mut request = TransportRequest::new(form.href.as_str(), operation.as_str());
-                request.metadata = input.parameters.clone();
-                request.payload = input.payload.take();
-                provider.apply(
-                    SecurityContext {
-                        thing,
-                        form,
-                        scheme_name,
-                        scheme,
-                        credentials: self.credential_store.as_deref(),
-                    },
-                    &mut request,
-                )?;
-                // Security provider modifies request.metadata with auth headers.
-                // Diff to extract only the security-added metadata.
-                for (key, value) in &request.metadata {
-                    if input.parameters.get(key) != Some(value) {
-                        input.security_metadata.insert(key.clone(), value.clone());
-                    }
-                }
-                input.payload = request.payload;
+            if !provider.supports_scopes(effective_security.scopes) {
+                return Err(CoreError::Security(SecurityError::SchemeFailure(format!(
+                    "Security provider '{}' does not support scopes {:?}",
+                    scheme_name, effective_security.scopes
+                )))
+                .into());
             }
 
-            Ok(input)
-        })
+            let mut request = TransportRequest::new(form.href.as_str(), operation.as_str());
+            request.metadata = input.parameters.clone();
+            request.payload = input.payload.take();
+            provider.apply(
+                SecurityContext {
+                    thing,
+                    form,
+                    scheme_name,
+                    scheme,
+                    credentials: self.credential_store.as_deref(),
+                },
+                &mut request,
+            )?;
+            // Security provider modifies request.metadata with auth headers.
+            // Diff to extract only the security-added metadata.
+            for (key, value) in &request.metadata {
+                if input.parameters.get(key) != Some(value) {
+                    input.security_metadata.insert(key.clone(), value.clone());
+                }
+            }
+            input.payload = request.payload;
+        }
+
+        Ok(input)
     }
 
     fn cached_or_select_binding_plan(
         &self,
         entry: &ConsumedThingEntry,
         thing: &clinkz_wot_td::thing::Thing,
-        id: &str,
         affordance: AffordanceRef<'_>,
         criteria: FormSelectionCriteria<'_>,
     ) -> ServientResult<ActiveBindingPlan> {
-        let key = SelectedFormCacheKey::new(id, affordance_target_from_ref(affordance), criteria);
+        let key = SelectedFormCacheKey::new(affordance_target_from_ref(affordance), criteria);
         let current_generation = self.binding_factories.generation();
 
         if let Some(plan) = entry.get_plan(&key) {
             // Fast path: the binding factory registry has not changed since
             // this plan was validated, and the TD is immutable for the life of
-            // the entry (the entry is invalidated on TD update). Skip both the
-            // form revalidation and the `supports_with_thing` check; just
-            // reconstruct the binding.
+            // the entry (the entry is invalidated on TD update). Reuse the
+            // cached live binding instance (cheap `Arc` clone) — no
+            // `make_binding`, no per-call session-handle/buffer construction.
             if plan.factory_generation == current_generation {
-                if let Some(binding) = self
-                    .binding_factories
-                    .make_binding(plan.binding_factory_index)
-                {
-                    return Ok(ActiveBindingPlan {
-                        form: plan.form,
-                        binding,
-                    });
+                return Ok(ActiveBindingPlan {
+                    form: Arc::clone(&plan.form),
+                    binding: Arc::clone(&plan.binding),
+                });
+            }
+            // Generation changed (a factory was appended): revalidate the
+            // cached plan against the current factory set using the cached
+            // binding itself. Factories are append-only, so the cached
+            // binding's factory index is still valid; only its `supports` need
+            // re-checking. On success, refresh the cached generation.
+            match self.active_binding_plan_from_cache(thing, affordance, criteria, &plan) {
+                Ok(active_plan) => {
+                    entry.update_plan_generation(&key, current_generation);
+                    return Ok(active_plan);
                 }
-                // Factory index is stale (registry shrank). Fall through to
-                // full recompute.
-                entry.remove_plan(&key);
-            } else {
-                // Generation changed: revalidate the cached plan against the
-                // current factory set. On success, refresh the cached
-                // generation so subsequent hits take the fast path.
-                match self.active_binding_plan_from_cache(thing, affordance, criteria, &plan) {
-                    Ok(active_plan) => {
-                        entry.update_plan_generation(&key, current_generation);
-                        return Ok(active_plan);
-                    }
-                    Err(_) => {
-                        entry.remove_plan(&key);
-                    }
+                Err(_) => {
+                    entry.remove_plan(&key);
                 }
             }
         }
 
-        let form = self.cached_or_select_form(entry, thing, id, affordance, criteria)?;
+        let form = self.cached_or_select_form(thing, affordance, criteria)?;
         let (binding_factory_index, binding) =
             self.select_binding_factory_for_form(thing, &form, criteria.operation)?;
+        let binding: Arc<dyn ClientBinding + Send + Sync> = Arc::from(binding);
         entry.insert_plan(
             key,
             BindingPlan {
-                form: form.clone(),
+                form: Arc::clone(&form),
                 binding_factory_index,
+                binding: Arc::clone(&binding),
                 factory_generation: current_generation,
             },
         );
@@ -319,18 +504,24 @@ impl InteractionRuntime {
         criteria: FormSelectionCriteria<'_>,
         plan: &BindingPlan,
     ) -> ServientResult<ActiveBindingPlan> {
-        validate_affordance_form_with_criteria(thing, affordance, &plan.form, criteria)?;
-        let binding = self.binding_from_factory_index(plan.binding_factory_index)?;
-        if binding.supports_with_thing(thing, &plan.form, criteria.operation) {
+        // The cached form was selected from this affordance; use the lightweight
+        // operation check instead of the full O(n) membership search. Reuse the
+        // cached binding instance (no make_binding): factories are append-only,
+        // so the cached binding is still from a valid factory.
+        validate_form_operation(thing, affordance, &plan.form, criteria.operation)?;
+        if plan
+            .binding
+            .supports_with_thing(thing, &plan.form, criteria.operation)
+        {
             Ok(ActiveBindingPlan {
-                form: plan.form.clone(),
-                binding,
+                form: Arc::clone(&plan.form),
+                binding: Arc::clone(&plan.binding),
             })
         } else {
             Err(CoreError::UnsupportedBinding(format!(
-                "Cached binding factory {} no longer supports {:?} for {}",
+                "Cached binding factory {} no longer supports {} for {}",
                 plan.binding_factory_index,
-                criteria.operation,
+                criteria.operation.as_str(),
                 plan.form.href.as_str()
             ))
             .into())
@@ -339,27 +530,19 @@ impl InteractionRuntime {
 
     fn cached_or_select_form(
         &self,
-        entry: &ConsumedThingEntry,
         thing: &clinkz_wot_td::thing::Thing,
-        id: &str,
         affordance: AffordanceRef<'_>,
         criteria: FormSelectionCriteria<'_>,
-    ) -> ServientResult<Form> {
-        let key = SelectedFormCacheKey::new(id, affordance_target_from_ref(affordance), criteria);
-
-        if let Some(form) = entry.get_form(&key) {
-            // The TD is immutable for the life of the entry, so a cached form
-            // is always still valid for the same affordance + criteria. Skip
-            // revalidation.
-            return Ok(form);
-        }
-
-        let form = select_affordance_form_with_criteria(thing, affordance, criteria)?
-            .selection
-            .form
-            .clone();
-        entry.insert_form(key, form.clone());
-        Ok(form)
+    ) -> ServientResult<Arc<Form>> {
+        // Reached only on plan-cache miss (the cold path). The selected form is
+        // stored in the binding plan, so a separate form cache would just hold
+        // the same `Arc<Form>` under the same key — recompute it here instead.
+        Ok(Arc::new(
+            select_affordance_form_with_criteria(thing, affordance, criteria)?
+                .selection
+                .form
+                .clone(),
+        ))
     }
 
     fn select_binding_factory_for_form(
@@ -367,20 +550,29 @@ impl InteractionRuntime {
         thing: &clinkz_wot_td::thing::Thing,
         form: &Form,
         operation: Operation,
-    ) -> ServientResult<(usize, Box<dyn ClientBinding>)> {
-        self.binding_factories
-            .find_supporting(thing, form, operation)
+    ) -> ServientResult<(usize, Box<dyn ClientBinding + Send + Sync>)> {
+        let binding_factory_index = self
+            .binding_factories
+            .find_supporting_index(thing, form, operation)
             .ok_or_else(|| {
-                CoreError::UnsupportedBinding(format!(
-                    "No binding supports {:?} for {}",
-                    operation,
+                ServientError::from(CoreError::UnsupportedBinding(format!(
+                    "No binding supports {} for {}",
+                    operation.as_str(),
                     form.href.as_str()
-                ))
-                .into()
-            })
+                )))
+            })?;
+        let binding = self.binding_from_factory_index(binding_factory_index)?;
+        debug_assert!(
+            binding.supports_with_thing(thing, form, operation),
+            "binding factory support predicate accepted a binding that rejected the same form"
+        );
+        Ok((binding_factory_index, binding))
     }
 
-    fn binding_from_factory_index(&self, index: usize) -> ServientResult<Box<dyn ClientBinding>> {
+    fn binding_from_factory_index(
+        &self,
+        index: usize,
+    ) -> ServientResult<Box<dyn ClientBinding + Send + Sync>> {
         self.binding_factories.make_binding(index).ok_or_else(|| {
             CoreError::UnsupportedBinding(format!(
                 "Binding factory index {} is not registered",
@@ -388,16 +580,6 @@ impl InteractionRuntime {
             ))
             .into()
         })
-    }
-
-    fn bound_consumed_thing_with_binding(
-        &self,
-        thing: alloc::sync::Arc<clinkz_wot_td::thing::Thing>,
-        binding: Box<dyn ClientBinding>,
-    ) -> BoundConsumedThing {
-        let mut consumed = BoundConsumedThing::from_arc(thing);
-        consumed.register_binding(binding);
-        consumed
     }
 }
 
@@ -432,27 +614,31 @@ fn normalize_interaction_output(
 ///
 /// # Performance note
 ///
-/// This round-trip allocates two `Vec<u8>` per call. Skipping it when the
-/// caller's bytes are already canonical would require a separate
-/// "target content type" or "validate-only" API on `PayloadCodec` so callers
-/// can opt into the fast path. Tracked as a follow-up.
+/// The matching codec is looked up under a brief registry lock and then
+/// cloned out as a cheap `Arc` clone; the decode+encode round-trip runs
+/// *outside* the lock so concurrent interactions are not serialized on codec
+/// work. The round-trip itself still allocates two `Vec<u8>` per call; skipping
+/// it when the caller's bytes are already canonical would require a separate
+/// "validate-only" API on `PayloadCodec` and is tracked as a follow-up.
 fn normalize_payload(codecs: &PayloadCodecRegistry, payload: Payload) -> ServientResult<Payload> {
-    codecs.with(|codecs| {
-        let Some(codec) = codecs
+    let codec = codecs.with(|codecs| {
+        codecs
             .iter()
             .find(|codec| codec.content_type().as_ref() == payload.content_type.as_str())
-        else {
-            return Ok(payload);
-        };
+            .cloned()
+    })?;
 
-        let decoded = codec.decode(&payload)?;
-        codec
-            .encode(CodecInput {
-                body: decoded.as_slice(),
-                data_type: None,
-            })
-            .map_err(Into::into)
-    })
+    let Some(codec) = codec else {
+        return Ok(payload);
+    };
+
+    let decoded = codec.decode(&payload)?;
+    codec
+        .encode(CodecInput {
+            body: decoded.as_slice(),
+            data_type: None,
+        })
+        .map_err(Into::into)
 }
 
 fn is_nosec_security(scheme: &SecurityScheme) -> bool {

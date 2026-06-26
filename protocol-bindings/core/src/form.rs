@@ -1,7 +1,6 @@
 use alloc::{borrow::Cow, collections::BTreeMap, format, string::String};
 
 use clinkz_wot_td::{
-    affordance::{ActionAffordance, EventAffordance, PropertyAffordance},
     data_type::{Operation, ResolvedFormHref, resolve_form_href},
     form::Form,
     td_defaults::{FormContext, effective_form_operations, effective_form_security},
@@ -73,10 +72,6 @@ impl<'a> FormSelectionCriteria<'a> {
         };
 
         content_type_matches && subprotocol_matches
-    }
-
-    fn matches(&self, operations: &[Operation], form: &Form) -> bool {
-        self.matches_operation(operations) && self.matches_metadata(form)
     }
 }
 
@@ -349,6 +344,31 @@ pub fn validate_affordance_form<'a>(
     )
 }
 
+/// Lightweight operation check that resolves the affordance context and
+/// validates that `form` supports `operation`, without performing an O(n)
+/// membership search.
+///
+/// Use this in binding hot paths where the form was already selected from the
+/// affordance by form-selection code. Use [`validate_affordance_form`] when you
+/// need to verify that an externally-supplied form belongs to the affordance.
+pub fn validate_form_operation(
+    thing: &Thing,
+    affordance: AffordanceRef<'_>,
+    form: &Form,
+    operation: Operation,
+) -> BindingResult<()> {
+    let form_set = forms_for_affordance(thing, affordance)?;
+    let operations = effective_form_operations(form_set.context, form);
+    if operations.contains(&operation) {
+        Ok(())
+    } else {
+        Err(BindingError::UnsupportedOperation(format!(
+            "Selected form does not support {:?}",
+            operation
+        )))
+    }
+}
+
 /// Validates that a selected form belongs to an affordance and matches the requested criteria.
 pub fn validate_affordance_form_with_criteria<'a>(
     thing: &'a Thing,
@@ -378,13 +398,11 @@ pub fn validate_affordance_form_with_criteria<'a>(
             )));
         }
 
-        if criteria.matches(operations.as_ref(), candidate) {
-            return Ok(SelectedForm {
-                index,
-                form: candidate,
-                operations,
-            });
-        }
+        return Ok(SelectedForm {
+            index,
+            form: candidate,
+            operations,
+        });
     }
 
     Err(BindingError::FormNotInAffordance)
@@ -428,13 +446,7 @@ fn forms_for_affordance<'a>(
     }
 }
 
-trait AffordanceMapValue {}
-
-impl AffordanceMapValue for PropertyAffordance {}
-impl AffordanceMapValue for ActionAffordance {}
-impl AffordanceMapValue for EventAffordance {}
-
-fn find_affordance<'a, T: AffordanceMapValue>(
+fn find_affordance<'a, T>(
     kind: &'static str,
     name: &str,
     affordances: &'a Option<BTreeMap<String, T>>,

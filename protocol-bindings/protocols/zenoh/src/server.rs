@@ -27,6 +27,7 @@
 use std::collections::{BTreeMap, VecDeque};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
 
 use alloc::boxed::Box;
 use alloc::format;
@@ -37,8 +38,8 @@ use alloc::vec::Vec;
 use clinkz_wot_core::AsyncServerBinding;
 use clinkz_wot_core::identity::CorrelationId;
 use clinkz_wot_core::{
-    AffordanceTarget, AuthMaterial, EventBroker, InboundRequest, InboundResponse, InteractionInput,
-    Payload, PublisherSink, ServerBinding, ThingId,
+    AffordanceTarget, AuthMaterial, EventBroker, EventName, InboundRequest, InboundResponse,
+    InteractionInput, Payload, PublisherSink, ServerBinding, ThingId,
 };
 use clinkz_wot_td::data_type::Operation;
 use clinkz_wot_td::form::Form;
@@ -50,7 +51,10 @@ use zenoh::pubsub::Subscriber;
 use zenoh::query::{Query, Queryable};
 use zenoh::sample::{Sample, SampleKind};
 
-use crate::{ZenohOperationKind, is_zenoh_form_target, plan_zenoh_operation};
+use crate::{
+    ZenohBindingResult, ZenohFormTarget, ZenohOperationKind, ZenohOperationPlan,
+    extract_zenoh_metadata, try_extract_zenoh_target, zenoh_operation_kind,
+};
 
 // ---------------------------------------------------------------------------
 // Internal state
@@ -63,6 +67,59 @@ struct RouteMeta {
     thing_id: String,
     target: AffordanceTarget,
     operation: Operation,
+    /// What the zenoh transport can extract for this route's effective
+    /// security scheme. Resolved from the TD at route-planning time so the
+    /// attachment is interpreted correctly (or refused) per route.
+    auth_expectation: AuthExpectation,
+}
+
+/// What the zenoh transport can extract for a route's effective security
+/// scheme.
+///
+/// The zenoh attachment is a single opaque byte buffer, so the transport can
+/// only directly carry a bearer token. Routes that declare a non-bearer scheme
+/// (Basic / OAuth2 / PSK / ApiKey / ...) cannot be authenticated via a zenoh
+/// attachment and are reported as [`AuthExpectation::Unsupported`] — the
+/// request is then treated as unauthenticated instead of misclassifying
+/// arbitrary attachment bytes as a bearer token (the previous behavior, which
+/// silently misfed verification).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum AuthExpectation {
+    /// No authentication required (NoSec or no security declared).
+    None,
+    /// Bearer scheme — attachment bytes are extracted as a bearer token.
+    Bearer,
+    /// A scheme the zenoh transport cannot extract from an attachment. The
+    /// attachment is ignored and the request is treated as unauthenticated.
+    Unsupported,
+}
+
+/// Upper bound on an accepted bearer-token attachment, to prevent unbounded
+/// attachments from being wrapped as auth material.
+const MAX_BEARER_TOKEN_BYTES: usize = 8 * 1024;
+
+/// Resolves the route-level [`AuthExpectation`] from the TD's effective form
+/// security. If multiple schemes are declared, Bearer wins (the transport can
+/// extract it); any non-NoSec/non-Bearer scheme marks the route Unsupported.
+fn resolve_auth_expectation(td: &Thing, form: &Form) -> AuthExpectation {
+    use clinkz_wot_protocol_bindings::resolve_form_security;
+    use clinkz_wot_td::security_scheme::SecurityScheme;
+
+    let effective = resolve_form_security(td, form);
+    let mut saw_unsupported = false;
+    for name in effective.security {
+        match td.security_definitions.get(name.as_str()) {
+            Some(SecurityScheme::NoSec(_)) => continue,
+            Some(SecurityScheme::Bearer(_)) => return AuthExpectation::Bearer,
+            Some(_) => saw_unsupported = true,
+            None => continue,
+        }
+    }
+    if saw_unsupported {
+        AuthExpectation::Unsupported
+    } else {
+        AuthExpectation::None
+    }
 }
 
 /// How to deliver a response back to the zenoh requester.
@@ -73,10 +130,31 @@ enum ReplyTarget {
     Put,
 }
 
-/// A pending inbound request paired with its reply mechanism.
-struct PendingRequest {
-    request: InboundRequest,
+/// Maximum number of inbound requests buffered for the synchronous driving
+/// loop. When exceeded, the oldest entry is dropped first (drop-oldest
+/// backpressure) so a slow driver cannot grow the queue without bound.
+const PENDING_QUEUE_CAPACITY: usize = 256;
+
+/// Lifetime after which an unclaimed [`ReplyTarget`] is considered abandoned
+/// and is evicted to release the underlying zenoh resource (e.g. a live
+/// `zenoh::Query`). Measured from the instant the reply target is registered
+/// (at callback arrival time). See [`sweep_expired_reply_targets`].
+const REPLY_TARGET_TTL: Duration = Duration::from_secs(30);
+
+/// Capacity of the tokio mpsc channel that feeds the async driving loop. The
+/// channel is bounded so that an async-compiled binding that is driven
+/// synchronously cannot leak unconsumed wakeups; under genuine async driving
+/// the receiver drains it.
+#[cfg(feature = "async")]
+const ASYNC_CHANNEL_CAPACITY: usize = 256;
+
+/// A registered [`ReplyTarget`] paired with the instant it was recorded, so
+/// abandoned entries (handler error, panic, or a request dropped before being
+/// polled) can be evicted via [`sweep_expired_reply_targets`] instead of
+/// leaking the live zenoh resource forever.
+struct ReplyTargetEntry {
     reply: ReplyTarget,
+    inserted_at: Instant,
 }
 
 /// Declared zenoh handles for one Thing, stored for cleanup.
@@ -85,6 +163,13 @@ struct PendingRequest {
 // zenoh versions; we erase them behind `Box<dyn Send>` and call `undeclare`
 // through the type-erased `Undeclare` trait.
 trait RouteHandle: Send {
+    /// Undeclares the zenoh primitive, blocking on `.wait()`.
+    ///
+    /// This blocks the calling thread until zenoh acknowledges the
+    /// undeclaration. Route cleanup is normally driven explicitly via
+    /// [`ZenohServerBinding::unregister_thing`] (called from
+    /// [`ServerBinding::unregister_thing`]); no `Drop` impl on the server
+    /// binding relies on this path.
     fn undeclare_boxed(self: Box<Self>);
 }
 
@@ -93,7 +178,9 @@ where
     H: Send,
 {
     fn undeclare_boxed(self: Box<Self>) {
-        let _ = Queryable::undeclare(*self).wait();
+        if let Err(e) = Queryable::undeclare(*self).wait() {
+            log::warn!("Zenoh server: failed to undeclare queryable route: {e}");
+        }
     }
 }
 
@@ -102,7 +189,9 @@ where
     H: Send,
 {
     fn undeclare_boxed(self: Box<Self>) {
-        let _ = Subscriber::undeclare(*self).wait();
+        if let Err(e) = Subscriber::undeclare(*self).wait() {
+            log::warn!("Zenoh server: failed to undeclare put-listener route: {e}");
+        }
     }
 }
 
@@ -111,10 +200,16 @@ enum DeclaredRoute {
     PutListener(Box<dyn RouteHandle>),
 }
 
+/// Declared inbound routes for one Thing, keyed by affordance
+/// (`affordance_key(target)`), so individual affordances can be
+/// registered/unregistered at runtime (W3C dynamic affordance lifecycle)
+/// without re-declaring the whole Thing's routes.
+type ThingRoutes = BTreeMap<String, Vec<DeclaredRoute>>;
+
 struct ServerState {
-    routes: BTreeMap<String, Vec<DeclaredRoute>>,
-    pending: VecDeque<PendingRequest>,
-    reply_targets: BTreeMap<CorrelationId, ReplyTarget>,
+    routes: BTreeMap<String, ThingRoutes>,
+    pending: VecDeque<InboundRequest>,
+    reply_targets: BTreeMap<CorrelationId, ReplyTargetEntry>,
     next_correlation: AtomicU64,
     event_broker: Option<EventBroker>,
 }
@@ -146,13 +241,15 @@ impl ServerState {
 /// [`send_response`](ServerBinding::send_response).
 pub struct ZenohServerBinding {
     session: zenoh::Session,
-    routes: Arc<Mutex<BTreeMap<String, Vec<DeclaredRoute>>>>,
-    pending: Arc<Mutex<VecDeque<PendingRequest>>>,
-    reply_targets: Arc<Mutex<BTreeMap<CorrelationId, ReplyTarget>>>,
+    routes: Arc<Mutex<BTreeMap<String, ThingRoutes>>>,
+    pending: Arc<Mutex<VecDeque<InboundRequest>>>,
+    reply_targets: Arc<Mutex<BTreeMap<CorrelationId, ReplyTargetEntry>>>,
     event_broker: Arc<Mutex<Option<EventBroker>>>,
     next_correlation: Arc<AtomicU64>,
     #[cfg(feature = "async")]
-    notify: Arc<tokio::sync::Notify>,
+    async_tx: Arc<tokio::sync::mpsc::Sender<InboundRequest>>,
+    #[cfg(feature = "async")]
+    async_rx: Arc<tokio::sync::Mutex<tokio::sync::mpsc::Receiver<InboundRequest>>>,
 }
 
 impl ZenohServerBinding {
@@ -162,6 +259,8 @@ impl ZenohServerBinding {
     /// interactions via [`crate::ZenohSessionTransport`].
     pub fn new(session: zenoh::Session) -> Self {
         let state = ServerState::new();
+        #[cfg(feature = "async")]
+        let (async_tx, async_rx) = tokio::sync::mpsc::channel(ASYNC_CHANNEL_CAPACITY);
         Self {
             session,
             routes: Arc::new(Mutex::new(state.routes)),
@@ -170,7 +269,9 @@ impl ZenohServerBinding {
             event_broker: Arc::new(Mutex::new(state.event_broker)),
             next_correlation: Arc::new(state.next_correlation),
             #[cfg(feature = "async")]
-            notify: Arc::new(tokio::sync::Notify::new()),
+            async_tx: Arc::new(async_tx),
+            #[cfg(feature = "async")]
+            async_rx: Arc::new(tokio::sync::Mutex::new(async_rx)),
         }
     }
 
@@ -192,18 +293,20 @@ impl ZenohServerBinding {
 
 impl ServerBinding for ZenohServerBinding {
     fn poll_accept_sync(&self) -> Option<InboundRequest> {
-        let pending = self.pending.lock().ok()?.pop_front()?;
-        let correlation = pending.request.correlation.clone();
-        self.reply_targets
-            .lock()
-            .ok()?
-            .insert(correlation, pending.reply);
-        Some(pending.request)
+        if let Ok(mut reply_targets) = self.reply_targets.lock() {
+            sweep_expired_reply_targets(&mut reply_targets);
+        }
+        self.pending.lock().ok()?.pop_front()
     }
 
     fn send_response(&self, response: InboundResponse) {
         let reply_target = match self.reply_targets.lock() {
-            Ok(mut reply_targets) => reply_targets.remove(&response.correlation),
+            Ok(mut reply_targets) => {
+                sweep_expired_reply_targets(&mut reply_targets);
+                reply_targets
+                    .remove(&response.correlation)
+                    .map(|entry| entry.reply)
+            }
             Err(_) => return,
         };
 
@@ -211,7 +314,9 @@ impl ServerBinding for ZenohServerBinding {
             Some(ReplyTarget::Query { query, key_expr }) => {
                 if let Some(err) = response.error {
                     let status = clinkz_wot_protocol_bindings::error_status(&err);
-                    let _ = query.reply_err(format!("[{}] {}", status, err)).wait();
+                    if let Err(e) = query.reply_err(format!("[{}] {}", status, err)).wait() {
+                        log::warn!("Zenoh server: failed to send error reply: {e}");
+                    }
                 } else {
                     let (payload_body, content_type) = match response.output.payload {
                         Some(payload) => (payload.body, payload.content_type),
@@ -221,7 +326,9 @@ impl ServerBinding for ZenohServerBinding {
                     if !content_type.is_empty() {
                         builder = builder.encoding(Encoding::from(content_type.as_str()));
                     }
-                    let _ = builder.wait();
+                    if let Err(e) = builder.wait() {
+                        log::warn!("Zenoh server: failed to send reply: {e}");
+                    }
                 }
             }
             Some(ReplyTarget::Put) | None => { /* no reply needed */ }
@@ -231,81 +338,18 @@ impl ServerBinding for ZenohServerBinding {
     fn register_thing(&self, thing_id: &str, td: &Thing) -> Result<(), String> {
         let routes = plan_inbound_routes(thing_id, td)?;
         let broker = self.event_broker.lock().map_err(|e| e.to_string())?.clone();
-        let mut declared = Vec::with_capacity(routes.len());
+        let mut by_affordance: ThingRoutes = BTreeMap::new();
 
         for route in routes {
-            match route.kind {
-                RouteKind::Queryable { key_expr } => {
-                    let pending = Arc::clone(&self.pending);
-                    let next_correlation = Arc::clone(&self.next_correlation);
-                    let meta = route.meta.clone();
-                    let key_for_reply = key_expr.clone();
-                    #[cfg(feature = "async")]
-                    let notify_handle = self.notify.clone();
-
-                    let queryable = match self
-                        .session
-                        .declare_queryable(key_expr.as_str())
-                        .callback(move |query| {
-                            handle_query(&pending, &next_correlation, &meta, &key_for_reply, query);
-                            #[cfg(feature = "async")]
-                            notify_handle.notify_one();
-                        })
-                        .wait()
-                    {
-                        Ok(queryable) => queryable,
-                        Err(err) => {
-                            undeclare_routes(declared);
-                            return Err(format!("zenoh queryable declaration failed: {err}"));
-                        }
-                    };
-
-                    declared.push(DeclaredRoute::Queryable(Box::new(queryable)));
-                }
-                RouteKind::PutListener { key_expr } => {
-                    let pending = Arc::clone(&self.pending);
-                    let next_correlation = Arc::clone(&self.next_correlation);
-                    let meta = route.meta.clone();
-                    #[cfg(feature = "async")]
-                    let notify_handle = self.notify.clone();
-
-                    let subscriber = match self
-                        .session
-                        .declare_subscriber(key_expr.as_str())
-                        .callback(move |sample| {
-                            handle_put_sample(&pending, &next_correlation, &meta, sample);
-                            #[cfg(feature = "async")]
-                            notify_handle.notify_one();
-                        })
-                        .wait()
-                    {
-                        Ok(subscriber) => subscriber,
-                        Err(err) => {
-                            undeclare_routes(declared);
-                            return Err(format!("zenoh put-listener declaration failed: {err}"));
-                        }
-                    };
-
-                    declared.push(DeclaredRoute::PutListener(Box::new(subscriber)));
-                }
-                RouteKind::Publisher { key_expr } => {
-                    // Register a PublisherSink with the EventBroker so that
-                    // emit_event / observe_property deliveries reach remote
-                    // zenoh subscribers via session.put.
-                    if let Some(ref broker) = broker {
-                        let event_name = match &route.meta.target {
-                            AffordanceTarget::Event(name) => name.clone(),
-                            AffordanceTarget::Property(name) => name.clone(),
-                            _ => continue,
-                        };
-                        let sink = ZenohPublisherSink {
-                            session: self.session.clone(),
-                            key_expr,
-                        };
-                        broker.register(thing_id.to_string(), event_name, sink);
+            let key = affordance_key(&route.meta.target);
+            match self.declare_planned_route(route, thing_id, &broker) {
+                Ok(Some(declared)) => by_affordance.entry(key).or_default().push(declared),
+                Ok(None) => {}
+                Err(err) => {
+                    for (_, declared) in by_affordance {
+                        undeclare_routes(declared);
                     }
-                    // No DeclaredRoute — cleanup is via broker.remove_thing
-                    // during unregister_thing.
+                    return Err(err);
                 }
             }
         }
@@ -313,7 +357,7 @@ impl ServerBinding for ZenohServerBinding {
         self.routes
             .lock()
             .map_err(|e| e.to_string())?
-            .insert(thing_id.to_string(), declared);
+            .insert(thing_id.to_string(), by_affordance);
         Ok(())
     }
 
@@ -325,13 +369,75 @@ impl ServerBinding for ZenohServerBinding {
         if let Some(ref broker) = broker {
             broker.remove_thing(&ThingId::from(thing_id));
         }
-        let routes = match self.routes.lock() {
+        let by_affordance = match self.routes.lock() {
             Ok(mut routes) => routes.remove(thing_id),
             Err(_) => return,
         };
+        if let Some(by_affordance) = by_affordance {
+            for (_, declared) in by_affordance {
+                undeclare_routes(declared);
+            }
+        }
+    }
 
-        if let Some(routes) = routes {
-            undeclare_routes(routes);
+    fn register_affordance(
+        &self,
+        thing_id: &str,
+        target: &AffordanceTarget,
+        td: &Thing,
+    ) -> Result<(), String> {
+        let key = affordance_key(target);
+        let broker = self.event_broker.lock().map_err(|e| e.to_string())?.clone();
+        // Plan all routes, keep only those belonging to this affordance.
+        let planned = plan_inbound_routes(thing_id, td)?
+            .into_iter()
+            .filter(|r| affordance_key(&r.meta.target) == key);
+        let mut declared = Vec::new();
+        for route in planned {
+            match self.declare_planned_route(route, thing_id, &broker) {
+                Ok(Some(d)) => declared.push(d),
+                Ok(None) => {}
+                Err(err) => {
+                    undeclare_routes(declared);
+                    return Err(err);
+                }
+            }
+        }
+        // Insert/replace under a brief lock. `insert` returns any prior entry
+        // for this affordance, which we undeclare to avoid leaking it.
+        let prior = self
+            .routes
+            .lock()
+            .map_err(|e| e.to_string())?
+            .entry(thing_id.to_string())
+            .or_default()
+            .insert(key, declared);
+        if let Some(prior) = prior {
+            undeclare_routes(prior);
+        }
+        Ok(())
+    }
+
+    fn unregister_affordance(&self, thing_id: &str, target: &AffordanceTarget) {
+        let key = affordance_key(target);
+        // Drop broker sinks for event / observable-property affordances.
+        let broker_name = match target {
+            AffordanceTarget::Event(name) | AffordanceTarget::Property(name) => Some(name.as_str()),
+            _ => None,
+        };
+        if let Some(name) = broker_name
+            && let Ok(broker) = self.event_broker.lock()
+            && let Some(broker) = broker.as_ref()
+        {
+            broker.remove_event(&ThingId::from(thing_id), &EventName::from(name));
+        }
+        let removed = self.routes.lock().ok().and_then(|mut routes| {
+            routes
+                .get_mut(thing_id)
+                .and_then(|thing_routes| thing_routes.remove(&key))
+        });
+        if let Some(removed) = removed {
+            undeclare_routes(removed);
         }
     }
 
@@ -342,20 +448,150 @@ impl ServerBinding for ZenohServerBinding {
     }
 }
 
+impl ZenohServerBinding {
+    /// Declares a single planned zenoh route. Returns `Ok(Some(route))` for
+    /// Queryable/PutListener (which need explicit undeclaration), `Ok(None)`
+    /// for Publisher routes (broker-managed via `PublisherSink` registration).
+    fn declare_planned_route(
+        &self,
+        route: PlannedRoute,
+        thing_id: &str,
+        broker: &Option<EventBroker>,
+    ) -> Result<Option<DeclaredRoute>, String> {
+        match route.kind {
+            RouteKind::Queryable { key_expr } => {
+                let pending = Arc::clone(&self.pending);
+                let reply_targets = Arc::clone(&self.reply_targets);
+                let next_correlation = Arc::clone(&self.next_correlation);
+                let meta = route.meta.clone();
+                let key_for_reply = key_expr.clone();
+                #[cfg(feature = "async")]
+                let async_tx = Arc::clone(&self.async_tx);
+
+                let queryable = self
+                    .session
+                    .declare_queryable(key_expr.as_str())
+                    .callback(move |query| {
+                        if let Some(request) = handle_query(
+                            &reply_targets,
+                            &next_correlation,
+                            &meta,
+                            &key_for_reply,
+                            query,
+                        ) {
+                            #[cfg(feature = "async")]
+                            {
+                                if let Err(e) = async_tx.try_send(request) {
+                                    log::warn!(
+                                        "Zenoh server: failed to enqueue inbound request \
+                                         (channel full): {e}"
+                                    );
+                                }
+                            }
+                            #[cfg(not(feature = "async"))]
+                            {
+                                if let Ok(mut pending) = pending.lock()
+                                    && let Some(dropped) = push_bounded(&mut pending, request)
+                                {
+                                    log::warn!(
+                                        "Zenoh server: pending queue full; dropping oldest request"
+                                    );
+                                    send_drop_reply(&reply_targets, &dropped.correlation);
+                                }
+                            }
+                        }
+                    })
+                    .wait()
+                    .map_err(|err| format!("zenoh queryable declaration failed: {err}"))?;
+                Ok(Some(DeclaredRoute::Queryable(Box::new(queryable))))
+            }
+            RouteKind::PutListener { key_expr } => {
+                let pending = Arc::clone(&self.pending);
+                let reply_targets = Arc::clone(&self.reply_targets);
+                let next_correlation = Arc::clone(&self.next_correlation);
+                let meta = route.meta.clone();
+                #[cfg(feature = "async")]
+                let async_tx = Arc::clone(&self.async_tx);
+
+                let subscriber = self
+                    .session
+                    .declare_subscriber(key_expr.as_str())
+                    .callback(move |sample| {
+                        if let Some(request) =
+                            handle_put_sample(&reply_targets, &next_correlation, &meta, sample)
+                        {
+                            #[cfg(feature = "async")]
+                            {
+                                if let Err(e) = async_tx.try_send(request) {
+                                    log::warn!(
+                                        "Zenoh server: failed to enqueue inbound request \
+                                         (channel full): {e}"
+                                    );
+                                }
+                            }
+                            #[cfg(not(feature = "async"))]
+                            {
+                                if let Ok(mut pending) = pending.lock()
+                                    && let Some(dropped) = push_bounded(&mut pending, request)
+                                {
+                                    log::warn!(
+                                        "Zenoh server: pending queue full; dropping oldest request"
+                                    );
+                                    send_drop_reply(&reply_targets, &dropped.correlation);
+                                }
+                            }
+                        }
+                    })
+                    .wait()
+                    .map_err(|err| format!("zenoh put-listener declaration failed: {err}"))?;
+                Ok(Some(DeclaredRoute::PutListener(Box::new(subscriber))))
+            }
+            RouteKind::Publisher { key_expr } => {
+                // Register a PublisherSink with the EventBroker so emit_event /
+                // observe_property deliveries reach remote zenoh subscribers.
+                if let Some(broker) = broker {
+                    let event_name = match &route.meta.target {
+                        AffordanceTarget::Event(name) => name.clone(),
+                        AffordanceTarget::Property(name) => name.clone(),
+                        _ => return Ok(None),
+                    };
+                    let sink = ZenohPublisherSink {
+                        session: self.session.clone(),
+                        key_expr,
+                    };
+                    broker.register(thing_id.to_string(), event_name, sink);
+                }
+                Ok(None)
+            }
+        }
+    }
+}
+
+/// Stable affordance identity used as the per-affordance route key, so a single
+/// affordance's routes can be incrementally registered/unregistered.
+fn affordance_key(target: &AffordanceTarget) -> String {
+    match target {
+        AffordanceTarget::Thing => String::from("thing"),
+        AffordanceTarget::Property(name) => format!("property:{name}"),
+        AffordanceTarget::Action(name) => format!("action:{name}"),
+        AffordanceTarget::Event(name) => format!("event:{name}"),
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Zenoh callback handlers
 // ---------------------------------------------------------------------------
 
 fn handle_query(
-    pending: &Mutex<VecDeque<PendingRequest>>,
+    reply_targets: &Mutex<BTreeMap<CorrelationId, ReplyTargetEntry>>,
     next_correlation: &AtomicU64,
     meta: &RouteMeta,
     key_expr: &str,
     query: Query,
-) {
+) -> Option<InboundRequest> {
     let correlation = CorrelationId::from(next_correlation.fetch_add(1, Ordering::Relaxed));
     let input = query_to_input(&query);
-    let auth = attachment_to_auth(query.attachment());
+    let auth = attachment_to_auth(query.attachment(), meta.auth_expectation);
     let request = InboundRequest {
         thing_id: ThingId::from(meta.thing_id.as_str()),
         target: meta.target.clone(),
@@ -364,31 +600,37 @@ fn handle_query(
         auth,
         correlation,
     };
-    let Ok(mut pending) = pending.lock() else {
-        return;
-    };
-    pending.push_back(PendingRequest {
-        request,
+    let entry = ReplyTargetEntry {
         reply: ReplyTarget::Query {
             query,
             key_expr: key_expr.to_string(),
         },
-    });
+        inserted_at: Instant::now(),
+    };
+    {
+        let Ok(mut reply_targets) = reply_targets.lock() else {
+            return None;
+        };
+        reply_targets.insert(request.correlation.clone(), entry);
+    }
+    // The caller pushes the request to the sync pending queue or the async
+    // channel — no clone needed here (the request is moved, not duplicated).
+    Some(request)
 }
 
 fn handle_put_sample(
-    pending: &Mutex<VecDeque<PendingRequest>>,
+    reply_targets: &Mutex<BTreeMap<CorrelationId, ReplyTargetEntry>>,
     next_correlation: &AtomicU64,
     meta: &RouteMeta,
     sample: Sample,
-) {
+) -> Option<InboundRequest> {
     if sample.kind() != SampleKind::Put {
-        return;
+        return None;
     }
 
     let correlation = CorrelationId::from(next_correlation.fetch_add(1, Ordering::Relaxed));
     let input = sample_to_input(&sample);
-    let auth = attachment_to_auth(sample.attachment());
+    let auth = attachment_to_auth(sample.attachment(), meta.auth_expectation);
     let request = InboundRequest {
         thing_id: ThingId::from(meta.thing_id.as_str()),
         target: meta.target.clone(),
@@ -397,13 +639,17 @@ fn handle_put_sample(
         auth,
         correlation,
     };
-    let Ok(mut pending) = pending.lock() else {
-        return;
-    };
-    pending.push_back(PendingRequest {
-        request,
+    let entry = ReplyTargetEntry {
         reply: ReplyTarget::Put,
-    });
+        inserted_at: Instant::now(),
+    };
+    {
+        let Ok(mut reply_targets) = reply_targets.lock() else {
+            return None;
+        };
+        reply_targets.insert(request.correlation.clone(), entry);
+    }
+    Some(request)
 }
 
 fn undeclare_routes(routes: Vec<DeclaredRoute>) {
@@ -412,6 +658,69 @@ fn undeclare_routes(routes: Vec<DeclaredRoute>) {
             DeclaredRoute::Queryable(handle) | DeclaredRoute::PutListener(handle) => {
                 handle.undeclare_boxed();
             }
+        }
+    }
+}
+
+/// Pushes a request onto the pending queue with drop-oldest backpressure,
+/// enforcing [`PENDING_QUEUE_CAPACITY`] so the queue cannot grow without bound
+/// when the synchronous driving loop falls behind. Returns the evicted request
+/// (if any) so the caller can fail it fast instead of waiting for the reply
+/// TTL to expire.
+fn push_bounded(
+    queue: &mut VecDeque<InboundRequest>,
+    request: InboundRequest,
+) -> Option<InboundRequest> {
+    let dropped = if queue.len() >= PENDING_QUEUE_CAPACITY {
+        queue.pop_front()
+    } else {
+        None
+    };
+    queue.push_back(request);
+    dropped
+}
+
+/// Fails a dropped request immediately by replying to its zenoh `Query` with an
+/// error, instead of leaving it to time out after [`REPLY_TARGET_TTL`].
+///
+/// Query-kind targets get a `server busy` error reply; Put-kind targets are
+/// fire-and-forget (no reply expected) and are simply dropped.
+fn send_drop_reply(
+    reply_targets: &Mutex<BTreeMap<CorrelationId, ReplyTargetEntry>>,
+    correlation: &CorrelationId,
+) {
+    let Ok(mut reply_targets) = reply_targets.lock() else {
+        return;
+    };
+    if let Some(ReplyTargetEntry {
+        reply: ReplyTarget::Query { query, .. },
+        ..
+    }) = reply_targets.remove(correlation)
+        && let Err(e) = query.reply_err("server busy: pending queue full").wait()
+    {
+        log::warn!("Zenoh server: failed to send drop reply: {e}");
+    }
+}
+
+/// Removes [`ReplyTargetEntry`]s older than [`REPLY_TARGET_TTL`]. For each
+/// evicted zenoh query, an error reply is sent so the underlying `Query`
+/// resource is released instead of leaking (e.g. when the handler errors or
+/// panics and [`ZenohServerBinding::send_response`] is never called).
+fn sweep_expired_reply_targets(reply_targets: &mut BTreeMap<CorrelationId, ReplyTargetEntry>) {
+    let now = Instant::now();
+    let expired: Vec<CorrelationId> = reply_targets
+        .iter()
+        .filter(|(_, entry)| now.duration_since(entry.inserted_at) > REPLY_TARGET_TTL)
+        .map(|(id, _)| id.clone())
+        .collect();
+    for id in expired {
+        if let Some(ReplyTargetEntry {
+            reply: ReplyTarget::Query { query, .. },
+            ..
+        }) = reply_targets.remove(&id)
+            && let Err(e) = query.reply_err("timeout").wait()
+        {
+            log::warn!("Zenoh server: failed to send timeout reply: {e}");
         }
     }
 }
@@ -434,16 +743,46 @@ fn query_to_input(query: &Query) -> InteractionInput {
 
 /// Extracts [`AuthMaterial`] from a zenoh attachment (`ZBytes`).
 ///
-/// The attachment bytes are interpreted as a bearer token. If the attachment
-/// is absent, `None` is returned and the request will be treated as
-/// unauthenticated (suitable for NoSec schemes).
-fn attachment_to_auth(attachment: Option<&zenoh::bytes::ZBytes>) -> Option<AuthMaterial> {
-    let zbytes = attachment?;
-    let bytes = zbytes.to_bytes().into_owned();
-    if bytes.is_empty() {
-        return None;
+/// Extracts transport-level auth material from a zenoh attachment, interpreted
+/// according to the route's [`AuthExpectation`].
+///
+/// For [`AuthExpectation::Bearer`] the attachment bytes are wrapped as a
+/// [`AuthMaterial::BearerToken`] (with a size bound). For
+/// [`AuthExpectation::None`] (NoSec) or [`AuthExpectation::Unsupported`]
+/// (Basic/OAuth2/PSK/…) the attachment is **ignored** and `None` is returned —
+/// the request is treated as unauthenticated. This replaces the previous
+/// behavior of unconditionally wrapping arbitrary attachment bytes as a bearer
+/// token, which misfed verification for non-bearer schemes.
+fn attachment_to_auth(
+    attachment: Option<&zenoh::bytes::ZBytes>,
+    expectation: AuthExpectation,
+) -> Option<AuthMaterial> {
+    match expectation {
+        AuthExpectation::Bearer => {
+            let zbytes = attachment?;
+            let bytes = zbytes.to_bytes().into_owned();
+            if bytes.is_empty() {
+                return None;
+            }
+            if bytes.len() > MAX_BEARER_TOKEN_BYTES {
+                log::warn!(
+                    "Zenoh inbound: bearer attachment ({} bytes) exceeds {}, dropping",
+                    bytes.len(),
+                    MAX_BEARER_TOKEN_BYTES
+                );
+                return None;
+            }
+            Some(AuthMaterial::BearerToken(bytes))
+        }
+        AuthExpectation::Unsupported => {
+            log::warn!(
+                "Zenoh inbound: route uses a security scheme the zenoh transport \
+                 cannot extract from an attachment; attachment ignored"
+            );
+            None
+        }
+        AuthExpectation::None => None,
     }
-    Some(AuthMaterial::BearerToken(bytes))
 }
 
 fn sample_to_input(sample: &Sample) -> InteractionInput {
@@ -479,13 +818,22 @@ struct PlannedRoute {
 fn plan_inbound_routes(thing_id: &str, td: &Thing) -> Result<Vec<PlannedRoute>, String> {
     let mut routes = Vec::new();
 
-    for (target, operation, form) in iter_zenoh_affordance_forms(td) {
-        let plan = plan_zenoh_operation(td, form, operation).map_err(|e| e.to_string())?;
+    for (target, operation, form, zenoh_target) in
+        iter_zenoh_affordance_forms(td).map_err(|e| e.to_string())?
+    {
+        // Build the execution plan from the already-resolved zenoh target to
+        // avoid resolving the form target a second time.
+        let plan = ZenohOperationPlan {
+            key_expr: zenoh_target.key_expr,
+            kind: zenoh_operation_kind(operation),
+            metadata: extract_zenoh_metadata(form).map_err(|e| e.to_string())?,
+        };
 
         let meta = RouteMeta {
             thing_id: thing_id.to_string(),
             target,
             operation,
+            auth_expectation: resolve_auth_expectation(td, form),
         };
 
         let kind = match plan.kind {
@@ -511,8 +859,13 @@ fn plan_inbound_routes(thing_id: &str, td: &Thing) -> Result<Vec<PlannedRoute>, 
 }
 
 /// Iterates over all zenoh-targeting affordance forms in a TD, yielding
-/// `(target, operation, form)` triples.
-fn iter_zenoh_affordance_forms(td: &Thing) -> Vec<(AffordanceTarget, Operation, &Form)> {
+/// `(target, operation, form, zenoh_target)` tuples.
+///
+/// The resolved [`ZenohFormTarget`] is produced alongside each form so that
+/// callers do not need to resolve the form target a second time.
+fn iter_zenoh_affordance_forms(
+    td: &Thing,
+) -> ZenohBindingResult<Vec<(AffordanceTarget, Operation, &Form, ZenohFormTarget)>> {
     let mut result = Vec::new();
 
     if let Some(properties) = &td.properties {
@@ -524,7 +877,7 @@ fn iter_zenoh_affordance_forms(td: &Thing) -> Vec<(AffordanceTarget, Operation, 
                 context,
                 AffordanceTarget::Property(name.clone()),
                 &mut result,
-            );
+            )?;
         }
     }
 
@@ -537,7 +890,7 @@ fn iter_zenoh_affordance_forms(td: &Thing) -> Vec<(AffordanceTarget, Operation, 
                 context,
                 AffordanceTarget::Action(name.clone()),
                 &mut result,
-            );
+            )?;
         }
     }
 
@@ -550,7 +903,7 @@ fn iter_zenoh_affordance_forms(td: &Thing) -> Vec<(AffordanceTarget, Operation, 
                 context,
                 AffordanceTarget::Event(name.clone()),
                 &mut result,
-            );
+            )?;
         }
     }
 
@@ -561,10 +914,10 @@ fn iter_zenoh_affordance_forms(td: &Thing) -> Vec<(AffordanceTarget, Operation, 
             FormContext::Thing,
             AffordanceTarget::Thing,
             &mut result,
-        );
+        )?;
     }
 
-    result
+    Ok(result)
 }
 
 fn collect_zenoh_forms<'a>(
@@ -572,16 +925,19 @@ fn collect_zenoh_forms<'a>(
     forms: &'a [Form],
     context: FormContext<'_>,
     target: AffordanceTarget,
-    out: &mut Vec<(AffordanceTarget, Operation, &'a Form)>,
-) {
+    out: &mut Vec<(AffordanceTarget, Operation, &'a Form, ZenohFormTarget)>,
+) -> ZenohBindingResult<()> {
     for form in forms {
-        if !is_zenoh_form_target(td, form) {
+        // Resolve the form target once: check the zenoh scheme and extract the
+        // key expression in a single resolution pass.
+        let Some(zenoh_target) = try_extract_zenoh_target(td, form)? else {
             continue;
-        }
+        };
         for operation in effective_form_operations(context, form).iter() {
-            out.push((target.clone(), *operation, form));
+            out.push((target.clone(), *operation, form, zenoh_target.clone()));
         }
     }
+    Ok(())
 }
 
 // ---------------------------------------------------------------------------
@@ -593,10 +949,22 @@ fn collect_zenoh_forms<'a>(
 impl AsyncServerBinding for ZenohServerBinding {
     async fn poll_accept(&self) -> InboundRequest {
         loop {
-            if let Some(request) = ServerBinding::poll_accept_sync(self) {
+            // Drain the async channel directly. Unlike `poll_accept_sync`,
+            // this never touches the `std::sync::Mutex`-guarded pending queue
+            // and therefore does not stall the tokio worker thread.
+            let request = {
+                let mut rx = self.async_rx.lock().await;
+                rx.recv().await
+            };
+            if let Some(request) = request {
+                if let Ok(mut reply_targets) = self.reply_targets.lock() {
+                    sweep_expired_reply_targets(&mut reply_targets);
+                }
                 return request;
             }
-            self.notify.notified().await;
+            // All senders were dropped (e.g. no routes are declared yet). Yield
+            // instead of busy-spinning, then wait for a sender to reappear.
+            tokio::task::yield_now().await;
         }
     }
 
@@ -639,7 +1007,7 @@ impl PublisherSink for ZenohPublisherSink {
     fn publish(&self, payload: &Payload) -> clinkz_wot_core::CoreResult<()> {
         let mut builder = self
             .session
-            .put(self.key_expr.as_str(), payload.body.clone());
+            .put(self.key_expr.as_str(), payload.body.as_slice());
         if !payload.content_type.is_empty() {
             builder = builder.encoding(Encoding::from(payload.content_type.as_str()));
         }

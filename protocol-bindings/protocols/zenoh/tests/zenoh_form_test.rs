@@ -638,9 +638,9 @@ fn reports_selection_error_when_affordance_has_no_zenoh_form() {
 
     assert_eq!(
         err,
-        ZenohBindingError::Selection(
-            "Caller filter mismatch: No form matches FormSelectionCriteria { operation: ReadProperty, content_type: None, subprotocol: None } after applying caller filter".into()
-        )
+        ZenohBindingError::Shared(clinkz_wot_protocol_bindings::BindingError::CallerFilterMismatch(
+            "No form matches FormSelectionCriteria { operation: ReadProperty, content_type: None, subprotocol: None } after applying caller filter".into()
+        ))
     );
 }
 

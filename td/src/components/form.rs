@@ -67,12 +67,14 @@ pub struct Form {
     pub _extra_fields: ExtensionMap,
 }
 
+const DEFAULT_CONTENT_TYPE: &str = "application/json";
+
 fn default_content_type() -> String {
-    String::from("application/json")
+    String::from(DEFAULT_CONTENT_TYPE)
 }
 
-fn is_default_content_type(content_type: &String) -> bool {
-    content_type == &default_content_type()
+fn is_default_content_type(content_type: &str) -> bool {
+    content_type == DEFAULT_CONTENT_TYPE
 }
 
 impl Default for Form {
@@ -93,27 +95,27 @@ impl Default for Form {
 }
 
 impl Form {
-    pub fn builder(href: &str) -> FormBuilder<'_> {
+    pub fn builder<'a>(href: impl Into<Cow<'a, str>>) -> FormBuilder<'a> {
         FormBuilder::new(href)
     }
 
     /// Creates a form builder with `readproperty` operation metadata.
-    pub fn read_property(href: &str) -> FormBuilder<'_> {
+    pub fn read_property<'a>(href: impl Into<Cow<'a, str>>) -> FormBuilder<'a> {
         Self::builder(href).read_property()
     }
 
     /// Creates a form builder with `writeproperty` operation metadata.
-    pub fn write_property(href: &str) -> FormBuilder<'_> {
+    pub fn write_property<'a>(href: impl Into<Cow<'a, str>>) -> FormBuilder<'a> {
         Self::builder(href).write_property()
     }
 
     /// Creates a form builder with `invokeaction` operation metadata.
-    pub fn invoke_action(href: &str) -> FormBuilder<'_> {
+    pub fn invoke_action<'a>(href: impl Into<Cow<'a, str>>) -> FormBuilder<'a> {
         Self::builder(href).invoke_action()
     }
 
     /// Creates a form builder with `subscribeevent` operation metadata.
-    pub fn subscribe_event(href: &str) -> FormBuilder<'_> {
+    pub fn subscribe_event<'a>(href: impl Into<Cow<'a, str>>) -> FormBuilder<'a> {
         Self::builder(href).subscribe_event()
     }
 }
@@ -193,7 +195,7 @@ impl<'a> FormBuilder<'a> {
     }
 
     /// Add multiple additional responses.
-    pub fn additonal_responses(
+    pub fn additional_responses(
         mut self,
         responses: impl IntoIterator<Item = AdditionalExpectedResponse>,
     ) -> Self {

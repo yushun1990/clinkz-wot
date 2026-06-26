@@ -16,6 +16,7 @@ pub fn error_status(error: &CoreError) -> u16 {
         CoreError::Transport(_) => 502,
         CoreError::MissingHandler => 501,
         CoreError::InboundDispatch(_) => 500,
+        CoreError::Lock(_) => 503,
     }
 }
 

@@ -85,21 +85,30 @@ impl InMemoryCredentialStore {
     }
 
     /// Stores credentials for a Thing + scheme pair.
+    ///
+    /// Returns [`CoreError::Lock`] if the store's lock was poisoned by a
+    /// panicking thread; in that case the write is skipped (not applied to
+    /// inconsistent state), so the caller can react to a credential that was
+    /// not actually stored.
     pub fn put(
         &self,
         thing_id: impl Into<String>,
         scheme_name: impl Into<String>,
         credentials: Credentials,
-    ) {
+    ) -> CoreResult<()> {
         self.entries.with(|map| {
             map.entry(thing_id.into())
                 .or_default()
                 .insert(scheme_name.into(), credentials);
-        });
+        })?;
+        Ok(())
     }
 
     /// Removes credentials for a Thing + scheme pair.
-    pub fn remove(&self, thing_id: &str, scheme_name: &str) {
+    ///
+    /// Returns [`CoreError::Lock`] if the store's lock was poisoned; the
+    /// removal is then skipped rather than applied to inconsistent state.
+    pub fn remove(&self, thing_id: &str, scheme_name: &str) -> CoreResult<()> {
         self.entries.with(|map| {
             if let Some(schemes) = map.get_mut(thing_id) {
                 schemes.remove(scheme_name);
@@ -107,13 +116,14 @@ impl InMemoryCredentialStore {
                     map.remove(thing_id);
                 }
             }
-        });
+        })?;
+        Ok(())
     }
 }
 
 impl CredentialStore for InMemoryCredentialStore {
     fn get(&self, thing_id: &str, scheme_name: &str) -> Option<Credentials> {
-        self.entries.with(|map| {
+        self.entries.with_recover(|map| {
             map.get(thing_id)
                 .and_then(|schemes| schemes.get(scheme_name).cloned())
         })
@@ -122,7 +132,7 @@ impl CredentialStore for InMemoryCredentialStore {
 
 impl fmt::Debug for InMemoryCredentialStore {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let count = self.entries.with(|map| map.len());
+        let count = self.entries.with_recover(|map| map.len());
         f.debug_struct("InMemoryCredentialStore")
             .field("entries", &count)
             .finish_non_exhaustive()
@@ -135,11 +145,12 @@ pub trait SecurityProvider {
     fn scheme_name(&self) -> &str;
 
     /// Applies security material to a transport request.
-    fn apply(
-        &mut self,
-        context: SecurityContext<'_>,
-        request: &mut TransportRequest,
-    ) -> CoreResult<()>;
+    ///
+    /// Takes `&self` (not `&mut self`) so providers can be shared across
+    /// concurrent interactions via `Arc`. Implementations that need to mutate
+    /// internal state (e.g. token caches) must use interior mutability.
+    fn apply(&self, context: SecurityContext<'_>, request: &mut TransportRequest)
+    -> CoreResult<()>;
 
     /// Optional hook for reporting unsupported scope names.
     fn supports_scopes(&self, _scopes: &[String]) -> bool {
@@ -217,6 +228,12 @@ impl From<&str> for PrincipalId {
     }
 }
 
+impl core::borrow::Borrow<str> for PrincipalId {
+    fn borrow(&self) -> &str {
+        &self.0
+    }
+}
+
 /// Identity established for an inbound caller after verification (baseline
 /// addendum §1.2 / v3.0 §8).
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -285,11 +302,20 @@ impl From<SecurityError> for CoreError {
 /// succeeds, enforcing the matched form's required scopes (baseline v3.0 §8:
 /// "authenticate plus an optional scope match").
 pub fn check_scopes(required: &[String], present: &[String]) -> Result<(), SecurityError> {
-    let missing: Vec<String> = required
-        .iter()
-        .filter(|req| !present.iter().any(|scope| scope == *req))
-        .cloned()
-        .collect();
+    // Single pass over `required`: the previous implementation scanned
+    // `present` twice — once via `all(contains)` for the success check and
+    // again via `filter(contains)` to build the missing list. Collecting the
+    // unsatisfied scopes once is strictly better on the failure path and equal
+    // on the success path, while staying allocation-free in the common
+    // fully-satisfied case (`Vec::new` does not allocate until the first push).
+    // A `BTreeSet` was considered but rejected: it would allocate and build a
+    // tree on every request, which hurts the typical small-scope hot path.
+    let mut missing: Vec<String> = Vec::new();
+    for req in required {
+        if !present.contains(req) {
+            missing.push(req.clone());
+        }
+    }
     if missing.is_empty() {
         Ok(())
     } else {
@@ -400,11 +426,7 @@ mod tests {
             fn scheme_name(&self) -> &str {
                 "nosec"
             }
-            fn apply(
-                &mut self,
-                _: SecurityContext<'_>,
-                _: &mut TransportRequest,
-            ) -> CoreResult<()> {
+            fn apply(&self, _: SecurityContext<'_>, _: &mut TransportRequest) -> CoreResult<()> {
                 Ok(())
             }
         }

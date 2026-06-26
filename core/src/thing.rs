@@ -95,16 +95,35 @@ pub trait EventSink {
 
 /// Handler for reading a local property affordance (W3C Scripting API
 /// `setPropertyReadHandler`).
+///
+/// # Reentrancy
+///
+/// Handlers run with the per-Thing slot lock **released** (the engine clones
+/// the handler out under a brief lock, then invokes it outside). Implementations
+/// may therefore freely re-enter the Servient — call
+/// [`ExposedThingHandle`](crate::ExposedThingHandle) methods, `emit_event`,
+/// `add_property`, etc. on the same or other Things — without self-deadlock.
+///
+/// Mutating internal handler state across **concurrent** invocations (e.g. when
+/// multiple application threads drive the same Thing) requires internal
+/// synchronization (`Arc<Mutex<…>>`, `Cell`, etc.); the engine serializes
+/// driving-loop interactions within a Thing but does not serialize
+/// application-facing handle calls against an in-flight driving handler.
 pub trait PropertyReadHandler {
     /// Reads the current property value.
-    fn read(&mut self, input: InteractionInput) -> CoreResult<InteractionOutput>;
+    fn read(&self, input: InteractionInput) -> CoreResult<InteractionOutput>;
 }
 
 /// Handler for writing a local property affordance (W3C Scripting API
 /// `setPropertyWriteHandler`).
+///
+/// # Reentrancy
+///
+/// See [`PropertyReadHandler`] — handlers run with the slot lock released and
+/// may re-enter the Servient.
 pub trait PropertyWriteHandler {
     /// Writes a new property value.
-    fn write(&mut self, input: InteractionInput) -> CoreResult<InteractionOutput>;
+    fn write(&self, input: InteractionInput) -> CoreResult<InteractionOutput>;
 }
 
 /// Handler for observing a local property affordance (W3C Scripting API
@@ -115,27 +134,44 @@ pub trait PropertyWriteHandler {
 /// the application via
 /// [`ExposedThingHandle::emit_event`](crate::ExposedThingHandle::emit_event)
 /// or a dedicated property-change emission path.
+///
+/// # Reentrancy
+///
+/// See [`PropertyReadHandler`] — handlers run with the slot lock released and
+/// may re-enter the Servient.
 pub trait PropertyObserveHandler {
     /// Called when observation starts; may emit initial values through `sink`.
     fn observe(
-        &mut self,
+        &self,
         input: InteractionInput,
         sink: &mut dyn EventSink,
     ) -> CoreResult<InteractionOutput>;
 }
 
 /// Handler for a local action affordance.
+///
+/// # Reentrancy
+///
+/// See [`PropertyReadHandler`] — handlers run with the slot lock released and
+/// may re-enter the Servient.
 pub trait ActionHandler {
     /// Invokes the action.
-    fn invoke(&mut self, input: InteractionInput) -> CoreResult<InteractionOutput>;
+    fn invoke(&self, input: InteractionInput) -> CoreResult<InteractionOutput>;
 }
 
 /// Handler for event subscription on a local event affordance (W3C Scripting
 /// API `setEventSubscribeHandler`).
+///
+/// Called when a consumer subscribes; may emit initial event payloads.
+///
+/// # Reentrancy
+///
+/// See [`PropertyReadHandler`] — handlers run with the slot lock released and
+/// may re-enter the Servient.
 pub trait EventSubscribeHandler {
     /// Called when a consumer subscribes; may emit initial event payloads.
     fn subscribe(
-        &mut self,
+        &self,
         input: InteractionInput,
         sink: &mut dyn EventSink,
     ) -> CoreResult<InteractionOutput>;
@@ -143,10 +179,18 @@ pub trait EventSubscribeHandler {
 
 /// Handler for event unsubscription on a local event affordance (W3C Scripting
 /// API `setEventUnsubscribeHandler`).
+///
+/// Called when a consumer unsubscribes; allows cleanup of per-subscriber
+/// state.
+///
+/// # Reentrancy
+///
+/// See [`PropertyReadHandler`] — handlers run with the slot lock released and
+/// may re-enter the Servient.
 pub trait EventUnsubscribeHandler {
     /// Called when a consumer unsubscribes; allows cleanup of per-subscriber
     /// state.
-    fn unsubscribe(&mut self, input: InteractionInput) -> CoreResult<InteractionOutput>;
+    fn unsubscribe(&self, input: InteractionInput) -> CoreResult<InteractionOutput>;
 }
 
 // ---------------------------------------------------------------------------
@@ -162,7 +206,7 @@ pub trait EventUnsubscribeHandler {
 #[async_trait::async_trait]
 pub trait AsyncPropertyReadHandler: Send {
     /// Reads the current property value.
-    async fn read(&mut self, input: InteractionInput) -> CoreResult<InteractionOutput>;
+    async fn read(&self, input: InteractionInput) -> CoreResult<InteractionOutput>;
 }
 
 /// Async handler for writing a property (M9).
@@ -170,7 +214,7 @@ pub trait AsyncPropertyReadHandler: Send {
 #[async_trait::async_trait]
 pub trait AsyncPropertyWriteHandler: Send {
     /// Writes a new property value.
-    async fn write(&mut self, input: InteractionInput) -> CoreResult<InteractionOutput>;
+    async fn write(&self, input: InteractionInput) -> CoreResult<InteractionOutput>;
 }
 
 /// Async handler for invoking an action (M9).
@@ -178,35 +222,35 @@ pub trait AsyncPropertyWriteHandler: Send {
 #[async_trait::async_trait]
 pub trait AsyncActionHandler: Send {
     /// Invokes the action.
-    async fn invoke(&mut self, input: InteractionInput) -> CoreResult<InteractionOutput>;
+    async fn invoke(&self, input: InteractionInput) -> CoreResult<InteractionOutput>;
 }
 
 /// All handlers registered for a single property affordance.
 #[derive(Default)]
 struct PropertyHandlerSet {
-    read: Option<Box<dyn PropertyReadHandler>>,
-    write: Option<Box<dyn PropertyWriteHandler>>,
-    observe: Option<Box<dyn PropertyObserveHandler>>,
+    read: Option<Arc<dyn PropertyReadHandler>>,
+    write: Option<Arc<dyn PropertyWriteHandler>>,
+    observe: Option<Arc<dyn PropertyObserveHandler>>,
     #[cfg(feature = "async")]
-    async_read: Option<Box<dyn AsyncPropertyReadHandler + Send>>,
+    async_read: Option<Arc<dyn AsyncPropertyReadHandler + Send>>,
     #[cfg(feature = "async")]
-    async_write: Option<Box<dyn AsyncPropertyWriteHandler + Send>>,
+    async_write: Option<Arc<dyn AsyncPropertyWriteHandler + Send>>,
 }
 
 /// All handlers registered for a single event affordance.
 #[derive(Default)]
 struct EventHandlerSet {
-    subscribe: Option<Box<dyn EventSubscribeHandler>>,
-    unsubscribe: Option<Box<dyn EventUnsubscribeHandler>>,
+    subscribe: Option<Arc<dyn EventSubscribeHandler>>,
+    unsubscribe: Option<Arc<dyn EventUnsubscribeHandler>>,
 }
 
 /// Protocol-neutral local Thing dispatcher.
 pub struct LocalThing {
     thing: Thing,
     property_handlers: BTreeMap<String, PropertyHandlerSet>,
-    action_handlers: BTreeMap<String, Box<dyn ActionHandler>>,
+    action_handlers: BTreeMap<String, Arc<dyn ActionHandler>>,
     #[cfg(feature = "async")]
-    async_action_handlers: BTreeMap<String, Box<dyn AsyncActionHandler + Send>>,
+    async_action_handlers: BTreeMap<String, Arc<dyn AsyncActionHandler + Send>>,
     event_handlers: BTreeMap<String, EventHandlerSet>,
 }
 
@@ -284,22 +328,25 @@ impl BoundConsumedThing {
         form: &Form,
     ) -> CoreResult<()> {
         let form_set = self.forms_for_target(target)?;
-        let selected = form_set
-            .forms
-            .iter()
-            .find(|candidate| *candidate == form)
-            .ok_or_else(|| {
-                CoreError::InvalidInteraction(
-                    "Selected form does not belong to the requested affordance".into(),
-                )
-            })?;
 
-        if effective_form_operations(form_set.context, selected).contains(&operation) {
+        // The public `ConsumedThing::request` entry point accepts an arbitrary
+        // caller-supplied `Arc<Form>`. Verify the form actually belongs to this
+        // affordance; otherwise a foreign form (or a no-`op` form) could pass
+        // by falling back to the affordance's default operations and dispatch
+        // to the wrong binding.
+        if !form_set.forms.iter().any(|candidate| candidate == form) {
+            return Err(CoreError::InvalidInteraction(format!(
+                "Selected form does not belong to the {:?} affordance",
+                target
+            )));
+        }
+
+        if effective_form_operations(form_set.context, form).contains(&operation) {
             Ok(())
         } else {
             Err(CoreError::UnsupportedOperation(format!(
-                "Form does not support {:?}",
-                operation
+                "Form does not support {}",
+                operation.as_str()
             )))
         }
     }
@@ -333,19 +380,19 @@ impl ConsumedThing for BoundConsumedThing {
         &mut self,
         target: AffordanceTarget,
         operation: Operation,
-        form: &Form,
+        form: Arc<Form>,
         input: InteractionInput,
     ) -> CoreResult<InteractionOutput> {
-        self.validate_selected_form(&target, operation, form)?;
+        self.validate_selected_form(&target, operation, &form)?;
 
         let binding = self
             .bindings
             .iter()
-            .find(|binding| binding.supports_with_thing(&self.thing, form, operation))
+            .find(|binding| binding.supports_with_thing(&self.thing, &form, operation))
             .ok_or_else(|| {
                 CoreError::UnsupportedBinding(format!(
-                    "No binding supports {:?} for {}",
-                    operation,
+                    "No binding supports {} for {}",
+                    operation.as_str(),
                     form.href.as_str()
                 ))
             })?;
@@ -354,7 +401,7 @@ impl ConsumedThing for BoundConsumedThing {
             thing: Arc::clone(&self.thing),
             target,
             operation,
-            form: Arc::new(form.clone()),
+            form: Arc::clone(&form),
             input,
         })
     }
@@ -384,7 +431,7 @@ impl LocalThing {
         name: impl Into<String>,
         handler: impl PropertyReadHandler + 'static,
     ) {
-        self.property_handlers.entry(name.into()).or_default().read = Some(Box::new(handler));
+        self.property_handlers.entry(name.into()).or_default().read = Some(Arc::new(handler));
     }
 
     /// Registers a property write handler by affordance name.
@@ -393,7 +440,7 @@ impl LocalThing {
         name: impl Into<String>,
         handler: impl PropertyWriteHandler + 'static,
     ) {
-        self.property_handlers.entry(name.into()).or_default().write = Some(Box::new(handler));
+        self.property_handlers.entry(name.into()).or_default().write = Some(Arc::new(handler));
     }
 
     /// Registers a property observe handler by affordance name.
@@ -405,7 +452,7 @@ impl LocalThing {
         self.property_handlers
             .entry(name.into())
             .or_default()
-            .observe = Some(Box::new(handler));
+            .observe = Some(Arc::new(handler));
     }
 
     /// Registers an action handler by affordance name.
@@ -413,8 +460,8 @@ impl LocalThing {
         &mut self,
         name: impl Into<String>,
         handler: impl ActionHandler + 'static,
-    ) -> Option<Box<dyn ActionHandler>> {
-        self.action_handlers.insert(name.into(), Box::new(handler))
+    ) -> Option<Arc<dyn ActionHandler>> {
+        self.action_handlers.insert(name.into(), Arc::new(handler))
     }
 
     /// Registers an async property read handler (M9, behind `async` feature).
@@ -427,7 +474,7 @@ impl LocalThing {
         self.property_handlers
             .entry(name.into())
             .or_default()
-            .async_read = Some(Box::new(handler));
+            .async_read = Some(Arc::new(handler));
     }
 
     /// Registers an async property write handler (M9).
@@ -440,7 +487,7 @@ impl LocalThing {
         self.property_handlers
             .entry(name.into())
             .or_default()
-            .async_write = Some(Box::new(handler));
+            .async_write = Some(Arc::new(handler));
     }
 
     /// Registers an async action handler (M9).
@@ -451,72 +498,84 @@ impl LocalThing {
         handler: impl AsyncActionHandler + 'static,
     ) {
         self.async_action_handlers
-            .insert(name.into(), Box::new(handler));
+            .insert(name.into(), Arc::new(handler));
     }
 
-    /// Takes the async read handler out of the set (for async dispatch).
+    /// Clones the async read handler for dispatch without removing it.
+    ///
+    /// The handler stays registered, so concurrent requests for the same
+    /// affordance each get their own `Arc` clone instead of observing
+    /// `MissingHandler`.
     #[cfg(feature = "async")]
-    pub fn take_async_read_handler(
-        &mut self,
+    pub fn async_read_handler(
+        &self,
         name: &str,
-    ) -> Option<Box<dyn AsyncPropertyReadHandler + Send>> {
+    ) -> Option<Arc<dyn AsyncPropertyReadHandler + Send>> {
         self.property_handlers
-            .get_mut(name)
-            .and_then(|set| set.async_read.take())
+            .get(name)
+            .and_then(|set| set.async_read.clone())
     }
 
-    /// Returns an async read handler to the set after dispatch.
+    /// Clones the async write handler for dispatch without removing it.
     #[cfg(feature = "async")]
-    pub fn return_async_read_handler(
-        &mut self,
+    pub fn async_write_handler(
+        &self,
         name: &str,
-        handler: Box<dyn AsyncPropertyReadHandler + Send>,
-    ) {
-        if let Some(set) = self.property_handlers.get_mut(name) {
-            set.async_read = Some(handler);
-        }
-    }
-
-    /// Takes the async write handler out of the set (for async dispatch).
-    #[cfg(feature = "async")]
-    pub fn take_async_write_handler(
-        &mut self,
-        name: &str,
-    ) -> Option<Box<dyn AsyncPropertyWriteHandler + Send>> {
+    ) -> Option<Arc<dyn AsyncPropertyWriteHandler + Send>> {
         self.property_handlers
-            .get_mut(name)
-            .and_then(|set| set.async_write.take())
+            .get(name)
+            .and_then(|set| set.async_write.clone())
     }
 
-    /// Returns an async write handler to the set after dispatch.
+    /// Clones the async action handler for dispatch without removing it.
     #[cfg(feature = "async")]
-    pub fn return_async_write_handler(
-        &mut self,
-        name: &str,
-        handler: Box<dyn AsyncPropertyWriteHandler + Send>,
-    ) {
-        if let Some(set) = self.property_handlers.get_mut(name) {
-            set.async_write = Some(handler);
-        }
+    pub fn async_action_handler(&self, name: &str) -> Option<Arc<dyn AsyncActionHandler + Send>> {
+        self.async_action_handlers.get(name).cloned()
     }
 
-    /// Takes the async action handler out (for async dispatch).
-    #[cfg(feature = "async")]
-    pub fn take_async_action_handler(
-        &mut self,
-        name: &str,
-    ) -> Option<Box<dyn AsyncActionHandler + Send>> {
-        self.async_action_handlers.remove(name)
+    /// Clones the sync read handler for dispatch without removing it.
+    ///
+    /// The handler stays registered; concurrent requests each get their own
+    /// `Arc` clone. Dispatch clones the handler out under the per-Thing slot
+    /// lock and invokes it with the lock released (reentrancy-safe — see the
+    /// [`PropertyReadHandler`] docs).
+    pub fn read_handler(&self, name: &str) -> Option<Arc<dyn PropertyReadHandler>> {
+        self.property_handlers
+            .get(name)
+            .and_then(|set| set.read.clone())
     }
 
-    /// Returns an async action handler after dispatch.
-    #[cfg(feature = "async")]
-    pub fn return_async_action_handler(
-        &mut self,
-        name: &str,
-        handler: Box<dyn AsyncActionHandler + Send>,
-    ) {
-        self.async_action_handlers.insert(name.into(), handler);
+    /// Clones the sync write handler for dispatch without removing it.
+    pub fn write_handler(&self, name: &str) -> Option<Arc<dyn PropertyWriteHandler>> {
+        self.property_handlers
+            .get(name)
+            .and_then(|set| set.write.clone())
+    }
+
+    /// Clones the sync observe handler for dispatch without removing it.
+    pub fn observe_handler(&self, name: &str) -> Option<Arc<dyn PropertyObserveHandler>> {
+        self.property_handlers
+            .get(name)
+            .and_then(|set| set.observe.clone())
+    }
+
+    /// Clones the sync action handler for dispatch without removing it.
+    pub fn action_handler(&self, name: &str) -> Option<Arc<dyn ActionHandler>> {
+        self.action_handlers.get(name).cloned()
+    }
+
+    /// Clones the sync event subscribe handler for dispatch without removing it.
+    pub fn subscribe_handler(&self, name: &str) -> Option<Arc<dyn EventSubscribeHandler>> {
+        self.event_handlers
+            .get(name)
+            .and_then(|set| set.subscribe.clone())
+    }
+
+    /// Clones the sync event unsubscribe handler for dispatch without removing it.
+    pub fn unsubscribe_handler(&self, name: &str) -> Option<Arc<dyn EventUnsubscribeHandler>> {
+        self.event_handlers
+            .get(name)
+            .and_then(|set| set.unsubscribe.clone())
     }
 
     /// Registers an event subscribe handler by affordance name.
@@ -528,7 +587,7 @@ impl LocalThing {
         self.event_handlers
             .entry(name.into())
             .or_default()
-            .subscribe = Some(Box::new(handler));
+            .subscribe = Some(Arc::new(handler));
     }
 
     /// Registers an event unsubscribe handler by affordance name.
@@ -540,18 +599,21 @@ impl LocalThing {
         self.event_handlers
             .entry(name.into())
             .or_default()
-            .unsubscribe = Some(Box::new(handler));
+            .unsubscribe = Some(Arc::new(handler));
     }
 
-    fn ensure_property_affordance(&self, name: &str) -> CoreResult<()> {
+    /// Returns `Err(UnknownAffordance)` if no property with `name` is declared.
+    pub fn ensure_property_affordance(&self, name: &str) -> CoreResult<()> {
         ensure_affordance("property", name, &self.thing.properties)
     }
 
-    fn ensure_action_affordance(&self, name: &str) -> CoreResult<()> {
+    /// Returns `Err(UnknownAffordance)` if no action with `name` is declared.
+    pub fn ensure_action_affordance(&self, name: &str) -> CoreResult<()> {
         ensure_affordance("action", name, &self.thing.actions)
     }
 
-    fn ensure_event_affordance(&self, name: &str) -> CoreResult<()> {
+    /// Returns `Err(UnknownAffordance)` if no event with `name` is declared.
+    pub fn ensure_event_affordance(&self, name: &str) -> CoreResult<()> {
         ensure_affordance("event", name, &self.thing.events)
     }
 
@@ -647,82 +709,58 @@ impl ExposedThing for LocalThing {
         &self.thing
     }
 
-    fn read_property(
-        &mut self,
-        name: &str,
-        input: InteractionInput,
-    ) -> CoreResult<InteractionOutput> {
+    fn read_property(&self, name: &str, input: InteractionInput) -> CoreResult<InteractionOutput> {
         self.ensure_property_affordance(name)?;
-        let handlers = self.property_handlers.get_mut(name);
-        let handler = handlers
-            .and_then(|h| h.read.as_deref_mut())
-            .ok_or(CoreError::MissingHandler)?;
+        let handler = self.read_handler(name).ok_or(CoreError::MissingHandler)?;
         handler.read(input)
     }
 
-    fn write_property(
-        &mut self,
-        name: &str,
-        input: InteractionInput,
-    ) -> CoreResult<InteractionOutput> {
+    fn write_property(&self, name: &str, input: InteractionInput) -> CoreResult<InteractionOutput> {
         self.ensure_property_affordance(name)?;
-        let handlers = self.property_handlers.get_mut(name);
-        let handler = handlers
-            .and_then(|h| h.write.as_deref_mut())
-            .ok_or(CoreError::MissingHandler)?;
+        let handler = self.write_handler(name).ok_or(CoreError::MissingHandler)?;
         handler.write(input)
     }
 
     fn observe_property(
-        &mut self,
+        &self,
         name: &str,
         input: InteractionInput,
         sink: &mut dyn EventSink,
     ) -> CoreResult<InteractionOutput> {
         self.ensure_property_affordance(name)?;
-        let handlers = self.property_handlers.get_mut(name);
-        let handler = handlers
-            .and_then(|h| h.observe.as_deref_mut())
+        let handler = self
+            .observe_handler(name)
             .ok_or(CoreError::MissingHandler)?;
         handler.observe(input, sink)
     }
 
-    fn invoke_action(
-        &mut self,
-        name: &str,
-        input: InteractionInput,
-    ) -> CoreResult<InteractionOutput> {
+    fn invoke_action(&self, name: &str, input: InteractionInput) -> CoreResult<InteractionOutput> {
         self.ensure_action_affordance(name)?;
-        let handler = self
-            .action_handlers
-            .get_mut(name)
-            .ok_or(CoreError::MissingHandler)?;
+        let handler = self.action_handler(name).ok_or(CoreError::MissingHandler)?;
         handler.invoke(input)
     }
 
     fn subscribe_event(
-        &mut self,
+        &self,
         name: &str,
         input: InteractionInput,
         sink: &mut dyn EventSink,
     ) -> CoreResult<InteractionOutput> {
         self.ensure_event_affordance(name)?;
-        let handlers = self.event_handlers.get_mut(name);
-        let handler = handlers
-            .and_then(|h| h.subscribe.as_deref_mut())
+        let handler = self
+            .subscribe_handler(name)
             .ok_or(CoreError::MissingHandler)?;
         handler.subscribe(input, sink)
     }
 
     fn unsubscribe_event(
-        &mut self,
+        &self,
         name: &str,
         input: InteractionInput,
     ) -> CoreResult<InteractionOutput> {
         self.ensure_event_affordance(name)?;
-        let handlers = self.event_handlers.get_mut(name);
-        let handler = handlers
-            .and_then(|h| h.unsubscribe.as_deref_mut())
+        let handler = self
+            .unsubscribe_handler(name)
             .ok_or(CoreError::MissingHandler)?;
         handler.unsubscribe(input)
     }
@@ -752,38 +790,26 @@ pub trait ExposedThing {
     fn thing_description(&self) -> &Thing;
 
     /// Reads a property.
-    fn read_property(
-        &mut self,
-        name: &str,
-        input: InteractionInput,
-    ) -> CoreResult<InteractionOutput>;
+    fn read_property(&self, name: &str, input: InteractionInput) -> CoreResult<InteractionOutput>;
 
     /// Writes a property.
-    fn write_property(
-        &mut self,
-        name: &str,
-        input: InteractionInput,
-    ) -> CoreResult<InteractionOutput>;
+    fn write_property(&self, name: &str, input: InteractionInput) -> CoreResult<InteractionOutput>;
 
     /// Starts observing a property; the handler may emit the initial value
     /// through `sink`.
     fn observe_property(
-        &mut self,
+        &self,
         name: &str,
         input: InteractionInput,
         sink: &mut dyn EventSink,
     ) -> CoreResult<InteractionOutput>;
 
     /// Invokes an action.
-    fn invoke_action(
-        &mut self,
-        name: &str,
-        input: InteractionInput,
-    ) -> CoreResult<InteractionOutput>;
+    fn invoke_action(&self, name: &str, input: InteractionInput) -> CoreResult<InteractionOutput>;
 
     /// Subscribes to an event source.
     fn subscribe_event(
-        &mut self,
+        &self,
         name: &str,
         input: InteractionInput,
         sink: &mut dyn EventSink,
@@ -791,7 +817,7 @@ pub trait ExposedThing {
 
     /// Unsubscribes from an event source.
     fn unsubscribe_event(
-        &mut self,
+        &self,
         name: &str,
         input: InteractionInput,
     ) -> CoreResult<InteractionOutput>;
@@ -807,7 +833,7 @@ pub trait ConsumedThing {
         &mut self,
         target: AffordanceTarget,
         operation: Operation,
-        form: &Form,
+        form: Arc<Form>,
         input: InteractionInput,
     ) -> CoreResult<InteractionOutput>;
 }

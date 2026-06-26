@@ -68,6 +68,56 @@ pub trait ClientBinding {
             "Binding does not support streaming subscriptions".into(),
         ))
     }
+
+    /// Returns a reference to the async variant of this binding, if the
+    /// concrete binding implements [`AsyncClientBinding`].
+    ///
+    /// Bindings that support native async I/O (e.g., a zenoh session using
+    /// `session.get().await`) override this to return `Some(self)`. The
+    /// async consumer path (`read_property_async`, etc.) checks this and
+    /// routes through `invoke_async` when available, avoiding a blocking
+    /// call inside an async context.
+    ///
+    /// The default implementation returns `None`, so bindings that do not
+    /// implement `AsyncClientBinding` fall back to the synchronous
+    /// [`invoke`](Self::invoke) path.
+    #[cfg(feature = "async")]
+    fn as_async_binding(&self) -> Option<&dyn AsyncClientBinding> {
+        None
+    }
+}
+
+/// Async outbound protocol binding contract.
+///
+/// Bindings that perform I/O through an async runtime (e.g., zenoh's native
+/// `session.get().await`) implement this trait so that the async consumer
+/// path (`ConsumedThingHandle::read_property_async`, etc.) gets true
+/// non-blocking I/O instead of wrapping the synchronous [`ClientBinding`]
+/// path.
+///
+/// A concrete binding typically implements **both** [`ClientBinding`] and
+/// `AsyncClientBinding`. The sync path is used by `poll_serve_sync` and
+/// `serve_sync`; the async path is used by `poll_serve`, `serve`, and the
+/// `*_async` consumer methods.
+#[cfg(feature = "async")]
+#[async_trait::async_trait]
+pub trait AsyncClientBinding: Send + Sync {
+    /// Performs the requested outbound interaction through the concrete
+    /// protocol asynchronously.
+    async fn invoke_async(&self, request: BindingRequest) -> CoreResult<InteractionOutput>;
+
+    /// Opens a long-lived streaming subscription asynchronously.
+    ///
+    /// The default implementation returns `UnsupportedOperation`. Override
+    /// when the concrete binding has a native async subscription API.
+    async fn subscribe_async(
+        &self,
+        _request: BindingRequest,
+    ) -> CoreResult<(Subscription, Box<dyn SubscriptionGuard>)> {
+        Err(crate::CoreError::UnsupportedOperation(
+            "Binding does not support async streaming subscriptions".into(),
+        ))
+    }
 }
 
 /// Protocol-specific cleanup handle for a streaming subscription.

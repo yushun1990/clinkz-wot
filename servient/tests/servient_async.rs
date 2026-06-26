@@ -293,7 +293,7 @@ struct SlowAsyncRead;
 
 #[async_trait]
 impl AsyncPropertyReadHandler for SlowAsyncRead {
-    async fn read(&mut self, _input: InteractionInput) -> CoreResult<InteractionOutput> {
+    async fn read(&self, _input: InteractionInput) -> CoreResult<InteractionOutput> {
         // Simulate async work (e.g., reading from a sensor or database).
         tokio::time::sleep(std::time::Duration::from_millis(10)).await;
         Ok(InteractionOutput::with_payload(Payload::new(
@@ -363,7 +363,7 @@ async fn async_dispatch_falls_back_to_sync_handler() {
 
     struct SyncRead;
     impl PropertyReadHandler for SyncRead {
-        fn read(&mut self, _: InteractionInput) -> CoreResult<InteractionOutput> {
+        fn read(&self, _: InteractionInput) -> CoreResult<InteractionOutput> {
             Ok(InteractionOutput::with_payload(Payload::new(
                 b"sync-fallback".to_vec(),
                 "text/plain",
@@ -408,7 +408,7 @@ struct AsyncEchoWrite;
 
 #[async_trait]
 impl AsyncPropertyWriteHandler for AsyncEchoWrite {
-    async fn write(&mut self, input: InteractionInput) -> CoreResult<InteractionOutput> {
+    async fn write(&self, input: InteractionInput) -> CoreResult<InteractionOutput> {
         tokio::time::sleep(std::time::Duration::from_millis(5)).await;
         let body = input.payload.map(|p| p.body).unwrap_or_default();
         Ok(InteractionOutput::with_payload(Payload::new(
@@ -422,7 +422,7 @@ struct AsyncEchoAction;
 
 #[async_trait]
 impl AsyncActionHandler for AsyncEchoAction {
-    async fn invoke(&mut self, input: InteractionInput) -> CoreResult<InteractionOutput> {
+    async fn invoke(&self, input: InteractionInput) -> CoreResult<InteractionOutput> {
         tokio::time::sleep(std::time::Duration::from_millis(5)).await;
         Ok(InteractionOutput {
             payload: input.payload,

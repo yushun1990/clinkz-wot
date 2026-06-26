@@ -69,7 +69,19 @@ Examples:
 
 - `contentType` defaults to `application/json`.
 - Thing-level `security` can be inherited by forms unless a form overrides it.
-- Default operation behavior should be resolved according to TD rules and interaction type.
+- Default operation behavior is resolved according to TD rules and interaction
+  type. Per TD 1.1 §5.3.3 the default `op` for an omitted Event form is
+  `subscribeevent` only (not paired with `unsubscribeevent`); for a Property
+  form it depends on the `readOnly`/`writeOnly` flags, and for an Action form it
+  is `invokeaction`. A `readOnly` and `writeOnly` combination of both `true` is
+  rejected.
+
+## Context Ordering
+
+When a TD carries multiple `@context` values, the standard WoT TD context URI
+must be the first entry so JSON-LD processors resolve the WoT vocabulary before
+any extension namespace. Profile/Full validation enforces this; extension-only
+first entries are rejected.
 
 ## JSON-LD Contexts
 

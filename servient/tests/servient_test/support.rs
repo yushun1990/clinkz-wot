@@ -5,7 +5,10 @@ use std::{
     cell::Cell,
     collections::VecDeque,
     rc::Rc,
-    sync::{Arc, Mutex},
+    sync::{
+        Arc, Mutex,
+        atomic::{AtomicUsize, Ordering},
+    },
 };
 
 use clinkz_wot_core::{
@@ -15,6 +18,9 @@ use clinkz_wot_core::{
     PropertyReadHandler, PropertyWriteHandler, SecurityContext, SecurityProvider,
     ServerBinding as ServerBindingTrait, SubscriptionGuard, TransportRequest,
 };
+
+#[cfg(feature = "test-zenoh")]
+use clinkz_wot_core::Subscription;
 use clinkz_wot_td::{
     affordance::{ActionAffordance, EventAffordance, InteractionHelper, PropertyAffordance},
     data_schema::DataSchema,
@@ -46,7 +52,7 @@ pub(crate) struct SharedStatusRead {
 }
 
 impl PropertyReadHandler for SharedStatusRead {
-    fn read(&mut self, _input: InteractionInput) -> CoreResult<InteractionOutput> {
+    fn read(&self, _input: InteractionInput) -> CoreResult<InteractionOutput> {
         Ok(InteractionOutput::with_payload(
             self.value.lock().unwrap().clone(),
         ))
@@ -58,7 +64,7 @@ pub(crate) struct SharedStatusWrite {
 }
 
 impl PropertyWriteHandler for SharedStatusWrite {
-    fn write(&mut self, input: InteractionInput) -> CoreResult<InteractionOutput> {
+    fn write(&self, input: InteractionInput) -> CoreResult<InteractionOutput> {
         *self.value.lock().unwrap() = input.payload.expect("test write payload");
         Ok(InteractionOutput::empty())
     }
@@ -71,7 +77,7 @@ pub(crate) struct StatusRead {
 }
 
 impl PropertyReadHandler for StatusRead {
-    fn read(&mut self, _input: InteractionInput) -> CoreResult<InteractionOutput> {
+    fn read(&self, _input: InteractionInput) -> CoreResult<InteractionOutput> {
         Ok(InteractionOutput::with_payload(self.value.clone()))
     }
 }
@@ -83,7 +89,7 @@ pub(crate) struct PrincipalCapturingProperty {
 }
 
 impl PropertyReadHandler for PrincipalCapturingProperty {
-    fn read(&mut self, input: InteractionInput) -> CoreResult<InteractionOutput> {
+    fn read(&self, input: InteractionInput) -> CoreResult<InteractionOutput> {
         *self.captured_principal.borrow_mut() = input.principal.clone();
         Ok(InteractionOutput::with_payload(Payload::new(
             b"ok".to_vec(),
@@ -95,7 +101,7 @@ impl PropertyReadHandler for PrincipalCapturingProperty {
 pub(crate) struct EchoAction;
 
 impl ActionHandler for EchoAction {
-    fn invoke(&mut self, input: InteractionInput) -> CoreResult<InteractionOutput> {
+    fn invoke(&self, input: InteractionInput) -> CoreResult<InteractionOutput> {
         Ok(InteractionOutput {
             payload: input.payload,
         })
@@ -111,7 +117,7 @@ pub(crate) struct SelfDestroyingAction {
 }
 
 impl ActionHandler for SelfDestroyingAction {
-    fn invoke(&mut self, _input: InteractionInput) -> CoreResult<InteractionOutput> {
+    fn invoke(&self, _input: InteractionInput) -> CoreResult<InteractionOutput> {
         // Destroy from within the handler — this must not deadlock.
         let result = self.servient.destroy(&self.thing_id);
         self.destroyed.set(result.is_ok());
@@ -126,7 +132,7 @@ pub(crate) struct StartupEvent;
 
 impl EventSubscribeHandler for StartupEvent {
     fn subscribe(
-        &mut self,
+        &self,
         _input: InteractionInput,
         sink: &mut dyn EventSink,
     ) -> CoreResult<InteractionOutput> {
@@ -141,7 +147,7 @@ pub(crate) struct RecordingUnsubscribe {
 }
 
 impl EventUnsubscribeHandler for RecordingUnsubscribe {
-    fn unsubscribe(&mut self, _input: InteractionInput) -> CoreResult<InteractionOutput> {
+    fn unsubscribe(&self, _input: InteractionInput) -> CoreResult<InteractionOutput> {
         self.called.set(true);
         Ok(InteractionOutput::empty())
     }
@@ -154,7 +160,7 @@ pub(crate) struct ObserveInitial {
 
 impl PropertyObserveHandler for ObserveInitial {
     fn observe(
-        &mut self,
+        &self,
         _input: InteractionInput,
         sink: &mut dyn EventSink,
     ) -> CoreResult<InteractionOutput> {
@@ -201,7 +207,7 @@ impl PayloadCodec for CountingCodec {
 pub(crate) struct LocalUnsecuredStatusProperty;
 
 impl PropertyReadHandler for LocalUnsecuredStatusProperty {
-    fn read(&mut self, _input: InteractionInput) -> CoreResult<InteractionOutput> {
+    fn read(&self, _input: InteractionInput) -> CoreResult<InteractionOutput> {
         Ok(InteractionOutput::with_payload(Payload::new(
             b"local-direct".to_vec(),
             "text/plain",
@@ -219,7 +225,7 @@ impl SecurityProvider for RecordingSecurityProvider {
     }
 
     fn apply(
-        &mut self,
+        &self,
         context: SecurityContext<'_>,
         request: &mut TransportRequest,
     ) -> CoreResult<()> {
@@ -332,12 +338,12 @@ impl ClientBinding for AuthenticatedReadBinding {
 }
 
 pub(crate) struct CountingUnsupportedBinding {
-    pub(crate) supports_calls: Rc<std::cell::RefCell<usize>>,
+    pub(crate) supports_calls: Arc<AtomicUsize>,
 }
 
 impl ClientBinding for CountingUnsupportedBinding {
     fn supports(&self, _form: &Form, _operation: Operation) -> bool {
-        *self.supports_calls.borrow_mut() += 1;
+        self.supports_calls.fetch_add(1, Ordering::Relaxed);
         false
     }
 
@@ -347,12 +353,12 @@ impl ClientBinding for CountingUnsupportedBinding {
 }
 
 pub(crate) struct CountingHrefBinding {
-    pub(crate) supports_calls: Rc<std::cell::RefCell<usize>>,
+    pub(crate) supports_calls: Arc<AtomicUsize>,
 }
 
 impl ClientBinding for CountingHrefBinding {
     fn supports(&self, form: &Form, operation: Operation) -> bool {
-        *self.supports_calls.borrow_mut() += 1;
+        self.supports_calls.fetch_add(1, Ordering::Relaxed);
         form.href.as_str().starts_with("test://") && operation == Operation::ReadProperty
     }
 
@@ -408,6 +414,26 @@ impl ZenohTransport for ServientZenohTransport {
             _ => panic!("unexpected zenoh transport request: {:?}", request),
         }
     }
+
+    fn open_subscription(
+        &self,
+        request: ZenohTransportRequest,
+    ) -> CoreResult<(Subscription, Box<dyn SubscriptionGuard>)> {
+        match (request.plan.kind, request.plan.key_expr.as_str()) {
+            (ZenohOperationKind::Subscribe, "clinkz/things/lamp/events/startup") => {
+                let (sender, subscription) = Subscription::channel(0);
+                sender.push(Payload::new(b"zenoh-subscribed".to_vec(), "text/plain"));
+                Ok((subscription, Box::new(NoopZenohSubscriptionGuard)))
+            }
+            _ => panic!("unexpected zenoh subscription request: {:?}", request),
+        }
+    }
+}
+
+struct NoopZenohSubscriptionGuard;
+
+impl SubscriptionGuard for NoopZenohSubscriptionGuard {
+    fn close(self: Box<Self>) {}
 }
 
 #[cfg(feature = "test-zenoh")]
@@ -578,6 +604,8 @@ pub(crate) struct FakeServerBinding {
     pub(crate) responses: Mutex<Vec<InboundResponse>>,
     pub(crate) registered_things: Mutex<Vec<String>>,
     pub(crate) unregistered_things: Mutex<Vec<String>>,
+    pub(crate) registered_affordances: Mutex<Vec<String>>,
+    pub(crate) unregistered_affordances: Mutex<Vec<String>>,
     pub(crate) route_registration_fails: bool,
 }
 
@@ -616,5 +644,30 @@ impl ServerBindingTrait for FakeServerBinding {
             .lock()
             .unwrap()
             .push(thing_id.to_owned());
+    }
+
+    fn register_affordance(
+        &self,
+        thing_id: &str,
+        target: &AffordanceTarget,
+        _td: &Thing,
+    ) -> Result<(), String> {
+        if self.route_registration_fails {
+            return Err(format!(
+                "affordance route registration failed for '{thing_id}'"
+            ));
+        }
+        self.registered_affordances
+            .lock()
+            .unwrap()
+            .push(format!("{thing_id}:{target:?}"));
+        Ok(())
+    }
+
+    fn unregister_affordance(&self, thing_id: &str, target: &AffordanceTarget) {
+        self.unregistered_affordances
+            .lock()
+            .unwrap()
+            .push(format!("{thing_id}:{target:?}"));
     }
 }

@@ -28,7 +28,8 @@ pub use form::{
     ZenohAffordanceOperationPlan, ZenohFormMetadata, ZenohFormTarget, ZenohOperationKind,
     ZenohOperationPlan, extract_zenoh_metadata, extract_zenoh_target, is_zenoh_form,
     is_zenoh_form_target, plan_zenoh_affordance_operation,
-    plan_zenoh_affordance_operation_with_criteria, plan_zenoh_operation, zenoh_operation_kind,
+    plan_zenoh_affordance_operation_with_criteria, plan_zenoh_operation, try_extract_zenoh_target,
+    zenoh_operation_kind,
 };
 #[cfg(any(feature = "zenoh", feature = "zenoh-pico"))]
 pub use runtime::ZenohRuntimeTransport;

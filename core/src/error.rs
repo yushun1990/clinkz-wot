@@ -2,6 +2,7 @@ use alloc::string::String;
 use core::fmt;
 
 use crate::security::SecurityError;
+use crate::sync::MapLockError;
 
 /// Result type used by protocol-neutral core traits.
 pub type CoreResult<T> = Result<T, CoreError>;
@@ -28,6 +29,8 @@ pub enum CoreError {
     MissingHandler,
     /// An inbound dispatch or routing failure with an opaque English reason.
     InboundDispatch(String),
+    /// A shared engine lock was poisoned by a panicking thread.
+    Lock(MapLockError),
 }
 
 impl fmt::Display for CoreError {
@@ -44,9 +47,16 @@ impl fmt::Display for CoreError {
             Self::InvalidInteraction(message) => write!(f, "Invalid interaction: {}", message),
             Self::MissingHandler => f.write_str("No handler attached for the requested affordance"),
             Self::InboundDispatch(message) => write!(f, "Inbound dispatch error: {}", message),
+            Self::Lock(err) => write!(f, "{}", err),
         }
     }
 }
 
 #[cfg(feature = "std")]
 impl std::error::Error for CoreError {}
+
+impl From<MapLockError> for CoreError {
+    fn from(value: MapLockError) -> Self {
+        Self::Lock(value)
+    }
+}
