@@ -438,6 +438,9 @@ fn plans_bulk_property_operation_from_thing_level_form() {
     assert_eq!(plan.operation.key_expr, "clinkz/things/lamp/properties");
 }
 
+/// `subscribeallevents` / `unsubscribeallevents` are TD 2.0 operations; this
+/// planning test is only compiled under `td2-preview`.
+#[cfg(feature = "td2-preview")]
 #[test]
 fn plans_bulk_event_operation_from_thing_level_form() {
     let subscribe_form = Form::builder("zenoh://clinkz/things/lamp/events")
@@ -691,6 +694,7 @@ fn maps_wot_operations_to_zenoh_operation_kinds() {
         zenoh_operation_kind(Operation::UnsubscribeEvent),
         ZenohOperationKind::Unsubscribe
     );
+    #[cfg(feature = "td2-preview")]
     assert_eq!(
         zenoh_operation_kind(Operation::CancelAction),
         ZenohOperationKind::RequestReply
@@ -711,6 +715,7 @@ fn maps_bulk_wot_operations_to_zenoh_operation_kinds() {
         zenoh_operation_kind(Operation::ObserveAllProperties),
         ZenohOperationKind::Subscribe
     );
+    #[cfg(feature = "td2-preview")]
     assert_eq!(
         zenoh_operation_kind(Operation::UnsubscribeAllEvents),
         ZenohOperationKind::Unsubscribe

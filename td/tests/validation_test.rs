@@ -33,6 +33,20 @@ fn test_thing_roundtrip_fidelity() {
 
         // Parse the original fixture into a generic JSON value for structural comparison.
         let raw_json = fs::read_to_string(&path_buf).expect("Read failed");
+
+        // Default builds target TD 1.1 and cannot represent TD 2.0 form
+        // operations (`cancelaction`, `subscribeallevents`,
+        // `unsubscribeallevents`). Skip such fixtures here; the full corpus is
+        // exercised under the `td2-preview` feature. (`synchronous` round-trips
+        // as an extension field and needs no skip.)
+        #[cfg(not(feature = "td2-preview"))]
+        if raw_json.contains("cancelaction")
+            || raw_json.contains("subscribeallevents")
+            || raw_json.contains("unsubscribeallevents")
+        {
+            continue;
+        }
+
         let mut original_value: serde_json::Value = serde_json::from_str(&raw_json)
             .unwrap_or_else(|_| panic!("Original JSON is invalid: {:?}", path_buf));
         sanitize_json(&mut original_value);
@@ -872,8 +886,7 @@ fn basic_validation_accepts_meta_operation_on_thing_level_form() {
             { "href": "/all", "op": ["readallproperties", "writeallproperties"] },
             { "href": "/multi", "op": ["readmultipleproperties", "writemultipleproperties"] },
             { "href": "/obs", "op": ["observeallproperties", "unobserveallproperties"] },
-            { "href": "/actions", "op": "queryallactions" },
-            { "href": "/events", "op": ["subscribeallevents", "unsubscribeallevents"] }
+            { "href": "/actions", "op": "queryallactions" }
         ]
     }"#;
 
@@ -881,6 +894,29 @@ fn basic_validation_accepts_meta_operation_on_thing_level_form() {
     thing
         .validate_with_level(ValidationLevel::Basic)
         .expect("basic validation should accept Thing-level meta-operations");
+}
+
+/// `subscribeallevents` / `unsubscribeallevents` are TD 2.0 event
+/// meta-operations; they are only representable under `td2-preview`.
+#[cfg(feature = "td2-preview")]
+#[test]
+fn basic_validation_accepts_td2_event_meta_operation_on_thing_level_form() {
+    let raw = r#"{
+        "@context": "https://www.w3.org/2022/wot/td/v1.1",
+        "title": "Valid TD2 Event Meta Form Ops",
+        "security": "nosec_sc",
+        "securityDefinitions": {
+            "nosec_sc": { "scheme": "nosec" }
+        },
+        "forms": [
+            { "href": "/events", "op": ["subscribeallevents", "unsubscribeallevents"] }
+        ]
+    }"#;
+
+    let thing: Thing = serde_json::from_str(raw).expect("TD should deserialize");
+    thing
+        .validate_with_level(ValidationLevel::Basic)
+        .expect("basic validation should accept TD2 event meta-operations");
 }
 
 // ---------------------------------------------------------------------------

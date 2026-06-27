@@ -250,7 +250,8 @@ impl<'a> FormBuilder<'a> {
         self.single_op(Operation::QueryAction)
     }
 
-    /// Adds `cancelaction` operation metadata.
+    /// Adds `cancelaction` operation metadata (TD 2.0; requires `td2-preview`).
+    #[cfg(feature = "td2-preview")]
     pub fn cancel_action(self) -> Self {
         self.single_op(Operation::CancelAction)
     }
@@ -300,12 +301,16 @@ impl<'a> FormBuilder<'a> {
         self.single_op(Operation::QueryAllActions)
     }
 
-    /// Adds `subscribeallevents` operation metadata.
+    /// Adds `subscribeallevents` operation metadata (TD 2.0; requires
+    /// `td2-preview`).
+    #[cfg(feature = "td2-preview")]
     pub fn subscribe_all_events(self) -> Self {
         self.single_op(Operation::SubscribeAllEvents)
     }
 
-    /// Adds `unsubscribeallevents` operation metadata.
+    /// Adds `unsubscribeallevents` operation metadata (TD 2.0; requires
+    /// `td2-preview`).
+    #[cfg(feature = "td2-preview")]
     pub fn unsubscribe_all_events(self) -> Self {
         self.single_op(Operation::UnsubscribeAllEvents)
     }

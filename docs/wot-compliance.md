@@ -4,7 +4,35 @@
 
 The default compliance target is W3C Web of Things TD 1.1, Architecture 1.1, Discovery, and Profile.
 
-TD 2.0 is tracked as experimental work only. Do not make TD 2.0 behavior part of the default public API until the specification stabilizes.
+TD 2.0 is tracked as experimental work only. Do not make TD 2.0 behavior part
+of the default public API until the specification stabilizes.
+
+## TD 2.0 Feature Gate
+
+TD 2.0 vocabulary that is not part of TD 1.1 is gated behind the
+`td2-preview` feature and is absent from default builds. The gated surface
+includes:
+
+- The `ActionAffordance.synchronous` field and its builder method. When the
+  feature is disabled the term round-trips as an opaque extension field.
+- The `Operation` variants `cancelaction`, `subscribeallevents`, and
+  `unsubscribeallevents` (the full TD 1.1 `op` vocabulary — the 15 canonical
+  terms including `queryaction` and `queryallactions` — is always available).
+- The runtime behavior that dispatches those operations: the
+  `ActionCancelHandler` trait, `ExposedThingHandle::set_action_cancel_handler`,
+  the `ConsumedThingHandle::subscribe_all_events` /
+  `unsubscribe_all_events` methods (sync and async), and the matching inbound
+  dispatch and zenoh binding planning arms.
+
+Consequences:
+
+- A default build targets strict TD 1.1. A TD document that uses a TD 2.0
+  `op` value fails to deserialize until `td2-preview` is enabled; this is
+  intentional. The official WoT parsing fixtures that carry TD 2.0 ops are
+  exercised under `td2-preview` (see `docs/verification.md`).
+- Enabling `td2-preview` on `clinkz-wot-td`, `clinkz-wot-core`,
+  `clinkz-wot-servient`, and `clinkz-wot-protocol-bindings-zenoh` restores the
+  full TD 2.0 data-model and runtime surface.
 
 ## Thing Description
 
@@ -88,3 +116,47 @@ first entries are rejected.
 The `@context` field defines the semantic vocabulary used by a TD.
 
 The standard WoT TD context should always be present. Extension vocabularies should be explicitly declared with their own namespace prefixes.
+
+## Scripting API Boundary
+
+`clinkz-wot` is positioned as a WoT Architecture 1.1 §8.8.1 *Native WoT
+Runtime*, not a WoT Scripting API user agent. Architecture 1.1 makes the
+Scripting API an optional building block (its own conformance note states it is
+"a WG Note which contains informative statements only"), and explicitly allows a
+Servient to expose a custom or native API instead of the Scripting API.
+
+Consequences for this engine:
+
+- The compliance bar for a Thing is a conformant TD plus the protocol behavior
+  declared by its forms, not Scripting API callback semantics.
+- `clinkz-wot` reuses the Scripting API's method names and interaction model as
+  a *design reference* (`produce`, `consume`, `discover`, `read_property`,
+  `subscribe_event`, etc.), but does not claim Consumer/Producer/Discovery UA
+  conformance.
+- Deviations from the Scripting API surface — such as the pull-based
+  subscription model below, a richer error taxonomy that maps to HTTP-like
+  statuses, or the absence of a `fetch` factory — are intentional engine
+  choices, not conformance defects.
+
+## Subscription Delivery Model
+
+`ConsumedThingHandle::observe_property` and `subscribe_event` return a
+`Subscription`: a bounded per-subscription queue with drop-oldest backpressure,
+drained synchronously via `Subscription::poll_next`. This is the primary
+delivery primitive on every build, including `no_std + alloc`.
+
+The design decouples *data arrival* from *data handling*: a client binding (the
+producer) pushes remote samples into the queue; the application (the consumer)
+drains it when ready. Application handler code never runs in the protocol
+stack's execution context, which avoids reentrancy into the stack, unbounded
+stack growth, and priority inversion on constrained devices.
+
+- **MCU (`no_std`):** the pull queue is the safe model for bare-metal
+  super-loops and cooperative RTOS tasks, where a callback fired from inside the
+  protocol poll could self-deadlock or block the whole loop.
+- **Host / gateway (`std` + `async`):** with the `async` feature, `Subscription`
+  implements `futures_core::Stream`, so a host consumer drains it as
+  `while let Some(payload) = sub.next().await`. The `Stream` impl layers a
+  `core::task::Waker` notification on top of the same queue, keeping the queue
+  the single source of truth and giving gateway consumers native push
+  ergonomics without baking a runtime dependency into the core.

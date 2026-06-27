@@ -12,11 +12,9 @@ use crate::{
     validate::{Validate, ValidateError, ValidationLevel, schema_error_message},
 };
 
-use super::{
-    data_schema::DataSchema,
-    form::Form,
-    util::{deserialize_bool_flexible, deserialize_option_bool_flexible},
-};
+#[cfg(feature = "td2-preview")]
+use super::util::deserialize_option_bool_flexible;
+use super::{data_schema::DataSchema, form::Form, util::deserialize_bool_flexible};
 
 /// Metadata of a Thing that shows the possible choices to Consumers,
 /// thereby suggesting how Consumers may interact with the Thing.
@@ -220,6 +218,10 @@ pub struct ActionAffordance {
     pub idempotent: bool,
 
     /// Indicates whether the Action is synchronous(=true) or not.
+    ///
+    /// TD 2.0 field; gated behind the `td2-preview` feature. TD 1.1 actions are
+    /// implicitly synchronous by default and do not carry this term.
+    #[cfg(feature = "td2-preview")]
     #[serde(default, deserialize_with = "deserialize_option_bool_flexible")]
     pub synchronous: Option<bool>,
 
@@ -246,10 +248,15 @@ impl Validate for ActionAffordance {
         }
 
         self._interaction.validate_ops("ActionAffordance", |op| {
-            matches!(
-                op,
-                Operation::InvokeAction | Operation::QueryAction | Operation::CancelAction
-            )
+            if matches!(op, Operation::InvokeAction | Operation::QueryAction) {
+                return true;
+            }
+            // `cancelaction` is a TD 2.0 operation.
+            #[cfg(feature = "td2-preview")]
+            if matches!(op, Operation::CancelAction) {
+                return true;
+            }
+            false
         })
     }
 }
@@ -298,7 +305,8 @@ impl ActionAffordanceBuilder {
         self
     }
 
-    /// Sets the synchronous flag.
+    /// Sets the synchronous flag (TD 2.0; requires `td2-preview`).
+    #[cfg(feature = "td2-preview")]
     pub fn synchronous(mut self, synchronous: bool) -> Self {
         self.affordance.synchronous = Some(synchronous);
         self

@@ -7,9 +7,17 @@ edition.workspace = true
 clinkz-wot-td = { path = "../td", default-features = false }
 async-trait = { workspace = true, optional = true }
 critical-section = { version = "1", optional = true, default-features = false }
+futures-core = { workspace = true, optional = true }
+
+[dev-dependencies]
+futures-util = { version = "0.3", default-features = false, features = ["alloc", "async-await"] }
+tokio = { version = "1", features = ["macros", "rt", "rt-multi-thread", "sync", "time"] }
 
 [features]
 default = ["std"]
 std = ["clinkz-wot-td/std"]
-async = ["dep:async-trait"]
+async = ["dep:async-trait", "dep:futures-core"]
 multithread = ["dep:critical-section"]
+## Experimental TD 2.0 interaction surface (e.g. `cancelaction`). Forwards to
+## the `clinkz-wot-td` data model gate.
+td2-preview = ["clinkz-wot-td/td2-preview"]

@@ -532,6 +532,8 @@ pub enum Operation {
     UnobserveProperty,
     InvokeAction,
     QueryAction,
+    /// Action cancellation. TD 2.0; gated behind `td2-preview`.
+    #[cfg(feature = "td2-preview")]
     CancelAction,
     SubscribeEvent,
     UnsubscribeEvent,
@@ -542,7 +544,11 @@ pub enum Operation {
     ObserveAllProperties,
     UnobserveAllProperties,
     QueryAllActions,
+    /// Subscribe to all events. TD 2.0; gated behind `td2-preview`.
+    #[cfg(feature = "td2-preview")]
     SubscribeAllEvents,
+    /// Unsubscribe from all events. TD 2.0; gated behind `td2-preview`.
+    #[cfg(feature = "td2-preview")]
     UnsubscribeAllEvents,
 }
 
@@ -557,6 +563,7 @@ impl Operation {
             Self::UnobserveProperty => "unobserveproperty",
             Self::InvokeAction => "invokeaction",
             Self::QueryAction => "queryaction",
+            #[cfg(feature = "td2-preview")]
             Self::CancelAction => "cancelaction",
             Self::SubscribeEvent => "subscribeevent",
             Self::UnsubscribeEvent => "unsubscribeevent",
@@ -567,7 +574,9 @@ impl Operation {
             Self::ObserveAllProperties => "observeallproperties",
             Self::UnobserveAllProperties => "unobserveallproperties",
             Self::QueryAllActions => "queryallactions",
+            #[cfg(feature = "td2-preview")]
             Self::SubscribeAllEvents => "subscribeallevents",
+            #[cfg(feature = "td2-preview")]
             Self::UnsubscribeAllEvents => "unsubscribeallevents",
         }
     }

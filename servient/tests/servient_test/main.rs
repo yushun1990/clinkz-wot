@@ -1141,6 +1141,97 @@ fn expose_rolls_back_on_route_registration_failure() {
     assert_eq!(directory.entries.len(), 0);
 }
 
+#[test]
+fn produce_creates_thing_without_registering_routes() {
+    let (td, _) = thing("urn:thing:produce-1", "Produce Test 1");
+    let server_binding = fake_server();
+    let servient = Servient::builder()
+        .server_binding(server_binding.clone())
+        .build();
+
+    let handle = servient.produce(td).unwrap();
+
+    // Routes are NOT registered after produce alone.
+    let registered = server_binding.registered_things.lock().unwrap();
+    assert!(
+        registered.is_empty(),
+        "produce must not register routes on server bindings"
+    );
+    drop(registered);
+
+    // Directory is NOT populated after produce alone.
+    let directory = servient.list();
+    assert_eq!(directory.entries.len(), 0);
+
+    // Local interactions work after produce (no handler yet → MissingHandler
+    // is expected, but the Thing is found, not "unknown").
+    let result = handle.read_property("status", InteractionInput::empty());
+    assert!(result.is_err());
+}
+
+#[test]
+fn produce_then_expose_registers_routes_and_publishes_directory() {
+    let (td, _) = thing("urn:thing:produce-2", "Produce Test 2");
+    let server_binding = fake_server();
+    let servient = Servient::builder()
+        .server_binding(server_binding.clone())
+        .build();
+
+    let handle = servient.produce(td).unwrap();
+
+    // Register a handler BEFORE expose — the Thing is not yet
+    // network-reachable, so there is no window where remote callers hit an
+    // unhandlered Thing.
+    handle
+        .set_property_read_handler(
+            "status",
+            StatusRead {
+                value: Payload::new(b"on".to_vec(), "text/plain"),
+            },
+        )
+        .unwrap();
+
+    // Start serving.
+    handle.expose().unwrap();
+
+    // Now routes are registered.
+    let registered = server_binding.registered_things.lock().unwrap();
+    assert_eq!(registered.len(), 1);
+    assert_eq!(registered[0], "urn:thing:produce-2");
+    drop(registered);
+
+    // Directory is populated.
+    let directory = servient.list();
+    assert_eq!(directory.entries.len(), 1);
+
+    // Local interaction works with the handler registered before expose.
+    let output = handle
+        .read_property("status", InteractionInput::empty())
+        .unwrap();
+    assert_eq!(output.payload.unwrap().body, b"on");
+}
+
+#[test]
+fn handle_expose_rolls_back_on_route_registration_failure() {
+    let (td, _) = thing("urn:thing:produce-3", "Produce Test 3");
+    let server_binding = fake_server_failing_routes();
+    let servient = Servient::builder()
+        .server_binding(server_binding.clone())
+        .build();
+
+    let handle = servient.produce(td).unwrap();
+
+    let result = handle.expose();
+    assert!(matches!(
+        result,
+        Err(clinkz_wot_servient::ServientError::RouteRegistration(_))
+    ));
+
+    // The Thing is still in the registry (produce succeeded), but routes are
+    // not registered and directory is not populated.
+    assert_eq!(servient.list().entries.len(), 0);
+}
+
 // ===========================================================================
 // SR-P3: Directory-driven invalidation tests (baseline addendum §3)
 // ===========================================================================
@@ -2801,4 +2892,266 @@ fn consumed_request_passes_non_template_form_unchanged() {
         received_href, "test://things/lamp/properties/status",
         "non-template href should pass through unchanged"
     );
+}
+
+// ---------------------------------------------------------------------------
+// W3C WoT Scripting API compliance: new handler traits and meta-operations.
+// ---------------------------------------------------------------------------
+
+/// Records whether the unobserve handler was called.
+struct RecordingUnobserveHandler {
+    called: Arc<std::sync::atomic::AtomicBool>,
+}
+
+impl clinkz_wot_core::PropertyUnobserveHandler for RecordingUnobserveHandler {
+    fn unobserve(
+        &self,
+        _input: InteractionInput,
+    ) -> clinkz_wot_core::CoreResult<clinkz_wot_core::InteractionOutput> {
+        self.called
+            .store(true, std::sync::atomic::Ordering::Relaxed);
+        Ok(clinkz_wot_core::InteractionOutput::empty())
+    }
+}
+
+#[test]
+fn dispatcher_routes_unobserve_property_through_handler() {
+    let (td, _) = thing("urn:thing:unobserve-handler", "Unobserve Handler Lamp");
+    let servient = Servient::new();
+    let handle = servient.expose(td).unwrap();
+
+    let called = Arc::new(std::sync::atomic::AtomicBool::new(false));
+    handle
+        .set_property_unobserve_handler(
+            "status",
+            RecordingUnobserveHandler {
+                called: Arc::clone(&called),
+            },
+        )
+        .unwrap();
+
+    let server_binding = Arc::new(FakeServerBinding::default());
+    servient
+        .register_server_binding(server_binding.clone())
+        .unwrap();
+
+    server_binding.enqueue(InboundRequest::new(
+        ThingId::from("urn:thing:unobserve-handler"),
+        clinkz_wot_core::AffordanceTarget::Property("status".into()),
+        Operation::UnobserveProperty,
+        InteractionInput::empty(),
+    ));
+
+    servient.poll_serve_sync().unwrap();
+
+    assert!(
+        called.load(std::sync::atomic::Ordering::Relaxed),
+        "unobserve handler should have been called"
+    );
+    let responses = server_binding.take_responses();
+    assert_eq!(responses.len(), 1);
+    assert!(responses[0].error.is_none());
+}
+
+#[test]
+fn dispatcher_routes_queryaction_through_handler() {
+    let (td, _) = thing("urn:thing:query-action", "Query Action Lamp");
+    let servient = Servient::new();
+    let handle = servient.expose(td).unwrap();
+
+    // QueryAction without a handler returns MissingHandler.
+    let server_binding = Arc::new(FakeServerBinding::default());
+    servient
+        .register_server_binding(server_binding.clone())
+        .unwrap();
+
+    server_binding.enqueue(InboundRequest::new(
+        ThingId::from("urn:thing:query-action"),
+        clinkz_wot_core::AffordanceTarget::Action("echo".into()),
+        Operation::QueryAction,
+        InteractionInput::empty(),
+    ));
+
+    servient.poll_serve_sync().unwrap();
+    let responses = server_binding.take_responses();
+    assert_eq!(responses.len(), 1);
+    assert!(responses[0].error.is_some());
+
+    // Now register a query handler and re-test.
+    struct EchoQuery;
+    impl clinkz_wot_core::ActionQueryHandler for EchoQuery {
+        fn query(
+            &self,
+            _input: InteractionInput,
+        ) -> clinkz_wot_core::CoreResult<clinkz_wot_core::InteractionOutput> {
+            Ok(clinkz_wot_core::InteractionOutput::with_payload(
+                Payload::new(b"\"idle\"".to_vec(), "application/json"),
+            ))
+        }
+    }
+    handle.set_action_query_handler("echo", EchoQuery).unwrap();
+
+    server_binding.enqueue(InboundRequest::new(
+        ThingId::from("urn:thing:query-action"),
+        clinkz_wot_core::AffordanceTarget::Action("echo".into()),
+        Operation::QueryAction,
+        InteractionInput::empty(),
+    ));
+
+    servient.poll_serve_sync().unwrap();
+    let responses = server_binding.take_responses();
+    assert_eq!(responses.len(), 1);
+    assert!(responses[0].error.is_none());
+    assert_eq!(
+        responses[0].output.payload.as_ref().unwrap().body,
+        b"\"idle\""
+    );
+}
+
+/// `cancelaction` is a TD 2.0 operation; this dispatch test is only
+/// compiled under `td2-preview`.
+#[cfg(feature = "td2-preview")]
+#[test]
+fn dispatcher_acknowledges_cancelaction_without_handler() {
+    let (td, _) = thing("urn:thing:cancel-action", "Cancel Action Lamp");
+    let servient = Servient::new();
+    servient.expose(td).unwrap();
+
+    let server_binding = Arc::new(FakeServerBinding::default());
+    servient
+        .register_server_binding(server_binding.clone())
+        .unwrap();
+
+    server_binding.enqueue(InboundRequest::new(
+        ThingId::from("urn:thing:cancel-action"),
+        clinkz_wot_core::AffordanceTarget::Action("echo".into()),
+        Operation::CancelAction,
+        InteractionInput::empty(),
+    ));
+
+    servient.poll_serve_sync().unwrap();
+    let responses = server_binding.take_responses();
+    assert_eq!(responses.len(), 1);
+    assert!(
+        responses[0].error.is_none(),
+        "CancelAction without a handler should ack"
+    );
+}
+
+#[test]
+fn dispatcher_dispatches_queryallactions_as_combined_response() {
+    let (td, _) = thing("urn:thing:query-all-actions", "Query All Actions Lamp");
+    let servient = Servient::new();
+    let handle = servient.expose(td).unwrap();
+
+    struct EchoQuery;
+    impl clinkz_wot_core::ActionQueryHandler for EchoQuery {
+        fn query(
+            &self,
+            _input: InteractionInput,
+        ) -> clinkz_wot_core::CoreResult<clinkz_wot_core::InteractionOutput> {
+            Ok(clinkz_wot_core::InteractionOutput::with_payload(
+                Payload::new(b"\"running\"".to_vec(), "application/json"),
+            ))
+        }
+    }
+    handle.set_action_query_handler("echo", EchoQuery).unwrap();
+
+    let server_binding = Arc::new(FakeServerBinding::default());
+    servient
+        .register_server_binding(server_binding.clone())
+        .unwrap();
+
+    server_binding.enqueue(InboundRequest::new(
+        ThingId::from("urn:thing:query-all-actions"),
+        clinkz_wot_core::AffordanceTarget::Thing,
+        Operation::QueryAllActions,
+        InteractionInput::empty(),
+    ));
+
+    servient.poll_serve_sync().unwrap();
+    let responses = server_binding.take_responses();
+    assert_eq!(responses.len(), 1);
+    assert!(responses[0].error.is_none());
+    let body = &responses[0].output.payload.as_ref().unwrap().body;
+    let json: serde_json::Value = serde_json::from_slice(body).unwrap();
+    assert_eq!(json["echo"], "running");
+}
+
+#[test]
+fn dispatcher_dispatches_observeallproperties_through_broker() {
+    // Build a Thing with an observable property.
+    let observe_form = Form::builder("test://things/lamp/properties/status")
+        .observe_property()
+        .content_type("text/plain")
+        .build()
+        .unwrap();
+    let property = PropertyAffordance::builder(DataSchema::String(DataSchema::string().build()))
+        .observable(true)
+        .form(observe_form)
+        .build()
+        .unwrap();
+    let td = Thing::builder("Observe All Props Lamp")
+        .id("urn:thing:observe-all-props")
+        .nosec()
+        .property("status", property)
+        .build()
+        .unwrap();
+
+    let servient = Servient::new();
+    let handle = servient.expose(td).unwrap();
+    handle
+        .set_property_observe_handler(
+            "status",
+            ObserveInitial {
+                initial: Payload::new(b"on".to_vec(), "text/plain"),
+            },
+        )
+        .unwrap();
+
+    let sink = RecordingPublisherSink::new();
+    servient.event_broker().register(
+        ThingId::from("urn:thing:observe-all-props"),
+        EventName::from("status"),
+        sink.clone(),
+    );
+
+    let server_binding = Arc::new(FakeServerBinding::default());
+    servient
+        .register_server_binding(server_binding.clone())
+        .unwrap();
+
+    server_binding.enqueue(InboundRequest::new(
+        ThingId::from("urn:thing:observe-all-props"),
+        clinkz_wot_core::AffordanceTarget::Thing,
+        Operation::ObserveAllProperties,
+        InteractionInput::empty(),
+    ));
+
+    servient.poll_serve_sync().unwrap();
+    assert_eq!(
+        sink.bodies(),
+        vec![b"on".to_vec()],
+        "observeallproperties should fan out through the broker"
+    );
+}
+
+#[test]
+fn consumed_write_all_properties_dispatches_each() {
+    let (td, _forms) = thing("urn:thing:write-all-props", "Write All Props Lamp");
+    let servient = Servient::builder()
+        .binding_factory(|| {
+            Box::new(TestBinding {
+                response: Payload::new(b"ok".to_vec(), "text/plain"),
+            })
+        })
+        .build();
+    let consumed = servient.consume(td).unwrap();
+
+    let mut values = BTreeMap::new();
+    values.insert(
+        "status".to_string(),
+        InteractionInput::with_payload(Payload::new(b"off".to_vec(), "text/plain")),
+    );
+    consumed.write_all_properties(&values).unwrap();
 }

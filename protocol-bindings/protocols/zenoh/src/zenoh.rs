@@ -221,6 +221,7 @@ fn default_supported_operations() -> u32 {
         UnobserveProperty,
         InvokeAction,
         QueryAction,
+        #[cfg(feature = "td2-preview")]
         CancelAction,
         SubscribeEvent,
         UnsubscribeEvent,
@@ -231,7 +232,9 @@ fn default_supported_operations() -> u32 {
         ObserveAllProperties,
         UnobserveAllProperties,
         QueryAllActions,
+        #[cfg(feature = "td2-preview")]
         SubscribeAllEvents,
+        #[cfg(feature = "td2-preview")]
         UnsubscribeAllEvents,
     ])
 }

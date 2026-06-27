@@ -112,8 +112,27 @@ For a full M7 baseline pass, use the aggregate check:
 scripts/check-m7.sh
 ```
 
-This script runs formatting, workspace tests, Clippy, embedded checks, and
-reserved backend feature checks in the same order documented above.
+This script runs formatting, workspace tests, Clippy, embedded checks,
+reserved backend feature checks, and the TD 2.0 experimental gate check in the
+same order documented above.
+
+## TD 2.0 Experimental Gate
+
+Default builds target strict TD 1.1 (see `docs/wot-compliance.md`). The
+experimental TD 2.0 surface — the `ActionAffordance.synchronous` field, the
+`cancelaction` / `subscribeallevents` / `unsubscribeallevents` operations, and
+the runtime dispatch and binding planning for them — is gated behind the
+`td2-preview` feature and absent from default builds. The TD 2.0 parsing
+fixtures and the gated runtime tests are exercised under `td2-preview`:
+
+```sh
+scripts/check-td2-preview.sh
+```
+
+This script compiles and tests `clinkz-wot-td`, `clinkz-wot-core`,
+`clinkz-wot-servient`, and `clinkz-wot-protocol-bindings-zenoh` with
+`--features td2-preview`, and is part of the M7 baseline so the gated surface
+keeps compiling and stays covered.
 
 ## Documentation Updates
 

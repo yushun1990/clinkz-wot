@@ -148,6 +148,21 @@ pub trait PropertyObserveHandler {
     ) -> CoreResult<InteractionOutput>;
 }
 
+/// Handler for unobserving a local property affordance (W3C Scripting API
+/// `setPropertyUnobserveHandler`).
+///
+/// Called when a remote consumer stops observing. Allows cleanup of
+/// per-observer state.
+///
+/// # Reentrancy
+///
+/// See [`PropertyReadHandler`] — handlers run with the slot lock released and
+/// may re-enter the Servient.
+pub trait PropertyUnobserveHandler {
+    /// Called when observation stops; allows cleanup of per-observer state.
+    fn unobserve(&self, input: InteractionInput) -> CoreResult<InteractionOutput>;
+}
+
 /// Handler for a local action affordance.
 ///
 /// # Reentrancy
@@ -157,6 +172,42 @@ pub trait PropertyObserveHandler {
 pub trait ActionHandler {
     /// Invokes the action.
     fn invoke(&self, input: InteractionInput) -> CoreResult<InteractionOutput>;
+}
+
+/// Handler for querying the status of a local action affordance (W3C TD
+/// `queryaction` operation).
+///
+/// Called when a remote consumer queries an action's status. When no query
+/// handler is registered the inbound dispatcher returns `MissingHandler` so
+/// callers receive a clear error instead of a silent empty reply.
+///
+/// # Reentrancy
+///
+/// See [`PropertyReadHandler`] — handlers run with the slot lock released and
+/// may re-enter the Servient.
+pub trait ActionQueryHandler {
+    /// Queries the action status.
+    fn query(&self, input: InteractionInput) -> CoreResult<InteractionOutput>;
+}
+
+/// Handler for cancelling a local action affordance (W3C TD `cancelaction`
+/// operation).
+///
+/// Called when a remote consumer cancels an ongoing action invocation. When no
+/// cancel handler is registered the inbound dispatcher acknowledges the
+/// request with an empty reply.
+///
+/// `cancelaction` is a TD 2.0 operation; this handler is only available under
+/// the `td2-preview` feature.
+///
+/// # Reentrancy
+///
+/// See [`PropertyReadHandler`] — handlers run with the slot lock released and
+/// may re-enter the Servient.
+#[cfg(feature = "td2-preview")]
+pub trait ActionCancelHandler {
+    /// Cancels the ongoing action invocation.
+    fn cancel(&self, input: InteractionInput) -> CoreResult<InteractionOutput>;
 }
 
 /// Handler for event subscription on a local event affordance (W3C Scripting
@@ -231,6 +282,7 @@ struct PropertyHandlerSet {
     read: Option<Arc<dyn PropertyReadHandler>>,
     write: Option<Arc<dyn PropertyWriteHandler>>,
     observe: Option<Arc<dyn PropertyObserveHandler>>,
+    unobserve: Option<Arc<dyn PropertyUnobserveHandler>>,
     #[cfg(feature = "async")]
     async_read: Option<Arc<dyn AsyncPropertyReadHandler + Send>>,
     #[cfg(feature = "async")]
@@ -244,13 +296,22 @@ struct EventHandlerSet {
     unsubscribe: Option<Arc<dyn EventUnsubscribeHandler>>,
 }
 
+/// All handlers registered for a single action affordance.
+#[derive(Default)]
+struct ActionHandlerSet {
+    invoke: Option<Arc<dyn ActionHandler>>,
+    query: Option<Arc<dyn ActionQueryHandler>>,
+    #[cfg(feature = "td2-preview")]
+    cancel: Option<Arc<dyn ActionCancelHandler>>,
+    #[cfg(feature = "async")]
+    async_invoke: Option<Arc<dyn AsyncActionHandler + Send>>,
+}
+
 /// Protocol-neutral local Thing dispatcher.
 pub struct LocalThing {
     thing: Thing,
     property_handlers: BTreeMap<String, PropertyHandlerSet>,
-    action_handlers: BTreeMap<String, Arc<dyn ActionHandler>>,
-    #[cfg(feature = "async")]
-    async_action_handlers: BTreeMap<String, Arc<dyn AsyncActionHandler + Send>>,
+    action_handlers: BTreeMap<String, ActionHandlerSet>,
     event_handlers: BTreeMap<String, EventHandlerSet>,
 }
 
@@ -414,8 +475,6 @@ impl LocalThing {
             thing,
             property_handlers: BTreeMap::new(),
             action_handlers: BTreeMap::new(),
-            #[cfg(feature = "async")]
-            async_action_handlers: BTreeMap::new(),
             event_handlers: BTreeMap::new(),
         }
     }
@@ -455,13 +514,51 @@ impl LocalThing {
             .observe = Some(Arc::new(handler));
     }
 
+    /// Registers a property unobserve handler by affordance name (W3C Scripting
+    /// API `setPropertyUnobserveHandler`).
+    pub fn register_property_unobserve_handler(
+        &mut self,
+        name: impl Into<String>,
+        handler: impl PropertyUnobserveHandler + 'static,
+    ) {
+        self.property_handlers
+            .entry(name.into())
+            .or_default()
+            .unobserve = Some(Arc::new(handler));
+    }
+
     /// Registers an action handler by affordance name.
     pub fn register_action_handler(
         &mut self,
         name: impl Into<String>,
         handler: impl ActionHandler + 'static,
     ) -> Option<Arc<dyn ActionHandler>> {
-        self.action_handlers.insert(name.into(), Arc::new(handler))
+        self.action_handlers
+            .entry(name.into())
+            .or_default()
+            .invoke
+            .replace(Arc::new(handler))
+    }
+
+    /// Registers an action query handler by affordance name (W3C TD
+    /// `queryaction` operation).
+    pub fn register_action_query_handler(
+        &mut self,
+        name: impl Into<String>,
+        handler: impl ActionQueryHandler + 'static,
+    ) {
+        self.action_handlers.entry(name.into()).or_default().query = Some(Arc::new(handler));
+    }
+
+    /// Registers an action cancel handler by affordance name (W3C TD
+    /// `cancelaction` operation; TD 2.0, requires `td2-preview`).
+    #[cfg(feature = "td2-preview")]
+    pub fn register_action_cancel_handler(
+        &mut self,
+        name: impl Into<String>,
+        handler: impl ActionCancelHandler + 'static,
+    ) {
+        self.action_handlers.entry(name.into()).or_default().cancel = Some(Arc::new(handler));
     }
 
     /// Registers an async property read handler (M9, behind `async` feature).
@@ -497,8 +594,10 @@ impl LocalThing {
         name: impl Into<String>,
         handler: impl AsyncActionHandler + 'static,
     ) {
-        self.async_action_handlers
-            .insert(name.into(), Arc::new(handler));
+        self.action_handlers
+            .entry(name.into())
+            .or_default()
+            .async_invoke = Some(Arc::new(handler));
     }
 
     /// Clones the async read handler for dispatch without removing it.
@@ -530,7 +629,9 @@ impl LocalThing {
     /// Clones the async action handler for dispatch without removing it.
     #[cfg(feature = "async")]
     pub fn async_action_handler(&self, name: &str) -> Option<Arc<dyn AsyncActionHandler + Send>> {
-        self.async_action_handlers.get(name).cloned()
+        self.action_handlers
+            .get(name)
+            .and_then(|set| set.async_invoke.clone())
     }
 
     /// Clones the sync read handler for dispatch without removing it.
@@ -559,9 +660,33 @@ impl LocalThing {
             .and_then(|set| set.observe.clone())
     }
 
+    /// Clones the sync unobserve handler for dispatch without removing it.
+    pub fn unobserve_handler(&self, name: &str) -> Option<Arc<dyn PropertyUnobserveHandler>> {
+        self.property_handlers
+            .get(name)
+            .and_then(|set| set.unobserve.clone())
+    }
+
     /// Clones the sync action handler for dispatch without removing it.
     pub fn action_handler(&self, name: &str) -> Option<Arc<dyn ActionHandler>> {
-        self.action_handlers.get(name).cloned()
+        self.action_handlers
+            .get(name)
+            .and_then(|set| set.invoke.clone())
+    }
+
+    /// Clones the sync action query handler for dispatch without removing it.
+    pub fn action_query_handler(&self, name: &str) -> Option<Arc<dyn ActionQueryHandler>> {
+        self.action_handlers
+            .get(name)
+            .and_then(|set| set.query.clone())
+    }
+
+    /// Clones the sync action cancel handler for dispatch without removing it.
+    #[cfg(feature = "td2-preview")]
+    pub fn action_cancel_handler(&self, name: &str) -> Option<Arc<dyn ActionCancelHandler>> {
+        self.action_handlers
+            .get(name)
+            .and_then(|set| set.cancel.clone())
     }
 
     /// Clones the sync event subscribe handler for dispatch without removing it.
@@ -672,8 +797,6 @@ impl LocalThing {
             actions.remove(name);
         }
         self.action_handlers.remove(name);
-        #[cfg(feature = "async")]
-        self.async_action_handlers.remove(name);
     }
 
     /// Adds an event affordance to the TD at runtime (W3C Scripting API
@@ -732,6 +855,18 @@ impl ExposedThing for LocalThing {
             .observe_handler(name)
             .ok_or(CoreError::MissingHandler)?;
         handler.observe(input, sink)
+    }
+
+    fn unobserve_property(
+        &self,
+        name: &str,
+        input: InteractionInput,
+    ) -> CoreResult<InteractionOutput> {
+        self.ensure_property_affordance(name)?;
+        let handler = self
+            .unobserve_handler(name)
+            .ok_or(CoreError::MissingHandler)?;
+        handler.unobserve(input)
     }
 
     fn invoke_action(&self, name: &str, input: InteractionInput) -> CoreResult<InteractionOutput> {
@@ -802,6 +937,13 @@ pub trait ExposedThing {
         name: &str,
         input: InteractionInput,
         sink: &mut dyn EventSink,
+    ) -> CoreResult<InteractionOutput>;
+
+    /// Stops observing a property; allows cleanup of per-observer state.
+    fn unobserve_property(
+        &self,
+        name: &str,
+        input: InteractionInput,
     ) -> CoreResult<InteractionOutput>;
 
     /// Invokes an action.

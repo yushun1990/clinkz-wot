@@ -27,10 +27,13 @@
 //! interior-mutability wrapper is cfg-selected: [`core::cell::RefCell`] on
 //! `no_std` (single-core MCU), [`std::sync::Mutex`] on `std`.
 //!
-//! The async [`core::task`] based `Stream` impl for [`Subscription`] is
-//! deferred to the async driving-layer phase, which introduces the runtime
-//! dependency; the synchronous [`Subscription::poll_next`] surface is the
-//! primary drain primitive and is available on every build.
+//! On builds with the `async` feature, [`Subscription`] implements
+//! [`futures_core::Stream`] so host/gateway consumers can drain it with
+//! `while let Some(payload) = sub.next().await`. The `Stream` impl layers a
+//! [`core::task::Waker`] notification on top of the same `VecDeque` queue, so
+//! the synchronous [`Subscription::poll_next`] remains the primary drain
+//! primitive on `no_std` builds and the `Stream` impl acts as a host-side push
+//! adapter (see `docs/wot-compliance.md`).
 
 use alloc::{
     collections::{BTreeMap, VecDeque},
@@ -361,6 +364,13 @@ struct QueueInner {
     capacity: usize,
     overflow_count: u64,
     stopped: bool,
+    /// Optional task waker notified on push/stop so the `async` `Stream` impl
+    /// can park until data is available. Stays `None` whenever no task is
+    /// parked on the queue (e.g. every `no_std` build without the `async`
+    /// feature, or a drained-then-repolled consumer). Waking is a no-op when
+    /// `None`, so keeping the field unconditional avoids `cfg` churn in the
+    /// push/stop hot paths.
+    waker: Option<core::task::Waker>,
 }
 
 /// Outbound (consumed) event subscription handle.
@@ -371,12 +381,25 @@ struct QueueInner {
 /// samples via the paired [`SubscriptionSender`]. The handle is [`Clone`] and
 /// shares a single queue across clones.
 ///
-/// `poll_next` returns `None` whenever the queue is empty; use
+/// A subscription created via [`Subscription::merge`] multiplexes across
+/// multiple underlying queues (used by `subscribeAllEvents` /
+/// `observeAllProperties` fan-out), draining each round-robin on
+/// [`poll_next`](Self::poll_next).
+///
+/// `poll_next` returns `None` whenever every underlying queue is empty; use
 /// [`is_stopped`](Self::is_stopped) to distinguish "no data yet" from
 /// "subscription finished".
 #[derive(Clone)]
 pub struct Subscription {
-    inner: Arc<MapLock<QueueInner>>,
+    inner: SubscriptionInner,
+}
+
+#[derive(Clone)]
+enum SubscriptionInner {
+    /// Single bounded queue (the common case).
+    Single(Arc<MapLock<QueueInner>>),
+    /// Multiplexed set of subscriptions (fan-out / "all" operations).
+    Merged(Vec<Subscription>),
 }
 
 /// Producer side of a [`Subscription`] queue.
@@ -406,46 +429,113 @@ impl Subscription {
             capacity: cap,
             overflow_count: 0,
             stopped: false,
+            waker: None,
         }));
         (
             SubscriptionSender {
                 inner: Arc::clone(&inner),
             },
-            Self { inner },
+            Self {
+                inner: SubscriptionInner::Single(inner),
+            },
         )
     }
 
-    /// Drains the next buffered payload, or `None` if the queue is empty.
-    pub fn poll_next(&self) -> Option<Payload> {
-        self.inner.with_recover(|q| q.buffer.pop_front())
+    /// Creates a merged subscription that multiplexes across `subs`, draining
+    /// each round-robin on [`poll_next`](Self::poll_next).
+    ///
+    /// Used by fan-out "all" operations (`subscribeAllEvents`,
+    /// `observeAllProperties`) when no Thing-level form declares the matching
+    /// meta-operation and the caller fans out across individual affordances.
+    /// Stopping the merged subscription stops every underlying subscription.
+    /// Returns an empty (already-stopped) subscription when `subs` is empty.
+    pub fn merge(subs: Vec<Subscription>) -> Self {
+        if subs.is_empty() {
+            let (_sender, stopped) = Self::channel(1);
+            stopped.stop();
+            return stopped;
+        }
+        if subs.len() == 1 {
+            return subs.into_iter().next().expect("exactly one");
+        }
+        Self {
+            inner: SubscriptionInner::Merged(subs),
+        }
     }
 
-    /// Marks the subscription as stopped.
+    /// Drains the next buffered payload, or `None` if every underlying queue is
+    /// empty.
+    pub fn poll_next(&self) -> Option<Payload> {
+        match &self.inner {
+            SubscriptionInner::Single(inner) => inner.with_recover(|q| q.buffer.pop_front()),
+            SubscriptionInner::Merged(subs) => {
+                for sub in subs {
+                    if let Some(payload) = sub.poll_next() {
+                        return Some(payload);
+                    }
+                }
+                None
+            }
+        }
+    }
+
+    /// Marks the subscription (and every underlying subscription in a merge) as
+    /// stopped.
     ///
     /// Prevents further producer pushes but leaves already-buffered samples
     /// drainable via [`poll_next`](Self::poll_next).
     pub fn stop(&self) {
-        self.inner.with_recover(|q| q.stopped = true);
+        match &self.inner {
+            SubscriptionInner::Single(inner) => {
+                let waker = inner.with_recover(|q| {
+                    q.stopped = true;
+                    q.waker.take()
+                });
+                if let Some(waker) = waker {
+                    waker.wake();
+                }
+            }
+            SubscriptionInner::Merged(subs) => {
+                for sub in subs {
+                    sub.stop();
+                }
+            }
+        }
     }
 
-    /// Returns whether the subscription has been stopped.
+    /// Returns whether the subscription has been stopped (every underlying
+    /// subscription in a merge).
     pub fn is_stopped(&self) -> bool {
-        self.inner.with_recover(|q| q.stopped)
+        match &self.inner {
+            SubscriptionInner::Single(inner) => inner.with_recover(|q| q.stopped),
+            SubscriptionInner::Merged(subs) => subs.iter().all(Self::is_stopped),
+        }
     }
 
     /// Returns the number of samples dropped by overflow backpressure.
     pub fn overflow_count(&self) -> u64 {
-        self.inner.with_recover(|q| q.overflow_count)
+        match &self.inner {
+            SubscriptionInner::Single(inner) => inner.with_recover(|q| q.overflow_count),
+            SubscriptionInner::Merged(subs) => subs.iter().map(Self::overflow_count).sum(),
+        }
     }
 
     /// Returns the configured queue capacity.
+    ///
+    /// For a merged subscription this is the sum of the underlying capacities.
     pub fn capacity(&self) -> usize {
-        self.inner.with_recover(|q| q.capacity)
+        match &self.inner {
+            SubscriptionInner::Single(inner) => inner.with_recover(|q| q.capacity),
+            SubscriptionInner::Merged(subs) => subs.iter().map(Self::capacity).sum(),
+        }
     }
 
     /// Returns the number of currently buffered samples.
     pub fn len(&self) -> usize {
-        self.inner.with_recover(|q| q.buffer.len())
+        match &self.inner {
+            SubscriptionInner::Single(inner) => inner.with_recover(|q| q.buffer.len()),
+            SubscriptionInner::Merged(subs) => subs.iter().map(Self::len).sum(),
+        }
     }
 
     /// Returns whether no samples are currently buffered.
@@ -456,15 +546,24 @@ impl Subscription {
 
 impl fmt::Debug for Subscription {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let (len, capacity, overflow_count, stopped) = self
-            .inner
-            .with_recover(|q| (q.buffer.len(), q.capacity, q.overflow_count, q.stopped));
-        f.debug_struct("Subscription")
-            .field("capacity", &capacity)
-            .field("len", &len)
-            .field("overflow_count", &overflow_count)
-            .field("stopped", &stopped)
-            .finish()
+        match &self.inner {
+            SubscriptionInner::Single(inner) => {
+                let (len, capacity, overflow_count, stopped) = inner
+                    .with_recover(|q| (q.buffer.len(), q.capacity, q.overflow_count, q.stopped));
+                f.debug_struct("Subscription")
+                    .field("capacity", &capacity)
+                    .field("len", &len)
+                    .field("overflow_count", &overflow_count)
+                    .field("stopped", &stopped)
+                    .finish()
+            }
+            SubscriptionInner::Merged(subs) => f
+                .debug_struct("Subscription")
+                .field("merged", &subs.len())
+                .field("len", &self.len())
+                .field("stopped", &self.is_stopped())
+                .finish_non_exhaustive(),
+        }
     }
 }
 
@@ -474,22 +573,37 @@ impl SubscriptionSender {
     /// When the queue is full the oldest sample is evicted and the overflow
     /// counter is incremented; the producer is never blocked. Pushes after a
     /// [`stop`](Self::stop) are silently dropped and do not count as overflow.
+    /// If a task is parked on the `async` `Stream` impl, it is woken so it can
+    /// drain the pushed sample.
     pub fn push(&self, payload: Payload) {
-        self.inner.with_recover(|q| {
+        let waker = self.inner.with_recover(|q| {
             if q.stopped {
-                return;
+                return None;
             }
             if q.buffer.len() >= q.capacity {
                 q.buffer.pop_front();
                 q.overflow_count = q.overflow_count.saturating_add(1);
             }
             q.buffer.push_back(payload);
+            q.waker.clone()
         });
+        if let Some(waker) = waker {
+            waker.wake();
+        }
     }
 
     /// Marks the subscription as stopped.
+    ///
+    /// Wakes any task parked on the `async` `Stream` impl so it observes the
+    /// terminal state instead of parking forever.
     pub fn stop(&self) {
-        self.inner.with_recover(|q| q.stopped = true);
+        let waker = self.inner.with_recover(|q| {
+            q.stopped = true;
+            q.waker.take()
+        });
+        if let Some(waker) = waker {
+            waker.wake();
+        }
     }
 
     /// Returns whether the subscription has been stopped.
@@ -513,6 +627,95 @@ impl fmt::Debug for SubscriptionSender {
             .field("overflow_count", &overflow_count)
             .field("stopped", &stopped)
             .finish()
+    }
+}
+
+// ---------------------------------------------------------------------------
+// `async` `Stream` adapter for outbound subscriptions.
+// ---------------------------------------------------------------------------
+
+/// Host-side push adapter layered on top of the synchronous
+/// [`Subscription::poll_next`] queue.
+///
+/// Behind the `async` feature, [`Subscription`] implements
+/// [`futures_core::Stream`]. The implementation parks a task by registering a
+/// [`core::task::Waker`] under the same [`MapLock`] that guards the queue, and
+/// [`SubscriptionSender::push`] / [`Subscription::stop`] wake it. This keeps the
+/// queue the single source of truth (no second channel primitive) and leaves the
+/// synchronous surface usable on `no_std`.
+#[cfg(feature = "async")]
+mod stream_impl {
+    use alloc::{sync::Arc, vec::Vec};
+    use core::pin::Pin;
+    use core::task::{Context, Poll};
+
+    use futures_core::Stream;
+
+    use crate::MapLock;
+    use crate::payload::Payload;
+
+    use super::{QueueInner, Subscription, SubscriptionInner};
+
+    impl Subscription {
+        /// Collects every underlying single queue, flattening nested merges.
+        fn collect_leaves(&self, out: &mut Vec<Arc<MapLock<QueueInner>>>) {
+            match &self.inner {
+                SubscriptionInner::Single(inner) => out.push(Arc::clone(inner)),
+                SubscriptionInner::Merged(subs) => {
+                    for sub in subs {
+                        sub.collect_leaves(out);
+                    }
+                }
+            }
+        }
+    }
+
+    impl Stream for Subscription {
+        type Item = Payload;
+
+        fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+            let mut leaves: Vec<Arc<MapLock<QueueInner>>> = Vec::new();
+            self.collect_leaves(&mut leaves);
+
+            // Round-robin drain: if any leaf has a buffered sample, return it
+            // and drop the wake slot on that queue (progress was made).
+            for inner in &leaves {
+                let drained = inner.with_recover(|q| {
+                    if let Some(payload) = q.buffer.pop_front() {
+                        q.waker = None;
+                        Some(payload)
+                    } else {
+                        None
+                    }
+                });
+                if let Some(payload) = drained {
+                    return Poll::Ready(Some(payload));
+                }
+            }
+
+            // Every leaf is empty. Register the caller's waker on each leaf (so
+            // the next push to any queue wakes this task) and determine whether
+            // the whole subscription is terminal. `will_wake` avoids redundant
+            // waker clones on repeated polls with the same task.
+            let mut all_stopped = true;
+            for inner in &leaves {
+                inner.with_recover(|q| {
+                    let needs_register = q.waker.as_ref().is_none_or(|w| !w.will_wake(cx.waker()));
+                    if needs_register {
+                        q.waker = Some(cx.waker().clone());
+                    }
+                    if !q.stopped {
+                        all_stopped = false;
+                    }
+                });
+            }
+
+            if all_stopped {
+                Poll::Ready(None)
+            } else {
+                Poll::Pending
+            }
+        }
     }
 }
 
@@ -812,5 +1015,159 @@ mod tests {
             .publish(&thing, &EventName::from("alert"), &payload(&[2]))
             .unwrap();
         assert_eq!(rec.bodies(), vec![vec![2]]);
+    }
+}
+
+#[cfg(all(test, feature = "async"))]
+mod stream_tests {
+    use alloc::vec;
+    use core::pin::Pin;
+    use core::task::{Context, Poll, RawWaker, RawWakerVTable, Waker};
+
+    use futures_core::Stream;
+    use futures_util::StreamExt;
+
+    use super::Subscription;
+    use crate::Payload;
+
+    fn payload(body: &[u8]) -> Payload {
+        Payload::new(body.to_vec(), "application/octet-stream")
+    }
+
+    /// Builds a no-op [`Waker`] so [`Subscription`] can be polled without an
+    /// async runtime. Sufficient for asserting `Ready`/`Pending` returns; the
+    /// cross-task wake path is covered by the `#[tokio::test]` cases below.
+    fn noop_waker() -> Waker {
+        fn clone(ptr: *const ()) -> RawWaker {
+            RawWaker::new(ptr, &VTABLE)
+        }
+        fn wake(_: *const ()) {}
+        fn wake_by_ref(_: *const ()) {}
+        fn drop(_: *const ()) {}
+        static VTABLE: RawWakerVTable = RawWakerVTable::new(clone, wake, wake_by_ref, drop);
+        // Safety: the vtable functions are valid no-ops and the stored pointer
+        // is never dereferenced.
+        unsafe { Waker::from_raw(RawWaker::new(core::ptr::null(), &VTABLE)) }
+    }
+
+    fn poll_once(sub: &mut Subscription) -> Poll<Option<Payload>> {
+        let waker = noop_waker();
+        let mut cx = Context::from_waker(&waker);
+        // Fully-qualified call: the inherent `Subscription::poll_next(&self)`
+        // would otherwise shadow the `Stream::poll_next` trait method.
+        Stream::poll_next(Pin::new(sub), &mut cx)
+    }
+
+    #[test]
+    fn poll_returns_ready_with_buffered_item() {
+        let (sender, mut sub) = Subscription::channel(4);
+        sender.push(payload(&[1]));
+        sender.push(payload(&[2]));
+
+        assert_eq!(poll_once(&mut sub), Poll::Ready(Some(payload(&[1]))));
+        assert_eq!(poll_once(&mut sub), Poll::Ready(Some(payload(&[2]))));
+        // Buffer now empty but subscription is live.
+        assert_eq!(poll_once(&mut sub), Poll::Pending);
+    }
+
+    #[test]
+    fn poll_returns_pending_until_pushed() {
+        let (sender, mut sub) = Subscription::channel(4);
+        assert_eq!(poll_once(&mut sub), Poll::Pending);
+
+        sender.push(payload(&[7]));
+        assert_eq!(poll_once(&mut sub), Poll::Ready(Some(payload(&[7]))));
+        assert_eq!(poll_once(&mut sub), Poll::Pending);
+    }
+
+    #[test]
+    fn poll_returns_none_when_stopped_and_empty() {
+        let (sender, mut sub) = Subscription::channel(4);
+        sender.push(payload(&[1]));
+
+        // Buffered items remain drainable after stop (matches poll_next).
+        assert_eq!(poll_once(&mut sub), Poll::Ready(Some(payload(&[1]))));
+        sender.stop();
+        assert_eq!(poll_once(&mut sub), Poll::Ready(None));
+    }
+
+    #[test]
+    fn poll_returns_none_immediately_for_empty_stopped_channel() {
+        let (_sender, mut sub) = Subscription::channel(4);
+        sub.stop();
+        assert_eq!(poll_once(&mut sub), Poll::Ready(None));
+    }
+
+    #[tokio::test]
+    async fn push_wakes_parked_async_consumer() {
+        let (sender, mut sub) = Subscription::channel(4);
+
+        // Park a consumer in a spawned task, then push from the main task.
+        let join = tokio::spawn(async move { sub.next().await });
+
+        // Give the spawned consumer a chance to reach the parked `.await`.
+        tokio::time::sleep(core::time::Duration::from_millis(5)).await;
+
+        sender.push(payload(&[9]));
+        assert_eq!(join.await.unwrap(), Some(payload(&[9])));
+    }
+
+    #[tokio::test]
+    async fn stop_wakes_parked_async_consumer() {
+        let (sender, mut sub) = Subscription::channel(4);
+
+        let join = tokio::spawn(async move { sub.next().await });
+
+        tokio::time::sleep(core::time::Duration::from_millis(5)).await;
+
+        sender.stop();
+        assert_eq!(join.await.unwrap(), None);
+    }
+
+    #[tokio::test]
+    async fn merged_stream_round_robins_and_terminates() {
+        let (s1, sub1) = Subscription::channel(4);
+        let (s2, sub2) = Subscription::channel(4);
+        let mut merged = Subscription::merge(vec![sub1, sub2]);
+
+        s1.push(payload(&[10]));
+        s2.push(payload(&[20]));
+
+        // Round-robin drains leaf 0 before leaf 1.
+        assert_eq!(merged.next().await, Some(payload(&[10])));
+        assert_eq!(merged.next().await, Some(payload(&[20])));
+
+        // Both leaves empty -> parks. Pushing to either wakes the merged task.
+        let s1_clone = s1.clone();
+        let push_task = tokio::spawn(async move {
+            tokio::time::sleep(core::time::Duration::from_millis(5)).await;
+            s1_clone.push(payload(&[30]));
+        });
+
+        assert_eq!(merged.next().await, Some(payload(&[30])));
+        push_task.await.unwrap();
+
+        // Stopping both leaves terminates the merged stream when empty.
+        s1.stop();
+        s2.stop();
+        assert_eq!(merged.next().await, None);
+    }
+
+    #[tokio::test]
+    async fn merged_stream_park_wakes_from_either_leaf() {
+        let (s2, sub2) = Subscription::channel(4);
+        let (_s1, sub1) = Subscription::channel(4);
+        let mut merged = Subscription::merge(vec![sub1, sub2]);
+
+        let s2_clone = s2.clone();
+        let push_task = tokio::spawn(async move {
+            tokio::time::sleep(core::time::Duration::from_millis(5)).await;
+            // Push to the second leaf; the merged task must wake even though the
+            // first leaf is the one polled first.
+            s2_clone.push(payload(&[40]));
+        });
+
+        assert_eq!(merged.next().await, Some(payload(&[40])));
+        push_task.await.unwrap();
     }
 }

@@ -208,13 +208,17 @@ pub fn zenoh_operation_kind(operation: Operation) -> ZenohOperationKind {
         | QueryAction
         | QueryAllActions => ZenohOperationKind::Query,
         WriteProperty | WriteAllProperties | WriteMultipleProperties => ZenohOperationKind::Put,
-        ObserveProperty | ObserveAllProperties | SubscribeEvent | SubscribeAllEvents => {
-            ZenohOperationKind::Subscribe
-        }
-        UnobserveProperty | UnobserveAllProperties | UnsubscribeEvent | UnsubscribeAllEvents => {
+        ObserveProperty | ObserveAllProperties | SubscribeEvent => ZenohOperationKind::Subscribe,
+        #[cfg(feature = "td2-preview")]
+        SubscribeAllEvents => ZenohOperationKind::Subscribe,
+        UnobserveProperty | UnobserveAllProperties | UnsubscribeEvent => {
             ZenohOperationKind::Unsubscribe
         }
-        InvokeAction | CancelAction => ZenohOperationKind::RequestReply,
+        #[cfg(feature = "td2-preview")]
+        UnsubscribeAllEvents => ZenohOperationKind::Unsubscribe,
+        InvokeAction => ZenohOperationKind::RequestReply,
+        #[cfg(feature = "td2-preview")]
+        CancelAction => ZenohOperationKind::RequestReply,
     }
 }
 

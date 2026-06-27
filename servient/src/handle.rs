@@ -92,6 +92,23 @@ impl<D> ExposedThingHandle<D>
 where
     D: clinkz_wot_discovery::ThingDirectory,
 {
+    /// Starts inbound serving for this Thing: registers inbound routes on all
+    /// server bindings and publishes the TD to the directory (W3C WoT Scripting
+    /// API `ExposedThing.expose`).
+    ///
+    /// Called automatically by [`Servient::expose`](crate::Servient::expose).
+    /// Use [`Servient::produce`](crate::Servient::produce) + this method when
+    /// you need to register handlers *before* the Thing becomes
+    /// network-reachable, eliminating the window where the Thing is remotely
+    /// addressable but has no handlers.
+    ///
+    /// Route-registration failure is fatal and returns `Err` (partially
+    /// registered routes are rolled back); directory-publish failure is
+    /// best-effort.
+    pub fn expose(&self) -> ServientResult<()> {
+        self.servient.start_serving(self.id.as_ref())
+    }
+
     /// Reads a property, dispatching directly to the attached handler.
     ///
     /// The handler `Arc` is cloned out under a brief slot lock and invoked with
@@ -328,6 +345,19 @@ where
         Ok(())
     }
 
+    /// Attaches a property unobserve handler (W3C Scripting API
+    /// `setPropertyUnobserveHandler`).
+    pub fn set_property_unobserve_handler(
+        &self,
+        name: impl Into<String>,
+        handler: impl clinkz_wot_core::PropertyUnobserveHandler + 'static,
+    ) -> ServientResult<()> {
+        self.registry.dispatch(&self.id, |thing| {
+            thing.register_property_unobserve_handler(name, handler)
+        });
+        Ok(())
+    }
+
     /// Attaches an action handler.
     pub fn set_action_handler(
         &self,
@@ -336,6 +366,32 @@ where
     ) -> ServientResult<()> {
         self.registry.dispatch(&self.id, |thing| {
             thing.register_action_handler(name, handler)
+        });
+        Ok(())
+    }
+
+    /// Attaches an action query handler (W3C TD `queryaction` operation).
+    pub fn set_action_query_handler(
+        &self,
+        name: impl Into<String>,
+        handler: impl clinkz_wot_core::ActionQueryHandler + 'static,
+    ) -> ServientResult<()> {
+        self.registry.dispatch(&self.id, |thing| {
+            thing.register_action_query_handler(name, handler)
+        });
+        Ok(())
+    }
+
+    /// Attaches an action cancel handler (W3C TD `cancelaction` operation; TD
+    /// 2.0, requires `td2-preview`).
+    #[cfg(feature = "td2-preview")]
+    pub fn set_action_cancel_handler(
+        &self,
+        name: impl Into<String>,
+        handler: impl clinkz_wot_core::ActionCancelHandler + 'static,
+    ) -> ServientResult<()> {
+        self.registry.dispatch(&self.id, |thing| {
+            thing.register_action_cancel_handler(name, handler)
         });
         Ok(())
     }
@@ -791,6 +847,125 @@ where
         Ok(())
     }
 
+    /// Writes all writable properties declared in the consumed TD (W3C
+    /// Scripting API `writeAllProperties`).
+    ///
+    /// Prefers a single Thing-level form declaring the `writeallproperties`
+    /// operation (one round trip, W3C TD §6.3.3) when the consumed TD advertises
+    /// one; otherwise falls back to one write per property.
+    pub fn write_all_properties(
+        &self,
+        values: &BTreeMap<String, InteractionInput>,
+    ) -> ServientResult<()> {
+        if let Some(result) = self.write_via_thing_level(Operation::WriteAllProperties, values) {
+            return result.map(|_| ());
+        }
+
+        for (name, input) in values {
+            self.write_property(name, input.clone())?;
+        }
+        Ok(())
+    }
+
+    /// Observes all observable properties declared in the consumed TD (W3C
+    /// Scripting API `observeAllProperties`).
+    ///
+    /// Prefers a single Thing-level form declaring the `observeallproperties`
+    /// operation (one subscription) when the consumed TD advertises one;
+    /// otherwise fans out across individual property observations and returns a
+    /// merged [`Subscription`] that multiplexes them.
+    pub fn observe_all_properties(&self, input: InteractionInput) -> ServientResult<Subscription> {
+        if let Some(sub) =
+            self.thing_level_subscribe(Operation::ObserveAllProperties, input.clone())
+        {
+            return sub;
+        }
+
+        let names = observable_property_names(self.entry.thing());
+        let mut subs = Vec::new();
+        for name in names {
+            subs.push(self.observe_property(name, input.clone())?);
+        }
+        Ok(Subscription::merge(subs))
+    }
+
+    /// Stops all active property observations (W3C Scripting API
+    /// `unobserveAllProperties`).
+    ///
+    /// Prefers a single Thing-level form declaring the
+    /// `unobserveallproperties` operation (one round trip) when available;
+    /// otherwise stops each active property observation individually.
+    pub fn unobserve_all_properties(&self) -> ServientResult<()> {
+        if self.has_thing_level_form_for(Operation::UnobserveAllProperties) {
+            let _ = self.servient.consumed_request(
+                &self.entry,
+                AffordanceTarget::Thing,
+                AffordanceRef::Thing,
+                criteria_for_operation(
+                    FormSelectionCriteria::new(Operation::UnobserveAllProperties),
+                    Operation::UnobserveAllProperties,
+                ),
+                InteractionInput::empty(),
+            )?;
+            return Ok(());
+        }
+
+        for name in observable_property_names(self.entry.thing()) {
+            self.unobserve_property(name);
+        }
+        Ok(())
+    }
+
+    /// Subscribes to all events declared in the consumed TD (W3C Scripting API
+    /// `subscribeAllEvents`; TD 2.0, requires `td2-preview`).
+    ///
+    /// Prefers a single Thing-level form declaring the `subscribeallevents`
+    /// operation (one subscription) when the consumed TD advertises one;
+    /// otherwise fans out across individual event subscriptions and returns a
+    /// merged [`Subscription`] that multiplexes them.
+    #[cfg(feature = "td2-preview")]
+    pub fn subscribe_all_events(&self, input: InteractionInput) -> ServientResult<Subscription> {
+        if let Some(sub) = self.thing_level_subscribe(Operation::SubscribeAllEvents, input.clone())
+        {
+            return sub;
+        }
+
+        let names = event_names(self.entry.thing());
+        let mut subs = Vec::new();
+        for name in names {
+            subs.push(self.subscribe_event(name, input.clone())?);
+        }
+        Ok(Subscription::merge(subs))
+    }
+
+    /// Stops all active event subscriptions (W3C Scripting API
+    /// `unsubscribeAllEvents`; TD 2.0, requires `td2-preview`).
+    ///
+    /// Prefers a single Thing-level form declaring the
+    /// `unsubscribeallevents` operation (one round trip) when available;
+    /// otherwise stops each active event subscription individually.
+    #[cfg(feature = "td2-preview")]
+    pub fn unsubscribe_all_events(&self) -> ServientResult<()> {
+        if self.has_thing_level_form_for(Operation::UnsubscribeAllEvents) {
+            let _ = self.servient.consumed_request(
+                &self.entry,
+                AffordanceTarget::Thing,
+                AffordanceRef::Thing,
+                criteria_for_operation(
+                    FormSelectionCriteria::new(Operation::UnsubscribeAllEvents),
+                    Operation::UnsubscribeAllEvents,
+                ),
+                InteractionInput::empty(),
+            )?;
+            return Ok(());
+        }
+
+        for name in event_names(self.entry.thing()) {
+            self.unsubscribe_event(name);
+        }
+        Ok(())
+    }
+
     // -----------------------------------------------------------------------
     // Thing-level bulk form preference (W3C TD §6.3.3).
     //
@@ -825,6 +1000,27 @@ where
             return None;
         }
         Some(self.servient.consumed_request(
+            &self.entry,
+            AffordanceTarget::Thing,
+            AffordanceRef::Thing,
+            criteria_for_operation(FormSelectionCriteria::new(operation), operation),
+            input,
+        ))
+    }
+
+    /// Opens a Thing-level streaming subscription when a matching form exists.
+    ///
+    /// Returns `None` when no Thing-level form supports `operation`, so callers
+    /// can fall back to per-affordance fan-out.
+    fn thing_level_subscribe(
+        &self,
+        operation: Operation,
+        input: InteractionInput,
+    ) -> Option<ServientResult<Subscription>> {
+        if !self.has_thing_level_form_for(operation) {
+            return None;
+        }
+        Some(self.servient.consumed_subscribe(
             &self.entry,
             AffordanceTarget::Thing,
             AffordanceRef::Thing,
@@ -1014,6 +1210,109 @@ where
             )
             .await
     }
+
+    /// Async variant of [`write_all_properties`](Self::write_all_properties).
+    pub async fn write_all_properties_async(
+        &self,
+        values: &BTreeMap<String, InteractionInput>,
+    ) -> ServientResult<()> {
+        if let Some(result) = self.write_via_thing_level(Operation::WriteAllProperties, values) {
+            return result.map(|_| ());
+        }
+        for (name, input) in values {
+            self.write_property_async(name, input.clone()).await?;
+        }
+        Ok(())
+    }
+
+    /// Async variant of [`observe_all_properties`](Self::observe_all_properties).
+    pub async fn observe_all_properties_async(
+        &self,
+        input: InteractionInput,
+    ) -> ServientResult<Subscription> {
+        if let Some(sub) =
+            self.thing_level_subscribe(Operation::ObserveAllProperties, input.clone())
+        {
+            return sub;
+        }
+        let names = observable_property_names(self.entry.thing());
+        let mut subs = Vec::new();
+        for name in names {
+            subs.push(self.observe_property_async(name, input.clone()).await?);
+        }
+        Ok(Subscription::merge(subs))
+    }
+
+    /// Async variant of
+    /// [`unobserve_all_properties`](Self::unobserve_all_properties).
+    pub async fn unobserve_all_properties_async(&self) -> ServientResult<()> {
+        if self.has_thing_level_form_for(Operation::UnobserveAllProperties) {
+            let _ = self
+                .servient
+                .consumed_request_async(
+                    &self.entry,
+                    AffordanceTarget::Thing,
+                    AffordanceRef::Thing,
+                    criteria_for_operation(
+                        FormSelectionCriteria::new(Operation::UnobserveAllProperties),
+                        Operation::UnobserveAllProperties,
+                    ),
+                    InteractionInput::empty(),
+                )
+                .await?;
+            return Ok(());
+        }
+        for name in observable_property_names(self.entry.thing()) {
+            self.unobserve_property(name);
+        }
+        Ok(())
+    }
+
+    /// Async variant of [`subscribe_all_events`](Self::subscribe_all_events)
+    /// (TD 2.0, requires `td2-preview`).
+    #[cfg(feature = "td2-preview")]
+    pub async fn subscribe_all_events_async(
+        &self,
+        input: InteractionInput,
+    ) -> ServientResult<Subscription> {
+        if let Some(sub) = self.thing_level_subscribe(Operation::SubscribeAllEvents, input.clone())
+        {
+            return sub;
+        }
+        let names = event_names(self.entry.thing());
+        let mut subs = Vec::new();
+        for name in names {
+            subs.push(self.subscribe_event_async(name, input.clone()).await?);
+        }
+        Ok(Subscription::merge(subs))
+    }
+
+    /// Async variant of
+    /// [`unsubscribe_all_events`](Self::unsubscribe_all_events) (TD 2.0,
+    /// requires `td2-preview`).
+    #[cfg(feature = "td2-preview")]
+    pub async fn unsubscribe_all_events_async(&self) -> ServientResult<()> {
+        if self.has_thing_level_form_for(Operation::UnsubscribeAllEvents) {
+            let _ = self
+                .servient
+                .consumed_request_async(
+                    &self.entry,
+                    AffordanceTarget::Thing,
+                    AffordanceRef::Thing,
+                    criteria_for_operation(
+                        FormSelectionCriteria::new(Operation::UnsubscribeAllEvents),
+                        Operation::UnsubscribeAllEvents,
+                    ),
+                    InteractionInput::empty(),
+                )
+                .await?;
+            return Ok(());
+        }
+        for name in event_names(self.entry.thing()) {
+            self.unsubscribe_event(name);
+        }
+        Ok(())
+    }
 }
 
 fn criteria_for_operation<'a>(
@@ -1056,4 +1355,29 @@ fn split_bulk_object_output(
         );
     }
     Some(results)
+}
+
+/// Returns the names of all observable properties declared in the TD.
+fn observable_property_names(thing: &Thing) -> Vec<&str> {
+    thing
+        .properties
+        .as_ref()
+        .map(|props| {
+            props
+                .iter()
+                .filter(|(_, p)| p.observable)
+                .map(|(name, _)| name.as_str())
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// Returns the names of all events declared in the TD.
+#[cfg(feature = "td2-preview")]
+fn event_names(thing: &Thing) -> Vec<&str> {
+    thing
+        .events
+        .as_ref()
+        .map(|events| events.keys().map(|name| name.as_str()).collect())
+        .unwrap_or_default()
 }

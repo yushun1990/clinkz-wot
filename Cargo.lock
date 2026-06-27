@@ -289,6 +289,9 @@ dependencies = [
  "async-trait",
  "clinkz-wot-td",
  "critical-section",
+ "futures-core",
+ "futures-util",
+ "tokio",
 ]
 
 [[package]]

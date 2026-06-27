@@ -292,7 +292,7 @@ pub(crate) fn validate_thing_level_form_operations(forms: &[Form]) -> Result<(),
 /// Returns `true` when `operation` is a valid meta-operation for a Thing-level
 /// form (TD 1.1 §5.3.4).
 fn is_thing_level_operation(operation: &Operation) -> bool {
-    matches!(
+    if matches!(
         operation,
         Operation::ReadAllProperties
             | Operation::WriteAllProperties
@@ -301,9 +301,18 @@ fn is_thing_level_operation(operation: &Operation) -> bool {
             | Operation::ObserveAllProperties
             | Operation::UnobserveAllProperties
             | Operation::QueryAllActions
-            | Operation::SubscribeAllEvents
-            | Operation::UnsubscribeAllEvents
-    )
+    ) {
+        return true;
+    }
+    // `subscribeallevents` / `unsubscribeallevents` are TD 2.0 meta-operations.
+    #[cfg(feature = "td2-preview")]
+    if matches!(
+        operation,
+        Operation::SubscribeAllEvents | Operation::UnsubscribeAllEvents
+    ) {
+        return true;
+    }
+    false
 }
 /// Validates that the Thing declares at least one interaction affordance or
 /// top-level form at Profile/Full level.

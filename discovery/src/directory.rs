@@ -44,6 +44,28 @@ pub struct DirectoryPage {
 }
 
 /// Protocol-neutral Thing Description Directory behavior.
+///
+/// # Relationship to W3C WoT Discovery
+///
+/// W3C WoT Discovery models a TDD as an HTTP/CoAP REST API in which
+/// `PUT /td/{id}` is an *upsert* (201 Created on first registration, 200 OK on
+/// update) and `POST /td/{id}` applies a JSON Merge Patch. This trait is
+/// deliberately protocol-neutral and **splits create and replace into two
+/// explicit methods** ([`register`](Self::register) is create-only and rejects
+/// duplicates; [`update`](Self::update) is replace-only and rejects missing
+/// ids) so that caller intent is unambiguous and storage backends are not
+/// forced to emulate HTTP semantics.
+///
+/// Consequences for binding authors:
+///
+/// - A future HTTP/CoAP directory binding that maps `PUT /td/{id}` to this
+///   trait must decide create-vs-replace itself (e.g. attempt [`update`](Self::update),
+///   fall back to [`register`](Self::register) on "not found"), since there is
+///   no upsert primitive on the trait. Partial update (`PATCH` / JSON Merge
+///   Patch) is likewise out of scope here and belongs to a binding-level
+///   helper.
+/// - System-generated identifiers (W3C `POST /td` may mint an id) are not
+///   modeled: [`register`](Self::register) requires the TD to carry an `id`.
 pub trait ThingDirectory {
     /// Registers a new TD and rejects duplicate Thing ids.
     fn register(&mut self, thing: Thing) -> DiscoveryResult<DirectoryEntry>;

@@ -28,3 +28,10 @@ async = [
     "clinkz-wot-core/async",
 ]
 zenoh-pico = []
+## Experimental TD 2.0 form-operation planning (`cancelaction`,
+## `subscribeallevents`, `unsubscribeallevents`). Forwards to the data-model
+## and core gates.
+td2-preview = [
+    "clinkz-wot-td/td2-preview",
+    "clinkz-wot-core/td2-preview",
+]

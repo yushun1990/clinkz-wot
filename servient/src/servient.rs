@@ -8,14 +8,16 @@ use core::sync::atomic::{AtomicBool, Ordering};
 #[cfg(feature = "async")]
 use core::time::Duration;
 
+#[cfg(feature = "td2-preview")]
+use clinkz_wot_core::ActionCancelHandler;
 #[cfg(feature = "async")]
 use clinkz_wot_core::AsyncServerBinding;
 use clinkz_wot_core::{
-    ActionHandler, ClientBinding, CoreError, CoreResult, CredentialStore, EventBroker, EventName,
-    EventSink, EventSubscribeHandler, EventUnsubscribeHandler, InboundRequest, InboundResponse,
-    InteractionInput, InteractionOutput, LocalThing, MapLock, Payload, PayloadCodec,
-    PropertyObserveHandler, PropertyReadHandler, PropertyWriteHandler, SecurityProvider,
-    ServerBinding, ThingId,
+    ActionHandler, ActionQueryHandler, ClientBinding, CoreError, CoreResult, CredentialStore,
+    EventBroker, EventName, EventSink, EventSubscribeHandler, EventUnsubscribeHandler,
+    InboundRequest, InboundResponse, InteractionInput, InteractionOutput, LocalThing, MapLock,
+    Payload, PayloadCodec, PropertyObserveHandler, PropertyReadHandler, PropertyUnobserveHandler,
+    PropertyWriteHandler, SecurityProvider, ServerBinding, ThingId,
 };
 use clinkz_wot_discovery::{
     DirectoryEntry, DirectoryPage, DirectoryQuery, InMemoryThingDirectory, ThingDirectory,
@@ -397,48 +399,95 @@ impl<D> Servient<D> {
     // Expose / consume / destroy (baseline §6, §10 / addendum §4).
     // -----------------------------------------------------------------------
 
-    /// Exposes a local Thing, immediately registering its inbound serving work
-    /// and publishing its TD to the directory (baseline §3 / §6, addendum §4).
+    /// Creates an exposed Thing without starting inbound serving (W3C WoT
+    /// Scripting API `WoT.produce`).
+    ///
+    /// The returned [`ExposedThingHandle`] can receive local in-process
+    /// interactions and allows handler registration, but is **not** yet
+    /// network-reachable or discoverable. Call
+    /// [`ExposedThingHandle::expose`](crate::ExposedThingHandle::expose) to
+    /// register inbound routes on server bindings and publish the TD to the
+    /// directory.
+    ///
+    /// This two-phase lifecycle eliminates the window where a Thing is remotely
+    /// addressable but has no handlers attached: register handlers between
+    /// `produce` and `expose`, then the Thing goes live fully wired.
+    pub fn produce(&self, td: Thing) -> ServientResult<ExposedThingHandle<D>> {
+        let id = thing_id(&td)?;
+
+        // §10 step 2: insert into the exposed registry (own lock — separate
+        // from the state lock used by start_serving).
+        self.shared
+            .exposed_registry
+            .insert(id.clone(), LocalThing::new(td))?;
+
+        Ok(ExposedThingHandle::new(
+            self.clone(),
+            Arc::clone(&self.shared.exposed_registry),
+            self.shared.event_broker.clone(),
+            id,
+        ))
+    }
+
+    /// Exposes a local Thing and immediately starts serving, combining
+    /// [`produce`](Self::produce) +
+    /// [`ExposedThingHandle::expose`](crate::ExposedThingHandle::expose) in one
+    /// step (backward-compatible convenience).
     ///
     /// Handlers are attached after `expose`, through the returned
-    /// [`ExposedThingHandle`]. Handler completeness is not a gate at `expose`
-    /// time.
+    /// [`ExposedThingHandle`]. When you need to register handlers *before* the
+    /// Thing becomes network-reachable, use [`produce`](Self::produce) +
+    /// [`ExposedThingHandle::expose`](crate::ExposedThingHandle::expose)
+    /// instead.
     pub fn expose(&self, td: Thing) -> ServientResult<ExposedThingHandle<D>>
     where
         D: ThingDirectory,
     {
-        let id = thing_id(&td)?;
+        let handle = self.produce(td)?;
+        if let Err(err) = handle.expose() {
+            // Rollback: destroy the registry entry on serving-start failure.
+            let _ = self.shared.exposed_registry.destroy(handle.thing_id());
+            return Err(err);
+        }
+        Ok(handle)
+    }
 
-        // §10 step 2: insert into the exposed registry (own lock — separate
-        // from the state lock below).
-        self.shared
+    /// Registers inbound routes on all server bindings and publishes the TD to
+    /// the directory (W3C WoT Scripting API `ExposedThing.expose`).
+    ///
+    /// Called by [`ExposedThingHandle::expose`](crate::ExposedThingHandle::expose)
+    /// and by the convenience [`expose`](Self::expose) wrapper. Route-
+    /// registration failure is fatal (returns `Err` with rollback of partially
+    /// registered routes); directory-publish failure is best-effort.
+    pub(crate) fn start_serving(&self, id: &str) -> ServientResult<()>
+    where
+        D: ThingDirectory,
+    {
+        let td = self
+            .shared
             .exposed_registry
-            .insert(id.clone(), LocalThing::new(td.clone()))?;
+            .thing_description(id)
+            .ok_or_else(|| ServientError::ExposedThingNotFound(id.to_owned()))?;
 
-        // §10 step 3 + 4: register inbound routes and publish to directory
-        // under the state lock so the sequence is consistent from the driving
-        // loop's perspective. The binding lists are snapshotted from the single
-        // authoritative source (`shared.*`) so expose and the driving loop can
-        // never observe divergent binding sets. `td` is moved into the closure
-        // (used by reference for binding registration, then moved into the
-        // directory).
+        // Snapshot binding from the single authoritative source so
+        // start_serving and the driving loop never observe divergent sets.
         let sync_bindings = self.shared.sync_server_bindings.with(|s| s.clone())?;
         #[cfg(feature = "async")]
         let async_bindings = self.shared.async_server_bindings.with(|s| s.clone())?;
 
-        let registration: Result<(), ServientError> = self.with_state(|state| {
+        self.with_state(|state| {
             for binding in sync_bindings.iter() {
-                if let Err(message) = binding.register_thing(&id, &td) {
+                if let Err(message) = binding.register_thing(id, &td) {
                     return Err(ServientError::RouteRegistration(message));
                 }
             }
             #[cfg(feature = "async")]
             {
                 for binding in async_bindings.iter() {
-                    if let Err(message) = binding.register_thing(&id, &td) {
+                    if let Err(message) = binding.register_thing(id, &td) {
                         // Rollback sync bindings that succeeded.
                         for b in sync_bindings.iter() {
-                            b.unregister_thing(&id);
+                            b.unregister_thing(id);
                         }
                         return Err(ServientError::RouteRegistration(message));
                     }
@@ -447,7 +496,6 @@ impl<D> Servient<D> {
 
             // §10 step 4: publish to directory. Non-fatal on failure.
             if let Err(directory_err) = state.directory.register(td).map_err(ServientError::from) {
-                // The Thing remains locally exposed and servable.
                 #[cfg(feature = "std")]
                 std::eprintln!(
                     "clinkz-wot expose: non-fatal directory publish failure: {}",
@@ -458,19 +506,7 @@ impl<D> Servient<D> {
             }
 
             Ok(())
-        });
-        if let Err(err) = registration {
-            // Rollback step 2.
-            self.shared.exposed_registry.destroy(&id);
-            return Err(err);
-        }
-
-        Ok(ExposedThingHandle::new(
-            self.clone(),
-            Arc::clone(&self.shared.exposed_registry),
-            self.shared.event_broker.clone(),
-            id,
-        ))
+        })
     }
 
     /// Removes a locally exposed Thing and its directory entry (baseline §10).
@@ -942,11 +978,12 @@ impl<D> Servient<D> {
                         })
                         .ok_or(CoreError::MissingHandler)?;
                     let prepared = prepared?;
-                    let output = prepared.run(&mut BufferingEventSink {
+                    let result = prepared.run(&mut BufferingEventSink {
                         buffer: &mut emitted,
                     })?;
                     drain_emitted(broker, &request.thing_id, &request.target, emitted);
-                    Ok(output)
+                    drain_tagged_emissions(broker, &request.thing_id, result.tagged_emissions);
+                    Ok(result.output)
                 })
             });
 
@@ -1145,8 +1182,7 @@ where
         // Phase 2: Async dispatch (no ServientInner lock held). The input is
         // cloned exactly once per inbound request: the principal moves in and
         // the owned `input` is handed to whichever handler branch fires.
-        let output = match dispatch_to_handler_async(&registry, &request, principal, &broker).await
-        {
+        let output = match dispatch_to_handler_async(&registry, &request, principal, broker).await {
             Some(result) => result,
             None => Err(CoreError::MissingHandler),
         };
@@ -1216,7 +1252,10 @@ async fn dispatch_to_handler_async(
         Some(Err(err)) => Err(err),
     };
     drain_emitted(broker, &request.thing_id, &request.target, emitted);
-    Some(result)
+    Some(result.map(|r| {
+        drain_tagged_emissions(broker, &request.thing_id, r.tagged_emissions);
+        r.output
+    }))
 }
 
 /// A handler cloned out under the brief slot lock, ready to run with the slot
@@ -1233,10 +1272,19 @@ enum PreparedDispatch {
     Subscribe(Arc<dyn EventSubscribeHandler>, InteractionInput),
     Unsubscribe(Arc<dyn EventUnsubscribeHandler>, InteractionInput),
     Observe(Arc<dyn PropertyObserveHandler>, InteractionInput),
+    Unobserve(Arc<dyn PropertyUnobserveHandler>, InteractionInput),
+    /// Action query (W3C TD `queryaction`).
+    ActionQuery(Arc<dyn ActionQueryHandler>, InteractionInput),
+    /// Action cancel with a registered handler (W3C TD `cancelaction`).
+    #[cfg(feature = "td2-preview")]
+    ActionCancel(Arc<dyn ActionCancelHandler>, InteractionInput),
     /// No unsubscribe handler registered — acknowledge the request inline.
     UnsubscribeAck,
     /// No observe handler registered — acknowledge the request inline.
     UnobserveAck,
+    /// No cancel handler registered — acknowledge the request inline.
+    #[cfg(feature = "td2-preview")]
+    ActionCancelAck,
     /// No observe handler registered — fall back to read + emit initial value.
     ObserveFallbackRead(Arc<dyn PropertyReadHandler>, InteractionInput),
     /// Fan out a `readallproperties` / `readmultipleproperties` request across
@@ -1250,6 +1298,44 @@ enum PreparedDispatch {
     /// across the listed property write handlers, each fed its slice of the
     /// JSON-object request payload (W3C TD §6.3.3).
     BulkWriteProperties(Vec<(String, Arc<dyn PropertyWriteHandler>, InteractionInput)>),
+    /// Fan out an `observeallproperties` request across the listed property
+    /// observe handlers. Each handler emits through a per-property buffering
+    /// sink so emissions route to the correct broker key (W3C TD §6.3.3).
+    BulkObserveProperties(
+        Vec<(String, Arc<dyn PropertyObserveHandler>)>,
+        InteractionInput,
+    ),
+    /// Fan out an `unobserveallproperties` request across the listed property
+    /// unobserve handlers (side-effect only, no streaming output).
+    BulkUnobserveProperties(Vec<(String, Arc<dyn PropertyUnobserveHandler>, InteractionInput)>),
+    /// Fan out a `subscribeallevents` request across the listed event
+    /// subscribe handlers. Each handler emits through a per-event buffering
+    /// sink (TD 2.0; requires `td2-preview`).
+    #[cfg(feature = "td2-preview")]
+    BulkSubscribeEvents(
+        Vec<(String, Arc<dyn EventSubscribeHandler>)>,
+        InteractionInput,
+    ),
+    /// Fan out an `unsubscribeallevents` request across the listed event
+    /// unsubscribe handlers (side-effect only; TD 2.0, requires `td2-preview`).
+    #[cfg(feature = "td2-preview")]
+    BulkUnsubscribeEvents(Vec<(String, Arc<dyn EventUnsubscribeHandler>, InteractionInput)>),
+    /// Fan out a `queryallactions` request across the listed action query
+    /// handlers and combine the results into a single JSON-object payload
+    /// (W3C TD §6.3.3).
+    BulkQueryActions(Vec<(String, Arc<dyn ActionQueryHandler>)>, InteractionInput),
+}
+
+/// Output of [`PreparedDispatch::run`].
+struct DispatchResult {
+    /// Interaction output (empty for ack / side-effect-only operations).
+    output: InteractionOutput,
+    /// Per-affordance emissions for bulk streaming fan-out operations
+    /// (`observeallproperties`, `subscribeallevents`). Each `(name, payloads)`
+    /// pair is drained through the broker keyed by `(thing_id, name)`. Empty
+    /// for single-affordance operations whose emissions go through the passed-in
+    /// `sink`.
+    tagged_emissions: Vec<(String, Vec<Payload>)>,
 }
 
 impl PreparedDispatch {
@@ -1301,8 +1387,28 @@ impl PreparedDispatch {
                     }
                 }
             }
-            (clinkz_wot_core::AffordanceTarget::Property(_), Operation::UnobserveProperty) => {
-                Ok(Self::UnobserveAck)
+            (clinkz_wot_core::AffordanceTarget::Property(name), Operation::UnobserveProperty) => {
+                thing.ensure_property_affordance(name)?;
+                match thing.unobserve_handler(name) {
+                    Some(handler) => Ok(Self::Unobserve(handler, input)),
+                    None => Ok(Self::UnobserveAck),
+                }
+            }
+            (clinkz_wot_core::AffordanceTarget::Action(name), Operation::QueryAction) => {
+                thing.ensure_action_affordance(name)?;
+                let handler = thing
+                    .action_query_handler(name)
+                    .ok_or(CoreError::MissingHandler)?;
+                Ok(Self::ActionQuery(handler, input))
+            }
+            // `cancelaction` is a TD 2.0 operation.
+            #[cfg(feature = "td2-preview")]
+            (clinkz_wot_core::AffordanceTarget::Action(name), Operation::CancelAction) => {
+                thing.ensure_action_affordance(name)?;
+                match thing.action_cancel_handler(name) {
+                    Some(handler) => Ok(Self::ActionCancel(handler, input)),
+                    None => Ok(Self::ActionCancelAck),
+                }
             }
             // Bulk property reads (W3C TD §6.3.3). Fan out across the property
             // read handlers and combine the results into a single JSON-object
@@ -1341,6 +1447,51 @@ impl PreparedDispatch {
                     content_type.as_str(),
                 )?))
             }
+            // Bulk observe (W3C TD §6.3.3). Fan out across the property
+            // observe handlers for every observable property.
+            (clinkz_wot_core::AffordanceTarget::Thing, Operation::ObserveAllProperties) => {
+                let names = observable_property_names(thing.thing_description());
+                Ok(Self::BulkObserveProperties(
+                    collect_observe_handlers(thing, &names)?,
+                    input,
+                ))
+            }
+            // Bulk unobserve (W3C TD §6.3.3). Fan out across the property
+            // unobserve handlers; unobserved properties without a handler are
+            // acked.
+            (clinkz_wot_core::AffordanceTarget::Thing, Operation::UnobserveAllProperties) => {
+                let names = observable_property_names(thing.thing_description());
+                Ok(Self::BulkUnobserveProperties(collect_unobserve_handlers(
+                    thing, &names, &input,
+                )))
+            }
+            // Bulk subscribe (`subscribeallevents`) and unsubscribe
+            // (`unsubscribeallevents`) are TD 2.0 event meta-operations.
+            #[cfg(feature = "td2-preview")]
+            (clinkz_wot_core::AffordanceTarget::Thing, Operation::SubscribeAllEvents) => {
+                let names = event_names(thing.thing_description());
+                Ok(Self::BulkSubscribeEvents(
+                    collect_subscribe_handlers(thing, &names)?,
+                    input,
+                ))
+            }
+            #[cfg(feature = "td2-preview")]
+            (clinkz_wot_core::AffordanceTarget::Thing, Operation::UnsubscribeAllEvents) => {
+                let names = event_names(thing.thing_description());
+                Ok(Self::BulkUnsubscribeEvents(collect_unsubscribe_handlers(
+                    thing, &names, &input,
+                )))
+            }
+            // Bulk query actions (W3C TD §6.3.3). Fan out across action query
+            // handlers and combine results. Actions without a query handler are
+            // skipped.
+            (clinkz_wot_core::AffordanceTarget::Thing, Operation::QueryAllActions) => {
+                let names = action_names(thing.thing_description());
+                Ok(Self::BulkQueryActions(
+                    collect_action_query_handlers(thing, &names),
+                    input,
+                ))
+            }
             _ => Err(CoreError::UnsupportedOperation(alloc::format!(
                 "Inbound dispatch does not support {:?} on {:?}",
                 request.operation,
@@ -1349,30 +1500,115 @@ impl PreparedDispatch {
         }
     }
 
-    /// Invokes the handler outside the slot lock. Emits go through `sink`.
-    fn run(self, sink: &mut dyn EventSink) -> CoreResult<InteractionOutput> {
+    /// Invokes the handler outside the slot lock. Single-affordance emissions go
+    /// through `sink`; bulk streaming fan-out emissions are returned as tagged
+    /// `(affordance_name, payloads)` pairs in [`DispatchResult`].
+    fn run(self, sink: &mut dyn EventSink) -> CoreResult<DispatchResult> {
+        let empty_emissions = Vec::new();
         match self {
-            Self::Read(handler, input) => handler.read(input),
-            Self::Write(handler, input) => handler.write(input),
-            Self::Invoke(handler, input) => handler.invoke(input),
-            Self::Subscribe(handler, input) => handler.subscribe(input, sink),
-            Self::Unsubscribe(handler, input) => handler.unsubscribe(input),
-            Self::Observe(handler, input) => handler.observe(input, sink),
-            Self::UnsubscribeAck | Self::UnobserveAck => Ok(InteractionOutput::empty()),
+            Self::Read(handler, input) => Ok(DispatchResult {
+                output: handler.read(input)?,
+                tagged_emissions: empty_emissions,
+            }),
+            Self::Write(handler, input) => Ok(DispatchResult {
+                output: handler.write(input)?,
+                tagged_emissions: empty_emissions,
+            }),
+            Self::Invoke(handler, input) => Ok(DispatchResult {
+                output: handler.invoke(input)?,
+                tagged_emissions: empty_emissions,
+            }),
+            Self::Subscribe(handler, input) => Ok(DispatchResult {
+                output: handler.subscribe(input, sink)?,
+                tagged_emissions: empty_emissions,
+            }),
+            Self::Unsubscribe(handler, input) => Ok(DispatchResult {
+                output: handler.unsubscribe(input)?,
+                tagged_emissions: empty_emissions,
+            }),
+            Self::Observe(handler, input) => Ok(DispatchResult {
+                output: handler.observe(input, sink)?,
+                tagged_emissions: empty_emissions,
+            }),
+            Self::Unobserve(handler, input) => Ok(DispatchResult {
+                output: handler.unobserve(input)?,
+                tagged_emissions: empty_emissions,
+            }),
+            Self::ActionQuery(handler, input) => Ok(DispatchResult {
+                output: handler.query(input)?,
+                tagged_emissions: empty_emissions,
+            }),
+            #[cfg(feature = "td2-preview")]
+            Self::ActionCancel(handler, input) => Ok(DispatchResult {
+                output: handler.cancel(input)?,
+                tagged_emissions: empty_emissions,
+            }),
+            Self::UnsubscribeAck | Self::UnobserveAck => Ok(DispatchResult {
+                output: InteractionOutput::empty(),
+                tagged_emissions: empty_emissions,
+            }),
+            #[cfg(feature = "td2-preview")]
+            Self::ActionCancelAck => Ok(DispatchResult {
+                output: InteractionOutput::empty(),
+                tagged_emissions: empty_emissions,
+            }),
             Self::ObserveFallbackRead(handler, input) => {
                 let output = handler.read(input)?;
                 if let Some(ref payload) = output.payload {
                     let _ = sink.emit(payload.clone());
                 }
-                Ok(output)
+                Ok(DispatchResult {
+                    output,
+                    tagged_emissions: empty_emissions,
+                })
             }
-            Self::BulkReadProperties(entries, input) => run_bulk_read(entries, input),
+            Self::BulkReadProperties(entries, input) => Ok(DispatchResult {
+                output: run_bulk_read(entries, input)?,
+                tagged_emissions: empty_emissions,
+            }),
             Self::BulkWriteProperties(entries) => {
                 for (_name, handler, value_input) in entries {
                     handler.write(value_input)?;
                 }
-                Ok(InteractionOutput::empty())
+                Ok(DispatchResult {
+                    output: InteractionOutput::empty(),
+                    tagged_emissions: empty_emissions,
+                })
             }
+            Self::BulkObserveProperties(entries, input) => {
+                run_bulk_streaming(entries, input, |handler, input, sink| {
+                    handler.observe(input, sink)
+                })
+            }
+            Self::BulkUnobserveProperties(entries) => {
+                for (_name, handler, value_input) in entries {
+                    handler.unobserve(value_input)?;
+                }
+                Ok(DispatchResult {
+                    output: InteractionOutput::empty(),
+                    tagged_emissions: empty_emissions,
+                })
+            }
+            #[cfg(feature = "td2-preview")]
+            Self::BulkSubscribeEvents(entries, input) => {
+                run_bulk_streaming(entries, input, |handler, input, sink| {
+                    handler.subscribe(input, sink)
+                })
+            }
+            #[cfg(feature = "td2-preview")]
+            Self::BulkUnsubscribeEvents(entries) => {
+                for (_name, handler, value_input) in entries {
+                    handler.unsubscribe(value_input)?;
+                }
+                Ok(DispatchResult {
+                    output: InteractionOutput::empty(),
+                    tagged_emissions: empty_emissions,
+                })
+            }
+            Self::BulkQueryActions(entries, input) => Ok(DispatchResult {
+                output: run_bulk_query_actions(entries, input)?,
+                tagged_emissions: empty_emissions,
+            }),
         }
     }
 }
@@ -1552,6 +1788,199 @@ impl<'a> EventSink for BufferingEventSink<'a> {
     }
 }
 
+// ---------------------------------------------------------------------------
+// Bulk streaming and action query helpers (W3C TD §6.3.3).
+// ---------------------------------------------------------------------------
+
+/// Returns the names of all observable properties declared in the TD.
+fn observable_property_names(thing: &Thing) -> Vec<String> {
+    thing
+        .properties
+        .as_ref()
+        .map(|props| {
+            props
+                .iter()
+                .filter(|(_, p)| p.observable)
+                .map(|(name, _)| name.clone())
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// Returns the names of all events declared in the TD.
+#[cfg(feature = "td2-preview")]
+fn event_names(thing: &Thing) -> Vec<String> {
+    thing
+        .events
+        .as_ref()
+        .map(|events| events.keys().cloned().collect())
+        .unwrap_or_default()
+}
+
+/// Returns the names of all actions declared in the TD.
+fn action_names(thing: &Thing) -> Vec<String> {
+    thing
+        .actions
+        .as_ref()
+        .map(|actions| actions.keys().cloned().collect())
+        .unwrap_or_default()
+}
+
+/// Collects `(name, observe handler)` pairs for the listed property names.
+///
+/// A property without a registered observe handler is skipped. Returns
+/// `MissingHandler` only when no listed property has a handler at all.
+fn collect_observe_handlers(
+    thing: &LocalThing,
+    names: &[String],
+) -> CoreResult<Vec<(String, Arc<dyn PropertyObserveHandler>)>> {
+    let mut entries = Vec::new();
+    for name in names {
+        if let Some(handler) = thing.observe_handler(name) {
+            entries.push((name.clone(), handler));
+        }
+    }
+    if entries.is_empty() {
+        return Err(CoreError::MissingHandler);
+    }
+    Ok(entries)
+}
+
+/// Collects `(name, unobserve handler, input)` triples for the listed property
+/// names. Properties without an unobserve handler produce no entry (the inbound
+/// dispatcher acks those inline).
+fn collect_unobserve_handlers(
+    thing: &LocalThing,
+    names: &[String],
+    input: &InteractionInput,
+) -> Vec<(String, Arc<dyn PropertyUnobserveHandler>, InteractionInput)> {
+    let mut entries = Vec::new();
+    for name in names {
+        if let Some(handler) = thing.unobserve_handler(name) {
+            entries.push((name.clone(), handler, input.clone()));
+        }
+    }
+    entries
+}
+
+/// Collects `(name, subscribe handler)` pairs for the listed event names.
+#[cfg(feature = "td2-preview")]
+fn collect_subscribe_handlers(
+    thing: &LocalThing,
+    names: &[String],
+) -> CoreResult<Vec<(String, Arc<dyn EventSubscribeHandler>)>> {
+    let mut entries = Vec::new();
+    for name in names {
+        if let Some(handler) = thing.subscribe_handler(name) {
+            entries.push((name.clone(), handler));
+        }
+    }
+    if entries.is_empty() {
+        return Err(CoreError::MissingHandler);
+    }
+    Ok(entries)
+}
+
+/// Collects `(name, unsubscribe handler, input)` triples for the listed event
+/// names.
+#[cfg(feature = "td2-preview")]
+fn collect_unsubscribe_handlers(
+    thing: &LocalThing,
+    names: &[String],
+    input: &InteractionInput,
+) -> Vec<(String, Arc<dyn EventUnsubscribeHandler>, InteractionInput)> {
+    let mut entries = Vec::new();
+    for name in names {
+        if let Some(handler) = thing.unsubscribe_handler(name) {
+            entries.push((name.clone(), handler, input.clone()));
+        }
+    }
+    entries
+}
+
+/// Collects `(name, query handler)` pairs for the listed action names.
+fn collect_action_query_handlers(
+    thing: &LocalThing,
+    names: &[String],
+) -> Vec<(String, Arc<dyn ActionQueryHandler>)> {
+    let mut entries = Vec::new();
+    for name in names {
+        if let Some(handler) = thing.action_query_handler(name) {
+            entries.push((name.clone(), handler));
+        }
+    }
+    entries
+}
+
+/// Runs a bulk streaming fan-out (`observeallproperties` /
+/// `subscribeallevents`), invoking each handler through a per-affordance
+/// buffering sink so emissions are tagged with the correct affordance name for
+/// broker routing.
+fn run_bulk_streaming<H>(
+    entries: Vec<(String, Arc<H>)>,
+    input: InteractionInput,
+    invoke: fn(&Arc<H>, InteractionInput, &mut dyn EventSink) -> CoreResult<InteractionOutput>,
+) -> CoreResult<DispatchResult>
+where
+    H: ?Sized,
+{
+    let mut tagged_emissions: Vec<(String, Vec<Payload>)> = Vec::new();
+    for (name, handler) in entries {
+        let mut emitted: Vec<Payload> = Vec::new();
+        invoke(
+            &handler,
+            input.clone(),
+            &mut BufferingEventSink {
+                buffer: &mut emitted,
+            },
+        )?;
+        if !emitted.is_empty() {
+            tagged_emissions.push((name, emitted));
+        }
+    }
+    Ok(DispatchResult {
+        output: InteractionOutput::empty(),
+        tagged_emissions,
+    })
+}
+
+/// Runs a bulk action query (`queryallactions`), combining each handler's
+/// output payload into a single JSON-object response keyed by action name.
+/// When no query handlers are registered, returns an empty JSON object.
+fn run_bulk_query_actions(
+    entries: Vec<(String, Arc<dyn ActionQueryHandler>)>,
+    input: InteractionInput,
+) -> CoreResult<InteractionOutput> {
+    let mut combined = serde_json::Map::new();
+    for (name, handler) in entries {
+        let output = handler.query(input.clone())?;
+        let value = match output.payload {
+            Some(payload) if !payload.body.is_empty() => {
+                serde_json::from_slice::<serde_json::Value>(payload.body.as_slice()).unwrap_or_else(
+                    |_| {
+                        serde_json::Value::String(
+                            alloc::string::String::from_utf8_lossy(payload.body.as_slice())
+                                .into_owned(),
+                        )
+                    },
+                )
+            }
+            _ => serde_json::Value::Null,
+        };
+        combined.insert(name, value);
+    }
+
+    let body = serde_json::to_vec(&serde_json::Value::Object(combined)).map_err(|err| {
+        CoreError::InvalidInteraction(alloc::format!(
+            "failed to serialize queryallactions response: {err}"
+        ))
+    })?;
+    Ok(InteractionOutput::with_payload(Payload::new(
+        body,
+        BULK_CONTENT_TYPE,
+    )))
+}
+
 /// Returns the broker event-name key for an affordance target, if it is one
 /// that emits through the broker (events and observed properties).
 fn event_name_for_target(target: &clinkz_wot_core::AffordanceTarget) -> Option<&str> {
@@ -1581,6 +2010,24 @@ fn drain_emitted(
     let event = EventName::from(name);
     for payload in emitted {
         let _ = broker.publish(thing_id, &event, &payload);
+    }
+}
+
+/// Drains per-affordance tagged emissions through the broker.
+///
+/// Each `(name, payloads)` pair is published to the broker under
+/// `(thing_id, name)` so the correct per-affordance `PublisherSink` receives
+/// the payloads.
+fn drain_tagged_emissions(
+    broker: &EventBroker,
+    thing_id: &ThingId,
+    tagged: Vec<(String, Vec<Payload>)>,
+) {
+    for (name, payloads) in tagged {
+        let event = EventName::from(name);
+        for payload in payloads {
+            let _ = broker.publish(thing_id, &event, &payload);
+        }
     }
 }
 
