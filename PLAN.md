@@ -2,526 +2,256 @@
 
 ## Summary
 
-`clinkz-wot` is a protocol-neutral Rust implementation of a W3C Web of Things engine for the Clinkz platform.
+`clinkz-wot` is a Rust implementation of a W3C Web of Things engine for the
+Clinkz platform. The engine targets **strict WoT specification compliance and
+WoT Scripting API conformance**, runs on both `std` and `no_std + alloc`, and
+serves both device Thing integration and application-layer integration.
 
-The engine uses TD and TM as the semantic contract layer. Protocol bindings are pluggable adapters. Zenoh is implemented first because Clinkz Platform uses it as the default communication bus, but zenoh is not a required dependency of the engine.
-
-The default specification target is W3C WoT TD 1.1, Architecture 1.1, Discovery, and Profile. TD 2.0 is tracked as experimental work behind a feature flag.
+The authoritative engine-wide design reference is
+`docs/baseline/engine-architecture-baseline.md` (v4.0). This file is the
+repository-level blueprint, milestone index, and acceptance-criteria source.
+Detailed per-phase implementation tasks live under `docs/plan/`.
 
 ## Scope
 
-This file is the repository-level blueprint and milestone index. It defines the
-intended delivery sequence and repository-wide acceptance criteria.
+This file defines the delivery sequence and repository-wide acceptance criteria.
+v4.0 mandates three direction decisions that drive the plan:
 
-Detailed development tasks belong in module plans under `docs/plan/`. Milestone
-sections reference those module plans when they exist.
+1. **Full WoT Scripting API alignment** — Consumer, Producer, and Discovery UA
+   conformance (reverses the prior "Native Runtime" positioning).
+2. **Frozen TD in v1** — no dynamic affordance add/remove after `expose()`.
+3. **Async-first driving, sync-primary handlers** — the driving/transport
+   layer is async; inbound handlers are synchronous (zero-allocation hot path)
+   with opt-in async twins for I/O-bound cloud handlers; `no_std` super-loops
+   drive the same futures by manual polling.
 
-## Milestones
+The three earlier Servient baselines (`servient-design-baseline.md` v3.0 and
+its addendum v3.1) and the per-milestone plans that sequenced them
+(`servient-runtime-redesign-plan.md`, the transitional `discovery-directory-
+refactor-plan.md` execution, etc.) are **superseded** by v4.0 and the phase
+plans below.
 
-Current focus:
+## Phases
 
-- TD 1.1 hardening in M1 is complete for the current crate scope.
-- Thing Model support has a first complete TD-crate implementation.
-- M3 protocol-neutral core has the first trait and dispatcher surface needed by
-  binding crates.
-- M4 protocol binding hardening is complete for the current shared and zenoh
-  binding scope.
-- M5 Discovery has the first embedded-ready in-memory Thing Description
-  Directory and query surface needed by runtime crates.
-- M6 Servient runtime composition now has a first embedded-ready runtime
-  surface that wires Discovery, local Things, consumed Things, injected
-  protocol bindings, runtime registries, TD/form/binding-plan caches, payload
-  codecs, and security providers. This first surface is about to be superseded
-  by the Servient runtime redesign.
-- The Servient runtime redesign has landed (phases SR-P0 through SR-P5) and
-  the runtime has since been hardened — handler reentrancy (sync `&self`
-  handlers cloned out of the per-Thing TD lock + a driving-loop `sync_lock`),
-  dynamic affordance lifecycle (per-affordance `ServerBinding::register_affordance`
-  / `unregister_affordance` + directory re-publish), inbound/outbound security
-  moved out of registry locks, and several diagnostics/robustness fixes. See
-  `docs/baseline/servient-design-baseline-addendum.md` §9 for the refinement
-  record. The redesign baseline is
-  `docs/baseline/servient-design-baseline.md` (v3.0) + addendum (v3.1), sequenced
-  by `docs/plan/servient-runtime-redesign-plan.md`.
-- The next concrete backend increment is the opt-in Rust `zenoh` runtime path
-  behind `zenoh`, with live smoke and integration coverage kept outside the
-  default workspace test path.
-- The current `zenoh` next-step target is live metadata coverage for
-  express QoS, priority, and congestion control on observable runtime paths.
-- Tracked follow-up (not blocking): align handler `Send`/`Sync` trait-object
-  bounds with v3.0 §7 (addendum §9.3) once multi-thread sync driving is in
-  scope.
-- Defer `zenoh-pico` runtime injection until the target hardware
-  platform, C ABI strategy, and polling model are confirmed.
-- Keep M7 conformance and no-std checks running across every crate that
-  claims `no_std + alloc` support.
+The refactor is sequenced P0 through P4 so the workspace compiles at each
+phase boundary. Each phase has a dedicated plan document under `docs/plan/`.
 
-Immediate next sequence:
+| Phase | Goal | Plan |
+|---|---|---|
+| P0 | Core interaction surface rewrite (sync-primary handlers, concrete Thing types, `WotLock`, Scripting-API I/O) | `docs/plan/phase-p0-core-interaction.md` |
+| P1 | Discovery rewrite (Introduction/Exploration/session; `Discoverer`/`DirectoryPublisher`) | `docs/plan/phase-p1-discovery.md` |
+| P2 | Binding async (real async `ClientBinding`; zenoh async consume; drop dynamic-affordance API) | `docs/plan/phase-p2-binding-async.md` |
+| P3 | Servient rewire (drop `Servient<D>`; async-only driving; frozen-TD lifecycle; real async consume) | `docs/plan/phase-p3-servient.md` |
+| P4 | Compliance and verification (Scripting API conformance map tests, feature matrix, fixtures, no-std checks) | `docs/plan/phase-p4-compliance.md` |
 
-1. Keep M7 checks and compatibility documentation aligned with the current
-   TD/TM, core, protocol binding, Discovery, and Servient surfaces.
-2. Treat `zenoh` as the only active concrete runtime increment and
-   expand its opt-in smoke and integration coverage without changing the
-   default workspace verification path, starting with live metadata coverage
-   for observable put and subscription paths.
-3. Keep `zenoh-pico` at the planning boundary until the target
-   hardware platform is selected and the runtime injection strategy is
-   documented for that platform.
+Dependency shape and compile boundaries: P0 is foundational (core types
+everyone depends on). Because P0 rewrites core's public surface, it breaks
+core's direct dependents (binding, discovery, servient) until they adapt. The
+phases are therefore sequenced bottom-up along the dependency graph: **P0–P2
+each leave their own target crate compiling and tested in isolation; the
+workspace is made whole again at P3.** This is the accepted cost of a one-shot
+breaking refactor with no downstream consumers. P1 and P2 may overlap in time
+once P0's public surface is stable. P4 finalizes compliance.
 
-### M1: TD 1.1 Hardening
+### P0: Core Interaction Surface Rewrite
 
-Plan: `docs/plan/wot-td-development-plan.md`.
+Plan: `docs/plan/phase-p0-core-interaction.md`.
 
-Harden the TD 1.1 data model, validation, extension preservation, and
-round-trip compatibility in `clinkz-wot-td`.
+Rewrite `clinkz-wot-core` to a single async interaction surface aligned with the
+WoT Scripting API.
 
-Current status:
+Scope:
 
-- Foundation work is complete for `no_std + alloc`, URI field typing, builder
-  error reporting, validation levels, security reference checks, field coverage
-  audit, and shared `base` plus form `href` target resolution.
-- Fixture expansion, shared TD default helpers, DataSchema Basic validation,
-  and SecurityScheme Basic validation are complete.
-- SecurityScheme deserialization now uses the `scheme` field as the concrete
-  variant discriminator, keeps fixture-compatible API key `in: "uri"` values,
-  and preserves TD round-trip behavior for the current fixture corpus.
-- DataSchema deserialization now prefers the explicit `type` field as the
-  concrete variant discriminator, while Basic validation still rejects
-  inconsistent explicit type declarations and keeps round-trip behavior intact.
-
-### M2: Thing Model Support
-
-Plan: `docs/plan/wot-td-development-plan.md`.
-
-Status: complete for the first TD-crate pass.
-
-Add Thing Model modeling, validation, extension preservation, and a future path
-from reusable TM templates to concrete TD documents.
+- Concrete `LocalExposedThing` / `BoundConsumedThing` (remove single-impl
+  `ExposedThing` / `ConsumedThing` traits).
+- Sync-primary handler trait set (`PropertyReadHandler`,
+  `PropertyWriteHandler`, …) with opt-in async twins behind `async`, and
+  consolidated per-affordance handler-set storage (`PropertyHandlerSet`,
+  `ActionHandlerSet`, `EventHandlerSet`).
+- `InteractionOptions` / `InteractionOutput` rework (Scripting API §7.1);
+  remove `InteractionInput.security_metadata`.
+- Rename `MapLock<T>` → `WotLock<T>`; make it the `Clone`-able `Arc`-backed
+  handle; remove `multithread` feature and `RefCell`/`UnsafeCell` backends.
+- Retain owned `ThingId`, `CorrelationId`, `AffordanceTarget`, `InboundRequest`,
+  `InboundResponse`, `BindingRequest` (v3.1 §1–§2).
+- Remove `ServerBinding::register_affordance` / `unregister_affordance`.
+- Single async `ServerBinding::poll_accept` (drop `poll_accept_sync` /
+  `AsyncServerBinding` split).
 
 Entry criteria:
 
-- M1 fixture expansion and TD Basic validation hardening are complete.
-- TM data structures can reuse TD component patterns without changing protocol
-  boundaries or adding `std`-only dependencies.
+- v4.0 baseline is locked.
 
-Completion notes:
+Exit criteria:
 
-- Added `ThingModel` data structures and builders in `clinkz-wot-td`.
-- TM parsing, serialization, validation, and extension preservation are covered
-  by focused tests.
-- TM support compiles under the same `no_std + alloc` check as TD.
+- `clinkz-wot-core` compiles `no_std + alloc` and `std`.
+- `cargo check -p clinkz-wot-core --no-default-features` passes.
+- Handler registration and a synthetic async dispatch round-trip are covered by
+  tests.
 
-### M3: Protocol-Neutral Core
+### P1: Discovery Rewrite
 
-Define the protocol-neutral engine trait surface for exposed Things, consumed
-Things, interaction handlers, bindings, payload codecs, security providers, and
-transport adapters.
+Plan: `docs/plan/phase-p1-discovery.md`.
 
-Current status:
+Execute `docs/plan/discovery-directory-refactor-plan.md` against the v4.0
+surface. Discovery becomes Introduction → Exploration → continuation session.
 
-- Started `clinkz-wot-core` as a `no_std + alloc` workspace crate.
-- Added the first protocol-neutral trait surface for payload codecs, exposed
-  Things, consumed Things, protocol bindings, security providers, and transport
-  adapters.
-- Added protocol-neutral local Thing handler traits and a reusable dispatcher
-  for property reads/writes, action invocation, and event subscription.
-- Added a protocol-neutral consumed Thing dispatcher that validates selected
-  affordance forms against TD effective operations and routes requests to
-  matching bindings.
-- Kept form selection, target URI resolution, and concrete protocol behavior
-  outside the core crate for the later protocol-bindings milestone.
-- Verified `clinkz-wot-core` with `cargo check -p clinkz-wot-core
-  --no-default-features`.
+Scope:
+
+- `DiscoveryEndpoint`, `ThingDescriptionResolver`, `ThingLinkResolver`,
+  `DirectoryReader`, `DirectorySession`, `DirectoryBatch`, `ContinuationToken`.
+- `DirectoryPublisher` (lease/revision-aware) and `DirectoryWatch`.
+- `Discoverer` trait (`discover` / `explore_directory` /
+  `request_thing_description`).
+- `ThingDiscoveryProcess` lazy session (replaces buffered `ThingDiscovery`).
+- In-memory backend as reference implementation of `DirectoryReader` /
+  `DirectoryPublisher`.
+- Remove `ThingDirectory` CRUD container, `DirectoryPage { offset, total }`,
+  `ThingFilter.method` model, `DiscoveryMethod` enum.
 
 Entry criteria:
 
-- TD/TM public types expose effective operation, target, and security metadata
-  needed by protocol binding consumers.
-- The core trait surface remains independent of zenoh and other concrete
-  transports.
-
-### M4: Protocol Bindings and Zenoh Binding
-
-Plan: `docs/plan/protocol-bindings-development-plan.md`.
-
-Add shared binding utilities and implement zenoh as the first optional protocol
-binding without making it a dependency of TD, TM, or core runtime crates.
-
-Current status:
-
-- Organized protocol binding crates under `protocol-bindings/`.
-- Started `clinkz-wot-protocol-bindings` as a `no_std + alloc` workspace crate
-  for shared protocol binding utilities.
-- Added shared form selection based on TD effective operations and affordance
-  context.
-- Added shared form target resolution using the TD crate's `base` plus `href`
-  helper.
-- Added shared affordance-level form selection and target resolution for Thing,
-  property, action, and event forms, including unknown-affordance errors.
-- Added protocol-neutral form selection criteria for content type and
-  subprotocol matching while preserving the existing operation-only selection
-  API.
-- Kept zenoh and other concrete protocol behavior out of
-  `clinkz-wot-protocol-bindings`.
-- Started `clinkz-wot-protocol-bindings-zenoh` as the first optional concrete
-  protocol binding crate under `protocol-bindings/protocols/zenoh`.
-- Added first-pass zenoh form support that recognizes `zenoh://` form targets
-  and resolves relative TD forms against Thing-level `base`, without
-  introducing a required zenoh runtime dependency.
-- Added zenoh operation planning that maps WoT form operations to
-  transport-level zenoh operation kinds while still avoiding a required zenoh
-  runtime dependency.
-- Extended zenoh operation planning with first-pass Clinkz extension metadata
-  parsing for encoding, QoS, priority, and congestion control hints.
-- Added shared predicate-based form selection and a zenoh affordance operation
-  planner so concrete bindings can choose protocol-supported forms from
-  multi-form affordances before runtime transport execution is wired in.
-- Extended the zenoh affordance planner to accept shared form selection
-  criteria, with zenoh planner coverage for content type and subprotocol
-  filters.
-- Improved shared form selection diagnostics so operation mismatches are
-  distinguished from metadata or caller-filter mismatches.
-- Added an injected zenoh transport adapter boundary to the generic
-  `ZenohBinding<T>` so planned zenoh operations can be executed by std or test
-  integrations without adding a required zenoh runtime dependency.
-- Added shared validation for caller-selected affordance forms and wired zenoh
-  runtime invocation to reject forms that do not belong to the requested
-  affordance or do not support the requested effective operation before
-  transport execution.
-- Added shared protocol-neutral helpers for selected-form security references
-  and scopes, including inherited Thing-level security, form-level overrides,
-  and nosec coverage.
-- Documented the first Clinkz zenoh extension vocabulary, limited to
-  experimental metadata hints while keeping TD `href` and `base` authoritative
-  for target resolution.
-- Expanded zenoh planning coverage for Thing-level forms, bulk property and
-  event operations, content type and subprotocol criteria, and relative `href`
-  values resolved against a zenoh `base`.
-- Kept concrete zenoh execution optional behind `ZenohTransport`, with tests
-  for fake transport propagation and the default no-transport error path.
-- Stabilized shared selected-form validation coverage for Thing-level forms,
-  property forms, action defaults, event defaults, copied selected form values,
-  and selected-form mismatch cases.
-- Finalized shared binding diagnostics with distinct errors for unknown
-  affordances, unsupported operations, metadata mismatches, caller-filter
-  mismatches, target resolution failures, and selected forms outside the
-  requested affordance.
-- Documented the runtime backend policy for future Rust `zenoh` and
-  `zenoh-pico` adapters: the current zenoh planning crate remains
-  `no_std + alloc`, while concrete runtime backends stay optional and
-  feature-gated or crate-separated.
-- Added the first concrete Rust `zenoh` std runtime backend behind the
-  explicit `zenoh` feature while keeping the default and
-  `--no-default-features` builds free of a concrete zenoh runtime dependency.
-- Hardened the Rust `zenoh` std runtime backend with request/reply selector
-  parameter validation, subscription lifecycle metadata and undeclaration, and
-  first-pass metadata mapping for encoding, express QoS, priority, and
-  congestion control.
-- Added a std-only shared zenoh transport handle so Servient binding factories
-  can reuse a session, pool, or runtime adapter across cloned bindings.
-- Added an opt-in Rust `zenoh` runtime smoke test behind the `zenoh`
-  feature and `CLINKZ_WOT_RUN_ZENOH_RUNTIME_TESTS=1`, covering concrete
-  `ZenohSessionTransport` put and get/request-reply execution without requiring
-  it in default workspace tests.
-
-Completion notes:
-
-- `clinkz-wot-protocol-bindings` and
-  `clinkz-wot-protocol-bindings-zenoh` pass `cargo test`.
-- Both protocol binding crates pass `cargo check --no-default-features`.
-- Zenoh-specific code remains outside TD, TM, and core crates.
+- P0 core identity types (`ThingId`) are stable.
 
 Exit criteria:
 
-- `clinkz-wot-protocol-bindings` and
-  `clinkz-wot-protocol-bindings-zenoh` pass `cargo test`.
-- Both protocol binding crates pass `cargo check --no-default-features`.
-- Shared utilities cover form selection, target resolution, selected-form
-  validation, diagnostics, and security metadata extraction needed by runtime
-  crates.
-- Zenoh-specific code remains outside TD, TM, and core crates.
+- `clinkz-wot-discovery` compiles `no_std + alloc` (crate root) and `std`
+  (storage).
+- A local continuation-session discovery round-trip is covered by tests.
 
-### M5: Discovery and TDD
+### P2: Binding Async
 
-Implement W3C Discovery concepts and Thing Description Directory behavior for
-registration, lookup, update, deletion, and query flows.
+Plan: `docs/plan/phase-p2-binding-async.md`.
 
-Current status:
+Make the protocol binding consume path genuinely async and remove the
+dynamic-affordance binding surface.
 
-- Started `clinkz-wot-discovery` as a workspace crate.
-- Added protocol-neutral Thing Description Directory traits for registration,
-  retrieval, update, deletion, listing, and query.
-- Added backend-portable structured directory queries with exact-match filters,
-  conjunctive matching, pagination metadata, and owned result entries suitable
-  for memory, SQL, RDF/SPARQL, HTTP, or other runtime backends.
-- Added a deterministic in-memory directory backend with configurable TD
-  validation level and a local predicate-query convenience API for tests and
-  local filtering.
-- Added focused tests for duplicate registration, update behavior, deletion,
-  lookup by id, deterministic listing, structured query predicates, pagination,
-  missing ids, validation failures, and owned result cloning.
+Scope:
+
+- `ClientBinding::invoke` becomes `async fn` driving a real transport.
+- `ZenohSessionTransport` async consume via `zenoh::Session` (`get`, `put`).
+- Remove fake-async consumer delegation (PLAN-old M8).
+- Remove `register_affordance` / `unregister_affordance` from concrete bindings.
+- Keep shared form selection, op resolution, target resolution, security
+  metadata extraction unchanged.
+- Keep the `runtime-*` feature split (planning `no_std+alloc` vs `zenoh` /
+  `zenoh-pico` backends).
 
 Entry criteria:
 
-- M4 shared binding APIs are stable enough for Discovery and Servient crates to
-  refer to TD forms without duplicating form selection or target resolution.
-- TD validation exposes the Basic checks needed to reject invalid directory
-  entries explicitly instead of during deserialization.
-
-Planned work:
-
-- Add `clinkz-wot-discovery` as a workspace crate with crate-root shared
-  directory and query APIs, no-std local directory capabilities, and std-only
-  storage extension points.
-- Define protocol-neutral directory traits for registration, retrieval, update,
-  deletion, listing, and query.
-- Implement a deterministic in-memory directory backend first.
-- Keep concrete production storage backends separate from the shared Discovery
-  query model, following the same adapter boundary used by protocol bindings.
-- Validate TD inputs explicitly at configurable validation levels before
-  registration and update.
-- Preserve full TD round-trip data, including unknown extension fields and
-  JSON-LD contexts, through directory storage.
-- Add tests for duplicate registration policy, overwrite/update behavior,
-  deletion, lookup by id, listing, and basic query predicates.
+- P0 async `ClientBinding` / `ServerBinding` traits are stable.
 
 Exit criteria:
 
-- The discovery crate has focused tests for CRUD and query behavior.
-- Discovery does not depend on zenoh or any concrete binding.
-- Directory storage keeps TD/TM semantic data and extension fields intact.
+- `clinkz-wot-protocol-bindings` and `clinkz-wot-protocol-bindings-zenoh` pass
+  `cargo test` and `--no-default-features`.
+- A real async zenoh consume round-trip (read/write/invoke) is covered by an
+  opt-in smoke test.
 
-### M6: Servient Runtime
+### P3: Servient Rewire
 
-Compose TD/TM, protocol bindings, discovery, security, and observability into a
-Servient runtime that supports exposed and consumed Things.
+Plan: `docs/plan/phase-p3-servient.md`.
 
-The M6 target shape is defined by the locked design baseline
-`docs/baseline/servient-design-baseline.md` (v3.0) and its implementation
-refinements `docs/baseline/servient-design-baseline-addendum.md` (v3.1). The
-sequencing and acceptance details are in
-`docs/plan/servient-runtime-redesign-plan.md`. The redesign is a one-shot
-breaking refactor to a single-generic interior-mutable `Servient<D>` with a
-sync driving layer, an inbound serving path, directory-driven consumed-Thing
-invalidation, and a zenoh server binding.
+Rewire the Servient on top of the P0–P2 surfaces: drop the directory generic,
+async-only driving, frozen-TD lifecycle, real async consumer.
 
-Current status — redesign phases SR-P0 through SR-P5 landed, plus compliance
-fixes T1 (event pipeline) and T3 (principal threading):
+Scope:
 
-- **SR-P0** (core inbound surface and owned types): owned `AffordanceTarget`,
-  `BindingRequest`, `InboundRequest`, `InboundResponse`; `ThingId`,
-  `CorrelationId`, `Principal`, `SecurityError`; `ClientBinding` /
-  `ServerBinding` trait split replacing `ProtocolBinding`; `EventBroker` /
-  `Subscription`; `SecurityProvider::verify` + `check_scopes`.
-- **SR-P1** (`Servient<D>` collapse): single-generic `Servient<D>` that is
-  `Clone` with all `&self` methods; typed `ExposedThingHandle` /
-  `ConsumedThingHandle`; two-level `MapLock` + `DrainFlag` locking;
-  `ConsumedThingRegistry` interning with per-entry form/binding-plan caches.
-- **SR-P2.1** (sync driving layer): `poll_serve_sync` / `serve_sync`;
-  `InboundDispatcher` implementation resolving Thing, form security, and
-  handler dispatch; `CoreError::MissingHandler` for unhandled affordances.
-- **SR-P2.2** (async driving layer): `AsyncServerBinding` trait (dyn-compatible
-  via `#[async_trait]`) behind the `async` feature; `Servient::poll_serve` /
-  `Servient::serve` using `select_all` to race all async bindings concurrently;
-  `ZenohServerBinding` implements `AsyncServerBinding` using `tokio::sync::Notify`.
-- **SR-P2.3** (expose/destroy coordination): `expose` with route registration
-  + rollback on failure; `destroy` with route unregistration; directory
-  publish/unpublish as best-effort; `ServientError::Accept`,
-  `RouteRegistration`, `From<SecurityError>`.
-- **SR-P3** (directory-driven invalidation): Servient-mediated
-  `ConsumedThingRegistry::invalidate` after `update`, `unregister`, and
-  `destroy`.
-- **SR-P4** (zenoh server binding): `ZenohServerBinding` implementing
-  `ServerBinding` on the shared `zenoh::Session`; readproperty/invokeaction
-  via `declare_queryable`, writeproperty via put-listener; route planning
-  reusing the `no_std + alloc` zenoh planner; also implements
-  `AsyncServerBinding` for native-async driving.
-- **SR-P5** (M7 alignment): feature-matrix and no-std verification confirmed;
-  documentation updated.
-- **T1** (event pipeline): `EventBroker` wired into `ServientInner` as a
-  `Clone`-able shared broker (`Arc<MapLock<…>>`); `ServerBinding::set_event_broker`
-  default method feeds the broker to each binding during `build()` and
-  `register_server_binding()`; `ZenohServerBinding` registers
-  `ZenohPublisherSink`s (wrapping `session.put`) for each `subscribeevent` /
-  `observeproperty` form during `register_thing`; `ExposedThingHandle::emit_event`
-  fans payloads through the broker to all registered publisher sinks;
-  `dispatch_to_handler` routes `SubscribeEvent` / `UnsubscribeEvent` /
-  `ObserveProperty` / `UnobserveProperty` through the broker; `destroy` cleans
-  up all broker sinks for the Thing via `EventBroker::remove_thing`.
-- **T3** (principal threading): `verify_inbound` returns the real verified
-  `Principal` (or anonymous for NoSec) instead of discarding it;
-  `InteractionInput` gains a `principal: Option<Principal>` field;
-  `dispatch_inbound` injects the verified principal into the handler
-  `InteractionInput` so handlers can authorize per-caller.
-- **T2** (consumer streaming subscriptions): `ClientBinding::subscribe` method
-  (default `UnsupportedOperation`) opens a long-lived wire subscription and
-  returns `(Subscription, Box<dyn SubscriptionGuard>)`; `ZenohTransport::
-  open_subscription` on `ZenohSessionTransport` uses `session.declare_subscriber`
-  with a callback that pushes samples into a `SubscriptionSender`;
-  `ConsumedThingHandle::subscribe_event` / `observe_property` now return
-  `Subscription` instead of one-shot `InteractionOutput`; added
-  `unsubscribe_event` / `unobserve_property` for wire cleanup; subscription
-  guards stored in `ConsumedThingEntry` and cleaned up on invalidation.
-- **C5** (split handler traits): `PropertyHandler` replaced by separate
-  `PropertyReadHandler`, `PropertyWriteHandler`, `PropertyObserveHandler`;
-  `EventHandler` replaced by `EventSubscribeHandler`, `EventUnsubscribeHandler`;
-  `LocalThing` stores per-affordance `PropertyHandlerSet` / `EventHandlerSet`;
-  `ExposedThingHandle` has separate `set_property_read_handler` /
-  `set_property_write_handler` / `set_property_observe_handler` /
-  `set_event_subscribe_handler` / `set_event_unsubscribe_handler`; dispatcher
-  falls back to read+emit for observe and ack for unsubscribe when no dedicated
-  handler is registered.
-- **C6** (bulk property operations): `read_multiple_properties`,
-  `read_all_properties`, `write_multiple_properties` on both
-  `ExposedThingHandle` and `ConsumedThingHandle`. The consumed side prefers a
-  single Thing-level form declaring the matching bulk meta-operation (W3C TD
-  §6.3.3) and otherwise fans out over individual property operations; the
-  inbound serving path fans out across exposed handlers and combines the
-  results so Thing-level bulk forms are servable end-to-end.
-- **C7** (Discovery API): `DiscoveryMethod` enum (`Local` / `Directory` /
-  `Multicast` / `Everything`); `ThingFilter` with method, url, query, fragment;
-  `ThingDiscovery` process object implementing `Iterator<Item = Thing>` with
-  `stop()` / `is_done()` / `error()` / `remaining()`; `Servient::discover(filter)`
-  backed by the local directory for `Local`/`Everything`; `Directory` and
-  `Multicast` methods set discovery error (deferred to protocol-specific
-  transports).
-- **M3+M4** (security end-to-end): `InteractionInput.security_metadata` field
-  separates transport-level auth headers from URI variables;
-  `apply_security` diffs provider-modified metadata into `security_metadata`;
-  zenoh server extracts `AuthMaterial::BearerToken` from `Query`/`Sample`
-  attachment via `attachment_to_auth`.
-- **M5** (error→status mapping): `clinkz_wot_protocol_bindings::error_status`
-  maps `CoreError` to HTTP-like status codes (404/401/403/501 etc.); zenoh
-  server includes `[status]` prefix in error replies.
-- **M12** (graceful shutdown): `Servient::shutdown_handle()` returns a `Clone`
-  `ShutdownHandle`; `serve_sync`, `serve`, and `poll_serve_sync` check the
-  `Arc<AtomicBool>` flag and exit gracefully.
-- **M7** (credential vault): `CredentialStore` trait +
-  `InMemoryCredentialStore` (`BTreeMap<(thing_id, scheme), Credentials>` backed
-  by `MapLock`); `Credentials` enum (BearerToken, Basic, ApiKey, Psk, Other);
-  `SecurityContext.credentials` field passes the store to
-  `SecurityProvider::apply`; `ServientBuilder::credential_store(store)`.
-- **M13** (runtime TD mutation): `ExposedThingHandle::add_property` /
-  `add_action` / `add_event` / `remove_property` / `remove_action` /
-  `remove_event` modify the TD after expose; handlers for removed affordances
-  are cleaned up automatically. Mutations also propagate to the network side
-  via the per-affordance `ServerBinding::register_affordance` /
-  `unregister_affordance` API (default no-op; the zenoh binding declares /
-  undeclares the affordance's routes incrementally, tracked per-affordance)
-  and re-publish the post-mutation TD to the directory, closing the dynamic
-  affordance lifecycle (W3C Scripting API) so new affordances become remotely
-  reachable and discoverable and removed ones stop being served.
-- **M8** (async consumer API): `ConsumedThingHandle` gains async variants
-  (`read_property_async`, `write_property_async`, `invoke_action_async`,
-  `subscribe_event_async`, `observe_property_async`) behind the `async` feature;
-  current implementation delegates to sync path (resolves immediately) with
-  forward-compatible API for future native async bindings.
-- **M9** (async handlers): `AsyncPropertyReadHandler`, `AsyncPropertyWriteHandler`,
-  `AsyncActionHandler` traits (`#[async_trait]`, `Send`, behind `async` feature);
-  `LocalThing` stores async handlers alongside sync handlers; async driving loop
-  (`poll_serve`) calls `dispatch_inbound_async` which uses the take-out / await /
-  return pattern to avoid holding the thing slot lock across `.await`; falls
-  back to sync handlers when no async handler is registered.
-
-Deferred:
-
-- M6: Remote directory transport (`DirectoryWatch`, `Directory`/`Multicast`
-  discovery methods — requires HTTP/CoAP TDD client).
+- `Servient` holds `Arc<dyn Discoverer>` + `Option<Arc<dyn DirectoryPublisher>>`
+  (drop `Servient<D>`).
+- Async-only driving: `poll_serve` / `serve` / `poll_serve_once` (manual-poll
+  for bare `no_std` super-loops). Remove `driving_sync.rs` /
+  `driving_async.rs` / `DrivingState` / `AsyncAcceptState` split.
+- `produce` / `consume` / `discover` / `fetch_td` facade; `expose` / `destroy`
+  with frozen TD; remove `add_*` / `remove_*` post-expose mutation.
+- Real async `ConsumedThingHandle` (remove fake-async delegation).
+- Retain `EventBroker`, bulk operations, security verification, credential
+  store, graceful shutdown.
 
 Entry criteria:
 
-- M5 provides a usable directory abstraction and in-memory backend.
-- Core consumed/exposed Thing dispatch can route through protocol bindings with
-  validated forms.
+- P0, P1, P2 surfaces are stable.
 
 Exit criteria:
 
-- `Servient<D>` exposes and consumes Things through the protocol-neutral core
-  `ClientBinding` / `ServerBinding` / `AsyncServerBinding` traits with both sync
-  and async driving flavors.
-- Zenoh remains optional and can be omitted from Servient builds.
-- Runtime integration tests cover discovery, inbound serving, binding dispatch,
-  and zenoh server binding round-trips (read, write, invoke, error).
-- The workspace M7 baseline (formatting, tests, Clippy, no-default-features
-  checks, `scripts/check-no-std.sh`, `scripts/check-reserved-features.sh`, and
-  `scripts/check-m7.sh`) passes with the redesigned surfaces.
+- `clinkz-wot-servient` compiles `no_std + alloc` (crate root) and `std`.
+- Integration tests cover produce→expose→read/write/invoke/subscribe and
+  consume→read/write/invoke/subscribe end-to-end through a fake binding and
+  (opt-in) the zenoh binding.
 
-### M7: Conformance and Embedded Support
+### P4: Compliance and Verification
 
-TD/TM plan: `docs/plan/wot-td-development-plan.md`.
+Plan: `docs/plan/phase-p4-compliance.md`.
 
-Add W3C compatibility checks, fixture coverage, and no-std-oriented
-`no_std + alloc` verification for crates that claim embedded support.
+Lock the compliance surface and the verification baseline.
 
-Planned work:
+Scope:
 
-- Keep TD/TM round-trip fixtures aligned with TD 1.1 field coverage and
-  extension preservation requirements.
-- Keep workspace-level verification documentation for `cargo test`,
-  `cargo fmt`, Clippy, and `--no-default-features` checks in
-  `docs/verification.md`.
-- Add no-default-features checks for every embedded-ready crate as it is added
-  or changed.
-- Keep `scripts/check-no-std.sh` aligned with every crate that claims
-  `no_std + alloc` support.
-- Add conformance-oriented fixtures for multi-form affordances, form security,
-  `base` plus relative `href`, JSON-LD context preservation, and Clinkz
-  extension terms.
-- Keep TD 2.0 behavior behind an experimental feature and out of default
-  compatibility expectations.
+- Scripting API conformance map tests (§10 of v4.0).
+- Feature-matrix verification (`std`, `async`, `zenoh`, `zenoh-pico`,
+  `td2-preview`).
+- `scripts/check-no-std.sh` updated for the new crate surfaces and `WotLock`.
+- TD 1.1 fixture round-trip and multi-form affordance coverage.
+- Clippy clean across the workspace.
+- Update `docs/technical-spec.md`, `docs/wot-compliance.md`,
+  `docs/no-std-embedded.md`, `docs/verification.md` to reflect v4.0.
 
-Current status:
+Entry criteria:
 
-- `docs/verification.md` defines the regular workspace verification path for
-  formatting, tests, Clippy, no-default-features checks, focused crate checks,
-  and documentation updates.
-- `docs/zenoh-runtime-integration-test.md` records the acceptance target for
-  the current active opt-in real Rust `zenoh` runtime increment.
-- `docs/zenoh-pico-runtime-target.md` records the acceptance target for the
-  deferred constrained zenoh-pico runtime backend and its target-specific C ABI
-  follow-up boundary.
-- `docs/zenoh-pico-c-abi-integration-target.md` records the target-specific
-  acceptance boundary for real zenoh-pico C ABI integrations.
-- `scripts/check-reserved-features.sh` covers constrained zenoh-pico feature
-  compilation, fake platform tests, and incompatible runtime backend feature
-  diagnostics for the current zenoh binding feature policy.
-- The zenoh binding tests consume the shared
-  `clinkz-extension-defaults.td.jsonld` fixture to verify Clinkz JSON-LD
-  extension terms, multi-form affordance selection, `base` plus relative
-  `href` resolution, form security overrides, content type criteria, and
-  Thing-level forms through the binding planner.
-- `scripts/check-no-std.sh` covers every current workspace crate that claims
-  `no_std + alloc` support: TD, core, shared protocol bindings, zenoh binding,
-  Discovery, and Servient.
-- The current protocol binding M7 verification path passes:
-  - `cargo fmt --check`
-  - `cargo test -p clinkz-wot-protocol-bindings -p clinkz-wot-protocol-bindings-zenoh`
-  - `cargo test -p clinkz-wot-protocol-bindings-zenoh --features zenoh-pico`
-  - `scripts/check-no-std.sh`
-  - `scripts/check-reserved-features.sh`
-- The current workspace M7 baseline passes:
-  - `cargo fmt --check`
-  - `cargo test --workspace`
-  - `cargo clippy --workspace --all-targets`
-  - `scripts/check-no-std.sh`
-  - `scripts/check-reserved-features.sh`
-- `scripts/check-m7.sh` is the aggregate entry point for the current workspace
-  M7 baseline.
-- The opt-in Rust `zenoh` runtime smoke test passes with:
-  - `CLINKZ_WOT_RUN_ZENOH_RUNTIME_TESTS=1 cargo test -p clinkz-wot-protocol-bindings-zenoh --features zenoh runtime_zenoh_transport_executes_put_and_get_smoke_paths`
+- P0–P3 are complete.
 
 Exit criteria:
 
-- All crates that claim embedded support pass no-default-features checks.
-- Public fixtures cover the TD/TM, core dispatch, binding selection, discovery,
-  and Servient flows needed for a first compatibility baseline.
-- No protocol-specific behavior leaks into TD/TM/core crates.
+- The full workspace M-baseline passes: `cargo fmt --check`,
+  `cargo test --workspace`, `cargo clippy --workspace --all-targets`,
+  `scripts/check-no-std.sh`, `scripts/check-m7.sh` (renamed/updated).
 
 ## Acceptance Criteria
 
-- Core TD/TM documents can be parsed, validated, serialized, and round-tripped without losing extension data.
-- The TD/TM/core crates compile without `std` when built with the no-default-features set.
-- The engine core has no dependency on zenoh.
-- The zenoh binding can be enabled as an optional crate or feature.
-- Protocol bindings all use the same protocol-neutral trait surface.
-- Technical documentation and comments are English-only.
+- TD/TM documents parse, validate, serialize, and round-trip without losing
+  extension data, on `no_std + alloc`.
+- The engine core has no dependency on zenoh or any concrete transport.
+- The zenoh binding is optional and feature-gated.
+- All protocol bindings use the same protocol-neutral `ClientBinding` /
+  `ServerBinding` trait surface.
+- The `WoT` facade, `ExposedThing`, `ConsumedThing`, and `ThingDiscovery`
+  surfaces follow the WoT Scripting API method catalogue (v4.0 §10).
+- `no_std + alloc` crates compile without `std`.
+- The only documented deviations from the Scripting API are those listed in
+  v4.0 §9.
+
+## Performance Hardening
+
+The per-request hot path must remain allocation-light and lock-bounded under
+v4.0. Targets (carried from the prior hardening pass, re-validated against the
+async surface):
+
+- Affordance addressing via `Arc<str>` (retained).
+- Handler invocation clones one `Arc<dyn Handler>` out of a per-Thing handler-
+  set map under a brief lock, releases, then `.await`s. One `async_trait`
+  `Box` per call is the accepted cost.
+- Outbound form/binding plan interned in the consumed registry entry; repeated
+  consumed interactions reuse the cached binding instance via `Arc` clone.
+- Event fan-out shares `Payload` bytes via `Arc<[u8]>`; media metadata may move
+  to `Arc<str>` if profiling warrants.
+- Lock contention bounded by the two-level model; `WotLock` removes the
+  `multithread` feature coordination cost.
+- Directory queries are continuation-based (one batch + token), not
+  `offset+total` full-table scan.
+
+## Deprecated Documentation
+
+The following are superseded by v4.0 and retained only as historical record
+(each carries a SUPERSEDED banner):
+
+- `docs/baseline/servient-design-baseline.md` (v3.0)
+- `docs/baseline/servient-design-baseline-addendum.md` (v3.1)
+- `docs/plan/servient-runtime-redesign-plan.md` (sequenced v3.0/v3.1)
+- `docs/plan/wot-td-development-plan.md` (M1/M2 hardening — mostly complete,
+  remaining cleanups folded into P0 §3 TD internal splits)
+- `docs/plan/protocol-bindings-development-plan.md` (M4 — superseded by P2)
+- `docs/plan/discovery-directory-refactor-plan.md` (folded into P1 as the
+  design source; P1 is the implementation plan)
+
+The technical-spec, wot-compliance, and no-std-embedded docs are updated in P4
+to match v4.0.

@@ -1,3 +1,8 @@
+> **⚠ SUPERSEDED.** This plan sequenced the now-superseded Servient baselines
+> (v3.0/v3.1). The current implementation plan is `PLAN.md` phases P0–P4
+> against `docs/baseline/engine-architecture-baseline.md` (v4.0). Retained as
+> historical record only.
+
 # Servient Runtime Redesign Plan
 
 ## Parent Plan Relationship

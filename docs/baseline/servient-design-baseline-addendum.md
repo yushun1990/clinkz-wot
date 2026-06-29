@@ -1,3 +1,12 @@
+> **⚠ SUPERSEDED by `docs/baseline/engine-architecture-baseline.md` (v4.0).**
+>
+> This addendum (v3.1) is retained as **historical record only**. v4.0 is the
+> authoritative engine-wide reference. v4.0 inherits this document's §1
+> (concrete core types), §2 (owned request/response model), §3 (directory-
+> invalidation trigger), and §5 (error taxonomy). v4.0 **reverses** §9.1
+> (sync-lock), §9.2 (dynamic affordance), and §9.3 (Send-bound divergence).
+> Do not implement against this document; implement against v4.0.
+
 # Servient Runtime Design Baseline — Implementation Type Refinements (v3.1)
 
 This document is the implementation-time addendum to

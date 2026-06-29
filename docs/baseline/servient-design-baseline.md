@@ -1,3 +1,13 @@
+> **⚠ SUPERSEDED by `docs/baseline/engine-architecture-baseline.md` (v4.0).**
+>
+> This Servient-only baseline (v3.0) is retained as **historical record only**.
+> v4.0 is the authoritative engine-wide reference. v4.0 inherits this document's
+> §1 (roles), §5 (storage ownership), §7 (two-level locking), §8 (security),
+> §9 (subscription flow), §10 (expose/destroy coordination), and §11 (inbound
+> request shape). v4.0 **reverses** §4 (async/sync duality) and the
+> dynamic-affordance surface added in the v3.1 addendum §9.2. Do not implement
+> against this document; implement against v4.0.
+
 # Servient Runtime Design Baseline (v3.0)
 
 This document is the consolidated, authoritative design baseline for the

@@ -1,3 +1,7 @@
+> **⚠ SUPERSEDED.** This M4 plan is superseded by
+> `docs/plan/phase-p2-binding-async.md` under the v4.0 baseline. Retained as
+> historical record only.
+
 # Protocol Bindings Development Plan
 
 ## Parent Plan Relationship

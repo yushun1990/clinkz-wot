@@ -1,3 +1,8 @@
+> **⚠ SUPERSEDED (mostly complete).** M1/M2 TD hardening is complete; the
+> remaining TD cleanups (data_type split, Form/TMF dedup, shared validation
+> helpers) are folded into v4.0 P0 §3 under `docs/plan/phase-p0-core-interaction.md`.
+> Retained as historical record.
+
 # clinkz-wot-td Development Plan
 
 ## Parent Plan Relationship
