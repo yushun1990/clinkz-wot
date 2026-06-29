@@ -41,10 +41,7 @@ fn encode_advertises_application_cbor_content_type() {
     let codec = CborCodec::new();
     let wire = cbor_bytes(&status_map());
     let payload = codec
-        .encode(CodecInput {
-            body: &wire,
-            data_type: None,
-        })
+        .encode(CodecInput { body: &wire })
         .expect("encode should succeed");
     assert_eq!(payload.content_type, "application/cbor");
 }
@@ -56,23 +53,13 @@ fn round_trip_through_encode_and_decode_is_stable() {
 
     // encode produces canonical bytes; decode of those bytes must be byte-identical
     // (canonical form is idempotent under this codec).
-    let payload = codec
-        .encode(CodecInput {
-            body: &canonical,
-            data_type: None,
-        })
-        .unwrap();
+    let payload = codec.encode(CodecInput { body: &canonical }).unwrap();
     let decoded = codec.decode(&payload).unwrap();
     assert_eq!(decoded, canonical, "decode must reproduce canonical bytes");
 
     // Re-encoding the decoded bytes must be idempotent.
-    let re_encoded = codec
-        .encode(CodecInput {
-            body: &decoded,
-            data_type: None,
-        })
-        .unwrap();
-    assert_eq!(re_encoded.body, canonical);
+    let re_encoded = codec.encode(CodecInput { body: &decoded }).unwrap();
+    assert_eq!(re_encoded.body.as_ref(), canonical.as_slice());
 }
 
 #[test]
@@ -90,13 +77,12 @@ fn canonicalize_compresses_integer_widths() {
     assert!(!wide.windows(2).any(|w| w == [0x18, 0x01]));
 
     let codec = CborCodec::new();
-    let canonical = codec
-        .encode(CodecInput {
-            body: &wide,
-            data_type: None,
-        })
-        .unwrap();
-    assert_eq!(canonical.body, wide, "already-canonical input is unchanged");
+    let canonical = codec.encode(CodecInput { body: &wide }).unwrap();
+    assert_eq!(
+        canonical.body.as_ref(),
+        wide.as_slice(),
+        "already-canonical input is unchanged"
+    );
 }
 
 #[test]
@@ -106,15 +92,10 @@ fn canonicalize_accepts_non_canonical_input() {
     // re-emit it in minimal form on encode.
     let non_minimal = [0x18, 0x01]; // unsigned int 1, one-byte follow
     let codec = CborCodec::new();
-    let canonical = codec
-        .encode(CodecInput {
-            body: &non_minimal,
-            data_type: None,
-        })
-        .unwrap();
+    let canonical = codec.encode(CodecInput { body: &non_minimal }).unwrap();
     assert_eq!(
-        canonical.body,
-        [0x01],
+        canonical.body.as_ref(),
+        &[0x01],
         "integer 1 must canonicalize to one byte"
     );
 }
@@ -124,12 +105,7 @@ fn encode_rejects_malformed_cbor() {
     // 0x61 is the start of a one-byte text string, but no byte follows.
     let truncated = [0x61];
     let codec = CborCodec::new();
-    let err = codec
-        .encode(CodecInput {
-            body: &truncated,
-            data_type: None,
-        })
-        .unwrap_err();
+    let err = codec.encode(CodecInput { body: &truncated }).unwrap_err();
     let message = format!("{}", err);
     assert!(
         message.contains("CBOR decode failed"),
@@ -167,12 +143,7 @@ fn round_trip_preserves_nested_structure() {
     let wire = cbor_bytes(&nested);
 
     let codec = CborCodec::new();
-    let payload = codec
-        .encode(CodecInput {
-            body: &wire,
-            data_type: None,
-        })
-        .unwrap();
+    let payload = codec.encode(CodecInput { body: &wire }).unwrap();
     let decoded = codec.decode(&payload).unwrap();
 
     assert_eq!(decoded, wire, "nested structures must round-trip unchanged");
@@ -190,12 +161,7 @@ fn h6_normalize_round_trip_pattern_is_idempotent_after_first_canonicalization() 
     let normalized = {
         let payload = Payload::new(canonical.clone(), CBOR_CONTENT_TYPE);
         let decoded = codec.decode(&payload).unwrap();
-        codec
-            .encode(CodecInput {
-                body: &decoded,
-                data_type: None,
-            })
-            .unwrap()
+        codec.encode(CodecInput { body: &decoded }).unwrap()
     };
-    assert_eq!(normalized.body, canonical);
+    assert_eq!(normalized.body.as_ref(), canonical.as_slice());
 }

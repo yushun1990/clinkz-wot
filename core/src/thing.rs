@@ -10,16 +10,74 @@ use clinkz_wot_td::{
 use crate::{BindingRequest, ClientBinding, CoreError, CoreResult, Payload, Principal};
 
 /// Location of an affordance within a Thing Description.
+///
+/// Affordance names are stored as [`Arc<str>`] rather than [`String`] so that
+/// cloning an `AffordanceTarget` is a single atomic refcount bump. This matters
+/// on the inbound and consumed-interaction hot paths, where the same target
+/// (typically a small set of property/action/event names) is cloned into every
+/// [`crate::InboundRequest`] / [`crate::BindingRequest`] and used as part of
+/// per-request cache keys.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum AffordanceTarget {
     /// A form declared at Thing level.
     Thing,
     /// A property affordance by name.
-    Property(String),
+    Property(Arc<str>),
     /// An action affordance by name.
-    Action(String),
+    Action(Arc<str>),
     /// An event affordance by name.
-    Event(String),
+    Event(Arc<str>),
+}
+
+impl AffordanceTarget {
+    /// Returns the affordance name when this target points at a property,
+    /// action, or event, or `None` for the Thing-level target.
+    pub fn name(&self) -> Option<&str> {
+        match self {
+            Self::Thing => None,
+            Self::Property(name) | Self::Action(name) | Self::Event(name) => Some(&**name),
+        }
+    }
+
+    /// Returns the [`AffordanceKind`] discriminant of this target, or `None`
+    /// for the Thing-level target.
+    pub fn kind(&self) -> Option<AffordanceKind> {
+        match self {
+            Self::Thing => None,
+            Self::Property(_) => Some(AffordanceKind::Property),
+            Self::Action(_) => Some(AffordanceKind::Action),
+            Self::Event(_) => Some(AffordanceKind::Event),
+        }
+    }
+}
+
+/// Closed discriminant for the three interaction affordance kinds.
+///
+/// Used by [`CoreError::UnknownAffordance`] so downstream code can match the
+/// kind exhaustively instead of comparing a `&'static str`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub enum AffordanceKind {
+    Property,
+    Action,
+    Event,
+}
+
+impl AffordanceKind {
+    /// Returns the canonical lowercase kind name (`"property"`, `"action"`,
+    /// `"event"`), matching the W3C TD interaction affordance collection names.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Property => "property",
+            Self::Action => "action",
+            Self::Event => "event",
+        }
+    }
+}
+
+impl core::fmt::Display for AffordanceKind {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.write_str(self.as_str())
+    }
 }
 
 /// Input provided to an interaction handler.
@@ -197,14 +255,10 @@ pub trait ActionQueryHandler {
 /// cancel handler is registered the inbound dispatcher acknowledges the
 /// request with an empty reply.
 ///
-/// `cancelaction` is a TD 2.0 operation; this handler is only available under
-/// the `td2-preview` feature.
-///
 /// # Reentrancy
 ///
 /// See [`PropertyReadHandler`] — handlers run with the slot lock released and
 /// may re-enter the Servient.
-#[cfg(feature = "td2-preview")]
 pub trait ActionCancelHandler {
     /// Cancels the ongoing action invocation.
     fn cancel(&self, input: InteractionInput) -> CoreResult<InteractionOutput>;
@@ -301,7 +355,6 @@ struct EventHandlerSet {
 struct ActionHandlerSet {
     invoke: Option<Arc<dyn ActionHandler>>,
     query: Option<Arc<dyn ActionQueryHandler>>,
-    #[cfg(feature = "td2-preview")]
     cancel: Option<Arc<dyn ActionCancelHandler>>,
     #[cfg(feature = "async")]
     async_invoke: Option<Arc<dyn AsyncActionHandler + Send>>,
@@ -359,21 +412,22 @@ impl BoundConsumedThing {
                 forms: self.thing.forms.as_deref().unwrap_or(&[]),
             }),
             AffordanceTarget::Property(name) => {
-                let property = find_affordance("property", name, &self.thing.properties)?;
+                let property =
+                    find_affordance(AffordanceKind::Property, name, &self.thing.properties)?;
                 Ok(FormSet {
                     context: FormContext::Property(property),
                     forms: property._interaction.forms.as_slice(),
                 })
             }
             AffordanceTarget::Action(name) => {
-                let action = find_affordance("action", name, &self.thing.actions)?;
+                let action = find_affordance(AffordanceKind::Action, name, &self.thing.actions)?;
                 Ok(FormSet {
                     context: FormContext::Action(action),
                     forms: action._interaction.forms.as_slice(),
                 })
             }
             AffordanceTarget::Event(name) => {
-                let event = find_affordance("event", name, &self.thing.events)?;
+                let event = find_affordance(AffordanceKind::Event, name, &self.thing.events)?;
                 Ok(FormSet {
                     context: FormContext::Event(event),
                     forms: event._interaction.forms.as_slice(),
@@ -419,7 +473,7 @@ struct FormSet<'a> {
 }
 
 fn find_affordance<'a, T>(
-    kind: &'static str,
+    kind: AffordanceKind,
     name: &str,
     affordances: &'a Option<BTreeMap<String, T>>,
 ) -> CoreResult<&'a T> {
@@ -551,8 +605,7 @@ impl LocalThing {
     }
 
     /// Registers an action cancel handler by affordance name (W3C TD
-    /// `cancelaction` operation; TD 2.0, requires `td2-preview`).
-    #[cfg(feature = "td2-preview")]
+    /// `cancelaction` operation).
     pub fn register_action_cancel_handler(
         &mut self,
         name: impl Into<String>,
@@ -682,7 +735,6 @@ impl LocalThing {
     }
 
     /// Clones the sync action cancel handler for dispatch without removing it.
-    #[cfg(feature = "td2-preview")]
     pub fn action_cancel_handler(&self, name: &str) -> Option<Arc<dyn ActionCancelHandler>> {
         self.action_handlers
             .get(name)
@@ -729,17 +781,17 @@ impl LocalThing {
 
     /// Returns `Err(UnknownAffordance)` if no property with `name` is declared.
     pub fn ensure_property_affordance(&self, name: &str) -> CoreResult<()> {
-        ensure_affordance("property", name, &self.thing.properties)
+        ensure_affordance(AffordanceKind::Property, name, &self.thing.properties)
     }
 
     /// Returns `Err(UnknownAffordance)` if no action with `name` is declared.
     pub fn ensure_action_affordance(&self, name: &str) -> CoreResult<()> {
-        ensure_affordance("action", name, &self.thing.actions)
+        ensure_affordance(AffordanceKind::Action, name, &self.thing.actions)
     }
 
     /// Returns `Err(UnknownAffordance)` if no event with `name` is declared.
     pub fn ensure_event_affordance(&self, name: &str) -> CoreResult<()> {
-        ensure_affordance("event", name, &self.thing.events)
+        ensure_affordance(AffordanceKind::Event, name, &self.thing.events)
     }
 
     /// Adds a property affordance to the TD at runtime (W3C Scripting API
@@ -834,13 +886,19 @@ impl ExposedThing for LocalThing {
 
     fn read_property(&self, name: &str, input: InteractionInput) -> CoreResult<InteractionOutput> {
         self.ensure_property_affordance(name)?;
-        let handler = self.read_handler(name).ok_or(CoreError::MissingHandler)?;
+        let handler = self.read_handler(name).ok_or(missing_handler(
+            AffordanceTarget::Property(name.into()),
+            Operation::ReadProperty,
+        ))?;
         handler.read(input)
     }
 
     fn write_property(&self, name: &str, input: InteractionInput) -> CoreResult<InteractionOutput> {
         self.ensure_property_affordance(name)?;
-        let handler = self.write_handler(name).ok_or(CoreError::MissingHandler)?;
+        let handler = self.write_handler(name).ok_or(missing_handler(
+            AffordanceTarget::Property(name.into()),
+            Operation::WriteProperty,
+        ))?;
         handler.write(input)
     }
 
@@ -851,9 +909,10 @@ impl ExposedThing for LocalThing {
         sink: &mut dyn EventSink,
     ) -> CoreResult<InteractionOutput> {
         self.ensure_property_affordance(name)?;
-        let handler = self
-            .observe_handler(name)
-            .ok_or(CoreError::MissingHandler)?;
+        let handler = self.observe_handler(name).ok_or(missing_handler(
+            AffordanceTarget::Property(name.into()),
+            Operation::ObserveProperty,
+        ))?;
         handler.observe(input, sink)
     }
 
@@ -863,15 +922,19 @@ impl ExposedThing for LocalThing {
         input: InteractionInput,
     ) -> CoreResult<InteractionOutput> {
         self.ensure_property_affordance(name)?;
-        let handler = self
-            .unobserve_handler(name)
-            .ok_or(CoreError::MissingHandler)?;
+        let handler = self.unobserve_handler(name).ok_or(missing_handler(
+            AffordanceTarget::Property(name.into()),
+            Operation::UnobserveProperty,
+        ))?;
         handler.unobserve(input)
     }
 
     fn invoke_action(&self, name: &str, input: InteractionInput) -> CoreResult<InteractionOutput> {
         self.ensure_action_affordance(name)?;
-        let handler = self.action_handler(name).ok_or(CoreError::MissingHandler)?;
+        let handler = self.action_handler(name).ok_or(missing_handler(
+            AffordanceTarget::Action(name.into()),
+            Operation::InvokeAction,
+        ))?;
         handler.invoke(input)
     }
 
@@ -882,9 +945,10 @@ impl ExposedThing for LocalThing {
         sink: &mut dyn EventSink,
     ) -> CoreResult<InteractionOutput> {
         self.ensure_event_affordance(name)?;
-        let handler = self
-            .subscribe_handler(name)
-            .ok_or(CoreError::MissingHandler)?;
+        let handler = self.subscribe_handler(name).ok_or(missing_handler(
+            AffordanceTarget::Event(name.into()),
+            Operation::SubscribeEvent,
+        ))?;
         handler.subscribe(input, sink)
     }
 
@@ -894,15 +958,22 @@ impl ExposedThing for LocalThing {
         input: InteractionInput,
     ) -> CoreResult<InteractionOutput> {
         self.ensure_event_affordance(name)?;
-        let handler = self
-            .unsubscribe_handler(name)
-            .ok_or(CoreError::MissingHandler)?;
+        let handler = self.unsubscribe_handler(name).ok_or(missing_handler(
+            AffordanceTarget::Event(name.into()),
+            Operation::UnsubscribeEvent,
+        ))?;
         handler.unsubscribe(input)
     }
 }
 
+/// Builds a [`CoreError::MissingHandler`] carrying the offending target and
+/// operation so diagnostics (e.g. HTTP 501 response bodies) are actionable.
+fn missing_handler(target: AffordanceTarget, operation: Operation) -> CoreError {
+    CoreError::MissingHandler { target, operation }
+}
+
 fn ensure_affordance<T>(
-    kind: &'static str,
+    kind: AffordanceKind,
     name: &str,
     affordances: &Option<BTreeMap<String, T>>,
 ) -> CoreResult<()> {

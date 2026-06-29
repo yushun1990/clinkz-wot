@@ -39,7 +39,7 @@ pub struct ZenohPicoRequest<'a> {
 impl<'a> ZenohPicoRequest<'a> {
     /// Builds a zenoh selector by appending validated request parameters to the
     /// selected key expression.
-    pub fn selector(&self) -> Result<String, ZenohPicoError> {
+    pub fn selector(&self) -> Result<Cow<'a, str>, ZenohPicoError> {
         selector_with_parameters(self.key_expr, self.parameters).map_err(parameter_error)
     }
 
@@ -50,9 +50,7 @@ impl<'a> ZenohPicoRequest<'a> {
     /// operations use the raw key expression directly.
     pub fn target_expr(&self) -> Result<Cow<'a, str>, ZenohPicoError> {
         match self.kind {
-            ZenohOperationKind::Query | ZenohOperationKind::RequestReply => {
-                self.selector().map(Cow::Owned)
-            }
+            ZenohOperationKind::Query | ZenohOperationKind::RequestReply => self.selector(),
             ZenohOperationKind::Put
             | ZenohOperationKind::Subscribe
             | ZenohOperationKind::Unsubscribe => Ok(Cow::Borrowed(self.key_expr)),

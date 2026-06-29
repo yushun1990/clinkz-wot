@@ -18,6 +18,6 @@ default = ["std"]
 std = ["clinkz-wot-td/std"]
 async = ["dep:async-trait", "dep:futures-core"]
 multithread = ["dep:critical-section"]
-## Experimental TD 2.0 interaction surface (e.g. `cancelaction`). Forwards to
-## the `clinkz-wot-td` data model gate.
+## Experimental TD 2.0 data-model surface (`ActionAffordance.synchronous`).
+## Forwards to the `clinkz-wot-td` data model gate.
 td2-preview = ["clinkz-wot-td/td2-preview"]

@@ -24,7 +24,7 @@
 //! is called during `expose`, [`ServerBinding::unregister_thing`] during
 //! `destroy`.
 
-use std::collections::{BTreeMap, VecDeque};
+use std::collections::{BTreeMap, HashMap, VecDeque};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
@@ -141,6 +141,17 @@ const PENDING_QUEUE_CAPACITY: usize = 256;
 /// (at callback arrival time). See [`sweep_expired_reply_targets`].
 const REPLY_TARGET_TTL: Duration = Duration::from_secs(30);
 
+/// Minimum interval between reply-target TTL sweeps.
+///
+/// The sweep only reclaims abandoned entries (handlers that never sent a
+/// response) — normal requests are removed eagerly via [`ServerBinding::send_response`],
+/// so abandoned entries are rare. The synchronous driving loop polls
+/// [`ServerBinding::poll_accept_sync`] roughly every millisecond; running an
+/// O(n) full-table scan on every poll is wasteful. Throttling the sweep to at
+/// most once per `SWEEP_INTERVAL` still reclaims leaked zenoh resources well
+/// within `REPLY_TARGET_TTL` while keeping the hot poll path cheap.
+const SWEEP_INTERVAL: Duration = Duration::from_secs(1);
+
 /// Capacity of the tokio mpsc channel that feeds the async driving loop. The
 /// channel is bounded so that an async-compiled binding that is driven
 /// synchronously cannot leak unconsumed wakeups; under genuine async driving
@@ -209,9 +220,38 @@ type ThingRoutes = BTreeMap<String, Vec<DeclaredRoute>>;
 struct ServerState {
     routes: BTreeMap<String, ThingRoutes>,
     pending: VecDeque<InboundRequest>,
-    reply_targets: BTreeMap<CorrelationId, ReplyTargetEntry>,
+    /// Reply-target table and its last-sweep instant, kept under a single
+    /// lock so the throttle check and the table mutation cannot race or
+    /// deadlock on lock ordering (previously two separate mutexes).
+    reply_targets: ReplyTargetState,
     next_correlation: AtomicU64,
     event_broker: Option<EventBroker>,
+}
+
+/// Reply-target table plus the instant of the last TTL sweep, co-located
+/// behind one [`Mutex`] so [`send_response`](ZenohServerBinding::send_response)
+/// and [`maybe_sweep_reply_targets`](ZenohServerBinding::maybe_sweep_reply_targets)
+/// take a single lock instead of the previous reply_targets → last_sweep
+/// two-lock dance (which was deadlock-free only by lock-ordering convention).
+struct ReplyTargetState {
+    targets: HashMap<CorrelationId, ReplyTargetEntry>,
+    last_sweep: Instant,
+}
+
+impl ReplyTargetState {
+    fn new() -> Self {
+        Self {
+            targets: HashMap::new(),
+            last_sweep: Instant::now(),
+        }
+    }
+
+    /// Sweeps expired entries unconditionally, updating `last_sweep`. Runs
+    /// entirely under the caller's lock.
+    fn sweep(&mut self) {
+        sweep_expired_reply_targets(&mut self.targets);
+        self.last_sweep = Instant::now();
+    }
 }
 
 impl ServerState {
@@ -219,7 +259,7 @@ impl ServerState {
         Self {
             routes: BTreeMap::new(),
             pending: VecDeque::new(),
-            reply_targets: BTreeMap::new(),
+            reply_targets: ReplyTargetState::new(),
             next_correlation: AtomicU64::new(1),
             event_broker: None,
         }
@@ -243,7 +283,15 @@ pub struct ZenohServerBinding {
     session: zenoh::Session,
     routes: Arc<Mutex<BTreeMap<String, ThingRoutes>>>,
     pending: Arc<Mutex<VecDeque<InboundRequest>>>,
-    reply_targets: Arc<Mutex<BTreeMap<CorrelationId, ReplyTargetEntry>>>,
+    /// Reply-target table + last-sweep instant under one lock (see
+    /// [`ReplyTargetState`]).
+    reply_targets: Arc<Mutex<ReplyTargetState>>,
+    /// Atomic mirror of the last-sweep instant (nanos since `sweep_epoch`),
+    /// used as a lock-free gate so the ~1 ms driving poll does not acquire the
+    /// reply-target mutex on every iteration — only when a sweep is actually
+    /// due. See [`ZenohServerBinding::maybe_sweep_reply_targets`].
+    last_sweep_ns: Arc<AtomicU64>,
+    sweep_epoch: Instant,
     event_broker: Arc<Mutex<Option<EventBroker>>>,
     next_correlation: Arc<AtomicU64>,
     #[cfg(feature = "async")]
@@ -259,6 +307,7 @@ impl ZenohServerBinding {
     /// interactions via [`crate::ZenohSessionTransport`].
     pub fn new(session: zenoh::Session) -> Self {
         let state = ServerState::new();
+        let sweep_epoch = Instant::now();
         #[cfg(feature = "async")]
         let (async_tx, async_rx) = tokio::sync::mpsc::channel(ASYNC_CHANNEL_CAPACITY);
         Self {
@@ -266,6 +315,8 @@ impl ZenohServerBinding {
             routes: Arc::new(Mutex::new(state.routes)),
             pending: Arc::new(Mutex::new(state.pending)),
             reply_targets: Arc::new(Mutex::new(state.reply_targets)),
+            last_sweep_ns: Arc::new(AtomicU64::new(0)),
+            sweep_epoch,
             event_broker: Arc::new(Mutex::new(state.event_broker)),
             next_correlation: Arc::new(state.next_correlation),
             #[cfg(feature = "async")]
@@ -285,6 +336,38 @@ impl ZenohServerBinding {
     pub fn session(&self) -> &zenoh::Session {
         &self.session
     }
+
+    /// Runs a reply-target TTL sweep only if [`SWEEP_INTERVAL`] has elapsed
+    /// since the last sweep.
+    ///
+    /// The sweep reclaims abandoned entries (handlers that never sent a
+    /// response), which are rare — normal requests are removed eagerly in
+    /// [`ServerBinding::send_response`]. The reply-target table and the sweep
+    /// instant share a single lock (see [`ReplyTargetState`]), so this and
+    /// [`send_response`](ServerBinding::send_response) take one lock and cannot
+    /// deadlock on lock ordering.
+    fn maybe_sweep_reply_targets(&self) {
+        // Lock-free gate: only acquire the reply-target mutex when
+        // `SWEEP_INTERVAL` has elapsed since the last sweep. The driving loop
+        // polls roughly every millisecond, so this avoids ~1000 lock
+        // acquisitions per second of idle time.
+        let now_ns = self.sweep_epoch.elapsed().as_nanos() as u64;
+        let last = self.last_sweep_ns.load(Ordering::Relaxed);
+        if now_ns.wrapping_sub(last) < SWEEP_INTERVAL.as_nanos() as u64 {
+            return;
+        }
+        let Ok(mut state) = self.reply_targets.lock() else {
+            return;
+        };
+        // Re-check under the lock: another thread may have just swept.
+        if state.last_sweep.elapsed() >= SWEEP_INTERVAL {
+            state.sweep();
+            self.last_sweep_ns.store(
+                self.sweep_epoch.elapsed().as_nanos() as u64,
+                Ordering::Relaxed,
+            );
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -293,21 +376,24 @@ impl ZenohServerBinding {
 
 impl ServerBinding for ZenohServerBinding {
     fn poll_accept_sync(&self) -> Option<InboundRequest> {
-        if let Ok(mut reply_targets) = self.reply_targets.lock() {
-            sweep_expired_reply_targets(&mut reply_targets);
-        }
+        self.maybe_sweep_reply_targets();
         self.pending.lock().ok()?.pop_front()
     }
 
     fn send_response(&self, response: InboundResponse) {
-        let reply_target = match self.reply_targets.lock() {
-            Ok(mut reply_targets) => {
-                sweep_expired_reply_targets(&mut reply_targets);
-                reply_targets
-                    .remove(&response.correlation)
-                    .map(|entry| entry.reply)
+        let reply_target = {
+            let Ok(mut state) = self.reply_targets.lock() else {
+                return;
+            };
+            // Throttled TTL sweep under the same lock, then remove the
+            // correlation's reply target.
+            if state.last_sweep.elapsed() >= SWEEP_INTERVAL {
+                state.sweep();
             }
-            Err(_) => return,
+            state
+                .targets
+                .remove(&response.correlation)
+                .map(|entry| entry.reply)
         };
 
         match reply_target {
@@ -320,9 +406,9 @@ impl ServerBinding for ZenohServerBinding {
                 } else {
                     let (payload_body, content_type) = match response.output.payload {
                         Some(payload) => (payload.body, payload.content_type),
-                        None => (Vec::new(), String::new()),
+                        None => (Default::default(), String::new()),
                     };
-                    let mut builder = query.reply(key_expr.as_str(), payload_body);
+                    let mut builder = query.reply(key_expr.as_str(), payload_body.as_ref());
                     if !content_type.is_empty() {
                         builder = builder.encoding(Encoding::from(content_type.as_str()));
                     }
@@ -388,10 +474,8 @@ impl ServerBinding for ZenohServerBinding {
     ) -> Result<(), String> {
         let key = affordance_key(target);
         let broker = self.event_broker.lock().map_err(|e| e.to_string())?.clone();
-        // Plan all routes, keep only those belonging to this affordance.
-        let planned = plan_inbound_routes(thing_id, td)?
-            .into_iter()
-            .filter(|r| affordance_key(&r.meta.target) == key);
+        // Plan only this affordance's routes instead of scanning all forms.
+        let planned = plan_inbound_routes_for_target(thing_id, td, target)?;
         let mut declared = Vec::new();
         for route in planned {
             match self.declare_planned_route(route, thing_id, &broker) {
@@ -422,7 +506,7 @@ impl ServerBinding for ZenohServerBinding {
         let key = affordance_key(target);
         // Drop broker sinks for event / observable-property affordances.
         let broker_name = match target {
-            AffordanceTarget::Event(name) | AffordanceTarget::Property(name) => Some(name.as_str()),
+            AffordanceTarget::Event(name) | AffordanceTarget::Property(name) => Some(&**name),
             _ => None,
         };
         if let Some(name) = broker_name
@@ -481,12 +565,10 @@ impl ZenohServerBinding {
                         ) {
                             #[cfg(feature = "async")]
                             {
-                                if let Err(e) = async_tx.try_send(request) {
-                                    log::warn!(
-                                        "Zenoh server: failed to enqueue inbound request \
-                                         (channel full): {e}"
-                                    );
-                                }
+                                handle_async_enqueue_result(
+                                    &reply_targets,
+                                    async_tx.try_send(request),
+                                );
                             }
                             #[cfg(not(feature = "async"))]
                             {
@@ -522,12 +604,10 @@ impl ZenohServerBinding {
                         {
                             #[cfg(feature = "async")]
                             {
-                                if let Err(e) = async_tx.try_send(request) {
-                                    log::warn!(
-                                        "Zenoh server: failed to enqueue inbound request \
-                                         (channel full): {e}"
-                                    );
-                                }
+                                handle_async_enqueue_result(
+                                    &reply_targets,
+                                    async_tx.try_send(request),
+                                );
                             }
                             #[cfg(not(feature = "async"))]
                             {
@@ -583,7 +663,7 @@ fn affordance_key(target: &AffordanceTarget) -> String {
 // ---------------------------------------------------------------------------
 
 fn handle_query(
-    reply_targets: &Mutex<BTreeMap<CorrelationId, ReplyTargetEntry>>,
+    reply_targets: &Mutex<ReplyTargetState>,
     next_correlation: &AtomicU64,
     meta: &RouteMeta,
     key_expr: &str,
@@ -592,14 +672,7 @@ fn handle_query(
     let correlation = CorrelationId::from(next_correlation.fetch_add(1, Ordering::Relaxed));
     let input = query_to_input(&query);
     let auth = attachment_to_auth(query.attachment(), meta.auth_expectation);
-    let request = InboundRequest {
-        thing_id: ThingId::from(meta.thing_id.as_str()),
-        target: meta.target.clone(),
-        operation: meta.operation,
-        input,
-        auth,
-        correlation,
-    };
+    let request = build_inbound_request(meta, input, auth, correlation);
     let entry = ReplyTargetEntry {
         reply: ReplyTarget::Query {
             query,
@@ -607,19 +680,14 @@ fn handle_query(
         },
         inserted_at: Instant::now(),
     };
-    {
-        let Ok(mut reply_targets) = reply_targets.lock() else {
-            return None;
-        };
-        reply_targets.insert(request.correlation.clone(), entry);
-    }
+    insert_reply_target(reply_targets, request.correlation.clone(), entry);
     // The caller pushes the request to the sync pending queue or the async
     // channel — no clone needed here (the request is moved, not duplicated).
     Some(request)
 }
 
 fn handle_put_sample(
-    reply_targets: &Mutex<BTreeMap<CorrelationId, ReplyTargetEntry>>,
+    reply_targets: &Mutex<ReplyTargetState>,
     next_correlation: &AtomicU64,
     meta: &RouteMeta,
     sample: Sample,
@@ -631,25 +699,64 @@ fn handle_put_sample(
     let correlation = CorrelationId::from(next_correlation.fetch_add(1, Ordering::Relaxed));
     let input = sample_to_input(&sample);
     let auth = attachment_to_auth(sample.attachment(), meta.auth_expectation);
-    let request = InboundRequest {
+    let request = build_inbound_request(meta, input, auth, correlation);
+    let entry = ReplyTargetEntry {
+        reply: ReplyTarget::Put,
+        inserted_at: Instant::now(),
+    };
+    insert_reply_target(reply_targets, request.correlation.clone(), entry);
+    Some(request)
+}
+
+/// Constructs the protocol-neutral [`InboundRequest`] shared by
+/// [`handle_query`] and [`handle_put_sample`], factoring out the duplicated
+/// thing-id / target / operation assembly.
+fn build_inbound_request(
+    meta: &RouteMeta,
+    input: InteractionInput,
+    auth: Option<AuthMaterial>,
+    correlation: CorrelationId,
+) -> InboundRequest {
+    InboundRequest {
         thing_id: ThingId::from(meta.thing_id.as_str()),
         target: meta.target.clone(),
         operation: meta.operation,
         input,
         auth,
         correlation,
-    };
-    let entry = ReplyTargetEntry {
-        reply: ReplyTarget::Put,
-        inserted_at: Instant::now(),
-    };
-    {
-        let Ok(mut reply_targets) = reply_targets.lock() else {
-            return None;
-        };
-        reply_targets.insert(request.correlation.clone(), entry);
     }
-    Some(request)
+}
+
+/// Inserts a reply-target entry under the (single) reply-target lock. Returns
+/// `false` (and drops the entry) if the lock was poisoned, so callers can
+/// still surface the request.
+fn insert_reply_target(
+    reply_targets: &Mutex<ReplyTargetState>,
+    correlation: CorrelationId,
+    entry: ReplyTargetEntry,
+) {
+    if let Ok(mut state) = reply_targets.lock() {
+        state.targets.insert(correlation, entry);
+    }
+}
+
+#[cfg(feature = "async")]
+fn handle_async_enqueue_result(
+    reply_targets: &Mutex<ReplyTargetState>,
+    result: Result<(), tokio::sync::mpsc::error::TrySendError<InboundRequest>>,
+) {
+    if let Err(err) = result {
+        let (request, reason) = match err {
+            tokio::sync::mpsc::error::TrySendError::Full(request) => {
+                (request, "channel full")
+            }
+            tokio::sync::mpsc::error::TrySendError::Closed(request) => {
+                (request, "channel closed")
+            }
+        };
+        log::warn!("Zenoh server: failed to enqueue inbound request ({reason})");
+        send_drop_reply(reply_targets, &request.correlation);
+    }
 }
 
 fn undeclare_routes(routes: Vec<DeclaredRoute>) {
@@ -685,17 +792,14 @@ fn push_bounded(
 ///
 /// Query-kind targets get a `server busy` error reply; Put-kind targets are
 /// fire-and-forget (no reply expected) and are simply dropped.
-fn send_drop_reply(
-    reply_targets: &Mutex<BTreeMap<CorrelationId, ReplyTargetEntry>>,
-    correlation: &CorrelationId,
-) {
-    let Ok(mut reply_targets) = reply_targets.lock() else {
+fn send_drop_reply(reply_targets: &Mutex<ReplyTargetState>, correlation: &CorrelationId) {
+    let Ok(mut state) = reply_targets.lock() else {
         return;
     };
     if let Some(ReplyTargetEntry {
         reply: ReplyTarget::Query { query, .. },
         ..
-    }) = reply_targets.remove(correlation)
+    }) = state.targets.remove(correlation)
         && let Err(e) = query.reply_err("server busy: pending queue full").wait()
     {
         log::warn!("Zenoh server: failed to send drop reply: {e}");
@@ -706,7 +810,7 @@ fn send_drop_reply(
 /// evicted zenoh query, an error reply is sent so the underlying `Query`
 /// resource is released instead of leaking (e.g. when the handler errors or
 /// panics and [`ZenohServerBinding::send_response`] is never called).
-fn sweep_expired_reply_targets(reply_targets: &mut BTreeMap<CorrelationId, ReplyTargetEntry>) {
+fn sweep_expired_reply_targets(reply_targets: &mut HashMap<CorrelationId, ReplyTargetEntry>) {
     let now = Instant::now();
     let expired: Vec<CorrelationId> = reply_targets
         .iter()
@@ -722,6 +826,56 @@ fn sweep_expired_reply_targets(reply_targets: &mut BTreeMap<CorrelationId, Reply
         {
             log::warn!("Zenoh server: failed to send timeout reply: {e}");
         }
+    }
+}
+
+#[cfg(all(test, feature = "async"))]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn async_enqueue_failure_removes_put_reply_target_immediately() {
+        let reply_targets = Mutex::new(ReplyTargetState::new());
+        let correlation = CorrelationId::from(7_u64);
+        insert_reply_target(
+            &reply_targets,
+            correlation.clone(),
+            ReplyTargetEntry {
+                reply: ReplyTarget::Put,
+                inserted_at: Instant::now(),
+            },
+        );
+
+        let (tx, mut rx) = tokio::sync::mpsc::channel(1);
+        tx.try_send(InboundRequest::new(
+            ThingId::from("urn:test:occupied"),
+            AffordanceTarget::Thing,
+            Operation::ReadAllProperties,
+            InteractionInput::empty(),
+        ))
+        .expect("seed channel");
+        let mut dropped = InboundRequest::new(
+            ThingId::from("urn:test:dropped"),
+            AffordanceTarget::Thing,
+            Operation::ReadAllProperties,
+            InteractionInput::empty(),
+        );
+        dropped.correlation = correlation.clone();
+
+        handle_async_enqueue_result(&reply_targets, tx.try_send(dropped));
+
+        assert!(
+            reply_targets
+                .lock()
+                .expect("lock reply targets")
+                .targets
+                .get(&correlation)
+                .is_none(),
+            "failed async enqueue should clear the reply target instead of waiting for TTL sweep"
+        );
+
+        let seeded = rx.try_recv().expect("seeded request remains buffered");
+        assert_eq!(seeded.thing_id.as_str(), "urn:test:occupied");
     }
 }
 
@@ -821,41 +975,76 @@ fn plan_inbound_routes(thing_id: &str, td: &Thing) -> Result<Vec<PlannedRoute>, 
     for (target, operation, form, zenoh_target) in
         iter_zenoh_affordance_forms(td).map_err(|e| e.to_string())?
     {
-        // Build the execution plan from the already-resolved zenoh target to
-        // avoid resolving the form target a second time.
-        let plan = ZenohOperationPlan {
-            key_expr: zenoh_target.key_expr,
-            kind: zenoh_operation_kind(operation),
-            metadata: extract_zenoh_metadata(form).map_err(|e| e.to_string())?,
-        };
-
-        let meta = RouteMeta {
-            thing_id: thing_id.to_string(),
-            target,
-            operation,
-            auth_expectation: resolve_auth_expectation(td, form),
-        };
-
-        let kind = match plan.kind {
-            ZenohOperationKind::Query | ZenohOperationKind::RequestReply => RouteKind::Queryable {
-                key_expr: plan.key_expr,
-            },
-            ZenohOperationKind::Put => RouteKind::PutListener {
-                key_expr: plan.key_expr,
-            },
-            ZenohOperationKind::Subscribe => RouteKind::Publisher {
-                key_expr: plan.key_expr,
-            },
-            ZenohOperationKind::Unsubscribe => {
-                // No route or publisher needed — cleanup is broker-managed.
-                continue;
-            }
-        };
-
-        routes.push(PlannedRoute { meta, kind });
+        if let Some(route) =
+            build_planned_route(thing_id, td, target, operation, form, zenoh_target)?
+        {
+            routes.push(route);
+        }
     }
 
     Ok(routes)
+}
+
+/// Plans inbound routes for a single target affordance only, avoiding the
+/// O(all_forms) scan of [`plan_inbound_routes`] when the caller knows exactly
+/// which affordance was added.
+fn plan_inbound_routes_for_target(
+    thing_id: &str,
+    td: &Thing,
+    target: &AffordanceTarget,
+) -> Result<Vec<PlannedRoute>, String> {
+    let mut routes = Vec::new();
+    for (target, operation, form, zenoh_target) in
+        iter_zenoh_forms_for_target(td, target).map_err(|e| e.to_string())?
+    {
+        if let Some(route) =
+            build_planned_route(thing_id, td, target, operation, form, zenoh_target)?
+        {
+            routes.push(route);
+        }
+    }
+    Ok(routes)
+}
+
+/// Builds a single [`PlannedRoute`] from resolved form metadata. Returns
+/// `Ok(None)` for operations that need no route (e.g. `Unsubscribe`).
+fn build_planned_route(
+    thing_id: &str,
+    td: &Thing,
+    target: AffordanceTarget,
+    operation: Operation,
+    form: &Form,
+    zenoh_target: ZenohFormTarget,
+) -> Result<Option<PlannedRoute>, String> {
+    let plan = ZenohOperationPlan {
+        key_expr: zenoh_target.key_expr,
+        kind: zenoh_operation_kind(operation),
+        metadata: extract_zenoh_metadata(form).map_err(|e| e.to_string())?,
+    };
+
+    let meta = RouteMeta {
+        thing_id: thing_id.to_string(),
+        target,
+        operation,
+        auth_expectation: resolve_auth_expectation(td, form),
+    };
+
+    let kind = match plan.kind {
+        ZenohOperationKind::Query | ZenohOperationKind::RequestReply => RouteKind::Queryable {
+            key_expr: plan.key_expr,
+        },
+        ZenohOperationKind::Put => RouteKind::PutListener {
+            key_expr: plan.key_expr,
+        },
+        ZenohOperationKind::Subscribe => RouteKind::Publisher {
+            key_expr: plan.key_expr,
+        },
+        ZenohOperationKind::Unsubscribe => {
+            return Ok(None);
+        }
+    };
+
+    Ok(Some(PlannedRoute { meta, kind }))
 }
 
 /// Iterates over all zenoh-targeting affordance forms in a TD, yielding
@@ -875,7 +1064,7 @@ fn iter_zenoh_affordance_forms(
                 td,
                 &property._interaction.forms,
                 context,
-                AffordanceTarget::Property(name.clone()),
+                AffordanceTarget::Property(name.as_str().into()),
                 &mut result,
             )?;
         }
@@ -888,7 +1077,7 @@ fn iter_zenoh_affordance_forms(
                 td,
                 &action._interaction.forms,
                 context,
-                AffordanceTarget::Action(name.clone()),
+                AffordanceTarget::Action(name.as_str().into()),
                 &mut result,
             )?;
         }
@@ -901,7 +1090,7 @@ fn iter_zenoh_affordance_forms(
                 td,
                 &event._interaction.forms,
                 context,
-                AffordanceTarget::Event(name.clone()),
+                AffordanceTarget::Event(name.as_str().into()),
                 &mut result,
             )?;
         }
@@ -940,6 +1129,61 @@ fn collect_zenoh_forms<'a>(
     Ok(())
 }
 
+/// Collects zenoh-targeting forms for a single target affordance only,
+/// avoiding the O(all_forms) scan of [`iter_zenoh_affordance_forms`] when the
+/// caller knows exactly which affordance is being registered.
+fn iter_zenoh_forms_for_target<'a>(
+    td: &'a Thing,
+    target: &AffordanceTarget,
+) -> ZenohBindingResult<Vec<(AffordanceTarget, Operation, &'a Form, ZenohFormTarget)>> {
+    let mut result = Vec::new();
+    match target {
+        AffordanceTarget::Thing => {
+            if let Some(forms) = &td.forms {
+                collect_zenoh_forms(td, forms, FormContext::Thing, target.clone(), &mut result)?;
+            }
+        }
+        AffordanceTarget::Property(name)
+            if let Some(properties) = &td.properties
+                && let Some(property) = properties.get(&**name) =>
+        {
+            collect_zenoh_forms(
+                td,
+                &property._interaction.forms,
+                FormContext::Property(property),
+                target.clone(),
+                &mut result,
+            )?;
+        }
+        AffordanceTarget::Action(name)
+            if let Some(actions) = &td.actions
+                && let Some(action) = actions.get(&**name) =>
+        {
+            collect_zenoh_forms(
+                td,
+                &action._interaction.forms,
+                FormContext::Action(action),
+                target.clone(),
+                &mut result,
+            )?;
+        }
+        AffordanceTarget::Event(name)
+            if let Some(events) = &td.events
+                && let Some(event) = events.get(&**name) =>
+        {
+            collect_zenoh_forms(
+                td,
+                &event._interaction.forms,
+                FormContext::Event(event),
+                target.clone(),
+                &mut result,
+            )?;
+        }
+        _ => {}
+    }
+    Ok(result)
+}
+
 // ---------------------------------------------------------------------------
 // AsyncServerBinding (baseline v3.0 §4 / addendum §2.4)
 // ---------------------------------------------------------------------------
@@ -957,9 +1201,7 @@ impl AsyncServerBinding for ZenohServerBinding {
                 rx.recv().await
             };
             if let Some(request) = request {
-                if let Ok(mut reply_targets) = self.reply_targets.lock() {
-                    sweep_expired_reply_targets(&mut reply_targets);
-                }
+                self.maybe_sweep_reply_targets();
                 return request;
             }
             // All senders were dropped (e.g. no routes are declared yet). Yield
@@ -1007,7 +1249,7 @@ impl PublisherSink for ZenohPublisherSink {
     fn publish(&self, payload: &Payload) -> clinkz_wot_core::CoreResult<()> {
         let mut builder = self
             .session
-            .put(self.key_expr.as_str(), payload.body.as_slice());
+            .put(self.key_expr.as_str(), payload.body.as_ref());
         if !payload.content_type.is_empty() {
             builder = builder.encoding(Encoding::from(payload.content_type.as_str()));
         }

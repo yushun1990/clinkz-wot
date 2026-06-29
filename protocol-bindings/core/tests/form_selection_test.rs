@@ -1,3 +1,4 @@
+use clinkz_wot_core::AffordanceKind;
 use clinkz_wot_protocol_bindings::{
     AffordanceRef, BindingError, FormSelectionCriteria, resolve_form_target,
     resolve_selected_affordance_form_security, select_affordance_form,
@@ -427,9 +428,9 @@ fn selects_action_and_event_forms_with_default_operations() {
     assert_eq!(selected_event.selection.form, &event_form);
     assert_eq!(
         selected_event.selection.operations.as_ref(),
-        // TD 1.1 §5.3.3: the default `op` for an Event form is subscribeevent
-        // only; unsubscribeevent must be declared explicitly when needed.
-        &[Operation::SubscribeEvent]
+        // TD 1.1 §5.4: the default `op` for an Event form is both
+        // `subscribeevent` and `unsubscribeevent`.
+        &[Operation::SubscribeEvent, Operation::UnsubscribeEvent]
     );
 }
 
@@ -447,7 +448,7 @@ fn reports_unknown_affordance_from_thing_lookup() {
     assert_eq!(
         err,
         BindingError::UnknownAffordance {
-            kind: "property",
+            kind: AffordanceKind::Property,
             name: "status".into()
         }
     );
@@ -520,8 +521,9 @@ fn validates_selected_event_form_with_default_operations() {
         .build()
         .unwrap();
 
-    // The default Event form operation is `subscribeevent` (TD 1.1 §5.3.3), so
-    // validating against `SubscribeEvent` resolves the default and succeeds.
+    // The default Event form operations are `subscribeevent` and
+    // `unsubscribeevent` (TD 1.1 §5.4), so validating against either resolves
+    // the default and succeeds.
     let selected = validate_affordance_form(
         &thing,
         AffordanceRef::Event("ready"),
@@ -531,15 +533,27 @@ fn validates_selected_event_form_with_default_operations() {
     .unwrap();
 
     assert_eq!(selected.index, 0);
-    assert_eq!(selected.operations.as_ref(), &[Operation::SubscribeEvent]);
+    assert_eq!(
+        selected.operations.as_ref(),
+        &[Operation::SubscribeEvent, Operation::UnsubscribeEvent]
+    );
 
-    // `unsubscribeevent` is not part of the default and must be rejected for a
-    // form that does not declare it explicitly.
-    let err = validate_affordance_form(
+    // `unsubscribeevent` is part of the default and is also accepted.
+    let selected_unsub = validate_affordance_form(
         &thing,
         AffordanceRef::Event("ready"),
         &form,
         Operation::UnsubscribeEvent,
+    )
+    .unwrap();
+    assert_eq!(selected_unsub.index, 0);
+
+    // An operation outside the Event vocabulary (`readproperty`) is rejected.
+    let err = validate_affordance_form(
+        &thing,
+        AffordanceRef::Event("ready"),
+        &form,
+        Operation::ReadProperty,
     )
     .unwrap_err();
     assert!(matches!(err, BindingError::UnsupportedOperation(_)));

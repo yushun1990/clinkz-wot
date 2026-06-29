@@ -89,8 +89,20 @@ impl From<&str> for EventName {
     }
 }
 
+impl From<Arc<str>> for EventName {
+    fn from(name: Arc<str>) -> Self {
+        Self((*name).into())
+    }
+}
+
 impl AsRef<str> for EventName {
     fn as_ref(&self) -> &str {
+        &self.0
+    }
+}
+
+impl core::borrow::Borrow<str> for EventName {
+    fn borrow(&self) -> &str {
         &self.0
     }
 }
@@ -255,7 +267,7 @@ impl EventBroker {
         // broker lock.
         let snapshot: Option<Arc<[SharedPublisherSink]>> = self
             .sinks
-            .with(|map| map.get(thing).and_then(|events| events.get(event)).cloned())?;
+            .with_read(|map| map.get(thing).and_then(|events| events.get(event)).cloned())?;
         let Some(snapshot) = snapshot else {
             return Ok(());
         };
@@ -539,8 +551,21 @@ impl Subscription {
     }
 
     /// Returns whether no samples are currently buffered.
+    ///
+    /// Short-circuits on the first non-empty underlying queue so a merged
+    /// subscription does not lock every queue and sum lengths.
     pub fn is_empty(&self) -> bool {
-        self.len() == 0
+        match &self.inner {
+            SubscriptionInner::Single(inner) => inner.with_read_recover(|q| q.buffer.is_empty()),
+            SubscriptionInner::Merged(subs) => subs.iter().all(Self::has_buffered),
+        }
+    }
+}
+
+impl Subscription {
+    /// Returns true when the subscription has at least one buffered sample.
+    fn has_buffered(sub: &Subscription) -> bool {
+        !sub.is_empty()
     }
 }
 
@@ -674,47 +699,91 @@ mod stream_impl {
         type Item = Payload;
 
         fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+            // Fast path: the overwhelmingly common single-queue case skips the
+            // per-poll `Vec` allocation entirely.
+            if let SubscriptionInner::Single(inner) = &self.inner {
+                return poll_single(inner, cx);
+            }
+
             let mut leaves: Vec<Arc<MapLock<QueueInner>>> = Vec::new();
             self.collect_leaves(&mut leaves);
+            poll_leaves(&leaves, cx)
+        }
+    }
 
-            // Round-robin drain: if any leaf has a buffered sample, return it
-            // and drop the wake slot on that queue (progress was made).
-            for inner in &leaves {
-                let drained = inner.with_recover(|q| {
-                    if let Some(payload) = q.buffer.pop_front() {
-                        q.waker = None;
-                        Some(payload)
-                    } else {
-                        None
-                    }
-                });
-                if let Some(payload) = drained {
-                    return Poll::Ready(Some(payload));
-                }
-            }
-
-            // Every leaf is empty. Register the caller's waker on each leaf (so
-            // the next push to any queue wakes this task) and determine whether
-            // the whole subscription is terminal. `will_wake` avoids redundant
-            // waker clones on repeated polls with the same task.
-            let mut all_stopped = true;
-            for inner in &leaves {
-                inner.with_recover(|q| {
-                    let needs_register = q.waker.as_ref().is_none_or(|w| !w.will_wake(cx.waker()));
-                    if needs_register {
-                        q.waker = Some(cx.waker().clone());
-                    }
-                    if !q.stopped {
-                        all_stopped = false;
-                    }
-                });
-            }
-
-            if all_stopped {
-                Poll::Ready(None)
+    fn poll_single(
+        inner: &Arc<MapLock<QueueInner>>,
+        cx: &mut Context<'_>,
+    ) -> Poll<Option<Payload>> {
+        let drained = inner.with_recover(|q| {
+            if let Some(payload) = q.buffer.pop_front() {
+                q.waker = None;
+                Some(payload)
             } else {
-                Poll::Pending
+                None
             }
+        });
+        if let Some(payload) = drained {
+            return Poll::Ready(Some(payload));
+        }
+        let mut all_stopped = true;
+        inner.with_recover(|q| {
+            let needs_register = q.waker.as_ref().is_none_or(|w| !w.will_wake(cx.waker()));
+            if needs_register {
+                q.waker = Some(cx.waker().clone());
+            }
+            if !q.stopped {
+                all_stopped = false;
+            }
+        });
+        if all_stopped {
+            Poll::Ready(None)
+        } else {
+            Poll::Pending
+        }
+    }
+
+    fn poll_leaves(
+        leaves: &[Arc<MapLock<QueueInner>>],
+        cx: &mut Context<'_>,
+    ) -> Poll<Option<Payload>> {
+        // Round-robin drain: if any leaf has a buffered sample, return it
+        // and drop the wake slot on that queue (progress was made).
+        for inner in leaves {
+            let drained = inner.with_recover(|q| {
+                if let Some(payload) = q.buffer.pop_front() {
+                    q.waker = None;
+                    Some(payload)
+                } else {
+                    None
+                }
+            });
+            if let Some(payload) = drained {
+                return Poll::Ready(Some(payload));
+            }
+        }
+
+        // Every leaf is empty. Register the caller's waker on each leaf (so
+        // the next push to any queue wakes this task) and determine whether
+        // the whole subscription is terminal. `will_wake` avoids redundant
+        // waker clones on repeated polls with the same task.
+        let mut all_stopped = true;
+        for inner in leaves {
+            inner.with_recover(|q| {
+                let needs_register = q.waker.as_ref().is_none_or(|w| !w.will_wake(cx.waker()));
+                if needs_register {
+                    q.waker = Some(cx.waker().clone());
+                }
+                if !q.stopped {
+                    all_stopped = false;
+                }
+            });
+        }
+
+        if all_stopped {
+            Poll::Ready(None)
+        } else {
+            Poll::Pending
         }
     }
 }
@@ -760,7 +829,7 @@ mod tests {
 
     impl PublisherSink for RecorderSink {
         fn publish(&self, p: &Payload) -> CoreResult<()> {
-            self.rec.received.lock().unwrap().push(p.body.clone());
+            self.rec.received.lock().unwrap().push(p.body.as_ref().to_vec());
             Ok(())
         }
     }

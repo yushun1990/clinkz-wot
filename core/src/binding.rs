@@ -151,4 +151,13 @@ impl ClientBinding for Box<dyn ClientBinding> {
     ) -> CoreResult<(Subscription, Box<dyn SubscriptionGuard>)> {
         self.as_ref().subscribe(request)
     }
+
+    /// Forwards to the inner binding so boxed bindings retain their async
+    /// capability. Without this, `BoundConsumedThing` (which stores
+    /// `Vec<Box<dyn ClientBinding>>`) would always see `None` and the async
+    /// consumer path would silently degrade to blocking `invoke`.
+    #[cfg(feature = "async")]
+    fn as_async_binding(&self) -> Option<&dyn AsyncClientBinding> {
+        (**self).as_async_binding()
+    }
 }

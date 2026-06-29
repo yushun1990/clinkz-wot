@@ -284,6 +284,9 @@ impl fmt::Display for SecurityError {
     }
 }
 
+#[cfg(feature = "std")]
+impl std::error::Error for SecurityError {}
+
 /// Maps a [`SecurityError`] into a [`CoreError`], preserving the structured
 /// taxonomy so callers can pattern-match on the specific failure.
 impl From<SecurityError> for CoreError {

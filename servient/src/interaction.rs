@@ -4,6 +4,8 @@ use clinkz_wot_core::{
     AffordanceTarget, ClientBinding, CodecInput, CoreError, CredentialStore, InteractionInput,
     InteractionOutput, Payload, SecurityContext, SecurityError, Subscription, TransportRequest,
 };
+#[cfg(feature = "async")]
+use clinkz_wot_core::{BindingRequest, SubscriptionGuard};
 use clinkz_wot_discovery::ThingDirectory;
 use clinkz_wot_protocol_bindings::{
     AffordanceRef, FormSelectionCriteria, expand_uri_template, resolve_form_security,
@@ -17,7 +19,6 @@ use clinkz_wot_td::{
 
 use crate::{
     BindingPlan, SelectedFormCacheKey, ServientError, ServientResult,
-    cache::affordance_target_from_ref,
     consumed::ConsumedThingEntry,
     servient::Servient,
     servient::{BindingFactoryRegistry, PayloadCodecRegistry, SecurityProviderRegistry},
@@ -156,7 +157,7 @@ impl InteractionRuntime {
     /// Performs a remote interaction against an interned consumed-Thing entry,
     /// selecting a form, applying transport security, and invoking a binding.
     pub(crate) fn consumed_request(
-        &mut self,
+        &self,
         entry: &ConsumedThingEntry,
         target: AffordanceTarget,
         affordance: AffordanceRef<'_>,
@@ -202,7 +203,7 @@ impl InteractionRuntime {
     /// The wire cleanup [`SubscriptionGuard`] is stored in the entry and cleaned
     /// up by `unsubscribe_event` / `unobserve_property` / entry invalidation.
     pub(crate) fn consumed_subscribe(
-        &mut self,
+        &self,
         entry: &ConsumedThingEntry,
         target: AffordanceTarget,
         affordance: AffordanceRef<'_>,
@@ -282,11 +283,14 @@ impl InteractionRuntime {
                 .await
                 .map_err(ServientError::from)?
         } else {
-            // Fallback: sync invoke (may block the async executor).
-            active_plan
-                .binding
-                .invoke(request)
-                .map_err(ServientError::from)?
+            // Fallback for bindings without a native async path. With a std
+            // tokio runtime the blocking `invoke` is offloaded to a
+            // blocking-pool thread so the async executor is not stalled
+            // (baseline addendum §9.3). On no_std async (cooperative
+            // single-thread) there is no blocking pool and types are not
+            // `Send`, so the call runs inline — bindings targeting no_std async
+            // should implement `AsyncClientBinding`.
+            offload_invoke(Arc::clone(&active_plan.binding), request).await?
         };
         self.prepare_interaction_output(output)
     }
@@ -325,10 +329,7 @@ impl InteractionRuntime {
                     .await
                     .map_err(ServientError::from)?
             } else {
-                active_plan
-                    .binding
-                    .subscribe(request)
-                    .map_err(ServientError::from)?
+                offload_subscribe(Arc::clone(&active_plan.binding), request).await?
             };
 
         let key = crate::consumed::SubscriptionKey::new(&target, criteria.operation.as_str());
@@ -378,13 +379,22 @@ impl InteractionRuntime {
         mut input: InteractionInput,
     ) -> ServientResult<InteractionInput> {
         let effective_security = resolve_form_security(thing, form);
-        // Snapshot provider handles under a brief lock, then apply *outside*
-        // the registry lock so a slow provider (e.g. token refresh, signing)
-        // does not serialize every outbound security application. `apply` takes
-        // `&self`, so an `Arc` clone is sufficient to release the handle.
-        let providers = self
-            .security_providers
-            .with(|snapshot| Arc::clone(snapshot))?;
+        // Snapshot provider handles under a brief *read* lock, then apply
+        // *outside* the registry lock so a slow provider (e.g. token refresh,
+        // signing) does not serialize every outbound security application.
+        // `apply` takes `&self`, so an `Arc` clone is sufficient to release
+        // the handle.
+        let providers = self.security_providers.with_read_recover(Arc::clone);
+
+        // Hoist the transport request out of the per-scheme loop so that the
+        // `target` and `method` String allocations are paid once per outbound
+        // interaction rather than once per scheme. The `metadata` buffer is
+        // likewise reused across schemes via `clear()` + extend, which keeps
+        // the previously allocated BTreeMap node capacity live across scheme
+        // iterations and avoids the per-scheme map allocation that
+        // `input.parameters.clone()` would otherwise incur.
+        let mut request = TransportRequest::new(form.href.as_str(), operation.as_str());
+        request.payload = input.payload.take();
 
         for scheme_name in effective_security.security {
             let scheme = thing.security_definitions.get(scheme_name).ok_or_else(|| {
@@ -416,9 +426,16 @@ impl InteractionRuntime {
                 .into());
             }
 
-            let mut request = TransportRequest::new(form.href.as_str(), operation.as_str());
-            request.metadata = input.parameters.clone();
-            request.payload = input.payload.take();
+            // Reset the working metadata to a fresh copy of the original
+            // parameters so each scheme is applied in isolation. `clear()`
+            // keeps the BTreeMap's allocated capacity around for the next
+            // iteration's `extend`, avoiding the fresh root-node allocation
+            // that `BTreeMap::clone` performs.
+            request.metadata.clear();
+            request
+                .metadata
+                .extend(input.parameters.iter().map(|(k, v)| (k.clone(), v.clone())));
+
             provider.apply(
                 SecurityContext {
                     thing,
@@ -429,16 +446,18 @@ impl InteractionRuntime {
                 },
                 &mut request,
             )?;
+
             // Security provider modifies request.metadata with auth headers.
-            // Diff to extract only the security-added metadata.
+            // Diff against the original parameters to extract only the
+            // security-added metadata.
             for (key, value) in &request.metadata {
                 if input.parameters.get(key) != Some(value) {
                     input.security_metadata.insert(key.clone(), value.clone());
                 }
             }
-            input.payload = request.payload;
         }
 
+        input.payload = request.payload;
         Ok(input)
     }
 
@@ -449,7 +468,7 @@ impl InteractionRuntime {
         affordance: AffordanceRef<'_>,
         criteria: FormSelectionCriteria<'_>,
     ) -> ServientResult<ActiveBindingPlan> {
-        let key = SelectedFormCacheKey::new(affordance_target_from_ref(affordance), criteria);
+        let key = SelectedFormCacheKey::new(entry.affordance_target(affordance), criteria);
         let current_generation = self.binding_factories.generation();
 
         if let Some(plan) = entry.get_plan(&key) {
@@ -621,12 +640,12 @@ fn normalize_interaction_output(
 /// it when the caller's bytes are already canonical would require a separate
 /// "validate-only" API on `PayloadCodec` and is tracked as a follow-up.
 fn normalize_payload(codecs: &PayloadCodecRegistry, payload: Payload) -> ServientResult<Payload> {
-    let codec = codecs.with(|codecs| {
+    let codec = codecs.with_read_recover(|codecs| {
         codecs
             .iter()
             .find(|codec| codec.content_type().as_ref() == payload.content_type.as_str())
             .cloned()
-    })?;
+    });
 
     let Some(codec) = codec else {
         return Ok(payload);
@@ -636,11 +655,60 @@ fn normalize_payload(codecs: &PayloadCodecRegistry, payload: Payload) -> Servien
     codec
         .encode(CodecInput {
             body: decoded.as_slice(),
-            data_type: None,
         })
         .map_err(Into::into)
 }
 
 fn is_nosec_security(scheme: &SecurityScheme) -> bool {
     matches!(scheme, SecurityScheme::NoSec(_))
+}
+
+// ---------------------------------------------------------------------------
+// Async sync-binding fallback offload helpers.
+//
+// `std` + async: a sync-only binding's blocking call is offloaded to the tokio
+// blocking pool so the async executor is not stalled. `no_std` + async
+// (cooperative single-thread): there is no blocking pool and binding results
+// are not `Send`, so the call runs inline. Bindings targeting no_std async
+// should implement `AsyncClientBinding` to avoid blocking the executor.
+// ---------------------------------------------------------------------------
+
+#[cfg(feature = "async")]
+async fn offload_invoke(
+    binding: Arc<dyn ClientBinding + Send + Sync>,
+    request: BindingRequest,
+) -> ServientResult<InteractionOutput> {
+    #[cfg(feature = "std")]
+    {
+        tokio::task::spawn_blocking(move || binding.invoke(request))
+            .await
+            .map_err(|join_err| {
+                ServientError::Accept(format!("blocking invoke task failed: {join_err}"))
+            })?
+            .map_err(ServientError::from)
+    }
+    #[cfg(not(feature = "std"))]
+    {
+        binding.invoke(request).map_err(ServientError::from)
+    }
+}
+
+#[cfg(feature = "async")]
+async fn offload_subscribe(
+    binding: Arc<dyn ClientBinding + Send + Sync>,
+    request: BindingRequest,
+) -> ServientResult<(Subscription, Box<dyn SubscriptionGuard>)> {
+    #[cfg(feature = "std")]
+    {
+        tokio::task::spawn_blocking(move || binding.subscribe(request))
+            .await
+            .map_err(|join_err| {
+                ServientError::Accept(format!("blocking subscribe task failed: {join_err}"))
+            })?
+            .map_err(ServientError::from)
+    }
+    #[cfg(not(feature = "std"))]
+    {
+        binding.subscribe(request).map_err(ServientError::from)
+    }
 }

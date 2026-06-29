@@ -9,10 +9,11 @@ clinkz-wot-discovery = { path = "../discovery", default-features = false }
 clinkz-wot-protocol-bindings = { path = "../protocol-bindings/core", default-features = false }
 clinkz-wot-protocol-bindings-zenoh = { path = "../protocol-bindings/protocols/zenoh", default-features = false, optional = true }
 clinkz-wot-td = { path = "../td", default-features = false }
+log = { version = "0.4", default-features = false }
 serde_json = { workspace = true }
 async-trait = { workspace = true, optional = true }
 futures-util = { workspace = true, optional = true }
-tokio = { version = "1", optional = true, features = ["sync", "macros", "time"] }
+tokio = { version = "1", optional = true, features = ["sync", "macros", "time", "rt"] }
 
 [dev-dependencies]
 clinkz-wot-codec-cbor = { path = "../codecs/cbor" }
@@ -38,8 +39,8 @@ test-zenoh = [
     "dep:clinkz-wot-protocol-bindings-zenoh",
     "clinkz-wot-protocol-bindings-zenoh/zenoh",
 ]
-## Experimental TD 2.0 runtime surface (`cancelaction`, `subscribeallevents`,
-## `unsubscribeallevents`). Forwards to the data-model and core gates.
+## Experimental TD 2.0 data-model surface (`ActionAffordance.synchronous`).
+## Forwards to the data-model gate.
 td2-preview = [
     "clinkz-wot-td/td2-preview",
     "clinkz-wot-core/td2-preview",

@@ -4,17 +4,30 @@ use alloc::{
     string::{String, ToString},
     vec::Vec,
 };
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde_with::skip_serializing_none;
 
 use crate::{
-    data_type::{ExtensionMap, Metadata, MetadataHelper, Operation},
+    data_type::{ExtensionMap, METADATA_KEYS, Metadata, MetadataHelper, Operation},
     validate::{Validate, ValidateError, ValidationLevel, schema_error_message},
 };
 
 #[cfg(feature = "td2-preview")]
 use super::util::deserialize_option_bool_flexible;
 use super::{data_schema::DataSchema, form::Form, util::deserialize_bool_flexible};
+
+/// Deserialize adapter carrying the flexible-bool decoder used by `observable`,
+/// `safe`, and `idempotent`.
+#[derive(Deserialize)]
+struct FlexBoolField(#[serde(deserialize_with = "deserialize_bool_flexible")] bool);
+
+/// Deserialize adapter carrying the optional flexible-bool decoder used by the
+/// TD 2.0 `synchronous` field.
+#[cfg(feature = "td2-preview")]
+#[derive(Deserialize)]
+struct OptionFlexBoolField(
+    #[serde(deserialize_with = "deserialize_option_bool_flexible")] Option<bool>,
+);
 
 /// Metadata of a Thing that shows the possible choices to Consumers,
 /// thereby suggesting how Consumers may interact with the Thing.
@@ -73,8 +86,7 @@ pub trait InteractionHelper: Sized {
     where
         I: IntoIterator<Item = Form>,
     {
-        let mut items: Vec<Form> = forms.into_iter().collect();
-        self.interaction().forms.append(&mut items);
+        self.interaction().forms.extend(forms);
         self
     }
 
@@ -96,25 +108,54 @@ pub trait InteractionHelper: Sized {
 }
 
 /// An Interaction Affordance that exposes state of the Thing.
-#[skip_serializing_none]
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Clone, Debug, PartialEq)]
 pub struct PropertyAffordance {
-    #[serde(flatten)]
     pub _schema: DataSchema,
 
-    #[serde(flatten)]
     pub _interaction: InteractionAffordance,
 
     /// A hint that indicates whether Servients hosting the Thing and
     /// Intermediaries should provide a Protocol Binding that supports
     /// the observeproperty and unobserveproperty.
-    #[serde(
-        default,
-        deserialize_with = "deserialize_bool_flexible",
-        skip_serializing_if = "core::ops::Not::not"
-    )]
     pub observable: bool,
+}
+
+impl<'de> Deserialize<'de> for PropertyAffordance {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let mut map = crate::flat::deserialize_map(deserializer)?;
+        let forms = crate::flat::take_required::<Vec<Form>, D::Error>(&mut map, "forms")?;
+        let uri_variables = crate::flat::take(&mut map, "uriVariables")?;
+        let observable = match crate::flat::take::<FlexBoolField, D::Error>(&mut map, "observable")?
+        {
+            Some(field) => field.0,
+            None => false,
+        };
+        let schema = crate::flat::from_remaining::<DataSchema, D::Error>(map)?;
+        Ok(PropertyAffordance {
+            _schema: schema,
+            _interaction: InteractionAffordance {
+                forms,
+                uri_variables,
+            },
+            observable,
+        })
+    }
+}
+
+impl Serialize for PropertyAffordance {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        use serde::ser::SerializeMap;
+        let mut map = serializer.serialize_map(None)?;
+        self._schema.serialize_into(&mut map)?;
+        map.serialize_entry("forms", &self._interaction.forms)?;
+        if let Some(uri_variables) = &self._interaction.uri_variables {
+            map.serialize_entry("uriVariables", uri_variables)?;
+        }
+        if self.observable {
+            map.serialize_entry("observable", &self.observable)?;
+        }
+        map.end()
+    }
 }
 
 impl Validate for PropertyAffordance {
@@ -183,14 +224,10 @@ impl InteractionHelper for PropertyAffordanceBuilder {
 
 /// An Interaction Affordance that allows to invoke a function of
 /// the Thing.
-#[skip_serializing_none]
-#[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Clone, Default, Debug, PartialEq)]
 pub struct ActionAffordance {
-    #[serde(flatten)]
     pub _metadata: Metadata,
 
-    #[serde(flatten)]
     pub _interaction: InteractionAffordance,
 
     /// Used to define the input data schema of the Action.
@@ -202,19 +239,9 @@ pub struct ActionAffordance {
     /// Signals if the Action is safe(=true) or not.
     /// Used to signal if there is no internal state is changed
     /// when invoking an Action.
-    #[serde(
-        default,
-        deserialize_with = "deserialize_bool_flexible",
-        skip_serializing_if = "core::ops::Not::not"
-    )]
     pub safe: bool,
 
     /// Indicates whether the Action is idempotent(=true) or not.
-    #[serde(
-        default,
-        deserialize_with = "deserialize_bool_flexible",
-        skip_serializing_if = "core::ops::Not::not"
-    )]
     pub idempotent: bool,
 
     /// Indicates whether the Action is synchronous(=true) or not.
@@ -222,11 +249,79 @@ pub struct ActionAffordance {
     /// TD 2.0 field; gated behind the `td2-preview` feature. TD 1.1 actions are
     /// implicitly synchronous by default and do not carry this term.
     #[cfg(feature = "td2-preview")]
-    #[serde(default, deserialize_with = "deserialize_option_bool_flexible")]
     pub synchronous: Option<bool>,
 
-    #[serde(flatten)]
     pub _extra_fields: ExtensionMap,
+}
+
+impl<'de> Deserialize<'de> for ActionAffordance {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let mut map = crate::flat::deserialize_map(deserializer)?;
+        let metadata = crate::flat::drain_substruct::<Metadata, D::Error>(&mut map, METADATA_KEYS)?;
+        let forms = crate::flat::take_required::<Vec<Form>, D::Error>(&mut map, "forms")?;
+        let uri_variables = crate::flat::take(&mut map, "uriVariables")?;
+        let input = crate::flat::take(&mut map, "input")?;
+        let output = crate::flat::take(&mut map, "output")?;
+        let safe = match crate::flat::take::<FlexBoolField, D::Error>(&mut map, "safe")? {
+            Some(field) => field.0,
+            None => false,
+        };
+        let idempotent = match crate::flat::take::<FlexBoolField, D::Error>(&mut map, "idempotent")?
+        {
+            Some(field) => field.0,
+            None => false,
+        };
+        #[cfg(feature = "td2-preview")]
+        let synchronous =
+            crate::flat::take::<OptionFlexBoolField, D::Error>(&mut map, "synchronous")?
+                .and_then(|field| field.0);
+        Ok(ActionAffordance {
+            _metadata: metadata,
+            _interaction: InteractionAffordance {
+                forms,
+                uri_variables,
+            },
+            input,
+            output,
+            safe,
+            idempotent,
+            #[cfg(feature = "td2-preview")]
+            synchronous,
+            _extra_fields: crate::flat::into_extras(map),
+        })
+    }
+}
+
+impl Serialize for ActionAffordance {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        use serde::ser::SerializeMap;
+        let mut map = serializer.serialize_map(None)?;
+        self._metadata.serialize_into(&mut map)?;
+        map.serialize_entry("forms", &self._interaction.forms)?;
+        if let Some(uri_variables) = &self._interaction.uri_variables {
+            map.serialize_entry("uriVariables", uri_variables)?;
+        }
+        if let Some(input) = &self.input {
+            map.serialize_entry("input", input)?;
+        }
+        if let Some(output) = &self.output {
+            map.serialize_entry("output", output)?;
+        }
+        if self.safe {
+            map.serialize_entry("safe", &self.safe)?;
+        }
+        if self.idempotent {
+            map.serialize_entry("idempotent", &self.idempotent)?;
+        }
+        #[cfg(feature = "td2-preview")]
+        if let Some(synchronous) = self.synchronous {
+            map.serialize_entry("synchronous", &synchronous)?;
+        }
+        for (key, value) in &self._extra_fields {
+            map.serialize_entry(key, value)?;
+        }
+        map.end()
+    }
 }
 
 impl Validate for ActionAffordance {
@@ -248,15 +343,10 @@ impl Validate for ActionAffordance {
         }
 
         self._interaction.validate_ops("ActionAffordance", |op| {
-            if matches!(op, Operation::InvokeAction | Operation::QueryAction) {
-                return true;
-            }
-            // `cancelaction` is a TD 2.0 operation.
-            #[cfg(feature = "td2-preview")]
-            if matches!(op, Operation::CancelAction) {
-                return true;
-            }
-            false
+            matches!(
+                op,
+                Operation::InvokeAction | Operation::QueryAction | Operation::CancelAction
+            )
         })
     }
 }
@@ -351,14 +441,10 @@ impl InteractionHelper for ActionAffordanceBuilder {
 
 /// An interaction Affordance that describes an event source, which
 /// asynchronously pushes event data to Consumers.
-#[skip_serializing_none]
-#[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Clone, Default, Debug, PartialEq)]
 pub struct EventAffordance {
-    #[serde(flatten)]
     pub _metadata: Metadata,
 
-    #[serde(flatten)]
     pub _interaction: InteractionAffordance,
 
     /// Defines data that needs to be passed upon subscription,
@@ -378,8 +464,60 @@ pub struct EventAffordance {
     /// a Webhook.
     pub cancellation: Option<DataSchema>,
 
-    #[serde(flatten)]
     pub _extra_fields: ExtensionMap,
+}
+
+impl<'de> Deserialize<'de> for EventAffordance {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let mut map = crate::flat::deserialize_map(deserializer)?;
+        let metadata = crate::flat::drain_substruct::<Metadata, D::Error>(&mut map, METADATA_KEYS)?;
+        let forms = crate::flat::take_required::<Vec<Form>, D::Error>(&mut map, "forms")?;
+        let uri_variables = crate::flat::take(&mut map, "uriVariables")?;
+        let subscription = crate::flat::take(&mut map, "subscription")?;
+        let data = crate::flat::take(&mut map, "data")?;
+        let data_response = crate::flat::take(&mut map, "dataResponse")?;
+        let cancellation = crate::flat::take(&mut map, "cancellation")?;
+        Ok(EventAffordance {
+            _metadata: metadata,
+            _interaction: InteractionAffordance {
+                forms,
+                uri_variables,
+            },
+            subscription,
+            data,
+            data_response,
+            cancellation,
+            _extra_fields: crate::flat::into_extras(map),
+        })
+    }
+}
+
+impl Serialize for EventAffordance {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        use serde::ser::SerializeMap;
+        let mut map = serializer.serialize_map(None)?;
+        self._metadata.serialize_into(&mut map)?;
+        map.serialize_entry("forms", &self._interaction.forms)?;
+        if let Some(uri_variables) = &self._interaction.uri_variables {
+            map.serialize_entry("uriVariables", uri_variables)?;
+        }
+        if let Some(subscription) = &self.subscription {
+            map.serialize_entry("subscription", subscription)?;
+        }
+        if let Some(data) = &self.data {
+            map.serialize_entry("data", data)?;
+        }
+        if let Some(data_response) = &self.data_response {
+            map.serialize_entry("dataResponse", data_response)?;
+        }
+        if let Some(cancellation) = &self.cancellation {
+            map.serialize_entry("cancellation", cancellation)?;
+        }
+        for (key, value) in &self._extra_fields {
+            map.serialize_entry(key, value)?;
+        }
+        map.end()
+    }
 }
 
 impl Validate for EventAffordance {

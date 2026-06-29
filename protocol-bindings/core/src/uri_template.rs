@@ -16,7 +16,6 @@ use alloc::{
     collections::BTreeMap,
     format,
     string::{String, ToString},
-    vec::Vec,
 };
 
 /// Error returned when URI template expansion fails.
@@ -126,13 +125,16 @@ fn expand_inner(
             result.push_str(&expanded);
             i = end + 1;
         } else {
-            // Literal characters are copied verbatim.
-            let next_brace = bytes[i..].iter().position(|&b| b == b'{');
-            let chunk_end = match next_brace {
-                Some(pos) => i + pos,
-                None => bytes.len(),
-            };
-            result.push_str(core::str::from_utf8(&bytes[i..chunk_end]).unwrap_or(""));
+            // Literal characters are copied verbatim. The slice boundaries
+            // (`{` positions and the string ends) are all ASCII, hence valid
+            // UTF-8 boundaries; index the `&str` directly instead of going
+            // through `from_utf8(...).unwrap_or("")`, which would silently
+            // drop output on any future regression.
+            let chunk_end = bytes[i..]
+                .iter()
+                .position(|&b| b == b'{')
+                .map_or(bytes.len(), |pos| i + pos);
+            result.push_str(&template[i..chunk_end]);
             i = chunk_end;
         }
     }
@@ -212,13 +214,14 @@ fn expand_expression(
     vars: &BTreeMap<String, String>,
     strict: bool,
 ) -> Result<String, TemplateExpandError> {
-    // Parse operator.
+    // Parse operator. `from_first_char` is consulted once (the previous code
+    // called it in the guard and again in the body).
     let (operator, var_list_str) = match expr.chars().next() {
-        Some(c) if Operator::from_first_char(c).is_some() => {
-            let op = Operator::from_first_char(c).unwrap();
-            (op, &expr[1..])
-        }
-        _ => (Operator::Simple, expr),
+        Some(c) => match Operator::from_first_char(c) {
+            Some(op) => (op, &expr[1..]),
+            None => (Operator::Simple, expr),
+        },
+        None => (Operator::Simple, expr),
     };
 
     // Check for Level 4 modifiers (`:N` or `*`) — not supported.
@@ -229,21 +232,23 @@ fn expand_expression(
         )));
     }
 
-    // Parse variable names.
-    let var_names: Vec<&str> = var_list_str.split(',').map(|s| s.trim()).collect();
+    // Expand each variable directly into a single result `String`, avoiding
+    // the intermediate `Vec<&str>` (variable names) and `Vec<String>` (encoded
+    // parts) allocations plus the final `join` that the previous implementation
+    // built on every call. RFC 6570: `first_separator` is emitted once before
+    // the first encoded value; `item_separator` separates subsequent values.
+    let mut result = String::new();
+    let item_sep = operator.item_separator();
+    let mut first = true;
 
-    if var_names.is_empty() || var_names.iter().any(|v| v.is_empty()) {
-        return Err(TemplateExpandError::MalformedExpression(format!(
-            "{{{}}}",
-            expr
-        )));
-    }
-
-    // Expand each variable.
-    let mut parts: Vec<String> = Vec::new();
-
-    for var_name in &var_names {
-        match vars.get(*var_name) {
+    for var_name in var_list_str.split(',').map(|s| s.trim()) {
+        if var_name.is_empty() {
+            return Err(TemplateExpandError::MalformedExpression(format!(
+                "{{{}}}",
+                expr
+            )));
+        }
+        match vars.get(var_name) {
             Some(value) => {
                 let encoded_value = if operator.encode_value() {
                     percent_encode(value)
@@ -251,37 +256,33 @@ fn expand_expression(
                     reserved_expand(value)
                 };
 
+                if first {
+                    result.push_str(operator.first_separator());
+                    first = false;
+                } else {
+                    result.push_str(item_sep);
+                }
+
                 if operator.named() {
                     // For named operators (semi/form/form-cont), emit
                     // `name=value` (or just `name` for empty values).
-                    if encoded_value.is_empty() {
-                        parts.push((*var_name).to_string());
-                    } else {
-                        parts.push(format!("{}={}", var_name, encoded_value));
+                    result.push_str(var_name);
+                    if !encoded_value.is_empty() {
+                        result.push('=');
+                        result.push_str(&encoded_value);
                     }
                 } else {
-                    parts.push(encoded_value);
+                    result.push_str(&encoded_value);
                 }
             }
             None => {
                 if strict {
-                    return Err(TemplateExpandError::MissingVariable(
-                        (*var_name).to_string(),
-                    ));
+                    return Err(TemplateExpandError::MissingVariable(var_name.to_string()));
                 }
                 // Per RFC 6570 §3.2.1: skip missing variables.
             }
         }
     }
-
-    if parts.is_empty() {
-        return Ok(String::new());
-    }
-
-    // RFC 6570: prefix with first separator, then join items with item separator.
-    let mut result = String::new();
-    result.push_str(operator.first_separator());
-    result.push_str(&parts.join(operator.item_separator()));
 
     Ok(result)
 }
@@ -291,12 +292,13 @@ fn expand_expression(
 /// Unreserved characters (RFC 3986 §2.3) are passed through: `A-Z a-z 0-9 - . _ ~`.
 /// All other bytes are percent-encoded.
 fn percent_encode(value: &str) -> String {
-    let mut out = String::with_capacity(value.len());
+    // Worst case: every byte becomes a `%XX` triplet (3 bytes).
+    let mut out = String::with_capacity(value.len() * 3);
     for byte in value.bytes() {
         if byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'.' | b'_' | b'~') {
             out.push(byte as char);
         } else {
-            out.push_str(&format!("%{:02X}", byte));
+            push_percent_encoded(&mut out, byte);
         }
     }
     out
@@ -309,7 +311,8 @@ fn percent_encode(value: &str) -> String {
 /// part of a valid percent-encoded sequence), and characters outside the
 /// unreserved + reserved sets.
 fn reserved_expand(value: &str) -> String {
-    let mut out = String::with_capacity(value.len());
+    // Worst case: every byte becomes a `%XX` triplet (3 bytes).
+    let mut out = String::with_capacity(value.len() * 3);
     let bytes = value.as_bytes();
     let mut i = 0;
 
@@ -351,11 +354,23 @@ fn reserved_expand(value: &str) -> String {
         }
 
         // Percent-encode everything else.
-        out.push_str(&format!("%{:02X}", b));
+        push_percent_encoded(&mut out, b);
         i += 1;
     }
 
     out
+}
+
+/// Writes a single percent-encoded byte (`%XX`) directly into `out` without
+/// the transient `String` allocation that `format!("%{:02X}", byte)` would
+/// incur. Called once per non-unreserved byte on the URI-template expansion
+/// hot path.
+fn push_percent_encoded(out: &mut String, byte: u8) {
+    const HEX_DIGITS: [u8; 16] = *b"0123456789ABCDEF";
+    out.reserve(3);
+    out.push('%');
+    out.push(HEX_DIGITS[usize::from(byte >> 4)] as char);
+    out.push(HEX_DIGITS[usize::from(byte & 0x0F)] as char);
 }
 
 #[cfg(test)]

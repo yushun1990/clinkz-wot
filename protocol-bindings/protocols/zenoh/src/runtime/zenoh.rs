@@ -185,7 +185,9 @@ impl ZenohSessionTransport {
             .payload
             .map(|payload| payload.body)
             .unwrap_or_default();
-        let mut builder = self.session.put(request.plan.key_expr.as_str(), body);
+        let mut builder = self
+            .session
+            .put(request.plan.key_expr.as_str(), body.as_ref());
         if let Some(content_type) = request.plan.metadata.content_type.as_deref() {
             builder = builder.encoding(Encoding::from(content_type));
         }
@@ -204,9 +206,9 @@ impl ZenohSessionTransport {
 
     fn get(&self, request: ZenohTransportRequest) -> CoreResult<InteractionOutput> {
         let selector = selector_with_parameters(&request.plan.key_expr, &request.parameters)?;
-        let mut builder = self.session.get(selector.as_str());
+        let mut builder = self.session.get(&*selector);
         if let Some(payload) = request.payload {
-            builder = builder.payload(payload.body);
+            builder = builder.payload(payload.body.as_ref());
         }
         if let Some(content_type) = request.plan.metadata.content_type.as_deref() {
             builder = builder.encoding(Encoding::from(content_type));
@@ -239,8 +241,8 @@ impl ZenohSessionTransport {
     }
 
     fn subscribe_once(&self, request: ZenohTransportRequest) -> CoreResult<InteractionOutput> {
-        let mut subscription =
-            self.declare_subscription(request.plan.key_expr, request.plan.metadata)?;
+        let mut subscription = self
+            .declare_subscription(request.plan.key_expr.clone(), request.plan.metadata.clone())?;
         let output = subscription.next_timeout(self.reply_timeout)?;
         subscription.undeclare()?;
 
@@ -319,20 +321,53 @@ impl Drop for ZenohSubscriptionGuard {
         let Some(sub) = self.subscriber.take() else {
             return;
         };
-        let spawned = std::thread::Builder::new()
+        // Hand the undeclaration to a single long-lived background worker
+        // instead of spawning an OS thread per `Drop` (the previous behavior),
+        // which dominated cost for observe/unobserve churn. If the worker is
+        // unavailable, the handle drops here and zenoh reclaims it when the
+        // session closes.
+        enqueue_undeclare(sub);
+    }
+}
+
+/// Lazily-initialized single worker thread that drains subscription
+/// undeclarations from a channel, so `Drop` no longer forks a thread per
+/// teardown.
+///
+/// If the worker thread ever exits (for example a panic in an
+/// `undeclare_boxed`), subsequent sends fail gracefully and the offending
+/// handle — plus all future handles — drop inline; zenoh reclaims each
+/// subscriber when its session closes, so no resource leaks.
+fn undeclare_worker()
+-> &'static std::sync::Mutex<std::sync::mpsc::Sender<Box<dyn SubscriberHandle>>> {
+    static WORKER: std::sync::OnceLock<
+        std::sync::Mutex<std::sync::mpsc::Sender<Box<dyn SubscriberHandle>>>,
+    > = std::sync::OnceLock::new();
+    WORKER.get_or_init(|| {
+        let (tx, rx) = std::sync::mpsc::channel::<Box<dyn SubscriberHandle>>();
+        std::thread::Builder::new()
             .name("clinkz-wot-zenoh-undeclare".to_string())
-            .spawn(move || sub.undeclare_boxed())
-            .is_ok();
-        if !spawned {
-            // Thread spawn failed (e.g. OS resource limits). The failed
-            // `spawn` call already dropped the subscriber handle, letting
-            // zenoh reclaim it when the session closes. Log so the resource
-            // state is observable instead of silent.
-            log::warn!(
-                "Zenoh subscription: background undeclare thread could not \
-                 spawn; subscriber handle will be reclaimed on session close"
-            );
-        }
+            .spawn(move || {
+                for sub in rx {
+                    sub.undeclare_boxed();
+                }
+            })
+            .expect("zenoh undeclare worker thread should spawn at first use");
+        std::sync::Mutex::new(tx)
+    })
+}
+
+/// Enqueues a subscription handle for background undeclaration.
+fn enqueue_undeclare(sub: Box<dyn SubscriberHandle>) {
+    let sent = undeclare_worker()
+        .lock()
+        .ok()
+        .and_then(|tx| tx.send(sub).ok());
+    if sent.is_none() {
+        log::warn!(
+            "Zenoh subscription: undeclare worker unavailable; subscriber will \
+             be reclaimed on session close"
+        );
     }
 }
 

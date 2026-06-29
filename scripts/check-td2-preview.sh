@@ -1,9 +1,9 @@
 #!/usr/bin/env sh
 
-# Verifies the experimental TD 2.0 surface (`td2-preview`) end to end:
-# data model, core trait surface, Servient runtime dispatch, and the zenoh
-# binding planning layer. Default builds target strict TD 1.1, so the gated
-# code and the TD 2.0 fixtures are only exercised here.
+# Verifies the experimental TD 2.0 surface (`td2-preview`) end to end. The only
+# gated TD 2.0 term is `ActionAffordance.synchronous`; the full TD 1.1 `op`
+# vocabulary (including `cancelaction`, `subscribeallevents`,
+# `unsubscribeallevents`) is always available in default builds.
 #
 # This check is part of the M7 baseline (see scripts/check-m7.sh) to keep the
 # gated surface compiling and tested.

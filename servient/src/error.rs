@@ -56,7 +56,17 @@ impl fmt::Display for ServientError {
 }
 
 #[cfg(feature = "std")]
-impl std::error::Error for ServientError {}
+impl std::error::Error for ServientError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::Discovery(err) => Some(err),
+            Self::Binding(err) => Some(err),
+            Self::Serve(err) => Some(err),
+            Self::Lock(err) => Some(err),
+            _ => None,
+        }
+    }
+}
 
 impl From<DiscoveryError> for ServientError {
     fn from(value: DiscoveryError) -> Self {

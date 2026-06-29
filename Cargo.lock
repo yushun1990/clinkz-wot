@@ -337,6 +337,7 @@ dependencies = [
  "clinkz-wot-protocol-bindings-zenoh",
  "clinkz-wot-td",
  "futures-util",
+ "log",
  "serde_json",
  "tokio",
 ]

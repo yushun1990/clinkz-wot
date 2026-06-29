@@ -5,7 +5,7 @@
 //! can cross a spawnable future boundary. See the design baseline addendum
 //! §1.1.
 
-use alloc::{string::String, vec::Vec};
+use alloc::{string::String, sync::Arc, vec::Vec};
 use core::fmt;
 
 /// Canonical Thing identity.
@@ -70,13 +70,21 @@ impl fmt::Display for ThingId {
 /// A binding fills it from its transport (for example a zenoh query id) and
 /// echoes it unchanged in the matching [`crate::InboundResponse`]. It is owned
 /// by core; bindings only supply the byte content. See baseline addendum §1.1.
+///
+/// The token is backed by `Arc<[u8]>` rather than `Vec<u8>`: every inbound
+/// request clones the correlation id at least once (the Servient driving loop
+/// clones it out of the request to echo back in the response, and the zenoh
+/// server inserts another clone into its `reply_targets` map). `Arc` makes
+/// every clone a refcount bump instead of a heap allocation, while derived
+/// `Hash`/`Ord`/`Eq` keep the same byte-wise semantics as `Vec<u8>` so map keys
+/// behave identically.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Default)]
-pub struct CorrelationId(Vec<u8>);
+pub struct CorrelationId(Arc<[u8]>);
 
 impl CorrelationId {
     /// Creates a correlation token from owned bytes.
     pub fn new(bytes: Vec<u8>) -> Self {
-        Self(bytes)
+        Self(Arc::from(bytes))
     }
 
     /// Creates an empty correlation token for flows that have no transport
@@ -92,7 +100,7 @@ impl CorrelationId {
 
     /// Returns the underlying owned token bytes.
     pub fn into_bytes(self) -> Vec<u8> {
-        self.0
+        self.0.to_vec()
     }
 }
 
@@ -104,7 +112,13 @@ impl AsRef<[u8]> for CorrelationId {
 
 impl From<Vec<u8>> for CorrelationId {
     fn from(bytes: Vec<u8>) -> Self {
-        Self(bytes)
+        Self(Arc::from(bytes))
+    }
+}
+
+impl From<&[u8]> for CorrelationId {
+    fn from(bytes: &[u8]) -> Self {
+        Self(Arc::from(bytes))
     }
 }
 
@@ -112,7 +126,7 @@ impl From<u64> for CorrelationId {
     /// Encodes the integer as 8 big-endian bytes for a deterministic, portable
     /// representation across hosts of different endianness.
     fn from(value: u64) -> Self {
-        Self(value.to_be_bytes().into())
+        Self(Arc::from(value.to_be_bytes()))
     }
 }
 
@@ -121,7 +135,7 @@ impl fmt::Display for CorrelationId {
         if self.0.is_empty() {
             return f.write_str("(none)");
         }
-        for byte in &self.0 {
+        for byte in self.0.iter() {
             write!(f, "{:02x}", byte)?;
         }
         Ok(())

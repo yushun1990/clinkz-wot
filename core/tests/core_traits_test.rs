@@ -1,10 +1,11 @@
 use std::{borrow::Cow, cell::RefCell, sync::Arc};
 
 use clinkz_wot_core::{
-    ActionHandler, AffordanceTarget, BindingRequest, BoundConsumedThing, ClientBinding, CodecInput,
-    ConsumedThing, CoreError, CoreResult, EventSink, EventSubscribeHandler, ExposedThing,
-    InteractionInput, InteractionOutput, LocalThing, Payload, PayloadCodec, PropertyReadHandler,
-    PropertyWriteHandler, TransportAdapter, TransportRequest, TransportResponse,
+    ActionHandler, AffordanceKind, AffordanceTarget, BindingRequest, BoundConsumedThing,
+    ClientBinding, CodecInput, ConsumedThing, CoreError, CoreResult, EventSink,
+    EventSubscribeHandler, ExposedThing, InteractionInput, InteractionOutput, LocalThing, Payload,
+    PayloadCodec, PropertyReadHandler, PropertyWriteHandler, TransportAdapter, TransportRequest,
+    TransportResponse,
 };
 use clinkz_wot_td::{
     affordance::{ActionAffordance, EventAffordance, InteractionHelper, PropertyAffordance},
@@ -31,7 +32,7 @@ impl PayloadCodec for EchoCodec {
     }
 
     fn decode(&self, payload: &Payload) -> CoreResult<Vec<u8>> {
-        Ok(payload.body.clone())
+        Ok(payload.body.as_ref().to_vec())
     }
 }
 
@@ -77,7 +78,9 @@ impl ClientBinding for RecordingBinding {
     }
 
     fn invoke(&self, request: BindingRequest) -> CoreResult<InteractionOutput> {
-        assert!(matches!(request.target, AffordanceTarget::Property(ref name) if name == "status"));
+        assert!(
+            matches!(request.target, AffordanceTarget::Property(ref name) if name.as_ref() == "status")
+        );
         assert_eq!(request.operation, Operation::ReadProperty);
         assert_eq!(
             request.thing._metadata.title.as_deref(),
@@ -224,12 +227,7 @@ fn remote_thing_description() -> (Thing, Form) {
 fn codec_round_trips_payload_bytes() {
     let codec = EchoCodec;
 
-    let payload = codec
-        .encode(CodecInput {
-            body: b"hello",
-            data_type: None,
-        })
-        .unwrap();
+    let payload = codec.encode(CodecInput { body: b"hello" }).unwrap();
 
     assert_eq!(payload.content_type, "application/octet-stream");
     assert_eq!(codec.decode(&payload).unwrap(), b"hello");
@@ -306,7 +304,7 @@ fn binding_invokes_selected_form_without_protocol_assumptions() {
         })
         .unwrap();
 
-    assert_eq!(output.payload.unwrap().body, b"payload");
+    assert_eq!(output.payload.unwrap().body.as_ref(), b"payload");
 }
 
 #[test]
@@ -327,7 +325,7 @@ fn consumed_thing_dispatches_selected_form_to_matching_binding() {
         )
         .unwrap();
 
-    assert_eq!(output.payload.unwrap().body, b"on");
+    assert_eq!(output.payload.unwrap().body.as_ref(), b"on");
 }
 
 #[test]
@@ -351,7 +349,7 @@ fn consumed_thing_rejects_unknown_affordance_before_binding_dispatch() {
     assert_eq!(
         err,
         CoreError::UnknownAffordance {
-            kind: "property",
+            kind: AffordanceKind::Property,
             name: "missing".into()
         }
     );
@@ -438,7 +436,7 @@ fn local_thing_dispatches_registered_handlers() {
         .unwrap()
         .payload
         .unwrap();
-    assert_eq!(status.body, b"off");
+    assert_eq!(status.body.as_ref(), b"off");
 
     thing
         .write_property(
@@ -451,7 +449,7 @@ fn local_thing_dispatches_registered_handlers() {
         .unwrap()
         .payload
         .unwrap();
-    assert_eq!(status.body, b"on");
+    assert_eq!(status.body.as_ref(), b"on");
 
     let action = thing
         .invoke_action(
@@ -461,13 +459,13 @@ fn local_thing_dispatches_registered_handlers() {
         .unwrap()
         .payload
         .unwrap();
-    assert_eq!(action.body, b"hello");
+    assert_eq!(action.body.as_ref(), b"hello");
 
     let mut sink = CollectSink::default();
     thing
         .subscribe_event("startup", InteractionInput::empty(), &mut sink)
         .unwrap();
-    assert_eq!(sink.payloads[0].body, b"ready");
+    assert_eq!(sink.payloads[0].body.as_ref(), b"ready");
 }
 
 #[test]
@@ -490,7 +488,7 @@ fn local_thing_rejects_unknown_affordance_before_dispatch() {
     assert_eq!(
         err,
         CoreError::UnknownAffordance {
-            kind: "property",
+            kind: AffordanceKind::Property,
             name: "missing".into()
         }
     );
@@ -504,7 +502,13 @@ fn local_thing_reports_missing_registered_handler() {
         .invoke_action("echo", InteractionInput::empty())
         .unwrap_err();
 
-    assert_eq!(err, CoreError::MissingHandler);
+    assert!(matches!(
+        err,
+        CoreError::MissingHandler {
+            target: AffordanceTarget::Action(_),
+            operation: Operation::InvokeAction,
+        }
+    ));
 }
 
 #[test]

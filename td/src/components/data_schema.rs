@@ -1,21 +1,23 @@
-use alloc::{collections::BTreeMap, format, string::String, vec::Vec};
+use alloc::{boxed::Box, collections::BTreeMap, format, string::String, vec::Vec};
 
-use serde::{Deserialize, Deserializer, Serialize};
-use serde_with::{OneOrMany, serde_as, skip_serializing_none};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 use super::util::deserialize_bool_flexible;
-use crate::data_type::{ExtensionMap, Metadata, MetadataHelper};
+use crate::data_type::{ExtensionMap, METADATA_KEYS, Metadata, MetadataHelper};
 use crate::validate::{Validate, ValidateError, ValidationLevel};
 
-#[skip_serializing_none]
-#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+/// Deserialize adapter carrying the flexible-bool decoder used by `readOnly`
+/// and `writeOnly`.
+#[derive(Deserialize)]
+struct FlexBoolField(#[serde(deserialize_with = "deserialize_bool_flexible")] bool);
+
+/// Shared base for every data schema variant: flattened metadata, the JSON
+/// Schema core constraints, and preserved extension fields.
+#[derive(Clone, Debug, Default, PartialEq)]
 pub struct DataSchemaContext {
-    #[serde(flatten)]
     pub _metadata: Metadata,
 
     /// Provides a const value.
-    #[serde(rename = "const")]
     pub constant: Option<serde_json::Value>,
 
     /// Supply a default value.
@@ -29,23 +31,12 @@ pub struct DataSchemaContext {
     pub one_of: Option<Vec<DataSchema>>,
 
     /// Restricted set of values provided as an array.
-    #[serde(rename = "enum")]
     pub enumerate: Option<Vec<serde_json::Value>>,
 
     /// Indicate whether a property value is read only.
-    #[serde(
-        default,
-        deserialize_with = "deserialize_bool_flexible",
-        skip_serializing_if = "core::ops::Not::not"
-    )]
     pub read_only: bool,
 
     /// Indicate whether a property value is write only.
-    #[serde(
-        default,
-        deserialize_with = "deserialize_bool_flexible",
-        skip_serializing_if = "core::ops::Not::not"
-    )]
     pub write_only: bool,
 
     /// Allows validation based on a format pattern such as
@@ -53,11 +44,97 @@ pub struct DataSchemaContext {
     pub format: Option<String>,
 
     /// Assignment of JSON based data types compatible with JSON schema.
-    #[serde(rename = "type")]
     pub data_type: Option<String>,
 
-    #[serde(flatten)]
     pub _extra_fields: ExtensionMap,
+}
+
+impl<'de> Deserialize<'de> for DataSchemaContext {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let mut map = crate::flat::deserialize_map(deserializer)?;
+        let metadata = crate::flat::drain_substruct::<Metadata, D::Error>(&mut map, METADATA_KEYS)?;
+        let constant = crate::flat::take(&mut map, "const")?;
+        let default = crate::flat::take(&mut map, "default")?;
+        let unit = crate::flat::take(&mut map, "unit")?;
+        let one_of = crate::flat::take(&mut map, "oneOf")?;
+        let enumerate = crate::flat::take(&mut map, "enum")?;
+        let read_only = match crate::flat::take::<FlexBoolField, D::Error>(&mut map, "readOnly")? {
+            Some(field) => field.0,
+            None => false,
+        };
+        let write_only = match crate::flat::take::<FlexBoolField, D::Error>(&mut map, "writeOnly")?
+        {
+            Some(field) => field.0,
+            None => false,
+        };
+        let format = crate::flat::take(&mut map, "format")?;
+        let data_type = crate::flat::take(&mut map, "type")?;
+        Ok(DataSchemaContext {
+            _metadata: metadata,
+            constant,
+            default,
+            unit,
+            one_of,
+            enumerate,
+            read_only,
+            write_only,
+            format,
+            data_type,
+            _extra_fields: crate::flat::into_extras(map),
+        })
+    }
+}
+
+impl Serialize for DataSchemaContext {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        use serde::ser::SerializeMap;
+        let mut map = serializer.serialize_map(None)?;
+        self.serialize_into(&mut map)?;
+        map.end()
+    }
+}
+
+impl DataSchemaContext {
+    /// Emits this context's fields inline into an in-progress serialized map.
+    /// Used by schema variants that previously `#[serde(flatten)]`-ed the
+    /// context, so its fields appear at the variant level without nesting.
+    pub(crate) fn serialize_into<S: serde::ser::SerializeMap>(
+        &self,
+        map: &mut S,
+    ) -> Result<(), S::Error> {
+        self._metadata.serialize_into(map)?;
+        if let Some(constant) = &self.constant {
+            map.serialize_entry("const", constant)?;
+        }
+        if let Some(default) = &self.default {
+            map.serialize_entry("default", default)?;
+        }
+        if let Some(unit) = &self.unit {
+            map.serialize_entry("unit", unit)?;
+        }
+        if let Some(one_of) = &self.one_of {
+            map.serialize_entry("oneOf", one_of)?;
+        }
+        if let Some(enumerate) = &self.enumerate {
+            map.serialize_entry("enum", enumerate)?;
+        }
+        if self.read_only {
+            map.serialize_entry("readOnly", &self.read_only)?;
+        }
+        if self.write_only {
+            map.serialize_entry("writeOnly", &self.write_only)?;
+        }
+        if let Some(format) = &self.format {
+            map.serialize_entry("format", format)?;
+        }
+        if let Some(data_type) = &self.data_type {
+            map.serialize_entry("type", data_type)?;
+        }
+        for (key, value) in &self._extra_fields {
+            map.serialize_entry(key, value)?;
+        }
+        Ok(())
+    }
 }
 
 pub trait ContextHelper: MetadataHelper {
@@ -87,11 +164,10 @@ pub trait ContextHelper: MetadataHelper {
         I: IntoIterator,
         I::Item: Into<DataSchema>,
     {
-        let mut items: Vec<DataSchema> = schemas.into_iter().map(Into::into).collect();
         self.context()
             .one_of
             .get_or_insert_with(Vec::new)
-            .append(&mut items);
+            .extend(schemas.into_iter().map(Into::into));
         self
     }
 
@@ -100,11 +176,10 @@ pub trait ContextHelper: MetadataHelper {
     where
         I: IntoIterator<Item = serde_json::Value>,
     {
-        let mut items: Vec<serde_json::Value> = values.into_iter().collect();
         self.context()
             .enumerate
             .get_or_insert_with(Vec::new)
-            .append(&mut items);
+            .extend(values);
         self
     }
 
@@ -146,16 +221,11 @@ pub trait ContextHelper: MetadataHelper {
 }
 
 /// Metadata describing data of type array.
-#[serde_as]
-#[skip_serializing_none]
-#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Clone, Debug, Default, PartialEq)]
 pub struct ArraySchema {
-    #[serde(flatten)]
     pub _context: DataSchemaContext,
 
     /// Used to define the characteristic of an array.
-    #[serde_as(as = "Option<OneOrMany<_>>")]
     pub items: Option<Vec<DataSchema>>,
 
     /// Define the minimum number of items that have to be in the array.
@@ -163,6 +233,55 @@ pub struct ArraySchema {
 
     /// Define the maximum number of items that have to be in the array.
     pub max_items: Option<u32>,
+}
+
+impl<'de> Deserialize<'de> for ArraySchema {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let mut map = crate::flat::deserialize_map(deserializer)?;
+        // `items` uses the W3C one-or-many convention (a single DataSchema or an
+        // array). It is read via `take_one_or_many` rather than
+        // `serde_with::OneOrMany` because the latter buffers through serde's
+        // `Content` layer, which would block the `Box<RawValue>` capture that
+        // `DataSchema` now relies on.
+        let items = crate::flat::take_one_or_many::<DataSchema, D::Error>(&mut map, "items")?;
+        let min_items = crate::flat::take(&mut map, "minItems")?;
+        let max_items = crate::flat::take(&mut map, "maxItems")?;
+        let context = crate::flat::from_remaining::<DataSchemaContext, D::Error>(map)?;
+        Ok(ArraySchema {
+            _context: context,
+            items,
+            min_items,
+            max_items,
+        })
+    }
+}
+
+impl Serialize for ArraySchema {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        use serde::ser::SerializeMap;
+        let mut map = serializer.serialize_map(None)?;
+        self.serialize_into(&mut map)?;
+        map.end()
+    }
+}
+
+impl ArraySchema {
+    pub(crate) fn serialize_into<S: serde::ser::SerializeMap>(
+        &self,
+        map: &mut S,
+    ) -> Result<(), S::Error> {
+        self._context.serialize_into(map)?;
+        if let Some(items) = &self.items {
+            map.serialize_entry("items", &crate::flat::OneOrManyRef(items))?;
+        }
+        if let Some(min_items) = self.min_items {
+            map.serialize_entry("minItems", &min_items)?;
+        }
+        if let Some(max_items) = self.max_items {
+            map.serialize_entry("maxItems", &max_items)?;
+        }
+        Ok(())
+    }
 }
 
 impl ArraySchema {
@@ -195,11 +314,10 @@ impl ArraySchemaBuilder {
         I: IntoIterator,
         I::Item: Into<DataSchema>,
     {
-        let mut schemas: Vec<DataSchema> = items.into_iter().map(Into::into).collect();
         self.schema
             .items
             .get_or_insert_with(Vec::new)
-            .append(&mut schemas);
+            .extend(items.into_iter().map(Into::into));
         self
     }
 
@@ -234,12 +352,35 @@ impl MetadataHelper for ArraySchemaBuilder {
 }
 
 /// Metadata describing data of type boolean.
-#[skip_serializing_none]
-#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Clone, Debug, Default, PartialEq)]
 pub struct BooleanSchema {
-    #[serde(flatten)]
     pub _context: DataSchemaContext,
+}
+
+impl<'de> Deserialize<'de> for BooleanSchema {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let map = crate::flat::deserialize_map(deserializer)?;
+        let context = crate::flat::from_remaining::<DataSchemaContext, D::Error>(map)?;
+        Ok(BooleanSchema { _context: context })
+    }
+}
+
+impl Serialize for BooleanSchema {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        use serde::ser::SerializeMap;
+        let mut map = serializer.serialize_map(None)?;
+        self._context.serialize_into(&mut map)?;
+        map.end()
+    }
+}
+
+impl BooleanSchema {
+    pub(crate) fn serialize_into<S: serde::ser::SerializeMap>(
+        &self,
+        map: &mut S,
+    ) -> Result<(), S::Error> {
+        self._context.serialize_into(map)
+    }
 }
 
 impl BooleanSchema {
@@ -281,220 +422,186 @@ impl MetadataHelper for BooleanSchemaBuilder {
     }
 }
 
-/// Metadata describing data of type number.
-#[skip_serializing_none]
-#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct NumberSchema {
-    #[serde(flatten)]
-    pub _context: DataSchemaContext,
+/// Generates a numeric DataSchema variant (`NumberSchema` / `IntegerSchema`)
+/// together with its manual `Deserialize` / `Serialize` (preserving extension
+/// fields via `from_remaining`), `serialize_into`, builder, `ContextHelper` /
+/// `MetadataHelper`, and `From` impls. The two variants are structurally
+/// identical except for the numeric type (`f64` vs `i64`), so the macro
+/// eliminates ~150 lines of pure duplication.
+macro_rules! impl_numeric_schema {
+    (
+        $name:ident, $builder:ident, $variant:ident, $ty:ty, $doc:expr
+    ) => {
+        #[doc = $doc]
+        #[derive(Clone, Debug, Default, PartialEq)]
+        pub struct $name {
+            pub _context: DataSchemaContext,
 
-    /// Specifies a minimum numeric value, representing an inclusive
-    /// lower limit.
-    pub minimum: Option<f64>,
+            /// Specifies a minimum numeric value, representing an inclusive
+            /// lower limit.
+            pub minimum: Option<$ty>,
 
-    /// Specifies a minimum numeric value, representing an exclusive
-    /// lower limit.
-    pub exclusive_minimum: Option<f64>,
+            /// Specifies a minimum numeric value, representing an exclusive
+            /// lower limit.
+            pub exclusive_minimum: Option<$ty>,
 
-    /// Specifies a maximum numeric value, representing an inclusive
-    /// upper limit.
-    pub maximum: Option<f64>,
+            /// Specifies a maximum numeric value, representing an inclusive
+            /// upper limit.
+            pub maximum: Option<$ty>,
 
-    /// Specifies a maximum numeric value, representing an exclusive
-    /// upper limit.
-    pub exclusive_maximum: Option<f64>,
+            /// Specifies a maximum numeric value, representing an exclusive
+            /// upper limit.
+            pub exclusive_maximum: Option<$ty>,
 
-    /// Specifies the `multipleOf` value.
-    ///
-    /// Basic validation requires this value to be strictly greater than 0.
-    pub multiple_of: Option<f64>,
-}
-
-impl NumberSchema {
-    pub fn builder() -> NumberSchemaBuilder {
-        NumberSchemaBuilder::new()
-    }
-}
-
-/// Builder for creating `NumberSchema` instances.
-pub struct NumberSchemaBuilder {
-    schema: NumberSchema,
-}
-
-impl NumberSchemaBuilder {
-    /// Creates a new `NumberSchemaBuilder`.
-    pub fn new() -> Self {
-        Self {
-            schema: NumberSchema {
-                _context: DataSchemaContext::default(),
-                minimum: None,
-                exclusive_minimum: None,
-                maximum: None,
-                exclusive_maximum: None,
-                multiple_of: None,
-            },
+            /// Specifies the `multipleOf` value.
+            ///
+            /// Basic validation requires this value to be strictly greater than 0.
+            pub multiple_of: Option<$ty>,
         }
-    }
 
-    /// Sets the minimum value.
-    pub fn minimum(mut self, minimum: f64) -> Self {
-        self.schema.minimum = Some(minimum);
-        self
-    }
-
-    /// Sets the exclusive minimum value.
-    pub fn exclusive_minimum(mut self, exclusive_minimum: f64) -> Self {
-        self.schema.exclusive_minimum = Some(exclusive_minimum);
-        self
-    }
-
-    /// Sets the maximum value.
-    pub fn maximum(mut self, maximum: f64) -> Self {
-        self.schema.maximum = Some(maximum);
-        self
-    }
-
-    /// Sets the exclusive maximum value.
-    pub fn exclusive_maximum(mut self, exclusive_maximum: f64) -> Self {
-        self.schema.exclusive_maximum = Some(exclusive_maximum);
-        self
-    }
-
-    /// Sets the `multipleOf` value.
-    pub fn multiple_of(mut self, multiple_of: f64) -> Self {
-        self.schema.multiple_of = Some(multiple_of);
-        self
-    }
-
-    /// Builds and returns the `NumberSchema` instance.
-    pub fn build(self) -> NumberSchema {
-        self.schema
-    }
-}
-
-impl ContextHelper for NumberSchemaBuilder {
-    fn context(&mut self) -> &mut DataSchemaContext {
-        &mut self.schema._context
-    }
-}
-
-impl MetadataHelper for NumberSchemaBuilder {
-    fn metadata(&mut self) -> &mut Metadata {
-        &mut self.context()._metadata
-    }
-}
-
-/// Metadata describing data of type integer.
-#[skip_serializing_none]
-#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct IntegerSchema {
-    #[serde(flatten)]
-    pub _context: DataSchemaContext,
-
-    /// Specifies a minimum numeric value, representing an inclusive
-    /// lower limit.
-    pub minimum: Option<i64>,
-
-    /// Specifies a minimum numeric value, representing an exclusive
-    /// lower limit.
-    pub exclusive_minimum: Option<i64>,
-
-    /// Specifies a maximum numeric value, representing an inclusive
-    /// upper limit.
-    pub maximum: Option<i64>,
-
-    /// Specifies a maximum numeric value, representing an exclusive
-    /// upper limit.
-    pub exclusive_maximum: Option<i64>,
-
-    /// Specifies the `multipleOf` value.
-    ///
-    /// Basic validation requires this value to be strictly greater than 0.
-    pub multiple_of: Option<i64>,
-}
-
-impl IntegerSchema {
-    pub fn builder() -> IntegerSchemaBuilder {
-        IntegerSchemaBuilder::new()
-    }
-}
-
-/// Builder for creating `IntegerSchema` instances.
-pub struct IntegerSchemaBuilder {
-    schema: IntegerSchema,
-}
-
-impl IntegerSchemaBuilder {
-    /// Creates a new `IntegerSchemaBuilder`.
-    pub fn new() -> Self {
-        Self {
-            schema: IntegerSchema {
-                _context: DataSchemaContext::default(),
-                minimum: None,
-                exclusive_minimum: None,
-                maximum: None,
-                exclusive_maximum: None,
-                multiple_of: None,
-            },
+        impl<'de> Deserialize<'de> for $name {
+            fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+                let mut map = crate::flat::deserialize_map(deserializer)?;
+                let minimum = crate::flat::take(&mut map, "minimum")?;
+                let exclusive_minimum = crate::flat::take(&mut map, "exclusiveMinimum")?;
+                let maximum = crate::flat::take(&mut map, "maximum")?;
+                let exclusive_maximum = crate::flat::take(&mut map, "exclusiveMaximum")?;
+                let multiple_of = crate::flat::take(&mut map, "multipleOf")?;
+                let context = crate::flat::from_remaining::<DataSchemaContext, D::Error>(map)?;
+                Ok($name {
+                    _context: context,
+                    minimum,
+                    exclusive_minimum,
+                    maximum,
+                    exclusive_maximum,
+                    multiple_of,
+                })
+            }
         }
-    }
 
-    /// Sets the minimum value.
-    pub fn minimum(mut self, minimum: i64) -> Self {
-        self.schema.minimum = Some(minimum);
-        self
-    }
+        impl Serialize for $name {
+            fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+                use serde::ser::SerializeMap;
+                let mut map = serializer.serialize_map(None)?;
+                self.serialize_into(&mut map)?;
+                map.end()
+            }
+        }
 
-    /// Sets the exclusive minimum value.
-    pub fn exclusive_minimum(mut self, exclusive_minimum: i64) -> Self {
-        self.schema.exclusive_minimum = Some(exclusive_minimum);
-        self
-    }
+        impl $name {
+            pub(crate) fn serialize_into<S: serde::ser::SerializeMap>(
+                &self,
+                map: &mut S,
+            ) -> Result<(), S::Error> {
+                self._context.serialize_into(map)?;
+                if let Some(v) = self.minimum {
+                    map.serialize_entry("minimum", &v)?;
+                }
+                if let Some(v) = self.exclusive_minimum {
+                    map.serialize_entry("exclusiveMinimum", &v)?;
+                }
+                if let Some(v) = self.maximum {
+                    map.serialize_entry("maximum", &v)?;
+                }
+                if let Some(v) = self.exclusive_maximum {
+                    map.serialize_entry("exclusiveMaximum", &v)?;
+                }
+                if let Some(v) = self.multiple_of {
+                    map.serialize_entry("multipleOf", &v)?;
+                }
+                Ok(())
+            }
 
-    /// Sets the maximum value.
-    pub fn maximum(mut self, maximum: i64) -> Self {
-        self.schema.maximum = Some(maximum);
-        self
-    }
+            pub fn builder() -> $builder {
+                $builder::new()
+            }
+        }
 
-    /// Sets the exclusive maximum value.
-    pub fn exclusive_maximum(mut self, exclusive_maximum: i64) -> Self {
-        self.schema.exclusive_maximum = Some(exclusive_maximum);
-        self
-    }
+        /// Builder for creating a `$name` instance.
+        pub struct $builder {
+            schema: $name,
+        }
 
-    /// Sets the `multipleOf` value.
-    pub fn multiple_of(mut self, multiple_of: i64) -> Self {
-        self.schema.multiple_of = Some(multiple_of);
-        self
-    }
+        impl $builder {
+            pub fn new() -> Self {
+                Self {
+                    schema: $name::default(),
+                }
+            }
 
-    /// Builds and returns the `IntegerSchema` instance.
-    pub fn build(self) -> IntegerSchema {
-        self.schema
-    }
+            pub fn minimum(mut self, v: $ty) -> Self {
+                self.schema.minimum = Some(v);
+                self
+            }
+
+            pub fn exclusive_minimum(mut self, v: $ty) -> Self {
+                self.schema.exclusive_minimum = Some(v);
+                self
+            }
+
+            pub fn maximum(mut self, v: $ty) -> Self {
+                self.schema.maximum = Some(v);
+                self
+            }
+
+            pub fn exclusive_maximum(mut self, v: $ty) -> Self {
+                self.schema.exclusive_maximum = Some(v);
+                self
+            }
+
+            pub fn multiple_of(mut self, v: $ty) -> Self {
+                self.schema.multiple_of = Some(v);
+                self
+            }
+
+            pub fn build(self) -> $name {
+                self.schema
+            }
+        }
+
+        impl ContextHelper for $builder {
+            fn context(&mut self) -> &mut DataSchemaContext {
+                &mut self.schema._context
+            }
+        }
+
+        impl MetadataHelper for $builder {
+            fn metadata(&mut self) -> &mut Metadata {
+                &mut self.context()._metadata
+            }
+        }
+
+        impl From<$name> for DataSchema {
+            fn from(schema: $name) -> Self {
+                Self::$variant(schema)
+            }
+        }
+
+        impl From<$builder> for DataSchema {
+            fn from(builder: $builder) -> Self {
+                builder.build().into()
+            }
+        }
+    };
 }
 
-impl ContextHelper for IntegerSchemaBuilder {
-    fn context(&mut self) -> &mut DataSchemaContext {
-        &mut self.schema._context
-    }
-}
-
-impl MetadataHelper for IntegerSchemaBuilder {
-    fn metadata(&mut self) -> &mut Metadata {
-        &mut self.context()._metadata
-    }
-}
-
+impl_numeric_schema!(
+    NumberSchema,
+    NumberSchemaBuilder,
+    Number,
+    f64,
+    "Metadata describing data of type number."
+);
+impl_numeric_schema!(
+    IntegerSchema,
+    IntegerSchemaBuilder,
+    Integer,
+    i64,
+    "Metadata describing data of type integer."
+);
 /// Metadata describing data of type Object.
-#[skip_serializing_none]
-#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Clone, Debug, Default, PartialEq)]
 pub struct ObjectSchema {
-    #[serde(flatten)]
     pub _context: DataSchemaContext,
 
     /// Data schema nested definitions.
@@ -502,6 +609,45 @@ pub struct ObjectSchema {
 
     /// Defines which members of the object type are mandatory.
     pub required: Option<Vec<String>>,
+}
+
+impl<'de> Deserialize<'de> for ObjectSchema {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let mut map = crate::flat::deserialize_map(deserializer)?;
+        let properties = crate::flat::take(&mut map, "properties")?;
+        let required = crate::flat::take(&mut map, "required")?;
+        let context = crate::flat::from_remaining::<DataSchemaContext, D::Error>(map)?;
+        Ok(ObjectSchema {
+            _context: context,
+            properties,
+            required,
+        })
+    }
+}
+
+impl Serialize for ObjectSchema {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        use serde::ser::SerializeMap;
+        let mut map = serializer.serialize_map(None)?;
+        self.serialize_into(&mut map)?;
+        map.end()
+    }
+}
+
+impl ObjectSchema {
+    pub(crate) fn serialize_into<S: serde::ser::SerializeMap>(
+        &self,
+        map: &mut S,
+    ) -> Result<(), S::Error> {
+        self._context.serialize_into(map)?;
+        if let Some(properties) = &self.properties {
+            map.serialize_entry("properties", properties)?;
+        }
+        if let Some(required) = &self.required {
+            map.serialize_entry("required", required)?;
+        }
+        Ok(())
+    }
 }
 
 impl ObjectSchema {
@@ -554,11 +700,10 @@ impl ObjectSchemaBuilder {
         I: IntoIterator<Item = S>,
         S: Into<String>,
     {
-        let mut items: Vec<String> = fields.into_iter().map(|s| s.into()).collect();
         self.schema
             .required
             .get_or_insert_with(Vec::new)
-            .append(&mut items);
+            .extend(fields.into_iter().map(|s| s.into()));
         self
     }
 
@@ -581,11 +726,8 @@ impl MetadataHelper for ObjectSchemaBuilder {
 }
 
 /// Metadata describing data of type string.
-#[skip_serializing_none]
-#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Clone, Debug, Default, PartialEq)]
 pub struct StringSchema {
-    #[serde(flatten)]
     pub _context: DataSchemaContext,
 
     /// Specifies the minimum length of a string.
@@ -603,6 +745,60 @@ pub struct StringSchema {
 
     /// Specifies the MIME type of the contents of a string value.
     pub content_media_type: Option<String>,
+}
+
+impl<'de> Deserialize<'de> for StringSchema {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let mut map = crate::flat::deserialize_map(deserializer)?;
+        let min_length = crate::flat::take(&mut map, "minLength")?;
+        let max_length = crate::flat::take(&mut map, "maxLength")?;
+        let pattern = crate::flat::take(&mut map, "pattern")?;
+        let content_encoding = crate::flat::take(&mut map, "contentEncoding")?;
+        let content_media_type = crate::flat::take(&mut map, "contentMediaType")?;
+        let context = crate::flat::from_remaining::<DataSchemaContext, D::Error>(map)?;
+        Ok(StringSchema {
+            _context: context,
+            min_length,
+            max_length,
+            pattern,
+            content_encoding,
+            content_media_type,
+        })
+    }
+}
+
+impl Serialize for StringSchema {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        use serde::ser::SerializeMap;
+        let mut map = serializer.serialize_map(None)?;
+        self.serialize_into(&mut map)?;
+        map.end()
+    }
+}
+
+impl StringSchema {
+    pub(crate) fn serialize_into<S: serde::ser::SerializeMap>(
+        &self,
+        map: &mut S,
+    ) -> Result<(), S::Error> {
+        self._context.serialize_into(map)?;
+        if let Some(min_length) = self.min_length {
+            map.serialize_entry("minLength", &min_length)?;
+        }
+        if let Some(max_length) = self.max_length {
+            map.serialize_entry("maxLength", &max_length)?;
+        }
+        if let Some(pattern) = &self.pattern {
+            map.serialize_entry("pattern", pattern)?;
+        }
+        if let Some(content_encoding) = &self.content_encoding {
+            map.serialize_entry("contentEncoding", content_encoding)?;
+        }
+        if let Some(content_media_type) = &self.content_media_type {
+            map.serialize_entry("contentMediaType", content_media_type)?;
+        }
+        Ok(())
+    }
 }
 
 impl StringSchema {
@@ -680,12 +876,35 @@ impl MetadataHelper for StringSchemaBuilder {
 }
 
 /// Metadata describing data of type string.
-#[skip_serializing_none]
-#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Clone, Debug, Default, PartialEq)]
 pub struct NullSchema {
-    #[serde(flatten)]
     pub _context: DataSchemaContext,
+}
+
+impl<'de> Deserialize<'de> for NullSchema {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let map = crate::flat::deserialize_map(deserializer)?;
+        let context = crate::flat::from_remaining::<DataSchemaContext, D::Error>(map)?;
+        Ok(NullSchema { _context: context })
+    }
+}
+
+impl Serialize for NullSchema {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        use serde::ser::SerializeMap;
+        let mut map = serializer.serialize_map(None)?;
+        self._context.serialize_into(&mut map)?;
+        map.end()
+    }
+}
+
+impl NullSchema {
+    pub(crate) fn serialize_into<S: serde::ser::SerializeMap>(
+        &self,
+        map: &mut S,
+    ) -> Result<(), S::Error> {
+        self._context.serialize_into(map)
+    }
 }
 
 impl NullSchema {
@@ -749,30 +968,50 @@ pub enum DataSchema {
     Null(NullSchema),
 }
 
+/// Lightweight discriminator probe used to dispatch [`DataSchema`] variants
+/// without materializing the full `serde_json::Value` tree.
+#[derive(Deserialize)]
+struct TypePeek {
+    #[serde(rename = "type")]
+    r#type: Option<String>,
+}
+
 impl<'de> Deserialize<'de> for DataSchema {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: Deserializer<'de>,
     {
-        let value = serde_json::Value::deserialize(deserializer)?;
-
-        // Peek at "type" to decide whether a typed schema applies, without
-        // cloning the entire value tree.
-        let has_known_type = value
-            .get("type")
-            .and_then(serde_json::Value::as_str)
-            .is_some_and(|t| {
-                matches!(
-                    t,
-                    "array" | "boolean" | "number" | "integer" | "object" | "string" | "null"
-                )
-            });
-
-        if has_known_type {
-            return deserialize_typed_data_schema(value).map_err(serde::de::Error::custom);
+        // Buffer the object once into a `Box<RawValue>` (a single byte-buffer
+        // allocation) instead of a full `serde_json::Value` tree (one
+        // allocation per node). This is possible now that every TD struct that
+        // used to `#[serde(flatten)]` extension/composition fields buffers
+        // through `serde_json::Map` instead of serde's `Content` layer, so the
+        // `RawValue` survives the ancestor deserializer and is re-parsed by
+        // serde_json's native (raw-capable) deserializer.
+        let raw: Box<serde_json::value::RawValue> = Deserialize::deserialize(deserializer)?;
+        let peek: TypePeek = serde_json::from_str(raw.get()).map_err(serde::de::Error::custom)?;
+        match peek.r#type.as_deref() {
+            Some("array") => serde_json::from_str::<ArraySchema>(raw.get()).map(Self::Array),
+            Some("boolean") => serde_json::from_str::<BooleanSchema>(raw.get()).map(Self::Boolean),
+            Some("number") => serde_json::from_str::<NumberSchema>(raw.get()).map(Self::Number),
+            Some("integer") => serde_json::from_str::<IntegerSchema>(raw.get()).map(Self::Integer),
+            Some("object") => serde_json::from_str::<ObjectSchema>(raw.get()).map(Self::Object),
+            Some("string") => serde_json::from_str::<StringSchema>(raw.get()).map(Self::String),
+            Some("null") => serde_json::from_str::<NullSchema>(raw.get()).map(Self::Null),
+            // A DataSchema without a recognized `type` is a generic schema
+            // (W3C TD permits omitting `type`). There is no dedicated
+            // "untyped" variant, so deserialize it as the most permissive
+            // canonical variant (`Object`) deterministically. The previous
+            // `#[serde(untagged)]` first-match logic arbitrarily picked
+            // `Array` (the first variant) for inputs like `{}`,
+            // misclassifying generic schemas as arrays. Any type-specific
+            // fields the input carries (e.g. `minLength`, `minimum`) are
+            // preserved via the schema's extension map. An unrecognized
+            // `type` string follows the same path defensively rather than
+            // panicking.
+            _ => serde_json::from_str::<ObjectSchema>(raw.get()).map(Self::Object),
         }
-
-        deserialize_untyped_data_schema(value).map_err(serde::de::Error::custom)
+        .map_err(serde::de::Error::custom)
     }
 }
 
@@ -796,30 +1035,6 @@ impl From<BooleanSchema> for DataSchema {
 
 impl From<BooleanSchemaBuilder> for DataSchema {
     fn from(builder: BooleanSchemaBuilder) -> Self {
-        builder.build().into()
-    }
-}
-
-impl From<NumberSchema> for DataSchema {
-    fn from(schema: NumberSchema) -> Self {
-        Self::Number(schema)
-    }
-}
-
-impl From<NumberSchemaBuilder> for DataSchema {
-    fn from(builder: NumberSchemaBuilder) -> Self {
-        builder.build().into()
-    }
-}
-
-impl From<IntegerSchema> for DataSchema {
-    fn from(schema: IntegerSchema) -> Self {
-        Self::Integer(schema)
-    }
-}
-
-impl From<IntegerSchemaBuilder> for DataSchema {
-    fn from(builder: IntegerSchemaBuilder) -> Self {
         builder.build().into()
     }
 }
@@ -896,7 +1111,25 @@ impl DataSchema {
         NullSchema::builder()
     }
 
-    fn context(&self) -> &DataSchemaContext {
+    /// Emits this schema's fields inline into an in-progress serialized map.
+    /// Used by interaction affordances that previously `#[serde(flatten)]`-ed a
+    /// `DataSchema`, so the schema fields appear at the affordance level.
+    pub(crate) fn serialize_into<S: serde::ser::SerializeMap>(
+        &self,
+        map: &mut S,
+    ) -> Result<(), S::Error> {
+        match self {
+            Self::Array(schema) => schema.serialize_into(map),
+            Self::Boolean(schema) => schema.serialize_into(map),
+            Self::Number(schema) => schema.serialize_into(map),
+            Self::Integer(schema) => schema.serialize_into(map),
+            Self::Object(schema) => schema.serialize_into(map),
+            Self::String(schema) => schema.serialize_into(map),
+            Self::Null(schema) => schema.serialize_into(map),
+        }
+    }
+
+    pub(crate) fn context(&self) -> &DataSchemaContext {
         match self {
             Self::Array(schema) => &schema._context,
             Self::Boolean(schema) => &schema._context,
@@ -932,26 +1165,26 @@ impl Validate for DataSchema {
 
         match self {
             Self::Array(schema) => {
-                validate_ordered_u32("minItems", schema.min_items, "maxItems", schema.max_items)?;
+                validate_ordered("minItems", schema.min_items, "maxItems", schema.max_items)?;
                 validate_nested_schemas(schema.items.as_deref(), level)?;
             }
             Self::Number(schema) => {
-                validate_number_bounds(
+                validate_numeric_bounds(
                     schema.minimum,
                     schema.exclusive_minimum,
                     schema.maximum,
                     schema.exclusive_maximum,
                 )?;
-                validate_positive_f64("multipleOf", schema.multiple_of)?;
+                validate_positive("multipleOf", schema.multiple_of)?;
             }
             Self::Integer(schema) => {
-                validate_integer_bounds(
+                validate_numeric_bounds(
                     schema.minimum,
                     schema.exclusive_minimum,
                     schema.maximum,
                     schema.exclusive_maximum,
                 )?;
-                validate_positive_i64("multipleOf", schema.multiple_of)?;
+                validate_positive("multipleOf", schema.multiple_of)?;
             }
             Self::Object(schema) => {
                 if let Some(properties) = &schema.properties {
@@ -966,7 +1199,7 @@ impl Validate for DataSchema {
                 }
             }
             Self::String(schema) => {
-                validate_ordered_u32(
+                validate_ordered(
                     "minLength",
                     schema.min_length,
                     "maxLength",
@@ -978,46 +1211,6 @@ impl Validate for DataSchema {
 
         Ok(())
     }
-}
-
-fn deserialize_typed_data_schema(
-    value: serde_json::Value,
-) -> Result<DataSchema, serde_json::Error> {
-    let data_type = value
-        .get("type")
-        .and_then(serde_json::Value::as_str)
-        .unwrap_or_default();
-    match data_type {
-        "array" => serde_json::from_value::<ArraySchema>(value).map(DataSchema::Array),
-        "boolean" => serde_json::from_value::<BooleanSchema>(value).map(DataSchema::Boolean),
-        "number" => serde_json::from_value::<NumberSchema>(value).map(DataSchema::Number),
-        "integer" => serde_json::from_value::<IntegerSchema>(value).map(DataSchema::Integer),
-        "object" => serde_json::from_value::<ObjectSchema>(value).map(DataSchema::Object),
-        "string" => serde_json::from_value::<StringSchema>(value).map(DataSchema::String),
-        "null" => serde_json::from_value::<NullSchema>(value).map(DataSchema::Null),
-        // Defensive: the `has_known_type` pre-check in `deserialize()`
-        // guarantees one of the known types above. Surface a deserialization
-        // error instead of panicking if that invariant ever breaks (for
-        // example if a new type name is introduced without updating this
-        // match).
-        other => Err(serde::de::Error::custom(format!(
-            "unknown data schema type '{other}'"
-        ))),
-    }
-}
-
-fn deserialize_untyped_data_schema(
-    value: serde_json::Value,
-) -> Result<DataSchema, serde_json::Error> {
-    // A DataSchema without a recognized `type` is a generic schema (W3C TD
-    // permits omitting `type`). There is no dedicated "untyped" variant, so
-    // deserialize it as the most permissive canonical variant (`Object`)
-    // deterministically. The previous `#[serde(untagged)]` first-match logic
-    // arbitrarily picked `Array` (the first variant) for inputs like `{}`,
-    // misclassifying generic schemas as arrays (and letting array-only
-    // constraints apply). Any type-specific fields the input carries (e.g.
-    // `minLength`, `minimum`) are preserved via the schema's extension map.
-    serde_json::from_value::<ObjectSchema>(value).map(DataSchema::Object)
 }
 
 fn validate_schema_type_consistency(schema: &DataSchema) -> Result<(), ValidateError> {
@@ -1050,13 +1243,13 @@ fn validate_schema_context(
     }
 
     let fields = &context._extra_fields;
-    validate_ordered_u64(
+    validate_ordered(
         "minItems",
         value_as_u64(fields.get("minItems")),
         "maxItems",
         value_as_u64(fields.get("maxItems")),
     )?;
-    validate_ordered_u64(
+    validate_ordered(
         "minLength",
         value_as_u64(fields.get("minLength")),
         "maxLength",
@@ -1065,7 +1258,7 @@ fn validate_schema_context(
     validate_json_number_bounds(fields)?;
 
     if let Some(multiple_of) = value_as_f64(fields.get("multipleOf")) {
-        validate_positive_f64("multipleOf", Some(multiple_of))?;
+        validate_positive("multipleOf", Some(multiple_of))?;
     }
 
     Ok(())
@@ -1086,11 +1279,11 @@ fn validate_nested_schemas(
     Ok(())
 }
 
-fn validate_ordered_u32(
+fn validate_ordered<T: PartialOrd>(
     min_name: &str,
-    min: Option<u32>,
+    min: Option<T>,
     max_name: &str,
-    max: Option<u32>,
+    max: Option<T>,
 ) -> Result<(), ValidateError> {
     match (min, max) {
         (Some(min), Some(max)) if min > max => Err(ValidateError::InvalidSchema(format!(
@@ -1101,31 +1294,16 @@ fn validate_ordered_u32(
     }
 }
 
-fn validate_ordered_u64(
-    min_name: &str,
-    min: Option<u64>,
-    max_name: &str,
-    max: Option<u64>,
+fn validate_numeric_bounds<T: PartialOrd + Copy>(
+    minimum: Option<T>,
+    exclusive_minimum: Option<T>,
+    maximum: Option<T>,
+    exclusive_maximum: Option<T>,
 ) -> Result<(), ValidateError> {
-    match (min, max) {
-        (Some(min), Some(max)) if min > max => Err(ValidateError::InvalidSchema(format!(
-            "{} must be less than or equal to {}",
-            min_name, max_name
-        ))),
-        _ => Ok(()),
-    }
-}
-
-fn validate_number_bounds(
-    minimum: Option<f64>,
-    exclusive_minimum: Option<f64>,
-    maximum: Option<f64>,
-    exclusive_maximum: Option<f64>,
-) -> Result<(), ValidateError> {
-    validate_ordered_f64("minimum", minimum, "maximum", maximum)?;
-    validate_ordered_f64("minimum", minimum, "exclusiveMaximum", exclusive_maximum)?;
-    validate_ordered_f64("exclusiveMinimum", exclusive_minimum, "maximum", maximum)?;
-    validate_ordered_f64(
+    validate_ordered("minimum", minimum, "maximum", maximum)?;
+    validate_ordered("minimum", minimum, "exclusiveMaximum", exclusive_maximum)?;
+    validate_ordered("exclusiveMinimum", exclusive_minimum, "maximum", maximum)?;
+    validate_ordered(
         "exclusiveMinimum",
         exclusive_minimum,
         "exclusiveMaximum",
@@ -1134,7 +1312,7 @@ fn validate_number_bounds(
 }
 
 fn validate_json_number_bounds(fields: &ExtensionMap) -> Result<(), ValidateError> {
-    validate_number_bounds(
+    validate_numeric_bounds(
         value_as_f64(fields.get("minimum")),
         value_as_f64(fields.get("exclusiveMinimum")),
         value_as_f64(fields.get("maximum")),
@@ -1142,66 +1320,12 @@ fn validate_json_number_bounds(fields: &ExtensionMap) -> Result<(), ValidateErro
     )
 }
 
-fn validate_ordered_f64(
-    min_name: &str,
-    min: Option<f64>,
-    max_name: &str,
-    max: Option<f64>,
+fn validate_positive<T: PartialOrd + Default>(
+    name: &str,
+    value: Option<T>,
 ) -> Result<(), ValidateError> {
-    match (min, max) {
-        (Some(min), Some(max)) if min > max => Err(ValidateError::InvalidSchema(format!(
-            "{} must be less than or equal to {}",
-            min_name, max_name
-        ))),
-        _ => Ok(()),
-    }
-}
-
-fn validate_integer_bounds(
-    minimum: Option<i64>,
-    exclusive_minimum: Option<i64>,
-    maximum: Option<i64>,
-    exclusive_maximum: Option<i64>,
-) -> Result<(), ValidateError> {
-    validate_ordered_i64("minimum", minimum, "maximum", maximum)?;
-    validate_ordered_i64("minimum", minimum, "exclusiveMaximum", exclusive_maximum)?;
-    validate_ordered_i64("exclusiveMinimum", exclusive_minimum, "maximum", maximum)?;
-    validate_ordered_i64(
-        "exclusiveMinimum",
-        exclusive_minimum,
-        "exclusiveMaximum",
-        exclusive_maximum,
-    )
-}
-
-fn validate_ordered_i64(
-    min_name: &str,
-    min: Option<i64>,
-    max_name: &str,
-    max: Option<i64>,
-) -> Result<(), ValidateError> {
-    match (min, max) {
-        (Some(min), Some(max)) if min > max => Err(ValidateError::InvalidSchema(format!(
-            "{} must be less than or equal to {}",
-            min_name, max_name
-        ))),
-        _ => Ok(()),
-    }
-}
-
-fn validate_positive_f64(name: &str, value: Option<f64>) -> Result<(), ValidateError> {
     match value {
-        Some(value) if value <= 0.0 => Err(ValidateError::InvalidSchema(format!(
-            "{} must be greater than 0",
-            name
-        ))),
-        _ => Ok(()),
-    }
-}
-
-fn validate_positive_i64(name: &str, value: Option<i64>) -> Result<(), ValidateError> {
-    match value {
-        Some(value) if value <= 0 => Err(ValidateError::InvalidSchema(format!(
+        Some(value) if value <= T::default() => Err(ValidateError::InvalidSchema(format!(
             "{} must be greater than 0",
             name
         ))),

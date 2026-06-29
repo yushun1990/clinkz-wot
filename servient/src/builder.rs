@@ -6,10 +6,14 @@ use clinkz_wot_core::{
 };
 use clinkz_wot_discovery::{InMemoryThingDirectory, ThingDirectory};
 
+#[cfg(feature = "async")]
+use crate::servient::DrivingState;
 use crate::{
     ConsumedThingRegistry, ExposedThingRegistry,
+    interaction::InteractionRuntime,
     servient::{
-        BindingFactoryEntry, BindingFactoryRegistry, Servient, ServientShared, ServientState,
+        BindingFactoryEntry, BindingFactoryRegistry, PayloadCodecRegistry,
+        SecurityProviderRegistry, Servient, ServientShared,
     },
 };
 
@@ -173,36 +177,53 @@ where
         #[cfg(feature = "async")]
         let async_binding_generation = self.async_server_bindings.len() as u64;
 
+        // Construct the shared registry handles once, then share them between
+        // `ServientShared` (for direct registry mutation paths) and the cached
+        // `InteractionRuntime` (for the consumed-interaction hot path). Both
+        // hold the same `Arc<MapLock<…>>` handles, so post-build mutations stay
+        // visible through both paths; the `InteractionRuntime` clone is just an
+        // `Arc` refcount bump per registry.
+        let binding_factories = BindingFactoryRegistry::from_factories(self.binding_factories);
+        #[allow(clippy::arc_with_non_send_sync)]
+        let payload_codecs: PayloadCodecRegistry = Arc::new(MapLock::new(self.payload_codecs));
+        #[allow(clippy::arc_with_non_send_sync)]
+        let security_providers: SecurityProviderRegistry =
+            Arc::new(MapLock::new(Arc::new(self.security_providers)));
+        let credential_store = self.credential_store;
+        let normalize_payloads = self.normalize_payloads;
+
+        let interaction = InteractionRuntime::new(
+            binding_factories.clone(),
+            Arc::clone(&payload_codecs),
+            Arc::clone(&security_providers),
+            credential_store,
+            normalize_payloads,
+        );
+
         Servient::from_parts(
             ServientShared {
                 #[allow(clippy::arc_with_non_send_sync)]
                 exposed_registry: Arc::new(ExposedThingRegistry::new()),
                 #[allow(clippy::arc_with_non_send_sync)]
                 consumed_registry: Arc::new(ConsumedThingRegistry::new()),
-                binding_factories: BindingFactoryRegistry::from_factories(self.binding_factories),
-                #[allow(clippy::arc_with_non_send_sync)]
-                payload_codecs: Arc::new(MapLock::new(self.payload_codecs)),
-                #[allow(clippy::arc_with_non_send_sync)]
-                security_providers: Arc::new(MapLock::new(Arc::new(self.security_providers))),
-                credential_store: self.credential_store,
+                binding_factories,
+                payload_codecs,
+                security_providers,
                 event_broker,
-                normalize_payloads: self.normalize_payloads,
+                interaction,
                 #[allow(clippy::arc_with_non_send_sync)]
-                sync_server_bindings: Arc::new(MapLock::new(Arc::from(
-                    self.server_bindings.clone(),
-                ))),
+                sync_server_bindings: Arc::new(MapLock::new(Arc::from(self.server_bindings))),
                 #[cfg(feature = "async")]
                 #[allow(clippy::arc_with_non_send_sync)]
                 async_server_bindings: Arc::new(MapLock::new(Arc::from(
-                    self.async_server_bindings.clone(),
+                    self.async_server_bindings,
                 ))),
+                sync_binding_cursor: core::sync::atomic::AtomicUsize::new(0),
             },
-            ServientState {
-                directory: self.directory,
-                sync_binding_cursor: 0,
-                #[cfg(feature = "async")]
+            self.directory,
+            #[cfg(feature = "async")]
+            DrivingState {
                 async_binding_generation,
-                #[cfg(feature = "async")]
                 async_accept_state: crate::servient::AsyncAcceptState::new(),
             },
         )

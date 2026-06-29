@@ -1,6 +1,7 @@
 use alloc::string::String;
 use core::fmt;
 
+use clinkz_wot_core::AffordanceKind;
 use clinkz_wot_td::data_type::ResolveFormHrefError;
 
 /// Result type used by protocol-neutral binding utilities.
@@ -11,8 +12,8 @@ pub type BindingResult<T> = Result<T, BindingError>;
 pub enum BindingError {
     /// The requested affordance does not exist on the Thing Description.
     UnknownAffordance {
-        /// Affordance collection name.
-        kind: &'static str,
+        /// Affordance collection kind.
+        kind: AffordanceKind,
         /// Requested affordance name.
         name: String,
     },
@@ -34,7 +35,9 @@ impl fmt::Display for BindingError {
             Self::UnknownAffordance { kind, name } => {
                 write!(f, "Unknown {} affordance: {}", kind, name)
             }
-            Self::UnsupportedOperation(message) => write!(f, "Unsupported operation: {}", message),
+            Self::UnsupportedOperation(message) => {
+                write!(f, "Unsupported operation: {}", message)
+            }
             Self::MetadataMismatch(message) => write!(f, "Metadata mismatch: {}", message),
             Self::CallerFilterMismatch(message) => {
                 write!(f, "Caller filter mismatch: {}", message)

@@ -45,6 +45,12 @@ pub enum ValidateError {
     /// A semantic or profile-level constraint is violated (e.g., missing
     /// standard `@context`, missing interaction affordances).
     InvalidContext(String),
+    /// Two or more validation failures discovered in one pass.
+    ///
+    /// Builders accumulate every error they encounter (instead of returning
+    /// only the first) so a caller can fix several issues per rebuild. The
+    /// order mirrors discovery order.
+    Multiple(Vec<ValidateError>),
 }
 
 impl fmt::Display for ValidateError {
@@ -65,6 +71,13 @@ impl fmt::Display for ValidateError {
                 )
             }
             Self::InvalidContext(msg) => write!(f, "Invalid context: {}", msg),
+            Self::Multiple(errors) => {
+                write!(f, "Multiple validation errors ({}):", errors.len())?;
+                for err in errors {
+                    write!(f, "\n  - {err}")?;
+                }
+                Ok(())
+            }
         }
     }
 }
@@ -111,6 +124,62 @@ pub(crate) fn schema_error_message(err: ValidateError) -> String {
     match err {
         ValidateError::InvalidSchema(message) => message,
         other => other.to_string(),
+    }
+}
+
+/// Collapses a collected `Vec<ValidateError>` into a single `Result`.
+///
+/// Empty → `Ok(())`. One error → that error verbatim. Two or more → a single
+/// [`ValidateError::Multiple`] aggregating them, so callers learn about every
+/// problem in one pass instead of one-at-a-time across rebuilds.
+pub(crate) fn collected_errors(errors: Vec<ValidateError>) -> Result<(), ValidateError> {
+    match errors.len() {
+        0 => Ok(()),
+        1 => Err(errors.into_iter().next().expect("len == 1")),
+        _ => Err(ValidateError::Multiple(errors)),
+    }
+}
+
+/// Prepends an affordance/security `context` to every message-carrying variant
+/// of a [`ValidateError`] **without changing its variant**, so the original
+/// error taxonomy is preserved for programmatic matching.
+pub(crate) fn prepend_context(context: String, err: ValidateError) -> ValidateError {
+    match err {
+        ValidateError::InvalidSchema(msg) => {
+            ValidateError::InvalidSchema(format!("{}: {}", context, msg))
+        }
+        ValidateError::InvalidSecurity(msg) => {
+            ValidateError::InvalidSecurity(format!("{}: {}", context, msg))
+        }
+        ValidateError::InvalidUri(msg) => {
+            ValidateError::InvalidUri(format!("{}: {}", context, msg))
+        }
+        ValidateError::InvalidContext(msg) => {
+            ValidateError::InvalidContext(format!("{}: {}", context, msg))
+        }
+        ValidateError::MissingRequiredField(field) => {
+            ValidateError::MissingRequiredField(format!("{}: {}", context, field))
+        }
+        ValidateError::InvalidOperation {
+            context: inner,
+            found,
+        } => ValidateError::InvalidOperation {
+            context: format!("{}: {}", context, inner),
+            found,
+        },
+        ValidateError::InvalidReference {
+            context: inner,
+            reference,
+        } => ValidateError::InvalidReference {
+            context: format!("{}: {}", context, inner),
+            reference,
+        },
+        ValidateError::Multiple(errors) => ValidateError::Multiple(
+            errors
+                .into_iter()
+                .map(|e| prepend_context(context.clone(), e))
+                .collect(),
+        ),
     }
 }
 
@@ -203,21 +272,24 @@ where
                 continue;
             };
 
-            let reference_context = format!(
-                "{}[{}].additionalResponses[{}].schema",
-                context, form_index, response_index
-            );
+            // Build the reference context lazily; only needed on the error path.
+            let reference_context = || {
+                format!(
+                    "{}[{}].additionalResponses[{}].schema",
+                    context, form_index, response_index
+                )
+            };
 
             let Some(schema_definitions) = schema_definitions else {
                 return Err(ValidateError::InvalidReference {
-                    context: reference_context,
+                    context: reference_context(),
                     reference: schema.clone(),
                 });
             };
 
             if !schema_definitions.contains_key(schema) {
                 return Err(ValidateError::InvalidReference {
-                    context: reference_context,
+                    context: reference_context(),
                     reference: schema.clone(),
                 });
             }
@@ -301,14 +373,8 @@ fn is_thing_level_operation(operation: &Operation) -> bool {
             | Operation::ObserveAllProperties
             | Operation::UnobserveAllProperties
             | Operation::QueryAllActions
-    ) {
-        return true;
-    }
-    // `subscribeallevents` / `unsubscribeallevents` are TD 2.0 meta-operations.
-    #[cfg(feature = "td2-preview")]
-    if matches!(
-        operation,
-        Operation::SubscribeAllEvents | Operation::UnsubscribeAllEvents
+            | Operation::SubscribeAllEvents
+            | Operation::UnsubscribeAllEvents
     ) {
         return true;
     }

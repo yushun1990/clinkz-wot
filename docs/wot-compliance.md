@@ -10,29 +10,29 @@ of the default public API until the specification stabilizes.
 ## TD 2.0 Feature Gate
 
 TD 2.0 vocabulary that is not part of TD 1.1 is gated behind the
-`td2-preview` feature and is absent from default builds. The gated surface
-includes:
+`td2-preview` feature and is absent from default builds. The gated surface is
+limited to:
 
 - The `ActionAffordance.synchronous` field and its builder method. When the
   feature is disabled the term round-trips as an opaque extension field.
-- The `Operation` variants `cancelaction`, `subscribeallevents`, and
-  `unsubscribeallevents` (the full TD 1.1 `op` vocabulary — the 15 canonical
-  terms including `queryaction` and `queryallactions` — is always available).
-- The runtime behavior that dispatches those operations: the
-  `ActionCancelHandler` trait, `ExposedThingHandle::set_action_cancel_handler`,
-  the `ConsumedThingHandle::subscribe_all_events` /
-  `unsubscribe_all_events` methods (sync and async), and the matching inbound
-  dispatch and zenoh binding planning arms.
+
+The full TD 1.1 `op` vocabulary is always available in default builds. This
+includes `cancelaction`, `subscribeallevents`, and `unsubscribeallevents`,
+which are part of the TD 1.1 REC `op` vocabulary (§5.3.4.2). Their runtime
+behavior is likewise always available: the `ActionCancelHandler` trait,
+`ExposedThingHandle::set_action_cancel_handler`, the
+`ConsumedThingHandle::subscribe_all_events` / `unsubscribe_all_events` methods
+(sync and async), and the matching inbound dispatch and zenoh binding planning
+arms.
 
 Consequences:
 
-- A default build targets strict TD 1.1. A TD document that uses a TD 2.0
-  `op` value fails to deserialize until `td2-preview` is enabled; this is
-  intentional. The official WoT parsing fixtures that carry TD 2.0 ops are
-  exercised under `td2-preview` (see `docs/verification.md`).
-- Enabling `td2-preview` on `clinkz-wot-td`, `clinkz-wot-core`,
-  `clinkz-wot-servient`, and `clinkz-wot-protocol-bindings-zenoh` restores the
-  full TD 2.0 data-model and runtime surface.
+- A default build targets full TD 1.1, including every TD 1.1 `op` value, so a
+  conformant TD 1.1 document (e.g. the official WoT parsing fixtures) parses,
+  validates, and round-trips without enabling `td2-preview`.
+- Enabling `td2-preview` on `clinkz-wot-td` additionally surfaces the
+  `ActionAffordance.synchronous` data-model field for experimental TD 2.0
+  tracking.
 
 ## Thing Description
 
@@ -98,11 +98,10 @@ Examples:
 - `contentType` defaults to `application/json`.
 - Thing-level `security` can be inherited by forms unless a form overrides it.
 - Default operation behavior is resolved according to TD rules and interaction
-  type. Per TD 1.1 §5.3.3 the default `op` for an omitted Event form is
-  `subscribeevent` only (not paired with `unsubscribeevent`); for a Property
-  form it depends on the `readOnly`/`writeOnly` flags, and for an Action form it
-  is `invokeaction`. A `readOnly` and `writeOnly` combination of both `true` is
-  rejected.
+  type. Per TD 1.1 §5.4 the default `op` for an omitted Event form is
+  `subscribeevent` and `unsubscribeevent`; for a Property form it depends on the
+  `readOnly`/`writeOnly` flags, and for an Action form it is `invokeaction`. A
+  `readOnly` and `writeOnly` combination of both `true` is rejected.
 
 ## Context Ordering
 

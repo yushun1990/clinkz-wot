@@ -15,7 +15,13 @@
 //! Remote interactions select a form, apply transport security, and invoke a
 //! binding through shared runtime registries snapshot from the Servient.
 
-use alloc::{collections::BTreeMap, string::String, string::ToString, sync::Arc, vec::Vec};
+use alloc::{
+    collections::{BTreeMap, BTreeSet},
+    string::String,
+    string::ToString,
+    sync::Arc,
+    vec::Vec,
+};
 
 use clinkz_wot_core::{
     AffordanceTarget, CoreError, EventBroker, EventName, EventSink, InteractionInput,
@@ -122,7 +128,10 @@ where
             .registry
             .dispatch(&self.id, |thing| {
                 thing.ensure_property_affordance(name)?;
-                thing.read_handler(name).ok_or(CoreError::MissingHandler)
+                thing.read_handler(name).ok_or(CoreError::MissingHandler {
+                    target: AffordanceTarget::Property(name.into()),
+                    operation: Operation::ReadProperty,
+                })
             })
             .ok_or_else(|| crate::ServientError::ExposedThingNotFound(self.id.to_string()))?
             .map_err(crate::ServientError::from)?;
@@ -139,7 +148,10 @@ where
             .registry
             .dispatch(&self.id, |thing| {
                 thing.ensure_property_affordance(name)?;
-                thing.write_handler(name).ok_or(CoreError::MissingHandler)
+                thing.write_handler(name).ok_or(CoreError::MissingHandler {
+                    target: AffordanceTarget::Property(name.into()),
+                    operation: Operation::WriteProperty,
+                })
             })
             .ok_or_else(|| crate::ServientError::ExposedThingNotFound(self.id.to_string()))?
             .map_err(crate::ServientError::from)?;
@@ -194,6 +206,24 @@ where
         Ok(())
     }
 
+    /// Writes all writable properties declared in the TD (W3C Scripting API
+    /// `writeAllProperties`; W3C TD `writeallproperties` meta-operation).
+    ///
+    /// Each entry in `values` is written to its property handler. Properties
+    /// absent from `values` are left unchanged. This is the local in-process
+    /// counterpart of the inbound `writeallproperties` dispatch; the semantic
+    /// distinction from [`write_multiple_properties`](Self::write_multiple_properties)
+    /// is only meaningful at the protocol level (different TD meta-operation).
+    pub fn write_all_properties(
+        &self,
+        values: &BTreeMap<String, InteractionInput>,
+    ) -> ServientResult<()> {
+        for (name, input) in values {
+            self.write_property(name, input.clone())?;
+        }
+        Ok(())
+    }
+
     /// Invokes an action, dispatching directly to the attached handler.
     pub fn invoke_action(
         &self,
@@ -204,7 +234,10 @@ where
             .registry
             .dispatch(&self.id, |thing| {
                 thing.ensure_action_affordance(name)?;
-                thing.action_handler(name).ok_or(CoreError::MissingHandler)
+                thing.action_handler(name).ok_or(CoreError::MissingHandler {
+                    target: AffordanceTarget::Action(name.into()),
+                    operation: Operation::InvokeAction,
+                })
             })
             .ok_or_else(|| crate::ServientError::ExposedThingNotFound(self.id.to_string()))?
             .map_err(crate::ServientError::from)?;
@@ -224,7 +257,10 @@ where
                 thing.ensure_event_affordance(name)?;
                 thing
                     .subscribe_handler(name)
-                    .ok_or(CoreError::MissingHandler)
+                    .ok_or(CoreError::MissingHandler {
+                        target: AffordanceTarget::Event(name.into()),
+                        operation: Operation::SubscribeEvent,
+                    })
             })
             .ok_or_else(|| crate::ServientError::ExposedThingNotFound(self.id.to_string()))?
             .map_err(crate::ServientError::from)?;
@@ -382,9 +418,7 @@ where
         Ok(())
     }
 
-    /// Attaches an action cancel handler (W3C TD `cancelaction` operation; TD
-    /// 2.0, requires `td2-preview`).
-    #[cfg(feature = "td2-preview")]
+    /// Attaches an action cancel handler (W3C TD `cancelaction` operation).
     pub fn set_action_cancel_handler(
         &self,
         name: impl Into<String>,
@@ -457,7 +491,7 @@ where
             .ok_or_else(|| crate::ServientError::ExposedThingNotFound(self.id.to_string()))?
             .map_err(crate::ServientError::from)?;
         self.servient
-            .sync_added_affordance(&self.id, &AffordanceTarget::Property(name))?;
+            .sync_added_affordance(&self.id, &AffordanceTarget::Property(name.into()))?;
         Ok(())
     }
 
@@ -482,7 +516,7 @@ where
             .ok_or_else(|| crate::ServientError::ExposedThingNotFound(self.id.to_string()))?
             .map_err(crate::ServientError::from)?;
         self.servient
-            .sync_added_affordance(&self.id, &AffordanceTarget::Action(name))?;
+            .sync_added_affordance(&self.id, &AffordanceTarget::Action(name.into()))?;
         Ok(())
     }
 
@@ -507,7 +541,7 @@ where
             .ok_or_else(|| crate::ServientError::ExposedThingNotFound(self.id.to_string()))?
             .map_err(crate::ServientError::from)?;
         self.servient
-            .sync_added_affordance(&self.id, &AffordanceTarget::Event(name))?;
+            .sync_added_affordance(&self.id, &AffordanceTarget::Event(name.into()))?;
         Ok(())
     }
 
@@ -667,6 +701,37 @@ where
         )
     }
 
+    /// Queries the status of a remote action, selecting a form by default
+    /// criteria (W3C TD `queryaction` operation).
+    pub fn query_action(
+        &self,
+        name: &str,
+        input: InteractionInput,
+    ) -> ServientResult<InteractionOutput> {
+        self.query_action_with_criteria(
+            name,
+            FormSelectionCriteria::new(Operation::QueryAction),
+            input,
+        )
+    }
+
+    /// Queries the status of a remote action, selecting a form by explicit
+    /// criteria (W3C TD `queryaction` operation).
+    pub fn query_action_with_criteria(
+        &self,
+        name: &str,
+        criteria: FormSelectionCriteria<'_>,
+        input: InteractionInput,
+    ) -> ServientResult<InteractionOutput> {
+        self.servient.consumed_request(
+            &self.entry,
+            clinkz_wot_core::AffordanceTarget::Action(name.into()),
+            AffordanceRef::Action(name),
+            criteria_for_operation(criteria, Operation::QueryAction),
+            input,
+        )
+    }
+
     /// Subscribes to a remote event, opening a long-lived streaming
     /// subscription.
     ///
@@ -767,9 +832,12 @@ where
         &self,
         names: &[&str],
     ) -> ServientResult<BTreeMap<String, InteractionOutput>> {
-        let names_owned: Vec<String> = names.iter().map(|n| String::from(*n)).collect();
+        // Membership set for O(1) filtering of the bulk response; avoids the
+        // previous O(N×M) `names_owned.iter().any(...)` scan and the throwaway
+        // `Vec<String>` allocation (serde_json serializes `&[&str]` directly).
+        let requested: BTreeSet<&str> = names.iter().copied().collect();
         if let Some(result) = self.thing_level_bulk(Operation::ReadMultipleProperties, {
-            let body = serde_json::to_vec(&names_owned).map_err(|err| {
+            let body = serde_json::to_vec(names).map_err(|err| {
                 crate::ServientError::from(CoreError::InvalidInteraction(alloc::format!(
                     "failed to serialize readmultipleproperties names: {err}"
                 )))
@@ -782,7 +850,7 @@ where
                 // extra properties.
                 let requested: BTreeMap<String, InteractionOutput> = map
                     .into_iter()
-                    .filter(|(name, _)| names_owned.iter().any(|n| n == name))
+                    .filter(|(name, _)| requested.contains(name.as_str()))
                     .collect();
                 if !requested.is_empty() {
                     return Ok(requested);
@@ -917,13 +985,12 @@ where
     }
 
     /// Subscribes to all events declared in the consumed TD (W3C Scripting API
-    /// `subscribeAllEvents`; TD 2.0, requires `td2-preview`).
+    /// `subscribeAllEvents`; W3C TD `subscribeallevents`).
     ///
     /// Prefers a single Thing-level form declaring the `subscribeallevents`
     /// operation (one subscription) when the consumed TD advertises one;
     /// otherwise fans out across individual event subscriptions and returns a
     /// merged [`Subscription`] that multiplexes them.
-    #[cfg(feature = "td2-preview")]
     pub fn subscribe_all_events(&self, input: InteractionInput) -> ServientResult<Subscription> {
         if let Some(sub) = self.thing_level_subscribe(Operation::SubscribeAllEvents, input.clone())
         {
@@ -939,12 +1006,11 @@ where
     }
 
     /// Stops all active event subscriptions (W3C Scripting API
-    /// `unsubscribeAllEvents`; TD 2.0, requires `td2-preview`).
+    /// `unsubscribeAllEvents`; W3C TD `unsubscribeallevents`).
     ///
     /// Prefers a single Thing-level form declaring the
     /// `unsubscribeallevents` operation (one round trip) when available;
     /// otherwise stops each active event subscription individually.
-    #[cfg(feature = "td2-preview")]
     pub fn unsubscribe_all_events(&self) -> ServientResult<()> {
         if self.has_thing_level_form_for(Operation::UnsubscribeAllEvents) {
             let _ = self.servient.consumed_request(
@@ -964,6 +1030,33 @@ where
             self.unsubscribe_event(name);
         }
         Ok(())
+    }
+
+    /// Queries the status of all actions declared in the consumed TD (W3C TD
+    /// `queryallactions` meta-operation; W3C TD §6.3.3).
+    ///
+    /// Prefers a single Thing-level form declaring the `queryallactions`
+    /// operation (one round trip) when the consumed TD advertises one, splitting
+    /// the combined JSON-object response into a per-action map; otherwise falls
+    /// back to one query per action.
+    pub fn query_all_actions(
+        &self,
+        input: InteractionInput,
+    ) -> ServientResult<BTreeMap<String, InteractionOutput>> {
+        if let Some(result) = self.thing_level_bulk(Operation::QueryAllActions, input.clone()) {
+            let output = result?;
+            if let Some(map) = split_bulk_object_output(output) {
+                return Ok(map);
+            }
+            // Split failed — fall through to fan-out.
+        }
+
+        let mut results = BTreeMap::new();
+        for name in action_names(self.entry.thing()) {
+            let output = self.query_action(name, input.clone())?;
+            results.insert(name.into(), output);
+        }
+        Ok(results)
     }
 
     // -----------------------------------------------------------------------
@@ -1048,7 +1141,7 @@ where
         for (name, input) in values {
             match input.payload.as_ref() {
                 Some(payload) if !payload.body.is_empty() => {
-                    match serde_json::from_slice::<serde_json::Value>(payload.body.as_slice()) {
+                    match serde_json::from_slice::<serde_json::Value>(payload.body.as_ref()) {
                         Ok(value) => {
                             combined.insert(name.clone(), value);
                         }
@@ -1058,7 +1151,7 @@ where
                             combined.insert(
                                 name.clone(),
                                 serde_json::Value::String(
-                                    String::from_utf8_lossy(payload.body.as_slice()).into_owned(),
+                                    String::from_utf8_lossy(payload.body.as_ref()).into_owned(),
                                 ),
                             );
                         }
@@ -1171,6 +1264,26 @@ where
             .await
     }
 
+    /// Async variant of [`query_action`](Self::query_action).
+    pub async fn query_action_async(
+        &self,
+        name: &str,
+        input: InteractionInput,
+    ) -> ServientResult<InteractionOutput> {
+        self.servient
+            .consumed_request_async(
+                &self.entry,
+                clinkz_wot_core::AffordanceTarget::Action(name.into()),
+                AffordanceRef::Action(name),
+                criteria_for_operation(
+                    FormSelectionCriteria::new(Operation::QueryAction),
+                    Operation::QueryAction,
+                ),
+                input,
+            )
+            .await
+    }
+
     /// Async variant of [`subscribe_event`](Self::subscribe_event).
     pub async fn subscribe_event_async(
         &self,
@@ -1268,9 +1381,7 @@ where
         Ok(())
     }
 
-    /// Async variant of [`subscribe_all_events`](Self::subscribe_all_events)
-    /// (TD 2.0, requires `td2-preview`).
-    #[cfg(feature = "td2-preview")]
+    /// Async variant of [`subscribe_all_events`](Self::subscribe_all_events).
     pub async fn subscribe_all_events_async(
         &self,
         input: InteractionInput,
@@ -1288,9 +1399,7 @@ where
     }
 
     /// Async variant of
-    /// [`unsubscribe_all_events`](Self::unsubscribe_all_events) (TD 2.0,
-    /// requires `td2-preview`).
-    #[cfg(feature = "td2-preview")]
+    /// [`unsubscribe_all_events`](Self::unsubscribe_all_events).
     pub async fn unsubscribe_all_events_async(&self) -> ServientResult<()> {
         if self.has_thing_level_form_for(Operation::UnsubscribeAllEvents) {
             let _ = self
@@ -1312,6 +1421,26 @@ where
             self.unsubscribe_event(name);
         }
         Ok(())
+    }
+
+    /// Async variant of [`query_all_actions`](Self::query_all_actions).
+    pub async fn query_all_actions_async(
+        &self,
+        input: InteractionInput,
+    ) -> ServientResult<BTreeMap<String, InteractionOutput>> {
+        if let Some(result) = self.thing_level_bulk(Operation::QueryAllActions, input.clone()) {
+            let output = result?;
+            if let Some(map) = split_bulk_object_output(output) {
+                return Ok(map);
+            }
+        }
+
+        let mut results = BTreeMap::new();
+        for name in action_names(self.entry.thing()) {
+            let output = self.query_action_async(name, input.clone()).await?;
+            results.insert(name.into(), output);
+        }
+        Ok(results)
     }
 }
 
@@ -1340,7 +1469,7 @@ fn split_bulk_object_output(
 ) -> Option<BTreeMap<String, InteractionOutput>> {
     let payload = output.payload?;
     let map: serde_json::Map<String, serde_json::Value> =
-        serde_json::from_slice(payload.body.as_slice()).ok()?;
+        serde_json::from_slice(payload.body.as_ref()).ok()?;
     let content_type = if payload.content_type.is_empty() {
         BULK_CONTENT_TYPE
     } else {
@@ -1373,11 +1502,19 @@ fn observable_property_names(thing: &Thing) -> Vec<&str> {
 }
 
 /// Returns the names of all events declared in the TD.
-#[cfg(feature = "td2-preview")]
 fn event_names(thing: &Thing) -> Vec<&str> {
     thing
         .events
         .as_ref()
         .map(|events| events.keys().map(|name| name.as_str()).collect())
+        .unwrap_or_default()
+}
+
+/// Returns the names of all actions declared in the TD.
+fn action_names(thing: &Thing) -> Vec<&str> {
+    thing
+        .actions
+        .as_ref()
+        .map(|actions| actions.keys().map(|name| name.as_str()).collect())
         .unwrap_or_default()
 }

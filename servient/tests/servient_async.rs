@@ -266,7 +266,7 @@ async fn read_property_async_returns_value() {
         .await
         .unwrap();
 
-    assert_eq!(output.payload.unwrap().body, b"async-value");
+    assert_eq!(output.payload.unwrap().body.as_ref(), b"async-value");
 }
 
 #[tokio::test]
@@ -352,7 +352,7 @@ async fn async_read_handler_dispatched_through_async_driving_loop() {
     assert_eq!(responses.len(), 1);
     assert!(responses[0].error.is_none());
     assert_eq!(
-        responses[0].output.payload.as_ref().unwrap().body,
+        responses[0].output.payload.as_ref().unwrap().body.as_ref(),
         b"async-read-value"
     );
 }
@@ -395,7 +395,7 @@ async fn async_dispatch_falls_back_to_sync_handler() {
     assert_eq!(responses.len(), 1);
     assert!(responses[0].error.is_none());
     assert_eq!(
-        responses[0].output.payload.as_ref().unwrap().body,
+        responses[0].output.payload.as_ref().unwrap().body.as_ref(),
         b"sync-fallback"
     );
 }
@@ -512,7 +512,7 @@ async fn async_action_handler_dispatched() {
     assert_eq!(responses.len(), 1);
     assert!(responses[0].error.is_none());
     assert_eq!(
-        responses[0].output.payload.as_ref().unwrap().body,
+        responses[0].output.payload.as_ref().unwrap().body.as_ref(),
         b"invoke"
     );
 }

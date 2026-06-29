@@ -43,7 +43,7 @@ fn exposes_local_thing_and_dispatches_handlers_through_handle() {
         .unwrap()
         .payload
         .unwrap();
-    assert_eq!(payload.body, b"off");
+    assert_eq!(payload.body.as_ref(), b"off");
     assert_eq!(servient.list().total, 1);
 
     handle
@@ -57,7 +57,7 @@ fn exposes_local_thing_and_dispatches_handlers_through_handle() {
         .unwrap()
         .payload
         .unwrap();
-    assert_eq!(payload.body, b"on");
+    assert_eq!(payload.body.as_ref(), b"on");
 
     let payload = handle
         .invoke_action(
@@ -67,13 +67,13 @@ fn exposes_local_thing_and_dispatches_handlers_through_handle() {
         .unwrap()
         .payload
         .unwrap();
-    assert_eq!(payload.body, b"hello");
+    assert_eq!(payload.body.as_ref(), b"hello");
 
     let mut sink = CollectSink::default();
     handle
         .subscribe_event("startup", InteractionInput::empty(), &mut sink)
         .unwrap();
-    assert_eq!(sink.payloads[0].body, b"ready");
+    assert_eq!(sink.payloads[0].body.as_ref(), b"ready");
 }
 
 #[test]
@@ -96,7 +96,7 @@ fn consumed_handle_reads_remote_property_through_registered_binding() {
         )
         .unwrap();
 
-    assert_eq!(output.payload.unwrap().body, b"on");
+    assert_eq!(output.payload.unwrap().body.as_ref(), b"on");
 }
 
 #[test]
@@ -118,7 +118,7 @@ fn consumed_handle_routes_all_operations_through_registered_bindings() {
             InteractionInput::empty(),
         )
         .unwrap();
-    assert_eq!(read.payload.unwrap().body, b"on");
+    assert_eq!(read.payload.unwrap().body.as_ref(), b"on");
 
     consumed
         .write_property_with_criteria(
@@ -135,7 +135,7 @@ fn consumed_handle_routes_all_operations_through_registered_bindings() {
             InteractionInput::with_payload(Payload::new(b"hello".to_vec(), "text/plain")),
         )
         .unwrap();
-    assert_eq!(action.payload.unwrap().body, b"hello");
+    assert_eq!(action.payload.unwrap().body.as_ref(), b"hello");
 
     let event_sub = consumed
         .subscribe_event_with_criteria(
@@ -147,7 +147,7 @@ fn consumed_handle_routes_all_operations_through_registered_bindings() {
     let event_payload = event_sub
         .poll_next()
         .expect("subscription should have a sample");
-    assert_eq!(event_payload.body, b"subscribed");
+    assert_eq!(event_payload.body.as_ref(), b"subscribed");
 }
 
 #[test]
@@ -176,7 +176,7 @@ fn payload_codecs_are_used_for_remote_interactions() {
             InteractionInput::empty(),
         )
         .unwrap();
-    assert_eq!(remote.payload.unwrap().body, b"remote");
+    assert_eq!(remote.payload.unwrap().body.as_ref(), b"remote");
     assert_eq!(decode_calls.get(), 1);
     assert_eq!(encode_calls.get(), 1);
 }
@@ -208,7 +208,7 @@ fn normalize_payloads_false_skips_codec_round_trip() {
             InteractionInput::empty(),
         )
         .unwrap();
-    assert_eq!(remote.payload.unwrap().body, b"remote");
+    assert_eq!(remote.payload.unwrap().body.as_ref(), b"remote");
     assert_eq!(
         decode_calls.get(),
         0,
@@ -264,7 +264,7 @@ fn cbor_codec_canonicalizes_remote_application_cbor_payloads() {
     let payload = remote.payload.expect("CBOR response should be present");
     assert_eq!(payload.content_type, "application/cbor");
     // Non-minimal 0x18 0x01 must have been canonicalized to 0x01.
-    assert_eq!(payload.body, [0x01]);
+    assert_eq!(payload.body.as_ref(), &[0x01]);
 }
 
 #[test]
@@ -286,7 +286,7 @@ fn security_providers_are_used_for_remote_interactions() {
     let remote = consumed
         .read_property("status", InteractionInput::empty())
         .unwrap();
-    assert_eq!(remote.payload.unwrap().body, b"secure-remote");
+    assert_eq!(remote.payload.unwrap().body.as_ref(), b"secure-remote");
     assert_eq!(applied_calls.get(), 1);
 }
 
@@ -352,7 +352,7 @@ fn consumed_handle_reuses_cached_binding_plans() {
         .read_property_with_criteria("status", criteria, InteractionInput::empty())
         .unwrap();
     assert_eq!(
-        read.payload.unwrap().body,
+        read.payload.unwrap().body.as_ref(),
         b"test://things/lamp/properties/status"
     );
     assert_eq!(
@@ -364,7 +364,7 @@ fn consumed_handle_reuses_cached_binding_plans() {
         .read_property_with_criteria("status", criteria, InteractionInput::empty())
         .unwrap();
     assert_eq!(
-        read.payload.unwrap().body,
+        read.payload.unwrap().body.as_ref(),
         b"test://things/lamp/properties/status"
     );
     assert_eq!(
@@ -395,7 +395,7 @@ fn late_binding_factory_registration_is_used_by_consumed_handle() {
         )
         .unwrap();
 
-    assert_eq!(output.payload.unwrap().body, b"late");
+    assert_eq!(output.payload.unwrap().body.as_ref(), b"late");
 }
 
 #[test]
@@ -447,7 +447,7 @@ fn exposed_handle_is_clone_and_shares_live_state() {
         .unwrap()
         .payload
         .unwrap();
-    assert_eq!(payload.body, b"off");
+    assert_eq!(payload.body.as_ref(), b"off");
 }
 
 #[test]
@@ -470,7 +470,7 @@ fn servient_clone_shares_directory_and_bindings() {
             InteractionInput::empty(),
         )
         .unwrap();
-    assert_eq!(read.payload.unwrap().body, b"on");
+    assert_eq!(read.payload.unwrap().body.as_ref(), b"on");
 }
 
 #[test]
@@ -490,7 +490,7 @@ fn local_interaction_skips_transport_security() {
         .unwrap()
         .payload
         .unwrap();
-    assert_eq!(payload.body, b"local-direct");
+    assert_eq!(payload.body.as_ref(), b"local-direct");
 }
 
 #[test]
@@ -505,7 +505,9 @@ fn dispatch_to_unhandled_affordance_errors() {
         .unwrap_err();
     assert!(matches!(
         err,
-        clinkz_wot_servient::ServientError::Serve(clinkz_wot_core::CoreError::MissingHandler)
+        clinkz_wot_servient::ServientError::Serve(
+            clinkz_wot_core::CoreError::MissingHandler { .. }
+        )
     ));
 }
 
@@ -549,8 +551,8 @@ fn dispatch_to_different_things_does_not_contend() {
         .unwrap()
         .payload
         .unwrap();
-    assert_eq!(payload_a.body, b"a");
-    assert_eq!(payload_b.body, b"b");
+    assert_eq!(payload_a.body.as_ref(), b"a");
+    assert_eq!(payload_b.body.as_ref(), b"b");
 }
 
 #[test]
@@ -581,7 +583,7 @@ fn dispatch_within_one_thing_serializes() {
         .unwrap()
         .payload
         .unwrap();
-    assert_eq!(payload.body, b"42");
+    assert_eq!(payload.body.as_ref(), b"42");
 }
 
 #[test]
@@ -610,7 +612,7 @@ fn destroy_from_within_handler_does_not_self_deadlock() {
         .unwrap()
         .payload
         .unwrap();
-    assert_eq!(payload.body, b"destroyed");
+    assert_eq!(payload.body.as_ref(), b"destroyed");
     assert!(
         destroyed.get(),
         "destroy should succeed from within handler"
@@ -698,7 +700,7 @@ fn handler_reentering_registry_does_not_self_deadlock() {
         .payload
         .unwrap()
         .body;
-    assert_eq!(body, b"from-b");
+    assert_eq!(body.as_ref(), b"from-b");
 }
 
 #[test]
@@ -916,7 +918,7 @@ fn poll_serve_sync_dispatches_read_property() {
     assert_eq!(responses.len(), 1);
     let response = &responses[0];
     assert!(response.error.is_none());
-    assert_eq!(response.output.payload.as_ref().unwrap().body, b"on");
+    assert_eq!(response.output.payload.as_ref().unwrap().body.as_ref(), b"on");
 }
 
 #[test]
@@ -1031,7 +1033,7 @@ fn poll_serve_sync_returns_missing_handler_for_unhandled_affordance() {
     assert_eq!(responses.len(), 1);
     assert!(matches!(
         responses[0].error,
-        Some(clinkz_wot_core::CoreError::MissingHandler)
+        Some(clinkz_wot_core::CoreError::MissingHandler { .. })
     ));
 }
 
@@ -1208,7 +1210,7 @@ fn produce_then_expose_registers_routes_and_publishes_directory() {
     let output = handle
         .read_property("status", InteractionInput::empty())
         .unwrap();
-    assert_eq!(output.payload.unwrap().body, b"on");
+    assert_eq!(output.payload.unwrap().body.as_ref(), b"on");
 }
 
 #[test]
@@ -1402,7 +1404,7 @@ impl RecordingPublisherSink {
 
 impl PublisherSink for RecordingPublisherSink {
     fn publish(&self, payload: &Payload) -> clinkz_wot_core::CoreResult<()> {
-        self.received.lock().unwrap().push(payload.body.clone());
+        self.received.lock().unwrap().push(payload.body.as_ref().to_vec());
         Ok(())
     }
 }
@@ -1575,7 +1577,7 @@ fn dispatcher_routes_observe_property_through_broker() {
     assert_eq!(responses.len(), 1);
     assert!(responses[0].error.is_none());
     // The response also carries the read value.
-    assert_eq!(responses[0].output.payload.as_ref().unwrap().body, b"on");
+    assert_eq!(responses[0].output.payload.as_ref().unwrap().body.as_ref(), b"on");
 }
 
 #[test]
@@ -1910,7 +1912,7 @@ fn subscribe_event_returns_streaming_subscription() {
 
     // The TestBinding::subscribe pushes an initial sample.
     let payload = subscription.poll_next().expect("should have a sample");
-    assert_eq!(payload.body, b"subscribed");
+    assert_eq!(payload.body.as_ref(), b"subscribed");
 
     // Queue is now empty.
     assert!(subscription.poll_next().is_none());
@@ -1934,7 +1936,7 @@ fn observe_property_returns_streaming_subscription() {
         .unwrap();
 
     let payload = subscription.poll_next().expect("should have a sample");
-    assert_eq!(payload.body, b"observed-value");
+    assert_eq!(payload.body.as_ref(), b"observed-value");
 }
 
 #[test]
@@ -2030,7 +2032,7 @@ fn read_only_property_works_without_write_handler() {
         .unwrap()
         .payload
         .unwrap();
-    assert_eq!(payload.body, b"read-only-value");
+    assert_eq!(payload.body.as_ref(), b"read-only-value");
 
     // Write must fail with MissingHandler.
     let err = handle
@@ -2042,7 +2044,7 @@ fn read_only_property_works_without_write_handler() {
     assert!(
         matches!(
             err,
-            crate::ServientError::Serve(clinkz_wot_core::CoreError::MissingHandler)
+            crate::ServientError::Serve(clinkz_wot_core::CoreError::MissingHandler { .. })
         ),
         "write to read-only property must fail with MissingHandler"
     );
@@ -2164,8 +2166,8 @@ fn read_multiple_properties_returns_all_values() {
         .read_multiple_properties(&["temperature", "humidity"])
         .unwrap();
     assert_eq!(results.len(), 2);
-    assert_eq!(results["temperature"].payload.as_ref().unwrap().body, b"42");
-    assert_eq!(results["humidity"].payload.as_ref().unwrap().body, b"42");
+    assert_eq!(results["temperature"].payload.as_ref().unwrap().body.as_ref(), b"42");
+    assert_eq!(results["humidity"].payload.as_ref().unwrap().body.as_ref(), b"42");
 }
 
 #[test]
@@ -2297,8 +2299,8 @@ fn read_all_properties_uses_thing_level_form_when_available() {
 
     let results = consumed.read_all_properties().unwrap();
     assert_eq!(results.len(), 2);
-    assert_eq!(results["a"].payload.as_ref().unwrap().body, b"1");
-    assert_eq!(results["b"].payload.as_ref().unwrap().body, b"2");
+    assert_eq!(results["a"].payload.as_ref().unwrap().body.as_ref(), b"1");
+    assert_eq!(results["b"].payload.as_ref().unwrap().body.as_ref(), b"2");
     assert!(
         *seen_bulk.lock().unwrap(),
         "the Thing-level readallproperties form must be used"
@@ -2326,7 +2328,7 @@ fn write_multiple_properties_uses_thing_level_form_when_available() {
             match (request.target.clone(), request.operation) {
                 (clinkz_wot_core::AffordanceTarget::Thing, Operation::WriteMultipleProperties) => {
                     if let Some(payload) = request.input.payload {
-                        *self.recorded_body.lock().unwrap() = payload.body;
+                        *self.recorded_body.lock().unwrap() = payload.body.as_ref().to_vec();
                     }
                     Ok(clinkz_wot_core::InteractionOutput::empty())
                 }
@@ -2462,7 +2464,7 @@ fn add_property_creates_readable_property() {
         .unwrap()
         .payload
         .unwrap();
-    assert_eq!(payload.body, b"75%");
+    assert_eq!(payload.body.as_ref(), b"75%");
 }
 
 #[test]
@@ -3003,14 +3005,13 @@ fn dispatcher_routes_queryaction_through_handler() {
     assert_eq!(responses.len(), 1);
     assert!(responses[0].error.is_none());
     assert_eq!(
-        responses[0].output.payload.as_ref().unwrap().body,
+        responses[0].output.payload.as_ref().unwrap().body.as_ref(),
         b"\"idle\""
     );
 }
 
-/// `cancelaction` is a TD 2.0 operation; this dispatch test is only
-/// compiled under `td2-preview`.
-#[cfg(feature = "td2-preview")]
+/// `cancelaction` is a TD 1.1 operation; this dispatch test verifies the
+/// no-handler acknowledgement path.
 #[test]
 fn dispatcher_acknowledges_cancelaction_without_handler() {
     let (td, _) = thing("urn:thing:cancel-action", "Cancel Action Lamp");

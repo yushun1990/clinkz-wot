@@ -5,16 +5,16 @@ use alloc::{
     vec::Vec,
 };
 
-use serde::{Deserialize, Serialize};
-use serde_with::{OneOrMany, serde_as, skip_serializing_none};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use serde_with::{OneOrMany, serde_as};
 
 use crate::{
     affordance::{ActionAffordance, EventAffordance, PropertyAffordance},
     context::Context,
     data_schema::DataSchema,
     data_type::{
-        AbsoluteUri, AdditionalExpectedResponse, BaseUri, ExtensionMap, FormHref, Metadata,
-        MetadataHelper, ThingModelVersionInfo,
+        AbsoluteUri, AdditionalExpectedResponse, BaseUri, ExtensionMap, FormHref, METADATA_KEYS,
+        Metadata, MetadataHelper, ThingModelVersionInfo,
     },
     form::Form,
     link::Link,
@@ -26,26 +26,38 @@ use crate::{
     },
 };
 
+/// Deserialize adapter for one-or-many string lists (`security`, `scopes`).
+#[serde_as]
+#[derive(Deserialize)]
+struct StringListField(#[serde_as(as = "Option<OneOrMany<_>>")] Option<Vec<String>>);
+
+/// Deserialize adapter for one-or-many operation lists (`op`).
+#[serde_as]
+#[derive(Deserialize)]
+struct OperationListField(
+    #[serde_as(as = "Option<OneOrMany<_>>")] Option<Vec<crate::data_type::Operation>>,
+);
+
+/// Deserialize adapter for one-or-many profile URIs.
+#[serde_as]
+#[derive(Deserialize)]
+struct ProfileField(#[serde_as(as = "Option<OneOrMany<_>>")] Option<Vec<AbsoluteUri>>);
+
 /// A reusable WoT Thing Model template.
 ///
 /// Thing Models describe a class of Things and can be instantiated into concrete
 /// Thing Descriptions by later tooling. This crate stores TM structure and
 /// validates local constraints, but does not fetch referenced models or generate
 /// protocol-specific forms.
-#[serde_as]
-#[skip_serializing_none]
-#[derive(Clone, Debug, Default, PartialEq, Deserialize, Serialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Clone, Debug, Default, PartialEq)]
 pub struct ThingModel {
     /// JSON-LD context for the model.
-    #[serde(rename = "@context")]
     pub context: Context,
 
     /// Model identifier.
     pub id: Option<AbsoluteUri>,
 
     /// Shared metadata, including the `@type` entry that identifies a TM.
-    #[serde(flatten)]
     pub _metadata: Metadata,
 
     /// Thing Model version information.
@@ -73,14 +85,12 @@ pub struct ThingModel {
     pub forms: Option<Vec<ThingModelForm>>,
 
     /// Optional model-level security names.
-    #[serde_as(as = "Option<OneOrMany<_>>")]
     pub security: Option<Vec<String>>,
 
     /// Optional named security configurations.
     pub security_definitions: Option<BTreeMap<String, SecurityScheme>>,
 
     /// WoT Profile identifiers associated with generated TDs.
-    #[serde_as(as = "Option<OneOrMany<_>>")]
     pub profile: Option<Vec<AbsoluteUri>>,
 
     /// Named data schemas reusable by the model.
@@ -91,41 +101,133 @@ pub struct ThingModel {
 
     /// JSON Pointer references to interaction models that are optional in TD
     /// instances generated from this model.
-    #[serde(rename = "tm:optional")]
     pub tm_optional: Option<Vec<String>>,
 
-    #[serde(flatten)]
     pub _extra_fields: ExtensionMap,
+}
+
+impl<'de> Deserialize<'de> for ThingModel {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let mut map = crate::flat::deserialize_map(deserializer)?;
+        let context = crate::flat::take_required(&mut map, "@context")?;
+        let id = crate::flat::take(&mut map, "id")?;
+        let metadata = crate::flat::drain_substruct::<Metadata, D::Error>(&mut map, METADATA_KEYS)?;
+        let version = crate::flat::take(&mut map, "version")?;
+        let support = crate::flat::take(&mut map, "support")?;
+        let base = crate::flat::take(&mut map, "base")?;
+        let properties = crate::flat::take(&mut map, "properties")?;
+        let actions = crate::flat::take(&mut map, "actions")?;
+        let events = crate::flat::take(&mut map, "events")?;
+        let links = crate::flat::take(&mut map, "links")?;
+        let forms = crate::flat::take(&mut map, "forms")?;
+        let security = crate::flat::take::<StringListField, D::Error>(&mut map, "security")?
+            .and_then(|field| field.0);
+        let security_definitions = crate::flat::take(&mut map, "securityDefinitions")?;
+        let profile = crate::flat::take::<ProfileField, D::Error>(&mut map, "profile")?
+            .and_then(|field| field.0);
+        let schema_definitions = crate::flat::take(&mut map, "schemaDefinitions")?;
+        let uri_variables = crate::flat::take(&mut map, "uriVariables")?;
+        let tm_optional = crate::flat::take(&mut map, "tm:optional")?;
+        Ok(ThingModel {
+            context,
+            id,
+            _metadata: metadata,
+            version,
+            support,
+            base,
+            properties,
+            actions,
+            events,
+            links,
+            forms,
+            security,
+            security_definitions,
+            profile,
+            schema_definitions,
+            uri_variables,
+            tm_optional,
+            _extra_fields: crate::flat::into_extras(map),
+        })
+    }
+}
+
+impl Serialize for ThingModel {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        use serde::ser::SerializeMap;
+        let mut map = serializer.serialize_map(None)?;
+        map.serialize_entry("@context", &self.context)?;
+        if let Some(id) = &self.id {
+            map.serialize_entry("id", id)?;
+        }
+        self._metadata.serialize_into(&mut map)?;
+        if let Some(version) = &self.version {
+            map.serialize_entry("version", version)?;
+        }
+        if let Some(support) = &self.support {
+            map.serialize_entry("support", support)?;
+        }
+        if let Some(base) = &self.base {
+            map.serialize_entry("base", base)?;
+        }
+        if let Some(properties) = &self.properties {
+            map.serialize_entry("properties", properties)?;
+        }
+        if let Some(actions) = &self.actions {
+            map.serialize_entry("actions", actions)?;
+        }
+        if let Some(events) = &self.events {
+            map.serialize_entry("events", events)?;
+        }
+        if let Some(links) = &self.links {
+            map.serialize_entry("links", links)?;
+        }
+        if let Some(forms) = &self.forms {
+            map.serialize_entry("forms", forms)?;
+        }
+        if let Some(security) = &self.security {
+            map.serialize_entry("security", &crate::flat::OneOrManyRef(security))?;
+        }
+        if let Some(security_definitions) = &self.security_definitions {
+            map.serialize_entry("securityDefinitions", security_definitions)?;
+        }
+        if let Some(profile) = &self.profile {
+            map.serialize_entry("profile", &crate::flat::OneOrManyRef(profile))?;
+        }
+        if let Some(schema_definitions) = &self.schema_definitions {
+            map.serialize_entry("schemaDefinitions", schema_definitions)?;
+        }
+        if let Some(uri_variables) = &self.uri_variables {
+            map.serialize_entry("uriVariables", uri_variables)?;
+        }
+        if let Some(tm_optional) = &self.tm_optional {
+            map.serialize_entry("tm:optional", tm_optional)?;
+        }
+        for (key, value) in &self._extra_fields {
+            map.serialize_entry(key, value)?;
+        }
+        map.end()
+    }
 }
 
 /// A Thing Model form template.
 ///
 /// Thing Model forms may omit `href` because they describe reusable templates
 /// that are instantiated into concrete Thing Description forms later.
-#[serde_as]
-#[skip_serializing_none]
-#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Clone, Debug, Default, PartialEq)]
 pub struct ThingModelForm {
     /// Optional target IRI of the resource or service.
     pub href: Option<FormHref>,
 
     /// Media type of data sent or received.
-    #[serde(
-        default = "default_content_type",
-        skip_serializing_if = "is_default_content_type"
-    )]
     pub content_type: String,
 
     /// Content coding, such as `gzip`.
     pub content_coding: Option<String>,
 
     /// Reference to a security scheme definition by name.
-    #[serde_as(as = "Option<OneOrMany<_>>")]
     pub security: Option<Vec<String>>,
 
     /// Scope names required for OAuth2.
-    #[serde_as(as = "Option<OneOrMany<_>>")]
     pub scopes: Option<Vec<String>>,
 
     /// Metadata of the primary response.
@@ -138,11 +240,78 @@ pub struct ThingModelForm {
     pub subprotocol: Option<String>,
 
     /// Intended operations for the form template.
-    #[serde_as(as = "Option<OneOrMany<_>>")]
     pub op: Option<Vec<crate::data_type::Operation>>,
 
-    #[serde(flatten)]
     pub _extra_fields: ExtensionMap,
+}
+
+impl<'de> Deserialize<'de> for ThingModelForm {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let mut map = crate::flat::deserialize_map(deserializer)?;
+        let href = crate::flat::take(&mut map, "href")?;
+        let content_type = crate::flat::take::<String, D::Error>(&mut map, "contentType")?
+            .unwrap_or_else(default_content_type);
+        let content_coding = crate::flat::take(&mut map, "contentCoding")?;
+        let security = crate::flat::take::<StringListField, D::Error>(&mut map, "security")?
+            .and_then(|field| field.0);
+        let scopes = crate::flat::take::<StringListField, D::Error>(&mut map, "scopes")?
+            .and_then(|field| field.0);
+        let response = crate::flat::take(&mut map, "response")?;
+        let additional_responses = crate::flat::take(&mut map, "additionalResponses")?;
+        let subprotocol = crate::flat::take(&mut map, "subprotocol")?;
+        let op = crate::flat::take::<OperationListField, D::Error>(&mut map, "op")?
+            .and_then(|field| field.0);
+        Ok(ThingModelForm {
+            href,
+            content_type,
+            content_coding,
+            security,
+            scopes,
+            response,
+            additional_responses,
+            subprotocol,
+            op,
+            _extra_fields: crate::flat::into_extras(map),
+        })
+    }
+}
+
+impl Serialize for ThingModelForm {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        use serde::ser::SerializeMap;
+        let mut map = serializer.serialize_map(None)?;
+        if let Some(href) = &self.href {
+            map.serialize_entry("href", href)?;
+        }
+        if !is_default_content_type(&self.content_type) {
+            map.serialize_entry("contentType", &self.content_type)?;
+        }
+        if let Some(content_coding) = &self.content_coding {
+            map.serialize_entry("contentCoding", content_coding)?;
+        }
+        if let Some(security) = &self.security {
+            map.serialize_entry("security", &crate::flat::OneOrManyRef(security))?;
+        }
+        if let Some(scopes) = &self.scopes {
+            map.serialize_entry("scopes", &crate::flat::OneOrManyRef(scopes))?;
+        }
+        if let Some(response) = &self.response {
+            map.serialize_entry("response", response)?;
+        }
+        if let Some(additional_responses) = &self.additional_responses {
+            map.serialize_entry("additionalResponses", additional_responses)?;
+        }
+        if let Some(subprotocol) = &self.subprotocol {
+            map.serialize_entry("subprotocol", subprotocol)?;
+        }
+        if let Some(op) = &self.op {
+            map.serialize_entry("op", &crate::flat::OneOrManyRef(op))?;
+        }
+        for (key, value) in &self._extra_fields {
+            map.serialize_entry(key, value)?;
+        }
+        map.end()
+    }
 }
 
 impl From<Form> for ThingModelForm {
@@ -627,9 +796,7 @@ impl ThingModelBuilder {
 
     /// Builds and returns the `ThingModel` instance.
     pub fn build(self) -> Result<ThingModel, ValidateError> {
-        if let Some(error) = self.errors.into_iter().next() {
-            return Err(error);
-        }
+        crate::validate::collected_errors(self.errors)?;
         self.model.validate()?;
         Ok(self.model)
     }

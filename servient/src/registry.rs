@@ -77,7 +77,8 @@ pub(crate) struct ResolvedInboundSecurity {
 pub(crate) struct ThingSlot {
     draining: DrainFlag,
     thing: MapLock<Option<LocalThing>>,
-    inbound_security: MapLock<BTreeMap<InboundResolutionKey, ResolvedInboundSecurity>>,
+    inbound_security:
+        MapLock<BTreeMap<InboundResolutionKey, Result<Arc<ResolvedInboundSecurity>, CoreError>>>,
     /// Sync driving-loop serialization lock: ensures the sync driving loop
     /// processes interactions within one Thing one at a time (baseline §7).
     /// Held only across a driving-loop handler call; application-facing handle
@@ -176,7 +177,7 @@ impl ExposedThingRegistry {
     /// Returns `None` when no entry exists for `id`, the entry is draining, or
     /// the thing was already taken out by a concurrent `destroy`.
     pub(crate) fn dispatch<R>(&self, id: &str, f: impl FnOnce(&mut LocalThing) -> R) -> Option<R> {
-        let slot = self.things.with_recover(|map| map.get(id).cloned())?;
+        let slot = self.things.with_read_recover(|map| map.get(id).cloned())?;
 
         if slot.draining.get() {
             return None;
@@ -188,7 +189,7 @@ impl ExposedThingRegistry {
     /// Dispatches a TD mutation and clears cached inbound metadata for the
     /// Thing so subsequent inbound requests re-resolve forms and security.
     pub(crate) fn mutate<R>(&self, id: &str, f: impl FnOnce(&mut LocalThing) -> R) -> Option<R> {
-        let slot = self.things.with_recover(|map| map.get(id).cloned())?;
+        let slot = self.things.with_read_recover(|map| map.get(id).cloned())?;
 
         if slot.draining.get() {
             return None;
@@ -207,7 +208,7 @@ impl ExposedThingRegistry {
     ///
     /// Returns `None` when no entry exists or the entry is draining.
     pub(crate) fn slot_for(&self, id: &str) -> Option<Arc<ThingSlot>> {
-        let slot = self.things.with_recover(|map| map.get(id).cloned())?;
+        let slot = self.things.with_read_recover(|map| map.get(id).cloned())?;
         if slot.draining.get() {
             return None;
         }
@@ -272,13 +273,17 @@ impl ExposedThingRegistry {
     ///
     /// This avoids cloning the full TD and rescanning its forms for every
     /// inbound request on the same `(Thing, target, operation)` path.
+    ///
+    /// The cache stores `Arc<ResolvedInboundSecurity>` so a cache hit is a
+    /// cheap refcount bump instead of deep-cloning the resolved
+    /// `SecurityScheme` vector on every inbound request.
     pub(crate) fn resolve_inbound_security(
         &self,
         id: &str,
         target: &AffordanceTarget,
         operation: Operation,
-    ) -> Option<Result<ResolvedInboundSecurity, CoreError>> {
-        let slot = self.things.with_recover(|map| map.get(id).cloned())?;
+    ) -> Option<Result<Arc<ResolvedInboundSecurity>, CoreError>> {
+        let slot = self.things.with_read_recover(|map| map.get(id).cloned())?;
 
         if slot.draining.get() {
             return None;
@@ -289,7 +294,7 @@ impl ExposedThingRegistry {
             .inbound_security
             .with_recover(|cache| cache.get(&key).cloned())
         {
-            return Some(Ok(cached));
+            return Some(cached);
         }
 
         let resolved = slot.thing.with_recover(|opt| {
@@ -298,13 +303,14 @@ impl ExposedThingRegistry {
             })
         })?;
 
-        if let Ok(metadata) = &resolved {
-            slot.inbound_security.with_recover(|cache| {
-                cache.insert(key, metadata.clone());
-            });
-        }
-
-        Some(resolved)
+        let cached = match resolved {
+            Ok(metadata) => Ok(Arc::new(metadata)),
+            Err(err) => Err(err),
+        };
+        slot.inbound_security.with_recover(|cache| {
+            cache.insert(key, cached.clone());
+        });
+        Some(cached)
     }
 }
 
@@ -349,21 +355,21 @@ fn find_form_for_operation<'a>(
     let (forms, context) = match target {
         AffordanceTarget::Thing => (thing.forms.as_deref().unwrap_or(&[]), FormContext::Thing),
         AffordanceTarget::Property(name) => {
-            let property = thing.properties.as_ref()?.get(name)?;
+            let property = thing.properties.as_ref()?.get(&**name)?;
             (
                 property._interaction.forms.as_slice(),
                 FormContext::Property(property),
             )
         }
         AffordanceTarget::Action(name) => {
-            let action = thing.actions.as_ref()?.get(name)?;
+            let action = thing.actions.as_ref()?.get(&**name)?;
             (
                 action._interaction.forms.as_slice(),
                 FormContext::Action(action),
             )
         }
         AffordanceTarget::Event(name) => {
-            let event = thing.events.as_ref()?.get(name)?;
+            let event = thing.events.as_ref()?.get(&**name)?;
             (
                 event._interaction.forms.as_slice(),
                 FormContext::Event(event),
@@ -374,4 +380,69 @@ fn find_form_for_operation<'a>(
     forms
         .iter()
         .find(|form| effective_form_operations(context, form).contains(&operation))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use clinkz_wot_core::LocalThing;
+    use clinkz_wot_td::{
+        affordance::{InteractionHelper, PropertyAffordance},
+        data_schema::DataSchema,
+        form::Form,
+        security_scheme::SecurityScheme,
+        thing::Thing,
+    };
+
+    #[test]
+    fn caches_failed_inbound_security_resolution() {
+        let property = PropertyAffordance::builder(DataSchema::String(DataSchema::string().build()))
+            .form(
+                Form::read_property("test://things/lamp/properties/status")
+                    .security(["token"])
+                    .build()
+                    .expect("build form"),
+            )
+            .build()
+            .expect("build property");
+        let mut thing = Thing::builder("Broken Security Thing")
+            .id("urn:thing:broken-security")
+            .security_named("token", SecurityScheme::bearer("Authorization"))
+            .property("status", property)
+            .build()
+            .expect("build thing");
+        thing.security_definitions.clear();
+        let registry = ExposedThingRegistry::new();
+        registry
+            .insert(String::from("urn:thing:broken-security"), LocalThing::new(thing))
+            .expect("insert thing");
+
+        let target = AffordanceTarget::Property("status".into());
+        let first = registry
+            .resolve_inbound_security("urn:thing:broken-security", &target, Operation::ReadProperty)
+            .expect("entry exists");
+        let second = registry
+            .resolve_inbound_security("urn:thing:broken-security", &target, Operation::ReadProperty)
+            .expect("entry exists");
+
+        assert!(
+            matches!(first, Err(CoreError::Security(SecurityError::SchemeFailure(_)))),
+            "first lookup should surface a cached scheme failure"
+        );
+        assert!(
+            matches!(second, Err(CoreError::Security(SecurityError::SchemeFailure(_)))),
+            "second lookup should return the same cached scheme failure"
+        );
+
+        let slot = registry
+            .things
+            .with_read_recover(|map| map.get("urn:thing:broken-security").cloned())
+            .expect("thing slot");
+        assert_eq!(
+            slot.inbound_security.with_read_recover(|cache| cache.len()),
+            1,
+            "negative security resolutions should be cached to avoid repeating the same TD scan",
+        );
+    }
 }

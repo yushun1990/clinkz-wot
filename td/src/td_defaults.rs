@@ -14,10 +14,9 @@ const PROPERTY_READ_WRITE_OPERATIONS: &[Operation] =
 const PROPERTY_READ_OPERATIONS: &[Operation] = &[Operation::ReadProperty];
 const PROPERTY_WRITE_OPERATIONS: &[Operation] = &[Operation::WriteProperty];
 const ACTION_OPERATIONS: &[Operation] = &[Operation::InvokeAction];
-// TD 1.1 §5.3.3: a form of an Event affordance without an explicit `op`
-// defaults to `subscribeevent` only. `unsubscribeevent` is never inferred;
-// authors who want it must declare it explicitly on the form.
-const EVENT_OPERATIONS: &[Operation] = &[Operation::SubscribeEvent];
+// TD 1.1 §5.4 Default Value Definitions: a form of an Event affordance without
+// an explicit `op` defaults to both `subscribeevent` and `unsubscribeevent`.
+const EVENT_OPERATIONS: &[Operation] = &[Operation::SubscribeEvent, Operation::UnsubscribeEvent];
 
 /// Context used to resolve the effective operations of a TD form.
 #[derive(Debug, Clone, Copy)]
@@ -92,19 +91,15 @@ fn default_property_operations(property: &PropertyAffordance) -> &'static [Opera
     match (schema.read_only, schema.write_only) {
         (true, false) => PROPERTY_READ_OPERATIONS,
         (false, true) => PROPERTY_WRITE_OPERATIONS,
-        (true, true) => NO_OPERATIONS,
-        (false, false) => PROPERTY_READ_WRITE_OPERATIONS,
+        // `readOnly` and `writeOnly` both `true` is invalid per TD 1.1 / JSON
+        // Schema and is rejected by Basic validation. When validation is
+        // skipped (Minimal level), fall back to the neutral read+write default
+        // so the property stays usable instead of silently having no
+        // operations.
+        (true, true) | (false, false) => PROPERTY_READ_WRITE_OPERATIONS,
     }
 }
 
 fn schema_context(schema: &DataSchema) -> &DataSchemaContext {
-    match schema {
-        DataSchema::Array(schema) => &schema._context,
-        DataSchema::Boolean(schema) => &schema._context,
-        DataSchema::Number(schema) => &schema._context,
-        DataSchema::Integer(schema) => &schema._context,
-        DataSchema::Object(schema) => &schema._context,
-        DataSchema::String(schema) => &schema._context,
-        DataSchema::Null(schema) => &schema._context,
-    }
+    schema.context()
 }

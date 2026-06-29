@@ -102,9 +102,9 @@ fn action_event_and_thing_default_operations_are_context_specific() {
         .expect("event should build");
     assert_eq!(
         effective_form_operations(FormContext::Event(&event), &event_form).as_ref(),
-        // TD 1.1 §5.3.3: the default `op` for an Event form is subscribeevent
-        // only; unsubscribeevent must be declared explicitly when needed.
-        &[Operation::SubscribeEvent]
+        // TD 1.1 §5.4: the default `op` for an Event form is both
+        // `subscribeevent` and `unsubscribeevent`.
+        &[Operation::SubscribeEvent, Operation::UnsubscribeEvent]
     );
 
     let thing_form = form("/properties");

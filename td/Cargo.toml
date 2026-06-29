@@ -9,7 +9,7 @@ fluent-uri = { version = "0.4", features = ["alloc", "serde"], default-features 
 time = { workspace = true, features = ["alloc", "macros", "serde-well-known", "quickcheck"] }
 
 serde = { workspace = true, features = ["derive", "alloc"] }
-serde_json = { workspace = true, features = ["alloc"] }
+serde_json = { workspace = true, features = ["alloc", "raw_value"] }
 serde_with = { version = "3.18", features = ["macros", "alloc", "time_0_3"], default-features = false }
 
 [features]

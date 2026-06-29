@@ -7,14 +7,16 @@ use alloc::{
 
 use time::OffsetDateTime;
 
-use serde::{Deserialize, Serialize};
-use serde_with::{OneOrMany, serde_as, skip_serializing_none};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use serde_with::{OneOrMany, serde_as};
 
 use crate::{
     affordance::{ActionAffordance, EventAffordance, PropertyAffordance},
     context::Context,
     data_schema::DataSchema,
-    data_type::{AbsoluteUri, BaseUri, ExtensionMap, Metadata, MetadataHelper, VersionInfo},
+    data_type::{
+        AbsoluteUri, BaseUri, ExtensionMap, METADATA_KEYS, Metadata, MetadataHelper, VersionInfo,
+    },
     form::Form,
     link::Link,
     security_scheme::SecurityScheme,
@@ -26,37 +28,51 @@ use crate::{
     },
 };
 
+/// Deserialize adapter for `security` (required one-or-many strings).
+#[serde_as]
+#[derive(Deserialize)]
+struct SecurityListField(#[serde_as(as = "OneOrMany<_>")] Vec<String>);
+
+/// Deserialize adapter for `profile` (optional one-or-many URIs).
+#[serde_as]
+#[derive(Deserialize)]
+struct ProfileField(#[serde_as(as = "Option<OneOrMany<_>>")] Option<Vec<AbsoluteUri>>);
+
+/// Deserialize adapter for RFC 3339 date-time fields (`created`, `modified`).
+#[derive(Deserialize)]
+struct Rfc3339DateTimeField(#[serde(with = "time::serde::rfc3339")] OffsetDateTime);
+
+/// Serialize adapter emitting an `OffsetDateTime` as an RFC 3339 string.
+struct Rfc3339Ser<'a>(&'a OffsetDateTime);
+
+impl Serialize for Rfc3339Ser<'_> {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        time::serde::rfc3339::serialize(self.0, serializer)
+    }
+}
+
 /// An abstraction of a physical or virtual entity whose metadata and interfaces are
 /// described by a WoT Thing Description, whereas a virtual entity is the composition
 /// of one or more Things.
-#[serde_as]
-#[skip_serializing_none]
-#[derive(Debug, Default, Clone, PartialEq, Deserialize, Serialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug, Default, Clone, PartialEq)]
 pub struct Thing {
     /// JSON-LD keyword to define short-hand names called terms that are used throughout
     /// a TD document.
-    #[serde(rename = "@context")]
     pub context: Context,
 
     /// Unique identifier of the Thing (optional by recommended).
     pub id: Option<AbsoluteUri>,
 
     /// metadata
-    #[serde(flatten)]
     pub _metadata: Metadata,
 
     /// Provides a version information.
     pub version: Option<VersionInfo>,
 
     /// Provides information when the TD instance was created.
-    #[serde(with = "time::serde::rfc3339::option")]
-    #[serde(default)]
     pub created: Option<OffsetDateTime>,
 
     /// Provides information when the TD instance was last modified.
-    #[serde(with = "time::serde::rfc3339::option")]
-    #[serde(default)]
     pub modified: Option<OffsetDateTime>,
 
     /// Provides information about the TD maintainer as URI scheme.
@@ -87,7 +103,6 @@ pub struct Thing {
 
     /// Set of security definition names, chosen from those defined in
     /// securityDefinitions.
-    #[serde_as(as = "OneOrMany<_>")]
     pub security: Vec<String>,
 
     /// Set of named security configurations(definitions only).
@@ -95,7 +110,6 @@ pub struct Thing {
 
     /// Indicates the WoT Profile mechanisms followed by this
     /// Thing Description and the corresponding Thing  implementation.
-    #[serde_as(as = "Option<OneOrMany<_>>")]
     pub profile: Option<Vec<AbsoluteUri>>,
 
     /// Set of named data schemas.
@@ -108,8 +122,113 @@ pub struct Thing {
     /// as collection based on DataSchema declarations.
     pub uri_variables: Option<BTreeMap<String, DataSchema>>,
 
-    #[serde(flatten)]
     pub _extra_fields: ExtensionMap,
+}
+
+impl<'de> Deserialize<'de> for Thing {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let mut map = crate::flat::deserialize_map(deserializer)?;
+        let context = crate::flat::take_required(&mut map, "@context")?;
+        let id = crate::flat::take(&mut map, "id")?;
+        let metadata = crate::flat::drain_substruct::<Metadata, D::Error>(&mut map, METADATA_KEYS)?;
+        let version = crate::flat::take(&mut map, "version")?;
+        let created = crate::flat::take::<Rfc3339DateTimeField, D::Error>(&mut map, "created")?
+            .map(|field| field.0);
+        let modified = crate::flat::take::<Rfc3339DateTimeField, D::Error>(&mut map, "modified")?
+            .map(|field| field.0);
+        let support = crate::flat::take(&mut map, "support")?;
+        let base = crate::flat::take(&mut map, "base")?;
+        let properties = crate::flat::take(&mut map, "properties")?;
+        let actions = crate::flat::take(&mut map, "actions")?;
+        let events = crate::flat::take(&mut map, "events")?;
+        let links = crate::flat::take(&mut map, "links")?;
+        let forms = crate::flat::take(&mut map, "forms")?;
+        let security =
+            crate::flat::take_required::<SecurityListField, D::Error>(&mut map, "security")?.0;
+        let security_definitions = crate::flat::take_required(&mut map, "securityDefinitions")?;
+        let profile = crate::flat::take::<ProfileField, D::Error>(&mut map, "profile")?
+            .and_then(|field| field.0);
+        let schema_definitions = crate::flat::take(&mut map, "schemaDefinitions")?;
+        let uri_variables = crate::flat::take(&mut map, "uriVariables")?;
+        Ok(Thing {
+            context,
+            id,
+            _metadata: metadata,
+            version,
+            created,
+            modified,
+            support,
+            base,
+            properties,
+            actions,
+            events,
+            links,
+            forms,
+            security,
+            security_definitions,
+            profile,
+            schema_definitions,
+            uri_variables,
+            _extra_fields: crate::flat::into_extras(map),
+        })
+    }
+}
+
+impl Serialize for Thing {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        use serde::ser::SerializeMap;
+        let mut map = serializer.serialize_map(None)?;
+        map.serialize_entry("@context", &self.context)?;
+        if let Some(id) = &self.id {
+            map.serialize_entry("id", id)?;
+        }
+        self._metadata.serialize_into(&mut map)?;
+        if let Some(version) = &self.version {
+            map.serialize_entry("version", version)?;
+        }
+        if let Some(created) = &self.created {
+            map.serialize_entry("created", &Rfc3339Ser(created))?;
+        }
+        if let Some(modified) = &self.modified {
+            map.serialize_entry("modified", &Rfc3339Ser(modified))?;
+        }
+        if let Some(support) = &self.support {
+            map.serialize_entry("support", support)?;
+        }
+        if let Some(base) = &self.base {
+            map.serialize_entry("base", base)?;
+        }
+        if let Some(properties) = &self.properties {
+            map.serialize_entry("properties", properties)?;
+        }
+        if let Some(actions) = &self.actions {
+            map.serialize_entry("actions", actions)?;
+        }
+        if let Some(events) = &self.events {
+            map.serialize_entry("events", events)?;
+        }
+        if let Some(links) = &self.links {
+            map.serialize_entry("links", links)?;
+        }
+        if let Some(forms) = &self.forms {
+            map.serialize_entry("forms", forms)?;
+        }
+        map.serialize_entry("security", &crate::flat::OneOrManyRef(&self.security))?;
+        map.serialize_entry("securityDefinitions", &self.security_definitions)?;
+        if let Some(profile) = &self.profile {
+            map.serialize_entry("profile", &crate::flat::OneOrManyRef(profile))?;
+        }
+        if let Some(schema_definitions) = &self.schema_definitions {
+            map.serialize_entry("schemaDefinitions", schema_definitions)?;
+        }
+        if let Some(uri_variables) = &self.uri_variables {
+            map.serialize_entry("uriVariables", uri_variables)?;
+        }
+        for (key, value) in &self._extra_fields {
+            map.serialize_entry(key, value)?;
+        }
+        map.end()
+    }
 }
 
 impl Thing {
@@ -148,17 +267,20 @@ impl Validate for Thing {
         // Validate Properties
         if let Some(properties) = &self.properties {
             for (name, property) in properties {
+                // Build the affordance context once; the `map_err` closure
+                // clones the already-built string only on the error path.
                 let ctx = format!("Property '{}'", name);
                 property
                     .validate_with_level(level)
                     .map_err(|e| contextualize_affordance_error(ctx.clone(), e))?;
+                let forms_ctx = format!("{}.forms", ctx);
                 validate_form_security_references(
                     ctx.as_str(),
                     &property._interaction.forms,
                     &self.security_definitions,
                 )?;
                 validate_form_response_references(
-                    format!("{}.forms", ctx).as_str(),
+                    forms_ctx.as_str(),
                     &property._interaction.forms,
                     self.schema_definitions.as_ref(),
                     level,
@@ -173,13 +295,14 @@ impl Validate for Thing {
                 action
                     .validate_with_level(level)
                     .map_err(|e| contextualize_affordance_error(ctx.clone(), e))?;
+                let forms_ctx = format!("{}.forms", ctx);
                 validate_form_security_references(
                     ctx.as_str(),
                     &action._interaction.forms,
                     &self.security_definitions,
                 )?;
                 validate_form_response_references(
-                    format!("{}.forms", ctx).as_str(),
+                    forms_ctx.as_str(),
                     &action._interaction.forms,
                     self.schema_definitions.as_ref(),
                     level,
@@ -194,13 +317,14 @@ impl Validate for Thing {
                 event
                     .validate_with_level(level)
                     .map_err(|e| contextualize_affordance_error(ctx.clone(), e))?;
+                let forms_ctx = format!("{}.forms", ctx);
                 validate_form_security_references(
                     ctx.as_str(),
                     &event._interaction.forms,
                     &self.security_definitions,
                 )?;
                 validate_form_response_references(
-                    format!("{}.forms", ctx).as_str(),
+                    forms_ctx.as_str(),
                     &event._interaction.forms,
                     self.schema_definitions.as_ref(),
                     level,
@@ -252,34 +376,15 @@ fn validate_security_definitions(
 }
 
 fn contextualize_affordance_error(context: String, err: ValidateError) -> ValidateError {
-    match err {
-        ValidateError::InvalidSchema(message) => {
-            ValidateError::InvalidSchema(format!("{}: {}", context, message))
-        }
-        other => ValidateError::InvalidOperation {
-            context,
-            found: other.to_string(),
-        },
-    }
+    // Preserves the original error variant (MissingRequiredField, InvalidSecurity,
+    // InvalidReference, etc.) instead of reclassifying every non-schema error as
+    // InvalidOperation, which previously lost semantic information and broke
+    // programmatic error matching downstream.
+    crate::validate::prepend_context(context, err)
 }
 
 fn contextualize_security_error(context: String, err: ValidateError) -> ValidateError {
-    match err {
-        ValidateError::InvalidSecurity(message) => {
-            ValidateError::InvalidSecurity(format!("{}: {}", context, message))
-        }
-        ValidateError::MissingRequiredField(field) => {
-            ValidateError::MissingRequiredField(format!("{}: {}", context, field))
-        }
-        ValidateError::InvalidReference {
-            context: nested,
-            reference,
-        } => ValidateError::InvalidReference {
-            context: format!("{}: {}", context, nested),
-            reference,
-        },
-        other => ValidateError::InvalidSecurity(format!("{}: {}", context, other)),
-    }
+    crate::validate::prepend_context(context, err)
 }
 
 fn validate_form_security_references(
@@ -289,11 +394,16 @@ fn validate_form_security_references(
 ) -> Result<(), ValidateError> {
     for (index, form) in forms.iter().enumerate() {
         if let Some(security) = &form.security {
-            validate_security_references(
-                format!("{}.forms[{}].security", context, index).as_str(),
-                security,
-                security_definitions,
-            )?;
+            for reference in security {
+                if !security_definitions.contains_key(reference) {
+                    // Build the per-form context lazily so the success path
+                    // pays no allocation.
+                    return Err(ValidateError::InvalidReference {
+                        context: format!("{}.forms[{}].security", context, index),
+                        reference: reference.clone(),
+                    });
+                }
+            }
         }
     }
 
@@ -429,11 +539,7 @@ impl ThingBuilder {
     where
         I: IntoIterator<Item = Link>,
     {
-        let mut items: Vec<Link> = links.into_iter().collect();
-        self.thing
-            .links
-            .get_or_insert_with(Vec::new)
-            .append(&mut items);
+        self.thing.links.get_or_insert_with(Vec::new).extend(links);
         self
     }
 
@@ -451,11 +557,7 @@ impl ThingBuilder {
     where
         I: IntoIterator<Item = Form>,
     {
-        let mut items: Vec<Form> = forms.into_iter().collect();
-        self.thing
-            .forms
-            .get_or_insert_with(Vec::new)
-            .append(&mut items);
+        self.thing.forms.get_or_insert_with(Vec::new).extend(forms);
         self
     }
 
@@ -632,9 +734,7 @@ impl ThingBuilder {
 
     /// Builds and returns the `Thing` instance.
     pub fn build(self) -> Result<Thing, ValidateError> {
-        if let Some(error) = self.errors.into_iter().next() {
-            return Err(error);
-        }
+        crate::validate::collected_errors(self.errors)?;
         self.thing.validate()?;
         Ok(self.thing)
     }

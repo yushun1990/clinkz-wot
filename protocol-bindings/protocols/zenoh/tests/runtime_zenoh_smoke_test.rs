@@ -63,14 +63,14 @@ fn runtime_zenoh_transport_executes_put_and_get_smoke_paths() {
     let transport = ZenohSessionTransport::new(session).with_reply_timeout(REPLY_TIMEOUT);
     let put_output = transport
         .execute(ZenohTransportRequest {
-            plan: ZenohOperationPlan {
+            plan: std::sync::Arc::new(ZenohOperationPlan {
                 key_expr: key_expr.clone(),
                 kind: ZenohOperationKind::Put,
                 metadata: ZenohFormMetadata {
                     content_type: Some("text/plain".into()),
                     ..Default::default()
                 },
-            },
+            }),
             payload: Some(Payload::new(b"runtime-put".to_vec(), "text/plain")),
             parameters: Default::default(),
         })
@@ -86,14 +86,14 @@ fn runtime_zenoh_transport_executes_put_and_get_smoke_paths() {
 
     let get_output = transport
         .execute(ZenohTransportRequest {
-            plan: ZenohOperationPlan {
+            plan: std::sync::Arc::new(ZenohOperationPlan {
                 key_expr,
                 kind: ZenohOperationKind::RequestReply,
                 metadata: ZenohFormMetadata {
                     content_type: Some("text/plain".into()),
                     ..Default::default()
                 },
-            },
+            }),
             payload: None,
             parameters: Default::default(),
         })
@@ -101,7 +101,7 @@ fn runtime_zenoh_transport_executes_put_and_get_smoke_paths() {
     let payload = get_output.payload.expect("query reply payload");
 
     assert_eq!(payload.content_type, "text/plain");
-    assert_eq!(payload.body, b"runtime-query-reply");
+    assert_eq!(payload.body.as_ref(), b"runtime-query-reply");
 
     reply_thread.join().expect("join query reply thread");
     subscriber.undeclare().wait().expect("undeclare subscriber");
@@ -131,14 +131,14 @@ fn runtime_zenoh_transport_executes_subscribe_once_smoke_path() {
     let transport = ZenohSessionTransport::new(session).with_reply_timeout(REPLY_TIMEOUT);
     let output = transport
         .execute(ZenohTransportRequest {
-            plan: ZenohOperationPlan {
+            plan: std::sync::Arc::new(ZenohOperationPlan {
                 key_expr,
                 kind: ZenohOperationKind::Subscribe,
                 metadata: ZenohFormMetadata {
                     content_type: Some("text/plain".into()),
                     ..Default::default()
                 },
-            },
+            }),
             payload: None,
             parameters: Default::default(),
         })
@@ -146,7 +146,7 @@ fn runtime_zenoh_transport_executes_subscribe_once_smoke_path() {
     let payload = output.payload.expect("one-shot subscription payload");
 
     assert_eq!(payload.content_type, "text/plain");
-    assert_eq!(payload.body, b"runtime-subscribe-once-event");
+    assert_eq!(payload.body.as_ref(), b"runtime-subscribe-once-event");
 
     publish_thread.join().expect("join one-shot publish thread");
 }
@@ -171,7 +171,7 @@ fn runtime_zenoh_put_propagates_live_metadata() {
     let transport = ZenohSessionTransport::new(session).with_reply_timeout(REPLY_TIMEOUT);
     let put_output = transport
         .execute(ZenohTransportRequest {
-            plan: ZenohOperationPlan {
+            plan: std::sync::Arc::new(ZenohOperationPlan {
                 key_expr,
                 kind: ZenohOperationKind::Put,
                 metadata: ZenohFormMetadata {
@@ -180,7 +180,7 @@ fn runtime_zenoh_put_propagates_live_metadata() {
                     priority: Some("background".into()),
                     congestion_control: Some("block".into()),
                 },
-            },
+            }),
             payload: Some(Payload::new(
                 br#"{"runtime":"metadata"}"#.to_vec(),
                 "application/json",
@@ -251,7 +251,7 @@ fn runtime_zenoh_subscription_receives_multiple_samples_and_undeclares() {
         .expect("first subscription sample payload");
 
     assert_eq!(first_payload.content_type, "text/plain");
-    assert_eq!(first_payload.body, b"runtime-event-1");
+    assert_eq!(first_payload.body.as_ref(), b"runtime-event-1");
 
     session
         .put(key_expr.as_str(), "runtime-event-2")
@@ -265,7 +265,7 @@ fn runtime_zenoh_subscription_receives_multiple_samples_and_undeclares() {
         .expect("second subscription sample payload");
 
     assert_eq!(second_payload.content_type, "text/plain");
-    assert_eq!(second_payload.body, b"runtime-event-2");
+    assert_eq!(second_payload.body.as_ref(), b"runtime-event-2");
 
     subscription
         .undeclare()
@@ -324,14 +324,14 @@ fn runtime_zenoh_request_reply_timeout_maps_to_transport_error() {
 
     let error = transport
         .execute(ZenohTransportRequest {
-            plan: ZenohOperationPlan {
+            plan: std::sync::Arc::new(ZenohOperationPlan {
                 key_expr: key_expr.clone(),
                 kind: ZenohOperationKind::RequestReply,
                 metadata: ZenohFormMetadata {
                     content_type: Some("text/plain".into()),
                     ..Default::default()
                 },
-            },
+            }),
             payload: None,
             parameters: Default::default(),
         })
@@ -395,14 +395,14 @@ fn runtime_zenoh_request_reply_propagates_selector_parameters() {
     let transport = ZenohSessionTransport::new(session).with_reply_timeout(REPLY_TIMEOUT);
     let output = transport
         .execute(ZenohTransportRequest {
-            plan: ZenohOperationPlan {
+            plan: std::sync::Arc::new(ZenohOperationPlan {
                 key_expr: planned_key_expr,
                 kind: ZenohOperationKind::RequestReply,
                 metadata: ZenohFormMetadata {
                     content_type: Some("text/plain".into()),
                     ..Default::default()
                 },
-            },
+            }),
             payload: None,
             parameters,
         })
@@ -410,7 +410,7 @@ fn runtime_zenoh_request_reply_propagates_selector_parameters() {
     let payload = output.payload.expect("parameterized query reply payload");
 
     assert_eq!(payload.content_type, "text/plain");
-    assert_eq!(payload.body, b"runtime-query-parameters-ok");
+    assert_eq!(payload.body.as_ref(), b"runtime-query-parameters-ok");
 
     reply_thread.join().expect("join parameter query thread");
 }
@@ -472,14 +472,14 @@ fn runtime_zenoh_request_reply_propagates_request_payload() {
     let transport = ZenohSessionTransport::new(session).with_reply_timeout(REPLY_TIMEOUT);
     let output = transport
         .execute(ZenohTransportRequest {
-            plan: ZenohOperationPlan {
+            plan: std::sync::Arc::new(ZenohOperationPlan {
                 key_expr,
                 kind: ZenohOperationKind::RequestReply,
                 metadata: ZenohFormMetadata {
                     content_type: Some("text/plain".into()),
                     ..Default::default()
                 },
-            },
+            }),
             payload: Some(Payload::new(request_body, "text/plain")),
             parameters: Default::default(),
         })
@@ -487,7 +487,7 @@ fn runtime_zenoh_request_reply_propagates_request_payload() {
     let payload = output.payload.expect("payload query reply payload");
 
     assert_eq!(payload.content_type, "text/plain");
-    assert_eq!(payload.body, b"runtime-query-payload-ok");
+    assert_eq!(payload.body.as_ref(), b"runtime-query-payload-ok");
 
     reply_thread.join().expect("join payload query thread");
 }
@@ -539,14 +539,14 @@ fn runtime_zenoh_request_reply_uses_live_reply_encoding() {
     let transport = ZenohSessionTransport::new(session).with_reply_timeout(REPLY_TIMEOUT);
     let output = transport
         .execute(ZenohTransportRequest {
-            plan: ZenohOperationPlan {
+            plan: std::sync::Arc::new(ZenohOperationPlan {
                 key_expr,
                 kind: ZenohOperationKind::RequestReply,
                 metadata: ZenohFormMetadata {
                     content_type: Some("application/json".into()),
                     ..Default::default()
                 },
-            },
+            }),
             payload: Some(Payload::new(
                 br#"{"request":"reply-encoding"}"#.to_vec(),
                 "application/json",
@@ -557,7 +557,7 @@ fn runtime_zenoh_request_reply_uses_live_reply_encoding() {
     let payload = output.payload.expect("reply encoding query reply payload");
 
     assert_eq!(payload.content_type, "text/plain");
-    assert_eq!(payload.body, b"runtime-query-reply-encoding-ok");
+    assert_eq!(payload.body.as_ref(), b"runtime-query-reply-encoding-ok");
 
     reply_thread
         .join()

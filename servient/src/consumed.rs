@@ -15,6 +15,7 @@
 use alloc::{boxed::Box, collections::BTreeMap, string::String, sync::Arc, vec::Vec};
 
 use clinkz_wot_core::{MapLock, MapLockError, SubscriptionGuard};
+use clinkz_wot_protocol_bindings::AffordanceRef;
 use clinkz_wot_td::thing::Thing;
 
 use crate::{BindingPlan, SelectedFormCacheKey};
@@ -31,9 +32,9 @@ pub(crate) struct SubscriptionKey {
 impl SubscriptionKey {
     pub(crate) fn new(target: &clinkz_wot_core::AffordanceTarget, operation: &str) -> Self {
         let (target_kind, target_name) = match target {
-            clinkz_wot_core::AffordanceTarget::Property(name) => ("property", name.as_str()),
-            clinkz_wot_core::AffordanceTarget::Action(name) => ("action", name.as_str()),
-            clinkz_wot_core::AffordanceTarget::Event(name) => ("event", name.as_str()),
+            clinkz_wot_core::AffordanceTarget::Property(name) => ("property", &**name),
+            clinkz_wot_core::AffordanceTarget::Action(name) => ("action", &**name),
+            clinkz_wot_core::AffordanceTarget::Event(name) => ("event", &**name),
             clinkz_wot_core::AffordanceTarget::Thing => ("thing", ""),
         };
         Self {
@@ -62,6 +63,16 @@ pub(crate) struct ConsumedThingEntry {
     thing: Arc<Thing>,
     plan_cache: MapLock<BTreeMap<SelectedFormCacheKey, BindingPlan>>,
     subscriptions: MapLock<BTreeMap<SubscriptionKey, Vec<BoxedGuard>>>,
+    /// Interned `Arc<str>` affordance names, lazily populated on first cache
+    /// lookup per unique name.
+    ///
+    /// Every consumed interaction builds a [`SelectedFormCacheKey`] whose
+    /// `affordance` field needs an owned [`AffordanceTarget`] (backed by
+    /// `Arc<str>`). Without interning, each cache lookup would allocate a fresh
+    /// `Arc<str>` for the affordance name even on a cache hit. With interning,
+    /// the first lookup per unique name allocates the canonical `Arc<str>` and
+    /// every subsequent lookup is a refcount bump.
+    affordance_names: MapLock<BTreeMap<String, Arc<str>>>,
 }
 
 impl ConsumedThingEntry {
@@ -70,6 +81,7 @@ impl ConsumedThingEntry {
             thing: Arc::new(thing),
             plan_cache: MapLock::new(BTreeMap::new()),
             subscriptions: MapLock::new(BTreeMap::new()),
+            affordance_names: MapLock::new(BTreeMap::new()),
         }
     }
 
@@ -86,10 +98,58 @@ impl ConsumedThingEntry {
         Arc::clone(&self.thing)
     }
 
+    /// Returns the canonical interned `Arc<str>` for `name`.
+    ///
+    /// The first call for a given name allocates the canonical `Arc<str>` and
+    /// caches it; every subsequent call is a refcount bump (no allocation).
+    /// Used by [`affordance_target`](Self::affordance_target) to avoid
+    /// re-allocating the affordance name on every cache lookup in the
+    /// consumed-interaction hot path.
+    pub(crate) fn intern_affordance_name(&self, name: &str) -> Arc<str> {
+        if let Some(arc) = self
+            .affordance_names
+            .with_read_recover(|map| map.get(name).cloned())
+        {
+            return arc;
+        }
+        let arc = Arc::<str>::from(name);
+        self.affordance_names.with_recover(|map| {
+            map.entry(String::from(name))
+                .or_insert_with(|| Arc::clone(&arc));
+        });
+        arc
+    }
+
+    /// Builds an owned [`AffordanceTarget`] from a borrowed
+    /// [`AffordanceRef`], interning affordance names so the resulting
+    /// `Arc<str>` is a refcount bump on the steady-state hot path.
+    pub(crate) fn affordance_target(
+        &self,
+        affordance: AffordanceRef<'_>,
+    ) -> clinkz_wot_core::AffordanceTarget {
+        use clinkz_wot_core::AffordanceTarget;
+        match affordance {
+            AffordanceRef::Thing => AffordanceTarget::Thing,
+            AffordanceRef::Property(name) => {
+                AffordanceTarget::Property(self.intern_affordance_name(name))
+            }
+            AffordanceRef::Action(name) => {
+                AffordanceTarget::Action(self.intern_affordance_name(name))
+            }
+            AffordanceRef::Event(name) => {
+                AffordanceTarget::Event(self.intern_affordance_name(name))
+            }
+        }
+    }
+
     /// Retrieves a cached binding plan by key.
+    ///
+    /// Uses a shared read lock so concurrent lookups on the same entry do not
+    /// serialize against each other (the cache is read-mostly on the consumed
+    /// hot path).
     pub(crate) fn get_plan(&self, key: &SelectedFormCacheKey) -> Option<BindingPlan> {
         self.plan_cache
-            .with_recover(|cache| cache.get(key).cloned())
+            .with_read_recover(|cache| cache.get(key).cloned())
     }
 
     /// Inserts or replaces a cached binding plan.
@@ -174,13 +234,22 @@ impl ConsumedThingRegistry {
         id: String,
         thing: Thing,
     ) -> Result<Arc<ConsumedThingEntry>, MapLockError> {
+        // Fast path: an existing entry is found under a shared read lock and
+        // returned without any allocation. The fresh entry is constructed
+        // outside the write lock so two concurrent `consume()` calls for
+        // *different* Things do not serialize on each other's allocation; on
+        // the rare double-insert for the same id the loser's entry is simply
+        // dropped (one wasted allocation, correct behavior).
+        if let Some(existing) = self.entries.with_read_recover(|map| map.get(&id).cloned()) {
+            return Ok(existing);
+        }
+        let entry = Arc::new(ConsumedThingEntry::new(thing));
         self.entries.with(|map| {
             if let Some(existing) = map.get(&id) {
                 Arc::clone(existing)
             } else {
-                let entry = Arc::new(ConsumedThingEntry::new(thing));
                 map.insert(id, Arc::clone(&entry));
-                entry
+                Arc::clone(&entry)
             }
         })
     }

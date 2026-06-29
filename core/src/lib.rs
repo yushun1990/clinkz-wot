@@ -34,13 +34,11 @@ pub use security::{
     SecurityContext, SecurityError, SecurityProvider, check_scopes,
 };
 pub use sync::{MapLock, MapLockError};
-#[cfg(feature = "td2-preview")]
-pub use thing::ActionCancelHandler;
 pub use thing::{
-    ActionHandler, ActionQueryHandler, AffordanceTarget, BoundConsumedThing, ConsumedThing,
-    EventSink, EventSubscribeHandler, EventUnsubscribeHandler, ExposedThing, InteractionInput,
-    InteractionOutput, LocalThing, PropertyObserveHandler, PropertyReadHandler,
-    PropertyUnobserveHandler, PropertyWriteHandler,
+    ActionCancelHandler, ActionHandler, ActionQueryHandler, AffordanceKind, AffordanceTarget,
+    BoundConsumedThing, ConsumedThing, EventSink, EventSubscribeHandler, EventUnsubscribeHandler,
+    ExposedThing, InteractionInput, InteractionOutput, LocalThing, PropertyObserveHandler,
+    PropertyReadHandler, PropertyUnobserveHandler, PropertyWriteHandler,
 };
 #[cfg(feature = "async")]
 pub use thing::{AsyncActionHandler, AsyncPropertyReadHandler, AsyncPropertyWriteHandler};

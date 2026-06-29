@@ -46,7 +46,7 @@
 //!     &mut wire,
 //! )?;
 //!
-//! let payload = codec.encode(CodecInput { body: &wire, data_type: None })?;
+//! let payload = codec.encode(CodecInput { body: &wire })?;
 //! assert_eq!(payload.content_type, "application/cbor");
 //! # Ok(())
 //! # }
@@ -108,7 +108,20 @@ impl PayloadCodec for CborCodec {
         // or sign decoded bytes see the same representation as the wire payload
         // (provided the input key order is itself stable — see crate-level
         // docs).
-        reencode(payload.body.as_slice())
+        reencode(payload.body.as_ref())
+    }
+
+    /// Returns the payload bytes as-is, without the normalize round-trip.
+    ///
+    /// Handlers that merely want to parse the value (not sign or hash it)
+    /// should prefer this over [`PayloadCodec::decode`] to avoid a parse →
+    /// re-serialize → re-parse triple pass.
+    fn decode_raw<'a>(&self, payload: &'a Payload) -> CoreResult<Cow<'a, [u8]>> {
+        // Validate well-formedness once (cheap structural parse) so callers
+        // still get a clear error on malformed CBOR, but do not reserialize.
+        ciborium::de::from_reader::<ciborium::Value, _>(payload.body.as_ref())
+            .map_err(|err| CoreError::Payload(format!("CBOR decode failed: {}", err)))?;
+        Ok(Cow::Borrowed(payload.body.as_ref()))
     }
 }
 

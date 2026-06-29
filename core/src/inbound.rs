@@ -330,7 +330,7 @@ mod tests {
     fn request_with(auth: Option<AuthMaterial>) -> InboundRequest {
         let mut request = InboundRequest::new(
             ThingId::from("urn:thing:1"),
-            AffordanceTarget::Property(String::from("status")),
+            AffordanceTarget::Property(String::from("status").into()),
             Operation::ReadProperty,
             InteractionInput::empty(),
         );

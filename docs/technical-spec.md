@@ -199,7 +199,10 @@ observability integrations stay behind the crate's `std` feature.
 - `zenoh` enables the Rust `zenoh` (std) backend including `ZenohServerBinding`.
 - `zenoh-pico` enables the constrained `no_std + alloc` platform-hook backend
   (mutually exclusive with `zenoh`).
-- `td2-preview` enables experimental TD 2.0 tracking.
+- `td2-preview` enables experimental TD 2.0 tracking (currently the
+  `ActionAffordance.synchronous` field; the full TD 1.1 `op` vocabulary
+  including `cancelaction`, `subscribeallevents`, and `unsubscribeallevents`
+  is always available).
 
 Crates that expose both embedded-ready and std-only surfaces should keep both
 surfaces in the same crate when the split is only a feature boundary. Use

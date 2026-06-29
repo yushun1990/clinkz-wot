@@ -38,7 +38,7 @@ impl ZenohTransport for RecordingZenohTransport {
             request
                 .payload
                 .as_ref()
-                .map(|payload| payload.body.as_slice()),
+                .map(|payload| payload.body.as_ref()),
             Some(&b"on"[..])
         );
         assert_eq!(
@@ -199,7 +199,7 @@ fn runtime_binding_delegates_planned_operation_to_transport() {
         })
         .unwrap();
 
-    assert_eq!(output.payload.unwrap().body, b"accepted");
+    assert_eq!(output.payload.unwrap().body.as_ref(), b"accepted");
 }
 
 #[cfg(feature = "zenoh")]
@@ -240,8 +240,8 @@ fn shared_transport_reuses_underlying_runtime_state() {
         })
         .unwrap();
 
-    assert_eq!(first.payload.unwrap().body, b"1:clinkz/things/lamp/status");
-    assert_eq!(second.payload.unwrap().body, b"2:clinkz/things/lamp/status");
+    assert_eq!(first.payload.unwrap().body.as_ref(), b"1:clinkz/things/lamp/status");
+    assert_eq!(second.payload.unwrap().body.as_ref(), b"2:clinkz/things/lamp/status");
     assert_eq!(shared.inner().calls.get(), 2);
 }
 
@@ -438,9 +438,8 @@ fn plans_bulk_property_operation_from_thing_level_form() {
     assert_eq!(plan.operation.key_expr, "clinkz/things/lamp/properties");
 }
 
-/// `subscribeallevents` / `unsubscribeallevents` are TD 2.0 operations; this
-/// planning test is only compiled under `td2-preview`.
-#[cfg(feature = "td2-preview")]
+/// `subscribeallevents` / `unsubscribeallevents` are TD 1.1 event
+/// meta-operations; this planning test covers the Thing-level bulk form path.
 #[test]
 fn plans_bulk_event_operation_from_thing_level_form() {
     let subscribe_form = Form::builder("zenoh://clinkz/things/lamp/events")
@@ -694,7 +693,6 @@ fn maps_wot_operations_to_zenoh_operation_kinds() {
         zenoh_operation_kind(Operation::UnsubscribeEvent),
         ZenohOperationKind::Unsubscribe
     );
-    #[cfg(feature = "td2-preview")]
     assert_eq!(
         zenoh_operation_kind(Operation::CancelAction),
         ZenohOperationKind::RequestReply
@@ -715,10 +713,13 @@ fn maps_bulk_wot_operations_to_zenoh_operation_kinds() {
         zenoh_operation_kind(Operation::ObserveAllProperties),
         ZenohOperationKind::Subscribe
     );
-    #[cfg(feature = "td2-preview")]
     assert_eq!(
         zenoh_operation_kind(Operation::UnsubscribeAllEvents),
         ZenohOperationKind::Unsubscribe
+    );
+    assert_eq!(
+        zenoh_operation_kind(Operation::SubscribeAllEvents),
+        ZenohOperationKind::Subscribe
     );
     assert_eq!(
         zenoh_operation_kind(Operation::QueryAllActions),

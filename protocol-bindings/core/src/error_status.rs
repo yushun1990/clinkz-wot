@@ -14,7 +14,7 @@ pub fn error_status(error: &CoreError) -> u16 {
         CoreError::Payload(_) | CoreError::InvalidInteraction(_) => 400,
         CoreError::Security(security_error) => security_status(security_error),
         CoreError::Transport(_) => 502,
-        CoreError::MissingHandler => 501,
+        CoreError::MissingHandler { .. } => 501,
         CoreError::InboundDispatch(_) => 500,
         CoreError::Lock(_) => 503,
     }
@@ -33,13 +33,14 @@ fn security_status(error: &SecurityError) -> u16 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use clinkz_wot_core::SecurityError;
+    use clinkz_wot_core::{AffordanceKind, AffordanceTarget, SecurityError};
+    use clinkz_wot_td::data_type::Operation;
 
     #[test]
     fn maps_every_core_error_variant() {
         assert_eq!(
             error_status(&CoreError::UnknownAffordance {
-                kind: "property",
+                kind: AffordanceKind::Property,
                 name: "x".into(),
             }),
             404
@@ -83,7 +84,13 @@ mod tests {
             error_status(&CoreError::InvalidInteraction("bad".into())),
             400
         );
-        assert_eq!(error_status(&CoreError::MissingHandler), 501);
+        assert_eq!(
+            error_status(&CoreError::MissingHandler {
+                target: AffordanceTarget::Property("x".into()),
+                operation: Operation::ReadProperty,
+            }),
+            501
+        );
         assert_eq!(error_status(&CoreError::InboundDispatch("d".into())), 500);
     }
 }

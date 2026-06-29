@@ -118,12 +118,12 @@ same order documented above.
 
 ## TD 2.0 Experimental Gate
 
-Default builds target strict TD 1.1 (see `docs/wot-compliance.md`). The
-experimental TD 2.0 surface — the `ActionAffordance.synchronous` field, the
-`cancelaction` / `subscribeallevents` / `unsubscribeallevents` operations, and
-the runtime dispatch and binding planning for them — is gated behind the
-`td2-preview` feature and absent from default builds. The TD 2.0 parsing
-fixtures and the gated runtime tests are exercised under `td2-preview`:
+Default builds target full TD 1.1 (see `docs/wot-compliance.md`), including the
+complete TD 1.1 `op` vocabulary (`cancelaction`, `subscribeallevents`, and
+`unsubscribeallevents` are TD 1.1 terms and their runtime dispatch and binding
+planning are always available). The only experimental TD 2.0 surface is the
+`ActionAffordance.synchronous` field, gated behind the `td2-preview` feature
+and absent from default builds. It is exercised under `td2-preview`:
 
 ```sh
 scripts/check-td2-preview.sh

@@ -4,12 +4,14 @@
 //!
 //! | Build | Backing primitive | Multi-thread safe |
 //! |---|---|---|
-//! | `std` | `std::sync::Mutex` | yes |
+//! | `std` | `std::sync::RwLock` | yes (reader/writer) |
 //! | `no_std` + `multithread` feature | `UnsafeCell` + `critical_section::with` | yes (RTOS / multi-interrupt) |
 //! | `no_std` (default) | `core::cell::RefCell` | no (single-thread only) |
 //!
 //! Critical sections are always short and never span `.await` or handler
-//! dispatch.
+//! dispatch. Read-mostly state should prefer
+//! [`with_read`](MapLock::with_read)/[`with_read_recover`](MapLock::with_read_recover)
+//! so concurrent readers do not serialize.
 
 // ---------------------------------------------------------------------------
 // Backing primitive selection.
@@ -19,7 +21,7 @@
 use core::cell::RefCell;
 
 #[cfg(feature = "std")]
-use std::sync::{Mutex as StdMutex, TryLockError};
+use std::sync::{RwLock, TryLockError};
 
 #[cfg(all(not(feature = "std"), feature = "multithread"))]
 use core::cell::UnsafeCell;
@@ -58,11 +60,14 @@ impl std::error::Error for MapLockError {}
 
 /// Interior-mutability wrapper with three cfg-selected backends:
 ///
-/// - `std`: `std::sync::Mutex` (multi-thread, reports poisoning).
+/// - `std`: `std::sync::RwLock` (multi-thread, reader/writer, reports
+///   poisoning). Read-mostly state should use
+///   [`with_read`](Self::with_read)/[`with_read_recover`](Self::with_read_recover)
+///   so concurrent readers proceed in parallel.
 /// - `no_std` + `critical-section`: `critical_section::Mutex` (multi-thread
-///   safe via critical sections; no poisoning).
+///   safe via critical sections; no poisoning; always exclusive).
 /// - `no_std` (default): `core::cell::RefCell` (single-thread, zero-cost,
-///   panics on re-entrancy).
+///   panics on re-entrancy; reads use shared borrows).
 #[cfg(all(not(feature = "std"), not(feature = "multithread")))]
 pub struct MapLock<T> {
     inner: RefCell<T>,
@@ -85,7 +90,7 @@ unsafe impl<T> Sync for MapLock<T> {}
 
 #[cfg(feature = "std")]
 pub struct MapLock<T> {
-    inner: StdMutex<T>,
+    inner: RwLock<T>,
 }
 
 impl<T> MapLock<T> {
@@ -106,7 +111,7 @@ impl<T> MapLock<T> {
         #[cfg(feature = "std")]
         {
             Self {
-                inner: StdMutex::new(value),
+                inner: RwLock::new(value),
             }
         }
     }
@@ -132,8 +137,42 @@ impl<T> MapLock<T> {
         }
         #[cfg(feature = "std")]
         {
-            match self.inner.lock() {
+            match self.inner.write() {
                 Ok(mut guard) => Ok(f(&mut *guard)),
+                Err(_) => {
+                    self.inner.clear_poison();
+                    Err(MapLockError::new())
+                }
+            }
+        }
+    }
+
+    /// Shared (read) variant of [`with`](Self::with).
+    ///
+    /// Acquires a **read** lock, runs `f` with shared access, and releases.
+    /// Concurrent readers proceed in parallel; only writers block. Returns
+    /// [`Err`] if the lock was poisoned by a panicking thread (`std` only).
+    ///
+    /// Prefer this over [`with`](Self::with) for read-only accessors (cache
+    /// lookups, registry `get`, length/empty checks) so read-heavy paths do not
+    /// serialize against each other.
+    pub fn with_read<R>(&self, f: impl FnOnce(&T) -> R) -> Result<R, MapLockError> {
+        #[cfg(all(not(feature = "std"), not(feature = "multithread")))]
+        {
+            Ok(f(&*self.inner.borrow()))
+        }
+        #[cfg(all(not(feature = "std"), feature = "multithread"))]
+        {
+            Ok(critical_section::with(|_| {
+                // Safety: critical section guarantees exclusive access.
+                let guard = unsafe { &*self.inner.get() };
+                f(guard)
+            }))
+        }
+        #[cfg(feature = "std")]
+        {
+            match self.inner.read() {
+                Ok(guard) => Ok(f(&*guard)),
                 Err(_) => {
                     self.inner.clear_poison();
                     Err(MapLockError::new())
@@ -166,9 +205,39 @@ impl<T> MapLock<T> {
         {
             let mut guard = self
                 .inner
-                .lock()
+                .write()
                 .unwrap_or_else(|poisoned| poisoned.into_inner());
             let result = f(&mut *guard);
+            drop(guard);
+            self.inner.clear_poison();
+            result
+        }
+    }
+
+    /// Best-effort shared (read) variant that recovers from poisoning.
+    ///
+    /// Like [`with_recover`](Self::with_recover) but acquires a **read** lock
+    /// and hands `f` a shared reference. Use this for read-only accessors that
+    /// should not fail (and should not block writers from other readers).
+    pub fn with_read_recover<R>(&self, f: impl FnOnce(&T) -> R) -> R {
+        #[cfg(all(not(feature = "std"), not(feature = "multithread")))]
+        {
+            f(&*self.inner.borrow())
+        }
+        #[cfg(all(not(feature = "std"), feature = "multithread"))]
+        {
+            critical_section::with(|_| {
+                let guard = unsafe { &*self.inner.get() };
+                f(guard)
+            })
+        }
+        #[cfg(feature = "std")]
+        {
+            let guard = self
+                .inner
+                .read()
+                .unwrap_or_else(|poisoned| poisoned.into_inner());
+            let result = f(&*guard);
             drop(guard);
             self.inner.clear_poison();
             result
@@ -202,7 +271,7 @@ impl<T> MapLock<T> {
         }
         #[cfg(feature = "std")]
         {
-            match self.inner.try_lock() {
+            match self.inner.try_write() {
                 Ok(mut guard) => Some(f(&mut *guard)),
                 Err(TryLockError::WouldBlock) => None,
                 Err(TryLockError::Poisoned(p)) => {

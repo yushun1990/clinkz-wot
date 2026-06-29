@@ -1,10 +1,16 @@
-use alloc::{borrow::Cow, string::String, vec::Vec};
+use alloc::{borrow::Cow, string::String, sync::Arc, vec::Vec};
 
 /// An encoded interaction payload plus protocol-neutral media metadata.
+///
+/// `body` is stored as `Arc<[u8]>` rather than `Vec<u8>` so cloning a `Payload`
+/// is a single refcount bump. This matters for the event fan-out path, where
+/// one emitted payload is queued into N subscriber buffers. Access the bytes
+/// via `body.as_ref()` / `&body[..]` (the `as_slice` method is unstable on
+/// `Arc<[u8]>`).
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct Payload {
-    /// Encoded payload bytes.
-    pub body: Vec<u8>,
+    /// Encoded payload bytes (shared by reference).
+    pub body: Arc<[u8]>,
     /// Media type for the encoded payload.
     pub content_type: String,
     /// Optional content coding such as gzip.
@@ -13,7 +19,7 @@ pub struct Payload {
 
 impl Payload {
     /// Creates a payload with explicit media metadata.
-    pub fn new(body: impl Into<Vec<u8>>, content_type: impl Into<String>) -> Self {
+    pub fn new(body: impl Into<Arc<[u8]>>, content_type: impl Into<String>) -> Self {
         Self {
             body: body.into(),
             content_type: content_type.into(),
@@ -33,8 +39,6 @@ impl Payload {
 pub struct CodecInput<'a> {
     /// Application-level bytes to encode.
     pub body: &'a [u8],
-    /// Optional application data type name.
-    pub data_type: Option<&'a str>,
 }
 
 /// Protocol-neutral payload codec contract.
@@ -47,4 +51,17 @@ pub trait PayloadCodec {
 
     /// Decodes a payload into application bytes.
     fn decode(&self, payload: &Payload) -> crate::CoreResult<Vec<u8>>;
+
+    /// Returns the application bytes without normalizing, when the codec
+    /// supports it.
+    ///
+    /// The default implementation falls back to [`decode`](Self::decode)
+    /// (normalized, owned). Codecs that can hand back the original wire bytes
+    /// without re-encoding override this to return [`Cow::Borrowed`], letting
+    /// handlers parse the value directly and avoid a normalize-then-reparse
+    /// round-trip on the hot path. Use [`decode`](Self::decode) instead when
+    /// the bytes must be byte-stable for signing or hashing.
+    fn decode_raw<'a>(&self, payload: &'a Payload) -> crate::CoreResult<Cow<'a, [u8]>> {
+        self.decode(payload).map(Cow::Owned)
+    }
 }

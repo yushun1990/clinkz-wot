@@ -198,7 +198,7 @@ impl PayloadCodec for CountingCodec {
 
     fn decode(&self, payload: &Payload) -> CoreResult<Vec<u8>> {
         self.decode_calls.set(self.decode_calls.get() + 1);
-        Ok(payload.body.clone())
+        Ok(payload.body.as_ref().to_vec())
     }
 }
 
@@ -263,14 +263,18 @@ impl ClientBinding for TestBinding {
             (AffordanceTarget::Property(_), Operation::ReadProperty) => {
                 Ok(InteractionOutput::with_payload(self.response.clone()))
             }
-            (AffordanceTarget::Property(name), Operation::WriteProperty) if name == "status" => {
-                assert_eq!(request.input.payload.unwrap().body, b"off");
+            (AffordanceTarget::Property(name), Operation::WriteProperty)
+                if name.as_ref() == "status" =>
+            {
+                assert_eq!(request.input.payload.unwrap().body.as_ref(), b"off");
                 Ok(InteractionOutput::empty())
             }
             (AffordanceTarget::Property(_), Operation::WriteProperty) => {
                 Ok(InteractionOutput::empty())
             }
-            (AffordanceTarget::Action(name), Operation::InvokeAction) if name == "echo" => {
+            (AffordanceTarget::Action(name), Operation::InvokeAction)
+                if name.as_ref() == "echo" =>
+            {
                 Ok(InteractionOutput {
                     payload: request.input.payload,
                 })
@@ -291,13 +295,17 @@ impl ClientBinding for TestBinding {
         request: BindingRequest,
     ) -> CoreResult<(clinkz_wot_core::Subscription, Box<dyn SubscriptionGuard>)> {
         match (request.target, request.operation) {
-            (AffordanceTarget::Event(name), Operation::SubscribeEvent) if name == "startup" => {
+            (AffordanceTarget::Event(name), Operation::SubscribeEvent)
+                if name.as_ref() == "startup" =>
+            {
                 let (sender, subscription) = clinkz_wot_core::Subscription::channel(0);
                 // Push an initial sample simulating a remote event delivery.
                 sender.push(Payload::new(b"subscribed".to_vec(), "text/plain"));
                 Ok((subscription, Box::new(NoopGuard)))
             }
-            (AffordanceTarget::Property(name), Operation::ObserveProperty) if name == "status" => {
+            (AffordanceTarget::Property(name), Operation::ObserveProperty)
+                if name.as_ref() == "status" =>
+            {
                 let (sender, subscription) = clinkz_wot_core::Subscription::channel(0);
                 sender.push(self.response.clone());
                 Ok((subscription, Box::new(NoopGuard)))
@@ -395,7 +403,7 @@ impl ZenohTransport for ServientZenohTransport {
                     request
                         .payload
                         .as_ref()
-                        .map(|payload| payload.body.as_slice()),
+                        .map(|payload| payload.body.as_ref()),
                     Some(&b"zenoh-off"[..])
                 );
                 Ok(InteractionOutput::empty())
@@ -460,7 +468,7 @@ impl ZenohTransport for CountingServientZenohTransport {
                     request
                         .payload
                         .as_ref()
-                        .map(|payload| payload.body.as_slice()),
+                        .map(|payload| payload.body.as_ref()),
                     Some(&b"zenoh-off"[..])
                 );
                 Ok(InteractionOutput::empty())

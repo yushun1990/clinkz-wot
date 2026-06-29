@@ -1,5 +1,6 @@
 use alloc::{borrow::Cow, collections::BTreeMap, format, string::String};
 
+use clinkz_wot_core::AffordanceKind;
 use clinkz_wot_td::{
     data_type::{Operation, ResolvedFormHref, resolve_form_href},
     form::Form,
@@ -423,21 +424,21 @@ fn forms_for_affordance<'a>(
             forms: thing.forms.as_deref().unwrap_or(&[]),
         }),
         AffordanceRef::Property(name) => {
-            let property = find_affordance("property", name, &thing.properties)?;
+            let property = find_affordance(AffordanceKind::Property, name, &thing.properties)?;
             Ok(FormSet {
                 context: FormContext::Property(property),
                 forms: property._interaction.forms.as_slice(),
             })
         }
         AffordanceRef::Action(name) => {
-            let action = find_affordance("action", name, &thing.actions)?;
+            let action = find_affordance(AffordanceKind::Action, name, &thing.actions)?;
             Ok(FormSet {
                 context: FormContext::Action(action),
                 forms: action._interaction.forms.as_slice(),
             })
         }
         AffordanceRef::Event(name) => {
-            let event = find_affordance("event", name, &thing.events)?;
+            let event = find_affordance(AffordanceKind::Event, name, &thing.events)?;
             Ok(FormSet {
                 context: FormContext::Event(event),
                 forms: event._interaction.forms.as_slice(),
@@ -447,7 +448,7 @@ fn forms_for_affordance<'a>(
 }
 
 fn find_affordance<'a, T>(
-    kind: &'static str,
+    kind: AffordanceKind,
     name: &str,
     affordances: &'a Option<BTreeMap<String, T>>,
 ) -> BindingResult<&'a T> {

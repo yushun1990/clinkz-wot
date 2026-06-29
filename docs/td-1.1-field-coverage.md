@@ -137,7 +137,7 @@ Status values:
 | `oneOf` | `ComboSecurityScheme::one_of` | `Vec<String>` | Combo | Conditional | No | Empty vector | N/A | covered | Represented. Basic validation checks minimum cardinality, empty references, and references against `securityDefinitions`. |
 | `allOf` | `ComboSecurityScheme::all_of` | `Vec<String>` | Combo | Conditional | No | Empty vector | N/A | covered | Represented. Basic validation checks minimum cardinality, empty references, and references against `securityDefinitions`. |
 | `name` | `name` fields | `Option<String>` | Basic, Digest, APIKey, Bearer | Conditional | No | None | N/A | partial | Represented. Basic validation checks API key `name`; additional scheme-specific name requirements remain future work. |
-| `in` | `location` fields | `SecurityLocation` | Basic, Digest, APIKey, Bearer | Conditional | No | `header` | N/A | covered | Represented with default. |
+| `in` | `location` fields | `SecurityLocation` | Basic, Digest, APIKey, Bearer | Conditional | No | `header` (Basic/Digest/Bearer), `query` (APIKey) | N/A | covered | Represented with scheme-specific defaults per TD 1.1 §5.4. |
 | `qop` | `DigestSecurityScheme::qop` | `Qop` | Digest | No | No | `auth` | N/A | covered | Represented. |
 | `authorization` | `BearerSecurityScheme::authorization`, `OAuth2SecurityScheme::authorization` | `Option<AbsoluteUri>` | Bearer, OAuth2 | Conditional | No | None | N/A | covered | Absolute URI enforced. Basic validation requires OAuth2 code-flow authorization endpoints. |
 | `alg` | `BearerSecurityScheme::alg` | `String` | Bearer | No | No | `ES256` | N/A | covered | Represented with default. |
@@ -164,8 +164,8 @@ Status values:
 
 Completed compliance hardening (TD 1.1 REC alignment):
 
-- Event affordance default `op` is `subscribeevent` only (TD 1.1 §5.3.3);
-  `unsubscribeevent` must be declared explicitly when needed.
+- Event affordance default `op` is `subscribeevent` and `unsubscribeevent`
+  (TD 1.1 §5.4); both operations are inferred for an omitted Event form `op`.
 - Thing-level forms only accept meta-operations (`readallproperties`,
   `queryallactions`, etc.) per TD 1.1 §5.3.4; affordance-scoped operations on a
   Thing-level form are rejected at Basic validation.

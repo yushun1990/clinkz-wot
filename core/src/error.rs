@@ -1,8 +1,11 @@
 use alloc::string::String;
 use core::fmt;
 
+use clinkz_wot_td::data_type::Operation;
+
 use crate::security::SecurityError;
 use crate::sync::MapLockError;
+use crate::thing::{AffordanceKind, AffordanceTarget};
 
 /// Result type used by protocol-neutral core traits.
 pub type CoreResult<T> = Result<T, CoreError>;
@@ -11,7 +14,7 @@ pub type CoreResult<T> = Result<T, CoreError>;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CoreError {
     /// The requested affordance does not exist on the Thing.
-    UnknownAffordance { kind: &'static str, name: String },
+    UnknownAffordance { kind: AffordanceKind, name: String },
     /// The requested operation is not supported by the selected affordance or form.
     UnsupportedOperation(String),
     /// No binding could handle the requested form or operation.
@@ -25,8 +28,13 @@ pub enum CoreError {
     /// The implementation returned an invalid interaction result.
     InvalidInteraction(String),
     /// An inbound interaction targeted an affordance with no attached handler
-    /// (baseline addendum §4).
-    MissingHandler,
+    /// (baseline addendum §4). Carries the target and operation so clients
+    /// receive actionable diagnostics (e.g. HTTP 501 bodies) instead of an
+    /// opaque "no handler" message.
+    MissingHandler {
+        target: AffordanceTarget,
+        operation: Operation,
+    },
     /// An inbound dispatch or routing failure with an opaque English reason.
     InboundDispatch(String),
     /// A shared engine lock was poisoned by a panicking thread.
@@ -45,7 +53,9 @@ impl fmt::Display for CoreError {
             Self::Security(error) => write!(f, "Security error: {}", error),
             Self::Transport(message) => write!(f, "Transport error: {}", message),
             Self::InvalidInteraction(message) => write!(f, "Invalid interaction: {}", message),
-            Self::MissingHandler => f.write_str("No handler attached for the requested affordance"),
+            Self::MissingHandler { target, operation } => {
+                write!(f, "No handler attached for {:?} on {:?}", operation, target)
+            }
             Self::InboundDispatch(message) => write!(f, "Inbound dispatch error: {}", message),
             Self::Lock(err) => write!(f, "{}", err),
         }
@@ -53,7 +63,15 @@ impl fmt::Display for CoreError {
 }
 
 #[cfg(feature = "std")]
-impl std::error::Error for CoreError {}
+impl std::error::Error for CoreError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::Security(err) => Some(err),
+            Self::Lock(err) => Some(err),
+            _ => None,
+        }
+    }
+}
 
 impl From<MapLockError> for CoreError {
     fn from(value: MapLockError) -> Self {

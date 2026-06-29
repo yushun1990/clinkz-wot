@@ -1,13 +1,14 @@
-use alloc::{collections::BTreeMap, format, string::String};
+use alloc::{borrow::Cow, collections::BTreeMap, format, string::String};
 
 use clinkz_wot_core::{CoreError, CoreResult};
 
-pub(super) fn selector_with_parameters(
-    key_expr: &str,
+pub(super) fn selector_with_parameters<'a>(
+    key_expr: &'a str,
     parameters: &BTreeMap<String, String>,
-) -> CoreResult<String> {
+) -> CoreResult<Cow<'a, str>> {
     if parameters.is_empty() {
-        return Ok(key_expr.into());
+        // Fast path: no allocation when there are no caller parameters.
+        return Ok(Cow::Borrowed(key_expr));
     }
 
     let mut selector = String::with_capacity(key_expr.len() + encoded_parameters_len(parameters));
@@ -32,7 +33,7 @@ pub(super) fn selector_with_parameters(
         first = false;
     }
 
-    Ok(selector)
+    Ok(Cow::Owned(selector))
 }
 
 fn selector_parameter_separator(key_expr: &str) -> CoreResult<Option<char>> {

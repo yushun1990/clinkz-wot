@@ -4,9 +4,11 @@
 //! discovery filtering.
 
 use clinkz_wot_discovery::{
-    DiscoveryMethod, InMemoryThingDirectory, ThingDirectory, ThingFilter, discover,
+    DirectoryEntry, DirectoryPage, DirectoryQuery, DiscoveryMethod, InMemoryThingDirectory,
+    ThingDirectory, ThingFilter, discover,
 };
 use clinkz_wot_td::thing::Thing;
+use core::sync::atomic::{AtomicUsize, Ordering};
 use serde_json::json;
 
 fn thing(id: &str, title: &str) -> Thing {
@@ -75,6 +77,67 @@ fn discover_local_with_fragment_filters_by_title_fragment() {
     .map(|t| id_of(&t))
     .collect();
     assert_eq!(ids, vec!["urn:1"]);
+}
+
+#[test]
+fn discover_pushes_indexable_fragment_filters_into_directory_query() {
+    struct SpyDirectory {
+        thing: Thing,
+        query_calls: AtomicUsize,
+        for_each_calls: AtomicUsize,
+    }
+
+    impl ThingDirectory for SpyDirectory {
+        fn register(&mut self, _thing: Thing) -> clinkz_wot_discovery::DiscoveryResult<DirectoryEntry> {
+            unreachable!("register is not used in this test")
+        }
+
+        fn update(&mut self, _thing: Thing) -> clinkz_wot_discovery::DiscoveryResult<DirectoryEntry> {
+            unreachable!("update is not used in this test")
+        }
+
+        fn delete(&mut self, _id: &str) -> clinkz_wot_discovery::DiscoveryResult<Thing> {
+            unreachable!("delete is not used in this test")
+        }
+
+        fn get(&self, _id: &str) -> clinkz_wot_discovery::DiscoveryResult<Thing> {
+            unreachable!("get is not used in this test")
+        }
+
+        fn list(&self) -> DirectoryPage {
+            unreachable!("list is not used in this test")
+        }
+
+        fn query(&self, query: DirectoryQuery) -> DirectoryPage {
+            self.query_calls.fetch_add(1, Ordering::Relaxed);
+            assert_eq!(query, DirectoryQuery::title("Lamp"));
+            DirectoryPage {
+                entries: vec![DirectoryEntry {
+                    id: "urn:lamp".to_string(),
+                    thing: self.thing.clone(),
+                }],
+                total: 1,
+                offset: 0,
+                limit: None,
+            }
+        }
+
+        fn for_each_thing(&self, _f: impl FnMut(&Thing)) {
+            self.for_each_calls.fetch_add(1, Ordering::Relaxed);
+        }
+    }
+
+    let dir = SpyDirectory {
+        thing: thing("urn:lamp", "Lamp"),
+        query_calls: AtomicUsize::new(0),
+        for_each_calls: AtomicUsize::new(0),
+    };
+
+    let td = discover(&dir, ThingFilter::new().fragment_field("title", json!("Lamp"))).unwrap();
+
+    assert_eq!(td.remaining(), 1);
+    assert_eq!(dir.query_calls.load(Ordering::Relaxed), 1);
+    assert_eq!(dir.for_each_calls.load(Ordering::Relaxed), 0);
 }
 
 #[test]

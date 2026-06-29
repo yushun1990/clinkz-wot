@@ -83,14 +83,14 @@ fn pico_transport_routes_put_and_query_requests_to_platform_hooks() {
 
     let put = transport
         .execute(ZenohTransportRequest {
-            plan: ZenohOperationPlan {
+            plan: std::sync::Arc::new(ZenohOperationPlan {
                 key_expr: "clinkz/things/lamp/status".into(),
                 kind: ZenohOperationKind::Put,
                 metadata: ZenohFormMetadata {
                     content_type: Some("text/plain".into()),
                     ..Default::default()
                 },
-            },
+            }),
             payload: Some(Payload::new(b"on".to_vec(), "text/plain")),
             parameters: Default::default(),
         })
@@ -102,17 +102,17 @@ fn pico_transport_routes_put_and_query_requests_to_platform_hooks() {
     query_parameters.insert("trace".into(), "full".into());
     let query = transport
         .execute(ZenohTransportRequest {
-            plan: ZenohOperationPlan {
+            plan: std::sync::Arc::new(ZenohOperationPlan {
                 key_expr: "clinkz/things/lamp/status".into(),
                 kind: ZenohOperationKind::RequestReply,
                 metadata: ZenohFormMetadata::default(),
-            },
+            }),
             payload: None,
             parameters: query_parameters,
         })
         .unwrap();
 
-    assert_eq!(query.payload.unwrap().body, b"query-reply");
+    assert_eq!(query.payload.unwrap().body.as_ref(), b"query-reply");
     assert_eq!(
         transport
             .platform()
@@ -135,28 +135,28 @@ fn pico_transport_routes_subscription_lifecycle_hooks() {
 
     let subscribed = transport
         .execute(ZenohTransportRequest {
-            plan: ZenohOperationPlan {
+            plan: std::sync::Arc::new(ZenohOperationPlan {
                 key_expr: "clinkz/things/lamp/events/status".into(),
                 kind: ZenohOperationKind::Subscribe,
                 metadata: ZenohFormMetadata::default(),
-            },
+            }),
             payload: None,
             parameters: Default::default(),
         })
         .unwrap();
     let unsubscribed = transport
         .execute(ZenohTransportRequest {
-            plan: ZenohOperationPlan {
+            plan: std::sync::Arc::new(ZenohOperationPlan {
                 key_expr: "clinkz/things/lamp/events/status".into(),
                 kind: ZenohOperationKind::Unsubscribe,
                 metadata: ZenohFormMetadata::default(),
-            },
+            }),
             payload: None,
             parameters: Default::default(),
         })
         .unwrap();
 
-    assert_eq!(subscribed.payload.unwrap().body, b"event");
+    assert_eq!(subscribed.payload.unwrap().body.as_ref(), b"event");
     assert!(unsubscribed.payload.is_none());
     assert_eq!(
         transport
@@ -180,11 +180,11 @@ fn pico_transport_maps_platform_errors_and_timeouts() {
 
     let err = failing
         .execute(ZenohTransportRequest {
-            plan: ZenohOperationPlan {
+            plan: std::sync::Arc::new(ZenohOperationPlan {
                 key_expr: "clinkz/things/lamp/status".into(),
                 kind: ZenohOperationKind::Put,
                 metadata: ZenohFormMetadata::default(),
-            },
+            }),
             payload: None,
             parameters: Default::default(),
         })
@@ -207,11 +207,11 @@ fn pico_transport_maps_platform_errors_and_timeouts() {
     let mut timing_out = ZenohPicoTransport::new(FakePicoPlatform::default());
     let err = timing_out
         .execute(ZenohTransportRequest {
-            plan: ZenohOperationPlan {
+            plan: std::sync::Arc::new(ZenohOperationPlan {
                 key_expr: "clinkz/things/lamp/status".into(),
                 kind: ZenohOperationKind::Query,
                 metadata: ZenohFormMetadata::default(),
-            },
+            }),
             payload: None,
             parameters: Default::default(),
         })

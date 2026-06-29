@@ -1,7 +1,6 @@
 use alloc::{
     borrow::ToOwned,
     collections::BTreeMap,
-    format,
     string::{String, ToString},
     vec::Vec,
 };
@@ -78,8 +77,13 @@ pub enum FormHref {
 /// individual fields narrow that range differently. Use `AbsoluteUri` for
 /// fields that must identify an absolute resource, and `FormHref` for form
 /// targets that may be relative references or URI templates.
+///
+/// The parsed [`Uri`] is retained alongside the textual form so that callers
+/// resolving relative references against this base can reuse the cached parse
+/// instead of paying for re-parsing on every resolution (a per-request hot
+/// path for protocol bindings).
 #[derive(Debug, Clone, PartialEq)]
-pub struct AbsoluteUri(String);
+pub struct AbsoluteUri(Uri<String>);
 
 impl AbsoluteUri {
     /// Creates an absolute URI from a static string. Panics if the input is invalid.
@@ -90,13 +94,21 @@ impl AbsoluteUri {
 
     /// Parses an absolute URI. Relative references and URI templates are rejected.
     pub fn parse(s: &str) -> Result<Self, ParseError> {
-        Uri::parse(s)?;
-        Ok(Self(s.to_owned()))
+        let uri = Uri::parse(s)?;
+        Ok(Self(uri.to_owned()))
     }
 
     /// Returns the string representation of the URI.
     pub fn as_str(&self) -> &str {
         self.0.as_str()
+    }
+
+    /// Returns the cached parsed URI for cheap resolution against this base.
+    ///
+    /// Protocol bindings call [`UriReference::resolve_against`] with this
+    /// reference instead of re-parsing the base on every request.
+    pub(crate) fn as_uri(&self) -> &Uri<String> {
+        &self.0
     }
 }
 
@@ -141,15 +153,15 @@ pub enum BaseUri {
 impl BaseUri {
     /// Parses a Thing-level base URI.
     pub fn parse(s: &str) -> Result<Self, ParseError> {
-        if s.contains('{')
-            && s.contains('}')
-            && let Some(static_uri) = strip_uri_template_expressions(s)
-        {
-            Uri::parse(static_uri.as_str())?;
-            return Ok(Self::Template(s.to_owned()));
+        match scan_template_expressions(s) {
+            TemplateScan::Valid(static_uri) => {
+                Uri::parse(static_uri.as_str())?;
+                Ok(Self::Template(s.to_owned()))
+            }
+            // No template expressions, or malformed braces: fall back to strict
+            // absolute-URI parsing so malformed inputs surface a parse error.
+            _ => AbsoluteUri::parse(s).map(Self::Absolute),
         }
-
-        AbsoluteUri::parse(s).map(Self::Absolute)
     }
 
     /// Returns the string representation of the base URI.
@@ -191,26 +203,49 @@ impl<'de> Deserialize<'de> for BaseUri {
     }
 }
 
-fn strip_uri_template_expressions(s: &str) -> Option<String> {
+/// Result of a single-pass scan for URI template expressions.
+enum TemplateScan {
+    /// No template braces were found.
+    None,
+    /// At least one balanced `{...}` expression was found; carries the
+    /// brace-stripped static portion for validation.
+    Valid(String),
+    /// Braces were present but unbalanced or nested.
+    Invalid,
+}
+
+/// Walks `s` once, classifying it as a plain URI, a valid URI template, or a
+/// malformed template. Replaces the previous two `contains` scans plus a third
+/// strip pass with a single allocation-free walk (the static portion is only
+/// built when the input is a valid template).
+fn scan_template_expressions(s: &str) -> TemplateScan {
     let mut stripped = String::new();
     let mut in_expression = false;
+    let mut has_expression = false;
 
     for c in s.chars() {
         match (c, in_expression) {
             ('{', false) => in_expression = true,
-            ('{', true) => return None,
-            ('}', true) => in_expression = false,
-            ('}', false) => return None,
+            ('{', true) => return TemplateScan::Invalid,
+            ('}', true) => {
+                in_expression = false;
+                has_expression = true;
+            }
+            ('}', false) => return TemplateScan::Invalid,
             (_, false) => stripped.push(c),
             (_, true) => {}
         }
     }
 
     if in_expression {
-        return None;
+        return TemplateScan::Invalid;
     }
 
-    Some(stripped)
+    if has_expression {
+        TemplateScan::Valid(stripped)
+    } else {
+        TemplateScan::None
+    }
 }
 
 impl FormHref {
@@ -220,12 +255,20 @@ impl FormHref {
     /// If found, it treats the string as a Template. Otherwise, it attempts
     /// to parse it as a standard URI Reference using fluent-uri.
     pub fn parse(s: &str) -> Result<Self, ParseError> {
-        // Rule 1: Check for URI Template indicators
-        if s.contains('{') && s.contains('}') {
-            return Ok(Self::Template(s.to_owned()));
+        // Single pass: a template requires both '{' and '}' to be present.
+        let mut has_open = false;
+        let mut has_close = false;
+        for c in s.chars() {
+            if c == '{' {
+                has_open = true;
+            } else if c == '}' {
+                has_close = true;
+            }
+            if has_open && has_close {
+                return Ok(Self::Template(s.to_owned()));
+            }
         }
 
-        // Rule 2: Attempt strict URI Reference parsing
         UriReference::parse(s).map(Self::Reference)
     }
 
@@ -363,15 +406,13 @@ pub fn resolve_form_href(
     };
 
     let base = match base {
-        BaseUri::Absolute(base) => Uri::parse(base.as_str()).map_err(|err| {
-            ResolveFormHrefError::Resolve(format!("invalid base '{}': {}", base.as_str(), err))
-        })?,
+        BaseUri::Absolute(base) => base.as_uri(),
         BaseUri::Template(template) => {
             return Err(ResolveFormHrefError::TemplateBase(template.clone()));
         }
     };
 
-    let resolved = reference.0.resolve_against(&base)?;
+    let resolved = reference.0.resolve_against(base)?;
     Ok(ResolvedFormHref::Reference(UriReference(resolved.into())))
 }
 
@@ -437,6 +478,12 @@ impl MultiLanguage {
             .extend(other.0.iter().map(|(k, v)| (k.clone(), v.clone())));
     }
 
+    /// Merges another MultiLanguage into this one, moving entries instead of
+    /// cloning them.
+    pub fn merge_owned(&mut self, other: MultiLanguage) {
+        self.0.extend(other.0);
+    }
+
     /// Returns a reference to the underlying BTreeMap.
     pub fn as_map(&self) -> &BTreeMap<String, String> {
         &self.0
@@ -468,15 +515,13 @@ impl FromIterator<(String, String)> for MultiLanguage {
 }
 
 /// Metadata of a Thing that provides version information about the TD document.
-#[skip_serializing_none]
-#[derive(Debug, Default, Serialize, Deserialize, Clone, PartialEq)]
+#[derive(Debug, Default, Clone, PartialEq)]
 pub struct VersionInfo {
     /// Provides a version indicator of this TD.
     pub instance: String,
     /// Provides a version indicator of underlying TM.
     pub model: Option<String>,
 
-    #[serde(flatten)]
     pub _extra_fields: ExtensionMap,
 }
 
@@ -494,17 +539,43 @@ impl VersionInfo {
     }
 }
 
+impl<'de> serde::Deserialize<'de> for VersionInfo {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let mut map = crate::flat::deserialize_map(deserializer)?;
+        let instance = crate::flat::take_required(&mut map, "instance")?;
+        let model = crate::flat::take(&mut map, "model")?;
+        Ok(VersionInfo {
+            instance,
+            model,
+            _extra_fields: crate::flat::into_extras(map),
+        })
+    }
+}
+
+impl serde::Serialize for VersionInfo {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        use serde::ser::SerializeMap;
+        let mut map = serializer.serialize_map(None)?;
+        map.serialize_entry("instance", &self.instance)?;
+        if let Some(model) = &self.model {
+            map.serialize_entry("model", model)?;
+        }
+        for (key, value) in &self._extra_fields {
+            map.serialize_entry(key, value)?;
+        }
+        map.end()
+    }
+}
+
 /// Thing Model version metadata.
 ///
 /// Thing Model versioning uses the `model` term and must not include an
 /// `instance` term.
-#[skip_serializing_none]
-#[derive(Debug, Default, Serialize, Deserialize, Clone, PartialEq)]
+#[derive(Debug, Default, Clone, PartialEq)]
 pub struct ThingModelVersionInfo {
     /// Provides a version indicator of the underlying Thing Model.
     pub model: Option<String>,
 
-    #[serde(flatten)]
     pub _extra_fields: ExtensionMap,
 }
 
@@ -522,6 +593,31 @@ impl ThingModelVersionInfo {
     }
 }
 
+impl<'de> serde::Deserialize<'de> for ThingModelVersionInfo {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let mut map = crate::flat::deserialize_map(deserializer)?;
+        let model = crate::flat::take(&mut map, "model")?;
+        Ok(ThingModelVersionInfo {
+            model,
+            _extra_fields: crate::flat::into_extras(map),
+        })
+    }
+}
+
+impl serde::Serialize for ThingModelVersionInfo {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        use serde::ser::SerializeMap;
+        let mut map = serializer.serialize_map(None)?;
+        if let Some(model) = &self.model {
+            map.serialize_entry("model", model)?;
+        }
+        for (key, value) in &self._extra_fields {
+            map.serialize_entry(key, value)?;
+        }
+        map.end()
+    }
+}
+
 /// Operation types of form.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -532,8 +628,7 @@ pub enum Operation {
     UnobserveProperty,
     InvokeAction,
     QueryAction,
-    /// Action cancellation. TD 2.0; gated behind `td2-preview`.
-    #[cfg(feature = "td2-preview")]
+    /// Action cancellation (TD 1.1 `cancelaction`).
     CancelAction,
     SubscribeEvent,
     UnsubscribeEvent,
@@ -544,11 +639,9 @@ pub enum Operation {
     ObserveAllProperties,
     UnobserveAllProperties,
     QueryAllActions,
-    /// Subscribe to all events. TD 2.0; gated behind `td2-preview`.
-    #[cfg(feature = "td2-preview")]
+    /// Subscribe to all events (TD 1.1 `subscribeallevents`).
     SubscribeAllEvents,
-    /// Unsubscribe from all events. TD 2.0; gated behind `td2-preview`.
-    #[cfg(feature = "td2-preview")]
+    /// Unsubscribe from all events (TD 1.1 `unsubscribeallevents`).
     UnsubscribeAllEvents,
 }
 
@@ -563,7 +656,6 @@ impl Operation {
             Self::UnobserveProperty => "unobserveproperty",
             Self::InvokeAction => "invokeaction",
             Self::QueryAction => "queryaction",
-            #[cfg(feature = "td2-preview")]
             Self::CancelAction => "cancelaction",
             Self::SubscribeEvent => "subscribeevent",
             Self::UnsubscribeEvent => "unsubscribeevent",
@@ -574,9 +666,7 @@ impl Operation {
             Self::ObserveAllProperties => "observeallproperties",
             Self::UnobserveAllProperties => "unobserveallproperties",
             Self::QueryAllActions => "queryallactions",
-            #[cfg(feature = "td2-preview")]
             Self::SubscribeAllEvents => "subscribeallevents",
-            #[cfg(feature = "td2-preview")]
             Self::UnsubscribeAllEvents => "unsubscribeallevents",
         }
     }
@@ -584,15 +674,35 @@ impl Operation {
 
 /// Communication metadata describing the expected response message for the
 /// primary response.
-#[skip_serializing_none]
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug, Clone, PartialEq)]
 pub struct ExpectedResponse {
     /// Media type of the response payload (e.g., "application/json").
     pub content_type: String,
 
-    #[serde(flatten)]
     pub _extra_fields: ExtensionMap,
+}
+
+impl<'de> serde::Deserialize<'de> for ExpectedResponse {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let mut map = crate::flat::deserialize_map(deserializer)?;
+        let content_type = crate::flat::take_required(&mut map, "contentType")?;
+        Ok(ExpectedResponse {
+            content_type,
+            _extra_fields: crate::flat::into_extras(map),
+        })
+    }
+}
+
+impl serde::Serialize for ExpectedResponse {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        use serde::ser::SerializeMap;
+        let mut map = serializer.serialize_map(None)?;
+        map.serialize_entry("contentType", &self.content_type)?;
+        for (key, value) in &self._extra_fields {
+            map.serialize_entry(key, value)?;
+        }
+        map.end()
+    }
 }
 
 impl From<String> for ExpectedResponse {
@@ -622,9 +732,7 @@ impl ExpectedResponse {
 
 /// Communication metadata describing the expected response message for
 /// additional responses.
-#[skip_serializing_none]
-#[derive(Debug, Default, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug, Default, Clone, PartialEq)]
 pub struct AdditionalExpectedResponse {
     /// Mandatory, default to value of the contentType of the Form element it belongs to.
     pub content_type: Option<String>,
@@ -636,15 +744,51 @@ pub struct AdditionalExpectedResponse {
     pub schema: Option<String>,
 
     /// Indicates if this response is for an error case.
-    #[serde(
-        default,
-        deserialize_with = "deserialize_bool_flexible",
-        skip_serializing_if = "core::ops::Not::not"
-    )]
     pub success: bool,
 
-    #[serde(flatten)]
     pub _extra_fields: ExtensionMap,
+}
+
+/// Deserialize adapter carrying the flexible-bool decoder used by `success`.
+#[derive(Deserialize)]
+struct FlexBoolField(#[serde(deserialize_with = "deserialize_bool_flexible")] bool);
+
+impl<'de> Deserialize<'de> for AdditionalExpectedResponse {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let mut map = crate::flat::deserialize_map(deserializer)?;
+        let content_type = crate::flat::take(&mut map, "contentType")?;
+        let schema = crate::flat::take(&mut map, "schema")?;
+        let success = match crate::flat::take::<FlexBoolField, D::Error>(&mut map, "success")? {
+            Some(field) => field.0,
+            None => false,
+        };
+        Ok(AdditionalExpectedResponse {
+            content_type,
+            schema,
+            success,
+            _extra_fields: crate::flat::into_extras(map),
+        })
+    }
+}
+
+impl Serialize for AdditionalExpectedResponse {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        use serde::ser::SerializeMap;
+        let mut map = serializer.serialize_map(None)?;
+        if let Some(content_type) = &self.content_type {
+            map.serialize_entry("contentType", content_type)?;
+        }
+        if let Some(schema) = &self.schema {
+            map.serialize_entry("schema", schema)?;
+        }
+        if self.success {
+            map.serialize_entry("success", &self.success)?;
+        }
+        for (key, value) in &self._extra_fields {
+            map.serialize_entry(key, value)?;
+        }
+        map.end()
+    }
 }
 
 impl AdditionalExpectedResponse {
@@ -700,6 +844,38 @@ pub struct Metadata {
     pub descriptions: Option<MultiLanguage>,
 }
 
+/// JSON object keys owned by [`Metadata`] when flattened into a parent struct.
+/// Drained out of the parent's buffer before the parent's own fields are read.
+pub(crate) const METADATA_KEYS: &[&str] =
+    &["@type", "title", "titles", "description", "descriptions"];
+
+impl Metadata {
+    /// Emits this metadata's fields inline into an in-progress serialized map.
+    /// Used by structs that previously `#[serde(flatten)]`-ed a `Metadata`
+    /// field, so the fields appear at the parent level without a nested object.
+    pub(crate) fn serialize_into<S: serde::ser::SerializeMap>(
+        &self,
+        map: &mut S,
+    ) -> Result<(), S::Error> {
+        if let Some(tags) = &self.tags {
+            map.serialize_entry("@type", &crate::flat::OneOrManyRef(tags))?;
+        }
+        if let Some(title) = &self.title {
+            map.serialize_entry("title", title)?;
+        }
+        if let Some(titles) = &self.titles {
+            map.serialize_entry("titles", titles)?;
+        }
+        if let Some(description) = &self.description {
+            map.serialize_entry("description", description)?;
+        }
+        if let Some(descriptions) = &self.descriptions {
+            map.serialize_entry("descriptions", descriptions)?;
+        }
+        Ok(())
+    }
+}
+
 pub trait MetadataHelper: Sized {
     fn metadata(&mut self) -> &mut Metadata;
 
@@ -710,11 +886,10 @@ pub trait MetadataHelper: Sized {
         S: Into<String>,
         Self: Sized,
     {
-        let mut items: Vec<String> = tags.into_iter().map(|s| s.into()).collect();
         self.metadata()
             .tags
             .get_or_insert_with(Vec::new)
-            .append(&mut items);
+            .extend(tags.into_iter().map(|s| s.into()));
         self
     }
 

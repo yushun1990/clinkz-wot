@@ -1,19 +1,8 @@
 use alloc::sync::Arc;
-use alloc::{borrow::ToOwned, string::String};
 
 use clinkz_wot_core::{AffordanceTarget, ClientBinding};
-use clinkz_wot_protocol_bindings::{AffordanceRef, FormSelectionCriteria};
+use clinkz_wot_protocol_bindings::FormSelectionCriteria;
 use clinkz_wot_td::{data_type::Operation, form::Form};
-
-/// Converts a borrowed [`AffordanceRef`] into an owned [`AffordanceTarget`].
-pub(crate) fn affordance_target_from_ref(affordance: AffordanceRef<'_>) -> AffordanceTarget {
-    match affordance {
-        AffordanceRef::Thing => AffordanceTarget::Thing,
-        AffordanceRef::Property(name) => AffordanceTarget::Property(name.to_owned()),
-        AffordanceRef::Action(name) => AffordanceTarget::Action(name.to_owned()),
-        AffordanceRef::Event(name) => AffordanceTarget::Event(name.to_owned()),
-    }
-}
 
 /// Cache key for a Servient-selected TD form.
 ///
@@ -21,6 +10,11 @@ pub(crate) fn affordance_target_from_ref(affordance: AffordanceRef<'_>) -> Affor
 /// identity is implied by the entry that owns the cache, so it is not part of
 /// the key. Keeping the Thing id out of the key removes a `String` allocation
 /// from every cache lookup (the consumed-interaction hot path).
+///
+/// `content_type` and `subprotocol` are stored as `Arc<str>` rather than
+/// `String` so building a key from borrowed criteria is one refcount bump per
+/// field instead of a heap allocation, and cloning the key (which happens on
+/// every cache lookup) is also a refcount bump.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct SelectedFormCacheKey {
     /// Affordance location used for form selection.
@@ -28,9 +22,9 @@ pub struct SelectedFormCacheKey {
     /// Required effective operation.
     pub operation: Operation,
     /// Optional required form content type.
-    pub content_type: Option<String>,
+    pub content_type: Option<Arc<str>>,
     /// Optional required form subprotocol.
-    pub subprotocol: Option<String>,
+    pub subprotocol: Option<Arc<str>>,
 }
 
 impl SelectedFormCacheKey {
@@ -39,8 +33,8 @@ impl SelectedFormCacheKey {
         Self {
             affordance,
             operation: criteria.operation,
-            content_type: criteria.content_type.map(str::to_owned),
-            subprotocol: criteria.subprotocol.map(str::to_owned),
+            content_type: criteria.content_type.map(Arc::<str>::from),
+            subprotocol: criteria.subprotocol.map(Arc::<str>::from),
         }
     }
 }

@@ -1,26 +1,31 @@
 use alloc::{
+    borrow::Cow,
+    boxed::Box,
     collections::BTreeMap,
     format,
     string::{String, ToString},
     vec::Vec,
 };
 
-use serde::{Deserialize, Deserializer, Serialize};
-use serde_with::{OneOrMany, serde_as, skip_serializing_none};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use serde_with::{OneOrMany, serde_as};
 
 use crate::{
     data_type::{AbsoluteUri, ExtensionMap, MultiLanguage},
     validate::{Validate, ValidateError, ValidationLevel, parse_uri_field},
 };
 
+/// Deserialize adapter carrying the `serde_as(Option<OneOrMany<_>>)` decoder
+/// for `SecuritySchemeContext::tags`.
 #[serde_as]
-#[skip_serializing_none]
-#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Deserialize)]
+struct TagsField(#[serde_as(as = "Option<OneOrMany<_>>")] Option<Vec<String>>);
+
+/// Shared base for every security scheme variant: semantic tags, description,
+/// proxy, the mandatory `scheme` discriminator, and preserved extension fields.
+#[derive(Clone, Debug, Default, PartialEq)]
 pub struct SecuritySchemeContext {
     /// JSON-LD keyword to label the object with semantic tags.
-    #[serde(rename = "@type")]
-    #[serde_as(as = "Option<OneOrMany<_>>")]
     pub tags: Option<Vec<String>>,
 
     /// Provides additional (human-readable) information based on a
@@ -37,7 +42,6 @@ pub struct SecuritySchemeContext {
     /// Identification of the security mechanism being configured.
     pub scheme: String,
 
-    #[serde(flatten)]
     pub _extra_fields: ExtensionMap,
 }
 
@@ -47,6 +51,61 @@ impl SecuritySchemeContext {
             scheme: scheme.into(),
             ..Default::default()
         }
+    }
+
+    /// Emits this context's fields inline into an in-progress serialized map.
+    /// Used by security scheme variants that previously `#[serde(flatten)]`-ed
+    /// the context, so its fields appear at the variant level without nesting.
+    pub(crate) fn serialize_into<S: serde::ser::SerializeMap>(
+        &self,
+        map: &mut S,
+    ) -> Result<(), S::Error> {
+        if let Some(tags) = &self.tags {
+            map.serialize_entry("@type", &crate::flat::OneOrManyRef(tags))?;
+        }
+        if let Some(description) = &self.description {
+            map.serialize_entry("description", description)?;
+        }
+        if let Some(descriptions) = &self.descriptions {
+            map.serialize_entry("descriptions", descriptions)?;
+        }
+        if let Some(proxy) = &self.proxy {
+            map.serialize_entry("proxy", proxy)?;
+        }
+        map.serialize_entry("scheme", &self.scheme)?;
+        for (key, value) in &self._extra_fields {
+            map.serialize_entry(key, value)?;
+        }
+        Ok(())
+    }
+}
+
+impl<'de> Deserialize<'de> for SecuritySchemeContext {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let mut map = crate::flat::deserialize_map(deserializer)?;
+        let tags =
+            crate::flat::take::<TagsField, D::Error>(&mut map, "@type")?.and_then(|field| field.0);
+        let description = crate::flat::take(&mut map, "description")?;
+        let descriptions = crate::flat::take(&mut map, "descriptions")?;
+        let proxy = crate::flat::take(&mut map, "proxy")?;
+        let scheme = crate::flat::take_required(&mut map, "scheme")?;
+        Ok(SecuritySchemeContext {
+            tags,
+            description,
+            descriptions,
+            proxy,
+            scheme,
+            _extra_fields: crate::flat::into_extras(map),
+        })
+    }
+}
+
+impl Serialize for SecuritySchemeContext {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        use serde::ser::SerializeMap;
+        let mut map = serializer.serialize_map(None)?;
+        self.serialize_into(&mut map)?;
+        map.end()
     }
 }
 
@@ -64,11 +123,10 @@ pub trait ContextHelper: Sized {
         I: IntoIterator<Item = S>,
         S: Into<String>,
     {
-        let mut items: Vec<String> = tags.into_iter().map(|s| s.into()).collect();
         self.context()
             .tags
             .get_or_insert_with(Vec::new)
-            .append(&mut items);
+            .extend(tags.into_iter().map(|s| s.into()));
         self
     }
 
@@ -120,20 +178,31 @@ pub trait ContextHelper: Sized {
 }
 
 fn check_builder_errors(errors: Vec<ValidateError>) -> Result<(), ValidateError> {
-    if let Some(error) = errors.into_iter().next() {
-        return Err(error);
-    }
-    Ok(())
+    crate::validate::collected_errors(errors)
 }
 
 /// A security configuration corresponding to identified by the
 /// Vocabulary Term `nosec`.
-#[skip_serializing_none]
-#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Clone, Debug, Default, PartialEq)]
 pub struct NoSecurityScheme {
-    #[serde(flatten)]
     pub _context: SecuritySchemeContext,
+}
+
+impl<'de> Deserialize<'de> for NoSecurityScheme {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let map = crate::flat::deserialize_map(deserializer)?;
+        let context = crate::flat::from_remaining::<SecuritySchemeContext, D::Error>(map)?;
+        Ok(NoSecurityScheme { _context: context })
+    }
+}
+
+impl Serialize for NoSecurityScheme {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        use serde::ser::SerializeMap;
+        let mut map = serializer.serialize_map(None)?;
+        self._context.serialize_into(&mut map)?;
+        map.end()
+    }
 }
 
 impl NoSecurityScheme {
@@ -178,12 +247,26 @@ impl ContextHelper for NoSecuritySchemeBuilder {
 
 /// A security configuration corresponding to identified by the
 /// Vocabulary Term `auto`.
-#[skip_serializing_none]
-#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Clone, Debug, Default, PartialEq)]
 pub struct AutoSecurityScheme {
-    #[serde(flatten)]
     pub _context: SecuritySchemeContext,
+}
+
+impl<'de> Deserialize<'de> for AutoSecurityScheme {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let map = crate::flat::deserialize_map(deserializer)?;
+        let context = crate::flat::from_remaining::<SecuritySchemeContext, D::Error>(map)?;
+        Ok(AutoSecurityScheme { _context: context })
+    }
+}
+
+impl Serialize for AutoSecurityScheme {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        use serde::ser::SerializeMap;
+        let mut map = serializer.serialize_map(None)?;
+        self._context.serialize_into(&mut map)?;
+        map.end()
+    }
 }
 
 impl AutoSecurityScheme {
@@ -228,23 +311,49 @@ impl ContextHelper for AutoSecuritySchemeBuilder {
 
 /// A security configuration corresponding to identified by the
 /// Vocabulary Term `combo`.
-#[skip_serializing_none]
-#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Clone, Debug, Default, PartialEq)]
 pub struct ComboSecurityScheme {
-    #[serde(flatten)]
     pub _context: SecuritySchemeContext,
 
     /// Array of two or more strings identifying other named security
     /// scheme definitions, any one of which, when satisfied, will
     /// allow access.
-    #[serde(default)]
     pub one_of: Vec<String>,
 
     /// Array of two or more strings identifying other named security
     /// scheme definitions, all of which must be satisfied for access.
-    #[serde(default)]
     pub all_of: Vec<String>,
+}
+
+impl<'de> Deserialize<'de> for ComboSecurityScheme {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let mut map = crate::flat::deserialize_map(deserializer)?;
+        let one_of =
+            crate::flat::take::<Vec<String>, D::Error>(&mut map, "oneOf")?.unwrap_or_default();
+        let all_of =
+            crate::flat::take::<Vec<String>, D::Error>(&mut map, "allOf")?.unwrap_or_default();
+        let context = crate::flat::from_remaining::<SecuritySchemeContext, D::Error>(map)?;
+        Ok(ComboSecurityScheme {
+            _context: context,
+            one_of,
+            all_of,
+        })
+    }
+}
+
+impl Serialize for ComboSecurityScheme {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        use serde::ser::SerializeMap;
+        let mut map = serializer.serialize_map(None)?;
+        self._context.serialize_into(&mut map)?;
+        if !self.one_of.is_empty() {
+            map.serialize_entry("oneOf", &self.one_of)?;
+        }
+        if !self.all_of.is_empty() {
+            map.serialize_entry("allOf", &self.all_of)?;
+        }
+        map.end()
+    }
 }
 
 impl ComboSecurityScheme {
@@ -331,19 +440,45 @@ fn is_default_location(location: &SecurityLocation) -> bool {
 
 /// A security configuration corresponding to identified by the
 /// Vocabulary Term `basic`.
-#[skip_serializing_none]
-#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Clone, Debug, Default, PartialEq)]
 pub struct BasicSecurityScheme {
-    #[serde(flatten)]
     pub _context: SecuritySchemeContext,
 
     /// Name for query, header, cookie, or uri parameters.
     pub name: Option<String>,
 
     /// Specifies the location of security authentication information.
-    #[serde(default, rename = "in", skip_serializing_if = "is_default_location")]
     pub location: SecurityLocation,
+}
+
+impl<'de> Deserialize<'de> for BasicSecurityScheme {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let mut map = crate::flat::deserialize_map(deserializer)?;
+        let name = crate::flat::take(&mut map, "name")?;
+        let location =
+            crate::flat::take::<SecurityLocation, D::Error>(&mut map, "in")?.unwrap_or_default();
+        let context = crate::flat::from_remaining::<SecuritySchemeContext, D::Error>(map)?;
+        Ok(BasicSecurityScheme {
+            _context: context,
+            name,
+            location,
+        })
+    }
+}
+
+impl Serialize for BasicSecurityScheme {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        use serde::ser::SerializeMap;
+        let mut map = serializer.serialize_map(None)?;
+        self._context.serialize_into(&mut map)?;
+        if let Some(name) = &self.name {
+            map.serialize_entry("name", name)?;
+        }
+        if !is_default_location(&self.location) {
+            map.serialize_entry("in", &self.location)?;
+        }
+        map.end()
+    }
 }
 
 impl BasicSecurityScheme {
@@ -416,23 +551,53 @@ fn is_default_qop(qop: &Qop) -> bool {
 
 /// A security configuration corresponding to identified by the
 /// Vocabulary Term `digest`.
-#[skip_serializing_none]
-#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Clone, Debug, Default, PartialEq)]
 pub struct DigestSecurityScheme {
-    #[serde(flatten)]
     pub _context: SecuritySchemeContext,
 
     /// Name for query, header, cookie, or uri parameters.
     pub name: Option<String>,
 
     /// Specifies the location of security authentication information.
-    #[serde(default, rename = "in", skip_serializing_if = "is_default_location")]
     pub location: SecurityLocation,
 
     /// Quality of protection.
-    #[serde(default, skip_serializing_if = "is_default_qop")]
     pub qop: Qop,
+}
+
+impl<'de> Deserialize<'de> for DigestSecurityScheme {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let mut map = crate::flat::deserialize_map(deserializer)?;
+        let name = crate::flat::take(&mut map, "name")?;
+        let location =
+            crate::flat::take::<SecurityLocation, D::Error>(&mut map, "in")?.unwrap_or_default();
+        let qop = crate::flat::take::<Qop, D::Error>(&mut map, "qop")?.unwrap_or_default();
+        let context = crate::flat::from_remaining::<SecuritySchemeContext, D::Error>(map)?;
+        Ok(DigestSecurityScheme {
+            _context: context,
+            name,
+            location,
+            qop,
+        })
+    }
+}
+
+impl Serialize for DigestSecurityScheme {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        use serde::ser::SerializeMap;
+        let mut map = serializer.serialize_map(None)?;
+        self._context.serialize_into(&mut map)?;
+        if let Some(name) = &self.name {
+            map.serialize_entry("name", name)?;
+        }
+        if !is_default_location(&self.location) {
+            map.serialize_entry("in", &self.location)?;
+        }
+        if !is_default_qop(&self.qop) {
+            map.serialize_entry("qop", &self.qop)?;
+        }
+        map.end()
+    }
 }
 
 impl DigestSecurityScheme {
@@ -498,19 +663,67 @@ impl ContextHelper for DigestSecuritySchemeBuilder {
 
 /// A security configuration corresponding to identified by the
 /// Vocabulary Term `apikey`.
-#[skip_serializing_none]
-#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Clone, Debug, PartialEq)]
 pub struct APIKeySecurityScheme {
-    #[serde(flatten)]
     pub _context: SecuritySchemeContext,
 
     /// Name for query, header, cookie, or uri parameters.
     pub name: Option<String>,
 
     /// Specifies the location of security authentication information.
-    #[serde(default, rename = "in", skip_serializing_if = "is_default_location")]
+    ///
+    /// Per TD 1.1 §5.4 the default `in` for an API key scheme is `query`
+    /// (unlike basic/digest/bearer, which default to `header`).
     pub location: SecurityLocation,
+}
+
+impl<'de> Deserialize<'de> for APIKeySecurityScheme {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let mut map = crate::flat::deserialize_map(deserializer)?;
+        let name = crate::flat::take(&mut map, "name")?;
+        let location = crate::flat::take::<SecurityLocation, D::Error>(&mut map, "in")?
+            .unwrap_or_else(default_apikey_location);
+        let context = crate::flat::from_remaining::<SecuritySchemeContext, D::Error>(map)?;
+        Ok(APIKeySecurityScheme {
+            _context: context,
+            name,
+            location,
+        })
+    }
+}
+
+impl Serialize for APIKeySecurityScheme {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        use serde::ser::SerializeMap;
+        let mut map = serializer.serialize_map(None)?;
+        self._context.serialize_into(&mut map)?;
+        if let Some(name) = &self.name {
+            map.serialize_entry("name", name)?;
+        }
+        if !is_default_apikey_location(&self.location) {
+            map.serialize_entry("in", &self.location)?;
+        }
+        map.end()
+    }
+}
+
+// TD 1.1 §5.4: `APIKeySecurityScheme.in` defaults to `query`.
+fn default_apikey_location() -> SecurityLocation {
+    SecurityLocation::Query
+}
+
+fn is_default_apikey_location(location: &SecurityLocation) -> bool {
+    location == &SecurityLocation::Query
+}
+
+impl Default for APIKeySecurityScheme {
+    fn default() -> Self {
+        Self {
+            _context: SecuritySchemeContext::new("apikey"),
+            name: None,
+            location: SecurityLocation::Query,
+        }
+    }
 }
 
 impl APIKeySecurityScheme {
@@ -532,7 +745,7 @@ impl APIKeySecuritySchemeBuilder {
             scheme: APIKeySecurityScheme {
                 _context: SecuritySchemeContext::new("apikey"),
                 name: None,
-                location: SecurityLocation::default(),
+                location: SecurityLocation::Query,
             },
             _builder_errors: Vec::new(),
         }
@@ -591,11 +804,8 @@ fn is_default_format(format: &str) -> bool {
 
 /// A security configuration corresponding to identified by the
 /// Vocabulary Term `bearer`.
-#[skip_serializing_none]
-#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Clone, Debug, Default, PartialEq)]
 pub struct BearerSecurityScheme {
-    #[serde(flatten)]
     pub _context: SecuritySchemeContext,
 
     /// URI of the authorization server.
@@ -605,16 +815,60 @@ pub struct BearerSecurityScheme {
     pub name: Option<String>,
 
     /// Encoding, encryption, or digest algorithm.
-    #[serde(default = "default_alg", skip_serializing_if = "is_default_alg")]
     pub alg: String,
 
     /// Specifies format of security authentication information.
-    #[serde(default = "default_format", skip_serializing_if = "is_default_format")]
     pub format: String,
 
     /// Specifies the location of security authentication information.
-    #[serde(default, rename = "in", skip_serializing_if = "is_default_location")]
     pub location: SecurityLocation,
+}
+
+impl<'de> Deserialize<'de> for BearerSecurityScheme {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let mut map = crate::flat::deserialize_map(deserializer)?;
+        let authorization = crate::flat::take(&mut map, "authorization")?;
+        let name = crate::flat::take(&mut map, "name")?;
+        let alg =
+            crate::flat::take::<String, D::Error>(&mut map, "alg")?.unwrap_or_else(default_alg);
+        let format = crate::flat::take::<String, D::Error>(&mut map, "format")?
+            .unwrap_or_else(default_format);
+        let location =
+            crate::flat::take::<SecurityLocation, D::Error>(&mut map, "in")?.unwrap_or_default();
+        let context = crate::flat::from_remaining::<SecuritySchemeContext, D::Error>(map)?;
+        Ok(BearerSecurityScheme {
+            _context: context,
+            authorization,
+            name,
+            alg,
+            format,
+            location,
+        })
+    }
+}
+
+impl Serialize for BearerSecurityScheme {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        use serde::ser::SerializeMap;
+        let mut map = serializer.serialize_map(None)?;
+        self._context.serialize_into(&mut map)?;
+        if let Some(authorization) = &self.authorization {
+            map.serialize_entry("authorization", authorization)?;
+        }
+        if let Some(name) = &self.name {
+            map.serialize_entry("name", name)?;
+        }
+        if !is_default_alg(&self.alg) {
+            map.serialize_entry("alg", &self.alg)?;
+        }
+        if !is_default_format(&self.format) {
+            map.serialize_entry("format", &self.format)?;
+        }
+        if !is_default_location(&self.location) {
+            map.serialize_entry("in", &self.location)?;
+        }
+        map.end()
+    }
 }
 
 impl BearerSecurityScheme {
@@ -702,16 +956,37 @@ impl ContextHelper for BearerSecuritySchemeBuilder {
 
 /// A security configuration corresponding to identified by the
 /// Vocabulary Term `psk`.
-#[skip_serializing_none]
-#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Clone, Debug, Default, PartialEq)]
 pub struct PSKSecurityScheme {
-    #[serde(flatten)]
     pub _context: SecuritySchemeContext,
 
     /// Identifier providing information which can be used for
     /// selection or confirmation.
     pub identity: Option<String>,
+}
+
+impl<'de> Deserialize<'de> for PSKSecurityScheme {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let mut map = crate::flat::deserialize_map(deserializer)?;
+        let identity = crate::flat::take(&mut map, "identity")?;
+        let context = crate::flat::from_remaining::<SecuritySchemeContext, D::Error>(map)?;
+        Ok(PSKSecurityScheme {
+            _context: context,
+            identity,
+        })
+    }
+}
+
+impl Serialize for PSKSecurityScheme {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        use serde::ser::SerializeMap;
+        let mut map = serializer.serialize_map(None)?;
+        self._context.serialize_into(&mut map)?;
+        if let Some(identity) = &self.identity {
+            map.serialize_entry("identity", identity)?;
+        }
+        map.end()
+    }
 }
 
 impl PSKSecurityScheme {
@@ -761,14 +1036,16 @@ impl ContextHelper for PSKSecuritySchemeBuilder {
     }
 }
 
+/// Deserialize adapter carrying the `serde_as(Option<OneOrMany<_>>)` decoder
+/// for `OAuth2SecurityScheme::scopes`.
+#[serde_as]
+#[derive(Deserialize)]
+struct ScopesField(#[serde_as(as = "Option<OneOrMany<_>>")] Option<Vec<String>>);
+
 /// A security configuration corresponding to identified by the
 /// Vocabulary Term `oauth2`.
-#[serde_as]
-#[skip_serializing_none]
-#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Clone, Debug, Default, PartialEq)]
 pub struct OAuth2SecurityScheme {
-    #[serde(flatten)]
     pub _context: SecuritySchemeContext,
 
     /// URI of the authorization server.
@@ -781,11 +1058,53 @@ pub struct OAuth2SecurityScheme {
     pub refresh: Option<AbsoluteUri>,
 
     /// Set of authorization scope identifier provided as an array.
-    #[serde_as(as = "Option<OneOrMany<_>>")]
     pub scopes: Option<Vec<String>>,
 
     /// Authorization flow, e.g., code, client.
     pub flow: String,
+}
+
+impl<'de> Deserialize<'de> for OAuth2SecurityScheme {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let mut map = crate::flat::deserialize_map(deserializer)?;
+        let authorization = crate::flat::take(&mut map, "authorization")?;
+        let token = crate::flat::take(&mut map, "token")?;
+        let refresh = crate::flat::take(&mut map, "refresh")?;
+        let scopes = crate::flat::take::<ScopesField, D::Error>(&mut map, "scopes")?
+            .and_then(|field| field.0);
+        let flow = crate::flat::take_required(&mut map, "flow")?;
+        let context = crate::flat::from_remaining::<SecuritySchemeContext, D::Error>(map)?;
+        Ok(OAuth2SecurityScheme {
+            _context: context,
+            authorization,
+            token,
+            refresh,
+            scopes,
+            flow,
+        })
+    }
+}
+
+impl Serialize for OAuth2SecurityScheme {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        use serde::ser::SerializeMap;
+        let mut map = serializer.serialize_map(None)?;
+        self._context.serialize_into(&mut map)?;
+        if let Some(authorization) = &self.authorization {
+            map.serialize_entry("authorization", authorization)?;
+        }
+        if let Some(token) = &self.token {
+            map.serialize_entry("token", token)?;
+        }
+        if let Some(refresh) = &self.refresh {
+            map.serialize_entry("refresh", refresh)?;
+        }
+        if let Some(scopes) = &self.scopes {
+            map.serialize_entry("scopes", &crate::flat::OneOrManyRef(scopes))?;
+        }
+        map.serialize_entry("flow", &self.flow)?;
+        map.end()
+    }
 }
 
 impl OAuth2SecurityScheme {
@@ -864,11 +1183,10 @@ impl OAuth2SecuritySchemeBuilder {
         I: IntoIterator<Item = S>,
         S: Into<String>,
     {
-        let mut items: Vec<String> = scopes.into_iter().map(|s| s.into()).collect();
         self.scheme
             .scopes
             .get_or_insert_with(Vec::new)
-            .append(&mut items);
+            .extend(scopes.into_iter().map(|s| s.into()));
         self
     }
 
@@ -914,50 +1232,41 @@ pub enum SecurityScheme {
     OAuth2(OAuth2SecurityScheme),
 }
 
+/// Lightweight discriminator probe used to dispatch [`SecurityScheme`] variants
+/// without materializing the full `serde_json::Value` tree.
+#[derive(Deserialize)]
+struct SchemePeek {
+    scheme: String,
+}
+
 impl<'de> Deserialize<'de> for SecurityScheme {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: Deserializer<'de>,
     {
-        let value = serde_json::Value::deserialize(deserializer)?;
-        let scheme = value
-            .get("scheme")
-            .and_then(serde_json::Value::as_str)
-            .ok_or_else(|| serde::de::Error::custom("missing or invalid security scheme"))?;
-
-        match scheme {
-            "nosec" => serde_json::from_value::<NoSecurityScheme>(value)
-                .map(Self::NoSec)
-                .map_err(serde::de::Error::custom),
-            "auto" => serde_json::from_value::<AutoSecurityScheme>(value)
-                .map(Self::Auto)
-                .map_err(serde::de::Error::custom),
-            "combo" => serde_json::from_value::<ComboSecurityScheme>(value)
-                .map(Self::Combo)
-                .map_err(serde::de::Error::custom),
-            "basic" => serde_json::from_value::<BasicSecurityScheme>(value)
-                .map(Self::Basic)
-                .map_err(serde::de::Error::custom),
-            "digest" => serde_json::from_value::<DigestSecurityScheme>(value)
-                .map(Self::Digest)
-                .map_err(serde::de::Error::custom),
-            "apikey" => serde_json::from_value::<APIKeySecurityScheme>(value)
-                .map(Self::APIKey)
-                .map_err(serde::de::Error::custom),
-            "bearer" => serde_json::from_value::<BearerSecurityScheme>(value)
-                .map(Self::Bearer)
-                .map_err(serde::de::Error::custom),
-            "psk" => serde_json::from_value::<PSKSecurityScheme>(value)
-                .map(Self::PSK)
-                .map_err(serde::de::Error::custom),
-            "oauth2" => serde_json::from_value::<OAuth2SecurityScheme>(value)
-                .map(Self::OAuth2)
-                .map_err(serde::de::Error::custom),
+        // Buffer the object once into a `Box<RawValue>` (a single byte-buffer
+        // allocation) instead of a full `serde_json::Value` tree (one
+        // allocation per node). See `DataSchema::deserialize` for why this is
+        // only possible now that the surrounding TD structs buffer through
+        // `serde_json::Map` rather than serde's `Content` layer.
+        let raw: Box<serde_json::value::RawValue> = Deserialize::deserialize(deserializer)?;
+        let peek: SchemePeek = serde_json::from_str(raw.get()).map_err(serde::de::Error::custom)?;
+        match peek.scheme.as_str() {
+            "nosec" => serde_json::from_str::<NoSecurityScheme>(raw.get()).map(Self::NoSec),
+            "auto" => serde_json::from_str::<AutoSecurityScheme>(raw.get()).map(Self::Auto),
+            "combo" => serde_json::from_str::<ComboSecurityScheme>(raw.get()).map(Self::Combo),
+            "basic" => serde_json::from_str::<BasicSecurityScheme>(raw.get()).map(Self::Basic),
+            "digest" => serde_json::from_str::<DigestSecurityScheme>(raw.get()).map(Self::Digest),
+            "apikey" => serde_json::from_str::<APIKeySecurityScheme>(raw.get()).map(Self::APIKey),
+            "bearer" => serde_json::from_str::<BearerSecurityScheme>(raw.get()).map(Self::Bearer),
+            "psk" => serde_json::from_str::<PSKSecurityScheme>(raw.get()).map(Self::PSK),
+            "oauth2" => serde_json::from_str::<OAuth2SecurityScheme>(raw.get()).map(Self::OAuth2),
             other => Err(serde::de::Error::custom(format!(
                 "unsupported security scheme '{}'",
                 other
             ))),
         }
+        .map_err(serde::de::Error::custom)
     }
 }
 
@@ -1058,7 +1367,7 @@ impl SecurityScheme {
         APIKeySecurityScheme {
             _context: SecuritySchemeContext::new("apikey"),
             name: Some(name.into()),
-            location: SecurityLocation::default(),
+            location: SecurityLocation::Query,
         }
         .into()
     }
@@ -1216,17 +1525,21 @@ impl SecurityScheme {
             .and_then(serde_json::Value::as_str)
     }
 
-    fn one_of_references(&self) -> Vec<String> {
+    fn one_of_references(&self) -> Cow<'_, [String]> {
         match self {
-            Self::Combo(scheme) => scheme.one_of.clone(),
-            _ => string_array_field(self.context()._extra_fields.get("oneOf")),
+            Self::Combo(scheme) => Cow::Borrowed(&scheme.one_of),
+            _ => Cow::Owned(string_array_field(
+                self.context()._extra_fields.get("oneOf"),
+            )),
         }
     }
 
-    fn all_of_references(&self) -> Vec<String> {
+    fn all_of_references(&self) -> Cow<'_, [String]> {
         match self {
-            Self::Combo(scheme) => scheme.all_of.clone(),
-            _ => string_array_field(self.context()._extra_fields.get("allOf")),
+            Self::Combo(scheme) => Cow::Borrowed(&scheme.all_of),
+            _ => Cow::Owned(string_array_field(
+                self.context()._extra_fields.get("allOf"),
+            )),
         }
     }
 

@@ -102,7 +102,7 @@ fn runtime_server_binding_invoke_action_round_trip() {
     assert_eq!(request.target, AffordanceTarget::Action("echo".into()));
     assert_eq!(request.operation, Operation::InvokeAction);
     let input_body = request.input.payload.map(|p| p.body).unwrap_or_default();
-    assert_eq!(input_body, b"hello");
+    assert_eq!(input_body.as_ref(), b"hello");
 
     let response = InboundResponse::new(
         InteractionOutput {
@@ -147,7 +147,7 @@ fn runtime_server_binding_write_property_put_listener() {
     assert_eq!(request.target, AffordanceTarget::Property("status".into()));
     assert_eq!(request.operation, Operation::WriteProperty);
     let body = request.input.payload.map(|p| p.body).unwrap_or_default();
-    assert_eq!(body, b"off");
+    assert_eq!(body.as_ref(), b"off");
 
     // Write-property is fire-and-forget — send_response is a no-op but must not panic.
     server_binding.send_response(InboundResponse::new(
@@ -209,7 +209,13 @@ fn runtime_server_binding_error_reply() {
 
     let request = poll_with_timeout(&server_binding, REPLY_TIMEOUT, "error query");
 
-    let response = InboundResponse::error(request.correlation, CoreError::MissingHandler);
+    let response = InboundResponse::error(
+        request.correlation,
+        CoreError::MissingHandler {
+            target: AffordanceTarget::Thing,
+            operation: Operation::ReadAllProperties,
+        },
+    );
     server_binding.send_response(response);
 
     let reply = query_thread.join().expect("join error thread");

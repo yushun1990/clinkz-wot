@@ -40,7 +40,7 @@ fn consumed_handle_routes_remote_requests_through_zenoh_binding_transport() {
             InteractionInput::empty(),
         )
         .unwrap();
-    assert_eq!(read.payload.unwrap().body, b"zenoh-on");
+    assert_eq!(read.payload.unwrap().body.as_ref(), b"zenoh-on");
 
     consumed
         .write_property_with_criteria(
@@ -57,7 +57,7 @@ fn consumed_handle_routes_remote_requests_through_zenoh_binding_transport() {
             InteractionInput::with_payload(Payload::new(b"zenoh-echo".to_vec(), "text/plain")),
         )
         .unwrap();
-    assert_eq!(action.payload.unwrap().body, b"zenoh-echo");
+    assert_eq!(action.payload.unwrap().body.as_ref(), b"zenoh-echo");
 
     let event = consumed
         .subscribe_event_with_criteria(
@@ -67,7 +67,7 @@ fn consumed_handle_routes_remote_requests_through_zenoh_binding_transport() {
         )
         .unwrap();
     assert_eq!(
-        event.poll_next().expect("subscription sample").body,
+        event.poll_next().expect("subscription sample").body.as_ref(),
         b"zenoh-subscribed"
     );
 }
@@ -102,7 +102,7 @@ fn consumed_handle_shares_zenoh_transport_state_across_requests() {
     let first = consumed
         .read_property_with_criteria("status", criteria, InteractionInput::empty())
         .unwrap();
-    assert_eq!(first.payload.unwrap().body, b"zenoh-read-1");
+    assert_eq!(first.payload.unwrap().body.as_ref(), b"zenoh-read-1");
 
     consumed
         .write_property_with_criteria(
@@ -115,6 +115,6 @@ fn consumed_handle_shares_zenoh_transport_state_across_requests() {
     let second = consumed
         .read_property_with_criteria("status", criteria, InteractionInput::empty())
         .unwrap();
-    assert_eq!(second.payload.unwrap().body, b"zenoh-read-3");
+    assert_eq!(second.payload.unwrap().body.as_ref(), b"zenoh-read-3");
     assert_eq!(shared.inner().calls.get(), 3);
 }

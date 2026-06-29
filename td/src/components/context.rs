@@ -65,21 +65,24 @@ impl Context {
     ///
     /// Prefers TD 1.1 when both 1.0 and 1.1 are declared.
     pub fn wot_version_uri(&self) -> Option<&'static str> {
-        let has_v11 = self
-            .entries
-            .iter()
-            .any(|e| matches!(e, ContextEntry::Uri(u) if u.as_str() == WOT_CONTEXT_1_1));
+        let mut has_v10 = false;
+        let mut has_v11 = false;
+        for entry in &self.entries {
+            if let ContextEntry::Uri(u) = entry {
+                if u.as_str() == WOT_CONTEXT_1_1 {
+                    has_v11 = true;
+                } else if u.as_str() == WOT_CONTEXT_1_0 {
+                    has_v10 = true;
+                }
+            }
+        }
         if has_v11 {
-            return Some(WOT_CONTEXT_1_1);
+            Some(WOT_CONTEXT_1_1)
+        } else if has_v10 {
+            Some(WOT_CONTEXT_1_0)
+        } else {
+            None
         }
-        let has_v10 = self
-            .entries
-            .iter()
-            .any(|e| matches!(e, ContextEntry::Uri(u) if u.as_str() == WOT_CONTEXT_1_0));
-        if has_v10 {
-            return Some(WOT_CONTEXT_1_0);
-        }
-        None
     }
 
     /// Enable compability with WoT 1.0 consumers.
@@ -168,9 +171,7 @@ impl ContextBuilder {
 
     /// Builds and returns the `Context` instance.
     pub fn build(self) -> Result<Context, ValidateError> {
-        if let Some(error) = self.errors.into_iter().next() {
-            return Err(error);
-        }
+        crate::validate::collected_errors(self.errors)?;
         Ok(self.context)
     }
 }
@@ -188,19 +189,22 @@ impl Serialize for Context {
     {
         use serde::ser::Error;
 
-        // Validation: Enusure at least one WoT standard URI is present
-        let has_v1 = self
-            .entries
-            .iter()
-            .any(|e| matches!(e, ContextEntry::Uri(u) if u == WOT_CONTEXT_1_0));
-        let has_v11 = self
-            .entries
-            .iter()
-            .any(|e| matches!(e, ContextEntry::Uri(u) if u == WOT_CONTEXT_1_1));
+        // Single-pass guard: ensure at least one official WoT URI is present.
+        let mut has_v1 = false;
+        let mut has_v11 = false;
+        for entry in &self.entries {
+            if let ContextEntry::Uri(u) = entry {
+                if u.as_str() == WOT_CONTEXT_1_0 {
+                    has_v1 = true;
+                } else if u.as_str() == WOT_CONTEXT_1_1 {
+                    has_v11 = true;
+                }
+            }
+        }
 
         if !has_v1 && !has_v11 {
             return Err(S::Error::custom(
-                "Context must contain at least on official WoT URI",
+                "Context must contain at least one official WoT URI",
             ));
         }
 

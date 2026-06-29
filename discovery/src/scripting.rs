@@ -26,7 +26,7 @@ use clinkz_wot_td::{data_type::ExtensionMap, thing::Thing};
 use serde::Serialize;
 use serde_json::Value;
 
-use crate::{DiscoveryResult, ThingDirectory};
+use crate::{DirectoryQuery, DiscoveryResult, QueryFilter, ThingDirectory};
 
 /// Discovery mechanism selection (WoT Scripting API `DiscoveryMethod`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -69,8 +69,10 @@ pub struct ThingFilter {
     ///
     /// When set alongside `fragment`, both must match for a Thing to be
     /// included in the results. The local directory applies `query` as a
-    /// substring match against the serialized TD when a structured query
-    /// backend is not available.
+    /// substring match against the Thing's searchable identifier fields
+    /// (`id`, `title`, `base`, and every property/action/event affordance
+    /// name) — see [`discover`]. Remote directory backends may interpret
+    /// `query` as SPARQL, JSONPath, or another structured query language.
     pub query: Option<String>,
     /// Fragment filter matching TD fields.
     pub fragment: Option<ThingFragment>,
@@ -252,34 +254,159 @@ where
     let mut discovery = ThingDiscovery::new(filter);
     let fragment = discovery.filter_ref().fragment.as_ref();
     let query = discovery.filter_ref().query.as_deref();
+    let pushed_query = build_discovery_query(discovery.filter_ref());
 
-    // Feed matches directly into the discovery's VecDeque (via set_results)
-    // without an intermediate Vec + collect→VecDeque conversion.
-    let mut results = alloc::collections::VecDeque::new();
-    directory.for_each_thing(|thing| {
-        if fragment.is_none_or(|frag| matches_fragment(thing, frag))
+    let matches_filter = |thing: &Thing| {
+        fragment.is_none_or(|frag| matches_fragment(thing, frag))
             && query.is_none_or(|q| matches_query(thing, q))
-        {
-            results.push_back(thing.clone());
-        }
-    });
+    };
+
+    // Matches are cloned eagerly into the discovery's VecDeque.
+    //
+    // A truly lazy cursor (resolve each Thing on `next_now` instead of cloning
+    // all matches up front) is blocked by two architectural constraints:
+    //  1. `ThingDiscovery` is an owned, `'static` process object (per the W3C
+    //     Scripting API shape), so it cannot borrow the directory.
+    //  2. `Servient::discover` runs discovery inside a `with_directory` lock
+    //     closure, so a borrowed `ThingDiscovery<'a>` could not escape it, and
+    //     building an `Arc<dyn Fn(&str)->Option<Thing> + Send + Sync>` lookup
+    //     closure would require tightening `Servient::discover`'s `D` bound to
+    //     `Send + Sync`.
+    // When part of the filter maps to the portable `DirectoryQuery` model
+    // (`id`, exact `title`, and affordance-name fragments), we push that slice
+    // down first so indexed backends can shrink the candidate set before the
+    // residual local match runs. The discovery object still owns eager clones
+    // of the final matches, but common local searches avoid a full-table scan.
+    let results = if let Some(query) = pushed_query {
+        directory
+            .query(query)
+            .entries
+            .into_iter()
+            .filter_map(|entry| matches_filter(&entry.thing).then_some(entry.thing))
+            .collect::<VecDeque<_>>()
+    } else {
+        // The filter still runs *before* cloning, so only matching entries are
+        // cloned — non-matches are never materialized.
+        let mut results = VecDeque::new();
+        directory.for_each_thing(|thing| {
+            if matches_filter(thing) {
+                results.push_back(thing.clone());
+            }
+        });
+        results
+    };
     discovery.set_results(results);
     Ok(discovery)
 }
 
+/// Extracts the portion of a local discovery filter that can be pushed into the
+/// protocol-neutral directory query model.
+///
+/// Only exact-match fields that preserve current `discover()` semantics are
+/// lowered here:
+/// - fragment `id: "..."` -> [`QueryFilter::Id`]
+/// - fragment `title: "..."` -> [`QueryFilter::Title`]
+/// - fragment `properties` / `actions` / `events` object keys ->
+///   affordance-name filters
+///
+/// Residual conditions (`query` substring matching, `security`, extension
+/// fields, non-string top-level values, etc.) are still evaluated locally
+/// against the candidate set returned by [`ThingDirectory::query`].
+fn build_discovery_query(filter: &ThingFilter) -> Option<DirectoryQuery> {
+    let mut query = DirectoryQuery::all();
+    let mut pushed_any = false;
+
+    let Some(fragment) = filter.fragment.as_ref() else {
+        return None;
+    };
+
+    for (key, value) in fragment {
+        match key.as_str() {
+            "id" => {
+                if let Some(id) = value.as_str() {
+                    query = query.and(QueryFilter::id(id));
+                    pushed_any = true;
+                }
+            }
+            "title" => {
+                if let Some(title) = value.as_str() {
+                    query = query.and(QueryFilter::title(title));
+                    pushed_any = true;
+                }
+            }
+            "properties" => {
+                if let Some(properties) = value.as_object() {
+                    for name in properties.keys() {
+                        query = query.and(QueryFilter::property(name.clone()));
+                        pushed_any = true;
+                    }
+                }
+            }
+            "actions" => {
+                if let Some(actions) = value.as_object() {
+                    for name in actions.keys() {
+                        query = query.and(QueryFilter::action(name.clone()));
+                        pushed_any = true;
+                    }
+                }
+            }
+            "events" => {
+                if let Some(events) = value.as_object() {
+                    for name in events.keys() {
+                        query = query.and(QueryFilter::event(name.clone()));
+                        pushed_any = true;
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+
+    pushed_any.then_some(query)
+}
+
 /// Returns `true` when `thing` matches the query string.
 ///
-/// The query is applied as a substring match against the serialized TD JSON
-/// when no structured query backend is available. This is a pragmatic local
-/// filter — remote directory backends may interpret `query` as SPARQL or
-/// JSONPath.
+/// The query is applied as a case-sensitive substring match against the
+/// Thing's searchable identifier fields: `id`, `title`, `base`, and the
+/// name of every property, action, and event affordance. Evaluation
+/// short-circuits on the first matching field.
+///
+/// This replaces an earlier implementation that serialized the whole TD to
+/// JSON and ran a substring search over the serialized bytes. That was
+/// O(TD size) per candidate and also matched JSON structural noise (key
+/// names, punctuation, nested schema text), producing false positives. The
+/// field-level match is both cheaper and more accurate. Remote directory
+/// backends may interpret `query` as SPARQL, JSONPath, or another structured
+/// query language; this substring match is the local fallback only.
 fn matches_query(thing: &Thing, query: &str) -> bool {
     if query.is_empty() {
         return true;
     }
-    serde_json::to_string(thing)
-        .unwrap_or_default()
-        .contains(query)
+    thing
+        .id
+        .as_ref()
+        .is_some_and(|id| id.as_str().contains(query))
+        || thing
+            ._metadata
+            .title
+            .as_deref()
+            .is_some_and(|title| title.contains(query))
+        || thing
+            .base
+            .as_ref()
+            .is_some_and(|base| base.as_str().contains(query))
+        || names_contain(&thing.properties, query)
+        || names_contain(&thing.actions, query)
+        || names_contain(&thing.events, query)
+}
+
+/// Returns `true` when any affordance name in `map` contains `query` as a
+/// substring. Used by [`matches_query`] to check property/action/event names
+/// without serializing the affordance bodies.
+fn names_contain<T>(map: &Option<BTreeMap<String, T>>, query: &str) -> bool {
+    map.as_ref()
+        .is_some_and(|m| m.keys().any(|name| name.contains(query)))
 }
 
 /// Returns `true` when `thing` matches every `(key, value)` pair in `fragment`.

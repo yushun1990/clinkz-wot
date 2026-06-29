@@ -1,20 +1,23 @@
 use alloc::{borrow::Cow, string::String, vec::Vec};
 use fluent_uri::ParseError;
-use serde::{Deserialize, Serialize};
-use serde_with::{OneOrMany, serde_as, skip_serializing_none};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use serde_with::{OneOrMany, serde_as};
 
 use crate::data_type::{ExtensionMap, UriReference};
 
+/// Deserialize adapter carrying the `serde_as(Option<OneOrMany<_>>)` decoder
+/// used by `Link::hreflang`.
 #[serde_as]
-#[skip_serializing_none]
-#[derive(Debug, Default, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Deserialize)]
+struct HrefLangField(#[serde_as(as = "Option<OneOrMany<_>>")] Option<Vec<String>>);
+
+/// A link relation to an arbitrary resource.
+#[derive(Debug, Default, Clone, PartialEq)]
 pub struct Link {
     /// Target IRI of the link.
     pub href: UriReference,
 
     /// Target media type of the link.
-    #[serde(rename = "type")]
     pub content_type: Option<String>,
 
     /// Relation type between the current Thing and the target resource.
@@ -29,11 +32,58 @@ pub struct Link {
     pub sizes: Option<String>,
 
     /// Language of the target resource (BCP47).
-    #[serde_as(as = "Option<OneOrMany<_>>")]
     pub hreflang: Option<Vec<String>>,
 
-    #[serde(flatten)]
     pub _extra_fields: ExtensionMap,
+}
+
+impl<'de> Deserialize<'de> for Link {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let mut map = crate::flat::deserialize_map(deserializer)?;
+        let href = crate::flat::take_required(&mut map, "href")?;
+        let content_type = crate::flat::take(&mut map, "type")?;
+        let rel = crate::flat::take(&mut map, "rel")?;
+        let anchor = crate::flat::take(&mut map, "anchor")?;
+        let sizes = crate::flat::take(&mut map, "sizes")?;
+        let hreflang = crate::flat::take::<HrefLangField, D::Error>(&mut map, "hreflang")?
+            .and_then(|field| field.0);
+        Ok(Link {
+            href,
+            content_type,
+            rel,
+            anchor,
+            sizes,
+            hreflang,
+            _extra_fields: crate::flat::into_extras(map),
+        })
+    }
+}
+
+impl Serialize for Link {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        use serde::ser::SerializeMap;
+        let mut map = serializer.serialize_map(None)?;
+        map.serialize_entry("href", &self.href)?;
+        if let Some(content_type) = &self.content_type {
+            map.serialize_entry("type", content_type)?;
+        }
+        if let Some(rel) = &self.rel {
+            map.serialize_entry("rel", rel)?;
+        }
+        if let Some(anchor) = &self.anchor {
+            map.serialize_entry("anchor", anchor)?;
+        }
+        if let Some(sizes) = &self.sizes {
+            map.serialize_entry("sizes", sizes)?;
+        }
+        if let Some(hreflang) = &self.hreflang {
+            map.serialize_entry("hreflang", &crate::flat::OneOrManyRef(hreflang))?;
+        }
+        for (key, value) in &self._extra_fields {
+            map.serialize_entry(key, value)?;
+        }
+        map.end()
+    }
 }
 
 impl Link {
@@ -98,11 +148,8 @@ impl<'a> LinkBuilder<'a> {
         I: IntoIterator<Item = S>,
         S: Into<String>,
     {
-        let mut items: Vec<String> = hreflangs.into_iter().map(|s| s.into()).collect();
-        self.link
-            .hreflang
-            .get_or_insert_with(Vec::new)
-            .append(&mut items);
+        let target = self.link.hreflang.get_or_insert_with(Vec::new);
+        target.extend(hreflangs.into_iter().map(|s| s.into()));
         self
     }
 

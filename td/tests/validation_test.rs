@@ -1,6 +1,6 @@
 use clinkz_wot_td::{
     data_schema::{ContextHelper, DataSchema},
-    security_scheme::{SecurityLocation, SecurityScheme},
+    security_scheme::{APIKeySecurityScheme, SecurityLocation, SecurityScheme},
     thing::Thing,
     validate::{Validate, ValidateError, ValidationLevel},
 };
@@ -9,7 +9,7 @@ use std::{fs, path::PathBuf};
 /// Verifies that every fixture round-trips through `Thing` with *semantic*
 /// fidelity: the deserialized-then-serialized document equals the original
 /// under [`is_semantic_eq`], which treats W3C default values (e.g.
-/// `contentType: "application/json"`, security `in: "header"`) as equivalent
+/// `contentType: "application/json"`, security `in` defaults) as equivalent
 /// whether present or omitted. Byte-identical round-trip is intentionally not
 /// required for defaulted fields; unknown extension fields are preserved
 /// exactly.
@@ -33,19 +33,6 @@ fn test_thing_roundtrip_fidelity() {
 
         // Parse the original fixture into a generic JSON value for structural comparison.
         let raw_json = fs::read_to_string(&path_buf).expect("Read failed");
-
-        // Default builds target TD 1.1 and cannot represent TD 2.0 form
-        // operations (`cancelaction`, `subscribeallevents`,
-        // `unsubscribeallevents`). Skip such fixtures here; the full corpus is
-        // exercised under the `td2-preview` feature. (`synchronous` round-trips
-        // as an extension field and needs no skip.)
-        #[cfg(not(feature = "td2-preview"))]
-        if raw_json.contains("cancelaction")
-            || raw_json.contains("subscribeallevents")
-            || raw_json.contains("unsubscribeallevents")
-        {
-            continue;
-        }
 
         let mut original_value: serde_json::Value = serde_json::from_str(&raw_json)
             .unwrap_or_else(|_| panic!("Original JSON is invalid: {:?}", path_buf));
@@ -174,7 +161,7 @@ fn is_semantic_eq(a: &serde_json::Value, b: &serde_json::Value) -> bool {
                     // The fidelity contract is *semantic* equality, not byte
                     // equality: a defaulted field may be present on one side
                     // and absent on the other (W3C TD defaults — e.g.
-                    // contentType "application/json", security "in" "header").
+                    // contentType "application/json", security "in" defaults).
                     // Accommodate the omission in both directions so the
                     // contract is symmetric and robust to future code paths.
                     if val_a.is_null() && is_default_value(key, val_b) {
@@ -218,7 +205,9 @@ fn is_default_value(key: &str, value: &serde_json::Value) -> bool {
             value == &serde_json::Value::Bool(false)
         }
         "contentType" => value == "application/json",
-        "in" => value == "header",
+        // `in` defaults are scheme-specific (TD 1.1 §5.4): `header` for
+        // basic/digest/bearer and `query` for apikey.
+        "in" => value == "header" || value == "query",
         "qop" => value == "auth",
         "alg" => value == "ES256",
         "format" => value == "jwt",
@@ -358,6 +347,43 @@ fn security_scheme_deserialization_accepts_uri_api_key_locations() {
 }
 
 #[test]
+fn apikey_scheme_defaults_to_query_location() {
+    // TD 1.1 §5.4: `APIKeySecurityScheme.in` defaults to `query`, distinct from
+    // basic/digest/bearer which default to `header`.
+    let raw = r#"{
+        "scheme": "apikey",
+        "name": "key"
+    }"#;
+
+    let scheme: SecurityScheme =
+        serde_json::from_str(raw).expect("API key security scheme should deserialize");
+    let SecurityScheme::APIKey(scheme) = scheme else {
+        panic!("expected API key variant");
+    };
+    assert_eq!(scheme.location, SecurityLocation::Query);
+
+    // The default must round-trip: the omitted `in` field stays omitted on
+    // re-serialization because it equals the default.
+    let reserialized = serde_json::to_string(&scheme).expect("scheme should serialize");
+    assert!(
+        !reserialized.contains("\"in\""),
+        "default `in` must not be serialized, got: {reserialized}"
+    );
+
+    // The builder and convenience constructor use the same default.
+    let built = APIKeySecurityScheme::builder()
+        .name("key")
+        .build()
+        .expect("builder should build");
+    assert_eq!(built.location, SecurityLocation::Query);
+
+    let SecurityScheme::APIKey(convenience) = SecurityScheme::apikey("key") else {
+        panic!("expected API key variant");
+    };
+    assert_eq!(convenience.location, SecurityLocation::Query);
+}
+
+#[test]
 fn basic_validation_rejects_apikey_without_name() {
     let raw = r#"{
         "@context": "https://www.w3.org/2022/wot/td/v1.1",
@@ -464,7 +490,8 @@ fn validation_levels_control_affordance_operation_checks() {
         .expect_err("basic validation should reject invalid property operation");
 
     assert!(
-        matches!(err, ValidateError::InvalidOperation { context, .. } if context == "Property 'status'")
+        matches!(err, ValidateError::InvalidOperation { ref context, .. } if context.starts_with("Property 'status'")),
+        "expected an InvalidOperation anchored at the property affordance, got: {err:?}"
     );
 }
 
@@ -886,6 +913,7 @@ fn basic_validation_accepts_meta_operation_on_thing_level_form() {
             { "href": "/all", "op": ["readallproperties", "writeallproperties"] },
             { "href": "/multi", "op": ["readmultipleproperties", "writemultipleproperties"] },
             { "href": "/obs", "op": ["observeallproperties", "unobserveallproperties"] },
+            { "href": "/events", "op": ["subscribeallevents", "unsubscribeallevents"] },
             { "href": "/actions", "op": "queryallactions" }
         ]
     }"#;
@@ -896,28 +924,9 @@ fn basic_validation_accepts_meta_operation_on_thing_level_form() {
         .expect("basic validation should accept Thing-level meta-operations");
 }
 
-/// `subscribeallevents` / `unsubscribeallevents` are TD 2.0 event
-/// meta-operations; they are only representable under `td2-preview`.
-#[cfg(feature = "td2-preview")]
-#[test]
-fn basic_validation_accepts_td2_event_meta_operation_on_thing_level_form() {
-    let raw = r#"{
-        "@context": "https://www.w3.org/2022/wot/td/v1.1",
-        "title": "Valid TD2 Event Meta Form Ops",
-        "security": "nosec_sc",
-        "securityDefinitions": {
-            "nosec_sc": { "scheme": "nosec" }
-        },
-        "forms": [
-            { "href": "/events", "op": ["subscribeallevents", "unsubscribeallevents"] }
-        ]
-    }"#;
-
-    let thing: Thing = serde_json::from_str(raw).expect("TD should deserialize");
-    thing
-        .validate_with_level(ValidationLevel::Basic)
-        .expect("basic validation should accept TD2 event meta-operations");
-}
+/// `subscribeallevents` / `unsubscribeallevents` are TD 1.1 event
+/// meta-operations and are accepted on Thing-level forms (covered by
+/// `basic_validation_accepts_meta_operation_on_thing_level_form` above).
 
 // ---------------------------------------------------------------------------
 // @context first-entry ordering (TD 1.1 / JSON-LD)
