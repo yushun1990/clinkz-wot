@@ -220,6 +220,20 @@ handler across concurrent dispatches and the driving loop stays `Send`). The
 current divergence where sync handler trait objects are non-`Send` (addendum
 §9.3) is thereby resolved.
 
+**Panic safety in dispatch (audit G1 — locked).** A handler is user code; it
+may panic. The lock is already safe (the handler `Arc` is cloned out under a
+brief lock and the lock released *before* the invoke, and `WotLock::with_recover`
+heals lock state across a panic), so a handler panic does **not** poison the
+registry/handler-table locks. The panic itself, however, would otherwise
+propagate up `dispatch → poll_serve → serve` and tear down the `serve` task. The
+`InboundDispatcher` therefore wraps every handler invocation (sync direct call
+and async `.await`) in `catch_unwind`, converting a panic into an
+`InboundResponse::error` (`CoreError::HandlerPanic { target, operation }`,
+status-mapped via `error_status` to a 5xx-class reply) so the offending request
+fails cleanly and the driving loop keeps serving other Things. This is the
+designed-in contract: handler authors should still avoid panics, but the engine
+is robust to one.
+
 ### 4.3 Interaction I/O aligned to Scripting API
 
 `InteractionInput` / `InteractionOutput` are reworked to mirror the Scripting
@@ -264,6 +278,23 @@ not to handler inputs. Outbound security application stays on the
 `SecurityProvider`/binding path; the verified `Principal` remains on the
 inbound handler input (addendum §T3 is kept).
 
+**Encoding boundary — handlers are byte-level (audit G3 — locked).** Both
+`InteractionInput.data` and `InteractionOutput.data` carry a `Payload` whose
+body is `Arc<[u8]>` (already-encoded bytes) plus media metadata. Handlers are
+therefore **byte-level on both sides**: an inbound handler receives the
+request's decoded-to-bytes payload and returns an already-encoded payload; it
+does not deal in schema values, and the runtime does **not** auto-encode a
+logical value the way the Scripting API's value-returning handlers do. The
+`PayloadCodecRegistry` (§7.1 `codecs`) is applied at the **transport edge**: a
+binding decodes the wire body to the `Payload` bytes the handler reads and, on
+the outbound/consumed path, encodes the caller's `Payload` to the wire format
+matched to the form's `contentType`. `contentType` negotiation/transcoding, when
+the handler's emitted media type differs from the request's `Accept`, is a
+codec-layer concern at the binding, not a handler concern. This byte-level
+handler contract is the companion to §9 deviation #4 (handler-driven, no
+implicit value store) and is the engine's zero-extra-copy stance; applications
+needing value semantics encode/decode inside their handler.
+
 ### 4.4 Affordance addressing and correlation
 
 Retained from v3.1 §1/§2: `ThingId`, `CorrelationId`, `AffordanceTarget`
@@ -287,7 +318,7 @@ outbound path; one `async_trait` `Box` per call, accepted as network-amortized.
 **synchronous, non-blocking** `try_accept`:
 
 ```rust
-pub trait ServerBinding {
+pub trait ServerBinding: Send + Sync {
     /// Non-blocking drain of one currently-ready inbound request, or `None`.
     /// No `async_trait`, no `Box` — a plain virtual call. (no_std polled path.)
     /// Default `None` (audit F8): a std-only binding that self-pushes via
@@ -361,6 +392,25 @@ Retained: `EventBroker` (inbound event fan-out) and `Subscription`
 (outbound pull-queue with drop-oldest + overflow counter). The queue capacity
 model (v3.1 §6.1) is retained. The pull-queue delivery model is the documented
 deviation from the Scripting API's listener callback (§9).
+
+**Async `Stream` waker (audit E17).** The `Subscription` queue owns an
+`Option<core::task::Waker>`. The producer side (a sync zenoh callback that
+`try_push`es a sample into the queue) calls `wake()` on the stored waker after a
+successful push — the callback need not `.await`, it only touches the
+`Option<Waker>` under the queue's brief lock. The async consumer
+(`Subscription::next().await` as a `Stream`) registers its `Waker` when the
+queue is empty (returns `Pending`); the next push wakes it. So the
+sync-callback-producer / async-consumer concurrency is well-defined: no
+executor is needed on the producer side, only on the consumer side.
+
+**`InteractionOptions.timeout` executor (audit E16).** On `std`, the Servient
+wraps each outbound `ClientBinding::invoke`/`subscribe` in
+`tokio::time::timeout(dur, …)` when `timeout` is set, returning
+`CoreError::Timeout` on expiry. On `no_std` there is no runtime timer, so
+`timeout` is **honored only if the binding/platform provides a timer** (e.g.
+embassy `embassy_time`); otherwise it is a no-op (the field is retained for
+API symmetry but not enforced). Documented as a std-vs-no_std capability
+asymmetry, not a deviation.
 
 ### 4.7 Single lock primitive — `WotLock<T>`
 
@@ -455,10 +505,18 @@ resolution, security metadata extraction, and the structured `BindingError`
 taxonomy are kept. Minor: convert remaining free-form `String` `BindingError`
 messages to structured variants (deferred #8).
 
+**Multi-form selection priority (audit E20).** When an affordance advertises
+multiple forms, the shared selector chooses by, in order: (1) the concrete
+binding's `supports` predicate (protocol the binding can drive), (2) caller
+`FormSelectionCriteria` (content type / subprotocol), (3) operation match. The
+tie-break order among equally-matching forms (e.g. two zenoh forms with the
+same content type) is **deterministic by TD declaration order** (first wins) —
+documented here as the v1 rule; a richer priority policy is deferred.
+
 **Cross-crate error interop (audit E1 — locked).** Four error types span the
 crates: `CoreError` (core), `BindingError` (protocol-bindings),
-`DiscoveryError` (discovery), `ServientError` (servient). The承重 conversion
-chain (crate-boundary contract):
+`DiscoveryError` (discovery), `ServientError` (servient). The load-bearing
+conversion chain (crate-boundary contract):
 
 - `impl From<BindingError> for CoreError` — a binding's `invoke`/`subscribe`
   returns `CoreResult` (= `Result<_, CoreError>`); `BindingError` flows in via
@@ -592,6 +650,24 @@ the async driving primitives require the `async` feature + an executor.
 they never drain a ready backlog, so a bare super-loop stays cooperative (one
 request per tick, interleaved with other work).
 
+**Global shutdown quiescing (audit G2 — locked).** Per-Thing `destroy()`
+quiescing is AD15; the **global** `shutdown` flag (§7.1) has a parallel,
+simpler contract. `serve = while !shutdown { poll_serve().await }` checks the
+flag **between** iterations, so the semantics are: (1) the currently-running
+`poll_serve` step finishes — the one request it accepted is dispatched and its
+handler(s) run to completion (an async handler is `.await`ed, not cancelled);
+(2) once that step returns and the flag is observed set, `serve` exits; (3)
+any further requests already sitting in the bounded fan-in channel are **not**
+drained — they are dropped when the `Servient`/fan-in channel is dropped
+(callers see a transport-level connection-close, not a WoT error reply). This
+is "finish-current, drop-queued", deliberately not a full drain: a host
+shutting down is expected to stop accepting at the transport (bindings close
+their listeners) so the queue drains to empty quickly; a long drain could
+block shutdown indefinitely. For per-Thing polite teardown use `destroy()`
+(AD15 gives in-flight handlers + error replies); reserve global `shutdown` for
+process exit. On `no_std`, `poll_serve_once` callers honor the flag the same
+way between super-loop ticks.
+
 **Accept is a single bounded fan-in channel, not `select_all`** (audit defect
 AD1/AD6a, see §4.5). The driving step does NOT build a `select_all` over
 per-binding boxed `poll_accept` futures and there is **no binding-internal
@@ -629,6 +705,21 @@ impl Servient {
     pub fn discover(&self, filter: DiscoveryFilter) -> ThingDiscoveryProcess;
     pub async fn fetch_td(&self, url: &AbsoluteUri) -> CoreResult<Thing>;
 }
+```
+
+**`ThingId` uniqueness and collision (audit G5 — locked).** The exposed and
+consumed registries key by `ThingId`. Uniqueness is **not** synthesized by the
+engine: `ThingId` is whatever the TD's `id` states (E18 — the TD must carry
+one). A `produce()`/`expose()` whose `ThingId` already exists in the servable
+exposed registry is **rejected** with `ServientError` (`AlreadyExposed`) rather
+than silently overwriting — `destroy()` the existing Thing first. `consume()`
+with a duplicate `ThingId` **reuses** the existing consumed entry (refreshing
+its TD). Cross-directory/cross-origin id collision (the same `id` string in two
+different directories referring to different Things) is **out of scope for v1**:
+a `ThingId` is only as globally unique as the TD's `id` asserts; a deployment
+that merges directories is responsible for disambiguating (e.g. namespacing the
+`id`) before expose/consume. This is a documented v1 boundary, not a deviation.
+
 
 impl ExposedThingHandle {
     pub fn set_property_read_handler(&self, name, handler);
@@ -708,6 +799,8 @@ impl ConsumedThingHandle {
     pub async fn read_property(&self, name, options) -> CoreResult<InteractionOutput>;
     pub async fn write_property(&self, name, value, options) -> ...;
     pub async fn invoke_action(&self, name, params, options) -> ...;
+    pub async fn query_action(&self, name, options) -> CoreResult<InteractionOutput>;   // queryaction (E14)
+    pub async fn cancel_action(&self, name, options) -> CoreResult<InteractionOutput>;  // cancelaction (E14)
     pub async fn observe_property(&self, name, options) -> CoreResult<Subscription>;
     pub async fn unobserve_property(&self, name, sub) -> ...;
     pub async fn subscribe_event(&self, name, options) -> CoreResult<Subscription>;
@@ -717,10 +810,24 @@ impl ConsumedThingHandle {
 }
 ```
 
-All methods drive the real async `ClientBinding`. The fake "delegates to sync"
-consumer surface (M8) is removed. Bulk operations prefer a Thing-level
-meta-operation form when the TD advertises one (W3C TD §6.3.3), otherwise fan
-out (behavior retained from PLAN C6).
+The consumer surface is **symmetric with the 9-op producer model** (audit E14):
+`query_action` / `cancel_action` are first-class consumer methods (TD 1.1
+`queryaction`/`cancelaction` are first-class ops), matching the producer's
+`ActionQueryHandler`/`ActionCancelHandler`. All methods drive the real async
+`ClientBinding`. The fake "delegates to sync" consumer surface (M8) is removed.
+Bulk operations prefer a Thing-level meta-operation form when the TD advertises
+one (W3C TD §6.3.3), otherwise fan out (behavior retained from PLAN C6).
+**Bulk reads honor `readOnly`/`writeOnly`** (audit E24): `read_all`/`read_multiple`
+exclude `writeOnly` properties; `write_all`/`write_multiple` exclude `readOnly`.
+
+**Async action completion — v1 scope (audit E15).** v1 supports **synchronous
+actions only**: `invoke_action` awaits the handler and returns its result in the
+`InteractionOutput` (`InteractionStatus::Ok`). The async-action completion model
+(HTTP/CoAP 202 `Accepted` + later result retrieval via poll/observe-action-state)
+is **deferred** — `InteractionStatus::Accepted` is reserved for that future
+model but no result-retrieval/subscription mechanism is defined in v1. This is a
+declared v1 scope boundary (not a §9 Scripting-API deviation; it is a
+feature-completeness gap recorded here and in `deferred-design-followups.md`).
 
 ### 7.5 Security and credentials
 
@@ -792,7 +899,7 @@ No other deviations are permitted without an explicit entry here.
 | `WoT.produce(td)` | `Servient::produce(td)` | returns `ExposedThingHandle` |
 | `WoT.consume(td)` | `Servient::consume(td)` | returns `ConsumedThingHandle` |
 | `WoT.discover(filter)` | `Servient::discover(filter)` | returns `ThingDiscoveryProcess` (lazy session) |
-| `WoT.fetchTD(url)` | `Servient::fetch_td(url)` | async |
+| `WoT.fetchTD(url)` | `Servient::fetch_td(url)` | async; **direct fetch, does not follow `ThingLink`** (audit E21 — link-following is a separate `ThingLinkResolver` path, §6) |
 | `ExposedThing.setPropertyReadHandler` | `ExposedThingHandle::set_property_read_handler` | |
 | `ExposedThing.setPropertyWriteHandler` | `set_property_write_handler` | |
 | `ExposedThing.setPropertyObserveHandler` | `set_property_observe_handler` | |
@@ -808,10 +915,12 @@ No other deviations are permitted without an explicit entry here.
 | `ConsumedThing.readProperty` | `read_property(name, options)` | async, real binding |
 | `ConsumedThing.writeProperty` | `write_property` | |
 | `ConsumedThing.invokeAction` | `invoke_action` | |
+| (action query) | `query_action` | `queryaction` consumer op (E14) |
+| (action cancel) | `cancel_action` | `cancelaction` consumer op (E14) |
 | `ConsumedThing.observeProperty`/`unobserveProperty` | `observe_property`/`unobserve_property` | returns `Subscription` (deviation §9.1) |
 | `ConsumedThing.subscribeEvent`/`unsubscribeEvent` | `subscribe_event`/`unsubscribe_event` | returns `Subscription` (deviation §9.1) |
-| `ConsumedThing.readAllProperties`/`writeAllProperties`/`readMultipleProperties`/`writeMultipleProperties`/`subscribeAllEvents`/`unsubscribeAllEvents` | bulk methods | retained from PLAN C6 |
-| `ThingDiscovery.start/next/stop` | `ThingDiscoveryProcess` (async session) | lazy, continuation-based |
+| `ConsumedThing.readAllProperties`/`writeAllProperties`/`readMultipleProperties`/`writeMultipleProperties`/`subscribeAllEvents`/`unsubscribeAllEvents` | bulk methods | retained from PLAN C6; honor `readOnly`/`writeOnly` (E24) |
+| `ThingDiscovery.start/next/stop` | `ThingDiscoveryProcess` (async session) | lazy, continuation-based; `start()` folded into first `next()` (AD10, E19) |
 
 ## 11. Performance Targets
 
@@ -946,3 +1055,11 @@ Each phase is independently shippable behind the workspace build.
 | AD25 | Cross-crate error interop | `From<BindingError> for CoreError`; `From<{CoreError,BindingError,DiscoveryError}> for ServientError`; `error_status(&CoreError)` is the single protocol-status source (binding errors flow through CoreError; DiscoveryError is app-layer via the process, not a status). Inward-only direction. (§5.1) |
 | AD26 | Bulk operation partial-failure | `readAll`/`readMultiple`/`writeAll`/`writeMultiple` return `BTreeMap<PropertyName, Result<InteractionOutput, CoreError>>`; `subscribeAll`/`unsubscribeAll` return per-event `Result<Subscription, _>`. One property's error does NOT fail the batch (Scripting-API aligned). (§7.4, P3 §3.6) |
 | AD27 | `expose()` rollback + `destroy()` idempotency | `expose()` registers bindings in order; on binding `k+1` failure it `unregister_thing`s the succeeded `1..k` (reverse), rolls back the registry insert, returns fatal `Err` (E12). `destroy()` is idempotent — on an already-removed/never-exposed Thing it no-ops returning `Ok`; concurrent destroys serialize (E13). (P3 §3.4) |
+| AD28 | Consumer 9-op symmetry | `ConsumedThingHandle` has `query_action`/`cancel_action` matching the producer's `ActionQueryHandler`/`ActionCancelHandler` — TD 1.1 `queryaction`/`cancelaction` are first-class on both sides. (§7.4, §10) |
+| AD29 | Async-action completion — v1 scope | v1 = synchronous actions only (`invoke_action` awaits + returns `Ok`); the 202 `Accepted` + result-retrieval/observe-action model is deferred (`InteractionStatus::Accepted` reserved). Declared scope boundary, not a §9 deviation. (§7.4) |
+| AD30 | Handler panic safety (G1) | `InboundDispatcher` wraps every handler invocation in `catch_unwind`; a panic becomes `CoreError::HandlerPanic { target, operation }` → 5xx reply, the request fails cleanly, the `serve` loop keeps running. Locks stay unpoisoned (handler `Arc` cloned out before invoke; `with_recover`). (§4.2) |
+| AD31 | Global shutdown quiescing (G2) | `shutdown` flag checked between `poll_serve` steps: the in-flight request completes (handler awaited, not cancelled); queued fan-in requests are dropped on `Servient` drop (not drained — full drain could block shutdown). Per-Thing polite teardown is `destroy()` (AD15). (§7.2) |
+| AD32 | Byte-level handler encoding (G3) | Handlers are byte-level on both sides (`InteractionInput/Output.data: Option<Payload>`, body `Arc<[u8]>`); the runtime does not auto-encode logical values. `PayloadCodecRegistry` applies at the transport edge (wire↔Payload). Companion to §9 deviation #4. (§4.3) |
+| AD33 | `ThingId` uniqueness/collision (G5) | Registries key by `ThingId` (= the TD's `id`, required per E18). Duplicate `expose` rejected (`AlreadyExposed`); duplicate `consume` reuses. Cross-directory id collision is the deployment's responsibility (v1 boundary, not a deviation). (§7.3) |
+| AD34 | Binding trait `Send + Sync` (G4) | `ServerBinding: Send + Sync` and `ClientBinding` trait objects are `Send + Sync` so the `serve` future is `Send` and spawnable on tokio/embassy. (§4.5) |
+| AD35 | `ServientBuilder` API shape (G6) | Move-fluent consuming builder (`with_*` → `build()`); required ≥1 server binding + ≥1 client factory; omitted discoverer defaults to `LocalDiscoverer`; `build()` wires `set_event_broker`/`set_request_sink` into every binding. (P3 §3.11) |

@@ -4,9 +4,11 @@
 > target shape; follow P1 for sequencing.
 >
 > **Divergences from this source already locked in P1/baseline (audit F5):**
-> - `Discoverer::discover` / `explore_directory` are **sync** here (§Scripting
->   API Mapping) but were changed to **sync returning a lazy process** by AD10
->   (P1 §1.9); async work is deferred to `ThingDiscoveryProcess::next()`.
+> - `Discoverer::discover` / `explore_directory` are **`async`** in this source
+>   (§Scripting API Mapping) but were changed to **sync returning a lazy
+>   process** by AD10 (P1 §1.9); async work is deferred to
+>   `ThingDiscoveryProcess::next()`. (`request_thing_description` stays async in
+>   both — a concrete TD fetch is a real network round-trip.)
 > - This source uses `ThingDescription` as the result type; the codebase and P1
 >   use `Thing`. Treat `ThingDescription` ≡ `Thing` when reading this source.
 

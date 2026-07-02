@@ -290,8 +290,18 @@ pub trait DirectoryPublisher: Send + Sync {
 
 `DirectoryRegistration` carries the TD + optional TTL/lease. `DirectoryPatch` is
 a JSON-Merge-Patch-shaped carrier. `Revision`/`LeaseToken`/`LeaseState`/
-`RegistrationAck` are typed. v1 in-memory backend supports `register`/`update`/
-`unregister` fully and `renew` as a no-op ack (no real TTL aging).
+`RegistrationAck` are typed (shapes pinned in §1.4). v1 in-memory backend
+supports `register`/`update`/`unregister` fully and `renew` as a no-op ack (no
+real TTL aging).
+
+**Scope of `update`/`renew` (audit E22).** The engine's frozen-TD lifecycle
+(AD8/D2) calls only `register` (expose) and `unregister` (destroy) — never
+`update`. `update`/`renew` exist for **external/manual directory management**
+(a directory *service* backend or an admin operator maintaining leases,
+revisions, and patches against TDs the engine does not own), and for the lease
+keep-alive model a remote TDD requires. They are NOT orphaned: they are the
+publisher-side contract for directory-service backends and manual registry
+maintenance, distinct from the engine's expose/destroy flow.
 
 ### Step 1.8 — Watch (`watch.rs`, std-gated)
 

@@ -80,7 +80,10 @@ removal, and the draft state lives in **no registry at all**:
   owned by the handle**. It is NOT in any registry/container, NOT remotely
   servable, NOT discoverable. Local interactions (`read_property` on the
   handle) dispatch directly to the handlers. Dropping a draft handle drops its
-  state — nothing to clean up.
+  state — nothing to clean up. **`id` is required** (audit E18): the engine does
+  not auto-assign a missing `id` (the Scripting API permits runtime id
+  allocation; clinkz-wot requires the TD to carry one — a declared permitted
+  behavior, not a §9 deviation).
 - **exposed** — `expose()` is the **single** mutation into shared state: it
   atomically inserts a `ThingSlot` (wrapping the handle's `Arc` state) into the
   servable `ExposedThingRegistry`, calls `register_thing` on every binding, and
@@ -310,6 +313,37 @@ payload codecs, client binding factories (+ support predicates), server
 bindings. The builder is the only place that constructs the
 `InMemoryDirectory`-backed `LocalDiscoverer` for embedded/local-only use, or
 injects a remote-capable `Discoverer` for cloud.
+
+**Builder API shape (audit G6 — locked).** `ServientBuilder` is a consuming,
+move-fluent builder (`fn(self, …) -> Self`) whose `build()` consumes it and
+returns the `Servient`. Required vs optional:
+
+```rust
+impl ServientBuilder {
+    pub fn new() -> Self;
+    // Required: at least one server binding is needed to serve; at least one
+    // client binding factory is needed to consume.
+    pub fn with_server_binding(mut self, binding: Arc<dyn ServerBinding>) -> Self;
+    pub fn with_client_factory<F>(mut self, factory: F) -> Self
+        where F: ClientBindingFactory + Send + Sync + 'static;
+    // Discovery: if omitted, build() installs the default LocalDiscoverer
+    // (InMemoryDirectory-backed) — the embedded/local-only path.
+    pub fn with_discoverer(mut self, discoverer: Arc<dyn Discoverer>) -> Self;
+    pub fn with_directory_publisher(mut self, publisher: Arc<dyn DirectoryPublisher>) -> Self;
+    // Optional, additive, multi-call:
+    pub fn with_security_provider(mut self, provider: Arc<dyn SecurityProvider>) -> Self;
+    pub fn with_payload_codec(mut self, codec: Arc<dyn PayloadCodec>) -> Self;
+    // Terminal:
+    pub fn build(self) -> ServientResult<Servient>;
+}
+```
+
+`build()` validates the minimum (≥1 server binding *or* explicitly
+local-only; codecs non-empty *or* a default JSON codec installed) and wires
+`set_event_broker`/`set_request_sink` (std) into every server binding at
+construction. The builder itself is `std`-host convenience (it touches concrete
+bindings/`Arc` composition); the constructed `Servient` is the `no_std + alloc`
+surface.
 
 ### Step 3.12 — `no_std + alloc` boundary (compile-time architecture only)
 
