@@ -235,9 +235,28 @@ pub struct InteractionOptions {
 
 pub struct InteractionOutput {
     pub data: Option<Payload>,
-    pub status: InteractionStatus, // Ok / Created / Accepted-style hint, for async actions later
+    pub status: InteractionStatus,
+}
+#[non_exhaustive]
+pub enum InteractionStatus {
+    /// Normal completion (default; HTTP/CoAP 200-equivalent).
+    Ok,
+    /// A new resource was created (201-equivalent).
+    Created,
+    /// An async action was accepted, not yet complete (202-equivalent; future).
+    Accepted,
 }
 ```
+
+**Naming consistency (audit D3).** The payload-bearing field is named `data`
+everywhere — `InteractionInput.data` (handler-facing, inbound), `InteractionOptions.data`
+(caller-facing, outbound/consumed), `InteractionOutput.data`. The prior
+`InteractionInput.payload` is renamed `data`. URI-template variables are named
+`uri_variables` everywhere — `InteractionInput.uri_variables` (renamed from
+`parameters`) and `InteractionOptions.uri_variables`. (`InteractionInput` keeps
+its inbound-only `principal` field; `InteractionOptions` keeps its outbound-only
+`form_index`/`timeout`. The two types differ by context but share field names
+for the concepts they have in common.)
 
 The current `InteractionInput.security_metadata` field is removed from the
 handler-facing type. Security material belongs to the binding/transport layer,
@@ -271,7 +290,19 @@ outbound path; one `async_trait` `Box` per call, accepted as network-amortized.
 pub trait ServerBinding {
     /// Non-blocking drain of one currently-ready inbound request, or `None`.
     /// No `async_trait`, no `Box` — a plain virtual call. (no_std polled path.)
-    fn try_accept(&self) -> Option<InboundRequest>;
+    /// Default `None` (audit F8): a std-only binding that self-pushes via
+    /// `set_request_sink` never has `try_accept` called and need not override it.
+    fn try_accept(&self) -> Option<InboundRequest> { None }
+    /// The reply path (audit F1): `InboundRequest` carries no reply handle, so
+    /// the dispatcher's `InboundResponse` is returned via `send_response`,
+    /// matched back to the requester by `CorrelationId`. Required by AD9's
+    /// "overload → explicit error reply" semantics. No default — every binding
+    /// that accepts requests must implement it.
+    fn send_response(&self, response: InboundResponse);
+    /// EventBroker injection (audit F1): the Servient calls this at registration
+    /// so the binding can register `PublisherSink`s for event/observable fan-out
+    /// during `register_thing`. Default no-op for bindings without event publish.
+    fn set_event_broker(&self, _broker: EventBroker) {}
     /// std fan-in injection (audit defect AD13): the Servient hands each
     /// binding a clone of the bounded fan-in sender at registration; the
     /// binding `try_send`s from its sync transport callbacks. Formalized on
@@ -314,6 +345,15 @@ surface entirely (addendum §6.2, §9.6 superseded). On std, `try_accept` is
 unused (direct push is the main path); on no_std, the zenoh-pico backend's
 `try_accept` polls its transport and returns one ready request. The sync
 driving primitive (§7.2) drives the same one-step loop.
+
+**`FanInSender` definition (audit D16).** `FanInSender<InboundRequest>` is a
+core-defined, **std-only** type alias for the bounded fan-in channel sender —
+concretely `async_channel::Sender<InboundRequest>` (runtime-neutral: works
+under tokio/async-std/embassy-std; its `try_send` is synchronous, matching the
+sync zenoh-callback enqueue). Defined in `clinkz-wot-core` behind `#[cfg(feature
+= "std")]`; the Servient constructs the `async_channel::channel(capacity)` pair
+and owns the `Receiver`. no_std has no `FanInSender` (no channel — the loop
+polls `try_accept`).
 
 ### 4.6 Subscription primitives
 
@@ -389,6 +429,23 @@ exclusive-semantics state (driving state, credential store, binding-factory
 registry generation counter). The snapshot pattern keeps the inbound hot read
 path lock-free on every build.
 
+### 4.8 Trait sealing (audit D15)
+
+Two classes, decided explicitly (AGENTS.md favors sealing extensible traits;
+deferred #8 had left this open):
+
+- **Stable extension points — NOT sealed** (downstream crates/users implement
+  these): `ClientBinding`, `ServerBinding`, the 9 sync handler traits + their
+  async twins, `PayloadCodec`, `SecurityProvider`, `CredentialStore`,
+  `Discoverer`, `DirectoryReader`, `DirectoryPublisher`,
+  `ThingDescriptionResolver`, `ThingLinkResolver`. Documented as the public
+  extension surface.
+- **Engine-internal — sealed or `pub(crate)`** (no external impls):
+  `DiscoverySession`, `DirectorySession`, `EventSink`, `InboundDispatcher`,
+  the consolidated `*HandlerSet` storage types, `ProcessState`. These are
+  implementation details; sealing prevents downstream from depending on their
+  shape.
+
 ## 5. Tier 2 — Protocol Bindings
 
 ### 5.1 Shared binding (`clinkz-wot-protocol-bindings`)
@@ -397,6 +454,27 @@ Healthy. No external change. Form selection, op→form resolution, target
 resolution, security metadata extraction, and the structured `BindingError`
 taxonomy are kept. Minor: convert remaining free-form `String` `BindingError`
 messages to structured variants (deferred #8).
+
+**Cross-crate error interop (audit E1 — locked).** Four error types span the
+crates: `CoreError` (core), `BindingError` (protocol-bindings),
+`DiscoveryError` (discovery), `ServientError` (servient). The承重 conversion
+chain (crate-boundary contract):
+
+- `impl From<BindingError> for CoreError` — a binding's `invoke`/`subscribe`
+  returns `CoreResult` (= `Result<_, CoreError>`); `BindingError` flows in via
+  this conversion.
+- `impl From<CoreError> for ServientError`, `impl From<BindingError> for
+  ServientError` (via CoreError), `impl From<DiscoveryError> for
+  ServientError` — servient methods return `ServientResult`.
+- **Protocol status mapping**: `error_status(&CoreError) -> u16` (shared
+  binding crate) is the single status source. Since `BindingError → CoreError`,
+  binding failures map through `CoreError`. `DiscoveryError` is an
+  **application-layer** error surfaced via the `ThingDiscoveryProcess` (its
+  `error()`/`next()`), NOT as a protocol reply status — it does not flow through
+  `error_status`. `ServientError` is unwrapped to its inner `CoreError` for
+  status mapping on the inbound reply path.
+- Direction: conversions go **inward** (BindingError→CoreError→ServientError);
+  the inverse is not provided (no `CoreError→BindingError`), preserving layering.
 
 ### 5.2 Zenoh binding (`clinkz-wot-protocol-bindings-zenoh`)
 
@@ -494,6 +572,20 @@ iterations and shares it with other work, so `&self` is required there, and
 tokio/embassy via `tokio::spawn(async move { svc.clone().serve().await })` —
 the `async move` block owns the cheaply-cloned `Servient` and `serve(&self)`
 borrows it (Pin makes the self-referential future sound).
+
+**Driving primitive × feature matrix (audit D4 — locked).** `poll_serve` and
+`serve` are `async fn` ⇒ gated behind the `async` feature (and need an executor:
+tokio on std, embassy on no_std). `poll_serve_once` is a plain sync `fn`
+available on every build — it is the bare-`no_std` super-loop primitive.
+
+| Primitive | `std` | `no_std` (no `async`) | `no_std` + `async` (embassy) |
+|---|---|---|---|
+| `poll_serve_once` (sync) | yes | **yes** (super-loop) | yes |
+| `poll_serve` (async) | yes (tokio) | **no** (no executor) | yes (embassy) |
+| `serve` (async loop) | yes (tokio host loop, std-gated idle backoff) | **no** | yes (embassy task) |
+
+So a bare `no_std` build (no `async` feature) exposes **only** `poll_serve_once`;
+the async driving primitives require the `async` feature + an executor.
 
 **Step contract — at most one inbound request per call** (audit defect AD6b).
 `poll_serve` and `poll_serve_once` each advance by **at most one** request —
@@ -637,6 +729,13 @@ Retained: `SecurityProvider` (with `verify` for inbound, `apply` for outbound),
 inbound `AuthMaterial` extraction. The `apply_security` post-apply diff is
 replaced by having `apply` return the metadata it added (deferred #4).
 
+**Combo schemes (audit E5).** TD 1.1 `ComboSecurityScheme` (`security`/`compose`
+— AND/OR of sub-schemes) is **not decomposed by the engine in v1**: a
+`SecurityProvider` returns `UnsupportedScheme` for a combo scheme. v1 supports
+the basic schemes only. A future `ComboSecurityProvider` will decompose AND
+(all sub-schemes must `apply`/`verify`) and OR (any) — tracked as a follow-up,
+not a §9 deviation (it is a scheme-coverage gap, recorded here).
+
 ## 8. Feature Policy
 
 | Feature | Effect |
@@ -667,6 +766,22 @@ documented, not hidden:
 3. **`fetchTD` / directory exploration are trait objects (`Discoverer`),** not a
    built-in `fetch` — the engine is protocol-neutral and the concrete transport
    is injected.
+4. **No implicit server-side property value store (audit E2).** The engine is
+   **handler-driven**: `LocalExposedThing` is "Thing + handler set", with no
+   internal property-value map. `read_property` dispatches to the read handler;
+   an affordance with no read handler returns `MissingHandler`. The Scripting
+   API's `ExposedThing` keeps an internal value (readable without a handler,
+   set by `writeProperty`/initial TD) — clinkz-wot does **not** replicate that.
+   Rationale: a handler-driven model is unambiguous (no value/handler race),
+   zero-extra-state, and matches the device/gateway use case. Applications
+   wanting value-store semantics implement a read handler backed by their own
+   state.
+5. **`DiscoveryFilter` replaces `ThingFilter` (audit E9).** The Scripting API
+   `discover(filter: ThingFilter)` (with `method` enum + `query`) is replaced by
+   `Servient::discover(filter: DiscoveryFilter)` (P1 §1.9). The
+   `DiscoveryMethod`/`ThingFilter.query` vocabulary is folded into
+   `DiscoveryFilter` + `DirectoryFilter`; remote `Directory`/`Multicast` methods
+   are v1-unsupported (see §6 / E6).
 
 No other deviations are permitted without an explicit entry here.
 
@@ -681,8 +796,12 @@ No other deviations are permitted without an explicit entry here.
 | `ExposedThing.setPropertyReadHandler` | `ExposedThingHandle::set_property_read_handler` | |
 | `ExposedThing.setPropertyWriteHandler` | `set_property_write_handler` | |
 | `ExposedThing.setPropertyObserveHandler` | `set_property_observe_handler` | |
+| (property unobserve) | `set_property_unobserve_handler` | TD §5.3.4.2 op |
 | `ExposedThing.setActionHandler` | `set_action_handler` | invoke op |
+| (action query) | `set_action_query_handler` | `queryaction` op |
+| (action cancel) | `set_action_cancel_handler` | `cancelaction` op |
 | `ExposedThing.setEventSubscribeHandler` | `set_event_subscribe_handler` | |
+| (event unsubscribe) | `set_event_unsubscribe_handler` | TD §5.3.4.2 op |
 | `ExposedThing.readProperty`/`writeProperty` | `read_property`/`write_property` (server-side local) | |
 | `ExposedThing.emitEvent`/`emitPropertyChange` | `emit_event`/`emit_property_change` | |
 | `ExposedThing.expose()`/`destroy()` | `expose()`/`destroy()` | TD frozen after expose |
@@ -725,6 +844,16 @@ The per-interaction hot path must be allocation-light and lock-bounded:
 - **Directory queries** are continuation-based (one batch + token), `Live`
   consistency only in v1, not full-table scan with `offset+total` (discovery
   refactor; audit defect 3).
+
+**Performance acceptance level (audit E8).** v4.0's performance claims are
+**design-level and structurally verified**, not benchmark-gated: the zero-alloc
+inbound hot path and O(1) fan-in are guaranteed by the architecture (sync
+handler dispatch, `Arc`-snapshot reads, bounded single fan-in channel), and P4
+verifies them by **code review + allocation-shape audit**, not by a `criterion`
+suite. A quantified regression benchmark is a **deferred follow-up** (recorded
+in `docs/deferred-design-followups.md`), added once the P0–P3 code lands and a
+representative workload exists. P4 exit does **not** require a numeric
+threshold.
 
 ## 12. Sequencing
 
@@ -803,8 +932,17 @@ Each phase is independently shippable behind the workspace build.
 | AD16 | no_std driving = compile-time architecture only | P3's no_std path is compile-only in v1; runtime validation is gated on zenoh-pico (P2 §2.7). P3 depends on the `try_accept` trait *shape*, not on pico's server-side runtime being finalized. (§7.2, P3 §3.12) |
 | AD17 | Phase compile boundary | P0–P2 are target-crate isolation (each target crate compiles/tests alone); the workspace is made whole at P3. Unifies baseline §12 with `PLAN.md`. |
 | AD18 | `ProjectionMode` vs `ThingDiscoveryProcess` | `ThingDiscoveryProcess` (Scripting-API surface yielding full `Thing`s) **forces `FullThingDescription`**; `IdOnly`/`Summary` are confined to the lower-level `DirectorySession`/`DirectoryItem` API (directory-admin use) and do not flow into the Scripting process. (`docs/plan/phase-p1-discovery.md` §1.4/§1.6) |
+| AD19 | `ServerBinding` trait surface completeness | The trait carries **all** load-bearing methods: `try_accept` (default `None` — std-only bindings self-push and never have it called), `send_response` (the reply path — required by AD9 overload error replies; `InboundRequest` has no reply handle), `set_event_broker` (EventBroker injection, default no-op), `set_request_sink` (std, AD13), `register_thing`/`unregister_thing`. The earlier §4.5 snippet omitted `send_response`/`set_event_broker`; both are retained from the current code. (§4.5) |
 | AD6c | no_std verification overclaim | `check-no-std.sh` is compile-only; runtime no_std driving deferred with zenoh-pico. (§7.2, `docs/plan/phase-p3-servient.md`, `phase-p4-compliance.md`) |
 | AD2 | `WotLock` no_std read degradation | Read-heavy-rare-write state (registries, handler tables, subscription state) uses lock-free `Arc`-snapshot reads; `WotLock` reserved for read-write-frequent/exclusive state. (§4.7, §11) |
 | AD3 | `SessionStable` snapshot cost | v1 ships `ConsistencyMode::Live` only; `SessionStable` deferred (`#[non_exhaustive]`). (§6) |
 | AD4 | Async handler coverage | Async twins for ALL 9 interaction operations, not just read/write/invoke. (§4.2) |
 | AD5 | Conservative compliance matrix | P4 build-checks all valid feature combinations per crate; tests a representative subset. (`docs/plan/phase-p4-compliance.md`) |
+| AD20 | Driving primitive feature matrix + `FanInSender` | `poll_serve_once` (sync) on every build; `poll_serve`/`serve` (async) gated behind `async` + need an executor (tokio/embassy) — bare `no_std` exposes only `poll_serve_once`. `FanInSender<T>` = core std-only alias for `async_channel::Sender<T>` (runtime-neutral; sync `try_send`). (§4.5, §7.2) |
+| AD21 | Interaction I/O naming consistency | Payload field is `data` and URI-template vars are `uri_variables` across `InteractionInput`/`Options`/`Output`; `InteractionStatus { Ok, Created, Accepted }` (`#[non_exhaustive]`). (§4.3) |
+| AD22 | `ThingDiscoveryProcess` struct + discover error bridging | `{ inner: Box<dyn DiscoverySession> }` where concrete inner is `ProcessState { Pending, Open(DirectorySession), Done(err) }` implementing `DiscoverySession`. Infallible `Servient::discover()` bridges a fallible `Discoverer::discover()` by constructing `Done(err)`. Introduction/Exploration deferred to first async `next()`. (§6, `phase-p1-discovery.md` §1.6/§1.9) |
+| AD23 | td cleanup owned by P0 | The Tier-0 td cleanups (data_type split, Form dedup, validation helpers, AbsoluteUri root re-export) are assigned to P0 (Step 0.0), closing the phase-ownership hole. (§3, §12, `phase-p0-core-interaction.md` §0.0) |
+| AD24 | Trait sealing | Extension-point traits (bindings, handlers, codecs, security, discovery reader/publisher/resolver) NOT sealed; engine-internal traits (`DiscoverySession`, `DirectorySession`, `EventSink`, `InboundDispatcher`, `*HandlerSet`, `ProcessState`) sealed/`pub(crate)`. (§4.8) |
+| AD25 | Cross-crate error interop | `From<BindingError> for CoreError`; `From<{CoreError,BindingError,DiscoveryError}> for ServientError`; `error_status(&CoreError)` is the single protocol-status source (binding errors flow through CoreError; DiscoveryError is app-layer via the process, not a status). Inward-only direction. (§5.1) |
+| AD26 | Bulk operation partial-failure | `readAll`/`readMultiple`/`writeAll`/`writeMultiple` return `BTreeMap<PropertyName, Result<InteractionOutput, CoreError>>`; `subscribeAll`/`unsubscribeAll` return per-event `Result<Subscription, _>`. One property's error does NOT fail the batch (Scripting-API aligned). (§7.4, P3 §3.6) |
+| AD27 | `expose()` rollback + `destroy()` idempotency | `expose()` registers bindings in order; on binding `k+1` failure it `unregister_thing`s the succeeded `1..k` (reverse), rolls back the registry insert, returns fatal `Err` (E12). `destroy()` is idempotent — on an already-removed/never-exposed Thing it no-ops returning `Ok`; concurrent destroys serialize (E13). (P3 §3.4) |

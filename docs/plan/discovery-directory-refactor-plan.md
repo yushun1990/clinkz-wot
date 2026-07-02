@@ -2,6 +2,13 @@
 > the Discovery rewrite. The implementation plan is
 > `docs/plan/phase-p1-discovery.md` under the v4.0 baseline. Read this for the
 > target shape; follow P1 for sequencing.
+>
+> **Divergences from this source already locked in P1/baseline (audit F5):**
+> - `Discoverer::discover` / `explore_directory` are **sync** here (§Scripting
+>   API Mapping) but were changed to **sync returning a lazy process** by AD10
+>   (P1 §1.9); async work is deferred to `ThingDiscoveryProcess::next()`.
+> - This source uses `ThingDescription` as the result type; the codebase and P1
+>   use `Thing`. Treat `ThingDescription` ≡ `Thing` when reading this source.
 
 # Discovery / Directory Refactor Plan
 

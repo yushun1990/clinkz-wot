@@ -19,6 +19,20 @@ breaking refactor.
 
 ## Work Breakdown
 
+### Step 0.0 — `clinkz-wot-td` internal cleanups (Tier 0, audit D17)
+
+P0 owns the td data-contract cleanups (baseline §3), since td is the foundation
+layer and P1 depends on the `AbsoluteUri` re-export:
+
+- Split `td/src/core/data_type.rs` into cohesive modules
+  (`core/uri.rs`, `core/metadata.rs`, `core/version.rs`, `core/response.rs`,
+  `core/operation.rs`).
+- Extract a shared `FormData` core (deduplicate `ThingModelForm`/`Form`).
+- Extract shared Thing/ThingModel affordance validation helpers.
+- **Re-export `AbsoluteUri` at the td crate root**
+  (`pub use core::data_type::AbsoluteUri;`) — AD11, P1 hard prerequisite.
+- Convert free-form `String` error messages to structured enum variants.
+
 ### Step 0.1 — Lock primitive: `MapLock` → `WotLock`
 
 Rewrite `core/src/sync.rs`:
@@ -33,7 +47,11 @@ Rewrite `core/src/sync.rs`:
   (panic-healing) retained.
 - Remove the `multithread` feature, `RefCell` backend, `UnsafeCell` backend,
   and the `MapLockError` std-poison surface (or retain minimal).
-- Remove `multithread` from `core/Cargo.toml` features.
+- Remove `multithread` from `core/Cargo.toml` features. **Also remove the
+  `multithread` feature from `servient/Cargo.toml`** (audit F6 — it forwards to
+  `clinkz-wot-core/multithread`; deleting the core feature invalidates the
+  servient forward). This is a P0 task even though P3 rewrites servient, so the
+  feature does not dangle.
 - **Snapshot-read primitive for hot read-heavy state** (audit defect AD2):
   alongside `WotLock`, expose a copy-on-write snapshot helper
   (`Arc<ImmutableMap>` publish + atomic-load read) for the registries and
@@ -52,6 +70,13 @@ Audit that no `MapLock` references remain in core.
 - Introduce concrete `LocalExposedThing` (produced Thing + handler sets) and
   `BoundConsumedThing` (consumed Thing + resolved binding plan).
 - These live in core; `Servient` wraps them in `Arc` handles (P3).
+- **`LocalThing` affordance-mutation primitives (audit F9 — decision):** the
+  existing `core/src/thing.rs` `LocalThing::{add,remove}_{property,action,event}`
+  (not the deleted `ExposedThingHandle` ones) are **retained as produce-time TD
+  builders**. D2 freezes the affordance set only *after* `expose()`; pre-expose
+  TD assembly (`produce` → mutate → `expose`) legitimately needs them. They are
+  NOT reachable from an exposed handle post-expose (AD12 removed that surface),
+  so retaining the core primitives does not reopen the dynamic lifecycle.
 
 ### Step 0.4 — Handler trait set (sync primary, opt-in async)
 
@@ -82,12 +107,15 @@ Audit that no `MapLock` references remain in core.
 
 ### Step 0.5 — Interaction I/O (Scripting API §7.1)
 
-- Rework `InteractionInput` → keep handler-facing fields: `payload`, `parameters`
-  (uri variables), `principal`. Remove `security_metadata` (moves to binding/
-  transport layer).
+- Rework `InteractionInput` handler-facing fields to **`data`** (renamed from
+  `payload`) + **`uri_variables`** (renamed from `parameters`) + `principal`
+  (audit D3 — naming consistency across `InteractionInput`/`Options`/`Output`).
+  Remove `security_metadata` (moves to binding/transport layer).
 - Introduce `InteractionOptions { uri_variables, form_index, data, timeout }`
   for the consumed-side call surface.
-- Rework `InteractionOutput { data, status }`.
+- Rework `InteractionOutput { data, status }`; enumerate
+  `InteractionStatus { Ok, Created, Accepted }` (`#[non_exhaustive]`,
+  v4.0 §4.3).
 
 ### Step 0.6 — Affordance addressing, inbound, binding requests
 
@@ -103,9 +131,13 @@ Audit that no `MapLock` references remain in core.
 - `ClientBinding { supports, async invoke, async subscribe }` (resolved A1) —
   outbound path; the `async_trait` `Box` per outbound call is acceptable
   (network-amortized), unlike the inbound handler path which stays sync.
-- `ServerBinding` exposes a **synchronous, non-blocking `try_accept`** — no
+- `ServerBinding` exposes a **synchronous, non-blocking `try_accept`** (default
+  `None` — audit F8: std-only bindings self-push and never have it called) — no
   boxed `poll_accept` future, no `select_all` (audit defect AD1):
-  `fn try_accept(&self) -> Option<InboundRequest>`, plus wholesale
+  `fn try_accept(&self) -> Option<InboundRequest> { None }`, the **reply path
+  `send_response(InboundResponse)`** (audit F1 — required by AD9 overload error
+  replies; `InboundRequest` carries no reply handle), **`set_event_broker`**
+  (audit F1 — EventBroker injection, default no-op), wholesale
   `register_thing(thing_id, td)` / `unregister_thing(thing_id)`, plus a
   **formalized std fan-in injection point**
   `#[cfg(feature="std")] fn set_request_sink(&self, sender: FanInSender<InboundRequest>)`

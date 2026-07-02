@@ -122,19 +122,25 @@ scripts/check-reserved-features.sh
 scripts/check-td2-preview.sh
 ```
 
-### Step 4.8 — Documentation alignment
+### Step 4.8 — Documentation alignment (verify, not rewrite)
 
-Update cross-cutting docs to v4.0:
+> Audit F4: `technical-spec.md`, `wot-compliance.md`, `no-std-embedded.md`, and
+> `verification.md` were **already rewritten to v4.0 present-tense** in earlier
+> rounds (WotLock, `try_accept`, `poll_serve_once`, reversed Scripting-API
+> positioning, removed `multithread` Layer-1). So this step is **verification,
+> not rewriting**. A known side effect: these docs currently describe types not
+> yet in code (`WotLock`, `try_accept`, `set_request_sink`, etc. — the code is
+> pre-P0). P4 accepts that doc↔code drift window now and **closes it once P0–P3
+> land the matching code**: re-check each doc against the final code and fix any
+> residual drift.
 
-- `docs/technical-spec.md`: crate layout, feature policy (`WotLock`, removed
-  `multithread`), validation levels, serialization policy, error policy.
-- `docs/wot-compliance.md`: **reverse** the §Scripting API Boundary positioning
-  to "Scripting API is a conformance target" (v4.0 §0); keep the
-  subscription-deviation note as v4.0 §9.1; update the TD 2.0 gate note.
-- `docs/no-std-embedded.md`: remove the `multithread` Layer-1 section (the lock
-  is always thread-safe now); keep zenoh-pico (Layer 2) and embassy (Layer 3)
-  boundaries; update supported capabilities for the async driving primitive.
-- `docs/verification.md`: record the v4.0 regular verification path.
+- `docs/technical-spec.md`: verify crate layout / feature policy / validation /
+  serialization / error policy match the final code.
+- `docs/wot-compliance.md`: verify the reversed Scripting-API conformance
+  positioning (§0) and the §9.1 subscription-deviation note still hold.
+- `docs/no-std-embedded.md`: verify WotLock/`try_accept`/`poll_serve_once` and
+  the two-layer (pico/embassy) plan match the final code.
+- `docs/verification.md`: verify the v4.0 verification path is accurate.
 - `PLAN.md`: mark P0–P4 status as complete; archive the deprecated-docs index.
 
 ### Step 4.9 — Acceptance criteria sign-off

@@ -133,12 +133,61 @@ Scripting-API `ThingDiscoveryProcess` (which yields full `Thing`s) **forces
 
 `#[non_exhaustive]` on `DirectoryFilter` and the mode enums makes the v1 set
 forward-compatible: `Semantic`/`Native` are added later without a breaking
-change, and callers are forced to write a `_ =>` fallback. `ThingFragment`
-reuses the TD's `ExtensionMap`-shaped fragment (closest to today's
-`QueryFilter::Fragment`). `CapabilityFilter` covers affordance names,
-operations, security schemes, protocol hints. The v1 set
+change, and callers are forced to write a `_ =>` fallback. The v1 set
 (`ByExample`/`Text`/`Capability`/`And`/`Or`) is the complete implementable
 set for the in-memory backend.
+
+**Public type shapes pinned (audit E3).** These are the discovery crate's
+public API surface; their structure is fixed now so implementers don't diverge:
+
+```rust
+/// Partial TD fragment for `ByExample` matching. Each field narrows the match;
+/// `None` = "any".
+pub struct ThingFragment {
+    pub title: Option<String>,
+    pub id: Option<ThingId>,
+    pub types: Vec<String>,              // @type values
+    pub properties: Vec<String>,         // property affordance names to require
+    pub actions: Vec<String>,
+    pub events: Vec<String>,
+}
+
+/// Capability/protocol filter.
+pub struct CapabilityFilter {
+    pub affordance: Option<String>,      // any affordance name
+    pub operations: Vec<Operation>,      // supported ops
+    pub security_schemes: Vec<String>,   // scheme names
+    pub protocol: Option<String>,        // e.g. "zenoh", "http"
+}
+
+/// One directory result item, shaped by `ProjectionMode`.
+#[non_exhaustive]
+pub enum DirectoryItem {
+    Id(ThingId),
+    Summary { id: ThingId, summary: SummaryFields },
+    Full(Thing),
+}
+/// Lightweight summary fields for `Summary` projection.
+pub struct SummaryFields {
+    pub title: Option<String>,
+    pub types: Vec<String>,
+    pub property_count: usize,
+    pub action_count: usize,
+    pub event_count: usize,
+}
+
+// Publisher-side typed carriers.
+pub struct DirectoryRegistration { pub td: Thing, pub ttl: Option<Duration> }
+pub struct RegistrationAck { pub id: ThingId, pub revision: Revision, pub lease: Option<LeaseState> }
+pub struct Revision(pub u64);                       // monotonic per-Thing revision
+pub struct LeaseToken(pub Vec<u8>);                 // opaque renewal handle
+pub struct LeaseState { pub token: LeaseToken, pub expires_at: Option<Duration> }
+pub struct DirectoryPatch(pub serde_json::Value);   // JSON Merge Patch carrier
+```
+
+`ThingFragment` replaces the earlier vague "ExtensionMap-shaped" description;
+`DirectoryItem` is an enum so `IdOnly`/`Summary`/`Full` results are
+type-correct (and only `Full` flows into `ThingDiscoveryProcess`, per AD18).
 
 ### Step 1.5 — Directory reader + session (`directory.rs` reader half, `session.rs`)
 
@@ -175,33 +224,55 @@ backend supports live visibility.
 pub struct ThingDiscoveryProcess { inner: Box<dyn DiscoverySession> }
 #[async_trait]
 pub trait DiscoverySession: Send {
+    /// Yields the next Thing, `Ok(None)` at a clean end, `Err(_)` on a terminal
+    /// failure (after which the session is `Done` and further `next()` returns
+    /// `Ok(None)`).
     async fn next(&mut self) -> DiscoveryResult<Option<Thing>>;
     async fn stop(&mut self) -> DiscoveryResult<()>;
+    /// Terminal-error accessor (audit D14): returns `Some` only after the
+    /// session has terminated **due to an error** (a `next()` that returned
+    /// `Err`, or a synchronous construction error — see D5). It is `None`
+    /// while the session is live and on a clean `Ok(None)` end. `next()`'s
+    /// per-call `Err` and `error()`'s terminal state are the same failure
+    /// surfaced two ways (immediate + retrospective).
     fn error(&self) -> Option<&DiscoveryError>;
 }
+
+// The concrete inner (audit D2 — single coherent struct):
+enum ProcessState {
+    // Set by sync discover(); no session opened yet.
+    Pending { reader: Arc<dyn DirectoryReader>, query: DirectoryQuery },
+    // Opened lazily on first next(); DirectorySession yields DirectoryItem.
+    Open(Box<dyn DirectorySession>),
+    // Terminal after an error or stop().
+    Done(Option<DiscoveryError>),
+}
+// ProcessState IMPLEMENTS DiscoverySession: next() on Pending calls
+// reader.open_search(query with FullThingDescription).await → Open, then drains
+// the DirectorySession and maps each DirectoryItem (full TD) → Thing.
 ```
 
-**Projection contract (audit defect AD18 — closed).** `ThingDiscoveryProcess`
-is the Scripting-API surface that yields **full `Thing`s**, so it **forces
-`ProjectionMode::FullThingDescription`** when opening the session (overriding
-any lighter projection the caller passed). The `DirectoryItem → Thing` mapping
-is therefore always well-defined (the item carries a full TD). Lightweight
-projections (`IdOnly` / `Summary`) are confined to the lower-level
-`DirectoryReader::open_search` / `DirectorySession` API — they yield
-`DirectoryItem` directly (id lists, summaries, counts for directory-admin use)
-and **do not flow into `ThingDiscoveryProcess`**. This locks the three options
-(forbid / directory-only / lazy-resolve) as: directory-only for lightweight,
-full-forced for the Scripting process.
+`ThingDiscoveryProcess { inner: Box<dyn DiscoverySession> }` holds a
+`ProcessState` (above) behind the trait object. This resolves the prior
+contradiction (the struct is NOT `Box<dyn DirectorySession>`; it is
+`Box<dyn DiscoverySession>` whose concrete impl is the `ProcessState` enum that
+*owns* a `DirectorySession` in its `Open` arm). `DirectorySession` and
+`DiscoverySession` are distinct traits (DirectoryItem-yielding vs
+Thing-yielding) and are never interchangeable.
 
-`ThingDiscoveryProcess` adapts a `DirectorySession` (the session is opened with
-`FullThingDescription`, so each `DirectoryItem` carries a full TD mapped to a
-`Thing`), or wraps a resolver/link flow. It is **lazy**: construction (sync
-`Discoverer::discover()`) performs no network work; the session is opened
-inside the **first async `next()`** (which calls
-`DirectoryReader::open_search().await` on demand, forcing full projection). The
-process holds an `enum { Pending(reader+query), Open(Box<dyn DirectorySession>)
-}`; `next()` transitions Pending→Open on first call, then drains (audit defect
-AD10).
+**Projection contract (audit defect AD18 — closed).** `ThingDiscoveryProcess`
+is the Scripting-API surface that yields **full `Thing`s**, so `ProcessState`
+**forces `ProjectionMode::FullThingDescription`** when opening the session
+(overriding any lighter projection the caller passed). The
+`DirectoryItem → Thing` mapping is therefore always well-defined (the item
+carries a full TD). Lightweight projections (`IdOnly` / `Summary`) are confined
+to the lower-level `DirectoryReader::open_search` / `DirectorySession` API —
+they yield `DirectoryItem` directly (id lists, summaries, counts for
+directory-admin use) and **do not flow into `ThingDiscoveryProcess`**.
+
+The process is **lazy** (AD10): construction (sync `Discoverer::discover()`)
+only builds the `Pending` state — no network work; the session is opened inside
+the **first async `next()`** (`Pending`→`Open`).
 
 `remaining()` is removed entirely. `stop()` / `error()` retained.
 
@@ -235,6 +306,12 @@ pub enum DirectoryChange { Added(Thing), Updated(Thing), Removed(ThingId) }
 
 Distinct from search. In-memory backend offers an opt-in watch backed by a
 version counter + listener list. Gated behind `std` (uses `std::sync`).
+**Watch vs Live search session (audit E10):** a `DirectoryWatch` is fully
+independent of any open search `DirectorySession` — changes observed via watch
+do NOT alter an open session's monotonicity or replay already-emitted items;
+sessions and watch are read through separate state. A watcher that wants the
+"current set" opens a new search session; watch only delivers subsequent
+changes.
 
 ### Step 1.9 — `Discoverer` facade (`discoverer.rs`)
 
@@ -256,9 +333,30 @@ pub enum DiscoveryFilter { /* wraps DirectoryFilter + method hints */ }
 pub enum DirectoryRef { Local, Url(AbsoluteUri) }
 ```
 
-`discover()` orchestrates Introduction then Exploration. A default
-`LocalDiscoverer` composes the in-memory reader + publisher + a
-`DirectUrlIntroducer`.
+`discover()` builds the lazy `ProcessState::Pending` — it does **not** run
+Introduction or Exploration (audit D6: both are deferred to the first async
+`next()`, even though `Introducer::discover_endpoints` and
+`DirectoryReader::open_search` are themselves async). The `ProcessState`
+opened in `next()` is what orchestrates Introduction (endpoints) then
+Exploration (session). A default `LocalDiscoverer` composes the in-memory
+reader + publisher + a `DirectUrlIntroducer`.
+
+**Error bridging (audit D5).** `Servient::discover()` is infallible (returns
+`ThingDiscoveryProcess`, Scripting-API shape). `Discoverer::discover()` is
+fallible (`DiscoveryResult<ThingDiscoveryProcess>`). If `Discoverer::discover()`
+returns `Err` synchronously (e.g. malformed filter), `Servient::discover()`
+constructs the process in `ProcessState::Done(err)` — the error surfaces via
+`error()` and the first `next()` returns `Err`, never via the infallible entry
+signature.
+
+**v1 remote-URL limitation (audit E6).** v1 ships no HTTP/CoAP fetcher backend
+(concrete remote transports are out of scope — integration points only).
+Therefore `Discoverer::explore_directory(DirectoryRef::Url(_), …)` and
+`Discoverer::request_thing_description(remote_url)` return
+`DiscoveryError::UnsupportedEndpoint` / `NotImplemented` in v1; only
+`DirectoryRef::Local` + the in-memory resolver are servable. This is a recorded
+v1 limitation (not a §9 Scripting-API deviation — it is a backend-availability
+gap), lifted when a concrete remote backend is added.
 
 ### Step 1.10 — In-memory reference backend (`backend/memory.rs`)
 
@@ -271,6 +369,15 @@ filtering, but serves via continuation sessions instead of `offset+total`.
 re-scan, monotonic, lazy, no match-set snapshot. `SessionStable` is deferred.
 
 `get_ref` (borrowed lookup, no clone) is retained for internal use.
+
+**`CountMode` backend contract (audit E11):** the in-memory backend can count
+exactly. Rule (applies to all backends): a backend **MAY upgrade**
+`Estimate → Exact` (returning the precise count), but **MUST NOT silently
+downgrade** `Exact → Estimate` — if a backend cannot satisfy `Exact` it returns
+`DiscoveryError::UnsupportedCountMode` rather than an imprecise value. `None`
+never computes a count. So the in-memory backend serves both `Estimate` and
+`Exact` (identical results); a future remote TDD may serve `Estimate` only and
+reject `Exact`.
 
 ### Step 1.11 — Error taxonomy (`error.rs`)
 
@@ -289,7 +396,17 @@ Delete from the crate: `ThingDirectory` trait, `DirectoryPage`, `DirectoryEntry`
 `DiscoveryFilter`/`ThingDiscoveryProcess`). The `local.rs` convenience API is
 folded into `backend/memory.rs`.
 
-### Step 1.13 — `no_std + alloc` boundary
+### Step 1.13 — `no_std + alloc` boundary and Cargo.toml
+
+**Cargo.toml change (audit F2 — hard prerequisite for P1 exit):** the
+`discovery` crate currently defines only a `std` feature and has no
+`async-trait`/`futures-core` deps, but the entire new surface
+(`DirectoryReader`, `DirectorySession`, `ThingDescriptionResolver`,
+`DirectoryPublisher`, `DirectoryWatch`, `Discoverer::request_thing_description`)
+is `#[async_trait]`. Add an `async` feature
+(`async = ["async-trait", "futures-core"]` deps + `clinkz-wot-core/async` if it
+shares async types) so `cargo test -p clinkz-wot-discovery` can exercise the
+async traits. This is an explicit P1 work item, not an afterthought.
 
 Crate root + `endpoint.rs` + `resolver.rs` + `directory.rs` + `session.rs` +
 `publisher.rs` + `discoverer.rs` + `backend/memory.rs` + `error.rs` are

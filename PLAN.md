@@ -61,7 +61,11 @@ once P0's public surface is stable. P4 finalizes compliance.
 Plan: `docs/plan/phase-p0-core-interaction.md`.
 
 Rewrite `clinkz-wot-core` to a single async interaction surface aligned with the
-WoT Scripting API.
+WoT Scripting API. **P0 also owns the `clinkz-wot-td` internal cleanups**
+(baseline §3 / Tier 0 — the foundation data-contract layer): split
+`data_type.rs`, deduplicate `Form`/`ThingModelForm`, extract shared validation
+helpers, and **re-export `AbsoluteUri` at the td crate root** (AD11, P1's hard
+prerequisite). These td edits are part of P0, not unassigned.
 
 Scope:
 

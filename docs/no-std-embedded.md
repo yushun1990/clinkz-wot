@@ -132,9 +132,11 @@ multi-thread safety is now inherent — no feature flag — so Layer 1 is gone.)
 The `ZenohPicoPlatform` trait in
 `protocol-bindings/protocols/zenoh/src/runtime/zenoh_pico.rs` defines the
 platform hook for constrained zenoh-pico C ABI integrations. The pico backend
-implements `ServerBinding::try_accept` (synchronous-readiness, polled by the
-`poll_serve_once` super-loop) and the async `ClientBinding`. A concrete
-implementation requires:
+**will** implement `ServerBinding::try_accept` (synchronous-readiness, polled by
+the `poll_serve_once` super-loop) and the async `ClientBinding` — but this is
+**deferred** (P2 §2.7, AD16): the server-side `try_accept` model and the pico
+server module are not yet implemented/finalized. A concrete implementation
+requires:
 
 - Target MCU selection (ESP32, STM32, nRF52, etc.).
 - zenoh-pico C library compiled for the target.

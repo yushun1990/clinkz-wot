@@ -25,7 +25,7 @@ This is the phase where the **workspace compiles whole again**.
   sync/async driving duplication.
 - `servient/src/servient/{dispatch.rs, bulk.rs, security.rs}`: dispatch, bulk
   ops, security application.
-- `servient/src/handle.rs` (1520 lines): `ExposedThingHandle<D>` /
+- `servient/src/handle.rs` (1444 lines): `ExposedThingHandle<D>` /
   `ConsumedThingHandle<D>` with dynamic affordance mutation (`add_*`/`remove_*`)
   and fake-async consumer methods.
 - `servient/src/{registry.rs, consumed.rs, cache.rs, interaction.rs, builder.rs,
@@ -126,9 +126,12 @@ impl ExposedThingHandle {
 - `expose()` (draft → exposed): validate the configured TD → **single** insert
   into the servable exposed registry (ThingSlot wrapping the handle's `Arc`
   state) → `ServerBinding::register_thing` (wholesale, P2) on every server
-  binding → `DirectoryPublisher::register` (best-effort). Binding route failure
-  is fatal (rollback the registry insert); directory failure is non-fatal
-  (warn). `produce()` does NOT insert — see the state machine above (AD8).
+  binding → `DirectoryPublisher::register` (best-effort). **Multi-binding
+  rollback (audit E12):** bindings register in deterministic order; if binding
+  `k+1` fails after `1..k` succeeded, `expose()` calls `unregister_thing` on the
+  already-registered `1..k` (reverse order), then removes the registry insert,
+  and returns the fatal `Err`. Directory failure is non-fatal (warn).
+  `produce()` does NOT insert — see the state machine above (AD8).
 - `destroy()` (exposed → removed) — full quiescing (audit defect AD15):
   1. `ServerBinding::unregister_thing` on every binding (routes-first → no new
      requests).
@@ -142,7 +145,10 @@ impl ExposedThingHandle {
   5. `DirectoryPublisher::unregister` (best-effort).
   The Thing is **gone** (not back to draft); re-`produce` to re-expose.
   `destroy(own_id)` from within a handler = step 3 is that handler itself ⇒
-  deferred removal until it returns.
+  deferred removal until it returns. **Idempotent (audit E13):** `destroy()` on
+  an already-removed or never-exposed Thing is a **no-op returning `Ok`**, never
+  an error; concurrent `destroy()` calls serialize via the registry lock and one
+  performs the teardown while the other(s) no-op.
 
 ### Step 3.2.1 — `discover()` sync/async boundary (audit defect AD10)
 
@@ -237,8 +243,14 @@ Single async `InboundDispatcher`:
   Reentrancy-safe (v4.0 §4.7).
 - Missing handler slot → `CoreError::MissingHandler { target, operation }` →
   `InboundResponse.error` → binding maps to status (P2 `error_status`).
-- Bulk meta-operations (`readallproperties`, etc.) fan out across handlers and
-  combine (retained from PLAN C6).
+- Bulk meta-operations (`readallproperties`, `readmultipleproperties`,
+  `writeallproperties`, `writemultipleproperties`) fan out across handlers and
+  return a **per-property map** `BTreeMap<PropertyName, Result<InteractionOutput,
+  CoreError>>` (audit E4 — partial-failure semantics aligned with Scripting API
+  `readAllProperties`): one property's handler error does **not** fail the whole
+  batch; the failing property's entry carries its `Err`, the rest carry their
+  `Ok` values. `subscribeallevents`/`unsubscribeallevents` return a map of
+  per-event `Result<Subscription, CoreError>` likewise.
 
 ### Step 3.7 — Real async `ConsumedThingHandle`
 
@@ -261,6 +273,13 @@ fake `*_async` delegation (PLAN M8) — the methods ARE async now. Form selectio
 binding instance is reused via `Arc` clone (addendum §9.4). Directory-driven
 invalidation (addendum §3) retained: Servient-mediated
 `ConsumedThingRegistry::invalidate(id)` after directory `update`/`unregister`.
+**In-flight subscriptions on an invalidated consumed Thing (audit E7):**
+invalidation closes the wire `SubscriptionGuard` for each open
+observe/subscribe on that Thing; the corresponding `Subscription` queue is
+**terminated** — `poll_next`/`Stream::next` returns `None` (clean end) after
+draining any already-buffered samples, and a `SubscriptionTerminated { reason:
+Invalidated }` is observable via the overflow/diagnostic counter. No silent
+infinite-block: consumers see a defined end.
 
 ### Step 3.8 — `EventBroker` wiring
 
@@ -362,7 +381,7 @@ shape compiles.
 
 ## Risks
 
-- `handle.rs` is 1520 lines and tightly coupled to the current `<D>` + dynamic
+- `handle.rs` is 1444 lines and tightly coupled to the current `<D>` + dynamic
   affordance model. The rewrite is the largest single file change in P3; split
   it into `handle/exposed.rs` + `handle/consumed.rs` during the rewrite (per
   AGENTS.md module guidance) rather than preserving one mega-file.
