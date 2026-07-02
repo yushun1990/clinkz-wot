@@ -118,24 +118,32 @@ The standard WoT TD context should always be present. Extension vocabularies sho
 
 ## Scripting API Boundary
 
-`clinkz-wot` is positioned as a WoT Architecture 1.1 §8.8.1 *Native WoT
-Runtime*, not a WoT Scripting API user agent. Architecture 1.1 makes the
-Scripting API an optional building block (its own conformance note states it is
-"a WG Note which contains informative statements only"), and explicitly allows a
-Servient to expose a custom or native API instead of the Scripting API.
+> Aligned to v4.0 (`docs/baseline/engine-architecture-baseline.md` §0). The
+> earlier "Native WoT Runtime, Scripting API as design reference only"
+> positioning is **reversed**.
+
+`clinkz-wot` targets **WoT Scripting API Consumer/Producer/Discovery User Agent
+conformance** as a first-class goal (not merely a design reference). The
+`WoT` facade, `ExposedThing`, `ConsumedThing`, and `ThingDiscovery` surfaces
+follow the Scripting API method catalogue (see the conformance map in v4.0
+§10). Rust idiom (`Result` instead of throw, `impl Future` instead of Promise,
+owned buffers) is the *syntax*; the *method set, parameter semantics, and error
+model* follow the Scripting API.
 
 Consequences for this engine:
 
-- The compliance bar for a Thing is a conformant TD plus the protocol behavior
-  declared by its forms, not Scripting API callback semantics.
-- `clinkz-wot` reuses the Scripting API's method names and interaction model as
-  a *design reference* (`produce`, `consume`, `discover`, `read_property`,
-  `subscribe_event`, etc.), but does not claim Consumer/Producer/Discovery UA
-  conformance.
-- Deviations from the Scripting API surface — such as the pull-based
-  subscription model below, a richer error taxonomy that maps to HTTP-like
-  statuses, or the absence of a `fetch` factory — are intentional engine
-  choices, not conformance defects.
+- The compliance bar for a Thing is a conformant TD, the protocol behavior
+  declared by its forms, **and** faithful Scripting API interaction semantics.
+- Engine-specific deviations from the Scripting API surface are documented
+  explicitly (v4.0 §9), not hidden. The current documented deviations are:
+  - **Subscription delivery is a pull-queue** (`Subscription` drained by
+    `poll_next`/`Stream`), not a push callback — required for `no_std + alloc`
+    safety on a bare MCU (reentrancy / super-loop blocking).
+  - **Errors are `Result`, not thrown exceptions** (Rust idiom).
+  - **`fetchTD` / directory exploration are trait objects (`Discoverer`)**, not
+    a built-in `fetch` — the engine is protocol-neutral and the concrete
+    transport is injected.
+- No other deviations are permitted without an explicit entry in v4.0 §9.
 
 ## Subscription Delivery Model
 

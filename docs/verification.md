@@ -35,21 +35,26 @@ Run the embedded-ready crate checks whenever a crate that claims
 scripts/check-no-std.sh
 ```
 
-The script currently checks:
+The script is a **compile-check** (`cargo check --no-default-features`); it
+asserts the crate roots compile `no_std + alloc`. It does NOT exercise the
+`no_std` driving path at runtime (deferred with zenoh-pico). It currently
+checks:
 
 - `clinkz-wot-td`
-- `clinkz-wot-core` (includes the inbound surface: `ServerBinding`,
-  `AsyncServerBinding`, `InboundRequest`, `InboundResponse`, `EventBroker`,
-  `SecurityProvider::verify`)
+- `clinkz-wot-core` (v4.0 surface: `ServerBinding::try_accept`,
+  `ClientBinding` async, sync-primary handler traits + opt-in async twins,
+  `EventBroker`, `SecurityProvider::verify`)
 - `clinkz-wot-protocol-bindings`
 - `clinkz-wot-protocol-bindings-zenoh` (planning layer only;
   `ZenohServerBinding` is behind the `zenoh` feature)
 - `clinkz-wot-discovery`
-- `clinkz-wot-servient` (sync flavor with `poll_serve_sync`)
+- `clinkz-wot-servient` (v4.0 driving: `poll_serve` / `serve` /
+  `poll_serve_once`; `WotLock`; no `poll_serve_sync`, no `multithread`)
+- `clinkz-wot-codec-cbor`
 - `clinkz-wot-core --no-default-features --features async` (async `no_std`
-  flavor with `AsyncServerBinding`)
+  flavor — opt-in async handler twins)
 - `clinkz-wot-servient --no-default-features --features async` (async `no_std`
-  flavor with `poll_serve` / `serve`)
+  flavor)
 
 `scripts/check-embedded.sh` is the stable alias for the embedded verification
 entry point. It currently runs the same no-default-features checks.

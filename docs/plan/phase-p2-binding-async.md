@@ -88,19 +88,42 @@ skips target resolution and key-expr allocation.
 
 ### Step 2.5 — Zenoh server binding (`server.rs`)
 
-`ZenohServerBinding` adapts to the P0 `ServerBinding::poll_accept` boxed-future
-shape (resolved A3):
+`ZenohServerBinding` implements the P0 `ServerBinding` surface. **Main std path:
+direct push into the Servient's single bounded fan-in channel — no
+binding-internal accept queue** (audit defect AD1 + the unbounded-buffer risk
+AD6a). `try_accept` is the **no_std polled path only**.
 
 - readproperty / invokeaction via `declare_queryable`.
 - writeproperty via put-listener.
 - observeproperty / subscribeevent via publisher on key (`PublisherSink`
   wrapping `session.put`), fed by the `EventBroker`.
 - Route planning reuses the `no_std + alloc` planner (inbound direction).
-- **Accept queue: `tokio::mpsc` unbounded channel (resolved A3).** zenoh
-  queryable/put-listener callbacks `tx.send(InboundRequest)`; `poll_accept`
-  is `rx.recv().await` (mapped: `None` ⇒ binding shut down). The driving loop
-  (P3) `select_all`s over each binding's boxed `poll_accept` future; tokio
-  provides the executor + wakers on this std backend.
+- **std accept (main path):** at registration the Servient calls the trait's
+  `set_request_sink(sender)` (AD13) to hand the binding a `FanInSender`
+  clone (the Servient fan-in channel tx) — this is a formalized trait method,
+  not prose-only coupling. zenoh queryable/put-listener callbacks are **synchronous closures** (`move |query|
+  { … }` / `move |sample| { … }` — see current `server.rs:558,601`); they
+  **cannot `.await`**. So they build the `InboundRequest` and call
+  **`fanin_tx.try_send(req)` synchronously** (matches the existing
+  `async_tx.try_send(request)` + `handle_async_enqueue_result` pattern). The
+  channel is **bounded** (capacity configurable, sane default); on `Full` the
+  binding applies a **policy split by interaction kind** (audit defect AD9 — a
+  blanket drop-oldest is wrong for request/reply):
+  - **Request/response** (readproperty / writeproperty / invokeaction /
+    queryaction): the binding REJECTS with an explicit error reply synthesized
+    from the zenoh reply target and mapped via `error_status` (503-style), so
+    the client gets **immediate overload feedback** — NOT a silent drop/timeout
+    that would unfairly sacrifice the longest-waiting request.
+  - **Streaming / fire-and-forget** (events, property observes): drop-oldest +
+    overflow counter (latest is most valuable; consistent with the
+    `Subscription` model in v4.0 §4.6; observable for diagnostics).
+  **No `await` in the callback, no async-bridge task** (a bridge would
+  reintroduce the intermediate buffer AD6a removed), **no binding-internal
+  queue** — the bounded fan-in channel is the single buffer.
+- **no_std accept (polled path):** no executor ⇒ no callback push. The binding
+  implements `try_accept(&self) -> Option<InboundRequest>` that drains one
+  ready request directly from its transport poll. The Servient super-loop
+  polls `try_accept` per binding (see P3 §3.5).
 
 ### Step 2.6 — Remove dynamic-affordance API
 
@@ -125,11 +148,12 @@ all), restored. The P0 `ServerBinding` trait carries only the wholesale pair.
 Retained at the platform-hook boundary (`ZenohPicoPlatform` trait,
 `ZenohPicoTransport`, `ZenohPicoRequest`). Adopt the async `ClientBinding`
 signature (the platform hook returns a future resolved by the platform's
-polling model). **The `ServerBinding::poll_accept` model for the pico backend
-is deferred** (resolved A3): its poll-driven (synchronous-readiness) shape will
-be specified when the target hardware platform and C ABI polling model are
-confirmed (per PLAN.md "Defer zenoh-pico runtime injection"). Update
-`scripts/check-reserved-features.sh` expectations if the feature surface moves.
+polling model). **The `ServerBinding::try_accept` model for the pico backend
+is deferred** (server-side accept API on bare no_std is TBD): its poll-driven
+(synchronous-readiness) shape will be specified when the target hardware
+platform and C ABI polling model are confirmed (per PLAN.md "Defer zenoh-pico
+runtime injection"). Update `scripts/check-reserved-features.sh` expectations
+if the feature surface moves.
 
 ### Step 2.8 — Feature policy
 
@@ -148,20 +172,28 @@ the async `invoke`.
 
 ## Resolved Decisions
 
-- **A3 (poll_accept shape and primitives).** The `ServerBinding::poll_accept`
-  trait method returns a boxed future
-  (`Pin<Box<dyn Future<Output = InboundRequest> + Send + '_>>`) for
-  dyn-compatibility — `impl Future` is not dyn-compatible, and the Servient
-  stores `Vec<Arc<dyn ServerBinding>>`. The trait is runtime-neutral; each
-  backend implements `poll_accept` per its execution model:
-  - **std zenoh backend:** `tokio::mpsc` unbounded channel (waker-driven).
-    Callbacks `tx.send`; `poll_accept` = `rx.recv().await`. Channel > Notify
-    because it bundles queue + wake + close semantics; unbounded avoids
-    dropping already-accepted inbound requests.
-  - **zenoh-pico backend:** `poll_accept` model **deferred** with the hardware
-    platform. It will be poll-driven (synchronous-readiness check, no waker
-    dependency) to suit a bare `no_std` super-loop; the exact shape is
-    specified when the C ABI polling model is confirmed.
+- **AD1 / A3 (inbound accept = bounded fan-in, not boxed `poll_accept` +
+  `select_all`; AD6a unbounded-buffer risk).** Audit defect AD1 overturned the
+  earlier "boxed `poll_accept` future + `select_all`" design; the
+  unbounded-buffer follow-up (AD6a) removes the binding-internal queue
+  entirely. The single source of truth is the **Servient's bounded fan-in
+  channel**:
+  - **std zenoh backend (main path):** the binding receives a
+    `Sender<InboundRequest>` clone at registration and enqueues from its
+    **synchronous** zenoh callbacks via **`fanin_tx.try_send(req)`** — zenoh
+    callbacks are sync closures (`move |query| { … }`, `server.rs:558,601`) and
+    cannot `await`. Bounded capacity ⇒ on `Full` a **policy split by interaction
+    kind** (AD9): request/response is **rejected with an explicit error reply**
+    (mapped via `error_status`, immediate client feedback — not silent
+    drop/timeout); streaming/events use drop-oldest + overflow counter. **No
+    `await` in the callback, no async-bridge task (would reintroduce an
+    intermediate buffer), no binding-internal queue.** `try_accept` is unused on
+    std.
+  - **no_std zenoh-pico backend:** `try_accept(&self) -> Option<InboundRequest>`
+    drains one ready request directly from the transport poll (no executor, no
+    callback push); the Servient super-loop polls it per binding. Model
+    **deferred** with the hardware platform.
+  No per-binding boxed accept future, no `select_all`, no unbounded buffer.
 
 ### Open Questions
 

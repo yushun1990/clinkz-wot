@@ -75,8 +75,10 @@ Scope:
 - Retain owned `ThingId`, `CorrelationId`, `AffordanceTarget`, `InboundRequest`,
   `InboundResponse`, `BindingRequest` (v3.1 §1–§2).
 - Remove `ServerBinding::register_affordance` / `unregister_affordance`.
-- Single async `ServerBinding::poll_accept` (drop `poll_accept_sync` /
-  `AsyncServerBinding` split).
+- `ServerBinding` exposes a **sync non-blocking `try_accept`** + wholesale
+  `register_thing`/`unregister_thing` (drop `poll_accept`/`poll_accept_sync`/
+  `AsyncServerBinding`); the fan-in is a bounded channel (std) / `try_accept`
+  poll (no_std) — v4.0 §4.5.
 
 Entry criteria:
 
@@ -112,6 +114,9 @@ Scope:
 Entry criteria:
 
 - P0 core identity types (`ThingId`) are stable.
+- td re-exports `AbsoluteUri` at its crate root (`pub use
+  core::data_type::AbsoluteUri;`, AD11) — P1's public discovery surface
+  (`DiscoveryEndpoint`, `DirectoryRef`, `DirectoryQuery`) depends on it.
 
 Exit criteria:
 

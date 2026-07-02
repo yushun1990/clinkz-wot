@@ -653,29 +653,4 @@ impl ServerBindingTrait for FakeServerBinding {
             .unwrap()
             .push(thing_id.to_owned());
     }
-
-    fn register_affordance(
-        &self,
-        thing_id: &str,
-        target: &AffordanceTarget,
-        _td: &Thing,
-    ) -> Result<(), String> {
-        if self.route_registration_fails {
-            return Err(format!(
-                "affordance route registration failed for '{thing_id}'"
-            ));
-        }
-        self.registered_affordances
-            .lock()
-            .unwrap()
-            .push(format!("{thing_id}:{target:?}"));
-        Ok(())
-    }
-
-    fn unregister_affordance(&self, thing_id: &str, target: &AffordanceTarget) {
-        self.unregistered_affordances
-            .lock()
-            .unwrap()
-            .push(format!("{thing_id}:{target:?}"));
-    }
 }

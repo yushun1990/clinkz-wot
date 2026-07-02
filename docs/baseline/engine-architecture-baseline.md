@@ -108,6 +108,12 @@ Largely healthy. No public API change. Internal cleanups (tracked in
 - Extract shared Thing/ThingModel affordance validation helpers (deferred #7).
 - Convert free-form `String` error messages to structured enum variants where
   callers match programmatically (deferred #8).
+- **Re-export `AbsoluteUri` at the td crate root**
+  (`pub use core::data_type::AbsoluteUri;`) — audit defect AD11: P1 discovery
+  uses `AbsoluteUri` as a public type (`DiscoveryEndpoint`, `DirectoryRef`,
+  `DirectoryQuery`); it is already defined at `core/data_type.rs:86` and
+  reachable via `data_type::AbsoluteUri`, but the root re-export is a hard P1
+  prerequisite, not an open question.
 
 ## 4. Tier 1 — `clinkz-wot-core` (Interaction Core) — REWRITE
 
@@ -130,11 +136,11 @@ types:
 
 ### 4.2 Handler model — sync primary, opt-in async
 
-The nine synchronous single-method handler traits plus their three async twins
-(`core/src/thing.rs`) are collapsed to a **coherent, consolidated handler
-model**: one trait per interaction operation, with **synchronous handlers as
-the primary, zero-allocation path** and **async handlers as an opt-in variant**
-for the rare I/O-bound cloud/gateway handler.
+The nine synchronous single-method handler traits (`core/src/thing.rs`) are
+collapsed to a **coherent, consolidated handler model**: one trait per
+interaction operation, with **synchronous handlers as the primary,
+zero-allocation path** and **an async twin per operation** (all nine, not a
+subset) as an opt-in variant for I/O-bound cloud/gateway handlers.
 
 **Why sync-primary.** A handler invocation is the inbound hot path — every
 remote property read / event subscription triggers one. On an always-on MCU
@@ -158,13 +164,17 @@ pub trait PropertyWriteHandler {
 // EventSubscribeHandler, EventUnsubscribeHandler — all plain sync `fn`.
 ```
 
-**Opt-in async variant.** A handler that legitimately needs to await (a cloud
-handler querying a DB, calling another service) cannot block the executor. For
-those, an async twin trait is provided behind the `async` feature
-(`#[async_trait]`, `+ Send + Sync`). Registration offers both; at most one
-flavor occupies a slot. The async path pays one `async_trait` `Box` per call,
-which is acceptable because the handler is I/O-bound (the Box is noise next to
-the awaited work).
+**Opt-in async variant (all nine operations).** A handler that legitimately
+needs to await (a cloud handler querying a DB, setting up a downstream
+subscription, calling another service) cannot block the executor. **Every one
+of the nine operations has an async twin** behind the `async` feature
+(`#[async_trait]`, `+ Send + Sync`) — observe/unobserve, query/cancel, and
+event subscribe/unsubscribe included, not just read/write/invoke. Partial
+coverage would force cloud/gateway handlers on the uncovered interactions to
+block the executor or bypass the unified abstraction. Registration offers both
+flavors per slot; at most one occupies a slot. The async path pays one
+`async_trait` `Box` per call, which is acceptable because the handler is
+I/O-bound (the Box is noise next to the awaited work).
 
 ```rust
 #[cfg(feature = "async")]
@@ -172,7 +182,10 @@ the awaited work).
 pub trait AsyncPropertyReadHandler: Send + Sync {
     async fn read(&self, input: &InteractionInput) -> CoreResult<InteractionOutput>;
 }
-// AsyncPropertyWriteHandler, AsyncActionHandler — opt-in, behind `async`.
+// Async twins for ALL nine operations, behind `async`:
+// AsyncPropertyRead/Write/Observe/UnsubscribeHandler,
+// AsyncActionHandler (invoke) + AsyncActionQuery/CancelHandler,
+// AsyncEventSubscribe/UnsubscribeHandler.
 ```
 
 **Consolidated storage.** One handler-set struct per affordance, with one slot
@@ -247,18 +260,60 @@ with interior mutability (v3.0 §2, v3.1 §2.4). The dynamic-affordance methods
 **removed** (decision 2). A binding registers a Thing's routes wholesale during
 `expose()` and unregisters them during `destroy()`.
 
-Because the driving layer is async, `ClientBinding::invoke` / `subscribe` are
-`async fn` (resolved A1), and `ServerBinding::poll_accept` returns a **boxed
-future** (`Pin<Box<dyn Future<Output = InboundRequest> + Send + '_>>`) for
-`dyn`-compatibility — the Servient stores `Vec<Arc<dyn ServerBinding>>` and
-`select_all`s their `poll_accept` futures (resolved A3). The dispatcher calls a
-sync handler directly (no allocation) or awaits an opt-in async handler
-(§4.2); the binding no longer needs a separate sync accept path. The
-`poll_accept_sync` / `AsyncServerBinding` split (addendum §6.2, §9.6) collapses
-to a single boxed-future `poll_accept`. The std zenoh backend implements it via
-a `tokio::mpsc` accept queue (waker-driven); the zenoh-pico backend's model is
-deferred with its hardware platform. The sync driving primitive (§7.2) manually
-polls the `poll_serve` future.
+`ClientBinding::invoke` / `subscribe` are `async fn` (resolved A1) — the
+outbound path; one `async_trait` `Box` per call, accepted as network-amortized.
+
+**Inbound accept uses a fan-in channel, not `select_all` over boxed
+`poll_accept` futures** (audit defect 1). `ServerBinding` exposes a single
+**synchronous, non-blocking** `try_accept`:
+
+```rust
+pub trait ServerBinding {
+    /// Non-blocking drain of one currently-ready inbound request, or `None`.
+    /// No `async_trait`, no `Box` — a plain virtual call. (no_std polled path.)
+    fn try_accept(&self) -> Option<InboundRequest>;
+    /// std fan-in injection (audit defect AD13): the Servient hands each
+    /// binding a clone of the bounded fan-in sender at registration; the
+    /// binding `try_send`s from its sync transport callbacks. Formalized on
+    /// the trait so the std main path is not prose-only implicit coupling.
+    #[cfg(feature = "std")]
+    fn set_request_sink(&self, sender: FanInSender<InboundRequest>);
+    fn register_thing(&self, thing_id: &ThingId, td: &Thing);
+    fn unregister_thing(&self, thing_id: &ThingId);
+}
+```
+
+The driving loop never builds a `select_all` wait set over per-binding boxed
+futures. Instead it uses a **single bounded fan-in channel** as the one and
+only inbound buffer:
+
+- **std path (main):** the Servient owns one **bounded** fan-in channel
+  (`FanInSender<InboundRequest>` / `Receiver`). At registration the Servient
+  calls `ServerBinding::set_request_sink(sender)` (AD13) to hand each binding a
+  sender clone; the binding enqueues inbound requests from its **synchronous**
+  transport callbacks via **`fanin_tx.try_send(req)`** — zenoh callbacks are
+  sync closures (`move |query| { … }`, `server.rs:558,601`) and cannot `.await`.
+  Bounded capacity ⇒ on `Full` a **policy split by interaction kind** (audit
+  defect AD9): request/response is **rejected with an explicit error reply**
+  (mapped via `error_status`, immediate client feedback — not silent
+  drop/timeout); streaming/events use drop-oldest + overflow counter — there is
+  **no binding-internal accept queue** (audit defect AD6a) and no async-bridge
+  task. The driving loop is `receiver.recv().await` — **O(1) per step, zero
+  per-binding boxing, one request per step**.
+- **no_std path:** there is no executor, so bindings cannot self-push; the
+  driving loop takes **one** request per tick with a **rotation cursor** so no
+  binding is starved:
+  `let start = cursor.fetch_add(1) % n; for i in 0..n { let b = snapshot[(start+i)%n]; if let Some(r) = b.try_accept() { dispatch(r); break; } }`
+  — the start offset advances each tick, delivering round-robin fairness;
+  strict one request per tick, no backlog drain (audit defects AD6b/AD7).
+  O(N_bindings) per tick but N is the protocol-binding count (typically 1–5),
+  each poll a plain sync virtual call.
+
+This removes the `poll_accept_sync` / `AsyncServerBinding` / boxed-`poll_accept`
+surface entirely (addendum §6.2, §9.6 superseded). On std, `try_accept` is
+unused (direct push is the main path); on no_std, the zenoh-pico backend's
+`try_accept` polls its transport and returns one ready request. The sync
+driving primitive (§7.2) drives the same one-step loop.
 
 ### 4.6 Subscription primitives
 
@@ -309,6 +364,31 @@ insert/remove/enumerate, an inner per-Thing `WotLock` held only across a single
 handler call. The reentrancy discipline (clone handler `Arc` out under a brief
 lock, release, then invoke) is retained.
 
+**Read-heavy-rare-write state uses lock-free snapshots, not `WotLock` reads**
+(audit defect 2). On `no_std`, `WotLock::with_read` degrades to a
+`critical_section::Mutex` exclusive entry (interrupt-disabled). Putting the
+registry lookup / handler-table lookup / subscription-state read — every
+inbound dispatch — behind that path would serialize them and lengthen the
+interrupt-disabled window, which is hostile to real-time MCU targets. So the
+read-mostly-write-rarely state avoids `WotLock` reads entirely and uses
+copy-on-write snapshots:
+
+- `ExposedThingRegistry` / `ConsumedThingRegistry` publish
+  `Arc<BTreeMap<ThingId, Arc<ThingSlot>>>` snapshots; a write (expose/destroy)
+  builds a new snapshot under a brief write-side critical section and atomically
+  swaps the published `Arc`; a **read is a single atomic load — no interrupt
+  disable**.
+- Per-Thing handler sets are `Arc<HandlerSet>`; dispatch clones the `Arc`
+  atomically (lock-free) and invokes outside any lock.
+- The server-binding list and `EventBroker` fan-out table already use this
+  `Arc<[...]>` snapshot pattern (PLAN §Performance Hardening); it is extended to
+  the registries and handler tables.
+
+`WotLock` is reserved for genuinely read-write-frequent or
+exclusive-semantics state (driving state, credential store, binding-factory
+registry generation counter). The snapshot pattern keeps the inbound hot read
+path lock-free on every build.
+
 ## 5. Tier 2 — Protocol Bindings
 
 ### 5.1 Shared binding (`clinkz-wot-protocol-bindings`)
@@ -344,8 +424,13 @@ the target shape:
 - **Exploration** resolves endpoints into TDs or directory sessions via
   `ThingDescriptionResolver`, `ThingLinkResolver`, `DirectoryReader`.
 - **Directory** is an Exploration service with continuation-based
-  `DirectorySession`, `CountMode`, `ConsistencyMode`, `ProjectionMode` — not a
-  local CRUD container.
+  `DirectorySession`, `CountMode`, `ProjectionMode` — not a local CRUD
+  container. **v1 ships `ConsistencyMode::Live` only** (audit defect 3);
+  `SessionStable` (snapshot-at-open) is deferred — it would re-introduce the
+  large-result-set materialization cost that lazy continuation was meant to
+  remove, especially for remote/large directories. `ConsistencyMode` stays
+  `#[non_exhaustive]` so `SessionStable` is added non-breakingly once its
+  snapshot semantics and remote-backend cost are resolved.
 - **Discovery process** (`ThingDiscoveryProcess`) is a lazy session handle, not
   a buffered `VecDeque<Thing>`.
 - **Publisher side** is lease/revision-aware (`DirectoryPublisher`).
@@ -410,6 +495,24 @@ tokio/embassy via `tokio::spawn(async move { svc.clone().serve().await })` —
 the `async move` block owns the cheaply-cloned `Servient` and `serve(&self)`
 borrows it (Pin makes the self-referential future sound).
 
+**Step contract — at most one inbound request per call** (audit defect AD6b).
+`poll_serve` and `poll_serve_once` each advance by **at most one** request —
+they never drain a ready backlog, so a bare super-loop stays cooperative (one
+request per tick, interleaved with other work).
+
+**Accept is a single bounded fan-in channel, not `select_all`** (audit defect
+AD1/AD6a, see §4.5). The driving step does NOT build a `select_all` over
+per-binding boxed `poll_accept` futures and there is **no binding-internal
+accept queue**. On std the binding enqueues from its **synchronous** zenoh
+callbacks via `fanin_tx.try_send(req)` (zenoh callbacks cannot `.await`;
+bounded capacity — on `Full` request/response is rejected with an explicit
+error reply and streaming/events drop-oldest + overflow, see AD9); the loop
+`receiver.recv().await`s the single bounded fan-in channel (O(1), one request
+per step). On bare no_std it takes one request per tick
+`for b in snapshot.rotate_from(cursor) { if let Some(r) = b.try_accept() {
+dispatch(r); cursor.advance_past(b); break; } }` (rotation cursor below;
+O(N_bindings), sync, no boxing, no drain).
+
 The bare super-loop usage:
 
 ```rust
@@ -450,14 +553,31 @@ impl ExposedThingHandle {
 
 There is **no** `add_property` / `remove_property` / `add_action` / `add_event`
 after `expose()`. Handlers are attached between `produce()` and `expose()`
-(this is the Scripting API produce→configure→expose flow). `expose()` registers
-all inbound routes wholesale and publishes the TD; the TD is immutable
-thereafter until `destroy()`. `destroy()` from within a Thing's own handler
+(this is the Scripting API produce→configure→expose flow). **Lifecycle state
+machine (AD8):** `produce()` creates a draft handle whose `Arc` state (TD +
+handler slots) lives in **no registry**; `expose()` is the **single** insertion
+into the servable exposed registry (ThingSlot wrapping that `Arc` state) +
+route registration + TD publish; `destroy()` is the **single** removal (Thing
+**gone**, not back to draft — re-`produce` to re-expose). One insertion, one
+removal, no second "becomes a registry thing" point. `expose()` registers all inbound routes
+wholesale and publishes the TD; the TD is immutable thereafter until
+`destroy()`. `destroy()` from within a Thing's own handler
 uses the deferred-removal rule (v3.0 §7), retained.
 
 The dynamic-affordance network propagation (addendum §9.2), directory
 re-publish-on-mutation, and `register_affordance`/`unregister_affordance` are
 all removed.
+
+**`discover()` sync/async boundary (audit defect AD10).**
+`Servient::discover(&self, filter) -> ThingDiscoveryProcess` is **synchronous
+and returns immediately**, and so is `Discoverer::discover()` — both are sync
+entry points. The `ThingDiscoveryProcess` is lazy: it stashes the reader +
+query (`Pending`), and the real async work (`DirectoryReader::open_search().await`
++ Introduction/Exploration) happens in the **first `next()`** on the process
+(which is async; `Pending`→`Open` on first call). No network/directory work at
+construction (matches the WoT Scripting API `discover()` → lazy `ThingDiscovery`
+model). `Discoverer::request_thing_description()` stays async (a concrete TD
+fetch IS a network round-trip).
 
 ### 7.4 ConsumedThing — real async
 
@@ -549,21 +669,32 @@ No other deviations are permitted without an explicit entry here.
 The per-interaction hot path must be allocation-light and lock-bounded:
 
 - **Affordance addressing** uses `Arc<str>` (already done, retained).
-- **Handler invocation** clones one `Arc<dyn Handler>` out of a per-Thing
-  handler-set map under a brief lock, releases the lock, then invokes. The
-  primary sync handler path is a direct virtual call — **zero per-interaction
-  heap allocation**. The opt-in async handler path pays one `async_trait` `Box`
-  per call (acceptable: the handler is I/O-bound).
+- **Handler invocation** clones one `Arc<dyn Handler>` from a per-Thing
+  handler-set **snapshot** (`Arc<HandlerSet>`, lock-free atomic load — audit
+  defect 2), then invokes. The primary sync handler path is a direct virtual
+  call — **zero per-interaction heap allocation**. The opt-in async handler
+  path pays one `async_trait` `Box` per call (acceptable: the handler is
+  I/O-bound).
+- **Inbound accept** is a single **bounded** fan-in channel on std (O(1)
+  `recv`, zero boxing; binding enqueues via sync `try_send` from zenoh
+  callbacks — they cannot `await`; on `Full` request/response is rejected with
+  an explicit error reply, streaming/events drop-oldest + overflow — no
+  binding-internal queue, AD6a/AD9) and a sync `try_accept` poll on no_std (one
+  request per tick, rotation cursor, O(N_bindings), no boxing — AD6b). No
+  `select_all`, no per-binding boxed `poll_accept` future (audit defect AD1).
+- **Registry / handler-table / subscription-state reads** are lock-free
+  `Arc`-snapshot loads; no `WotLock::with_read` (no interrupt disable) on the
+  hot read path (audit defect 2).
 - **Outbound form/binding plan** is interned in the consumed registry entry
   (addendum §9.4 retained); repeated consumed interactions reuse the cached
   binding instance via `Arc` clone — no `make_binding`, no plan recompute.
 - **Event fan-out** shares `Payload` bytes via `Arc<[u8]>` (retained); media
   metadata may move to `Arc<str>` if profiling warrants (deferred #1).
-- **Lock contention** is bounded by the two-level model: registry lock is
-  coarse but rare (expose/destroy only); per-Thing lock is brief. The single
-  unified lock primitive removes the `multithread` feature coordination cost.
-- **Directory queries** are continuation-based (one batch + token), not
-  full-table scan with `offset+total` (discovery refactor).
+- **Lock contention** is bounded: `WotLock` is reserved for read-write-frequent
+  / exclusive-semantics state; read-heavy-rare-write state uses snapshots.
+- **Directory queries** are continuation-based (one batch + token), `Live`
+  consistency only in v1, not full-table scan with `offset+total` (discovery
+  refactor; audit defect 3).
 
 ## 12. Sequencing
 
@@ -616,5 +747,25 @@ Each phase is independently shippable behind the workspace build.
 | D3 | Async/sync model | Async driving/transport layer; sync handlers primary (zero-alloc hot path) with opt-in async handlers (feature/cloud); sync driving is a manual-poll super-loop adapter. (§4.2, §7.2) |
 | D4 | Lock primitive | `WotLock<T>`: `Arc`-backed portable handle, `std::sync` / `critical_section`; renames `MapLock`; `multithread` feature removed. (§4.7) |
 | D5 | Thing abstractions | Concrete `LocalExposedThing`/`BoundConsumedThing`; single-impl traits removed. (§4.1) |
-| D6 | Handler storage | One consolidated handler-set per affordance; sync traits primary, async twins opt-in per Scripting API method. (§4.2) |
+| D6 | Handler storage | One consolidated handler-set per affordance; sync traits primary, async twins (all 9 ops) opt-in per Scripting API method. (§4.2) |
 | D7 | Discovery | Execute the Introduction/Exploration/session refactor; `Servient` holds `Discoverer` trait object. (§6, §7.1) |
+
+### Audit defect resolutions (locked)
+
+| Defect | Topic | Resolution |
+|---|---|---|
+| AD1 | Inbound accept fan-in | Drop boxed `poll_accept` + `select_all`; fan-in channel (std, O(1)) + sync `try_accept` (no_std, O(N_bindings), no boxing). (§4.5, §7.2) |
+| AD6a | Unbounded accept buffer | Single **bounded** fan-in channel (capacity configurable); std bindings enqueue from **synchronous** zenoh callbacks via `try_send` (callbacks cannot `await`); on `Full` the policy is split by interaction kind (AD9); **no binding-internal queue**, no async-bridge task. (§4.5, §7.2) |
+| AD6b | `poll_serve_once` step semantics | Strict bounded step: at most ONE inbound request per `poll_serve`/`poll_serve_once` call; no backlog drain (no_std `if let … break`, not `while let`). (§7.2) |
+| AD7 | no_std poll-loop fairness | Restore a lightweight `AtomicUsize` rotation cursor for the no_std `try_accept` poll loop (the old "select_all-inherent fairness" rationale died with `select_all`); start offset advances each tick. (§4.5, §7.2) |
+| AD8 | produce/expose registry insertion | `produce()` creates a draft handle only (no registry insert); `expose()` is the SINGLE insertion into the servable exposed registry. Closes the lifecycle state machine: draft → exposed → removed. (§7.3) |
+| AD9 | Overload policy for request/reply | On fan-in `Full`: request/response interactions are **rejected with an explicit error reply** (mapped via `error_status`, immediate client feedback); only streaming/events use drop-oldest + overflow. No silent drop/timeout as the request/reply default. (§4.5, §11) |
+| AD10 | `discover()` sync/async boundary | `Servient::discover()` AND `Discoverer::discover()` are both **sync**, returning a lazy `ThingDiscoveryProcess`; the async `DirectoryReader::open_search()` is deferred to the first async `next()`. No network/directory work at construction. `request_thing_description()` stays async (real network fetch). (§6, §7.3) |
+| AD11 | `AbsoluteUri` exposure | td re-exports `AbsoluteUri` at its crate root as a hard P1 prerequisite (it was a P1 open question; P1's independent-compile promise rested on it). (§3) |
+| AD12 | Dynamic affordance surface removed from code | The `register_affordance`/`unregister_affordance` binding trait methods, the `ExposedThingHandle::{add,remove}_{property,action,event}` methods, their Servient propagation (`sync_added/sync_removed_affordance`), the zenoh per-affordance impls, and the dedicated tests are **deleted from the current code** (not just docs), closing the code↔baseline divergence. Workspace `cargo check --all-targets` and `cargo test --workspace` pass. |
+| AD13 | Fan-in sender injection formalized | The std fan-in `Sender` injection is a **trait method** `ServerBinding::set_request_sink(sender)` (std-gated), called by the Servient at registration — not prose-only "the binding receives a Sender clone". The driving layer drains; it does not own the overload policy (that stays the binding's AD9 contract). (§4.5, §7.2) |
+| AD6c | no_std verification overclaim | `check-no-std.sh` is compile-only; runtime no_std driving deferred with zenoh-pico. (§7.2, `docs/plan/phase-p3-servient.md`, `phase-p4-compliance.md`) |
+| AD2 | `WotLock` no_std read degradation | Read-heavy-rare-write state (registries, handler tables, subscription state) uses lock-free `Arc`-snapshot reads; `WotLock` reserved for read-write-frequent/exclusive state. (§4.7, §11) |
+| AD3 | `SessionStable` snapshot cost | v1 ships `ConsistencyMode::Live` only; `SessionStable` deferred (`#[non_exhaustive]`). (§6) |
+| AD4 | Async handler coverage | Async twins for ALL 9 interaction operations, not just read/write/invoke. (§4.2) |
+| AD5 | Conservative compliance matrix | P4 build-checks all valid feature combinations per crate; tests a representative subset. (`docs/plan/phase-p4-compliance.md`) |

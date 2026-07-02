@@ -38,7 +38,7 @@ use alloc::vec::Vec;
 use clinkz_wot_core::AsyncServerBinding;
 use clinkz_wot_core::identity::CorrelationId;
 use clinkz_wot_core::{
-    AffordanceTarget, AuthMaterial, EventBroker, EventName, InboundRequest, InboundResponse,
+    AffordanceTarget, AuthMaterial, EventBroker, InboundRequest, InboundResponse,
     InteractionInput, Payload, PublisherSink, ServerBinding, ThingId,
 };
 use clinkz_wot_td::data_type::Operation;
@@ -463,65 +463,6 @@ impl ServerBinding for ZenohServerBinding {
             for (_, declared) in by_affordance {
                 undeclare_routes(declared);
             }
-        }
-    }
-
-    fn register_affordance(
-        &self,
-        thing_id: &str,
-        target: &AffordanceTarget,
-        td: &Thing,
-    ) -> Result<(), String> {
-        let key = affordance_key(target);
-        let broker = self.event_broker.lock().map_err(|e| e.to_string())?.clone();
-        // Plan only this affordance's routes instead of scanning all forms.
-        let planned = plan_inbound_routes_for_target(thing_id, td, target)?;
-        let mut declared = Vec::new();
-        for route in planned {
-            match self.declare_planned_route(route, thing_id, &broker) {
-                Ok(Some(d)) => declared.push(d),
-                Ok(None) => {}
-                Err(err) => {
-                    undeclare_routes(declared);
-                    return Err(err);
-                }
-            }
-        }
-        // Insert/replace under a brief lock. `insert` returns any prior entry
-        // for this affordance, which we undeclare to avoid leaking it.
-        let prior = self
-            .routes
-            .lock()
-            .map_err(|e| e.to_string())?
-            .entry(thing_id.to_string())
-            .or_default()
-            .insert(key, declared);
-        if let Some(prior) = prior {
-            undeclare_routes(prior);
-        }
-        Ok(())
-    }
-
-    fn unregister_affordance(&self, thing_id: &str, target: &AffordanceTarget) {
-        let key = affordance_key(target);
-        // Drop broker sinks for event / observable-property affordances.
-        let broker_name = match target {
-            AffordanceTarget::Event(name) | AffordanceTarget::Property(name) => Some(&**name),
-            _ => None,
-        };
-        if let Some(name) = broker_name
-            && let Ok(broker) = self.event_broker.lock()
-            && let Some(broker) = broker.as_ref()
-        {
-            broker.remove_event(&ThingId::from(thing_id), &EventName::from(name));
-        }
-        let removed = self.routes.lock().ok().and_then(|mut routes| {
-            routes
-                .get_mut(thing_id)
-                .and_then(|thing_routes| thing_routes.remove(&key))
-        });
-        if let Some(removed) = removed {
-            undeclare_routes(removed);
         }
     }
 
@@ -985,27 +926,6 @@ fn plan_inbound_routes(thing_id: &str, td: &Thing) -> Result<Vec<PlannedRoute>, 
     Ok(routes)
 }
 
-/// Plans inbound routes for a single target affordance only, avoiding the
-/// O(all_forms) scan of [`plan_inbound_routes`] when the caller knows exactly
-/// which affordance was added.
-fn plan_inbound_routes_for_target(
-    thing_id: &str,
-    td: &Thing,
-    target: &AffordanceTarget,
-) -> Result<Vec<PlannedRoute>, String> {
-    let mut routes = Vec::new();
-    for (target, operation, form, zenoh_target) in
-        iter_zenoh_forms_for_target(td, target).map_err(|e| e.to_string())?
-    {
-        if let Some(route) =
-            build_planned_route(thing_id, td, target, operation, form, zenoh_target)?
-        {
-            routes.push(route);
-        }
-    }
-    Ok(routes)
-}
-
 /// Builds a single [`PlannedRoute`] from resolved form metadata. Returns
 /// `Ok(None)` for operations that need no route (e.g. `Unsubscribe`).
 fn build_planned_route(
@@ -1127,61 +1047,6 @@ fn collect_zenoh_forms<'a>(
         }
     }
     Ok(())
-}
-
-/// Collects zenoh-targeting forms for a single target affordance only,
-/// avoiding the O(all_forms) scan of [`iter_zenoh_affordance_forms`] when the
-/// caller knows exactly which affordance is being registered.
-fn iter_zenoh_forms_for_target<'a>(
-    td: &'a Thing,
-    target: &AffordanceTarget,
-) -> ZenohBindingResult<Vec<(AffordanceTarget, Operation, &'a Form, ZenohFormTarget)>> {
-    let mut result = Vec::new();
-    match target {
-        AffordanceTarget::Thing => {
-            if let Some(forms) = &td.forms {
-                collect_zenoh_forms(td, forms, FormContext::Thing, target.clone(), &mut result)?;
-            }
-        }
-        AffordanceTarget::Property(name)
-            if let Some(properties) = &td.properties
-                && let Some(property) = properties.get(&**name) =>
-        {
-            collect_zenoh_forms(
-                td,
-                &property._interaction.forms,
-                FormContext::Property(property),
-                target.clone(),
-                &mut result,
-            )?;
-        }
-        AffordanceTarget::Action(name)
-            if let Some(actions) = &td.actions
-                && let Some(action) = actions.get(&**name) =>
-        {
-            collect_zenoh_forms(
-                td,
-                &action._interaction.forms,
-                FormContext::Action(action),
-                target.clone(),
-                &mut result,
-            )?;
-        }
-        AffordanceTarget::Event(name)
-            if let Some(events) = &td.events
-                && let Some(event) = events.get(&**name) =>
-        {
-            collect_zenoh_forms(
-                td,
-                &event._interaction.forms,
-                FormContext::Event(event),
-                target.clone(),
-                &mut result,
-            )?;
-        }
-        _ => {}
-    }
-    Ok(result)
 }
 
 // ---------------------------------------------------------------------------

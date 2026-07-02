@@ -131,32 +131,6 @@ pub trait ServerBinding {
     /// destroy step 1).
     fn unregister_thing(&self, thing_id: &str);
 
-    /// Incrementally registers inbound routes for a single affordance added to
-    /// an already-exposed Thing at runtime (W3C Scripting API dynamic
-    /// affordance lifecycle). `td` is the current (post-mutation) Thing
-    /// Description so the binding can look up the affordance's forms.
-    ///
-    /// The default implementation is a no-op: bindings that do not support
-    /// incremental route registration keep only the routes declared at
-    /// [`register_thing`](Self::register_thing) time. Bindings that serve
-    /// network requests (e.g. zenoh) override this to declare the new
-    /// affordance's routes so it becomes remotely reachable.
-    fn register_affordance(
-        &self,
-        _thing_id: &str,
-        _target: &AffordanceTarget,
-        _td: &Thing,
-    ) -> Result<(), String> {
-        Ok(())
-    }
-
-    /// Incrementally unregisters inbound routes for a single affordance removed
-    /// from an exposed Thing at runtime.
-    ///
-    /// The default implementation is a no-op (routes stay declared until
-    /// [`unregister_thing`](Self::unregister_thing)).
-    fn unregister_affordance(&self, _thing_id: &str, _target: &AffordanceTarget) {}
-
     /// Provides the shared [`EventBroker`] so the binding can register
     /// [`PublisherSink`](crate::PublisherSink)s for event and observable
     /// property fan-out during [`register_thing`](Self::register_thing).
@@ -196,21 +170,6 @@ pub trait AsyncServerBinding: Send + Sync {
     /// Unregisters inbound routes for a Thing being destroyed (baseline §10
     /// destroy step 1).
     fn unregister_thing(&self, thing_id: &str);
-
-    /// Incrementally registers inbound routes for a single affordance added at
-    /// runtime. See [`ServerBinding::register_affordance`].
-    fn register_affordance(
-        &self,
-        _thing_id: &str,
-        _target: &AffordanceTarget,
-        _td: &Thing,
-    ) -> Result<(), String> {
-        Ok(())
-    }
-
-    /// Incrementally unregisters inbound routes for a single affordance removed
-    /// at runtime. See [`ServerBinding::unregister_affordance`].
-    fn unregister_affordance(&self, _thing_id: &str, _target: &AffordanceTarget) {}
 
     /// Provides the shared [`EventBroker`] (see [`ServerBinding::set_event_broker`]).
     fn set_event_broker(&self, _broker: EventBroker) {}

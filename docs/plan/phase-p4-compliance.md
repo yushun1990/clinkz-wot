@@ -58,20 +58,29 @@ Verify the v4.0 §9 deviations behave as declared:
 
 ### Step 4.3 — Feature-matrix verification
 
-Build/check combinations, recorded in `docs/verification.md`:
+Audit defect AD5: a "focused matrix" lets feature-interaction defects surface
+late at edge combinations. So **build-check covers ALL valid feature
+combinations per crate; tests cover a representative subset**:
 
-- `cargo check` (default = std).
-- `cargo check --no-default-features` per embedded-ready crate.
-- `--features async` no-std flavor (embassy-style).
-- `--features zenoh` (std + real async zenoh).
-- `--features zenoh-pico` (no_std + alloc platform hook, fake platform).
-- `--features td2-preview` (TD 2.0 gate).
+- **Build-check (`cargo check`) — full combination matrix.** For each crate,
+  enumerate every valid combination of `std`/`async`/`zenoh`/`zenoh-pico`/
+  `td2-preview` (minus the mutually-exclusive `zenoh` ∩ `zenoh-pico` pair) and
+  `cargo check` it. ~28 combinations across the workspace — catches every
+  compile-time feature-interaction defect. Cheap enough for CI.
+- **Test (`cargo test`) — representative subset:** default (std);
+  `--no-default-features` (no_std + alloc); `--features async`; `--features
+  zenoh`; `--features zenoh-pico` (fake platform); `--features td2-preview`.
 - Mutually-exclusive `zenoh` ∩ `zenoh-pico` produces a clear diagnostic
   (update `check-reserved-features.sh`).
+- `docs/verification.md` records **which combinations are build-checked vs
+  test-covered**, leaving no blind combination.
 
 ### Step 4.4 — `scripts/check-no-std.sh` update
 
-Update for the v4.0 surfaces:
+`check-no-std.sh` is a **compile-check** (`cargo check --no-default-features`),
+not a runtime test — state this in the script header and in `verification.md`.
+It asserts the crate roots compile `no_std + alloc`; it does NOT exercise the
+no_std driving path at runtime (deferred with zenoh-pico). Update for v4.0:
 
 - Replace any `--features multithread` lines (removed in P0) — the lock is now
   always thread-safe; no `multithread` feature.
@@ -154,9 +163,11 @@ delivered).
 
 ## Risks
 
-- Feature-matrix explosions: with `std`/`async`/`zenoh`/`zenoh-pico`/
-  `td2-preview`, the combination space is large. Pin a focused matrix in
-  `docs/verification.md` rather than testing every combination.
+- Feature-matrix scope split: **build-check (`cargo check`) covers ALL valid
+  feature combinations per crate (~28); tests (`cargo test`) cover a
+  representative subset** (default, no-default-features, async, zenoh,
+  zenoh-pico, td2-preview). Do not run the full combination matrix under
+  `cargo test` — record the split in `docs/verification.md` so the build-checked-vs-test-covered boundary is explicit.
 - Reversing the Scripting API positioning in `wot-compliance.md` touches a
   load-bearing doc; ensure every backreference (PLAN, technical-spec, baseline)
   is consistent after the edit.

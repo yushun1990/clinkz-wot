@@ -112,7 +112,15 @@ pub enum DirectoryFilter {
 #[non_exhaustive]
 pub enum CountMode { None, Estimate, Exact }
 #[non_exhaustive]
-pub enum ConsistencyMode { Live, SessionStable }
+pub enum ConsistencyMode {
+    Live,
+    // SessionStable is NOT shipped in v1 (audit defect AD3): it snapshots the
+    // matching id set at open time, re-introducing the large-result-set
+    // materialization cost (memory peak + first-batch latency) that lazy
+    // continuation was meant to remove — especially for remote/large
+    // directories. Added non-breakingly once its snapshot semantics and
+    // remote-backend cost are resolved.
+}
 #[non_exhaustive]
 pub enum ProjectionMode { IdOnly, Summary, FullThingDescription }
 ```
@@ -169,7 +177,11 @@ pub trait DiscoverySession: Send {
 
 `ThingDiscoveryProcess` adapts a `DirectorySession` (mapping `DirectoryItem` →
 `Thing` per `ProjectionMode`), or wraps a resolver/link flow. It is **lazy**:
-construction performs no network work; the first `next()` opens the session.
+construction (sync `Discoverer::discover()`) performs no network work; the
+session is opened inside the **first async `next()`** (which calls
+`DirectoryReader::open_search().await` on demand). The process holds an
+`enum { Pending(reader+query), Open(Box<dyn DiscoverySession>) }`; `next()`
+transitions Pending→Open on first call, then drains (audit defect AD10).
 
 `remaining()` is removed entirely. `stop()` / `error()` retained.
 
@@ -207,11 +219,17 @@ version counter + listener list. Gated behind `std` (uses `std::sync`).
 ### Step 1.9 — `Discoverer` facade (`discoverer.rs`)
 
 ```rust
-#[async_trait]
 pub trait Discoverer: Send + Sync {
-    async fn discover(&self, filter: DiscoveryFilter) -> DiscoveryResult<ThingDiscoveryProcess>;
-    async fn explore_directory(&self, dir: DirectoryRef, q: DirectoryQuery)
+    /// Synchronous: returns a LAZY `ThingDiscoveryProcess`. No network/directory
+    /// work happens here — the async Introduction/Exploration + session open is
+    /// deferred to the first `ThingDiscoveryProcess::next()` (which is async).
+    /// This makes `Servient::discover()` (sync) → `Discoverer::discover()` (sync)
+    /// → lazy process coherent (audit defect AD10).
+    fn discover(&self, filter: DiscoveryFilter) -> DiscoveryResult<ThingDiscoveryProcess>;
+    /// Synchronous, same lazy semantics as `discover`.
+    fn explore_directory(&self, dir: DirectoryRef, q: DirectoryQuery)
         -> DiscoveryResult<ThingDiscoveryProcess>;
+    /// Async: a concrete TD fetch IS a network round-trip, so it stays async.
     async fn request_thing_description(&self, url: &AbsoluteUri) -> DiscoveryResult<Thing>;
 }
 pub enum DiscoveryFilter { /* wraps DirectoryFilter + method hints */ }
@@ -229,8 +247,8 @@ pub enum DirectoryRef { Local, Url(AbsoluteUri) }
 `DirectoryWatch`-gated). It keeps the secondary indexes (Title, Property,
 Action, Event, Fragment) from the current hardening pass for O(log n)
 filtering, but serves via continuation sessions instead of `offset+total`.
-`SessionStable` sessions snapshot the matching id set at open time; `Live`
-sessions re-scan with a moving cursor.
+**v1 implements `Live` sessions only** (audit defect AD3): a moving-cursor
+re-scan, monotonic, lazy, no match-set snapshot. `SessionStable` is deferred.
 
 `get_ref` (borrowed lookup, no clone) is retained for internal use.
 
@@ -269,15 +287,30 @@ sessions are `Send` to stay spawnable; the in-memory backend is `Send + Sync`.
   backend (HTTP TDD with SPARQL, or a backend-specific query escape hatch)
   needs them. Rationale: shipping typed carriers that the only v1 backend (in-
   memory) cannot serve would be dead, untested code that misleads callers into
-  runtime `Unsupported` failures; `#[non_exhaustive]` gives the same forward-
+  runtime `Unsupported` failures;   `#[non_exhaustive]` gives the same forward-
   compatibility without the dead surface.
+- **AD3 (SessionStable snapshot cost).** v1 ships `ConsistencyMode::Live`
+  only. `SessionStable` (snapshot-at-open) would re-introduce large-result-set
+  materialization (memory peak + first-batch latency) that lazy continuation
+  removes — especially for remote/large directories. `ConsistencyMode` stays
+  `#[non_exhaustive]`; `SessionStable` is added non-breakingly once its
+  snapshot semantics and remote-backend cost are resolved.
+
+### Resolved Prerequisites
+
+- **AD11 (`AbsoluteUri` exposure — no longer open).** P1 uses `AbsoluteUri` as a
+  public type (`DiscoveryEndpoint`, `DirectoryRef`, `DirectoryQuery`). It is
+  defined at `clinkz-wot-td` `core/data_type.rs:86` and is `Clone` (cached
+  `fluent_uri` parse). **P0 re-exports it at the td crate root**
+  (`pub use core::data_type::AbsoluteUri;`, v4.0 §3) as a hard P1 prerequisite.
+  P1 consumes it as `clinkz_wot_td::AbsoluteUri`. This is now a locked
+  entry-criterion for P1, not an open question — P1's "independently
+  compilable + testable" promise rests on it.
 
 ### Open Questions
 
-1. **`AbsoluteUri` source.** `AbsoluteUri` currently lives in `clinkz-wot-td`
-   (TD crate) with a cached `fluent_uri` parse (PLAN §Performance Hardening).
-   P1 depends on it being re-exported and `Clone`able cheaply. Verify the TD
-   crate exposes it publicly; if not, P0 §3 TD cleanup surfaces it.
+(none currently — the `AbsoluteUri` exposure was the sole entry-criterion
+ambiguity and is now resolved by AD11.)
 
 ## Deliverables
 
@@ -291,8 +324,8 @@ sessions are `Send` to stay spawnable; the in-memory backend is `Send + Sync`.
 - Crate compiles `no_std + alloc` (root) and `std` (storage + watch).
 - `cargo test -p clinkz-wot-discovery` covers: filter→batch→continuation→next
   batch; `get`/`open_search`; publisher CRUD; projection modes; count modes
-  (None default, Exact opt-in); `SessionStable` monotonicity; `ThingDiscoveryProcess`
-  laziness.
+  (None default, Exact opt-in); `Live` monotonicity (no re-emit, moving
+  cursor); `ThingDiscoveryProcess` laziness.
 - No `ThingDirectory`/`DirectoryPage`/`DiscoveryMethod`/buffered-`ThingDiscovery`
   references remain.
 

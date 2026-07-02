@@ -34,6 +34,12 @@ Rewrite `core/src/sync.rs`:
 - Remove the `multithread` feature, `RefCell` backend, `UnsafeCell` backend,
   and the `MapLockError` std-poison surface (or retain minimal).
 - Remove `multithread` from `core/Cargo.toml` features.
+- **Snapshot-read primitive for hot read-heavy state** (audit defect AD2):
+  alongside `WotLock`, expose a copy-on-write snapshot helper
+  (`Arc<ImmutableMap>` publish + atomic-load read) for the registries and
+  handler tables whose reads must not disable interrupts on `no_std`. `WotLock`
+  is reserved for read-write-frequent / exclusive-semantics state (see P3
+  §3.1/§3.6).
 
 ### Step 0.2 — Identity and correlation types
 
@@ -54,9 +60,15 @@ Audit that no `MapLock` references remain in core.
   `PropertyWriteHandler`, `PropertyObserveHandler`, `PropertyUnsubscribeHandler`,
   `ActionHandler`, `ActionQueryHandler`, `ActionCancelHandler`,
   `EventSubscribeHandler`, `EventUnsubscribeHandler`.
-- Define **opt-in async twins** behind the `async` feature (`#[async_trait]`,
-  `+ Send + Sync`): `AsyncPropertyReadHandler`, `AsyncPropertyWriteHandler`,
-  `AsyncActionHandler` — for I/O-bound cloud/gateway handlers only.
+- Define **opt-in async twins for ALL 9 operations** behind the `async`
+  feature (`#[async_trait]`, `+ Send + Sync`): `AsyncPropertyReadHandler`,
+  `AsyncPropertyWriteHandler`, `AsyncPropertyObserveHandler`,
+  `AsyncPropertyUnsubscribeHandler`, `AsyncActionHandler`,
+  `AsyncActionQueryHandler`, `AsyncActionCancelHandler`,
+  `AsyncEventSubscribeHandler`, `AsyncEventUnsubscribeHandler` — observe/
+  unobserve, query/cancel, event subscribe/unsubscribe included, not just
+  read/write/invoke (audit defect AD4: partial coverage would force cloud/
+  gateway handlers on the uncovered ops to block the executor).
 - Remove the old nine sync traits' mechanical duplication (consolidated storage
   replaces it); the sync traits above ARE the primary surface.
 - Define consolidated handler-set storage: `PropertyHandlerSet`,
@@ -91,12 +103,21 @@ Audit that no `MapLock` references remain in core.
 - `ClientBinding { supports, async invoke, async subscribe }` (resolved A1) —
   outbound path; the `async_trait` `Box` per outbound call is acceptable
   (network-amortized), unlike the inbound handler path which stays sync.
-- `ServerBinding::poll_accept(&self) -> Pin<Box<dyn Future<Output = InboundRequest> + Send + '_>>`
-  — boxed future for dyn-compatibility (resolved A3). Single async accept;
-  remove `poll_accept_sync` and `AsyncServerBinding`.
-- Remove `register_affordance` / `unregister_affordance` (decision 2); replace
-  with wholesale `register_thing(thing_id, td)` / `unregister_thing(thing_id)`
-  (the binding declares/undeclares all routes for the Thing at once).
+- `ServerBinding` exposes a **synchronous, non-blocking `try_accept`** — no
+  boxed `poll_accept` future, no `select_all` (audit defect AD1):
+  `fn try_accept(&self) -> Option<InboundRequest>`, plus wholesale
+  `register_thing(thing_id, td)` / `unregister_thing(thing_id)`, plus a
+  **formalized std fan-in injection point**
+  `#[cfg(feature="std")] fn set_request_sink(&self, sender: FanInSender<InboundRequest>)`
+  (audit defect AD13 — the std main path is binding→channel `try_send`, so the
+  sender injection must be on the trait surface, not prose). The Servient calls
+  `set_request_sink` at registration (std) to hand each binding a sender clone;
+  on no_std there is no channel and the loop polls `try_accept` per binding —
+  see P3 §3.5. Remove `poll_accept_sync`, `AsyncServerBinding`, and the
+  boxed-`poll_accept` surface entirely.
+- Remove `register_affordance` / `unregister_affordance` (decision 2); the
+  wholesale `register_thing` / `unregister_thing` declares/undeclares all
+  routes for the Thing at once.
 - `InboundDispatcher` maps `InboundRequest` → handler dispatch →
   `InboundResponse`; calls the sync handler directly (no allocation) or awaits
   an opt-in async handler (§0.4).

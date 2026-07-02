@@ -131,6 +131,7 @@ pub mod thing;
 pub mod thing_model;
 pub mod validate;
 pub use core::data_type;
+pub use core::data_type::AbsoluteUri;
 
 mod components;
 mod flat;

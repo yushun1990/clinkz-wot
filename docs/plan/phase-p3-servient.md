@@ -11,8 +11,8 @@ This is the phase where the **workspace compiles whole again**.
 ## Entry Criteria
 
 - P0 core (sync-primary handlers, `WotLock`, concrete Thing types), P1 discovery
-  (`Discoverer`/`DirectoryPublisher`), P2 binding (async `ClientBinding`/
-  `ServerBinding`, wholesale route lifecycle) are stable.
+  (`Discoverer`/`DirectoryPublisher`), P2 binding (async `ClientBinding`;
+  **sync `ServerBinding::try_accept`** + wholesale route lifecycle) are stable.
 
 ## Current State (being replaced)
 
@@ -36,21 +36,26 @@ This is the phase where the **workspace compiles whole again**.
 
 ```rust
 pub struct Servient {
-    exposed: ExposedThingRegistry,            // WotLock<BTreeMap<ThingId, ThingSlot>>
-    consumed: ConsumedThingRegistry,           // WotLock<BTreeMap<ThingId, ConsumedThingEntry>>
-    server_bindings: WotLock<Vec<Arc<dyn ServerBinding>>>,
+    exposed: ExposedThingRegistry,            // Arc-snapshot BTreeMap (lock-free reads)
+    consumed: ConsumedThingRegistry,           // Arc-snapshot BTreeMap (lock-free reads)
+    server_bindings: BindingList,              // Arc<[...]> snapshot (lock-free reads)
+    inbound_fanin: Receiver<InboundRequest>,   // std: bindings self-push via set_request_sink; no_std: try_accept poll
+    inbound_fanin_tx: FanInSender<InboundRequest>, // std only; cloned into each binding at registration
     client_factories: BindingFactoryRegistry,  // generation-tracked, retained
     discoverer: Arc<dyn Discoverer>,
     directory_publisher: Option<Arc<dyn DirectoryPublisher>>,
     security: SecurityContext,
-    codecs: WotLock<Vec<Arc<dyn PayloadCodec>>>,
+    codecs: WotLock<Vec<Arc<dyn PayloadCodec>>>, // read-write-frequent → WotLock
     event_broker: EventBroker,
     shutdown: Arc<AtomicBool>,
 }
 ```
 
-`Servient` is `Clone` (cheap, `Arc`/`WotLock` clones), all methods `&self`,
-`Send + Sync`. `WotLock<T>` (from P0) replaces every `Arc<MapLock<T>>`.
+`Servient` is `Clone` (cheap, `Arc`/snapshot clones), all methods `&self`,
+`Send + Sync`. **Read-heavy-rare-write state (registries, binding list,
+handler tables) is published as `Arc` snapshots with lock-free reads; `WotLock`
+is reserved for read-write-frequent / exclusive-semantics state** (audit defect
+AD2 — avoids disabling interrupts on the hot read path on `no_std`).
 
 ### Step 3.2 — Facade (`WoT` surface)
 
@@ -63,9 +68,33 @@ impl Servient {
 }
 ```
 
-`produce`/`consume` validate the TD (well-formed, has `id`), insert into the
-registry, return a handle. `discover` delegates to `Discoverer::discover`.
-`fetch_td` delegates to `Discoverer::request_thing_description`.
+**Lifecycle state machine (audit defect AD8 — closed, single source of truth).**
+A produced Thing follows exactly one path, with **one** insertion and **one**
+removal, and the draft state lives in **no registry at all**:
+
+- **draft** — `produce()` validates the TD (well-formed, has `id`) and returns
+  an `ExposedThingHandle` whose `Arc` state (TD + handler slots) is **entirely
+  owned by the handle**. It is NOT in any registry/container, NOT remotely
+  servable, NOT discoverable. Local interactions (`read_property` on the
+  handle) dispatch directly to the handlers. Dropping a draft handle drops its
+  state — nothing to clean up.
+- **exposed** — `expose()` is the **single** mutation into shared state: it
+  atomically inserts a `ThingSlot` (wrapping the handle's `Arc` state) into the
+  servable `ExposedThingRegistry`, calls `register_thing` on every binding, and
+  publishes the TD. The handle now references that registry entry (it is an
+  "exposed handle"). Remotely servable + discoverable.
+- **removed** — `destroy()` is the **single** removal: unregisters routes,
+  removes the `ExposedThingRegistry` entry, unpublishes the TD. The Thing is
+  **gone** (NOT back to draft — matches Scripting API `destroy()`). The handle
+  is inert afterwards; re-`produce` to re-expose.
+
+`consume()` validates the TD and inserts into the **consumed** registry
+(consumed Things have no expose/destroy — drop the handle / unsubscribe).
+`discover` is synchronous and returns a lazy `ThingDiscoveryProcess`
+(§3.2.1). `fetch_td` delegates to `Discoverer::request_thing_description`.
+
+The earlier "destroy → back to draft (or full removal)" wording is withdrawn —
+it was ambiguous and contradicted AD8.
 
 ### Step 3.3 — Handles (drop `<D>`)
 
@@ -91,12 +120,28 @@ impl ExposedThingHandle {
 
 - **Remove** `add_property`/`add_action`/`add_event`/`remove_property`/
   `remove_action`/`remove_event` and all directory re-publish-on-mutation.
-- `expose()`: validate TD → insert registry entry →
-  `ServerBinding::register_thing` (wholesale, P2) on every server binding →
-  `DirectoryPublisher::register` (best-effort). Binding route failure is fatal
-  (rollback the registry insert); directory failure is non-fatal (warn).
-- `destroy()`: `ServerBinding::unregister_thing` → remove registry entry →
-  `DirectoryPublisher::unregister` (best-effort). Order: routes-first.
+- `expose()` (draft → exposed): validate the configured TD → **single** insert
+  into the servable exposed registry (ThingSlot wrapping the handle's `Arc`
+  state) → `ServerBinding::register_thing` (wholesale, P2) on every server
+  binding → `DirectoryPublisher::register` (best-effort). Binding route failure
+  is fatal (rollback the registry insert); directory failure is non-fatal
+  (warn). `produce()` does NOT insert — see the state machine above (AD8).
+- `destroy()` (exposed → removed): `ServerBinding::unregister_thing` → remove
+  registry entry → `DirectoryPublisher::unregister` (best-effort). Order:
+  routes-first. The Thing is **gone** (not back to draft); re-`produce` to
+  re-expose.
+
+### Step 3.2.1 — `discover()` sync/async boundary (audit defect AD10)
+
+`Servient::discover(&self, filter) -> ThingDiscoveryProcess` is **synchronous
+and returns immediately**, and so is `Discoverer::discover()` (P1 §1.9) — both
+are sync entry points. The `ThingDiscoveryProcess` is **lazy**: it stashes the
+reader + query (`Pending`); the real async `DirectoryReader::open_search().await`
++ Introduction/Exploration happens in the **first `next()`** on the process
+(async; `Pending`→`Open`). So no network/directory work happens at construction
+— matching the WoT Scripting API `discover()` → lazy `ThingDiscovery` model.
+This closes the half-sync/half-async gap (AD10): sync `Servient::discover()`
+calls sync `Discoverer::discover()` → lazy process; async only inside `next()`.
 - `destroy(own_id)` from within a handler uses deferred removal (`DrainFlag`
   semantics retained, simplified onto `WotLock`).
 
@@ -110,18 +155,43 @@ Single driving module replaces `driving_sync.rs` + `driving_async.rs`:
 
 ```rust
 impl Servient {
-    pub async fn poll_serve(&self) -> ServientResult<()>;     // one step
+    /// Processes AT MOST ONE inbound request, then returns. Native async.
+    pub async fn poll_serve(&self) -> ServientResult<()>;
     pub async fn serve(&self);                                 // loop until shutdown
+    /// Processes AT MOST ONE inbound request per call (strict bounded step),
+    /// under a caller Context. For bare no_std super-loops.
     pub fn poll_serve_once(&self, cx: &mut Context<'_>)
-        -> Poll<ServientResult<()>>;                           // bare no_std super-loop
+        -> Poll<ServientResult<()>>;
 }
 ```
 
-- `poll_serve`: snapshot `server_bindings` (`WotLock` read → `Arc<[...]>` clone),
-  `select_all` over each binding's boxed `poll_accept` future (resolved A3); on
-  accept, dispatch. Cross-Thing concurrency via a local `FuturesUnordered` for
-  in-flight dispatches (retained from addendum §9.6), no `tokio::spawn`
-  (Servient stays spawnable via local-task concurrency).
+**Step contract (audit defect AD6b — strict bounded step).** `poll_serve` and
+`poll_serve_once` each advance by **at most one inbound request** per call —
+they do NOT drain a ready backlog. This keeps the bare super-loop cooperative:
+one request per tick, interleaved with other super-loop work, never
+monopolizing the loop when many requests are ready.
+
+- `poll_serve`: **bounded fan-in accept, not `select_all` over boxed
+  `poll_accept` futures** (AD1). The Servient owns one **bounded** inbound
+  fan-in channel (`Receiver<InboundRequest>`). On std, bindings enqueue from
+  their **synchronous** zenoh   callbacks via `fanin_tx.try_send(req)` (callbacks
+  cannot `await`; sender injected via `set_request_sink` at registration, AD13;
+  no binding-internal queue, AD6a) and the loop is
+  `receiver.recv().await` — **O(1), zero per-binding boxing**. It takes ONE
+  request and dispatches it. **The driving layer does NOT define the
+  saturation policy** — on `Full`, the *binding* applies the AD9 dual-track
+  contract (request/response → explicit error reply; streaming/events →
+  drop-oldest + overflow). P3 must not re-state or flatten that contract
+  (audit defect: P3 previously wrote a uniform drop-oldest, contradicting P2). On bare no_std, the loop
+  does ONE round with a **rotation cursor** (audit defect AD7 — without a
+  cursor the fixed-order scan starves later bindings, contradicting any
+  fairness claim):
+  `let start = cursor.fetch_add(1) % n; for i in 0..n { let b = snapshot[(start+i)%n]; if let Some(r) = b.try_accept() { dispatch(r); break; } }`
+  — the start offset advances each tick, so across ticks every binding gets a
+  fair first-ready turn (no binding starved when another stays busy). Strict
+  one step per call (AD6b). The `server_bindings` snapshot is an `Arc<[...]>`
+  clone (lock-free load). Cross-Thing concurrency via a local `FuturesUnordered`
+  for in-flight dispatches (retained from addendum §9.6), no `tokio::spawn`.
 - `serve(&self)` (resolved A4): `while !shutdown.load() { poll_serve().await; }`
   with std-gated idle backoff. Spawn via
   `tokio::spawn(async move { svc.clone().serve().await })` — the `async move`
@@ -132,21 +202,26 @@ impl Servient {
   caller `Context` (noop-waker for pure super-loops). The bare super-loop usage
   is documented in v4.0 §7.2.
 - Delete `driving_sync.rs`, `driving_async.rs`, `DrivingState`,
-  `AsyncAcceptState`, the `AtomicUsize` round-robin cursor (async `select_all`
-  is inherently fair).
+  `AsyncAcceptState`. **Keep a lightweight `AtomicUsize` rotation cursor** for
+  the no_std poll-loop fairness (AD7); the old cursor deletion note assumed
+  `select_all`-inherent fairness, which no longer applies once `select_all`
+  was removed.
 
 ### Step 3.6 — Dispatch (`dispatch.rs`)
 
 Single async `InboundDispatcher`:
 
-- Resolve `Thing` from exposed registry by `thing_id`.
+- Resolve `Thing` from the exposed-registry **snapshot** (lock-free `Arc`
+  load — audit defect AD2; no `WotLock::with_read`, no interrupt disable on the
+  hot read path) by `thing_id`.
 - Resolve matched `Form` internally (security scheme lookup); never expose to
   handlers (v3.0 §11).
 - `verify_inbound` → `Principal` (or anonymous for NoSec); inject into handler
   `InteractionInput`.
-- Clone handler `Arc` out under brief per-Thing `WotLock`, release, then invoke
-  — sync handler is called directly (zero-alloc), opt-in async handler is
-  `.await`ed (one `Box`, I/O-bound). Reentrancy-safe (v4.0 §4.7).
+- Clone the handler `Arc` from the per-Thing handler-set snapshot
+  (`Arc<HandlerSet>`, lock-free), then invoke — sync handler is called directly
+  (zero-alloc), opt-in async handler is `.await`ed (one `Box`, I/O-bound).
+  Reentrancy-safe (v4.0 §4.7).
 - Missing handler slot → `CoreError::MissingHandler { target, operation }` →
   `InboundResponse.error` → binding maps to status (P2 `error_status`).
 - Bulk meta-operations (`readallproperties`, etc.) fan out across handlers and
@@ -210,7 +285,12 @@ Crate root + driving primitives (`poll_serve`/`poll_serve_once`) +
 registries + handles are `no_std + alloc`. `serve` loop, idle backoff,
 `std::eprintln!` diagnostics, host conveniences behind `std`. The async driving
 requires an executor on `no_std` (embassy) or manual `poll_serve_once` in a
-bare super-loop — both paths verified by `check-no-std.sh`.
+bare super-loop. **`check-no-std.sh` verifies COMPILATION only** (`cargo check
+--no-default-features` = the crate roots compile `no_std + alloc`); it does
+NOT exercise the no_std driving path at runtime, and there is no concrete
+`no_std` binding (zenoh-pico) to exercise it against in v1. Runtime
+verification of the no_std driving is deferred with the pico hardware
+platform (see Open Questions).
 
 ## Resolved Decisions
 
@@ -231,10 +311,12 @@ bare super-loop — both paths verified by `check-no-std.sh`.
 
 ### Open Questions
 
-1. **`poll_serve_once` correctness on bare no_std** remains coupled to the
-   zenoh-pico `poll_accept` model (deferred). When pico lands, verify that
-   `select_all` over pico's poll-driven `poll_accept` futures makes progress
-   under repeated `poll_serve_once(noop_waker)` calls.
+1. **`poll_serve_once` runtime correctness on bare no_std** is unverified in v1
+   (compile-only; coupled to the zenoh-pico `try_accept` model, deferred).
+   When pico lands, verify the strict one-step contract (`for b in snapshot {
+   if let Some(r) = b.try_accept() { dispatch(r); break; } }` under
+   `poll_serve_once(noop_waker)`) — one request advanced per tick, round-robin
+   fairness across bindings, no backlog drain.
 
 ## Deliverables
 

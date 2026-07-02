@@ -127,10 +127,6 @@ impl ThingSlot {
     pub(crate) async fn lock_async(&self) -> tokio::sync::MutexGuard<'_, ()> {
         self.async_lock.lock().await
     }
-
-    fn clear_inbound_cache(&self) {
-        self.inbound_security.with_recover(BTreeMap::clear);
-    }
 }
 
 /// Deterministic in-memory registry for locally exposed Things with two-level
@@ -184,22 +180,6 @@ impl ExposedThingRegistry {
         }
 
         slot.thing.with_recover(|opt| opt.as_mut().map(f))
-    }
-
-    /// Dispatches a TD mutation and clears cached inbound metadata for the
-    /// Thing so subsequent inbound requests re-resolve forms and security.
-    pub(crate) fn mutate<R>(&self, id: &str, f: impl FnOnce(&mut LocalThing) -> R) -> Option<R> {
-        let slot = self.things.with_read_recover(|map| map.get(id).cloned())?;
-
-        if slot.draining.get() {
-            return None;
-        }
-
-        let result = slot.thing.with_recover(|opt| opt.as_mut().map(f));
-        if result.is_some() {
-            slot.clear_inbound_cache();
-        }
-        result
     }
 
     /// Returns the [`Arc<ThingSlot>`] for `id` without dispatching, for use by

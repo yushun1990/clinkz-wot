@@ -24,20 +24,26 @@ Embedded-ready crates should support:
 - Owned inbound interaction model (`InboundRequest`, `InboundResponse`,
   `AffordanceTarget`, `BindingRequest`) that is `'static` and usable across
   spawnable boundaries (baseline v3.1 §2).
-- Sync inbound driving via `poll_serve_sync` on MCU super-loops (baseline
-  addendum §6.2). The native-async driving layer (`async` feature) is deferred.
-- `ServerBinding` trait is dyn-compatible, allowing `Vec<Arc<dyn ServerBinding>>`
-  storage in both sync and (future) async builds.
-- `MapLock` shared locking primitive in `clinkz-wot-core` usable across core
-  and servient.
-- **Multi-thread RTOS support** via the optional `multithread` feature:
-  `MapLock` switches from `RefCell` (single-thread) to
-  `UnsafeCell<T>` + `critical_section::with` (interrupt-safe mutual
-  exclusion). `DrainFlag` switches from `Cell<bool>` to `AtomicBool`. This
-  enables the engine to run safely across RTOS tasks (FreeRTOS, Zephyr) on
-  multi-core MCU gateways without requiring `std` or async runtime.
-  Enable with `--features multithread` on `clinkz-wot-core` or
-  `clinkz-wot-servient` (propagates to core).
+- Sync inbound driving via `poll_serve_once` on MCU super-loops (v4.0 §7.2):
+  one request per tick, rotation-cursor fairness, no backlog drain. The
+  native-async driving layer (`async` feature) is the canonical model; bare
+  `no_std` uses the manual-poll primitive.
+- `ServerBinding` exposes a **synchronous `try_accept`** (no boxed
+  `poll_accept`, no `select_all`) and wholesale `register_thing`/
+  `unregister_thing` (v4.0 §4.5).
+- `WotLock<T>` locking primitive in `clinkz-wot-core` usable across core and
+  servient. Read-heavy-rare-write state (registries, handler tables) uses
+  lock-free `Arc`-snapshot reads; `WotLock` (std `RwLock` / no_std
+  `critical_section::Mutex`) is reserved for read-write-frequent state.
+- Handlers are **synchronous and primary** (zero per-call allocation on the
+  inbound hot path); opt-in async twins behind the `async` feature serve
+  I/O-bound cloud/gateway handlers (v4.0 §4.2).
+- **Multi-thread RTOS support is inherent, not feature-gated.** The unified
+  lock primitive is always thread-safe (std `RwLock` / no_std
+  `critical_section::Mutex`); the prior `multithread` feature, `RefCell`/
+  `UnsafeCell` split, and `DrainFlag`/`Cell` toggles are removed (v4.0 §4.7).
+  The engine runs safely across RTOS tasks (FreeRTOS, Zephyr) on multi-core MCU
+  gateways without `std` or an async runtime.
 
 ## Non-Goals for v1
 
@@ -102,45 +108,32 @@ allocation-backed directory capabilities usable without `std`.
 `discovery::storage` is available only with the `std` feature for shared
 storage adapters and future production storage extension points.
 
-`servient` exposes no-std Servient APIs through the crate root. The
-single-generic `Servient<D>` is `Clone` with `&self` methods, using `MapLock`
-from `clinkz-wot-core` for interior mutability. The sync driving layer
-(`poll_serve_sync`) is available without `std` and is intended to be called as
-a stepwise primitive from the MCU super-loop: one call processes at most one
-inbound request. Std-only Servient integrations (`serve_sync`,
-`std::eprintln!` diagnostics, host idle backoff) stay behind the `std` feature.
-This keeps the sync API usable in both embedded and host deployments without
-forcing the no-std super-loop semantics onto host runtimes. The native-async
-driving layer and `Send + Sync` lock primitives are deferred behind the
-`async` feature (SR-P2.2). The project avoids naming these modules `core`
-because `clinkz-wot-core` already denotes the
-protocol-neutral engine trait crate.
+`servient` exposes no-std Servient APIs through the crate root. `Servient`
+(non-generic in v4.0; the old `Servient<D>` is dropped) is `Clone` with `&self`
+methods, using `WotLock<T>` from `clinkz-wot-core` for interior mutability and
+lock-free `Arc`-snapshot reads for the read-heavy registries/handler tables.
+The driving layer is async-first: `poll_serve` / `serve` are the canonical
+primitives, and `poll_serve_once` is the bare-`no_std` manual-poll primitive
+(one request per tick, rotation-cursor fairness) intended to be called from the
+MCU super-loop. Std-only Servient conveniences (`serve` host loop with idle
+backoff, `std::eprintln!` diagnostics) stay behind the `std` feature. The
+project avoids naming these modules `core` because `clinkz-wot-core` already
+denotes the protocol-neutral engine trait crate.
 
-## MCU Gateway Path: Three-Layer Plan
+## MCU Gateway Path: Two-Layer Plan
 
 For MCU gateways (ESP32, STM32, nRF52) that serve multiple Things and need
 concurrent request handling across sub-devices (BLE, Modbus, SPI), the
-following three layers close the gap:
+following layers close the gap. (v4.0 collapses the prior three-layer plan:
+multi-thread safety is now inherent — no feature flag — so Layer 1 is gone.)
 
-### Layer 1: Multi-thread safe locks — IMPLEMENTED
-
-The `multithread` feature on `clinkz-wot-core` (and propagated from
-`clinkz-wot-servient`) switches `MapLock` from `RefCell` (single-thread) to
-`UnsafeCell<T>` + `critical_section::with` (interrupt/task-safe mutual
-exclusion). `DrainFlag` switches to `AtomicBool`.
-
-This lets two RTOS tasks safely share one `Servient` instance (e.g., one per
-core on an ESP32) and call `poll_serve_sync` independently. Sub-device I/O
-runs in dedicated tasks; handlers communicate via RTOS queues.
-
-Verified: `cargo check --features multithread` passes for core and
-servient on `no_std + alloc`.
-
-### Layer 2: zenoh-pico concrete platform — DEFERRED (hardware-specific)
+### Layer 1: zenoh-pico concrete platform — DEFERRED (hardware-specific)
 
 The `ZenohPicoPlatform` trait in
 `protocol-bindings/protocols/zenoh/src/runtime/zenoh_pico.rs` defines the
-platform hook for constrained zenoh-pico C ABI integrations. A concrete
+platform hook for constrained zenoh-pico C ABI integrations. The pico backend
+implements `ServerBinding::try_accept` (synchronous-readiness, polled by the
+`poll_serve_once` super-loop) and the async `ClientBinding`. A concrete
 implementation requires:
 
 - Target MCU selection (ESP32, STM32, nRF52, etc.).
@@ -149,14 +142,16 @@ implementation requires:
 - Buffer management and polling model (cooperative vs preemptive).
 - A `critical_section::Impl` registration for the target's interrupt model.
 
-Blocked by: PLAN.md "Defer `zenoh-pico` runtime injection until the target
-hardware platform, C ABI strategy, and polling model are confirmed."
+Multi-thread safety across RTOS tasks is inherent (`WotLock` is always
+thread-safe; no `multithread` feature). Blocked by: PLAN.md "Defer `zenoh-pico`
+runtime injection until the target hardware platform, C ABI strategy, and
+polling model are confirmed."
 
-### Layer 3: Embassy async (concurrent dispatch on MCU) — DEFERRED
+### Layer 2: Embassy async (concurrent dispatch on MCU) — DEFERRED
 
-With the `multithread` feature (Layer 1) and a concrete zenoh-pico
-platform (Layer 2), the engine is multi-thread safe and can communicate.
-Layer 3 adds the `embassy` async runtime for concurrent dispatch:
+With a concrete zenoh-pico platform (Layer 1), the engine compiles and runs on
+`no_std + alloc`, driven by `poll_serve_once` from the super-loop. Layer 2 adds
+the `embassy` async runtime for concurrent dispatch:
 
 - New `embassy` feature on `clinkz-wot-servient` (alongside existing `async`
   which uses tokio).
@@ -167,5 +162,5 @@ Layer 3 adds the `embassy` async runtime for concurrent dispatch:
   `FuturesUnordered` pattern as the tokio `serve()`, but on no_std).
 
 Blocked by: requires embassy executor + target (or simulator) for testing.
-The serve() concurrent-dispatch design (addendum §9.6) is runtime-agnostic
-and portable to embassy once the target is available.
+The `serve()` driving design (v4.0 §7.2) is runtime-agnostic and portable to
+embassy once the target is available.
