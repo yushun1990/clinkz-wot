@@ -12,7 +12,10 @@ This is the phase where the **workspace compiles whole again**.
 
 - P0 core (sync-primary handlers, `WotLock`, concrete Thing types), P1 discovery
   (`Discoverer`/`DirectoryPublisher`), P2 binding (async `ClientBinding`;
-  **sync `ServerBinding::try_accept`** + wholesale route lifecycle) are stable.
+  **sync `ServerBinding::try_accept` trait shape** + wholesale route lifecycle)
+  are stable. **P3 depends only on the `try_accept` trait *shape*, not on the
+  zenoh-pico server-side `try_accept` runtime being finalized** — that stays
+  deferred in P2 §2.7 and does NOT gate P3.
 
 ## Current State (being replaced)
 
@@ -106,7 +109,7 @@ via `Arc`.
 
 ```rust
 impl ExposedThingHandle {
-    // handler attachment (between produce and expose):
+    // handler attachment — replaceable throughout produce→expose→destroy (AD14):
     pub fn set_property_read_handler(&self, name, handler);
     pub fn set_property_write_handler(&self, name, handler);
     pub fn set_property_observe_handler(&self, name, handler);
@@ -126,10 +129,20 @@ impl ExposedThingHandle {
   binding → `DirectoryPublisher::register` (best-effort). Binding route failure
   is fatal (rollback the registry insert); directory failure is non-fatal
   (warn). `produce()` does NOT insert — see the state machine above (AD8).
-- `destroy()` (exposed → removed): `ServerBinding::unregister_thing` → remove
-  registry entry → `DirectoryPublisher::unregister` (best-effort). Order:
-  routes-first. The Thing is **gone** (not back to draft); re-`produce` to
-  re-expose.
+- `destroy()` (exposed → removed) — full quiescing (audit defect AD15):
+  1. `ServerBinding::unregister_thing` on every binding (routes-first → no new
+     requests).
+  2. Set the ThingSlot `draining` flag; the driving loop rejects not-yet-
+     dispatched requests targeting this Thing (request/response → "Thing gone"
+     error reply via `error_status`; streaming/events dropped).
+  3. In-flight handlers complete (not cancelled); results discarded if the
+     Thing is already removed.
+  4. Remove the registry entry at the quiesce point (no in-flight dispatch
+     left).
+  5. `DirectoryPublisher::unregister` (best-effort).
+  The Thing is **gone** (not back to draft); re-`produce` to re-expose.
+  `destroy(own_id)` from within a handler = step 3 is that handler itself ⇒
+  deferred removal until it returns.
 
 ### Step 3.2.1 — `discover()` sync/async boundary (audit defect AD10)
 
@@ -142,12 +155,12 @@ reader + query (`Pending`); the real async `DirectoryReader::open_search().await
 — matching the WoT Scripting API `discover()` → lazy `ThingDiscovery` model.
 This closes the half-sync/half-async gap (AD10): sync `Servient::discover()`
 calls sync `Discoverer::discover()` → lazy process; async only inside `next()`.
-- `destroy(own_id)` from within a handler uses deferred removal (`DrainFlag`
-  semantics retained, simplified onto `WotLock`).
 
-The TD is immutable between `expose()` and `destroy()`. Handler attachment
-after `expose()` is permitted (a slot starts `None` → `MissingHandler` until
-set), but the affordance set itself is frozen.
+**Handler lifecycle (audit defect AD14).** The TD **affordance set** is frozen
+at `expose()` (decision 2); but **handlers may be attached or replaced
+throughout the exposed lifetime** (Scripting API aligned — a handler is runtime
+behavior, not TD structure). An affordance whose handler slot is `None` returns
+`CoreError::MissingHandler` (designed-in semantic for exposed-but-unwired).
 
 ### Step 3.5 — Async-only driving
 
@@ -279,18 +292,23 @@ bindings. The builder is the only place that constructs the
 `InMemoryDirectory`-backed `LocalDiscoverer` for embedded/local-only use, or
 injects a remote-capable `Discoverer` for cloud.
 
-### Step 3.12 — `no_std + alloc` boundary
+### Step 3.12 — `no_std + alloc` boundary (compile-time architecture only)
 
 Crate root + driving primitives (`poll_serve`/`poll_serve_once`) +
 registries + handles are `no_std + alloc`. `serve` loop, idle backoff,
 `std::eprintln!` diagnostics, host conveniences behind `std`. The async driving
 requires an executor on `no_std` (embassy) or manual `poll_serve_once` in a
-bare super-loop. **`check-no-std.sh` verifies COMPILATION only** (`cargo check
---no-default-features` = the crate roots compile `no_std + alloc`); it does
-NOT exercise the no_std driving path at runtime, and there is no concrete
-`no_std` binding (zenoh-pico) to exercise it against in v1. Runtime
-verification of the no_std driving is deferred with the pico hardware
-platform (see Open Questions).
+bare super-loop.
+
+**The no_std driving path is compile-time architecture only in v1** (audit
+defect AD16 — closes the P2/P3 boundary): `check-no-std.sh` verifies
+**compilation only** (`cargo check --no-default-features` = the crate roots
+compile `no_std + alloc`); it does NOT exercise the no_std driving path at
+runtime, and there is no concrete `no_std` binding (zenoh-pico) to exercise it
+against. P3's exit criteria for no_std is **compile-only**; runtime
+verification is deferred with the pico hardware platform (P2 §2.7). P3 does
+not assume pico's server-side `try_accept` is finalized — only that the trait
+shape compiles.
 
 ## Resolved Decisions
 
@@ -335,7 +353,9 @@ platform (see Open Questions).
     and opt-in zenoh;
   - bulk operations end-to-end;
   - directory-driven consumed-Thing invalidation;
-  - `destroy(own_id)` from within a handler (deferred removal);
+  - `destroy()` quiescing: in-flight requests rejected/dropped after draining
+    flag, in-flight handlers complete (results discarded), self-`destroy` from
+    a handler uses deferred removal (AD15);
   - graceful shutdown.
 - No `Servient<D>`, `add_*`/`remove_*`, sync driving modules, or fake-async
   consumer references remain.

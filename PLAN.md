@@ -33,8 +33,11 @@ plans below.
 
 ## Phases
 
-The refactor is sequenced P0 through P4 so the workspace compiles at each
-phase boundary. Each phase has a dedicated plan document under `docs/plan/`.
+The refactor is sequenced P0 through P4. **P0–P2 are target-crate isolation**
+(each target crate compiles/tests alone; the workspace is NOT whole mid-refactor
+because P0 rewrites core's public surface); **the workspace is made whole again
+at P3** (see §Dependency shape below). Each phase has a dedicated plan document
+under `docs/plan/`.
 
 | Phase | Goal | Plan |
 |---|---|---|
@@ -183,6 +186,9 @@ Exit criteria:
 - Integration tests cover produce→expose→read/write/invoke/subscribe and
   consume→read/write/invoke/subscribe end-to-end through a fake binding and
   (opt-in) the zenoh binding.
+- **`destroy()` quiescing lifecycle** covered (AD15): in-flight requests
+  rejected/dropped after the draining flag, in-flight handlers complete with
+  results discarded, self-`destroy` from a handler uses deferred removal.
 
 ### P4: Compliance and Verification
 

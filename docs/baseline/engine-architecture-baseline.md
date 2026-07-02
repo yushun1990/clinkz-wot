@@ -552,17 +552,47 @@ impl ExposedThingHandle {
 ```
 
 There is **no** `add_property` / `remove_property` / `add_action` / `add_event`
-after `expose()`. Handlers are attached between `produce()` and `expose()`
-(this is the Scripting API produce→configure→expose flow). **Lifecycle state
-machine (AD8):** `produce()` creates a draft handle whose `Arc` state (TD +
-handler slots) lives in **no registry**; `expose()` is the **single** insertion
-into the servable exposed registry (ThingSlot wrapping that `Arc` state) +
-route registration + TD publish; `destroy()` is the **single** removal (Thing
-**gone**, not back to draft — re-`produce` to re-expose). One insertion, one
-removal, no second "becomes a registry thing" point. `expose()` registers all inbound routes
-wholesale and publishes the TD; the TD is immutable thereafter until
-`destroy()`. `destroy()` from within a Thing's own handler
-uses the deferred-removal rule (v3.0 §7), retained.
+after `expose()` — the **TD affordance set is frozen** at expose (decision 2).
+**Handlers, however, may be attached or replaced throughout the exposed
+lifetime** (audit defect AD14 — the earlier "handlers only between produce and
+expose" wording conflicted with P3 and with the Scripting API). Rationale: a
+handler is runtime behavior for an already-declared affordance, not TD
+structure, and the Scripting API allows `setPropertyReadHandler` etc. at any
+time. An affordance whose handler slot is still `None` returns
+`CoreError::MissingHandler` — a **designed-in** semantic for an exposed-but-
+unwired affordance, not an error condition. (Handler swap publishes a new
+`Arc` handler-set snapshot; an in-flight dispatch keeps the handler `Arc` it
+cloned out.) **Lifecycle state machine (AD8):** `produce()` creates a draft
+handle whose `Arc` state (TD + handler slots) lives in **no registry**;
+`expose()` is the **single** insertion into the servable exposed registry
+(ThingSlot wrapping that `Arc` state) + route registration + TD publish;
+`destroy()` is the **single** removal (Thing **gone**, not back to draft —
+re-`produce` to re-expose). One insertion, one removal, no second "becomes a
+registry thing" point. `expose()` registers all inbound routes wholesale and
+publishes the TD; the TD affordance set is immutable thereafter until
+`destroy()`.
+
+**`destroy()` quiescing (audit defect AD15).** Teardown is more than
+routes-first; it defines the fate of every in-flight request:
+
+1. `ServerBinding::unregister_thing` on every binding (routes-first → no **new**
+   requests can arrive).
+2. Set the ThingSlot `draining` flag. The driving loop honors it: any
+   not-yet-dispatched request already in the fan-in channel (or accepted via
+   `try_accept`) that targets this Thing is **rejected** — request/response
+   gets a synthesized "Thing gone" error reply (status-mapped via
+   `error_status`, 410-style); streaming/events are dropped.
+3. **In-flight handlers already executing are allowed to complete** (they hold
+   a handler `Arc` cloned out before draining); their results are **discarded**
+   if the Thing is already removed (the response goes nowhere). Async handlers
+   are not cancelled mid-`.await`.
+4. Once no in-flight dispatch remains (quiesce point), remove the registry
+   entry.
+5. `DirectoryPublisher::unregister` (best-effort).
+
+`destroy(own_id)` from within the Thing's own handler is the special case: the
+in-flight handler is step 3 itself, so removal is **deferred** until it returns
+(v3.0 §7 deferred-removal rule, retained).
 
 The dynamic-affordance network propagation (addendum §9.2), directory
 re-publish-on-mutation, and `register_affordance`/`unregister_affordance` are
@@ -698,7 +728,11 @@ The per-interaction hot path must be allocation-light and lock-bounded:
 
 ## 12. Sequencing
 
-The refactor is sequenced to keep the workspace compiling at each phase:
+The refactor is sequenced for **target-crate isolation through P2, workspace
+whole at P3** (audit defect AD17 — unifies with `PLAN.md` §Dependency shape;
+the earlier "keep the workspace compiling at each phase" wording was wrong
+because P0 rewrites core's public surface and breaks core's dependents until
+they adapt):
 
 - **P0 — Core interaction surface rewrite.** Sync-primary handler trait set
   with opt-in async twins; consolidated handler storage; concrete
@@ -764,6 +798,11 @@ Each phase is independently shippable behind the workspace build.
 | AD11 | `AbsoluteUri` exposure | td re-exports `AbsoluteUri` at its crate root as a hard P1 prerequisite (it was a P1 open question; P1's independent-compile promise rested on it). (§3) |
 | AD12 | Dynamic affordance surface removed from code | The `register_affordance`/`unregister_affordance` binding trait methods, the `ExposedThingHandle::{add,remove}_{property,action,event}` methods, their Servient propagation (`sync_added/sync_removed_affordance`), the zenoh per-affordance impls, and the dedicated tests are **deleted from the current code** (not just docs), closing the code↔baseline divergence. Workspace `cargo check --all-targets` and `cargo test --workspace` pass. |
 | AD13 | Fan-in sender injection formalized | The std fan-in `Sender` injection is a **trait method** `ServerBinding::set_request_sink(sender)` (std-gated), called by the Servient at registration — not prose-only "the binding receives a Sender clone". The driving layer drains; it does not own the overload policy (that stays the binding's AD9 contract). (§4.5, §7.2) |
+| AD14 | Handler lifecycle vs TD freeze | The TD **affordance set** is frozen at `expose()` (decision 2), but **handlers may be attached/replaced throughout the exposed lifetime** (Scripting API aligned). `MissingHandler` is the designed-in semantic for an exposed-but-unwired affordance. Resolves the baseline-vs-P3 conflict. (§7.3) |
+| AD15 | `destroy()` quiescing | Teardown = routes-first + `draining` flag (pending requests rejected: request/reply → "Thing gone" error, streaming dropped) + in-flight handlers allowed to complete (results discarded) + entry removed at quiesce + unpublish. Self-`destroy` from a handler = deferred removal. (§7.3) |
+| AD16 | no_std driving = compile-time architecture only | P3's no_std path is compile-only in v1; runtime validation is gated on zenoh-pico (P2 §2.7). P3 depends on the `try_accept` trait *shape*, not on pico's server-side runtime being finalized. (§7.2, P3 §3.12) |
+| AD17 | Phase compile boundary | P0–P2 are target-crate isolation (each target crate compiles/tests alone); the workspace is made whole at P3. Unifies baseline §12 with `PLAN.md`. |
+| AD18 | `ProjectionMode` vs `ThingDiscoveryProcess` | `ThingDiscoveryProcess` (Scripting-API surface yielding full `Thing`s) **forces `FullThingDescription`**; `IdOnly`/`Summary` are confined to the lower-level `DirectorySession`/`DirectoryItem` API (directory-admin use) and do not flow into the Scripting process. (`docs/plan/phase-p1-discovery.md` §1.4/§1.6) |
 | AD6c | no_std verification overclaim | `check-no-std.sh` is compile-only; runtime no_std driving deferred with zenoh-pico. (§7.2, `docs/plan/phase-p3-servient.md`, `phase-p4-compliance.md`) |
 | AD2 | `WotLock` no_std read degradation | Read-heavy-rare-write state (registries, handler tables, subscription state) uses lock-free `Arc`-snapshot reads; `WotLock` reserved for read-write-frequent/exclusive state. (§4.7, §11) |
 | AD3 | `SessionStable` snapshot cost | v1 ships `ConsistencyMode::Live` only; `SessionStable` deferred (`#[non_exhaustive]`). (§6) |

@@ -125,6 +125,12 @@ pub enum ConsistencyMode {
 pub enum ProjectionMode { IdOnly, Summary, FullThingDescription }
 ```
 
+`ProjectionMode` scope (audit defect AD18): `IdOnly` / `Summary` apply ONLY to
+the lower-level `DirectoryReader::open_search` / `DirectorySession` API (yield
+`DirectoryItem` — id lists, summaries, counts for directory-admin use). The
+Scripting-API `ThingDiscoveryProcess` (which yields full `Thing`s) **forces
+`FullThingDescription`**; lighter projections do not flow into it (§1.6).
+
 `#[non_exhaustive]` on `DirectoryFilter` and the mode enums makes the v1 set
 forward-compatible: `Semantic`/`Native` are added later without a breaking
 change, and callers are forced to write a `_ =>` fallback. `ThingFragment`
@@ -175,13 +181,27 @@ pub trait DiscoverySession: Send {
 }
 ```
 
-`ThingDiscoveryProcess` adapts a `DirectorySession` (mapping `DirectoryItem` →
-`Thing` per `ProjectionMode`), or wraps a resolver/link flow. It is **lazy**:
-construction (sync `Discoverer::discover()`) performs no network work; the
-session is opened inside the **first async `next()`** (which calls
-`DirectoryReader::open_search().await` on demand). The process holds an
-`enum { Pending(reader+query), Open(Box<dyn DiscoverySession>) }`; `next()`
-transitions Pending→Open on first call, then drains (audit defect AD10).
+**Projection contract (audit defect AD18 — closed).** `ThingDiscoveryProcess`
+is the Scripting-API surface that yields **full `Thing`s**, so it **forces
+`ProjectionMode::FullThingDescription`** when opening the session (overriding
+any lighter projection the caller passed). The `DirectoryItem → Thing` mapping
+is therefore always well-defined (the item carries a full TD). Lightweight
+projections (`IdOnly` / `Summary`) are confined to the lower-level
+`DirectoryReader::open_search` / `DirectorySession` API — they yield
+`DirectoryItem` directly (id lists, summaries, counts for directory-admin use)
+and **do not flow into `ThingDiscoveryProcess`**. This locks the three options
+(forbid / directory-only / lazy-resolve) as: directory-only for lightweight,
+full-forced for the Scripting process.
+
+`ThingDiscoveryProcess` adapts a `DirectorySession` (the session is opened with
+`FullThingDescription`, so each `DirectoryItem` carries a full TD mapped to a
+`Thing`), or wraps a resolver/link flow. It is **lazy**: construction (sync
+`Discoverer::discover()`) performs no network work; the session is opened
+inside the **first async `next()`** (which calls
+`DirectoryReader::open_search().await` on demand, forcing full projection). The
+process holds an `enum { Pending(reader+query), Open(Box<dyn DirectorySession>)
+}`; `next()` transitions Pending→Open on first call, then drains (audit defect
+AD10).
 
 `remaining()` is removed entirely. `stop()` / `error()` retained.
 
