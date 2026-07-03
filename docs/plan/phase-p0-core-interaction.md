@@ -52,12 +52,19 @@ Rewrite `core/src/sync.rs`:
   `clinkz-wot-core/multithread`; deleting the core feature invalidates the
   servient forward). This is a P0 task even though P3 rewrites servient, so the
   feature does not dangle.
-- **Snapshot-read primitive for hot read-heavy state** (audit defect AD2):
-  alongside `WotLock`, expose a copy-on-write snapshot helper
-  (`Arc<ImmutableMap>` publish + atomic-load read) for the registries and
-  handler tables whose reads must not disable interrupts on `no_std`. `WotLock`
-  is reserved for read-write-frequent / exclusive-semantics state (see P3
-  §3.1/§3.6).
+- **Snapshot-read primitive for hot read-heavy state** (audit defect AD2;
+  concrete primitive — audit round-2 C6/AD41 + P-1/AD50): alongside `WotLock`,
+  expose a lock-free copy-on-write snapshot helper. The publish cell is
+  **`arc_swap::ArcSwap<T>`** (`ArcSwapOption` for optional slots) — AtomicPtr-
+  based and `no_std`-safe — and the registry container is **`im::OrdMap<K, V>`**
+  (structurally persistent: O(log n) insert, O(1) clone), not `BTreeMap` (which
+  has no structural sharing ⇒ O(n) snapshot writes). So: publish =
+  `arc_swap.store(Arc::new(map.insert(..)))` (lock-free), read =
+  `arc_swap.load()` (lock-free `Guard`). This is for the registries and handler
+  tables whose reads must not disable interrupts on `no_std`. `WotLock` is
+  reserved for read-write-frequent / exclusive-semantics state (see P3
+  §3.1/§3.6). Add `arc-swap` and `im` (with `no_std + alloc` support) to
+  `core/Cargo.toml`.
 
 ### Step 0.2 — Identity and correlation types
 
@@ -99,18 +106,32 @@ Audit that no `MapLock` references remain in core.
 - Define consolidated handler-set storage: `PropertyHandlerSet`,
   `ActionHandlerSet`, `EventHandlerSet`, each slot an enum
   `Sync(Arc<dyn …>) | Async(Arc<dyn Async…>)` (async arm feature-gated).
-- `LocalExposedThing` holds `BTreeMap<AffordanceName, …HandlerSet>` per kind.
+- `LocalExposedThing` holds `im::OrdMap<AffordanceName, …HandlerSet>` per kind
+  (structural sharing, audit round-2 P-1/AD50); each per-affordance `HandlerSet`
+  is published as `Arc<HandlerSet>` behind an `ArcSwap`/`ArcSwapOption` so
+  dispatch reads it lock-free (audit round-2 C6/AD41).
 - Rationale: inbound handler invocation is the device hot path; sync dispatch
   is a direct virtual call with **no `Box`**. Async handlers pay one
   `async_trait` `Box` per call — acceptable only because the handler is
   I/O-bound (v4.0 §4.2).
+- **Handler-swap granularity (audit round-2 P-2/AD51):** v1 swaps a slot by
+  rebuilding the whole `HandlerSet` struct + republishing one `Arc` (one alloc
+  per swap, off the per-request path). If runtime handler-swapping later proves
+  hot, the documented escape hatch is per-slot `ArcSwapOption<Arc<dyn …>>` (swap
+  one slot without rebuilding the struct). Deferred.
 
 ### Step 0.5 — Interaction I/O (Scripting API §7.1)
 
 - Rework `InteractionInput` handler-facing fields to **`data`** (renamed from
   `payload`) + **`uri_variables`** (renamed from `parameters`) + `principal`
   (audit D3 — naming consistency across `InteractionInput`/`Options`/`Output`).
-  Remove `security_metadata` (moves to binding/transport layer).
+  Remove `security_metadata` (moves to binding/transport layer). **Add
+  `accept: Option<AcceptHint>`** (audit round-2 O7/AD48) — a protocol-neutral
+  view of the request's `Accept`/content-type preferences, populated by the
+  binding at the edge, so a byte-level handler can choose a client-acceptable
+  output content type and avoid a mismatch-driven double codec. `AcceptHint` is
+  a small `no_std + alloc`-safe struct (preferred `MediaType` + optional ordered
+  list), carrying no protocol headers.
 - Introduce `InteractionOptions { uri_variables, form_index, data, timeout }`
   for the consumed-side call surface.
 - Rework `InteractionOutput { data, status }`; enumerate
@@ -138,8 +159,11 @@ Audit that no `MapLock` references remain in core.
   `send_response(InboundResponse)`** (audit F1 — required by AD9 overload error
   replies; `InboundRequest` carries no reply handle), **`set_event_broker`**
   (audit F1 — EventBroker injection, default no-op), wholesale
-  `register_thing(thing_id, td)` / `unregister_thing(thing_id)`, plus a
-  **formalized std fan-in injection point**
+  `register_thing(thing_id, td) -> Result<(), CoreError>` /
+  `unregister_thing(thing_id)` (audit round-2 C3/AD38 — `register_thing` must be
+  fallible so `expose()` rollback E12/AD27 can detect a binding `k+1` failure;
+  `unregister_thing` stays infallible since `destroy()` is idempotent/best-
+  effort), plus a **formalized std fan-in injection point**
   `#[cfg(feature="std")] fn set_request_sink(&self, sender: FanInSender<InboundRequest>)`
   (audit defect AD13 — the std main path is binding→channel `try_send`, so the
   sender injection must be on the trait surface, not prose). The Servient calls
@@ -166,16 +190,37 @@ Audit that no `MapLock` references remain in core.
   `InMemoryCredentialStore`, `check_scopes` (`core/src/security.rs`).
 - Change `apply` to return the metadata it added (deferred #4), removing the
   post-apply diff.
+- **`verify` is on the sync inbound hot path (audit round-2 O2/AD43):** it runs
+  before the handler on every dispatch, so the same non-blocking rule that
+  governs sync handlers governs `verify` — it must be non-blocking/short.
+  Expensive crypto (JWT/signature validation) belongs in an async twin; an
+  `AsyncSecurityProvider` (`verify`/`apply` async twins) is a deferred
+  follow-up (`docs/deferred-design-followups.md`), not a v1 surface.
 
 ### Step 0.10 — Payload / codec / transport
 
 - Retain `Payload` (`Arc<[u8]>` body), `PayloadCodec`, `TransportAdapter`,
   `TransportRequest`, `TransportResponse`. Adapt to the new `InteractionOutput`.
+- **`OutboundTimeout` driver trait (audit round-2 C4/AD39):** core defines a
+  small runtime-neutral trait
+  `fn timeout<F: Future>(&self, dur: Duration, fut: F) -> Future<Output = Result<F::Output, CoreError::Timeout>>`
+  (object-safe wrapper as needed), with feature-selected defaults: a tokio impl
+  behind `std`, an `embassy_time` impl behind `no_std + async`, none on bare
+  `no_std`. The Servient holds an `Arc<dyn OutboundTimeout>` (P3 §3.1); a set
+  `InteractionOptions.timeout` with no driver returns
+  `CoreError::TimeoutUnsupported` (AD45 — fail-closed, never silent no-op).
 
 ### Step 0.11 — Core error taxonomy
 
 - `CoreError`: retain `MissingHandler { target, operation }`, `Security`,
-  `InboundDispatch`. Drop variants tied to removed surfaces.
+  `InboundDispatch`. Drop variants tied to removed surfaces. **Add the variants
+  the round-2 resolutions require:** `HandlerPanic { target, operation }`
+  (AD30 — std-only panic→reply), `Timeout` (AD39 — outbound timeout expired),
+  `TimeoutUnsupported` (AD45 — a `timeout` was requested but no
+  `OutboundTimeout` driver is available on this build; fail-closed), and
+  `UnsupportedForm` (AD47 — a caller-pinned `form_index` points at a form no
+  binding can drive). Each is a structured variant (no free-form `String`) so
+  it threads through `error_status`/`ServientError`.
 
 ### Step 0.12 — `core/src/lib.rs` public surface
 
@@ -216,6 +261,8 @@ Audit that no `MapLock` references remain in core.
   work inside the async driving loop will block the executor. Document that
   sync handlers must be non-blocking (or short); I/O-bound handlers must use
   the opt-in async variant. This is the trade-off for the zero-alloc inbound
-  hot path (v4.0 §4.2).
+  hot path (v4.0 §4.2). The same non-blocking budget applies to
+  `SecurityProvider::verify`, which is on the same inbound hot path before the
+  handler (audit round-2 O2/AD43).
 - `critical_section` dependency adds a critical-section impl registration
   requirement on bare targets — documented in `docs/no-std-embedded.md`.

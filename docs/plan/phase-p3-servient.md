@@ -39,8 +39,8 @@ This is the phase where the **workspace compiles whole again**.
 
 ```rust
 pub struct Servient {
-    exposed: ExposedThingRegistry,            // Arc-snapshot BTreeMap (lock-free reads)
-    consumed: ConsumedThingRegistry,           // Arc-snapshot BTreeMap (lock-free reads)
+    exposed: ExposedThingRegistry,            // Arc<im::OrdMap> snapshot via ArcSwap (lock-free reads; AD50)
+    consumed: ConsumedThingRegistry,           // Arc<im::OrdMap> snapshot via ArcSwap (lock-free reads; AD50)
     server_bindings: BindingList,              // Arc<[...]> snapshot (lock-free reads)
     inbound_fanin: Receiver<InboundRequest>,   // std: bindings self-push via set_request_sink; no_std: try_accept poll
     inbound_fanin_tx: FanInSender<InboundRequest>, // std only; cloned into each binding at registration
@@ -49,6 +49,7 @@ pub struct Servient {
     directory_publisher: Option<Arc<dyn DirectoryPublisher>>,
     security: SecurityContext,
     codecs: WotLock<Vec<Arc<dyn PayloadCodec>>>, // read-write-frequent → WotLock
+    timeout: Arc<dyn OutboundTimeout>,          // runtime-neutral outbound timeout driver (AD39); tokio/embassy_time/custom
     event_broker: EventBroker,
     shutdown: Arc<AtomicBool>,
 }
@@ -67,9 +68,14 @@ impl Servient {
     pub async fn produce(&self, td: Thing) -> CoreResult<ExposedThingHandle>;
     pub async fn consume(&self, td: Thing) -> CoreResult<ConsumedThingHandle>;
     pub fn discover(&self, filter: DiscoveryFilter) -> ThingDiscoveryProcess;
-    pub async fn fetch_td(&self, url: &AbsoluteUri) -> CoreResult<Thing>;
+    pub async fn fetch_td(&self, url: &AbsoluteUri) -> ServientResult<Thing>;
 }
 ```
+
+`fetch_td` returns **`ServientResult<Thing>`** (audit round-2 C2/AD37): it
+delegates to `Discoverer::request_thing_description` (`DiscoveryResult<Thing>`,
+P1 §1.9), and `From<DiscoveryError> for CoreError` is layering-blocked (core ↛
+discovery; AD25), so the Servient-level conversion is the only legal one.
 
 **Lifecycle state machine (audit defect AD8 — closed, single source of truth).**
 A produced Thing follows exactly one path, with **one** insertion and **one**
@@ -128,12 +134,14 @@ impl ExposedThingHandle {
   `remove_action`/`remove_event` and all directory re-publish-on-mutation.
 - `expose()` (draft → exposed): validate the configured TD → **single** insert
   into the servable exposed registry (ThingSlot wrapping the handle's `Arc`
-  state) → `ServerBinding::register_thing` (wholesale, P2) on every server
-  binding → `DirectoryPublisher::register` (best-effort). **Multi-binding
-  rollback (audit E12):** bindings register in deterministic order; if binding
-  `k+1` fails after `1..k` succeeded, `expose()` calls `unregister_thing` on the
-  already-registered `1..k` (reverse order), then removes the registry insert,
-  and returns the fatal `Err`. Directory failure is non-fatal (warn).
+  state) → `ServerBinding::register_thing` (wholesale, P2; returns
+  `Result<(), CoreError>` — audit round-2 C3/AD38) on every server binding →
+  `DirectoryPublisher::register` (best-effort). **Multi-binding rollback
+  (audit E12/AD27):** bindings register in deterministic order; if binding
+  `k+1` returns `Err` after `1..k` succeeded, `expose()` calls `unregister_thing`
+  on the already-registered `1..k` (reverse order), then removes the registry
+  insert, and returns the fatal `Err` (the `CoreError` maps through
+  `ServientError`). Directory failure is non-fatal (warn).
   `produce()` does NOT insert — see the state machine above (AD8).
 - `destroy()` (exposed → removed) — full quiescing (audit defect AD15):
   1. `ServerBinding::unregister_thing` on every binding (routes-first → no new
@@ -212,17 +220,31 @@ monopolizing the loop when many requests are ready.
   — the start offset advances each tick, so across ticks every binding gets a
   fair first-ready turn (no binding starved when another stays busy). Strict
   one step per call (AD6b). The `server_bindings` snapshot is an `Arc<[...]>`
-  clone (lock-free load). Cross-Thing concurrency via a local `FuturesUnordered`
-  for in-flight dispatches (retained from addendum §9.6), no `tokio::spawn`.
+  clone (lock-free load). **Completion concurrency model (audit round-2
+  O1/AD42):** AD6b bounds the **accept** rate (≤1/step), not completion
+  concurrency. On std/embassy a bounded local `FuturesUnordered` holds in-flight
+  dispatches (retained from addendum §9.6), so a slow opt-in async handler on
+  one Thing does not stall accept/dispatch of others — `poll_serve` accepts ≤1
+  new request *and* polls the in-flight set one step; sync handlers run inline
+  (fast) within their dispatch. On bare `no_std` there is **no**
+  `FuturesUnordered` and no in-flight concept — strictly serial
+  accept→sync-handler→reply per tick (no executor to drive multiple futures).
+  No `tokio::spawn`.
 - `serve(&self)` (resolved A4): `while !shutdown.load() { poll_serve().await; }`
   with std-gated idle backoff. Spawn via
   `tokio::spawn(async move { svc.clone().serve().await })` — the `async move`
   block owns the clone and `serve(&self)` borrows it (Pin makes the
   self-referential future sound). Consistent with `poll_serve(&self)` and
   `poll_serve_once(&self)`.
-- `poll_serve_once(&self, cx)`: manually polls the `poll_serve` future under a
-  caller `Context` (noop-waker for pure super-loops). The bare super-loop usage
-  is documented in v4.0 §7.2.
+- `poll_serve_once(&self, cx)`: **dual implementation by feature** (audit
+  round-2 C5/AD40). On `no_std + async` (embassy, no `serve` task spawned) it
+  manually polls the `poll_serve` future one step under the caller `Context`
+  (noop-waker for pure super-loops). On **bare `no_std`** (no `async` feature —
+  `poll_serve` does not exist there) it runs a **purely synchronous**
+  accept→dispatch→reply step (rotation-cursor `try_accept` poll → sync handler
+  → `send_response`) with no async future involved. Both return
+  `Poll<ServientResult<()>>` for a uniform call shape; `Pending` = no request
+  ready. The bare super-loop usage is documented in v4.0 §7.2.
 - Delete `driving_sync.rs`, `driving_async.rs`, `DrivingState`,
   `AsyncAcceptState`. **Keep a lightweight `AtomicUsize` rotation cursor** for
   the no_std poll-loop fairness (AD7); the old cursor deletion note assumed
@@ -253,7 +275,12 @@ Single async `InboundDispatcher`:
   `readAllProperties`): one property's handler error does **not** fail the whole
   batch; the failing property's entry carries its `Err`, the rest carry their
   `Ok` values. `subscribeallevents`/`unsubscribeallevents` return a map of
-  per-event `Result<Subscription, CoreError>` likewise.
+  per-event `Result<Subscription, CoreError>` likewise. **Fan-out concurrency
+  (audit round-2 P-3/AD52):** when no Thing-level meta-operation form applies,
+  std drives the per-property `invoke`s through a bounded
+  `buffer_unordered(bound)` (default bound = property count; configurable bound
+  deferred); no_std fans out serially. Partial-failure semantics hold under
+  both.
 
 ### Step 3.7 — Real async `ConsumedThingHandle`
 
@@ -276,6 +303,12 @@ fake `*_async` delegation (PLAN M8) — the methods ARE async now. Form selectio
 binding instance is reused via `Arc` clone (addendum §9.4). Directory-driven
 invalidation (addendum §3) retained: Servient-mediated
 `ConsumedThingRegistry::invalidate(id)` after directory `update`/`unregister`.
+**Churn cost (audit round-2 P-4/AD53):** because the consumed registry snapshot
+is an `Arc<im::OrdMap<..>>` (AD50), each invalidation rebuild is an O(log n)
+structural-sharing publish, not an O(n) full clone — so high-churn directories
+do not compound into O(n) snapshot storms. Repeated rapid invalidations are
+further **coalesced/debounced** (one rebuild per drain tick), so a busy
+directory cannot thrash the consumed registry.
 **In-flight subscriptions on an invalidated consumed Thing (audit E7):**
 invalidation closes the wire `SubscriptionGuard` for each open
 observe/subscribe on that Thing; the corresponding `Subscription` queue is
@@ -294,7 +327,10 @@ Inbound `subscribeevent`/`observeproperty` route through the broker-backed sink;
 ### Step 3.9 — Security
 
 - Inbound: `SecurityProvider::verify` → `Principal`; `check_scopes` against
-  affordance `security`/`scopes`. Retained (v3.0 §8).
+  affordance `security`/`scopes`. Retained (v3.0 §8). **`verify` runs on the
+  sync inbound hot path before the handler** (audit round-2 O2/AD43), so it
+  inherits the same non-blocking budget as a sync handler — expensive crypto
+  belongs in an async twin (`AsyncSecurityProvider`, deferred).
 - Outbound: `SecurityProvider::apply` returns the metadata it added (P0 §0.9);
   bindings send it as protocol headers/attachments. Remove the post-apply diff.
 - `CredentialStore`/`InMemoryCredentialStore` retained; `SecurityContext`
@@ -330,6 +366,11 @@ impl ServientBuilder {
     // (InMemoryDirectory-backed) — the embedded/local-only path.
     pub fn with_discoverer(mut self, discoverer: Arc<dyn Discoverer>) -> Self;
     pub fn with_directory_publisher(mut self, publisher: Arc<dyn DirectoryPublisher>) -> Self;
+    // Inbound fan-in channel capacity (audit round-2 O5/AD46 — AD6a's
+    // "configurable capacity" had no setter). std-only; defaults to a sensible
+    // bounded value when unset.
+    #[cfg(feature = "std")]
+    pub fn with_fanin_capacity(mut self, capacity: usize) -> Self;
     // Optional, additive, multi-call:
     pub fn with_security_provider(mut self, provider: Arc<dyn SecurityProvider>) -> Self;
     pub fn with_payload_codec(mut self, codec: Arc<dyn PayloadCodec>) -> Self;

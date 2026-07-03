@@ -111,6 +111,54 @@ parameterized by an error-context strategy.
 - Traits (`ClientBinding`, `ServerBinding`, `PayloadCodec`, handler traits)
   are unsealed: document which are stable extension points.
 
+## 9. `AsyncSecurityProvider` (audit round-2 O2/AD43)
+
+`SecurityProvider::verify` runs synchronously on the inbound dispatch hot path
+before the handler (baseline §7.5). The v1 contract is that it must be
+non-blocking/short, like a sync handler. Deployments whose verification is
+genuinely I/O-bound or CPU-heavy (JWT/signature validation, OCSP, remote
+auth) need an async twin so they do not block the executor the same way a
+blocking sync handler would.
+
+Add `AsyncSecurityProvider` (`async verify`/`async apply` twins behind the
+`async` feature, mirroring the handler sync-primary/opt-in-async policy of
+§4.2). The dispatcher selects the async twin when registered and the build has
+`async`; otherwise the sync `verify` runs on the hot-path budget.
+
+Why deferred: it widens the security trait surface and the dispatcher's
+security path; v1 documents the non-blocking constraint on the sync path
+instead. Picked up when a real binding ships a verification flow that cannot
+meet the sync budget.
+
+## 10. Per-slot `ArcSwapOption` handler slots (audit round-2 P-2/AD51)
+
+The consolidated `HandlerSet` is a multi-field struct published as one
+`Arc<HandlerSet>` via `ArcSwap` (baseline §4.7). Swapping one slot rebuilds the
+whole struct + republishes one `Arc` — one allocation per handler swap, off the
+per-request hot path.
+
+If profiling shows **runtime** handler swapping (post-`expose`, per AD14) to be
+a hot allocation source, move each slot to its own
+`arc_swap::ArcSwapOption<Arc<dyn …>>` so one slot swaps without rebuilding the
+struct.
+
+Why deferred: the expected handler-swap rate is setup-phase wiring plus
+occasional runtime re-attachment — one alloc per swap is acceptable, and
+per-slot `ArcSwapOption` complicates the `HandlerSet` shape and dispatch read
+(one load per slot instead of one load per set). Re-evaluate once a workload
+exists.
+
+## 11. Configurable bulk fan-out concurrency bound (audit round-2 P-3/AD52)
+
+Bulk operations (`readAll`/`readMultiple`/…) fan out per-property through a
+bounded `buffer_unordered(bound)` on std (baseline §7.4). The default bound is
+the property count. A configurable bound (e.g. a per-Servient or per-call
+concurrency limit) lets a caller cap concurrent network fan-out.
+
+Why deferred: the default (bound = property count) is correct for the common
+case; a knob adds API surface and tuning burden. Add when a deployment shows
+N-way fan-out storms that the default does not bound.
+
 ## Status convention
 
 When an entry above is started, move it to PLAN.md's "Performance Hardening"

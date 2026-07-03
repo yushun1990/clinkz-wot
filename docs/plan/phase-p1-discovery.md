@@ -182,7 +182,10 @@ pub struct RegistrationAck { pub id: ThingId, pub revision: Revision, pub lease:
 pub struct Revision(pub u64);                       // monotonic per-Thing revision
 pub struct LeaseToken(pub Vec<u8>);                 // opaque renewal handle
 pub struct LeaseState { pub token: LeaseToken, pub expires_at: Option<Duration> }
-pub struct DirectoryPatch(pub serde_json::Value);   // JSON Merge Patch carrier
+pub struct DirectoryPatch {                  // Merge-Patch carrier, protocol-neutral (audit round-2 S1/AD49)
+    pub body: Vec<u8>,                       // raw patch bytes (JSON Merge Patch, CBOR, ...)
+    pub content_type: MediaType,             // declares the patch representation
+}
 ```
 
 `ThingFragment` replaces the earlier vague "ExtensionMap-shaped" description;
@@ -217,6 +220,19 @@ Live-monotonic rules (design source §Live Semantics) are encoded in the
 in-memory backend: emitted items never re-emit; inserts before the cursor are
 not guaranteed visible; inserts after may appear in later batches when the
 backend supports live visibility.
+
+**Live-session concurrency safety (audit round-2 O3/AD44).** The cursor is a
+**monotonic revision high-water-mark**: every register/update bumps a per-Thing
+`Revision` (§1.4) and the session records `max(revision)` seen as its cursor; a
+later batch emits only items with `revision > cursor`. Concurrent
+register/unregister against an open session is safe because each `next()` takes
+a **brief shared lock** over the live map, reads one consistent batch (id + rev
+pairs), records the high-water mark, and releases — there is no borrow held
+across batches and no iteration-while-mutating. A mutation that lands between
+two batches either is below the new cursor (already visible, will not re-emit)
+or above it (appears in a later batch). This closes the open cursor question
+below and the P1 risk: high-water-mark revision is the chosen cursor (deterministic,
+monotonic, no re-emit of updated items).
 
 ### Step 1.6 — `ThingDiscoveryProcess` (`session.rs`, `discoverer.rs`)
 
@@ -288,8 +304,12 @@ pub trait DirectoryPublisher: Send + Sync {
 }
 ```
 
-`DirectoryRegistration` carries the TD + optional TTL/lease. `DirectoryPatch` is
-a JSON-Merge-Patch-shaped carrier. `Revision`/`LeaseToken`/`LeaseState`/
+`DirectoryRegistration` carries the TD + optional TTL/lease. `DirectoryPatch`
+is a **protocol-neutral** Merge-Patch carrier — `{ body: Vec<u8>,
+content_type: MediaType }` (audit round-2 S1/AD49), not `serde_json::Value`,
+so the `no_std + alloc` discovery root stays JSON-free and a future CBOR patch
+representation needs no type change; serialization/deserialization of the patch
+body happens at the backend. `Revision`/`LeaseToken`/`LeaseState`/
 `RegistrationAck` are typed (shapes pinned in §1.4). v1 in-memory backend
 supports `register`/`update`/`unregister` fully and `renew` as a no-op ack (no
 real TTL aging).
@@ -376,7 +396,9 @@ gap), lifted when a concrete remote backend is added.
 Action, Event, Fragment) from the current hardening pass for O(log n)
 filtering, but serves via continuation sessions instead of `offset+total`.
 **v1 implements `Live` sessions only** (audit defect AD3): a moving-cursor
-re-scan, monotonic, lazy, no match-set snapshot. `SessionStable` is deferred.
+re-scan, monotonic, lazy, no match-set snapshot — using a **revision
+high-water-mark cursor** with brief shared-lock batches (audit round-2
+O3/AD44). `SessionStable` is deferred.
 
 `get_ref` (borrowed lookup, no clone) is retained for internal use.
 
@@ -478,9 +500,13 @@ ambiguity and is now resolved by AD11.)
 
 ## Risks
 
-- The continuation-cursor design for the in-memory `Live` session must avoid
+- ~~The continuation-cursor design for the in-memory `Live` session must avoid
   re-emitting updated items; a `(id, revision)` cursor or a high-water-mark id
-  cursor is needed. Pick one and document it in `backend/memory.rs`.
+  cursor is needed. Pick one and document it in `backend/memory.rs`.~~
+  **Resolved (audit round-2 O3/AD44):** the cursor is a **monotonic revision
+  high-water-mark** (max `Revision` seen per batch); each `next()` reads one
+  consistent batch under a brief shared lock. Document the choice in
+  `backend/memory.rs`.
 - `#[async_trait]` `Box` per `next()` call on a large scan could allocate; the
   backend yields batches internally and the session drains a local buffer, so
   `next()` is usually a cheap buffer pop — verify in tests.
