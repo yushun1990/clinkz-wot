@@ -145,18 +145,19 @@ combining their outputs into a single JSON-object response, so a Thing-level
 bulk form is servable end-to-end.
 
 Discovery follows the W3C Scripting API §5 process model: `Servient::discover`
-accepts a fragment-oriented `ThingFilter` and returns a `ThingDiscovery`
-process object. Callers drain the process synchronously with
-`ThingDiscovery::next_now()` or asynchronously with `ThingDiscovery::next()`.
-The current implementation uses the in-memory directory backend; transport-
-backed discovery remains protocol-specific.
+accepts a `DiscoveryFilter` and returns a lazy `ThingDiscoveryProcess` (v4.0 §9.5
+— replaces the transitional `ThingFilter`/`ThingDiscovery`). Callers drain the
+process asynchronously with `ThingDiscoveryProcess::next()` (the only drain
+primitive; the old `next_now()` is removed). v1 is local-only (in-memory
+backend); transport-backed discovery remains protocol-specific (deferred per E6).
 
-Security metadata is separated from URI variables:
-`InteractionInput.security_metadata` carries transport-level auth headers
-applied by `SecurityProvider::apply`; bindings SHOULD send these as
-protocol-level headers or zenoh attachments. Inbound auth material is extracted
-from zenoh query/sample attachments and surfaced as `AuthMaterial::BearerToken`
-in `InboundRequest.auth`.
+Security metadata belongs to the binding/transport layer, not handler inputs
+(v4.0 §4.3/AD21 — `InteractionInput.security_metadata` is **removed**).
+Outbound security application stays on the `SecurityProvider::apply` path
+(bindings send the applied headers as protocol-level headers or zenoh
+attachments). Inbound auth material is extracted from zenoh query/sample
+attachments and surfaced as `AuthMaterial::BearerToken` in `InboundRequest.auth`;
+the verified `Principal` is injected into the handler-facing `InteractionInput`.
 
 Error mapping is shared via `clinkz_wot_protocol_bindings::error_status`, which
 maps `CoreError` variants to HTTP-like status codes. Bindings include the status
