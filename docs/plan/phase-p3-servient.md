@@ -39,8 +39,8 @@ This is the phase where the **workspace compiles whole again**.
 
 ```rust
 pub struct Servient {
-    exposed: ExposedThingRegistry,            // std: ArcSwap<Arc<im::OrdMap>>; no_std: WotLock<BTreeMap>+clone-out (AD2/C1/AD54)
-    consumed: ConsumedThingRegistry,           // same per-build split (AD2/C1/AD54)
+    exposed: ExposedThingRegistry,            // std: ArcSwap<Arc<im::HashMap>>; no_std: WotLock<BTreeMap>+clone-out (AD2/C1/AD54/M2)
+    consumed: ConsumedThingRegistry,           // same per-build split (AD2/C1/AD54/M2)
     server_bindings: BindingList,              // Arc<[...]> snapshot (lock-free reads)
     inbound_fanin: Receiver<InboundRequest>,   // std: bindings self-push via set_request_sink; no_std: try_accept poll
     inbound_fanin_tx: FanInSender<InboundRequest>, // std only; cloned into each binding at registration
@@ -311,7 +311,7 @@ binding instance is reused via `Arc` clone (addendum §9.4). Directory-driven
 invalidation (addendum §3) retained: Servient-mediated
 `ConsumedThingRegistry::invalidate(id)` after directory `update`/`unregister`.
 **Churn cost (audit round-2 P-4/AD53):** because the consumed registry snapshot
-is an `Arc<im::OrdMap<..>>` (AD50), each invalidation rebuild is an O(log n)
+is an `Arc<im::HashMap<..>>` (AD50/M2), each invalidation rebuild is an O(1) amortized
 structural-sharing publish, not an O(n) full clone — so high-churn directories
 do not compound into O(n) snapshot storms. Repeated rapid invalidations are
 further **coalesced/debounced** (one rebuild per drain tick), so a busy

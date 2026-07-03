@@ -53,7 +53,7 @@ Rewrite `core/src/sync.rs`:
   servient forward). This is a P0 task even though P3 rewrites servient, so the
   feature does not dangle.
 - **Registry read path per build (AD2, corrected C1/AD54):**
-  - **std**: lock-free `arc_swap::ArcSwap<Arc<im::OrdMap<K,V>>>` snapshot — read
+  - **std**: lock-free `arc_swap::ArcSwap<Arc<im::HashMap<K,V>>>` snapshot — read
     = `load()` (lock-free Guard); write = `store(Arc::new(map.insert(..)))`
     (O(log n) structural-sharing). Add `arc-swap` + `im` to `core/Cargo.toml`
     behind the `std` feature.
