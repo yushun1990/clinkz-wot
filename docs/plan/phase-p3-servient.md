@@ -244,13 +244,17 @@ monopolizing the loop when many requests are ready.
   self-referential future sound). Consistent with `poll_serve(&self)` and
   `poll_serve_once(&self)`.
 - `poll_serve_once(&self, cx)`: **dual implementation by feature** (audit
-  round-2 C5/AD40). On `no_std + async` (embassy, no `serve` task spawned) it
-  manually polls the `poll_serve` future one step under the caller `Context`
-  (noop-waker for pure super-loops). On **bare `no_std`** (no `async` feature —
-  `poll_serve` does not exist there) it runs a **purely synchronous**
-  accept→dispatch→reply step (rotation-cursor `try_accept` poll → sync handler
-  → `send_response`) with no async future involved. Both return
-  `Poll<ServientResult<()>>` for a uniform call shape; `Pending` = no request
+  round-2 C5/AD40, **E2 future-persistence corrected**). On `no_std + async`
+  (embassy, no `serve` task spawned) it **stores a pinned, reusable `poll_serve`
+  future** (created lazily on first call, held in `DrivingState`) and **polls the
+  SAME future each tick** — NOT a new future per call (E2: recreating the future
+  each tick drops the `recv().await` Pending state, degenerating to busy-poll).
+  The stored future's `recv().await` registers the caller's `Waker`/`Context`;
+  across ticks the Pending state persists and the future resumes where it left
+  off. On **bare `no_std`** (no `async` feature — `poll_serve` does not exist)
+  it runs a **purely synchronous** accept→dispatch→reply step (rotation-cursor
+  `try_accept` poll → sync handler → `send_response`) with no async future
+  involved. Both return `Poll<ServientResult<()>>`; `Pending` = no request
   ready. The bare super-loop usage is documented in v4.0 §7.2.
 - Delete `driving_sync.rs`, `driving_async.rs`, `DrivingState`,
   `AsyncAcceptState`. **Keep a lightweight `AtomicUsize` rotation cursor** for

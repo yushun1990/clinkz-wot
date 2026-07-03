@@ -328,22 +328,26 @@ binding decodes the wire body to the `Payload` bytes the handler reads and, on
 the outbound/consumed path, encodes the caller's `Payload` to the wire format
 matched to the form's `contentType`.
 
-**Content-negotiation hint on the byte-level input (audit round-2 O7/AD48).**
-Because the handler emits already-encoded bytes with no value type in between,
-it must itself pick an output content type. Doing that blind (without knowing
-the client's `Accept`) risks an emitted type the edge must then decode→re-encode
-— a **double codec** the value-level model does not pay. To close that gap the
-inbound `InteractionInput` carries an `accept: Option<AcceptHint>` (a compact
-representation of the request's `Accept`/content-type preferences, populated by
-the binding at the edge). A byte-level handler reads `accept` to choose an
-output `Payload` content type the client will accept in one encode pass; only if
-the handler ignores the hint and emits a mismatched type does the edge fall back
-to transcoding (decode→re-encode), which remains a documented, bounded cost
-rather than the default path. `AcceptHint` is a small, protocol-neutral struct
+**Content-negotiation hint on the byte-level input (audit round-2 O7/AD48,
+**E1 corrected).** Because the handler emits already-encoded bytes with no value
+type in between, it must itself pick an output content type. Doing that blind
+(without knowing the client's `Accept`) risks emitting a type the client cannot
+consume. To close that gap the inbound `InteractionInput` carries an `accept:
+Option<AcceptHint>` (a compact representation of the request's
+`Accept`/content-type preferences, populated by the binding at the edge). A
+byte-level handler reads `accept` to choose an output `Payload` content type the
+client will accept in one encode pass. **If the handler ignores the hint and
+emits a mismatched content type, the edge does NOT transcode** (audit E1: the
+engine has no value type to transcode through — deviation #4/AD32; "decode→
+re-encode" would require an intermediate value type that does not exist).
+Instead, the mismatch is an **error**: the binding returns
+`CoreError::ContentTypeMismatch` (status-mapped) so the client gets explicit
+feedback. Transcoding, if ever needed, is an **application-layer codec** the
+caller registers explicitly (a `PayloadCodec` that produces a value type), not
+an engine-layer fallback. `AcceptHint` is a small, protocol-neutral struct
 (a preferred `MediaType` plus an optional ordered list), `no_std + alloc`-safe;
-it carries no protocol headers. This byte-level
-handler contract is the companion to §9 deviation #4 (handler-driven, no
-implicit value store) and is the engine's zero-extra-copy stance; applications
+it carries no protocol headers. This byte-level handler contract is the
+companion to §9 deviation #4.
 needing value semantics encode/decode inside their handler.
 
 ### 4.4 Affordance addressing and correlation
@@ -729,13 +733,13 @@ impl Servient {
     pub async fn serve(&self);
 
     /// Manual-poll primitive for bare no_std super-loops without an executor.
-    /// Dual implementation by feature (audit round-2 C5/AD40): on
-    /// `no_std + async` (embassy, no `serve` task spawned) it manually polls
-    /// the `poll_serve` future one step under the caller `Context`; on bare
-    /// `no_std` (no `async` feature — no `poll_serve` exists there) it runs a
-    /// **purely synchronous** accept→dispatch→reply step with no async future
-    /// involved. Both return `Poll<ServientResult<()>>` for a uniform call
-    /// shape; `Pending` means no request was ready.
+    /// Dual implementation by feature (C5/AD40, **E2 corrected**): on
+    /// `no_std + async` (embassy) it **stores a pinned reusable `poll_serve`
+    /// future** (created once, polled each tick — NOT recreated per call, E2:
+    /// recreating drops the `recv().await` Pending state); on bare
+    /// `no_std` (no `async` feature) it runs a **purely synchronous**
+    /// accept→dispatch→reply step with no async future involved. Both return
+    /// `Poll<ServientResult<()>>`; `Pending` means no request was ready.
     pub fn poll_serve_once(&self, cx: &mut core::task::Context<'_>)
         -> core::task::Poll<ServientResult<()>>;
 }
@@ -1275,7 +1279,7 @@ above carry cross-references to the matching AD36–AD53 entry.
 | AD37 (C2) | `fetch_td` error chain | `fetch_td` returns **`ServientResult<Thing>`**. `From<DiscoveryError> for CoreError` is layering-blocked (core ↛ discovery), so the Servient-level conversion is the only legal one; AD25 unchanged. (§7.3, AD25) |
 | AD38 (C3) | `register_thing` return type | `register_thing(&self, ..) -> Result<(), CoreError>` — required so `expose()` rollback (E12/AD27) can detect binding `k+1` failure. `unregister_thing` stays `()` (idempotent/best-effort teardown). (§4.5, AD27) |
 | AD39 (C4/H2) | Outbound timeout — build-time cfg, not trait | **No `OutboundTimeout` trait** (H2: generic-method trait is not object-safe; `Arc<dyn OutboundTimeout>` was invalid). Timeout is **build-time cfg** in the Servient outbound path: std = `tokio::time::timeout`; no_std+embassy = `embassy_time::with_timeout`; bare no_std = fail-closed `Err(TimeoutUnsupported)`. (§4.6, AD45) |
-| AD40 (C5) | `poll_serve_once` on bare no_std | Dual implementation by feature: no_std+async manually polls the `poll_serve` future; **bare no_std runs a purely synchronous** accept→dispatch→reply step (no async future exists there). (§7.2) |
+| AD40 (C5/E2) | `poll_serve_once` on bare no_std | Dual implementation by feature: no_std+async **stores a pinned reusable `poll_serve` future** (created once, polled each tick — E2: NOT recreated per call, which would drop the `recv().await` Pending state); **bare no_std runs a purely synchronous** accept→dispatch→reply step (no async future exists there). (§7.2) |
 | AD41 (C6) | Lock-free snapshot atomic primitive (std-only) | On **std**, the concrete primitive is `arc_swap::ArcSwap<Arc<im::HashMap>>` (M2: HashMap for exact-key lookup; genuinely lock-free reads). On **no_std**, `arc-swap` and `im` are NOT available (C1/AD54); the registry uses `WotLock<BTreeMap>` + clone-out instead — no snapshot primitive needed. (§4.7, AD2) |
 | AD42 (O1/H4) | `FuturesUnordered` + `max_inflight` cap | AD6b bounds **accept** (≤1/step), not **completion concurrency**. std/embassy use `FuturesUnordered` for cross-Thing async concurrency — but it is **inherently unbounded** (H4: "bounded FuturesUnordered" was a false claim). The concrete bound is **`max_inflight`**: before accepting, the loop checks `in_flight < max_inflight`; at capacity, poll-only → fan-in fills → AD9 backpressure. Default configurable (e.g., 64). bare no_std is strictly serial (no executor, no `FuturesUnordered`). (§7.2, AD6b/AD9) |
 | AD43 (O2) | `verify` non-blocking | The non-blocking rule extends from handlers to the sync `SecurityProvider::verify` on the inbound hot path. `AsyncSecurityProvider` deferred. (§4.2, §7.5, `deferred-design-followups.md`) |
@@ -1283,7 +1287,7 @@ above carry cross-references to the matching AD36–AD53 entry.
 | AD45 (O4) | timeout silent no-op on no_std | A set `timeout` on bare no_std (no timer) returns **`Err(CoreError::TimeoutUnsupported)`** (fail-closed) — never silently ignored. On std/embassy the timeout is enforced via build-time cfg (AD39/H2). (§4.6, AD39) |
 | AD46 (O5) | Fan-in capacity setter | `ServientBuilder::with_fanin_capacity(usize)` added; AD6a's "configurable capacity" now has a setter. (AD35, P3 §3.11) |
 | AD47 (O6) | `form_index` priority | `InteractionOptions.form_index` is the **highest-priority** selection key (bypasses `supports`; caller takes responsibility); an unsupported pinned form → `CoreError::UnsupportedForm`. (§5.1, E20) |
-| AD48 (O7) | Byte-level content negotiation | `InteractionInput.accept: Option<AcceptHint>` lets a byte-level handler pick a client-acceptable output content type; transcoding (double codec) is now a bounded fallback, not the default. (§4.3, AD32) |
+| AD48 (O7/E1) | Byte-level content negotiation | `InteractionInput.accept: Option<AcceptHint>` lets a byte-level handler pick a client-acceptable output content type. **E1 correction:** if the handler emits a mismatched type, the edge returns `CoreError::ContentTypeMismatch` — it does **NOT** transcode (the engine has no value type per deviation #4/AD32). Transcoding is an explicit application-layer codec, not an engine fallback. (§4.3, AD32) |
 | AD49 (S1) | `DirectoryPatch` JSON coupling | `DirectoryPatch` is **`{ body: Vec<u8>, content_type: MediaType }`** (protocol-neutral bytes), not `pub serde_json::Value`; serialization to JSON/CBOR moves to the backend. Keeps the no_std discovery root JSON-free. (P1 §1.4) |
 | AD50 (P-1/M2) | Registry container per build | **std**: `Arc<im::HashMap>` (HAMT structural sharing: O(1) amortized insert, O(1) publish — M2: HashMap for exact-key lookup, not OrdMap). **no_std**: `WotLock<BTreeMap>` (no snapshot; O(log n) get under brief CS — for ESP32-class gateways; no external deps). (§4.7, §11, AD2) |
 | AD51 (P-2/H1) | Handler-set swap granularity — unified | **Single model**: `Map<Name, Arc<HandlerSet>>`. A slot swap rebuilds ONE `Arc<HandlerSet>` (one alloc) + one map insert (O(log n)); NOT a per-affordance `ArcSwap` cell. The earlier "via `ArcSwap`" per-affordance wording is withdrawn (H1). Per-slot `ArcSwapOption` remains the std-only escape hatch if hot. (§4.2, §4.7) |
