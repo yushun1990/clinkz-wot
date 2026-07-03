@@ -120,6 +120,18 @@ AD6a). `try_accept` is the **no_std polled path only**.
   **No `await` in the callback, no async-bridge task** (a bridge would
   reintroduce the intermediate buffer AD6a removed), **no binding-internal
   queue** — the bounded fan-in channel is the single buffer.
+- **Deferred reply-handle storage (audit M1):** the zenoh callback returns
+  immediately after `try_send`, but the **zenoh `Query` reply-handle** must
+  survive until `send_response` replies. The binding stores it in a
+  `CorrelationId`-keyed `reply_targets` map (`ReplyTarget::Query { query,
+  key_expr }`) — this IS the current code pattern (`server.rs:128/400`), and
+  zenoh 1.x natively supports holding a `Query` and calling `query.reply()` /
+  `query.reply_err()` later (the `Query` owns the reply sender). A throttled
+  TTL sweep evicts orphaned entries (a request that never got a `send_response`
+  because it was dropped at capacity) and replies with a server-busy error so
+  the client is not left hanging. **P2 exit requires a smoke test** verifying
+  the end-to-end flow: queryable callback → `try_send` → `send_response` →
+  `query.reply()` under the `zenoh` feature gate.
 - **no_std accept (polled path):** no executor ⇒ no callback push. The binding
   implements `try_accept(&self) -> Option<InboundRequest>` that drains one
   ready request directly from its transport poll. The Servient super-loop
@@ -215,7 +227,8 @@ the async `invoke`.
   `cargo test` and `cargo check --no-default-features`.
 - Opt-in smoke test passes: `CLINKZ_WOT_RUN_ZENOH_RUNTIME_TESTS=1 cargo test -p
   clinkz-wot-protocol-bindings-zenoh --features zenoh` covering real async
-  put/get/subscribe.
+  put/get/subscribe **and** the deferred-reply-handle flow (audit M1:
+  queryable callback → `try_send` → `send_response` → `query.reply()`).
 - No `register_affordance`/`unregister_affordance`/`as_async_binding`/
   `AsyncClientBinding` references remain.
 

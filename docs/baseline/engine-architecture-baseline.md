@@ -208,15 +208,17 @@ pub struct ActionHandlerSet { invoke, query, cancel }
 pub struct EventHandlerSet  { subscribe, unsubscribe }
 ```
 
-`LocalExposedThing` holds `im::OrdMap<AffordanceName, PropertyHandlerSet>` (and
-Action/Event equivalents — structural sharing so a handler swap republishes
-the per-Thing affordance map cheaply, audit round-2 P-1/AD50). Registration
-methods (`set_property_read_handler`) mutate one slot (publishing a new
-`Arc<HandlerSet>` for that affordance via `ArcSwap`, audit round-2 C6/AD41).
-Dispatch looks up the set once and reads the slot; an absent slot yields
-`CoreError::MissingHandler`. This collapses the mechanical repetition across
-registration and dispatch while preserving Scripting API fidelity (separate
-`set_*` methods, separate trait objects).
+`LocalExposedThing` holds `Map<AffordanceName, Arc<HandlerSet>>` (audit H1 —
+**single unified model**: std = `im::OrdMap` behind `ArcSwap` snapshot; no_std =
+`BTreeMap` behind `WotLock`+clone-out), with Action/Event equivalents. Each
+affordance's handlers are a plain `Arc<HandlerSet>` **value in the map** — NOT a
+separate per-affordance `ArcSwap` cell (the earlier "via `ArcSwap`" wording was
+ambiguous and is withdrawn). Registration methods (`set_property_read_handler`)
+rebuild the ONE affected `Arc<HandlerSet>` (one alloc, one slot changed) and do a
+single map insert (O(log n)); other affordances' `Arc<HandlerSet>` are shared,
+not rebuilt. Dispatch looks up the affordance, clones the `Arc<HandlerSet>`,
+reads the slot, and invokes — all outside any lock (clone-out / snapshot load).
+An absent slot yields `CoreError::MissingHandler`.
 
 Bounds: sync handler trait objects are `Send + Sync` (so `Arc` clones share a
 handler across concurrent dispatches and the driving loop stays `Send`). The
@@ -464,27 +466,34 @@ queue is empty (returns `Pending`); the next push wakes it. So the
 sync-callback-producer / async-consumer concurrency is well-defined: no
 executor is needed on the producer side, only on the consumer side.
 
-**`InteractionOptions.timeout` executor (audit E16; runtime-neutral driver +
-fail-closed — audit round-2 C4/AD39 + O4/AD45).** Outbound timeout is applied
-through an injectable, runtime-neutral `OutboundTimeout` driver held by the
-`Servient`, **not** a hardcoded `tokio::time::timeout`. The driver has a single
-operation — `fn timeout<T>(&self, dur: Duration, fut: F) -> Future<Output =
-Result<T, CoreError::Timeout>>` — with feature-selected defaults: a `tokio`
-impl behind `std` (wraps `tokio::time::timeout`), an `embassy_time` impl behind
-`no_std + async` (wraps `embassy_time::with_timeout`), and **no** default on
-bare `no_std`. This keeps the timer and `FanInSender` (`async_channel`, AD20) on
-the same runtime-neutral footing: an `async-std`/`embassy-std` user supplies
-their own `OutboundTimeout` rather than dragging in `tokio`.
+**`InteractionOptions.timeout` executor (audit E16/H2 — build-time cfg,
+fail-closed per AD45).** Outbound timeout is applied via **build-time cfg**
+inside the Servient outbound path, NOT a runtime `dyn` trait (audit H2: the
+earlier `OutboundTimeout` trait had a generic method and was not object-safe):
+- **std** (tokio): the outbound path wraps `tokio::time::timeout(dur,
+  binding.invoke(req))` when `options.timeout.is_some()`.
+- **no_std + async** (embassy): `embassy_time::with_timeout` behind the
+  `embassy` feature.
+- **bare no_std**: no timer available — see fail-closed below.
+No trait object, no per-call boxing.
 
-On a build **without** an `OutboundTimeout` (bare `no_std`, no platform timer),
+On a build **without** a timer (bare `no_std`),
 a caller-supplied `InteractionOptions.timeout` is **never silently ignored**:
 the outbound call returns `Err(CoreError::TimeoutUnsupported)` immediately
 (fail-closed) instead of hanging indefinitely. A `timeout` left `None` behaves
-normally (no timeout enforced). This is a correctness contract, not "documented
-asymmetry": silently dropping a caller's explicit safety bound would let a
-deadlocked `consume` block forever with the caller believing it was bounded.
-The earlier "no-op, retained for API symmetry" wording is withdrawn (audit
-round-2 O4).
+normally (no timeout enforced). Silently dropping a caller's explicit safety
+bound would let a deadlocked `consume` block forever with the caller believing
+it was bounded. The earlier "no-op, retained for API symmetry" wording is
+withdrawn (audit round-2 O4).
+
+**Inbound async handler — no timeout bound (audit M6, known boundary).**
+`InteractionOptions.timeout` is **outbound-only**. An inbound opt-in async
+handler has no per-handler timeout: if it hangs (bug/malice), its future never
+completes, permanently occupying a `max_inflight` slot (AD42/H4). The primary
+defense is the §4.2 **non-blocking contract** (handlers must not block), but
+there is no enforcement against a malicious/buggy handler that violates it. A
+per-handler timeout is a **future hardening item**; v1 documents this as a
+known boundary.
 
 ### 4.7 Single lock primitive — `WotLock<T>`
 
@@ -528,52 +537,53 @@ insert/remove/enumerate, an inner per-Thing `WotLock` held only across a single
 handler call. The reentrancy discipline (clone handler `Arc` out under a brief
 lock, release, then invoke) is retained.
 
-**Read-heavy-rare-write state uses lock-free snapshots, not `WotLock` reads**
-(audit defect 2). On `no_std`, `WotLock::with_read` degrades to a
-`critical_section::Mutex` exclusive entry (interrupt-disabled). Putting the
-registry lookup / handler-table lookup / subscription-state read — every
-inbound dispatch — behind that path would serialize them and lengthen the
-interrupt-disabled window, which is hostile to real-time MCU targets. So the
-read-mostly-write-rarely state avoids `WotLock` reads entirely and uses
-copy-on-write snapshots:
+**Read-heavy-rare-write state — per-build strategy (AD2, corrected by C1/AD54).**
+The hot read path must not hold a lock during handler invocation (AD2's intent).
+How this is achieved depends on the build:
 
-- `ExposedThingRegistry` / `ConsumedThingRegistry` publish
-  `Arc<im::OrdMap<ThingId, Arc<ThingSlot>>>` snapshots — **structurally
-  persistent** (audit round-2 P-1/AD50): a write (expose/destroy) is an O(log n)
-  insert that shares structure with the previous map and produces a new `Arc` in
-  O(1) (no full clone). The earlier `Arc<BTreeMap<…>>` wording is rejected:
-  `BTreeMap` has no structural sharing, so "build a new snapshot" was an O(n)
-  full node copy — worse than a `RwLock<BTreeMap>`'s O(log n) insert at gateway
-  scale (hundreds/thousands of Things). `im::OrdMap` is `no_std + alloc`-safe and
-  makes the "cheap snapshot write" claim actually true.
-- The published snapshot cell is an `arc_swap::ArcSwap<...>` (audit round-2
-  C6/AD41): a write does `arc_swap.store(new_arc)` (atomic, lock-free) and a read
-  does `arc_swap.load()` (`arc_swap::Guard` over the `Arc`). This is the concrete
-  atomic primitive AD2 was missing — a plain `Arc` has no atomic swap, and
-  falling back to `WotLock` would re-introduce interrupt-disable on `no_std`
-  (exactly what AD2 forbids). `arc-swap` is `no_std`-compatible (`AtomicPtr`-based)
-  and added as a workspace dependency.
-- Per-Thing handler sets are `Arc<HandlerSet>` published the same way
-  (`ArcSwap`); dispatch `load`s the `Arc` (lock-free) and invokes outside any
-  lock.
-- The server-binding list and `EventBroker` fan-out table already use this
-  `Arc<[...]>` snapshot pattern (PLAN §Performance Hardening); it is extended to
-  the registries and handler tables.
+- **std (tokio host/cloud): lock-free `arc-swap` snapshot.** The registry is
+  `arc_swap::ArcSwap<Arc<im::HashMap<ThingId, Arc<ThingSlot>>>>` — a write does
+  `arc_swap.store(Arc::new(map.insert(..)))` (atomic, lock-free, O(1) amortized
+  insert via HAMT structural sharing); a read does `arc_swap.load()` (lock-free
+  `Guard`, zero contention across tokio threads). **`HashMap` (not `OrdMap`) is
+  chosen for the registry** (audit M2: registry lookup is exact-key by
+  `ThingId`, not range scan; `HashMap`'s HAMT is O(1) amortized with wider
+  branching vs `OrdMap`'s O(log n) B-tree with ~10 levels at gateway scale +
+  cache-unfriendly pointer chasing). Per-Thing handler tables (small N ≈ 10–50
+  affordances) keep `OrdMap`/`BTreeMap` where ordering or small-N simplicity
+  matters.
+- **no_std (ESP32/STM32/etc.): `WotLock` + clone-out dispatch discipline.** The
+  registry is `WotLock<BTreeMap<ThingId, Arc<ThingSlot>>>`. The hot read does:
+  `wotlock.with_read(|m| m.get(&id).cloned())` — a **brief critical_section**
+  covering only the BTreeMap::get (O(log n) ≈ 7 comparisons for n=100 ≈ 200ns)
+  + Arc clone (refcount incr ≈ 10ns); then the lock is released and the handler
+  is invoked **outside any lock**. The CS window is ~500ns — well within typical
+  MCU real-time interrupt-disable budgets (1–10μs). **No external deps needed**
+  (`WotLock` + `BTreeMap` are both in-scope `alloc` types); no `arc-swap`, no
+  `im`, no in-tree `AtomicPtr`+CS snapshot primitive. The savings from a
+  snapshot over WotLock+clone-out on a 240 MHz ESP32 are ~450ns/dispatch =
+  ~100 cycles = negligible.
 
-`WotLock` is reserved for genuinely read-write-frequent or
-exclusive-semantics state (driving state, credential store, binding-factory
-registry generation counter). The snapshot pattern keeps the inbound hot read
-path lock-free on every build.
+This split resolves both dependency gaps (C1: `arc-swap` and `im` are std-only,
+NOT stable-`no_std`) while serving ESP32-class gateways that aggregate dozens to
+hundreds of sub-device — `BTreeMap::get` is O(log n) and fast enough under the
+brief CS regardless of registry size.
 
-**Handler-set snapshot granularity (audit round-2 P-2/AD51).** `HandlerSet` is
-a multi-field struct; replacing one slot under the consolidated model publishes
-a new `Arc<HandlerSet>` (one allocation per handler swap). This is acceptable
-for the expected handler-swap rate (setup-phase wiring, plus occasional runtime
-re-attachment per AD14) and is **not** on the per-request hot path. If profiling
-later shows runtime handler swapping to be a hot allocation, the documented
-escape hatch is per-slot `arc_swap::ArcSwapOption<Arc<dyn …>>` so one slot swaps
-without rebuilding the whole struct; v1 ships the simpler whole-struct snapshot.
-Recorded in `docs/deferred-design-followups.md`.
+`WotLock` is used for the registry on `no_std` and for genuinely
+read-write-frequent / exclusive-semantics state on every build (driving state,
+credential store, binding-factory generation counter).
+
+**Handler-set swap granularity (audit H1 unified, round-2 P-2/AD51).** The
+single model is `Map<Name, Arc<HandlerSet>>`: each affordance's handlers are a
+plain `Arc<HandlerSet>` value in the map. Replacing one slot rebuilds that ONE
+`Arc<HandlerSet>` (one alloc) + one map insert (O(log n) structural sharing on
+std; O(log n) insert under WotLock on no_std). Other affordances' `Arc<HandlerSet>`
+are shared, not rebuilt. This is off the per-request path (handler swaps are
+setup-phase wiring + occasional runtime re-attachment per AD14). If profiling
+later shows per-affordance handler swapping to be a hot allocation, the
+documented escape hatch is per-slot `ArcSwapOption<Arc<dyn …>>` (std only) so
+one slot swaps without rebuilding the struct; v1 ships the simpler whole-HandlerSet
+rebuild. Recorded in `docs/deferred-design-followups.md`.
 
 ### 4.8 Trait sealing (audit D15)
 
@@ -759,12 +769,17 @@ each **accept** at most one request per call — they never drain a ready backlo
 so a bare super-loop stays cooperative (one request per tick, interleaved with
 other work). AD6b bounds the **accept rate**, not the **completion concurrency**:
 
-- **`std` builds:** a bounded local `FuturesUnordered` of in-flight dispatches
-  is retained so a slow opt-in async handler on one Thing does not stall
-  accept/ dispatch of other Things; sync handlers run inline (fast). `poll_serve`
-  accepts ≤1 new request per step *and* polls the in-flight set one step.
-- **`no_std + async` (embassy):** the same `FuturesUnordered` model with
-  `futures-util` `alloc` (cooperative, no `tokio`).
+- **`std` builds:** a local `FuturesUnordered` of in-flight dispatches is
+  retained so a slow opt-in async handler on one Thing does not stall
+  accept/dispatch of other Things; sync handlers run inline (fast). The
+  `FuturesUnordered` is bounded by a **`max_inflight` cap with poll-before-accept
+  discipline** (H4 — `FuturesUnordered` itself is unbounded; the earlier
+  "bounded FuturesUnordered" was false): before accepting, the loop checks
+  `in_flight < max_inflight`; at capacity it polls-only. The fan-in channel fills
+  → bindings backpressure per AD9. `poll_serve` accepts ≤1 new request per step
+  *and* polls the in-flight set one step.
+- **`no_std + async` (embassy):** the same `FuturesUnordered` + `max_inflight`
+  model with `futures-util` `alloc` (cooperative, no `tokio`).
 - **bare `no_std`:** strictly **serial** — one accept→sync-handler→reply per
   tick, no `FuturesUnordered`, no in-flight concept. There is no executor to
   concurrently drive multiple futures, so concurrent completion is not a thing
@@ -775,6 +790,15 @@ This resolves the earlier tension between "inline `.await` the handler"
 (P3 §3.6) and "FuturesUnordered of in-flight dispatches" (P3 §3.5): inline refers
 to *how* a single dispatch runs its handler, while FuturesUnordered allows
 *multiple* dispatches to be in flight concurrently on std/embassy.
+
+**`poll_serve` / `poll_serve_once` Err semantics (audit M3).** Per-request
+handler errors do NOT surface as `poll_serve`'s `Err` — they go through
+`InboundResponse.error` → `send_response` → `Ok(())`. `poll_serve` returns
+`Err(ServientError)` only for **infrastructure-level** failures that cannot be
+attributed to a specific request: the fan-in channel is closed/disconnected
+(all bindings unregistered or shutdown), or an unrecoverable driving-loop panic.
+Normal operation: `Ok(())` after each step (whether a request was dispatched or
+the step was idle).
 
 **Global shutdown quiescing (audit G2 — locked).** Per-Thing `destroy()`
 quiescing is AD15; the **global** `shutdown` flag (§7.1) has a parallel,
@@ -844,18 +868,32 @@ does not depend on `discovery` (layering forbids the reverse impl). The earlier
 compile-level contradiction. Returning `ServientResult<Thing>` uses the existing
 `From<DiscoveryError> for ServientError`; AD25 stands unchanged.
 
-**`ThingId` uniqueness and collision (audit G5 — locked).** The exposed and
+**`ThingId` uniqueness and collision (audit G5/H6 — locked).** The exposed and
 consumed registries key by `ThingId`. Uniqueness is **not** synthesized by the
 engine: `ThingId` is whatever the TD's `id` states (E18 — the TD must carry
 one). A `produce()`/`expose()` whose `ThingId` already exists in the servable
 exposed registry is **rejected** with `ServientError` (`AlreadyExposed`) rather
 than silently overwriting — `destroy()` the existing Thing first. `consume()`
 with a duplicate `ThingId` **reuses** the existing consumed entry (refreshing
-its TD). Cross-directory/cross-origin id collision (the same `id` string in two
-different directories referring to different Things) is **out of scope for v1**:
-a `ThingId` is only as globally unique as the TD's `id` asserts; a deployment
-that merges directories is responsible for disambiguating (e.g. namespacing the
-`id`) before expose/consume. This is a documented v1 boundary, not a deviation.
+its TD).
+
+**Atomic check-and-insert (audit H6):** concurrent `expose`/`destroy` against
+the same `ThingId` must be atomic (check + insert/remove as one operation):
+- **std** (ArcSwap): a **CAS loop** — `load → check absent/present → build new
+  map → compare_and_swap(current, new) → retry on mismatch`. `ArcSwap::rcu` or
+  `compare_and_swap` provides this. `AlreadyExposed` / idempotent-destroy are
+  correct under CAS (a concurrent writer that wins the CAS forces the loser to
+  retry and see the new state).
+- **no_std** (WotLock): the `with` (exclusive) critical section makes
+  check + insert/remove **inherently atomic** under one lock hold.
+
+The earlier "concurrent destroy serialize via the registry lock" wording (E13)
+was std-inaccurate (std has no lock — the CAS loop is the mechanism); corrected
+here to per-build atomicity.
+
+Cross-directory/cross-origin id collision is **out of scope for v1**: a
+`ThingId` is only as globally unique as the TD's `id` asserts; a deployment that
+merges directories is responsible for disambiguating before expose/consume.
 
 
 impl ExposedThingHandle {
@@ -891,6 +929,18 @@ re-`produce` to re-expose). One insertion, one removal, no second "becomes a
 registry thing" point. `expose()` registers all inbound routes wholesale and
 publishes the TD; the TD affordance set is immutable thereafter until
 `destroy()`.
+
+**`expose()` sub-step ordering (audit M4 — pinned).** Correctness (rollback +
+no stale-route window) requires a precise order:
+1. `register_thing` on **ALL** server bindings (deterministic order). If any
+   binding fails, `unregister_thing` the already-registered ones (reverse) and
+   return `Err` — the registry is **not yet touched**, so no registry rollback
+   needed.
+2. All bindings registered OK → **insert into the exposed registry** (CAS/WotLock
+   atomic). Now the Thing is dispatchable.
+3. `DirectoryPublisher::register` (best-effort; failure is non-fatal/warn).
+This eliminates the "routes exist but registry doesn't" window: the registry
+entry appears only after all routes are live.
 
 **`destroy()` quiescing (audit defect AD15).** Teardown is more than
 routes-first; it defines the fate of every in-flight request:
@@ -994,7 +1044,7 @@ not a §9 deviation (it is a scheme-coverage gap, recorded here).
 |---|---|
 | `default = ["std"]` | std runtime + tokio convenience. |
 | `alloc` | dynamic data on `no_std`. |
-| `std` | networking, filesystem, async runtime, host convenience (`serve` loop, idle backoff). |
+| `std` | networking, filesystem, async runtime, host convenience (`serve` loop, idle backoff). **Implies `alloc` + `async`** (`Cargo.toml`: `std = ["alloc", "async"]` — audit M7; `--features std` always enables async driving + `FanInSender`). |
 | `async` | native-async driving (always on for `std`; required for the canonical model). On `no_std`, driving is manual-poll by default and native-async suspension requires an executor (embassy). |
 | `zenoh` | Rust `zenoh` std backend (real async consume + inbound). |
 | `zenoh-pico` | constrained `no_std+alloc` platform-hook backend (mutually exclusive with `zenoh`). |
@@ -1085,13 +1135,12 @@ The per-interaction hot path must be allocation-light and lock-bounded:
   binding-internal queue, AD6a/AD9) and a sync `try_accept` poll on no_std (one
   request per tick, rotation cursor, O(N_bindings), no boxing — AD6b). No
   `select_all`, no per-binding boxed `poll_accept` future (audit defect AD1).
-- **Registry / handler-table / subscription-state reads** are lock-free
-  `arc_swap` snapshot loads; no `WotLock::with_read` (no interrupt disable) on
-  the hot read path (audit defect 2). Registry snapshots are
-  `Arc<im::OrdMap<…>>` so a write is O(log n) structural-sharing insert + O(1)
-  `Arc` publish (audit round-2 P-1), not the O(n) full clone a `BTreeMap`
-  snapshot would cost — the published-snapshot write stays cheap at gateway
-  scale (audit round-2 P-1/P-4).
+- **Registry / handler-table / subscription-state reads** are per-build (AD2/C1):
+  std = lock-free `arc_swap` snapshot load; no_std = `WotLock` + clone-out
+  (`with_read(|m| m.get(&id).cloned())` — brief CS ~500ns, handler invocation
+  outside the lock). No `WotLock::with_read` covering handler invocation on any
+  build. std registry snapshots are `Arc<im::OrdMap<…>>` (O(log n) insert,
+  O(1) publish); no_std uses `BTreeMap` (O(log n) get, no snapshot publish).
 - **Outbound form/binding plan** is interned in the consumed registry entry
   (addendum §9.4 retained); repeated consumed interactions reuse the cached
   binding instance via `Arc` clone — no `make_binding`, no plan recompute.
@@ -1177,7 +1226,7 @@ Each phase is independently shippable behind the workspace build.
 |---|---|---|
 | AD1 | Inbound accept fan-in | Drop boxed `poll_accept` + `select_all`; fan-in channel (std, O(1)) + sync `try_accept` (no_std, O(N_bindings), no boxing). (§4.5, §7.2) |
 | AD6a | Unbounded accept buffer | Single **bounded** fan-in channel (capacity configurable); std bindings enqueue from **synchronous** zenoh callbacks via `try_send` (callbacks cannot `await`); on `Full` the policy is split by interaction kind (AD9); **no binding-internal queue**, no async-bridge task. (§4.5, §7.2) |
-| AD6b | `poll_serve_once` step semantics | Strict bounded step: at most ONE inbound request **accepted** per `poll_serve`/`poll_serve_once` call; no backlog drain (no_std `if let … break`, not `while let`). AD6b bounds the **accept rate**, not completion concurrency (audit round-2 O1/AD42: std/embassy keep a bounded in-flight `FuturesUnordered`; bare `no_std` is strictly serial). (§7.2) |
+| AD6b | `poll_serve_once` step semantics | Strict bounded step: at most ONE inbound request **accepted** per `poll_serve`/`poll_serve_once` call; no backlog drain (no_std `if let … break`, not `while let`). AD6b bounds the **accept rate**, not completion concurrency (O1/AD42/H4: std/embassy use `FuturesUnordered` + `max_inflight` cap; bare `no_std` is strictly serial). (§7.2) |
 | AD7 | no_std poll-loop fairness | Restore a lightweight `AtomicUsize` rotation cursor for the no_std `try_accept` poll loop (the old "select_all-inherent fairness" rationale died with `select_all`); start offset advances each tick. (§4.5, §7.2) |
 | AD8 | produce/expose registry insertion | `produce()` creates a draft handle only (no registry insert); `expose()` is the SINGLE insertion into the servable exposed registry. Closes the lifecycle state machine: draft → exposed → removed. (§7.3) |
 | AD9 | Overload policy for request/reply | On fan-in `Full`: request/response interactions are **rejected with an explicit error reply** (mapped via `error_status`, immediate client feedback); only streaming/events use drop-oldest + overflow. No silent drop/timeout as the request/reply default. (§4.5, §11) |
@@ -1190,26 +1239,26 @@ Each phase is independently shippable behind the workspace build.
 | AD16 | no_std driving = compile-time architecture only | P3's no_std path is compile-only in v1; runtime validation is gated on zenoh-pico (P2 §2.7). P3 depends on the `try_accept` trait *shape*, not on pico's server-side runtime being finalized. (§7.2, P3 §3.12) |
 | AD17 | Phase compile boundary | P0–P2 are target-crate isolation (each target crate compiles/tests alone); the workspace is made whole at P3. Unifies baseline §12 with `PLAN.md`. |
 | AD18 | `ProjectionMode` vs `ThingDiscoveryProcess` | `ThingDiscoveryProcess` (Scripting-API surface yielding full `Thing`s) **forces `FullThingDescription`**; `IdOnly`/`Summary` are confined to the lower-level `DirectorySession`/`DirectoryItem` API (directory-admin use) and do not flow into the Scripting process. (`docs/plan/phase-p1-discovery.md` §1.4/§1.6) |
-| AD19 | `ServerBinding` trait surface completeness | The trait carries **all** load-bearing methods: `try_accept` (default `None` — std-only bindings self-push and never have it called), `send_response` (the reply path — required by AD9 overload error replies; `InboundRequest` has no reply handle), `set_event_broker` (EventBroker injection, default no-op), `set_request_sink` (std, AD13), `register_thing`/`unregister_thing`. The earlier §4.5 snippet omitted `send_response`/`set_event_broker`; both are retained from the current code. (§4.5) |
+| AD19 | `ServerBinding` trait surface completeness | The trait carries **all** load-bearing methods: `try_accept` (default `None` — std-only bindings self-push and never have it called), `send_response` (the reply path — required by AD9 overload error replies; `InboundRequest` has no reply handle), `set_event_broker` (EventBroker injection, default no-op), `set_request_sink` (std, AD13), `register_thing`/`unregister_thing`. The earlier §4.5 snippet omitted `send_response`/`set_event_broker`; both are retained from the current code. **M1:** the binding stores zenoh `Query` reply-handles in a `CorrelationId`-keyed map for deferred `send_response` (current code `server.rs:128/400`; zenoh 1.x natively supports this). (§4.5) |
 | AD6c | no_std verification overclaim | `check-no-std.sh` is compile-only; runtime no_std driving deferred with zenoh-pico. (§7.2, `docs/plan/phase-p3-servient.md`, `phase-p4-compliance.md`) |
-| AD2 | `WotLock` no_std read degradation | Read-heavy-rare-write state (registries, handler tables, subscription state) uses lock-free `Arc`-snapshot reads; `WotLock` reserved for read-write-frequent/exclusive state. **Concrete primitive: `arc_swap::ArcSwap` publish + `im::OrdMap` structural-sharing container** (audit round-2 C6/AD41 + P-1/AD50) — not the unspecified "atomic Arc swap" of the original wording. (§4.7, §11) |
+| AD2 | `WotLock` no_std read degradation | **std**: registry uses lock-free `arc_swap::ArcSwap<Arc<im::HashMap>>` snapshot reads (M2: HashMap for exact-key lookup, not OrdMap). **no_std**: registry uses `WotLock<BTreeMap>` + clone-out dispatch discipline (CS covers only the BTreeMap::get + Arc clone, ~500ns; handler invocation is outside any lock). AD2's intent — "don't hold the lock during handler invocation" — is satisfied on both builds; "zero interrupt-disable on no_std" is **withdrawn** (C1/AD54). (§4.7, §11) |
 | AD3 | `SessionStable` snapshot cost | v1 ships `ConsistencyMode::Live` only; `SessionStable` deferred (`#[non_exhaustive]`). (§6) |
 | AD4 | Async handler coverage | Async twins for ALL 9 interaction operations, not just read/write/invoke. (§4.2) |
 | AD5 | Conservative compliance matrix | P4 build-checks all valid feature combinations per crate; tests a representative subset. (`docs/plan/phase-p4-compliance.md`) |
-| AD20 | Driving primitive feature matrix + `FanInSender` | `poll_serve_once` (sync) on every build; `poll_serve`/`serve` (async) gated behind `async` + need an executor (tokio/embassy) — bare `no_std` exposes only `poll_serve_once`. `FanInSender<T>` = core std-only alias for `async_channel::Sender<T>` (runtime-neutral; sync `try_send`). **Outbound timeout is runtime-neutral too** (audit round-2 C4/AD39): an injectable `OutboundTimeout` driver replaces a hardcoded `tokio::time::timeout` (tokio/`embassy_time`/custom). (§4.5, §4.6, §7.2) |
+| AD20 | Driving primitive feature matrix + `FanInSender` | `poll_serve_once` (sync) on every build; `poll_serve`/`serve` (async) gated behind `async` + need an executor (tokio/embassy) — bare `no_std` exposes only `poll_serve_once`. `FanInSender<T>` = core std-only alias for `async_channel::Sender<T>` (runtime-neutral; sync `try_send`). Outbound timeout is build-time cfg (AD39/H2), not a trait. (§4.5, §4.6, §7.2) |
 | AD21 | Interaction I/O naming consistency | Payload field is `data` and URI-template vars are `uri_variables` across `InteractionInput`/`Options`/`Output`; `InteractionStatus { Ok, Created, Accepted }` (`#[non_exhaustive]`). (§4.3) |
-| AD22 | `ThingDiscoveryProcess` struct + discover error bridging | `{ inner: Box<dyn DiscoverySession> }` where concrete inner is `ProcessState { Pending, Open(DirectorySession), Done(err) }` implementing `DiscoverySession`. Infallible `Servient::discover()` bridges a fallible `Discoverer::discover()` by constructing `Done(err)`. Introduction/Exploration deferred to first async `next()`. (§6, `phase-p1-discovery.md` §1.6/§1.9) |
+| AD22 | `ThingDiscoveryProcess` struct + discover error bridging | `{ inner: Box<dyn DiscoverySession> }` where concrete inner is `ProcessState { Pending, Open(DirectorySession), Done(err) }` implementing `DiscoverySession`. Infallible `Servient::discover()` bridges a fallible `Discoverer::discover()` by constructing `Done(err)`. **H5 correction:** v1 Introduction is trivially resolved in `discover()` (local endpoint = reader, no async Introduction); `next()` does Exploration only (`open_search`). The earlier "Introduction deferred to next()" was aspirational for future remote Introduction; deferred with E6. (§6, `phase-p1-discovery.md` §1.6/§1.9) |
 | AD23 | td cleanup owned by P0 | The Tier-0 td cleanups (data_type split, Form dedup, validation helpers, AbsoluteUri root re-export) are assigned to P0 (Step 0.0), closing the phase-ownership hole. (§3, §12, `phase-p0-core-interaction.md` §0.0) |
 | AD24 | Trait sealing | Extension-point traits (bindings, handlers, codecs, security, discovery reader/publisher/resolver) NOT sealed; engine-internal traits (`DiscoverySession`, `DirectorySession`, `EventSink`, `InboundDispatcher`, `*HandlerSet`, `ProcessState`) sealed/`pub(crate)`. (§4.8) |
 | AD25 | Cross-crate error interop | `From<BindingError> for CoreError`; `From<{CoreError,BindingError,DiscoveryError}> for ServientError`; `error_status(&CoreError)` is the single protocol-status source (binding errors flow through CoreError; DiscoveryError is app-layer via the process, not a status). Inward-only direction. **`fetch_td` therefore returns `ServientResult<Thing>`** (audit round-2 C2/AD37): `From<DiscoveryError> for CoreError` is layering-blocked (core does not depend on discovery), so the Servient-level conversion is the only legal one. (§5.1, §7.3) |
 | AD26 | Bulk operation partial-failure | `readAll`/`readMultiple`/`writeAll`/`writeMultiple` return `BTreeMap<PropertyName, Result<InteractionOutput, CoreError>>`; `subscribeAll`/`unsubscribeAll` return per-event `Result<Subscription, _>`. One property's error does NOT fail the batch (Scripting-API aligned). (§7.4, P3 §3.6) |
-| AD27 | `expose()` rollback + `destroy()` idempotency | `expose()` registers bindings in order; on binding `k+1` failure it `unregister_thing`s the succeeded `1..k` (reverse), rolls back the registry insert, returns fatal `Err` (E12). Requires `register_thing` to return `Result<(), CoreError>` (audit round-2 C3/AD38). `destroy()` is idempotent — on an already-removed/never-exposed Thing it no-ops returning `Ok`; concurrent destroys serialize (E13). (P3 §3.4) |
+| AD27 | `expose()` rollback + `destroy()` idempotency | `expose()` registers bindings in order; on binding `k+1` failure it `unregister_thing`s the succeeded `1..k` (reverse), rolls back the registry insert, returns fatal `Err` (E12). Requires `register_thing` to return `Result<(), CoreError>` (audit round-2 C3/AD38). `destroy()` is idempotent — on an already-removed/never-exposed Thing it no-ops returning `Ok`; concurrent destroys are safe via CAS (std) / WotLock exclusive (no_std) (E13/H6). (P3 §3.4) |
 | AD28 | Consumer 9-op symmetry | `ConsumedThingHandle` has `query_action`/`cancel_action` matching the producer's `ActionQueryHandler`/`ActionCancelHandler` — TD 1.1 `queryaction`/`cancelaction` are first-class on both sides. (§7.4, §10) |
 | AD29 | Async-action completion — v1 scope | v1 = synchronous actions only (`invoke_action` awaits + returns `Ok`); the 202 `Accepted` + result-retrieval/observe-action model is deferred (`InteractionStatus::Accepted` reserved). Declared scope boundary, not a §9 deviation. (§7.4) |
 | AD30 | Handler panic safety (G1) | **std-only panic→reply; no_std lock-integrity only** (audit round-2 C1). `std`: `InboundDispatcher` wraps every handler invocation in `catch_unwind`; a panic becomes `CoreError::HandlerPanic { target, operation }` → 5xx reply, the request fails cleanly, the `serve` loop keeps running. `no_std`: `catch_unwind` unavailable (bare metal is `panic=abort`); the engine guarantees only **lock integrity** (handler `Arc` cloned before invoke; `with_recover` heals locks) — the panic itself goes to the platform panic handler. Locks stay unpoisoned on every build. (§4.2) |
 | AD31 | Global shutdown quiescing (G2) | `shutdown` flag checked between `poll_serve` steps: the in-flight request completes (handler awaited, not cancelled); queued fan-in requests are dropped on `Servient` drop (not drained — full drain could block shutdown). Per-Thing polite teardown is `destroy()` (AD15). (§7.2) |
 | AD32 | Byte-level handler encoding (G3) | Handlers are byte-level on both sides (`InteractionInput/Output.data: Option<Payload>`, body `Arc<[u8]>`); the runtime does not auto-encode logical values. `PayloadCodecRegistry` applies at the transport edge (wire↔Payload). **`InteractionInput.accept: Option<AcceptHint>`** lets a byte-level handler pick a matching output content type and avoid a mismatch-driven double codec (audit round-2 O7/AD48). Companion to §9 deviation #4. (§4.3) |
-| AD33 | `ThingId` uniqueness/collision (G5) | Registries key by `ThingId` (= the TD's `id`, required per E18). Duplicate `expose` rejected (`AlreadyExposed`); duplicate `consume` reuses. Cross-directory id collision is the deployment's responsibility (v1 boundary, not a deviation). (§7.3) |
+| AD33 (G5/H6) | `ThingId` uniqueness + atomic check-and-insert | Registries key by `ThingId` (= TD's `id`). Duplicate `expose` rejected (`AlreadyExposed`); duplicate `consume` reuses. **Atomicity (H6):** std = CAS loop on ArcSwap (load→check→build→compare_and_swap→retry); no_std = WotLock exclusive `with` (check+insert atomic). The earlier "registry lock" wording was std-inaccurate; corrected to per-build mechanism. (§7.3) |
 | AD34 | Binding trait `Send + Sync` (G4) | `ServerBinding: Send + Sync` and `ClientBinding` trait objects are `Send + Sync` so the `serve` future is `Send` and spawnable on tokio/embassy. (§4.5) |
 | AD35 | `ServientBuilder` API shape (G6) | Move-fluent consuming builder (`with_*` → `build()`); required ≥1 server binding + ≥1 client factory; omitted discoverer defaults to `LocalDiscoverer`; `build()` wires `set_event_broker`/`set_request_sink` into every binding. **`with_fanin_capacity(usize)`** configures the bounded inbound fan-in channel capacity (audit round-2 O5/AD46) — the AD6a "configurable capacity" had no setter before. (P3 §3.11) |
 
@@ -1225,18 +1274,19 @@ above carry cross-references to the matching AD36–AD53 entry.
 | AD36 (C1) | `catch_unwind` vs `no_std` | `catch_unwind` is std-only; AD30 rescoped to a **std-only** panic→reply contract. `no_std` gets **lock-integrity only** (`with_recover` + handler `Arc` cloned pre-invoke); the panic itself goes to the platform panic handler (`panic=abort` ⇒ reset). (§4.2, AD30) |
 | AD37 (C2) | `fetch_td` error chain | `fetch_td` returns **`ServientResult<Thing>`**. `From<DiscoveryError> for CoreError` is layering-blocked (core ↛ discovery), so the Servient-level conversion is the only legal one; AD25 unchanged. (§7.3, AD25) |
 | AD38 (C3) | `register_thing` return type | `register_thing(&self, ..) -> Result<(), CoreError>` — required so `expose()` rollback (E12/AD27) can detect binding `k+1` failure. `unregister_thing` stays `()` (idempotent/best-effort teardown). (§4.5, AD27) |
-| AD39 (C4) | `tokio::time::timeout` vs runtime-neutral | Outbound timeout via an injectable **`OutboundTimeout`** driver (tokio on std, `embassy_time` on no_std+async, custom otherwise), keeping timer and `FanInSender` equally runtime-neutral. (§4.6, AD20) |
+| AD39 (C4/H2) | Outbound timeout — build-time cfg, not trait | **No `OutboundTimeout` trait** (H2: generic-method trait is not object-safe; `Arc<dyn OutboundTimeout>` was invalid). Timeout is **build-time cfg** in the Servient outbound path: std = `tokio::time::timeout`; no_std+embassy = `embassy_time::with_timeout`; bare no_std = fail-closed `Err(TimeoutUnsupported)`. (§4.6, AD45) |
 | AD40 (C5) | `poll_serve_once` on bare no_std | Dual implementation by feature: no_std+async manually polls the `poll_serve` future; **bare no_std runs a purely synchronous** accept→dispatch→reply step (no async future exists there). (§7.2) |
-| AD41 (C6) | Lock-free snapshot atomic primitive | Concrete primitive is **`arc_swap::ArcSwap`/`ArcSwapOption`** (AtomicPtr-based, no_std-safe) — the original AD2 "atomic Arc swap" had no backing primitive and would have regressed to interrupt-disabling `WotLock`. (§4.7, AD2) |
-| AD42 (O1) | `FuturesUnordered` vs single-step | AD6b bounds **accept** (≤1/step), not **completion concurrency**: std/embassy keep a bounded in-flight `FuturesUnordered`; bare no_std is strictly serial (no executor). (§7.2, AD6b) |
+| AD41 (C6) | Lock-free snapshot atomic primitive (std-only) | On **std**, the concrete primitive is `arc_swap::ArcSwap<Arc<im::HashMap>>` (M2: HashMap for exact-key lookup; genuinely lock-free reads). On **no_std**, `arc-swap` and `im` are NOT available (C1/AD54); the registry uses `WotLock<BTreeMap>` + clone-out instead — no snapshot primitive needed. (§4.7, AD2) |
+| AD42 (O1/H4) | `FuturesUnordered` + `max_inflight` cap | AD6b bounds **accept** (≤1/step), not **completion concurrency**. std/embassy use `FuturesUnordered` for cross-Thing async concurrency — but it is **inherently unbounded** (H4: "bounded FuturesUnordered" was a false claim). The concrete bound is **`max_inflight`**: before accepting, the loop checks `in_flight < max_inflight`; at capacity, poll-only → fan-in fills → AD9 backpressure. Default configurable (e.g., 64). bare no_std is strictly serial (no executor, no `FuturesUnordered`). (§7.2, AD6b/AD9) |
 | AD43 (O2) | `verify` non-blocking | The non-blocking rule extends from handlers to the sync `SecurityProvider::verify` on the inbound hot path. `AsyncSecurityProvider` deferred. (§4.2, §7.5, `deferred-design-followups.md`) |
-| AD44 (O3) | Live-session concurrency safety | In-memory `Live` session uses a **revision high-water-mark cursor**; each `next()` reads a consistent batch under a brief shared lock and records the max revision seen, so concurrent register/unregister never re-emits and never borrow-conflicts. (P1 §1.10) |
-| AD45 (O4) | timeout silent no-op on no_std | A set `timeout` with no `OutboundTimeout` available returns **`Err(CoreError::TimeoutUnsupported)`** (fail-closed) — never silently ignored. (§4.6, AD39) |
+| AD44 (O3/H3) | Live-session cursor model | In-memory `Live` session uses a **sorted-id cursor** (last-emitted id in BTreeMap key order), NOT a revision high-water-mark (H3: revision cursor re-emitted updated items, violating Live Semantics rule 4). Each `next()` reads `id > cursor` under a brief shared lock, advances cursor. Updates to already-emitted ids do NOT re-emit (go to `DirectoryWatch`). O(1) cursor memory. (P1 §1.5/§1.10) |
+| AD45 (O4) | timeout silent no-op on no_std | A set `timeout` on bare no_std (no timer) returns **`Err(CoreError::TimeoutUnsupported)`** (fail-closed) — never silently ignored. On std/embassy the timeout is enforced via build-time cfg (AD39/H2). (§4.6, AD39) |
 | AD46 (O5) | Fan-in capacity setter | `ServientBuilder::with_fanin_capacity(usize)` added; AD6a's "configurable capacity" now has a setter. (AD35, P3 §3.11) |
 | AD47 (O6) | `form_index` priority | `InteractionOptions.form_index` is the **highest-priority** selection key (bypasses `supports`; caller takes responsibility); an unsupported pinned form → `CoreError::UnsupportedForm`. (§5.1, E20) |
 | AD48 (O7) | Byte-level content negotiation | `InteractionInput.accept: Option<AcceptHint>` lets a byte-level handler pick a client-acceptable output content type; transcoding (double codec) is now a bounded fallback, not the default. (§4.3, AD32) |
 | AD49 (S1) | `DirectoryPatch` JSON coupling | `DirectoryPatch` is **`{ body: Vec<u8>, content_type: MediaType }`** (protocol-neutral bytes), not `pub serde_json::Value`; serialization to JSON/CBOR moves to the backend. Keeps the no_std discovery root JSON-free. (P1 §1.4) |
-| AD50 (P-1) | Registry snapshot O(n) clone | Registry snapshots use **`Arc<im::OrdMap<..>>`** (structural sharing: O(log n) insert, O(1) clone). `BTreeMap`'s O(n) full copy is rejected — it was worse than `RwLock<BTreeMap>` at gateway scale. (§4.7, §11, AD2) |
-| AD51 (P-2) | Handler-set snapshot per-swap rebuild | v1 keeps whole-struct `Arc<HandlerSet>` rebuild (one alloc per swap, off the per-request path). **Per-slot `ArcSwapOption`** is the documented escape hatch if runtime handler-swapping proves hot. (`§4.7`, `deferred-design-followups.md`) |
+| AD50 (P-1/M2) | Registry container per build | **std**: `Arc<im::HashMap>` (HAMT structural sharing: O(1) amortized insert, O(1) publish — M2: HashMap for exact-key lookup, not OrdMap). **no_std**: `WotLock<BTreeMap>` (no snapshot; O(log n) get under brief CS — for ESP32-class gateways; no external deps). (§4.7, §11, AD2) |
+| AD51 (P-2/H1) | Handler-set swap granularity — unified | **Single model**: `Map<Name, Arc<HandlerSet>>`. A slot swap rebuilds ONE `Arc<HandlerSet>` (one alloc) + one map insert (O(log n)); NOT a per-affordance `ArcSwap` cell. The earlier "via `ArcSwap`" per-affordance wording is withdrawn (H1). Per-slot `ArcSwapOption` remains the std-only escape hatch if hot. (§4.2, §4.7) |
 | AD52 (P-3) | Bulk fan-out concurrency | std: bounded `buffer_unordered`; no_std: serial. Default bound = property count; configurable bound deferred. Partial-failure (AD26) holds under both. (§7.4, P3 §3.6) |
-| AD53 (P-4) | Directory-driven consumed invalidation cost | With `im::OrdMap` (AD50) the invalidation-driven snapshot rebuild is O(log n), resolving the compounding with P-1; churn is coalesced/debounced so high-churn directories do not thrash. (P3 §3.7) |
+| AD53 (P-4) | Directory-driven consumed invalidation cost | std: `im::OrdMap` (AD50) → O(log n) rebuild. no_std: `WotLock<BTreeMap>` → O(log n) get, O(n) full rebuild on invalidation (rare; acceptable for ESP32-class registries). Churn is coalesced/debounced. (P3 §3.7) |
+| **AD54 (C1)** 🔴 | **arc-swap + im NOT stable-`no_std` — no_std uses WotLock+clone-out** | The prior claim "`arc-swap` is `no_std`-compatible" was **false** (`arc-swap` 1.9 `no_std` needs nightly `experimental-thread-local`; `im` is std-oriented). **Final correction:** no_std registry uses **`WotLock<BTreeMap>` + clone-out dispatch** (CS covers only BTreeMap::get + Arc clone ≈ 500ns; handler invocation outside any lock). **Zero external deps on no_std.** std keeps `arc_swap::ArcSwap<Arc<im::OrdMap>>` (lock-free; both deps available on std). AD2 intent preserved (no locked invocation); "zero interrupt-disable on no_std reads" **withdrawn**. (§4.7, §11, AD2/AD41/AD50) |

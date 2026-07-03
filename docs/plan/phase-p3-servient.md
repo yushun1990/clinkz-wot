@@ -39,8 +39,8 @@ This is the phase where the **workspace compiles whole again**.
 
 ```rust
 pub struct Servient {
-    exposed: ExposedThingRegistry,            // Arc<im::OrdMap> snapshot via ArcSwap (lock-free reads; AD50)
-    consumed: ConsumedThingRegistry,           // Arc<im::OrdMap> snapshot via ArcSwap (lock-free reads; AD50)
+    exposed: ExposedThingRegistry,            // std: ArcSwap<Arc<im::OrdMap>>; no_std: WotLock<BTreeMap>+clone-out (AD2/C1/AD54)
+    consumed: ConsumedThingRegistry,           // same per-build split (AD2/C1/AD54)
     server_bindings: BindingList,              // Arc<[...]> snapshot (lock-free reads)
     inbound_fanin: Receiver<InboundRequest>,   // std: bindings self-push via set_request_sink; no_std: try_accept poll
     inbound_fanin_tx: FanInSender<InboundRequest>, // std only; cloned into each binding at registration
@@ -49,7 +49,7 @@ pub struct Servient {
     directory_publisher: Option<Arc<dyn DirectoryPublisher>>,
     security: SecurityContext,
     codecs: WotLock<Vec<Arc<dyn PayloadCodec>>>, // read-write-frequent → WotLock
-    timeout: Arc<dyn OutboundTimeout>,          // runtime-neutral outbound timeout driver (AD39); tokio/embassy_time/custom
+    // (no timeout field — build-time cfg, audit H2; std=tokio, bare no_std=fail-closed)
     event_broker: EventBroker,
     shutdown: Arc<AtomicBool>,
 }
@@ -156,10 +156,11 @@ impl ExposedThingHandle {
   5. `DirectoryPublisher::unregister` (best-effort).
   The Thing is **gone** (not back to draft); re-`produce` to re-expose.
   `destroy(own_id)` from within a handler = step 3 is that handler itself ⇒
-  deferred removal until it returns. **Idempotent (audit E13):** `destroy()` on
+  deferred removal until it returns.   **Idempotent (audit E13/H6):** `destroy()` on
   an already-removed or never-exposed Thing is a **no-op returning `Ok`**, never
-  an error; concurrent `destroy()` calls serialize via the registry lock and one
-  performs the teardown while the other(s) no-op.
+  an error; concurrent `destroy()` calls are safe — on std they race via CAS
+  (the loser retries and sees the entry gone → no-op), on no_std they serialize
+  via the `WotLock` exclusive critical section.
 
 ### Step 3.2.1 — `discover()` sync/async boundary (audit defect AD10)
 
@@ -221,13 +222,19 @@ monopolizing the loop when many requests are ready.
   fair first-ready turn (no binding starved when another stays busy). Strict
   one step per call (AD6b). The `server_bindings` snapshot is an `Arc<[...]>`
   clone (lock-free load). **Completion concurrency model (audit round-2
-  O1/AD42):** AD6b bounds the **accept** rate (≤1/step), not completion
-  concurrency. On std/embassy a bounded local `FuturesUnordered` holds in-flight
-  dispatches (retained from addendum §9.6), so a slow opt-in async handler on
-  one Thing does not stall accept/dispatch of others — `poll_serve` accepts ≤1
-  new request *and* polls the in-flight set one step; sync handlers run inline
-  (fast) within their dispatch. On bare `no_std` there is **no**
-  `FuturesUnordered` and no in-flight concept — strictly serial
+  O1/AD42, H4 corrected):** AD6b bounds the **accept** rate (≤1/step), not
+  completion concurrency. On std/embassy a local `FuturesUnordered` holds
+  in-flight dispatches — but `FuturesUnordered` is **inherently unbounded** (H4:
+  the earlier "bounded FuturesUnordered" was a false claim; no such mechanism
+  exists in Rust). The concrete bound is a **`max_inflight` cap with
+  poll-before-accept discipline**: the driving loop tracks `in_flight` (count of
+  live futures in the set); before accepting a new request, it checks
+  `in_flight < max_inflight` — at capacity, the step polls existing futures only
+  (no accept). The fan-in channel fills → bindings backpressure per AD9. This
+  bounds memory: the in-flight set never exceeds `max_inflight` (default
+  configurable, e.g., 64; = property count for bulk). Sync handlers run inline
+  (fast, synchronous, no future pushed) within their dispatch. On bare `no_std`
+  there is **no** `FuturesUnordered` and no in-flight concept — strictly serial
   accept→sync-handler→reply per tick (no executor to drive multiple futures).
   No `tokio::spawn`.
 - `serve(&self)` (resolved A4): `while !shutdown.load() { poll_serve().await; }`

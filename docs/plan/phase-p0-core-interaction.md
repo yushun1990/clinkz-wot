@@ -52,19 +52,18 @@ Rewrite `core/src/sync.rs`:
   `clinkz-wot-core/multithread`; deleting the core feature invalidates the
   servient forward). This is a P0 task even though P3 rewrites servient, so the
   feature does not dangle.
-- **Snapshot-read primitive for hot read-heavy state** (audit defect AD2;
-  concrete primitive — audit round-2 C6/AD41 + P-1/AD50): alongside `WotLock`,
-  expose a lock-free copy-on-write snapshot helper. The publish cell is
-  **`arc_swap::ArcSwap<T>`** (`ArcSwapOption` for optional slots) — AtomicPtr-
-  based and `no_std`-safe — and the registry container is **`im::OrdMap<K, V>`**
-  (structurally persistent: O(log n) insert, O(1) clone), not `BTreeMap` (which
-  has no structural sharing ⇒ O(n) snapshot writes). So: publish =
-  `arc_swap.store(Arc::new(map.insert(..)))` (lock-free), read =
-  `arc_swap.load()` (lock-free `Guard`). This is for the registries and handler
-  tables whose reads must not disable interrupts on `no_std`. `WotLock` is
-  reserved for read-write-frequent / exclusive-semantics state (see P3
-  §3.1/§3.6). Add `arc-swap` and `im` (with `no_std + alloc` support) to
-  `core/Cargo.toml`.
+- **Registry read path per build (AD2, corrected C1/AD54):**
+  - **std**: lock-free `arc_swap::ArcSwap<Arc<im::OrdMap<K,V>>>` snapshot — read
+    = `load()` (lock-free Guard); write = `store(Arc::new(map.insert(..)))`
+    (O(log n) structural-sharing). Add `arc-swap` + `im` to `core/Cargo.toml`
+    behind the `std` feature.
+  - **no_std**: `WotLock<BTreeMap<K,V>>` + clone-out dispatch discipline — read =
+    `wotlock.with_read(|m| m.get(&id).cloned())` (brief CS ~500ns: BTreeMap::get
+    + Arc clone); handler invocation **outside** any lock. **Zero external deps.**
+    `arc-swap` and `im` are NOT stable-`no_std` and are excluded entirely.
+  - This is for the registries and handler tables. `WotLock` is also used for
+    read-write-frequent / exclusive-semantics state on every build
+    (see P3 §3.1/§3.6).
 
 ### Step 0.2 — Identity and correlation types
 
@@ -106,19 +105,22 @@ Audit that no `MapLock` references remain in core.
 - Define consolidated handler-set storage: `PropertyHandlerSet`,
   `ActionHandlerSet`, `EventHandlerSet`, each slot an enum
   `Sync(Arc<dyn …>) | Async(Arc<dyn Async…>)` (async arm feature-gated).
-- `LocalExposedThing` holds `im::OrdMap<AffordanceName, …HandlerSet>` per kind
-  (structural sharing, audit round-2 P-1/AD50); each per-affordance `HandlerSet`
-  is published as `Arc<HandlerSet>` behind an `ArcSwap`/`ArcSwapOption` so
-  dispatch reads it lock-free (audit round-2 C6/AD41).
+- `LocalExposedThing` holds `Map<AffordanceName, Arc<HandlerSet>>` per kind
+  (audit H1 — **single model**: std = `im::OrdMap`+`ArcSwap`; no_std =
+  `BTreeMap`+`WotLock` clone-out). Each affordance's `HandlerSet` is a plain
+  `Arc<HandlerSet>` **value in the map**, NOT a separate per-affordance
+  `ArcSwap` cell. Dispatch clones the `Arc<HandlerSet>` and invokes outside any
+  lock (clone-out / snapshot load).
 - Rationale: inbound handler invocation is the device hot path; sync dispatch
   is a direct virtual call with **no `Box`**. Async handlers pay one
   `async_trait` `Box` per call — acceptable only because the handler is
   I/O-bound (v4.0 §4.2).
-- **Handler-swap granularity (audit round-2 P-2/AD51):** v1 swaps a slot by
-  rebuilding the whole `HandlerSet` struct + republishing one `Arc` (one alloc
-  per swap, off the per-request path). If runtime handler-swapping later proves
-  hot, the documented escape hatch is per-slot `ArcSwapOption<Arc<dyn …>>` (swap
-  one slot without rebuilding the struct). Deferred.
+- **Handler-swap granularity (audit round-2 P-2/AD51, H1 unified):** v1 swaps a
+  slot by rebuilding the ONE affected `Arc<HandlerSet>` (one alloc) + one map
+  insert (O(log n)); other affordances are untouched. If runtime handler-swapping
+  later proves hot, the documented escape hatch is per-slot
+  `ArcSwapOption<Arc<dyn …>>` (swap one slot without rebuilding the struct).
+  Deferred.
 
 ### Step 0.5 — Interaction I/O (Scripting API §7.1)
 
@@ -201,14 +203,19 @@ Audit that no `MapLock` references remain in core.
 
 - Retain `Payload` (`Arc<[u8]>` body), `PayloadCodec`, `TransportAdapter`,
   `TransportRequest`, `TransportResponse`. Adapt to the new `InteractionOutput`.
-- **`OutboundTimeout` driver trait (audit round-2 C4/AD39):** core defines a
-  small runtime-neutral trait
-  `fn timeout<F: Future>(&self, dur: Duration, fut: F) -> Future<Output = Result<F::Output, CoreError::Timeout>>`
-  (object-safe wrapper as needed), with feature-selected defaults: a tokio impl
-  behind `std`, an `embassy_time` impl behind `no_std + async`, none on bare
-  `no_std`. The Servient holds an `Arc<dyn OutboundTimeout>` (P3 §3.1); a set
-  `InteractionOptions.timeout` with no driver returns
-  `CoreError::TimeoutUnsupported` (AD45 — fail-closed, never silent no-op).
+- **Outbound timeout — build-time cfg, NOT a trait (audit H2):** the earlier
+  `OutboundTimeout` trait with a generic `fn timeout<F: Future>(...)` was **not
+  object-safe** (generic methods cannot produce `dyn`), so `Arc<dyn
+  OutboundTimeout>` was invalid. Correction: timeout is a **build-time cfg**
+  inside the Servient outbound path (P3), not a runtime-injected trait:
+  - **std** (tokio): `tokio::time::timeout(dur, binding.invoke(req))` when
+    `options.timeout.is_some()`.
+  - **no_std + async** (embassy): `embassy_time::with_timeout` behind the
+    `embassy` feature.
+  - **bare no_std**: a set `options.timeout` returns
+    `Err(CoreError::TimeoutUnsupported)` (AD45 — fail-closed, never silent).
+  - No trait, no `dyn`, no per-call boxing. `CoreError::Timeout` and
+    `TimeoutUnsupported` variants are retained (§0.11).
 
 ### Step 0.11 — Core error taxonomy
 
@@ -216,8 +223,8 @@ Audit that no `MapLock` references remain in core.
   `InboundDispatch`. Drop variants tied to removed surfaces. **Add the variants
   the round-2 resolutions require:** `HandlerPanic { target, operation }`
   (AD30 — std-only panic→reply), `Timeout` (AD39 — outbound timeout expired),
-  `TimeoutUnsupported` (AD45 — a `timeout` was requested but no
-  `OutboundTimeout` driver is available on this build; fail-closed), and
+  `TimeoutUnsupported` (AD45 — a `timeout` was requested but this build has no
+  timer cfg; fail-closed), and
   `UnsupportedForm` (AD47 — a caller-pinned `form_index` points at a form no
   binding can drive). Each is a structured variant (no free-form `String`) so
   it threads through `error_status`/`ServientError`.

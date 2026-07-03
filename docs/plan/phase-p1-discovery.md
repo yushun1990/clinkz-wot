@@ -221,18 +221,23 @@ in-memory backend: emitted items never re-emit; inserts before the cursor are
 not guaranteed visible; inserts after may appear in later batches when the
 backend supports live visibility.
 
-**Live-session concurrency safety (audit round-2 O3/AD44).** The cursor is a
-**monotonic revision high-water-mark**: every register/update bumps a per-Thing
-`Revision` (§1.4) and the session records `max(revision)` seen as its cursor; a
-later batch emits only items with `revision > cursor`. Concurrent
-register/unregister against an open session is safe because each `next()` takes
-a **brief shared lock** over the live map, reads one consistent batch (id + rev
-pairs), records the high-water mark, and releases — there is no borrow held
-across batches and no iteration-while-mutating. A mutation that lands between
-two batches either is below the new cursor (already visible, will not re-emit)
-or above it (appears in a later batch). This closes the open cursor question
-below and the P1 risk: high-water-mark revision is the chosen cursor (deterministic,
-monotonic, no re-emit of updated items).
+**Live-session concurrency safety (audit round-2 O3/AD44, **corrected by H3**).**
+The cursor is the **last-emitted id in sorted (BTreeMap) key order** — NOT a
+revision high-water-mark (the revision cursor violated Live Semantics rule 4 by
+re-emitting updated items whose revision bumped above the cursor). The sorted-id
+cursor naturally satisfies all four Live Semantics rules:
+- id ≤ cursor: already emitted → update does NOT re-emit (rule 4 ✓).
+- new id > cursor: appears in a later batch (rule 3 ✓).
+- new id ≤ cursor: not guaranteed visible (rule 2 ✓).
+- O(1) memory (one id).
+Concurrent register/unregister against an open session is safe because each
+`next()` takes a **brief shared lock** over the live BTreeMap, reads one
+consistent batch of items with id > cursor (in sorted order), advances the
+cursor to the last id in the batch, and releases — no borrow held across
+batches, no iteration-while-mutating. Item updates (revision bump) to already-
+emitted ids are NOT re-emitted in the same session; they surface only via
+`DirectoryWatch` (§1.8) or a new session. This closes the cursor question and
+the P1 risk.
 
 ### Step 1.6 — `ThingDiscoveryProcess` (`session.rs`, `discoverer.rs`)
 
@@ -254,11 +259,14 @@ pub trait DiscoverySession: Send {
     fn error(&self) -> Option<&DiscoveryError>;
 }
 
-// The concrete inner (audit D2 — single coherent struct):
+// The concrete inner (audit D2/H5 — single coherent struct):
 enum ProcessState {
-    // Set by sync discover(); no session opened yet.
+    // v1: Introduction is trivially resolved in discover() (the local endpoint
+    // IS the in-memory reader — no async Introduction to defer). Pending carries
+    // the resolved reader + query; next() opens the search session (Exploration
+    // only).
     Pending { reader: Arc<dyn DirectoryReader>, query: DirectoryQuery },
-    // Opened lazily on first next(); DirectorySession yields DirectoryItem.
+    // Opened lazily on first next() via reader.open_search(query).await.
     Open(Box<dyn DirectorySession>),
     // Terminal after an error or stop().
     Done(Option<DiscoveryError>),
@@ -363,13 +371,15 @@ pub enum DiscoveryFilter { /* wraps DirectoryFilter + method hints */ }
 pub enum DirectoryRef { Local, Url(AbsoluteUri) }
 ```
 
-`discover()` builds the lazy `ProcessState::Pending` — it does **not** run
-Introduction or Exploration (audit D6: both are deferred to the first async
-`next()`, even though `Introducer::discover_endpoints` and
-`DirectoryReader::open_search` are themselves async). The `ProcessState`
-opened in `next()` is what orchestrates Introduction (endpoints) then
-Exploration (session). A default `LocalDiscoverer` composes the in-memory
-reader + publisher + a `DirectUrlIntroducer`.
+`discover()` builds the lazy `ProcessState::Pending` (audit H5 — **v1
+Introduction is trivially resolved here**: the local endpoint IS the in-memory
+`DirectoryReader`; there is no async Introduction to defer because v1 is
+local-only per E6). `next()` does **Exploration only** — calls
+`reader.open_search(query).await` to open the session. The earlier "Introduction
+deferred to next()" wording was aspirational for a future remote Introduction
+(mDNS/DNS-SD/etc.); in v1 Introduction is already done at `discover()` time and
+`Pending` carries the resolved reader. A future remote-capable `Pending` variant
+would additionally carry an `Introducer`; deferred with the remote backend (E6).
 
 **Error bridging (audit D5).** `Servient::discover()` is infallible (returns
 `ThingDiscoveryProcess`, Scripting-API shape). `Discoverer::discover()` is
@@ -395,21 +405,25 @@ gap), lifted when a concrete remote backend is added.
 `DirectoryWatch`-gated). It keeps the secondary indexes (Title, Property,
 Action, Event, Fragment) from the current hardening pass for O(log n)
 filtering, but serves via continuation sessions instead of `offset+total`.
-**v1 implements `Live` sessions only** (audit defect AD3): a moving-cursor
-re-scan, monotonic, lazy, no match-set snapshot — using a **revision
-high-water-mark cursor** with brief shared-lock batches (audit round-2
-O3/AD44). `SessionStable` is deferred.
+**v1 implements `Live` sessions only** (audit defect AD3): a **sorted-id
+cursor** — each `next()` reads items with `id > cursor` from the live BTreeMap
+in sorted order, advances the cursor to the last id emitted, under a brief
+shared lock per batch (audit round-2 O3/AD44, **corrected by H3**: the prior
+revision high-water-mark cursor re-emitted updated items; sorted-id cursor
+fixes this). `SessionStable` is deferred.
 
 `get_ref` (borrowed lookup, no clone) is retained for internal use.
 
-**`CountMode` backend contract (audit E11):** the in-memory backend can count
+**`CountMode` backend contract (audit E11/M5):** the in-memory backend can count
 exactly. Rule (applies to all backends): a backend **MAY upgrade**
 `Estimate → Exact` (returning the precise count), but **MUST NOT silently
 downgrade** `Exact → Estimate` — if a backend cannot satisfy `Exact` it returns
-`DiscoveryError::UnsupportedCountMode` rather than an imprecise value. `None`
-never computes a count. So the in-memory backend serves both `Estimate` and
-`Exact` (identical results); a future remote TDD may serve `Estimate` only and
-reject `Exact`.
+`DiscoveryError::UnsupportedCountMode`. `None` never computes a count. **M5
+temporal tension:** `Exact` on a `Live` (constantly changing) set is a
+**point-in-time count** at the moment the batch was computed — it may be stale
+by the next batch. This is inherent to `Live`; `Exact` has strong (stable)
+semantics only with `SessionStable` (deferred). Documented as a known temporal
+boundary, not a bug.
 
 ### Step 1.11 — Error taxonomy (`error.rs`)
 
@@ -501,12 +515,11 @@ ambiguity and is now resolved by AD11.)
 ## Risks
 
 - ~~The continuation-cursor design for the in-memory `Live` session must avoid
-  re-emitting updated items; a `(id, revision)` cursor or a high-water-mark id
-  cursor is needed. Pick one and document it in `backend/memory.rs`.~~
-  **Resolved (audit round-2 O3/AD44):** the cursor is a **monotonic revision
-  high-water-mark** (max `Revision` seen per batch); each `next()` reads one
-  consistent batch under a brief shared lock. Document the choice in
-  `backend/memory.rs`.
+  re-emitting updated items.~~ **Resolved (O3/AD44, corrected by H3):** the
+  cursor is the **last-emitted id in sorted (BTreeMap) key order** — NOT a
+  revision high-water-mark (which re-emitted updated items, violating Live
+  Semantics rule 4). The sorted-id cursor naturally prevents re-emission of
+  already-seen ids regardless of updates. Document in `backend/memory.rs`.
 - `#[async_trait]` `Box` per `next()` call on a large scan could allocate; the
   backend yields batches internally and the session drains a local buffer, so
   `next()` is usually a cheap buffer pop — verify in tests.
