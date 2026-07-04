@@ -41,7 +41,7 @@ pub use security::{
 pub use sync::WotLock;
 pub use thing::{
     ActionCancelHandler, ActionHandler, ActionQueryHandler, AffordanceKind, AffordanceTarget,
-    EventSubscribeHandler, EventUnsubscribeHandler, LocalExposedThing, LocalThing,
+    EventSubscribeHandler, EventUnsubscribeHandler, ExposedThing, LocalThing,
     PropertyObserveHandler, PropertyReadHandler, PropertyUnobserveHandler, PropertyWriteHandler,
     PushFn,
 };
@@ -50,6 +50,6 @@ pub use thing::{
     AsyncActionCancelHandler, AsyncActionHandler, AsyncActionQueryHandler,
     AsyncEventSubscribeHandler, AsyncEventUnsubscribeHandler, AsyncPropertyObserveHandler,
     AsyncPropertyReadHandler, AsyncPropertyUnobserveHandler, AsyncPropertyWriteHandler,
-    BoundConsumedThing,
+    ConsumedThing,
 };
 pub use transport::{TransportAdapter, TransportRequest, TransportResponse};

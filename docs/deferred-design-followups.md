@@ -50,10 +50,10 @@ best handled in a standalone refactor.
 
 `core/src/thing.rs` defines `ExposedThing` and `ConsumedThing` traits that
 each have exactly one implementor in the whole workspace (`LocalThing` and
-`BoundConsumedThing`). No fakes, no alternative implementations. Premature
+`ConsumedThing`). No fakes, no alternative implementations. Premature
 abstraction that bloats the public API.
 
-Why deferred: removing the traits re-exposes `LocalThing`/`BoundConsumedThing`
+Why deferred: removing the traits re-exposes `LocalThing`/`ConsumedThing`
 on the public surface. Decide whether a future `RemoteExposedThing` proxy is
 planned before deleting; otherwise just use the concrete types.
 

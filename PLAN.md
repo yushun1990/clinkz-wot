@@ -69,7 +69,7 @@ prerequisite). These td edits are part of P0, not unassigned.
 
 Scope:
 
-- Concrete `LocalExposedThing` / `BoundConsumedThing` (remove single-impl
+- Concrete `ExposedThing` / `ConsumedThing` (remove single-impl
   `ExposedThing` / `ConsumedThing` traits).
 - Sync-primary handler trait set (`PropertyReadHandler`,
   `PropertyWriteHandler`, …) with opt-in async twins behind `async`, and

@@ -1,9 +1,9 @@
 //! Integration tests for the rewritten core interaction surface (P0).
 //!
-//! - Sync [`LocalExposedThing`] dispatch (default features): handler
+//! - Sync [`ExposedThing`] dispatch (default features): handler
 //!   registration + read/write/invoke/subscribe round-trip.
 //! - Consumed form selection + async dispatch (`async` feature): exercises
-//!   [`BoundConsumedThing`] and the async [`ClientBinding`] path.
+//!   [`ConsumedThing`] and the async [`ClientBinding`] path.
 //! - Error mapping.
 
 #![cfg(test)]
@@ -12,7 +12,7 @@ use std::sync::Arc;
 
 use clinkz_wot_core::{
     AffordanceKind, AffordanceTarget, CoreError, CoreResult, InteractionInput,
-    InteractionOutput, InteractionStatus, LocalExposedThing, Payload,
+    InteractionOutput, InteractionStatus, ExposedThing, Payload,
 };
 use clinkz_wot_td::{
     affordance::{ActionAffordance, EventAffordance, InteractionHelper, PropertyAffordance},
@@ -120,12 +120,12 @@ fn local_thing_description() -> Thing {
 }
 
 // ---------------------------------------------------------------------------
-// Sync LocalExposedThing dispatch (primary inbound path).
+// Sync ExposedThing dispatch (primary inbound path).
 // ---------------------------------------------------------------------------
 
 #[test]
 fn local_exposed_thing_dispatches_registered_handlers() {
-    let mut thing = LocalExposedThing::new(local_thing_description());
+    let mut thing = ExposedThing::new(local_thing_description());
     let shared = Arc::new(std::sync::Mutex::new(Payload::new(b"off".to_vec(), "text/plain")));
     thing.set_property_read_handler("status", StoredRead { value: Arc::clone(&shared) });
     thing.set_property_write_handler("status", StoredWrite { value: Arc::clone(&shared) });
@@ -164,7 +164,7 @@ fn local_exposed_thing_dispatches_registered_handlers() {
 
 #[test]
 fn local_exposed_thing_rejects_unknown_affordance_before_dispatch() {
-    let mut thing = LocalExposedThing::new(local_thing_description());
+    let mut thing = ExposedThing::new(local_thing_description());
     thing.set_property_read_handler(
         "missing",
         StoredRead {
@@ -184,7 +184,7 @@ fn local_exposed_thing_rejects_unknown_affordance_before_dispatch() {
 
 #[test]
 fn local_exposed_thing_reports_missing_registered_handler() {
-    let thing = LocalExposedThing::new(local_thing_description());
+    let thing = ExposedThing::new(local_thing_description());
     let err = thing.invoke_action("echo", &mut InteractionInput::empty()).unwrap_err();
     assert!(matches!(
         err,
@@ -234,7 +234,7 @@ fn interaction_output_defaults_to_ok_status() {
 #[cfg(feature = "async")]
 mod consumed_async {
     use super::*;
-    use clinkz_wot_core::{BindingRequest, BoundConsumedThing, ClientBinding, SubscriptionGuard};
+    use clinkz_wot_core::{BindingRequest, ConsumedThing, ClientBinding, SubscriptionGuard};
     use clinkz_wot_core::interaction::InteractionOutput;
     use std::cell::RefCell;
 
@@ -285,7 +285,7 @@ mod consumed_async {
     #[tokio::test]
     async fn consumed_dispatches_selected_form_to_matching_binding() {
         let (td, read_form) = remote_thing_description();
-        let mut thing = BoundConsumedThing::new(td);
+        let mut thing = ConsumedThing::new(td);
         thing.register_binding(RecordingBinding {
             content_type: "application/octet-stream",
             response: Payload::new(b"on".to_vec(), "text/plain"),
@@ -307,7 +307,7 @@ mod consumed_async {
     #[tokio::test]
     async fn consumed_rejects_form_not_in_affordance() {
         let (td, _valid_form) = remote_thing_description();
-        let mut consumed = BoundConsumedThing::new(td);
+        let mut consumed = ConsumedThing::new(td);
         let foreign_form = Arc::new(
             Form::read_property("wot://other/properties/x")
                 .content_type("application/octet-stream")
@@ -332,7 +332,7 @@ mod consumed_async {
     #[tokio::test]
     async fn consumed_rejects_unknown_affordance_before_binding_dispatch() {
         let (td, read_form) = remote_thing_description();
-        let mut thing = BoundConsumedThing::new(td);
+        let mut thing = ConsumedThing::new(td);
         thing.register_binding(RecordingBinding {
             content_type: "application/octet-stream",
             response: Payload::new(b"on".to_vec(), "text/plain"),
@@ -370,7 +370,7 @@ mod consumed_async {
             .property("status", property)
             .build()
             .unwrap();
-        let mut thing = BoundConsumedThing::new(td);
+        let mut thing = ConsumedThing::new(td);
         let err = thing
             .request(
                 AffordanceTarget::Property("status".into()),
@@ -389,7 +389,7 @@ mod consumed_async {
     #[tokio::test]
     async fn consumed_reports_missing_matching_binding() {
         let (td, read_form) = remote_thing_description();
-        let mut thing = BoundConsumedThing::new(td);
+        let mut thing = ConsumedThing::new(td);
         let err = thing
             .request(
                 AffordanceTarget::Property("status".into()),
@@ -422,7 +422,7 @@ mod consumed_async {
 mod async_dispatch {
     use super::*;
     use clinkz_wot_core::{
-        AsyncActionHandler, AsyncPropertyReadHandler, LocalExposedThing,
+        AsyncActionHandler, AsyncPropertyReadHandler, ExposedThing,
     };
 
     struct AsyncEchoRead;
@@ -448,7 +448,7 @@ mod async_dispatch {
 
     #[tokio::test]
     async fn async_read_handler_dispatches_via_async_path() {
-        let mut thing = LocalExposedThing::new(local_thing_description());
+        let mut thing = ExposedThing::new(local_thing_description());
         thing.set_async_property_read_handler("status", AsyncEchoRead);
         let out = thing
             .read_property_async(
@@ -462,7 +462,7 @@ mod async_dispatch {
 
     #[tokio::test]
     async fn async_action_handler_dispatches_via_async_path() {
-        let mut thing = LocalExposedThing::new(local_thing_description());
+        let mut thing = ExposedThing::new(local_thing_description());
         thing.set_async_action_handler("echo", AsyncEchoAction);
         let mut input =
             InteractionInput::with_data(Payload::new(b"yo".to_vec(), "text/plain"));
@@ -474,7 +474,7 @@ mod async_dispatch {
     async fn sync_handler_runs_inline_via_async_path() {
         // An async dispatch against a sync handler runs the sync handler inline
         // (the std driving loop's inline model).
-        let mut thing = LocalExposedThing::new(local_thing_description());
+        let mut thing = ExposedThing::new(local_thing_description());
         thing.set_property_read_handler(
             "status",
             StoredRead {

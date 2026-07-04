@@ -140,10 +140,13 @@ Consequences for this engine:
   `ExposedThingHandle`/`ConsumedThingHandle`/`ThingDiscoveryProcess` handles,
   and the `snake_case` method catalogue — `read_property`, `set_*_handler`,
   `emit_event`, etc.) is the Scripting-API-aligned layer (v4.0 §10 map). The
-  engine-internal concrete types (`LocalExposedThing`, `BoundConsumedThing`,
+  engine-internal concrete types (`ExposedThing`, `ConsumedThing`,
   `InteractionInput`/`Output`, `EventBroker`, `PushFn`, …) are Rust-idiomatic
-  engine types and are **not** named after the JS API; such naming/idiom
-  choices are governed by v4.0 §0 and are not Scripting-API deviations.
+  engine types: `ExposedThing`/`ConsumedThing` denote the concrete thing STATE
+  in core, wrapped by the Servient's `ExposedThingHandle`/`ConsumedThingHandle`
+  (the app-facing surface that maps 1:1 to the Scripting API's
+  `ExposedThing`/`ConsumedThing`). Such naming/idiom choices are governed by
+  v4.0 §0 and are not Scripting-API deviations.
 - Engine-specific **behavioral** deviations from the Scripting API surface are
   documented explicitly (v4.0 §9), not hidden. The current documented
   deviations are:

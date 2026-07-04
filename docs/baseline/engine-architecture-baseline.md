@@ -65,15 +65,20 @@ parameter-semantics + error-model* alignment, expressed in Rust idiom. It is
   `query_action`/`cancel_action`, `emit_event`/`emit_property_change`,
   `expose`/`destroy`, the `set_*_handler` family) — Rust `snake_case` renderings
   of the Scripting API method names, mapped 1:1 in §10.
-- The **engine-internal concrete types** (`LocalExposedThing`,
-  `BoundConsumedThing`, `LocalThing`, `InteractionInput`/`InteractionOutput`/
+- The **engine-internal concrete types** (`ExposedThing`, `ConsumedThing`,
+  `LocalThing`, `InteractionInput`/`InteractionOutput`/
   `InteractionOptions`/`InteractionStatus`, `EventBroker`, `PushFn`, the
   `*Handler` traits, `WotLock`) are Rust-idiomatic engine types. They implement
-  the Scripting API *semantics* but are **not** named after the JS API — the JS
-  `ExposedThing`/`ConsumedThing` names are reserved for the Servient handle
-  layer. These naming choices are governed by this §0 posture and the Rust API
-  Guidelines; they are **not** §9 behavioral deviations and do not require
-  individual §9 entries.
+  the Scripting API *semantics* but are shaped to Rust, not to JS. The Servient
+  wraps `ExposedThing`/`ConsumedThing` in `ExposedThingHandle`/
+  `ConsumedThingHandle` (the application-facing, `Arc`-clonable surface); that
+  `*Handle` layer is what corresponds 1:1 to the Scripting API's
+  `ExposedThing`/`ConsumedThing`, while the core `ExposedThing`/`ConsumedThing`
+  nouns denote the concrete thing state the handles wrap (deliberate
+  `Thing` + `Handle` Rust-idiom split). `LocalThing` keeps its `Local` qualifier
+  to disambiguate from the data-model `clinkz_wot_td::Thing`. These naming
+  choices are governed by this §0 posture and the Rust API Guidelines; they are
+  **not** §9 behavioral deviations and do not require individual §9 entries.
 - Engine-specific handler-signature details the Scripting API does not pin down
   (e.g. the observe/subscribe handler's `PushFn` initial-value callback, which
   models CoAP-Observe-style "current value on subscribe") are implementation
@@ -148,13 +153,14 @@ public surface.
 
 ### 4.1 Thing types become concrete
 
-The single-impl `ExposedThing` and `ConsumedThing` traits
-(`core/src/thing.rs`) are removed (deferred #3). `core` owns two concrete
-types:
+The single-impl `ExposedThing` and `ConsumedThing` **traits**
+(`core/src/thing.rs`) are removed (deferred #3). The names are reused for the
+two concrete types `core` now owns (the trait indirection is gone; these are
+the concrete thing-state types the Servient wraps in `*Handle`s):
 
-- `LocalExposedThing` — a produced Thing plus its handler set. Lives in core so
+- `ExposedThing` — a produced Thing plus its handler set. Lives in core so
   the protocol-neutral dispatcher can drive it.
-- `BoundConsumedThing` — a consumed Thing plus its resolved binding plan. Lives
+- `ConsumedThing` — a consumed Thing plus its resolved binding plan. Lives
   in core so the consumed dispatch path can invoke it.
 
 `Servient` wraps these in `Arc`-based handles (`ExposedThingHandle`,
@@ -234,7 +240,7 @@ pub struct ActionHandlerSet { invoke, query, cancel }
 pub struct EventHandlerSet  { subscribe, unsubscribe }
 ```
 
-`LocalExposedThing` holds `Map<AffordanceName, Arc<HandlerSet>>` (audit H1 —
+`ExposedThing` holds `Map<AffordanceName, Arc<HandlerSet>>` (audit H1 —
 **single unified model**: std = `im::OrdMap` behind `ArcSwap` snapshot; no_std =
 `BTreeMap` behind `WotLock`+clone-out), with Action/Event equivalents. Each
 affordance's handlers are a plain `Arc<HandlerSet>` **value in the map** — NOT a
@@ -1101,7 +1107,7 @@ the §0 "Naming and idiom posture" and are not enumerated here:
    built-in `fetch` — the engine is protocol-neutral and the concrete transport
    is injected.
 4. **No implicit server-side property value store (audit E2).** The engine is
-   **handler-driven**: `LocalExposedThing` is "Thing + handler set", with no
+   **handler-driven**: `ExposedThing` is "Thing + handler set", with no
    internal property-value map. `read_property` dispatches to the read handler;
    an affordance with no read handler returns `MissingHandler`. The Scripting
    API's `ExposedThing` keeps an internal value (readable without a handler,
@@ -1206,7 +1212,7 @@ they adapt):
 
 - **P0 — Core interaction surface rewrite.** Sync-primary handler trait set
   with opt-in async twins; consolidated handler storage; concrete
-  `LocalExposedThing` / `BoundConsumedThing`; `WotLock`; `InteractionOptions`/
+  `ExposedThing` / `ConsumedThing`; `WotLock`; `InteractionOptions`/
   `InteractionOutput` rework. `no_std+alloc` verified.
 - **P1 — Discovery rewrite.** Introduction/Exploration/session traits; in-memory
   backend as reference impl; `Discoverer`/`DirectoryPublisher`/
@@ -1250,7 +1256,7 @@ Each phase is independently shippable behind the workspace build.
 | D2 | Dynamic affordance lifecycle | Removed in v1; TD frozen at expose. (§4.5, §7.3) |
 | D3 | Async/sync model | Async driving/transport layer; sync handlers primary (zero-alloc hot path) with opt-in async handlers (feature/cloud); sync driving is a manual-poll super-loop adapter. (§4.2, §7.2) |
 | D4 | Lock primitive | `WotLock<T>`: `Arc`-backed portable handle, `std::sync` / `critical_section`; renames `MapLock`; `multithread` feature removed. (§4.7) |
-| D5 | Thing abstractions | Concrete `LocalExposedThing`/`BoundConsumedThing`; single-impl traits removed. (§4.1) |
+| D5 | Thing abstractions | Concrete `ExposedThing`/`ConsumedThing`; single-impl traits removed. (§4.1) |
 | D6 | Handler storage | One consolidated handler-set per affordance; sync traits primary, async twins (all 9 ops) opt-in per Scripting API method. (§4.2) |
 | D7 | Discovery | Execute the Introduction/Exploration/session refactor; `Servient` holds `Discoverer` trait object. (§6, §7.1) |
 

@@ -2,8 +2,8 @@
 //! types (baseline v4.0 §4.1–§4.4).
 //!
 //! The single-impl `ExposedThing` / `ConsumedThing` traits are gone. Core owns
-//! two concrete types: [`LocalExposedThing`] (a produced Thing plus its handler
-//! sets, driven by the protocol-neutral dispatcher) and [`BoundConsumedThing`]
+//! two concrete types: [`ExposedThing`] (a produced Thing plus its handler
+//! sets, driven by the protocol-neutral dispatcher) and [`ConsumedThing`]
 //! (a consumed Thing plus its resolved binding plan). [`LocalThing`] is retained
 //! as a produce-time TD affordance builder (audit F9).
 
@@ -484,7 +484,7 @@ fn missing_handler(target: AffordanceTarget, operation: Operation) -> CoreError 
 }
 
 // ---------------------------------------------------------------------------
-// LocalExposedThing — produced Thing plus handler sets (baseline §4.1). Lives
+// ExposedThing — produced Thing plus handler sets (baseline §4.1). Lives
 // in core so the protocol-neutral dispatcher can drive it. Handlers may be
 // attached or replaced throughout the exposed lifetime (AD14); an unwired
 // affordance yields `MissingHandler`.
@@ -495,14 +495,14 @@ fn missing_handler(target: AffordanceTarget, operation: Operation) -> CoreError 
 /// Holds a [`LocalThing`] (the mutable TD + affordance-mutation primitives) and
 /// three handler-set maps (property/action/event). Dispatch clones a handler
 /// `Arc` out of the relevant set and invokes it outside any lock.
-pub struct LocalExposedThing {
+pub struct ExposedThing {
     pub(crate) local: LocalThing,
     pub(crate) property_handlers: BTreeMap<String, PropertyHandlerSet>,
     pub(crate) action_handlers: BTreeMap<String, ActionHandlerSet>,
     pub(crate) event_handlers: BTreeMap<String, EventHandlerSet>,
 }
 
-impl LocalExposedThing {
+impl ExposedThing {
     /// Creates an exposed Thing from a Thing Description with no handlers
     /// attached.
     pub fn new(thing: Thing) -> Self {
@@ -1005,7 +1005,7 @@ impl LocalExposedThing {
 mod async_dispatch {
     use super::*;
 
-    impl LocalExposedThing {
+    impl ExposedThing {
         /// Async read dispatch: awaits an async read handler, or runs a sync
         /// read handler inline.
         pub async fn read_property_async(
@@ -1165,7 +1165,7 @@ mod async_dispatch {
 }
 
 // ---------------------------------------------------------------------------
-// BoundConsumedThing — consumed Thing plus resolved binding plan (baseline
+// ConsumedThing — consumed Thing plus resolved binding plan (baseline
 // §4.1). The consumed (outbound) path is network-bound and therefore async
 // (resolved A1): ClientBinding::invoke is `async fn`, so the consumed dispatch
 // is gated behind the `async` feature.
@@ -1189,12 +1189,12 @@ mod consumed {
     /// Dispatch resolves the selected form against the affordance, picks a
     /// binding whose [`ClientBinding::supports`] holds, and drives
     /// [`ClientBinding::invoke`] asynchronously.
-    pub struct BoundConsumedThing {
+    pub struct ConsumedThing {
         pub(crate) thing: Arc<Thing>,
         pub(crate) bindings: Vec<Box<dyn ClientBinding>>,
     }
 
-    impl BoundConsumedThing {
+    impl ConsumedThing {
         /// Creates a consumed Thing dispatcher for a Thing Description.
         pub fn new(thing: Thing) -> Self {
             Self {
@@ -1343,4 +1343,4 @@ mod consumed {
 }
 
 #[cfg(feature = "async")]
-pub use consumed::BoundConsumedThing;
+pub use consumed::ConsumedThing;

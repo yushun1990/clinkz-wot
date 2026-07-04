@@ -17,8 +17,8 @@ Path: `core`.
 Defines protocol-neutral engine traits and local runtime abstractions
 (v4.0 §4). Expected responsibilities:
 
-- Exposed and consumed Thing abstractions (concrete `LocalExposedThing` /
-  `BoundConsumedThing`; the single-impl traits are removed).
+- Exposed and consumed Thing abstractions (concrete `ExposedThing` /
+  `ConsumedThing`; the single-impl traits are removed).
 - Sync-primary handler traits (zero-alloc dispatch) + opt-in async twins for
   all nine interaction operations, behind `async` (v4.0 §4.2).
 - Client (`ClientBinding` — async `invoke`/`subscribe`) and server

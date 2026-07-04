@@ -73,8 +73,8 @@ Audit that no `MapLock` references remain in core.
 ### Step 0.3 — Concrete Thing types
 
 - Remove the `ExposedThing` and `ConsumedThing` traits (`core/src/thing.rs`).
-- Introduce concrete `LocalExposedThing` (produced Thing + handler sets) and
-  `BoundConsumedThing` (consumed Thing + resolved binding plan).
+- Introduce concrete `ExposedThing` (produced Thing + handler sets) and
+  `ConsumedThing` (consumed Thing + resolved binding plan).
 - These live in core; `Servient` wraps them in `Arc` handles (P3).
 - **`LocalThing` affordance-mutation primitives (audit F9 — decision):** the
   existing `core/src/thing.rs` `LocalThing::{add,remove}_{property,action,event}`
@@ -105,7 +105,7 @@ Audit that no `MapLock` references remain in core.
 - Define consolidated handler-set storage: `PropertyHandlerSet`,
   `ActionHandlerSet`, `EventHandlerSet`, each slot an enum
   `Sync(Arc<dyn …>) | Async(Arc<dyn Async…>)` (async arm feature-gated).
-- `LocalExposedThing` holds `Map<AffordanceName, Arc<HandlerSet>>` per kind
+- `ExposedThing` holds `Map<AffordanceName, Arc<HandlerSet>>` per kind
   (audit H1 — **single model**: std = `im::OrdMap`+`ArcSwap`; no_std =
   `BTreeMap`+`WotLock` clone-out). Each affordance's `HandlerSet` is a plain
   `Arc<HandlerSet>` **value in the map**, NOT a separate per-affordance

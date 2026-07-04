@@ -111,7 +111,7 @@ it was ambiguous and contradicted AD8.
 ### Step 3.3 — Handles (drop `<D>`)
 
 `ExposedThingHandle` / `ConsumedThingHandle` drop the `<D>` generic (they hold
-a `Servient` clone). They wrap P0's `LocalExposedThing` / `BoundConsumedThing`
+a `Servient` clone). They wrap P0's `ExposedThing` / `ConsumedThing`
 via `Arc`.
 
 ### Step 3.4 — Frozen-TD lifecycle (decision 2)
