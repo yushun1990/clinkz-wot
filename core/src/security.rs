@@ -4,7 +4,7 @@ use core::fmt;
 use clinkz_wot_td::{form::Form, security_scheme::SecurityScheme, thing::Thing};
 
 use crate::inbound::InboundRequest;
-use crate::{CoreError, CoreResult, MapLock, TransportRequest};
+use crate::{CoreError, CoreResult, TransportRequest, WotLock};
 
 /// Security metadata available while preparing a transport request.
 #[derive(Clone, Copy)]
@@ -67,13 +67,13 @@ pub trait CredentialStore {
 /// `get` lookups by `&str` keys proceed without allocating `String` keys on
 /// every secured outbound request.
 pub struct InMemoryCredentialStore {
-    entries: MapLock<BTreeMap<String, BTreeMap<String, Credentials>>>,
+    entries: WotLock<BTreeMap<String, BTreeMap<String, Credentials>>>,
 }
 
 impl Default for InMemoryCredentialStore {
     fn default() -> Self {
         Self {
-            entries: MapLock::new(BTreeMap::new()),
+            entries: WotLock::new(BTreeMap::new()),
         }
     }
 }
@@ -86,10 +86,9 @@ impl InMemoryCredentialStore {
 
     /// Stores credentials for a Thing + scheme pair.
     ///
-    /// Returns [`CoreError::Lock`] if the store's lock was poisoned by a
-    /// panicking thread; in that case the write is skipped (not applied to
-    /// inconsistent state), so the caller can react to a credential that was
-    /// not actually stored.
+    /// The store's lock heals any std poisoning internally and never fails;
+    /// the write is always applied. Returns `Ok(())` for API symmetry with
+    /// [`CredentialStore`].
     pub fn put(
         &self,
         thing_id: impl Into<String>,
@@ -100,14 +99,14 @@ impl InMemoryCredentialStore {
             map.entry(thing_id.into())
                 .or_default()
                 .insert(scheme_name.into(), credentials);
-        })?;
+        });
         Ok(())
     }
 
     /// Removes credentials for a Thing + scheme pair.
     ///
-    /// Returns [`CoreError::Lock`] if the store's lock was poisoned; the
-    /// removal is then skipped rather than applied to inconsistent state.
+    /// The lock never fails (poisoning is healed internally), so the removal
+    /// is always applied.
     pub fn remove(&self, thing_id: &str, scheme_name: &str) -> CoreResult<()> {
         self.entries.with(|map| {
             if let Some(schemes) = map.get_mut(thing_id) {
@@ -116,7 +115,7 @@ impl InMemoryCredentialStore {
                     map.remove(thing_id);
                 }
             }
-        })?;
+        });
         Ok(())
     }
 }

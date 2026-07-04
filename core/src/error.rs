@@ -4,7 +4,6 @@ use core::fmt;
 use clinkz_wot_td::data_type::Operation;
 
 use crate::security::SecurityError;
-use crate::sync::MapLockError;
 use crate::thing::{AffordanceKind, AffordanceTarget};
 
 /// Result type used by protocol-neutral core traits.
@@ -37,8 +36,6 @@ pub enum CoreError {
     },
     /// An inbound dispatch or routing failure with an opaque English reason.
     InboundDispatch(String),
-    /// A shared engine lock was poisoned by a panicking thread.
-    Lock(MapLockError),
 }
 
 impl fmt::Display for CoreError {
@@ -57,7 +54,6 @@ impl fmt::Display for CoreError {
                 write!(f, "No handler attached for {:?} on {:?}", operation, target)
             }
             Self::InboundDispatch(message) => write!(f, "Inbound dispatch error: {}", message),
-            Self::Lock(err) => write!(f, "{}", err),
         }
     }
 }
@@ -67,14 +63,7 @@ impl std::error::Error for CoreError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
             Self::Security(err) => Some(err),
-            Self::Lock(err) => Some(err),
             _ => None,
         }
-    }
-}
-
-impl From<MapLockError> for CoreError {
-    fn from(value: MapLockError) -> Self {
-        Self::Lock(value)
     }
 }

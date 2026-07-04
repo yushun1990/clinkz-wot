@@ -44,7 +44,7 @@ use alloc::{
 };
 use core::fmt;
 
-use crate::MapLock;
+use crate::WotLock;
 use crate::thing::EventSink;
 use crate::{CoreError, CoreResult, Payload, ThingId};
 
@@ -159,13 +159,13 @@ type EventSinkMap = BTreeMap<ThingId, BTreeMap<EventName, Arc<[SharedPublisherSi
 /// broker.register("urn:thing:1", "update", ConsoleSink);
 /// ```
 pub struct EventBroker {
-    sinks: Arc<MapLock<EventSinkMap>>,
+    sinks: WotLock<EventSinkMap>,
 }
 
 impl Clone for EventBroker {
     fn clone(&self) -> Self {
         Self {
-            sinks: Arc::clone(&self.sinks),
+            sinks: self.sinks.clone(),
         }
     }
 }
@@ -174,7 +174,7 @@ impl EventBroker {
     /// Creates an empty event broker.
     pub fn new() -> Self {
         Self {
-            sinks: Arc::new(MapLock::new(BTreeMap::new())),
+            sinks: WotLock::new(BTreeMap::new()),
         }
     }
 
@@ -208,7 +208,7 @@ impl EventBroker {
         // `with` (not `with_recover`): on poison the registration is skipped
         // rather than written into potentially inconsistent state. A skipped
         // registration leaves the broker with its pre-poison fan-out table.
-        let _ = self.sinks.with(|map| {
+        self.sinks.with(|map| {
             let events = map.entry(thing.into()).or_default();
             let event = event.into();
             let snapshot = if let Some(sinks) = events.get(&event) {
@@ -237,16 +237,14 @@ impl EventBroker {
     /// Called by the Servient during `destroy` so that stale publisher sinks do
     /// not linger after a Thing is removed.
     pub fn remove_thing(&self, thing: &ThingId) {
-        // `with` skips the removal on poison instead of mutating inconsistent
-        // state; stale sinks at worst linger until the next successful call.
-        let _ = self.sinks.with(|map| {
+        self.sinks.with(|map| {
             map.remove(thing);
         });
     }
 
     /// Removes publisher sinks for a single event on a Thing.
     pub fn remove_event(&self, thing: &ThingId, event: &EventName) {
-        let _ = self.sinks.with(|map| {
+        self.sinks.with(|map| {
             if let Some(events) = map.get_mut(thing) {
                 events.remove(event);
             }
@@ -267,7 +265,7 @@ impl EventBroker {
         // broker lock.
         let snapshot: Option<Arc<[SharedPublisherSink]>> = self
             .sinks
-            .with_read(|map| map.get(thing).and_then(|events| events.get(event)).cloned())?;
+            .with_read(|map| map.get(thing).and_then(|events| events.get(event)).cloned());
         let Some(snapshot) = snapshot else {
             return Ok(());
         };
@@ -409,7 +407,7 @@ pub struct Subscription {
 #[derive(Clone)]
 enum SubscriptionInner {
     /// Single bounded queue (the common case).
-    Single(Arc<MapLock<QueueInner>>),
+    Single(WotLock<QueueInner>),
     /// Multiplexed set of subscriptions (fan-out / "all" operations).
     Merged(Vec<Subscription>),
 }
@@ -422,7 +420,7 @@ enum SubscriptionInner {
 /// incremented. Pushes after [`stop`](Self::stop) are silently dropped.
 #[derive(Clone)]
 pub struct SubscriptionSender {
-    inner: Arc<MapLock<QueueInner>>,
+    inner: WotLock<QueueInner>,
 }
 
 impl Subscription {
@@ -436,16 +434,16 @@ impl Subscription {
         } else {
             capacity
         };
-        let inner = Arc::new(MapLock::new(QueueInner {
+        let inner = WotLock::new(QueueInner {
             buffer: VecDeque::new(),
             capacity: cap,
             overflow_count: 0,
             stopped: false,
             waker: None,
-        }));
+        });
         (
             SubscriptionSender {
-                inner: Arc::clone(&inner),
+                inner: inner.clone(),
             },
             Self {
                 inner: SubscriptionInner::Single(inner),
@@ -664,28 +662,28 @@ impl fmt::Debug for SubscriptionSender {
 ///
 /// Behind the `async` feature, [`Subscription`] implements
 /// [`futures_core::Stream`]. The implementation parks a task by registering a
-/// [`core::task::Waker`] under the same [`MapLock`] that guards the queue, and
+/// [`core::task::Waker`] under the same [`WotLock`] that guards the queue, and
 /// [`SubscriptionSender::push`] / [`Subscription::stop`] wake it. This keeps the
 /// queue the single source of truth (no second channel primitive) and leaves the
 /// synchronous surface usable on `no_std`.
 #[cfg(feature = "async")]
 mod stream_impl {
-    use alloc::{sync::Arc, vec::Vec};
+    use alloc::vec::Vec;
     use core::pin::Pin;
     use core::task::{Context, Poll};
 
     use futures_core::Stream;
 
-    use crate::MapLock;
+    use crate::WotLock;
     use crate::payload::Payload;
 
     use super::{QueueInner, Subscription, SubscriptionInner};
 
     impl Subscription {
         /// Collects every underlying single queue, flattening nested merges.
-        fn collect_leaves(&self, out: &mut Vec<Arc<MapLock<QueueInner>>>) {
+        fn collect_leaves(&self, out: &mut Vec<WotLock<QueueInner>>) {
             match &self.inner {
-                SubscriptionInner::Single(inner) => out.push(Arc::clone(inner)),
+                SubscriptionInner::Single(inner) => out.push(inner.clone()),
                 SubscriptionInner::Merged(subs) => {
                     for sub in subs {
                         sub.collect_leaves(out);
@@ -705,14 +703,14 @@ mod stream_impl {
                 return poll_single(inner, cx);
             }
 
-            let mut leaves: Vec<Arc<MapLock<QueueInner>>> = Vec::new();
+            let mut leaves: Vec<WotLock<QueueInner>> = Vec::new();
             self.collect_leaves(&mut leaves);
             poll_leaves(&leaves, cx)
         }
     }
 
     fn poll_single(
-        inner: &Arc<MapLock<QueueInner>>,
+        inner: &WotLock<QueueInner>,
         cx: &mut Context<'_>,
     ) -> Poll<Option<Payload>> {
         let drained = inner.with_recover(|q| {
@@ -744,7 +742,7 @@ mod stream_impl {
     }
 
     fn poll_leaves(
-        leaves: &[Arc<MapLock<QueueInner>>],
+        leaves: &[WotLock<QueueInner>],
         cx: &mut Context<'_>,
     ) -> Poll<Option<Payload>> {
         // Round-robin drain: if any leaf has a buffered sample, return it

@@ -34,7 +34,6 @@ async = [
     "dep:tokio",
     "clinkz-wot-core/async",
 ]
-multithread = ["clinkz-wot-core/multithread"]
 test-zenoh = [
     "dep:clinkz-wot-protocol-bindings-zenoh",
     "clinkz-wot-protocol-bindings-zenoh/zenoh",

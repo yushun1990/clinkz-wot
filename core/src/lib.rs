@@ -33,7 +33,7 @@ pub use security::{
     AuthMaterial, CredentialStore, Credentials, InMemoryCredentialStore, Principal, PrincipalId,
     SecurityContext, SecurityError, SecurityProvider, check_scopes,
 };
-pub use sync::{MapLock, MapLockError};
+pub use sync::WotLock;
 pub use thing::{
     ActionCancelHandler, ActionHandler, ActionQueryHandler, AffordanceKind, AffordanceTarget,
     BoundConsumedThing, ConsumedThing, EventSink, EventSubscribeHandler, EventUnsubscribeHandler,
