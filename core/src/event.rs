@@ -126,10 +126,9 @@ pub trait PublisherSink {
 
 /// Owned, erased publisher sink stored by [`EventBroker`].
 ///
-/// `Send + Sync` on `std` (shareable across async tasks), `Send` on `no_std`.
-#[cfg(not(feature = "std"))]
-pub(crate) type SharedPublisherSink = Arc<dyn PublisherSink + Send>;
-#[cfg(feature = "std")]
+/// `Send + Sync` on every build (v4.0 unified handler-object bounds): the
+/// broker is shared across the driving loop / async tasks and its sinks must
+/// be shareable across threads.
 pub(crate) type SharedPublisherSink = Arc<dyn PublisherSink + Send + Sync>;
 
 /// Fan-out table keyed by Thing and event name.
@@ -182,19 +181,9 @@ impl EventBroker {
     ///
     /// Takes ownership and boxes the sink internally. Duplicate registrations
     /// for the same `(thing, event)` accumulate into the fan-out list.
-    #[cfg(feature = "std")]
     pub fn register<S>(&self, thing: impl Into<ThingId>, event: impl Into<EventName>, sink: S)
     where
         S: PublisherSink + Send + Sync + 'static,
-    {
-        self.register_shared(thing, event, Arc::new(sink));
-    }
-
-    /// Registers a publisher sink for the given Thing and event (`no_std`).
-    #[cfg(not(feature = "std"))]
-    pub fn register<S>(&self, thing: impl Into<ThingId>, event: impl Into<EventName>, sink: S)
-    where
-        S: PublisherSink + Send + 'static,
     {
         self.register_shared(thing, event, Arc::new(sink));
     }

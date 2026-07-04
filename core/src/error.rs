@@ -36,6 +36,24 @@ pub enum CoreError {
     },
     /// An inbound dispatch or routing failure with an opaque English reason.
     InboundDispatch(String),
+    /// A handler panicked during dispatch (`std`-only panic→reply contract,
+    /// AD30). Carries the target and operation for diagnostics.
+    HandlerPanic {
+        target: AffordanceTarget,
+        operation: Operation,
+    },
+    /// An outbound call exceeded its requested `InteractionOptions.timeout`
+    /// (AD39).
+    Timeout,
+    /// A `timeout` was requested but this build has no timer cfg (bare `no_std`,
+    /// AD45). Fail-closed: never silently ignored.
+    TimeoutUnsupported,
+    /// A caller-pinned `form_index` points at a form no binding can drive
+    /// (AD47).
+    UnsupportedForm { index: usize },
+    /// A byte-level handler emitted a content type the request's `Accept` hint
+    /// did not permit. The engine does not transcode (AD48 / E1).
+    ContentTypeMismatch { content_type: String },
 }
 
 impl fmt::Display for CoreError {
@@ -54,6 +72,24 @@ impl fmt::Display for CoreError {
                 write!(f, "No handler attached for {:?} on {:?}", operation, target)
             }
             Self::InboundDispatch(message) => write!(f, "Inbound dispatch error: {}", message),
+            Self::HandlerPanic { target, operation } => {
+                write!(
+                    f,
+                    "Handler panicked for {:?} on {:?}",
+                    operation, target
+                )
+            }
+            Self::Timeout => write!(f, "Outbound call timed out"),
+            Self::TimeoutUnsupported => write!(
+                f,
+                "Outbound timeout requested but unsupported on this build"
+            ),
+            Self::UnsupportedForm { index } => {
+                write!(f, "Caller-pinned form index {} is unsupported", index)
+            }
+            Self::ContentTypeMismatch { content_type } => {
+                write!(f, "Content type not acceptable: {}", content_type)
+            }
         }
     }
 }

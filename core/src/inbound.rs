@@ -1,22 +1,28 @@
-//! Inbound interaction request and response model (baseline v3.0 §11 /
-//! addendum §2.3).
+//! Inbound interaction request and response model, and the inbound binding
+//! contract (baseline v4.0 §4.5).
 //!
-//! The inbound path is the symmetric counterpart of the outbound path: a
-//! [`ServerBinding`] produces an [`InboundRequest`], the Servient driving loop
-//! dispatches it against the exposed Thing registry, and returns an
-//! [`InboundResponse`] that the binding matches back to its transport via the
-//! echoed [`CorrelationId`].
+//! A [`ServerBinding`] produces [`InboundRequest`]s. On `std` it self-pushes
+//! into a bounded fan-in channel via [`ServerBinding::set_request_sink`]; on
+//! `no_std` the driving loop polls [`ServerBinding::try_accept`]. The Servient
+//! driving loop dispatches each request against the exposed Thing registry and
+//! returns an [`InboundResponse`] that the binding matches back to its transport
+//! via the echoed [`CorrelationId`].
 
-#[cfg(feature = "async")]
-use alloc::boxed::Box;
 use alloc::string::String;
 
 use clinkz_wot_td::{data_type::Operation, thing::Thing};
 
 use crate::{
-    AffordanceTarget, CoreResult, EventBroker, InteractionInput, InteractionOutput, ThingId,
-    identity::CorrelationId, security::AuthMaterial,
+    interaction::{InteractionInput, InteractionOutput}, AffordanceTarget, CoreError, CoreResult,
+    EventBroker, ThingId, identity::CorrelationId, security::AuthMaterial,
 };
+
+/// Bounded fan-in channel sender handed to each server binding on `std`
+/// (baseline §4.5 / AD13 / D16). The Servient owns the matching `Receiver`;
+/// each binding `try_send`s inbound requests from its **synchronous** transport
+/// callbacks. Runtime-neutral (tokio/async-std/embassy-std).
+#[cfg(feature = "std")]
+pub type FanInSender<T> = async_channel::Sender<T>;
 
 /// Request produced by a server binding for an inbound interaction.
 ///
@@ -71,7 +77,7 @@ pub struct InboundResponse {
     ///
     /// When `Some`, `output` is empty and the binding maps this to a
     /// protocol-level error reply.
-    pub error: Option<crate::CoreError>,
+    pub error: Option<CoreError>,
 }
 
 impl InboundResponse {
@@ -85,7 +91,7 @@ impl InboundResponse {
     }
 
     /// Creates an error response with empty output.
-    pub fn error(correlation: CorrelationId, error: crate::CoreError) -> Self {
+    pub fn error(correlation: CorrelationId, error: CoreError) -> Self {
         Self {
             output: InteractionOutput::empty(),
             correlation,
@@ -94,101 +100,76 @@ impl InboundResponse {
     }
 }
 
-/// Inbound protocol binding contract: a source of [`InboundRequest`]s (baseline
-/// v3.0 §2 / §4).
+/// Inbound protocol binding contract (baseline v4.0 §4.5).
 ///
-/// A Servient drives the server side by polling its registered server bindings.
-/// The synchronous flavor uses [`poll_accept_sync`](Self::poll_accept_sync).
-/// The native-async `poll_accept` surface is finalized when the async driving
-/// layer lands (SR-P2.2); until then this trait is dyn-compatible so the
-/// Servient can store `Box<dyn ServerBinding>`.
-///
-/// Responses are written back through [`send_response`](Self::send_response).
-/// The binding matches the response to its transport via the echoed
-/// [`CorrelationId`].
-///
-/// Route registration ([`register_thing`](Self::register_thing) /
-/// [`unregister_thing`](Self::unregister_thing)) is called by the Servient
-/// during `expose`/`destroy` coordination (baseline §10). A route-registration
-/// failure is fatal — the Servient removes the entry and returns `Err`.
-pub trait ServerBinding {
-    /// Non-blocking immediate poll. Returns `None` when no inbound request is
-    /// ready, never blocks.
-    fn poll_accept_sync(&self) -> Option<InboundRequest>;
+/// Routes are declared/undeclared wholesale per Thing during `expose()` /
+/// `destroy()` (decision 2 — no per-affordance registration). On `std` the
+/// binding self-pushes inbound requests into a bounded fan-in channel
+/// ([`set_request_sink`](Self::set_request_sink)); on `no_std` the driving loop
+/// polls [`try_accept`](Self::try_accept).
+pub trait ServerBinding: Send + Sync {
+    /// Non-blocking drain of one currently-ready inbound request, or `None`.
+    ///
+    /// Default `None`: a `std`-only binding that self-pushes via
+    /// [`set_request_sink`](Self::set_request_sink) never has `try_accept`
+    /// called and need not override it. On `no_std` this is the polled accept
+    /// path (one request per tick, rotation cursor — see baseline §4.5/§7.2).
+    fn try_accept(&self) -> Option<InboundRequest> {
+        None
+    }
 
     /// Sends a response back to the requester identified by the response's
-    /// [`CorrelationId`].
+    /// [`CorrelationId`]. Required by AD9's overload-error-reply semantics
+    /// (`InboundRequest` carries no reply handle). No default — every binding
+    /// that accepts requests must implement it.
     fn send_response(&self, response: InboundResponse);
-
-    /// Registers inbound routes for a newly exposed Thing (baseline §10 step 3).
-    ///
-    /// The binding derives protocol-specific routes (e.g. zenoh keys) from the
-    /// Thing's affordance forms. Returns `Err(message)` when route registration
-    /// fails; the Servient treats this as fatal and rolls back the `expose`.
-    fn register_thing(&self, thing_id: &str, td: &Thing) -> Result<(), String>;
-
-    /// Unregisters inbound routes for a Thing being destroyed (baseline §10
-    /// destroy step 1).
-    fn unregister_thing(&self, thing_id: &str);
 
     /// Provides the shared [`EventBroker`] so the binding can register
     /// [`PublisherSink`](crate::PublisherSink)s for event and observable
     /// property fan-out during [`register_thing`](Self::register_thing).
     ///
-    /// The default implementation is a no-op, suitable for bindings that do
-    /// not support inbound event publishing.
+    /// Default no-op for bindings without event publish.
     fn set_event_broker(&self, _broker: EventBroker) {}
-}
 
-/// Native-async inbound protocol binding contract (baseline v3.0 §2 / §4 /
-/// addendum §2.4).
-///
-/// This trait is the async counterpart of [`ServerBinding`]. It is gated behind
-/// the `async` feature and uses `#[async_trait]` so it remains dyn-compatible
-/// (`Arc<dyn AsyncServerBinding>`).
-///
-/// The async driving loop (`Servient::poll_serve`) races
-/// [`poll_accept`](Self::poll_accept) across all registered async bindings
-/// concurrently using `select_all`.
-#[cfg(feature = "async")]
-#[async_trait::async_trait]
-pub trait AsyncServerBinding: Send + Sync {
-    /// Native-async accept; pending until a request arrives.
+    /// Hands the binding a clone of the bounded fan-in sender at registration
+    /// (`std` only — AD13). The binding `try_send`s inbound requests from its
+    /// **synchronous** transport callbacks (zenoh callbacks cannot `.await`).
+    /// On `no_std` there is no channel and the loop polls
+    /// [`try_accept`](Self::try_accept) instead.
+    #[cfg(feature = "std")]
+    fn set_request_sink(&self, sender: FanInSender<InboundRequest>);
+
+    /// Wholesale route registration for one Thing during `expose()`.
     ///
-    /// Implementations should not busy-poll — they should await an efficient
-    /// notification primitive (e.g. `tokio::sync::Notify`, a channel, or an
-    /// embassy signal) and only drain the pending queue once woken.
-    async fn poll_accept(&self) -> InboundRequest;
+    /// Returns `Result<(), CoreError>` so the multi-binding rollback (E12/AD27)
+    /// can detect a binding `k+1` failure, `unregister_thing` the succeeded
+    /// `1..k`, and surface a fatal `Err` (AD38). A binding reports a structural
+    /// failure via a structured `CoreError`, never a free-form `String`.
+    fn register_thing(&self, thing_id: &ThingId, td: &Thing) -> Result<(), CoreError>;
 
-    /// Sends a response back to the requester identified by the response's
-    /// [`CorrelationId`].
-    fn send_response(&self, response: InboundResponse);
-
-    /// Registers inbound routes for a newly exposed Thing (baseline §10 step 3).
-    fn register_thing(&self, thing_id: &str, td: &Thing) -> Result<(), String>;
-
-    /// Unregisters inbound routes for a Thing being destroyed (baseline §10
-    /// destroy step 1).
-    fn unregister_thing(&self, thing_id: &str);
-
-    /// Provides the shared [`EventBroker`] (see [`ServerBinding::set_event_broker`]).
-    fn set_event_broker(&self, _broker: EventBroker) {}
+    /// Wholesale route removal during `destroy()`. Returns `()` — `destroy()`
+    /// is idempotent (AD27/E13) and best-effort across bindings.
+    fn unregister_thing(&self, thing_id: &ThingId);
 }
 
 /// Dispatches an inbound request to the matching exposed Thing handler
 /// (baseline v3.0 §2 / §11).
 ///
 /// The dispatcher resolves the `Thing` from the exposed registry by
-/// [`thing_id`](InboundRequest::thing_id), resolves the matched `Form`
-/// internally (for security scheme lookup), runs inbound security verification,
-/// and routes the interaction to the handler. It never exposes the matched
-/// `Form` to handlers. A concrete implementation lives with the runtime that
-/// owns the exposed Thing registry (Servient); this trait is the core contract.
+/// [`thing_id`](InboundRequest::thing_id), runs inbound security verification,
+/// and routes the interaction to the handler. A concrete implementation lives
+/// with the runtime that owns the exposed Thing registry (Servient); this trait
+/// is the core contract.
 pub trait InboundDispatcher {
     /// Resolves and routes an inbound request, returning the response that the
     /// server binding echoes back to its transport.
     fn dispatch(&self, request: InboundRequest) -> CoreResult<InboundResponse>;
 }
+
+// Allow tests that previously constructed a `String` thing_id to keep compiling
+// while the binding surface migrates to `ThingId`.
+#[allow(dead_code)]
+fn _string_compat(_s: String) {}
 
 #[cfg(test)]
 mod tests {
@@ -225,8 +206,7 @@ mod tests {
     // --- Inbound security verification flow (SR-P0.5) -----------------------
 
     /// Bearer-token provider that authenticates a known token and grants the
-    /// configured principal scopes. Demonstrates the wiring a concrete
-    /// dispatcher (Servient in SR-P1) will use.
+    /// configured principal scopes.
     struct BearerProvider {
         valid_token: Vec<u8>,
         principal_scopes: Vec<String>,
@@ -260,8 +240,7 @@ mod tests {
     }
 
     /// Minimal secure dispatcher: verify, then enforce form scopes, then route
-    /// to a (stub) handler. The resolved scheme and required scopes stand in for
-    /// the form-to-scheme resolution the Servient performs.
+    /// to a (stub) handler.
     struct SecureDispatcher<'a> {
         provider: &'a BearerProvider,
         scheme: SecurityScheme,
@@ -315,7 +294,7 @@ mod tests {
             .dispatch(request)
             .expect("valid request dispatches");
         assert_eq!(response.correlation, CorrelationId::from(7u64));
-        assert!(response.output.payload.is_none());
+        assert!(response.output.data.is_none());
     }
 
     #[test]

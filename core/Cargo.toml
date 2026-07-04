@@ -6,6 +6,7 @@ edition.workspace = true
 [dependencies]
 clinkz-wot-td = { path = "../td", default-features = false }
 async-trait = { workspace = true, optional = true }
+async-channel = { version = "2", optional = true }
 critical-section = { version = "1", default-features = false }
 futures-core = { workspace = true, optional = true }
 
@@ -15,7 +16,7 @@ tokio = { version = "1", features = ["macros", "rt", "rt-multi-thread", "sync", 
 
 [features]
 default = ["std"]
-std = ["clinkz-wot-td/std", "critical-section/std"]
+std = ["clinkz-wot-td/std", "critical-section/std", "dep:async-channel"]
 async = ["dep:async-trait", "dep:futures-core"]
 ## Experimental TD 2.0 data-model surface (`ActionAffordance.synchronous`).
 ## Forwards to the `clinkz-wot-td` data model gate.
