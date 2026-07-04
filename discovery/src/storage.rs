@@ -1,59 +1,20 @@
-//! Shared storage adapters for `std` Discovery runtimes.
-//!
-//! Production storage backends that need filesystems, databases, sockets, or
-//! async runtimes should live behind `std` features or in separate crates while
-//! implementing the protocol-neutral [`ThingDirectory`] trait.
+//! Std-only storage adapters for the in-memory directory (retained behind
+//! `std`). A shared directory is an `Arc<InMemoryDirectory>`; the type alias
+//! documents the shared-storage idiom for the Servient composition layer.
 
-use std::sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard};
+extern crate alloc;
+extern crate std;
 
-use crate::{DiscoveryError, DiscoveryResult};
+use alloc::sync::Arc;
 
-/// Shareable Thing Directory handle for `std` runtimes.
-///
-/// This wrapper lets runtime composition share one directory backend across
-/// services without requiring a concrete storage backend type at every call
-/// site.
-#[derive(Debug, Clone)]
-pub struct SharedThingDirectory<D> {
-    inner: Arc<RwLock<D>>,
-}
+use crate::backend::memory::InMemoryDirectory;
 
-impl<D> SharedThingDirectory<D> {
-    /// Creates a shared directory handle from a concrete backend.
-    pub fn new(directory: D) -> Self {
-        Self {
-            inner: Arc::new(RwLock::new(directory)),
-        }
-    }
+/// A shared, clone-cheap handle to an [`InMemoryDirectory`] for use across
+/// async tasks / the Servient. The directory is already `Clone` (`Arc`-backed
+/// `WotLock`); this alias documents the shared-storage idiom.
+pub type SharedInMemoryDirectory = Arc<InMemoryDirectory>;
 
-    /// Creates a shared directory handle from an existing `Arc<RwLock<D>>`.
-    pub fn from_arc(inner: Arc<RwLock<D>>) -> Self {
-        Self { inner }
-    }
-
-    /// Returns the underlying shared directory container.
-    pub fn inner(&self) -> &Arc<RwLock<D>> {
-        &self.inner
-    }
-
-    /// Acquires a shared read lock on the directory backend.
-    ///
-    /// Multiple concurrent read locks are allowed so read-only operations do
-    /// not serialize against each other. Lock poisoning remains an explicit
-    /// error.
-    pub fn read(&self) -> DiscoveryResult<RwLockReadGuard<'_, D>> {
-        self.inner
-            .read()
-            .map_err(|_| DiscoveryError::SharedDirectoryLockPoisoned)
-    }
-
-    /// Acquires an exclusive write lock on the shared directory backend.
-    ///
-    /// Callers keep control over which directory operations are executed while
-    /// lock poisoning remains an explicit error.
-    pub fn lock(&self) -> DiscoveryResult<RwLockWriteGuard<'_, D>> {
-        self.inner
-            .write()
-            .map_err(|_| DiscoveryError::SharedDirectoryLockPoisoned)
-    }
+/// Creates a fresh shared in-memory directory.
+pub fn shared_in_memory_directory() -> SharedInMemoryDirectory {
+    Arc::new(InMemoryDirectory::new())
 }

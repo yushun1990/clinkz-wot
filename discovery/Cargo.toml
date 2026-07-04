@@ -5,9 +5,21 @@ edition.workspace = true
 
 [dependencies]
 clinkz-wot-td = { path = "../td", default-features = false }
+clinkz-wot-core = { path = "../core", default-features = false }
 serde = { version = "1", default-features = false, features = ["alloc"] }
 serde_json = { version = "1", default-features = false, features = ["alloc"] }
+async-trait = { workspace = true, optional = true }
+futures-core = { workspace = true, optional = true }
+
+[dev-dependencies]
+tokio = { version = "1", features = ["macros", "rt", "rt-multi-thread"] }
 
 [features]
 default = ["std"]
-std = ["clinkz-wot-td/std"]
+## The discovery std surface (storage adapters, watch) is async, so `std`
+## implies `async`. The data model alone compiles `--no-default-features`.
+std = ["clinkz-wot-td/std", "clinkz-wot-core/std", "async"]
+## Native-async discovery traits (`DirectoryReader`, `DirectorySession`,
+## `ThingDescriptionResolver`, `DirectoryPublisher`, `DirectoryWatch`,
+## `Discoverer::request_thing_description`).
+async = ["dep:async-trait", "dep:futures-core", "clinkz-wot-core/async"]

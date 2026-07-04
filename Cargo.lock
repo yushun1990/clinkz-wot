@@ -311,9 +311,13 @@ dependencies = [
 name = "clinkz-wot-discovery"
 version = "0.1.0"
 dependencies = [
+ "async-trait",
+ "clinkz-wot-core",
  "clinkz-wot-td",
+ "futures-core",
  "serde",
  "serde_json",
+ "tokio",
 ]
 
 [[package]]
