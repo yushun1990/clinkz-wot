@@ -53,6 +53,32 @@ Consequences of the posture change:
   set required for `no_std + alloc` safety. They do not invalidate the
   interaction *semantics*.
 
+**Naming and idiom posture.** Scripting API conformance is *method-catalogue +
+parameter-semantics + error-model* alignment, expressed in Rust idiom. It is
+**not** verbatim replication of the JS API's type or method names. Concretely:
+
+- The **Servient User-Agent surface** is the Scripting-API-aligned layer: the
+  `WoT`/`Servient` facade (`produce`/`consume`/`discover`/`fetch_td`), the
+  handles (`ExposedThingHandle`, `ConsumedThingHandle`, `ThingDiscoveryProcess`),
+  and the method catalogue (`read_property`, `write_property`, `invoke_action`,
+  `observe_property`/`unobserve_property`, `subscribe_event`/`unsubscribe_event`,
+  `query_action`/`cancel_action`, `emit_event`/`emit_property_change`,
+  `expose`/`destroy`, the `set_*_handler` family) — Rust `snake_case` renderings
+  of the Scripting API method names, mapped 1:1 in §10.
+- The **engine-internal concrete types** (`LocalExposedThing`,
+  `BoundConsumedThing`, `LocalThing`, `InteractionInput`/`InteractionOutput`/
+  `InteractionOptions`/`InteractionStatus`, `EventBroker`, `PushFn`, the
+  `*Handler` traits, `WotLock`) are Rust-idiomatic engine types. They implement
+  the Scripting API *semantics* but are **not** named after the JS API — the JS
+  `ExposedThing`/`ConsumedThing` names are reserved for the Servient handle
+  layer. These naming choices are governed by this §0 posture and the Rust API
+  Guidelines; they are **not** §9 behavioral deviations and do not require
+  individual §9 entries.
+- Engine-specific handler-signature details the Scripting API does not pin down
+  (e.g. the observe/subscribe handler's `PushFn` initial-value callback, which
+  models CoAP-Observe-style "current value on subscribe") are implementation
+  shapes, not interaction-semantics deviations.
+
 ## 1. Design Principles
 
 1. **Layering is non-negotiable.** Data contract (TD/TM) knows nothing of
@@ -1060,7 +1086,9 @@ thread-safe.
 ## 9. Documented Deviations from the Scripting API
 
 These are the minimum deviations required for `no_std + alloc` and are
-documented, not hidden:
+documented, not hidden. This section lists **behavioral / semantic** deviations
+only — naming and Rust-idiom choices for engine-internal types are governed by
+the §0 "Naming and idiom posture" and are not enumerated here:
 
 1. **Subscription delivery is a pull queue, not a push callback.** A
    `ConsumedThingHandle::subscribe_event` returns a `Subscription` drained by
@@ -1089,7 +1117,9 @@ documented, not hidden:
    `DiscoveryFilter` + `DirectoryFilter`; remote `Directory`/`Multicast` methods
    are v1-unsupported (see §6 / E6).
 
-No other deviations are permitted without an explicit entry here.
+No other behavioral deviations are permitted without an explicit entry here
+(naming/idiom choices for engine-internal types are governed by the §0
+posture, not this section).
 
 ## 10. Scripting API Conformance Map
 

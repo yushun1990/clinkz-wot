@@ -134,8 +134,19 @@ Consequences for this engine:
 
 - The compliance bar for a Thing is a conformant TD, the protocol behavior
   declared by its forms, **and** faithful Scripting API interaction semantics.
-- Engine-specific deviations from the Scripting API surface are documented
-  explicitly (v4.0 §9), not hidden. The current documented deviations are:
+- **Naming posture:** conformance is method-catalogue + parameter-semantics +
+  error-model alignment in Rust idiom, **not** verbatim JS type/method naming.
+  The Servient UA surface (the `WoT`/`Servient` facade, the
+  `ExposedThingHandle`/`ConsumedThingHandle`/`ThingDiscoveryProcess` handles,
+  and the `snake_case` method catalogue — `read_property`, `set_*_handler`,
+  `emit_event`, etc.) is the Scripting-API-aligned layer (v4.0 §10 map). The
+  engine-internal concrete types (`LocalExposedThing`, `BoundConsumedThing`,
+  `InteractionInput`/`Output`, `EventBroker`, `PushFn`, …) are Rust-idiomatic
+  engine types and are **not** named after the JS API; such naming/idiom
+  choices are governed by v4.0 §0 and are not Scripting-API deviations.
+- Engine-specific **behavioral** deviations from the Scripting API surface are
+  documented explicitly (v4.0 §9), not hidden. The current documented
+  deviations are:
   - **Subscription delivery is a pull-queue** (`Subscription` drained by
     `poll_next`/`Stream`), not a push callback — required for `no_std + alloc`
     safety on a bare MCU (reentrancy / super-loop blocking).
@@ -143,7 +154,8 @@ Consequences for this engine:
   - **`fetchTD` / directory exploration are trait objects (`Discoverer`)**, not
     a built-in `fetch` — the engine is protocol-neutral and the concrete
     transport is injected.
-- No other deviations are permitted without an explicit entry in v4.0 §9.
+- No other **behavioral** deviations are permitted without an explicit entry in
+  v4.0 §9.
 
 ## Subscription Delivery Model
 
