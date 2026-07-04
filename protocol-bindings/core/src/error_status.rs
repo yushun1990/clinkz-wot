@@ -16,7 +16,14 @@ pub fn error_status(error: &CoreError) -> u16 {
         CoreError::Transport(_) => 502,
         CoreError::MissingHandler { .. } => 501,
         CoreError::InboundDispatch(_) => 500,
-        CoreError::Lock(_) => 503,
+        // Transient/overload-class failures (P0 added these structured variants):
+        // a panicked handler or a timeout is a server-side transient fault.
+        CoreError::HandlerPanic { .. } => 500,
+        CoreError::Timeout | CoreError::TimeoutUnsupported => 504,
+        // The caller pinned a form no binding can drive, or the handler emitted
+        // an unacceptable content type: both are caller-side (400-class).
+        CoreError::UnsupportedForm { .. } => 400,
+        CoreError::ContentTypeMismatch { .. } => 406,
     }
 }
 
