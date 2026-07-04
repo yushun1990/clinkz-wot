@@ -134,6 +134,12 @@ Consequences for this engine:
 
 - The compliance bar for a Thing is a conformant TD, the protocol behavior
   declared by its forms, **and** faithful Scripting API interaction semantics.
+- **Engineering-priorities posture (v4.0 §0):** Scripting API alignment is a
+  *target*, not a constraint overriding engineering judgment. Performance,
+  stability, extensibility, and code reasonableness are the primary criteria;
+  where strict Scripting API adherence conflicts with these, the
+  engineering-best choice wins and the divergence is recorded as a §9
+  deviation. The §10 map is the default surface, amended by §9.
 - **Naming posture:** conformance is method-catalogue + parameter-semantics +
   error-model alignment in Rust idiom, **not** verbatim JS type/method naming.
   The Servient UA surface (the `WoT`/`Servient` facade, the

@@ -53,6 +53,23 @@ Consequences of the posture change:
   set required for `no_std + alloc` safety. They do not invalidate the
   interaction *semantics*.
 
+**Engineering-priorities posture.** Scripting API alignment is a *target*, not
+a constraint that overrides engineering judgment. The primary criteria for
+design decisions are **performance, stability, extensibility, and code
+reasonableness**; where strict Scripting API adherence (naming or structure)
+conflicts with these, the engineering-best choice wins and the divergence is
+recorded as an explicit §9 deviation with rationale. The §10 conformance map is
+therefore the *default* surface, amended by the §9 list — not a contract that
+overrides engineering concerns. (Worked example: the per-operation handler
+trait model — nine sync traits plus nine async twins, one per interaction
+operation — is retained because the nine operations have genuinely
+heterogeneous signatures: observe/subscribe carry a `PushFn` initial-value
+callback that read/write/invoke/query/cancel/unobserve/unsubscribe do not, so
+collapsing them into one multi-method trait would require either a fat-trait
+ISP violation or a god-signature request struct. Per-op traits are the
+engineering-cleanest shape; this also happens to be Scripting-API-aligned, so
+no §9 deviation arises there.)
+
 **Naming and idiom posture.** Scripting API conformance is *method-catalogue +
 parameter-semantics + error-model* alignment, expressed in Rust idiom. It is
 **not** verbatim replication of the JS API's type or method names. Concretely:
