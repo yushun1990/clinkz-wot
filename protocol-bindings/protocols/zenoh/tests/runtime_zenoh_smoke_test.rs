@@ -76,7 +76,7 @@ fn runtime_zenoh_transport_executes_put_and_get_smoke_paths() {
         })
         .expect("execute put");
 
-    assert!(put_output.payload.is_none());
+    assert!(put_output.data.is_none());
 
     let sample = subscriber
         .recv_timeout(REPLY_TIMEOUT)
@@ -98,7 +98,7 @@ fn runtime_zenoh_transport_executes_put_and_get_smoke_paths() {
             parameters: Default::default(),
         })
         .expect("execute get");
-    let payload = get_output.payload.expect("query reply payload");
+    let payload = get_output.data.expect("query reply payload");
 
     assert_eq!(payload.content_type, "text/plain");
     assert_eq!(payload.body.as_ref(), b"runtime-query-reply");
@@ -143,7 +143,7 @@ fn runtime_zenoh_transport_executes_subscribe_once_smoke_path() {
             parameters: Default::default(),
         })
         .expect("execute one-shot subscribe");
-    let payload = output.payload.expect("one-shot subscription payload");
+    let payload = output.data.expect("one-shot subscription payload");
 
     assert_eq!(payload.content_type, "text/plain");
     assert_eq!(payload.body.as_ref(), b"runtime-subscribe-once-event");
@@ -189,7 +189,7 @@ fn runtime_zenoh_put_propagates_live_metadata() {
         })
         .expect("execute metadata put");
 
-    assert!(put_output.payload.is_none());
+    assert!(put_output.data.is_none());
 
     let sample = subscriber
         .recv_timeout(REPLY_TIMEOUT)
@@ -247,7 +247,7 @@ fn runtime_zenoh_subscription_receives_multiple_samples_and_undeclares() {
     let first_payload = subscription
         .next_sample()
         .expect("receive first subscription sample")
-        .payload
+        .data
         .expect("first subscription sample payload");
 
     assert_eq!(first_payload.content_type, "text/plain");
@@ -261,7 +261,7 @@ fn runtime_zenoh_subscription_receives_multiple_samples_and_undeclares() {
     let second_payload = subscription
         .next_sample()
         .expect("receive second subscription sample")
-        .payload
+        .data
         .expect("second subscription sample payload");
 
     assert_eq!(second_payload.content_type, "text/plain");
@@ -407,7 +407,7 @@ fn runtime_zenoh_request_reply_propagates_selector_parameters() {
             parameters,
         })
         .expect("execute parameterized get");
-    let payload = output.payload.expect("parameterized query reply payload");
+    let payload = output.data.expect("parameterized query reply payload");
 
     assert_eq!(payload.content_type, "text/plain");
     assert_eq!(payload.body.as_ref(), b"runtime-query-parameters-ok");
@@ -484,7 +484,7 @@ fn runtime_zenoh_request_reply_propagates_request_payload() {
             parameters: Default::default(),
         })
         .expect("execute payload query");
-    let payload = output.payload.expect("payload query reply payload");
+    let payload = output.data.expect("payload query reply payload");
 
     assert_eq!(payload.content_type, "text/plain");
     assert_eq!(payload.body.as_ref(), b"runtime-query-payload-ok");
@@ -554,7 +554,7 @@ fn runtime_zenoh_request_reply_uses_live_reply_encoding() {
             parameters: Default::default(),
         })
         .expect("execute reply encoding query");
-    let payload = output.payload.expect("reply encoding query reply payload");
+    let payload = output.data.expect("reply encoding query reply payload");
 
     assert_eq!(payload.content_type, "text/plain");
     assert_eq!(payload.body.as_ref(), b"runtime-query-reply-encoding-ok");

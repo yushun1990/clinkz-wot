@@ -46,7 +46,7 @@ impl ZenohTransport for RecordingZenohTransport {
             Some("test")
         );
 
-        Ok(InteractionOutput::with_payload(Payload::new(
+        Ok(InteractionOutput::with_data(Payload::new(
             b"accepted".to_vec(),
             "text/plain",
         )))
@@ -56,23 +56,25 @@ impl ZenohTransport for RecordingZenohTransport {
 #[cfg(feature = "zenoh")]
 #[derive(Default)]
 struct CountingZenohTransport {
-    calls: Cell<usize>,
+    calls: std::sync::atomic::AtomicUsize,
 }
 
 #[cfg(feature = "zenoh")]
 impl ZenohTransport for CountingZenohTransport {
     fn execute(&self, request: ZenohTransportRequest) -> CoreResult<InteractionOutput> {
-        let count = self.calls.get().saturating_add(1);
-        self.calls.set(count);
-        Ok(InteractionOutput::with_payload(Payload::new(
+        let count = self
+            .calls
+            .fetch_add(1, std::sync::atomic::Ordering::SeqCst)
+            .saturating_add(1);
+        Ok(InteractionOutput::with_data(Payload::new(
             format!("{}:{}", count, request.plan.key_expr).into_bytes(),
             "text/plain",
         )))
     }
 }
 
-#[test]
-fn supports_forms_with_zenoh_href() {
+#[tokio::test]
+async fn supports_forms_with_zenoh_href() {
     let form = Form::read_property("zenoh://clinkz/things/lamp/status")
         .build()
         .unwrap();
@@ -82,8 +84,8 @@ fn supports_forms_with_zenoh_href() {
     assert!(binding.supports(&form, Operation::ReadProperty));
 }
 
-#[test]
-fn supports_forms_with_relative_href_and_zenoh_base() {
+#[tokio::test]
+async fn supports_forms_with_relative_href_and_zenoh_base() {
     let form = Form::read_property("properties/status").build().unwrap();
     let thing = Thing::builder("Lamp")
         .base("zenoh://clinkz/things/lamp/")
@@ -97,8 +99,8 @@ fn supports_forms_with_relative_href_and_zenoh_base() {
     assert!(binding.supports_with_thing(&thing, &form, Operation::ReadProperty));
 }
 
-#[test]
-fn extracts_key_expression_from_zenoh_href() {
+#[tokio::test]
+async fn extracts_key_expression_from_zenoh_href() {
     let form = Form::read_property("zenoh://clinkz/things/lamp/status")
         .build()
         .unwrap();
@@ -109,8 +111,8 @@ fn extracts_key_expression_from_zenoh_href() {
     assert_eq!(target.key_expr, "clinkz/things/lamp/status");
 }
 
-#[test]
-fn builds_operation_plan_from_href_resolved_against_base() {
+#[tokio::test]
+async fn builds_operation_plan_from_href_resolved_against_base() {
     let form = Form::invoke_action("actions/reboot").build().unwrap();
     let thing = Thing::builder("Lamp")
         .base("zenoh://clinkz/things/lamp/")
@@ -131,8 +133,8 @@ fn builds_operation_plan_from_href_resolved_against_base() {
     );
 }
 
-#[test]
-fn extracts_zenoh_metadata_extensions() {
+#[tokio::test]
+async fn extracts_zenoh_metadata_extensions() {
     let form = Form::write_property("zenoh://clinkz/things/lamp/status")
         .content_type("application/json")
         .extra_field(CZ_ZENOH_QOS, json!("express"))
@@ -149,8 +151,8 @@ fn extracts_zenoh_metadata_extensions() {
     assert_eq!(metadata.congestion_control.as_deref(), Some("block"));
 }
 
-#[test]
-fn includes_metadata_in_operation_plan() {
+#[tokio::test]
+async fn includes_metadata_in_operation_plan() {
     let form = Form::write_property("zenoh://clinkz/things/lamp/status")
         .content_type("application/json")
         .extra_field(CZ_ZENOH_QOS, json!("express"))
@@ -169,8 +171,8 @@ fn includes_metadata_in_operation_plan() {
     assert_eq!(plan.metadata.qos.as_deref(), Some("express"));
 }
 
-#[test]
-fn runtime_binding_delegates_planned_operation_to_transport() {
+#[tokio::test]
+async fn runtime_binding_delegates_planned_operation_to_transport() {
     let form = Form::write_property("zenoh://clinkz/things/lamp/status")
         .content_type("application/json")
         .build()
@@ -185,8 +187,8 @@ fn runtime_binding_delegates_planned_operation_to_transport() {
         .build()
         .unwrap();
     let mut input =
-        InteractionInput::with_payload(Payload::new(b"on".to_vec(), "application/json"));
-    input.parameters.insert("source".into(), "test".into());
+        InteractionInput::with_data(Payload::new(b"on".to_vec(), "application/json"));
+    input.uri_variables.insert("source".into(), "test".into());
     let binding = ZenohBindingTransport::with_transport(RecordingZenohTransport);
 
     let output = binding
@@ -197,14 +199,15 @@ fn runtime_binding_delegates_planned_operation_to_transport() {
             form: Arc::new(form.clone()),
             input,
         })
+        .await
         .unwrap();
 
-    assert_eq!(output.payload.unwrap().body.as_ref(), b"accepted");
+    assert_eq!(output.data.unwrap().body.as_ref(), b"accepted");
 }
 
 #[cfg(feature = "zenoh")]
-#[test]
-fn shared_transport_reuses_underlying_runtime_state() {
+#[tokio::test]
+async fn shared_transport_reuses_underlying_runtime_state() {
     let form = Form::read_property("zenoh://clinkz/things/lamp/status")
         .build()
         .unwrap();
@@ -229,6 +232,7 @@ fn shared_transport_reuses_underlying_runtime_state() {
             form: Arc::new(form.clone()),
             input: InteractionInput::empty(),
         })
+        .await
         .unwrap();
     let second = second_binding
         .invoke(BindingRequest {
@@ -238,15 +242,19 @@ fn shared_transport_reuses_underlying_runtime_state() {
             form: Arc::new(form.clone()),
             input: InteractionInput::empty(),
         })
+        .await
         .unwrap();
 
-    assert_eq!(first.payload.unwrap().body.as_ref(), b"1:clinkz/things/lamp/status");
-    assert_eq!(second.payload.unwrap().body.as_ref(), b"2:clinkz/things/lamp/status");
-    assert_eq!(shared.inner().calls.get(), 2);
+    assert_eq!(first.data.unwrap().body.as_ref(), b"1:clinkz/things/lamp/status");
+    assert_eq!(second.data.unwrap().body.as_ref(), b"2:clinkz/things/lamp/status");
+    assert_eq!(
+        shared.inner().calls.load(std::sync::atomic::Ordering::SeqCst),
+        2
+    );
 }
 
-#[test]
-fn runtime_binding_rejects_form_that_does_not_support_requested_operation() {
+#[tokio::test]
+async fn runtime_binding_rejects_form_that_does_not_support_requested_operation() {
     let form = Form::read_property("zenoh://clinkz/things/lamp/status")
         .build()
         .unwrap();
@@ -269,6 +277,7 @@ fn runtime_binding_rejects_form_that_does_not_support_requested_operation() {
             form: Arc::new(form.clone()),
             input: InteractionInput::empty(),
         })
+        .await
         .unwrap_err();
 
     assert_eq!(
@@ -277,8 +286,8 @@ fn runtime_binding_rejects_form_that_does_not_support_requested_operation() {
     );
 }
 
-#[test]
-fn plans_zenoh_affordance_operation_from_matching_form() {
+#[tokio::test]
+async fn plans_zenoh_affordance_operation_from_matching_form() {
     let http_form = Form::read_property("https://example.com/things/lamp/properties/status")
         .build()
         .unwrap();
@@ -316,8 +325,8 @@ fn plans_zenoh_affordance_operation_from_matching_form() {
     );
 }
 
-#[test]
-fn plans_zenoh_affordance_operation_with_metadata_criteria() {
+#[tokio::test]
+async fn plans_zenoh_affordance_operation_with_metadata_criteria() {
     let json_form = Form::read_property("zenoh://clinkz/things/lamp/properties/status/json")
         .content_type("application/json")
         .build()
@@ -354,8 +363,8 @@ fn plans_zenoh_affordance_operation_with_metadata_criteria() {
     );
 }
 
-#[test]
-fn plans_zenoh_affordance_operation_with_subprotocol_criteria() {
+#[tokio::test]
+async fn plans_zenoh_affordance_operation_with_subprotocol_criteria() {
     let longpoll_form =
         Form::subscribe_event("zenoh://clinkz/things/lamp/events/status-change/longpoll")
             .content_type("application/json")
@@ -392,8 +401,8 @@ fn plans_zenoh_affordance_operation_with_subprotocol_criteria() {
     );
 }
 
-#[test]
-fn plans_thing_level_zenoh_form() {
+#[tokio::test]
+async fn plans_thing_level_zenoh_form() {
     let form = Form::builder("zenoh://clinkz/things/lamp")
         .op([Operation::ReadAllProperties])
         .build()
@@ -410,8 +419,8 @@ fn plans_thing_level_zenoh_form() {
     assert_eq!(plan.operation.key_expr, "clinkz/things/lamp");
 }
 
-#[test]
-fn plans_bulk_property_operation_from_thing_level_form() {
+#[tokio::test]
+async fn plans_bulk_property_operation_from_thing_level_form() {
     let read_form = Form::builder("zenoh://clinkz/things/lamp/properties")
         .op([Operation::ReadAllProperties])
         .build()
@@ -440,8 +449,8 @@ fn plans_bulk_property_operation_from_thing_level_form() {
 
 /// `subscribeallevents` / `unsubscribeallevents` are TD 1.1 event
 /// meta-operations; this planning test covers the Thing-level bulk form path.
-#[test]
-fn plans_bulk_event_operation_from_thing_level_form() {
+#[tokio::test]
+async fn plans_bulk_event_operation_from_thing_level_form() {
     let subscribe_form = Form::builder("zenoh://clinkz/things/lamp/events")
         .op([Operation::SubscribeAllEvents])
         .build()
@@ -468,8 +477,8 @@ fn plans_bulk_event_operation_from_thing_level_form() {
     assert_eq!(plan.operation.key_expr, "clinkz/things/lamp/events");
 }
 
-#[test]
-fn plans_relative_href_against_zenoh_base() {
+#[tokio::test]
+async fn plans_relative_href_against_zenoh_base() {
     let form = Form::read_property("properties/status").build().unwrap();
     let property = PropertyAffordance::builder(DataSchema::String(DataSchema::string().build()))
         .form(form.clone())
@@ -498,8 +507,8 @@ fn plans_relative_href_against_zenoh_base() {
     assert_eq!(plan.operation.kind, ZenohOperationKind::Query);
 }
 
-#[test]
-fn rejects_relative_href_when_base_is_invalid() {
+#[tokio::test]
+async fn rejects_relative_href_when_base_is_invalid() {
     let form = Form::read_property("properties/status").build().unwrap();
     let property = PropertyAffordance::builder(DataSchema::String(DataSchema::string().build()))
         .form(form.clone())
@@ -525,8 +534,8 @@ fn rejects_relative_href_when_base_is_invalid() {
     ));
 }
 
-#[test]
-fn runtime_binding_reports_invalid_interaction_for_unresolvable_target() {
+#[tokio::test]
+async fn runtime_binding_reports_invalid_interaction_for_unresolvable_target() {
     let form = Form::read_property("properties/status").build().unwrap();
     let property = PropertyAffordance::builder(DataSchema::String(DataSchema::string().build()))
         .form(form.clone())
@@ -548,6 +557,7 @@ fn runtime_binding_reports_invalid_interaction_for_unresolvable_target() {
             form: Arc::new(form.clone()),
             input: InteractionInput::empty(),
         })
+        .await
         .unwrap_err();
 
     match err {
@@ -559,8 +569,8 @@ fn runtime_binding_reports_invalid_interaction_for_unresolvable_target() {
     }
 }
 
-#[test]
-fn plans_operations_from_clinkz_extension_fixture() {
+#[tokio::test]
+async fn plans_operations_from_clinkz_extension_fixture() {
     let thing: Thing = serde_json::from_str(include_str!(
         "../../../../td/tests/fixtures/clinkz-extension-defaults.td.jsonld"
     ))
@@ -616,8 +626,8 @@ fn plans_operations_from_clinkz_extension_fixture() {
     );
 }
 
-#[test]
-fn reports_selection_error_when_affordance_has_no_zenoh_form() {
+#[tokio::test]
+async fn reports_selection_error_when_affordance_has_no_zenoh_form() {
     let form = Form::read_property("https://example.com/things/lamp/properties/status")
         .build()
         .unwrap();
@@ -646,8 +656,8 @@ fn reports_selection_error_when_affordance_has_no_zenoh_form() {
     );
 }
 
-#[test]
-fn rejects_non_string_zenoh_metadata_extension() {
+#[tokio::test]
+async fn rejects_non_string_zenoh_metadata_extension() {
     let form = Form::read_property("zenoh://clinkz/things/lamp/status")
         .extra_field(CZ_ZENOH_QOS, json!(true))
         .build()
@@ -664,8 +674,8 @@ fn rejects_non_string_zenoh_metadata_extension() {
     );
 }
 
-#[test]
-fn extracts_default_content_type_into_zenoh_metadata() {
+#[tokio::test]
+async fn extracts_default_content_type_into_zenoh_metadata() {
     let form = Form::read_property("zenoh://clinkz/things/lamp/status")
         .build()
         .unwrap();
@@ -675,8 +685,8 @@ fn extracts_default_content_type_into_zenoh_metadata() {
     assert_eq!(metadata.content_type.as_deref(), Some("application/json"));
 }
 
-#[test]
-fn maps_wot_operations_to_zenoh_operation_kinds() {
+#[tokio::test]
+async fn maps_wot_operations_to_zenoh_operation_kinds() {
     assert_eq!(
         zenoh_operation_kind(Operation::ReadProperty),
         ZenohOperationKind::Query
@@ -699,8 +709,8 @@ fn maps_wot_operations_to_zenoh_operation_kinds() {
     );
 }
 
-#[test]
-fn maps_bulk_wot_operations_to_zenoh_operation_kinds() {
+#[tokio::test]
+async fn maps_bulk_wot_operations_to_zenoh_operation_kinds() {
     assert_eq!(
         zenoh_operation_kind(Operation::ReadAllProperties),
         ZenohOperationKind::Query
@@ -727,8 +737,8 @@ fn maps_bulk_wot_operations_to_zenoh_operation_kinds() {
     );
 }
 
-#[test]
-fn does_not_support_unknown_operations_when_restricted() {
+#[tokio::test]
+async fn does_not_support_unknown_operations_when_restricted() {
     let form = Form::write_property("zenoh://clinkz/things/lamp/status")
         .build()
         .unwrap();

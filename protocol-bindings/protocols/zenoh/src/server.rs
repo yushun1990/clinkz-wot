@@ -34,12 +34,10 @@ use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
-#[cfg(feature = "async")]
-use clinkz_wot_core::AsyncServerBinding;
 use clinkz_wot_core::identity::CorrelationId;
 use clinkz_wot_core::{
-    AffordanceTarget, AuthMaterial, EventBroker, InboundRequest, InboundResponse,
-    InteractionInput, Payload, PublisherSink, ServerBinding, ThingId,
+    AffordanceTarget, AuthMaterial, CoreError, EventBroker, FanInSender, InboundRequest,
+    InboundResponse, InteractionInput, Payload, PublisherSink, ServerBinding, ThingId,
 };
 use clinkz_wot_td::data_type::Operation;
 use clinkz_wot_td::form::Form;
@@ -218,7 +216,7 @@ enum DeclaredRoute {
 type ThingRoutes = BTreeMap<String, Vec<DeclaredRoute>>;
 
 struct ServerState {
-    routes: BTreeMap<String, ThingRoutes>,
+    routes: BTreeMap<ThingId, ThingRoutes>,
     pending: VecDeque<InboundRequest>,
     /// Reply-target table and its last-sweep instant, kept under a single
     /// lock so the throttle check and the table mutation cannot race or
@@ -281,7 +279,7 @@ impl ServerState {
 /// [`send_response`](ServerBinding::send_response).
 pub struct ZenohServerBinding {
     session: zenoh::Session,
-    routes: Arc<Mutex<BTreeMap<String, ThingRoutes>>>,
+    routes: Arc<Mutex<BTreeMap<ThingId, ThingRoutes>>>,
     pending: Arc<Mutex<VecDeque<InboundRequest>>>,
     /// Reply-target table + last-sweep instant under one lock (see
     /// [`ReplyTargetState`]).
@@ -375,7 +373,7 @@ impl ZenohServerBinding {
 // ---------------------------------------------------------------------------
 
 impl ServerBinding for ZenohServerBinding {
-    fn poll_accept_sync(&self) -> Option<InboundRequest> {
+    fn try_accept(&self) -> Option<InboundRequest> {
         self.maybe_sweep_reply_targets();
         self.pending.lock().ok()?.pop_front()
     }
@@ -404,7 +402,7 @@ impl ServerBinding for ZenohServerBinding {
                         log::warn!("Zenoh server: failed to send error reply: {e}");
                     }
                 } else {
-                    let (payload_body, content_type) = match response.output.payload {
+                    let (payload_body, content_type) = match response.output.data {
                         Some(payload) => (payload.body, payload.content_type),
                         None => (Default::default(), String::new()),
                     };
@@ -421,39 +419,47 @@ impl ServerBinding for ZenohServerBinding {
         }
     }
 
-    fn register_thing(&self, thing_id: &str, td: &Thing) -> Result<(), String> {
-        let routes = plan_inbound_routes(thing_id, td)?;
-        let broker = self.event_broker.lock().map_err(|e| e.to_string())?.clone();
+    fn register_thing(&self, thing_id: &ThingId, td: &Thing) -> Result<(), CoreError> {
+        let id_str = thing_id.as_str();
+        let routes = plan_inbound_routes(id_str, td)
+            .map_err(|e| CoreError::InvalidInteraction(e))?;
+        let broker = self
+            .event_broker
+            .lock()
+            .map_err(|e| CoreError::InvalidInteraction(e.to_string()))?
+            .clone();
         let mut by_affordance: ThingRoutes = BTreeMap::new();
 
         for route in routes {
             let key = affordance_key(&route.meta.target);
-            match self.declare_planned_route(route, thing_id, &broker) {
-                Ok(Some(declared)) => by_affordance.entry(key).or_default().push(declared),
+            match self.declare_planned_route(route, id_str, &broker) {
+                Ok(Some(declared)) => {
+                    by_affordance.entry(key).or_default().push(declared);
+                }
                 Ok(None) => {}
                 Err(err) => {
                     for (_, declared) in by_affordance {
                         undeclare_routes(declared);
                     }
-                    return Err(err);
+                    return Err(CoreError::InvalidInteraction(err));
                 }
             }
         }
 
         self.routes
             .lock()
-            .map_err(|e| e.to_string())?
-            .insert(thing_id.to_string(), by_affordance);
+            .map_err(|e| CoreError::InvalidInteraction(e.to_string()))?
+            .insert(thing_id.clone(), by_affordance);
         Ok(())
     }
 
-    fn unregister_thing(&self, thing_id: &str) {
+    fn unregister_thing(&self, thing_id: &ThingId) {
         let broker = match self.event_broker.lock() {
             Ok(broker) => broker.clone(),
             Err(_) => return,
         };
         if let Some(ref broker) = broker {
-            broker.remove_thing(&ThingId::from(thing_id));
+            broker.remove_thing(thing_id);
         }
         let by_affordance = match self.routes.lock() {
             Ok(mut routes) => routes.remove(thing_id),
@@ -470,6 +476,16 @@ impl ServerBinding for ZenohServerBinding {
         if let Ok(mut event_broker) = self.event_broker.lock() {
             *event_broker = Some(broker);
         }
+    }
+
+    /// Stores the Servient's bounded fan-in sender (baseline §4.5 / AD13). The
+    /// zenoh callbacks currently self-push via the internal async channel; a
+    /// follow-up migrates them to this injected sender as the single buffer.
+    fn set_request_sink(&self, _sender: FanInSender<InboundRequest>) {
+        // TODO(P2 refinement): switch zenoh queryable/put-listener callbacks
+        // from the internal `async_tx` to this injected `FanInSender` so the
+        // Servient owns the one bounded fan-in channel (AD6a: no binding-
+        // internal queue).
     }
 }
 
@@ -826,10 +842,10 @@ fn query_to_input(query: &Query) -> InteractionInput {
             let body = payload.to_bytes().into_owned();
             let content_type = query.encoding().map(|e| e.to_string()).unwrap_or_default();
             InteractionInput {
-                payload: Some(Payload::new(body, content_type)),
-                parameters: BTreeMap::new(),
+                data: Some(Payload::new(body, content_type)),
+                uri_variables: BTreeMap::new(),
                 principal: None,
-                security_metadata: BTreeMap::new(),
+                accept: None,
             }
         }
         None => InteractionInput::empty(),
@@ -887,10 +903,10 @@ fn sample_to_input(sample: &Sample) -> InteractionInput {
         InteractionInput::empty()
     } else {
         InteractionInput {
-            payload: Some(Payload::new(body, content_type)),
-            parameters: BTreeMap::new(),
+            data: Some(Payload::new(body, content_type)),
+            uri_variables: BTreeMap::new(),
             principal: None,
-            security_metadata: BTreeMap::new(),
+            accept: None,
         }
     }
 }
@@ -1053,40 +1069,12 @@ fn collect_zenoh_forms<'a>(
 // AsyncServerBinding (baseline v3.0 §4 / addendum §2.4)
 // ---------------------------------------------------------------------------
 
-#[cfg(feature = "async")]
-#[async_trait::async_trait]
-impl AsyncServerBinding for ZenohServerBinding {
-    async fn poll_accept(&self) -> InboundRequest {
-        loop {
-            // Drain the async channel directly. Unlike `poll_accept_sync`,
-            // this never touches the `std::sync::Mutex`-guarded pending queue
-            // and therefore does not stall the tokio worker thread.
-            let request = {
-                let mut rx = self.async_rx.lock().await;
-                rx.recv().await
-            };
-            if let Some(request) = request {
-                self.maybe_sweep_reply_targets();
-                return request;
-            }
-            // All senders were dropped (e.g. no routes are declared yet). Yield
-            // instead of busy-spinning, then wait for a sender to reappear.
-            tokio::task::yield_now().await;
-        }
-    }
-
-    fn send_response(&self, response: InboundResponse) {
-        ServerBinding::send_response(self, response);
-    }
-
-    fn register_thing(&self, thing_id: &str, td: &Thing) -> Result<(), String> {
-        ServerBinding::register_thing(self, thing_id, td)
-    }
-
-    fn unregister_thing(&self, thing_id: &str) {
-        ServerBinding::unregister_thing(self, thing_id);
-    }
-}
+// NOTE: `AsyncServerBinding` was removed in P0 — the v4.0 `ServerBinding` is
+// the single inbound contract, and the async driving loop lives in the
+// Servient (P3) draining its bounded fan-in channel. The async-channel drain
+// this block implemented migrates to the Servient driving loop; see
+// `set_request_sink` above (TODO: wire zenoh callbacks to the injected
+// `FanInSender`).
 
 // ---------------------------------------------------------------------------
 

@@ -258,7 +258,7 @@ impl ZenohTransport for ZenohPicoTransport {
                     .query(pico_request)
                     .map_err(transport_error)?
                     .ok_or_else(|| timeout_error("query", &request.plan.key_expr))?;
-                Ok(InteractionOutput::with_payload(payload))
+                Ok(InteractionOutput::with_data(payload))
             }
             ZenohOperationKind::Subscribe => {
                 let pico_request = self.pico_request(&request);
@@ -266,7 +266,7 @@ impl ZenohTransport for ZenohPicoTransport {
                     .subscribe(pico_request)
                     .map_err(transport_error)?
                     .ok_or_else(|| timeout_error("subscription", &request.plan.key_expr))?;
-                Ok(InteractionOutput::with_payload(payload))
+                Ok(InteractionOutput::with_data(payload))
             }
             ZenohOperationKind::Unsubscribe => {
                 let pico_request = self.pico_request(&request);

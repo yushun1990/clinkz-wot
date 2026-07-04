@@ -16,6 +16,7 @@ log = "0.4"
 [features]
 default = ["zenoh"]
 zenoh = [
+    "async",
     "clinkz-wot-core/std",
     "clinkz-wot-protocol-bindings/std",
     "clinkz-wot-td/std",

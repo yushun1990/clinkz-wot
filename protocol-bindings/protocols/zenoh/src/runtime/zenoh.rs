@@ -82,7 +82,7 @@ impl ZenohSubscription {
                 ))
             })?;
 
-        Ok(InteractionOutput::with_payload(payload_from_sample(
+        Ok(InteractionOutput::with_data(payload_from_sample(
             &sample,
             self.content_type_hint.as_deref(),
         )))
@@ -235,7 +235,7 @@ impl ZenohSessionTransport {
             })?;
         let sample = reply.into_result().map_err(transport_error)?;
 
-        Ok(InteractionOutput::with_payload(payload_from_sample(
+        Ok(InteractionOutput::with_data(payload_from_sample(
             &sample, None,
         )))
     }

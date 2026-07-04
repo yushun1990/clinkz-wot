@@ -6,9 +6,11 @@ use alloc::{
 };
 
 use clinkz_wot_core::{
-    AffordanceTarget, BindingRequest, ClientBinding, CoreError, CoreResult, InteractionInput,
-    InteractionOutput, MapLock, Payload, Subscription, SubscriptionGuard,
+    AffordanceTarget, CoreError, CoreResult, InteractionInput, InteractionOutput, Payload,
+    Subscription, SubscriptionGuard, WotLock,
 };
+#[cfg(feature = "async")]
+use clinkz_wot_core::{BindingRequest, ClientBinding};
 use clinkz_wot_protocol_bindings::{AffordanceRef, BindingError, validate_form_operation};
 use clinkz_wot_td::{data_type::Operation, form::Form};
 
@@ -76,7 +78,7 @@ pub struct ZenohBindingTransport<T> {
     /// Bitset of supported [`Operation`]s (bit position = discriminant).
     supported_operations: u32,
     transport: T,
-    plan_cache: MapLock<BTreeMap<PlanCacheKey, PlanCacheEntry>>,
+    plan_cache: WotLock<BTreeMap<PlanCacheKey, PlanCacheEntry>>,
 }
 
 /// Identity key for the per-form plan cache. Uses the `Arc<Form>` allocation
@@ -118,7 +120,7 @@ impl<T> ZenohBindingTransport<T> {
         Self {
             supported_operations: ops_to_bitset(operations),
             transport,
-            plan_cache: MapLock::new(BTreeMap::new()),
+            plan_cache: WotLock::new(BTreeMap::new()),
         }
     }
 
@@ -127,7 +129,7 @@ impl<T> ZenohBindingTransport<T> {
         Self {
             supported_operations: default_supported_operations(),
             transport,
-            plan_cache: MapLock::new(BTreeMap::new()),
+            plan_cache: WotLock::new(BTreeMap::new()),
         }
     }
 
@@ -142,9 +144,11 @@ impl<T> ZenohBindingTransport<T> {
     }
 }
 
+#[cfg(feature = "async")]
+#[async_trait::async_trait]
 impl<T> ClientBinding for ZenohBindingTransport<T>
 where
-    T: ZenohTransport,
+    T: ZenohTransport + Send + Sync,
 {
     fn supports(&self, form: &Form, operation: Operation) -> bool {
         (self.supported_operations & (1u32 << (operation as u32))) != 0
@@ -161,7 +165,7 @@ where
             && crate::form::is_zenoh_form_target(thing, form)
     }
 
-    fn invoke(&self, request: BindingRequest) -> CoreResult<InteractionOutput> {
+    async fn invoke(&self, request: BindingRequest) -> CoreResult<InteractionOutput> {
         validate_form_operation(
             &request.thing,
             affordance_ref_from_target(&request.target),
@@ -176,7 +180,7 @@ where
         self.transport.execute(transport_request)
     }
 
-    fn subscribe(
+    async fn subscribe(
         &self,
         request: BindingRequest,
     ) -> CoreResult<(Subscription, Box<dyn SubscriptionGuard>)> {
@@ -267,8 +271,8 @@ pub fn build_zenoh_transport_request(
 ) -> ZenohTransportRequest {
     ZenohTransportRequest {
         plan,
-        payload: input.payload,
-        parameters: input.parameters,
+        payload: input.data,
+        parameters: input.uri_variables,
     }
 }
 

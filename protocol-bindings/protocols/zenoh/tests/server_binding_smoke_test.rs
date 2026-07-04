@@ -29,7 +29,7 @@ fn runtime_server_binding_read_property_round_trip() {
 
     let td = test_td("urn:server:read");
     server_binding
-        .register_thing("urn:server:read", &td)
+        .register_thing(&ThingId::from("urn:server:read"), &td)
         .expect("register routes");
 
     std::thread::sleep(PROPAGATION_DELAY);
@@ -54,9 +54,7 @@ fn runtime_server_binding_read_property_round_trip() {
     assert_eq!(request.operation, Operation::ReadProperty);
 
     let response = InboundResponse::new(
-        InteractionOutput {
-            payload: Some(Payload::new(b"on".to_vec(), "text/plain")),
-        },
+        InteractionOutput::with_data(Payload::new(b"on".to_vec(), "text/plain")),
         request.correlation,
     );
     server_binding.send_response(response);
@@ -77,7 +75,7 @@ fn runtime_server_binding_invoke_action_round_trip() {
 
     let td = test_td("urn:server:invoke");
     server_binding
-        .register_thing("urn:server:invoke", &td)
+        .register_thing(&ThingId::from("urn:server:invoke"), &td)
         .expect("register routes");
 
     std::thread::sleep(PROPAGATION_DELAY);
@@ -101,13 +99,11 @@ fn runtime_server_binding_invoke_action_round_trip() {
     let request = poll_with_timeout(&server_binding, REPLY_TIMEOUT, "action query");
     assert_eq!(request.target, AffordanceTarget::Action("echo".into()));
     assert_eq!(request.operation, Operation::InvokeAction);
-    let input_body = request.input.payload.map(|p| p.body).unwrap_or_default();
+    let input_body = request.input.data.map(|p| p.body).unwrap_or_default();
     assert_eq!(input_body.as_ref(), b"hello");
 
     let response = InboundResponse::new(
-        InteractionOutput {
-            payload: Some(Payload::new(b"hello-echo".to_vec(), "text/plain")),
-        },
+        InteractionOutput::with_data(Payload::new(b"hello-echo".to_vec(), "text/plain")),
         request.correlation,
     );
     server_binding.send_response(response);
@@ -128,7 +124,7 @@ fn runtime_server_binding_write_property_put_listener() {
 
     let td = test_td("urn:server:write");
     server_binding
-        .register_thing("urn:server:write", &td)
+        .register_thing(&ThingId::from("urn:server:write"), &td)
         .expect("register routes");
 
     std::thread::sleep(PROPAGATION_DELAY);
@@ -146,7 +142,7 @@ fn runtime_server_binding_write_property_put_listener() {
 
     assert_eq!(request.target, AffordanceTarget::Property("status".into()));
     assert_eq!(request.operation, Operation::WriteProperty);
-    let body = request.input.payload.map(|p| p.body).unwrap_or_default();
+    let body = request.input.data.map(|p| p.body).unwrap_or_default();
     assert_eq!(body.as_ref(), b"off");
 
     // Write-property is fire-and-forget — send_response is a no-op but must not panic.
@@ -167,18 +163,18 @@ fn runtime_server_binding_unregister_stops_receiving_queries() {
 
     let td = test_td("urn:server:unreg");
     server_binding
-        .register_thing("urn:server:unreg", &td)
+        .register_thing(&ThingId::from("urn:server:unreg"), &td)
         .expect("register routes");
 
     std::thread::sleep(PROPAGATION_DELAY);
 
-    server_binding.unregister_thing("urn:server:unreg");
+    server_binding.unregister_thing(&ThingId::from("urn:server:unreg"));
 
     std::thread::sleep(PROPAGATION_DELAY);
 
-    // After unregistration, poll_accept_sync should not produce requests.
+    // After unregistration, try_accept should not produce requests.
     std::thread::sleep(PROPAGATION_DELAY);
-    assert!(server_binding.poll_accept_sync().is_none());
+    assert!(server_binding.try_accept().is_none());
 }
 
 #[test]
@@ -193,7 +189,7 @@ fn runtime_server_binding_error_reply() {
 
     let td = test_td("urn:server:error");
     server_binding
-        .register_thing("urn:server:error", &td)
+        .register_thing(&ThingId::from("urn:server:error"), &td)
         .expect("register routes");
 
     std::thread::sleep(PROPAGATION_DELAY);
@@ -243,7 +239,7 @@ fn runtime_server_binding_event_publish_to_subscriber() {
 
     let td = test_td("urn:server:event");
     server_binding
-        .register_thing("urn:server:event", &td)
+        .register_thing(&ThingId::from("urn:server:event"), &td)
         .expect("register routes");
 
     std::thread::sleep(PROPAGATION_DELAY);
@@ -294,65 +290,14 @@ fn runtime_server_binding_event_publish_to_subscriber() {
 }
 
 // ---------------------------------------------------------------------------
-// Async driving layer (SR-P2.2)
+// Async driving layer — removed: `AsyncServerBinding` was deleted in P0 (the
+// v4.0 `ServerBinding` is the single inbound contract; async driving lives in
+// the Servient, P3, draining its bounded fan-in channel). The per-binding
+// async `poll_accept` this test exercised no longer exists; the equivalent
+// coverage (Servient fan-in driving) lands with P3.
 // ---------------------------------------------------------------------------
 
-#[cfg(feature = "async")]
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn runtime_async_server_binding_poll_accept() {
-    if !should_run() {
-        return;
-    }
-
-    zenoh::init_log_from_env_or("error");
-    let server_binding = ZenohServerBinding::open(zenoh::Config::default()).unwrap();
-    let session = server_binding.session().clone();
-
-    let td = test_td("urn:async:server");
-    server_binding
-        .register_thing("urn:async:server", &td)
-        .expect("register routes");
-
-    std::thread::sleep(PROPAGATION_DELAY);
-
-    // Spawn a thread to send a zenoh query.
-    let key_expr = "clinkz/things/urn:async:server/properties/status";
-    let query_thread = std::thread::spawn(move || {
-        let replies = session.get(key_expr).wait().expect("send query");
-        replies
-            .recv_timeout(REPLY_TIMEOUT)
-            .expect("receive reply")
-            .expect("no reply")
-            .into_result()
-            .expect("reply error")
-    });
-
-    // Async poll_accept should return the inbound request.
-    let request = tokio::time::timeout(REPLY_TIMEOUT, async {
-        use clinkz_wot_core::AsyncServerBinding;
-        server_binding.poll_accept().await
-    })
-    .await
-    .expect("async poll_accept timed out");
-
-    assert_eq!(request.thing_id.as_str(), "urn:async:server");
-    assert_eq!(request.target, AffordanceTarget::Property("status".into()));
-    assert_eq!(request.operation, Operation::ReadProperty);
-
-    let response = InboundResponse::new(
-        InteractionOutput {
-            payload: Some(Payload::new(b"async-on".to_vec(), "text/plain")),
-        },
-        request.correlation,
-    );
-
-    // send_response is on both ServerBinding and AsyncServerBinding;
-    // they delegate to the same implementation, so ServerBinding is fine here.
-    server_binding.send_response(response);
-
-    let sample = query_thread.join().expect("join async query thread");
-    assert_eq!(sample.payload().to_bytes().as_ref(), b"async-on");
-}
+// (removed: runtime_async_server_binding_poll_accept — tested a deleted surface)
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -365,7 +310,7 @@ fn poll_with_timeout(
 ) -> InboundRequest {
     let deadline = std::time::Instant::now() + timeout;
     loop {
-        if let Some(request) = binding.poll_accept_sync() {
+        if let Some(request) = binding.try_accept() {
             return request;
         }
         if std::time::Instant::now() > deadline {
