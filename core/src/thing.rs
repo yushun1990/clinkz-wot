@@ -59,18 +59,6 @@ impl AffordanceTarget {
     }
 }
 
-impl From<&str> for AffordanceTarget {
-    fn from(name: &str) -> Self {
-        Self::Property(Arc::<str>::from(name))
-    }
-}
-
-impl From<String> for AffordanceTarget {
-    fn from(name: String) -> Self {
-        Self::Property(Arc::<str>::from(name))
-    }
-}
-
 /// Closed discriminant for the three interaction affordance kinds.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum AffordanceKind {
@@ -102,11 +90,15 @@ impl core::fmt::Display for AffordanceKind {
 // (baseline §4.2). Sync handler trait objects are `Send + Sync`.
 // ---------------------------------------------------------------------------
 
-/// Sink used by event/observe handlers to push initial payloads without
-/// requiring an async runtime.
-pub trait EventSink: Send + Sync {
-    /// Accepts the next event payload.
-    fn emit(&mut self, payload: crate::Payload) -> CoreResult<()>;
+/// Generic data sink handed to a streaming (observe/subscribe) handler at
+/// establishment so it can push initial [`Payload`]s into the stream. The sink
+/// is a `&mut` borrow scoped to the one handler call; subsequent ongoing
+/// emission uses the Servient-level `emit_event` / `emit_property_change` API
+/// (which drives [`EventBroker::publish`](crate::EventBroker::publish)
+/// directly), not this sink.
+pub trait DataSink: Send + Sync {
+    /// Pushes a payload into the sink.
+    fn push(&mut self, payload: crate::Payload) -> CoreResult<()>;
 }
 
 /// Handler for reading a local property affordance (Scripting API
@@ -126,13 +118,13 @@ pub trait PropertyWriteHandler: Send + Sync {
 
 /// Handler for observing a local property affordance (Scripting API
 /// `setPropertyObserveHandler`). Called once when a remote consumer starts
-/// observing; may emit the initial value through `sink`.
+/// observing; may push the initial value through `sink`.
 pub trait PropertyObserveHandler: Send + Sync {
-    /// Called when observation starts; may emit initial values through `sink`.
+    /// Called when observation starts; may push initial values through `sink`.
     fn observe(
         &self,
         input: &InteractionInput,
-        sink: &mut dyn EventSink,
+        sink: &mut dyn DataSink,
     ) -> CoreResult<InteractionOutput>;
 }
 
@@ -167,11 +159,11 @@ pub trait ActionCancelHandler: Send + Sync {
 /// Handler for event subscription on a local event affordance (Scripting API
 /// `setEventSubscribeHandler`).
 pub trait EventSubscribeHandler: Send + Sync {
-    /// Called when a consumer subscribes; may emit initial event payloads.
+    /// Called when a consumer subscribes; may push initial event payloads.
     fn subscribe(
         &self,
         input: &InteractionInput,
-        sink: &mut dyn EventSink,
+        sink: &mut dyn DataSink,
     ) -> CoreResult<InteractionOutput>;
 }
 
@@ -194,7 +186,7 @@ pub trait EventUnsubscribeHandler: Send + Sync {
 mod async_handlers {
     use alloc::boxed::Box;
 
-    use super::{EventSink, InteractionInput, InteractionOutput};
+    use super::{DataSink, InteractionInput, InteractionOutput};
     use crate::CoreResult;
 
     #[async_trait::async_trait]
@@ -212,7 +204,7 @@ mod async_handlers {
         async fn observe(
             &self,
             input: &InteractionInput,
-            sink: &mut dyn EventSink,
+            sink: &mut dyn DataSink,
         ) -> CoreResult<InteractionOutput>;
     }
 
@@ -241,7 +233,7 @@ mod async_handlers {
         async fn subscribe(
             &self,
             input: &InteractionInput,
-            sink: &mut dyn EventSink,
+            sink: &mut dyn DataSink,
         ) -> CoreResult<InteractionOutput>;
     }
 
@@ -808,7 +800,7 @@ impl LocalExposedThing {
         &self,
         name: &str,
         input: &InteractionInput,
-        sink: &mut dyn EventSink,
+        sink: &mut dyn DataSink,
     ) -> CoreResult<InteractionOutput> {
         self.local.ensure_property_affordance(name)?;
         let slot = self.property_handler_observe(name).ok_or(missing_handler(
@@ -914,7 +906,7 @@ impl LocalExposedThing {
         &self,
         name: &str,
         input: &InteractionInput,
-        sink: &mut dyn EventSink,
+        sink: &mut dyn DataSink,
     ) -> CoreResult<InteractionOutput> {
         self.local.ensure_event_affordance(name)?;
         let slot = self.event_handler_subscribe(name).ok_or(missing_handler(
@@ -1071,7 +1063,7 @@ mod async_dispatch {
             &self,
             name: &str,
             input: &InteractionInput,
-            sink: &mut dyn EventSink,
+            sink: &mut dyn DataSink,
         ) -> CoreResult<InteractionOutput> {
             self.local.ensure_property_affordance(name)?;
             match self.property_handler_observe(name) {
@@ -1140,7 +1132,7 @@ mod async_dispatch {
             &self,
             name: &str,
             input: &InteractionInput,
-            sink: &mut dyn EventSink,
+            sink: &mut dyn DataSink,
         ) -> CoreResult<InteractionOutput> {
             self.local.ensure_event_affordance(name)?;
             match self.event_handler_subscribe(name) {

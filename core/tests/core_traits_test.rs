@@ -11,7 +11,7 @@
 use std::sync::Arc;
 
 use clinkz_wot_core::{
-    AffordanceKind, AffordanceTarget, CoreError, CoreResult, EventSink, InteractionInput,
+    AffordanceKind, AffordanceTarget, CoreError, CoreResult, DataSink, InteractionInput,
     InteractionOutput, InteractionStatus, LocalExposedThing, Payload,
 };
 use clinkz_wot_td::{
@@ -70,9 +70,9 @@ impl clinkz_wot_core::EventSubscribeHandler for StartupEvent {
     fn subscribe(
         &self,
         _input: &InteractionInput,
-        sink: &mut dyn EventSink,
+        sink: &mut dyn DataSink,
     ) -> CoreResult<InteractionOutput> {
-        sink.emit(Payload::new(b"ready".to_vec(), "text/plain"))?;
+        sink.push(Payload::new(b"ready".to_vec(), "text/plain"))?;
         Ok(InteractionOutput::empty())
     }
 }
@@ -82,8 +82,8 @@ struct CollectSink {
     payloads: Vec<Payload>,
 }
 
-impl EventSink for CollectSink {
-    fn emit(&mut self, payload: Payload) -> CoreResult<()> {
+impl DataSink for CollectSink {
+    fn push(&mut self, payload: Payload) -> CoreResult<()> {
         self.payloads.push(payload);
         Ok(())
     }

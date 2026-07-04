@@ -22,7 +22,7 @@ pub use binding::{BindingRequest, ClientBinding};
 pub use binding::SubscriptionGuard;
 pub use error::{CoreError, CoreResult};
 pub use event::{
-    BrokerEventSink, DEFAULT_SUBSCRIPTION_CAPACITY, EventBroker, EventName, PublisherSink,
+    BrokerDataSink, DEFAULT_SUBSCRIPTION_CAPACITY, EventBroker, EventName, PublisherSink,
     Subscription, SubscriptionSender,
 };
 pub use identity::{CorrelationId, ThingId};
@@ -41,7 +41,7 @@ pub use security::{
 pub use sync::WotLock;
 pub use thing::{
     ActionCancelHandler, ActionHandler, ActionQueryHandler, AffordanceKind, AffordanceTarget,
-    EventSink, EventSubscribeHandler, EventUnsubscribeHandler, LocalExposedThing, LocalThing,
+    DataSink, EventSubscribeHandler, EventUnsubscribeHandler, LocalExposedThing, LocalThing,
     PropertyObserveHandler, PropertyReadHandler, PropertyUnobserveHandler, PropertyWriteHandler,
 };
 #[cfg(feature = "async")]

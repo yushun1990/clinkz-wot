@@ -3,8 +3,8 @@
 //! Implements the v3.0 §9 / v3.1 §6.1 event data flow:
 //!
 //! - [`EventBroker`] holds a fan-out table keyed by `ThingId` and
-//!   [`EventName`]. A broker-backed [`EventSink`] (see
-//!   [`EventBroker::event_sink`]) is handed to a local
+//!   [`EventName`]. A broker-backed [`BrokerDataSink`] (see
+//!   [`EventBroker::data_sink`]) is handed to a local
 //!   [`EventSubscribeHandler::subscribe`](crate::EventSubscribeHandler::subscribe) call; each
 //!   `emit` fans the payload out to every registered [`PublisherSink`], each of
 //!   which wraps a server binding's publish channel and pushes the payload to a
@@ -45,7 +45,7 @@ use alloc::{
 use core::fmt;
 
 use crate::WotLock;
-use crate::thing::EventSink;
+use crate::thing::DataSink;
 use crate::{CoreError, CoreResult, Payload, ThingId};
 
 /// Crate-default capacity for a [`Subscription`] queue when none is requested.
@@ -132,7 +132,7 @@ pub trait PublisherSink {
 pub(crate) type SharedPublisherSink = Arc<dyn PublisherSink + Send + Sync>;
 
 /// Fan-out table keyed by Thing and event name.
-type EventSinkMap = BTreeMap<ThingId, BTreeMap<EventName, Arc<[SharedPublisherSink]>>>;
+type PublisherSinkMap = BTreeMap<ThingId, BTreeMap<EventName, Arc<[SharedPublisherSink]>>>;
 
 /// Inbound (exposed) event fan-out broker.
 ///
@@ -158,7 +158,7 @@ type EventSinkMap = BTreeMap<ThingId, BTreeMap<EventName, Arc<[SharedPublisherSi
 /// broker.register("urn:thing:1", "update", ConsoleSink);
 /// ```
 pub struct EventBroker {
-    sinks: WotLock<EventSinkMap>,
+    sinks: WotLock<PublisherSinkMap>,
 }
 
 impl Clone for EventBroker {
@@ -286,17 +286,18 @@ impl EventBroker {
         }
     }
 
-    /// Builds a broker-backed [`EventSink`] for a local event source.
+    /// Builds a broker-backed [`BrokerDataSink`] for a local streaming source
+    /// (event or observed property).
     ///
-    /// Each [`EventSink::emit`] on the returned sink fans the payload out to
+    /// Each [`DataSink::push`] on the returned sink fans the payload out to
     /// the broker's registered sinks for `(thing, event)`. The sink borrows the
-    /// broker for the duration of a `subscribe` call.
-    pub fn event_sink(
+    /// broker for the duration of a `subscribe`/`observe` call.
+    pub fn data_sink(
         &self,
         thing: impl Into<ThingId>,
         event: impl Into<EventName>,
-    ) -> BrokerEventSink<'_> {
-        BrokerEventSink {
+    ) -> BrokerDataSink<'_> {
+        BrokerDataSink {
             broker: self,
             thing: thing.into(),
             event: event.into(),
@@ -328,26 +329,28 @@ impl fmt::Debug for EventBroker {
     }
 }
 
-/// [`EventSink`] adapter that fans emitted payloads through an [`EventBroker`].
+/// [`DataSink`] adapter that fans pushed payloads through an [`EventBroker`].
 ///
-/// Returned by [`EventBroker::event_sink`]. Hand it to a local
-/// [`EventSubscribeHandler::subscribe`](crate::EventSubscribeHandler::subscribe) call so that
-/// locally emitted events reach every registered remote subscriber.
-pub struct BrokerEventSink<'a> {
+/// Returned by [`EventBroker::data_sink`]. Hand it to a local
+/// [`EventSubscribeHandler::subscribe`](crate::EventSubscribeHandler::subscribe)
+/// or [`PropertyObserveHandler::observe`](crate::PropertyObserveHandler::observe)
+/// call so that locally pushed initial payloads reach every registered remote
+/// subscriber.
+pub struct BrokerDataSink<'a> {
     broker: &'a EventBroker,
     thing: ThingId,
     event: EventName,
 }
 
-impl EventSink for BrokerEventSink<'_> {
-    fn emit(&mut self, payload: Payload) -> CoreResult<()> {
+impl DataSink for BrokerDataSink<'_> {
+    fn push(&mut self, payload: Payload) -> CoreResult<()> {
         self.broker.publish(&self.thing, &self.event, &payload)
     }
 }
 
-impl fmt::Debug for BrokerEventSink<'_> {
+impl fmt::Debug for BrokerDataSink<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("BrokerEventSink")
+        f.debug_struct("BrokerDataSink")
             .field("thing", &self.thing)
             .field("event", &self.event)
             .finish_non_exhaustive()
@@ -778,13 +781,13 @@ mod stream_impl {
 #[cfg(test)]
 mod tests {
     use super::{
-        BrokerEventSink, DEFAULT_SUBSCRIPTION_CAPACITY, EventBroker, EventName, PublisherSink,
+        BrokerDataSink, DEFAULT_SUBSCRIPTION_CAPACITY, EventBroker, EventName, PublisherSink,
         Subscription,
     };
     use alloc::{string::String, string::ToString, vec, vec::Vec};
     use std::sync::{Arc, Mutex};
 
-    use crate::thing::EventSink;
+use crate::thing::DataSink;
     use crate::{CoreError, CoreResult, Payload, ThingId};
 
     fn payload(body: &[u8]) -> Payload {
@@ -926,13 +929,13 @@ mod tests {
     }
 
     #[test]
-    fn broker_event_sink_bridges_emit_to_fanout() {
+    fn broker_data_sink_bridges_push_to_fanout() {
         let broker = EventBroker::new();
         let rec = Recorder::new();
         broker.register("urn:t:1", "update", RecorderSink { rec: rec.clone() });
 
-        let mut sink: BrokerEventSink<'_> = broker.event_sink("urn:t:1", "update");
-        sink.emit(payload(&[7])).unwrap();
+        let mut sink: BrokerDataSink<'_> = broker.data_sink("urn:t:1", "update");
+        sink.push(payload(&[7])).unwrap();
 
         assert_eq!(rec.bodies(), vec![vec![7]]);
     }
