@@ -11,7 +11,7 @@
 use std::sync::Arc;
 
 use clinkz_wot_core::{
-    AffordanceKind, AffordanceTarget, CoreError, CoreResult, DataSink, InteractionInput,
+    AffordanceKind, AffordanceTarget, CoreError, CoreResult, InteractionInput,
     InteractionOutput, InteractionStatus, LocalExposedThing, Payload,
 };
 use clinkz_wot_td::{
@@ -70,22 +70,10 @@ impl clinkz_wot_core::EventSubscribeHandler for StartupEvent {
     fn subscribe(
         &self,
         _input: &InteractionInput,
-        sink: &mut dyn DataSink,
+        push: &mut dyn FnMut(Payload) -> CoreResult<()>,
     ) -> CoreResult<InteractionOutput> {
-        sink.push(Payload::new(b"ready".to_vec(), "text/plain"))?;
+        push(Payload::new(b"ready".to_vec(), "text/plain"))?;
         Ok(InteractionOutput::empty())
-    }
-}
-
-#[derive(Default)]
-struct CollectSink {
-    payloads: Vec<Payload>,
-}
-
-impl DataSink for CollectSink {
-    fn push(&mut self, payload: Payload) -> CoreResult<()> {
-        self.payloads.push(payload);
-        Ok(())
     }
 }
 
@@ -164,9 +152,14 @@ fn local_exposed_thing_dispatches_registered_handlers() {
     let action = thing.invoke_action("echo", &mut action_input).unwrap().data.unwrap();
     assert_eq!(action.body.as_ref(), b"hello");
 
-    let mut sink = CollectSink::default();
-    thing.subscribe_event("startup", &InteractionInput::empty(), &mut sink).unwrap();
-    assert_eq!(sink.payloads[0].body.as_ref(), b"ready");
+    let mut received: Vec<Payload> = Vec::new();
+    thing
+        .subscribe_event("startup", &InteractionInput::empty(), &mut |p| {
+            received.push(p);
+            Ok(())
+        })
+        .unwrap();
+    assert_eq!(received[0].body.as_ref(), b"ready");
 }
 
 #[test]

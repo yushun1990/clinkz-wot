@@ -90,16 +90,16 @@ impl core::fmt::Display for AffordanceKind {
 // (baseline §4.2). Sync handler trait objects are `Send + Sync`.
 // ---------------------------------------------------------------------------
 
-/// Generic data sink handed to a streaming (observe/subscribe) handler at
-/// establishment so it can push initial [`Payload`]s into the stream. The sink
-/// is a `&mut` borrow scoped to the one handler call; subsequent ongoing
-/// emission uses the Servient-level `emit_event` / `emit_property_change` API
-/// (which drives [`EventBroker::publish`](crate::EventBroker::publish)
-/// directly), not this sink.
-pub trait DataSink: Send + Sync {
-    /// Pushes a payload into the sink.
-    fn push(&mut self, payload: crate::Payload) -> CoreResult<()>;
-}
+/// Ephemeral push callback handed to a streaming (observe/subscribe) handler
+/// so it can push initial [`Payload`]s into the stream at establishment.
+///
+/// This is a closure, not a named trait: the "initial push" is a one-shot,
+/// handler-scoped concern, so a `FnMut` callback is the minimal abstraction
+/// (no implementor/impl indirection needed). It is distinct from ongoing
+/// emission, which uses the Servient-level `emit_event` / `emit_property_change`
+/// API (driving [`EventBroker::publish`](crate::EventBroker::publish) directly,
+/// available for the lifetime of the exposed Thing — not handler-scoped).
+pub type PushFn<'a> = &'a mut dyn FnMut(crate::Payload) -> CoreResult<()>;
 
 /// Handler for reading a local property affordance (Scripting API
 /// `setPropertyReadHandler`).
@@ -118,13 +118,13 @@ pub trait PropertyWriteHandler: Send + Sync {
 
 /// Handler for observing a local property affordance (Scripting API
 /// `setPropertyObserveHandler`). Called once when a remote consumer starts
-/// observing; may push the initial value through `sink`.
+/// observing; may push the initial value through `push`.
 pub trait PropertyObserveHandler: Send + Sync {
-    /// Called when observation starts; may push initial values through `sink`.
+    /// Called when observation starts; may push initial values through `push`.
     fn observe(
         &self,
         input: &InteractionInput,
-        sink: &mut dyn DataSink,
+        push: PushFn<'_>,
     ) -> CoreResult<InteractionOutput>;
 }
 
@@ -163,7 +163,7 @@ pub trait EventSubscribeHandler: Send + Sync {
     fn subscribe(
         &self,
         input: &InteractionInput,
-        sink: &mut dyn DataSink,
+        push: PushFn<'_>,
     ) -> CoreResult<InteractionOutput>;
 }
 
@@ -186,7 +186,7 @@ pub trait EventUnsubscribeHandler: Send + Sync {
 mod async_handlers {
     use alloc::boxed::Box;
 
-    use super::{DataSink, InteractionInput, InteractionOutput};
+    use super::{InteractionInput, InteractionOutput, PushFn};
     use crate::CoreResult;
 
     #[async_trait::async_trait]
@@ -204,7 +204,7 @@ mod async_handlers {
         async fn observe(
             &self,
             input: &InteractionInput,
-            sink: &mut dyn DataSink,
+            push: PushFn<'_>,
         ) -> CoreResult<InteractionOutput>;
     }
 
@@ -233,7 +233,7 @@ mod async_handlers {
         async fn subscribe(
             &self,
             input: &InteractionInput,
-            sink: &mut dyn DataSink,
+            push: PushFn<'_>,
         ) -> CoreResult<InteractionOutput>;
     }
 
@@ -800,7 +800,7 @@ impl LocalExposedThing {
         &self,
         name: &str,
         input: &InteractionInput,
-        sink: &mut dyn DataSink,
+        push: PushFn<'_>,
     ) -> CoreResult<InteractionOutput> {
         self.local.ensure_property_affordance(name)?;
         let slot = self.property_handler_observe(name).ok_or(missing_handler(
@@ -808,7 +808,7 @@ impl LocalExposedThing {
             Operation::ObserveProperty,
         ))?;
         match slot {
-            ObserveSlot::Sync(handler) => handler.observe(input, sink),
+            ObserveSlot::Sync(handler) => handler.observe(input, push),
             #[cfg(feature = "async")]
             ObserveSlot::Async(_) => Err(missing_handler(
                 AffordanceTarget::Property(name.into()),
@@ -906,7 +906,7 @@ impl LocalExposedThing {
         &self,
         name: &str,
         input: &InteractionInput,
-        sink: &mut dyn DataSink,
+        push: PushFn<'_>,
     ) -> CoreResult<InteractionOutput> {
         self.local.ensure_event_affordance(name)?;
         let slot = self.event_handler_subscribe(name).ok_or(missing_handler(
@@ -914,7 +914,7 @@ impl LocalExposedThing {
             Operation::SubscribeEvent,
         ))?;
         match slot {
-            SubscribeSlot::Sync(handler) => handler.subscribe(input, sink),
+            SubscribeSlot::Sync(handler) => handler.subscribe(input, push),
             #[cfg(feature = "async")]
             SubscribeSlot::Async(_) => Err(missing_handler(
                 AffordanceTarget::Event(name.into()),
@@ -1063,12 +1063,12 @@ mod async_dispatch {
             &self,
             name: &str,
             input: &InteractionInput,
-            sink: &mut dyn DataSink,
+            push: PushFn<'_>,
         ) -> CoreResult<InteractionOutput> {
             self.local.ensure_property_affordance(name)?;
             match self.property_handler_observe(name) {
-                Some(ObserveSlot::Sync(handler)) => handler.observe(input, sink),
-                Some(ObserveSlot::Async(handler)) => handler.observe(input, sink).await,
+                Some(ObserveSlot::Sync(handler)) => handler.observe(input, push),
+                Some(ObserveSlot::Async(handler)) => handler.observe(input, push).await,
                 None => Err(missing_handler(
                     AffordanceTarget::Property(name.into()),
                     Operation::ObserveProperty,
@@ -1132,12 +1132,12 @@ mod async_dispatch {
             &self,
             name: &str,
             input: &InteractionInput,
-            sink: &mut dyn DataSink,
+            push: PushFn<'_>,
         ) -> CoreResult<InteractionOutput> {
             self.local.ensure_event_affordance(name)?;
             match self.event_handler_subscribe(name) {
-                Some(SubscribeSlot::Sync(handler)) => handler.subscribe(input, sink),
-                Some(SubscribeSlot::Async(handler)) => handler.subscribe(input, sink).await,
+                Some(SubscribeSlot::Sync(handler)) => handler.subscribe(input, push),
+                Some(SubscribeSlot::Async(handler)) => handler.subscribe(input, push).await,
                 None => Err(missing_handler(
                     AffordanceTarget::Event(name.into()),
                     Operation::SubscribeEvent,
