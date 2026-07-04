@@ -1,231 +1,110 @@
+//! `ServientBuilder` — std-host consuming, move-fluent builder
+//! (baseline v4.0 §7.3/§3.11 / phase-p3 §3.11).
+
 use alloc::{boxed::Box, sync::Arc, vec::Vec};
 
-use clinkz_wot_core::{
-    ClientBinding, CredentialStore, EventBroker, MapLock, PayloadCodec, SecurityProvider,
-    ServerBinding,
-};
-use clinkz_wot_discovery::{InMemoryThingDirectory, ThingDirectory};
+use clinkz_wot_core::{EventBroker, FanInSender, InboundRequest, ServerBinding};
+use clinkz_wot_discovery::{Discoverer, InMemoryDirectory, LocalDiscoverer};
 
-#[cfg(feature = "async")]
-use crate::servient::DrivingState;
-use crate::{
-    ConsumedThingRegistry, ExposedThingRegistry,
-    interaction::InteractionRuntime,
-    servient::{
-        BindingFactoryEntry, BindingFactoryRegistry, PayloadCodecRegistry,
-        SecurityProviderRegistry, Servient, ServientShared,
-    },
-};
+use crate::handle::{ConsumedThingHandle, ExposedThingHandle};
+use crate::servient::{ClientBindingFactory, Servient};
+use crate::{ServientError, ServientResult};
 
-/// Builder for a Web of Things Servient.
+/// Default inbound fan-in channel capacity (audit AD6a/O5).
+const DEFAULT_FANIN_CAPACITY: usize = 256;
+
+/// Consuming, move-fluent builder for a [`Servient`].
 ///
-/// Mirrors the [`Servient<D>`](Servient) shape: a single generic directory
-/// parameter `D` (baseline §6). The exposed Thing registry and form/binding
-/// caches are internal concrete types and are no longer injectable.
-pub struct ServientBuilder<D = InMemoryThingDirectory> {
-    pub(crate) directory: D,
-    pub(crate) binding_factories: Vec<BindingFactoryEntry>,
-    pub(crate) payload_codecs: Vec<Arc<dyn PayloadCodec>>,
-    pub(crate) security_providers: Vec<Arc<dyn SecurityProvider>>,
-    pub(crate) credential_store: Option<Arc<dyn CredentialStore>>,
-    pub(crate) server_bindings: Vec<Arc<dyn ServerBinding>>,
-    pub(crate) normalize_payloads: bool,
-    #[cfg(feature = "async")]
-    pub(crate) async_server_bindings: Vec<Arc<dyn clinkz_wot_core::AsyncServerBinding>>,
+/// Required: ≥1 server binding (to serve) or explicit local-only; ≥1 client
+/// binding factory (to consume). Discovery defaults to a
+/// [`LocalDiscoverer`] over a fresh [`InMemoryDirectory`].
+pub struct ServientBuilder {
+    server_bindings: Vec<Arc<dyn ServerBinding>>,
+    client_factories: Vec<Arc<dyn ClientBindingFactory>>,
+    discoverer: Option<Arc<dyn Discoverer>>,
+    fanin_capacity: usize,
 }
 
-impl ServientBuilder<InMemoryThingDirectory> {
-    /// Creates a builder using an in-memory Thing Description Directory.
+impl ServientBuilder {
+    /// Creates an empty builder.
     pub fn new() -> Self {
         Self {
-            directory: InMemoryThingDirectory::new(),
-            binding_factories: Vec::new(),
-            payload_codecs: Vec::new(),
-            security_providers: Vec::new(),
-            credential_store: None,
             server_bindings: Vec::new(),
-            normalize_payloads: true,
-            #[cfg(feature = "async")]
-            async_server_bindings: Vec::new(),
-        }
-    }
-}
-
-impl Default for ServientBuilder<InMemoryThingDirectory> {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl<D> ServientBuilder<D>
-where
-    D: ThingDirectory,
-{
-    /// Uses a caller-provided Thing Description Directory backend.
-    pub fn with_directory<N>(self, directory: N) -> ServientBuilder<N>
-    where
-        N: ThingDirectory,
-    {
-        ServientBuilder {
-            directory,
-            binding_factories: self.binding_factories,
-            payload_codecs: self.payload_codecs,
-            security_providers: self.security_providers,
-            credential_store: self.credential_store,
-            server_bindings: self.server_bindings,
-            normalize_payloads: self.normalize_payloads,
-            #[cfg(feature = "async")]
-            async_server_bindings: self.async_server_bindings,
+            client_factories: Vec::new(),
+            discoverer: None,
+            fanin_capacity: DEFAULT_FANIN_CAPACITY,
         }
     }
 
-    /// Registers a factory used to attach protocol bindings to consumed Things.
-    pub fn binding_factory<F>(mut self, factory: F) -> Self
-    where
-        F: Fn() -> Box<dyn ClientBinding + Send + Sync> + 'static,
-    {
-        self.binding_factories.push(BindingFactoryEntry {
-            make: Box::new(factory),
-            supports: Arc::new(|_, _, _| true),
-        });
-        self
-    }
-
-    /// Registers a factory used to attach protocol bindings to consumed Things.
-    ///
-    /// The `supports` predicate lets the Servient skip instantiating bindings
-    /// that cannot handle the selected form/operation.
-    pub fn binding_factory_with_support<F, S>(mut self, factory: F, supports: S) -> Self
-    where
-        F: Fn() -> Box<dyn ClientBinding + Send + Sync> + 'static,
-        S: Fn(
-                &clinkz_wot_td::thing::Thing,
-                &clinkz_wot_td::form::Form,
-                clinkz_wot_td::data_type::Operation,
-            ) -> bool
-            + 'static,
-    {
-        self.binding_factories.push(BindingFactoryEntry {
-            make: Box::new(factory),
-            supports: Arc::new(supports),
-        });
-        self
-    }
-
-    /// Registers a payload codec used by Servient interaction hooks.
-    pub fn payload_codec(mut self, codec: impl PayloadCodec + 'static) -> Self {
-        self.payload_codecs.push(Arc::new(codec));
-        self
-    }
-
-    /// Registers a security provider used by Servient interaction hooks.
-    pub fn security_provider(mut self, provider: impl SecurityProvider + 'static) -> Self {
-        self.security_providers.push(Arc::new(provider));
-        self
-    }
-
-    /// Registers a credential store for security providers to retrieve stored
-    /// secrets (baseline addendum §1.2 `cz:credentialSource`).
-    pub fn credential_store(mut self, store: Arc<dyn CredentialStore>) -> Self {
-        self.credential_store = Some(store);
-        self
-    }
-
-    /// Controls whether consumed-interaction payloads are decoded and
-    /// re-encoded through registered codecs for canonicalization (default
-    /// `true`).
-    ///
-    /// Set to `false` for high-frequency deployments that do not need canonical
-    /// bytes (e.g. no signing/hashing) — this skips two `Vec<u8>` allocations
-    /// and a full decode+encode round-trip per interaction whose content type
-    /// matches a registered codec. Malformed payloads are no longer rejected by
-    /// the codec in this mode; validation responsibility moves to the handler.
-    pub fn normalize_payloads(mut self, enabled: bool) -> Self {
-        self.normalize_payloads = enabled;
-        self
-    }
-
-    /// Registers a server binding for inbound interactions.
-    pub fn server_binding(mut self, binding: Arc<dyn ServerBinding>) -> Self {
+    /// Adds a server binding (≥1 required to serve).
+    pub fn with_server_binding(mut self, binding: Arc<dyn ServerBinding>) -> Self {
         self.server_bindings.push(binding);
         self
     }
 
-    /// Registers an async server binding for native-async inbound driving.
-    #[cfg(feature = "async")]
-    pub fn async_server_binding(
-        mut self,
-        binding: Arc<dyn clinkz_wot_core::AsyncServerBinding>,
-    ) -> Self {
-        self.async_server_bindings.push(binding);
+    /// Adds a client binding factory (≥1 required to consume).
+    pub fn with_client_factory(mut self, factory: Arc<dyn ClientBindingFactory>) -> Self {
+        self.client_factories.push(factory);
         self
     }
 
-    /// Builds the Servient.
-    pub fn build(self) -> Servient<D> {
+    /// Sets the Discoverer. If omitted, `build()` installs a
+    /// [`LocalDiscoverer`] over a fresh [`InMemoryDirectory`] (embedded/local-only).
+    pub fn with_discoverer(mut self, discoverer: Arc<dyn Discoverer>) -> Self {
+        self.discoverer = Some(discoverer);
+        self
+    }
+
+    /// Sets the bounded inbound fan-in channel capacity (AD6a/O5).
+    pub fn with_fanin_capacity(mut self, capacity: usize) -> Self {
+        self.fanin_capacity = capacity.max(1);
+        self
+    }
+
+    /// Builds the [`Servient`]: constructs the fan-in channel, injects the
+    /// sender + [`EventBroker`] into every server binding, and assembles the
+    /// registries.
+    pub fn build(self) -> ServientResult<Servient> {
+        let Self {
+            server_bindings,
+            client_factories,
+            discoverer,
+            fanin_capacity,
+        } = self;
+
+        let discoverer: Arc<dyn Discoverer> = discoverer.unwrap_or_else(|| {
+            // Default: local-only discoverer over a fresh in-memory directory.
+            let dir = Arc::new(InMemoryDirectory::new());
+            Arc::new(LocalDiscoverer::new(dir))
+        });
+
         let event_broker = EventBroker::new();
+        let (inbound_tx, inbound_rx) = async_channel::bounded::<InboundRequest>(fanin_capacity);
 
-        // Hand the broker to every server binding so they can register
-        // PublisherSinks during subsequent `expose` calls.
-        for binding in &self.server_bindings {
+        // Wire event broker + fan-in sender into every server binding.
+        for binding in &server_bindings {
             binding.set_event_broker(event_broker.clone());
+            binding.set_request_sink(inbound_tx.clone());
         }
-        #[cfg(feature = "async")]
-        for binding in &self.async_server_bindings {
-            binding.set_event_broker(event_broker.clone());
-        }
-        #[cfg(feature = "async")]
-        let async_binding_generation = self.async_server_bindings.len() as u64;
 
-        // Construct the shared registry handles once, then share them between
-        // `ServientShared` (for direct registry mutation paths) and the cached
-        // `InteractionRuntime` (for the consumed-interaction hot path). Both
-        // hold the same `Arc<MapLock<…>>` handles, so post-build mutations stay
-        // visible through both paths; the `InteractionRuntime` clone is just an
-        // `Arc` refcount bump per registry.
-        let binding_factories = BindingFactoryRegistry::from_factories(self.binding_factories);
-        #[allow(clippy::arc_with_non_send_sync)]
-        let payload_codecs: PayloadCodecRegistry = Arc::new(MapLock::new(self.payload_codecs));
-        #[allow(clippy::arc_with_non_send_sync)]
-        let security_providers: SecurityProviderRegistry =
-            Arc::new(MapLock::new(Arc::new(self.security_providers)));
-        let credential_store = self.credential_store;
-        let normalize_payloads = self.normalize_payloads;
+        let server_bindings: Arc<[Arc<dyn ServerBinding>]> = Arc::from(server_bindings);
+        let client_factories: Arc<[Arc<dyn ClientBindingFactory>]> = Arc::from(client_factories);
 
-        let interaction = InteractionRuntime::new(
-            binding_factories.clone(),
-            Arc::clone(&payload_codecs),
-            Arc::clone(&security_providers),
-            credential_store,
-            normalize_payloads,
-        );
+        Ok(Servient::assemble(
+            Default::default(),
+            Default::default(),
+            server_bindings,
+            client_factories,
+            discoverer,
+            event_broker,
+            inbound_tx,
+            Arc::new(inbound_rx),
+        ))
+    }
+}
 
-        Servient::from_parts(
-            ServientShared {
-                #[allow(clippy::arc_with_non_send_sync)]
-                exposed_registry: Arc::new(ExposedThingRegistry::new()),
-                #[allow(clippy::arc_with_non_send_sync)]
-                consumed_registry: Arc::new(ConsumedThingRegistry::new()),
-                binding_factories,
-                payload_codecs,
-                security_providers,
-                event_broker,
-                interaction,
-                #[allow(clippy::arc_with_non_send_sync)]
-                sync_server_bindings: Arc::new(MapLock::new(Arc::from(self.server_bindings))),
-                #[cfg(feature = "async")]
-                #[allow(clippy::arc_with_non_send_sync)]
-                async_server_bindings: Arc::new(MapLock::new(Arc::from(
-                    self.async_server_bindings,
-                ))),
-                sync_binding_cursor: core::sync::atomic::AtomicUsize::new(0),
-            },
-            self.directory,
-            #[cfg(feature = "async")]
-            DrivingState {
-                async_binding_generation,
-                async_accept_state: crate::servient::AsyncAcceptState::new(),
-            },
-        )
+impl Default for ServientBuilder {
+    fn default() -> Self {
+        Self::new()
     }
 }

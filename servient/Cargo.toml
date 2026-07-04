@@ -11,6 +11,7 @@ clinkz-wot-protocol-bindings-zenoh = { path = "../protocol-bindings/protocols/ze
 clinkz-wot-td = { path = "../td", default-features = false }
 log = { version = "0.4", default-features = false }
 serde_json = { workspace = true }
+async-channel = { version = "2", optional = true }
 async-trait = { workspace = true, optional = true }
 futures-util = { workspace = true, optional = true }
 tokio = { version = "1", optional = true, features = ["sync", "macros", "time", "rt"] }
@@ -22,17 +23,23 @@ tokio = { version = "1", features = ["macros", "rt", "rt-multi-thread", "sync", 
 
 [features]
 default = ["std"]
+## The Servient's std surface (driving loop, fan-in channel, host conveniences)
+## is async, so `std` implies `async`.
 std = [
+    "async",
     "clinkz-wot-core/std",
     "clinkz-wot-discovery/std",
     "clinkz-wot-protocol-bindings/std",
     "clinkz-wot-td/std",
+    "dep:async-channel",
 ]
+## Native-async driving primitives (`poll_serve`, `serve`). `std` implies this.
 async = [
     "dep:async-trait",
     "dep:futures-util",
     "dep:tokio",
     "clinkz-wot-core/async",
+    "clinkz-wot-discovery/async",
 ]
 test-zenoh = [
     "dep:clinkz-wot-protocol-bindings-zenoh",

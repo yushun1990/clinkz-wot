@@ -1227,7 +1227,7 @@ mod consumed {
         /// operation; otherwise an `InvalidInteraction` / `UnsupportedOperation`
         /// error is returned before any binding is consulted.
         pub async fn request(
-            &mut self,
+            &self,
             target: AffordanceTarget,
             operation: Operation,
             form: Arc<Form>,

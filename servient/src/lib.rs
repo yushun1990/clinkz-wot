@@ -1,8 +1,13 @@
-//! Servient composition for Web of Things flows.
+//! Servient composition for Web of Things flows (baseline v4.0 §7 / phase-p3).
 //!
-//! This crate wires protocol-neutral core dispatch, Discovery directory
-//! storage, and protocol binding factories without making any concrete
-//! protocol binding mandatory.
+//! Wires protocol-neutral core dispatch, Discovery, and protocol binding
+//! factories into a single non-generic runtime: produce/consume/discover,
+//! async-only driving, frozen-TD lifecycle.
+//!
+//! The Servient fundamentally requires the `async` feature (it holds a
+//! `dyn Discoverer`, drives async handlers, and consumes via async
+//! `ClientBinding`s). On `no_std` that means `no_std + async` (embassy); bare
+//! `no_std` without `async` compiles only the data-registry primitives.
 
 #![no_std]
 
@@ -11,21 +16,24 @@ extern crate std;
 
 extern crate alloc;
 
-mod builder;
-mod cache;
-mod consumed;
 mod error;
-mod handle;
-mod interaction;
-mod lock;
 mod registry;
+
+#[cfg(feature = "async")]
+mod handle;
+#[cfg(feature = "async")]
 mod servient;
+#[cfg(feature = "std")]
+mod builder;
 
-pub use builder::ServientBuilder;
-pub use cache::{BindingPlan, SelectedFormCacheKey};
 pub use error::{ServientError, ServientResult};
-pub use handle::{ConsumedThingHandle, ExposedThingHandle};
-pub use servient::{Servient, ShutdownHandle};
 
-pub(crate) use consumed::ConsumedThingRegistry;
-pub(crate) use registry::ExposedThingRegistry;
+#[cfg(feature = "async")]
+pub use handle::{ConsumedThingHandle, ExposedThingHandle};
+#[cfg(feature = "async")]
+pub use servient::{Servient, ShutdownHandle};
+#[cfg(feature = "async")]
+pub use servient::ClientBindingFactory;
+
+#[cfg(feature = "std")]
+pub use builder::ServientBuilder;
