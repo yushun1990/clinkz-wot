@@ -72,7 +72,6 @@ impl ServientBuilder {
         } = self;
 
         let discoverer: Arc<dyn Discoverer> = discoverer.unwrap_or_else(|| {
-            // Default: local-only discoverer over a fresh in-memory directory.
             let dir = Arc::new(InMemoryDirectory::new());
             Arc::new(LocalDiscoverer::new(dir))
         });
@@ -80,16 +79,16 @@ impl ServientBuilder {
         let event_broker = EventBroker::new();
         let (inbound_tx, inbound_rx) = async_channel::bounded::<InboundRequest>(fanin_capacity);
 
-        // Wire event broker + fan-in sender into every server binding.
-        for binding in &server_bindings {
-            binding.set_event_broker(event_broker.clone());
-            binding.set_request_sink(inbound_tx.clone());
-        }
-
         let server_bindings: Arc<[Arc<dyn ServerBinding>]> = Arc::from(server_bindings);
         let client_factories: Arc<[Arc<dyn ClientBindingFactory>]> = Arc::from(client_factories);
 
-        Ok(Servient::assemble(
+        // Assemble the Servient FIRST (needs owned event_broker + server_bindings).
+        // Clone what we still need for post-construction wiring.
+        let broker_for_wiring = event_broker.clone();
+        let tx_for_wiring = inbound_tx.clone();
+        let bindings_for_wiring = server_bindings.clone();
+
+        let servient = Servient::assemble(
             Default::default(),
             Default::default(),
             server_bindings,
@@ -98,7 +97,22 @@ impl ServientBuilder {
             event_broker,
             inbound_tx,
             Arc::new(inbound_rx),
-        ))
+        );
+
+        // THEN wire bindings — now we have the Servient for dispatch injection.
+        // Each binding picks its dispatch model:
+        //   - zenoh (sync callbacks): uses set_request_sink (fan-in channel).
+        //   - HTTP/CoAP (async handlers): uses set_dispatch (direct dispatch).
+        //   - Bare no_std: uses try_accept (poll model).
+        // All three are injected; each binding ignores what it doesn't use.
+        let dispatch: Arc<dyn clinkz_wot_core::Dispatch> = Arc::new(servient.clone());
+        for binding in bindings_for_wiring.iter() {
+            binding.set_event_broker(broker_for_wiring.clone());
+            binding.set_request_sink(tx_for_wiring.clone());
+            binding.set_dispatch(dispatch.clone());
+        }
+
+        Ok(servient)
     }
 }
 

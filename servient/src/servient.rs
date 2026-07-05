@@ -7,8 +7,8 @@ use alloc::{boxed::Box, format, sync::Arc, vec::Vec};
 #[cfg(feature = "std")]
 use clinkz_wot_core::FanInSender;
 use clinkz_wot_core::{
-    ClientBinding, EventBroker, EventName, ExposedThing, InboundRequest, InboundResponse,
-    InteractionOutput, Payload, ServerBinding, ThingId, WotLock,
+    ClientBinding, Dispatch, EventBroker, EventName, ExposedThing, InboundRequest,
+    InboundResponse, InteractionOutput, Payload, ServerBinding, ThingId, WotLock,
 };
 use clinkz_wot_discovery::{Discoverer, DiscoveryFilter, ProcessState, ThingDiscoveryProcess};
 use clinkz_wot_td::{AbsoluteUri, thing::Thing};
@@ -339,5 +339,18 @@ impl Servient {
             Ok(output) => InboundResponse::new(output, correlation),
             Err(err) => InboundResponse::error(correlation, err),
         }
+    }
+}
+
+/// Direct-dispatch implementation: lets bindings with async handlers (HTTP,
+/// CoAP) dispatch requests directly without the fan-in channel + driving loop.
+/// The binding calls `serve_request(request).await` inside its async handler
+/// and gets the response — the transport's own concurrency model provides
+/// backpressure.
+#[cfg(feature = "async")]
+#[async_trait::async_trait]
+impl Dispatch for Servient {
+    async fn serve_request(&self, request: InboundRequest) -> InboundResponse {
+        self.dispatch(request).await
     }
 }

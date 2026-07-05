@@ -8,6 +8,9 @@
 //! returns an [`InboundResponse`] that the binding matches back to its transport
 //! via the echoed [`CorrelationId`].
 
+#[cfg(feature = "async")]
+use alloc::boxed::Box;
+
 use clinkz_wot_td::{data_type::Operation, thing::Thing};
 
 use crate::{
@@ -136,8 +139,25 @@ pub trait ServerBinding: Send + Sync {
     /// **synchronous** transport callbacks (zenoh callbacks cannot `.await`).
     /// On `no_std` there is no channel and the loop polls
     /// [`try_accept`](Self::try_accept) instead.
+    ///
+    /// **Default no-op**: bindings that use direct dispatch (HTTP, CoAP —
+    /// async handlers that CAN `.await`) ignore the fan-in channel and dispatch
+    /// via [`set_dispatch`](Self::set_dispatch) instead. Only bindings with
+    /// sync callbacks that cannot block (zenoh) override this.
     #[cfg(feature = "std")]
-    fn set_request_sink(&self, sender: FanInSender<InboundRequest>);
+    fn set_request_sink(&self, _sender: FanInSender<InboundRequest>) {}
+
+    /// Injects a [`Dispatch`] handle for **direct dispatch** (async feature).
+    /// Bindings whose transport provides async request handlers (HTTP/hyper,
+    /// CoAP) override this to store the handle and call
+    /// [`Dispatch::serve_request`] directly inside their handler — no fan-in
+    /// channel, no driving loop, zero extra hops. The transport's own
+    /// concurrency model (connection pool, thread pool) provides backpressure.
+    ///
+    /// **Default no-op**: bindings that use the fan-in/poll model (zenoh,
+    /// bare no_std `try_accept`) ignore this.
+    #[cfg(feature = "async")]
+    fn set_dispatch(&self, _dispatch: alloc::sync::Arc<dyn Dispatch>) {}
 
     /// Wholesale route registration for one Thing during `expose()`.
     ///
@@ -150,6 +170,23 @@ pub trait ServerBinding: Send + Sync {
     /// Wholesale route removal during `destroy()`. Returns `()` — `destroy()`
     /// is idempotent (AD27/E13) and best-effort across bindings.
     fn unregister_thing(&self, thing_id: &ThingId);
+}
+
+/// Direct-dispatch handle for bindings that handle their own request lifecycle
+/// (HTTP async handlers, CoAP async handlers). The binding calls
+/// [`serve_request`](Self::serve_request) inside its transport's async handler
+/// and gets the [`InboundResponse`] directly — no fan-in channel, no driving
+/// loop. The transport's own concurrency model (connection pool, thread pool)
+/// provides backpressure.
+///
+/// Bindings with sync callbacks that cannot `.await` (zenoh) do NOT use this;
+/// they push to the fan-in channel via [`ServerBinding::set_request_sink`]
+/// instead.
+#[cfg(feature = "async")]
+#[async_trait::async_trait]
+pub trait Dispatch: Send + Sync {
+    /// Dispatches an inbound request and returns the response directly.
+    async fn serve_request(&self, request: InboundRequest) -> InboundResponse;
 }
 
 /// Dispatches an inbound request to the matching exposed Thing handler

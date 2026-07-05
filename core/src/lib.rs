@@ -29,6 +29,8 @@ pub use identity::{CorrelationId, ThingId};
 #[cfg(feature = "std")]
 pub use inbound::FanInSender;
 pub use inbound::{InboundDispatcher, InboundRequest, InboundResponse, ServerBinding};
+#[cfg(feature = "async")]
+pub use inbound::Dispatch;
 pub use interaction::{
     AcceptHint, InteractionInput, InteractionOptions, InteractionOutput, InteractionStatus,
     MediaType,
