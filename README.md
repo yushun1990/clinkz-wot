@@ -1,182 +1,236 @@
 # clinkz-wot
 
-`clinkz-wot` is a protocol-neutral Rust Web of Things engine for the Clinkz
-platform.
+A protocol-neutral Rust Web of Things engine targeting **W3C WoT Scripting API
+conformance** (Consumer, Producer, Discovery), running on both `std` and
+`no_std + alloc`.
 
-The project uses W3C WoT Thing Descriptions (TD) and Thing Models (TM) as the
-semantic contract layer. Protocol bindings are pluggable adapters. Zenoh is the
-first concrete binding because Clinkz uses it as a default communication bus,
-but zenoh is not required by the TD, TM, or protocol-neutral core crates.
+The engine uses W3C WoT Thing Descriptions (TD 1.1) as the semantic contract.
+Protocol bindings are pluggable; **Zenoh** is the first concrete binding.
 
-## Project Status
+## v4.0 Architecture
 
-This workspace is in an early `0.1.0` development stage.
+The v4.0 baseline is a one-shot breaking refactor driven by three decisions:
 
-Current implementation highlights:
+1. **Full WoT Scripting API alignment** — the engine surfaces (`produce`/
+   `consume`/`discover`/`fetch_td`, `set_*_handler`, `read_property`/
+   `write_property`/`invoke_action`/`subscribe_event`, `expose`/`destroy`)
+   follow the Scripting API method catalogue.
+2. **Frozen TD at expose** — no dynamic affordance add/remove after `expose()`;
+   handlers may be replaced throughout the exposed lifetime.
+3. **Sync-primary handlers, async driving** — inbound handlers are synchronous
+   (zero-allocation hot path); the driving/transport layer is async; `no_std`
+   super-loops drive the same futures by manual polling.
 
-- TD 1.1 modeling, serde support, explicit validation, default handling, URI
-  typing, `base` plus relative form `href` resolution, and extension-field
-  preservation are implemented for the current TD crate scope.
-- Thing Model support has a first complete implementation in the TD crate.
-- The protocol-neutral core exposes split handler traits
-  (`PropertyReadHandler` / `PropertyWriteHandler` / `PropertyObserveHandler`,
-  `EventSubscribeHandler` / `EventUnsubscribeHandler`, `ActionHandler`) and
-  inbound/outbound interaction models with verified `Principal` threading.
-- Shared protocol binding utilities cover form selection, target resolution,
-  selected-form validation, diagnostics, security metadata extraction, and
-  `CoreError` → HTTP-like status code mapping.
-- The zenoh binding includes a `no_std + alloc` planning layer and an optional
-  Rust `zenoh` std runtime backend (`zenoh` feature) with both outbound
-  (`ZenohSessionTransport`) and inbound (`ZenohServerBinding`) surfaces on a
-  shared `zenoh::Session`, including event publishing via `PublisherSink` and
-  attachment-based auth extraction.
-- Discovery includes an embedded-ready query model, deterministic in-memory
-  Thing Description Directory, and W3C Scripting API §5 discovery surface
-  (`ThingFilter`, `ThingDiscovery`, `discover()`, `DiscoveryMethod`).
-- Servient provides a `Clone`-able `Servient<D>` with sync and async driving
-  loops, `EventBroker`-backed event fan-out (`emit_event`), streaming consumer
-  subscriptions (`observe_property` / `subscribe_event` → `Subscription`),
-  bulk property operations, `CredentialStore`, graceful shutdown
-  (`ShutdownHandle`), runtime TD mutation, async handler traits (M9), and async
-  consumer methods (M8).
-- The workspace passes `cargo test --workspace`, `cargo clippy --workspace`,
-  `no_std + alloc` checks, and reserved-feature checks.
+### Key Types
 
-Next focus areas are continued conformance plus no-std checks, adding a remote
-directory transport (HTTP/CoAP TDD client), and deferring `zenoh-pico` runtime
-injection until the target hardware platform is selected.
+| Type | Crate | Role |
+| --- | --- | --- |
+| `WotLock<T>` | `core` | Arc-backed `Clone`-able lock (`std::sync::RwLock` / `critical_section::Mutex`). |
+| `ExposedThing` | `core` | Produced Thing + per-affordance handler sets (9 sync + 9 async traits). |
+| `ConsumedThing` | `core` | Consumed Thing + registered `ClientBinding`s. |
+| `Servient` | `servient` | Non-generic composition root: registries, bindings, fan-in channel, discoverer. |
+| `ServientBuilder` | `servient` | Consuming fluent builder. |
+| `InMemoryDirectory` | `discovery` | Reference directory backend (all 4 capability traits). |
+| `ServerBinding` / `ClientBinding` | `core` | Inbound (`try_accept`/`send_response`/`register_thing`) / outbound (`async invoke`/`subscribe`). |
 
 ## Workspace Crates
 
-| Crate | Path | Role | Runtime profile |
-| --- | --- | --- | --- |
-| `clinkz-wot-td` | `td` | TD/TM data models, builders, serde, validation, defaults, URI helpers, extension preservation. | `no_std + alloc`, `std` by default |
-| `clinkz-wot-core` | `core` | Protocol-neutral engine traits and local/consumed Thing dispatch abstractions. | `no_std + alloc`, `std` by default |
-| `clinkz-wot-protocol-bindings` | `protocol-bindings/core` | Shared form selection, target resolution, selected-form validation, diagnostics, and security helpers. | `no_std + alloc`, `std` by default |
-| `clinkz-wot-protocol-bindings-zenoh` | `protocol-bindings/protocols/zenoh` | Optional zenoh form parsing, operation planning, metadata extraction, and injected transport boundary. | `no_std + alloc`, `std` by default |
-| `clinkz-wot-discovery` | `discovery` | Protocol-neutral Discovery and Thing Description Directory traits with an in-memory backend. | `no_std + alloc`, `std` by default |
-| `clinkz-wot-servient` | `servient` | Servient composition for discovery, local exposure, remote consumption, caches, and injected bindings. | `no_std + alloc`, `std` by default |
-
-## Architecture Principles
-
-- Keep the engine protocol-neutral.
-- Keep W3C WoT vocabulary separate from Clinkz extensions.
-- Express Clinkz-specific metadata through JSON-LD extension namespaces such as
-  `cz:` and zenoh-specific terms through `cz-zenoh:`.
-- Keep zenoh-specific behavior in optional protocol binding crates.
-- Keep TD, TM, and core runtime abstractions compatible with `no_std + alloc`.
-- Put std runtime capabilities, storage backends, sockets, and concrete
-  protocol sessions behind `std` boundaries or separate runtime adapters.
+| Crate | Role | `no_std` |
+| --- | --- | --- |
+| [`clinkz-wot-td`](td) | TD/TM data models, builders, serde, validation, URI helpers. | ✅ root |
+| [`clinkz-wot-core`](core) | Interaction core: handler traits, `ExposedThing`/`ConsumedThing`, `WotLock`, `EventBroker`, `ServerBinding`/`ClientBinding`, `PushFn`. | ✅ root |
+| [`clinkz-wot-discovery`](discovery) | Introduction→Exploration sessions, `DirectoryReader`/`Publisher`/`Watch`, `Discoverer`, `InMemoryDirectory`. | ✅ root |
+| [`clinkz-wot-protocol-bindings`](protocol-bindings/core) | Shared form selection, op resolution, `error_status`, URI-template expansion. | ✅ root |
+| [`clinkz-wot-protocol-bindings-zenoh`](protocol-bindings/protocols/zenoh) | Zenoh planning + async runtime (`zenoh` feature). | ✅ planning layer |
+| [`clinkz-wot-servient`](servient) | `Servient` + `ServientBuilder` + driving (`poll_serve`/`serve`/`poll_serve_once`) + handles. | ✅ root |
 
 ## Quick Start
-
-Use a Rust toolchain that supports edition 2024.
 
 ```sh
 git clone git@github.com:yushun1990/clinkz-wot.git
 cd clinkz-wot
-cargo test --workspace
+cargo test --workspace          # all suites
+cargo clippy --workspace --all-targets  # 0 warnings
+scripts/check-baseline.sh       # fmt + test + clippy + no_std + feature-matrix
 ```
 
-Run the no-std checks for crates that claim `no_std + alloc` support:
+## Engine Usage
 
-```sh
-scripts/check-no-std.sh
-```
-
-The full workspace verification path is documented in `docs/verification.md`.
-Real Rust `zenoh` runtime integration tests are opt-in and documented in
-`docs/zenoh-runtime-integration-test.md`; default workspace tests do not
-require a zenoh router.
-
-Run the concrete Rust `zenoh` runtime smoke tests only when you want live
-router coverage:
-
-```sh
-CLINKZ_WOT_RUN_ZENOH_RUNTIME_TESTS=1 \
-cargo test -p clinkz-wot-protocol-bindings-zenoh --features zenoh
-```
-
-If the router is not reachable through the default local configuration, set
-`CLINKZ_WOT_ZENOH_ENDPOINT`, for example `tcp/127.0.0.1:7447`.
-
-`discovery` keeps its shared directory and query model at the crate root,
-exposes no-std local directory capabilities through `discovery::local`, and
-keeps std-only storage adapters behind `discovery::storage`. `servient`
-exposes no-std Servient APIs through the crate root. Std-only Servient
-integrations should stay behind the `std` feature when they provide concrete
-capabilities.
-The project avoids naming these modules `core` because `clinkz-wot-core`
-already owns the protocol-neutral engine trait surface.
-
-Run Clippy when changing Rust code:
-
-```sh
-cargo clippy --workspace --all-targets
-```
-
-## Minimal TD Example
+### 1. Build a Servient
 
 ```rust
-use clinkz_wot_td::{
-    affordance::{InteractionHelper, PropertyAffordance},
-    data_schema::DataSchema,
-    form::Form,
-    thing::Thing,
-    validate::Validate,
-};
+use clinkz_wot_servient::{ServientBuilder, ClientBindingFactory, Servient};
+use clinkz_wot_core::{ClientBinding, ServerBinding};
+use clinkz_wot_discovery::{Discoverer, InMemoryDirectory, LocalDiscoverer};
+use alloc::{boxed::Box, sync::Arc};
 
-fn build_lamp_td() -> Result<Thing, String> {
-    let status_form = Form::read_property("/properties/status")
-        .build()
-        .map_err(|error| error.to_string())?;
+// A custom client binding factory (or use a provided one).
+struct MyClientFactory;
+impl ClientBindingFactory for MyClientFactory {
+    fn build(&self) -> Box<dyn ClientBinding> {
+        // Return your async ClientBinding impl.
+        todo!()
+    }
+}
 
-    let status = PropertyAffordance::builder(DataSchema::string())
-        .form(status_form)
-        .build()
-        .map_err(|error| error.to_string())?;
+// Build the Servient.
+let servient = ServientBuilder::new()
+    .with_server_binding(my_server_binding)   // Arc<dyn ServerBinding>
+    .with_client_factory(Arc::new(MyClientFactory))
+    // .with_discoverer(custom)  // optional; defaults to LocalDiscoverer
+    // .with_fanin_capacity(256) // optional inbound fan-in capacity
+    .build()
+    .expect("build servient");
+```
 
-    let thing = Thing::builder("Lamp")
-        .id("urn:dev:ops:lamp-001")
-        .base("zenoh://clinkz/things/lamp-001/")
-        .nosec()
-        .property("status", status)
-        .build()
-        .map_err(|error| error.to_string())?;
+`build()` constructs the bounded fan-in channel, injects `set_request_sink` +
+`set_event_broker` into every server binding, and defaults the discoverer to a
+`LocalDiscoverer` over a fresh `InMemoryDirectory`.
 
-    thing.validate().map_err(|error| error.to_string())?;
-    Ok(thing)
+### 2. Produce + Expose a Thing (Producer)
+
+```rust
+use clinkz_wot_core::{InteractionInput, InteractionOutput, CoreError, PropertyReadHandler};
+
+struct StatusRead;
+impl PropertyReadHandler for StatusRead {
+    fn read(&self, _input: &InteractionInput) -> Result<InteractionOutput, CoreError> {
+        Ok(InteractionOutput::with_data(
+            clinkz_wot_core::Payload::new(b"on".to_vec(), "text/plain"),
+        ))
+    }
+}
+
+// produce() creates a draft handle (not yet remotely servable).
+let handle = servient.produce(lamp_td()).expect("produce");
+
+// Attach handlers (replaceable throughout the lifetime — AD14).
+handle.set_property_read_handler("status", StatusRead);
+// handle.set_property_write_handler("status", ...);
+// handle.set_action_handler("toggle", ...);
+// handle.set_event_subscribe_handler("overheat", ...);
+
+// expose() registers routes on all server bindings + inserts into the
+// servable registry. TD is frozen after this.
+handle.expose().await.expect("expose");
+
+// Local server-side interactions.
+let value = handle.read_property("status", &InteractionInput::empty())?;
+handle.emit_event("overheat", payload)?;
+```
+
+### 3. Drive the Inbound Loop
+
+```rust
+// std (tokio): serve until shutdown.
+let shutdown = servient.shutdown_handle();
+tokio::spawn(async move {
+    servient.clone().serve().await;
+});
+
+// ... or step-by-step.
+servient.poll_serve().await?;  // dispatches ≤1 inbound request per call
+
+// Graceful shutdown.
+shutdown.shutdown();
+```
+
+**Bare `no_std` super-loop** (no executor):
+
+```rust
+loop {
+    let waker = noop_waker();
+    let mut cx = core::task::Context::from_waker(&waker);
+    let _ = svc.poll_serve_once(&mut cx);  // ≤1 accept→dispatch→reply
+    // ... other super-loop work
 }
 ```
 
-## Protocol Bindings
+### 4. Consume a Remote Thing (Consumer)
 
-Protocol bindings consume TD forms and map them to concrete transport behavior.
-The shared binding crate handles protocol-neutral concerns such as operation
-matching, affordance-level form lookup, `base` plus `href` target resolution,
-selected-form validation, and security metadata extraction.
+```rust
+// consume() builds a ConsumedThing with fresh client bindings.
+let consumed = servient.consume(remote_td()).expect("consume");
 
-The zenoh crate currently acts as a planning and adapter layer. It supports
-`zenoh://` targets, resolves relative forms against Thing-level `base`, maps
-WoT operations to zenoh operation kinds, and exposes an injected
-`ZenohTransport` boundary for std, constrained, or test integrations.
-Concrete Rust `zenoh` and constrained `zenoh-pico` runtime paths remain
-optional and feature-gated.
+// All methods are async — they drive the real ClientBinding.
+let output = consumed.read_property("status", InteractionOptions::new()).await?;
+let _ = consumed.invoke_action("toggle", InteractionOptions::new()).await?;
+```
+
+### 5. Discover Things
+
+```rust
+use clinkz_wot_discovery::DiscoveryFilter;
+
+// discover() is synchronous and returns a lazy process (AD10).
+let mut process = servient.discover(DiscoveryFilter::all());
+
+// Real directory work happens inside the first next().
+while let Some(thing) = process.next().await? {
+    println!("found: {:?}", thing.id);
+}
+```
+
+### 6. Destroy (Quiescing Teardown)
+
+```rust
+// destroy() is idempotent (AD27). Unregisters routes, drains in-flight,
+// removes the registry entry.
+handle.destroy().await.expect("destroy");
+```
+
+## Feature Flags
+
+| Feature | Effect |
+| --- | --- |
+| `default = ["std"]` | std runtime + tokio driving. `std` implies `async`. |
+| `alloc` | Dynamic data on `no_std`. |
+| `std` | Networking, filesystem, async runtime, host conveniences. Implies `alloc` + `async`. |
+| `async` | Native-async driving (`poll_serve`, `serve`). On `no_std` requires an executor (embassy). |
+| `zenoh` | Rust `zenoh` std backend (real async consume + inbound). |
+| `zenoh-pico` | Constrained `no_std+alloc` platform-hook backend (mutually exclusive with `zenoh`). |
+| `td2-preview` | Experimental TD 2.0 fields. |
+
+## Architecture Principles
+
+- **Layering is non-negotiable.** Data contract (TD/TM) → interaction core →
+  bindings → servient. Core knows nothing of concrete protocols.
+- **`no_std + alloc` is the baseline contract.** Every crate whose
+  responsibility permits it compiles `no_std + alloc`.
+- **Stable unknown-field round-trip fidelity.** TD/TM documents are preserved
+  verbatim through serde.
+- **Sync-primary handlers** = zero-allocation inbound hot path. Async twins are
+  opt-in for I/O-bound cloud handlers.
+- **One lock primitive** — `WotLock<T>` (always thread-safe, `Clone`-able).
+- **Scripting API alignment** — method catalogue + semantics, in Rust idiom;
+  engineering concerns (performance, extensibility, code reasonableness) take
+  priority over verbatim JS naming where they conflict.
+
+## Verification
+
+```sh
+scripts/check-baseline.sh     # aggregate: fmt + test + clippy + no_std + feature-matrix
+scripts/check-no-std.sh       # 7 crates bare no_std + 2 async no_std flavors
+scripts/check-feature-matrix.sh  # 21 feature combinations
+```
+
+Zenoh runtime smoke tests are opt-in:
+
+```sh
+CLINKZ_WOT_RUN_ZENOH_RUNTIME_TESTS=1 \
+  cargo test -p clinkz-wot-protocol-bindings-zenoh --features zenoh
+```
 
 ## Documentation
 
 - [Implementation plan](PLAN.md)
+- [Engine architecture baseline (v4.0)](docs/baseline/engine-architecture-baseline.md)
+- [Servient workflow diagrams](docs/servient-workflow.md)
 - [Technical specification](docs/technical-spec.md)
 - [WoT compliance notes](docs/wot-compliance.md)
-- [Protocol bindings](docs/protocol-bindings.md)
-- [TD API convenience surface](docs/td-api-convenience.md)
-- [TD 1.1 field coverage](docs/td-1.1-field-coverage.md)
 - [no_std and embedded support](docs/no-std-embedded.md)
-- [Clinkz platform context](docs/clinkz-platform-context.md)
-- [TD/TM development plan](docs/plan/wot-td-development-plan.md)
-- [Protocol binding development plan](docs/plan/protocol-bindings-development-plan.md)
+- [Discovery refactor plan](docs/plan/discovery-directory-refactor-plan.md)
 
 ## License
 
-This project is licensed under the MIT License. Portions of the software are
-derived from `wot-td`. See [LICENSES/MIT.txt](LICENSES/MIT.txt) for details.
+MIT. Portions derived from `wot-td`. See [LICENSES/MIT.txt](LICENSES/MIT.txt).
