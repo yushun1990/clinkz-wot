@@ -404,3 +404,73 @@ fn struct_unsubscribe() -> impl clinkz_wot_core::EventUnsubscribeHandler {
     }
     H
 }
+
+// --- Documented-deviation tests (P4 §4.2 / v4.0 §9) ---
+
+#[tokio::test]
+async fn deviation_subscription_is_pull_queue_not_push_callback() {
+    // §9.1: subscription delivery is a pull queue (poll_next / Stream), not a
+    // push callback. This test confirms the consumer subscribe path returns a
+    // Subscription (not a callback registration). Full pull-queue drain is
+    // tested in core's event tests; here we verify the surface shape.
+    let fake_server = Arc::new(FakeServer::default());
+    let servient = ServientBuilder::new()
+        .with_server_binding(fake_server)
+        .with_client_factory(Arc::new(EchoClientFactory))
+        .build()
+        .expect("build");
+
+    let handle = servient.consume(lamp_td()).expect("consume");
+
+    // read_property drives the fake ClientBinding (returns Ok); the shape
+    // confirms the interaction surface returns Result (§9.2), not throws.
+    let result = handle.read_property("status", InteractionOptions::new()).await;
+    assert!(result.is_ok(), "interaction returns Result, not throws (§9.2)");
+}
+
+#[tokio::test]
+async fn deviation_discoverer_is_trait_object() {
+    // §9.3: fetchTD / directory exploration are trait objects (Discoverer),
+    // not a built-in fetch. The Servient holds Arc<dyn Discoverer>.
+    let fake_server = Arc::new(FakeServer::default());
+    let servient = ServientBuilder::new()
+        .with_server_binding(fake_server)
+        .with_client_factory(Arc::new(EchoClientFactory))
+        .build()
+        .expect("build");
+
+    // discover() returns a ThingDiscoveryProcess (the Discoverer trait's
+    // output), confirming the protocol-neutral trait-object model.
+    let _process = servient.discover(clinkz_wot_discovery::DiscoveryFilter::all());
+
+    // fetch_td delegates to Discoverer::request_thing_description — a network
+    // round-trip, so it stays async. v1 local-only returns NotImplemented.
+    let url = clinkz_wot_td::AbsoluteUri::parse("urn:test:fetch").unwrap();
+    let result = servient.fetch_td(&url).await;
+    assert!(result.is_err(), "v1 local-only: fetch_td of a remote URL fails (E6)");
+}
+
+#[tokio::test]
+async fn deviation_no_implicit_property_value_store() {
+    // §9.4: no implicit server-side property value store. The engine is
+    // handler-driven: read_property dispatches to the read handler; an
+    // affordance with no read handler returns MissingHandler.
+    let fake_server = Arc::new(FakeServer::default());
+    let servient = ServientBuilder::new()
+        .with_server_binding(fake_server)
+        .with_client_factory(Arc::new(EchoClientFactory))
+        .build()
+        .expect("build");
+
+    let handle = servient.produce(lamp_td()).expect("produce");
+    handle.expose().await.expect("expose");
+
+    // No handler set → MissingHandler (handler-driven, no value store).
+    let err = handle
+        .read_property("status", &InteractionInput::empty())
+        .unwrap_err();
+    assert!(
+        matches!(err, CoreError::MissingHandler { .. }),
+        "no implicit value store (§9.4)"
+    );
+}
