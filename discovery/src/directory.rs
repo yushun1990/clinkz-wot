@@ -10,9 +10,9 @@ use clinkz_wot_core::{MediaType, ThingId};
 use clinkz_wot_td::{data_type::Operation, thing::Thing};
 
 #[cfg(feature = "async")]
-use alloc::boxed::Box;
-#[cfg(feature = "async")]
 use crate::{DiscoveryError, DiscoveryResult};
+#[cfg(feature = "async")]
+use alloc::boxed::Box;
 
 // ---------------------------------------------------------------------------
 // Query request model.
@@ -161,6 +161,7 @@ pub enum ProjectionMode {
 /// One directory result item, shaped by [`ProjectionMode`].
 #[non_exhaustive]
 #[derive(Debug, Clone)]
+#[allow(clippy::large_enum_variant)]
 pub enum DirectoryItem {
     /// `IdOnly` projection.
     Id(ThingId),

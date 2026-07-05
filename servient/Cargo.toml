@@ -51,8 +51,3 @@ td2-preview = [
     "clinkz-wot-td/td2-preview",
     "clinkz-wot-core/td2-preview",
 ]
-
-[[test]]
-name = "servient_zenoh"
-path = "tests/servient_zenoh.rs"
-required-features = ["test-zenoh"]

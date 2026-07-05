@@ -7,21 +7,17 @@
 use std::string::ToString;
 
 use clinkz_wot_core::ThingId;
-use clinkz_wot_td::{
-    affordance::PropertyAffordance,
-    data_schema::DataSchema,
-    thing::Thing,
-};
+use clinkz_wot_td::{affordance::PropertyAffordance, data_schema::DataSchema, thing::Thing};
 
 use clinkz_wot_discovery::{
-    CapabilityFilter, ConsistencyMode, CountMode, DirectoryFilter, DirectoryItem,
-    DirectoryPatch, DirectoryPublisher, DirectoryQuery, DirectoryReader, DirectoryRegistration,
-    DiscoveryFilter, Discoverer, InMemoryDirectory, LocalDiscoverer, ProjectionMode,
-    ThingDiscoveryProcess, ThingFragment,
+    CapabilityFilter, CountMode, DirectoryFilter, DirectoryItem, DirectoryPatch,
+    DirectoryPublisher, DirectoryQuery, DirectoryReader, DirectoryRegistration, Discoverer,
+    DiscoveryFilter, InMemoryDirectory, LocalDiscoverer, ProjectionMode, ThingDiscoveryProcess,
+    ThingFragment,
 };
 
-use std::sync::Arc;
 use clinkz_wot_core::MediaType;
+use std::sync::Arc;
 
 fn thing(id: &str, title: &str) -> Thing {
     Thing::builder(title)
@@ -37,7 +33,9 @@ fn thing_with_property(id: &str, title: &str, property: &str) -> Thing {
         .nosec()
         .property(
             property,
-            PropertyAffordance::builder(DataSchema::string()).build().unwrap(),
+            PropertyAffordance::builder(DataSchema::string())
+                .build()
+                .unwrap(),
         )
         .build()
         .expect("valid TD")
@@ -64,14 +62,11 @@ async fn reader_get_and_open_search_full_projection() {
     assert!(got.is_some());
 
     // open_search yields both full Things in sorted-id order
-    let mut s = dir
-        .open_search(DirectoryQuery::all())
-        .await
-        .unwrap();
+    let mut s = dir.open_search(DirectoryQuery::all()).await.unwrap();
     let batch = s.next().await.unwrap().unwrap();
     assert_eq!(batch.items.len(), 2);
     assert!(matches!(batch.items[0], DirectoryItem::Full(_)));
-    assert!(matches!(batch.stats.has_more, false));
+    assert!(!batch.stats.has_more);
 }
 
 #[tokio::test]
@@ -141,12 +136,18 @@ async fn live_session_mid_drain_insert_appears() {
     // Live Semantics rule 3 (optional): an insert during a multi-batch drain,
     // with id > cursor, appears in a later batch of the same session.
     let dir = InMemoryDirectory::new();
-    dir.register(DirectoryRegistration { td: thing("urn:t:a", "Alpha"), ttl: None })
-        .await
-        .unwrap();
-    dir.register(DirectoryRegistration { td: thing("urn:t:b", "Beta"), ttl: None })
-        .await
-        .unwrap();
+    dir.register(DirectoryRegistration {
+        td: thing("urn:t:a", "Alpha"),
+        ttl: None,
+    })
+    .await
+    .unwrap();
+    dir.register(DirectoryRegistration {
+        td: thing("urn:t:b", "Beta"),
+        ttl: None,
+    })
+    .await
+    .unwrap();
 
     let q = DirectoryQuery {
         page_size: 1,
@@ -157,9 +158,12 @@ async fn live_session_mid_drain_insert_appears() {
     assert_eq!(batch1.items.len(), 1); // emits "urn:t:a", cursor=a, session still open (b > a)
 
     // Insert "urn:t:c" mid-drain (c > a, c > b).
-    dir.register(DirectoryRegistration { td: thing("urn:t:c", "Gamma"), ttl: None })
-        .await
-        .unwrap();
+    dir.register(DirectoryRegistration {
+        td: thing("urn:t:c", "Gamma"),
+        ttl: None,
+    })
+    .await
+    .unwrap();
 
     let batch2 = s.next().await.unwrap().unwrap();
     assert_eq!(batch2.items.len(), 1); // emits "urn:t:b"
@@ -185,7 +189,10 @@ async fn count_modes() {
     };
     let mut s = dir.open_search(q).await.unwrap();
     let batch = s.next().await.unwrap().unwrap();
-    assert_eq!(batch.stats.count, Some(clinkz_wot_discovery::CountValue::Exact(5)));
+    assert_eq!(
+        batch.stats.count,
+        Some(clinkz_wot_discovery::CountValue::Exact(5))
+    );
 }
 
 #[tokio::test]
@@ -221,7 +228,10 @@ async fn thing_discovery_process_is_lazy_and_drains() {
 
     // First next() opens the session and yields the Thing.
     let t = process.next().await.unwrap().unwrap();
-    assert_eq!(t.id.as_ref().map(|u| u.as_str().to_string()), Some("urn:t:a".to_string()));
+    assert_eq!(
+        t.id.as_ref().map(|u| u.as_str().to_string()),
+        Some("urn:t:a".to_string())
+    );
     // Drain complete.
     assert_eq!(process.next().await.unwrap(), None);
 }
@@ -250,6 +260,4 @@ async fn capability_filter_smoke() {
 }
 
 // Re-exports needed in tests.
-mod _exports {
-    pub use clinkz_wot_discovery::CountValue;
-}
+mod _exports {}

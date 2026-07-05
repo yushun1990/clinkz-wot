@@ -1,4 +1,4 @@
-use std::{cell::Cell, sync::Arc};
+use std::sync::Arc;
 
 use clinkz_wot_core::{
     AffordanceTarget, BindingRequest, ClientBinding, CoreError, CoreResult, InteractionInput,
@@ -186,8 +186,7 @@ async fn runtime_binding_delegates_planned_operation_to_transport() {
         .property("status", property)
         .build()
         .unwrap();
-    let mut input =
-        InteractionInput::with_data(Payload::new(b"on".to_vec(), "application/json"));
+    let mut input = InteractionInput::with_data(Payload::new(b"on".to_vec(), "application/json"));
     input.uri_variables.insert("source".into(), "test".into());
     let binding = ZenohBindingTransport::with_transport(RecordingZenohTransport);
 
@@ -245,10 +244,19 @@ async fn shared_transport_reuses_underlying_runtime_state() {
         .await
         .unwrap();
 
-    assert_eq!(first.data.unwrap().body.as_ref(), b"1:clinkz/things/lamp/status");
-    assert_eq!(second.data.unwrap().body.as_ref(), b"2:clinkz/things/lamp/status");
     assert_eq!(
-        shared.inner().calls.load(std::sync::atomic::Ordering::SeqCst),
+        first.data.unwrap().body.as_ref(),
+        b"1:clinkz/things/lamp/status"
+    );
+    assert_eq!(
+        second.data.unwrap().body.as_ref(),
+        b"2:clinkz/things/lamp/status"
+    );
+    assert_eq!(
+        shared
+            .inner()
+            .calls
+            .load(std::sync::atomic::Ordering::SeqCst),
         2
     );
 }

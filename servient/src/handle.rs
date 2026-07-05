@@ -4,16 +4,16 @@
 use alloc::sync::Arc;
 
 use clinkz_wot_core::{
-    AffordanceTarget, ActionCancelHandler, ActionHandler, ActionQueryHandler, ConsumedThing,
-    CoreError, CoreResult, EventSubscribeHandler, EventUnsubscribeHandler, ExposedThing,
-    InteractionInput, InteractionOptions, InteractionOutput, Payload, PropertyObserveHandler,
-    PropertyReadHandler, PropertyUnobserveHandler, PropertyWriteHandler, ThingId, WotLock,
+    ActionCancelHandler, ActionHandler, ActionQueryHandler, AffordanceTarget, ConsumedThing,
+    CoreError, CoreResult, EventSubscribeHandler, EventUnsubscribeHandler, InteractionInput,
+    InteractionOptions, InteractionOutput, Payload, PropertyObserveHandler, PropertyReadHandler,
+    PropertyUnobserveHandler, PropertyWriteHandler, ThingId, WotLock,
 };
 use clinkz_wot_td::{data_type::Operation, thing::Thing};
 
+use crate::ServientResult;
 use crate::registry::ExposedThingSlot;
 use crate::servient::Servient;
-use crate::ServientResult;
 
 // ---------------------------------------------------------------------------
 // ExposedThingHandle — produced Thing + handler slots; frozen TD at expose.
@@ -33,7 +33,11 @@ pub struct ExposedThingHandle {
 }
 
 impl ExposedThingHandle {
-    pub(crate) fn new(servient: Servient, slot: Arc<WotLock<ExposedThingSlot>>, id: ThingId) -> Self {
+    pub(crate) fn new(
+        servient: Servient,
+        slot: Arc<WotLock<ExposedThingSlot>>,
+        id: ThingId,
+    ) -> Self {
         Self { servient, slot, id }
     }
 
@@ -54,7 +58,8 @@ impl ExposedThingHandle {
         name: impl Into<alloc::string::String>,
         handler: impl PropertyReadHandler + 'static,
     ) {
-        self.slot.with(|s| s.thing.set_property_read_handler(name, handler));
+        self.slot
+            .with(|s| s.thing.set_property_read_handler(name, handler));
     }
 
     pub fn set_property_write_handler(
@@ -62,7 +67,8 @@ impl ExposedThingHandle {
         name: impl Into<alloc::string::String>,
         handler: impl PropertyWriteHandler + 'static,
     ) {
-        self.slot.with(|s| s.thing.set_property_write_handler(name, handler));
+        self.slot
+            .with(|s| s.thing.set_property_write_handler(name, handler));
     }
 
     pub fn set_property_observe_handler(
@@ -70,7 +76,8 @@ impl ExposedThingHandle {
         name: impl Into<alloc::string::String>,
         handler: impl PropertyObserveHandler + 'static,
     ) {
-        self.slot.with(|s| s.thing.set_property_observe_handler(name, handler));
+        self.slot
+            .with(|s| s.thing.set_property_observe_handler(name, handler));
     }
 
     pub fn set_property_unobserve_handler(
@@ -78,7 +85,8 @@ impl ExposedThingHandle {
         name: impl Into<alloc::string::String>,
         handler: impl PropertyUnobserveHandler + 'static,
     ) {
-        self.slot.with(|s| s.thing.set_property_unobserve_handler(name, handler));
+        self.slot
+            .with(|s| s.thing.set_property_unobserve_handler(name, handler));
     }
 
     pub fn set_action_handler(
@@ -86,7 +94,8 @@ impl ExposedThingHandle {
         name: impl Into<alloc::string::String>,
         handler: impl ActionHandler + 'static,
     ) {
-        self.slot.with(|s| s.thing.set_action_handler(name, handler));
+        self.slot
+            .with(|s| s.thing.set_action_handler(name, handler));
     }
 
     pub fn set_action_query_handler(
@@ -94,7 +103,8 @@ impl ExposedThingHandle {
         name: impl Into<alloc::string::String>,
         handler: impl ActionQueryHandler + 'static,
     ) {
-        self.slot.with(|s| s.thing.set_action_query_handler(name, handler));
+        self.slot
+            .with(|s| s.thing.set_action_query_handler(name, handler));
     }
 
     pub fn set_action_cancel_handler(
@@ -102,7 +112,8 @@ impl ExposedThingHandle {
         name: impl Into<alloc::string::String>,
         handler: impl ActionCancelHandler + 'static,
     ) {
-        self.slot.with(|s| s.thing.set_action_cancel_handler(name, handler));
+        self.slot
+            .with(|s| s.thing.set_action_cancel_handler(name, handler));
     }
 
     pub fn set_event_subscribe_handler(
@@ -110,7 +121,8 @@ impl ExposedThingHandle {
         name: impl Into<alloc::string::String>,
         handler: impl EventSubscribeHandler + 'static,
     ) {
-        self.slot.with(|s| s.thing.set_event_subscribe_handler(name, handler));
+        self.slot
+            .with(|s| s.thing.set_event_subscribe_handler(name, handler));
     }
 
     pub fn set_event_unsubscribe_handler(
@@ -118,7 +130,8 @@ impl ExposedThingHandle {
         name: impl Into<alloc::string::String>,
         handler: impl EventUnsubscribeHandler + 'static,
     ) {
-        self.slot.with(|s| s.thing.set_event_unsubscribe_handler(name, handler));
+        self.slot
+            .with(|s| s.thing.set_event_unsubscribe_handler(name, handler));
     }
 
     // --- lifecycle ---
@@ -127,7 +140,9 @@ impl ExposedThingHandle {
     /// registry, and publishes the TD. Multi-binding rollback on failure
     /// (E12/AD27). The TD affordance set is frozen after this.
     pub async fn expose(&self) -> ServientResult<()> {
-        self.servient.expose_thing(self.id.clone(), self.slot.clone()).await
+        self.servient
+            .expose_thing(self.id.clone(), self.slot.clone())
+            .await
     }
 
     /// Quiescing teardown (AD15): unregisters routes (no new requests), drains
@@ -140,7 +155,11 @@ impl ExposedThingHandle {
     // --- local (server-side) interaction ---
 
     /// Reads a property locally via its registered handler.
-    pub fn read_property(&self, name: &str, input: &InteractionInput) -> CoreResult<InteractionOutput> {
+    pub fn read_property(
+        &self,
+        name: &str,
+        input: &InteractionInput,
+    ) -> CoreResult<InteractionOutput> {
         self.slot.with_read(|s| s.thing.read_property(name, input))
     }
 
@@ -192,7 +211,11 @@ impl ConsumedThingHandle {
         // The Servient pre-registers client bindings into `consumed` before
         // wrapping it (see `Servient::consume`).
         let _ = &servient;
-        Self { servient, consumed, id }
+        Self {
+            servient,
+            consumed,
+            id,
+        }
     }
 
     /// Returns the Thing id.
@@ -205,7 +228,11 @@ impl ConsumedThingHandle {
         self.consumed.thing_description()
     }
 
-    fn affordance_form(&self, target: &AffordanceTarget, operation: Operation) -> CoreResult<Arc<clinkz_wot_td::form::Form>> {
+    fn affordance_form(
+        &self,
+        target: &AffordanceTarget,
+        operation: Operation,
+    ) -> CoreResult<Arc<clinkz_wot_td::form::Form>> {
         let thing = self.consumed.thing_description();
         let forms = match target {
             AffordanceTarget::Thing => thing.forms.as_deref().unwrap_or(&[]),
@@ -232,23 +259,30 @@ impl ConsumedThingHandle {
         for form in forms {
             let ctx = match target {
                 AffordanceTarget::Thing => clinkz_wot_td::td_defaults::FormContext::Thing,
-                AffordanceTarget::Property(_) => {
-                    clinkz_wot_td::td_defaults::FormContext::Property(
-                        thing.properties.as_ref().and_then(|m| m.get(target.name().unwrap_or(""))).unwrap(),
-                    )
-                }
-                AffordanceTarget::Action(_) => {
-                    clinkz_wot_td::td_defaults::FormContext::Action(
-                        thing.actions.as_ref().and_then(|m| m.get(target.name().unwrap_or(""))).unwrap(),
-                    )
-                }
-                AffordanceTarget::Event(_) => {
-                    clinkz_wot_td::td_defaults::FormContext::Event(
-                        thing.events.as_ref().and_then(|m| m.get(target.name().unwrap_or(""))).unwrap(),
-                    )
-                }
+                AffordanceTarget::Property(_) => clinkz_wot_td::td_defaults::FormContext::Property(
+                    thing
+                        .properties
+                        .as_ref()
+                        .and_then(|m| m.get(target.name().unwrap_or("")))
+                        .unwrap(),
+                ),
+                AffordanceTarget::Action(_) => clinkz_wot_td::td_defaults::FormContext::Action(
+                    thing
+                        .actions
+                        .as_ref()
+                        .and_then(|m| m.get(target.name().unwrap_or("")))
+                        .unwrap(),
+                ),
+                AffordanceTarget::Event(_) => clinkz_wot_td::td_defaults::FormContext::Event(
+                    thing
+                        .events
+                        .as_ref()
+                        .and_then(|m| m.get(target.name().unwrap_or("")))
+                        .unwrap(),
+                ),
             };
-            if clinkz_wot_td::td_defaults::effective_form_operations(ctx, form).contains(&operation) {
+            if clinkz_wot_td::td_defaults::effective_form_operations(ctx, form).contains(&operation)
+            {
                 return Ok(Arc::new(form.clone()));
             }
         }
@@ -280,8 +314,12 @@ impl ConsumedThingHandle {
         name: &str,
         options: InteractionOptions,
     ) -> CoreResult<InteractionOutput> {
-        self.invoke_op(AffordanceTarget::Property(name.into()), Operation::ReadProperty, options)
-            .await
+        self.invoke_op(
+            AffordanceTarget::Property(name.into()),
+            Operation::ReadProperty,
+            options,
+        )
+        .await
     }
 
     pub async fn write_property(
@@ -289,8 +327,12 @@ impl ConsumedThingHandle {
         name: &str,
         options: InteractionOptions,
     ) -> CoreResult<InteractionOutput> {
-        self.invoke_op(AffordanceTarget::Property(name.into()), Operation::WriteProperty, options)
-            .await
+        self.invoke_op(
+            AffordanceTarget::Property(name.into()),
+            Operation::WriteProperty,
+            options,
+        )
+        .await
     }
 
     pub async fn invoke_action(
@@ -298,7 +340,11 @@ impl ConsumedThingHandle {
         name: &str,
         options: InteractionOptions,
     ) -> CoreResult<InteractionOutput> {
-        self.invoke_op(AffordanceTarget::Action(name.into()), Operation::InvokeAction, options)
-            .await
+        self.invoke_op(
+            AffordanceTarget::Action(name.into()),
+            Operation::InvokeAction,
+            options,
+        )
+        .await
     }
 }

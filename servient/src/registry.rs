@@ -89,6 +89,7 @@ impl ConsumedThingRegistry {
         });
     }
 
+    #[allow(dead_code)]
     pub(crate) fn untrack(&self, id: &ThingId) {
         self.ids.with(|s| {
             s.remove(id);

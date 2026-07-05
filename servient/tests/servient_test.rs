@@ -40,11 +40,17 @@ impl ServerBinding for FakeServer {
         *self.sink.lock().unwrap() = Some(sender);
     }
     fn register_thing(&self, thing_id: &ThingId, _td: &Thing) -> Result<(), CoreError> {
-        self.registered.lock().unwrap().push(thing_id.as_str().to_string());
+        self.registered
+            .lock()
+            .unwrap()
+            .push(thing_id.as_str().to_string());
         Ok(())
     }
     fn unregister_thing(&self, thing_id: &ThingId) {
-        self.registered.lock().unwrap().retain(|s| s != thing_id.as_str());
+        self.registered
+            .lock()
+            .unwrap()
+            .retain(|s| s != thing_id.as_str());
     }
 }
 

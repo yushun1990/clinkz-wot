@@ -12,8 +12,8 @@ use alloc::{collections::BTreeMap, format, string::String, sync::Arc};
 use clinkz_wot_td::{data_type::Operation, thing::Thing};
 
 use crate::{
-    interaction::{InteractionInput, InteractionOutput},
     CoreError, CoreResult,
+    interaction::{InteractionInput, InteractionOutput},
 };
 
 // ---------------------------------------------------------------------------
@@ -121,11 +121,7 @@ pub trait PropertyWriteHandler: Send + Sync {
 /// observing; may push the initial value through `push`.
 pub trait PropertyObserveHandler: Send + Sync {
     /// Called when observation starts; may push initial values through `push`.
-    fn observe(
-        &self,
-        input: &InteractionInput,
-        push: PushFn<'_>,
-    ) -> CoreResult<InteractionOutput>;
+    fn observe(&self, input: &InteractionInput, push: PushFn<'_>) -> CoreResult<InteractionOutput>;
 }
 
 /// Handler for unobserving a local property affordance (Scripting API
@@ -535,10 +531,8 @@ impl ExposedThing {
         name: impl Into<String>,
         handler: impl PropertyReadHandler + 'static,
     ) {
-        self.property_handlers
-            .entry(name.into())
-            .or_default()
-            .read = Some(ReadSlot::Sync(Arc::new(handler)));
+        self.property_handlers.entry(name.into()).or_default().read =
+            Some(ReadSlot::Sync(Arc::new(handler)));
     }
 
     /// Sets the property write handler for `name`.
@@ -547,10 +541,8 @@ impl ExposedThing {
         name: impl Into<String>,
         handler: impl PropertyWriteHandler + 'static,
     ) {
-        self.property_handlers
-            .entry(name.into())
-            .or_default()
-            .write = Some(WriteSlot::Sync(Arc::new(handler)));
+        self.property_handlers.entry(name.into()).or_default().write =
+            Some(WriteSlot::Sync(Arc::new(handler)));
     }
 
     /// Sets the property observe handler for `name`.
@@ -585,10 +577,8 @@ impl ExposedThing {
         name: impl Into<String>,
         handler: impl ActionHandler + 'static,
     ) {
-        self.action_handlers
-            .entry(name.into())
-            .or_default()
-            .invoke = Some(InvokeSlot::Sync(Arc::new(handler)));
+        self.action_handlers.entry(name.into()).or_default().invoke =
+            Some(InvokeSlot::Sync(Arc::new(handler)));
     }
 
     /// Sets the action query handler for `name` (TD 1.1 `queryaction`).
@@ -597,10 +587,8 @@ impl ExposedThing {
         name: impl Into<String>,
         handler: impl ActionQueryHandler + 'static,
     ) {
-        self.action_handlers
-            .entry(name.into())
-            .or_default()
-            .query = Some(QuerySlot::Sync(Arc::new(handler)));
+        self.action_handlers.entry(name.into()).or_default().query =
+            Some(QuerySlot::Sync(Arc::new(handler)));
     }
 
     /// Sets the action cancel handler for `name` (TD 1.1 `cancelaction`).
@@ -609,10 +597,8 @@ impl ExposedThing {
         name: impl Into<String>,
         handler: impl ActionCancelHandler + 'static,
     ) {
-        self.action_handlers
-            .entry(name.into())
-            .or_default()
-            .cancel = Some(CancelSlot::Sync(Arc::new(handler)));
+        self.action_handlers.entry(name.into()).or_default().cancel =
+            Some(CancelSlot::Sync(Arc::new(handler)));
     }
 
     // --- event handler registration ---------------------------------------
@@ -649,10 +635,8 @@ impl ExposedThing {
         name: impl Into<String>,
         handler: impl AsyncPropertyReadHandler + 'static,
     ) {
-        self.property_handlers
-            .entry(name.into())
-            .or_default()
-            .read = Some(ReadSlot::Async(Arc::new(handler)));
+        self.property_handlers.entry(name.into()).or_default().read =
+            Some(ReadSlot::Async(Arc::new(handler)));
     }
 
     #[cfg(feature = "async")]
@@ -661,10 +645,8 @@ impl ExposedThing {
         name: impl Into<String>,
         handler: impl AsyncPropertyWriteHandler + 'static,
     ) {
-        self.property_handlers
-            .entry(name.into())
-            .or_default()
-            .write = Some(WriteSlot::Async(Arc::new(handler)));
+        self.property_handlers.entry(name.into()).or_default().write =
+            Some(WriteSlot::Async(Arc::new(handler)));
     }
 
     #[cfg(feature = "async")]
@@ -673,10 +655,8 @@ impl ExposedThing {
         name: impl Into<String>,
         handler: impl AsyncActionHandler + 'static,
     ) {
-        self.action_handlers
-            .entry(name.into())
-            .or_default()
-            .invoke = Some(InvokeSlot::Async(Arc::new(handler)));
+        self.action_handlers.entry(name.into()).or_default().invoke =
+            Some(InvokeSlot::Async(Arc::new(handler)));
     }
 
     #[cfg(feature = "async")]
@@ -709,10 +689,8 @@ impl ExposedThing {
         name: impl Into<String>,
         handler: impl AsyncActionQueryHandler + 'static,
     ) {
-        self.action_handlers
-            .entry(name.into())
-            .or_default()
-            .query = Some(QuerySlot::Async(Arc::new(handler)));
+        self.action_handlers.entry(name.into()).or_default().query =
+            Some(QuerySlot::Async(Arc::new(handler)));
     }
 
     #[cfg(feature = "async")]
@@ -721,10 +699,8 @@ impl ExposedThing {
         name: impl Into<String>,
         handler: impl AsyncActionCancelHandler + 'static,
     ) {
-        self.action_handlers
-            .entry(name.into())
-            .or_default()
-            .cancel = Some(CancelSlot::Async(Arc::new(handler)));
+        self.action_handlers.entry(name.into()).or_default().cancel =
+            Some(CancelSlot::Async(Arc::new(handler)));
     }
 
     #[cfg(feature = "async")]
@@ -824,10 +800,12 @@ impl ExposedThing {
         input: &InteractionInput,
     ) -> CoreResult<InteractionOutput> {
         self.local.ensure_property_affordance(name)?;
-        let slot = self.property_handler_unobserve(name).ok_or(missing_handler(
-            AffordanceTarget::Property(name.into()),
-            Operation::UnobserveProperty,
-        ))?;
+        let slot = self
+            .property_handler_unobserve(name)
+            .ok_or(missing_handler(
+                AffordanceTarget::Property(name.into()),
+                Operation::UnobserveProperty,
+            ))?;
         match slot {
             UnobserveSlot::Sync(handler) => handler.unobserve(input),
             #[cfg(feature = "async")]
@@ -1173,16 +1151,15 @@ mod async_dispatch {
 
 #[cfg(feature = "async")]
 mod consumed {
-    use alloc::{
-        boxed::Box, collections::BTreeMap, format, string::String, sync::Arc, vec::Vec,
-    };
+    use alloc::{boxed::Box, collections::BTreeMap, format, string::String, sync::Arc, vec::Vec};
 
-    use clinkz_wot_td::{data_type::Operation, form::Form, thing::Thing};
     use clinkz_wot_td::td_defaults::{FormContext, effective_form_operations};
+    use clinkz_wot_td::{data_type::Operation, form::Form, thing::Thing};
 
     use crate::interaction::{InteractionInput, InteractionOutput};
-    use crate::{AffordanceTarget, AffordanceKind, BindingRequest, ClientBinding, CoreError,
-        CoreResult};
+    use crate::{
+        AffordanceKind, AffordanceTarget, BindingRequest, ClientBinding, CoreError, CoreResult,
+    };
 
     /// A consumed Thing plus its registered client bindings.
     ///
@@ -1294,18 +1271,16 @@ mod consumed {
                     forms: self.thing.forms.as_deref().unwrap_or(&[]),
                 }),
                 AffordanceTarget::Property(name) => {
-                    let property = find_affordance(
-                        AffordanceKind::Property,
-                        name,
-                        &self.thing.properties,
-                    )?;
+                    let property =
+                        find_affordance(AffordanceKind::Property, name, &self.thing.properties)?;
                     Ok(FormSet {
                         context: FormContext::Property(property),
                         forms: property._interaction.forms.as_slice(),
                     })
                 }
                 AffordanceTarget::Action(name) => {
-                    let action = find_affordance(AffordanceKind::Action, name, &self.thing.actions)?;
+                    let action =
+                        find_affordance(AffordanceKind::Action, name, &self.thing.actions)?;
                     Ok(FormSet {
                         context: FormContext::Action(action),
                         forms: action._interaction.forms.as_slice(),

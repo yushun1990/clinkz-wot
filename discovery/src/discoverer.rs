@@ -12,7 +12,7 @@ use clinkz_wot_td::{AbsoluteUri, thing::Thing};
 
 use crate::{
     CountMode, DirectoryFilter, DirectoryPublisher, DirectoryQuery, DirectoryReader,
-    DiscoveryError, DiscoveryResult, ProjectionMode, ProcessState, ThingDiscoveryProcess,
+    DiscoveryError, DiscoveryResult, ProcessState, ProjectionMode, ThingDiscoveryProcess,
 };
 
 /// A caller-facing discovery filter: wraps a [`DirectoryFilter`] plus
@@ -162,9 +162,10 @@ impl Discoverer for LocalDiscoverer {
         query: DirectoryQuery,
     ) -> DiscoveryResult<ThingDiscoveryProcess> {
         match dir {
-            DirectoryRef::Local => Ok(ThingDiscoveryProcess::new(Box::new(
-                ProcessState::pending(Arc::clone(&self.reader), query),
-            ))),
+            DirectoryRef::Local => Ok(ThingDiscoveryProcess::new(Box::new(ProcessState::pending(
+                Arc::clone(&self.reader),
+                query,
+            )))),
             DirectoryRef::Url(_) => Err(DiscoveryError::UnsupportedEndpoint),
         }
     }

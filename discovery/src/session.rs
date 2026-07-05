@@ -70,7 +70,7 @@ pub trait DiscoverySession: Send {
 ///
 /// v1 Introduction is trivially resolved at `discover()` time: the local
 /// endpoint IS the in-memory reader, so `Pending` carries the resolved reader
-/// + query; `next()` does Exploration only (`open_search`). A future remote-
+/// and query; `next()` does Exploration only (`open_search`). A future remote-
 /// capable variant would additionally carry an `Introducer` (deferred, E6).
 pub enum ProcessState {
     /// Resolved reader + query; the session is opened lazily on first `next()`.

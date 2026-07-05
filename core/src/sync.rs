@@ -27,7 +27,7 @@ use alloc::sync::Arc;
 use core::fmt;
 
 #[cfg(feature = "std")]
-use std::sync::{RwLock, RwLockWriteGuard, RwLockReadGuard};
+use std::sync::{RwLock, RwLockReadGuard, RwLockWriteGuard};
 
 /// Portable interior-mutability lock, `Arc`-backed and [`Clone`]-able.
 ///
@@ -175,10 +175,7 @@ mod tests {
     fn exclusive_access_mutates_value() {
         let lock = WotLock::new(String::from("a"));
         lock.with(|s: &mut String| s.push_str("bc"));
-        assert_eq!(
-            lock.with_read(|s: &String| s.clone()),
-            String::from("abc")
-        );
+        assert_eq!(lock.with_read(|s: &String| s.clone()), String::from("abc"));
     }
 
     #[test]

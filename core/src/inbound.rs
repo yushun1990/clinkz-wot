@@ -13,8 +13,10 @@ use alloc::string::String;
 use clinkz_wot_td::{data_type::Operation, thing::Thing};
 
 use crate::{
-    interaction::{InteractionInput, InteractionOutput}, AffordanceTarget, CoreError, CoreResult,
-    EventBroker, ThingId, identity::CorrelationId, security::AuthMaterial,
+    AffordanceTarget, CoreError, CoreResult, EventBroker, ThingId,
+    identity::CorrelationId,
+    interaction::{InteractionInput, InteractionOutput},
+    security::AuthMaterial,
 };
 
 /// Bounded fan-in channel sender handed to each server binding on `std`

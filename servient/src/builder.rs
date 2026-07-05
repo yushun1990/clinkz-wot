@@ -1,14 +1,13 @@
 //! `ServientBuilder` — std-host consuming, move-fluent builder
 //! (baseline v4.0 §7.3/§3.11 / phase-p3 §3.11).
 
-use alloc::{boxed::Box, sync::Arc, vec::Vec};
+use alloc::{sync::Arc, vec::Vec};
 
-use clinkz_wot_core::{EventBroker, FanInSender, InboundRequest, ServerBinding};
+use clinkz_wot_core::{EventBroker, InboundRequest, ServerBinding};
 use clinkz_wot_discovery::{Discoverer, InMemoryDirectory, LocalDiscoverer};
 
-use crate::handle::{ConsumedThingHandle, ExposedThingHandle};
+use crate::ServientResult;
 use crate::servient::{ClientBindingFactory, Servient};
-use crate::{ServientError, ServientResult};
 
 /// Default inbound fan-in channel capacity (audit AD6a/O5).
 const DEFAULT_FANIN_CAPACITY: usize = 256;

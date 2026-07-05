@@ -10,9 +10,9 @@ use clinkz_wot_core::ThingId;
 use clinkz_wot_td::thing::Thing;
 
 #[cfg(feature = "std")]
-use alloc::boxed::Box;
-#[cfg(feature = "std")]
 use crate::DiscoveryResult;
+#[cfg(feature = "std")]
+use alloc::boxed::Box;
 
 /// One directory change observed by a [`DirectoryWatch`].
 #[derive(Debug, Clone)]

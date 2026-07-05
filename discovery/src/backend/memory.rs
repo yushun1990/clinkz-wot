@@ -19,15 +19,21 @@ use alloc::{
 };
 
 use clinkz_wot_core::{ThingId, WotLock};
-use clinkz_wot_td::{AbsoluteUri, thing::Thing, validate::{Validate, ValidationLevel}};
+use clinkz_wot_td::{
+    AbsoluteUri,
+    thing::Thing,
+    validate::{Validate, ValidationLevel},
+};
 
 use crate::{
     CapabilityFilter, ContinuationToken, CountMode, CountValue, DirectoryBatch, DirectoryChange,
     DirectoryFilter, DirectoryItem::*, DirectoryPatch, DirectoryPublisher, DirectoryQuery,
-    DirectoryReader, DirectoryRegistration, DirectorySession, DirectoryStats, DirectoryWatch,
-    DiscoveryError, DiscoveryResult, LeaseState, LeaseToken, ProjectionMode, RegistrationAck,
-    Revision, SummaryFields, ThingDescriptionResolver, ThingFragment,
+    DirectoryReader, DirectoryRegistration, DirectorySession, DirectoryStats, DiscoveryError,
+    DiscoveryResult, LeaseState, LeaseToken, ProjectionMode, RegistrationAck, Revision,
+    SummaryFields, ThingDescriptionResolver, ThingFragment,
 };
+#[cfg(feature = "std")]
+use crate::DirectoryWatch;
 
 // ---------------------------------------------------------------------------
 // State (primary map + secondary indexes + lease/revision counters).
@@ -122,13 +128,11 @@ impl State {
     /// Candidate id set from indexes, or `None` if a full scan is required.
     fn indexed_candidates(&self, filter: &DirectoryFilter) -> Option<BTreeSet<ThingId>> {
         match filter {
-            DirectoryFilter::Any => return None,
+            DirectoryFilter::Any => None,
             DirectoryFilter::And(parts) => {
                 let mut acc: Option<BTreeSet<ThingId>> = None;
                 for part in parts {
-                    let Some(set) = self.indexed_candidates(part) else {
-                        return None;
-                    };
+                    let set = self.indexed_candidates(part)?;
                     acc = Some(match acc {
                         None => set,
                         Some(mut existing) => {
@@ -137,7 +141,7 @@ impl State {
                         }
                     });
                 }
-                return acc;
+                acc
             }
             DirectoryFilter::Or(parts) => {
                 let mut acc: BTreeSet<ThingId> = BTreeSet::new();
@@ -150,7 +154,7 @@ impl State {
                         return None;
                     }
                 }
-                return if any_indexed { Some(acc) } else { None };
+                if any_indexed { Some(acc) } else { None }
             }
             DirectoryFilter::ByExample(f) => {
                 if let Some(id) = &f.id {
@@ -258,10 +262,10 @@ fn matches_fragment(f: &ThingFragment, thing: &Thing) -> bool {
             return false;
         }
     }
-    if let Some(id) = &f.id {
-        if thing.id.as_ref().map(|x| x.as_str()) != Some(id.as_str()) {
-            return false;
-        }
+    if let Some(id) = &f.id
+        && thing.id.as_ref().map(|x| x.as_str()) != Some(id.as_str())
+    {
+        return false;
     }
     for ty in &f.types {
         let Some(tags) = thing._metadata.tags.as_ref() else {
@@ -276,10 +280,7 @@ fn matches_fragment(f: &ThingFragment, thing: &Thing) -> bool {
         && names_present(thing.events.as_ref(), &f.events)
 }
 
-fn names_present<V>(
-    affordances: Option<&BTreeMap<String, V>>,
-    required: &[String],
-) -> bool {
+fn names_present<V>(affordances: Option<&BTreeMap<String, V>>, required: &[String]) -> bool {
     let Some(map) = affordances else {
         return required.is_empty();
     };
@@ -288,13 +289,21 @@ fn names_present<V>(
 
 fn text_contains(thing: &Thing, needle: &str) -> bool {
     let n = needle.to_ascii_lowercase();
-    let title = thing._metadata.title.as_deref().unwrap_or("").to_ascii_lowercase();
+    let title = thing
+        ._metadata
+        .title
+        .as_deref()
+        .unwrap_or("")
+        .to_ascii_lowercase();
     title.contains(&n)
 }
 
 fn matches_capability(c: &CapabilityFilter, thing: &Thing) -> bool {
     if let Some(name) = &c.affordance {
-        let in_prop = thing.properties.as_ref().is_some_and(|m| m.contains_key(name));
+        let in_prop = thing
+            .properties
+            .as_ref()
+            .is_some_and(|m| m.contains_key(name));
         let in_act = thing.actions.as_ref().is_some_and(|m| m.contains_key(name));
         let in_evt = thing.events.as_ref().is_some_and(|m| m.contains_key(name));
         if !(in_prop || in_act || in_evt) {
@@ -369,10 +378,10 @@ impl DirectorySession for InMemorySession {
             let mut emitted = 0usize;
             let mut last: Option<ThingId> = None;
             for id in candidates.iter() {
-                if let Some(c) = &cursor {
-                    if id <= c {
-                        continue;
-                    }
+                if let Some(c) = &cursor
+                    && id <= c
+                {
+                    continue;
                 }
                 let Some(thing) = s.things.get(id) else {
                     continue;
@@ -403,10 +412,13 @@ impl DirectorySession for InMemorySession {
         let count = if self.query.count_mode == CountMode::None {
             None
         } else {
-            let total = self.dir.state.with_read(|s| match s.indexed_candidates(&self.query.filter) {
-                Some(set) => set.len() as u64,
-                None => scan_matches(s, &self.query.filter).len() as u64,
-            });
+            let total =
+                self.dir
+                    .state
+                    .with_read(|s| match s.indexed_candidates(&self.query.filter) {
+                        Some(set) => set.len() as u64,
+                        None => scan_matches(s, &self.query.filter).len() as u64,
+                    });
             // Backend can always count exactly in-memory; upgrade Estimate.
             Some(CountValue::Exact(total))
         };
@@ -488,19 +500,24 @@ impl DirectoryPublisher for InMemoryDirectory {
             }
             (rev, lease)
         });
-        Ok(RegistrationAck { id, revision, lease })
+        Ok(RegistrationAck {
+            id,
+            revision,
+            lease,
+        })
     }
 
     async fn renew(&self, lease: LeaseToken) -> DiscoveryResult<LeaseState> {
         let needle = alloc::string::String::from_utf8(lease.0.clone())
             .map_err(|_| DiscoveryError::LeaseExpired)?;
-        self.state.with_read(|s| {
-            s.leases
-                .iter()
-                .find(|(_, state)| state.token.0 == needle.as_bytes())
-                .map(|(_, state)| state.clone())
-        })
-        .ok_or(DiscoveryError::LeaseExpired)
+        self.state
+            .with_read(|s| {
+                s.leases
+                    .iter()
+                    .find(|(_, state)| state.token.0 == needle.as_bytes())
+                    .map(|(_, state)| state.clone())
+            })
+            .ok_or(DiscoveryError::LeaseExpired)
     }
 
     async fn update(&self, id: &ThingId, patch: DirectoryPatch) -> DiscoveryResult<Revision> {
@@ -510,25 +527,26 @@ impl DirectoryPublisher for InMemoryDirectory {
         if patch.content_type.as_str() != "application/json" {
             return Err(DiscoveryError::UnsupportedProjection);
         }
-        let updated: Thing = self.state.with_read(|s| -> DiscoveryResult<Option<Thing>> {
-            let Some(existing) = s.things.get(id) else {
-                return Ok(None);
-            };
-            let mut target = serde_json::to_value(existing).map_err(|e| {
-                DiscoveryError::ResolverFailed(format!("serialize TD failed: {e}"))
-            })?;
-            let patch_val: serde_json::Value =
-                serde_json::from_slice(&patch.body).map_err(|e| {
-                    DiscoveryError::ResolverFailed(format!("parse patch failed: {e}"))
+        let updated: Thing = self
+            .state
+            .with_read(|s| -> DiscoveryResult<Option<Thing>> {
+                let Some(existing) = s.things.get(id) else {
+                    return Ok(None);
+                };
+                let mut target = serde_json::to_value(existing).map_err(|e| {
+                    DiscoveryError::ResolverFailed(format!("serialize TD failed: {e}"))
                 })?;
-            json_merge(&mut target, patch_val);
-            let thing: Thing =
-                serde_json::from_value(target).map_err(|e| {
+                let patch_val: serde_json::Value =
+                    serde_json::from_slice(&patch.body).map_err(|e| {
+                        DiscoveryError::ResolverFailed(format!("parse patch failed: {e}"))
+                    })?;
+                json_merge(&mut target, patch_val);
+                let thing: Thing = serde_json::from_value(target).map_err(|e| {
                     DiscoveryError::ResolverFailed(format!("patched TD invalid: {e}"))
                 })?;
-            Ok(Some(thing))
-        })?
-        .ok_or_else(|| DiscoveryError::UnknownThing(id.clone()))?;
+                Ok(Some(thing))
+            })?
+            .ok_or_else(|| DiscoveryError::UnknownThing(id.clone()))?;
         // Re-validate + store + bump revision.
         self.validate_and_id(&updated)?;
         let rev = self.state.with(|s| {
@@ -559,7 +577,8 @@ impl DirectoryPublisher for InMemoryDirectory {
         });
         if let Some(thing) = removed {
             #[cfg(feature = "std")]
-            self.state.with(|s| push_change(s, DirectoryChange::Removed(id.clone())));
+            self.state
+                .with(|s| push_change(s, DirectoryChange::Removed(id.clone())));
             // `thing` observed; suppress unused warning without dropping it.
             let _ = &thing;
         }

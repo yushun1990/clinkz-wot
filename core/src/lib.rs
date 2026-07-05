@@ -17,18 +17,18 @@ pub mod sync;
 pub mod thing;
 pub mod transport;
 
+pub use binding::SubscriptionGuard;
 #[cfg(feature = "async")]
 pub use binding::{BindingRequest, ClientBinding};
-pub use binding::SubscriptionGuard;
 pub use error::{CoreError, CoreResult};
 pub use event::{
-    DEFAULT_SUBSCRIPTION_CAPACITY, EventBroker, EventName, PublisherSink,
-    Subscription, SubscriptionSender,
+    DEFAULT_SUBSCRIPTION_CAPACITY, EventBroker, EventName, PublisherSink, Subscription,
+    SubscriptionSender,
 };
 pub use identity::{CorrelationId, ThingId};
-pub use inbound::{InboundDispatcher, InboundRequest, InboundResponse, ServerBinding};
 #[cfg(feature = "std")]
 pub use inbound::FanInSender;
+pub use inbound::{InboundDispatcher, InboundRequest, InboundResponse, ServerBinding};
 pub use interaction::{
     AcceptHint, InteractionInput, InteractionOptions, InteractionOutput, InteractionStatus,
     MediaType,

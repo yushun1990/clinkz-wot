@@ -3,13 +3,13 @@
 //! These types wrap [`fluent_uri`] so that parsed representations can be cached
 //! and reused on the per-request resolution hot path of protocol bindings.
 
-use alloc::{borrow::ToOwned, string::{String, ToString}};
+use alloc::{
+    borrow::ToOwned,
+    string::{String, ToString},
+};
 use core::fmt;
 
-use fluent_uri::{
-    ParseError, Uri, UriRef,
-    resolve::ResolveError,
-};
+use fluent_uri::{ParseError, Uri, UriRef, resolve::ResolveError};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 /// URI reference compliant with RFC 3986.

@@ -10,8 +10,8 @@ use alloc::{boxed::Box, sync::Arc};
 
 use clinkz_wot_td::{data_type::Operation, form::Form, thing::Thing};
 
-use crate::interaction::InteractionInput;
 use crate::AffordanceTarget;
+use crate::interaction::InteractionInput;
 #[cfg(feature = "async")]
 use crate::{CoreError, CoreResult, Subscription, interaction::InteractionOutput};
 

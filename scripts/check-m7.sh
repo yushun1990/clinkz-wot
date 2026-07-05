@@ -1,13 +1,3 @@
 #!/usr/bin/env sh
-
-set -eu
-
-cargo fmt --check
-cargo test --workspace
-cargo clippy --workspace --all-targets
-
-SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
-
-"$SCRIPT_DIR/check-no-std.sh"
-"$SCRIPT_DIR/check-reserved-features.sh"
-"$SCRIPT_DIR/check-td2-preview.sh"
+# Deprecated alias — use scripts/check-baseline.sh (v4.0 rename, phase-p4 §4.7).
+exec "$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)/check-baseline.sh" "$@"

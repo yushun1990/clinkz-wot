@@ -246,7 +246,7 @@ impl<T> ZenohBindingTransport<T> {
             crate::form::plan_zenoh_operation(thing, form, operation)
                 .map_err(core_error_from_zenoh_error)?,
         );
-        let _ = self.plan_cache.with(|cache| {
+        self.plan_cache.with(|cache| {
             prune_dead_plan_cache_entries(cache);
             cache.insert(
                 key,
@@ -289,6 +289,60 @@ fn core_error_from_binding_error(err: BindingError) -> CoreError {
             CoreError::InvalidInteraction(message.to_string())
         }
     }
+}
+
+fn core_error_from_zenoh_error(err: crate::ZenohBindingError) -> CoreError {
+    match err {
+        // Preserve structured shared-binding errors (e.g. `UnknownAffordance`)
+        // by routing them through the same mapper used by the direct
+        // `validate_form_operation` path, instead of collapsing them to
+        // `InvalidInteraction(String)`.
+        crate::ZenohBindingError::Shared(binding_error) => {
+            core_error_from_binding_error(binding_error)
+        }
+        crate::ZenohBindingError::Selection(message)
+        | crate::ZenohBindingError::UnsupportedForm(message)
+        | crate::ZenohBindingError::InvalidExtension { message, .. } => {
+            CoreError::InvalidInteraction(message)
+        }
+        crate::ZenohBindingError::Target(message) => {
+            CoreError::InvalidInteraction(message.to_string())
+        }
+    }
+}
+
+fn affordance_ref_from_target(target: &AffordanceTarget) -> AffordanceRef<'_> {
+    match target {
+        AffordanceTarget::Thing => AffordanceRef::Thing,
+        AffordanceTarget::Property(name) => AffordanceRef::Property(name),
+        AffordanceTarget::Action(name) => AffordanceRef::Action(name),
+        AffordanceTarget::Event(name) => AffordanceRef::Event(name),
+    }
+}
+
+fn default_supported_operations() -> u32 {
+    use Operation::*;
+
+    ops_to_bitset([
+        ReadProperty,
+        WriteProperty,
+        ObserveProperty,
+        UnobserveProperty,
+        InvokeAction,
+        QueryAction,
+        CancelAction,
+        SubscribeEvent,
+        UnsubscribeEvent,
+        ReadAllProperties,
+        WriteAllProperties,
+        ReadMultipleProperties,
+        WriteMultipleProperties,
+        ObserveAllProperties,
+        UnobserveAllProperties,
+        QueryAllActions,
+        SubscribeAllEvents,
+        UnsubscribeAllEvents,
+    ])
 }
 
 #[cfg(test)]
@@ -355,58 +409,4 @@ mod tests {
             "stale entries from dropped forms should be pruned on the next cache miss"
         );
     }
-}
-
-fn core_error_from_zenoh_error(err: crate::ZenohBindingError) -> CoreError {
-    match err {
-        // Preserve structured shared-binding errors (e.g. `UnknownAffordance`)
-        // by routing them through the same mapper used by the direct
-        // `validate_form_operation` path, instead of collapsing them to
-        // `InvalidInteraction(String)`.
-        crate::ZenohBindingError::Shared(binding_error) => {
-            core_error_from_binding_error(binding_error)
-        }
-        crate::ZenohBindingError::Selection(message)
-        | crate::ZenohBindingError::UnsupportedForm(message)
-        | crate::ZenohBindingError::InvalidExtension { message, .. } => {
-            CoreError::InvalidInteraction(message)
-        }
-        crate::ZenohBindingError::Target(message) => {
-            CoreError::InvalidInteraction(message.to_string())
-        }
-    }
-}
-
-fn affordance_ref_from_target(target: &AffordanceTarget) -> AffordanceRef<'_> {
-    match target {
-        AffordanceTarget::Thing => AffordanceRef::Thing,
-        AffordanceTarget::Property(name) => AffordanceRef::Property(name),
-        AffordanceTarget::Action(name) => AffordanceRef::Action(name),
-        AffordanceTarget::Event(name) => AffordanceRef::Event(name),
-    }
-}
-
-fn default_supported_operations() -> u32 {
-    use Operation::*;
-
-    ops_to_bitset([
-        ReadProperty,
-        WriteProperty,
-        ObserveProperty,
-        UnobserveProperty,
-        InvokeAction,
-        QueryAction,
-        CancelAction,
-        SubscribeEvent,
-        UnsubscribeEvent,
-        ReadAllProperties,
-        WriteAllProperties,
-        ReadMultipleProperties,
-        WriteMultipleProperties,
-        ObserveAllProperties,
-        UnobserveAllProperties,
-        QueryAllActions,
-        SubscribeAllEvents,
-        UnsubscribeAllEvents,
-    ])
 }

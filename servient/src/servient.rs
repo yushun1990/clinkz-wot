@@ -2,22 +2,16 @@
 //! §3.10–§3.11). Non-generic; holds registries, bindings, the inbound fan-in
 //! channel, a `Discoverer`, and the driving primitives.
 
-use alloc::{
-    boxed::Box,
-    format,
-    string::{String, ToString},
-    sync::Arc,
-    vec::Vec,
-};
+use alloc::{boxed::Box, format, sync::Arc, vec::Vec};
 
 use clinkz_wot_core::{
-    ClientBinding, EventBroker, EventName, ExposedThing, FanInSender, InboundRequest,
-    InboundResponse, InteractionOutput, Payload, ServerBinding, ThingId, WotLock,
+    ClientBinding, EventBroker, EventName, ExposedThing, InboundRequest, InboundResponse,
+    InteractionOutput, Payload, ServerBinding, ThingId, WotLock,
 };
-use clinkz_wot_discovery::{
-    DiscoveryFilter, Discoverer, ProcessState, ThingDiscoveryProcess,
-};
-use clinkz_wot_td::{thing::Thing, AbsoluteUri};
+#[cfg(feature = "std")]
+use clinkz_wot_core::FanInSender;
+use clinkz_wot_discovery::{Discoverer, DiscoveryFilter, ProcessState, ThingDiscoveryProcess};
+use clinkz_wot_td::{AbsoluteUri, thing::Thing};
 
 use crate::handle::{ConsumedThingHandle, ExposedThingHandle};
 use crate::registry::{ConsumedThingRegistry, ExposedThingRegistry, ExposedThingSlot};
@@ -72,12 +66,14 @@ pub struct Servient {
     #[cfg(feature = "std")]
     inbound_tx: FanInSender<InboundRequest>,
     /// no_std rotation cursor for `try_accept` poll fairness (AD7).
+    #[allow(dead_code)]
     rotation: Arc<core::sync::atomic::AtomicUsize>,
 }
 
 impl Servient {
     /// Assembles a `Servient` from its pieces (called by `ServientBuilder`).
     #[cfg(feature = "std")]
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn assemble(
         exposed: ExposedThingRegistry,
         consumed_registry: ConsumedThingRegistry,
@@ -104,6 +100,7 @@ impl Servient {
 
     /// Returns the inbound fan-in sender (std only).
     #[cfg(feature = "std")]
+    #[allow(dead_code)]
     pub(crate) fn inbound_sender(&self) -> FanInSender<InboundRequest> {
         self.inbound_tx.clone()
     }
@@ -243,13 +240,11 @@ impl Servient {
         if self.shutdown.load(Ordering::SeqCst) {
             return Ok(());
         }
-        let request = self
-            .inbound_rx
-            .recv()
-            .await
-            .map_err(|_| ServientError::Serve(clinkz_wot_core::CoreError::InboundDispatch(
+        let request = self.inbound_rx.recv().await.map_err(|_| {
+            ServientError::Serve(clinkz_wot_core::CoreError::InboundDispatch(
                 "fan-in channel closed".into(),
-            )))?;
+            ))
+        })?;
         self.serve_one(request).await;
         Ok(())
     }

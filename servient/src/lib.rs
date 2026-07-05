@@ -19,21 +19,21 @@ extern crate alloc;
 mod error;
 mod registry;
 
+#[cfg(feature = "std")]
+mod builder;
 #[cfg(feature = "async")]
 mod handle;
 #[cfg(feature = "async")]
 mod servient;
-#[cfg(feature = "std")]
-mod builder;
 
 pub use error::{ServientError, ServientResult};
 
 #[cfg(feature = "async")]
 pub use handle::{ConsumedThingHandle, ExposedThingHandle};
 #[cfg(feature = "async")]
-pub use servient::{Servient, ShutdownHandle};
-#[cfg(feature = "async")]
 pub use servient::ClientBindingFactory;
+#[cfg(feature = "async")]
+pub use servient::{Servient, ShutdownHandle};
 
 #[cfg(feature = "std")]
 pub use builder::ServientBuilder;

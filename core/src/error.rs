@@ -73,11 +73,7 @@ impl fmt::Display for CoreError {
             }
             Self::InboundDispatch(message) => write!(f, "Inbound dispatch error: {}", message),
             Self::HandlerPanic { target, operation } => {
-                write!(
-                    f,
-                    "Handler panicked for {:?} on {:?}",
-                    operation, target
-                )
+                write!(f, "Handler panicked for {:?} on {:?}", operation, target)
             }
             Self::Timeout => write!(f, "Outbound call timed out"),
             Self::TimeoutUnsupported => write!(

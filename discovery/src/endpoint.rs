@@ -10,9 +10,9 @@ use alloc::string::String;
 use clinkz_wot_td::AbsoluteUri;
 
 #[cfg(feature = "async")]
-use alloc::{boxed::Box, vec::Vec};
-#[cfg(feature = "async")]
 use crate::DiscoveryResult;
+#[cfg(feature = "async")]
+use alloc::{boxed::Box, vec::Vec};
 
 /// A discovered entry point produced by Introduction.
 #[derive(Debug, Clone)]

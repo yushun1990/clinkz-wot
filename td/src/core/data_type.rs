@@ -25,12 +25,12 @@ pub mod response;
 pub mod uri;
 pub mod version;
 
-pub use metadata::{Metadata, MetadataHelper, MultiLanguage};
 pub(crate) use metadata::METADATA_KEYS;
+pub use metadata::{Metadata, MetadataHelper, MultiLanguage};
 pub use operation::Operation;
 pub use response::{AdditionalExpectedResponse, ExpectedResponse};
 pub use uri::{
-    AbsoluteUri, BaseUri, FormHref, ResolvedFormHref, ResolveFormHrefError, UriReference,
+    AbsoluteUri, BaseUri, FormHref, ResolveFormHrefError, ResolvedFormHref, UriReference,
     resolve_form_href,
 };
 pub use version::{ThingModelVersionInfo, VersionInfo};

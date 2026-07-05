@@ -653,10 +653,7 @@ mod stream_impl {
         }
     }
 
-    fn poll_single(
-        inner: &WotLock<QueueInner>,
-        cx: &mut Context<'_>,
-    ) -> Poll<Option<Payload>> {
+    fn poll_single(inner: &WotLock<QueueInner>, cx: &mut Context<'_>) -> Poll<Option<Payload>> {
         let drained = inner.with_recover(|q| {
             if let Some(payload) = q.buffer.pop_front() {
                 q.waker = None;
@@ -685,10 +682,7 @@ mod stream_impl {
         }
     }
 
-    fn poll_leaves(
-        leaves: &[WotLock<QueueInner>],
-        cx: &mut Context<'_>,
-    ) -> Poll<Option<Payload>> {
+    fn poll_leaves(leaves: &[WotLock<QueueInner>], cx: &mut Context<'_>) -> Poll<Option<Payload>> {
         // Round-robin drain: if any leaf has a buffered sample, return it
         // and drop the wake slot on that queue (progress was made).
         for inner in leaves {
@@ -733,8 +727,7 @@ mod stream_impl {
 #[cfg(test)]
 mod tests {
     use super::{
-        DEFAULT_SUBSCRIPTION_CAPACITY, EventBroker, EventName, PublisherSink,
-        Subscription,
+        DEFAULT_SUBSCRIPTION_CAPACITY, EventBroker, EventName, PublisherSink, Subscription,
     };
     use alloc::{string::String, string::ToString, vec, vec::Vec};
     use std::sync::{Arc, Mutex};
@@ -770,7 +763,11 @@ mod tests {
 
     impl PublisherSink for RecorderSink {
         fn publish(&self, p: &Payload) -> CoreResult<()> {
-            self.rec.received.lock().unwrap().push(p.body.as_ref().to_vec());
+            self.rec
+                .received
+                .lock()
+                .unwrap()
+                .push(p.body.as_ref().to_vec());
             Ok(())
         }
     }

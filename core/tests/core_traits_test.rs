@@ -11,17 +11,15 @@
 use std::sync::Arc;
 
 use clinkz_wot_core::{
-    AffordanceKind, AffordanceTarget, CoreError, CoreResult, InteractionInput,
-    InteractionOutput, InteractionStatus, ExposedThing, Payload,
+    AffordanceKind, AffordanceTarget, CoreError, CoreResult, ExposedThing, InteractionInput,
+    InteractionOutput, InteractionStatus, Payload,
 };
 use clinkz_wot_td::{
     affordance::{ActionAffordance, EventAffordance, InteractionHelper, PropertyAffordance},
     data_schema::DataSchema,
     data_type::Operation,
     form::Form,
-    security_scheme::{NoSecurityScheme, SecurityScheme},
     thing::Thing,
-    validate::Validate,
 };
 
 // ---------------------------------------------------------------------------
@@ -34,7 +32,9 @@ struct StoredRead {
 
 impl clinkz_wot_core::PropertyReadHandler for StoredRead {
     fn read(&self, _input: &InteractionInput) -> CoreResult<InteractionOutput> {
-        Ok(InteractionOutput::with_data(self.value.lock().unwrap().clone()))
+        Ok(InteractionOutput::with_data(
+            self.value.lock().unwrap().clone(),
+        ))
     }
 }
 
@@ -126,9 +126,22 @@ fn local_thing_description() -> Thing {
 #[test]
 fn local_exposed_thing_dispatches_registered_handlers() {
     let mut thing = ExposedThing::new(local_thing_description());
-    let shared = Arc::new(std::sync::Mutex::new(Payload::new(b"off".to_vec(), "text/plain")));
-    thing.set_property_read_handler("status", StoredRead { value: Arc::clone(&shared) });
-    thing.set_property_write_handler("status", StoredWrite { value: Arc::clone(&shared) });
+    let shared = Arc::new(std::sync::Mutex::new(Payload::new(
+        b"off".to_vec(),
+        "text/plain",
+    )));
+    thing.set_property_read_handler(
+        "status",
+        StoredRead {
+            value: Arc::clone(&shared),
+        },
+    );
+    thing.set_property_write_handler(
+        "status",
+        StoredWrite {
+            value: Arc::clone(&shared),
+        },
+    );
     thing.set_action_handler("echo", EchoAction);
     thing.set_event_subscribe_handler("startup", StartupEvent);
 
@@ -148,8 +161,13 @@ fn local_exposed_thing_dispatches_registered_handlers() {
         .unwrap();
     assert_eq!(status.body.as_ref(), b"on");
 
-    let mut action_input = InteractionInput::with_data(Payload::new(b"hello".to_vec(), "text/plain"));
-    let action = thing.invoke_action("echo", &mut action_input).unwrap().data.unwrap();
+    let mut action_input =
+        InteractionInput::with_data(Payload::new(b"hello".to_vec(), "text/plain"));
+    let action = thing
+        .invoke_action("echo", &mut action_input)
+        .unwrap()
+        .data
+        .unwrap();
     assert_eq!(action.body.as_ref(), b"hello");
 
     let mut received: Vec<Payload> = Vec::new();
@@ -168,11 +186,16 @@ fn local_exposed_thing_rejects_unknown_affordance_before_dispatch() {
     thing.set_property_read_handler(
         "missing",
         StoredRead {
-            value: Arc::new(std::sync::Mutex::new(Payload::new(b"value".to_vec(), "text/plain"))),
+            value: Arc::new(std::sync::Mutex::new(Payload::new(
+                b"value".to_vec(),
+                "text/plain",
+            ))),
         },
     );
 
-    let err = thing.read_property("missing", &InteractionInput::empty()).unwrap_err();
+    let err = thing
+        .read_property("missing", &InteractionInput::empty())
+        .unwrap_err();
     assert_eq!(
         err,
         CoreError::UnknownAffordance {
@@ -185,7 +208,9 @@ fn local_exposed_thing_rejects_unknown_affordance_before_dispatch() {
 #[test]
 fn local_exposed_thing_reports_missing_registered_handler() {
     let thing = ExposedThing::new(local_thing_description());
-    let err = thing.invoke_action("echo", &mut InteractionInput::empty()).unwrap_err();
+    let err = thing
+        .invoke_action("echo", &mut InteractionInput::empty())
+        .unwrap_err();
     assert!(matches!(
         err,
         CoreError::MissingHandler {
@@ -202,14 +227,15 @@ fn local_thing_affordance_mutation_pre_expose() {
     // mutation is legitimate.
     let mut local = clinkz_wot_core::LocalThing::new(local_thing_description());
     assert!(local.ensure_property_affordance("status").is_ok());
-    local.add_property(
-        "level",
-        PropertyAffordance::builder(DataSchema::number())
-            .form(Form::read_property("/properties/level").build().unwrap())
-            .build()
-            .unwrap(),
-    )
-    .unwrap();
+    local
+        .add_property(
+            "level",
+            PropertyAffordance::builder(DataSchema::number())
+                .form(Form::read_property("/properties/level").build().unwrap())
+                .build()
+                .unwrap(),
+        )
+        .unwrap();
     assert!(local.ensure_property_affordance("level").is_ok());
     local.remove_property("level");
     assert!(local.ensure_property_affordance("level").is_err());
@@ -234,8 +260,8 @@ fn interaction_output_defaults_to_ok_status() {
 #[cfg(feature = "async")]
 mod consumed_async {
     use super::*;
-    use clinkz_wot_core::{BindingRequest, ConsumedThing, ClientBinding, SubscriptionGuard};
     use clinkz_wot_core::interaction::InteractionOutput;
+    use clinkz_wot_core::{BindingRequest, ClientBinding, ConsumedThing, SubscriptionGuard};
     use std::cell::RefCell;
 
     struct RecordingBinding {
@@ -254,7 +280,10 @@ mod consumed_async {
                 matches!(request.target, AffordanceTarget::Property(ref name) if name.as_ref() == "status")
             );
             assert_eq!(request.operation, Operation::ReadProperty);
-            assert_eq!(request.thing._metadata.title.as_deref(), Some("Remote Lamp"));
+            assert_eq!(
+                request.thing._metadata.title.as_deref(),
+                Some("Remote Lamp")
+            );
             Ok(InteractionOutput::with_data(self.response.clone()))
         }
     }
@@ -268,10 +297,11 @@ mod consumed_async {
             .content_type("application/json")
             .build()
             .unwrap();
-        let property = PropertyAffordance::builder(DataSchema::String(DataSchema::string().build()))
-            .forms([read_form.clone(), write_form])
-            .build()
-            .unwrap();
+        let property =
+            PropertyAffordance::builder(DataSchema::String(DataSchema::string().build()))
+                .forms([read_form.clone(), write_form])
+                .build()
+                .unwrap();
         (
             Thing::builder("Remote Lamp")
                 .nosec()
@@ -307,7 +337,7 @@ mod consumed_async {
     #[tokio::test]
     async fn consumed_rejects_form_not_in_affordance() {
         let (td, _valid_form) = remote_thing_description();
-        let mut consumed = ConsumedThing::new(td);
+        let consumed = ConsumedThing::new(td);
         let foreign_form = Arc::new(
             Form::read_property("wot://other/properties/x")
                 .content_type("application/octet-stream")
@@ -361,16 +391,17 @@ mod consumed_async {
             .content_type("application/octet-stream")
             .build()
             .unwrap();
-        let property = PropertyAffordance::builder(DataSchema::String(DataSchema::string().build()))
-            .form(read_form.clone())
-            .build()
-            .unwrap();
+        let property =
+            PropertyAffordance::builder(DataSchema::String(DataSchema::string().build()))
+                .form(read_form.clone())
+                .build()
+                .unwrap();
         let td = Thing::builder("Remote Lamp")
             .nosec()
             .property("status", property)
             .build()
             .unwrap();
-        let mut thing = ConsumedThing::new(td);
+        let thing = ConsumedThing::new(td);
         let err = thing
             .request(
                 AffordanceTarget::Property("status".into()),
@@ -389,7 +420,7 @@ mod consumed_async {
     #[tokio::test]
     async fn consumed_reports_missing_matching_binding() {
         let (td, read_form) = remote_thing_description();
-        let mut thing = ConsumedThing::new(td);
+        let thing = ConsumedThing::new(td);
         let err = thing
             .request(
                 AffordanceTarget::Property("status".into()),
@@ -421,16 +452,16 @@ mod consumed_async {
 #[cfg(feature = "async")]
 mod async_dispatch {
     use super::*;
-    use clinkz_wot_core::{
-        AsyncActionHandler, AsyncPropertyReadHandler, ExposedThing,
-    };
+    use clinkz_wot_core::{AsyncActionHandler, AsyncPropertyReadHandler, ExposedThing};
 
     struct AsyncEchoRead;
 
     #[async_trait::async_trait]
     impl AsyncPropertyReadHandler for AsyncEchoRead {
         async fn read(&self, input: &InteractionInput) -> CoreResult<InteractionOutput> {
-            Ok(InteractionOutput::with_data(input.data.clone().unwrap_or_default()))
+            Ok(InteractionOutput::with_data(
+                input.data.clone().unwrap_or_default(),
+            ))
         }
     }
 
@@ -464,8 +495,7 @@ mod async_dispatch {
     async fn async_action_handler_dispatches_via_async_path() {
         let mut thing = ExposedThing::new(local_thing_description());
         thing.set_async_action_handler("echo", AsyncEchoAction);
-        let mut input =
-            InteractionInput::with_data(Payload::new(b"yo".to_vec(), "text/plain"));
+        let mut input = InteractionInput::with_data(Payload::new(b"yo".to_vec(), "text/plain"));
         let out = thing.invoke_action_async("echo", &mut input).await.unwrap();
         assert_eq!(out.data.unwrap().body.as_ref(), b"yo");
     }
@@ -478,10 +508,16 @@ mod async_dispatch {
         thing.set_property_read_handler(
             "status",
             StoredRead {
-                value: Arc::new(std::sync::Mutex::new(Payload::new(b"v".to_vec(), "text/plain"))),
+                value: Arc::new(std::sync::Mutex::new(Payload::new(
+                    b"v".to_vec(),
+                    "text/plain",
+                ))),
             },
         );
-        let out = thing.read_property_async("status", &InteractionInput::empty()).await.unwrap();
+        let out = thing
+            .read_property_async("status", &InteractionInput::empty())
+            .await
+            .unwrap();
         assert_eq!(out.data.unwrap().body.as_ref(), b"v");
     }
 }

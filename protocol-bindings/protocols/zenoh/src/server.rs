@@ -131,6 +131,7 @@ enum ReplyTarget {
 /// Maximum number of inbound requests buffered for the synchronous driving
 /// loop. When exceeded, the oldest entry is dropped first (drop-oldest
 /// backpressure) so a slow driver cannot grow the queue without bound.
+#[allow(dead_code)]
 const PENDING_QUEUE_CAPACITY: usize = 256;
 
 /// Lifetime after which an unclaimed [`ReplyTarget`] is considered abandoned
@@ -295,6 +296,7 @@ pub struct ZenohServerBinding {
     #[cfg(feature = "async")]
     async_tx: Arc<tokio::sync::mpsc::Sender<InboundRequest>>,
     #[cfg(feature = "async")]
+    #[allow(dead_code)]
     async_rx: Arc<tokio::sync::Mutex<tokio::sync::mpsc::Receiver<InboundRequest>>>,
 }
 
@@ -320,6 +322,7 @@ impl ZenohServerBinding {
             #[cfg(feature = "async")]
             async_tx: Arc::new(async_tx),
             #[cfg(feature = "async")]
+            #[allow(dead_code)]
             async_rx: Arc::new(tokio::sync::Mutex::new(async_rx)),
         }
     }
@@ -421,8 +424,7 @@ impl ServerBinding for ZenohServerBinding {
 
     fn register_thing(&self, thing_id: &ThingId, td: &Thing) -> Result<(), CoreError> {
         let id_str = thing_id.as_str();
-        let routes = plan_inbound_routes(id_str, td)
-            .map_err(|e| CoreError::InvalidInteraction(e))?;
+        let routes = plan_inbound_routes(id_str, td).map_err(CoreError::InvalidInteraction)?;
         let broker = self
             .event_broker
             .lock()
@@ -501,7 +503,7 @@ impl ZenohServerBinding {
     ) -> Result<Option<DeclaredRoute>, String> {
         match route.kind {
             RouteKind::Queryable { key_expr } => {
-                let pending = Arc::clone(&self.pending);
+                let _pending = Arc::clone(&self.pending);
                 let reply_targets = Arc::clone(&self.reply_targets);
                 let next_correlation = Arc::clone(&self.next_correlation);
                 let meta = route.meta.clone();
@@ -545,7 +547,7 @@ impl ZenohServerBinding {
                 Ok(Some(DeclaredRoute::Queryable(Box::new(queryable))))
             }
             RouteKind::PutListener { key_expr } => {
-                let pending = Arc::clone(&self.pending);
+                let _pending = Arc::clone(&self.pending);
                 let reply_targets = Arc::clone(&self.reply_targets);
                 let next_correlation = Arc::clone(&self.next_correlation);
                 let meta = route.meta.clone();
@@ -704,12 +706,8 @@ fn handle_async_enqueue_result(
 ) {
     if let Err(err) = result {
         let (request, reason) = match err {
-            tokio::sync::mpsc::error::TrySendError::Full(request) => {
-                (request, "channel full")
-            }
-            tokio::sync::mpsc::error::TrySendError::Closed(request) => {
-                (request, "channel closed")
-            }
+            tokio::sync::mpsc::error::TrySendError::Full(request) => (request, "channel full"),
+            tokio::sync::mpsc::error::TrySendError::Closed(request) => (request, "channel closed"),
         };
         log::warn!("Zenoh server: failed to enqueue inbound request ({reason})");
         send_drop_reply(reply_targets, &request.correlation);
@@ -731,6 +729,7 @@ fn undeclare_routes(routes: Vec<DeclaredRoute>) {
 /// when the synchronous driving loop falls behind. Returns the evicted request
 /// (if any) so the caller can fail it fast instead of waiting for the reply
 /// TTL to expire.
+#[allow(dead_code)]
 fn push_bounded(
     queue: &mut VecDeque<InboundRequest>,
     request: InboundRequest,
@@ -822,12 +821,11 @@ mod tests {
         handle_async_enqueue_result(&reply_targets, tx.try_send(dropped));
 
         assert!(
-            reply_targets
+            !reply_targets
                 .lock()
                 .expect("lock reply targets")
                 .targets
-                .get(&correlation)
-                .is_none(),
+                .contains_key(&correlation),
             "failed async enqueue should clear the reply target instead of waiting for TTL sweep"
         );
 
