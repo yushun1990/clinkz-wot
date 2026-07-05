@@ -8,8 +8,6 @@
 //! returns an [`InboundResponse`] that the binding matches back to its transport
 //! via the echoed [`CorrelationId`].
 
-use alloc::string::String;
-
 use clinkz_wot_td::{data_type::Operation, thing::Thing};
 
 use crate::{
@@ -167,11 +165,6 @@ pub trait InboundDispatcher {
     /// server binding echoes back to its transport.
     fn dispatch(&self, request: InboundRequest) -> CoreResult<InboundResponse>;
 }
-
-// Allow tests that previously constructed a `String` thing_id to keep compiling
-// while the binding surface migrates to `ThingId`.
-#[allow(dead_code)]
-fn _string_compat(_s: String) {}
 
 #[cfg(test)]
 mod tests {

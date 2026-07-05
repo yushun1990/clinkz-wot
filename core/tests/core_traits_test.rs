@@ -221,27 +221,6 @@ fn local_exposed_thing_reports_missing_registered_handler() {
 }
 
 #[test]
-fn local_thing_affordance_mutation_pre_expose() {
-    // LocalThing affordance mutation is retained as a produce-time TD builder
-    // (audit F9). The TD affordance set is frozen at expose(); pre-expose
-    // mutation is legitimate.
-    let mut local = clinkz_wot_core::LocalThing::new(local_thing_description());
-    assert!(local.ensure_property_affordance("status").is_ok());
-    local
-        .add_property(
-            "level",
-            PropertyAffordance::builder(DataSchema::number())
-                .form(Form::read_property("/properties/level").build().unwrap())
-                .build()
-                .unwrap(),
-        )
-        .unwrap();
-    assert!(local.ensure_property_affordance("level").is_ok());
-    local.remove_property("level");
-    assert!(local.ensure_property_affordance("level").is_err());
-}
-
-#[test]
 fn core_error_display_is_english() {
     let err = CoreError::UnsupportedBinding("no matching form".into());
     assert_eq!(err.to_string(), "Unsupported binding: no matching form");

@@ -199,13 +199,9 @@ async fn producer_write_property_local() {
     handle.set_property_write_handler("status", StoredWrite(value.clone()));
     handle.expose().await.expect("expose");
 
-    let mut input =
-        InteractionInput::with_data(Payload::new(b"on".to_vec(), "text/plain"));
+    let mut input = InteractionInput::with_data(Payload::new(b"on".to_vec(), "text/plain"));
     handle.write_property("status", &mut input).expect("write");
-    assert_eq!(
-        value.lock().unwrap().body.as_ref(),
-        b"on"
-    );
+    assert_eq!(value.lock().unwrap().body.as_ref(), b"on");
 }
 
 struct StoredWrite(Arc<Mutex<Payload>>);
@@ -236,10 +232,7 @@ async fn missing_handler_on_exposed_but_unwired_affordance() {
     let err = handle
         .read_property("status", &InteractionInput::empty())
         .unwrap_err();
-    assert!(matches!(
-        err,
-        CoreError::MissingHandler { .. }
-    ));
+    assert!(matches!(err, CoreError::MissingHandler { .. }));
 }
 
 #[tokio::test]
@@ -292,16 +285,21 @@ async fn all_producer_handler_setters_compile_and_register() {
         .expect("build");
 
     let handle = servient.produce(lamp_td()).expect("produce");
-    handle.set_property_read_handler("status", StoredRead(Arc::new(Mutex::new(
-        Payload::new(b"x".to_vec(), "text/plain"),
-    ))));
-    handle.set_property_write_handler("status", StoredWrite(Arc::new(Mutex::new(
-        Payload::new(b"y".to_vec(), "text/plain"),
-    ))));
-    handle.set_property_observe_handler(
+    handle.set_property_read_handler(
         "status",
-        struct_observe(),
+        StoredRead(Arc::new(Mutex::new(Payload::new(
+            b"x".to_vec(),
+            "text/plain",
+        )))),
     );
+    handle.set_property_write_handler(
+        "status",
+        StoredWrite(Arc::new(Mutex::new(Payload::new(
+            b"y".to_vec(),
+            "text/plain",
+        )))),
+    );
+    handle.set_property_observe_handler("status", struct_observe());
     handle.set_property_unobserve_handler("status", struct_unobserve());
     handle.set_action_handler("status", struct_action());
     handle.set_action_query_handler("status", struct_query());
@@ -424,8 +422,13 @@ async fn deviation_subscription_is_pull_queue_not_push_callback() {
 
     // read_property drives the fake ClientBinding (returns Ok); the shape
     // confirms the interaction surface returns Result (§9.2), not throws.
-    let result = handle.read_property("status", InteractionOptions::new()).await;
-    assert!(result.is_ok(), "interaction returns Result, not throws (§9.2)");
+    let result = handle
+        .read_property("status", InteractionOptions::new())
+        .await;
+    assert!(
+        result.is_ok(),
+        "interaction returns Result, not throws (§9.2)"
+    );
 }
 
 #[tokio::test]
@@ -447,7 +450,10 @@ async fn deviation_discoverer_is_trait_object() {
     // round-trip, so it stays async. v1 local-only returns NotImplemented.
     let url = clinkz_wot_td::AbsoluteUri::parse("urn:test:fetch").unwrap();
     let result = servient.fetch_td(&url).await;
-    assert!(result.is_err(), "v1 local-only: fetch_td of a remote URL fails (E6)");
+    assert!(
+        result.is_err(),
+        "v1 local-only: fetch_td of a remote URL fails (E6)"
+    );
 }
 
 #[tokio::test]

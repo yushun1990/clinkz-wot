@@ -7,7 +7,7 @@
 //! (a consumed Thing plus its resolved binding plan). [`LocalThing`] is retained
 //! as a produce-time TD affordance builder (audit F9).
 
-use alloc::{collections::BTreeMap, format, string::String, sync::Arc};
+use alloc::{collections::BTreeMap, string::String, sync::Arc};
 
 use clinkz_wot_td::{data_type::Operation, thing::Thing};
 
@@ -377,82 +377,6 @@ impl LocalThing {
     pub fn ensure_event_affordance(&self, name: &str) -> CoreResult<()> {
         ensure_affordance(AffordanceKind::Event, name, &self.thing.events)
     }
-
-    /// Adds a property affordance to the TD (Scripting API `addProperty`).
-    /// Returns `Err` if a property with the same name already exists.
-    pub fn add_property(
-        &mut self,
-        name: impl Into<String>,
-        property: clinkz_wot_td::affordance::PropertyAffordance,
-    ) -> CoreResult<()> {
-        let name = name.into();
-        let properties = self.thing.properties.get_or_insert_with(BTreeMap::new);
-        if properties.contains_key(&name) {
-            return Err(CoreError::InvalidInteraction(format!(
-                "Property '{}' already exists",
-                name
-            )));
-        }
-        properties.insert(name, property);
-        Ok(())
-    }
-
-    /// Removes a property affordance from the TD (Scripting API `removeProperty`).
-    pub fn remove_property(&mut self, name: &str) {
-        if let Some(properties) = &mut self.thing.properties {
-            properties.remove(name);
-        }
-    }
-
-    /// Adds an action affordance to the TD (Scripting API `addAction`).
-    pub fn add_action(
-        &mut self,
-        name: impl Into<String>,
-        action: clinkz_wot_td::affordance::ActionAffordance,
-    ) -> CoreResult<()> {
-        let name = name.into();
-        let actions = self.thing.actions.get_or_insert_with(BTreeMap::new);
-        if actions.contains_key(&name) {
-            return Err(CoreError::InvalidInteraction(format!(
-                "Action '{}' already exists",
-                name
-            )));
-        }
-        actions.insert(name, action);
-        Ok(())
-    }
-
-    /// Removes an action affordance from the TD.
-    pub fn remove_action(&mut self, name: &str) {
-        if let Some(actions) = &mut self.thing.actions {
-            actions.remove(name);
-        }
-    }
-
-    /// Adds an event affordance to the TD (Scripting API `addEvent`).
-    pub fn add_event(
-        &mut self,
-        name: impl Into<String>,
-        event: clinkz_wot_td::affordance::EventAffordance,
-    ) -> CoreResult<()> {
-        let name = name.into();
-        let events = self.thing.events.get_or_insert_with(BTreeMap::new);
-        if events.contains_key(&name) {
-            return Err(CoreError::InvalidInteraction(format!(
-                "Event '{}' already exists",
-                name
-            )));
-        }
-        events.insert(name, event);
-        Ok(())
-    }
-
-    /// Removes an event affordance from the TD.
-    pub fn remove_event(&mut self, name: &str) {
-        if let Some(events) = &mut self.thing.events {
-            events.remove(name);
-        }
-    }
 }
 
 fn ensure_affordance<T>(
@@ -513,14 +437,6 @@ impl ExposedThing {
     /// Returns the Thing Description.
     pub fn thing_description(&self) -> &Thing {
         self.local.thing_description()
-    }
-
-    /// Returns mutable access to the produce-time TD affordance builder.
-    ///
-    /// Pre-expose only: the affordance set is frozen after `expose()` (decision
-    /// 2). Handlers may still be attached/replaced post-expose (AD14).
-    pub fn local_mut(&mut self) -> &mut LocalThing {
-        &mut self.local
     }
 
     // --- property handler registration ------------------------------------
