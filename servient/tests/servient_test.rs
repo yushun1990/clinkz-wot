@@ -122,27 +122,23 @@ async fn produce_expose_registers_and_dispatches() {
     handle.set_property_read_handler("status", StoredRead(value.clone()));
     handle.expose().await.expect("expose");
 
-    // expose() registered the Thing on the fake binding.
     assert_eq!(fake_server.registered.lock().unwrap().len(), 1);
 
-    // Simulate a remote read: push an InboundRequest via the fan-in sender.
-    let sender = fake_server.sink.lock().unwrap().clone().expect("sink set");
+    // Simulate a remote read: dispatch directly (no driving loop needed —
+    // the binding or the test calls Dispatch::serve_request).
+    use clinkz_wot_core::Dispatch;
     let request = InboundRequest::new(
         ThingId::from("urn:test:lamp"),
         AffordanceTarget::Property("status".into()),
         Operation::ReadProperty,
         InteractionInput::empty(),
     );
-    sender.send(request).await.expect("send inbound");
-
-    // Drive one step: dispatches and replies via send_response.
-    servient.poll_serve().await.expect("poll_serve");
+    let response = servient.serve_request(request).await;
 
     // The handler's value reached the response.
-    let responses = fake_server.responses.lock().unwrap();
-    assert_eq!(responses.len(), 1);
-    let body = responses[0].output.data.as_ref().unwrap().body.as_ref();
+    let body = response.output.data.as_ref().unwrap().body.as_ref();
     assert_eq!(body, b"on");
+    assert!(response.error.is_none());
 }
 
 #[tokio::test]
