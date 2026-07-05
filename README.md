@@ -56,26 +56,68 @@ scripts/check-baseline.sh       # fmt + test + clippy + no_std + feature-matrix
 
 ## Engine Usage
 
-### 1. Build a Servient
+### 1. Implement a ServerBinding
+
+Each binding picks its dispatch model in `configure` — the engine doesn't
+mandate a single model:
 
 ```rust
-use clinkz_wot_servient::{ServientBuilder, ClientBindingFactory, Servient};
-use clinkz_wot_core::{ClientBinding, ServerBinding};
-use clinkz_wot_discovery::{Discoverer, InMemoryDirectory, LocalDiscoverer};
+use clinkz_wot_core::{
+    BindingContext, CoreError, InboundRequest, InboundResponse,
+    ServerBinding, ThingId,
+};
+use clinkz_wot_td::thing::Thing;
+
+struct MyServerBinding;
+
+impl ServerBinding for MyServerBinding {
+    /// One-shot setup: pick capabilities from the context.
+    /// Adding new capabilities = adding fields to BindingContext, not new
+    /// trait methods.
+    fn configure(&self, ctx: &BindingContext) {
+        // Option A: fan-in channel (sync callbacks, e.g. zenoh)
+        //   store ctx.fanin_sender and try_send from callbacks.
+        //
+        // Option B: direct dispatch (async handlers, e.g. HTTP/CoAP)
+        //   store ctx.dispatch and call serve_request(req).await.
+        //
+        // Option C: poll model (bare no_std)
+        //   ignore both; implement try_accept() instead.
+        //
+        // All bindings get ctx.event_broker for event fan-out.
+    }
+
+    fn send_response(&self, response: InboundResponse) {
+        // Map InboundResponse back to the protocol's reply.
+    }
+
+    fn register_thing(&self, thing_id: &ThingId, td: &Thing) -> Result<(), CoreError> {
+        // Declare all routes for this Thing (wholesale).
+        Ok(())
+    }
+
+    fn unregister_thing(&self, thing_id: &ThingId) {
+        // Remove all routes (idempotent).
+    }
+}
+```
+
+### 2. Build a Servient
+
+```rust
+use clinkz_wot_servient::{ServientBuilder, ClientBindingFactory};
+use clinkz_wot_core::ClientBinding;
 use alloc::{boxed::Box, sync::Arc};
 
-// A custom client binding factory (or use a provided one).
 struct MyClientFactory;
 impl ClientBindingFactory for MyClientFactory {
     fn build(&self) -> Box<dyn ClientBinding> {
-        // Return your async ClientBinding impl.
-        todo!()
+        todo!() // your async ClientBinding impl
     }
 }
 
-// Build the Servient.
 let servient = ServientBuilder::new()
-    .with_server_binding(my_server_binding)   // Arc<dyn ServerBinding>
+    .with_server_binding(Arc::new(MyServerBinding))
     .with_client_factory(Arc::new(MyClientFactory))
     // .with_discoverer(custom)  // optional; defaults to LocalDiscoverer
     // .with_fanin_capacity(256) // optional inbound fan-in capacity
@@ -83,11 +125,11 @@ let servient = ServientBuilder::new()
     .expect("build servient");
 ```
 
-`build()` constructs the bounded fan-in channel, injects `set_request_sink` +
-`set_event_broker` into every server binding, and defaults the discoverer to a
-`LocalDiscoverer` over a fresh `InMemoryDirectory`.
+`build()` assembles the Servient, then calls `binding.configure(&ctx)` once per
+binding with a `BindingContext` containing the event broker, fan-in sender,
+and dispatch handle. Each binding picks what it needs.
 
-### 2. Produce + Expose a Thing (Producer)
+### 3. Produce + Expose a Thing (Producer)
 
 ```rust
 use clinkz_wot_core::{InteractionInput, InteractionOutput, CoreError, PropertyReadHandler};
@@ -119,37 +161,37 @@ let value = handle.read_property("status", &InteractionInput::empty())?;
 handle.emit_event("overheat", payload)?;
 ```
 
-### 3. Drive the Inbound Loop
+### 4. Drive Inbound Requests
+
+**Bindings with sync callbacks (zenoh):** the Servient's driving loop drains the
+fan-in channel. Start it on std:
 
 ```rust
-// std (tokio): serve until shutdown.
 let shutdown = servient.shutdown_handle();
-tokio::spawn(async move {
-    servient.clone().serve().await;
-});
+tokio::spawn(async move { servient.clone().serve().await });
 
 // ... or step-by-step.
-servient.poll_serve().await?;  // dispatches ≤1 inbound request per call
+servient.poll_serve().await?;  // ≤1 request per call (AD6b)
 
-// Graceful shutdown.
 shutdown.shutdown();
 ```
 
-**Bare `no_std` super-loop** (no executor):
+**Bindings with async handlers (HTTP/CoAP):** no driving loop needed — the
+binding calls `dispatch.serve_request(req).await` directly inside its route
+handler. The transport's own concurrency model provides backpressure.
+
+**Bare `no_std` (no executor):** poll `try_accept` in a super-loop:
 
 ```rust
 loop {
-    let waker = noop_waker();
-    let mut cx = core::task::Context::from_waker(&waker);
     let _ = svc.poll_serve_once(&mut cx);  // ≤1 accept→dispatch→reply
-    // ... other super-loop work
+    // ... other super-loop work (sensor reads, etc.)
 }
 ```
 
-### 4. Consume a Remote Thing (Consumer)
+### 5. Consume a Remote Thing (Consumer)
 
 ```rust
-// consume() builds a ConsumedThing with fresh client bindings.
 let consumed = servient.consume(remote_td()).expect("consume");
 
 // All methods are async — they drive the real ClientBinding.
@@ -157,7 +199,7 @@ let output = consumed.read_property("status", InteractionOptions::new()).await?;
 let _ = consumed.invoke_action("toggle", InteractionOptions::new()).await?;
 ```
 
-### 5. Discover Things
+### 6. Discover Things
 
 ```rust
 use clinkz_wot_discovery::DiscoveryFilter;
@@ -171,7 +213,7 @@ while let Some(thing) = process.next().await? {
 }
 ```
 
-### 6. Destroy (Quiescing Teardown)
+### 7. Destroy (Quiescing Teardown)
 
 ```rust
 // destroy() is idempotent (AD27). Unregisters routes, drains in-flight,
