@@ -110,65 +110,44 @@ impl InboundResponse {
 /// binding self-pushes inbound requests into a bounded fan-in channel
 /// ([`set_request_sink`](Self::set_request_sink)); on `no_std` the driving loop
 /// polls [`try_accept`](Self::try_accept).
+/// All capabilities the Servient can inject into a binding at setup time.
+/// Each binding picks what it needs; new capabilities are added as fields
+/// without changing the [`ServerBinding`] trait.
+#[derive(Clone)]
+pub struct BindingContext {
+    /// Event fan-out broker for event/observable property publish.
+    pub event_broker: EventBroker,
+    /// Bounded fan-in sender (std only). `None` when the binding uses direct
+    /// dispatch or poll instead. Sync-callback bindings (zenoh) `try_send`
+    /// from their callbacks.
+    #[cfg(feature = "std")]
+    pub fanin_sender: Option<FanInSender<InboundRequest>>,
+    /// Direct-dispatch handle (async only). `None` on bare no_std or when the
+    /// binding doesn't use direct dispatch. Async-handler bindings (HTTP/CoAP)
+    /// call `serve_request(req).await` directly.
+    #[cfg(feature = "async")]
+    pub dispatch: Option<alloc::sync::Arc<dyn Dispatch>>,
+}
+
 pub trait ServerBinding: Send + Sync {
+    /// One-shot setup: the Servient passes a [`BindingContext`] containing all
+    /// available capabilities (event broker, fan-in sender, dispatch handle).
+    /// Each binding clones what it needs and ignores the rest. Default no-op.
+    fn configure(&self, _ctx: &BindingContext) {}
+
     /// Non-blocking drain of one currently-ready inbound request, or `None`.
-    ///
-    /// Default `None`: a `std`-only binding that self-pushes via
-    /// [`set_request_sink`](Self::set_request_sink) never has `try_accept`
-    /// called and need not override it. On `no_std` this is the polled accept
-    /// path (one request per tick, rotation cursor — see baseline §4.5/§7.2).
     fn try_accept(&self) -> Option<InboundRequest> {
         None
     }
 
     /// Sends a response back to the requester identified by the response's
-    /// [`CorrelationId`]. Required by AD9's overload-error-reply semantics
-    /// (`InboundRequest` carries no reply handle). No default — every binding
-    /// that accepts requests must implement it.
+    /// [`CorrelationId`].
     fn send_response(&self, response: InboundResponse);
 
-    /// Provides the shared [`EventBroker`] so the binding can register
-    /// [`PublisherSink`](crate::PublisherSink)s for event and observable
-    /// property fan-out during [`register_thing`](Self::register_thing).
-    ///
-    /// Default no-op for bindings without event publish.
-    fn set_event_broker(&self, _broker: EventBroker) {}
-
-    /// Hands the binding a clone of the bounded fan-in sender at registration
-    /// (`std` only — AD13). The binding `try_send`s inbound requests from its
-    /// **synchronous** transport callbacks (zenoh callbacks cannot `.await`).
-    /// On `no_std` there is no channel and the loop polls
-    /// [`try_accept`](Self::try_accept) instead.
-    ///
-    /// **Default no-op**: bindings that use direct dispatch (HTTP, CoAP —
-    /// async handlers that CAN `.await`) ignore the fan-in channel and dispatch
-    /// via [`set_dispatch`](Self::set_dispatch) instead. Only bindings with
-    /// sync callbacks that cannot block (zenoh) override this.
-    #[cfg(feature = "std")]
-    fn set_request_sink(&self, _sender: FanInSender<InboundRequest>) {}
-
-    /// Injects a [`Dispatch`] handle for **direct dispatch** (async feature).
-    /// Bindings whose transport provides async request handlers (HTTP/hyper,
-    /// CoAP) override this to store the handle and call
-    /// [`Dispatch::serve_request`] directly inside their handler — no fan-in
-    /// channel, no driving loop, zero extra hops. The transport's own
-    /// concurrency model (connection pool, thread pool) provides backpressure.
-    ///
-    /// **Default no-op**: bindings that use the fan-in/poll model (zenoh,
-    /// bare no_std `try_accept`) ignore this.
-    #[cfg(feature = "async")]
-    fn set_dispatch(&self, _dispatch: alloc::sync::Arc<dyn Dispatch>) {}
-
     /// Wholesale route registration for one Thing during `expose()`.
-    ///
-    /// Returns `Result<(), CoreError>` so the multi-binding rollback (E12/AD27)
-    /// can detect a binding `k+1` failure, `unregister_thing` the succeeded
-    /// `1..k`, and surface a fatal `Err` (AD38). A binding reports a structural
-    /// failure via a structured `CoreError`, never a free-form `String`.
     fn register_thing(&self, thing_id: &ThingId, td: &Thing) -> Result<(), CoreError>;
 
-    /// Wholesale route removal during `destroy()`. Returns `()` — `destroy()`
-    /// is idempotent (AD27/E13) and best-effort across bindings.
+    /// Wholesale route removal during `destroy()`.
     fn unregister_thing(&self, thing_id: &ThingId);
 }
 

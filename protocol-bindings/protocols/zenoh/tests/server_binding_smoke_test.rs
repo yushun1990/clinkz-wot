@@ -232,10 +232,14 @@ fn runtime_server_binding_event_publish_to_subscriber() {
     let server_binding = ZenohServerBinding::open(zenoh::Config::default()).unwrap();
     let session = server_binding.session().clone();
 
-    // Set the EventBroker *before* registering the thing so that publisher
-    // sinks are wired during register_thing.
+    // Configure the binding with an EventBroker *before* registering the thing
+    // so that publisher sinks are wired during register_thing.
     let broker = EventBroker::new();
-    server_binding.set_event_broker(broker.clone());
+    server_binding.configure(&clinkz_wot_core::BindingContext {
+        event_broker: broker.clone(),
+        fanin_sender: None,
+        dispatch: None,
+    });
 
     let td = test_td("urn:server:event");
     server_binding

@@ -7,8 +7,8 @@ use alloc::{boxed::Box, format, sync::Arc, vec::Vec};
 #[cfg(feature = "std")]
 use clinkz_wot_core::FanInSender;
 use clinkz_wot_core::{
-    ClientBinding, Dispatch, EventBroker, EventName, ExposedThing, InboundRequest,
-    InboundResponse, InteractionOutput, Payload, ServerBinding, ThingId, WotLock,
+    ClientBinding, Dispatch, EventBroker, EventName, ExposedThing, InboundRequest, InboundResponse,
+    InteractionOutput, Payload, ServerBinding, ThingId, WotLock,
 };
 use clinkz_wot_discovery::{Discoverer, DiscoveryFilter, ProcessState, ThingDiscoveryProcess};
 use clinkz_wot_td::{AbsoluteUri, thing::Thing};

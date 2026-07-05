@@ -99,17 +99,16 @@ impl ServientBuilder {
             Arc::new(inbound_rx),
         );
 
-        // THEN wire bindings — now we have the Servient for dispatch injection.
-        // Each binding picks its dispatch model:
-        //   - zenoh (sync callbacks): uses set_request_sink (fan-in channel).
-        //   - HTTP/CoAP (async handlers): uses set_dispatch (direct dispatch).
-        //   - Bare no_std: uses try_accept (poll model).
-        // All three are injected; each binding ignores what it doesn't use.
+        // THEN wire bindings — one configure call per binding with a context
+        // containing all available capabilities. Each binding picks what it needs.
         let dispatch: Arc<dyn clinkz_wot_core::Dispatch> = Arc::new(servient.clone());
+        let ctx = clinkz_wot_core::BindingContext {
+            event_broker: broker_for_wiring,
+            fanin_sender: Some(tx_for_wiring),
+            dispatch: Some(dispatch),
+        };
         for binding in bindings_for_wiring.iter() {
-            binding.set_event_broker(broker_for_wiring.clone());
-            binding.set_request_sink(tx_for_wiring.clone());
-            binding.set_dispatch(dispatch.clone());
+            binding.configure(&ctx);
         }
 
         Ok(servient)

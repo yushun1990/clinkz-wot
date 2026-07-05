@@ -36,8 +36,8 @@ use alloc::vec::Vec;
 
 use clinkz_wot_core::identity::CorrelationId;
 use clinkz_wot_core::{
-    AffordanceTarget, AuthMaterial, CoreError, EventBroker, FanInSender, InboundRequest,
-    InboundResponse, InteractionInput, Payload, PublisherSink, ServerBinding, ThingId,
+    AffordanceTarget, AuthMaterial, CoreError, EventBroker, InboundRequest, InboundResponse,
+    InteractionInput, Payload, PublisherSink, ServerBinding, ThingId,
 };
 use clinkz_wot_td::data_type::Operation;
 use clinkz_wot_td::form::Form;
@@ -474,20 +474,12 @@ impl ServerBinding for ZenohServerBinding {
         }
     }
 
-    fn set_event_broker(&self, broker: EventBroker) {
+    fn configure(&self, ctx: &clinkz_wot_core::BindingContext) {
         if let Ok(mut event_broker) = self.event_broker.lock() {
-            *event_broker = Some(broker);
+            *event_broker = Some(ctx.event_broker.clone());
         }
-    }
-
-    /// Stores the Servient's bounded fan-in sender (baseline §4.5 / AD13). The
-    /// zenoh callbacks currently self-push via the internal async channel; a
-    /// follow-up migrates them to this injected sender as the single buffer.
-    fn set_request_sink(&self, _sender: FanInSender<InboundRequest>) {
-        // TODO(P2 refinement): switch zenoh queryable/put-listener callbacks
-        // from the internal `async_tx` to this injected `FanInSender` so the
-        // Servient owns the one bounded fan-in channel (AD6a: no binding-
-        // internal queue).
+        // TODO(P2 refinement): switch zenoh callbacks from the internal
+        // async_tx to ctx.fanin_sender (AD6a: no binding-internal queue).
     }
 }
 

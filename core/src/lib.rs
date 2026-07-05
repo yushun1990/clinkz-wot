@@ -26,11 +26,13 @@ pub use event::{
     SubscriptionSender,
 };
 pub use identity::{CorrelationId, ThingId};
-#[cfg(feature = "std")]
-pub use inbound::FanInSender;
-pub use inbound::{InboundDispatcher, InboundRequest, InboundResponse, ServerBinding};
 #[cfg(feature = "async")]
 pub use inbound::Dispatch;
+#[cfg(feature = "std")]
+pub use inbound::FanInSender;
+pub use inbound::{
+    BindingContext, InboundDispatcher, InboundRequest, InboundResponse, ServerBinding,
+};
 pub use interaction::{
     AcceptHint, InteractionInput, InteractionOptions, InteractionOutput, InteractionStatus,
     MediaType,

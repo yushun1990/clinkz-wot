@@ -7,9 +7,9 @@ use std::sync::{Arc, Mutex};
 
 use async_trait::async_trait;
 use clinkz_wot_core::{
-    AffordanceTarget, BindingRequest, ClientBinding, CoreError, EventBroker, FanInSender,
-    InboundRequest, InboundResponse, InteractionInput, InteractionOptions, InteractionOutput,
-    Payload, PropertyReadHandler, ServerBinding, ThingId,
+    AffordanceTarget, BindingRequest, ClientBinding, CoreError, FanInSender, InboundRequest,
+    InboundResponse, InteractionInput, InteractionOptions, InteractionOutput, Payload,
+    PropertyReadHandler, ServerBinding, ThingId,
 };
 use clinkz_wot_servient::{ClientBindingFactory, ServientBuilder};
 use clinkz_wot_td::{
@@ -29,15 +29,16 @@ struct FakeServer {
 }
 
 impl ServerBinding for FakeServer {
+    fn configure(&self, ctx: &clinkz_wot_core::BindingContext) {
+        if let Some(sender) = &ctx.fanin_sender {
+            *self.sink.lock().unwrap() = Some(sender.clone());
+        }
+    }
     fn try_accept(&self) -> Option<InboundRequest> {
         None
     }
     fn send_response(&self, response: InboundResponse) {
         self.responses.lock().unwrap().push(response);
-    }
-    fn set_event_broker(&self, _broker: EventBroker) {}
-    fn set_request_sink(&self, sender: FanInSender<InboundRequest>) {
-        *self.sink.lock().unwrap() = Some(sender);
     }
     fn register_thing(&self, thing_id: &ThingId, _td: &Thing) -> Result<(), CoreError> {
         self.registered
