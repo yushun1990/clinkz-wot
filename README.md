@@ -56,49 +56,69 @@ scripts/check-baseline.sh       # fmt + test + clippy + no_std + feature-matrix
 
 ## Engine Usage
 
+### Architecture: who does what
+
+```
+┌─────────────────────────────────────────────────────┐
+│                    Servient                          │
+│  produce / consume / discover / fetch_td             │
+│  expose / destroy (lifecycle)                        │
+│  dispatch(req) → handler → response    ← 唯一入口    │
+│  (不关心谁来调、怎么调)                                │
+└───────────────────┬─────────────────────────────────┘
+                    │ Dispatch::serve_request(req).await
+                    │
+     ┌──────────────┼──────────────────┐
+     │              │                  │
+ zenoh binding   HTTP/CoAP binding   no_std binding
+     │              │                  │
+ 自己跑 draining  route handler       super-loop
+ task 从 channel  里直接调             poll try_accept
+ drain → dispatch  serve_request       → dispatch
+ → send_response                      → send_response
+```
+
 ### 1. Implement a ServerBinding
 
-Each binding picks its dispatch model in `configure` — the engine doesn't
-mandate a single model:
+每个 binding 在 `configure` 里选择自己的 dispatch 模式：
 
 ```rust
 use clinkz_wot_core::{
-    BindingContext, CoreError, InboundRequest, InboundResponse,
+    BindingContext, CoreError, Dispatch, InboundRequest, InboundResponse,
     ServerBinding, ThingId,
 };
 use clinkz_wot_td::thing::Thing;
+use alloc::sync::Arc;
 
-struct MyServerBinding;
+struct MyServerBinding {
+    // 按需存储 — 不是全部都要
+    dispatch: Option<Arc<dyn Dispatch>>,
+}
 
 impl ServerBinding for MyServerBinding {
-    /// One-shot setup: pick capabilities from the context.
-    /// Adding new capabilities = adding fields to BindingContext, not new
-    /// trait methods.
     fn configure(&self, ctx: &BindingContext) {
-        // Option A: fan-in channel (sync callbacks, e.g. zenoh)
-        //   store ctx.fanin_sender and try_send from callbacks.
+        // 从 context 里拿需要的 capability。
+        // 新增 capability = 给 BindingContext 加字段，不改 trait。
         //
-        // Option B: direct dispatch (async handlers, e.g. HTTP/CoAP)
-        //   store ctx.dispatch and call serve_request(req).await.
+        // 直派发模式 (HTTP/CoAP async handler):
+        //   self.dispatch = ctx.dispatch.clone();
         //
-        // Option C: poll model (bare no_std)
-        //   ignore both; implement try_accept() instead.
+        // fan-in 模式 (zenoh sync callback):
+        //   self.fanin = ctx.fanin_sender.clone();
         //
-        // All bindings get ctx.event_broker for event fan-out.
+        // poll 模式 (bare no_std):
+        //   什么都不存; 实现 try_accept().
     }
 
     fn send_response(&self, response: InboundResponse) {
-        // Map InboundResponse back to the protocol's reply.
+        // 把 InboundResponse 映射回协议回复。
     }
 
     fn register_thing(&self, thing_id: &ThingId, td: &Thing) -> Result<(), CoreError> {
-        // Declare all routes for this Thing (wholesale).
         Ok(())
     }
 
-    fn unregister_thing(&self, thing_id: &ThingId) {
-        // Remove all routes (idempotent).
-    }
+    fn unregister_thing(&self, thing_id: &ThingId) {}
 }
 ```
 
@@ -117,17 +137,16 @@ impl ClientBindingFactory for MyClientFactory {
 }
 
 let servient = ServientBuilder::new()
-    .with_server_binding(Arc::new(MyServerBinding))
+    .with_server_binding(Arc::new(MyServerBinding { dispatch: None }))
     .with_client_factory(Arc::new(MyClientFactory))
     // .with_discoverer(custom)  // optional; defaults to LocalDiscoverer
-    // .with_fanin_capacity(256) // optional inbound fan-in capacity
     .build()
     .expect("build servient");
 ```
 
-`build()` assembles the Servient, then calls `binding.configure(&ctx)` once per
-binding with a `BindingContext` containing the event broker, fan-in sender,
-and dispatch handle. Each binding picks what it needs.
+`build()` 组装 Servient，然后对每个 binding 调一次 `configure(&ctx)`，
+传入 `BindingContext { event_broker, dispatch, fanin_sender }`。每个 binding
+按需取用。
 
 ### 3. Produce + Expose a Thing (Producer)
 
@@ -143,49 +162,64 @@ impl PropertyReadHandler for StatusRead {
     }
 }
 
-// produce() creates a draft handle (not yet remotely servable).
+// produce() 创建 draft handle（尚未可远程访问）。
 let handle = servient.produce(lamp_td()).expect("produce");
 
-// Attach handlers (replaceable throughout the lifetime — AD14).
+// 挂载 handler（生命周期内可随时替换 — AD14）。
 handle.set_property_read_handler("status", StatusRead);
-// handle.set_property_write_handler("status", ...);
-// handle.set_action_handler("toggle", ...);
-// handle.set_event_subscribe_handler("overheat", ...);
 
-// expose() registers routes on all server bindings + inserts into the
-// servable registry. TD is frozen after this.
+// expose() 在所有 server binding 上注册路由 + 插入 servable 注册表。
+// TD 在此后冻结。
 handle.expose().await.expect("expose");
 
-// Local server-side interactions.
+// 本地服务端交互。
 let value = handle.read_property("status", &InteractionInput::empty())?;
 handle.emit_event("overheat", payload)?;
 ```
 
-### 4. Drive Inbound Requests
+### 4. Dispatch — 由 binding 驱动，不是 Servient
 
-**Bindings with sync callbacks (zenoh):** the Servient's driving loop drains the
-fan-in channel. Start it on std:
+**Servient 不跑循环。** 它只暴露 `Dispatch::serve_request(req).await`。
+每个 binding 自己决定怎么调它：
+
+**zenoh binding（sync 回调）** — binding 自己 owns channel + draining task：
 
 ```rust
-let shutdown = servient.shutdown_handle();
-tokio::spawn(async move { servient.clone().serve().await });
-
-// ... or step-by-step.
-servient.poll_serve().await?;  // ≤1 request per call (AD6b)
-
-shutdown.shutdown();
+// binding::configure 里 spawn 一个 draining task:
+fn configure(&self, ctx: &BindingContext) {
+    let dispatch = ctx.dispatch.clone().expect("dispatch");
+    let rx = self.internal_rx.clone();  // binding 自己的 channel
+    tokio::spawn(async move {
+        while let Ok(req) = rx.recv().await {
+            let resp = dispatch.serve_request(req).await;
+            // binding 自己负责把 resp 发回客户端
+        }
+    });
+}
+// zenoh 回调 (sync): try_send(req) 到 binding 自己的 channel
 ```
 
-**Bindings with async handlers (HTTP/CoAP):** no driving loop needed — the
-binding calls `dispatch.serve_request(req).await` directly inside its route
-handler. The transport's own concurrency model provides backpressure.
+**HTTP/CoAP binding（async handler）** — route handler 里直接调：
 
-**Bare `no_std` (no executor):** poll `try_accept` in a super-loop:
+```rust
+// HTTP route handler:
+async fn handle_read(req: Request) -> Response {
+    let inbound = build_inbound_request(req);
+    let resp = self.dispatch.serve_request(inbound).await;
+    resp.into_http()
+}
+// hyper 连接池提供 backpressure，不需要 channel、不需要循环
+```
+
+**bare no_std（无 executor）** — super-loop 轮询：
 
 ```rust
 loop {
-    let _ = svc.poll_serve_once(&mut cx);  // ≤1 accept→dispatch→reply
-    // ... other super-loop work (sensor reads, etc.)
+    if let Some(req) = binding.try_accept() {
+        let resp = dispatch.serve_request(req).await;  // 或 sync dispatch
+        binding.send_response(resp);
+    }
+    // ... 其他 super-loop 工作
 }
 ```
 
@@ -194,7 +228,7 @@ loop {
 ```rust
 let consumed = servient.consume(remote_td()).expect("consume");
 
-// All methods are async — they drive the real ClientBinding.
+// 所有方法是 async — 驱动真实 ClientBinding。
 let output = consumed.read_property("status", InteractionOptions::new()).await?;
 let _ = consumed.invoke_action("toggle", InteractionOptions::new()).await?;
 ```
@@ -204,10 +238,10 @@ let _ = consumed.invoke_action("toggle", InteractionOptions::new()).await?;
 ```rust
 use clinkz_wot_discovery::DiscoveryFilter;
 
-// discover() is synchronous and returns a lazy process (AD10).
+// discover() 同步返回一个惰性 process（AD10）。
 let mut process = servient.discover(DiscoveryFilter::all());
 
-// Real directory work happens inside the first next().
+// 真正的目录工作发生在第一次 next() 里。
 while let Some(thing) = process.next().await? {
     println!("found: {:?}", thing.id);
 }
@@ -216,8 +250,7 @@ while let Some(thing) = process.next().await? {
 ### 7. Destroy (Quiescing Teardown)
 
 ```rust
-// destroy() is idempotent (AD27). Unregisters routes, drains in-flight,
-// removes the registry entry.
+// destroy() 幂等（AD27）。注销路由、drain 在途、移除注册表条目。
 handle.destroy().await.expect("destroy");
 ```
 
