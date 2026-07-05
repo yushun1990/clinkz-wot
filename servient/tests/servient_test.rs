@@ -182,3 +182,225 @@ async fn destroy_unregisters() {
     // Idempotent destroy (AD27/E13): second destroy is a no-op Ok.
     handle.destroy().await.expect("idempotent destroy");
 }
+
+// --- Scripting API conformance map expansion (P4 §4.1) ---
+
+#[tokio::test]
+async fn producer_write_property_local() {
+    let fake_server = Arc::new(FakeServer::default());
+    let servient = ServientBuilder::new()
+        .with_server_binding(fake_server)
+        .with_client_factory(Arc::new(EchoClientFactory))
+        .build()
+        .expect("build");
+
+    let value = Arc::new(Mutex::new(Payload::new(b"off".to_vec(), "text/plain")));
+    let handle = servient.produce(lamp_td()).expect("produce");
+    handle.set_property_write_handler("status", StoredWrite(value.clone()));
+    handle.expose().await.expect("expose");
+
+    let mut input =
+        InteractionInput::with_data(Payload::new(b"on".to_vec(), "text/plain"));
+    handle.write_property("status", &mut input).expect("write");
+    assert_eq!(
+        value.lock().unwrap().body.as_ref(),
+        b"on"
+    );
+}
+
+struct StoredWrite(Arc<Mutex<Payload>>);
+impl clinkz_wot_core::PropertyWriteHandler for StoredWrite {
+    fn write(
+        &self,
+        input: &mut clinkz_wot_core::InteractionInput,
+    ) -> Result<InteractionOutput, CoreError> {
+        *self.0.lock().unwrap() = input.data.take().unwrap();
+        Ok(InteractionOutput::empty())
+    }
+}
+
+#[tokio::test]
+async fn missing_handler_on_exposed_but_unwired_affordance() {
+    let fake_server = Arc::new(FakeServer::default());
+    let servient = ServientBuilder::new()
+        .with_server_binding(fake_server)
+        .with_client_factory(Arc::new(EchoClientFactory))
+        .build()
+        .expect("build");
+
+    let handle = servient.produce(lamp_td()).expect("produce");
+    handle.expose().await.expect("expose");
+
+    // No read handler set → MissingHandler (AD14: designed-in semantic for
+    // exposed-but-unwired).
+    let err = handle
+        .read_property("status", &InteractionInput::empty())
+        .unwrap_err();
+    assert!(matches!(
+        err,
+        CoreError::MissingHandler { .. }
+    ));
+}
+
+#[tokio::test]
+async fn producer_emit_event_succeeds() {
+    let fake_server = Arc::new(FakeServer::default());
+    let servient = ServientBuilder::new()
+        .with_server_binding(fake_server)
+        .with_client_factory(Arc::new(EchoClientFactory))
+        .build()
+        .expect("build");
+
+    let handle = servient.produce(lamp_td()).expect("produce");
+    handle.expose().await.expect("expose");
+
+    // emit_event publishes via the broker; succeeds even with no subscribers
+    // (no-op fan-out).
+    handle
+        .emit_event("status", Payload::new(b"change".to_vec(), "text/plain"))
+        .expect("emit");
+    handle
+        .emit_property_change("status", Payload::new(b"v2".to_vec(), "text/plain"))
+        .expect("emit change");
+}
+
+#[tokio::test]
+async fn discover_returns_lazy_process() {
+    let fake_server = Arc::new(FakeServer::default());
+    let servient = ServientBuilder::new()
+        .with_server_binding(fake_server)
+        .with_client_factory(Arc::new(EchoClientFactory))
+        .build()
+        .expect("build");
+
+    // discover() is sync and returns immediately (AD10). With an empty
+    // directory, the first next() yields None.
+    let mut process = servient.discover(clinkz_wot_discovery::DiscoveryFilter::all());
+    let result = process.next().await.expect("next should not error");
+    assert!(result.is_none(), "empty directory → clean end");
+}
+
+#[tokio::test]
+async fn all_producer_handler_setters_compile_and_register() {
+    // Smoke-test: every set_*_handler variant compiles and the handler is
+    // registered (read dispatches successfully; others are no-ops if unwired).
+    let fake_server = Arc::new(FakeServer::default());
+    let servient = ServientBuilder::new()
+        .with_server_binding(fake_server)
+        .with_client_factory(Arc::new(EchoClientFactory))
+        .build()
+        .expect("build");
+
+    let handle = servient.produce(lamp_td()).expect("produce");
+    handle.set_property_read_handler("status", StoredRead(Arc::new(Mutex::new(
+        Payload::new(b"x".to_vec(), "text/plain"),
+    ))));
+    handle.set_property_write_handler("status", StoredWrite(Arc::new(Mutex::new(
+        Payload::new(b"y".to_vec(), "text/plain"),
+    ))));
+    handle.set_property_observe_handler(
+        "status",
+        struct_observe(),
+    );
+    handle.set_property_unobserve_handler("status", struct_unobserve());
+    handle.set_action_handler("status", struct_action());
+    handle.set_action_query_handler("status", struct_query());
+    handle.set_action_cancel_handler("status", struct_cancel());
+    handle.set_event_subscribe_handler("status", struct_subscribe());
+    handle.set_event_unsubscribe_handler("status", struct_unsubscribe());
+    handle.expose().await.expect("expose");
+
+    // Read succeeds (handler was set).
+    let out = handle
+        .read_property("status", &InteractionInput::empty())
+        .expect("read");
+    assert_eq!(out.data.unwrap().body.as_ref(), b"x");
+}
+
+// Trivial handler stubs for the compile-and-register smoke test.
+fn struct_observe() -> impl clinkz_wot_core::PropertyObserveHandler {
+    struct H;
+    impl clinkz_wot_core::PropertyObserveHandler for H {
+        fn observe(
+            &self,
+            _: &clinkz_wot_core::InteractionInput,
+            _push: &mut dyn FnMut(Payload) -> Result<(), CoreError>,
+        ) -> Result<InteractionOutput, CoreError> {
+            Ok(InteractionOutput::empty())
+        }
+    }
+    H
+}
+fn struct_unobserve() -> impl clinkz_wot_core::PropertyUnobserveHandler {
+    struct H;
+    impl clinkz_wot_core::PropertyUnobserveHandler for H {
+        fn unobserve(
+            &self,
+            _: &clinkz_wot_core::InteractionInput,
+        ) -> Result<InteractionOutput, CoreError> {
+            Ok(InteractionOutput::empty())
+        }
+    }
+    H
+}
+fn struct_action() -> impl clinkz_wot_core::ActionHandler {
+    struct H;
+    impl clinkz_wot_core::ActionHandler for H {
+        fn invoke(
+            &self,
+            _: &mut clinkz_wot_core::InteractionInput,
+        ) -> Result<InteractionOutput, CoreError> {
+            Ok(InteractionOutput::empty())
+        }
+    }
+    H
+}
+fn struct_query() -> impl clinkz_wot_core::ActionQueryHandler {
+    struct H;
+    impl clinkz_wot_core::ActionQueryHandler for H {
+        fn query(
+            &self,
+            _: &clinkz_wot_core::InteractionInput,
+        ) -> Result<InteractionOutput, CoreError> {
+            Ok(InteractionOutput::empty())
+        }
+    }
+    H
+}
+fn struct_cancel() -> impl clinkz_wot_core::ActionCancelHandler {
+    struct H;
+    impl clinkz_wot_core::ActionCancelHandler for H {
+        fn cancel(
+            &self,
+            _: &mut clinkz_wot_core::InteractionInput,
+        ) -> Result<InteractionOutput, CoreError> {
+            Ok(InteractionOutput::empty())
+        }
+    }
+    H
+}
+fn struct_subscribe() -> impl clinkz_wot_core::EventSubscribeHandler {
+    struct H;
+    impl clinkz_wot_core::EventSubscribeHandler for H {
+        fn subscribe(
+            &self,
+            _: &clinkz_wot_core::InteractionInput,
+            _push: &mut dyn FnMut(Payload) -> Result<(), CoreError>,
+        ) -> Result<InteractionOutput, CoreError> {
+            Ok(InteractionOutput::empty())
+        }
+    }
+    H
+}
+fn struct_unsubscribe() -> impl clinkz_wot_core::EventUnsubscribeHandler {
+    struct H;
+    impl clinkz_wot_core::EventUnsubscribeHandler for H {
+        fn unsubscribe(
+            &self,
+            _: &clinkz_wot_core::InteractionInput,
+        ) -> Result<InteractionOutput, CoreError> {
+            Ok(InteractionOutput::empty())
+        }
+    }
+    H
+}
