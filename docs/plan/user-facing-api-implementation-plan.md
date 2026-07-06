@@ -16,7 +16,10 @@
 | **P0** | `ProtocolBinding` facade lands | No | ✅ landed |
 | **P1** | Old binding-config surface retired | Yes (cleanup only) | ✅ landed |
 | **P2** | Consumer-side handle gaps closed | Additive | ✅ landed |
-| **P3** | Exposed-side handle gaps closed + polish | Additive | pending |
+| **P3** | Exposed-side handle gaps closed + polish | Additive | ✅ landed |
+
+All four phases of the user-facing API migration landed. Remaining work is
+the deferred items in §"Out of Scope".
 
 P0 and P1 are serial (P1 depends on P0 trait). P2 and P3 are independent of
 each other and may run in parallel after P1.

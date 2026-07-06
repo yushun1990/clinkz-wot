@@ -175,6 +175,34 @@ impl InteractionOptions {
     pub fn new() -> Self {
         Self::default()
     }
+
+    /// Convenience constructor that pre-seeds `data`. Equivalent to
+    /// `Self::new()` followed by setting the `data` field, but reads more
+    /// naturally at call sites:
+    ///
+    /// ```ignore
+    /// handle.write_property("on", InteractionOptions::with_data(payload)).await?;
+    /// ```
+    pub fn with_data(data: Payload) -> Self {
+        Self {
+            data: Some(data),
+            ..Self::default()
+        }
+    }
+
+    /// Builder-style setter for a single URI-template variable. Chains:
+    ///
+    /// ```ignore
+    /// let opts = InteractionOptions::with_uri_variable("brightness", "75")
+    ///     .with_uri_variable("zone", "north");
+    /// ```
+    ///
+    /// Consumes and returns self; for non-chaining use, set
+    /// [`uri_variables`](Self::uri_variables) directly.
+    pub fn with_uri_variable(mut self, key: &str, value: &str) -> Self {
+        self.uri_variables.insert(key.into(), value.into());
+        self
+    }
 }
 
 /// Completion status of an interaction (baseline §4.3 / AD21).

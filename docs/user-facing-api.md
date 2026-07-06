@@ -698,9 +698,9 @@ requires `async`.
 | `with_server_binding` / `with_client_factory` | `pub` | deleted (no in-tree caller post-migration) | ✅ P1 |
 | `ClientBindingFactory` re-exported from servient | yes (`lib.rs:34`) | removed from re-exports | ✅ P1 |
 | `ConsumedThingHandle` streaming ops | absent | 8 methods added (§6.1) | ✅ P2 |
-| `ExposedThingHandle` async setters | absent | 9 `set_async_*` added (§6.2) | ⏳ P3 |
-| `ExposedThingHandle` local dispatch | 3 ops (`read/write/invoke`) | 9 ops (sync + 9 `_async`) (§6.2) | ⏳ P3 |
-| `InteractionOptions::with_data` / `with_uri_variable` | bare fields only | builder conveniences added | ⏳ P3 |
+| `ExposedThingHandle` async setters | absent | 9 `set_async_*` added (§6.2) | ✅ P3 |
+| `ExposedThingHandle` local dispatch | 3 ops (`read/write/invoke`) | 9 ops (sync + 9 `_async`) (§6.2) | ✅ P3 |
+| `InteractionOptions::with_data` / `with_uri_variable` | bare fields only | builder conveniences added | ✅ P3 |
 | Unified facade error tree | split across 4 enums | deferred to follow-up (§9.4) | — |
 
 ## 12. Open Questions (deferred, not blocking v0.1)

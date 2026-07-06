@@ -221,3 +221,30 @@ silent on the merged-stream shape.
 `subscribe_all_events` is fail-fast: if any declared event has no compatible
 form or matching binding, it returns `UnsupportedOperation` and opens no
 subscriptions. Partial-subscribe semantics are explicitly out of scope for v0.1.
+
+### P3 deviations
+
+The P3 expansion of `ExposedThingHandle` (Scripting API §7) introduces one
+recorded deviation:
+
+1. **Sync local dispatch refuses async handlers.** When a sync local-dispatch
+   method on `ExposedThingHandle` (`read_property`, `write_property`,
+   `invoke_action`, `query_action`, `cancel_action`, `observe_property`,
+   `unobserve_property`, `subscribe_event`, `unsubscribe_event`) is invoked
+   against an affordance whose currently-registered handler is the async
+   flavor (registered via `set_async_*`), the method returns
+   `CoreError::MissingHandler`. The async path must be used (`*_async`).
+   Rationale: `WotLock::with` is a sync closure that cannot host an `.await`;
+   bridging to async would require either holding the lock guard across the
+   await (incompatible with std's `!Send` `RwLockReadGuard`) or boxing the
+   future (heap overhead on every sync call). The split keeps sync dispatch
+   allocation-free and surfaces the mismatch as a typed error rather than
+   silent behavior. Callers who register async handlers must call the
+   `*_async` variant.
+
+All 9 async dispatchers (`read_property_async` etc.) drive both sync and
+async handlers transparently: a sync handler runs inline (no `.await`),
+an async handler is awaited. The dispatch path locks the slot only long
+enough to clone the handler `Arc` out, then drops the lock before the
+`.await`, keeping critical sections short and never holding a guard across
+an await boundary.

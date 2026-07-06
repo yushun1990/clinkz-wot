@@ -11,11 +11,18 @@ use alloc::{
 };
 
 use clinkz_wot_core::{
-    ActionCancelHandler, ActionHandler, ActionQueryHandler, AffordanceTarget, ConsumedThing,
-    CoreError, CoreResult, EventName, EventStream, EventSubscribeHandler, EventUnsubscribeHandler,
-    InteractionInput, InteractionOptions, InteractionOutput, Payload, PropertyObserveHandler,
-    PropertyReadHandler, PropertyUnobserveHandler, PropertyWriteHandler, Subscription,
-    SubscriptionGuard, ThingId, WotLock,
+    ActionCancelHandler, ActionHandler, ActionQueryHandler, AffordanceTarget, CancelSlot,
+    ConsumedThing, CoreError, CoreResult, EventName, EventStream, EventSubscribeHandler,
+    EventUnsubscribeHandler, InteractionInput, InteractionOptions, InteractionOutput, InvokeSlot,
+    ObserveSlot, Payload, PropertyObserveHandler, PropertyReadHandler, PropertyUnobserveHandler,
+    PropertyWriteHandler, PushFn, QuerySlot, ReadSlot, SubscribeSlot, Subscription,
+    SubscriptionGuard, ThingId, UnobserveSlot, UnsubscribeSlot, WotLock, WriteSlot,
+};
+#[cfg(feature = "async")]
+use clinkz_wot_core::{
+    AsyncActionCancelHandler, AsyncActionHandler, AsyncActionQueryHandler, AsyncPropertyObserveHandler,
+    AsyncPropertyReadHandler, AsyncPropertyUnobserveHandler, AsyncPropertyWriteHandler,
+    AsyncEventSubscribeHandler, AsyncEventUnsubscribeHandler,
 };
 use clinkz_wot_td::{data_type::Operation, thing::Thing};
 
@@ -142,6 +149,105 @@ impl ExposedThingHandle {
             .with(|s| s.thing.set_event_unsubscribe_handler(name, handler));
     }
 
+    // --- async handler setters (mirror the sync set; for I/O-bound handlers) ---
+    //
+    // Both flavors registerable on the same handle. Per-affordance the last
+    // setter wins (the underlying `core::ExposedThing` stores handlers as
+    // `Option<XSlot>` where `XSlot` is a `Sync(..) | Async(..)` enum, last
+    // write replaces). Gated on `#[cfg(feature = "async")]`.
+
+    /// Registers an async property-read handler for `name` (replaces any
+    /// prior handler, sync or async).
+    #[cfg(feature = "async")]
+    pub fn set_async_property_read_handler(
+        &self,
+        name: impl Into<alloc::string::String>,
+        handler: impl AsyncPropertyReadHandler + 'static,
+    ) {
+        self.slot
+            .with(|s| s.thing.set_async_property_read_handler(name, handler));
+    }
+
+    #[cfg(feature = "async")]
+    pub fn set_async_property_write_handler(
+        &self,
+        name: impl Into<alloc::string::String>,
+        handler: impl AsyncPropertyWriteHandler + 'static,
+    ) {
+        self.slot
+            .with(|s| s.thing.set_async_property_write_handler(name, handler));
+    }
+
+    #[cfg(feature = "async")]
+    pub fn set_async_property_observe_handler(
+        &self,
+        name: impl Into<alloc::string::String>,
+        handler: impl AsyncPropertyObserveHandler + 'static,
+    ) {
+        self.slot
+            .with(|s| s.thing.set_async_property_observe_handler(name, handler));
+    }
+
+    #[cfg(feature = "async")]
+    pub fn set_async_property_unobserve_handler(
+        &self,
+        name: impl Into<alloc::string::String>,
+        handler: impl AsyncPropertyUnobserveHandler + 'static,
+    ) {
+        self.slot
+            .with(|s| s.thing.set_async_property_unobserve_handler(name, handler));
+    }
+
+    #[cfg(feature = "async")]
+    pub fn set_async_action_handler(
+        &self,
+        name: impl Into<alloc::string::String>,
+        handler: impl AsyncActionHandler + 'static,
+    ) {
+        self.slot
+            .with(|s| s.thing.set_async_action_handler(name, handler));
+    }
+
+    #[cfg(feature = "async")]
+    pub fn set_async_action_query_handler(
+        &self,
+        name: impl Into<alloc::string::String>,
+        handler: impl AsyncActionQueryHandler + 'static,
+    ) {
+        self.slot
+            .with(|s| s.thing.set_async_action_query_handler(name, handler));
+    }
+
+    #[cfg(feature = "async")]
+    pub fn set_async_action_cancel_handler(
+        &self,
+        name: impl Into<alloc::string::String>,
+        handler: impl AsyncActionCancelHandler + 'static,
+    ) {
+        self.slot
+            .with(|s| s.thing.set_async_action_cancel_handler(name, handler));
+    }
+
+    #[cfg(feature = "async")]
+    pub fn set_async_event_subscribe_handler(
+        &self,
+        name: impl Into<alloc::string::String>,
+        handler: impl AsyncEventSubscribeHandler + 'static,
+    ) {
+        self.slot
+            .with(|s| s.thing.set_async_event_subscribe_handler(name, handler));
+    }
+
+    #[cfg(feature = "async")]
+    pub fn set_async_event_unsubscribe_handler(
+        &self,
+        name: impl Into<alloc::string::String>,
+        handler: impl AsyncEventUnsubscribeHandler + 'static,
+    ) {
+        self.slot
+            .with(|s| s.thing.set_async_event_unsubscribe_handler(name, handler));
+    }
+
     // --- lifecycle ---
 
     /// Registers routes on every server binding, inserts into the servable
@@ -189,6 +295,253 @@ impl ExposedThingHandle {
         self.slot.with(|s| s.thing.invoke_action(name, input))
     }
 
+    /// Queries an action's state locally (TD 1.1 `queryaction`). Returns
+    /// `MissingHandler` when no query handler is registered for `name` or
+    /// when only an async handler is registered (sync dispatch cannot drive
+    /// async handlers — use [`Self::query_action_async`] for those).
+    pub fn query_action(
+        &self,
+        name: &str,
+        input: &InteractionInput,
+    ) -> CoreResult<InteractionOutput> {
+        self.slot.with_read(|s| s.thing.query_action(name, input))
+    }
+
+    /// Cancels an in-flight action locally (TD 1.1 `cancelaction`). Returns
+    /// `MissingHandler` for the same reasons as [`Self::query_action`].
+    pub fn cancel_action(
+        &self,
+        name: &str,
+        input: &mut InteractionInput,
+    ) -> CoreResult<InteractionOutput> {
+        self.slot.with(|s| s.thing.cancel_action(name, input))
+    }
+
+    /// Triggers the observe handler locally, fanning its first push out via
+    /// `push`. Returns `MissingHandler` for the same reasons as
+    /// [`Self::query_action`].
+    pub fn observe_property(
+        &self,
+        name: &str,
+        input: &InteractionInput,
+        push: PushFn<'_>,
+    ) -> CoreResult<InteractionOutput> {
+        self.slot
+            .with_read(|s| s.thing.observe_property(name, input, push))
+    }
+
+    /// Triggers the unobserve handler locally.
+    pub fn unobserve_property(
+        &self,
+        name: &str,
+        input: &InteractionInput,
+    ) -> CoreResult<InteractionOutput> {
+        self.slot.with_read(|s| s.thing.unobserve_property(name, input))
+    }
+
+    /// Triggers the event subscribe handler locally.
+    pub fn subscribe_event(
+        &self,
+        name: &str,
+        input: &InteractionInput,
+        push: PushFn<'_>,
+    ) -> CoreResult<InteractionOutput> {
+        self.slot
+            .with_read(|s| s.thing.subscribe_event(name, input, push))
+    }
+
+    /// Triggers the event unsubscribe handler locally.
+    pub fn unsubscribe_event(
+        &self,
+        name: &str,
+        input: &InteractionInput,
+    ) -> CoreResult<InteractionOutput> {
+        self.slot
+            .with_read(|s| s.thing.unsubscribe_event(name, input))
+    }
+
+    // --- async local dispatch (drives sync OR async handlers) ---
+    //
+    // For each op, lock the slot, clone the handler Arc out, drop the lock,
+    // and `.await` outside the critical section. The `WotLock::with_read`
+    // closure is sync so it cannot host an `.await` itself; cloning the Arc
+    // out keeps the lock guard's scope short. Sync handlers run inline
+    // inside the closure; async handlers run after the lock drops.
+
+    /// Async local read; drives sync handlers inline or awaits async ones.
+    #[cfg(feature = "async")]
+    pub async fn read_property_async(
+        &self,
+        name: &str,
+        input: &InteractionInput,
+    ) -> CoreResult<InteractionOutput> {
+        let slot = self
+            .slot
+            .with_read(|s| s.thing.property_handler_read(name));
+        match slot {
+            Some(ReadSlot::Sync(h)) => h.read(input),
+            Some(ReadSlot::Async(h)) => h.read(input).await,
+            None => Err(missing_local_handler(
+                AffordanceTarget::Property(name.into()),
+                Operation::ReadProperty,
+            )),
+        }
+    }
+
+    #[cfg(feature = "async")]
+    pub async fn write_property_async(
+        &self,
+        name: &str,
+        input: &mut InteractionInput,
+    ) -> CoreResult<InteractionOutput> {
+        let slot = self
+            .slot
+            .with_read(|s| s.thing.property_handler_write(name));
+        match slot {
+            Some(WriteSlot::Sync(h)) => h.write(input),
+            Some(WriteSlot::Async(h)) => h.write(input).await,
+            None => Err(missing_local_handler(
+                AffordanceTarget::Property(name.into()),
+                Operation::WriteProperty,
+            )),
+        }
+    }
+
+    #[cfg(feature = "async")]
+    pub async fn invoke_action_async(
+        &self,
+        name: &str,
+        input: &mut InteractionInput,
+    ) -> CoreResult<InteractionOutput> {
+        let slot = self
+            .slot
+            .with_read(|s| s.thing.action_handler_invoke(name));
+        match slot {
+            Some(InvokeSlot::Sync(h)) => h.invoke(input),
+            Some(InvokeSlot::Async(h)) => h.invoke(input).await,
+            None => Err(missing_local_handler(
+                AffordanceTarget::Action(name.into()),
+                Operation::InvokeAction,
+            )),
+        }
+    }
+
+    #[cfg(feature = "async")]
+    pub async fn query_action_async(
+        &self,
+        name: &str,
+        input: &InteractionInput,
+    ) -> CoreResult<InteractionOutput> {
+        let slot = self
+            .slot
+            .with_read(|s| s.thing.action_handler_query(name));
+        match slot {
+            Some(QuerySlot::Sync(h)) => h.query(input),
+            Some(QuerySlot::Async(h)) => h.query(input).await,
+            None => Err(missing_local_handler(
+                AffordanceTarget::Action(name.into()),
+                Operation::QueryAction,
+            )),
+        }
+    }
+
+    #[cfg(feature = "async")]
+    pub async fn cancel_action_async(
+        &self,
+        name: &str,
+        input: &mut InteractionInput,
+    ) -> CoreResult<InteractionOutput> {
+        let slot = self
+            .slot
+            .with_read(|s| s.thing.action_handler_cancel(name));
+        match slot {
+            Some(CancelSlot::Sync(h)) => h.cancel(input),
+            Some(CancelSlot::Async(h)) => h.cancel(input).await,
+            None => Err(missing_local_handler(
+                AffordanceTarget::Action(name.into()),
+                Operation::CancelAction,
+            )),
+        }
+    }
+
+    #[cfg(feature = "async")]
+    pub async fn observe_property_async(
+        &self,
+        name: &str,
+        input: &InteractionInput,
+        push: PushFn<'_>,
+    ) -> CoreResult<InteractionOutput> {
+        let slot = self
+            .slot
+            .with_read(|s| s.thing.property_handler_observe(name));
+        match slot {
+            Some(ObserveSlot::Sync(h)) => h.observe(input, push),
+            Some(ObserveSlot::Async(h)) => h.observe(input, push).await,
+            None => Err(missing_local_handler(
+                AffordanceTarget::Property(name.into()),
+                Operation::ObserveProperty,
+            )),
+        }
+    }
+
+    #[cfg(feature = "async")]
+    pub async fn unobserve_property_async(
+        &self,
+        name: &str,
+        input: &InteractionInput,
+    ) -> CoreResult<InteractionOutput> {
+        let slot = self
+            .slot
+            .with_read(|s| s.thing.property_handler_unobserve(name));
+        match slot {
+            Some(UnobserveSlot::Sync(h)) => h.unobserve(input),
+            Some(UnobserveSlot::Async(h)) => h.unobserve(input).await,
+            None => Err(missing_local_handler(
+                AffordanceTarget::Property(name.into()),
+                Operation::UnobserveProperty,
+            )),
+        }
+    }
+
+    #[cfg(feature = "async")]
+    pub async fn subscribe_event_async(
+        &self,
+        name: &str,
+        input: &InteractionInput,
+        push: PushFn<'_>,
+    ) -> CoreResult<InteractionOutput> {
+        let slot = self
+            .slot
+            .with_read(|s| s.thing.event_handler_subscribe(name));
+        match slot {
+            Some(SubscribeSlot::Sync(h)) => h.subscribe(input, push),
+            Some(SubscribeSlot::Async(h)) => h.subscribe(input, push).await,
+            None => Err(missing_local_handler(
+                AffordanceTarget::Event(name.into()),
+                Operation::SubscribeEvent,
+            )),
+        }
+    }
+
+    #[cfg(feature = "async")]
+    pub async fn unsubscribe_event_async(
+        &self,
+        name: &str,
+        input: &InteractionInput,
+    ) -> CoreResult<InteractionOutput> {
+        let slot = self
+            .slot
+            .with_read(|s| s.thing.event_handler_unsubscribe(name));
+        match slot {
+            Some(UnsubscribeSlot::Sync(h)) => h.unsubscribe(input),
+            Some(UnsubscribeSlot::Async(h)) => h.unsubscribe(input).await,
+            None => Err(missing_local_handler(
+                AffordanceTarget::Event(name.into()),
+                Operation::UnsubscribeEvent,
+            )),
+        }
+    }
+
     /// Fans an event payload out to registered subscribers via the broker.
     pub fn emit_event(&self, name: &str, payload: Payload) -> CoreResult<()> {
         self.servient.emit_event(&self.id, name, payload)
@@ -198,6 +551,16 @@ impl ExposedThingHandle {
     pub fn emit_property_change(&self, name: &str, payload: Payload) -> CoreResult<()> {
         self.servient.emit_event(&self.id, name, payload)
     }
+}
+
+/// Constructs the canonical "no handler registered for this op" error.
+///
+/// Mirrors the shape produced by `core::ExposedThing`'s internal
+/// `missing_handler` helper but lives on the handle so the async dispatch
+/// path (which clones the handler Arc out of the slot lock and then
+/// dispatches outside it) can produce the same error variant.
+fn missing_local_handler(target: AffordanceTarget, operation: Operation) -> CoreError {
+    CoreError::MissingHandler { target, operation }
 }
 
 // ---------------------------------------------------------------------------

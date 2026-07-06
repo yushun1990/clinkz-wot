@@ -53,9 +53,10 @@ pub use security::{
 pub use sync::WotLock;
 pub use thing::{
     ActionCancelHandler, ActionHandler, ActionQueryHandler, AffordanceKind, AffordanceTarget,
-    EventSubscribeHandler, EventUnsubscribeHandler, ExposedThing, LocalThing,
-    PropertyObserveHandler, PropertyReadHandler, PropertyUnobserveHandler, PropertyWriteHandler,
-    PushFn,
+    CancelSlot, EventSubscribeHandler, EventUnsubscribeHandler, ExposedThing, InvokeSlot,
+    LocalThing, ObserveSlot, PropertyObserveHandler, PropertyReadHandler, PropertyUnobserveHandler,
+    PropertyWriteHandler, PushFn, QuerySlot, ReadSlot, SubscribeSlot, UnobserveSlot,
+    UnsubscribeSlot, WriteSlot,
 };
 #[cfg(feature = "async")]
 pub use thing::{

@@ -255,63 +255,63 @@ pub use async_handlers::{
 /// Slot holding whichever flavor (sync primary / opt-in async twin) was
 /// registered for a single property-read operation.
 #[derive(Clone)]
-pub(crate) enum ReadSlot {
+pub enum ReadSlot {
     Sync(Arc<dyn PropertyReadHandler>),
     #[cfg(feature = "async")]
     Async(Arc<dyn AsyncPropertyReadHandler>),
 }
 
 #[derive(Clone)]
-pub(crate) enum WriteSlot {
+pub enum WriteSlot {
     Sync(Arc<dyn PropertyWriteHandler>),
     #[cfg(feature = "async")]
     Async(Arc<dyn AsyncPropertyWriteHandler>),
 }
 
 #[derive(Clone)]
-pub(crate) enum ObserveSlot {
+pub enum ObserveSlot {
     Sync(Arc<dyn PropertyObserveHandler>),
     #[cfg(feature = "async")]
     Async(Arc<dyn AsyncPropertyObserveHandler>),
 }
 
 #[derive(Clone)]
-pub(crate) enum UnobserveSlot {
+pub enum UnobserveSlot {
     Sync(Arc<dyn PropertyUnobserveHandler>),
     #[cfg(feature = "async")]
     Async(Arc<dyn AsyncPropertyUnobserveHandler>),
 }
 
 #[derive(Clone)]
-pub(crate) enum InvokeSlot {
+pub enum InvokeSlot {
     Sync(Arc<dyn ActionHandler>),
     #[cfg(feature = "async")]
     Async(Arc<dyn AsyncActionHandler>),
 }
 
 #[derive(Clone)]
-pub(crate) enum QuerySlot {
+pub enum QuerySlot {
     Sync(Arc<dyn ActionQueryHandler>),
     #[cfg(feature = "async")]
     Async(Arc<dyn AsyncActionQueryHandler>),
 }
 
 #[derive(Clone)]
-pub(crate) enum CancelSlot {
+pub enum CancelSlot {
     Sync(Arc<dyn ActionCancelHandler>),
     #[cfg(feature = "async")]
     Async(Arc<dyn AsyncActionCancelHandler>),
 }
 
 #[derive(Clone)]
-pub(crate) enum SubscribeSlot {
+pub enum SubscribeSlot {
     Sync(Arc<dyn EventSubscribeHandler>),
     #[cfg(feature = "async")]
     Async(Arc<dyn AsyncEventSubscribeHandler>),
 }
 
 #[derive(Clone)]
-pub(crate) enum UnsubscribeSlot {
+pub enum UnsubscribeSlot {
     Sync(Arc<dyn EventUnsubscribeHandler>),
     #[cfg(feature = "async")]
     Async(Arc<dyn AsyncEventUnsubscribeHandler>),
@@ -840,55 +840,55 @@ impl ExposedThing {
 
     // --- handler-lookup (clone slot out for dispatch) ---------------------
 
-    pub(crate) fn property_handler_read(&self, name: &str) -> Option<ReadSlot> {
+    pub fn property_handler_read(&self, name: &str) -> Option<ReadSlot> {
         self.property_handlers
             .get(name)
             .and_then(|set| set.read.clone())
     }
 
-    pub(crate) fn property_handler_write(&self, name: &str) -> Option<WriteSlot> {
+    pub fn property_handler_write(&self, name: &str) -> Option<WriteSlot> {
         self.property_handlers
             .get(name)
             .and_then(|set| set.write.clone())
     }
 
-    pub(crate) fn property_handler_observe(&self, name: &str) -> Option<ObserveSlot> {
+    pub fn property_handler_observe(&self, name: &str) -> Option<ObserveSlot> {
         self.property_handlers
             .get(name)
             .and_then(|set| set.observe.clone())
     }
 
-    pub(crate) fn property_handler_unobserve(&self, name: &str) -> Option<UnobserveSlot> {
+    pub fn property_handler_unobserve(&self, name: &str) -> Option<UnobserveSlot> {
         self.property_handlers
             .get(name)
             .and_then(|set| set.unobserve.clone())
     }
 
-    pub(crate) fn action_handler_invoke(&self, name: &str) -> Option<InvokeSlot> {
+    pub fn action_handler_invoke(&self, name: &str) -> Option<InvokeSlot> {
         self.action_handlers
             .get(name)
             .and_then(|set| set.invoke.clone())
     }
 
-    pub(crate) fn action_handler_query(&self, name: &str) -> Option<QuerySlot> {
+    pub fn action_handler_query(&self, name: &str) -> Option<QuerySlot> {
         self.action_handlers
             .get(name)
             .and_then(|set| set.query.clone())
     }
 
-    pub(crate) fn action_handler_cancel(&self, name: &str) -> Option<CancelSlot> {
+    pub fn action_handler_cancel(&self, name: &str) -> Option<CancelSlot> {
         self.action_handlers
             .get(name)
             .and_then(|set| set.cancel.clone())
     }
 
-    pub(crate) fn event_handler_subscribe(&self, name: &str) -> Option<SubscribeSlot> {
+    pub fn event_handler_subscribe(&self, name: &str) -> Option<SubscribeSlot> {
         self.event_handlers
             .get(name)
             .and_then(|set| set.subscribe.clone())
     }
 
-    pub(crate) fn event_handler_unsubscribe(&self, name: &str) -> Option<UnsubscribeSlot> {
+    pub fn event_handler_unsubscribe(&self, name: &str) -> Option<UnsubscribeSlot> {
         self.event_handlers
             .get(name)
             .and_then(|set| set.unsubscribe.clone())
