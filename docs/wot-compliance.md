@@ -152,7 +152,12 @@ Consequences for this engine:
   in core, wrapped by the Servient's `ExposedThingHandle`/`ConsumedThingHandle`
   (the app-facing surface that maps 1:1 to the Scripting API's
   `ExposedThing`/`ConsumedThing`). Such naming/idiom choices are governed by
-  v4.0 §0 and are not Scripting-API deviations.
+  v4.0 §0 and are not Scripting-API deviations. From P1 onward the binding
+  configuration surface is the unified `ProtocolBinding` facade; the
+  engine-internal `ClientBinding` / `ServerBinding` / `ClientBindingFactory`
+  traits remain `pub` in `clinkz_wot_core` for binding authors but are no
+  longer re-exported from `clinkz_wot_servient` (see
+  `docs/user-facing-api.md`).
 - Engine-specific **behavioral** deviations from the Scripting API surface are
   documented explicitly (v4.0 §9), not hidden. The current documented
   deviations are:

@@ -335,6 +335,7 @@ dependencies = [
  "async-trait",
  "clinkz-wot-core",
  "clinkz-wot-protocol-bindings",
+ "clinkz-wot-servient",
  "clinkz-wot-td",
  "log",
  "serde_json",

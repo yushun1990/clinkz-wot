@@ -258,34 +258,6 @@ async fn each_consume_builds_a_fresh_client_binding() {
     assert_eq!(*builds_snapshot.lock().unwrap(), 3);
 }
 
-#[tokio::test]
-async fn mixing_with_legacy_hooks_still_works_in_p0() {
-    // P0 guarantee: the legacy with_server_binding / with_client_factory
-    // entrypoints remain usable alongside with_protocol_binding. P1 will
-    // retire them.
-    let (factory, _invocations) = CountingClientFactory::new();
-    let server: Arc<dyn ServerBinding> =
-        Arc::new(FakeServer::default()) as Arc<dyn ServerBinding>;
-    let facade: Arc<dyn ProtocolBinding> =
-        clinkz_wot_core::client_only("test-c", factory);
-
-    let servient = ServientBuilder::new()
-        .with_server_binding(server.clone())
-        .with_protocol_binding(facade)
-        .build()
-        .expect("build");
-
-    // Combined: server from legacy hook, client from facade.
-    let handle = servient.produce(lamp_td()).expect("produce");
-    handle.expose().await.expect("expose");
-
-    let consumed = servient.consume(lamp_td()).expect("consume");
-    consumed
-        .read_property("status", Default::default())
-        .await
-        .expect("read");
-}
-
 // --- keep imports used only in type signatures ------------------------------
 
 #[allow(dead_code)]

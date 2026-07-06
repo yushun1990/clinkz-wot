@@ -688,16 +688,19 @@ requires `async`.
 
 ## 11. Migration Delta From Current Source
 
-| Item | Current | Target | Source ref |
+> Status: P0 (`ProtocolBinding` facade + `with_protocol_binding` entry) and
+> P1 (legacy hooks retired) have landed. P2/P3 still pending.
+
+| Item | Current | Target | Status |
 |---|---|---|---|
-| `ProtocolBinding` trait | absent (removed in redesign) | added in `clinkz_wot_core` | new |
-| `ServientBuilder::with_protocol_binding` | absent | added as primary entry | new |
-| `with_server_binding` / `with_client_factory` | `pub` | `pub(crate)` (or `#[doc(hidden)]`) | `servient/src/builder.rs:27,32` |
-| `ClientBindingFactory` re-exported from servient | yes (`lib.rs:34`) | removed from re-exports | `servient/src/lib.rs:34` |
-| `ConsumedThingHandle` streaming ops | absent | 8 methods added (§6.1) | `servient/src/handle.rs:202` |
-| `ExposedThingHandle` async setters | absent | 9 `set_async_*` added (§6.2) | `servient/src/handle.rs:29` |
-| `ExposedThingHandle` local dispatch | 3 ops (`read/write/invoke`) | 9 ops (sync + 9 `_async`) (§6.2) | `servient/src/handle.rs:158-192` |
-| `InteractionOptions::with_data` / `with_uri_variable` | bare fields only | builder conveniences added | `core/src/interaction.rs:156` |
+| `ProtocolBinding` trait | absent (removed in redesign) | added in `clinkz_wot_core` | ✅ P0 |
+| `ServientBuilder::with_protocol_binding` | absent | added as primary entry | ✅ P0 |
+| `with_server_binding` / `with_client_factory` | `pub` | deleted (no in-tree caller post-migration) | ✅ P1 |
+| `ClientBindingFactory` re-exported from servient | yes (`lib.rs:34`) | removed from re-exports | ✅ P1 |
+| `ConsumedThingHandle` streaming ops | absent | 8 methods added (§6.1) | ⏳ P2 |
+| `ExposedThingHandle` async setters | absent | 9 `set_async_*` added (§6.2) | ⏳ P3 |
+| `ExposedThingHandle` local dispatch | 3 ops (`read/write/invoke`) | 9 ops (sync + 9 `_async`) (§6.2) | ⏳ P3 |
+| `InteractionOptions::with_data` / `with_uri_variable` | bare fields only | builder conveniences added | ⏳ P3 |
 | Unified facade error tree | split across 4 enums | deferred to follow-up (§9.4) | — |
 
 ## 12. Open Questions (deferred, not blocking v0.1)

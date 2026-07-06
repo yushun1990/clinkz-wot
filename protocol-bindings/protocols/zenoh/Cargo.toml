@@ -13,6 +13,9 @@ async-trait = { workspace = true, optional = true }
 tokio = { version = "1", optional = true, features = ["sync", "macros", "rt", "rt-multi-thread", "time"] }
 log = "0.4"
 
+[dev-dependencies]
+clinkz-wot-servient = { path = "../../../servient" }
+
 [features]
 default = ["zenoh"]
 zenoh = [

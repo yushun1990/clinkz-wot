@@ -125,9 +125,10 @@ impl ServerBinding for MyServerBinding {
 ### 2. Build a Servient
 
 ```rust
-use clinkz_wot_servient::{ServientBuilder, ClientBindingFactory};
-use clinkz_wot_core::ClientBinding;
 use alloc::{boxed::Box, sync::Arc};
+use clinkz_wot_core::{
+    ClientBinding, ClientBindingFactory, ProtocolBinding, ProtocolId, ServerBinding,
+};
 
 struct MyClientFactory;
 impl ClientBindingFactory for MyClientFactory {
@@ -136,9 +137,19 @@ impl ClientBindingFactory for MyClientFactory {
     }
 }
 
+struct MyProtocolBinding;
+impl ProtocolBinding for MyProtocolBinding {
+    fn protocol(&self) -> ProtocolId { ProtocolId("custom") }
+    fn client_factory(&self) -> Option<Box<dyn ClientBindingFactory>> {
+        Some(Box::new(MyClientFactory))
+    }
+    fn server(&self) -> Option<Arc<dyn ServerBinding>> {
+        Some(Arc::new(MyServerBinding { dispatch: None }))
+    }
+}
+
 let servient = ServientBuilder::new()
-    .with_server_binding(Arc::new(MyServerBinding { dispatch: None }))
-    .with_client_factory(Arc::new(MyClientFactory))
+    .with_protocol_binding(Arc::new(MyProtocolBinding))
     // .with_discoverer(custom)  // optional; defaults to LocalDiscoverer
     .build()
     .expect("build servient");

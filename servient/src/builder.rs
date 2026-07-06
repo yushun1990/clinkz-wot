@@ -52,29 +52,6 @@ impl ServientBuilder {
         self
     }
 
-    /// Legacy entry: registers a server-side binding directly.
-    ///
-    /// Superseded by [`Self::with_protocol_binding`]. Retained as `pub`
-    /// through P0 so existing callers and test fixtures keep working; will
-    /// be demoted to `pub(crate)` and removed from the public surface in P1
-    /// (see `docs/plan/user-facing-api-implementation-plan.md`).
-    pub fn with_server_binding(mut self, binding: Arc<dyn ServerBinding>) -> Self {
-        self.server_bindings.push(binding);
-        self
-    }
-
-    /// Legacy entry: registers a client-side binding factory directly.
-    ///
-    /// Superseded by [`Self::with_protocol_binding`]. Retained as `pub`
-    /// through P0; will be demoted to `pub(crate)` in P1.
-    pub fn with_client_factory(
-        mut self,
-        factory: Arc<dyn ClientBindingFactory>,
-    ) -> Self {
-        self.client_factories.push(factory);
-        self
-    }
-
     pub fn with_discoverer(mut self, discoverer: Arc<dyn Discoverer>) -> Self {
         self.discoverer = Some(discoverer);
         self

@@ -7,11 +7,12 @@ use std::sync::{Arc, Mutex};
 
 use async_trait::async_trait;
 use clinkz_wot_core::{
-    AffordanceTarget, BindingRequest, ClientBinding, CoreError, FanInSender, InboundRequest,
-    InboundResponse, InteractionInput, InteractionOptions, InteractionOutput, Payload,
-    PropertyReadHandler, ServerBinding, ThingId,
+    AffordanceTarget, BindingRequest, ClientBinding, ClientBindingFactory, CoreError,
+    FanInSender, InboundRequest, InboundResponse, InteractionInput, InteractionOptions,
+    InteractionOutput, Payload, ProtocolBinding, ProtocolId, PropertyReadHandler, ServerBinding,
+    ThingId,
 };
-use clinkz_wot_servient::{ClientBindingFactory, ServientBuilder};
+use clinkz_wot_servient::ServientBuilder;
 use clinkz_wot_td::{
     affordance::{InteractionHelper, PropertyAffordance},
     data_schema::DataSchema,
@@ -77,6 +78,32 @@ impl ClientBindingFactory for EchoClientFactory {
     }
 }
 
+/// Wraps the fake server and echo client factory behind a single
+/// `ProtocolBinding`, mirroring how a real two-direction binding registers
+/// through `ServientBuilder::with_protocol_binding`. Replaces the legacy
+/// `with_server_binding` + `with_client_factory` pair used before P1.
+struct FakeProtocolBinding {
+    server: Arc<FakeServer>,
+}
+
+impl FakeProtocolBinding {
+    fn new(server: Arc<FakeServer>) -> Self {
+        Self { server }
+    }
+}
+
+impl ProtocolBinding for FakeProtocolBinding {
+    fn protocol(&self) -> ProtocolId {
+        ProtocolId("fake")
+    }
+    fn client_factory(&self) -> Option<Box<dyn ClientBindingFactory>> {
+        Some(Box::new(EchoClientFactory))
+    }
+    fn server(&self) -> Option<Arc<dyn ServerBinding>> {
+        Some(self.server.clone())
+    }
+}
+
 // --- fixtures ---
 
 fn lamp_td() -> Thing {
@@ -112,8 +139,7 @@ impl PropertyReadHandler for StoredRead {
 async fn produce_expose_registers_and_dispatches() {
     let fake_server = Arc::new(FakeServer::default());
     let servient = ServientBuilder::new()
-        .with_server_binding(fake_server.clone())
-        .with_client_factory(Arc::new(EchoClientFactory))
+        .with_protocol_binding(Arc::new(FakeProtocolBinding::new(fake_server.clone())))
         .build()
         .expect("build servient");
 
@@ -145,8 +171,7 @@ async fn produce_expose_registers_and_dispatches() {
 async fn consume_invokes_via_client_binding() {
     let fake_server = Arc::new(FakeServer::default());
     let servient = ServientBuilder::new()
-        .with_server_binding(fake_server.clone())
-        .with_client_factory(Arc::new(EchoClientFactory))
+        .with_protocol_binding(Arc::new(FakeProtocolBinding::new(fake_server.clone())))
         .build()
         .expect("build servient");
 
@@ -164,8 +189,7 @@ async fn consume_invokes_via_client_binding() {
 async fn destroy_unregisters() {
     let fake_server = Arc::new(FakeServer::default());
     let servient = ServientBuilder::new()
-        .with_server_binding(fake_server.clone())
-        .with_client_factory(Arc::new(EchoClientFactory))
+        .with_protocol_binding(Arc::new(FakeProtocolBinding::new(fake_server.clone())))
         .build()
         .expect("build servient");
 
@@ -186,8 +210,7 @@ async fn destroy_unregisters() {
 async fn producer_write_property_local() {
     let fake_server = Arc::new(FakeServer::default());
     let servient = ServientBuilder::new()
-        .with_server_binding(fake_server)
-        .with_client_factory(Arc::new(EchoClientFactory))
+        .with_protocol_binding(Arc::new(FakeProtocolBinding::new(fake_server)))
         .build()
         .expect("build");
 
@@ -216,8 +239,7 @@ impl clinkz_wot_core::PropertyWriteHandler for StoredWrite {
 async fn missing_handler_on_exposed_but_unwired_affordance() {
     let fake_server = Arc::new(FakeServer::default());
     let servient = ServientBuilder::new()
-        .with_server_binding(fake_server)
-        .with_client_factory(Arc::new(EchoClientFactory))
+        .with_protocol_binding(Arc::new(FakeProtocolBinding::new(fake_server)))
         .build()
         .expect("build");
 
@@ -236,8 +258,7 @@ async fn missing_handler_on_exposed_but_unwired_affordance() {
 async fn producer_emit_event_succeeds() {
     let fake_server = Arc::new(FakeServer::default());
     let servient = ServientBuilder::new()
-        .with_server_binding(fake_server)
-        .with_client_factory(Arc::new(EchoClientFactory))
+        .with_protocol_binding(Arc::new(FakeProtocolBinding::new(fake_server)))
         .build()
         .expect("build");
 
@@ -258,8 +279,7 @@ async fn producer_emit_event_succeeds() {
 async fn discover_returns_lazy_process() {
     let fake_server = Arc::new(FakeServer::default());
     let servient = ServientBuilder::new()
-        .with_server_binding(fake_server)
-        .with_client_factory(Arc::new(EchoClientFactory))
+        .with_protocol_binding(Arc::new(FakeProtocolBinding::new(fake_server)))
         .build()
         .expect("build");
 
@@ -276,8 +296,7 @@ async fn all_producer_handler_setters_compile_and_register() {
     // registered (read dispatches successfully; others are no-ops if unwired).
     let fake_server = Arc::new(FakeServer::default());
     let servient = ServientBuilder::new()
-        .with_server_binding(fake_server)
-        .with_client_factory(Arc::new(EchoClientFactory))
+        .with_protocol_binding(Arc::new(FakeProtocolBinding::new(fake_server)))
         .build()
         .expect("build");
 
@@ -410,8 +429,7 @@ async fn deviation_subscription_is_pull_queue_not_push_callback() {
     // tested in core's event tests; here we verify the surface shape.
     let fake_server = Arc::new(FakeServer::default());
     let servient = ServientBuilder::new()
-        .with_server_binding(fake_server)
-        .with_client_factory(Arc::new(EchoClientFactory))
+        .with_protocol_binding(Arc::new(FakeProtocolBinding::new(fake_server)))
         .build()
         .expect("build");
 
@@ -434,8 +452,7 @@ async fn deviation_discoverer_is_trait_object() {
     // not a built-in fetch. The Servient holds Arc<dyn Discoverer>.
     let fake_server = Arc::new(FakeServer::default());
     let servient = ServientBuilder::new()
-        .with_server_binding(fake_server)
-        .with_client_factory(Arc::new(EchoClientFactory))
+        .with_protocol_binding(Arc::new(FakeProtocolBinding::new(fake_server)))
         .build()
         .expect("build");
 
@@ -460,8 +477,7 @@ async fn deviation_no_implicit_property_value_store() {
     // affordance with no read handler returns MissingHandler.
     let fake_server = Arc::new(FakeServer::default());
     let servient = ServientBuilder::new()
-        .with_server_binding(fake_server)
-        .with_client_factory(Arc::new(EchoClientFactory))
+        .with_protocol_binding(Arc::new(FakeProtocolBinding::new(fake_server)))
         .build()
         .expect("build");
 

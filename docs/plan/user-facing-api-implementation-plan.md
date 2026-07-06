@@ -1,8 +1,8 @@
 # User-Facing API — Implementation Plan
 
-> Status: **Draft v0.1**. Sequences the migration delta in
-> `docs/user-facing-api.md` §11 into four phases. Each phase compiles,
-> passes tests, and ships independently.
+> Status: **P0 + P1 landed**. P2/P3 still pending. Sequences the migration
+> delta in `docs/user-facing-api.md` §11 into four phases. Each phase
+> compiles, passes tests, and ships independently.
 >
 > Reference docs:
 > - `docs/user-facing-api.md` — frozen external boundary.
@@ -11,12 +11,12 @@
 
 ## Phase Summary
 
-| Phase | Theme | Breaking? | Net effect |
+| Phase | Theme | Breaking? | Status |
 |---|---|---|---|
-| **P0** | `ProtocolBinding` facade lands | No | New entrypoint coexists with old. |
-| **P1** | Old binding-config surface retired | Yes (cleanup only) | Only `with_protocol_binding` remains in public API. |
-| **P2** | Consumer-side handle gaps closed | Additive | `ConsumedThingHandle` matches Scripting API §6. |
-| **P3** | Exposed-side handle gaps closed + polish | Additive | `ExposedThingHandle` matches Scripting API §7. |
+| **P0** | `ProtocolBinding` facade lands | No | ✅ landed |
+| **P1** | Old binding-config surface retired | Yes (cleanup only) | ✅ landed |
+| **P2** | Consumer-side handle gaps closed | Additive | pending |
+| **P3** | Exposed-side handle gaps closed + polish | Additive | pending |
 
 P0 and P1 are serial (P1 depends on P0 trait). P2 and P3 are independent of
 each other and may run in parallel after P1.

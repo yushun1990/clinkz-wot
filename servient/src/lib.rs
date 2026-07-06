@@ -29,7 +29,7 @@ mod servient;
 pub use error::{ServientError, ServientResult};
 
 #[cfg(feature = "async")]
-pub use clinkz_wot_core::{ClientBindingFactory, ProtocolBinding};
+pub use clinkz_wot_core::ProtocolBinding;
 #[cfg(feature = "async")]
 pub use handle::{ConsumedThingHandle, ExposedThingHandle};
 #[cfg(feature = "async")]
