@@ -7,8 +7,8 @@
 use alloc::{boxed::Box, format, sync::Arc, vec::Vec};
 
 use clinkz_wot_core::{
-    ClientBinding, Dispatch, EventBroker, EventName, ExposedThing, InboundRequest, InboundResponse,
-    InteractionOutput, Payload, ServerBinding, ThingId, WotLock,
+    ClientBindingFactory, Dispatch, EventBroker, EventName, ExposedThing, InboundRequest,
+    InboundResponse, InteractionOutput, Payload, ServerBinding, ThingId, WotLock,
 };
 use clinkz_wot_discovery::{Discoverer, DiscoveryFilter, ProcessState, ThingDiscoveryProcess};
 use clinkz_wot_td::{AbsoluteUri, thing::Thing};
@@ -17,11 +17,11 @@ use crate::handle::{ConsumedThingHandle, ExposedThingHandle};
 use crate::registry::{ConsumedThingRegistry, ExposedThingRegistry, ExposedThingSlot};
 use crate::{ServientError, ServientResult};
 
-/// Constructs a fresh [`ClientBinding`] for a consumed Thing.
-#[cfg(feature = "async")]
-pub trait ClientBindingFactory: Send + Sync {
-    fn build(&self) -> Box<dyn ClientBinding>;
-}
+// `ClientBindingFactory` lives in `clinkz_wot_core` (moved in P0). Re-exported
+// from the Servient crate for P0 backward compatibility; P1 will retire this
+// re-export so application code imports it from `clinkz_wot_core` (or, more
+// commonly, never names the trait directly and instead implements
+// `clinkz_wot_core::ProtocolBinding`).
 
 /// The Servient: composes exposed/consumed Things, server/client bindings, and
 /// discovery. `Clone`, `&self`, `Send + Sync`.

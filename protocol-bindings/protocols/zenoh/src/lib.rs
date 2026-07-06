@@ -17,6 +17,8 @@ extern crate alloc;
 
 mod error;
 mod form;
+#[cfg(feature = "zenoh")]
+mod protocol_binding;
 #[cfg(any(feature = "zenoh", feature = "zenoh-pico"))]
 mod runtime;
 #[cfg(feature = "zenoh")]
@@ -39,6 +41,8 @@ pub use runtime::{SharedZenohTransport, ZenohSessionTransport, ZenohSubscription
 pub use runtime::{
     ZenohPicoError, ZenohPicoErrorKind, ZenohPicoPlatform, ZenohPicoRequest, ZenohPicoTransport,
 };
+#[cfg(feature = "zenoh")]
+pub use protocol_binding::ZenohProtocolBinding;
 #[cfg(feature = "zenoh")]
 pub use server::ZenohServerBinding;
 #[cfg(any(feature = "zenoh", feature = "zenoh-pico"))]

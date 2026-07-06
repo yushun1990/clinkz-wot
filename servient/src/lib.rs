@@ -29,9 +29,9 @@ mod servient;
 pub use error::{ServientError, ServientResult};
 
 #[cfg(feature = "async")]
-pub use handle::{ConsumedThingHandle, ExposedThingHandle};
+pub use clinkz_wot_core::{ClientBindingFactory, ProtocolBinding};
 #[cfg(feature = "async")]
-pub use servient::ClientBindingFactory;
+pub use handle::{ConsumedThingHandle, ExposedThingHandle};
 #[cfg(feature = "async")]
 pub use servient::{Servient, ShutdownHandle};
 

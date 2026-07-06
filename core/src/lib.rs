@@ -6,6 +6,8 @@ extern crate std;
 extern crate alloc;
 
 pub mod binding;
+#[cfg(feature = "async")]
+pub mod binding_facade;
 pub mod error;
 pub mod event;
 pub mod identity;
@@ -19,7 +21,11 @@ pub mod transport;
 
 pub use binding::SubscriptionGuard;
 #[cfg(feature = "async")]
-pub use binding::{BindingRequest, ClientBinding};
+pub use binding::{BindingRequest, ClientBinding, ClientBindingFactory};
+#[cfg(feature = "async")]
+pub use binding_facade::{
+    ClientOnly, ProtocolBinding, ProtocolId, ServerOnly, client_only, server_only,
+};
 pub use error::{CoreError, CoreResult};
 pub use event::{
     DEFAULT_SUBSCRIPTION_CAPACITY, EventBroker, EventName, PublisherSink, Subscription,

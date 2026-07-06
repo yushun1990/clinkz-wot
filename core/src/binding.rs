@@ -102,6 +102,23 @@ impl ClientBinding for Box<dyn ClientBinding> {
     }
 }
 
+/// Constructs a fresh [`ClientBinding`] for a consumed Thing.
+///
+/// Owned by the Servient and invoked once per consumed Thing (see
+/// `Servient::consume`). Moved to `clinkz_wot_core` so that
+/// [`crate::ProtocolBinding`] can reference it without pulling in the
+/// Servient crate.
+///
+/// Concrete factories typically hold a shared, clone-able handle (e.g.
+/// `Arc<MySession>`) and produce a fresh binding per `build()` call so each
+/// consumed Thing owns its own plan cache / state while sharing the
+/// underlying session.
+#[cfg(feature = "async")]
+pub trait ClientBindingFactory: Send + Sync {
+    /// Produces a fresh boxed [`ClientBinding`] instance.
+    fn build(&self) -> Box<dyn ClientBinding>;
+}
+
 /// Protocol-specific cleanup handle for a streaming subscription.
 ///
 /// Returned alongside a [`Subscription`] from
