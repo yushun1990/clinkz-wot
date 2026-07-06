@@ -313,7 +313,7 @@ impl fmt::Debug for EventBroker {
 // Outbound (consumed) subscription bounded queue.
 // ---------------------------------------------------------------------------
 
-struct QueueInner {
+pub(crate) struct QueueInner {
     buffer: VecDeque<Payload>,
     capacity: usize,
     overflow_count: u64,
@@ -611,6 +611,29 @@ impl fmt::Debug for SubscriptionSender {
 /// queue the single source of truth (no second channel primitive) and leaves the
 /// synchronous surface usable on `no_std`.
 #[cfg(feature = "async")]
+impl Subscription {
+    /// Collects every underlying single queue, flattening nested merges.
+    ///
+    /// Async-only helper shared by `Subscription`'s own `Stream` impl and by
+    /// `EventStream`'s `Stream` impl. Returns one [`WotLock`] handle per
+    /// underlying leaf queue so callers can register a waker / drain samples
+    /// without re-walking the merge tree on every poll.
+    pub(crate) fn collect_leaves(
+        &self,
+        out: &mut alloc::vec::Vec<WotLock<QueueInner>>,
+    ) {
+        match &self.inner {
+            SubscriptionInner::Single(inner) => out.push(inner.clone()),
+            SubscriptionInner::Merged(subs) => {
+                for sub in subs {
+                    sub.collect_leaves(out);
+                }
+            }
+        }
+    }
+}
+
+#[cfg(feature = "async")]
 mod stream_impl {
     use alloc::vec::Vec;
     use core::pin::Pin;
@@ -624,17 +647,9 @@ mod stream_impl {
     use super::{QueueInner, Subscription, SubscriptionInner};
 
     impl Subscription {
-        /// Collects every underlying single queue, flattening nested merges.
-        fn collect_leaves(&self, out: &mut Vec<WotLock<QueueInner>>) {
-            match &self.inner {
-                SubscriptionInner::Single(inner) => out.push(inner.clone()),
-                SubscriptionInner::Merged(subs) => {
-                    for sub in subs {
-                        sub.collect_leaves(out);
-                    }
-                }
-            }
-        }
+        // `collect_leaves` is now defined at the top level of the async
+        // section below; both `stream_impl` and `event_stream_impl` reach
+        // it through `crate::event::Subscription::collect_leaves`.
     }
 
     impl Stream for Subscription {
@@ -720,6 +735,142 @@ mod stream_impl {
             Poll::Ready(None)
         } else {
             Poll::Pending
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// `EventStream`: merged event-name-tagged subscription stream (P2).
+// ---------------------------------------------------------------------------
+
+/// Merged event-name-tagged stream returned by
+/// `ConsumedThingHandle::subscribe_all_events`.
+///
+/// Wraps a `Vec<(EventName, Subscription)>` and yields `(EventName, Payload)`
+/// tuples in round-robin order across the underlying event streams. Distinct
+/// from [`Subscription::merge`] (which yields bare `Payload`) because the
+/// caller of `subscribe_all_events` needs to know which event each sample
+/// belongs to.
+///
+/// Like [`Subscription`], this type is `no_std + alloc` compatible in its
+/// synchronous surface ([`poll_next`](Self::poll_next),
+/// [`stop`](Self::stop)); the
+/// [`futures_core::Stream`] implementation is available behind the `async`
+/// feature.
+#[cfg(feature = "async")]
+pub struct EventStream {
+    entries: alloc::vec::Vec<(EventName, Subscription)>,
+}
+
+#[cfg(feature = "async")]
+impl EventStream {
+    /// Creates an event stream from already-paired `(EventName, Subscription)`
+    /// entries.
+    ///
+    /// Used by `ConsumedThingHandle::subscribe_all_events`, which produces
+    /// one entry per event declared by the consumed Thing. An empty `entries`
+    /// yields a stream that immediately returns `None`.
+    pub fn new(entries: alloc::vec::Vec<(EventName, Subscription)>) -> Self {
+        Self { entries }
+    }
+
+    /// Drains the next tagged payload across all underlying subscriptions,
+    /// round-robin, or `None` when every queue is empty.
+    ///
+    /// Use [`is_stopped`](Self::is_stopped) to distinguish "no data yet"
+    /// from "every underlying subscription has stopped".
+    pub fn poll_next(&self) -> Option<(EventName, Payload)> {
+        for (name, sub) in &self.entries {
+            if let Some(payload) = sub.poll_next() {
+                return Some((name.clone(), payload));
+            }
+        }
+        None
+    }
+
+    /// Stops every underlying subscription.
+    ///
+    /// Already-buffered samples remain drainable via
+    /// [`poll_next`](Self::poll_next); only future producer pushes are
+    /// suppressed.
+    pub fn stop(&self) {
+        for (_, sub) in &self.entries {
+            sub.stop();
+        }
+    }
+
+    /// Returns `true` when every underlying subscription is stopped.
+    pub fn is_stopped(&self) -> bool {
+        self.entries.iter().all(|(_, s)| s.is_stopped())
+    }
+
+    /// Returns the number of underlying event subscriptions in this stream.
+    pub fn event_count(&self) -> usize {
+        self.entries.len()
+    }
+
+    /// Returns the names of the events multiplexed by this stream, in
+    /// construction order.
+    pub fn event_names(&self) -> alloc::vec::Vec<&EventName> {
+        self.entries.iter().map(|(n, _)| n).collect()
+    }
+}
+
+#[cfg(feature = "async")]
+impl core::fmt::Debug for EventStream {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("EventStream")
+            .field("event_count", &self.entries.len())
+            .finish_non_exhaustive()
+    }
+}
+
+#[cfg(feature = "async")]
+mod event_stream_impl {
+    use super::EventStream;
+    use crate::payload::Payload;
+
+    use alloc::vec::Vec;
+    use core::pin::Pin;
+    use core::task::{Context, Poll};
+
+    use futures_core::Stream;
+
+    impl Stream for EventStream {
+        type Item = (super::EventName, Payload);
+
+        fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+            // Drain ready samples first; only register the waker when no
+            // underlying queue had a sample this pass.
+            for (name, sub) in &self.entries {
+                if let Some(payload) = sub.poll_next() {
+                    return Poll::Ready(Some((name.clone(), payload)));
+                }
+            }
+            // Register the waker on every underlying queue so any future
+            // push wakes this task.
+            let mut leaves: Vec<crate::WotLock<super::QueueInner>> = Vec::new();
+            for (_, sub) in &self.entries {
+                sub.collect_leaves(&mut leaves);
+            }
+            let mut all_stopped = true;
+            for inner in &leaves {
+                inner.with_recover(|q| {
+                    let needs_register =
+                        q.waker.as_ref().is_none_or(|w| !w.will_wake(cx.waker()));
+                    if needs_register {
+                        q.waker = Some(cx.waker().clone());
+                    }
+                    if !q.stopped {
+                        all_stopped = false;
+                    }
+                });
+            }
+            if all_stopped {
+                Poll::Ready(None)
+            } else {
+                Poll::Pending
+            }
         }
     }
 }

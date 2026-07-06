@@ -1075,6 +1075,7 @@ mod consumed {
     use crate::interaction::{InteractionInput, InteractionOutput};
     use crate::{
         AffordanceKind, AffordanceTarget, BindingRequest, ClientBinding, CoreError, CoreResult,
+        Subscription, SubscriptionGuard,
     };
 
     /// A consumed Thing plus its registered client bindings.
@@ -1142,6 +1143,52 @@ mod consumed {
 
             binding
                 .invoke(BindingRequest {
+                    thing: Arc::clone(&self.thing),
+                    target,
+                    operation,
+                    form: Arc::clone(&form),
+                    input,
+                })
+                .await
+        }
+
+        /// Opens a long-lived streaming subscription against a caller-selected
+        /// affordance form (P2).
+        ///
+        /// Mirrors [`Self::request`] but drives
+        /// [`ClientBinding::subscribe`] instead of [`ClientBinding::invoke`].
+        /// Used by `observe_property`, `subscribe_event`, and their `*_all`
+        /// fan-outs on `ConsumedThingHandle`. Form validation and binding
+        /// selection are identical to `request`.
+        ///
+        /// Returns the consumer-side [`Subscription`] (for draining pushed
+        /// samples) and the protocol-specific [`SubscriptionGuard`] (for
+        /// wire-side cleanup). The caller is responsible for keeping the
+        /// guard alive for the desired subscription lifetime; dropping it
+        /// releases the wire-side resources.
+        pub async fn subscribe(
+            &self,
+            target: AffordanceTarget,
+            operation: Operation,
+            form: Arc<Form>,
+            input: InteractionInput,
+        ) -> CoreResult<(Subscription, Box<dyn SubscriptionGuard>)> {
+            self.validate_selected_form(&target, operation, &form)?;
+
+            let binding = self
+                .bindings
+                .iter()
+                .find(|binding| binding.supports_with_thing(&self.thing, &form, operation))
+                .ok_or_else(|| {
+                    CoreError::UnsupportedBinding(format!(
+                        "No binding supports {} for {}",
+                        operation.as_str(),
+                        form.href.as_str()
+                    ))
+                })?;
+
+            binding
+                .subscribe(BindingRequest {
                     thing: Arc::clone(&self.thing),
                     target,
                     operation,

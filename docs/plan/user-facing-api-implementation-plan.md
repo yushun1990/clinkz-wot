@@ -15,7 +15,7 @@
 |---|---|---|---|
 | **P0** | `ProtocolBinding` facade lands | No | ✅ landed |
 | **P1** | Old binding-config surface retired | Yes (cleanup only) | ✅ landed |
-| **P2** | Consumer-side handle gaps closed | Additive | pending |
+| **P2** | Consumer-side handle gaps closed | Additive | ✅ landed |
 | **P3** | Exposed-side handle gaps closed + polish | Additive | pending |
 
 P0 and P1 are serial (P1 depends on P0 trait). P2 and P3 are independent of

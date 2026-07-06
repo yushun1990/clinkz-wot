@@ -31,6 +31,8 @@ pub use event::{
     DEFAULT_SUBSCRIPTION_CAPACITY, EventBroker, EventName, PublisherSink, Subscription,
     SubscriptionSender,
 };
+#[cfg(feature = "async")]
+pub use event::EventStream;
 pub use identity::{CorrelationId, ThingId};
 #[cfg(feature = "async")]
 pub use inbound::Dispatch;

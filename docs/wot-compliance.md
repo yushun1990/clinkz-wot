@@ -193,3 +193,31 @@ stack growth, and priority inversion on constrained devices.
   `core::task::Waker` notification on top of the same queue, keeping the queue
   the single source of truth and giving gateway consumers native push
   ergonomics without baking a runtime dependency into the core.
+
+### P2 deviations
+
+The P2 expansion of `ConsumedThingHandle` (Scripting API §6) introduces two
+recorded deviations from the W3C Scripting API method catalogue:
+
+1. **`unobserve_property` / `unsubscribe_event` return `CoreResult<()>`** rather
+   than the Scripting API's cancellation-ack payload. The wire-side guard for
+   the matching subscription is dropped from the handle's guard registry,
+   releasing transport-side resources; the caller's previously-returned
+   `Subscription` stops receiving new samples but remains drainable for
+   already-buffered ones. The ack payload carries no useful information beyond
+   "the unsubscribe completed", which `Result::Ok(())` conveys in Rust idiom.
+2. **`read_all_properties` / `read_multiple_properties` aggregate into a single
+   JSON `InteractionOutput`** whose body is `{"<name>": <value>}`. Each
+   per-property value is encoded as a JSON string when its payload body is valid
+   UTF-8, otherwise as a `"base64:"`-prefixed base64 string. The aggregated
+   `content_type` is `application/json`. This is the clinkz v0.1 convention;
+   richer codec-aware aggregation is deferred.
+
+`subscribe_all_events` returns an `EventStream` (clinkz extension) whose
+`Stream::Item` is `(EventName, Payload)` so the caller can disambiguate which
+event each sample belongs to — the W3C Scripting API's `subscribeAllEvents` is
+silent on the merged-stream shape.
+
+`subscribe_all_events` is fail-fast: if any declared event has no compatible
+form or matching binding, it returns `UnsupportedOperation` and opens no
+subscriptions. Partial-subscribe semantics are explicitly out of scope for v0.1.
