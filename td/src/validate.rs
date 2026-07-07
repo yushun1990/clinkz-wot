@@ -82,6 +82,9 @@ impl fmt::Display for ValidateError {
     }
 }
 
+#[cfg(feature = "std")]
+impl std::error::Error for ValidateError {}
+
 /// A trait for validating components against W3C WoT Thing Description constraints.
 pub trait Validate {
     /// Validates the component with the default `Basic` validation level.

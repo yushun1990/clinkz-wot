@@ -7,6 +7,10 @@
 use clinkz_wot_core::{CoreError, SecurityError};
 
 /// HTTP-like status code for a [`CoreError`].
+///
+/// Returns 500 (internal server error) for any future variant added to
+/// `CoreError` (which is `#[non_exhaustive]`) so bindings stay forward-
+/// compatible without a release-coordinated update.
 pub fn error_status(error: &CoreError) -> u16 {
     match error {
         CoreError::UnknownAffordance { .. } => 404,
@@ -24,6 +28,9 @@ pub fn error_status(error: &CoreError) -> u16 {
         // an unacceptable content type: both are caller-side (400-class).
         CoreError::UnsupportedForm { .. } => 400,
         CoreError::ContentTypeMismatch { .. } => 406,
+        // Future variants default to 500. Update the match explicitly when
+        // a new variant needs a different status code.
+        _ => 500,
     }
 }
 

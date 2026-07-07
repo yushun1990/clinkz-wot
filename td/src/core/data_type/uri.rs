@@ -374,6 +374,9 @@ impl fmt::Display for ResolveFormHrefError {
     }
 }
 
+#[cfg(feature = "std")]
+impl std::error::Error for ResolveFormHrefError {}
+
 impl From<ResolveError> for ResolveFormHrefError {
     fn from(value: ResolveError) -> Self {
         Self::Resolve(value.to_string())

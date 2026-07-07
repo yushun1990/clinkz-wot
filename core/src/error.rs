@@ -10,7 +10,11 @@ use crate::thing::{AffordanceKind, AffordanceTarget};
 pub type CoreResult<T> = Result<T, CoreError>;
 
 /// Protocol-neutral errors surfaced by core runtime abstractions.
+///
+/// Non-exhaustive: future engine concerns may add variants. Callers should
+/// keep a `_` arm in `match` expressions.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum CoreError {
     /// The requested affordance does not exist on the Thing.
     UnknownAffordance { kind: AffordanceKind, name: String },

@@ -145,7 +145,7 @@ impl Servient {
                 for &j in registered.iter().rev() {
                     self.server_bindings[j].unregister_thing(&id);
                 }
-                return Err(ServientError::RouteRegistration(err));
+                return Err(ServientError::Serve(err));
             }
             registered.push(i);
         }

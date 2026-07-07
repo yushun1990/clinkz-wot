@@ -75,7 +75,17 @@ impl fmt::Display for DiscoveryError {
 }
 
 #[cfg(feature = "std")]
-impl std::error::Error for DiscoveryError {}
+impl std::error::Error for DiscoveryError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            // Surface the underlying TD validation failure as the cause so
+            // error chains walk through to the structured ValidateError
+            // instead of stopping at the DiscoveryError wrapper.
+            Self::InvalidThingDescription(err) => Some(err),
+            _ => None,
+        }
+    }
+}
 
 impl From<ValidateError> for DiscoveryError {
     fn from(value: ValidateError) -> Self {

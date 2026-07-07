@@ -655,24 +655,65 @@ impl futures_core::Stream for Subscription { type Item = Payload; }
 
 ### 9.4 Errors
 
-The current split (`CoreError`, `ServientError`, `BindingError`,
-`SecurityError`, `DiscoveryError`) is preserved as-is for v0.1. A future
-unified facade error tree is listed in §11.
+`ServientError` is the **single application-facing error type**. It wraps
+the engine-internal `CoreError`, the protocol-neutral `BindingError`, the
+discovery `DiscoveryError`, and the security errors transparently, plus
+Servient-lifecycle variants that have no lower-layer counterpart.
 
 Conversion direction:
 
 ```
 SecurityError  ─┐
-BindingError   ─┼─►  CoreError  ─┐
-DiscoveryError ─┘                ├──►  ServientError
-                                 │      (the top-level Result the user sees)
-CoreError ───────────────────────┘
+BindingError   ─┼─►  CoreError  ─┐    ServientError::Serve(CoreError)
+DiscoveryError ─┘                ├──► (ServientError::Binding(BindingError))
+                                 │    (ServientError::Discovery(DiscoveryError))
+CoreError ───────────────────────┘    + lifecycle variants
 ```
 
 `ServientResult<T>` is the type the application layer receives from
 `Servient::*` and `*ThingHandle::*`. `CoreResult<T>` is returned by handler
 traits and by local-dispatch methods; the Servient wraps it via
 `From<CoreError> for ServientError`.
+
+**Discriminating errors.** Callers can either pattern-match on
+`ServientError` directly, or use the convenience predicates and accessors:
+
+```rust
+match err {
+    ServientError::Serve(CoreError::MissingHandler { .. }) => /* ... */,
+    ServientError::Binding(BindingError::UnknownAffordance { .. }) => /* ... */,
+    ServientError::Discovery(DiscoveryError::UnknownThing(id)) => /* ... */,
+    ServientError::AlreadyExposed(id) => /* ... */,
+    _ => /* ... */,
+}
+
+// Or via the predicates (covers the common cases without a full match):
+if err.is_missing_handler() { /* ... */ }
+if err.is_security()        { /* ... */ }
+if err.is_timeout()         { /* ... */ }
+if let Some(core) = err.as_core() { /* inspect the wrapped CoreError */ }
+if let Some(b) = err.as_binding() { /* inspect the wrapped BindingError */ }
+```
+
+`ServientError`, `CoreError`, and `BindingError` are all `#[non_exhaustive]`
+so future variants can be added without breaking downstream `match`
+expressions (callers must keep a `_` arm).
+
+**Structured vs funneled conversions.** `From<BindingError> for CoreError`
+preserves `UnknownAffordance { kind, name }` and `UnsupportedOperation(_)`
+structurally (typed payloads survive), and funnels the remaining four
+`BindingError` variants through `CoreError::InvalidInteraction` with the
+verbatim `Display` text. Callers that need the full structured binding
+taxonomy should match on `ServientError::Binding(BindingError)` (which
+preserves the original typed payload) rather than letting the conversion
+into `CoreError` run.
+
+**Cause chains.** `ServientError`, `BindingError`, and `DiscoveryError`
+all implement `std::error::Error::source()` so `anyhow` / `eyre` /
+`Error::source()` walks traverse the full cause chain — e.g.
+`ServientError::Discovery(DiscoveryError::InvalidThingDescription(ValidateError))`
+exposes both the `DiscoveryError` and the underlying `ValidateError` as
+sources.
 
 ## 10. Feature Flags and `no_std` Posture
 
@@ -701,7 +742,7 @@ requires `async`.
 | `ExposedThingHandle` async setters | absent | 9 `set_async_*` added (§6.2) | ✅ P3 |
 | `ExposedThingHandle` local dispatch | 3 ops (`read/write/invoke`) | 9 ops (sync + 9 `_async`) (§6.2) | ✅ P3 |
 | `InteractionOptions::with_data` / `with_uri_variable` | bare fields only | builder conveniences added | ✅ P3 |
-| Unified facade error tree | split across 4 enums | deferred to follow-up (§9.4) | — |
+| Unified facade error tree | split across 4 enums | `ServientError` is now the single app-facing type with predicates, accessors, structured `From<BindingError> for CoreError`, `non_exhaustive` on all error enums, and proper `source()` chains | ✅ done |
 
 ## 12. Open Questions (deferred, not blocking v0.1)
 

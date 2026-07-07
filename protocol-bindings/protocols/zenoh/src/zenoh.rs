@@ -11,7 +11,7 @@ use clinkz_wot_core::{
 };
 #[cfg(feature = "async")]
 use clinkz_wot_core::{BindingRequest, ClientBinding};
-use clinkz_wot_protocol_bindings::{AffordanceRef, BindingError, validate_form_operation};
+use clinkz_wot_protocol_bindings::{AffordanceRef, validate_form_operation};
 use clinkz_wot_td::{data_type::Operation, form::Form};
 
 use crate::ZenohOperationPlan;
@@ -172,7 +172,7 @@ where
             &request.form,
             request.operation,
         )
-        .map_err(core_error_from_binding_error)?;
+        .map_err(CoreError::from)?;
 
         let plan = self.plan_for(&request.thing, &request.form, request.operation)?;
         let transport_request = build_zenoh_transport_request(Arc::clone(&plan), request.input);
@@ -190,7 +190,7 @@ where
             &request.form,
             request.operation,
         )
-        .map_err(core_error_from_binding_error)?;
+        .map_err(CoreError::from)?;
 
         let plan = self.plan_for(&request.thing, &request.form, request.operation)?;
         let transport_request = build_zenoh_transport_request(Arc::clone(&plan), request.input);
@@ -276,30 +276,13 @@ pub fn build_zenoh_transport_request(
     }
 }
 
-fn core_error_from_binding_error(err: BindingError) -> CoreError {
-    match err {
-        BindingError::UnknownAffordance { kind, name } => {
-            CoreError::UnknownAffordance { kind, name }
-        }
-        BindingError::UnsupportedOperation(message) => CoreError::UnsupportedOperation(message),
-        BindingError::MetadataMismatch(message) => CoreError::InvalidInteraction(message),
-        BindingError::CallerFilterMismatch(message) => CoreError::InvalidInteraction(message),
-        BindingError::FormNotInAffordance => CoreError::InvalidInteraction(err.to_string()),
-        BindingError::TargetResolution(message) => {
-            CoreError::InvalidInteraction(message.to_string())
-        }
-    }
-}
-
 fn core_error_from_zenoh_error(err: crate::ZenohBindingError) -> CoreError {
     match err {
-        // Preserve structured shared-binding errors (e.g. `UnknownAffordance`)
-        // by routing them through the same mapper used by the direct
-        // `validate_form_operation` path, instead of collapsing them to
-        // `InvalidInteraction(String)`.
-        crate::ZenohBindingError::Shared(binding_error) => {
-            core_error_from_binding_error(binding_error)
-        }
+        // Preserve structured shared-binding errors by routing them through
+        // the canonical `From<BindingError> for CoreError` impl defined in
+        // `clinkz_wot_protocol_bindings::error`. Two variants map
+        // structurally; the rest funnel through `InvalidInteraction`.
+        crate::ZenohBindingError::Shared(binding_error) => CoreError::from(binding_error),
         crate::ZenohBindingError::Selection(message)
         | crate::ZenohBindingError::UnsupportedForm(message)
         | crate::ZenohBindingError::InvalidExtension { message, .. } => {
