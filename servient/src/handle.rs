@@ -917,8 +917,8 @@ impl ConsumedThingHandle {
     /// [`InteractionOutput`] whose payload is a JSON object mapping
     /// property name to its raw payload.
     ///
-    /// Each individual read runs sequentially against the selected form.
-    /// The aggregated body is a JSON object `{"<name>": "<value>"}` where
+    /// All individual reads fan out in parallel via `join_all`. The
+    /// aggregated body is a JSON object `{"<name>": "<value>"}` where
     /// the value is the per-property payload body interpreted as a UTF-8
     /// string when valid, otherwise base64-encoded. The aggregated
     /// `content_type` is `application/json`.
@@ -937,48 +937,89 @@ impl ConsumedThingHandle {
             .await
     }
 
-    /// Reads the named subset of properties and returns a single
+    /// Reads the named subset of properties in parallel and returns a single
     /// [`InteractionOutput`] in the same aggregated JSON format as
     /// [`read_all_properties`](Self::read_all_properties).
+    ///
+    /// All reads are issued concurrently via `join_all`; the first error
+    /// short-circuits the aggregate (remaining in-flight reads are still
+    /// driven to completion by `join_all`'s semantics — they're not
+    /// cancelled, but their results are discarded on error).
     pub async fn read_multiple_properties(
         &self,
         names: &[&str],
         options: InteractionOptions,
     ) -> CoreResult<InteractionOutput> {
-        let mut entries: Vec<(String, Payload)> = Vec::with_capacity(names.len());
-        for name in names {
-            let out = self
-                .invoke_op(
-                    AffordanceTarget::Property((*name).into()),
-                    Operation::ReadProperty,
-                    options.clone(),
-                )
-                .await?;
-            if let Some(payload) = out.data {
-                entries.push(((*name).to_string(), payload));
+        use futures_util::future::join_all;
+
+        // Build one future per named property. Each clone of `options` is
+        // cheap (Payload is Arc-backed, BTreeMap is the only real copy).
+        let reads: Vec<_> = names
+            .iter()
+            .map(|name| {
+                let name = (*name).to_string();
+                let opts = options.clone();
+                async move {
+                    let out = self
+                        .invoke_op(
+                            AffordanceTarget::Property(name.clone().into()),
+                            Operation::ReadProperty,
+                            opts,
+                        )
+                        .await?;
+                    Ok::<_, CoreError>((name, out.data))
+                }
+            })
+            .collect();
+
+        let results = join_all(reads).await;
+        // Surface the first error if any; otherwise build the aggregate.
+        let mut entries: Vec<(String, Payload)> = Vec::with_capacity(results.len());
+        for r in results {
+            match r {
+                Ok((name, Some(payload))) => entries.push((name, payload)),
+                Ok((_, None)) => {} // empty payload → no entry
+                Err(err) => return Err(err),
             }
         }
         Ok(InteractionOutput::with_data(aggregate_payloads(entries)))
     }
 
-    /// Writes the named properties. Each write runs sequentially against
-    /// the selected form for that property. Returns `Ok(())` only after
-    /// every write succeeds; on the first error, the remaining writes are
-    /// skipped and the error is returned.
+    /// Writes the named properties in parallel. All writes are issued
+    /// concurrently via `join_all`; the method returns the first error
+    /// encountered (remaining writes still complete — they're not
+    /// cancelled, but their outcomes are folded into the aggregate result).
+    ///
+    /// For strict sequential semantics (write N only after N-1 succeeds),
+    /// issue individual [`write_property`](Self::write_property) calls
+    /// from application code.
     pub async fn write_multiple_properties(
         &self,
         entries: &BTreeMap<&str, Payload>,
         options: InteractionOptions,
     ) -> CoreResult<()> {
-        for (name, payload) in entries {
-            let mut opts = options.clone();
-            opts.data = Some(payload.clone());
-            self.invoke_op(
-                AffordanceTarget::Property((*name).into()),
-                Operation::WriteProperty,
-                opts,
-            )
-            .await?;
+        use futures_util::future::join_all;
+
+        let writes: Vec<_> = entries
+            .iter()
+            .map(|(name, payload)| {
+                let name = (*name).to_string();
+                let mut opts = options.clone();
+                opts.data = Some(payload.clone());
+                async move {
+                    self.invoke_op(
+                        AffordanceTarget::Property(name.into()),
+                        Operation::WriteProperty,
+                        opts,
+                    )
+                    .await
+                }
+            })
+            .collect();
+
+        let results = join_all(writes).await;
+        for result in results {
+            result?;
         }
         Ok(())
     }

@@ -1,0 +1,68 @@
+[package]
+name = "clinkz-wot"
+version.workspace = true
+edition.workspace = true
+
+description = "clinkz-wot — Rust Web of Things engine. Umbrella crate re-exporting the application-facing API."
+license = "MIT"
+
+[dependencies]
+# Always pull in the application-facing stack. Feature flags below add
+# protocol bindings and codecs on top.
+clinkz-wot-core = { path = "../core", default-features = false }
+clinkz-wot-td = { path = "../td", default-features = false }
+clinkz-wot-discovery = { path = "../discovery", default-features = false }
+clinkz-wot-protocol-bindings = { path = "../protocol-bindings/core", default-features = false }
+clinkz-wot-servient = { path = "../servient", default-features = false }
+
+# Optional concrete bindings + codecs. Off by default so downstream
+# crates can pick the surface they need; turn them on via features.
+clinkz-wot-protocol-bindings-zenoh = { path = "../protocol-bindings/protocols/zenoh", default-features = false, optional = true }
+clinkz-wot-codec-cbor = { path = "../codecs/cbor", default-features = false, optional = true }
+
+[features]
+default = ["std"]
+
+# std runtime (tokio + the full Servient surface). Implies async + alloc.
+std = [
+    "clinkz-wot-core/std",
+    "clinkz-wot-td/std",
+    "clinkz-wot-discovery/std",
+    "clinkz-wot-protocol-bindings/std",
+    "clinkz-wot-servient/std",
+]
+
+# Native-async Servient surface (handles, async handler setters, async
+# dispatch, streaming subscriptions).
+async = [
+    "clinkz-wot-core/async",
+    "clinkz-wot-discovery/async",
+    "clinkz-wot-servient/async",
+]
+
+# Concrete protocol bindings. The user picks one (or several — they don't
+# conflict at the type level, only at runtime if they share a transport).
+zenoh = [
+    "dep:clinkz-wot-protocol-bindings-zenoh",
+    "clinkz-wot-protocol-bindings-zenoh/zenoh",
+    "std",
+]
+
+# Codec for CBOR payloads (TD 1.1 default content type).
+cbor = ["dep:clinkz-wot-codec-cbor"]
+
+# Experimental TD 2.0 surface — see docs/wot-compliance.md.
+td2-preview = [
+    "clinkz-wot-td/td2-preview",
+    "clinkz-wot-core/td2-preview",
+]
+
+[dev-dependencies]
+# Examples use tokio + async-trait + futures-util.
+tokio = { version = "1", features = ["macros", "rt", "rt-multi-thread"] }
+async-trait = "0.1"
+futures-util = "0.3"
+
+[[example]]
+name = "minimal_local"
+path = "examples/minimal_local.rs"

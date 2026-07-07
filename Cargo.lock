@@ -286,6 +286,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "clinkz-wot"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "clinkz-wot-codec-cbor",
+ "clinkz-wot-core",
+ "clinkz-wot-discovery",
+ "clinkz-wot-protocol-bindings",
+ "clinkz-wot-protocol-bindings-zenoh",
+ "clinkz-wot-servient",
+ "clinkz-wot-td",
+ "futures-util",
+ "tokio",
+]
+
+[[package]]
 name = "clinkz-wot-codec-cbor"
 version = "0.1.0"
 dependencies = [
