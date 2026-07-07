@@ -1,5 +1,12 @@
 # Phase P4 — Compliance and Verification
 
+> **⚠ Status — implemented with post-v4.0 expansion.** This phase scoped
+> v4.0 compliance verification. The user-facing API was later expanded
+> (P0–P3, commits `39bcb4d` → `b6f5a97`) with recorded deviations in
+> `docs/wot-compliance.md` (P2 deviations, P3 deviations). The body of
+> this document is the v4.0 phase plan; cross-check
+> `docs/wot-compliance.md` for the current deviation list.
+
 > Baseline: `docs/baseline/engine-architecture-baseline.md` (v4.0) §0, §8, §9, §10.
 
 ## Goal

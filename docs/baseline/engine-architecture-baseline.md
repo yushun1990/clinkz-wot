@@ -1,5 +1,28 @@
 # clinkz-wot Engine Architecture Baseline (v4.0)
 
+> **⚠ Status — post-v4.0 implementation drift (kept inline):**
+>
+> v4.0 is the design frozen at the v4.0 baseline. Two later implementation
+> changes supersede parts of §7.2 and the trait-split framing below, and
+> should be read alongside this document:
+>
+> 1. **Driving loop removed from the Servient** (commit `c03de58`).
+>    `poll_serve` / `serve` / `poll_serve_once` no longer exist. The Servient
+>    now exposes only `Dispatch::serve_request(req).await`; each binding owns
+>    its driving model (fan-in channel / async route handler / super-loop
+>    `try_accept`). See `docs/servient-workflow.md` §3 and §6 for the current
+>    model.
+> 2. **User-facing API expansion** (P0–P3, commits `39bcb4d` → `b6f5a97`).
+>    `ProtocolBinding` facade replaces direct `ClientBinding`/`ServerBinding`
+>    registration from application code; `ConsumedThingHandle` /
+>    `ExposedThingHandle` now carry the full Scripting API §6/§7 surface
+>    (streaming, bulk, async handlers). See `docs/user-facing-api.md` for the
+>    frozen external boundary.
+>
+> The body of this document is the v4.0 design record; where the
+> implementation has diverged, the divergence is noted inline at the
+> affected section.
+
 This document is the consolidated, authoritative **engine-wide** architecture
 baseline for `clinkz-wot`. It supersedes the Servient-only baselines
 `docs/baseline/servient-design-baseline.md` (v3.0) and
@@ -769,6 +792,14 @@ pub struct Servient {
 `Servient` is `Clone` (cheap, `Arc`-based), all methods `&self`, `Send + Sync`.
 
 ### 7.2 Driving layer — async only
+
+> **⚠ SUPERSEDED in implementation (commit `c03de58`).** The driving loop was
+> removed from the Servient. The methods shown below (`poll_serve` / `serve` /
+> `poll_serve_once`) **do not exist in current source**. The Servient now
+> exposes only `impl Dispatch for Servient { async fn serve_request(req) }`.
+> Each binding owns its driving model. See `docs/servient-workflow.md` §3 and
+> §6 for the current binding-owned model. The text and code below are the
+> v4.0 design record.
 
 The four-way sync/async duplication collapses:
 

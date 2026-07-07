@@ -48,8 +48,11 @@ checks:
 - `clinkz-wot-protocol-bindings-zenoh` (planning layer only;
   `ZenohServerBinding` is behind the `zenoh` feature)
 - `clinkz-wot-discovery`
-- `clinkz-wot-servient` (v4.0 driving: `poll_serve` / `serve` /
-  `poll_serve_once`; `WotLock`; no `poll_serve_sync`, no `multithread`)
+- `clinkz-wot-servient` (v4.0 surface: `Servient` + `ServientBuilder` +
+  `ConsumedThingHandle` / `ExposedThingHandle`; dispatch is binding-owned
+  via `Dispatch::serve_request`; `WotLock`; no `poll_serve` / `serve` /
+  `poll_serve_once` / `poll_serve_sync` / `multithread` — those were
+  removed when the driving loop moved out of the Servient)
 - `clinkz-wot-codec-cbor`
 - `clinkz-wot-core --no-default-features --features async` (async `no_std`
   flavor — opt-in async handler twins)

@@ -1,5 +1,11 @@
 # Phase P0 — Core Interaction Surface Rewrite
 
+> **⚠ Status — implemented; expanded post-v4.0.** The core interaction
+> surface landed per this plan and was later expanded (P0–P3 user-facing
+> API work, commits `39bcb4d` → `b6f5a97`) with streaming ops, bulk ops,
+> async handler setters, and the `ProtocolBinding` facade. See
+> `docs/user-facing-api.md` for the current external boundary.
+
 > Baseline: `docs/baseline/engine-architecture-baseline.md` (v4.0) §4.
 
 ## Goal

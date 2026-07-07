@@ -90,15 +90,19 @@ The Servient is **non-generic** (the old `Servient<D>` is dropped); it holds
 handles (`ExposedThingHandle`, `ConsumedThingHandle`) provide interaction APIs
 aligned with the WoT Scripting API.
 
-The driving layer is **async-first** (v4.0 §7.2): `poll_serve` (one request per
-call) / `serve` (loop) are the canonical primitives; `poll_serve_once` is the
-bare-`no_std` manual-poll super-loop primitive. Inbound accept is a **single
-bounded fan-in channel** on std (bindings enqueue via sync `try_send` from
-zenoh callbacks; on `Full` request/response is rejected with an explicit error
-reply, streaming/events drop-oldest) and a sync `try_accept` poll with a
-rotation cursor on no_std. There is no `select_all`, no boxed `poll_accept`,
-no `AsyncServerBinding`, no `poll_serve_sync`/`serve_sync` (v4.0 §4.5/§7.2;
-audit defects AD1/AD6a/AD6b/AD7/AD9).
+The driving layer is **binding-owned** (commit c03de58; superseded the v4.0
+§7.2 design): the Servient exposes only `Dispatch::serve_request(req).await`
+for bindings to call from whichever driving model fits their transport. There
+is no `poll_serve` / `serve` / `poll_serve_once` on the Servient — those
+primitives were removed when the driving loop moved out of the Servient.
+Inbound accept takes one of three forms depending on the binding: a
+**single bounded fan-in channel** on std (zenoh enqueues via sync
+`try_send` from callbacks; on `Full` request/response is rejected with an
+explicit error reply, streaming/events drop-oldest), **direct dispatch**
+from an async route handler (HTTP/CoAP), or a **sync `try_accept` poll**
+with a rotation cursor on bare no_std super-loops. There is no `select_all`,
+no boxed `poll_accept`, no `AsyncServerBinding` (v4.0 §4.5; audit defects
+AD1/AD6a/AD6b/AD7/AD9).
 
 The Servient keeps hot-path runtime state in lock-free `Arc` snapshots
 (registries, handler tables, binding list, EventBroker fan-out) so reads never
@@ -164,8 +168,9 @@ maps `CoreError` variants to HTTP-like status codes. Bindings include the status
 in error replies.
 
 Graceful shutdown is provided by `Servient::shutdown_handle()`, returning a
-`Clone`-able `ShutdownHandle` that signals `serve` / `poll_serve` /
-`poll_serve_once` to exit after the current iteration.
+`Clone`-able `ShutdownHandle` that signals binding-owned driving tasks to
+exit after the current iteration. Bindings check the flag inside their
+drain loop / route handler / super-loop tick.
 
 A credential vault (`CredentialStore` trait, `InMemoryCredentialStore`) provides
 protocol-neutral secret storage. `SecurityContext.credentials` passes the store
@@ -193,9 +198,12 @@ observability integrations stay behind the crate's `std` feature.
 - `default = ["std"]` may be used for std runtime and cloud convenience.
 - `alloc` enables dynamic data structures in `no_std` environments.
 - `std` enables networking, filesystems, async runtimes, integration tests, and richer diagnostics.
-- `async` enables the native-async driving layer (`poll_serve` / `serve`), the
-  opt-in async handler twins (all nine ops), and native async `ClientBinding`.
-  On `no_std`, `poll_serve_once` drives the same surface from a bare super-loop.
+- `async` enables the native-async Servient surface (`ConsumedThingHandle` /
+  `ExposedThingHandle` async methods, the opt-in async handler twins — all
+  nine ops — and native async `ClientBinding`). On `no_std`, the same
+  surface is reachable via embassy once that executor lands; on bare
+  `no_std`, bindings expose sync `try_accept` for a super-loop poll, and
+  sync handlers run inline.
 - `zenoh` enables the Rust `zenoh` (std) backend including `ZenohServerBinding`.
 - `zenoh-pico` enables the constrained `no_std + alloc` platform-hook backend
   (mutually exclusive with `zenoh`).

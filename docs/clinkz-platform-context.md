@@ -118,8 +118,9 @@ The WoT engine (`clinkz-wot`) is protocol-neutral and focused on:
 - TD/TM data model, validation, serialization, round-trip fidelity.
 - Protocol-neutral operation dispatch (form selection, security verification,
   payload codec).
-- Servient runtime composition (expose, consume, driving loop, event broker,
-  runtime TD mutation lifecycle).
+- Servient runtime composition (expose, consume, binding-owned dispatch
+  via `Dispatch::serve_request`, event broker, runtime TD mutation
+  lifecycle).
 - Discovery directory traits (protocol-neutral registration, query, listing).
 
 The engine deliberately does NOT include:

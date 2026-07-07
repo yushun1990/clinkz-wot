@@ -171,9 +171,11 @@ Scope:
 
 - `Servient` holds `Arc<dyn Discoverer>` + `Option<Arc<dyn DirectoryPublisher>>`
   (drop `Servient<D>`).
-- Async-only driving: `poll_serve` / `serve` / `poll_serve_once` (manual-poll
-  for bare `no_std` super-loops). Remove `driving_sync.rs` /
-  `driving_async.rs` / `DrivingState` / `AsyncAcceptState` split.
+- Driving is **binding-owned** (commit c03de58 superseded the original
+  v4.0 design that put `poll_serve` / `serve` / `poll_serve_once` on the
+  Servient). The Servient now exposes only `Dispatch::serve_request` for
+  bindings to call; each binding decides its driving model
+  (fan-in channel / async route handler / super-loop `try_accept`).
 - `produce` / `consume` / `discover` / `fetch_td` facade; `expose` / `destroy`
   with frozen TD; remove `add_*` / `remove_*` post-expose mutation.
 - Real async `ConsumedThingHandle` (remove fake-async delegation).

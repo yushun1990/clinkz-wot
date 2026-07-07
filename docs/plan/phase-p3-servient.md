@@ -1,5 +1,21 @@
 # Phase P3 — Servient Rewire
 
+> **⚠ Status — implemented with divergence.** This phase plan scoped the
+> v4.0 Servient surface. The implementation landed the surface but later
+> diverged in two ways:
+>
+> 1. **Driving loop removed** (commit `c03de58`). The `poll_serve` /
+>    `serve` / `poll_serve_once` primitives this plan describes are **not
+>    in current source**. The Servient now exposes only
+>    `Dispatch::serve_request`; driving is binding-owned.
+> 2. **User-facing API expanded** (commits `39bcb4d` → `b6f5a97`, tracked
+>    in `docs/plan/user-facing-api-implementation-plan.md`). `ProtocolBinding`
+>    facade replaces direct binding registration; handles carry the full
+>    Scripting API §6/§7 surface.
+>
+> The body of this document is the v4.0 phase plan; read alongside
+> `docs/user-facing-api.md` for the current external boundary.
+
 > Baseline: `docs/baseline/engine-architecture-baseline.md` (v4.0) §7.
 
 ## Goal

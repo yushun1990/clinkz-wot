@@ -24,10 +24,15 @@ Embedded-ready crates should support:
 - Owned inbound interaction model (`InboundRequest`, `InboundResponse`,
   `AffordanceTarget`, `BindingRequest`) that is `'static` and usable across
   spawnable boundaries (baseline v3.1 §2).
-- Sync inbound driving via `poll_serve_once` on MCU super-loops (v4.0 §7.2):
-  one request per tick, rotation-cursor fairness, no backlog drain. The
-  native-async driving layer (`async` feature) is the canonical model; bare
-  `no_std` uses the manual-poll primitive.
+- Sync inbound driving via `ServerBinding::try_accept` polled from the MCU
+  super-loop, dispatching via `Dispatch::serve_request` (v4.0 §4.5/§7.3).
+  The driving loop is **binding-owned**, not on the Servient: each binding
+  decides whether to push inbound requests into a fan-in channel (zenoh),
+  call `Dispatch::serve_request` directly from an async handler
+  (HTTP/CoAP), or expose `try_accept` for a super-loop to poll (bare
+  `no_std`). There is no `poll_serve` / `serve` / `poll_serve_once` on the
+  Servient — those primitives were removed when the driving loop moved
+  out of the Servient (commit c03de58).
 - `ServerBinding` exposes a **synchronous `try_accept`** (no boxed
   `poll_accept`, no `select_all`) and wholesale `register_thing`/
   `unregister_thing` (v4.0 §4.5).
@@ -112,13 +117,16 @@ storage adapters and future production storage extension points.
 (non-generic in v4.0; the old `Servient<D>` is dropped) is `Clone` with `&self`
 methods, using `WotLock<T>` from `clinkz-wot-core` for interior mutability and
 lock-free `Arc`-snapshot reads for the read-heavy registries/handler tables.
-The driving layer is async-first: `poll_serve` / `serve` are the canonical
-primitives, and `poll_serve_once` is the bare-`no_std` manual-poll primitive
-(one request per tick, rotation-cursor fairness) intended to be called from the
-MCU super-loop. Std-only Servient conveniences (`serve` host loop with idle
-backoff, `std::eprintln!` diagnostics) stay behind the `std` feature. The
-project avoids naming these modules `core` because `clinkz-wot-core` already
-denotes the protocol-neutral engine trait crate.
+**Dispatch is binding-owned** (commit c03de58): the Servient exposes only
+`Dispatch::serve_request(req).await` for bindings to call from whichever
+driving model fits their transport — tokio task draining a fan-in channel
+(zenoh), direct async route handler (HTTP/CoAP), or super-loop polling
+`ServerBinding::try_accept` (bare `no_std`). The `poll_serve` / `serve` /
+`poll_serve_once` primitives that used to live on the Servient have been
+removed. Std-only Servient conveniences (`ServientBuilder`, host conveniences)
+stay behind the `std` feature. The project avoids naming these modules `core`
+because `clinkz-wot-core` already denotes the protocol-neutral engine trait
+crate.
 
 ## MCU Gateway Path: Two-Layer Plan
 
@@ -132,11 +140,11 @@ multi-thread safety is now inherent — no feature flag — so Layer 1 is gone.)
 The `ZenohPicoPlatform` trait in
 `protocol-bindings/protocols/zenoh/src/runtime/zenoh_pico.rs` defines the
 platform hook for constrained zenoh-pico C ABI integrations. The pico backend
-**will** implement `ServerBinding::try_accept` (synchronous-readiness, polled by
-the `poll_serve_once` super-loop) and the async `ClientBinding` — but this is
-**deferred** (P2 §2.7, AD16): the server-side `try_accept` model and the pico
-server module are not yet implemented/finalized. A concrete implementation
-requires:
+**will** implement `ServerBinding::try_accept` (synchronous-readiness, polled
+by the MCU super-loop, then dispatched via `Dispatch::serve_request`) and the
+async `ClientBinding` — but this is **deferred** (P2 §2.7, AD16): the
+server-side `try_accept` model and the pico server module are not yet
+implemented/finalized. A concrete implementation requires:
 
 - Target MCU selection (ESP32, STM32, nRF52, etc.).
 - zenoh-pico C library compiled for the target.
@@ -152,17 +160,18 @@ polling model are confirmed."
 ### Layer 2: Embassy async (concurrent dispatch on MCU) — DEFERRED
 
 With a concrete zenoh-pico platform (Layer 1), the engine compiles and runs on
-`no_std + alloc`, driven by `poll_serve_once` from the super-loop. Layer 2 adds
-the `embassy` async runtime for concurrent dispatch:
+`no_std + alloc`, driven from the super-loop via `ServerBinding::try_accept` →
+`Dispatch::serve_request`. Layer 2 adds the `embassy` async runtime for
+concurrent dispatch:
 
 - New `embassy` feature on `clinkz-wot-servient` (alongside existing `async`
   which uses tokio).
-- `serve()` ported to embassy primitives (`embassy_futures::select`,
-  `embassy_time::Timer`).
+- Binding-owned driving tasks ported to embassy primitives
+  (`embassy_futures::select`, `embassy_time::Timer`).
 - No `tokio::select!` or `tokio::time::sleep` — embassy equivalents.
-- Enables cross-Thing concurrent dispatch on MCU (same `select!` +
-  `FuturesUnordered` pattern as the tokio `serve()`, but on no_std).
+- Enables cross-Thing concurrent dispatch on MCU (same fan-in +
+  `FuturesUnordered` pattern as the tokio path, but on no_std).
 
 Blocked by: requires embassy executor + target (or simulator) for testing.
-The `serve()` driving design (v4.0 §7.2) is runtime-agnostic and portable to
-embassy once the target is available.
+The binding-owned driving design is runtime-agnostic and portable to embassy
+once the target is available.
