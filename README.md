@@ -12,9 +12,11 @@ Protocol bindings are pluggable; **Zenoh** is the first concrete binding.
 The v4.0 baseline is a one-shot breaking refactor driven by three decisions:
 
 1. **Full WoT Scripting API alignment** — the engine surfaces (`produce`/
-   `consume`/`discover`/`fetch_td`, `set_*_handler`, `read_property`/
-   `write_property`/`invoke_action`/`subscribe_event`, `expose`/`destroy`)
-   follow the Scripting API method catalogue.
+   `consume`/`discover`/`fetch_td`, `set_*_handler`/`set_async_*_handler`,
+   `read_property`/`write_property`/`invoke_action`/`observe_property`/
+   `subscribe_event`/`subscribe_all_events`/`read_all_properties`/
+   `write_multiple_properties`, `expose`/`destroy`) follow the Scripting API
+   method catalogue.
 2. **Frozen TD at expose** — no dynamic affordance add/remove after `expose()`;
    handlers may be replaced throughout the exposed lifetime.
 3. **Sync-primary handlers, async driving** — inbound handlers are synchronous
@@ -28,10 +30,12 @@ The v4.0 baseline is a one-shot breaking refactor driven by three decisions:
 | `WotLock<T>` | `core` | Arc-backed `Clone`-able lock (`std::sync::RwLock` / `critical_section::Mutex`). |
 | `ExposedThing` | `core` | Produced Thing + per-affordance handler sets (9 sync + 9 async traits). |
 | `ConsumedThing` | `core` | Consumed Thing + registered `ClientBinding`s. |
+| `ProtocolBinding` | `core` | **App-facing** unified binding facade; `client_factory()` + `server()`. What `ServientBuilder::with_protocol_binding` accepts. |
+| `ConsumedThingHandle` / `ExposedThingHandle` | `servient` | **App-facing** interaction surfaces (Scripting API §6/§7). |
 | `Servient` | `servient` | Non-generic composition root: registries, bindings, fan-in channel, discoverer. |
 | `ServientBuilder` | `servient` | Consuming fluent builder. |
 | `InMemoryDirectory` | `discovery` | Reference directory backend (all 4 capability traits). |
-| `ServerBinding` / `ClientBinding` | `core` | Inbound (`try_accept`/`send_response`/`register_thing`) / outbound (`async invoke`/`subscribe`). |
+| `ServerBinding` / `ClientBinding` / `ClientBindingFactory` | `core` | **Engine-internal** contracts for binding authors. Inbound (`try_accept`/`send_response`/`register_thing`) / outbound (`async invoke`/`subscribe`). Not re-exported from `servient`; reachable via `core` only when implementing a `ProtocolBinding`. |
 
 ## Workspace Crates
 
@@ -78,7 +82,12 @@ scripts/check-baseline.sh       # fmt + test + clippy + no_std + feature-matrix
  → send_response                      → send_response
 ```
 
-### 1. Implement a ServerBinding
+### 1. (Binding authors only) Implement a ServerBinding
+
+> Application developers do **not** implement `ServerBinding` directly. They
+> register a `ProtocolBinding` (next section), which wraps both halves.
+> This section is for binding authors adding a new protocol (HTTP, CoAP,
+> MQTT, ...).
 
 每个 binding 在 `configure` 里选择自己的 dispatch 模式：
 
@@ -122,7 +131,13 @@ impl ServerBinding for MyServerBinding {
 }
 ```
 
-### 2. Build a Servient
+### 2. Build a Servient (application entry point)
+
+Application code registers one `ProtocolBinding` per protocol. The Servient
+extracts the client factory and server singleton internally. The
+`ClientBinding` / `ServerBinding` / `ClientBindingFactory` traits stay
+engine-internal (defined in `clinkz-wot-core` for binding authors) and are
+**not** re-exported from `clinkz-wot-servient`.
 
 ```rust
 use alloc::{boxed::Box, sync::Arc};
@@ -155,6 +170,9 @@ let servient = ServientBuilder::new()
     .expect("build servient");
 ```
 
+For pure-consumer / pure-exposer bindings, use `clinkz_wot_core::client_only`
+or `clinkz_wot_core::server_only` to wrap a single-direction adapter.
+
 `build()` 组装 Servient，然后对每个 binding 调一次 `configure(&ctx)`，
 传入 `BindingContext { event_broker, dispatch, fanin_sender }`。每个 binding
 按需取用。
@@ -177,16 +195,40 @@ impl PropertyReadHandler for StatusRead {
 let handle = servient.produce(lamp_td()).expect("produce");
 
 // 挂载 handler（生命周期内可随时替换 — AD14）。
+// sync handler（零分配热路径）：
 handle.set_property_read_handler("status", StatusRead);
+
+// 或 async handler（I/O 密集型，feature = "async"）：
+// handle.set_async_property_read_handler("status", MyAsyncRead);
 
 // expose() 在所有 server binding 上注册路由 + 插入 servable 注册表。
 // TD 在此后冻结。
 handle.expose().await.expect("expose");
 
-// 本地服务端交互。
+// 本地服务端交互 — sync 派发调 sync handler；async 派发（*_async）调任一种。
 let value = handle.read_property("status", &InteractionInput::empty())?;
+let _     = handle.read_property_async("status", &InteractionInput::empty()).await?;
 handle.emit_event("overheat", payload)?;
+handle.emit_property_change("temperature", temp_payload)?;
 ```
+
+Local dispatch surface on `ExposedThingHandle` (Scripting API §7):
+
+| Op | Sync method | Async method |
+| --- | --- | --- |
+| read property | `read_property` | `read_property_async` |
+| write property | `write_property` | `write_property_async` |
+| invoke action | `invoke_action` | `invoke_action_async` |
+| query action | `query_action` | `query_action_async` |
+| cancel action | `cancel_action` | `cancel_action_async` |
+| observe property | `observe_property` | `observe_property_async` |
+| unobserve property | `unobserve_property` | `unobserve_property_async` |
+| subscribe event | `subscribe_event` | `subscribe_event_async` |
+| unsubscribe event | `unsubscribe_event` | `unsubscribe_event_async` |
+
+> Sync dispatch refuses async handlers (returns `MissingHandler`). Use the
+> `*_async` variant when an async handler is registered. See
+> `docs/wot-compliance.md` "P3 deviations".
 
 ### 4. Dispatch — 由 binding 驱动，不是 Servient
 
@@ -239,10 +281,60 @@ loop {
 ```rust
 let consumed = servient.consume(remote_td()).expect("consume");
 
-// 所有方法是 async — 驱动真实 ClientBinding。
-let output = consumed.read_property("status", InteractionOptions::new()).await?;
-let _ = consumed.invoke_action("toggle", InteractionOptions::new()).await?;
+// One-shot ops — all async (drive real ClientBinding):
+let _ = consumed
+    .read_property("status", InteractionOptions::new())
+    .await?;
+let _ = consumed
+    .invoke_action("toggle", InteractionOptions::new())
+    .await?;
+
+// Bulk property ops (Scripting API §6.5):
+let all = consumed
+    .read_all_properties(InteractionOptions::new())
+    .await?; // aggregated JSON InteractionOutput
+let _ = consumed
+    .write_multiple_properties(
+        &[
+            ("brightness", Payload::new(b"75".to_vec(), "text/plain")),
+        ].into_iter().collect(),
+        InteractionOptions::new(),
+    )
+    .await?;
+
+// Streaming ops (Scripting API §6.6/§6.7) — pull-queue deviation:
+let mut temp = consumed
+    .observe_property("temperature", InteractionOptions::new())
+    .await?;
+while let Some(sample) = temp.next().await {
+    println!("temp={:?}", sample.body);
+}
+// Optional explicit cleanup; dropping the handle also releases the guard:
+consumed
+    .unobserve_property("temperature", InteractionOptions::new())
+    .await?;
+
+// Subscribe to a single event:
+let mut motion = consumed
+    .subscribe_event("motion", InteractionOptions::new())
+    .await?;
+
+// Or fan out across every declared event in one call:
+let mut events = consumed
+    .subscribe_all_events(InteractionOptions::new())
+    .await?;
+while let Some((event_name, payload)) = events.next().await {
+    println!("{}: {:?}", event_name.as_str(), payload.body);
+}
 ```
+
+`observe_property` / `subscribe_event` / `subscribe_all_events` return a
+`Subscription` / `EventStream` implementing `futures_core::Stream`. The
+wire-side `SubscriptionGuard` for each open subscription is owned by the
+handle; dropping the handle releases every still-active guard. See
+`docs/wot-compliance.md` "P2 deviations" for the deviation notes
+(`unobserve_*` return shape, bulk aggregation format, fail-fast
+`subscribe_all_events`).
 
 ### 6. Discover Things
 
@@ -257,6 +349,10 @@ while let Some(thing) = process.next().await? {
     println!("found: {:?}", thing.id);
 }
 ```
+
+> `InteractionOptions` accepts bare field access or two builder
+> conveniences: `InteractionOptions::with_data(payload)` and
+> `.with_uri_variable("k", "v")` (chainable).
 
 ### 7. Destroy (Quiescing Teardown)
 
@@ -309,6 +405,8 @@ CLINKZ_WOT_RUN_ZENOH_RUNTIME_TESTS=1 \
 
 ## Documentation
 
+- [User-facing API spec](docs/user-facing-api.md) — frozen external boundary, migration delta
+- [User-facing API implementation plan](docs/plan/user-facing-api-implementation-plan.md) — P0–P3 phase status
 - [Implementation plan](PLAN.md)
 - [Engine architecture baseline (v4.0)](docs/baseline/engine-architecture-baseline.md)
 - [Servient workflow diagrams](docs/servient-workflow.md)
