@@ -42,11 +42,11 @@ The v4.0 baseline is a one-shot breaking refactor driven by three decisions:
 | Crate | Role | `no_std` |
 | --- | --- | --- |
 | [`clinkz-wot-td`](td) | TD/TM data models, builders, serde, validation, URI helpers. | ✅ root |
-| [`clinkz-wot-core`](core) | Interaction core: handler traits, `ExposedThing`/`ConsumedThing`, `WotLock`, `EventBroker`, `ServerBinding`/`ClientBinding`, `PushFn`. | ✅ root |
+| [`clinkz-wot-core`](core) | Interaction core: handler traits, `ExposedThing`/`ConsumedThing`, `WotLock`, `EventBroker`, `ProtocolBinding` (app-facing) + `ServerBinding`/`ClientBinding` (engine-internal), `PushFn`. | ✅ root |
 | [`clinkz-wot-discovery`](discovery) | Introduction→Exploration sessions, `DirectoryReader`/`Publisher`/`Watch`, `Discoverer`, `InMemoryDirectory`. | ✅ root |
 | [`clinkz-wot-protocol-bindings`](protocol-bindings/core) | Shared form selection, op resolution, `error_status`, URI-template expansion. | ✅ root |
-| [`clinkz-wot-protocol-bindings-zenoh`](protocol-bindings/protocols/zenoh) | Zenoh planning + async runtime (`zenoh` feature). | ✅ planning layer |
-| [`clinkz-wot-servient`](servient) | `Servient` + `ServientBuilder` + driving (`poll_serve`/`serve`/`poll_serve_once`) + handles. | ✅ root |
+| [`clinkz-wot-protocol-bindings-zenoh`](protocol-bindings/protocols/zenoh) | Zenoh planning + async runtime + `ZenohProtocolBinding` facade (`zenoh` feature). | ✅ planning layer |
+| [`clinkz-wot-servient`](servient) | `Servient` + `ServientBuilder` + `ConsumedThingHandle`/`ExposedThingHandle`. Dispatch is binding-owned; the Servient exposes `Dispatch::serve_request` for bindings to call. | ✅ root |
 
 ## Quick Start
 
@@ -365,10 +365,10 @@ handle.destroy().await.expect("destroy");
 
 | Feature | Effect |
 | --- | --- |
-| `default = ["std"]` | std runtime + tokio driving. `std` implies `async`. |
+| `default = ["std"]` | std runtime + tokio. `std` implies `async`. |
 | `alloc` | Dynamic data on `no_std`. |
 | `std` | Networking, filesystem, async runtime, host conveniences. Implies `alloc` + `async`. |
-| `async` | Native-async driving (`poll_serve`, `serve`). On `no_std` requires an executor (embassy). |
+| `async` | Native-async Servient surface (`consume`/`produce` handles, async handler setters, async local dispatch, streaming subscriptions). On `no_std` requires an executor (embassy). |
 | `zenoh` | Rust `zenoh` std backend (real async consume + inbound). |
 | `zenoh-pico` | Constrained `no_std+alloc` platform-hook backend (mutually exclusive with `zenoh`). |
 | `td2-preview` | Experimental TD 2.0 fields. |
