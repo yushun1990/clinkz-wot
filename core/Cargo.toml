@@ -6,7 +6,7 @@ edition.workspace = true
 [dependencies]
 clinkz-wot-td = { path = "../td", default-features = false }
 async-trait = { workspace = true, optional = true }
-async-channel = { version = "2", optional = true }
+async-channel = { version = "2", optional = true, default-features = false }
 critical-section = { version = "1", default-features = false }
 futures-core = { workspace = true, optional = true }
 
@@ -16,8 +16,15 @@ tokio = { version = "1", features = ["macros", "rt", "rt-multi-thread", "sync", 
 
 [features]
 default = ["std"]
-std = ["clinkz-wot-td/std", "critical-section/std", "dep:async-channel"]
-async = ["dep:async-trait", "dep:futures-core"]
+# Host runtime: std `RwLock` backend for `WotLock`, std error impls, std-only
+# dep flags. Deliberately orthogonal to `async` — `std` alone gives the lock
+# backend without pulling the async syntax surface or any executor.
+std = ["clinkz-wot-td/std", "critical-section/std"]
+# Async *syntax surface* (async-trait + futures-core + the async-channel
+# fan-in primitive). no_std-reachable; pulls no executor/runtime. The fan-in
+# channel (`async-channel`) is an async primitive paired with `Dispatch`, so
+# it lives here rather than under `std`.
+async = ["dep:async-trait", "dep:futures-core", "dep:async-channel"]
 ## Experimental TD 2.0 data-model surface (`ActionAffordance.synchronous`).
 ## Forwards to the `clinkz-wot-td` data model gate.
 td2-preview = ["clinkz-wot-td/td2-preview"]

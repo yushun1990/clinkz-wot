@@ -39,15 +39,19 @@ struct SecurityListField(#[serde_as(as = "OneOrMany<_>")] Vec<String>);
 struct ProfileField(#[serde_as(as = "Option<OneOrMany<_>>")] Option<Vec<AbsoluteUri>>);
 
 /// Deserialize adapter for RFC 3339 date-time fields (`created`, `modified`).
+///
+/// Uses `crate::rfc3339` (a no_std-compatible reimplementation) rather than
+/// `time::serde::rfc3339`, which would pull `time`'s `formatting`/`parsing`
+/// features and force `std` onto this crate.
 #[derive(Deserialize)]
-struct Rfc3339DateTimeField(#[serde(with = "time::serde::rfc3339")] OffsetDateTime);
+struct Rfc3339DateTimeField(#[serde(with = "crate::rfc3339")] OffsetDateTime);
 
 /// Serialize adapter emitting an `OffsetDateTime` as an RFC 3339 string.
 struct Rfc3339Ser<'a>(&'a OffsetDateTime);
 
 impl Serialize for Rfc3339Ser<'_> {
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        time::serde::rfc3339::serialize(self.0, serializer)
+        crate::rfc3339::serialize(self.0, serializer)
     }
 }
 

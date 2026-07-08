@@ -135,6 +135,7 @@ pub use core::data_type::AbsoluteUri;
 
 mod components;
 mod flat;
+mod rfc3339;
 pub use components::{
     affordance, context, data_schema, form, link, security_scheme, util as components_util,
 };

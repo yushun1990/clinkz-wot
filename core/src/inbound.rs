@@ -1,12 +1,14 @@
 //! Inbound interaction request and response model, and the inbound binding
 //! contract (baseline v4.0 §4.5).
 //!
-//! A [`ServerBinding`] produces [`InboundRequest`]s. On `std` it self-pushes
-//! into a bounded fan-in channel via [`ServerBinding::set_request_sink`]; on
-//! `no_std` the driving loop polls [`ServerBinding::try_accept`]. The Servient
-//! driving loop dispatches each request against the exposed Thing registry and
-//! returns an [`InboundResponse`] that the binding matches back to its transport
-//! via the echoed [`CorrelationId`].
+//! A [`ServerBinding`] produces [`InboundRequest`]s. When the async driving
+//! surface is enabled (always under `std`; opt-in on `no_std` via an async
+//! executor such as embassy), it self-pushes into a bounded fan-in channel via
+//! [`ServerBinding::set_request_sink`]; on bare `no_std` the driving loop polls
+//! [`ServerBinding::try_accept`]. The Servient driving loop dispatches each
+//! request against the exposed Thing registry and returns an [`InboundResponse`]
+//! that the binding matches back to its transport via the echoed
+//! [`CorrelationId`].
 
 #[cfg(feature = "async")]
 use alloc::boxed::Box;
@@ -20,11 +22,13 @@ use crate::{
     security::AuthMaterial,
 };
 
-/// Bounded fan-in channel sender handed to each server binding on `std`
-/// (baseline §4.5 / AD13 / D16). The Servient owns the matching `Receiver`;
-/// each binding `try_send`s inbound requests from its **synchronous** transport
-/// callbacks. Runtime-neutral (tokio/async-std/embassy-std).
-#[cfg(feature = "std")]
+/// Bounded fan-in channel sender handed to each server binding when the
+/// async driving surface is enabled (baseline §4.5 / AD13 / D16). The
+/// Servient owns the matching `Receiver`; each binding `try_send`s inbound
+/// requests from its **synchronous** transport callbacks. Runtime-neutral
+/// (tokio/async-std/embassy-std); the channel itself (`async-channel`) is
+/// `no_std + alloc`-compatible, so this lives behind `async`, not `std`.
+#[cfg(feature = "async")]
 pub type FanInSender<T> = async_channel::Sender<T>;
 
 /// Request produced by a server binding for an inbound interaction.
@@ -117,10 +121,10 @@ impl InboundResponse {
 pub struct BindingContext {
     /// Event fan-out broker for event/observable property publish.
     pub event_broker: EventBroker,
-    /// Bounded fan-in sender (std only). `None` when the binding uses direct
-    /// dispatch or poll instead. Sync-callback bindings (zenoh) `try_send`
-    /// from their callbacks.
-    #[cfg(feature = "std")]
+    /// Bounded fan-in sender (async driving surface). `None` when the binding
+    /// uses direct dispatch or poll instead. Sync-callback bindings (zenoh)
+    /// `try_send` from their callbacks.
+    #[cfg(feature = "async")]
     pub fanin_sender: Option<FanInSender<InboundRequest>>,
     /// Direct-dispatch handle (async only). `None` on bare no_std or when the
     /// binding doesn't use direct dispatch. Async-handler bindings (HTTP/CoAP)

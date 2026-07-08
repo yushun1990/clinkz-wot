@@ -25,10 +25,15 @@ zenoh = [
     "clinkz-wot-td/std",
     "serde_json/std",
     "dep:zenoh",
+    # tokio is the zenoh backend's driving runtime (server fan-in channel,
+    # task spawn). It belongs to the concrete `zenoh` backend, NOT to the
+    # `async` syntax surface — the latter must stay no_std-reachable.
+    "dep:tokio",
 ]
+# Async syntax surface for the binding (async-trait + core/async). Kept free
+# of any runtime so a future no_std zenoh-pico async backend can reuse it.
 async = [
     "dep:async-trait",
-    "dep:tokio",
     "clinkz-wot-core/async",
 ]
 zenoh-pico = []

@@ -13,7 +13,6 @@ log = { version = "0.4", default-features = false }
 serde_json = { workspace = true }
 async-trait = { workspace = true, optional = true }
 futures-util = { workspace = true, optional = true }
-tokio = { version = "1", optional = true, features = ["sync", "macros", "time", "rt"] }
 
 [dev-dependencies]
 clinkz-wot-codec-cbor = { path = "../codecs/cbor" }
@@ -34,10 +33,14 @@ std = [
 ## Native-async Servient surface (consume/produce handles, async handler
 ## setters, async local dispatch). Driving is binding-owned; the Servient
 ## itself exposes only `Dispatch::serve_request` for bindings to call.
+##
+## This feature is the *async syntax surface* only (async-trait +
+## futures-util): no_std-reachable. The tokio runtime is NOT pulled in here;
+## it arrives via the `std` feature (host conveniences) or dev-dependencies
+## (tests). See AGENTS.md / docs/no-std-embedded.md.
 async = [
     "dep:async-trait",
     "dep:futures-util",
-    "dep:tokio",
     "clinkz-wot-core/async",
     "clinkz-wot-discovery/async",
 ]

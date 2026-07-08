@@ -6,11 +6,24 @@ edition.workspace = true
 [dependencies]
 fluent-uri = { version = "0.4", features = ["alloc", "serde"], default-features = false }
 
-time = { workspace = true, features = ["alloc", "macros", "serde-well-known", "quickcheck"] }
+# `quickcheck` is intentionally NOT enabled here: it pulls `getrandom`, which
+# is unsupported on bare `no_std` targets and would break the crate's
+# `no_std + alloc` guarantee. quickcheck-style property testing, if needed,
+# belongs in dev-dependencies / a dedicated test feature.
+# Only the `OffsetDateTime` type + its core accessors/constructors are used.
+# `macros`/`serde`/`serde-well-known` are intentionally NOT enabled:
+# `serde-well-known` pulls `formatting`+`parsing`, both of which hard-require
+# `std` in `time` and would break this crate's `no_std + alloc` guarantee.
+# RFC 3339 (de)serialization is handled by the in-tree `rfc3339` module.
+time = { workspace = true, features = ["alloc"] }
 
 serde = { workspace = true, features = ["derive", "alloc"] }
 serde_json = { workspace = true, features = ["alloc", "raw_value"] }
-serde_with = { version = "3.18", features = ["macros", "alloc", "time_0_3"], default-features = false }
+# `time_0_3` is intentionally NOT enabled: this crate does not use any
+# serde_with time converters (only `OneOrMany` / `serde_as` /
+# `skip_serializing_none`), and enabling it would let `serde_with/std` forward
+# `time/serde-well-known` + `time/std`, re-introducing the `std` dependency.
+serde_with = { version = "3.18", features = ["macros", "alloc"], default-features = false }
 
 [features]
 default = ["std"]

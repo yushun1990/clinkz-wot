@@ -23,8 +23,11 @@ clinkz-wot-codec-cbor = { path = "../codecs/cbor", default-features = false, opt
 [features]
 default = ["std"]
 
-# std runtime (tokio + the full Servient surface). Implies async + alloc.
+# std runtime (tokio + the full Servient surface). The Servient/discovery
+# std surfaces are async-first, so `std` implies `async` — otherwise the
+# prelude would not export the async types that std unconditionally compiles.
 std = [
+    "async",
     "clinkz-wot-core/std",
     "clinkz-wot-td/std",
     "clinkz-wot-discovery/std",
