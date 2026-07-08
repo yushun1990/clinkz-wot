@@ -1083,9 +1083,12 @@ mod consumed {
     /// Dispatch resolves the selected form against the affordance, picks a
     /// binding whose [`ClientBinding::supports`] holds, and drives
     /// [`ClientBinding::invoke`] asynchronously.
+    ///
+    /// v4.1 (AD57): bindings are shared `Arc<dyn ClientBinding>` — one
+    /// instance per protocol serves all consumed Things.
     pub struct ConsumedThing {
         pub(crate) thing: Arc<Thing>,
-        pub(crate) bindings: Vec<Box<dyn ClientBinding>>,
+        pub(crate) bindings: Vec<Arc<dyn ClientBinding>>,
     }
 
     impl ConsumedThing {
@@ -1110,9 +1113,10 @@ mod consumed {
             &self.thing
         }
 
-        /// Registers a protocol binding.
-        pub fn register_binding(&mut self, binding: impl ClientBinding + 'static) {
-            self.bindings.push(Box::new(binding));
+        /// Registers a shared protocol binding (v4.1 AD57). The binding is
+        /// `Arc`-cloned, not boxed — one instance serves all consumed Things.
+        pub fn register_binding(&mut self, binding: Arc<dyn ClientBinding>) {
+            self.bindings.push(binding);
         }
 
         /// Performs an operation against a caller-selected affordance form.

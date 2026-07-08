@@ -1,14 +1,13 @@
 //! Inbound interaction request and response model, and the inbound binding
-//! contract (baseline v4.0 §4.5).
+//! contract (baseline v4.1 §4.5).
 //!
-//! A [`ServerBinding`] produces [`InboundRequest`]s. When the async driving
-//! surface is enabled (always under `std`; opt-in on `no_std` via an async
-//! executor such as embassy), it self-pushes into a bounded fan-in channel via
-//! [`ServerBinding::set_request_sink`]; on bare `no_std` the driving loop polls
-//! [`ServerBinding::try_accept`]. The Servient driving loop dispatches each
-//! request against the exposed Thing registry and returns an [`InboundResponse`]
-//! that the binding matches back to its transport via the echoed
-//! [`CorrelationId`].
+//! A [`ServerBinding`] produces [`InboundRequest`]s. On `std` the binding owns
+//! its driving model: `serve()` declares routes and spawns a draining task
+//! that calls `ctx.dispatch.serve_request(req).await`; on bare `no_std` the
+//! super-loop polls [`ServerBinding::try_accept`]. The Servient's dispatch
+//! resolves each request against the exposed Thing registry and returns an
+//! [`InboundResponse`] that the binding matches back to its transport via the
+//! echoed [`CorrelationId`].
 
 #[cfg(feature = "async")]
 use alloc::boxed::Box;
@@ -21,15 +20,6 @@ use crate::{
     interaction::{InteractionInput, InteractionOutput},
     security::AuthMaterial,
 };
-
-/// Bounded fan-in channel sender handed to each server binding when the
-/// async driving surface is enabled (baseline §4.5 / AD13 / D16). The
-/// Servient owns the matching `Receiver`; each binding `try_send`s inbound
-/// requests from its **synchronous** transport callbacks. Runtime-neutral
-/// (tokio/async-std/embassy-std); the channel itself (`async-channel`) is
-/// `no_std + alloc`-compatible, so this lives behind `async`, not `std`.
-#[cfg(feature = "async")]
-pub type FanInSender<T> = async_channel::Sender<T>;
 
 /// Request produced by a server binding for an inbound interaction.
 ///
@@ -107,64 +97,63 @@ impl InboundResponse {
     }
 }
 
-/// Inbound protocol binding contract (baseline v4.0 §4.5).
-///
-/// Routes are declared/undeclared wholesale per Thing during `expose()` /
-/// `destroy()` (decision 2 — no per-affordance registration). On `std` the
-/// binding self-pushes inbound requests into a bounded fan-in channel
-/// ([`set_request_sink`](Self::set_request_sink)); on `no_std` the driving loop
-/// polls [`try_accept`](Self::try_accept).
-/// All capabilities the Servient can inject into a binding at setup time.
-/// Each binding picks what it needs; new capabilities are added as fields
-/// without changing the [`ServerBinding`] trait.
+/// All capabilities the Servient can inject into a binding at `serve()` time
+/// (v4.1 AD56). Each binding picks what it needs.
 #[derive(Clone)]
 pub struct BindingContext {
     /// Event fan-out broker for event/observable property publish.
     pub event_broker: EventBroker,
-    /// Bounded fan-in sender (async driving surface). `None` when the binding
-    /// uses direct dispatch or poll instead. Sync-callback bindings (zenoh)
-    /// `try_send` from their callbacks.
-    #[cfg(feature = "async")]
-    pub fanin_sender: Option<FanInSender<InboundRequest>>,
     /// Direct-dispatch handle (async only). `None` on bare no_std or when the
-    /// binding doesn't use direct dispatch. Async-handler bindings (HTTP/CoAP)
-    /// call `serve_request(req).await` directly.
+    /// binding doesn't use direct dispatch. On std the binding's draining task
+    /// calls `serve_request(req).await` to route requests through the Servient.
     #[cfg(feature = "async")]
     pub dispatch: Option<alloc::sync::Arc<dyn Dispatch>>,
 }
 
+/// Inbound protocol binding contract (baseline v4.1 §4.5, AD56).
+///
+/// The binding owns its lifecycle: [`serve`](Self::serve) declares routes for
+/// one Thing AND starts the driving model (std: spawns a draining task; no_std:
+/// configures poll state). [`shutdown`](Self::shutdown) is the teardown twin.
+/// This replaces v4.0's `configure` + `register_thing` + `unregister_thing` +
+/// `set_event_broker` + `set_request_sink`.
 pub trait ServerBinding: Send + Sync {
-    /// One-shot setup: the Servient passes a [`BindingContext`] containing all
-    /// available capabilities (event broker, fan-in sender, dispatch handle).
-    /// Each binding clones what it needs and ignores the rest. Default no-op.
-    fn configure(&self, _ctx: &BindingContext) {}
+    /// Starts serving inbound requests for `thing_id` based on `td`.
+    ///
+    /// On std this declares transport routes (queryables / listeners) AND may
+    /// spawn a background draining task that recv()s from the binding's
+    /// internal channel and calls `ctx.dispatch.serve_request(req).await`,
+    /// then `self.send_response(resp)`. On no_std it declares routes and
+    /// configures poll state; the super-loop drains via `try_accept`.
+    ///
+    /// Returns `Result<(), CoreError>` so multi-binding rollback (AD27) can
+    /// detect a binding `k+1` failure, `shutdown` the succeeded `1..k`, and
+    /// surface a fatal `Err`.
+    fn serve(&self, thing_id: &ThingId, td: &Thing, ctx: &BindingContext) -> CoreResult<()>;
+
+    /// Stops serving `thing_id`: undeclares routes, cancels background tasks,
+    /// drops per-Thing state. Idempotent (AD27/E13) — best-effort across
+    /// bindings.
+    fn shutdown(&self, thing_id: &ThingId);
 
     /// Non-blocking drain of one currently-ready inbound request, or `None`.
+    /// Default `None`: std bindings that self-drive via a background task
+    /// never have `try_accept` called. no_std bindings override this so the
+    /// super-loop can poll.
     fn try_accept(&self) -> Option<InboundRequest> {
         None
     }
 
     /// Sends a response back to the requester identified by the response's
-    /// [`CorrelationId`].
+    /// [`CorrelationId`]. Required — every binding that accepts requests
+    /// must implement it.
     fn send_response(&self, response: InboundResponse);
-
-    /// Wholesale route registration for one Thing during `expose()`.
-    fn register_thing(&self, thing_id: &ThingId, td: &Thing) -> Result<(), CoreError>;
-
-    /// Wholesale route removal during `destroy()`.
-    fn unregister_thing(&self, thing_id: &ThingId);
 }
 
-/// Direct-dispatch handle for bindings that handle their own request lifecycle
-/// (HTTP async handlers, CoAP async handlers). The binding calls
-/// [`serve_request`](Self::serve_request) inside its transport's async handler
-/// and gets the [`InboundResponse`] directly — no fan-in channel, no driving
-/// loop. The transport's own concurrency model (connection pool, thread pool)
-/// provides backpressure.
-///
-/// Bindings with sync callbacks that cannot `.await` (zenoh) do NOT use this;
-/// they push to the fan-in channel via [`ServerBinding::set_request_sink`]
-/// instead.
+/// Direct-dispatch handle for bindings that handle their own request lifecycle.
+/// The binding's draining task calls
+/// [`serve_request`](Self::serve_request) and gets the [`InboundResponse`]
+/// directly.
 #[cfg(feature = "async")]
 #[async_trait::async_trait]
 pub trait Dispatch: Send + Sync {

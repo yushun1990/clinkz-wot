@@ -96,11 +96,7 @@ pub mod cbor {
 /// ```
 pub mod prelude {
     pub use crate::core::{
-        CoreError, CoreResult, InteractionInput, InteractionOptions, InteractionOutput, Payload,
-        PushFn,
-    };
-    pub use crate::core::{
-        ActionHandler, ActionQueryHandler, ActionCancelHandler, EventSubscribeHandler,
+        ActionCancelHandler, ActionHandler, ActionQueryHandler, EventSubscribeHandler,
         EventUnsubscribeHandler, PropertyObserveHandler, PropertyReadHandler,
         PropertyUnobserveHandler, PropertyWriteHandler,
     };
@@ -110,11 +106,13 @@ pub mod prelude {
         AsyncEventSubscribeHandler, AsyncEventUnsubscribeHandler, AsyncPropertyObserveHandler,
         AsyncPropertyReadHandler, AsyncPropertyUnobserveHandler, AsyncPropertyWriteHandler,
     };
-    pub use crate::servient::{ServientError, ServientResult};
-    #[cfg(feature = "async")]
-    pub use crate::servient::ProtocolBinding;
+    pub use crate::core::{
+        CoreError, CoreResult, InteractionInput, InteractionOptions, InteractionOutput, Payload,
+        PushFn,
+    };
     #[cfg(feature = "std")]
     pub use crate::servient::ServientBuilder;
     #[cfg(feature = "async")]
     pub use crate::servient::{ConsumedThingHandle, ExposedThingHandle, Servient};
+    pub use crate::servient::{ServientError, ServientResult};
 }

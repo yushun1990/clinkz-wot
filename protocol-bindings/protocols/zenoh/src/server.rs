@@ -25,7 +25,7 @@
 //! `destroy`.
 
 use std::collections::{BTreeMap, HashMap, VecDeque};
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
@@ -298,6 +298,9 @@ pub struct ZenohServerBinding {
     #[cfg(feature = "async")]
     #[allow(dead_code)]
     async_rx: Arc<tokio::sync::Mutex<tokio::sync::mpsc::Receiver<InboundRequest>>>,
+    /// Ensures the draining task is spawned at most once (on first `serve`).
+    #[cfg(feature = "async")]
+    draining_started: Arc<AtomicBool>,
 }
 
 impl ZenohServerBinding {
@@ -324,6 +327,8 @@ impl ZenohServerBinding {
             #[cfg(feature = "async")]
             #[allow(dead_code)]
             async_rx: Arc::new(tokio::sync::Mutex::new(async_rx)),
+            #[cfg(feature = "async")]
+            draining_started: Arc::new(AtomicBool::new(false)),
         }
     }
 
@@ -382,47 +387,21 @@ impl ServerBinding for ZenohServerBinding {
     }
 
     fn send_response(&self, response: InboundResponse) {
-        let reply_target = {
-            let Ok(mut state) = self.reply_targets.lock() else {
-                return;
-            };
-            // Throttled TTL sweep under the same lock, then remove the
-            // correlation's reply target.
-            if state.last_sweep.elapsed() >= SWEEP_INTERVAL {
-                state.sweep();
-            }
-            state
-                .targets
-                .remove(&response.correlation)
-                .map(|entry| entry.reply)
-        };
-
-        match reply_target {
-            Some(ReplyTarget::Query { query, key_expr }) => {
-                if let Some(err) = response.error {
-                    let status = clinkz_wot_protocol_bindings::error_status(&err);
-                    if let Err(e) = query.reply_err(format!("[{}] {}", status, err)).wait() {
-                        log::warn!("Zenoh server: failed to send error reply: {e}");
-                    }
-                } else {
-                    let (payload_body, content_type) = match response.output.data {
-                        Some(payload) => (payload.body, payload.content_type),
-                        None => (Default::default(), String::new()),
-                    };
-                    let mut builder = query.reply(key_expr.as_str(), payload_body.as_ref());
-                    if !content_type.is_empty() {
-                        builder = builder.encoding(Encoding::from(content_type.as_str()));
-                    }
-                    if let Err(e) = builder.wait() {
-                        log::warn!("Zenoh server: failed to send reply: {e}");
-                    }
-                }
-            }
-            Some(ReplyTarget::Put) | None => { /* no reply needed */ }
-        }
+        deliver_response(&self.reply_targets, response);
     }
 
-    fn register_thing(&self, thing_id: &ThingId, td: &Thing) -> Result<(), CoreError> {
+    fn serve(
+        &self,
+        thing_id: &ThingId,
+        td: &Thing,
+        ctx: &clinkz_wot_core::BindingContext,
+    ) -> Result<(), CoreError> {
+        // Store event broker from context (was v4.0 configure()).
+        if let Ok(mut event_broker) = self.event_broker.lock() {
+            *event_broker = Some(ctx.event_broker.clone());
+        }
+
+        // Declare routes (was v4.0 register_thing()).
         let id_str = thing_id.as_str();
         let routes = plan_inbound_routes(id_str, td).map_err(CoreError::InvalidInteraction)?;
         let broker = self
@@ -452,10 +431,17 @@ impl ServerBinding for ZenohServerBinding {
             .lock()
             .map_err(|e| CoreError::InvalidInteraction(e.to_string()))?
             .insert(thing_id.clone(), by_affordance);
+
+        // Spawn the draining task on the first serve (closes the v4.0
+        // dead-async_rx gap — nobody was draining the internal channel).
+        #[cfg(feature = "async")]
+        self.ensure_draining_task(ctx);
+
         Ok(())
     }
 
-    fn unregister_thing(&self, thing_id: &ThingId) {
+    fn shutdown(&self, thing_id: &ThingId) {
+        // Was v4.0 unregister_thing() — undeclare routes + remove broker sinks.
         let broker = match self.event_broker.lock() {
             Ok(broker) => broker.clone(),
             Err(_) => return,
@@ -473,17 +459,84 @@ impl ServerBinding for ZenohServerBinding {
             }
         }
     }
+}
 
-    fn configure(&self, ctx: &clinkz_wot_core::BindingContext) {
-        if let Ok(mut event_broker) = self.event_broker.lock() {
-            *event_broker = Some(ctx.event_broker.clone());
+/// Extracted reply-delivery logic shared between `send_response` and the
+/// async draining task.
+fn deliver_response(reply_targets: &Mutex<ReplyTargetState>, response: InboundResponse) {
+    let reply_target = {
+        let Ok(mut state) = reply_targets.lock() else {
+            return;
+        };
+        if state.last_sweep.elapsed() >= SWEEP_INTERVAL {
+            state.sweep();
         }
-        // TODO(P2 refinement): switch zenoh callbacks from the internal
-        // async_tx to ctx.fanin_sender (AD6a: no binding-internal queue).
+        state
+            .targets
+            .remove(&response.correlation)
+            .map(|entry| entry.reply)
+    };
+
+    match reply_target {
+        Some(ReplyTarget::Query { query, key_expr }) => {
+            if let Some(err) = response.error {
+                let status = clinkz_wot_protocol_bindings::error_status(&err);
+                if let Err(e) = query.reply_err(format!("[{}] {}", status, err)).wait() {
+                    log::warn!("Zenoh server: failed to send error reply: {e}");
+                }
+            } else {
+                let (payload_body, content_type) = match response.output.data {
+                    Some(payload) => (payload.body, payload.content_type),
+                    None => (Default::default(), String::new()),
+                };
+                let mut builder = query.reply(key_expr.as_str(), payload_body.as_ref());
+                if !content_type.is_empty() {
+                    builder = builder.encoding(Encoding::from(content_type.as_str()));
+                }
+                if let Err(e) = builder.wait() {
+                    log::warn!("Zenoh server: failed to send reply: {e}");
+                }
+            }
+        }
+        Some(ReplyTarget::Put) | None => { /* no reply needed */ }
     }
 }
 
 impl ZenohServerBinding {
+    /// Spawns the async draining task on first call (idempotent via
+    /// `draining_started` flag). The task locks `async_rx`, recv()s inbound
+    /// requests, dispatches them via `ctx.dispatch.serve_request(req).await`,
+    /// and delivers the response via `deliver_response`. This closes the
+    /// v4.0 dead-async_rx gap.
+    #[cfg(feature = "async")]
+    fn ensure_draining_task(&self, ctx: &clinkz_wot_core::BindingContext) {
+        if self
+            .draining_started
+            .swap(true, core::sync::atomic::Ordering::SeqCst)
+        {
+            return; // already spawned
+        }
+        let Some(dispatch) = ctx.dispatch.clone() else {
+            return;
+        };
+        let rx = Arc::clone(&self.async_rx);
+        let reply_targets = Arc::clone(&self.reply_targets);
+
+        tokio::spawn(async move {
+            loop {
+                let request = {
+                    let mut guard = rx.lock().await;
+                    guard.recv().await
+                };
+                let Some(request) = request else {
+                    break; // channel closed — all senders dropped
+                };
+                let response = dispatch.serve_request(request).await;
+                deliver_response(&reply_targets, response);
+            }
+        });
+    }
+
     /// Declares a single planned zenoh route. Returns `Ok(Some(route))` for
     /// Queryable/PutListener (which need explicit undeclaration), `Ok(None)`
     /// for Publisher routes (broker-managed via `PublisherSink` registration).

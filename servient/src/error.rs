@@ -140,10 +140,7 @@ impl ServientError {
     /// Convenience for callers that want to detect "the affordance exists
     /// but no handler is registered" without matching through three layers.
     pub fn is_missing_handler(&self) -> bool {
-        matches!(
-            self,
-            Self::Serve(CoreError::MissingHandler { .. })
-        )
+        matches!(self, Self::Serve(CoreError::MissingHandler { .. }))
     }
 
     /// Returns `true` when the error is security-related (missing or

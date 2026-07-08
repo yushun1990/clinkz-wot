@@ -19,33 +19,17 @@ use clinkz_wot_core::{
     AsyncActionHandler, AsyncPropertyReadHandler, CoreError, InteractionInput, InteractionOptions,
     InteractionOutput, Payload, PropertyObserveHandler, PropertyReadHandler, PropertyWriteHandler,
 };
-use clinkz_wot_servient::{ProtocolBinding, ServientBuilder};
+use clinkz_wot_servient::ServientBuilder;
 use clinkz_wot_td::{
     affordance::{ActionAffordance, InteractionHelper, PropertyAffordance},
     data_schema::DataSchema,
     thing::Thing,
 };
 
-// --- protocol binding plumbing (minimal: server-less) ---------------------
-
-struct ClientOnlyBinding;
-impl ProtocolBinding for ClientOnlyBinding {
-    fn protocol(&self) -> clinkz_wot_core::ProtocolId {
-        clinkz_wot_core::ProtocolId("test-only")
-    }
-    fn client_factory(&self) -> Option<Box<dyn clinkz_wot_core::ClientBindingFactory>> {
-        None
-    }
-    fn server(&self) -> Option<Arc<dyn clinkz_wot_core::ServerBinding>> {
-        None
-    }
-}
+// --- protocol binding plumbing (minimal: no bindings, local dispatch only) -
 
 fn build_servient() -> clinkz_wot_servient::Servient {
-    ServientBuilder::new()
-        .with_protocol_binding(Arc::new(ClientOnlyBinding))
-        .build()
-        .expect("build")
+    ServientBuilder::new().build().expect("build")
 }
 
 fn lamp_td() -> Thing {
@@ -147,10 +131,7 @@ struct RecordingWrite {
     captured: Arc<Mutex<Option<Vec<u8>>>>,
 }
 impl PropertyWriteHandler for RecordingWrite {
-    fn write(
-        &self,
-        input: &mut InteractionInput,
-    ) -> Result<InteractionOutput, CoreError> {
+    fn write(&self, input: &mut InteractionInput) -> Result<InteractionOutput, CoreError> {
         *self.captured.lock().unwrap() = input.data.take().map(|p| p.body.to_vec());
         Ok(InteractionOutput::empty())
     }
@@ -189,7 +170,10 @@ async fn set_async_property_read_handler_runs_via_async_dispatch() {
     let handle = servient.produce(lamp_td()).expect("produce");
     handle.set_async_property_read_handler(
         "status",
-        AsyncRead { canned: "async-21C", delay_ms: 5 },
+        AsyncRead {
+            canned: "async-21C",
+            delay_ms: 5,
+        },
     );
 
     let out = handle
@@ -203,7 +187,13 @@ async fn set_async_property_read_handler_runs_via_async_dispatch() {
 async fn sync_dispatch_refuses_async_handler() {
     let servient = build_servient();
     let handle = servient.produce(lamp_td()).expect("produce");
-    handle.set_async_property_read_handler("status", AsyncRead { canned: "x", delay_ms: 0 });
+    handle.set_async_property_read_handler(
+        "status",
+        AsyncRead {
+            canned: "x",
+            delay_ms: 0,
+        },
+    );
 
     let err = handle
         .read_property("status", &InteractionInput::empty())
@@ -233,7 +223,12 @@ async fn set_async_action_handler_runs_via_invoke_action_async() {
     let handle = servient.produce(pump_td()).expect("produce");
 
     let calls = Arc::new(Mutex::new(0usize));
-    handle.set_async_action_handler("start", AsyncActionInvoke { calls: calls.clone() });
+    handle.set_async_action_handler(
+        "start",
+        AsyncActionInvoke {
+            calls: calls.clone(),
+        },
+    );
 
     handle
         .invoke_action_async("start", &mut InteractionInput::empty())
@@ -253,11 +248,7 @@ async fn local_observe_routes_through_sync_handler_and_pushes() {
         received = Some(p.body.to_vec());
         Ok(())
     };
-    let _ = handle.observe_property(
-        "temperature",
-        &InteractionInput::empty(),
-        &mut push_fn,
-    );
+    let _ = handle.observe_property("temperature", &InteractionInput::empty(), &mut push_fn);
     assert_eq!(received.as_deref(), Some(b"first".as_slice()));
 }
 
@@ -265,7 +256,12 @@ async fn local_observe_routes_through_sync_handler_and_pushes() {
 async fn local_observe_async_routes_through_sync_handler_and_pushes() {
     let servient = build_servient();
     let handle = servient.produce(sensor_td()).expect("produce");
-    handle.set_property_observe_handler("temperature", PushingObserve { sample: "via-async" });
+    handle.set_property_observe_handler(
+        "temperature",
+        PushingObserve {
+            sample: "via-async",
+        },
+    );
 
     let mut received: Option<Vec<u8>> = None;
     let mut push_fn = |p: Payload| -> Result<(), CoreError> {
@@ -300,7 +296,10 @@ async fn interaction_options_with_data_builder_round_trips() {
     let chained = InteractionOptions::with_data(Payload::new(b"x".to_vec(), "text/plain"))
         .with_uri_variable("zone", "north")
         .with_uri_variable("brightness", "75");
-    assert_eq!(chained.uri_variables.get("zone").map(String::as_str), Some("north"));
+    assert_eq!(
+        chained.uri_variables.get("zone").map(String::as_str),
+        Some("north")
+    );
     assert_eq!(
         chained.uri_variables.get("brightness").map(String::as_str),
         Some("75")
@@ -314,7 +313,9 @@ async fn local_property_write_routes_through_sync_handler() {
     let captured = Arc::new(Mutex::new(None));
     handle.set_property_write_handler(
         "status",
-        RecordingWrite { captured: captured.clone() },
+        RecordingWrite {
+            captured: captured.clone(),
+        },
     );
 
     let mut input = InteractionInput::with_data(Payload::new(b"on".to_vec(), "text/plain"));

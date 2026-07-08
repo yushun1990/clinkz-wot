@@ -1,8 +1,8 @@
-//! Servient composition for Web of Things flows (baseline v4.0 §7 / phase-p3).
+//! Servient composition for Web of Things flows (baseline v4.1 §7).
 //!
-//! Wires protocol-neutral core dispatch, Discovery, and protocol binding
-//! factories into a single non-generic runtime: produce/consume/discover,
-//! async-only driving, frozen-TD lifecycle.
+//! Wires protocol-neutral core dispatch, Discovery, and protocol bindings
+//! into a single non-generic runtime: produce/consume/discover, binding-owned
+//! driving, frozen-TD lifecycle.
 //!
 //! The Servient fundamentally requires the `async` feature (it holds a
 //! `dyn Discoverer`, drives async handlers, and consumes via async
@@ -28,8 +28,6 @@ mod servient;
 
 pub use error::{ServientError, ServientResult};
 
-#[cfg(feature = "async")]
-pub use clinkz_wot_core::ProtocolBinding;
 #[cfg(feature = "async")]
 pub use handle::{ConsumedThingHandle, ExposedThingHandle};
 #[cfg(feature = "async")]

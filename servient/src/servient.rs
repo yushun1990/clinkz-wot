@@ -1,13 +1,15 @@
-//! `Servient` — composition root (baseline v4.0 §7 / phase-p3 §3.1–§3.2).
-//! Non-generic; holds registries, bindings, a `Discoverer`, and the dispatch
-//! logic. **Driving (loop / poll) is NOT on the Servient** — each binding
-//! decides its own dispatch model (fan-in channel, direct dispatch, or poll)
-//! via the `Dispatch` handle injected in `configure(&BindingContext)`.
+//! `Servient` — composition root (baseline v4.1 §7).
+//!
+//! Non-generic; holds registries, default bindings, a `Discoverer`, and the
+//! dispatch logic. Bindings are owned by handles (AD58): the Servient holds
+//! default sets that are cloned into handles at `produce()` / `consume()` time.
+//! Driving is binding-owned (AD56): each binding's `serve()` starts its own
+//! driving model.
 
 use alloc::{boxed::Box, format, sync::Arc, vec::Vec};
 
 use clinkz_wot_core::{
-    ClientBindingFactory, Dispatch, EventBroker, EventName, ExposedThing, InboundRequest,
+    BindingContext, ClientBinding, Dispatch, EventBroker, EventName, ExposedThing, InboundRequest,
     InboundResponse, InteractionOutput, Payload, Principal, SecurityProvider, ServerBinding,
     ThingId, WotLock,
 };
@@ -18,31 +20,22 @@ use crate::handle::{ConsumedThingHandle, ExposedThingHandle};
 use crate::registry::{ConsumedThingRegistry, ExposedThingRegistry, ExposedThingSlot};
 use crate::{ServientError, ServientResult};
 
-// `ClientBindingFactory` lives in `clinkz_wot_core` (moved in P0). Re-exported
-// from the Servient crate for P0 backward compatibility; P1 will retire this
-// re-export so application code imports it from `clinkz_wot_core` (or, more
-// commonly, never names the trait directly and instead implements
-// `clinkz_wot_core::ProtocolBinding`).
-
-/// The Servient: composes exposed/consumed Things, server/client bindings, and
+/// The Servient: composes exposed/consumed Things, default bindings, and
 /// discovery. `Clone`, `&self`, `Send + Sync`.
 ///
-/// **Driving is NOT here.** The Servient provides [`Dispatch::serve_request`]
-/// (the dispatch logic). Each binding calls it however fits its transport:
-///
-/// | Binding type | How dispatch is invoked |
-/// |---|---|
-/// | zenoh (sync callbacks) | Binding owns a channel + draining task that calls `serve_request(req).await` |
-/// | HTTP / CoAP (async handlers) | Route handler calls `serve_request(req).await` directly |
-/// | bare no_std | Super-loop polls `try_accept`, then calls dispatch |
+/// The Servient's role narrows to: **dispatch engine** (security verification +
+/// registry lookup + handler invocation via `Dispatch::serve_request`) +
+/// **discovery facade** (`produce`/`consume`/`discover`/`fetch_td`). Handles
+/// own their binding `Arc` references and drive lifecycle (`expose` calls
+/// `serve`; `destroy` calls `shutdown`).
 #[derive(Clone)]
 pub struct Servient {
     pub(crate) exposed: ExposedThingRegistry,
     #[allow(dead_code)]
     consumed_registry: ConsumedThingRegistry,
-    pub(crate) server_bindings: Arc<[Arc<dyn ServerBinding>]>,
+    pub(crate) default_server_bindings: Arc<[Arc<dyn ServerBinding>]>,
     #[cfg(feature = "async")]
-    pub(crate) client_factories: Arc<[Arc<dyn ClientBindingFactory>]>,
+    pub(crate) default_client_bindings: Arc<[Arc<dyn ClientBinding>]>,
     pub(crate) security_providers: Arc<[Arc<dyn SecurityProvider>]>,
     pub(crate) discoverer: Arc<dyn Discoverer>,
     pub(crate) event_broker: EventBroker,
@@ -67,8 +60,8 @@ impl Servient {
     pub(crate) fn assemble(
         exposed: ExposedThingRegistry,
         consumed_registry: ConsumedThingRegistry,
-        server_bindings: Arc<[Arc<dyn ServerBinding>]>,
-        client_factories: Arc<[Arc<dyn ClientBindingFactory>]>,
+        default_server_bindings: Arc<[Arc<dyn ServerBinding>]>,
+        default_client_bindings: Arc<[Arc<dyn ClientBinding>]>,
         security_providers: Arc<[Arc<dyn SecurityProvider>]>,
         discoverer: Arc<dyn Discoverer>,
         event_broker: EventBroker,
@@ -76,8 +69,8 @@ impl Servient {
         Self {
             exposed,
             consumed_registry,
-            server_bindings,
-            client_factories,
+            default_server_bindings,
+            default_client_bindings,
             security_providers,
             discoverer,
             event_broker,
@@ -100,7 +93,12 @@ impl Servient {
             .map(|u| ThingId::from(u.as_str()))
             .ok_or(ServientError::MissingThingId)?;
         let slot = Arc::new(WotLock::new(ExposedThingSlot::new(ExposedThing::new(td))));
-        Ok(ExposedThingHandle::new(self.clone(), slot, id))
+        Ok(ExposedThingHandle::new(
+            self.clone(),
+            slot,
+            id,
+            self.default_server_bindings.clone(),
+        ))
     }
 
     #[cfg(feature = "async")]
@@ -112,8 +110,8 @@ impl Servient {
             .map(|u| ThingId::from(u.as_str()))
             .ok_or(ServientError::MissingThingId)?;
         let mut consumed = ConsumedThing::new(td);
-        for factory in self.client_factories.iter() {
-            consumed.register_binding(factory.build());
+        for binding in self.default_client_bindings.iter() {
+            consumed.register_binding(Arc::clone(binding));
         }
         self.consumed_registry.track(id.clone());
         Ok(ConsumedThingHandle::new(self.clone(), consumed, id))
@@ -138,36 +136,45 @@ impl Servient {
         &self,
         id: ThingId,
         slot: Arc<WotLock<ExposedThingSlot>>,
+        bindings: &[Arc<dyn ServerBinding>],
     ) -> ServientResult<()> {
         if self.exposed.contains(&id) {
             return Err(ServientError::AlreadyExposed(id));
         }
         let td = slot.with_read(|s| s.thing.thing_description().clone());
-        let mut registered: Vec<usize> = Vec::new();
-        for (i, binding) in self.server_bindings.iter().enumerate() {
-            if let Err(err) = binding.register_thing(&id, &td) {
-                for &j in registered.iter().rev() {
-                    self.server_bindings[j].unregister_thing(&id);
+        let ctx = BindingContext {
+            event_broker: self.event_broker.clone(),
+            dispatch: Some(Arc::new(self.clone())),
+        };
+        let mut served: Vec<usize> = Vec::new();
+        for (i, binding) in bindings.iter().enumerate() {
+            if let Err(err) = binding.serve(&id, &td, &ctx) {
+                for &j in served.iter().rev() {
+                    bindings[j].shutdown(&id);
                 }
                 return Err(ServientError::Serve(err));
             }
-            registered.push(i);
+            served.push(i);
         }
         if self.exposed.insert(id.clone(), slot).is_err() {
-            for binding in self.server_bindings.iter() {
-                binding.unregister_thing(&id);
+            for binding in bindings.iter() {
+                binding.shutdown(&id);
             }
             return Err(ServientError::AlreadyExposed(id));
         }
         Ok(())
     }
 
-    pub(crate) async fn destroy_thing(&self, id: &ThingId) -> ServientResult<()> {
+    pub(crate) async fn destroy_thing(
+        &self,
+        id: &ThingId,
+        bindings: &[Arc<dyn ServerBinding>],
+    ) -> ServientResult<()> {
         let Some(slot) = self.exposed.get(id) else {
             return Ok(());
         };
-        for binding in self.server_bindings.iter() {
-            binding.unregister_thing(id);
+        for binding in bindings.iter() {
+            binding.shutdown(id);
         }
         slot.with(|s| {
             s.draining.store(true, core::sync::atomic::Ordering::SeqCst);
@@ -188,7 +195,7 @@ impl Servient {
 
     // --- dispatch (the ONLY driving-related logic on the Servient) ---
 
-    /// Dispatch routing (§3.6). Resolves the exposed Thing, checks draining,
+    /// Dispatch routing. Resolves the exposed Thing, checks draining,
     /// routes by operation to the handler.
     ///
     /// **This is called by bindings, not by a Servient-owned loop.** Each
@@ -222,19 +229,11 @@ impl Servient {
         }
 
         // --- Security verification (P-Sec) ---
-        //
-        // Resolve the Thing's effective security scheme(s) and verify each
-        // against a registered SecurityProvider. An empty `security` list
-        // means open access (W3C TD 1.1 default). If a scheme is declared
-        // but no matching provider is registered, reject with
-        // `UnsupportedScheme` — strict by default prevents accidental open
-        // access. On success, the established Principal is injected into
-        // the handler-facing InteractionInput.
 
         let security_check = slot.with_read(|s| -> Result<Option<Principal>, CoreError> {
             let td = s.thing.thing_description();
             if td.security.is_empty() {
-                return Ok(None); // open access, no principal
+                return Ok(None);
             }
             let mut established_principal: Option<Principal> = None;
             for scheme_name in &td.security {
@@ -256,11 +255,6 @@ impl Servient {
                     clinkz_wot_core::SecurityError::UnsupportedScheme,
                 ))?;
 
-                // Reconstruct a minimal InboundRequest for the provider's
-                // verify call. The provider only inspects `auth`, `target`,
-                // and `operation`; the input/correlation fields are not
-                // consulted by the built-in providers. This reconstruction
-                // avoids borrowing `input` (which is `&mut` outside).
                 let verify_req = InboundRequest::new(
                     thing_id.clone(),
                     target.clone(),

@@ -20,9 +20,9 @@ use clinkz_wot_core::{
 };
 #[cfg(feature = "async")]
 use clinkz_wot_core::{
-    AsyncActionCancelHandler, AsyncActionHandler, AsyncActionQueryHandler, AsyncPropertyObserveHandler,
+    AsyncActionCancelHandler, AsyncActionHandler, AsyncActionQueryHandler,
+    AsyncEventSubscribeHandler, AsyncEventUnsubscribeHandler, AsyncPropertyObserveHandler,
     AsyncPropertyReadHandler, AsyncPropertyUnobserveHandler, AsyncPropertyWriteHandler,
-    AsyncEventSubscribeHandler, AsyncEventUnsubscribeHandler,
 };
 use clinkz_wot_td::{data_type::Operation, thing::Thing};
 
@@ -45,6 +45,7 @@ pub struct ExposedThingHandle {
     servient: Servient,
     slot: Arc<WotLock<ExposedThingSlot>>,
     id: ThingId,
+    server_bindings: Arc<[Arc<dyn clinkz_wot_core::ServerBinding>]>,
 }
 
 impl ExposedThingHandle {
@@ -52,8 +53,14 @@ impl ExposedThingHandle {
         servient: Servient,
         slot: Arc<WotLock<ExposedThingSlot>>,
         id: ThingId,
+        server_bindings: Arc<[Arc<dyn clinkz_wot_core::ServerBinding>]>,
     ) -> Self {
-        Self { servient, slot, id }
+        Self {
+            servient,
+            slot,
+            id,
+            server_bindings,
+        }
     }
 
     /// Returns the Thing id.
@@ -255,7 +262,7 @@ impl ExposedThingHandle {
     /// (E12/AD27). The TD affordance set is frozen after this.
     pub async fn expose(&self) -> ServientResult<()> {
         self.servient
-            .expose_thing(self.id.clone(), self.slot.clone())
+            .expose_thing(self.id.clone(), self.slot.clone(), &self.server_bindings)
             .await
     }
 
@@ -263,7 +270,9 @@ impl ExposedThingHandle {
     /// / rejects in-flight, removes the registry entry, unpublishes. Idempotent
     /// (AD27/E13). The Thing is gone afterwards — re-`produce` to re-expose.
     pub async fn destroy(&self) -> ServientResult<()> {
-        self.servient.destroy_thing(&self.id).await
+        self.servient
+            .destroy_thing(&self.id, &self.server_bindings)
+            .await
     }
 
     // --- local (server-side) interaction ---
@@ -336,7 +345,8 @@ impl ExposedThingHandle {
         name: &str,
         input: &InteractionInput,
     ) -> CoreResult<InteractionOutput> {
-        self.slot.with_read(|s| s.thing.unobserve_property(name, input))
+        self.slot
+            .with_read(|s| s.thing.unobserve_property(name, input))
     }
 
     /// Triggers the event subscribe handler locally.
@@ -375,9 +385,7 @@ impl ExposedThingHandle {
         name: &str,
         input: &InteractionInput,
     ) -> CoreResult<InteractionOutput> {
-        let slot = self
-            .slot
-            .with_read(|s| s.thing.property_handler_read(name));
+        let slot = self.slot.with_read(|s| s.thing.property_handler_read(name));
         match slot {
             Some(ReadSlot::Sync(h)) => h.read(input),
             Some(ReadSlot::Async(h)) => h.read(input).await,
@@ -413,9 +421,7 @@ impl ExposedThingHandle {
         name: &str,
         input: &mut InteractionInput,
     ) -> CoreResult<InteractionOutput> {
-        let slot = self
-            .slot
-            .with_read(|s| s.thing.action_handler_invoke(name));
+        let slot = self.slot.with_read(|s| s.thing.action_handler_invoke(name));
         match slot {
             Some(InvokeSlot::Sync(h)) => h.invoke(input),
             Some(InvokeSlot::Async(h)) => h.invoke(input).await,
@@ -432,9 +438,7 @@ impl ExposedThingHandle {
         name: &str,
         input: &InteractionInput,
     ) -> CoreResult<InteractionOutput> {
-        let slot = self
-            .slot
-            .with_read(|s| s.thing.action_handler_query(name));
+        let slot = self.slot.with_read(|s| s.thing.action_handler_query(name));
         match slot {
             Some(QuerySlot::Sync(h)) => h.query(input),
             Some(QuerySlot::Async(h)) => h.query(input).await,
@@ -451,9 +455,7 @@ impl ExposedThingHandle {
         name: &str,
         input: &mut InteractionInput,
     ) -> CoreResult<InteractionOutput> {
-        let slot = self
-            .slot
-            .with_read(|s| s.thing.action_handler_cancel(name));
+        let slot = self.slot.with_read(|s| s.thing.action_handler_cancel(name));
         match slot {
             Some(CancelSlot::Sync(h)) => h.cancel(input),
             Some(CancelSlot::Async(h)) => h.cancel(input).await,
@@ -706,7 +708,10 @@ impl ConsumedThingHandle {
             principal: None,
             accept: None,
         };
-        let (subscription, guard) = self.consumed.subscribe(target.clone(), operation, form, input).await?;
+        let (subscription, guard) = self
+            .consumed
+            .subscribe(target.clone(), operation, form, input)
+            .await?;
         self.guards.with(|g| {
             g.insert(target, guard);
         });
@@ -729,7 +734,9 @@ impl ConsumedThingHandle {
             principal: None,
             accept: None,
         };
-        self.consumed.subscribe(target, operation, form, input).await
+        self.consumed
+            .subscribe(target, operation, form, input)
+            .await
     }
 
     /// Drops the guard stored under `target`, releasing the wire-side
@@ -881,11 +888,7 @@ impl ConsumedThingHandle {
         for name in &event_names {
             let target = AffordanceTarget::Event(name.clone().into());
             match self
-                .subscribe_op_with_guard(
-                    target.clone(),
-                    Operation::SubscribeEvent,
-                    options.clone(),
-                )
+                .subscribe_op_with_guard(target.clone(), Operation::SubscribeEvent, options.clone())
                 .await
             {
                 Ok((sub, guard)) => {
@@ -933,8 +936,11 @@ impl ConsumedThingHandle {
             .as_ref()
             .map(|m| m.keys().cloned().collect())
             .unwrap_or_default();
-        self.read_multiple_properties(&names.iter().map(String::as_str).collect::<Vec<_>>(), options)
-            .await
+        self.read_multiple_properties(
+            &names.iter().map(String::as_str).collect::<Vec<_>>(),
+            options,
+        )
+        .await
     }
 
     /// Reads the named subset of properties in parallel and returns a single
@@ -1085,8 +1091,7 @@ fn json_escape_into(out: &mut String, s: &str) {
 }
 
 fn base64_encode_into(out: &mut String, bytes: &[u8]) {
-    const ALPHA: &[u8; 64] =
-        b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    const ALPHA: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
     let mut i = 0;
     while i + 3 <= bytes.len() {
         let b0 = bytes[i] as usize;

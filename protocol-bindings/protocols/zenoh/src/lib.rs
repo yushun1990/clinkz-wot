@@ -33,6 +33,8 @@ pub use form::{
     plan_zenoh_affordance_operation_with_criteria, plan_zenoh_operation, try_extract_zenoh_target,
     zenoh_operation_kind,
 };
+#[cfg(feature = "zenoh")]
+pub use protocol_binding::{client, server, shared};
 #[cfg(any(feature = "zenoh", feature = "zenoh-pico"))]
 pub use runtime::ZenohRuntimeTransport;
 #[cfg(feature = "zenoh")]
@@ -41,8 +43,6 @@ pub use runtime::{SharedZenohTransport, ZenohSessionTransport, ZenohSubscription
 pub use runtime::{
     ZenohPicoError, ZenohPicoErrorKind, ZenohPicoPlatform, ZenohPicoRequest, ZenohPicoTransport,
 };
-#[cfg(feature = "zenoh")]
-pub use protocol_binding::ZenohProtocolBinding;
 #[cfg(feature = "zenoh")]
 pub use server::ZenohServerBinding;
 #[cfg(any(feature = "zenoh", feature = "zenoh-pico"))]

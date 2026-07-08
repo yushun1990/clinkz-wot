@@ -16,8 +16,7 @@ use std::sync::{Arc, Mutex};
 
 use clinkz_wot_core::{
     AffordanceTarget, AuthMaterial, CoreError, Dispatch, InboundRequest, InteractionInput,
-    NoSecurityProvider, PropertyReadHandler, SecurityError,
-    ThingId,
+    NoSecurityProvider, PropertyReadHandler, SecurityError, ThingId,
 };
 use clinkz_wot_servient::ServientBuilder;
 use clinkz_wot_td::{
@@ -87,10 +86,7 @@ impl PropertyReadHandler for RecordingRead {
     }
 }
 
-fn build_request(
-    thing_id: &str,
-    auth: Option<AuthMaterial>,
-) -> InboundRequest {
+fn build_request(thing_id: &str, auth: Option<AuthMaterial>) -> InboundRequest {
     let mut req = InboundRequest::new(
         ThingId::from(thing_id),
         AffordanceTarget::Property("status".into()),
@@ -109,13 +105,11 @@ async fn bearer_valid_token_passes_and_injects_principal() {
     let principal = Arc::new(Mutex::new(None));
 
     let servient = ServientBuilder::new()
-        .with_security_provider(Arc::new(
-            clinkz_wot_core::BearerSecurityProvider::new(
-                b"valid-secret".to_vec(),
-                "user-42",
-                ["read"],
-            ),
-        ))
+        .with_security_provider(Arc::new(clinkz_wot_core::BearerSecurityProvider::new(
+            b"valid-secret".to_vec(),
+            "user-42",
+            ["read"],
+        )))
         .build()
         .expect("build");
 
@@ -154,13 +148,11 @@ async fn bearer_missing_credentials_rejects_before_handler() {
     let called = Arc::new(Mutex::new(false));
 
     let servient = ServientBuilder::new()
-        .with_security_provider(Arc::new(
-            clinkz_wot_core::BearerSecurityProvider::new(
-                b"valid-secret".to_vec(),
-                "u",
-                Vec::<String>::new(),
-            ),
-        ))
+        .with_security_provider(Arc::new(clinkz_wot_core::BearerSecurityProvider::new(
+            b"valid-secret".to_vec(),
+            "u",
+            Vec::<String>::new(),
+        )))
         .build()
         .expect("build");
 
@@ -193,13 +185,11 @@ async fn bearer_wrong_token_rejects_with_invalid_credentials() {
     let called = Arc::new(Mutex::new(false));
 
     let servient = ServientBuilder::new()
-        .with_security_provider(Arc::new(
-            clinkz_wot_core::BearerSecurityProvider::new(
-                b"correct".to_vec(),
-                "u",
-                Vec::<String>::new(),
-            ),
-        ))
+        .with_security_provider(Arc::new(clinkz_wot_core::BearerSecurityProvider::new(
+            b"correct".to_vec(),
+            "u",
+            Vec::<String>::new(),
+        )))
         .build()
         .expect("build");
 
@@ -220,7 +210,10 @@ async fn bearer_wrong_token_rejects_with_invalid_credentials() {
         ))
         .await;
 
-    assert!(!*called.lock().unwrap(), "handler should NOT have been called");
+    assert!(
+        !*called.lock().unwrap(),
+        "handler should NOT have been called"
+    );
     assert!(matches!(
         resp.error,
         Some(CoreError::Security(SecurityError::InvalidCredentials))

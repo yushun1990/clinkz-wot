@@ -93,9 +93,7 @@ impl From<BindingError> for CoreError {
             BindingError::UnknownAffordance { kind, name } => {
                 CoreError::UnknownAffordance { kind, name }
             }
-            BindingError::UnsupportedOperation(message) => {
-                CoreError::UnsupportedOperation(message)
-            }
+            BindingError::UnsupportedOperation(message) => CoreError::UnsupportedOperation(message),
             // No structural counterpart in CoreError; surface as
             // InvalidInteraction with the BindingError's Display text so
             // the diagnostic detail is preserved verbatim.

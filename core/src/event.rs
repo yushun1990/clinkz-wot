@@ -618,10 +618,7 @@ impl Subscription {
     /// `EventStream`'s `Stream` impl. Returns one [`WotLock`] handle per
     /// underlying leaf queue so callers can register a waker / drain samples
     /// without re-walking the merge tree on every poll.
-    pub(crate) fn collect_leaves(
-        &self,
-        out: &mut alloc::vec::Vec<WotLock<QueueInner>>,
-    ) {
+    pub(crate) fn collect_leaves(&self, out: &mut alloc::vec::Vec<WotLock<QueueInner>>) {
         match &self.inner {
             SubscriptionInner::Single(inner) => out.push(inner.clone()),
             SubscriptionInner::Merged(subs) => {
@@ -856,8 +853,7 @@ mod event_stream_impl {
             let mut all_stopped = true;
             for inner in &leaves {
                 inner.with_recover(|q| {
-                    let needs_register =
-                        q.waker.as_ref().is_none_or(|w| !w.will_wake(cx.waker()));
+                    let needs_register = q.waker.as_ref().is_none_or(|w| !w.will_wake(cx.waker()));
                     if needs_register {
                         q.waker = Some(cx.waker().clone());
                     }

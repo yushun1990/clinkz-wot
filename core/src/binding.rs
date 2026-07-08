@@ -1,10 +1,14 @@
 //! Outbound protocol binding contract and consumed-side request model
-//! (baseline v4.0 §4.5 / §5.1).
+//! (baseline v4.1 §4.5 / §5.1).
 //!
 //! [`ClientBinding::invoke`] and [`ClientBinding::subscribe`] are `async fn`
 //! (resolved A1): the outbound path is network-bound, so one `async_trait`
 //! `Box` per call is accepted as network-amortized. The trait is therefore
 //! gated behind the `async` feature.
+//!
+//! v4.1 (AD57): `ClientBinding` is stored as a shared `Arc<dyn ClientBinding>`
+//! — one instance per protocol serves all consumed Things. The
+//! `ClientBindingFactory` trait is removed.
 
 use alloc::{boxed::Box, sync::Arc};
 
@@ -35,12 +39,16 @@ pub struct BindingRequest {
     pub input: InteractionInput,
 }
 
-/// Outbound protocol binding contract (baseline v4.0 §4.5 / §5.1).
+/// Outbound protocol binding contract (baseline v4.1 §4.5 / §5.1).
 ///
 /// A concrete binding implementing this trait owns its own interior mutability
 /// for I/O state, so outbound calls are issued through a shared reference. A
 /// single concrete protocol binding may also implement [`crate::ServerBinding`]
 /// and share one protocol session across both directions.
+///
+/// v4.1 (AD57): `ClientBinding` is effectively stateless — all per-Thing
+/// context (TD, form, operation, input) is carried in [`BindingRequest`]. One
+/// shared `Arc<dyn ClientBinding>` per protocol serves all consumed Things.
 ///
 /// `invoke` and `subscribe` are `async fn` (resolved A1); the outbound path is
 /// network-bound, so one `async_trait` `Box` per call is accepted as
@@ -79,9 +87,11 @@ pub trait ClientBinding: Send + Sync {
     }
 }
 
+/// Delegates [`ClientBinding`] through an `Arc<dyn ClientBinding>` so that
+/// `ConsumedThing` can store shared binding instances (v4.1 AD57).
 #[cfg(feature = "async")]
 #[async_trait::async_trait]
-impl ClientBinding for Box<dyn ClientBinding> {
+impl ClientBinding for Arc<dyn ClientBinding> {
     fn supports(&self, form: &Form, operation: Operation) -> bool {
         self.as_ref().supports(form, operation)
     }
@@ -100,23 +110,6 @@ impl ClientBinding for Box<dyn ClientBinding> {
     ) -> CoreResult<(Subscription, Box<dyn SubscriptionGuard>)> {
         self.as_ref().subscribe(request).await
     }
-}
-
-/// Constructs a fresh [`ClientBinding`] for a consumed Thing.
-///
-/// Owned by the Servient and invoked once per consumed Thing (see
-/// `Servient::consume`). Moved to `clinkz_wot_core` so that
-/// [`crate::ProtocolBinding`] can reference it without pulling in the
-/// Servient crate.
-///
-/// Concrete factories typically hold a shared, clone-able handle (e.g.
-/// `Arc<MySession>`) and produce a fresh binding per `build()` call so each
-/// consumed Thing owns its own plan cache / state while sharing the
-/// underlying session.
-#[cfg(feature = "async")]
-pub trait ClientBindingFactory: Send + Sync {
-    /// Produces a fresh boxed [`ClientBinding`] instance.
-    fn build(&self) -> Box<dyn ClientBinding>;
 }
 
 /// Protocol-specific cleanup handle for a streaming subscription.

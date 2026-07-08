@@ -22,9 +22,9 @@ use std::sync::{Arc, Mutex};
 
 use async_trait::async_trait;
 use clinkz_wot_core::{
-    BindingRequest, ClientBinding, ClientBindingFactory, CoreError,
-    EventName, InteractionInput, InteractionOptions, InteractionOutput, Payload, ProtocolBinding,
-    ProtocolId, ServerBinding, Subscription, SubscriptionGuard, ThingId,
+    BindingContext, BindingRequest, ClientBinding, CoreError, CoreResult, EventName,
+    InteractionInput, InteractionOptions, InteractionOutput, Payload, ServerBinding, Subscription,
+    SubscriptionGuard, ThingId,
 };
 use clinkz_wot_servient::ServientBuilder;
 use clinkz_wot_td::{
@@ -80,7 +80,9 @@ impl ClientBinding for StreamingClient {
     }
 
     async fn invoke(&self, request: BindingRequest) -> Result<InteractionOutput, CoreError> {
-        Ok(InteractionOutput::with_data(request.input.data.unwrap_or_default()))
+        Ok(InteractionOutput::with_data(
+            request.input.data.unwrap_or_default(),
+        ))
     }
 
     async fn subscribe(
@@ -105,46 +107,15 @@ impl ClientBinding for StreamingClient {
     }
 }
 
-#[derive(Clone)]
-struct StreamingFactory {
-    canned_samples: Arc<Mutex<StdBTreeMap<String, VecDeque<Vec<u8>>>>>,
-    live_guard_count: Arc<Mutex<usize>>,
-}
-
-impl ClientBindingFactory for StreamingFactory {
-    fn build(&self) -> Box<dyn ClientBinding> {
-        Box::new(StreamingClient {
-            canned_samples: self.canned_samples.clone(),
-            live_guard_count: self.live_guard_count.clone(),
-        })
-    }
-}
-
-struct StreamingBinding {
-    factory: StreamingFactory,
-}
-
-impl ProtocolBinding for StreamingBinding {
-    fn protocol(&self) -> ProtocolId {
-        ProtocolId("fake-stream")
-    }
-    fn client_factory(&self) -> Option<Box<dyn ClientBindingFactory>> {
-        Some(Box::new(self.factory.clone()))
-    }
-    fn server(&self) -> Option<Arc<dyn ServerBinding>> {
-        None
-    }
-}
-
 #[allow(dead_code)]
 #[derive(Default)]
 struct NoopServer;
 impl ServerBinding for NoopServer {
-    fn send_response(&self, _response: clinkz_wot_core::InboundResponse) {}
-    fn register_thing(&self, _: &ThingId, _: &Thing) -> Result<(), CoreError> {
+    fn serve(&self, _: &ThingId, _: &Thing, _: &BindingContext) -> CoreResult<()> {
         Ok(())
     }
-    fn unregister_thing(&self, _: &ThingId) {}
+    fn shutdown(&self, _: &ThingId) {}
+    fn send_response(&self, _response: clinkz_wot_core::InboundResponse) {}
 }
 
 // ---------------------------------------------------------------------------
@@ -224,19 +195,25 @@ type CannedSamples = StdBTreeMap<String, Vec<Vec<u8>>>;
 /// Shared handle to the canned-sample buffer.
 type CannedHandle = Arc<Mutex<StdBTreeMap<String, VecDeque<Vec<u8>>>>>;
 
-fn build_servient(canned: CannedSamples) -> (clinkz_wot_servient::Servient, Arc<Mutex<usize>>, CannedHandle) {
+fn build_servient(
+    canned: CannedSamples,
+) -> (
+    clinkz_wot_servient::Servient,
+    Arc<Mutex<usize>>,
+    CannedHandle,
+) {
     let keyed: StdBTreeMap<String, VecDeque<Vec<u8>>> = canned
         .into_iter()
         .map(|(k, v)| (k, VecDeque::from(v)))
         .collect();
     let canned_samples = Arc::new(Mutex::new(keyed));
     let live_guard_count = Arc::new(Mutex::new(0usize));
-    let factory = StreamingFactory {
+    let client: Arc<dyn ClientBinding> = Arc::new(StreamingClient {
         canned_samples: canned_samples.clone(),
         live_guard_count: live_guard_count.clone(),
-    };
+    });
     let servient = ServientBuilder::new()
-        .with_protocol_binding(Arc::new(StreamingBinding { factory }))
+        .with_client_binding(client)
         .build()
         .expect("build");
     (servient, live_guard_count, canned_samples)
@@ -336,8 +313,14 @@ async fn subscribe_all_events_yields_named_samples_from_every_event() {
         .into_iter()
         .map(|(n, p)| (n.as_str().to_string(), p.body.to_vec()))
         .collect();
-    assert_eq!(by_name.get("motion").map(|v| v.as_slice()), Some(&b"motion-A"[..]));
-    assert_eq!(by_name.get("startup").map(|v| v.as_slice()), Some(&b"startup-B"[..]));
+    assert_eq!(
+        by_name.get("motion").map(|v| v.as_slice()),
+        Some(&b"motion-A"[..])
+    );
+    assert_eq!(
+        by_name.get("startup").map(|v| v.as_slice()),
+        Some(&b"startup-B"[..])
+    );
 
     // Two events → two guards.
     assert_eq!(*live_guards.lock().unwrap(), 2);
@@ -373,7 +356,10 @@ async fn read_all_properties_aggregates_into_json_object() {
         }
         async fn invoke(&self, _request: BindingRequest) -> Result<InteractionOutput, CoreError> {
             let next = self.canned.lock().unwrap().remove(0);
-            Ok(InteractionOutput::with_data(Payload::new(next, "text/plain")))
+            Ok(InteractionOutput::with_data(Payload::new(
+                next,
+                "text/plain",
+            )))
         }
         async fn subscribe(
             &self,
@@ -382,34 +368,17 @@ async fn read_all_properties_aggregates_into_json_object() {
             Err(CoreError::UnsupportedOperation("no streaming".into()))
         }
     }
-    struct CannedFactory(Vec<Vec<u8>>);
-    impl ClientBindingFactory for CannedFactory {
-        fn build(&self) -> Box<dyn ClientBinding> {
-            Box::new(CannedEcho {
-                canned: Mutex::new(self.0.clone()),
-            })
-        }
-    }
-    struct CannedBinding(Vec<Vec<u8>>);
-    impl ProtocolBinding for CannedBinding {
-        fn protocol(&self) -> ProtocolId {
-            ProtocolId("canned")
-        }
-        fn client_factory(&self) -> Option<Box<dyn ClientBindingFactory>> {
-            Some(Box::new(CannedFactory(self.0.clone())))
-        }
-        fn server(&self) -> Option<Arc<dyn ServerBinding>> {
-            None
-        }
-    }
 
-    let servient = ServientBuilder::new()
-        .with_protocol_binding(Arc::new(CannedBinding(vec![
+    let client: Arc<dyn ClientBinding> = Arc::new(CannedEcho {
+        canned: Mutex::new(vec![
             // BTreeMap iterates alphabetically: humidity first, then
             // temperature. Order canned values to match.
             b"55pct".to_vec(),
             b"21C".to_vec(),
-        ])))
+        ]),
+    });
+    let servient = ServientBuilder::new()
+        .with_client_binding(client)
         .build()
         .expect("build");
     let handle = servient.consume(multi_event_td()).expect("consume");

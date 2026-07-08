@@ -1,8 +1,8 @@
 //! Minimal local round-trip: produces a sensor Thing, exposes it, consumes
 //! its TD from the same Servient, and exercises read / observe / event
-//! subscribe / action invoke end-to-end against a **fake in-memory
-//! ProtocolBinding** — no real protocol session, no network, no executor
-//! feature gates beyond `async`. Runs in milliseconds.
+//! subscribe / action invoke end-to-end against a **fake in-memory binding
+//! pair** — no real protocol session, no network, no executor feature gates
+//! beyond `async`. Runs in milliseconds.
 //!
 //! Run with:
 //! ```sh
@@ -10,17 +10,18 @@
 //! ```
 //!
 //! This example is the canonical "what does the API look like?" demo. For
-//! a real zenoh-based deployment, swap `LoopbackBinding` for
-//! `clinkz_wot::zenoh::ZenohProtocolBinding::shared(session)`.
+//! a real zenoh-based deployment, swap the loopback pair for
+//! `clinkz_wot::zenoh::shared(session)`, which returns
+//! `(Arc<dyn ServerBinding>, Arc<dyn ClientBinding>)`.
 
 use std::sync::Arc;
 
 use async_trait::async_trait;
 use clinkz_wot::{
     core::{
-        BindingRequest, ClientBinding, ClientBindingFactory, CoreError, InteractionInput,
-        InteractionOptions, InteractionOutput, Payload, ProtocolBinding, ProtocolId,
-        PropertyReadHandler, ServerBinding, Subscription, SubscriptionGuard,
+        BindingContext, BindingRequest, ClientBinding, CoreError, CoreResult, InteractionInput,
+        InteractionOptions, InteractionOutput, Payload, PropertyReadHandler, ServerBinding,
+        Subscription, SubscriptionGuard, ThingId,
     },
     servient::{ServientBuilder, ServientResult},
     td::{
@@ -33,28 +34,32 @@ use futures_util::StreamExt;
 
 // --- a tiny in-memory binding that loops inside one process ---------------
 
-#[derive(Default)]
 struct LoopbackServer;
+
 impl ServerBinding for LoopbackServer {
-    fn send_response(&self, _: clinkz_wot::core::InboundResponse) {}
-    fn register_thing(
-        &self,
-        _: &clinkz_wot::core::ThingId,
-        _: &Thing,
-    ) -> Result<(), CoreError> {
+    fn serve(&self, _: &ThingId, _: &Thing, _: &BindingContext) -> CoreResult<()> {
+        // No-op: the loopback never routes inbound requests back to the
+        // producer's handler — it's a stand-in to demonstrate the API shape.
         Ok(())
     }
-    fn unregister_thing(&self, _: &clinkz_wot::core::ThingId) {}
+
+    fn shutdown(&self, _: &ThingId) {}
+
+    fn send_response(&self, _: clinkz_wot::core::InboundResponse) {}
 }
 
 struct LoopbackClient;
 
 #[async_trait]
 impl ClientBinding for LoopbackClient {
-    fn supports(&self, _: &clinkz_wot::td::form::Form, _: clinkz_wot::td::data_type::Operation) -> bool {
+    fn supports(
+        &self,
+        _: &clinkz_wot::td::form::Form,
+        _: clinkz_wot::td::data_type::Operation,
+    ) -> bool {
         true
     }
-    async fn invoke(&self, request: BindingRequest) -> Result<InteractionOutput, CoreError> {
+    async fn invoke(&self, request: BindingRequest) -> CoreResult<InteractionOutput> {
         // Echo the input if provided (write/invoke), otherwise return a
         // canned read value. The loopback doesn't actually route to the
         // producer's handler — it's a stand-in to demonstrate the API shape.
@@ -63,12 +68,15 @@ impl ClientBinding for LoopbackClient {
             .data
             .map(|p| p.body.to_vec())
             .unwrap_or_else(|| b"21.4C".to_vec());
-        Ok(InteractionOutput::with_data(Payload::new(body, "text/plain")))
+        Ok(InteractionOutput::with_data(Payload::new(
+            body,
+            "text/plain",
+        )))
     }
     async fn subscribe(
         &self,
         _: BindingRequest,
-    ) -> Result<(Subscription, Box<dyn SubscriptionGuard>), CoreError> {
+    ) -> CoreResult<(Subscription, Box<dyn SubscriptionGuard>)> {
         let (sender, sub) = Subscription::channel(8);
         // Push one canned sample so the example has something to drain.
         let _ = sender.push(Payload::new(b"sample-payload".to_vec(), "text/plain"));
@@ -77,27 +85,6 @@ impl ClientBinding for LoopbackClient {
             fn close(self: Box<Self>) {}
         }
         Ok((sub, Box::new(OneShotGuard)))
-    }
-}
-
-#[derive(Clone)]
-struct LoopbackFactory;
-impl ClientBindingFactory for LoopbackFactory {
-    fn build(&self) -> Box<dyn ClientBinding> {
-        Box::new(LoopbackClient)
-    }
-}
-
-struct LoopbackBinding;
-impl ProtocolBinding for LoopbackBinding {
-    fn protocol(&self) -> ProtocolId {
-        ProtocolId("loopback")
-    }
-    fn client_factory(&self) -> Option<Box<dyn ClientBindingFactory>> {
-        Some(Box::new(LoopbackFactory))
-    }
-    fn server(&self) -> Option<Arc<dyn ServerBinding>> {
-        Some(Arc::new(LoopbackServer) as Arc<dyn ServerBinding>)
     }
 }
 
@@ -144,10 +131,12 @@ fn sensor_td() -> Thing {
 
 #[tokio::main]
 async fn main() -> ServientResult<()> {
-    // The loopback binding handles both produce and consume in one process.
-    // In a real deployment you'd use a real protocol binding (e.g. zenoh).
+    // The loopback pair handles both produce and consume in one process.
+    // In a real deployment you'd use a real protocol binding (e.g. zenoh's
+    // `shared(session)` constructor).
     let servient = ServientBuilder::new()
-        .with_protocol_binding(Arc::new(LoopbackBinding))
+        .with_server_binding(Arc::new(LoopbackServer) as Arc<dyn ServerBinding>)
+        .with_client_binding(Arc::new(LoopbackClient) as Arc<dyn ClientBinding>)
         .build()?;
 
     // --- Producer side ----------------------------------------------------

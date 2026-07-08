@@ -390,7 +390,11 @@ impl SecurityProvider for NoSecurityProvider {
         &self.scheme_name
     }
 
-    fn apply(&self, _context: SecurityContext<'_>, _request: &mut TransportRequest) -> CoreResult<()> {
+    fn apply(
+        &self,
+        _context: SecurityContext<'_>,
+        _request: &mut TransportRequest,
+    ) -> CoreResult<()> {
         Ok(())
     }
 
@@ -463,7 +467,11 @@ impl SecurityProvider for BearerSecurityProvider {
         &self.scheme_name
     }
 
-    fn apply(&self, _context: SecurityContext<'_>, _request: &mut TransportRequest) -> CoreResult<()> {
+    fn apply(
+        &self,
+        _context: SecurityContext<'_>,
+        _request: &mut TransportRequest,
+    ) -> CoreResult<()> {
         // Outbound Bearer application is handled by the binding when it
         // builds the transport request; this hook is a no-op for v0.1.
         Ok(())
@@ -527,7 +535,11 @@ impl SecurityProvider for BasicSecurityProvider {
         &self.scheme_name
     }
 
-    fn apply(&self, _context: SecurityContext<'_>, _request: &mut TransportRequest) -> CoreResult<()> {
+    fn apply(
+        &self,
+        _context: SecurityContext<'_>,
+        _request: &mut TransportRequest,
+    ) -> CoreResult<()> {
         Ok(())
     }
 
@@ -593,8 +605,7 @@ mod provider_tests {
     #[test]
     fn nosec_provider_always_passes() {
         let provider = NoSecurityProvider::new();
-        let scheme =
-            clinkz_wot_td::security_scheme::NoSecurityScheme::default();
+        let scheme = clinkz_wot_td::security_scheme::NoSecurityScheme::default();
         let result = provider.verify(
             &request_with(None),
             &clinkz_wot_td::security_scheme::SecurityScheme::NoSec(scheme),
@@ -605,10 +616,8 @@ mod provider_tests {
 
     #[test]
     fn bearer_provider_accepts_valid_token() {
-        let provider =
-            BearerSecurityProvider::new(b"secret-token".to_vec(), "user-1", ["read"]);
-        let scheme =
-            clinkz_wot_td::security_scheme::BearerSecurityScheme::default();
+        let provider = BearerSecurityProvider::new(b"secret-token".to_vec(), "user-1", ["read"]);
+        let scheme = clinkz_wot_td::security_scheme::BearerSecurityScheme::default();
         let result = provider.verify(
             &request_with(Some(AuthMaterial::BearerToken(b"secret-token".to_vec()))),
             &clinkz_wot_td::security_scheme::SecurityScheme::Bearer(scheme),
@@ -637,9 +646,12 @@ mod provider_tests {
     fn bearer_provider_rejects_missing_credentials() {
         let provider = BearerSecurityProvider::new(b"x".to_vec(), "u", Vec::<String>::new());
         let err = provider
-            .verify(&request_with(None), &clinkz_wot_td::security_scheme::SecurityScheme::Bearer(
-                clinkz_wot_td::security_scheme::BearerSecurityScheme::default(),
-            ))
+            .verify(
+                &request_with(None),
+                &clinkz_wot_td::security_scheme::SecurityScheme::Bearer(
+                    clinkz_wot_td::security_scheme::BearerSecurityScheme::default(),
+                ),
+            )
             .unwrap_err();
         assert!(matches!(err, SecurityError::MissingCredentials));
     }
@@ -661,7 +673,8 @@ mod provider_tests {
 
     #[test]
     fn basic_provider_rejects_wrong_password() {
-        let provider = BasicSecurityProvider::new("alice", "correct", "alice", Vec::<String>::new());
+        let provider =
+            BasicSecurityProvider::new("alice", "correct", "alice", Vec::<String>::new());
         let err = provider
             .verify(
                 &request_with(Some(AuthMaterial::Basic {

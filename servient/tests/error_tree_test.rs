@@ -31,7 +31,10 @@ fn binding_error_unknown_affordance_maps_structurally_to_core_error() {
     assert!(
         matches!(
             core_err,
-            CoreError::UnknownAffordance { kind: AffordanceKind::Property, .. }
+            CoreError::UnknownAffordance {
+                kind: AffordanceKind::Property,
+                ..
+            }
         ),
         "UnknownAffordance should map structurally, got {core_err:?}"
     );
@@ -82,7 +85,10 @@ fn binding_error_into_servient_error_preserves_typed_payload() {
     let binding_err = BindingError::FormNotInAffordance;
     let servient_err: ServientError = binding_err.into();
     assert!(
-        matches!(servient_err.as_binding(), Some(BindingError::FormNotInAffordance)),
+        matches!(
+            servient_err.as_binding(),
+            Some(BindingError::FormNotInAffordance)
+        ),
         "ServientError should preserve the FormNotInAffordance payload"
     );
     assert!(servient_err.is_binding());
@@ -104,9 +110,7 @@ fn is_missing_handler_detects_serve_missing_handler() {
 
 #[test]
 fn is_security_detects_serve_security_variants() {
-    let err = ServientError::Serve(CoreError::Security(
-        SecurityError::MissingCredentials,
-    ));
+    let err = ServientError::Serve(CoreError::Security(SecurityError::MissingCredentials));
     assert!(err.is_security());
 }
 
@@ -122,7 +126,10 @@ fn is_timeout_detects_timeout_and_timeout_unsupported() {
 fn is_discovery_and_as_discovery_round_trip() {
     let err = ServientError::Discovery(DiscoveryError::LeaseExpired);
     assert!(err.is_discovery());
-    assert!(matches!(err.as_discovery(), Some(DiscoveryError::LeaseExpired)));
+    assert!(matches!(
+        err.as_discovery(),
+        Some(DiscoveryError::LeaseExpired)
+    ));
     assert!(!err.is_binding());
     assert!(err.as_core().is_none());
 }
@@ -137,8 +144,14 @@ fn lifecycle_variants_have_no_core_binding_discovery_payload() {
     ];
     for err in cases {
         assert!(err.as_core().is_none(), "{err:?} should have no CoreError");
-        assert!(err.as_binding().is_none(), "{err:?} should have no BindingError");
-        assert!(err.as_discovery().is_none(), "{err:?} should have no DiscoveryError");
+        assert!(
+            err.as_binding().is_none(),
+            "{err:?} should have no BindingError"
+        );
+        assert!(
+            err.as_discovery().is_none(),
+            "{err:?} should have no DiscoveryError"
+        );
     }
 }
 

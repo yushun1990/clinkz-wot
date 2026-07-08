@@ -295,10 +295,10 @@ mod consumed_async {
     async fn consumed_dispatches_selected_form_to_matching_binding() {
         let (td, read_form) = remote_thing_description();
         let mut thing = ConsumedThing::new(td);
-        thing.register_binding(RecordingBinding {
+        thing.register_binding(Arc::new(RecordingBinding {
             content_type: "application/octet-stream",
             response: Payload::new(b"on".to_vec(), "text/plain"),
-        });
+        }) as Arc<dyn ClientBinding>);
 
         let output = thing
             .request(
@@ -342,10 +342,10 @@ mod consumed_async {
     async fn consumed_rejects_unknown_affordance_before_binding_dispatch() {
         let (td, read_form) = remote_thing_description();
         let mut thing = ConsumedThing::new(td);
-        thing.register_binding(RecordingBinding {
+        thing.register_binding(Arc::new(RecordingBinding {
             content_type: "application/octet-stream",
             response: Payload::new(b"on".to_vec(), "text/plain"),
-        });
+        }) as Arc<dyn ClientBinding>);
         let err = thing
             .request(
                 AffordanceTarget::Property("missing".into()),

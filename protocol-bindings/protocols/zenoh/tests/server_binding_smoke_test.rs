@@ -5,8 +5,9 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use clinkz_wot_core::{
-    AffordanceTarget, CoreError, EventBroker, EventName, InboundDispatcher, InboundRequest,
-    InboundResponse, InteractionInput, InteractionOutput, Payload, ServerBinding, ThingId,
+    AffordanceTarget, BindingContext, CoreError, EventBroker, EventName, InboundDispatcher,
+    InboundRequest, InboundResponse, InteractionInput, InteractionOutput, Payload, ServerBinding,
+    ThingId,
 };
 use clinkz_wot_protocol_bindings_zenoh::ZenohServerBinding;
 use clinkz_wot_td::data_type::Operation;
@@ -28,9 +29,10 @@ fn runtime_server_binding_read_property_round_trip() {
     let session = server_binding.session().clone();
 
     let td = test_td("urn:server:read");
+    let ctx = default_ctx();
     server_binding
-        .register_thing(&ThingId::from("urn:server:read"), &td)
-        .expect("register routes");
+        .serve(&ThingId::from("urn:server:read"), &td, &ctx)
+        .expect("serve");
 
     std::thread::sleep(PROPAGATION_DELAY);
 
@@ -74,9 +76,10 @@ fn runtime_server_binding_invoke_action_round_trip() {
     let session = server_binding.session().clone();
 
     let td = test_td("urn:server:invoke");
+    let ctx = default_ctx();
     server_binding
-        .register_thing(&ThingId::from("urn:server:invoke"), &td)
-        .expect("register routes");
+        .serve(&ThingId::from("urn:server:invoke"), &td, &ctx)
+        .expect("serve");
 
     std::thread::sleep(PROPAGATION_DELAY);
 
@@ -123,9 +126,10 @@ fn runtime_server_binding_write_property_put_listener() {
     let session = server_binding.session().clone();
 
     let td = test_td("urn:server:write");
+    let ctx = default_ctx();
     server_binding
-        .register_thing(&ThingId::from("urn:server:write"), &td)
-        .expect("register routes");
+        .serve(&ThingId::from("urn:server:write"), &td, &ctx)
+        .expect("serve");
 
     std::thread::sleep(PROPAGATION_DELAY);
 
@@ -162,17 +166,18 @@ fn runtime_server_binding_unregister_stops_receiving_queries() {
     let server_binding = ZenohServerBinding::open(zenoh::Config::default()).unwrap();
 
     let td = test_td("urn:server:unreg");
+    let ctx = default_ctx();
     server_binding
-        .register_thing(&ThingId::from("urn:server:unreg"), &td)
-        .expect("register routes");
+        .serve(&ThingId::from("urn:server:unreg"), &td, &ctx)
+        .expect("serve");
 
     std::thread::sleep(PROPAGATION_DELAY);
 
-    server_binding.unregister_thing(&ThingId::from("urn:server:unreg"));
+    server_binding.shutdown(&ThingId::from("urn:server:unreg"));
 
     std::thread::sleep(PROPAGATION_DELAY);
 
-    // After unregistration, try_accept should not produce requests.
+    // After shutdown, try_accept should not produce requests.
     std::thread::sleep(PROPAGATION_DELAY);
     assert!(server_binding.try_accept().is_none());
 }
@@ -188,9 +193,10 @@ fn runtime_server_binding_error_reply() {
     let session = server_binding.session().clone();
 
     let td = test_td("urn:server:error");
+    let ctx = default_ctx();
     server_binding
-        .register_thing(&ThingId::from("urn:server:error"), &td)
-        .expect("register routes");
+        .serve(&ThingId::from("urn:server:error"), &td, &ctx)
+        .expect("serve");
 
     std::thread::sleep(PROPAGATION_DELAY);
 
@@ -232,19 +238,18 @@ fn runtime_server_binding_event_publish_to_subscriber() {
     let server_binding = ZenohServerBinding::open(zenoh::Config::default()).unwrap();
     let session = server_binding.session().clone();
 
-    // Configure the binding with an EventBroker *before* registering the thing
-    // so that publisher sinks are wired during register_thing.
+    // Build a context carrying an EventBroker *before* serving the thing
+    // so that publisher sinks are wired during serve.
     let broker = EventBroker::new();
-    server_binding.configure(&clinkz_wot_core::BindingContext {
+    let ctx = BindingContext {
         event_broker: broker.clone(),
-        fanin_sender: None,
         dispatch: None,
-    });
+    };
 
     let td = test_td("urn:server:event");
     server_binding
-        .register_thing(&ThingId::from("urn:server:event"), &td)
-        .expect("register routes");
+        .serve(&ThingId::from("urn:server:event"), &td, &ctx)
+        .expect("serve");
 
     std::thread::sleep(PROPAGATION_DELAY);
 
@@ -306,6 +311,13 @@ fn runtime_server_binding_event_publish_to_subscriber() {
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
+
+fn default_ctx() -> BindingContext {
+    BindingContext {
+        event_broker: EventBroker::new(),
+        dispatch: None,
+    }
+}
 
 fn poll_with_timeout(
     binding: &ZenohServerBinding,

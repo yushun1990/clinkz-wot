@@ -118,7 +118,10 @@ fn format_rfc3339(datetime: &OffsetDateTime) -> String {
 
 /// Parses an RFC 3339 date-time string into an [`OffsetDateTime`].
 fn parse_rfc3339(input: &str) -> Result<OffsetDateTime, ParseError> {
-    let mut cursor = Cursor { bytes: input.as_bytes(), pos: 0 };
+    let mut cursor = Cursor {
+        bytes: input.as_bytes(),
+        pos: 0,
+    };
 
     let year = cursor.digits(4)? as i32;
     cursor.eat(b'-')?;
@@ -154,13 +157,7 @@ fn parse_rfc3339(input: &str) -> Result<OffsetDateTime, ParseError> {
                 cursor.bump();
                 seconds = cursor.digits(2)? as i8;
             }
-            let signed = |v: i8| -> i8 {
-                if sign == b'+' {
-                    v
-                } else {
-                    -v
-                }
-            };
+            let signed = |v: i8| -> i8 { if sign == b'+' { v } else { -v } };
             UtcOffset::from_hms(signed(hours), signed(minutes), signed(seconds))
                 .map_err(|_| ParseError::OutOfRange)?
         }
@@ -283,7 +280,10 @@ mod tests {
 
     #[test]
     fn formats_whole_seconds_as_z() {
-        assert_eq!(format_rfc3339(&odt(2018, 9, 10, 6, 30, 0, 0)), "2018-09-10T06:30:00Z");
+        assert_eq!(
+            format_rfc3339(&odt(2018, 9, 10, 6, 30, 0, 0)),
+            "2018-09-10T06:30:00Z"
+        );
     }
 
     #[test]
