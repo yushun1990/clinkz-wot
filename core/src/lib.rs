@@ -36,7 +36,7 @@ pub use event::EventStream;
 pub use identity::{CorrelationId, ThingId};
 #[cfg(feature = "async")]
 pub use inbound::Dispatch;
-#[cfg(feature = "std")]
+#[cfg(feature = "async")]
 pub use inbound::FanInSender;
 pub use inbound::{
     BindingContext, InboundDispatcher, InboundRequest, InboundResponse, ServerBinding,
@@ -47,8 +47,9 @@ pub use interaction::{
 };
 pub use payload::{CodecInput, Payload, PayloadCodec};
 pub use security::{
-    AuthMaterial, CredentialStore, Credentials, InMemoryCredentialStore, Principal, PrincipalId,
-    SecurityContext, SecurityError, SecurityProvider, check_scopes,
+    AuthMaterial, BasicSecurityProvider, BearerSecurityProvider, CredentialStore, Credentials,
+    InMemoryCredentialStore, NoSecurityProvider, Principal, PrincipalId, SecurityContext,
+    SecurityError, SecurityProvider, check_scopes,
 };
 pub use sync::WotLock;
 pub use thing::{

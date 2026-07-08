@@ -3,7 +3,7 @@
 use alloc::{boxed::Box, sync::Arc, vec::Vec};
 
 use clinkz_wot_core::{
-    ClientBindingFactory, EventBroker, ProtocolBinding, ServerBinding,
+    ClientBindingFactory, EventBroker, ProtocolBinding, SecurityProvider, ServerBinding,
 };
 use clinkz_wot_discovery::{Discoverer, InMemoryDirectory, LocalDiscoverer};
 
@@ -14,6 +14,7 @@ use crate::{ServientError, ServientResult};
 pub struct ServientBuilder {
     server_bindings: Vec<Arc<dyn ServerBinding>>,
     client_factories: Vec<Arc<dyn ClientBindingFactory>>,
+    security_providers: Vec<Arc<dyn SecurityProvider>>,
     discoverer: Option<Arc<dyn Discoverer>>,
 }
 
@@ -22,6 +23,7 @@ impl ServientBuilder {
         Self {
             server_bindings: Vec::new(),
             client_factories: Vec::new(),
+            security_providers: Vec::new(),
             discoverer: None,
         }
     }
@@ -52,6 +54,35 @@ impl ServientBuilder {
         self
     }
 
+    /// Registers a [`SecurityProvider`] for inbound request verification.
+    ///
+    /// Multiple providers may be registered, each handling a different
+    /// scheme name. During dispatch, the Servient resolves the Thing's
+    /// effective security scheme(s) and finds the matching provider by
+    /// `scheme_name()`. If no matching provider is found for a declared
+    /// scheme, the request is rejected with `SecurityError::UnsupportedScheme`.
+    ///
+    /// ```no_run
+    /// use clinkz_wot_core::{NoSecurityProvider, BearerSecurityProvider};
+    /// use clinkz_wot_servient::ServientBuilder;
+    /// use std::sync::Arc;
+    ///
+    /// let servient = ServientBuilder::new()
+    ///     .with_security_provider(Arc::new(NoSecurityProvider::new()))
+    ///     .with_security_provider(Arc::new(
+    ///         BearerSecurityProvider::new(b"secret".to_vec(), "user-1", ["read"])
+    ///     ))
+    ///     .build()
+    ///     .expect("build");
+    /// ```
+    pub fn with_security_provider(
+        mut self,
+        provider: Arc<dyn SecurityProvider>,
+    ) -> Self {
+        self.security_providers.push(provider);
+        self
+    }
+
     pub fn with_discoverer(mut self, discoverer: Arc<dyn Discoverer>) -> Self {
         self.discoverer = Some(discoverer);
         self
@@ -63,6 +94,7 @@ impl ServientBuilder {
         let Self {
             server_bindings,
             client_factories,
+            security_providers,
             discoverer,
         } = self;
 
@@ -72,12 +104,24 @@ impl ServientBuilder {
         let event_broker = EventBroker::new();
         let server_bindings: Arc<[Arc<dyn ServerBinding>]> = Arc::from(server_bindings);
         let client_factories: Arc<[Arc<dyn ClientBindingFactory>]> = Arc::from(client_factories);
+        let security_providers: Arc<[Arc<dyn SecurityProvider>]> = if security_providers.is_empty() {
+            // Default: register a NoSec provider so Things declaring the
+            // W3C default `"nosec"` scheme pass without configuration.
+            // Things with empty `security` lists pass regardless (dispatch
+            // skips verification entirely). Things declaring other schemes
+            // (bearer, basic, ...) still require explicit registration.
+            Arc::from([Arc::new(clinkz_wot_core::NoSecurityProvider::new())
+                as Arc<dyn SecurityProvider>])
+        } else {
+            Arc::from(security_providers)
+        };
 
         let servient = Servient::assemble(
             Default::default(),
             Default::default(),
             server_bindings.clone(),
             client_factories,
+            security_providers,
             discoverer,
             event_broker.clone(),
         );

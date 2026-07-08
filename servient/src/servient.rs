@@ -8,7 +8,8 @@ use alloc::{boxed::Box, format, sync::Arc, vec::Vec};
 
 use clinkz_wot_core::{
     ClientBindingFactory, Dispatch, EventBroker, EventName, ExposedThing, InboundRequest,
-    InboundResponse, InteractionOutput, Payload, ServerBinding, ThingId, WotLock,
+    InboundResponse, InteractionOutput, Payload, Principal, SecurityProvider, ServerBinding,
+    ThingId, WotLock,
 };
 use clinkz_wot_discovery::{Discoverer, DiscoveryFilter, ProcessState, ThingDiscoveryProcess};
 use clinkz_wot_td::{AbsoluteUri, thing::Thing};
@@ -42,6 +43,7 @@ pub struct Servient {
     pub(crate) server_bindings: Arc<[Arc<dyn ServerBinding>]>,
     #[cfg(feature = "async")]
     pub(crate) client_factories: Arc<[Arc<dyn ClientBindingFactory>]>,
+    pub(crate) security_providers: Arc<[Arc<dyn SecurityProvider>]>,
     pub(crate) discoverer: Arc<dyn Discoverer>,
     pub(crate) event_broker: EventBroker,
     shutdown: Arc<core::sync::atomic::AtomicBool>,
@@ -67,6 +69,7 @@ impl Servient {
         consumed_registry: ConsumedThingRegistry,
         server_bindings: Arc<[Arc<dyn ServerBinding>]>,
         client_factories: Arc<[Arc<dyn ClientBindingFactory>]>,
+        security_providers: Arc<[Arc<dyn SecurityProvider>]>,
         discoverer: Arc<dyn Discoverer>,
         event_broker: EventBroker,
     ) -> Self {
@@ -75,6 +78,7 @@ impl Servient {
             consumed_registry,
             server_bindings,
             client_factories,
+            security_providers,
             discoverer,
             event_broker,
             shutdown: Arc::new(core::sync::atomic::AtomicBool::new(false)),
@@ -193,8 +197,18 @@ impl Servient {
     pub(crate) async fn dispatch(&self, request: InboundRequest) -> InboundResponse {
         use clinkz_wot_core::CoreError;
         use clinkz_wot_td::data_type::Operation;
+
         let correlation = request.correlation.clone();
-        let Some(slot) = self.exposed.get(&request.thing_id) else {
+        let InboundRequest {
+            thing_id,
+            target,
+            operation,
+            mut input,
+            auth,
+            ..
+        } = request;
+
+        let Some(slot) = self.exposed.get(&thing_id) else {
             return InboundResponse::error(
                 correlation,
                 CoreError::InboundDispatch("Thing gone".into()),
@@ -206,10 +220,80 @@ impl Servient {
                 CoreError::InboundDispatch("Thing gone".into()),
             );
         }
-        let mut input = request.input;
+
+        // --- Security verification (P-Sec) ---
+        //
+        // Resolve the Thing's effective security scheme(s) and verify each
+        // against a registered SecurityProvider. An empty `security` list
+        // means open access (W3C TD 1.1 default). If a scheme is declared
+        // but no matching provider is registered, reject with
+        // `UnsupportedScheme` — strict by default prevents accidental open
+        // access. On success, the established Principal is injected into
+        // the handler-facing InteractionInput.
+
+        let security_check = slot.with_read(|s| -> Result<Option<Principal>, CoreError> {
+            let td = s.thing.thing_description();
+            if td.security.is_empty() {
+                return Ok(None); // open access, no principal
+            }
+            let mut established_principal: Option<Principal> = None;
+            for scheme_name in &td.security {
+                let scheme = td.security_definitions.get(scheme_name).ok_or_else(|| {
+                    CoreError::Security(clinkz_wot_core::SecurityError::SchemeFailure(
+                        alloc::format!(
+                            "security definition '{}' referenced by Thing.security but not found in securityDefinitions",
+                            scheme_name
+                        ),
+                    ))
+                })?;
+
+                let provider = self
+                    .security_providers
+                    .iter()
+                    .find(|p| p.scheme_name() == scheme_name.as_str());
+
+                let provider = provider.ok_or(CoreError::Security(
+                    clinkz_wot_core::SecurityError::UnsupportedScheme,
+                ))?;
+
+                // Reconstruct a minimal InboundRequest for the provider's
+                // verify call. The provider only inspects `auth`, `target`,
+                // and `operation`; the input/correlation fields are not
+                // consulted by the built-in providers. This reconstruction
+                // avoids borrowing `input` (which is `&mut` outside).
+                let verify_req = InboundRequest::new(
+                    thing_id.clone(),
+                    target.clone(),
+                    operation,
+                    clinkz_wot_core::InteractionInput::empty(),
+                );
+                let mut verify_req = verify_req;
+                verify_req.auth = auth.clone();
+
+                let principal = provider
+                    .verify(&verify_req, scheme)
+                    .map_err(CoreError::from)?;
+                if established_principal.is_none() {
+                    established_principal = Some(principal);
+                }
+            }
+            Ok(established_principal)
+        });
+
+        match security_check {
+            Ok(principal) => {
+                input.principal = principal;
+            }
+            Err(err) => {
+                return InboundResponse::error(correlation, err);
+            }
+        }
+
+        // --- Handler dispatch ---
+
         let result = slot.with_read(|s| -> Result<InteractionOutput, CoreError> {
-            let name = request.target.name().unwrap_or("");
-            match request.operation {
+            let name = target.name().unwrap_or("");
+            match operation {
                 Operation::ReadProperty => s.thing.read_property(name, &input),
                 Operation::WriteProperty => s.thing.write_property(name, &mut input),
                 Operation::InvokeAction => s.thing.invoke_action(name, &mut input),
@@ -223,7 +307,7 @@ impl Servient {
                 Operation::UnobserveProperty => s.thing.unobserve_property(name, &input),
                 _ => Err(CoreError::UnsupportedOperation(format!(
                     "operation {:?} not handled",
-                    request.operation
+                    operation
                 ))),
             }
         });

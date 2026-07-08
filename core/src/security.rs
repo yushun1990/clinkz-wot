@@ -139,7 +139,7 @@ impl fmt::Debug for InMemoryCredentialStore {
 }
 
 /// Applies protocol-neutral security metadata to a transport request.
-pub trait SecurityProvider {
+pub trait SecurityProvider: Send + Sync {
     /// Returns the security definition name handled by this provider.
     fn scheme_name(&self) -> &str;
 
@@ -182,11 +182,14 @@ pub trait SecurityProvider {
 ///
 /// These are raw extractions; verification happens in `verify`.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[non_exhaustive]
 pub enum AuthMaterial {
     /// Transport peer locator or identifier (for example a zenoh peer id).
     PeerId(String),
     /// Raw bearer token bytes (for example an Authorization header value).
     BearerToken(Vec<u8>),
+    /// Basic auth username + password (RFC 7617).
+    Basic { username: String, password: String },
     /// Raw certificate fingerprint bytes.
     CertificateFingerprint(Vec<u8>),
     /// Forward-compatible opaque carrier for schemes not yet enumerated.
@@ -241,6 +244,18 @@ pub struct Principal {
     pub id: PrincipalId,
     /// Scopes or claims carried for authorization, if any.
     pub scopes: Vec<String>,
+}
+
+impl Principal {
+    /// Creates an anonymous principal with no scopes, used by the `NoSec`
+    /// scheme and other schemes that authenticate but do not establish a
+    /// named identity.
+    pub fn anonymous() -> Self {
+        Self {
+            id: PrincipalId::from("anonymous"),
+            scopes: Vec::new(),
+        }
+    }
 }
 
 /// Failure reported by inbound security verification (baseline addendum §1.3).
@@ -325,6 +340,348 @@ pub fn check_scopes(required: &[String], present: &[String]) -> Result<(), Secur
             required: missing,
             present: present.to_vec(),
         })
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Built-in security providers (P-Sec).
+// ---------------------------------------------------------------------------
+
+/// `NoSec` security provider — always passes, returns an anonymous principal.
+///
+/// Register this provider when a Thing declares `"nosec"` in its
+/// `securityDefinitions` and you want inbound requests to pass without
+/// authentication. This is the W3C WoT default.
+///
+/// ```
+/// use clinkz_wot_core::{NoSecurityProvider, SecurityProvider};
+/// let provider = NoSecurityProvider::new();
+/// assert_eq!(provider.scheme_name(), "nosec");
+/// ```
+pub struct NoSecurityProvider {
+    scheme_name: String,
+}
+
+impl NoSecurityProvider {
+    /// Creates a `NoSec` provider for the default `"nosec"` scheme name.
+    pub fn new() -> Self {
+        Self {
+            scheme_name: String::from("nosec"),
+        }
+    }
+
+    /// Creates a `NoSec` provider with a custom scheme name (for `Auto`
+    /// security definitions that map to a no-op verification).
+    pub fn with_scheme_name(scheme_name: impl Into<String>) -> Self {
+        Self {
+            scheme_name: scheme_name.into(),
+        }
+    }
+}
+
+impl Default for NoSecurityProvider {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl SecurityProvider for NoSecurityProvider {
+    fn scheme_name(&self) -> &str {
+        &self.scheme_name
+    }
+
+    fn apply(&self, _context: SecurityContext<'_>, _request: &mut TransportRequest) -> CoreResult<()> {
+        Ok(())
+    }
+
+    fn verify(
+        &self,
+        _request: &InboundRequest,
+        _scheme: &SecurityScheme,
+    ) -> Result<Principal, SecurityError> {
+        Ok(Principal::anonymous())
+    }
+}
+
+/// Bearer token security provider — verifies inbound requests against a
+/// single configured valid token.
+///
+/// This is a minimal v0.1 implementation suitable for development and
+/// testing. Production deployments should replace this with a provider
+/// that validates JWT signatures, checks expiry, introspects tokens via
+/// an authorization server, etc.
+///
+/// The provider compares the inbound `AuthMaterial::BearerToken` bytes
+/// against the configured token using a constant-time comparison to
+/// avoid timing side channels.
+pub struct BearerSecurityProvider {
+    scheme_name: String,
+    valid_token: Vec<u8>,
+    principal_id: String,
+    scopes: Vec<String>,
+}
+
+impl BearerSecurityProvider {
+    /// Creates a Bearer provider for the `"bearer"` scheme name.
+    ///
+    /// `valid_token` is the exact token bytes an inbound caller must
+    /// present in `AuthMaterial::BearerToken`. `principal_id` is the
+    /// identity assigned to a successfully verified caller; `scopes` are
+    /// the authorization scopes granted to that caller.
+    pub fn new(
+        valid_token: impl Into<Vec<u8>>,
+        principal_id: impl Into<String>,
+        scopes: impl IntoIterator<Item = impl Into<String>>,
+    ) -> Self {
+        Self {
+            scheme_name: String::from("bearer"),
+            valid_token: valid_token.into(),
+            principal_id: principal_id.into(),
+            scopes: scopes.into_iter().map(|s| s.into()).collect(),
+        }
+    }
+
+    /// Creates a Bearer provider with a custom scheme name (for `OAuth2`
+    /// definitions that carry bearer tokens in practice).
+    pub fn with_scheme_name(
+        scheme_name: impl Into<String>,
+        valid_token: impl Into<Vec<u8>>,
+        principal_id: impl Into<String>,
+        scopes: impl IntoIterator<Item = impl Into<String>>,
+    ) -> Self {
+        Self {
+            scheme_name: scheme_name.into(),
+            valid_token: valid_token.into(),
+            principal_id: principal_id.into(),
+            scopes: scopes.into_iter().map(|s| s.into()).collect(),
+        }
+    }
+}
+
+impl SecurityProvider for BearerSecurityProvider {
+    fn scheme_name(&self) -> &str {
+        &self.scheme_name
+    }
+
+    fn apply(&self, _context: SecurityContext<'_>, _request: &mut TransportRequest) -> CoreResult<()> {
+        // Outbound Bearer application is handled by the binding when it
+        // builds the transport request; this hook is a no-op for v0.1.
+        Ok(())
+    }
+
+    fn verify(
+        &self,
+        request: &InboundRequest,
+        _scheme: &SecurityScheme,
+    ) -> Result<Principal, SecurityError> {
+        match &request.auth {
+            Some(AuthMaterial::BearerToken(token)) => {
+                if constant_time_eq(token, &self.valid_token) {
+                    Ok(Principal {
+                        id: PrincipalId::from(self.principal_id.as_str()),
+                        scopes: self.scopes.clone(),
+                    })
+                } else {
+                    Err(SecurityError::InvalidCredentials)
+                }
+            }
+            Some(_) => Err(SecurityError::InvalidCredentials),
+            None => Err(SecurityError::MissingCredentials),
+        }
+    }
+}
+
+/// Basic auth security provider (RFC 7617) — verifies inbound requests
+/// against a single configured username + password.
+///
+/// Minimal v0.1 implementation for development and testing. Production
+/// deployments should use a provider backed by a credential database.
+pub struct BasicSecurityProvider {
+    scheme_name: String,
+    valid_username: String,
+    valid_password: String,
+    principal_id: String,
+    scopes: Vec<String>,
+}
+
+impl BasicSecurityProvider {
+    /// Creates a Basic auth provider for the `"basic"` scheme name.
+    pub fn new(
+        username: impl Into<String>,
+        password: impl Into<String>,
+        principal_id: impl Into<String>,
+        scopes: impl IntoIterator<Item = impl Into<String>>,
+    ) -> Self {
+        Self {
+            scheme_name: String::from("basic"),
+            valid_username: username.into(),
+            valid_password: password.into(),
+            principal_id: principal_id.into(),
+            scopes: scopes.into_iter().map(|s| s.into()).collect(),
+        }
+    }
+}
+
+impl SecurityProvider for BasicSecurityProvider {
+    fn scheme_name(&self) -> &str {
+        &self.scheme_name
+    }
+
+    fn apply(&self, _context: SecurityContext<'_>, _request: &mut TransportRequest) -> CoreResult<()> {
+        Ok(())
+    }
+
+    fn verify(
+        &self,
+        request: &InboundRequest,
+        _scheme: &SecurityScheme,
+    ) -> Result<Principal, SecurityError> {
+        match &request.auth {
+            Some(AuthMaterial::Basic { username, password }) => {
+                if constant_time_eq(username.as_bytes(), self.valid_username.as_bytes())
+                    && constant_time_eq(password.as_bytes(), self.valid_password.as_bytes())
+                {
+                    Ok(Principal {
+                        id: PrincipalId::from(self.principal_id.as_str()),
+                        scopes: self.scopes.clone(),
+                    })
+                } else {
+                    Err(SecurityError::InvalidCredentials)
+                }
+            }
+            Some(_) => Err(SecurityError::InvalidCredentials),
+            None => Err(SecurityError::MissingCredentials),
+        }
+    }
+}
+
+/// Constant-time byte-slice comparison to avoid timing side channels on
+/// credential checks. Not a cryptographic constant-time guarantee (the
+/// length comparison leaks), but strictly better than `==` for short
+/// secrets. Returns `true` when both slices have the same length and
+/// content.
+fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
+    if a.len() != b.len() {
+        return false;
+    }
+    let mut diff: u8 = 0;
+    for (x, y) in a.iter().zip(b.iter()) {
+        diff |= x ^ y;
+    }
+    diff == 0
+}
+
+#[cfg(test)]
+mod provider_tests {
+    use super::*;
+    use crate::inbound::InboundRequest;
+    use crate::{AffordanceTarget, InteractionInput};
+    use alloc::vec;
+    use clinkz_wot_td::data_type::Operation;
+
+    fn request_with(auth: Option<AuthMaterial>) -> InboundRequest {
+        let mut req = InboundRequest::new(
+            crate::ThingId::from("urn:test"),
+            AffordanceTarget::Property("x".into()),
+            Operation::ReadProperty,
+            InteractionInput::empty(),
+        );
+        req.auth = auth;
+        req
+    }
+
+    #[test]
+    fn nosec_provider_always_passes() {
+        let provider = NoSecurityProvider::new();
+        let scheme =
+            clinkz_wot_td::security_scheme::NoSecurityScheme::default();
+        let result = provider.verify(
+            &request_with(None),
+            &clinkz_wot_td::security_scheme::SecurityScheme::NoSec(scheme),
+        );
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap().id.as_str(), "anonymous");
+    }
+
+    #[test]
+    fn bearer_provider_accepts_valid_token() {
+        let provider =
+            BearerSecurityProvider::new(b"secret-token".to_vec(), "user-1", ["read"]);
+        let scheme =
+            clinkz_wot_td::security_scheme::BearerSecurityScheme::default();
+        let result = provider.verify(
+            &request_with(Some(AuthMaterial::BearerToken(b"secret-token".to_vec()))),
+            &clinkz_wot_td::security_scheme::SecurityScheme::Bearer(scheme),
+        );
+        assert!(result.is_ok());
+        let principal = result.unwrap();
+        assert_eq!(principal.id.as_str(), "user-1");
+        assert_eq!(principal.scopes, vec![String::from("read")]);
+    }
+
+    #[test]
+    fn bearer_provider_rejects_invalid_token() {
+        let provider = BearerSecurityProvider::new(b"correct".to_vec(), "u", Vec::<String>::new());
+        let err = provider
+            .verify(
+                &request_with(Some(AuthMaterial::BearerToken(b"wrong".to_vec()))),
+                &clinkz_wot_td::security_scheme::SecurityScheme::Bearer(
+                    clinkz_wot_td::security_scheme::BearerSecurityScheme::default(),
+                ),
+            )
+            .unwrap_err();
+        assert!(matches!(err, SecurityError::InvalidCredentials));
+    }
+
+    #[test]
+    fn bearer_provider_rejects_missing_credentials() {
+        let provider = BearerSecurityProvider::new(b"x".to_vec(), "u", Vec::<String>::new());
+        let err = provider
+            .verify(&request_with(None), &clinkz_wot_td::security_scheme::SecurityScheme::Bearer(
+                clinkz_wot_td::security_scheme::BearerSecurityScheme::default(),
+            ))
+            .unwrap_err();
+        assert!(matches!(err, SecurityError::MissingCredentials));
+    }
+
+    #[test]
+    fn basic_provider_accepts_valid_credentials() {
+        let provider = BasicSecurityProvider::new("alice", "pw", "alice", ["read", "write"]);
+        let result = provider.verify(
+            &request_with(Some(AuthMaterial::Basic {
+                username: "alice".into(),
+                password: "pw".into(),
+            })),
+            &clinkz_wot_td::security_scheme::SecurityScheme::Basic(
+                clinkz_wot_td::security_scheme::BasicSecurityScheme::default(),
+            ),
+        );
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn basic_provider_rejects_wrong_password() {
+        let provider = BasicSecurityProvider::new("alice", "correct", "alice", Vec::<String>::new());
+        let err = provider
+            .verify(
+                &request_with(Some(AuthMaterial::Basic {
+                    username: "alice".into(),
+                    password: "wrong".into(),
+                })),
+                &clinkz_wot_td::security_scheme::SecurityScheme::Basic(
+                    clinkz_wot_td::security_scheme::BasicSecurityScheme::default(),
+                ),
+            )
+            .unwrap_err();
+        assert!(matches!(err, SecurityError::InvalidCredentials));
+    }
+
+    #[test]
+    fn constant_time_eq_matches_builtin_eq() {
+        assert!(constant_time_eq(b"abc", b"abc"));
+        assert!(!constant_time_eq(b"abc", b"abd"));
+        assert!(!constant_time_eq(b"abc", b"ab"));
+        assert!(constant_time_eq(b"", b""));
     }
 }
 
