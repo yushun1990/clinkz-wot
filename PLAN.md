@@ -46,6 +46,7 @@ under `docs/plan/`.
 | P2 | Binding async (real async `ClientBinding`; zenoh async consume; drop dynamic-affordance API) | `docs/plan/phase-p2-binding-async.md` |
 | P3 | Servient rewire (drop `Servient<D>`; async-only driving; frozen-TD lifecycle; real async consume) | `docs/plan/phase-p3-servient.md` |
 | P4 | Compliance and verification (Scripting API conformance map tests, feature matrix, fixtures, no-std checks) | `docs/plan/phase-p4-compliance.md` |
+| **v4.1** | **Binding ownership refactor** (AD55–AD58: remove `ProtocolBinding`/`ClientBindingFactory`; `ServerBinding` `serve`/`shutdown` lifecycle; bindings on handles) | **`docs/plan/v4.1-binding-ownership-refactor.md`** |
 
 Dependency shape and compile boundaries: P0 is foundational (core types
 everyone depends on). Because P0 rewrites core's public surface, it breaks

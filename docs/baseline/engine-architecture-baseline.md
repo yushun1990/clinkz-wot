@@ -1,27 +1,57 @@
-# clinkz-wot Engine Architecture Baseline (v4.0)
+# clinkz-wot Engine Architecture Baseline (v4.1)
+
+> **⚠ Status — v4.1 amendment (binding ownership refactor):**
+>
+> v4.1 supersedes the v4.0 binding registration, ownership, and lifecycle
+> model. Three design decisions drive the amendment (AD55–AD58):
+>
+> 1. **`ProtocolBinding` facade removed** (AD55). It was a thin bundling
+>    container that destructed at registration time — the "one protocol
+>    shares one session" concern is a concrete binding implementation
+>    detail, not an engine trait. `ServientBuilder` takes `ServerBinding`
+>    and `ClientBinding` directly.
+> 2. **`ServerBinding` gains explicit lifecycle** (AD56). `configure()`,
+>    `register_thing()`, and `unregister_thing()` are merged into
+>    `serve(thing_id, td, ctx)` and `shutdown(thing_id)`. `serve` is the
+>    single entry point that declares routes AND starts the driving model
+>    (spawning a draining task on std; configuring poll state on no_std).
+>    This closes the gap left by the c03de58 driving-loop removal — the
+>    binding now has an explicit "start serving" call.
+> 3. **`ClientBindingFactory` removed; `ClientBinding` is shared `Arc`**
+>    (AD57). `ClientBinding` is effectively stateless (all per-Thing
+>    context is in `BindingRequest`), so one shared `Arc<dyn
+>    ClientBinding>` per protocol serves all consumed Things.
+> 4. **Binding ownership moves to handles** (AD58). `ExposedThingHandle`
+>    holds its `ServerBinding` references; `ConsumedThingHandle` holds its
+>    `ClientBinding` references. The Servient provides defaults at
+>    construction; handles own `Arc` clones thereafter. `expose()` calls
+>    `serve()` on the handle's bindings; `destroy()` calls `shutdown()`.
+>
+> The affected sections (§4.5, §4.8, §7.1, §7.3, §7.4, §11) carry inline
+> `v4.1` amendment blocks; the v4.0 text is retained as the design record.
 
 > **⚠ Status — post-v4.0 implementation drift (kept inline):**
 >
-> v4.0 is the design frozen at the v4.0 baseline. Two later implementation
+> v4.0 is the design frozen at the v4.0 baseline. Two earlier implementation
 > changes supersede parts of §7.2 and the trait-split framing below, and
 > should be read alongside this document:
 >
 > 1. **Driving loop removed from the Servient** (commit `c03de58`).
 >    `poll_serve` / `serve` / `poll_serve_once` no longer exist. The Servient
 >    now exposes only `Dispatch::serve_request(req).await`; each binding owns
->    its driving model (fan-in channel / async route handler / super-loop
->    `try_accept`). See `docs/servient-workflow.md` §3 and §6 for the current
->    model.
+>    its driving model. **v4.1 formalizes this** by adding `serve()`/`shutdown()`
+>    lifecycle to `ServerBinding` (AD56).
 > 2. **User-facing API expansion** (P0–P3, commits `39bcb4d` → `b6f5a97`).
->    `ProtocolBinding` facade replaces direct `ClientBinding`/`ServerBinding`
->    registration from application code; `ConsumedThingHandle` /
->    `ExposedThingHandle` now carry the full Scripting API §6/§7 surface
->    (streaming, bulk, async handlers). See `docs/user-facing-api.md` for the
->    frozen external boundary.
+>    ~~`ProtocolBinding` facade replaces direct `ClientBinding`/`ServerBinding`
+>    registration from application code~~ — **v4.1 removes `ProtocolBinding`**
+>    (AD55); `ServientBuilder` now takes `ServerBinding`/`ClientBinding`
+>    directly. `ConsumedThingHandle` / `ExposedThingHandle` carry the full
+>    Scripting API §6/§7 surface (streaming, bulk, async handlers). See
+>    `docs/user-facing-api.md` for the current external boundary.
 >
-> The body of this document is the v4.0 design record; where the
-> implementation has diverged, the divergence is noted inline at the
-> affected section.
+> The body of this document is the v4.0 design record; where the design has
+> been amended by v4.1 or the implementation has diverged, the divergence is
+> noted inline at the affected section.
 
 This document is the consolidated, authoritative **engine-wide** architecture
 baseline for `clinkz-wot`. It supersedes the Servient-only baselines
@@ -30,6 +60,10 @@ baseline for `clinkz-wot`. It supersedes the Servient-only baselines
 design reference. Those two documents remain useful as historical record of the
 concurrency and inbound-surface decisions that v4.0 inherits; where v4.0
 diverges, the divergence is explicit and LOCKED here.
+
+**v4.1** amends the binding ownership, lifecycle, and registration model
+(AD55–AD58). The v4.0 body is retained as the design record; each amended
+section carries an inline `v4.1` block with the superseding content.
 
 v4.0 is a **one-shot breaking refactor** triggered by three direction decisions
 that collapse most of the accumulated complexity:
@@ -431,6 +465,16 @@ unchanged.
 
 ### 4.5 Binding trait split
 
+> **⚠ v4.1 amendment (AD55–AD58).** The v4.0 `ServerBinding` trait surface
+> (`configure` / `try_accept` / `send_response` / `set_event_broker` /
+> `set_request_sink` / `register_thing` / `unregister_thing`) is superseded.
+> `ProtocolBinding` is removed (AD55); `ClientBindingFactory` is removed
+> (AD57); `ServerBinding` gains explicit lifecycle (AD56); bindings are
+> owned by handles, not the Servient (AD58). The Servient-owned fan-in
+> channel (`FanInSender` / `set_request_sink`) is removed — each binding
+> owns its driving model (c03de58 formalized). The v4.0 text below is
+> retained as the design record; the **v4.1 target surface** follows.
+
 Retained: `ClientBinding` (outbound) and `ServerBinding` (inbound), both `&self`
 with interior mutability (v3.0 §2, v3.1 §2.4). The dynamic-affordance methods
 `register_affordance` / `unregister_affordance` added in addendum §9.2 are
@@ -440,46 +484,145 @@ with interior mutability (v3.0 §2, v3.1 §2.4). The dynamic-affordance methods
 `ClientBinding::invoke` / `subscribe` are `async fn` (resolved A1) — the
 outbound path; one `async_trait` `Box` per call, accepted as network-amortized.
 
+---
+
+#### v4.1 target surface
+
+**`ServerBinding` — explicit lifecycle (AD56).**
+
+`configure()`, `register_thing()`, `unregister_thing()`, `set_event_broker()`,
+and `set_request_sink()` are merged into two lifecycle methods. `serve` is the
+single entry point that declares routes for one Thing AND starts the driving
+model. `shutdown` is the teardown twin.
+
+```rust
+pub struct BindingContext {
+    /// Event fan-out broker for event/observable property publish.
+    pub event_broker: EventBroker,
+    /// Direct-dispatch handle. The binding calls `serve_request(req).await`
+    /// to route an inbound request through the Servient's dispatch
+    /// (security verification + registry lookup + handler invocation).
+    /// `None` on bare no_std (the super-loop holds its own dispatch ref).
+    #[cfg(feature = "async")]
+    pub dispatch: Option<Arc<dyn Dispatch>>,
+}
+
+pub trait ServerBinding: Send + Sync {
+    /// Starts serving inbound requests for `thing_id` based on `td`.
+    ///
+    /// This is the single lifecycle entry point — it replaces v4.0's
+    /// `configure` + `register_thing` + `set_request_sink` + `set_event_broker`.
+    /// On std it declares transport routes (queryables / listeners) AND
+    /// may spawn a background draining task that recv()s from the binding's
+    /// internal channel and calls `ctx.dispatch.serve_request(req).await`,
+    /// then `self.send_response(resp)`. On no_std it declares routes and
+    /// configures poll state; the super-loop drains via `try_accept`.
+    ///
+    /// Returns `Result<(), CoreError>` so multi-binding rollback (E12/AD27)
+    /// can detect a binding `k+1` failure, `shutdown` the succeeded `1..k`,
+    /// and surface a fatal `Err`.
+    fn serve(
+        &self,
+        thing_id: &ThingId,
+        td: &Thing,
+        ctx: &BindingContext,
+    ) -> CoreResult<()>;
+
+    /// Stops serving `thing_id`: undeclares routes, cancels background tasks,
+    /// drops per-Thing state. Idempotent (AD27/E13) — best-effort across
+    /// bindings, a failure to shut down one does not abort teardown of the
+    /// rest (logged, not fatal).
+    fn shutdown(&self, thing_id: &ThingId);
+
+    /// Non-blocking drain of one ready inbound request, or `None`.
+    /// Default `None`: std bindings that self-drive via a background task
+    /// never have `try_accept` called. no_std bindings override this so the
+    /// super-loop can poll.
+    fn try_accept(&self) -> Option<InboundRequest> { None }
+
+    /// Sends a response back to the requester identified by the response's
+    /// `CorrelationId`. Required — every binding that accepts requests
+    /// must implement it (AD9 overload error-reply semantics).
+    fn send_response(&self, response: InboundResponse);
+}
+```
+
+**Binding-owned driving model.** The Servient-owned fan-in channel
+(`FanInSender` / `set_request_sink`) is **removed**. Each binding owns its
+inbound queue and driving task:
+
+- **std (tokio/embassy-async):** `serve()` declares routes and spawns a
+  draining task. Zenoh's sync callbacks `try_send` into the binding's
+  internal bounded channel; the draining task `recv().await`s, calls
+  `ctx.dispatch.serve_request(req).await`, and `send_response(resp)`. The
+  binding controls its own backpressure policy (AD9: request/reply rejected
+  with explicit error reply on `Full`; streaming/events drop-oldest +
+  overflow counter).
+- **bare no_std (no executor):** `serve()` declares routes and configures
+  poll state. The super-loop polls `try_accept()` on each binding (rotation
+  cursor for fairness — AD7), then calls dispatch + `send_response` inline.
+  Strict one request per tick, no backlog drain (AD6b).
+
+This is a per-binding channel model, not the v4.0 single shared fan-in
+channel. The trade-off: N draining tasks instead of 1 (N is the protocol-
+binding count, typically 1–5). Dispatch (`&self`, `Send + Sync`) handles
+concurrent calls correctly.
+
+**`ClientBinding` — shared `Arc`, no factory (AD57).**
+
+`ClientBinding` is unchanged in its trait shape (`supports` / `invoke` /
+`subscribe`, all `async`). The change is in **how instances are owned**:
+`ClientBindingFactory` is removed. All per-Thing context (TD, form,
+operation, input) is carried in `BindingRequest`, so the binding carries no
+per-Thing state. One shared `Arc<dyn ClientBinding>` per protocol serves all
+consumed Things. `Servient::consume` clones `Arc` references into the
+`ConsumedThingHandle` — no `build()` step, no `Box`.
+
+```rust
+// v4.0 (removed):
+pub trait ClientBindingFactory: Send + Sync {
+    fn build(&self) -> Box<dyn ClientBinding>;
+}
+
+// v4.1: ClientBinding is registered as Arc<dyn ClientBinding> directly.
+// The Servient holds Arc<[Arc<dyn ClientBinding>]> and clones into handles.
+```
+
+**`ProtocolBinding` — removed (AD55).**
+
+The `ProtocolBinding` facade trait (`core/src/binding_facade.rs`) is deleted.
+It bundled `client_factory()` + `server()` into a temporary container that
+was immediately destructed at `ServientBuilder` registration time. The "one
+protocol shares one session" concern is a concrete binding implementation
+detail: the zenoh crate provides `ZenohBinding::shared(session) ->
+(Arc<dyn ServerBinding>, Arc<dyn ClientBinding>)` as a convenience
+constructor, and the application passes the two `Arc`s to the builder
+separately.
+
+**`FanInSender` — removed.** The `FanInSender<InboundRequest>` type alias
+(`async_channel::Sender`) is deleted from `clinkz-wot-core`. Each binding
+owns its channel internally (e.g. zenoh's `tokio::sync::mpsc` or
+`async_channel`). The Servient no longer constructs or owns a shared inbound
+channel.
+
+---
+
+<details>
+<summary>v4.0 design record (retained for context — superseded by v4.1 above)</summary>
+
 **Inbound accept uses a fan-in channel, not `select_all` over boxed
 `poll_accept` futures** (audit defect 1). `ServerBinding` exposes a single
 **synchronous, non-blocking** `try_accept`:
 
 ```rust
+// v4.0 ServerBinding — SUPERSEDED by v4.1 serve/shutdown above.
 pub trait ServerBinding: Send + Sync {
-    /// Non-blocking drain of one currently-ready inbound request, or `None`.
-    /// No `async_trait`, no `Box` — a plain virtual call. (no_std polled path.)
-    /// Default `None` (audit F8): a std-only binding that self-pushes via
-    /// `set_request_sink` never has `try_accept` called and need not override it.
     fn try_accept(&self) -> Option<InboundRequest> { None }
-    /// The reply path (audit F1): `InboundRequest` carries no reply handle, so
-    /// the dispatcher's `InboundResponse` is returned via `send_response`,
-    /// matched back to the requester by `CorrelationId`. Required by AD9's
-    /// "overload → explicit error reply" semantics. No default — every binding
-    /// that accepts requests must implement it.
     fn send_response(&self, response: InboundResponse);
-    /// EventBroker injection (audit F1): the Servient calls this at registration
-    /// so the binding can register `PublisherSink`s for event/observable fan-out
-    /// during `register_thing`. Default no-op for bindings without event publish.
     fn set_event_broker(&self, _broker: EventBroker) {}
-    /// std fan-in injection (audit defect AD13): the Servient hands each
-    /// binding a clone of the bounded fan-in sender at registration; the
-    /// binding `try_send`s from its sync transport callbacks. Formalized on
-    /// the trait so the std main path is not prose-only implicit coupling.
     #[cfg(feature = "std")]
     fn set_request_sink(&self, sender: FanInSender<InboundRequest>);
-    /// Wholesale route registration for one Thing during `expose()`. Returns
-    /// `Result<(), CoreError>` so the multi-binding rollback (E12/AD27) can
-    /// detect a binding `k+1` failure, `unregister_thing` the succeeded
-    /// `1..k`, and surface a fatal `Err` (audit round-2 C3/AD38 — the earlier
-    /// `()` sketch could not fail, contradicting the rollback contract). A
-    /// binding reports a structural failure (cannot register routes for this
-    /// TD) via a structured `CoreError` (mapped from its `BindingError`),
-    /// never a `String`, so it threads through `error_status`/`ServientError`.
     fn register_thing(&self, thing_id: &ThingId, td: &Thing) -> Result<(), CoreError>;
-    /// Wholesale route removal during `destroy()`. Returns `()` — `destroy()`
-    /// is idempotent (AD27/E13) and best-effort across bindings: a failure to
-    /// unregister one binding does not abort teardown of the rest (logged, not
-    /// fatal), matching the "Thing gone" end state.
     fn unregister_thing(&self, thing_id: &ThingId);
 }
 ```
@@ -524,6 +667,8 @@ sync zenoh-callback enqueue). Defined in `clinkz-wot-core` behind `#[cfg(feature
 = "std")]`; the Servient constructs the `async_channel::channel(capacity)` pair
 and owns the `Receiver`. no_std has no `FanInSender` (no channel — the loop
 polls `try_accept`).
+
+</details>
 
 ### 4.6 Subscription primitives
 
@@ -663,6 +808,10 @@ rebuild. Recorded in `docs/deferred-design-followups.md`.
 
 ### 4.8 Trait sealing (audit D15)
 
+> **⚠ v4.1 amendment (AD55).** `ProtocolBinding` and `ClientBindingFactory`
+> are removed from the extension-points list. `ClientBinding` and
+> `ServerBinding` remain as the stable binding extension surface.
+
 Two classes, decided explicitly (AGENTS.md favors sealing extensible traits;
 deferred #8 had left this open):
 
@@ -671,7 +820,8 @@ deferred #8 had left this open):
   async twins, `PayloadCodec`, `SecurityProvider`, `CredentialStore`,
   `Discoverer`, `DirectoryReader`, `DirectoryPublisher`,
   `ThingDescriptionResolver`, `ThingLinkResolver`. Documented as the public
-  extension surface.
+  extension surface. ~~`ProtocolBinding`, `ClientBindingFactory`~~ — removed
+  in v4.1 (AD55, AD57).
 - **Engine-internal — sealed or `pub(crate)`** (no external impls):
   `DiscoverySession`, `DirectorySession`, `EventSink`, `InboundDispatcher`,
   the consolidated `*HandlerSet` storage types, `ProcessState`. These are
@@ -774,7 +924,45 @@ backend is demoted to a reference implementation of those traits.
 
 ### 7.1 Shape
 
+> **⚠ v4.1 amendment (AD55–AD58).** The Servient no longer holds
+> `server_bindings` or `client_factories` as long-term fields. Bindings are
+> owned by handles. The Servient retains a **default binding set** cloned
+> into handles at `produce()` / `consume()` time (so new handles get the
+> registered protocols without per-call registration), but the handles own
+> their `Arc` clones thereafter. `client_factories` → `client_bindings`
+> (shared `Arc<dyn ClientBinding>`, no factory — AD57). `ProtocolBinding`
+> is removed (AD55).
+
 ```rust
+// v4.1 Servient shape
+pub struct Servient {
+    exposed: ExposedThingRegistry,
+    consumed: ConsumedThingRegistry,
+    // Default binding sets — cloned into handles at produce/consume time.
+    // The handles own their Arc clones; the Servient holds these as defaults
+    // so new produce()/consume() calls get the registered protocols.
+    default_server_bindings: Arc<[Arc<dyn ServerBinding>]>,
+    default_client_bindings: Arc<[Arc<dyn ClientBinding>]>,
+    discoverer: Arc<dyn Discoverer>,
+    directory_publisher: Option<Arc<dyn DirectoryPublisher>>,
+    security_providers: Arc<[Arc<dyn SecurityProvider>]>,
+    event_broker: EventBroker,
+    shutdown: Arc<AtomicBool>,
+}
+```
+
+`Servient` is `Clone` (cheap, `Arc`-based), all methods `&self`, `Send + Sync`.
+The Servient's role narrows to: **dispatch engine** (security verification +
+registry lookup + handler invocation via `Dispatch::serve_request`) +
+**discovery facade** (`produce`/`consume`/`discover`/`fetch_td`). The handles
+own their bindings and drive lifecycle (`expose` calls `serve`; `destroy` calls
+`shutdown`).
+
+<details>
+<summary>v4.0 Servient shape (retained for context — superseded)</summary>
+
+```rust
+// v4.0 — SUPERSEDED by v4.1 above.
 pub struct Servient {
     exposed: ExposedThingRegistry,
     consumed: ConsumedThingRegistry,
@@ -790,6 +978,8 @@ pub struct Servient {
 ```
 
 `Servient` is `Clone` (cheap, `Arc`-based), all methods `&self`, `Send + Sync`.
+
+</details>
 
 ### 7.2 Driving layer — async only
 
@@ -1016,11 +1206,12 @@ publishes the TD; the TD affordance set is immutable thereafter until
 
 **`expose()` sub-step ordering (audit M4 — pinned).** Correctness (rollback +
 no stale-route window) requires a precise order:
-1. `register_thing` on **ALL** server bindings (deterministic order). If any
-   binding fails, `unregister_thing` the already-registered ones (reverse) and
-   return `Err` — the registry is **not yet touched**, so no registry rollback
-   needed.
-2. All bindings registered OK → **insert into the exposed registry** (CAS/WotLock
+1. `serve(thing_id, td, ctx)` on **ALL** of the handle's server bindings
+   (deterministic order). If any binding fails, `shutdown` the already-served
+   ones (reverse) and return `Err` — the registry is **not yet touched**, so
+   no registry rollback needed. *(v4.1: `serve` replaces v4.0's `configure` +
+   `register_thing` + `set_request_sink` + `set_event_broker`.)*
+2. All bindings served OK → **insert into the exposed registry** (CAS/WotLock
    atomic). Now the Thing is dispatchable.
 3. `DirectoryPublisher::register` (best-effort; failure is non-fatal/warn).
 This eliminates the "routes exist but registry doesn't" window: the registry
@@ -1029,13 +1220,14 @@ entry appears only after all routes are live.
 **`destroy()` quiescing (audit defect AD15).** Teardown is more than
 routes-first; it defines the fate of every in-flight request:
 
-1. `ServerBinding::unregister_thing` on every binding (routes-first → no **new**
-   requests can arrive).
-2. Set the ThingSlot `draining` flag. The driving loop honors it: any
-   not-yet-dispatched request already in the fan-in channel (or accepted via
-   `try_accept`) that targets this Thing is **rejected** — request/response
-   gets a synthesized "Thing gone" error reply (status-mapped via
-   `error_status`, 410-style); streaming/events are dropped.
+1. `ServerBinding::shutdown(thing_id)` on every binding (routes-first → no **new**
+   requests can arrive; background draining tasks are cancelled). *(v4.1:
+   `shutdown` replaces v4.0's `unregister_thing`.)*
+2. Set the ThingSlot `draining` flag. The dispatch path honors it: any
+   not-yet-dispatched request already accepted by a binding that targets this
+   Thing is **rejected** — request/response gets a synthesized "Thing gone"
+   error reply (status-mapped via `error_status`, 410-style); streaming/events
+   are dropped.
 3. **In-flight handlers already executing are allowed to complete** (they hold
    a handler `Arc` cloned out before draining); their results are **discarded**
    if the Thing is already removed (the response goes nowhere). Async handlers
@@ -1064,6 +1256,13 @@ model). `Discoverer::request_thing_description()` stays async (a concrete TD
 fetch IS a network round-trip).
 
 ### 7.4 ConsumedThing — real async
+
+> **⚠ v4.1 amendment (AD57–AD58).** `ConsumedThingHandle` now holds
+> `Arc<[Arc<dyn ClientBinding>]>` (shared instances, no factory). The handle
+> is self-contained for interaction — it does not go through the Servient
+> for outbound calls. `Servient::consume()` clones `Arc` references from the
+> default client-binding set into the handle. The `ClientBindingFactory`
+> trait is removed.
 
 ```rust
 impl ConsumedThingHandle {
@@ -1128,7 +1327,7 @@ not a §9 deviation (it is a scheme-coverage gap, recorded here).
 |---|---|
 | `default = ["std"]` | std runtime + tokio convenience. |
 | `alloc` | dynamic data on `no_std`. |
-| `std` | networking, filesystem, async runtime, host convenience (`serve` loop, idle backoff). **Implies `alloc` + `async`** (`Cargo.toml`: `std = ["alloc", "async"]` — audit M7; `--features std` always enables async driving + `FanInSender`). |
+| `std` | networking, filesystem, async runtime, host convenience (`serve` loop, idle backoff). **Implies `alloc` + `async`** (`Cargo.toml`: `std = ["alloc", "async"]` — audit M7; `--features std` always enables async driving ~~+ `FanInSender`~~ — v4.1: `FanInSender` removed, AD56). |
 | `async` | native-async driving (always on for `std`; required for the canonical model). On `no_std`, driving is manual-poll by default and native-async suspension requires an executor (embassy). |
 | `zenoh` | Rust `zenoh` std backend (real async consume + inbound). |
 | `zenoh-pico` | constrained `no_std+alloc` platform-hook backend (mutually exclusive with `zenoh`). |
@@ -1216,12 +1415,14 @@ The per-interaction hot path must be allocation-light and lock-bounded:
   call — **zero per-interaction heap allocation**. The opt-in async handler
   path pays one `async_trait` `Box` per call (acceptable: the handler is
   I/O-bound).
-- **Inbound accept** is a single **bounded** fan-in channel on std (O(1)
-  `recv`, zero boxing; binding enqueues via sync `try_send` from zenoh
-  callbacks — they cannot `await`; on `Full` request/response is rejected with
-  an explicit error reply, streaming/events drop-oldest + overflow — no
-  binding-internal queue, AD6a/AD9) and a sync `try_accept` poll on no_std (one
-  request per tick, rotation cursor, O(N_bindings), no boxing — AD6b). No
+- **Inbound accept** is **binding-owned** (v4.1 AD56): each binding owns a
+  bounded internal channel and a draining task on std (O(1) `recv`, zero
+  boxing; zenoh callbacks `try_send` from sync closures — they cannot `await`;
+  on `Full` request/response is rejected with an explicit error reply,
+  streaming/events drop-oldest + overflow — AD9) and a sync `try_accept` poll
+  on no_std (one request per tick, rotation cursor, O(N_bindings), no boxing —
+  AD6b). ~~v4.0 single shared fan-in channel~~ — removed in v4.1; N per-binding
+  channels instead of 1 (N is protocol-binding count, typically 1–5). No
   `select_all`, no per-binding boxed `poll_accept` future (audit defect AD1).
 - **Registry / handler-table / subscription-state reads** are per-build (AD2/C1):
   std = lock-free `arc_swap` snapshot load; no_std = `WotLock` + clone-out
@@ -1229,9 +1430,10 @@ The per-interaction hot path must be allocation-light and lock-bounded:
   outside the lock). No `WotLock::with_read` covering handler invocation on any
   build. std registry snapshots are `Arc<im::HashMap<…>>` (O(1) amortized insert,
   O(1) publish); no_std uses `BTreeMap` (O(log n) get, no snapshot publish).
-- **Outbound form/binding plan** is interned in the consumed registry entry
-  (addendum §9.4 retained); repeated consumed interactions reuse the cached
-  binding instance via `Arc` clone — no `make_binding`, no plan recompute.
+- **Outbound form/binding plan** — the `ClientBinding` is a shared
+  `Arc<dyn ClientBinding>` (v4.1 AD57); repeated consumed interactions reuse
+  the same binding instance via `Arc` clone — no `build()`, no per-Thing
+  factory, no plan recompute. Form selection is per-call in the handle.
 - **Event fan-out** shares `Payload` bytes via `Arc<[u8]>` (retained); media
   metadata may move to `Arc<str>` if profiling warrants (deferred #1).
 - **Lock contention** is bounded: `WotLock` is reserved for read-write-frequent
@@ -1378,3 +1580,16 @@ above carry cross-references to the matching AD36–AD53 entry.
 | AD52 (P-3) | Bulk fan-out concurrency | std: bounded `buffer_unordered`; no_std: serial. Default bound = property count; configurable bound deferred. Partial-failure (AD26) holds under both. (§7.4, P3 §3.6) |
 | AD53 (P-4) | Directory-driven consumed invalidation cost | std: `im::HashMap` (AD50/M2) → O(1) amortized rebuild. no_std: `WotLock<BTreeMap>` → O(log n) get, O(n) full rebuild on invalidation (rare; acceptable for ESP32-class registries). Churn is coalesced/debounced. (P3 §3.7) |
 | **AD54 (C1)** 🔴 | **arc-swap + im NOT stable-`no_std` — no_std uses WotLock+clone-out** | The prior claim "`arc-swap` is `no_std`-compatible" was **false** (`arc-swap` 1.9 `no_std` needs nightly `experimental-thread-local`; `im` is std-oriented). **Final correction:** no_std registry uses **`WotLock<BTreeMap>` + clone-out dispatch** (CS covers only BTreeMap::get + Arc clone ≈ 500ns; handler invocation outside any lock). **Zero external deps on no_std.** std keeps `arc_swap::ArcSwap<Arc<im::HashMap>>` (lock-free; both deps available on std). AD2 intent preserved (no locked invocation); "zero interrupt-disable on no_std reads" **withdrawn**. (§4.7, §11, AD2/AD41/AD50) |
+
+### v4.1 amendment defect resolutions (locked)
+
+These resolve the binding ownership, lifecycle, and registration refactor
+(AD55–AD58). Each is a locked amendment superseding the corresponding v4.0
+surface; the affected body sections above carry inline `v4.1` blocks.
+
+| Defect | Topic | Resolution |
+|---|---|---|
+| AD55 | `ProtocolBinding` facade removed | The `ProtocolBinding` trait (`core/src/binding_facade.rs`) and its `ClientOnly` / `ServerOnly` wrappers / `client_only()` / `server_only()` helpers are **deleted**. It was a thin bundling container: `client_factory()` + `server()` were immediately destructed into separate lists at `ServientBuilder` registration time (`builder.rs:44-54`). The "one protocol shares one session" concern is a concrete binding implementation detail (e.g. `ZenohBinding::shared(session) -> (Arc<dyn ServerBinding>, Arc<dyn ClientBinding>)`), not an engine trait. `ServientBuilder` takes `with_server_binding(Arc<dyn ServerBinding>)` and `with_client_binding(Arc<dyn ClientBinding>)` directly. The `binding_facade` module is removed from `clinkz-wot-core`. (§4.5, §4.8) |
+| AD56 | `ServerBinding` gains explicit lifecycle (`serve`/`shutdown`) | `configure()`, `register_thing()`, `unregister_thing()`, `set_event_broker()`, and `set_request_sink()` are **merged** into two lifecycle methods: `serve(thing_id, td, ctx) -> CoreResult<()>` and `shutdown(thing_id)`. `serve` is the single entry point that declares routes AND starts the driving model (std: spawns draining task; no_std: configures poll state). This closes the gap left by c03de58 — the binding now has an explicit "start serving" call instead of implicit configure+register. Multi-binding rollback unchanged (AD27/E12): `serve` returns `Result`; on binding `k+1` failure the handle `shutdown`s the succeeded `1..k`. `BindingContext` is simplified: `fanin_sender` removed (binding owns its channel), `dispatch` and `event_broker` retained. `FanInSender` type alias is deleted. (§4.5, §7.3) |
+| AD57 | `ClientBindingFactory` removed; `ClientBinding` is shared `Arc` | `ClientBinding` is effectively stateless — all per-Thing context (TD, form, operation, input) is carried in `BindingRequest`. One shared `Arc<dyn ClientBinding>` per protocol serves all consumed Things. The `ClientBindingFactory` trait (`core/src/binding.rs`) is **deleted**. `ConsumedThing::bindings` changes from `Vec<Box<dyn ClientBinding>>` to `Vec<Arc<dyn ClientBinding>>` (shared instances, `Arc`-cloned). `Servient::consume` clones `Arc` references from the default client-binding set instead of calling `factory.build()`. The per-Thing "plan cache" the factory existed to provide is either (a) not needed (form selection is done per-call in the handle) or (b) an internal optimization keyed by form href (unique across Things). (§4.5, §7.4) |
+| AD58 | Binding ownership moves to handles | `ExposedThingHandle` holds `Arc<[Arc<dyn ServerBinding>]>` (cloned from the Servient's default set at `produce()` time); `ConsumedThingHandle` holds `Arc<[Arc<dyn ClientBinding>]>` (cloned at `consume()` time). The Servient retains `default_server_bindings` / `default_client_bindings` so new `produce()`/`consume()` calls get the registered protocols without per-call registration, but the handles own their `Arc` clones thereafter. `expose()` calls `serve()` on the handle's bindings; `destroy()` calls `shutdown()`. The Servient's role narrows to dispatch engine + discovery facade. This gives per-Thing lifecycle coupling (binding routes live and die with the Thing) and removes the Servient's role as a binding registry. (§7.1, §7.3, §7.4) |

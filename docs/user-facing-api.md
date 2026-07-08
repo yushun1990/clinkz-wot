@@ -1,9 +1,13 @@
 # clinkz-wot User-Facing API — Frozen Boundary Draft
 
-> Status: **Draft v0.1** — external API boundary spec, presented before
-> implementation refactoring. Signatures here are the contract; internals
-> (`ClientBinding`, `ServerBinding`, `ClientBindingFactory`) retreat behind
-> this surface and may be reorganized freely as long as the contract holds.
+> Status: **Draft v0.2 (v4.1 aligned)** — external API boundary spec.
+> Signatures here are the contract; internals may be reorganized freely as
+> long as the contract holds.
+>
+> **v4.1 changes (AD55–AD58):** `ProtocolBinding` facade removed;
+> `ClientBindingFactory` removed; `ServerBinding` gains `serve`/`shutdown`
+> lifecycle; bindings owned by handles. `ServientBuilder` takes
+> `with_server_binding` / `with_client_binding` directly.
 >
 > Alignment target: W3C WoT Scripting API (Consumer/Producer/Discovery User
 > Agent conformance), expressed in Rust idiom (`Result` not throw, `async fn`
@@ -18,14 +22,13 @@ author) programs against. Anything not listed here is **not** public API.
 
 - One entry point per concern: `ServientBuilder` for composition,
   `Servient` for the runtime facade, `ConsumedThingHandle` /
-  `ExposedThingHandle` for interaction, `ProtocolBinding` for binding
-  authors.
+  `ExposedThingHandle` for interaction, `ServerBinding` / `ClientBinding`
+  for binding authors.
 - Method catalogue, parameter semantics, and error model follow the W3C WoT
   Scripting API. Rust syntax only — no JS naming (`camelCase` → `snake_case`).
-- The engine-internal trait split (`ClientBinding` outbound vs `ServerBinding`
-  inbound, async-vs-sync, per-instance vs singleton) is **not visible** to
-  application code. It exists for binding authors and lives in
-  `clinkz_wot_core`.
+- `ServerBinding` and `ClientBinding` are the public binding extension
+  surface. Application code registers them via `ServientBuilder`; binding
+  authors implement them in `clinkz_wot_core`.
 - `no_std + alloc` path remains viable for TD/TM construction, validation,
   local dispatch, and abstract transport adapters. The full Servient requires
   `async` (see §10).
@@ -34,8 +37,9 @@ author) programs against. Anything not listed here is **not** public API.
 
 - Verbatim JS WebIDL reproduction. Rust idiom wins where they conflict
   (already decided by `docs/wot-compliance.md` §"Scripting API Boundary").
-- Removing the internal `ClientBinding` / `ServerBinding` trait split. They
-  stay; they just stop being part of the user-facing surface.
+- ~~`ProtocolBinding` facade~~ — removed in v4.1 (AD55). The engine-internal
+  `ClientBinding` / `ServerBinding` trait split is the binding surface; the
+  application registers them directly.
 - A new umbrella crate. The user entrypoint stays `clinkz_wot_servient`
   (re-exporting from `clinkz_wot_core` as needed). A future facade crate is
   possible but out of scope here.
@@ -52,28 +56,28 @@ author) programs against. Anything not listed here is **not** public API.
    ──────────────────────────────┼──────────────────────────────
    Binding                       │
    authors      ┌────────────────▼──────────────────────────────┐
-                │  ProtocolBinding  (clinkz_wot_core)            │
+                │  ServerBinding · ClientBinding                 │
+                │  (clinkz_wot_core)                             │
                 └────────────────┬──────────────────────────────┘
                                  │  (engine-internal, pub in core)
                 ┌────────────────▼──────────────────────────────┐
-   Engine       │  ClientBinding · ServerBinding · ConsumedThing │
-   internals    │  ExposedThing · EventBroker · Dispatch         │
+   Engine       │  ConsumedThing · ExposedThing · EventBroker    │
+   internals    │  Dispatch · BindingContext                      │
                 └───────────────────────────────────────────────┘
 ```
 
-Three layers, three audiences:
+Two layers, two audiences:
 
 | Layer | Audience | Crate |
 |---|---|---|
 | Application API | App developers | `clinkz_wot_servient` |
-| Binding facade | Binding authors | `clinkz_wot_core` (`ProtocolBinding`) |
+| Binding traits | Binding authors | `clinkz_wot_core` (`ServerBinding`, `ClientBinding`) |
 | Engine internals | Engine maintainers | `clinkz_wot_core` (the rest) |
 
-`ClientBinding`, `ServerBinding`, `ClientBindingFactory` remain `pub` in
-`clinkz_wot_core` because binding authors need them to implement
-`ProtocolBinding`. **They stop being re-exported from
-`clinkz_wot_servient`'s public surface.** Application code that touches
-them is depending on internals.
+`ClientBinding` and `ServerBinding` are `pub` in `clinkz_wot_core` — they
+are the public binding extension surface. Application code registers
+instances via `ServientBuilder`; binding authors implement them. ~~`ProtocolBinding`~~
+and ~~`ClientBindingFactory`~~ are removed (v4.1 AD55, AD57).
 
 ## 3. Crate Topology and Dependency Direction
 
@@ -84,81 +88,93 @@ them is depending on internals.
             └────────────┬───────────────┘
                   depends on │
             ┌──────▼─────────┐
-            │  clinkz_wot_core│  ← defines ProtocolBinding,
-            └──────┬─────────┘     ClientBinding, ServerBinding
+            │  clinkz_wot_core│  ← defines ServerBinding,
+            └──────┬─────────┘     ClientBinding, BindingContext
        depends on  │
    ┌───────────────┴┬──────────────────────────────┐
    │                │                              │
 clinkz_wot_td   clinkz_wot_discovery   clinkz_wot_protocol_bindings_*
 ```
 
-- `ProtocolBinding` lives in **`clinkz_wot_core`** alongside
-  `ClientBinding` / `ServerBinding`. All binding-related traits colocated.
+- `ServerBinding` and `ClientBinding` live in **`clinkz_wot_core`**. Binding
+  crates implement these traits.
 - Concrete binding crates (e.g. `clinkz_wot_protocol_bindings_zenoh`) depend
-  on `clinkz_wot_core` to implement `ProtocolBinding`. They do **not** depend
-  on `clinkz_wot_servient`.
-- `clinkz_wot_servient` depends on `clinkz_wot_core` (uses `ProtocolBinding`
-  in its builder). No cycle.
+  on `clinkz_wot_core` to implement `ServerBinding` / `ClientBinding`. They
+  do **not** depend on `clinkz_wot_servient`.
+- `clinkz_wot_servient` depends on `clinkz_wot_core`. No cycle.
 
-## 4. Layer 1 — Binding Facade
+## 4. Binding Registration (v4.1)
 
-### 4.1 `ProtocolBinding` trait
+> **v4.1 (AD55–AD58).** `ProtocolBinding` facade and `ClientBindingFactory`
+> are removed. Application code registers `ServerBinding` and `ClientBinding`
+> directly via `ServientBuilder`. Concrete binding crates (zenoh, http, ...)
+> implement these two traits and provide convenience constructors for
+> session-sharing topologies.
 
-Lives in `clinkz_wot_core`, re-exported from `clinkz_wot_servient` so binding
-authors can import from either crate.
+### 4.1 `ServerBinding` — inbound, lifecycle-scoped
+
+A concrete binding implements `ServerBinding` in `clinkz_wot_core`. The
+trait carries explicit lifecycle methods (`serve` / `shutdown`) — see
+baseline §4.5 (v4.1 amendment, AD56).
 
 ```rust
-// clinkz_wot_core::binding_facade (new module)
-//
-// The single trait a concrete protocol binding (zenoh, http, mqtt, ...)
-// implements. Application code never calls these methods directly; the
-// Servient extracts the client/server adapters at build time.
+pub trait ServerBinding: Send + Sync {
+    /// Starts serving inbound requests for `thing_id` based on `td`.
+    /// Declares routes AND starts the driving model (std: spawns draining
+    /// task; no_std: configures poll state). Called by ExposedThingHandle::expose().
+    fn serve(&self, thing_id: &ThingId, td: &Thing, ctx: &BindingContext) -> CoreResult<()>;
 
-pub trait ProtocolBinding: Send + Sync {
-    /// Human-readable protocol identifier, e.g. `"zenoh"`, `"http"`.
-    /// Used for diagnostics and form-selection logging only.
-    fn protocol(&self) -> &str;
+    /// Stops serving `thing_id`. Undeclares routes, cancels background tasks.
+    /// Idempotent. Called by ExposedThingHandle::destroy().
+    fn shutdown(&self, thing_id: &ThingId);
 
-    /// Returns a fresh client-side binding factory, or `None` for
-    /// pure-exposer bindings (e.g. a sensor that never consumes remote
-    /// Things). The Servient invokes `build()` once per consumed Thing.
-    fn client_factory(&self) -> Option<Box<dyn ClientBindingFactory>>;
+    /// Non-blocking drain for no_std super-loop. Default `None` for std
+    /// bindings that self-drive via background task.
+    fn try_accept(&self) -> Option<InboundRequest> { None }
 
-    /// Returns the shared server-side binding, or `None` for pure-consumer
-    /// bindings (e.g. a cloud controller that never exposes local Things).
-    /// The Servient registers this once and shares it across all exposed
-    /// Things.
-    fn server(&self) -> Option<Arc<dyn ServerBinding>>;
+    /// Reply path. Required.
+    fn send_response(&self, response: InboundResponse);
 }
 ```
 
-### 4.2 Default implementations for the asymmetric cases
+### 4.2 `ClientBinding` — outbound, shared
 
-A small blanket helper is provided so binding authors do not write `None`
-twice for the common one-directional cases:
-
-```rust
-// For pure-consumer bindings (client-only):
-impl<T: ClientBindingFactory + Send + Sync> ProtocolBinding for ClientOnly<T> { ... }
-
-// For pure-exposer bindings (server-only):
-impl<T: ServerBinding + Send + Sync> ProtocolBinding for ServerOnly<T> { ... }
-```
-
-These wrappers are constructed via free functions:
+A concrete binding implements `ClientBinding` in `clinkz_wot_core`. The
+trait is effectively stateless — all per-Thing context is in `BindingRequest`.
+One shared `Arc<dyn ClientBinding>` per protocol serves all consumed Things
+(AD57).
 
 ```rust
-pub fn client_only(factory: impl ClientBindingFactory + 'static) -> Box<dyn ProtocolBinding>;
-pub fn server_only(server: impl ServerBinding + 'static) -> Arc<dyn ProtocolBinding>;
+#[cfg(feature = "async")]
+#[async_trait::async_trait]
+pub trait ClientBinding: Send + Sync {
+    fn supports(&self, form: &Form, operation: Operation) -> bool;
+    async fn invoke(&self, request: BindingRequest) -> CoreResult<InteractionOutput>;
+    async fn subscribe(&self, request: BindingRequest)
+        -> CoreResult<(Subscription, Box<dyn SubscriptionGuard>)>;
+}
 ```
 
-A full two-direction binding (the common case) implements `ProtocolBinding`
-directly on its concrete type.
+### 4.3 Concrete binding convenience constructors
 
-### 4.3 What application code sees
+Binding crates provide constructors that handle session-sharing. These are
+**not** engine traits — they are concrete binding API:
 
-Nothing in this section. Application code only meets `ProtocolBinding`
-through `ServientBuilder::with_protocol_binding` (§5.1).
+```rust
+// zenoh crate example:
+impl ZenohServerBinding {
+    pub fn new(session: zenoh::Session) -> Self { ... }
+}
+impl ZenohClientBinding {
+    pub fn new(session: zenoh::Session) -> Self { ... }
+}
+// Canonical shared-session helper:
+pub fn shared(session: zenoh::Session)
+    -> (Arc<dyn ServerBinding>, Arc<dyn ClientBinding>) { ... }
+```
+
+A pure-consumer binding implements only `ClientBinding`; a pure-exposer
+implements only `ServerBinding`. No wrapper traits needed.
 
 ## 5. Layer 2 — Servient Composition
 
@@ -172,29 +188,42 @@ pub struct ServientBuilder { /* private */ }
 impl ServientBuilder {
     pub fn new() -> Self;
 
-    /// Registers a protocol binding. The Servient extracts the client
-    /// factory and server singleton internally. Call once per protocol.
-    ///
-    /// Equivalent to the legacy `with_server_binding` +
-    /// `with_client_factory` pair, collapsed into one entry.
-    pub fn with_protocol_binding(mut self, binding: Arc<dyn ProtocolBinding>) -> Self;
+    /// Registers a server binding (inbound). The Servient stores it as a
+    /// default; ExposedThingHandle clones an Arc reference at produce()
+    /// time. Call once per protocol.
+    pub fn with_server_binding(mut self, binding: Arc<dyn ServerBinding>) -> Self;
 
-    /// Overrides the default `LocalDiscoverer` (backed by
-    /// `InMemoryDirectory`).
+    /// Registers a client binding (outbound). The Servient stores it as a
+    /// default; ConsumedThingHandle clones an Arc reference at consume()
+    /// time. Call once per protocol.
+    #[cfg(feature = "async")]
+    pub fn with_client_binding(mut self, binding: Arc<dyn ClientBinding>) -> Self;
+
+    /// Registers a [`SecurityProvider`] for inbound request verification.
+    pub fn with_security_provider(mut self, provider: Arc<dyn SecurityProvider>) -> Self;
+
+    /// Overrides the default `LocalDiscoverer`.
     pub fn with_discoverer(mut self, discoverer: Arc<dyn Discoverer>) -> Self;
 
-    /// Assembles the Servient, calls `configure(&BindingContext)` on every
-    /// server binding so each picks its dispatch model.
+    /// Assembles the Servient.
     pub fn build(self) -> ServientResult<Servient>;
 }
 
 impl Default for ServientBuilder { fn default() -> Self { Self::new() } }
 ```
 
-The previous `with_server_binding` and `with_client_factory` are demoted to
-`pub(crate)` (or `#[doc(hidden)] pub` if external mock-test support is
-needed). They are **not** part of the stable surface and are removed from
-the crate's public re-exports.
+~~`with_protocol_binding`~~ is removed (v4.1 AD55). Application code
+registers `ServerBinding` and `ClientBinding` directly. A two-direction
+binding (the common case) is split into two `with_*` calls from one shared
+session:
+
+```rust
+let (server, client) = ZenohBinding::shared(session);
+let servient = ServientBuilder::new()
+    .with_server_binding(server)
+    .with_client_binding(client)
+    .build()?;
+```
 
 ### 5.2 `Servient` facade
 
@@ -208,13 +237,12 @@ pub struct Servient { /* private */ }
 
 impl Servient {
     /// `WoT.produce(td)` — instantiate a locally-exposed Thing from its TD.
-    /// The returned handle holds handler slots and TD state; routes are not
-    /// installed until `expose()` is called.
+    /// The handle clones the Servient's default server bindings; routes are
+    /// not installed until `expose()` is called.
     pub fn produce(&self, td: Thing) -> ServientResult<ExposedThingHandle>;
 
     /// `WoT.consume(td)` — instantiate a client proxy against a remote
-    /// Thing's TD. The Servient pre-registers every `ProtocolBinding`'s
-    /// client adapter into the returned handle.
+    /// Thing's TD. The handle clones the Servient's default client bindings.
     #[cfg(feature = "async")]
     pub fn consume(&self, td: Thing) -> ServientResult<ConsumedThingHandle>;
 
@@ -239,20 +267,21 @@ impl ShutdownHandle {
 ### 5.3 Typical composition
 
 ```rust
-use clinkz_wot_servient::{ServientBuilder, ProtocolBinding};
+use clinkz_wot_servient::ServientBuilder;
 use clinkz_wot_protocol_bindings_zenoh::ZenohBinding;
 
 # async fn run() -> ServientResult<()> {
-let zenoh = Arc::new(ZenohBinding::open(session).await?);
+let (server, client) = ZenohBinding::shared(session);
 
 let servient = ServientBuilder::new()
-    .with_protocol_binding(zenoh)
-    // .with_protocol_binding(Arc::new(HttpBinding::bind(addr)?))
+    .with_server_binding(server)
+    .with_client_binding(client)
+    // .with_server_binding(Arc::new(HttpBinding::bind(addr)?))
     .build()?;
 
 let sensor = servient.produce(sensor_td)?;
 sensor.set_property_read_handler("temperature", MyHandler)?;
-sensor.expose().await?;
+sensor.expose().await?;  // calls server_binding.serve() on each
 
 let lamp = servient.consume(lamp_td)?;
 lamp.write_property("on", InteractionOptions::with_data(...)).await?;
@@ -720,31 +749,35 @@ sources.
 | Flag | Effect |
 |---|---|
 | *(default)* | `no_std + alloc` TD/TM construction, validation, abstract dispatch. |
-| `async` | Enables `Servient`, handles, `ConsumedThing`, async handler traits. Required for any network runtime. On `no_std` this means `no_std + async` (embassy). |
+| `async` | Enables `Servient`, handles, `ConsumedThing`, async handler traits, `ClientBinding`. Required for any network runtime. On `no_std` this means `no_std + async` (embassy). |
 | `std` | Implies `async`. Enables `ServientBuilder`, `LocalDiscoverer`, std-only transport bindings. |
 
-`ProtocolBinding` itself is `no_std + alloc`-compatible. A pure-`no_std`
-binding can implement it without `std`. The Servient composition layer
-requires `async`.
+`ServerBinding` and `ClientBinding` are `no_std + alloc`-compatible traits.
+A pure-`no_std` binding can implement them without `std`. The Servient
+composition layer requires `async`.
 
 ## 11. Migration Delta From Current Source
 
-> Status: P0 (`ProtocolBinding` facade + `with_protocol_binding` entry) and
-> P1 (legacy hooks retired) have landed. P2/P3 still pending.
+> Status: P0–P3 landed (v4.0 surface). **v4.1 binding ownership refactor
+> (AD55–AD58) is the next migration target.**
 
 | Item | Current | Target | Status |
 |---|---|---|---|
-| `ProtocolBinding` trait | absent (removed in redesign) | added in `clinkz_wot_core` | ✅ P0 |
-| `ServientBuilder::with_protocol_binding` | absent | added as primary entry | ✅ P0 |
-| `with_server_binding` / `with_client_factory` | `pub` | deleted (no in-tree caller post-migration) | ✅ P1 |
-| `ClientBindingFactory` re-exported from servient | yes (`lib.rs:34`) | removed from re-exports | ✅ P1 |
+| ~~`ProtocolBinding` trait~~ | added in P0 | **removed** (AD55) | 🔲 v4.1 |
+| ~~`ClientBindingFactory`~~ | in `clinkz_wot_core` | **removed** (AD57) | 🔲 v4.1 |
+| ~~`with_protocol_binding`~~ | primary builder entry | **removed**, replaced by `with_server_binding` + `with_client_binding` | 🔲 v4.1 |
+| `ServerBinding` trait | `configure`/`register_thing`/`unregister_thing`/`set_request_sink`/`set_event_broker` | **`serve`/`shutdown`** lifecycle (AD56) | 🔲 v4.1 |
+| ~~`FanInSender`~~ | core type alias | **removed** (AD56) | 🔲 v4.1 |
+| ~~`binding_facade` module~~ | `core/src/binding_facade.rs` | **deleted** | 🔲 v4.1 |
+| `Servient.server_bindings` | global field | moved to `ExposedThingHandle` (AD58) | 🔲 v4.1 |
+| `Servient.client_factories` | global field | → `default_client_bindings: Arc<[Arc<dyn ClientBinding>]>`; moved to `ConsumedThingHandle` (AD57/AD58) | 🔲 v4.1 |
 | `ConsumedThingHandle` streaming ops | absent | 8 methods added (§6.1) | ✅ P2 |
 | `ExposedThingHandle` async setters | absent | 9 `set_async_*` added (§6.2) | ✅ P3 |
 | `ExposedThingHandle` local dispatch | 3 ops (`read/write/invoke`) | 9 ops (sync + 9 `_async`) (§6.2) | ✅ P3 |
 | `InteractionOptions::with_data` / `with_uri_variable` | bare fields only | builder conveniences added | ✅ P3 |
-| Unified facade error tree | split across 4 enums | `ServientError` is now the single app-facing type with predicates, accessors, structured `From<BindingError> for CoreError`, `non_exhaustive` on all error enums, and proper `source()` chains | ✅ done |
+| Unified facade error tree | split across 4 enums | `ServientError` is now the single app-facing type | ✅ done |
 
-## 12. Open Questions (deferred, not blocking v0.1)
+## 12. Open Questions (deferred, not blocking v4.1)
 
 1. Should `read_all_properties` / `read_multiple_properties` fan out across
    multiple bindings in parallel, or stay sequential? Current
@@ -756,8 +789,6 @@ requires `async`.
 3. Whether to expose a top-level `clinkz_wot` umbrella crate that re-exports
    `servient + td + protocol-bindings-zenoh` so users `use clinkz_wot::*`
    once. Convenience win, but couples release cadence.
-4. `ProtocolBinding::protocol()` returning `&str` vs a typed `ProtocolId`
-   newtype. `&str` is simpler; newtype enables stable matching and
-   diagnostics.
-5. Whether `with_server_binding` / `with_client_factory` should be kept as
-   `#[doc(hidden)] pub` (external mock tests) or fully `pub(crate)`.
+4. ~~`ProtocolBinding::protocol()` returning `&str` vs a typed `ProtocolId`
+   newtype.~~ — moot: `ProtocolBinding` removed (AD55). Protocol identification
+   is a concrete binding implementation detail.
