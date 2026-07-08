@@ -7,9 +7,10 @@ conformance** (Consumer, Producer, Discovery), running on both `std` and
 The engine uses W3C WoT Thing Descriptions (TD 1.1) as the semantic contract.
 Protocol bindings are pluggable; **Zenoh** is the first concrete binding.
 
-## v4.0 Architecture
+## v4.1 Architecture
 
-The v4.0 baseline is a one-shot breaking refactor driven by three decisions:
+The v4.1 baseline amends v4.0's binding ownership, lifecycle, and registration
+model (AD55–AD58):
 
 1. **Full WoT Scripting API alignment** — the engine surfaces (`produce`/
    `consume`/`discover`/`fetch_td`, `set_*_handler`/`set_async_*_handler`,
@@ -19,9 +20,14 @@ The v4.0 baseline is a one-shot breaking refactor driven by three decisions:
    method catalogue.
 2. **Frozen TD at expose** — no dynamic affordance add/remove after `expose()`;
    handlers may be replaced throughout the exposed lifetime.
-3. **Sync-primary handlers, async driving** — inbound handlers are synchronous
-   (zero-allocation hot path); the driving/transport layer is async; `no_std`
-   super-loops drive the same futures by manual polling.
+3. **Sync-primary handlers, binding-owned driving** — inbound handlers are
+   synchronous (zero-allocation hot path); each binding owns its driving model
+   (`serve()` spawns a draining task on std; `no_std` super-loops poll
+   `try_accept`).
+4. **Direct binding registration** (v4.1) — `ProtocolBinding` facade removed;
+   `ServerBinding` and `ClientBinding` are registered directly via
+   `ServientBuilder::with_server_binding` / `with_client_binding`. Bindings
+   are owned by handles, not the Servient.
 
 ### Key Types
 
@@ -29,23 +35,23 @@ The v4.0 baseline is a one-shot breaking refactor driven by three decisions:
 | --- | --- | --- |
 | `WotLock<T>` | `core` | Arc-backed `Clone`-able lock (`std::sync::RwLock` / `critical_section::Mutex`). |
 | `ExposedThing` | `core` | Produced Thing + per-affordance handler sets (9 sync + 9 async traits). |
-| `ConsumedThing` | `core` | Consumed Thing + registered `ClientBinding`s. |
-| `ProtocolBinding` | `core` | **App-facing** unified binding facade; `client_factory()` + `server()`. What `ServientBuilder::with_protocol_binding` accepts. |
-| `ConsumedThingHandle` / `ExposedThingHandle` | `servient` | **App-facing** interaction surfaces (Scripting API §6/§7). |
-| `Servient` | `servient` | Non-generic composition root: registries, bindings, fan-in channel, discoverer. |
-| `ServientBuilder` | `servient` | Consuming fluent builder. |
+| `ConsumedThing` | `core` | Consumed Thing + shared `Arc<dyn ClientBinding>` list. |
+| `ServerBinding` | `core` | **Binding extension trait**: `serve(thing_id, td, ctx)` / `shutdown(thing_id)` lifecycle + `try_accept` / `send_response`. |
+| `ClientBinding` | `core` | **Binding extension trait**: async `invoke` / `subscribe` outbound. Shared `Arc` across all consumed Things. |
+| `ConsumedThingHandle` / `ExposedThingHandle` | `servient` | **App-facing** interaction surfaces (Scripting API §6/§7). Own their binding `Arc` references. |
+| `Servient` | `servient` | Non-generic composition root: dispatch engine + discovery facade. Holds default bindings cloned into handles. |
+| `ServientBuilder` | `servient` | Consuming fluent builder: `with_server_binding` + `with_client_binding`. |
 | `InMemoryDirectory` | `discovery` | Reference directory backend (all 4 capability traits). |
-| `ServerBinding` / `ClientBinding` / `ClientBindingFactory` | `core` | **Engine-internal** contracts for binding authors. Inbound (`try_accept`/`send_response`/`register_thing`) / outbound (`async invoke`/`subscribe`). Not re-exported from `servient`; reachable via `core` only when implementing a `ProtocolBinding`. |
 
 ## Workspace Crates
 
 | Crate | Role | `no_std` |
 | --- | --- | --- |
 | [`clinkz-wot-td`](td) | TD/TM data models, builders, serde, validation, URI helpers. | ✅ root |
-| [`clinkz-wot-core`](core) | Interaction core: handler traits, `ExposedThing`/`ConsumedThing`, `WotLock`, `EventBroker`, `ProtocolBinding` (app-facing) + `ServerBinding`/`ClientBinding` (engine-internal), `PushFn`. | ✅ root |
+| [`clinkz-wot-core`](core) | Interaction core: handler traits, `ExposedThing`/`ConsumedThing`, `WotLock`, `EventBroker`, `ServerBinding`/`ClientBinding` (binding extension traits), `PushFn`. | ✅ root |
 | [`clinkz-wot-discovery`](discovery) | Introduction→Exploration sessions, `DirectoryReader`/`Publisher`/`Watch`, `Discoverer`, `InMemoryDirectory`. | ✅ root |
 | [`clinkz-wot-protocol-bindings`](protocol-bindings/core) | Shared form selection, op resolution, `error_status`, URI-template expansion. | ✅ root |
-| [`clinkz-wot-protocol-bindings-zenoh`](protocol-bindings/protocols/zenoh) | Zenoh planning + async runtime + `ZenohProtocolBinding` facade (`zenoh` feature). | ✅ planning layer |
+| [`clinkz-wot-protocol-bindings-zenoh`](protocol-bindings/protocols/zenoh) | Zenoh planning + async runtime + `shared()`/`client()`/`server()` constructors (`zenoh` feature). | ✅ planning layer |
 | [`clinkz-wot-servient`](servient) | `Servient` + `ServientBuilder` + `ConsumedThingHandle`/`ExposedThingHandle`. Dispatch is binding-owned; the Servient exposes `Dispatch::serve_request` for bindings to call. | ✅ root |
 
 ## Quick Start
@@ -82,100 +88,95 @@ scripts/check-baseline.sh       # fmt + test + clippy + no_std + feature-matrix
  → send_response                      → send_response
 ```
 
-### 1. (Binding authors only) Implement a ServerBinding
+### 1. (Binding authors only) Implement ServerBinding / ClientBinding
 
-> Application developers do **not** implement `ServerBinding` directly. They
-> register a `ProtocolBinding` (next section), which wraps both halves.
-> This section is for binding authors adding a new protocol (HTTP, CoAP,
-> MQTT, ...).
+> Application developers register bindings via `ServientBuilder`. This section
+> is for binding authors adding a new protocol (HTTP, CoAP, MQTT, ...).
 
-每个 binding 在 `configure` 里选择自己的 dispatch 模式：
+`ServerBinding` has explicit lifecycle: `serve()` declares routes AND starts
+the driving model; `shutdown()` tears them down.
 
 ```rust
 use clinkz_wot_core::{
-    BindingContext, CoreError, Dispatch, InboundRequest, InboundResponse,
+    BindingContext, CoreResult, Dispatch, InboundRequest, InboundResponse,
     ServerBinding, ThingId,
 };
 use clinkz_wot_td::thing::Thing;
 use alloc::sync::Arc;
 
-struct MyServerBinding {
-    // 按需存储 — 不是全部都要
-    dispatch: Option<Arc<dyn Dispatch>>,
-}
+struct MyServerBinding;
 
 impl ServerBinding for MyServerBinding {
-    fn configure(&self, ctx: &BindingContext) {
-        // 从 context 里拿需要的 capability。
-        // 新增 capability = 给 BindingContext 加字段，不改 trait。
-        //
-        // 直派发模式 (HTTP/CoAP async handler):
-        //   self.dispatch = ctx.dispatch.clone();
-        //
-        // fan-in 模式 (zenoh sync callback):
-        //   self.fanin = ctx.fanin_sender.clone();
-        //
-        // poll 模式 (bare no_std):
-        //   什么都不存; 实现 try_accept().
-    }
-
-    fn send_response(&self, response: InboundResponse) {
-        // 把 InboundResponse 映射回协议回复。
-    }
-
-    fn register_thing(&self, thing_id: &ThingId, td: &Thing) -> Result<(), CoreError> {
+    fn serve(
+        &self,
+        thing_id: &ThingId,
+        td: &Thing,
+        ctx: &BindingContext,
+    ) -> CoreResult<()> {
+        // 1. Declare transport routes for this Thing based on td.
+        // 2. On std: spawn a draining task that calls
+        //    ctx.dispatch.serve_request(req).await then self.send_response(resp).
+        // 3. On no_std: configure poll state; the super-loop calls try_accept().
         Ok(())
     }
 
-    fn unregister_thing(&self, thing_id: &ThingId) {}
+    fn shutdown(&self, _thing_id: &ThingId) {
+        // Undeclare routes, cancel background tasks.
+    }
+
+    fn try_accept(&self) -> Option<InboundRequest> {
+        None // default; no_std bindings override for super-loop polling.
+    }
+
+    fn send_response(&self, _response: InboundResponse) {
+        // Map InboundResponse back to the protocol reply.
+    }
+}
+```
+
+`ClientBinding` is stateless — all per-Thing context is in `BindingRequest`:
+
+```rust
+use clinkz_wot_core::{ClientBinding, BindingRequest, CoreResult, InteractionOutput};
+
+#[async_trait::async_trait]
+impl ClientBinding for MyClientBinding {
+    fn supports(&self, form: &clinkz_wot_td::form::Form, op: clinkz_wot_td::data_type::Operation) -> bool {
+        // Return true if this binding can drive the form's protocol scheme.
+        todo!()
+    }
+    async fn invoke(&self, request: BindingRequest) -> CoreResult<InteractionOutput> {
+        // Drive the real protocol (zenoh get/put, HTTP fetch, ...).
+        todo!()
+    }
 }
 ```
 
 ### 2. Build a Servient (application entry point)
 
-Application code registers one `ProtocolBinding` per protocol. The Servient
-extracts the client factory and server singleton internally. The
-`ClientBinding` / `ServerBinding` / `ClientBindingFactory` traits stay
-engine-internal (defined in `clinkz-wot-core` for binding authors) and are
-**not** re-exported from `clinkz-wot-servient`.
+Application code registers `ServerBinding` and `ClientBinding` directly.
+A two-direction binding (the common case) registers both from one shared
+session:
 
 ```rust
-use alloc::{boxed::Box, sync::Arc};
-use clinkz_wot_core::{
-    ClientBinding, ClientBindingFactory, ProtocolBinding, ProtocolId, ServerBinding,
-};
+use clinkz_wot_servient::ServientBuilder;
+use clinkz_wot_protocol_bindings_zenoh as zenoh;
+use std::sync::Arc;
 
-struct MyClientFactory;
-impl ClientBindingFactory for MyClientFactory {
-    fn build(&self) -> Box<dyn ClientBinding> {
-        todo!() // your async ClientBinding impl
-    }
-}
-
-struct MyProtocolBinding;
-impl ProtocolBinding for MyProtocolBinding {
-    fn protocol(&self) -> ProtocolId { ProtocolId("custom") }
-    fn client_factory(&self) -> Option<Box<dyn ClientBindingFactory>> {
-        Some(Box::new(MyClientFactory))
-    }
-    fn server(&self) -> Option<Arc<dyn ServerBinding>> {
-        Some(Arc::new(MyServerBinding { dispatch: None }))
-    }
-}
+let session = zenoh::open(config).await.unwrap();
+let (server, client) = zenoh::shared(session);
 
 let servient = ServientBuilder::new()
-    .with_protocol_binding(Arc::new(MyProtocolBinding))
-    // .with_discoverer(custom)  // optional; defaults to LocalDiscoverer
+    .with_server_binding(server)       // Arc<dyn ServerBinding>
+    .with_client_binding(client)       // Arc<dyn ClientBinding>
+    // .with_discoverer(custom)        // optional; defaults to LocalDiscoverer
     .build()
     .expect("build servient");
 ```
 
-For pure-consumer / pure-exposer bindings, use `clinkz_wot_core::client_only`
-or `clinkz_wot_core::server_only` to wrap a single-direction adapter.
-
-`build()` 组装 Servient，然后对每个 binding 调一次 `configure(&ctx)`，
-传入 `BindingContext { event_broker, dispatch, fanin_sender }`。每个 binding
-按需取用。
+For pure-consumer / pure-exposer use cases, register only the needed side.
+The `ClientBinding` is a shared `Arc` — one instance per protocol serves all
+consumed Things (v4.1 AD57).
 
 ### 3. Produce + Expose a Thing (Producer)
 
@@ -230,38 +231,36 @@ Local dispatch surface on `ExposedThingHandle` (Scripting API §7):
 > `*_async` variant when an async handler is registered. See
 > `docs/wot-compliance.md` "P3 deviations".
 
-### 4. Dispatch — 由 binding 驱动，不是 Servient
+### 4. Dispatch — binding-owned driving (v4.1 AD56)
 
 **Servient 不跑循环。** 它只暴露 `Dispatch::serve_request(req).await`。
-每个 binding 自己决定怎么调它：
+每个 binding 的 `serve()` 启动自己的驱动模型：
 
-**zenoh binding（sync 回调）** — binding 自己 owns channel + draining task：
+**zenoh binding（sync 回调）** — `serve()` 声明路由 + spawns draining task：
 
 ```rust
-// binding::configure 里 spawn 一个 draining task:
-fn configure(&self, ctx: &BindingContext) {
-    let dispatch = ctx.dispatch.clone().expect("dispatch");
-    let rx = self.internal_rx.clone();  // binding 自己的 channel
-    tokio::spawn(async move {
-        while let Ok(req) = rx.recv().await {
-            let resp = dispatch.serve_request(req).await;
-            // binding 自己负责把 resp 发回客户端
-        }
-    });
+fn serve(&self, thing_id: &ThingId, td: &Thing, ctx: &BindingContext) -> CoreResult<()> {
+    // 1. Declare zenoh queryables/subscribers from td routes.
+    // 2. Spawn draining task (first serve only):
+    if let Some(dispatch) = &ctx.dispatch {
+        self.spawn_draining_task(dispatch.clone());
+    }
+    Ok(())
 }
-// zenoh 回调 (sync): try_send(req) 到 binding 自己的 channel
+// zenoh sync callback: try_send(req) → binding's internal channel
+// draining task: recv().await → dispatch.serve_request(req).await → send_response(resp)
 ```
 
-**HTTP/CoAP binding（async handler）** — route handler 里直接调：
+**HTTP/CoAP binding（async handler）** — `serve()` 注册路由，handler 里直接调：
 
 ```rust
-// HTTP route handler:
+// HTTP route handler (registered in serve()):
 async fn handle_read(req: Request) -> Response {
     let inbound = build_inbound_request(req);
     let resp = self.dispatch.serve_request(inbound).await;
     resp.into_http()
 }
-// hyper 连接池提供 backpressure，不需要 channel、不需要循环
+// hyper 连接池提供 backpressure，不需要 channel
 ```
 
 **bare no_std（无 executor）** — super-loop 轮询：
@@ -408,7 +407,7 @@ CLINKZ_WOT_RUN_ZENOH_RUNTIME_TESTS=1 \
 - [User-facing API spec](docs/user-facing-api.md) — frozen external boundary, migration delta
 - [User-facing API implementation plan](docs/plan/user-facing-api-implementation-plan.md) — P0–P3 phase status
 - [Implementation plan](PLAN.md)
-- [Engine architecture baseline (v4.0)](docs/baseline/engine-architecture-baseline.md)
+- [Engine architecture baseline (v4.1)](docs/baseline/engine-architecture-baseline.md)
 - [Servient workflow diagrams](docs/servient-workflow.md)
 - [Technical specification](docs/technical-spec.md)
 - [WoT compliance notes](docs/wot-compliance.md)
