@@ -159,6 +159,73 @@ Why deferred: the default (bound = property count) is correct for the common
 case; a knob adds API surface and tuning burden. Add when a deployment shows
 N-way fan-out storms that the default does not bound.
 
+## 12. Wire the outbound `SecurityProvider::apply` + `CredentialStore` path (high value, cross-cutting)
+
+The repo defines a complete outbound credential mechanism that is **designed
+but unwired**:
+
+- `CredentialStore` trait (`core/src/security.rs:55–59`), keyed by
+  `(thing_id, scheme_name)` → `Credentials` (`BearerToken`, `Basic`, `ApiKey`,
+  `Psk`, `Other`). Only `InMemoryCredentialStore` implements it.
+- `SecurityContext<'a>` (`security.rs:10–22`) carries
+  `credentials: Option<&'a dyn CredentialStore>` alongside thing/form/scheme,
+  and is the parameter to `SecurityProvider::apply`.
+- `SecurityProvider::apply` (`security.rs:149`) — intended to attach security
+  material (headers, tokens, attachments) to a `TransportRequest` for a
+  consumed interaction.
+
+None of this reaches the outbound dispatch path today:
+
+- `SecurityProvider::apply` has **zero production callers**. The built-in
+  `BearerSecurityProvider` / `BasicSecurityProvider` `apply` impls are no-ops
+  with comments noting "the binding handles it" (`security.rs:455, 540`).
+- `SecurityContext` is **never constructed** by production code.
+- `BindingRequest` (`core/src/binding.rs:29–40`) carries `thing`, `target`,
+  `operation`, `form`, `input` — **no credential store, no security context**.
+- `ConsumedThing` (`core/src/thing.rs:1089–1092`) holds only `thing` and
+  `bindings` — no reference to `Servient::security_providers` or any store.
+- `Servient::consume` (`servient/src/servient.rs:104–118`) registers client
+  bindings but never passes credentials or providers to the `ConsumedThing`.
+
+**Impact**: per-form request-level security on consumed interactions (a
+`bearer` token in a zenoh attachment, an `apikey` header on HTTP) cannot be
+honored by the engine. The only wired credential injection point today is
+binding-local session-level config (e.g. zenoh's `ZenohSessionPolicy`, which
+covers TLS/PSK at connect time but not per-request tokens). This affects
+**every** binding, not just zenoh — see
+[`docs/zenoh-binding-template.md`](zenoh-binding-template.md) §6.3.4.
+
+**Spec grounding**: the WoT Scripting API deliberately leaves credential
+acquisition implementation-defined (§11.1.4: "the runtime should not expose
+any API for scripts to query the provisioned security credentials"). This
+wiring is how `clinkz-wot` provides that implementation-defined channel: the
+`CredentialStore` is injected at the runtime layer (not script/TD-visible),
+and `apply` is the protocol-neutral point where a `SecurityProvider` attaches
+material to an outbound request. The TD carries only security *configuration*
+(`securityDefinitions`); secrets come from the store.
+
+**What wiring involves**:
+
+- Thread an `Arc<dyn CredentialStore>` (or `SecurityContext` factory) from
+  `Servient` → `ConsumedThing` → `BindingRequest`.
+- Invoke `SecurityProvider::apply` in `ConsumedThing::request` /
+  `subscribe` (`core/src/thing.rs:1127–1203`) after form selection, before
+  `binding.invoke`, for the form's effective security scheme
+  (`effective_form_security`, `td/src/td_defaults.rs:56–60`).
+- Implement non-no-op `apply` in the built-in providers (bearer → attachment
+  / header; basic → header; apikey → header/query per `in`).
+- Decide the relationship to the inbound path: inbound `verify` IS wired
+  (`Servient::dispatch`, `servient.rs:231–275`), but it currently uses
+  Thing-level `td.security`, not per-form security — a separate divergence to
+  reconcile in the same pass (the repo's own `effective_form_security` exists
+  for exactly this).
+
+Why deferred: it is a cross-cutting engine change (`core`, `servient`, every
+binding's outbound path) with security-correctness implications, orthogonal to
+the zenoh URI-convention work. It is a prerequisite for honoring per-form
+`bearer`/`apikey` schemes on consumed interactions across all bindings, and
+should be picked up as a dedicated security-wiring milestone.
+
 ## Status convention
 
 When an entry above is started, move it to PLAN.md's "Performance Hardening"

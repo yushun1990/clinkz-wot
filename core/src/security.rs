@@ -1,4 +1,4 @@
-use alloc::{collections::BTreeMap, string::String, vec::Vec};
+use alloc::{collections::BTreeMap, format, string::String, vec::Vec};
 use core::fmt;
 
 use clinkz_wot_td::{form::Form, security_scheme::SecurityScheme, thing::Thing};
@@ -52,7 +52,7 @@ pub enum Credentials {
 /// [`apply`](SecurityProvider::apply) to retrieve stored secrets rather than
 /// capturing them in closures. Implementations are interior-mutable (`&self`
 /// methods) so the store can be shared across providers and threads.
-pub trait CredentialStore {
+pub trait CredentialStore: Send + Sync {
     /// Returns credentials for the given Thing and security scheme, or `None`
     /// when no credentials are stored.
     fn get(&self, thing_id: &str, scheme_name: &str) -> Option<Credentials>;
@@ -469,11 +469,25 @@ impl SecurityProvider for BearerSecurityProvider {
 
     fn apply(
         &self,
-        _context: SecurityContext<'_>,
-        _request: &mut TransportRequest,
+        context: SecurityContext<'_>,
+        request: &mut TransportRequest,
     ) -> CoreResult<()> {
-        // Outbound Bearer application is handled by the binding when it
-        // builds the transport request; this hook is a no-op for v0.1.
+        // Retrieve the bearer token from the credential store (keyed by
+        // thing_id + scheme_name) and attach it as an Authorization header.
+        // Each binding maps the metadata entry to its wire format.
+        let Some(store) = context.credentials else {
+            return Ok(());
+        };
+        let Some(thing_id) = context.thing.id.as_ref().map(|u| u.as_str()) else {
+            return Ok(());
+        };
+        if let Some(Credentials::BearerToken(token)) = store.get(thing_id, context.scheme_name) {
+            let token_str = String::from_utf8_lossy(&token);
+            let header_value = format!("Bearer {}", token_str);
+            request
+                .metadata
+                .insert(String::from("Authorization"), header_value);
+        }
         Ok(())
     }
 
@@ -537,9 +551,29 @@ impl SecurityProvider for BasicSecurityProvider {
 
     fn apply(
         &self,
-        _context: SecurityContext<'_>,
-        _request: &mut TransportRequest,
+        context: SecurityContext<'_>,
+        request: &mut TransportRequest,
     ) -> CoreResult<()> {
+        // TODO: encode as `Authorization: Basic <base64(user:pass)>` once a
+        // no_std-compatible base64 encoder is available. For now, insert the
+        // raw credentials as separate metadata entries so the binding can
+        // encode them for the wire.
+        let Some(store) = context.credentials else {
+            return Ok(());
+        };
+        let Some(thing_id) = context.thing.id.as_ref().map(|u| u.as_str()) else {
+            return Ok(());
+        };
+        if let Some(Credentials::Basic { username, password }) =
+            store.get(thing_id, context.scheme_name)
+        {
+            request
+                .metadata
+                .insert(String::from("basic-username"), username);
+            request
+                .metadata
+                .insert(String::from("basic-password"), password);
+        }
         Ok(())
     }
 

@@ -34,11 +34,13 @@ pub use form::{
     zenoh_operation_kind,
 };
 #[cfg(feature = "zenoh")]
-pub use protocol_binding::{client, server, shared};
+pub use protocol_binding::{client, client_pooled, client_pooled_default, server, shared};
 #[cfg(any(feature = "zenoh", feature = "zenoh-pico"))]
 pub use runtime::ZenohRuntimeTransport;
 #[cfg(feature = "zenoh")]
 pub use runtime::{SharedZenohTransport, ZenohSessionTransport, ZenohSubscription};
+#[cfg(feature = "zenoh")]
+pub use runtime::{DefaultSessionPolicy, ZenohSessionPool, ZenohSessionPolicy};
 #[cfg(feature = "zenoh-pico")]
 pub use runtime::{
     ZenohPicoError, ZenohPicoErrorKind, ZenohPicoPlatform, ZenohPicoRequest, ZenohPicoTransport,

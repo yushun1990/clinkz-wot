@@ -32,7 +32,7 @@
 //! [`core::task::Waker`] notification on top of the same `VecDeque` queue, so
 //! the synchronous [`Subscription::poll_next`] remains the primary drain
 //! primitive on `no_std` builds and the `Stream` impl acts as a host-side push
-//! adapter (see `docs/wot-compliance.md`).
+//! adapter (see `docs/design.md`).
 
 use alloc::{
     collections::{BTreeMap, VecDeque},

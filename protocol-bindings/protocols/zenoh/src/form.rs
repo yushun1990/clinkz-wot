@@ -6,6 +6,7 @@ use clinkz_wot_protocol_bindings::{
 };
 use clinkz_wot_td::data_type::Operation;
 use clinkz_wot_td::form::Form;
+use fluent_uri::Uri;
 use serde_json::Value;
 
 use crate::{ZenohBindingError, ZenohBindingResult};
@@ -23,6 +24,21 @@ pub const CZ_ZENOH_CONGESTION_CONTROL: &str = "cz-zenoh:congestionControl";
 /// Resolved zenoh form target.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ZenohFormTarget {
+    /// Zenoh transport protocol, derived from the URI scheme suffix.
+    ///
+    /// `zenoh` and `zenoh+tcp` normalize to `"tcp"`; `zenoh+udp` to `"udp"`.
+    /// Combines with [`authority`](Self::authority) to form the zenoh locator
+    /// `<transport>/<authority>`.
+    pub transport: String,
+
+    /// Zenoh router/peer endpoint (`host[:port]`), or `None` for the default
+    /// session.
+    ///
+    /// Derived from the RFC 3986 authority component of the resolved href.
+    /// Always non-empty for a valid form; an empty authority is rejected at
+    /// extraction time as [`MissingAuthority`](ZenohBindingError::MissingAuthority).
+    pub authority: String,
+
     /// Zenoh key expression used by the concrete zenoh operation.
     pub key_expr: String,
 }
@@ -58,6 +74,10 @@ pub struct ZenohFormMetadata {
 /// Concrete zenoh execution plan derived from a TD form and WoT operation.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ZenohOperationPlan {
+    /// Zenoh transport protocol (`"tcp"`, `"udp"`).
+    pub transport: String,
+    /// Zenoh router/peer endpoint.
+    pub authority: String,
     /// Zenoh key expression used by the concrete zenoh operation.
     pub key_expr: String,
     /// Transport-level operation shape.
@@ -78,14 +98,17 @@ pub struct ZenohAffordanceOperationPlan<'a> {
 }
 
 /// Returns true when a form carries zenoh-specific target metadata.
+///
+/// Recognizes both the bare `zenoh://` scheme and transport-suffixed variants
+/// such as `zenoh+tcp://` and `zenoh+udp://` (RFC 8323 `coap+tcp` precedent).
 pub fn is_zenoh_form(form: &Form) -> bool {
-    form.href.as_str().starts_with(ZENOH_SCHEME)
+    has_zenoh_scheme(form.href.as_str())
 }
 
 /// Returns true when a form resolves to a zenoh target for a Thing.
 pub fn is_zenoh_form_target(thing: &clinkz_wot_td::thing::Thing, form: &Form) -> bool {
     resolve_form_target(thing, form)
-        .map(|target| target.href.as_str().starts_with(ZENOH_SCHEME))
+        .map(|target| has_zenoh_scheme(target.href.as_str()))
         .unwrap_or(false)
 }
 
@@ -102,7 +125,7 @@ pub fn try_extract_zenoh_target(
     form: &Form,
 ) -> ZenohBindingResult<Option<ZenohFormTarget>> {
     let target = resolve_form_target(thing, form).map_err(ZenohBindingError::from)?;
-    if target.href.as_str().starts_with(ZENOH_SCHEME) {
+    if has_zenoh_scheme(target.href.as_str()) {
         Ok(Some(extract_zenoh_target_from_resolved_href(
             target.href.as_str(),
         )?))
@@ -132,6 +155,8 @@ pub fn plan_zenoh_operation(
     let kind = zenoh_operation_kind(operation);
 
     Ok(ZenohOperationPlan {
+        transport: target.transport,
+        authority: target.authority,
         key_expr: target.key_expr,
         kind,
         metadata: extract_zenoh_metadata(form)?,
@@ -168,7 +193,7 @@ pub fn plan_zenoh_affordance_operation_with_criteria<'a>(
         criteria,
         |form| -> ZenohBindingResult<bool> {
             let target = resolve_form_target(thing, form).map_err(ZenohBindingError::from)?;
-            if target.href.as_str().starts_with(ZENOH_SCHEME) {
+            if has_zenoh_scheme(target.href.as_str()) {
                 resolved_href = Some(target.href.as_str().into());
                 Ok(true)
             } else {
@@ -185,6 +210,8 @@ pub fn plan_zenoh_affordance_operation_with_criteria<'a>(
     })?;
     let target = extract_zenoh_target_from_resolved_href(&href)?;
     let plan = ZenohOperationPlan {
+        transport: target.transport,
+        authority: target.authority,
         key_expr: target.key_expr,
         kind: zenoh_operation_kind(criteria.operation),
         metadata: extract_zenoh_metadata(selected.selection.form)?,
@@ -228,17 +255,62 @@ pub fn extract_zenoh_metadata(form: &Form) -> ZenohBindingResult<ZenohFormMetada
     })
 }
 
-fn extract_zenoh_target_from_resolved_href(href: &str) -> ZenohBindingResult<ZenohFormTarget> {
-    if let Some(key_expr) = href.strip_prefix(ZENOH_SCHEME) {
-        return Ok(ZenohFormTarget {
-            key_expr: key_expr.into(),
-        });
-    }
+/// Returns true when a resolved href uses a zenoh URI scheme.
+///
+/// Matches the bare `zenoh://` scheme and transport-suffixed variants such as
+/// `zenoh+tcp://`.
+fn has_zenoh_scheme(href: &str) -> bool {
+    href.starts_with(ZENOH_SCHEME) || href.starts_with("zenoh+")
+}
 
-    Err(ZenohBindingError::UnsupportedForm(format!(
-        "href '{}' is not a zenoh target",
-        href
-    )))
+/// Splits a `zenoh[+transport]` scheme into a normalized transport string.
+///
+/// `zenoh` and `zenoh+tcp` normalize to `"tcp"`; `zenoh+udp` to `"udp"`;
+/// unknown suffixes return [`UnsupportedTransport`](ZenohBindingError::UnsupportedTransport).
+fn parse_zenoh_transport(scheme: &str) -> ZenohBindingResult<String> {
+    match scheme {
+        "zenoh" | "zenoh+tcp" => Ok("tcp".into()),
+        "zenoh+udp" => Ok("udp".into()),
+        other if other.starts_with("zenoh+") => {
+            Err(ZenohBindingError::UnsupportedTransport(other.into()))
+        }
+        other => Err(ZenohBindingError::UnsupportedForm(format!(
+            "href scheme '{}' is not zenoh",
+            other
+        ))),
+    }
+}
+
+fn extract_zenoh_target_from_resolved_href(href: &str) -> ZenohBindingResult<ZenohFormTarget> {
+    let uri = Uri::parse(href).map_err(|e| {
+        ZenohBindingError::UnsupportedForm(format!("href '{}' is not a valid URI: {}", href, e))
+    })?;
+    let transport = parse_zenoh_transport(uri.scheme().as_str())?;
+    let authority = uri
+        .authority()
+        .map(|a| String::from(a.as_str()))
+        .filter(|a| !a.is_empty())
+        .ok_or_else(|| {
+            ZenohBindingError::MissingAuthority(format!(
+                "zenoh form href '{}' has no authority; the TD base/href must name a router (e.g. zenoh://router:7447/...)",
+                href
+            ))
+        })?;
+    let path = uri.path().as_str();
+    let key_expr = path.strip_prefix('/').ok_or_else(|| {
+        ZenohBindingError::UnsupportedForm(format!("href '{}' has no path component", href))
+    })?;
+    if key_expr.is_empty() {
+        return Err(ZenohBindingError::UnsupportedForm(format!(
+            "href '{}' has an empty key expression",
+            href
+        )));
+    }
+    Ok(ZenohFormTarget {
+        transport,
+        authority,
+        key_expr: key_expr.into(),
+    })
 }
 
 fn extension_string(form: &Form, term: &'static str) -> ZenohBindingResult<Option<String>> {

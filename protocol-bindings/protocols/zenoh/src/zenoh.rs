@@ -285,6 +285,8 @@ fn core_error_from_zenoh_error(err: crate::ZenohBindingError) -> CoreError {
         crate::ZenohBindingError::Shared(binding_error) => CoreError::from(binding_error),
         crate::ZenohBindingError::Selection(message)
         | crate::ZenohBindingError::UnsupportedForm(message)
+        | crate::ZenohBindingError::MissingAuthority(message)
+        | crate::ZenohBindingError::UnsupportedTransport(message)
         | crate::ZenohBindingError::InvalidExtension { message, .. } => {
             CoreError::InvalidInteraction(message)
         }

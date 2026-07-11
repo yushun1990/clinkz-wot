@@ -4,7 +4,7 @@
 # Build-checks ALL valid feature combinations per crate (~28) to catch
 # compile-time feature-interaction defects. This is a BUILD-CHECK
 # (`cargo check`), not a test run — test coverage is a representative
-# subset (see docs/verification.md).
+# subset (see docs/design.md).
 
 set -eu
 

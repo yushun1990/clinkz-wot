@@ -9,9 +9,9 @@
 use alloc::{boxed::Box, format, sync::Arc, vec::Vec};
 
 use clinkz_wot_core::{
-    BindingContext, ClientBinding, Dispatch, EventBroker, EventName, ExposedThing, InboundRequest,
-    InboundResponse, InteractionOutput, Payload, Principal, SecurityProvider, ServerBinding,
-    ThingId, WotLock,
+    BindingContext, ClientBinding, CredentialStore, Dispatch, EventBroker, EventName, ExposedThing,
+    InboundRequest, InboundResponse, InteractionOutput, Payload, Principal, SecurityProvider,
+    ServerBinding, ThingId, WotLock,
 };
 use clinkz_wot_discovery::{Discoverer, DiscoveryFilter, ProcessState, ThingDiscoveryProcess};
 use clinkz_wot_td::{AbsoluteUri, thing::Thing};
@@ -37,6 +37,7 @@ pub struct Servient {
     #[cfg(feature = "async")]
     pub(crate) default_client_bindings: Arc<[Arc<dyn ClientBinding>]>,
     pub(crate) security_providers: Arc<[Arc<dyn SecurityProvider>]>,
+    pub(crate) credential_store: Option<Arc<dyn CredentialStore>>,
     pub(crate) discoverer: Arc<dyn Discoverer>,
     pub(crate) event_broker: EventBroker,
     shutdown: Arc<core::sync::atomic::AtomicBool>,
@@ -57,12 +58,14 @@ impl ShutdownHandle {
 impl Servient {
     /// Assembles a `Servient` (called by `ServientBuilder`).
     #[cfg(feature = "std")]
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn assemble(
         exposed: ExposedThingRegistry,
         consumed_registry: ConsumedThingRegistry,
         default_server_bindings: Arc<[Arc<dyn ServerBinding>]>,
         default_client_bindings: Arc<[Arc<dyn ClientBinding>]>,
         security_providers: Arc<[Arc<dyn SecurityProvider>]>,
+        credential_store: Option<Arc<dyn CredentialStore>>,
         discoverer: Arc<dyn Discoverer>,
         event_broker: EventBroker,
     ) -> Self {
@@ -72,6 +75,7 @@ impl Servient {
             default_server_bindings,
             default_client_bindings,
             security_providers,
+            credential_store,
             discoverer,
             event_broker,
             shutdown: Arc::new(core::sync::atomic::AtomicBool::new(false)),
@@ -113,6 +117,10 @@ impl Servient {
         for binding in self.default_client_bindings.iter() {
             consumed.register_binding(Arc::clone(binding));
         }
+        consumed.register_security(
+            self.security_providers.iter().cloned().collect(),
+            self.credential_store.clone(),
+        );
         self.consumed_registry.track(id.clone());
         Ok(ConsumedThingHandle::new(self.clone(), consumed, id))
     }

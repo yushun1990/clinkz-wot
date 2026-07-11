@@ -1070,12 +1070,14 @@ mod consumed {
     use alloc::{boxed::Box, collections::BTreeMap, format, string::String, sync::Arc, vec::Vec};
 
     use clinkz_wot_td::td_defaults::{FormContext, effective_form_operations};
+    use clinkz_wot_td::td_defaults::effective_form_security;
     use clinkz_wot_td::{data_type::Operation, form::Form, thing::Thing};
 
     use crate::interaction::{InteractionInput, InteractionOutput};
     use crate::{
         AffordanceKind, AffordanceTarget, BindingRequest, ClientBinding, CoreError, CoreResult,
-        Subscription, SubscriptionGuard,
+        CredentialStore, SecurityContext, SecurityProvider, Subscription, SubscriptionGuard,
+        TransportRequest,
     };
 
     /// A consumed Thing plus its registered client bindings.
@@ -1089,6 +1091,8 @@ mod consumed {
     pub struct ConsumedThing {
         pub(crate) thing: Arc<Thing>,
         pub(crate) bindings: Vec<Arc<dyn ClientBinding>>,
+        pub(crate) security_providers: Vec<Arc<dyn SecurityProvider>>,
+        pub(crate) credential_store: Option<Arc<dyn CredentialStore>>,
     }
 
     impl ConsumedThing {
@@ -1097,6 +1101,8 @@ mod consumed {
             Self {
                 thing: Arc::new(thing),
                 bindings: Vec::new(),
+                security_providers: Vec::new(),
+                credential_store: None,
             }
         }
 
@@ -1105,6 +1111,8 @@ mod consumed {
             Self {
                 thing,
                 bindings: Vec::new(),
+                security_providers: Vec::new(),
+                credential_store: None,
             }
         }
 
@@ -1117,6 +1125,66 @@ mod consumed {
         /// `Arc`-cloned, not boxed — one instance serves all consumed Things.
         pub fn register_binding(&mut self, binding: Arc<dyn ClientBinding>) {
             self.bindings.push(binding);
+        }
+
+        /// Registers security providers and an optional credential store used
+        /// for outbound request-level security application
+        /// ([`SecurityProvider::apply`]).
+        ///
+        /// When this is not called, no outbound security metadata is applied
+        /// (`applied_security` on outgoing [`BindingRequest`]s is empty),
+        /// matching the pre-wiring behavior.
+        pub fn register_security(
+            &mut self,
+            providers: Vec<Arc<dyn SecurityProvider>>,
+            credential_store: Option<Arc<dyn CredentialStore>>,
+        ) {
+            self.security_providers = providers;
+            self.credential_store = credential_store;
+        }
+
+        /// Runs [`SecurityProvider::apply`] for the form's effective security
+        /// schemes and returns the accumulated metadata (e.g. `Authorization`
+        /// headers). Returns an empty map when no providers are registered or
+        /// the scheme is `nosec`.
+        fn apply_outbound_security(
+            &self,
+            form: &Form,
+        ) -> CoreResult<BTreeMap<String, String>> {
+            if self.security_providers.is_empty() {
+                return Ok(BTreeMap::new());
+            }
+            let scheme_names = effective_form_security(&self.thing, form);
+            let mut transport_request = TransportRequest::new("", "");
+            for def_name in scheme_names {
+                let Some(scheme) = self.thing.security_definitions.get(def_name.as_str())
+                else {
+                    continue;
+                };
+                // Match the provider by scheme *type* (e.g. "bearer"), not the
+                // definition name (e.g. "bearer_sc"), since SecurityProvider
+                // implementations key on the scheme type.
+                let scheme_type = scheme.scheme();
+                let Some(provider) = self
+                    .security_providers
+                    .iter()
+                    .find(|p| p.scheme_name() == scheme_type)
+                else {
+                    continue;
+                };
+                let context = SecurityContext {
+                    thing: &self.thing,
+                    form,
+                    scheme_name: def_name.as_str(),
+                    scheme,
+                    credentials: self
+                        .credential_store
+                        .as_deref()
+                        .map(|s| s as &dyn CredentialStore),
+                };
+                provider.apply(context, &mut transport_request)?;
+            }
+            Ok(transport_request.metadata)
         }
 
         /// Performs an operation against a caller-selected affordance form.
@@ -1145,6 +1213,8 @@ mod consumed {
                     ))
                 })?;
 
+            let applied_security = self.apply_outbound_security(&form)?;
+
             binding
                 .invoke(BindingRequest {
                     thing: Arc::clone(&self.thing),
@@ -1152,6 +1222,7 @@ mod consumed {
                     operation,
                     form: Arc::clone(&form),
                     input,
+                    applied_security,
                 })
                 .await
         }
@@ -1191,6 +1262,8 @@ mod consumed {
                     ))
                 })?;
 
+            let applied_security = self.apply_outbound_security(&form)?;
+
             binding
                 .subscribe(BindingRequest {
                     thing: Arc::clone(&self.thing),
@@ -1198,6 +1271,7 @@ mod consumed {
                     operation,
                     form: Arc::clone(&form),
                     input,
+                    applied_security,
                 })
                 .await
         }

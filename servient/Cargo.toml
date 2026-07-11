@@ -37,7 +37,7 @@ std = [
 ## This feature is the *async syntax surface* only (async-trait +
 ## futures-util): no_std-reachable. The tokio runtime is NOT pulled in here;
 ## it arrives via the `std` feature (host conveniences) or dev-dependencies
-## (tests). See AGENTS.md / docs/no-std-embedded.md.
+## (tests). See AGENTS.md / docs/design.md.
 async = [
     "dep:async-trait",
     "dep:futures-util",

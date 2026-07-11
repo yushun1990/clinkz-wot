@@ -996,6 +996,8 @@ fn build_planned_route(
     zenoh_target: ZenohFormTarget,
 ) -> Result<Option<PlannedRoute>, String> {
     let plan = ZenohOperationPlan {
+        transport: zenoh_target.transport,
+        authority: zenoh_target.authority,
         key_expr: zenoh_target.key_expr,
         kind: zenoh_operation_kind(operation),
         metadata: extract_zenoh_metadata(form).map_err(|e| e.to_string())?,

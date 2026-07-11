@@ -417,6 +417,80 @@ mod consumed_async {
         );
     }
 
+    #[tokio::test]
+    async fn consumed_applies_outbound_bearer_security() {
+        use clinkz_wot_core::{
+            BearerSecurityProvider, Credentials, InMemoryCredentialStore, SecurityProvider,
+        };
+
+        let read_form = Form::read_property("wot://thing/properties/status")
+            .content_type("application/octet-stream")
+            .build()
+            .unwrap();
+        let property =
+            PropertyAffordance::builder(DataSchema::String(DataSchema::string().build()))
+                .form(read_form.clone())
+                .build()
+                .unwrap();
+        let td = Thing::builder("Secured Thing")
+            .id("urn:uuid:secured-test")
+            .bearer_security("bearer_sc", "token")
+            .property("status", property)
+            .build()
+            .unwrap();
+
+        let store = Arc::new(InMemoryCredentialStore::new());
+        store
+            .put(
+                "urn:uuid:secured-test",
+                "bearer_sc",
+                Credentials::BearerToken(b"secret-token".to_vec()),
+            )
+            .unwrap();
+
+        struct SecurityCheckingBinding;
+        #[async_trait::async_trait]
+        impl ClientBinding for SecurityCheckingBinding {
+            fn supports(&self, _form: &Form, operation: Operation) -> bool {
+                operation == Operation::ReadProperty
+            }
+            async fn invoke(&self, request: BindingRequest) -> CoreResult<InteractionOutput> {
+                assert_eq!(
+                    request.applied_security.get("Authorization").map(|s| s.as_str()),
+                    Some("Bearer secret-token"),
+                    "Bearer token should flow through applied_security"
+                );
+                Ok(InteractionOutput::with_data(Payload::new(
+                    b"ok".to_vec(),
+                    "text/plain",
+                )))
+            }
+        }
+
+        let mut thing = ConsumedThing::new(td);
+        thing.register_binding(
+            Arc::new(SecurityCheckingBinding) as Arc<dyn ClientBinding>,
+        );
+        thing.register_security(
+            vec![
+                Arc::new(BearerSecurityProvider::new("dummy", "principal", [""]))
+                    as Arc<dyn SecurityProvider>,
+            ],
+            Some(store),
+        );
+
+        let output = thing
+            .request(
+                AffordanceTarget::Property("status".into()),
+                Operation::ReadProperty,
+                Arc::new(read_form),
+                InteractionInput::empty(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(output.data.unwrap().body.as_ref(), b"ok");
+    }
+
     // Suppress unused-import warnings for fixtures only used in some tests.
     #[allow(dead_code)]
     fn _retain(_v: &RefCell<()>) {}

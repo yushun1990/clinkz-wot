@@ -64,6 +64,8 @@ fn runtime_zenoh_transport_executes_put_and_get_smoke_paths() {
     let put_output = transport
         .execute(ZenohTransportRequest {
             plan: std::sync::Arc::new(ZenohOperationPlan {
+                transport: "tcp".into(),
+                authority: "localhost".into(),
                 key_expr: key_expr.clone(),
                 kind: ZenohOperationKind::Put,
                 metadata: ZenohFormMetadata {
@@ -87,6 +89,8 @@ fn runtime_zenoh_transport_executes_put_and_get_smoke_paths() {
     let get_output = transport
         .execute(ZenohTransportRequest {
             plan: std::sync::Arc::new(ZenohOperationPlan {
+                transport: "tcp".into(),
+                authority: "localhost".into(),
                 key_expr,
                 kind: ZenohOperationKind::RequestReply,
                 metadata: ZenohFormMetadata {
@@ -132,6 +136,8 @@ fn runtime_zenoh_transport_executes_subscribe_once_smoke_path() {
     let output = transport
         .execute(ZenohTransportRequest {
             plan: std::sync::Arc::new(ZenohOperationPlan {
+                transport: "tcp".into(),
+                authority: "localhost".into(),
                 key_expr,
                 kind: ZenohOperationKind::Subscribe,
                 metadata: ZenohFormMetadata {
@@ -172,6 +178,8 @@ fn runtime_zenoh_put_propagates_live_metadata() {
     let put_output = transport
         .execute(ZenohTransportRequest {
             plan: std::sync::Arc::new(ZenohOperationPlan {
+                transport: "tcp".into(),
+                authority: "localhost".into(),
                 key_expr,
                 kind: ZenohOperationKind::Put,
                 metadata: ZenohFormMetadata {
@@ -224,6 +232,8 @@ fn runtime_zenoh_subscription_receives_multiple_samples_and_undeclares() {
     let transport = ZenohSessionTransport::new(session.clone()).with_reply_timeout(REPLY_TIMEOUT);
     let mut subscription = transport
         .subscribe(ZenohOperationPlan {
+            transport: "tcp".into(),
+            authority: "localhost".into(),
             key_expr: key_expr.clone(),
             kind: ZenohOperationKind::Subscribe,
             metadata: ZenohFormMetadata {
@@ -285,6 +295,8 @@ fn runtime_zenoh_subscription_timeout_maps_to_transport_error() {
     let transport = ZenohSessionTransport::new(session).with_reply_timeout(REPLY_TIMEOUT);
     let mut subscription = transport
         .subscribe(ZenohOperationPlan {
+            transport: "tcp".into(),
+            authority: "localhost".into(),
             key_expr: key_expr.clone(),
             kind: ZenohOperationKind::Subscribe,
             metadata: ZenohFormMetadata {
@@ -325,6 +337,8 @@ fn runtime_zenoh_request_reply_timeout_maps_to_transport_error() {
     let error = transport
         .execute(ZenohTransportRequest {
             plan: std::sync::Arc::new(ZenohOperationPlan {
+                transport: "tcp".into(),
+                authority: "localhost".into(),
                 key_expr: key_expr.clone(),
                 kind: ZenohOperationKind::RequestReply,
                 metadata: ZenohFormMetadata {
@@ -396,6 +410,8 @@ fn runtime_zenoh_request_reply_propagates_selector_parameters() {
     let output = transport
         .execute(ZenohTransportRequest {
             plan: std::sync::Arc::new(ZenohOperationPlan {
+                transport: "tcp".into(),
+                authority: "localhost".into(),
                 key_expr: planned_key_expr,
                 kind: ZenohOperationKind::RequestReply,
                 metadata: ZenohFormMetadata {
@@ -473,6 +489,8 @@ fn runtime_zenoh_request_reply_propagates_request_payload() {
     let output = transport
         .execute(ZenohTransportRequest {
             plan: std::sync::Arc::new(ZenohOperationPlan {
+                transport: "tcp".into(),
+                authority: "localhost".into(),
                 key_expr,
                 kind: ZenohOperationKind::RequestReply,
                 metadata: ZenohFormMetadata {
@@ -540,6 +558,8 @@ fn runtime_zenoh_request_reply_uses_live_reply_encoding() {
     let output = transport
         .execute(ZenohTransportRequest {
             plan: std::sync::Arc::new(ZenohOperationPlan {
+                transport: "tcp".into(),
+                authority: "localhost".into(),
                 key_expr,
                 kind: ZenohOperationKind::RequestReply,
                 metadata: ZenohFormMetadata {

@@ -2,7 +2,9 @@
 
 use alloc::{sync::Arc, vec::Vec};
 
-use clinkz_wot_core::{ClientBinding, EventBroker, SecurityProvider, ServerBinding};
+use clinkz_wot_core::{
+    ClientBinding, CredentialStore, EventBroker, SecurityProvider, ServerBinding,
+};
 use clinkz_wot_discovery::{Discoverer, InMemoryDirectory, LocalDiscoverer};
 
 use crate::servient::Servient;
@@ -14,6 +16,7 @@ pub struct ServientBuilder {
     #[cfg(feature = "async")]
     client_bindings: Vec<Arc<dyn ClientBinding>>,
     security_providers: Vec<Arc<dyn SecurityProvider>>,
+    credential_store: Option<Arc<dyn CredentialStore>>,
     discoverer: Option<Arc<dyn Discoverer>>,
 }
 
@@ -24,6 +27,7 @@ impl ServientBuilder {
             #[cfg(feature = "async")]
             client_bindings: Vec::new(),
             security_providers: Vec::new(),
+            credential_store: None,
             discoverer: None,
         }
     }
@@ -51,6 +55,15 @@ impl ServientBuilder {
         self
     }
 
+    /// Registers a [`CredentialStore`] for outbound request-level security
+    /// ([`SecurityProvider::apply`]). The store is shared with every
+    /// [`ConsumedThing`](clinkz_wot_core::ConsumedThing) produced by this
+    /// Servient.
+    pub fn with_credential_store(mut self, store: Arc<dyn CredentialStore>) -> Self {
+        self.credential_store = Some(store);
+        self
+    }
+
     pub fn with_discoverer(mut self, discoverer: Arc<dyn Discoverer>) -> Self {
         self.discoverer = Some(discoverer);
         self
@@ -63,6 +76,7 @@ impl ServientBuilder {
             #[cfg(feature = "async")]
             client_bindings,
             security_providers,
+            credential_store,
             discoverer,
         } = self;
 
@@ -88,6 +102,7 @@ impl ServientBuilder {
             #[cfg(feature = "async")]
             client_bindings,
             security_providers,
+            credential_store,
             discoverer,
             event_broker,
         );

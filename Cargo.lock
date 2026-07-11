@@ -353,6 +353,7 @@ dependencies = [
  "clinkz-wot-protocol-bindings",
  "clinkz-wot-servient",
  "clinkz-wot-td",
+ "fluent-uri",
  "log",
  "serde_json",
  "tokio",

@@ -783,7 +783,7 @@ impl ConsumedThingHandle {
     // Deviation from Scripting API §6.6: `observe_property` returns a
     // pull-queue `Subscription` rather than registering a push-callback,
     // and `unobserve_property` returns `CoreResult<()>` rather than the
-    // cancellation ack payload. Recorded in docs/wot-compliance.md §9.
+    // cancellation ack payload. Recorded in docs/design.md.
 
     /// Opens a long-lived subscription to property changes and returns a
     /// [`Subscription`] implementing

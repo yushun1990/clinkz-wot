@@ -93,6 +93,26 @@ in `docs/zenoh-pico-runtime-target.md`.
 Concrete backend features are mutually exclusive. The shared planning surface
 remains available without selecting either backend.
 
+### Zenoh URI Convention and Session Model
+
+The zenoh binding uses an authority-based URI convention: TD forms resolve to
+`zenoh[+<transport>]://<authority>/<key-expr>`, where the authority (RFC 3986
+`host[:port]`) names the zenoh router and the path is the key expression. The
+authority is mandatory — a TD with an empty authority is a configuration
+error, not a default-session fallback. The transport is encoded in the URI
+scheme suffix (`zenoh`, `zenoh+tcp`, `zenoh+udp`), following the RFC 8323
+`coap+tcp` precedent.
+
+The `std` backend aggregates sessions per authority (`ZenohSessionPool`), so a
+Consumer can reach Things on multiple routers from one Servient. The `no_std`
+backend uses a single platform-injected session and validates each form's
+authority against it. Client and server sessions are never shared, even in a
+combined Servient.
+
+The full specification — form parsing, session pool design, credential
+acquisition, migration path, and `no_std` handling — lives in
+[`docs/zenoh-binding-template.md`](zenoh-binding-template.md).
+
 Expected operation mapping:
 
 - Property read maps to zenoh query or get behavior.
@@ -141,25 +161,36 @@ values.
 | `cz-zenoh:congestionControl` | Experimental hint | string | Preferred zenoh congestion control metadata. |
 
 The resolved `href` remains authoritative for the concrete target. Relative
-`href` values are resolved against Thing-level `base` before the binding turns
-them into zenoh key expressions.
+`href` values are resolved against Thing-level `base` (RFC 3986) before the
+binding splits the result into a zenoh router authority and a key expression.
+The full URI convention — mandatory authority, `+transport` scheme suffix,
+session aggregation, and the `no_std` backend — is specified in
+[`docs/zenoh-binding-template.md`](zenoh-binding-template.md).
 
 The metadata hint terms are parsed and preserved in the zenoh operation plan,
 but the shared engine does not assign mandatory runtime behavior to them. Host
 runtime adapters may choose how to translate these hints to a concrete zenoh
 session or publication API.
 
-Example form:
+Example form (authority `router.example.com:7447` carries the router address;
+the path under it is the key expression):
 
 ```json
 {
-  "base": "zenoh://clinkz/things/lamp/",
+  "base": "zenoh://router.example.com:7447/clinkz/things/lamp/",
   "href": "properties/status",
   "op": "readproperty",
   "contentType": "application/json",
   "cz-zenoh:qos": "express"
 }
 ```
+
+This resolves to
+`zenoh://router.example.com:7447/clinkz/things/lamp/properties/status` →
+authority `router.example.com:7447`, key expression
+`clinkz/things/lamp/properties/status`. A non-TCP transport uses a scheme
+suffix, e.g. `zenoh+udp://router.example.com:7447/...` (following the RFC 8323
+`coap+tcp` precedent). An empty authority is a TD configuration error.
 
 ## Future Bindings
 

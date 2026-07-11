@@ -10,7 +10,7 @@
 //! — one instance per protocol serves all consumed Things. The
 //! `ClientBindingFactory` trait is removed.
 
-use alloc::{boxed::Box, sync::Arc};
+use alloc::{boxed::Box, collections::BTreeMap, string::String, sync::Arc};
 
 use clinkz_wot_td::{data_type::Operation, form::Form, thing::Thing};
 
@@ -37,6 +37,13 @@ pub struct BindingRequest {
     pub form: Arc<Form>,
     /// Caller input.
     pub input: InteractionInput,
+    /// Request-level security metadata applied by [`SecurityProvider::apply`]
+    /// (e.g. `"Authorization" → "Bearer <token>"`). Each binding maps these
+    /// entries to its protocol-specific wire format. Empty when the form's
+    /// effective security is `nosec` or no provider matched.
+    ///
+    /// [`SecurityProvider::apply`]: crate::SecurityProvider
+    pub applied_security: BTreeMap<String, String>,
 }
 
 /// Outbound protocol binding contract (baseline v4.1 §4.5 / §5.1).

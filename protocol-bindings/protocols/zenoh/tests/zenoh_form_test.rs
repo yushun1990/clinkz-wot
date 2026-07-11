@@ -29,7 +29,7 @@ struct RecordingZenohTransport;
 impl ZenohTransport for RecordingZenohTransport {
     fn execute(&self, request: ZenohTransportRequest) -> CoreResult<InteractionOutput> {
         assert_eq!(request.plan.kind, ZenohOperationKind::Put);
-        assert_eq!(request.plan.key_expr, "clinkz/things/lamp/status");
+        assert_eq!(request.plan.key_expr, "things/lamp/status");
         assert_eq!(
             request.plan.metadata.content_type.as_deref(),
             Some("application/json")
@@ -108,7 +108,41 @@ async fn extracts_key_expression_from_zenoh_href() {
 
     let target = extract_zenoh_target(&thing, &form).unwrap();
 
-    assert_eq!(target.key_expr, "clinkz/things/lamp/status");
+    assert_eq!(target.transport, "tcp");
+    assert_eq!(target.authority, "clinkz");
+    assert_eq!(target.key_expr, "things/lamp/status");
+}
+
+#[tokio::test]
+async fn extracts_transport_suffix_from_scheme() {
+    let udp_form = Form::read_property("zenoh+udp://router-a:7447/things/lamp/status")
+        .build()
+        .unwrap();
+    let thing = Thing::builder("Lamp").nosec().build().unwrap();
+
+    let target = extract_zenoh_target(&thing, &udp_form).unwrap();
+
+    assert_eq!(target.transport, "udp");
+    assert_eq!(target.authority, "router-a:7447");
+    assert_eq!(target.key_expr, "things/lamp/status");
+
+    let tcp_form = Form::read_property("zenoh+tcp://router-a:7447/things/lamp/status")
+        .build()
+        .unwrap();
+    let target = extract_zenoh_target(&thing, &tcp_form).unwrap();
+    assert_eq!(target.transport, "tcp");
+}
+
+#[tokio::test]
+async fn rejects_empty_authority() {
+    let form = Form::read_property("zenoh:///things/lamp/status")
+        .build()
+        .unwrap();
+    let thing = Thing::builder("Lamp").nosec().build().unwrap();
+
+    let err = extract_zenoh_target(&thing, &form).unwrap_err();
+
+    assert!(matches!(err, ZenohBindingError::MissingAuthority(_)));
 }
 
 #[tokio::test]
@@ -122,7 +156,9 @@ async fn builds_operation_plan_from_href_resolved_against_base() {
 
     let plan = plan_zenoh_operation(&thing, &form, Operation::InvokeAction).unwrap();
 
-    assert_eq!(plan.key_expr, "clinkz/things/lamp/actions/reboot");
+    assert_eq!(plan.transport, "tcp");
+    assert_eq!(plan.authority, "clinkz");
+    assert_eq!(plan.key_expr, "things/lamp/actions/reboot");
     assert_eq!(plan.kind, ZenohOperationKind::RequestReply);
     assert_eq!(
         plan.metadata,
@@ -162,7 +198,7 @@ async fn includes_metadata_in_operation_plan() {
 
     let plan = plan_zenoh_operation(&thing, &form, Operation::WriteProperty).unwrap();
 
-    assert_eq!(plan.key_expr, "clinkz/things/lamp/status");
+    assert_eq!(plan.key_expr, "things/lamp/status");
     assert_eq!(plan.kind, ZenohOperationKind::Put);
     assert_eq!(
         plan.metadata.content_type.as_deref(),
@@ -197,6 +233,7 @@ async fn runtime_binding_delegates_planned_operation_to_transport() {
             operation: Operation::WriteProperty,
             form: Arc::new(form.clone()),
             input,
+            applied_security: Default::default(),
         })
         .await
         .unwrap();
@@ -230,6 +267,7 @@ async fn shared_transport_reuses_underlying_runtime_state() {
             operation: Operation::ReadProperty,
             form: Arc::new(form.clone()),
             input: InteractionInput::empty(),
+            applied_security: Default::default(),
         })
         .await
         .unwrap();
@@ -240,17 +278,18 @@ async fn shared_transport_reuses_underlying_runtime_state() {
             operation: Operation::ReadProperty,
             form: Arc::new(form.clone()),
             input: InteractionInput::empty(),
+            applied_security: Default::default(),
         })
         .await
         .unwrap();
 
     assert_eq!(
         first.data.unwrap().body.as_ref(),
-        b"1:clinkz/things/lamp/status"
+        b"1:things/lamp/status"
     );
     assert_eq!(
         second.data.unwrap().body.as_ref(),
-        b"2:clinkz/things/lamp/status"
+        b"2:things/lamp/status"
     );
     assert_eq!(
         shared
@@ -284,6 +323,7 @@ async fn runtime_binding_rejects_form_that_does_not_support_requested_operation(
             operation: Operation::WriteProperty,
             form: Arc::new(form.clone()),
             input: InteractionInput::empty(),
+            applied_security: Default::default(),
         })
         .await
         .unwrap_err();
@@ -325,7 +365,7 @@ async fn plans_zenoh_affordance_operation_from_matching_form() {
     assert_eq!(plan.operation.kind, ZenohOperationKind::Query);
     assert_eq!(
         plan.operation.key_expr,
-        "clinkz/things/lamp/properties/status"
+        "things/lamp/properties/status"
     );
     assert_eq!(
         plan.operation.metadata.content_type.as_deref(),
@@ -363,7 +403,7 @@ async fn plans_zenoh_affordance_operation_with_metadata_criteria() {
     assert_eq!(plan.form_index, 1);
     assert_eq!(
         plan.operation.key_expr,
-        "clinkz/things/lamp/properties/status/cbor"
+        "things/lamp/properties/status/cbor"
     );
     assert_eq!(
         plan.operation.metadata.content_type.as_deref(),
@@ -405,7 +445,7 @@ async fn plans_zenoh_affordance_operation_with_subprotocol_criteria() {
     assert_eq!(plan.operation.kind, ZenohOperationKind::Subscribe);
     assert_eq!(
         plan.operation.key_expr,
-        "clinkz/things/lamp/events/status-change/sse"
+        "things/lamp/events/status-change/sse"
     );
 }
 
@@ -424,7 +464,7 @@ async fn plans_thing_level_zenoh_form() {
     assert_eq!(plan.affordance, AffordanceRef::Thing);
     assert_eq!(plan.form_index, 0);
     assert_eq!(plan.operation.kind, ZenohOperationKind::Query);
-    assert_eq!(plan.operation.key_expr, "clinkz/things/lamp");
+    assert_eq!(plan.operation.key_expr, "things/lamp");
 }
 
 #[tokio::test]
@@ -452,7 +492,7 @@ async fn plans_bulk_property_operation_from_thing_level_form() {
 
     assert_eq!(plan.form_index, 1);
     assert_eq!(plan.operation.kind, ZenohOperationKind::Put);
-    assert_eq!(plan.operation.key_expr, "clinkz/things/lamp/properties");
+    assert_eq!(plan.operation.key_expr, "things/lamp/properties");
 }
 
 /// `subscribeallevents` / `unsubscribeallevents` are TD 1.1 event
@@ -482,7 +522,7 @@ async fn plans_bulk_event_operation_from_thing_level_form() {
 
     assert_eq!(plan.form_index, 1);
     assert_eq!(plan.operation.kind, ZenohOperationKind::Unsubscribe);
-    assert_eq!(plan.operation.key_expr, "clinkz/things/lamp/events");
+    assert_eq!(plan.operation.key_expr, "things/lamp/events");
 }
 
 #[tokio::test]
@@ -510,7 +550,7 @@ async fn plans_relative_href_against_zenoh_base() {
 
     assert_eq!(
         plan.operation.key_expr,
-        "clinkz/things/lamp/properties/status"
+        "things/lamp/properties/status"
     );
     assert_eq!(plan.operation.kind, ZenohOperationKind::Query);
 }
@@ -564,6 +604,7 @@ async fn runtime_binding_reports_invalid_interaction_for_unresolvable_target() {
             operation: Operation::ReadProperty,
             form: Arc::new(form.clone()),
             input: InteractionInput::empty(),
+            applied_security: Default::default(),
         })
         .await
         .unwrap_err();
@@ -594,7 +635,7 @@ async fn plans_operations_from_clinkz_extension_fixture() {
     assert_eq!(read.operation.kind, ZenohOperationKind::Query);
     assert_eq!(
         read.operation.key_expr,
-        "clinkz/things/targeted-roundtrip/properties/status"
+        "things/targeted-roundtrip/properties/status"
     );
 
     let write = plan_zenoh_affordance_operation_with_criteria(
@@ -607,7 +648,7 @@ async fn plans_operations_from_clinkz_extension_fixture() {
     assert_eq!(write.operation.kind, ZenohOperationKind::Put);
     assert_eq!(
         write.operation.key_expr,
-        "clinkz/things/targeted-roundtrip/properties/status"
+        "things/targeted-roundtrip/properties/status"
     );
 
     let unsubscribe = plan_zenoh_affordance_operation(
@@ -620,7 +661,7 @@ async fn plans_operations_from_clinkz_extension_fixture() {
     assert_eq!(unsubscribe.operation.kind, ZenohOperationKind::Unsubscribe);
     assert_eq!(
         unsubscribe.operation.key_expr,
-        "clinkz/things/targeted-roundtrip/events/alarm"
+        "things/targeted-roundtrip/events/alarm"
     );
 
     let read_all =
@@ -630,7 +671,7 @@ async fn plans_operations_from_clinkz_extension_fixture() {
     assert_eq!(read_all.operation.kind, ZenohOperationKind::Query);
     assert_eq!(
         read_all.operation.key_expr,
-        "clinkz/things/targeted-roundtrip/properties"
+        "things/targeted-roundtrip/properties"
     );
 }
 

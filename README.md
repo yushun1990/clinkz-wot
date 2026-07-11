@@ -229,7 +229,7 @@ Local dispatch surface on `ExposedThingHandle` (Scripting API §7):
 
 > Sync dispatch refuses async handlers (returns `MissingHandler`). Use the
 > `*_async` variant when an async handler is registered. See
-> `docs/wot-compliance.md` "P3 deviations".
+> `docs/design.md` for the current Scripting API posture.
 
 ### 4. Dispatch — binding-owned driving (v4.1 AD56)
 
@@ -331,9 +331,7 @@ while let Some((event_name, payload)) = events.next().await {
 `Subscription` / `EventStream` implementing `futures_core::Stream`. The
 wire-side `SubscriptionGuard` for each open subscription is owned by the
 handle; dropping the handle releases every still-active guard. See
-`docs/wot-compliance.md` "P2 deviations" for the deviation notes
-(`unobserve_*` return shape, bulk aggregation format, fail-fast
-`subscribe_all_events`).
+`docs/design.md` for the current subscription model.
 
 ### 6. Discover Things
 
@@ -404,15 +402,9 @@ CLINKZ_WOT_RUN_ZENOH_RUNTIME_TESTS=1 \
 
 ## Documentation
 
-- [User-facing API spec](docs/user-facing-api.md) — frozen external boundary, migration delta
-- [User-facing API implementation plan](docs/plan/user-facing-api-implementation-plan.md) — P0–P3 phase status
-- [Implementation plan](PLAN.md)
-- [Engine architecture baseline (v4.1)](docs/baseline/engine-architecture-baseline.md)
-- [Servient workflow diagrams](docs/servient-workflow.md)
-- [Technical specification](docs/technical-spec.md)
-- [WoT compliance notes](docs/wot-compliance.md)
-- [no_std and embedded support](docs/no-std-embedded.md)
-- [Discovery refactor plan](docs/plan/discovery-directory-refactor-plan.md)
+- [Current design](docs/design.md) — authoritative architecture, API, feature, and verification reference.
+- [Current documentation plan](PLAN.md) — session entry point for documentation.
+- [Deprecated archive](docs/deprecated/README.md) — historical baselines, plans, target notes, and audit context.
 
 ## License
 

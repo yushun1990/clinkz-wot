@@ -37,7 +37,7 @@ fn runtime_server_binding_read_property_round_trip() {
     std::thread::sleep(PROPAGATION_DELAY);
 
     // Simulate a consumer querying the read-property key.
-    let key_expr = "clinkz/things/urn:server:read/properties/status";
+    let key_expr = "things/urn:server:read/properties/status";
     let query_thread = std::thread::spawn(move || {
         let replies = session.get(key_expr).wait().expect("send query");
         replies
@@ -83,7 +83,7 @@ fn runtime_server_binding_invoke_action_round_trip() {
 
     std::thread::sleep(PROPAGATION_DELAY);
 
-    let key_expr = "clinkz/things/urn:server:invoke/actions/echo";
+    let key_expr = "things/urn:server:invoke/actions/echo";
     let request_body = b"hello".to_vec();
     let query_thread = std::thread::spawn(move || {
         let replies = session
@@ -134,7 +134,7 @@ fn runtime_server_binding_write_property_put_listener() {
     std::thread::sleep(PROPAGATION_DELAY);
 
     // Send a PUT on the write-property key.
-    let key_expr = "clinkz/things/urn:server:write/properties/status".to_string();
+    let key_expr = "things/urn:server:write/properties/status".to_string();
     std::thread::spawn(move || {
         session
             .put(key_expr.as_str(), "off")
@@ -200,7 +200,7 @@ fn runtime_server_binding_error_reply() {
 
     std::thread::sleep(PROPAGATION_DELAY);
 
-    let key_expr = "clinkz/things/urn:server:error/properties/status";
+    let key_expr = "things/urn:server:error/properties/status";
     let query_thread = std::thread::spawn(move || {
         let replies = session.get(key_expr).wait().expect("send query");
         replies
@@ -254,7 +254,7 @@ fn runtime_server_binding_event_publish_to_subscriber() {
     std::thread::sleep(PROPAGATION_DELAY);
 
     // Subscribe on the client side.
-    let key_expr = "clinkz/things/urn:server:event/events/startup";
+    let key_expr = "things/urn:server:event/events/startup";
     let received = Arc::new(std::sync::Mutex::new(None::<Vec<u8>>));
     let received_clone = received.clone();
     let _subscriber = session
