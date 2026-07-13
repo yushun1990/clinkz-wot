@@ -1,11 +1,10 @@
 schema_version = 1
 design_revision = "4.6"
 work_package = "WP-000"
-implementation_ref = "1336f97"
+implementation_ref = "3da41e7"
 recorded_on = "2026-07-13"
 verification_command = "tools/check-wp-000.sh"
-status = "superseded"
-superseded_reason = "WP-100-ERR-DISPOSITION-001 adds an exhaustive resource field; replacement evidence is pending"
+status = "passed"
 
 [[evidence]]
 key = "foundation-feature-matrix"
@@ -24,7 +23,7 @@ requirement_ids = ["RES-LIMIT-001", "RES-LIMIT-002", "RES-LIMIT-003", "RES-LIMIT
 compilation_cells = ["no-default", "async-no-std", "std"]
 resource_profiles = ["application-static", "gateway-default-v1", "directory-client-default-v1"]
 coverage = [
-    "historical 116-field resource schema before WP-100-ERR-DISPOSITION-001",
+    "all 118 authoritative CSV fields",
     "exact configured limit",
     "one-over configured limit",
     "zero and not-applicable semantics",

@@ -37,7 +37,7 @@ id = "WP-000"
 sequence = 0
 title = "Foundation primitives and resource accounting"
 document = "docs/work-packages/WP-000-foundation.md"
-status = "in-progress"
+status = "complete"
 depends_on = []
 requirements = [
     "PROFILE-AXIS-001",
@@ -79,7 +79,7 @@ id = "WP-100"
 sequence = 100
 title = "Core handlers, security, codecs, and callback isolation"
 document = "docs/work-packages/WP-100-core.md"
-status = "planned"
+status = "in-progress"
 depends_on = ["WP-000"]
 requirements = [
     "CONCUR-LOCK-001",

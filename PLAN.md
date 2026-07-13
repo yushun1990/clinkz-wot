@@ -39,10 +39,10 @@ The success/error boundary, shared wire disposition, handler-absence mapping,
 and legacy Servient predicate removal are closed by normative amendment
 `WP-100-ERR-DISPOSITION-001`.
 
-That amendment adds `additional_responses_per_form_max`, so `WP-000` is
-temporarily reopened and `WP-100` returns to planned status until the generated
-foundation schema, profile snapshots, boundary tests, and evidence cover all
-118 resource fields.
+That amendment adds `additional_responses_per_form_max`. The resulting `WP-000`
+refresh now covers all 118 resource fields in the generated foundation schema,
+profile snapshots, boundary tests, and evidence. `WP-000` is complete and
+`WP-100` has resumed.
 
 The Directory performance artifact covers only the engine-side Directory client
 contract. Directory service topology, storage backends, server-side query
