@@ -1,6 +1,6 @@
 # WP-000 Foundation Primitives
 
-Status: Planned
+Status: Complete
 
 Design revision: v4.6
 

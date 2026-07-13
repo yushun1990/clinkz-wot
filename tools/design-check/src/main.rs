@@ -134,7 +134,10 @@ fn check_work_packages(root: &Path) -> Result<(), String> {
         "work-package requirement",
         "IMPL-CONFORM-001",
     )?;
-    require_string(document.get("status"), "work-package status", "planned")?;
+    let root_status = document
+        .get("status")
+        .and_then(Item::as_str)
+        .ok_or_else(|| "work-package index has no string status".to_owned())?;
 
     let entry_gates = root_string_set(&document, "implementation_entry_gates")?;
     let known_gates = load_first_column(root, "docs/refactor-gates.csv")?;
@@ -164,6 +167,33 @@ fn check_work_packages(root: &Path) -> Result<(), String> {
         .get("package")
         .and_then(Item::as_array_of_tables)
         .ok_or_else(|| "work-package index has no [[package]] entries".to_owned())?;
+    let allowed_statuses = owned_set(&["planned", "in-progress", "complete"]);
+    if !allowed_statuses.contains(root_status) {
+        return Err(format!("invalid work-package index status {root_status:?}"));
+    }
+    let mut package_statuses = BTreeMap::new();
+    for package in packages {
+        let id = string_field(package, "id", "work package")?;
+        let status = string_field(package, "status", &id)?;
+        if !allowed_statuses.contains(&status) {
+            return Err(format!("{id} has invalid status {status:?}"));
+        }
+        if package_statuses.insert(id.clone(), status).is_some() {
+            return Err(format!("duplicate work package {id:?}"));
+        }
+    }
+    let expected_root_status = if package_statuses.values().all(|status| status == "planned") {
+        "planned"
+    } else if package_statuses.values().all(|status| status == "complete") {
+        "complete"
+    } else {
+        "in-progress"
+    };
+    if root_status != expected_root_status {
+        return Err(format!(
+            "work-package index status must be {expected_root_status:?}; found {root_status:?}"
+        ));
+    }
     let expected_dependencies = expected_work_package_dependencies();
     let expected_sequences: BTreeMap<&str, i64> = [
         ("WP-000", 0),
@@ -210,9 +240,9 @@ fn check_work_packages(root: &Path) -> Result<(), String> {
             ));
         }
         string_field(package, "title", &id)?;
-        if string_field(package, "status", &id)? != "planned" {
-            return Err(format!("{id} status must be planned at design freeze"));
-        }
+        let status = package_statuses
+            .get(&id)
+            .ok_or_else(|| format!("{id} has no registered status"))?;
         let dependencies = string_set(array_field(package, "depends_on", &id)?, &id, "depends_on")?;
         let expected = expected_dependencies
             .get(id.as_str())
@@ -228,6 +258,13 @@ fn check_work_packages(root: &Path) -> Result<(), String> {
                 .ok_or_else(|| format!("{id} has unknown dependency {dependency:?}"))?;
             if dependency_sequence >= expected_sequence {
                 return Err(format!("{id} dependency {dependency:?} is not earlier"));
+            }
+            if status != "planned"
+                && package_statuses.get(dependency).map(String::as_str) != Some("complete")
+            {
+                return Err(format!(
+                    "{id} cannot be {status:?} before dependency {dependency:?} is complete"
+                ));
             }
         }
 
@@ -257,12 +294,16 @@ fn check_work_packages(root: &Path) -> Result<(), String> {
             root,
             &document_path,
             &id,
+            status,
             &dependencies,
             &requirements,
             &owners,
             &evidence,
             &workload_expressions,
         )?;
+        if status == "complete" {
+            check_work_package_evidence(root, &id, &requirements, &cells, &evidence)?;
+        }
     }
     if ids != expected_ids {
         return Err(format!(
@@ -413,6 +454,7 @@ fn check_work_package_document(
     root: &Path,
     relative_path: &str,
     id: &str,
+    status: &str,
     dependencies: &BTreeSet<String>,
     requirements: &BTreeSet<String>,
     owners: &BTreeSet<String>,
@@ -431,8 +473,14 @@ fn check_work_package_document(
     if !source.starts_with(&format!("# {id} ")) {
         return Err(format!("{relative_path} title does not start with {id}"));
     }
+    let status_metadata = match status {
+        "planned" => "Status: Planned",
+        "in-progress" => "Status: In Progress",
+        "complete" => "Status: Complete",
+        _ => return Err(format!("{id} has unsupported document status {status:?}")),
+    };
     for metadata in [
-        "Status: Planned",
+        status_metadata,
         "Design revision: v4.6",
         "Depends on:",
         "Required gates:",
@@ -471,6 +519,69 @@ fn check_work_package_document(
         if !source.contains(value) {
             return Err(format!("{relative_path} does not identify {value:?}"));
         }
+    }
+    Ok(())
+}
+
+fn check_work_package_evidence(
+    root: &Path,
+    id: &str,
+    requirements: &BTreeSet<String>,
+    cells: &BTreeSet<String>,
+    expected_keys: &BTreeSet<String>,
+) -> Result<(), String> {
+    let relative_path = format!("docs/evidence/{id}.toml");
+    let path = root.join(&relative_path);
+    let source = fs::read_to_string(&path)
+        .map_err(|error| format!("cannot read {relative_path}: {error}"))?;
+    let document = source
+        .parse::<DocumentMut>()
+        .map_err(|error| format!("invalid {relative_path}: {error}"))?;
+    require_integer(document.get("schema_version"), "evidence schema_version", 1)?;
+    require_string(
+        document.get("design_revision"),
+        "evidence design_revision",
+        "4.6",
+    )?;
+    require_string(document.get("work_package"), "evidence work_package", id)?;
+    require_string(document.get("status"), "evidence status", "passed")?;
+    for field in ["implementation_ref", "recorded_on", "verification_command"] {
+        let value = document
+            .get(field)
+            .and_then(Item::as_str)
+            .ok_or_else(|| format!("{relative_path} has no string field {field:?}"))?;
+        if value.trim().is_empty() {
+            return Err(format!("{relative_path} has empty field {field:?}"));
+        }
+    }
+
+    let records = document
+        .get("evidence")
+        .and_then(Item::as_array_of_tables)
+        .ok_or_else(|| format!("{relative_path} has no [[evidence]] records"))?;
+    let allowed_profiles = owned_set(&[
+        "application-static",
+        "gateway-default-v1",
+        "directory-client-default-v1",
+    ]);
+    let mut keys = BTreeSet::new();
+    for record in records {
+        let key = string_field(record, "key", id)?;
+        if !keys.insert(key.clone()) {
+            return Err(format!("{relative_path} duplicates evidence key {key:?}"));
+        }
+        let record_requirements = package_string_set(record, "requirement_ids", &key)?;
+        check_known_values(&key, "requirement", &record_requirements, requirements)?;
+        let record_cells = package_string_set(record, "compilation_cells", &key)?;
+        check_known_values(&key, "compilation cell", &record_cells, cells)?;
+        let profiles = package_string_set(record, "resource_profiles", &key)?;
+        check_known_values(&key, "resource profile", &profiles, &allowed_profiles)?;
+        package_string_set(record, "coverage", &key)?;
+    }
+    if &keys != expected_keys {
+        return Err(format!(
+            "{relative_path} evidence keys mismatch; expected {expected_keys:?}, found {keys:?}"
+        ));
     }
     Ok(())
 }

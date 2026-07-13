@@ -11,3 +11,8 @@ publish = false
 default = ["std"]
 std = []
 async = []
+
+[[example]]
+name = "no_std_surface"
+path = "examples/no_std_surface.rs"
+crate-type = ["lib"]

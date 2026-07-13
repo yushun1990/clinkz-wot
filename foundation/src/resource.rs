@@ -563,6 +563,38 @@ mod tests {
     }
 
     #[test]
+    fn every_profile_limit_accepts_exactly_its_boundary() {
+        for limits in [
+            GatewayDefaultV1::LIMITS,
+            DirectoryClientDefaultV1::LIMITS,
+            BenchmarkStaticReferenceV1::LIMITS,
+        ] {
+            for kind in ResourceKind::ALL {
+                let Some(limit) = limits.get(kind) else {
+                    continue;
+                };
+                let mut account = ResourceAccount::new(
+                    SlotIndex::new(kind.index() as u32),
+                    Generation::INITIAL,
+                    kind,
+                    limit,
+                );
+                account
+                    .try_reserve(limit)
+                    .expect("the exact configured limit must fit")
+                    .commit();
+                assert!(account.release_committed(limit));
+                if let Some(over_limit) = limit.checked_add(1) {
+                    assert!(account.try_reserve(over_limit).is_none());
+                }
+                if limit > 0 {
+                    assert!(!account.release_committed(1));
+                }
+            }
+        }
+    }
+
+    #[test]
     fn account_reservations_roll_back_unless_committed() {
         let mut account = ResourceAccount::new(
             SlotIndex::new(3),

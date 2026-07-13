@@ -1,7 +1,7 @@
 schema_version = 1
 design_revision = "4.6"
 requirement = "IMPL-CONFORM-001"
-status = "planned"
+status = "in-progress"
 implementation_entry_gates = [
     "GATE-1",
     "GATE-2",
@@ -37,12 +37,14 @@ id = "WP-000"
 sequence = 0
 title = "Foundation primitives and resource accounting"
 document = "docs/work-packages/WP-000-foundation.md"
-status = "planned"
+status = "complete"
 depends_on = []
 requirements = [
     "PROFILE-AXIS-001",
     "FEATURE-MATRIX-001",
     "CRATE-DEPS-001",
+    "API-SURFACE-001",
+    "API-TYPES-001",
     "CONSTRAINED-STORAGE-001",
     "CONSTRAINED-STORAGE-002",
     "CONSTRAINED-WORK-001",
@@ -54,6 +56,10 @@ requirements = [
     "RES-PROFILE-001",
     "API-RESOURCE-001",
     "API-SOURCE-TIME-001",
+    "ADMIT-TXN-001",
+    "ADMIT-MEM-001",
+    "HOST-DEFAULT-001",
+    "HOST-DEFAULT-002",
     "TIME-001",
     "PERF-ACCOUNT-001",
 ]

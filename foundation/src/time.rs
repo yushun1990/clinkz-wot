@@ -141,7 +141,23 @@ mod tests {
     use core::cmp::Ordering;
     use core::num::NonZeroU64;
 
-    use super::{ClockId, MonotonicInstant, SourceTimestamp};
+    use super::{ClockId, MonotonicInstant, RuntimeClock, SourceTimestamp};
+
+    struct WrappingClock;
+
+    impl RuntimeClock for WrappingClock {
+        fn now(&self) -> MonotonicInstant {
+            MonotonicInstant::new(ClockId::new(7), 3)
+        }
+
+        fn ticks_per_second(&self) -> NonZeroU64 {
+            NonZeroU64::new(1_000).expect("the scale is nonzero")
+        }
+
+        fn wrap_period_ticks(&self) -> Option<NonZeroU64> {
+            NonZeroU64::new(256)
+        }
+    }
 
     #[test]
     fn different_clocks_are_incomparable() {
@@ -178,5 +194,13 @@ mod tests {
             timestamp.monotonic_instant(),
             Some(MonotonicInstant::new(ClockId::new(9), 42))
         );
+    }
+
+    #[test]
+    fn finite_clock_exposes_its_wrap_policy() {
+        let clock = WrappingClock;
+        assert_eq!(clock.now().clock_id(), ClockId::new(7));
+        assert_eq!(clock.ticks_per_second().get(), 1_000);
+        assert_eq!(clock.wrap_period_ticks().map(NonZeroU64::get), Some(256));
     }
 }

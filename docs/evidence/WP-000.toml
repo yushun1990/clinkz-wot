@@ -1,0 +1,65 @@
+schema_version = 1
+design_revision = "4.6"
+work_package = "WP-000"
+implementation_ref = "1336f97"
+recorded_on = "2026-07-13"
+verification_command = "tools/check-wp-000.sh"
+status = "passed"
+
+[[evidence]]
+key = "foundation-feature-matrix"
+requirement_ids = ["PROFILE-AXIS-001", "FEATURE-MATRIX-001", "CRATE-DEPS-001", "API-SURFACE-001"]
+compilation_cells = ["no-default", "async-no-std", "std"]
+resource_profiles = ["application-static", "gateway-default-v1", "directory-client-default-v1"]
+coverage = [
+    "portable public-surface compile fixture",
+    "empty normal dependency tree",
+    "downward TD and core dependency checks",
+]
+
+[[evidence]]
+key = "resource-limit-boundaries"
+requirement_ids = ["RES-LIMIT-001", "RES-LIMIT-002", "RES-LIMIT-003", "RES-LIMIT-004"]
+compilation_cells = ["no-default", "async-no-std", "std"]
+resource_profiles = ["application-static", "gateway-default-v1", "directory-client-default-v1"]
+coverage = [
+    "all 116 authoritative CSV fields",
+    "exact configured limit",
+    "one-over configured limit",
+    "zero and not-applicable semantics",
+]
+
+[[evidence]]
+key = "resource-profile-snapshots"
+requirement_ids = ["RES-PROFILE-001", "HOST-DEFAULT-001", "HOST-DEFAULT-002"]
+compilation_cells = ["no-default", "async-no-std", "std"]
+resource_profiles = ["application-static", "gateway-default-v1", "directory-client-default-v1"]
+coverage = [
+    "GatewayDefaultV1 exhaustive generated snapshot",
+    "DirectoryClientDefaultV1 exhaustive generated snapshot",
+    "BenchmarkStaticReferenceV1 exhaustive generated snapshot",
+]
+
+[[evidence]]
+key = "resource-accounting-rollback"
+requirement_ids = ["API-RESOURCE-001", "ADMIT-TXN-001", "ADMIT-MEM-001", "PERF-ACCOUNT-001"]
+compilation_cells = ["no-default", "async-no-std", "std"]
+resource_profiles = ["application-static", "gateway-default-v1", "directory-client-default-v1"]
+coverage = [
+    "move-only reservation rollback and commit",
+    "six explicit admission accounts",
+    "peak-live and largest-contiguous observations",
+    "underflow-safe committed release",
+]
+
+[[evidence]]
+key = "time-and-generation-api"
+requirement_ids = ["API-SOURCE-TIME-001", "API-TYPES-001", "TIME-001", "CONSTRAINED-STORAGE-001"]
+compilation_cells = ["no-default", "async-no-std", "std"]
+resource_profiles = ["application-static", "gateway-default-v1", "directory-client-default-v1"]
+coverage = [
+    "clock identity mismatch",
+    "checked duration scaling and rounding",
+    "finite clock wrap declaration",
+    "nonzero generation and no-wrap reuse boundary",
+]
