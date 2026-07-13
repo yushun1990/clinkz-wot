@@ -1,0 +1,10 @@
+path,role,normativity,design_revision,schema_version,requirement_source
+PLAN.md,active-revision-selector,non-normative,4.6,1,docs/design.md
+docs/design.md,architecture-and-behavior,normative,4.6,1,docs/design.md
+docs/artifacts.csv,artifact-registry,normative,4.6,1,docs/design.md
+docs/api-ownership.csv,public-api-ownership,normative,4.6,1,docs/design.md
+docs/refactor-gates.csv,implementation-admission,normative,4.6,1,docs/design.md
+docs/requirements.csv,requirement-and-evidence-index,normative-index,4.6,1,docs/design.md
+docs/performance/constrained.toml,constrained-performance-budget,normative,4.6,4,docs/design.md
+docs/performance/gateway.toml,gateway-performance-budget,normative,4.6,4,docs/design.md
+docs/performance/directory.toml,directory-client-performance-budget,normative,4.6,4,docs/design.md

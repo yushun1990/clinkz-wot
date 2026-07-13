@@ -1,0 +1,207 @@
+schema_version = 4
+profile = "BenchmarkStaticReferenceV1"
+runtime_default = false
+feature_set = "no-default-features,application-static-profile"
+environment = "thumbv7em-none-eabihf"
+runner = "record-board-cpu-clock-memory-map-in-result"
+reference_runner_class = "cortex-m4f-single-core-zero-wait-state-sram"
+toolchain = "record-in-result"
+allocator = "record-in-result"
+fixture_generator = "engine-benchmark-fixtures-v1"
+fixture_digest = "record-in-result"
+fixture_seed = "record-in-result"
+warmup_iterations = 100
+sample_count = 1000
+regression_tolerance_percent = 10
+outlier_policy = "none-unless-predeclared-and-recorded"
+failed_sample_policy = "record-and-fail-gate"
+
+[gate_policy]
+minimum_metrics_regress_when = "decrease"
+maximum_metrics_regress_when = "increase"
+integer_zero_budget = "exact"
+characterization_requires_explicit_marker = true
+
+[measurement]
+latency_start = "target-cycle-counter-before-engine-operation"
+latency_stop = "target-cycle-counter-after-result-or-terminal-status"
+include_transport_io = false
+include_codec = "workload-specific-and-recorded"
+allocation_boundary = "clinkz-wot-engine-excluding-handler-owned-output"
+peak_live_bytes_unit = "bytes"
+work_budget_codec_unit = "exact-bytes"
+
+[static_profile]
+document_bytes_max = 65536
+payload_bytes_max = 1024
+string_bytes_max = 16384
+extension_bytes_max = 16384
+td_nodes_max = 1024
+forms_max = 256
+bindings_max = 4
+candidates_per_operation_max = 32
+schema_nodes_max = 256
+security_branches_max = 64
+subscribers_max = 256
+admission_temporary_bytes_max = 1048576
+compiled_runtime_bytes_max = 1048576
+peak_live_bytes_max = 4194304
+largest_contiguous_allocation_max = 262144
+fanout_subscribers_per_step_max = 16
+
+[operation_boundary]
+local_sync_interaction = "before public local call -> result returned"
+inbound_dispatch_no_transport = "owned request ready -> owned response constructed"
+compiled_plan_lookup = "lookup key ready -> generation-safe plan reference acquired"
+candidate_selection_32 = "ordered candidates ready -> selection or terminal selection error"
+security_selection_64_local_probes = "effective expression ready -> branch selected or terminal selection error"
+composed_strict_interaction_1k = "owned input ready -> validated dispatch result returned"
+subscription_round_trip_one_subscriber = "before enqueue -> same sample dequeued"
+shared_payload_fanout_256 = "before sequence assignment -> every enqueue or overflow decision committed"
+bounded_fanout_progress_256 = "before one runtime step -> step returns at work boundary"
+lazy_plan_single_flight = "first waiter publishes compile intent -> all interleaved waiters observe result or backpressure"
+interaction_accounting = "before admitted interaction accounting -> local counters and reservations committed"
+manual_step_fairness = "before runtime step -> step returns at work boundary"
+profile_maximum_td_planning = "source bytes admitted -> private compiled plan complete before publication"
+admission_byte_and_structure_scaling = "source bytes admitted -> private admission result or limit error"
+
+[scales]
+payload_bytes = [0, 64, 1024]
+document_bytes = [1024, 16384, 65536]
+string_bytes = [0, 1024, 16384]
+extension_bytes = [0, 1024, 16384]
+uri_template_bytes = [0, 256, 4096]
+expanded_uri_bytes = [0, 256, 4096]
+td_nodes = [64, 1024]
+forms = [1, 8]
+bindings = [1, 4]
+schema_nodes = [16, 256]
+maximum_case = "BenchmarkStaticReferenceV1-limits"
+candidates = [1, 8, 32]
+security_branches = [1, 8, 64]
+subscribers = [1, 16, 256]
+concurrency = [1]
+
+[[workload]]
+name = "local_sync_interaction"
+variants = ["read", "write", "invoke"]
+p95_target_cycles_max = 100000
+engine_allocations_max = 0
+report = ["median", "p95", "p99", "allocations", "peak-live-bytes"]
+
+[[workload]]
+name = "inbound_dispatch_no_transport"
+p99_target_cycles_max = 250000
+engine_allocations_max = 0
+report = ["median", "p95", "p99", "allocations", "peak-live-bytes"]
+
+[[workload]]
+name = "compiled_plan_lookup"
+p95_target_cycles_max = 20000
+report = ["median", "p95", "p99", "allocations"]
+
+[[workload]]
+name = "candidate_selection_32"
+p95_target_cycles_max = 50000
+candidate_count = 32
+report = ["median", "p95", "p99", "candidates-visited", "allocations"]
+
+[[workload]]
+name = "security_selection_64_local_probes"
+p95_target_cycles_max = 250000
+security_branch_count = 64
+credential_cases = ["hit", "miss", "generation-invalidated"]
+report = ["median", "p95", "p99", "provider-probes", "allocations"]
+
+[[workload]]
+name = "composed_strict_interaction_1k"
+payload_bytes = 1024
+candidate_count = 8
+security_branch_count = 8
+include_codec = true
+include_strict_schema_validation = true
+include_security_application = true
+include_dispatch = true
+p99_target_cycles_max = 750000
+report = ["median", "p95", "p99", "allocations", "peak-live-bytes", "provider-probes"]
+
+[[workload]]
+name = "subscription_round_trip_one_subscriber"
+p95_target_cycles_max = 5000
+payload_copies_per_subscriber_max = 0
+report = ["median", "p95", "p99", "allocations"]
+
+[[workload]]
+name = "shared_payload_fanout_256"
+subscriber_count = 256
+p95_target_cycles_max = 500000
+payload_copies_per_subscriber_max = 0
+report = ["median", "p95", "p99", "pool-bytes", "allocations"]
+
+[[workload]]
+name = "bounded_fanout_progress_256"
+subscriber_count = 256
+subscribers_per_step_max = 16
+require_generation_safe_resume_cursor = true
+require_no_restart_after_budget_exhaustion = true
+require_cancellation_progress_between_steps = true
+report = ["cycles-per-step", "steps", "maximum-service-gap", "queue-operations"]
+
+[[workload]]
+name = "lazy_plan_single_flight"
+interleaved_callers = 8
+binding_compile_attempts_max = 1
+require_bounded_slot_and_reclamation_work = true
+report = ["median", "p95", "p99", "compile-attempts", "cleanup-work-units", "peak-live-bytes"]
+
+[[workload]]
+name = "interaction_accounting"
+global_ledger_mutex_acquisitions_per_interaction_max = 0
+require_no_atomic_reference_counting = true
+require_exact_capacity_and_loss_totals = true
+report = ["median", "p95", "p99", "reservation-refills", "critical-section-cycles"]
+
+[[workload]]
+name = "manual_step_fairness"
+require_bounded_units = true
+require_no_starvation = true
+report = ["cycles-per-work-class", "maximum-service-gap", "peak-live-bytes"]
+
+[[workload]]
+name = "profile_maximum_td_planning"
+cases = ["small", "profile-maximum", "adversarial"]
+require_within_declared_work_units = true
+require_within_profile_bytes = true
+report = ["median", "p95", "p99", "plan-construction-bytes", "peak-live-bytes", "allocations"]
+
+[[workload]]
+name = "admission_byte_and_structure_scaling"
+axes = [
+    "document-bytes",
+    "string-bytes",
+    "extension-bytes",
+    "uri-template-bytes",
+    "td-nodes",
+    "forms",
+    "bindings",
+    "schema-nodes",
+    "security-branches",
+]
+vary_one_axis_at_a_time = true
+require_declared_complexity = true
+require_no_logical_plan_duplication_per_candidate = true
+report = [
+    "bytes-consumed",
+    "bytes-produced",
+    "nodes-visited",
+    "reference-edges",
+    "binding-probes",
+    "logical-plans",
+    "binding-states",
+    "persistent-bytes",
+    "peak-live-bytes",
+]
+
+[code_size]
+report = ["text", "rodata", "data", "bss"]
+tolerance_percent = 10

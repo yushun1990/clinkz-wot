@@ -1,0 +1,7 @@
+gate,status,requirements,artifacts,checks,review_evidence
+GATE-1,closed,API-OWNERSHIP-001,docs/api-ownership.csv,api-ownership-check,api-ownership-v4.6-review
+GATE-2,open,LIFE-EXPOSE-003|BIND-PROGRESS-001|STATE-EXPOSE-001|STATE-SUB-001|STATE-BIND-001|HANDLE-DROP-001|PRODUCER-EMIT-001,docs/design.md|docs/state-machines.toml,state-machine-check,pending
+GATE-3,open,DIR-SCOPE-001|DIR-CONTRACT-001|DIR-AUTH-001|DIR-SNAPSHOT-001|DIR-WATCH-001,docs/design.md,directory-client-scope-check,pending
+GATE-4,open,RES-LIMIT-001|RES-PROFILE-001|API-RESOURCE-001,docs/resource-limits.csv|docs/performance/constrained.toml|docs/performance/gateway.toml|docs/performance/directory.toml,resource-profile-check,pending
+GATE-5,open,PERF-BENCH-001|PERF-BENCH-002|PERF-BUDGET-001|PERF-SCALE-001,docs/performance/manifest.schema.json|docs/performance/result.schema.json|docs/performance/fixtures.lock.toml,performance-contract-check,pending
+GATE-6,open,IMPL-CONFORM-001,docs/work-packages/index.toml|docs/work-packages,work-package-dag-check,pending

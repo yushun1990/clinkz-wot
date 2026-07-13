@@ -1,0 +1,154 @@
+schema_version = 4
+profile = "DirectoryClientDefaultV1"
+scope = "engine-side-directory-client"
+feature_set = "std,async"
+environment = "x86_64-unknown-linux-gnu"
+runner = "dedicated-4-physical-core-performance-governor"
+toolchain = "record-in-result"
+allocator = "system"
+fixture_generator = "directory-client-fixtures-v1"
+fixture_digest = "record-in-result"
+fixture_seed = "record-in-result"
+scripted_transport = "deterministic-poll-transport-v1"
+warmup_seconds = 3
+sample_count = 100
+regression_tolerance_percent = 10
+outlier_policy = "none-unless-predeclared-and-recorded"
+failed_sample_policy = "record-and-fail-gate"
+
+[gate_policy]
+minimum_metrics_regress_when = "decrease"
+maximum_metrics_regress_when = "increase"
+integer_zero_budget = "exact"
+characterization_requires_explicit_marker = true
+
+[measurement]
+latency_start = "immediately-before-engine-client-operation"
+latency_stop = "engine-result-or-terminal-status-published"
+include_codec = true
+include_scripted_transport_delay = false
+allocation_boundary = "clinkz-wot-engine-and-directory-client-adapter"
+peak_live_bytes_unit = "bytes"
+lock_wait_unit = "nanoseconds"
+
+[operation_boundary]
+directory_request_planning = "owned request inputs ready -> binding request plan complete"
+directory_page_admission_128 = "first encoded page byte ready -> committed owned page returned"
+directory_page_incremental_admission_128 = "first input fragment ready -> committed page or terminal error"
+directory_accounting_contention_128 = "before item accounting -> local counters and reservations committed"
+directory_watch_change_admission = "encoded change ready -> change committed or terminal overflow"
+directory_publication_planning = "TD source bytes admitted -> publication request plan complete"
+directory_cancel_local_terminal = "before cancel request -> retained local terminal status visible"
+directory_buffer_overflow = "capacity exhausted before item -> retained overflow terminal status visible"
+directory_admission_byte_and_structure_scaling = "first encoded input byte ready -> private admission result or limit error"
+
+[scales]
+td_nodes = [64, 1024, 65536]
+string_bytes = [0, 4096, 262144]
+extension_bytes = [0, 4096, 262144]
+uri_template_bytes = [0, 1024, 16384]
+td_forms = [1, 8, 32]
+bindings = [1]
+schema_nodes = [16, 1024, 65536]
+security_branches = [1, 8, 64]
+page_entries = [1, 16, 128]
+td_bytes = [1024, 65536, 1048576]
+watchers = [1, 64, 8192]
+concurrent_sessions = [1, 16, 128]
+
+[[workload]]
+name = "directory_request_planning"
+p95_latency_us_max = 25
+report = ["median", "p95", "p99", "allocations", "allocated-bytes"]
+
+[[workload]]
+name = "directory_page_admission_128"
+page_entries = 128
+td_bytes_each = 1024
+p95_latency_us_max = 2000
+peak_live_bytes_max = 8388608
+report = ["median", "p95", "p99", "throughput", "allocations", "peak-live-bytes"]
+
+[[workload]]
+name = "directory_page_incremental_admission_128"
+page_entries = 128
+td_bytes_each = 1024
+input_fragment_bytes = 17
+complete_page_staging_copies_max = 0
+decoded_item_reparse_count_max = 0
+require_partial_page_rollback = true
+require_bounded_resume_cursor = true
+peak_live_bytes_max = 8388608
+report = ["median", "p95", "p99", "peak-live-bytes", "input-bytes", "items-admitted"]
+
+[[workload]]
+name = "directory_accounting_contention_128"
+concurrent_sessions = 128
+global_ledger_mutex_acquisitions_per_item_max = 0
+require_exact_capacity_and_loss_totals = true
+report = ["median", "p95", "p99", "throughput", "lock-wait", "reservation-refills"]
+
+[[workload]]
+name = "directory_watch_change_admission"
+change_bytes = 1024
+p99_latency_us_max = 100
+report = ["median", "p95", "p99", "throughput", "lock-wait", "queue-bytes"]
+
+[[workload]]
+name = "directory_publication_planning"
+td_bytes = [1024, 65536, 1048576]
+require_declared_complexity = true
+require_within_admission_bytes = true
+peak_live_bytes_max = 25165824
+report = ["median", "p95", "p99", "allocations", "peak-live-bytes"]
+
+[[workload]]
+name = "directory_cancel_local_terminal"
+variants = ["query", "watch", "publication"]
+p99_latency_us_max = 100
+report = ["median", "p95", "p99", "cleanup-steps", "allocations"]
+
+[[workload]]
+name = "directory_buffer_overflow"
+variants = ["page-count", "page-bytes", "watch-count", "watch-bytes"]
+require_bounded_terminal_status = true
+report = ["median", "p95", "p99", "queue-bytes", "lost-items", "allocations"]
+
+[[workload]]
+name = "directory_admission_byte_and_structure_scaling"
+axes = [
+    "td-bytes",
+    "string-bytes",
+    "extension-bytes",
+    "td-nodes",
+    "td-forms",
+    "schema-nodes",
+    "page-entries",
+]
+vary_one_axis_at_a_time = true
+require_declared_complexity = true
+report = [
+    "bytes-consumed",
+    "bytes-produced",
+    "nodes-visited",
+    "reference-edges",
+    "entries-admitted",
+    "persistent-bytes",
+    "peak-live-bytes",
+]
+
+[[contention]]
+name = "unrelated_directory_sessions"
+require_independent_progress = true
+
+[[contention]]
+name = "query_watch_publication_clients"
+characterization = true
+report = ["p99", "throughput", "lock_wait", "queue_bytes"]
+
+[deferred]
+directory_service_latency = true
+storage_backend_throughput = true
+query_planner_scaling = true
+snapshot_retention = true
+publication_write_amplification = true
