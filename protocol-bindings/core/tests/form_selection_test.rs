@@ -556,7 +556,10 @@ fn validates_selected_event_form_with_default_operations() {
         Operation::ReadProperty,
     )
     .unwrap_err();
-    assert!(matches!(err, BindingError::UnsupportedOperation(_)));
+    assert!(matches!(
+        err,
+        BindingError::SelectedFormOperationMismatch(_)
+    ));
 }
 
 #[test]
@@ -608,7 +611,9 @@ fn rejects_selected_affordance_form_when_operation_does_not_match() {
 
     assert_eq!(
         err,
-        BindingError::UnsupportedOperation("Selected form does not support WriteProperty".into())
+        BindingError::SelectedFormOperationMismatch(
+            "Selected form does not support WriteProperty".into()
+        )
     );
 }
 

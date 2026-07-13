@@ -1,6 +1,4 @@
-use alloc::format;
-
-use clinkz_wot_core::{CoreError, CoreResult};
+use clinkz_wot_core::{CoreError, CoreResult, ErrorContext, ErrorPhase, RetryClass};
 use zenoh::qos::{CongestionControl, Priority};
 
 /// Returns true when `value` (after trimming whitespace) case-insensitively
@@ -59,11 +57,8 @@ pub(super) fn parse_congestion_control(value: &str) -> CoreResult<CongestionCont
     }
 }
 
-fn unsupported_metadata(term: &str, value: &str) -> CoreError {
-    CoreError::Transport(format!(
-        "Unsupported zenoh metadata {} value '{}'",
-        term, value
-    ))
+fn unsupported_metadata(_term: &str, _value: &str) -> CoreError {
+    CoreError::Validation(ErrorContext::new(ErrorPhase::Validate, RetryClass::Never))
 }
 
 #[cfg(test)]
@@ -82,12 +77,7 @@ mod tests {
     fn rejects_unknown_qos_metadata() {
         let err = parse_express_qos("guaranteed").unwrap_err();
 
-        assert_eq!(
-            err,
-            CoreError::Transport(
-                "Unsupported zenoh metadata cz-zenoh:qos value 'guaranteed'".into()
-            )
-        );
+        assert_eq!(err, unsupported_metadata("", ""));
     }
 
     #[test]
@@ -129,23 +119,13 @@ mod tests {
     fn rejects_unknown_priority_metadata() {
         let err = parse_priority("urgent").unwrap_err();
 
-        assert_eq!(
-            err,
-            CoreError::Transport(
-                "Unsupported zenoh metadata cz-zenoh:priority value 'urgent'".into()
-            )
-        );
+        assert_eq!(err, unsupported_metadata("", ""));
     }
 
     #[test]
     fn rejects_unknown_congestion_control_metadata() {
         let err = parse_congestion_control("queue").unwrap_err();
 
-        assert_eq!(
-            err,
-            CoreError::Transport(
-                "Unsupported zenoh metadata cz-zenoh:congestionControl value 'queue'".into()
-            )
-        );
+        assert_eq!(err, unsupported_metadata("", ""));
     }
 }

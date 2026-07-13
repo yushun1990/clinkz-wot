@@ -49,7 +49,7 @@ pub use payload::{CodecInput, Payload, PayloadCodec};
 pub use security::{
     AuthMaterial, BasicSecurityProvider, BearerSecurityProvider, CredentialStore, Credentials,
     InMemoryCredentialStore, NoSecurityProvider, Principal, PrincipalId, SecurityContext,
-    SecurityError, SecurityProvider, check_scopes,
+    SecurityProvider, check_scopes,
 };
 pub use status::{
     CleanupHandle, CleanupOperation, CleanupOutcome, CleanupRecord, PendingWork, PendingWorkClass,

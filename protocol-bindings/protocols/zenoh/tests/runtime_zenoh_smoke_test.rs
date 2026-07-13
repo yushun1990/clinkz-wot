@@ -6,7 +6,7 @@ use std::{
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
-use clinkz_wot_core::{CoreError, Payload};
+use clinkz_wot_core::{CoreError, ErrorPhase, Payload, RetryClass};
 use clinkz_wot_protocol_bindings_zenoh::{
     ZenohFormMetadata, ZenohOperationKind, ZenohOperationPlan, ZenohSessionTransport,
     ZenohTransport, ZenohTransportRequest,
@@ -283,7 +283,7 @@ fn runtime_zenoh_subscription_receives_multiple_samples_and_undeclares() {
 }
 
 #[test]
-fn runtime_zenoh_subscription_timeout_maps_to_transport_error() {
+fn runtime_zenoh_subscription_timeout_maps_to_structured_timeout() {
     if !should_run_runtime_tests() {
         return;
     }
@@ -312,10 +312,10 @@ fn runtime_zenoh_subscription_timeout_maps_to_transport_error() {
         .next_timeout(Duration::from_millis(100))
         .expect_err("subscription timeout should map to transport error");
 
-    assert_eq!(
-        error,
-        CoreError::Transport(format!("Zenoh subscription for '{key_expr}' timed out"))
-    );
+    assert!(matches!(error, CoreError::TimedOut(_)));
+    assert_eq!(error.context().phase(), ErrorPhase::Binding);
+    assert_eq!(error.retry_class(), RetryClass::CallerDecision);
+    assert!(error.context().redacted_cause().is_none());
 
     subscription
         .undeclare()
@@ -323,7 +323,7 @@ fn runtime_zenoh_subscription_timeout_maps_to_transport_error() {
 }
 
 #[test]
-fn runtime_zenoh_request_reply_timeout_maps_to_transport_error() {
+fn runtime_zenoh_request_reply_timeout_maps_to_structured_timeout() {
     if !should_run_runtime_tests() {
         return;
     }
@@ -351,10 +351,10 @@ fn runtime_zenoh_request_reply_timeout_maps_to_transport_error() {
         })
         .expect_err("query timeout should map to transport error");
 
-    assert_eq!(
-        error,
-        CoreError::Transport(format!("Zenoh query for '{key_expr}' timed out"))
-    );
+    assert!(matches!(error, CoreError::TimedOut(_)));
+    assert_eq!(error.context().phase(), ErrorPhase::Binding);
+    assert_eq!(error.retry_class(), RetryClass::CallerDecision);
+    assert!(error.context().redacted_cause().is_none());
 }
 
 #[test]

@@ -182,10 +182,10 @@ mod tests {
     use alloc::{string::String, vec, vec::Vec};
     use clinkz_wot_td::security_scheme::{NoSecurityScheme, SecurityScheme};
 
-    use crate::CoreError;
     use crate::TransportRequest;
     use crate::security::SecurityProvider;
-    use crate::security::{Principal, PrincipalId, SecurityContext, SecurityError, check_scopes};
+    use crate::security::{Principal, PrincipalId, SecurityContext, check_scopes};
+    use crate::{ErrorContext, ErrorPhase, RetryClass, SecurityFailureReason};
 
     #[test]
     fn new_request_defaults_to_no_auth_and_empty_correlation() {
@@ -229,17 +229,24 @@ mod tests {
             &self,
             request: &InboundRequest,
             _scheme: &SecurityScheme,
-        ) -> Result<Principal, SecurityError> {
+        ) -> CoreResult<Principal> {
             match &request.auth {
-                None => Err(SecurityError::MissingCredentials),
+                None => Err(security_failure(SecurityFailureReason::MissingCredentials)),
                 Some(AuthMaterial::BearerToken(token)) if token == &self.valid_token => {
                     Ok(Principal {
                         id: PrincipalId::from("caller-1"),
                         scopes: self.principal_scopes.clone(),
                     })
                 }
-                Some(_) => Err(SecurityError::InvalidCredentials),
+                Some(_) => Err(security_failure(SecurityFailureReason::InvalidCredentials)),
             }
+        }
+    }
+
+    fn security_failure(reason: SecurityFailureReason) -> CoreError {
+        CoreError::Security {
+            reason,
+            context: ErrorContext::new(ErrorPhase::Commit, RetryClass::Never),
         }
     }
 
@@ -253,10 +260,7 @@ mod tests {
 
     impl InboundDispatcher for SecureDispatcher<'_> {
         fn dispatch(&self, request: InboundRequest) -> CoreResult<InboundResponse> {
-            let principal = self
-                .provider
-                .verify(&request, &self.scheme)
-                .map_err(CoreError::from)?;
+            let principal = self.provider.verify(&request, &self.scheme)?;
             check_scopes(&self.required_scopes, &principal.scopes)?;
             Ok(InboundResponse::new(
                 InteractionOutput::empty(),
@@ -315,7 +319,10 @@ mod tests {
         let error = dispatcher.dispatch(request_with(None)).unwrap_err();
         assert!(matches!(
             error,
-            CoreError::Security(SecurityError::MissingCredentials)
+            CoreError::Security {
+                reason: SecurityFailureReason::MissingCredentials,
+                ..
+            }
         ));
     }
 
@@ -335,7 +342,10 @@ mod tests {
             .unwrap_err();
         assert!(matches!(
             error,
-            CoreError::Security(SecurityError::InvalidCredentials)
+            CoreError::Security {
+                reason: SecurityFailureReason::InvalidCredentials,
+                ..
+            }
         ));
     }
 
@@ -355,7 +365,10 @@ mod tests {
             .unwrap_err();
         assert!(matches!(
             error,
-            CoreError::Security(SecurityError::ScopeDenied { .. })
+            CoreError::Security {
+                reason: SecurityFailureReason::AuthorizationDenied,
+                ..
+            }
         ));
     }
 }

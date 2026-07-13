@@ -49,7 +49,7 @@ pub mod core {
     pub mod security {
         pub use clinkz_wot_core::{
             AuthMaterial, CredentialStore, Credentials, InMemoryCredentialStore, Principal,
-            PrincipalId, SecurityContext, SecurityError, SecurityProvider, check_scopes,
+            PrincipalId, SecurityContext, SecurityFailureReason, SecurityProvider, check_scopes,
         };
     }
 }

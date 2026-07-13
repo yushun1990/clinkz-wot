@@ -22,9 +22,9 @@ use std::sync::{Arc, Mutex};
 
 use async_trait::async_trait;
 use clinkz_wot_core::{
-    BindingContext, BindingRequest, ClientBinding, CoreError, CoreResult, EventName,
-    InteractionInput, InteractionOptions, InteractionOutput, Payload, ServerBinding, Subscription,
-    SubscriptionGuard, ThingId,
+    BindingContext, BindingRequest, ClientBinding, CoreError, CoreResult, ErrorContext, ErrorPhase,
+    EventName, InteractionInput, InteractionOptions, InteractionOutput, Payload, RetryClass,
+    ServerBinding, Subscription, SubscriptionGuard, ThingId,
 };
 use clinkz_wot_servient::ServientBuilder;
 use clinkz_wot_td::{
@@ -365,7 +365,10 @@ async fn read_all_properties_aggregates_into_json_object() {
             &self,
             _: BindingRequest,
         ) -> Result<(Subscription, Box<dyn SubscriptionGuard>), CoreError> {
-            Err(CoreError::UnsupportedOperation("no streaming".into()))
+            Err(CoreError::UnsupportedOperation(
+                ErrorContext::new(ErrorPhase::Binding, RetryClass::Never)
+                    .with_operation(Operation::SubscribeEvent),
+            ))
         }
     }
 

@@ -8,8 +8,9 @@ use std::sync::{Arc, Mutex};
 use async_trait::async_trait;
 use clinkz_wot_core::{
     AffordanceTarget, BindingContext, BindingRequest, ClientBinding, CoreError, CoreResult,
-    InboundRequest, InboundResponse, InteractionInput, InteractionOptions, InteractionOutput,
-    Payload, PropertyReadHandler, ServerBinding, ThingId,
+    CorrelationId, ErrorPhase, InboundRequest, InboundResponse, InteractionInput,
+    InteractionOptions, InteractionOutput, Payload, PropertyReadHandler, RetryClass, ServerBinding,
+    ThingId,
 };
 use clinkz_wot_servient::ServientBuilder;
 use clinkz_wot_td::{
@@ -129,6 +130,31 @@ async fn produce_expose_registers_and_dispatches() {
 }
 
 #[tokio::test]
+async fn dispatch_to_unavailable_thing_is_a_lifecycle_error() {
+    use clinkz_wot_core::Dispatch;
+
+    let servient = ServientBuilder::new().build().expect("build servient");
+    let mut request = InboundRequest::new(
+        ThingId::from("urn:test:missing"),
+        AffordanceTarget::Property("status".into()),
+        Operation::ReadProperty,
+        InteractionInput::empty(),
+    );
+    request.correlation = CorrelationId::new(19);
+
+    let response = servient.serve_request(request).await;
+
+    assert!(matches!(
+        response.error,
+        Some(CoreError::Lifecycle(context))
+            if context.phase() == ErrorPhase::Selection
+                && context.retry_class() == RetryClass::CallerDecision
+                && context.operation() == Some(Operation::ReadProperty)
+                && context.correlation() == Some(CorrelationId::new(19))
+    ));
+}
+
+#[tokio::test]
 async fn consume_invokes_via_client_binding() {
     let servient = ServientBuilder::new()
         .with_client_binding(Arc::new(EchoClient))
@@ -209,12 +235,18 @@ async fn missing_handler_on_exposed_but_unwired_affordance() {
     let handle = servient.produce(lamp_td()).expect("produce");
     handle.expose().await.expect("expose");
 
-    // No read handler set → MissingHandler (AD14: designed-in semantic for
+    // No read handler set → UnsupportedOperation (designed-in semantic for
     // exposed-but-unwired).
     let err = handle
         .read_property("status", &InteractionInput::empty())
         .unwrap_err();
-    assert!(matches!(err, CoreError::MissingHandler { .. }));
+    assert!(matches!(
+        err,
+        CoreError::UnsupportedOperation(context)
+            if context.phase() == ErrorPhase::Handler
+                && context.retry_class() == RetryClass::Never
+                && context.operation() == Some(Operation::ReadProperty)
+    ));
 }
 
 #[tokio::test]
@@ -442,7 +474,7 @@ async fn deviation_discoverer_is_trait_object() {
 async fn deviation_no_implicit_property_value_store() {
     // §9.4: no implicit server-side property value store. The engine is
     // handler-driven: read_property dispatches to the read handler; an
-    // affordance with no read handler returns MissingHandler.
+    // affordance with no read handler returns UnsupportedOperation.
     let fake_server = Arc::new(FakeServer::default());
     let servient = ServientBuilder::new()
         .with_server_binding(fake_server)
@@ -453,12 +485,18 @@ async fn deviation_no_implicit_property_value_store() {
     let handle = servient.produce(lamp_td()).expect("produce");
     handle.expose().await.expect("expose");
 
-    // No handler set → MissingHandler (handler-driven, no value store).
+    // No handler set → UnsupportedOperation (handler-driven, no value store).
     let err = handle
         .read_property("status", &InteractionInput::empty())
         .unwrap_err();
     assert!(
-        matches!(err, CoreError::MissingHandler { .. }),
+        matches!(
+            err,
+            CoreError::UnsupportedOperation(context)
+                if context.phase() == ErrorPhase::Handler
+                    && context.retry_class() == RetryClass::Never
+                    && context.operation() == Some(Operation::ReadProperty)
+        ),
         "no implicit value store (§9.4)"
     );
 }

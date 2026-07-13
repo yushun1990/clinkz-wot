@@ -24,8 +24,8 @@ pub enum ZenohBindingError {
     /// A TD form target cannot be resolved to a concrete zenoh key expression.
     Target(ResolveFormHrefError),
     /// A structured error from the shared protocol-binding utilities,
-    /// preserved (instead of collapsed to [`Selection`]/`InvalidInteraction`)
-    /// so callers can pattern-match variants like
+    /// preserved instead of being collapsed into a generic binding failure so
+    /// callers can pattern-match variants like
     /// [`BindingError::UnknownAffordance`] downstream.
     Shared(BindingError),
     /// A zenoh extension value is malformed.

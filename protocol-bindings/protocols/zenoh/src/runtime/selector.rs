@@ -1,6 +1,6 @@
-use alloc::{borrow::Cow, collections::BTreeMap, format, string::String};
+use alloc::{borrow::Cow, collections::BTreeMap, string::String};
 
-use clinkz_wot_core::{CoreError, CoreResult};
+use clinkz_wot_core::{CoreError, CoreResult, ErrorContext, ErrorPhase, RetryClass};
 
 pub(super) fn selector_with_parameters<'a>(
     key_expr: &'a str,
@@ -48,10 +48,7 @@ fn selector_parameter_separator(key_expr: &str) -> CoreResult<Option<char>> {
         0 => Ok(Some('?')),
         1 if key_expr.ends_with(['?', ';']) => Ok(None),
         1 => Ok(Some(';')),
-        _ => Err(CoreError::Transport(format!(
-            "Zenoh selector '{}' contains multiple parameter separators",
-            key_expr
-        ))),
+        _ => Err(invalid_selector()),
     }
 }
 
@@ -68,19 +65,18 @@ fn encoded_parameters_len(parameters: &BTreeMap<String, String>) -> usize {
 
 fn validate_selector_parameter(kind: &str, value: &str) -> CoreResult<()> {
     if kind == "key" && value.trim().is_empty() {
-        return Err(CoreError::Transport(
-            "Zenoh selector parameter key must not be empty".into(),
-        ));
+        return Err(invalid_selector());
     }
 
     if value.contains(['?', ';', '=', '|']) {
-        return Err(CoreError::Transport(format!(
-            "Zenoh selector parameter {} '{}' contains a reserved separator",
-            kind, value
-        )));
+        return Err(invalid_selector());
     }
 
     Ok(())
+}
+
+fn invalid_selector() -> CoreError {
+    CoreError::Validation(ErrorContext::new(ErrorPhase::Validate, RetryClass::Never))
 }
 
 #[cfg(test)]
@@ -158,12 +154,7 @@ mod tests {
         )
         .unwrap_err();
 
-        assert_eq!(
-            err,
-            CoreError::Transport(
-                "Zenoh selector 'clinkz/things/lamp/actions/reboot?reply=summary?trace=false' contains multiple parameter separators".into()
-            )
-        );
+        assert_eq!(err, invalid_selector());
     }
 
     #[test]
@@ -183,12 +174,7 @@ mod tests {
         let err =
             selector_with_parameters("clinkz/things/lamp/actions/reboot", &parameters).unwrap_err();
 
-        assert_eq!(
-            err,
-            CoreError::Transport(
-                "Zenoh selector parameter key 'reply;mode' contains a reserved separator".into()
-            )
-        );
+        assert_eq!(err, invalid_selector());
     }
 
     #[test]
@@ -199,10 +185,7 @@ mod tests {
         let err =
             selector_with_parameters("clinkz/things/lamp/actions/reboot", &parameters).unwrap_err();
 
-        assert_eq!(
-            err,
-            CoreError::Transport("Zenoh selector parameter key must not be empty".into())
-        );
+        assert_eq!(err, invalid_selector());
     }
 
     #[test]
@@ -213,10 +196,7 @@ mod tests {
         let err =
             selector_with_parameters("clinkz/things/lamp/actions/reboot", &parameters).unwrap_err();
 
-        assert_eq!(
-            err,
-            CoreError::Transport("Zenoh selector parameter key must not be empty".into())
-        );
+        assert_eq!(err, invalid_selector());
     }
 
     #[test]
@@ -227,12 +207,6 @@ mod tests {
         let err =
             selector_with_parameters("clinkz/things/lamp/actions/reboot", &parameters).unwrap_err();
 
-        assert_eq!(
-            err,
-            CoreError::Transport(
-                "Zenoh selector parameter value 'full;trace=true' contains a reserved separator"
-                    .into()
-            )
-        );
+        assert_eq!(err, invalid_selector());
     }
 }

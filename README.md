@@ -227,8 +227,9 @@ Local dispatch surface on `ExposedThingHandle` (Scripting API §7):
 | subscribe event | `subscribe_event` | `subscribe_event_async` |
 | unsubscribe event | `unsubscribe_event` | `unsubscribe_event_async` |
 
-> Sync dispatch refuses async handlers (returns `MissingHandler`). Use the
-> `*_async` variant when an async handler is registered. See
+> Sync dispatch refuses async handlers (returns structured
+> `UnsupportedOperation` with handler-phase context). Use the `*_async`
+> variant when an async handler is registered. See
 > `docs/design.md` for the current Scripting API posture.
 
 ### 4. Dispatch — binding-owned driving (v4.1 AD56)

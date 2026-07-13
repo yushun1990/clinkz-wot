@@ -5,9 +5,9 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use clinkz_wot_core::{
-    AffordanceTarget, BindingContext, CoreError, EventBroker, EventName, InboundDispatcher,
-    InboundRequest, InboundResponse, InteractionInput, InteractionOutput, Payload, ServerBinding,
-    ThingId,
+    AffordanceTarget, BindingContext, CoreError, ErrorContext, ErrorPhase, EventBroker, EventName,
+    InboundDispatcher, InboundRequest, InboundResponse, InteractionInput, InteractionOutput,
+    Payload, RetryClass, ServerBinding, ThingId,
 };
 use clinkz_wot_protocol_bindings_zenoh::ZenohServerBinding;
 use clinkz_wot_td::data_type::Operation;
@@ -213,10 +213,10 @@ fn runtime_server_binding_error_reply() {
 
     let response = InboundResponse::error(
         request.correlation,
-        CoreError::MissingHandler {
-            target: AffordanceTarget::Thing,
-            operation: Operation::ReadAllProperties,
-        },
+        CoreError::UnsupportedOperation(
+            ErrorContext::new(ErrorPhase::Handler, RetryClass::Never)
+                .with_operation(Operation::ReadAllProperties),
+        ),
     );
     server_binding.send_response(response);
 

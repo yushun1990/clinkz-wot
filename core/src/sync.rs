@@ -19,7 +19,7 @@
 //! On `std`, a panicking thread can poison the inner `RwLock`. Every accessor
 //! heals the poison when observed (via [`RwLockWriteGuard`]'s
 //! `into_inner`/`unwrap_or_else`), so a handler panic never leaves the lock
-//! permanently unusable and no `MapLockError`/`CoreError::Lock` surface exists.
+//! permanently unusable and no public lock-error surface exists.
 //! On `no_std` the critical-section backend cannot poison. This honors the
 //! baseline §4.2 / AD30 contract: locks stay unpoisoned on every build.
 

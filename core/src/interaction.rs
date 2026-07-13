@@ -63,7 +63,7 @@ impl core::fmt::Display for MediaType {
 /// handler to choose an output [`Payload`] content type the client will accept
 /// in a single encode pass. Carries no protocol headers. If the handler ignores
 /// the hint and emits a mismatched type, the edge returns
-/// [`CoreError::ContentTypeMismatch`](crate::CoreError::ContentTypeMismatch)
+/// [`CoreError::Payload`](crate::CoreError::Payload) with codec-phase context
 /// (the engine does not transcode — deviation §9.4).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AcceptHint {
@@ -157,15 +157,15 @@ pub struct InteractionOptions {
     /// URI-template variables to expand into the selected form's target.
     pub uri_variables: BTreeMap<String, String>,
     /// Explicit form index, bypassing binding `supports` selection. A pinned
-    /// form no binding can drive yields
-    /// [`CoreError::UnsupportedForm`](crate::CoreError::UnsupportedForm)
-    /// (baseline §5.1 / AD47).
+    /// form no binding can drive yields a
+    /// [`CoreError::Selection`](crate::CoreError::Selection) with
+    /// `StrictSelectionMismatch` (baseline §5.1 / AD47).
     pub form_index: Option<usize>,
     /// Optional encoded request payload.
     pub data: Option<Payload>,
     /// Outbound timeout. Enforced via build-time cfg (AD39/H2): `std`/embassy
     /// apply it; bare `no_std` without a timer returns
-    /// [`CoreError::TimeoutUnsupported`](crate::CoreError::TimeoutUnsupported)
+    /// [`CoreError::UnsupportedOperation`](crate::CoreError::UnsupportedOperation)
     /// rather than silently ignoring it (AD45).
     pub timeout: Option<Duration>,
 }

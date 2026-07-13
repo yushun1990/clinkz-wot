@@ -36,7 +36,6 @@
 
 use alloc::{
     collections::{BTreeMap, VecDeque},
-    format,
     string::String,
     sync::Arc,
     vec::Vec,
@@ -44,7 +43,7 @@ use alloc::{
 use core::fmt;
 
 use crate::WotLock;
-use crate::{CoreError, CoreResult, Payload, ThingId};
+use crate::{CoreError, CoreResult, ErrorContext, ErrorPhase, Payload, RetryClass, ThingId};
 
 /// Crate-default capacity for a [`Subscription`] queue when none is requested.
 ///
@@ -240,12 +239,11 @@ impl EventBroker {
 
     /// Fans `payload` out to every publisher sink registered for the event.
     ///
-    /// Every sink is attempted even if an earlier one errors. With a single
-    /// failure the structured error is returned as-is; with multiple failures a
-    /// composite [`CoreError::Transport`] surfaces every failure (count +
-    /// joined messages) so partial fan-out is observable instead of silently
-    /// dropping all but the first. Publishing to an unknown Thing or event
-    /// succeeds as a no-op.
+    /// Every sink is attempted even if an earlier one errors. A bounded
+    /// publication failure is returned after fan-out completes; it uses
+    /// [`RetryClass::CallerDecision`] because a failed fan-out may already have
+    /// committed delivery to another sink. Publishing to an unknown Thing or
+    /// event succeeds as a no-op.
     pub fn publish(&self, thing: &ThingId, event: &EventName, payload: &Payload) -> CoreResult<()> {
         // Snapshot the sink list under a brief lock, then fan-out outside the
         // lock so blocking sinks (e.g. zenoh `session.put`) don't hold the
@@ -257,30 +255,19 @@ impl EventBroker {
             return Ok(());
         };
 
-        // Collect every failure so partial fan-out is observable. Returning
-        // only the first error (the previous behavior) silently dropped the
-        // rest, hiding which/how-many subscribers missed the event.
-        let mut errors: Vec<CoreError> = Vec::new();
+        let mut failed = false;
         for sink in snapshot.iter() {
-            if let Err(err) = sink.publish(payload) {
-                errors.push(err);
+            if sink.publish(payload).is_err() {
+                failed = true;
             }
         }
-        match errors.len() {
-            0 => Ok(()),
-            1 => Err(errors
-                .into_iter()
-                .next()
-                .expect("exactly one error recorded")),
-            count => Err(CoreError::Transport(format!(
-                "Event fan-out failed for {count} of {} subscriber(s): {}",
-                snapshot.len(),
-                errors
-                    .iter()
-                    .map(|err| format!("{err}"))
-                    .collect::<Vec<_>>()
-                    .join("; ")
-            ))),
+        if failed {
+            Err(CoreError::Binding(ErrorContext::new(
+                ErrorPhase::Delivery,
+                RetryClass::CallerDecision,
+            )))
+        } else {
+            Ok(())
         }
     }
 }
@@ -879,7 +866,7 @@ mod tests {
     use alloc::{string::String, string::ToString, vec, vec::Vec};
     use std::sync::{Arc, Mutex};
 
-    use crate::{CoreError, CoreResult, Payload, ThingId};
+    use crate::{CoreError, CoreResult, ErrorContext, ErrorPhase, Payload, RetryClass, ThingId};
 
     fn payload(body: &[u8]) -> Payload {
         Payload::new(body.to_vec(), "application/octet-stream")
@@ -923,7 +910,10 @@ mod tests {
 
     impl PublisherSink for FailingSink {
         fn publish(&self, _: &Payload) -> CoreResult<()> {
-            Err(CoreError::Transport("publish failed".into()))
+            Err(CoreError::Binding(ErrorContext::new(
+                ErrorPhase::Delivery,
+                RetryClass::Safe,
+            )))
         }
     }
 
@@ -977,7 +967,7 @@ mod tests {
     }
 
     #[test]
-    fn publish_continues_after_sink_error_and_returns_first_error() {
+    fn publish_continues_after_sink_error_and_requires_caller_retry_decision() {
         let broker = EventBroker::new();
         let rec = Recorder::new();
         // Failing sink registered first; the recorder must still receive.
@@ -989,15 +979,16 @@ mod tests {
             &EventName::from("update"),
             &payload(&[9]),
         );
-        assert!(result.is_err());
+        assert!(matches!(result, Err(CoreError::Binding(context))
+            if context.phase() == ErrorPhase::Delivery
+                && context.retry_class() == RetryClass::CallerDecision));
         assert_eq!(rec.bodies(), vec![vec![9]]);
     }
 
     #[test]
-    fn publish_aggregates_multiple_sink_failures() {
+    fn publish_returns_a_bounded_failure_after_attempting_all_sinks() {
         let broker = EventBroker::new();
-        // Two failing subscribers: partial fan-out must surface every failure,
-        // not just the first.
+        // The public error remains bounded even when multiple subscribers fail.
         broker.register("urn:t:1", "update", FailingSink);
         broker.register("urn:t:1", "update", FailingSink);
 
@@ -1008,19 +999,9 @@ mod tests {
                 &payload(&[1]),
             )
             .expect_err("two failing sinks must surface an error");
-
-        let message = match &err {
-            CoreError::Transport(message) => message,
-            other => panic!("expected composite Transport error, got {other:?}"),
-        };
-        assert!(
-            message.contains("2 of 2 subscriber(s)"),
-            "expected failure count, message was: {message}"
-        );
-        assert!(
-            message.matches("publish failed").count() == 2,
-            "expected both failures joined, message was: {message}"
-        );
+        assert!(matches!(err, CoreError::Binding(context)
+            if context.phase() == ErrorPhase::Delivery
+                && context.retry_class() == RetryClass::CallerDecision));
     }
 
     #[test]

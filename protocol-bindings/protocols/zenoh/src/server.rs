@@ -14,15 +14,14 @@
 //! | `subscribeevent`         | `PublisherSink` → `session.put` |
 //!
 //! Event and observable-property publishing is wired through the shared
-//! [`EventBroker`]: at `register_thing` time the binding registers a
+//! [`EventBroker`]: when [`ServerBinding::serve`] is called, the binding registers a
 //! [`ZenohPublisherSink`] for each event/observe key expression. When
 //! `emit_event` or `observe_property` pushes a payload through the broker, the
 //! sink calls `session.put` on the matching zenoh key expression, delivering
 //! the sample to every remote subscriber.
 //!
-//! Route lifecycle is driven by the Servient: [`ServerBinding::register_thing`]
-//! is called during `expose`, [`ServerBinding::unregister_thing`] during
-//! `destroy`.
+//! Route lifecycle is driven by the Servient: [`ServerBinding::serve`] is
+//! called during exposure and [`ServerBinding::shutdown`] during destruction.
 
 use std::collections::{BTreeMap, HashMap, VecDeque};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
@@ -36,8 +35,9 @@ use alloc::vec::Vec;
 
 use clinkz_wot_core::identity::CorrelationId;
 use clinkz_wot_core::{
-    AffordanceTarget, AuthMaterial, CoreError, EventBroker, InboundRequest, InboundResponse,
-    InteractionInput, Payload, PublisherSink, ServerBinding, ThingId,
+    AffordanceTarget, AuthMaterial, CoreError, CoreResult, ErrorContext, ErrorPhase, EventBroker,
+    InboundRequest, InboundResponse, InteractionInput, Payload, PublisherSink, RetryClass,
+    ServerBinding, ThingId,
 };
 use clinkz_wot_td::data_type::Operation;
 use clinkz_wot_td::form::Form;
@@ -143,9 +143,9 @@ const REPLY_TARGET_TTL: Duration = Duration::from_secs(30);
 /// Minimum interval between reply-target TTL sweeps.
 ///
 /// The sweep only reclaims abandoned entries (handlers that never sent a
-/// response) — normal requests are removed eagerly via [`ServerBinding::send_response`],
-/// so abandoned entries are rare. The synchronous driving loop polls
-/// [`ServerBinding::poll_accept_sync`] roughly every millisecond; running an
+/// response) — normal requests are removed eagerly via
+/// [`ServerBinding::send_response`], so abandoned entries are rare.
+/// Poll-driven hosts call [`ServerBinding::try_accept`] frequently; running an
 /// O(n) full-table scan on every poll is wasteful. Throttling the sweep to at
 /// most once per `SWEEP_INTERVAL` still reclaims leaked zenoh resources well
 /// within `REPLY_TARGET_TTL` while keeping the hot poll path cheap.
@@ -177,9 +177,8 @@ trait RouteHandle: Send {
     ///
     /// This blocks the calling thread until zenoh acknowledges the
     /// undeclaration. Route cleanup is normally driven explicitly via
-    /// [`ZenohServerBinding::unregister_thing`] (called from
-    /// [`ServerBinding::unregister_thing`]); no `Drop` impl on the server
-    /// binding relies on this path.
+    /// [`ServerBinding::shutdown`]; no `Drop` impl on the server binding relies
+    /// on this path.
     fn undeclare_boxed(self: Box<Self>);
 }
 
@@ -272,12 +271,10 @@ impl ServerState {
 /// Zenoh server binding sharing a [`zenoh::Session`] for both inbound serving
 /// and outbound interactions (baseline v3.0 §1, §13).
 ///
-/// During `Servient::expose` the Servient calls [`ServerBinding::register_thing`]
-/// for each Thing, causing zenoh queryables and put-listeners to be declared on
-/// the shared session. The Servient driving loop polls
-/// [`poll_accept_sync`](ServerBinding::poll_accept_sync) to drain inbound
-/// requests; responses are written back via
-/// [`send_response`](ServerBinding::send_response).
+/// During exposure the Servient calls [`ServerBinding::serve`] for each Thing,
+/// causing zenoh queryables and put-listeners to be declared on the shared
+/// session. Poll-driven hosts use [`ServerBinding::try_accept`] to drain inbound
+/// requests; responses are written back via [`ServerBinding::send_response`].
 pub struct ZenohServerBinding {
     session: zenoh::Session,
     routes: Arc<Mutex<BTreeMap<ThingId, ThingRoutes>>>,
@@ -403,11 +400,11 @@ impl ServerBinding for ZenohServerBinding {
 
         // Declare routes (was v4.0 register_thing()).
         let id_str = thing_id.as_str();
-        let routes = plan_inbound_routes(id_str, td).map_err(CoreError::InvalidInteraction)?;
+        let routes = plan_inbound_routes(id_str, td)?;
         let broker = self
             .event_broker
             .lock()
-            .map_err(|e| CoreError::InvalidInteraction(e.to_string()))?
+            .map_err(|_| internal_error(ErrorPhase::Prepare))?
             .clone();
         let mut by_affordance: ThingRoutes = BTreeMap::new();
 
@@ -422,14 +419,14 @@ impl ServerBinding for ZenohServerBinding {
                     for (_, declared) in by_affordance {
                         undeclare_routes(declared);
                     }
-                    return Err(CoreError::InvalidInteraction(err));
+                    return Err(err);
                 }
             }
         }
 
         self.routes
             .lock()
-            .map_err(|e| CoreError::InvalidInteraction(e.to_string()))?
+            .map_err(|_| internal_error(ErrorPhase::Commit))?
             .insert(thing_id.clone(), by_affordance);
 
         // Spawn the draining task on the first serve (closes the v4.0
@@ -545,7 +542,7 @@ impl ZenohServerBinding {
         route: PlannedRoute,
         thing_id: &str,
         broker: &Option<EventBroker>,
-    ) -> Result<Option<DeclaredRoute>, String> {
+    ) -> CoreResult<Option<DeclaredRoute>> {
         match route.kind {
             RouteKind::Queryable { key_expr } => {
                 let _pending = Arc::clone(&self.pending);
@@ -588,7 +585,7 @@ impl ZenohServerBinding {
                         }
                     })
                     .wait()
-                    .map_err(|err| format!("zenoh queryable declaration failed: {err}"))?;
+                    .map_err(|_| binding_error(ErrorPhase::Prepare))?;
                 Ok(Some(DeclaredRoute::Queryable(Box::new(queryable))))
             }
             RouteKind::PutListener { key_expr } => {
@@ -627,7 +624,7 @@ impl ZenohServerBinding {
                         }
                     })
                     .wait()
-                    .map_err(|err| format!("zenoh put-listener declaration failed: {err}"))?;
+                    .map_err(|_| binding_error(ErrorPhase::Prepare))?;
                 Ok(Some(DeclaredRoute::PutListener(Box::new(subscriber))))
             }
             RouteKind::Publisher { key_expr } => {
@@ -992,11 +989,11 @@ struct PlannedRoute {
     kind: RouteKind,
 }
 
-fn plan_inbound_routes(thing_id: &str, td: &Thing) -> Result<Vec<PlannedRoute>, String> {
+fn plan_inbound_routes(thing_id: &str, td: &Thing) -> CoreResult<Vec<PlannedRoute>> {
     let mut routes = Vec::new();
 
     for (target, operation, form, zenoh_target) in
-        iter_zenoh_affordance_forms(td).map_err(|e| e.to_string())?
+        iter_zenoh_affordance_forms(td).map_err(|_| validation_error())?
     {
         if let Some(route) =
             build_planned_route(thing_id, td, target, operation, form, zenoh_target)?
@@ -1017,13 +1014,13 @@ fn build_planned_route(
     operation: Operation,
     form: &Form,
     zenoh_target: ZenohFormTarget,
-) -> Result<Option<PlannedRoute>, String> {
+) -> CoreResult<Option<PlannedRoute>> {
     let plan = ZenohOperationPlan {
         transport: zenoh_target.transport,
         authority: zenoh_target.authority,
         key_expr: zenoh_target.key_expr,
         kind: zenoh_operation_kind(operation),
-        metadata: extract_zenoh_metadata(form).map_err(|e| e.to_string())?,
+        metadata: extract_zenoh_metadata(form).map_err(|_| validation_error())?,
     };
 
     let meta = RouteMeta {
@@ -1156,9 +1153,8 @@ fn io_error(err: impl std::fmt::Display) -> std::io::Error {
 
 /// [`PublisherSink`] that publishes event payloads to a zenoh key expression.
 ///
-/// Registered with the [`EventBroker`] during
-/// [`ZenohServerBinding::register_thing`] for each event and observable
-/// property form. When the broker fans out a payload, the sink calls
+/// Registered with the [`EventBroker`] during [`ServerBinding::serve`] for each
+/// event and observable property form. When the broker fans out a payload, the sink calls
 /// `session.put` on its key expression, delivering the sample to every remote
 /// zenoh subscriber.
 struct ZenohPublisherSink {
@@ -1176,6 +1172,18 @@ impl PublisherSink for ZenohPublisherSink {
         }
         builder
             .wait()
-            .map_err(|e| clinkz_wot_core::CoreError::Transport(e.to_string()))
+            .map_err(|_| binding_error(ErrorPhase::Delivery))
     }
+}
+
+fn validation_error() -> CoreError {
+    CoreError::Validation(ErrorContext::new(ErrorPhase::Validate, RetryClass::Never))
+}
+
+fn binding_error(phase: ErrorPhase) -> CoreError {
+    CoreError::Binding(ErrorContext::new(phase, RetryClass::CallerDecision))
+}
+
+fn internal_error(phase: ErrorPhase) -> CoreError {
+    CoreError::InternalInvariant(ErrorContext::new(phase, RetryClass::Never))
 }

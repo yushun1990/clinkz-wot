@@ -1,8 +1,10 @@
+#![cfg(feature = "async")]
+
 use std::sync::Arc;
 
 use clinkz_wot_core::{
-    AffordanceTarget, BindingRequest, ClientBinding, CoreError, CoreResult, InteractionInput,
-    InteractionOutput, Payload,
+    AffordanceTarget, BindingRequest, ClientBinding, CoreResult, ErrorPhase, InteractionInput,
+    InteractionOutput, Payload, RetryClass, SelectionFailureReason,
 };
 use clinkz_wot_protocol_bindings::{AffordanceRef, FormSelectionCriteria};
 use clinkz_wot_protocol_bindings_zenoh::{
@@ -283,14 +285,8 @@ async fn shared_transport_reuses_underlying_runtime_state() {
         .await
         .unwrap();
 
-    assert_eq!(
-        first.data.unwrap().body.as_ref(),
-        b"1:things/lamp/status"
-    );
-    assert_eq!(
-        second.data.unwrap().body.as_ref(),
-        b"2:things/lamp/status"
-    );
+    assert_eq!(first.data.unwrap().body.as_ref(), b"1:things/lamp/status");
+    assert_eq!(second.data.unwrap().body.as_ref(), b"2:things/lamp/status");
     assert_eq!(
         shared
             .inner()
@@ -329,9 +325,11 @@ async fn runtime_binding_rejects_form_that_does_not_support_requested_operation(
         .unwrap_err();
 
     assert_eq!(
-        err,
-        CoreError::UnsupportedOperation("Selected form does not support WriteProperty".into())
+        err.selection_reason(),
+        Some(SelectionFailureReason::StrictSelectionMismatch),
     );
+    assert_eq!(err.context().phase(), ErrorPhase::Selection);
+    assert_eq!(err.retry_class(), RetryClass::Never);
 }
 
 #[tokio::test]
@@ -363,10 +361,7 @@ async fn plans_zenoh_affordance_operation_from_matching_form() {
     assert_eq!(plan.affordance, AffordanceRef::Property("status"));
     assert_eq!(plan.form_index, 1);
     assert_eq!(plan.operation.kind, ZenohOperationKind::Query);
-    assert_eq!(
-        plan.operation.key_expr,
-        "things/lamp/properties/status"
-    );
+    assert_eq!(plan.operation.key_expr, "things/lamp/properties/status");
     assert_eq!(
         plan.operation.metadata.content_type.as_deref(),
         Some("application/json")
@@ -548,10 +543,7 @@ async fn plans_relative_href_against_zenoh_base() {
     )
     .unwrap();
 
-    assert_eq!(
-        plan.operation.key_expr,
-        "things/lamp/properties/status"
-    );
+    assert_eq!(plan.operation.key_expr, "things/lamp/properties/status");
     assert_eq!(plan.operation.kind, ZenohOperationKind::Query);
 }
 
@@ -583,7 +575,7 @@ async fn rejects_relative_href_when_base_is_invalid() {
 }
 
 #[tokio::test]
-async fn runtime_binding_reports_invalid_interaction_for_unresolvable_target() {
+async fn runtime_binding_reports_selection_failure_for_unresolvable_target() {
     let form = Form::read_property("properties/status").build().unwrap();
     let property = PropertyAffordance::builder(DataSchema::String(DataSchema::string().build()))
         .form(form.clone())
@@ -609,13 +601,13 @@ async fn runtime_binding_reports_invalid_interaction_for_unresolvable_target() {
         .await
         .unwrap_err();
 
-    match err {
-        CoreError::InvalidInteraction(message) => {
-            assert!(message.contains("Cannot resolve form href"));
-            assert!(message.contains("URI template base"));
-        }
-        other => panic!("expected invalid interaction error, got {:?}", other),
-    }
+    assert_eq!(
+        err.selection_reason(),
+        Some(SelectionFailureReason::TargetResolutionFailed),
+    );
+    assert_eq!(err.context().phase(), ErrorPhase::Selection);
+    assert_eq!(err.retry_class(), RetryClass::Never);
+    assert!(err.context().redacted_cause().is_none());
 }
 
 #[tokio::test]

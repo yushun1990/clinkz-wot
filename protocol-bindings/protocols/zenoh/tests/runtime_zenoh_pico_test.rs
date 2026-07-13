@@ -2,7 +2,7 @@
 
 use std::time::Duration;
 
-use clinkz_wot_core::{CoreError, Payload};
+use clinkz_wot_core::{CoreError, ErrorPhase, Payload, RetryClass};
 use clinkz_wot_protocol_bindings_zenoh::{
     ZenohFormMetadata, ZenohOperationKind, ZenohOperationPlan, ZenohPicoError, ZenohPicoErrorKind,
     ZenohPicoPlatform, ZenohPicoRequest, ZenohPicoTransport, ZenohTransport, ZenohTransportRequest,
@@ -75,7 +75,7 @@ impl FakePicoPlatform {
 
 #[test]
 fn pico_transport_routes_put_and_query_requests_to_platform_hooks() {
-    let mut transport = ZenohPicoTransport::new(FakePicoPlatform {
+    let transport = ZenohPicoTransport::new(FakePicoPlatform {
         query_reply: Some(Payload::new(b"query-reply".to_vec(), "text/plain")),
         ..Default::default()
     })
@@ -84,6 +84,8 @@ fn pico_transport_routes_put_and_query_requests_to_platform_hooks() {
     let put = transport
         .execute(ZenohTransportRequest {
             plan: std::sync::Arc::new(ZenohOperationPlan {
+                transport: "serial".into(),
+                authority: "embedded".into(),
                 key_expr: "clinkz/things/lamp/status".into(),
                 kind: ZenohOperationKind::Put,
                 metadata: ZenohFormMetadata {
@@ -96,13 +98,15 @@ fn pico_transport_routes_put_and_query_requests_to_platform_hooks() {
         })
         .unwrap();
 
-    assert!(put.payload.is_none());
+    assert!(put.data.is_none());
 
     let mut query_parameters = std::collections::BTreeMap::new();
     query_parameters.insert("trace".into(), "full".into());
     let query = transport
         .execute(ZenohTransportRequest {
             plan: std::sync::Arc::new(ZenohOperationPlan {
+                transport: "serial".into(),
+                authority: "embedded".into(),
                 key_expr: "clinkz/things/lamp/status".into(),
                 kind: ZenohOperationKind::RequestReply,
                 metadata: ZenohFormMetadata::default(),
@@ -112,7 +116,7 @@ fn pico_transport_routes_put_and_query_requests_to_platform_hooks() {
         })
         .unwrap();
 
-    assert_eq!(query.payload.unwrap().body.as_ref(), b"query-reply");
+    assert_eq!(query.data.unwrap().body.as_ref(), b"query-reply");
     assert_eq!(
         transport
             .platform()
@@ -128,7 +132,7 @@ fn pico_transport_routes_put_and_query_requests_to_platform_hooks() {
 
 #[test]
 fn pico_transport_routes_subscription_lifecycle_hooks() {
-    let mut transport = ZenohPicoTransport::new(FakePicoPlatform {
+    let transport = ZenohPicoTransport::new(FakePicoPlatform {
         subscription_reply: Some(Payload::new(b"event".to_vec(), "text/plain")),
         ..Default::default()
     });
@@ -136,6 +140,8 @@ fn pico_transport_routes_subscription_lifecycle_hooks() {
     let subscribed = transport
         .execute(ZenohTransportRequest {
             plan: std::sync::Arc::new(ZenohOperationPlan {
+                transport: "serial".into(),
+                authority: "embedded".into(),
                 key_expr: "clinkz/things/lamp/events/status".into(),
                 kind: ZenohOperationKind::Subscribe,
                 metadata: ZenohFormMetadata::default(),
@@ -147,6 +153,8 @@ fn pico_transport_routes_subscription_lifecycle_hooks() {
     let unsubscribed = transport
         .execute(ZenohTransportRequest {
             plan: std::sync::Arc::new(ZenohOperationPlan {
+                transport: "serial".into(),
+                authority: "embedded".into(),
                 key_expr: "clinkz/things/lamp/events/status".into(),
                 kind: ZenohOperationKind::Unsubscribe,
                 metadata: ZenohFormMetadata::default(),
@@ -156,8 +164,8 @@ fn pico_transport_routes_subscription_lifecycle_hooks() {
         })
         .unwrap();
 
-    assert_eq!(subscribed.payload.unwrap().body.as_ref(), b"event");
-    assert!(unsubscribed.payload.is_none());
+    assert_eq!(subscribed.data.unwrap().body.as_ref(), b"event");
+    assert!(unsubscribed.data.is_none());
     assert_eq!(
         transport
             .platform()
@@ -173,7 +181,7 @@ fn pico_transport_routes_subscription_lifecycle_hooks() {
 
 #[test]
 fn pico_transport_maps_platform_errors_and_timeouts() {
-    let mut failing = ZenohPicoTransport::new(FakePicoPlatform {
+    let failing = ZenohPicoTransport::new(FakePicoPlatform {
         fail_next: Some(ZenohPicoError::with_code(-7, "platform rejected put")),
         ..Default::default()
     });
@@ -181,6 +189,8 @@ fn pico_transport_maps_platform_errors_and_timeouts() {
     let err = failing
         .execute(ZenohTransportRequest {
             plan: std::sync::Arc::new(ZenohOperationPlan {
+                transport: "serial".into(),
+                authority: "embedded".into(),
                 key_expr: "clinkz/things/lamp/status".into(),
                 kind: ZenohOperationKind::Put,
                 metadata: ZenohFormMetadata::default(),
@@ -190,10 +200,33 @@ fn pico_transport_maps_platform_errors_and_timeouts() {
         })
         .unwrap_err();
 
-    assert_eq!(
-        err,
-        CoreError::Transport("zenoh-pico status -7: platform rejected put".into())
-    );
+    assert!(matches!(err, CoreError::Binding(_)));
+    assert_eq!(err.context().phase(), ErrorPhase::Binding);
+    assert_eq!(err.retry_class(), RetryClass::CallerDecision);
+    assert!(err.context().redacted_cause().is_none());
+    assert!(!format!("{err:?}").contains("platform rejected put"));
+
+    let rejected = ZenohPicoTransport::new(FakePicoPlatform {
+        fail_next: Some(ZenohPicoError::invalid_request("private request detail")),
+        ..Default::default()
+    });
+    let err = rejected
+        .execute(ZenohTransportRequest {
+            plan: std::sync::Arc::new(ZenohOperationPlan {
+                transport: "serial".into(),
+                authority: "embedded".into(),
+                key_expr: "clinkz/things/lamp/status".into(),
+                kind: ZenohOperationKind::Put,
+                metadata: ZenohFormMetadata::default(),
+            }),
+            payload: None,
+            parameters: Default::default(),
+        })
+        .unwrap_err();
+    assert!(matches!(err, CoreError::Validation(_)));
+    assert_eq!(err.context().phase(), ErrorPhase::Validate);
+    assert_eq!(err.retry_class(), RetryClass::Never);
+    assert!(!format!("{err:?}").contains("private request detail"));
 
     let timeout = ZenohPicoError::timeout("query", "clinkz/things/lamp/status");
     assert_eq!(timeout.kind(), ZenohPicoErrorKind::Timeout);
@@ -204,10 +237,12 @@ fn pico_transport_maps_platform_errors_and_timeouts() {
         "Zenoh-pico query for 'clinkz/things/lamp/status' timed out"
     );
 
-    let mut timing_out = ZenohPicoTransport::new(FakePicoPlatform::default());
+    let timing_out = ZenohPicoTransport::new(FakePicoPlatform::default());
     let err = timing_out
         .execute(ZenohTransportRequest {
             plan: std::sync::Arc::new(ZenohOperationPlan {
+                transport: "serial".into(),
+                authority: "embedded".into(),
                 key_expr: "clinkz/things/lamp/status".into(),
                 kind: ZenohOperationKind::Query,
                 metadata: ZenohFormMetadata::default(),
@@ -217,10 +252,10 @@ fn pico_transport_maps_platform_errors_and_timeouts() {
         })
         .unwrap_err();
 
-    assert_eq!(
-        err,
-        CoreError::Transport("Zenoh-pico query for 'clinkz/things/lamp/status' timed out".into())
-    );
+    assert!(matches!(err, CoreError::TimedOut(_)));
+    assert_eq!(err.context().phase(), ErrorPhase::Binding);
+    assert_eq!(err.retry_class(), RetryClass::CallerDecision);
+    assert!(err.context().redacted_cause().is_none());
 }
 
 #[test]
@@ -296,8 +331,5 @@ fn pico_request_rejects_invalid_selector_parameters() {
     let err = request.selector().unwrap_err();
     assert_eq!(err.kind(), ZenohPicoErrorKind::Request);
     assert_eq!(err.code(), None);
-    assert_eq!(
-        err.message(),
-        "Zenoh selector parameter key 'reply;mode' contains a reserved separator"
-    );
+    assert_eq!(err.message(), "invalid zenoh selector parameters");
 }

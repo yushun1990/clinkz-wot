@@ -1,19 +1,18 @@
-//! Unified error tree: structured conversions, predicates, and source chains.
+//! Unified error tree: structured conversions, typed accessors, and source chains.
 //!
 //! Verifies:
-//! - `From<BindingError> for CoreError` preserves structural variants
-//!   (`UnknownAffordance`, `UnsupportedOperation`) and funnels the rest
-//!   through `InvalidInteraction` with verbatim Display text.
+//! - `From<BindingError> for CoreError` maps binding failures into the bounded
+//!   core taxonomy without retaining arbitrary error strings.
 //! - `From<BindingError> for ServientError` keeps the original `BindingError`
 //!   typed payload intact (no lossy collapse).
-//! - `ServientError` predicates (`is_missing_handler`, `is_security`,
-//!   `is_timeout`, `is_discovery`, `is_binding`) and accessors
-//!   (`as_core`, `as_binding`, `as_discovery`).
+//! - `ServientError` typed accessors preserve their wrapped values.
 //! - `ServientError::source()` chains walk through to wrapped errors.
 
 #![cfg(feature = "std")]
 
-use clinkz_wot_core::{AffordanceKind, CoreError, SecurityError};
+use clinkz_wot_core::{
+    AffordanceKind, CoreError, ErrorContext, ErrorPhase, RetryClass, SelectionFailureReason,
+};
 use clinkz_wot_discovery::DiscoveryError;
 use clinkz_wot_protocol_bindings::BindingError;
 use clinkz_wot_servient::ServientError;
@@ -31,47 +30,55 @@ fn binding_error_unknown_affordance_maps_structurally_to_core_error() {
     assert!(
         matches!(
             core_err,
-            CoreError::UnknownAffordance {
-                kind: AffordanceKind::Property,
+            CoreError::Selection {
+                reason: SelectionFailureReason::AffordanceMissing,
                 ..
             }
         ),
-        "UnknownAffordance should map structurally, got {core_err:?}"
+        "unknown affordance should retain its selection category, got {core_err:?}"
     );
 }
 
 #[test]
-fn binding_error_unsupported_operation_maps_structurally_to_core_error() {
+fn binding_error_unsupported_operation_maps_to_selection_reason() {
     let binding_err = BindingError::UnsupportedOperation("readproperty".into());
     let core_err: CoreError = binding_err.into();
     assert!(
-        matches!(core_err, CoreError::UnsupportedOperation(_)),
-        "UnsupportedOperation should map structurally, got {core_err:?}"
+        matches!(
+            core_err,
+            CoreError::Selection {
+                reason: SelectionFailureReason::NoFormSupportsOperation,
+                ..
+            }
+        ),
+        "unsupported binding operation should remain a selection failure, got {core_err:?}"
     );
 }
 
 #[test]
-fn binding_error_metadata_mismatch_funnels_through_invalid_interaction() {
+fn binding_error_metadata_mismatch_maps_to_selection() {
     let binding_err = BindingError::MetadataMismatch("cz-zenoh:qos missing".into());
     let core_err: CoreError = binding_err.into();
-    let message = match core_err {
-        CoreError::InvalidInteraction(msg) => msg,
-        ref other => panic!("expected InvalidInteraction, got {other:?}"),
-    };
     assert!(
-        message.contains("cz-zenoh:qos missing"),
-        "Display text should be preserved verbatim, got: {message}"
+        matches!(core_err, CoreError::Selection { .. }),
+        "metadata mismatch should remain a selection failure, got {core_err:?}"
     );
 }
 
 #[test]
-fn binding_error_target_resolution_funnels_through_invalid_interaction() {
+fn binding_error_target_resolution_maps_structurally_to_selection() {
     let inner = ResolveFormHrefError::Resolve("rfc3986 failure".into());
     let binding_err = BindingError::TargetResolution(inner);
     let core_err: CoreError = binding_err.into();
     assert!(
-        matches!(core_err, CoreError::InvalidInteraction(_)),
-        "TargetResolution should funnel through InvalidInteraction, got {core_err:?}"
+        matches!(
+            core_err,
+            CoreError::Selection {
+                reason: SelectionFailureReason::TargetResolutionFailed,
+                ..
+            }
+        ),
+        "target resolution should retain its structured reason, got {core_err:?}"
     );
 }
 
@@ -92,34 +99,21 @@ fn binding_error_into_servient_error_preserves_typed_payload() {
         "ServientError should preserve the FormNotInAffordance payload"
     );
     assert!(servient_err.is_binding());
-    assert!(!servient_err.is_missing_handler());
 }
 
-// --- ServientError predicates + accessors ----------------------------------
+// --- ServientError typed accessors -----------------------------------------
 
 #[test]
-fn is_missing_handler_detects_serve_missing_handler() {
-    let err = ServientError::Serve(CoreError::MissingHandler {
-        target: clinkz_wot_core::AffordanceTarget::Property("temperature".into()),
-        operation: Operation::ReadProperty,
-    });
-    assert!(err.is_missing_handler());
-    assert!(err.as_core().is_some());
+fn as_core_preserves_structured_handler_error() {
+    let err = ServientError::Serve(CoreError::UnsupportedOperation(
+        ErrorContext::new(ErrorPhase::Handler, RetryClass::Never)
+            .with_operation(Operation::ReadProperty),
+    ));
+    let core = err.as_core().expect("serve error retains the core value");
+    assert!(matches!(core, CoreError::UnsupportedOperation(_)));
+    assert_eq!(core.context().phase(), ErrorPhase::Handler);
+    assert_eq!(core.context().operation(), Some(Operation::ReadProperty));
     assert!(err.as_binding().is_none());
-}
-
-#[test]
-fn is_security_detects_serve_security_variants() {
-    let err = ServientError::Serve(CoreError::Security(SecurityError::MissingCredentials));
-    assert!(err.is_security());
-}
-
-#[test]
-fn is_timeout_detects_timeout_and_timeout_unsupported() {
-    let timeout = ServientError::Serve(CoreError::Timeout);
-    let unsupported = ServientError::Serve(CoreError::TimeoutUnsupported);
-    assert!(timeout.is_timeout());
-    assert!(unsupported.is_timeout());
 }
 
 #[test]
@@ -159,7 +153,10 @@ fn lifecycle_variants_have_no_core_binding_discovery_payload() {
 
 #[test]
 fn servient_error_source_walks_through_to_wrapped_core_error() {
-    let core = CoreError::Payload("decode failed".into());
+    let core = CoreError::Payload(
+        ErrorContext::new(ErrorPhase::Codec, RetryClass::Never)
+            .with_redacted_cause(1, "decode failed"),
+    );
     let servient_err: ServientError = core.into();
     let source = std::error::Error::source(&servient_err);
     assert!(

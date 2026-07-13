@@ -3,6 +3,10 @@ name = "clinkz-wot-protocol-bindings-zenoh"
 version.workspace = true
 edition.workspace = true
 
+[lints.clippy]
+# CoreError is an exact allocation-free no_std schema and remains inline at this binding boundary.
+result_large_err = "allow"
+
 [dependencies]
 clinkz-wot-core = { path = "../../../core", default-features = false }
 clinkz-wot-protocol-bindings = { path = "../../core", default-features = false }

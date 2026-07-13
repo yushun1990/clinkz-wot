@@ -12,11 +12,12 @@ use alloc::{
 
 use clinkz_wot_core::{
     ActionCancelHandler, ActionHandler, ActionQueryHandler, AffordanceTarget, CancelSlot,
-    ConsumedThing, CoreError, CoreResult, EventName, EventStream, EventSubscribeHandler,
-    EventUnsubscribeHandler, InteractionInput, InteractionOptions, InteractionOutput, InvokeSlot,
-    ObserveSlot, Payload, PropertyObserveHandler, PropertyReadHandler, PropertyUnobserveHandler,
-    PropertyWriteHandler, PushFn, QuerySlot, ReadSlot, SubscribeSlot, Subscription,
-    SubscriptionGuard, ThingId, UnobserveSlot, UnsubscribeSlot, WotLock, WriteSlot,
+    ConsumedThing, CoreError, CoreResult, ErrorContext, ErrorPhase, EventName, EventStream,
+    EventSubscribeHandler, EventUnsubscribeHandler, InteractionInput, InteractionOptions,
+    InteractionOutput, InvokeSlot, ObserveSlot, Payload, PropertyObserveHandler,
+    PropertyReadHandler, PropertyUnobserveHandler, PropertyWriteHandler, PushFn, QuerySlot,
+    ReadSlot, RetryClass, SelectionFailureReason, SubscribeSlot, Subscription, SubscriptionGuard,
+    ThingId, UnobserveSlot, UnsubscribeSlot, WotLock, WriteSlot,
 };
 #[cfg(feature = "async")]
 use clinkz_wot_core::{
@@ -305,7 +306,7 @@ impl ExposedThingHandle {
     }
 
     /// Queries an action's state locally (TD 1.1 `queryaction`). Returns
-    /// `MissingHandler` when no query handler is registered for `name` or
+    /// `UnsupportedOperation` when no query handler is registered for `name` or
     /// when only an async handler is registered (sync dispatch cannot drive
     /// async handlers — use [`Self::query_action_async`] for those).
     pub fn query_action(
@@ -317,7 +318,7 @@ impl ExposedThingHandle {
     }
 
     /// Cancels an in-flight action locally (TD 1.1 `cancelaction`). Returns
-    /// `MissingHandler` for the same reasons as [`Self::query_action`].
+    /// `UnsupportedOperation` for the same reasons as [`Self::query_action`].
     pub fn cancel_action(
         &self,
         name: &str,
@@ -327,7 +328,7 @@ impl ExposedThingHandle {
     }
 
     /// Triggers the observe handler locally, fanning its first push out via
-    /// `push`. Returns `MissingHandler` for the same reasons as
+    /// `push`. Returns `UnsupportedOperation` for the same reasons as
     /// [`Self::query_action`].
     pub fn observe_property(
         &self,
@@ -389,10 +390,7 @@ impl ExposedThingHandle {
         match slot {
             Some(ReadSlot::Sync(h)) => h.read(input),
             Some(ReadSlot::Async(h)) => h.read(input).await,
-            None => Err(missing_local_handler(
-                AffordanceTarget::Property(name.into()),
-                Operation::ReadProperty,
-            )),
+            None => Err(missing_local_handler(Operation::ReadProperty)),
         }
     }
 
@@ -408,10 +406,7 @@ impl ExposedThingHandle {
         match slot {
             Some(WriteSlot::Sync(h)) => h.write(input),
             Some(WriteSlot::Async(h)) => h.write(input).await,
-            None => Err(missing_local_handler(
-                AffordanceTarget::Property(name.into()),
-                Operation::WriteProperty,
-            )),
+            None => Err(missing_local_handler(Operation::WriteProperty)),
         }
     }
 
@@ -425,10 +420,7 @@ impl ExposedThingHandle {
         match slot {
             Some(InvokeSlot::Sync(h)) => h.invoke(input),
             Some(InvokeSlot::Async(h)) => h.invoke(input).await,
-            None => Err(missing_local_handler(
-                AffordanceTarget::Action(name.into()),
-                Operation::InvokeAction,
-            )),
+            None => Err(missing_local_handler(Operation::InvokeAction)),
         }
     }
 
@@ -442,10 +434,7 @@ impl ExposedThingHandle {
         match slot {
             Some(QuerySlot::Sync(h)) => h.query(input),
             Some(QuerySlot::Async(h)) => h.query(input).await,
-            None => Err(missing_local_handler(
-                AffordanceTarget::Action(name.into()),
-                Operation::QueryAction,
-            )),
+            None => Err(missing_local_handler(Operation::QueryAction)),
         }
     }
 
@@ -459,10 +448,7 @@ impl ExposedThingHandle {
         match slot {
             Some(CancelSlot::Sync(h)) => h.cancel(input),
             Some(CancelSlot::Async(h)) => h.cancel(input).await,
-            None => Err(missing_local_handler(
-                AffordanceTarget::Action(name.into()),
-                Operation::CancelAction,
-            )),
+            None => Err(missing_local_handler(Operation::CancelAction)),
         }
     }
 
@@ -479,10 +465,7 @@ impl ExposedThingHandle {
         match slot {
             Some(ObserveSlot::Sync(h)) => h.observe(input, push),
             Some(ObserveSlot::Async(h)) => h.observe(input, push).await,
-            None => Err(missing_local_handler(
-                AffordanceTarget::Property(name.into()),
-                Operation::ObserveProperty,
-            )),
+            None => Err(missing_local_handler(Operation::ObserveProperty)),
         }
     }
 
@@ -498,10 +481,7 @@ impl ExposedThingHandle {
         match slot {
             Some(UnobserveSlot::Sync(h)) => h.unobserve(input),
             Some(UnobserveSlot::Async(h)) => h.unobserve(input).await,
-            None => Err(missing_local_handler(
-                AffordanceTarget::Property(name.into()),
-                Operation::UnobserveProperty,
-            )),
+            None => Err(missing_local_handler(Operation::UnobserveProperty)),
         }
     }
 
@@ -518,10 +498,7 @@ impl ExposedThingHandle {
         match slot {
             Some(SubscribeSlot::Sync(h)) => h.subscribe(input, push),
             Some(SubscribeSlot::Async(h)) => h.subscribe(input, push).await,
-            None => Err(missing_local_handler(
-                AffordanceTarget::Event(name.into()),
-                Operation::SubscribeEvent,
-            )),
+            None => Err(missing_local_handler(Operation::SubscribeEvent)),
         }
     }
 
@@ -537,10 +514,7 @@ impl ExposedThingHandle {
         match slot {
             Some(UnsubscribeSlot::Sync(h)) => h.unsubscribe(input),
             Some(UnsubscribeSlot::Async(h)) => h.unsubscribe(input).await,
-            None => Err(missing_local_handler(
-                AffordanceTarget::Event(name.into()),
-                Operation::UnsubscribeEvent,
-            )),
+            None => Err(missing_local_handler(Operation::UnsubscribeEvent)),
         }
     }
 
@@ -555,14 +529,11 @@ impl ExposedThingHandle {
     }
 }
 
-/// Constructs the canonical "no handler registered for this op" error.
-///
-/// Mirrors the shape produced by `core::ExposedThing`'s internal
-/// `missing_handler` helper but lives on the handle so the async dispatch
-/// path (which clones the handler Arc out of the slot lock and then
-/// dispatches outside it) can produce the same error variant.
-fn missing_local_handler(target: AffordanceTarget, operation: Operation) -> CoreError {
-    CoreError::MissingHandler { target, operation }
+/// Constructs the canonical "no handler registered for this operation" error.
+fn missing_local_handler(operation: Operation) -> CoreError {
+    CoreError::UnsupportedOperation(
+        ErrorContext::new(ErrorPhase::Handler, RetryClass::Never).with_operation(operation),
+    )
 }
 
 // ---------------------------------------------------------------------------
@@ -617,26 +588,32 @@ impl ConsumedThingHandle {
         operation: Operation,
     ) -> CoreResult<Arc<clinkz_wot_td::form::Form>> {
         let thing = self.consumed.thing_description();
-        let forms = match target {
-            AffordanceTarget::Thing => thing.forms.as_deref().unwrap_or(&[]),
-            AffordanceTarget::Property(name) => thing
+        let (forms, affordance_exists): (&[clinkz_wot_td::form::Form], bool) = match target {
+            AffordanceTarget::Thing => (thing.forms.as_deref().unwrap_or(&[]), true),
+            AffordanceTarget::Property(name) => match thing
                 .properties
                 .as_ref()
-                .and_then(|m| m.get(&**name))
-                .map(|p| p._interaction.forms.as_slice())
-                .unwrap_or(&[]),
-            AffordanceTarget::Action(name) => thing
+                .and_then(|affordances| affordances.get(&**name))
+            {
+                Some(property) => (property._interaction.forms.as_slice(), true),
+                None => (&[], false),
+            },
+            AffordanceTarget::Action(name) => match thing
                 .actions
                 .as_ref()
-                .and_then(|m| m.get(&**name))
-                .map(|a| a._interaction.forms.as_slice())
-                .unwrap_or(&[]),
-            AffordanceTarget::Event(name) => thing
+                .and_then(|affordances| affordances.get(&**name))
+            {
+                Some(action) => (action._interaction.forms.as_slice(), true),
+                None => (&[], false),
+            },
+            AffordanceTarget::Event(name) => match thing
                 .events
                 .as_ref()
-                .and_then(|m| m.get(&**name))
-                .map(|e| e._interaction.forms.as_slice())
-                .unwrap_or(&[]),
+                .and_then(|affordances| affordances.get(&**name))
+            {
+                Some(event) => (event._interaction.forms.as_slice(), true),
+                None => (&[], false),
+            },
         };
         // First form whose effective operations contain `operation`.
         for form in forms {
@@ -669,11 +646,15 @@ impl ConsumedThingHandle {
                 return Ok(Arc::new(form.clone()));
             }
         }
-        Err(CoreError::UnsupportedOperation(format!(
-            "no form for {} on {:?}",
-            operation.as_str(),
-            target
-        )))
+        Err(CoreError::Selection {
+            reason: if affordance_exists {
+                SelectionFailureReason::NoFormSupportsOperation
+            } else {
+                SelectionFailureReason::AffordanceMissing
+            },
+            context: ErrorContext::new(ErrorPhase::Selection, RetryClass::Never)
+                .with_operation(operation),
+        })
     }
 
     async fn invoke_op(
@@ -868,10 +849,10 @@ impl ConsumedThingHandle {
     /// If the Thing declares no events, returns an empty `EventStream` that
     /// immediately yields `None`.
     ///
-    /// Fail-fast: if any declared event has no compatible form or no
-    /// matching binding, this method returns an `UnsupportedOperation`
-    /// error and opens no subscriptions. Existing subscriptions opened in
-    /// the same call before the failure are cleaned up before returning.
+    /// Fail-fast: if any declared event has no compatible form or no matching
+    /// binding, this method returns a structured selection error and opens no
+    /// subscriptions. Existing subscriptions opened in the same call before
+    /// the failure are cleaned up before returning.
     pub async fn subscribe_all_events(
         &self,
         options: InteractionOptions,
@@ -897,7 +878,7 @@ impl ConsumedThingHandle {
                     });
                     opened.push((EventName::new(name.clone()), sub));
                 }
-                Err(err) => {
+                Err(error) => {
                     // Fail-fast: clean up everything we just opened so the
                     // caller doesn't have to handle a partial result.
                     for (cleanup_name, _) in &opened {
@@ -905,9 +886,7 @@ impl ConsumedThingHandle {
                             cleanup_name.as_str().to_string().into(),
                         ));
                     }
-                    return Err(CoreError::UnsupportedOperation(format!(
-                        "subscribe_all_events: event {name:?} could not be subscribed: {err}"
-                    )));
+                    return Err(error);
                 }
             }
         }

@@ -4,7 +4,7 @@
 //! Verifies:
 //! - 9 `set_async_*` setters register handlers reachable via `*_async`
 //!   local dispatch.
-//! - Sync dispatch refuses async handlers (returns `MissingHandler`).
+//! - Sync dispatch refuses async handlers (returns `UnsupportedOperation`).
 //! - Async dispatch drives BOTH sync and async handlers.
 //! - 6 missing sync local-dispatch methods route through the registered
 //!   sync handler.
@@ -16,13 +16,15 @@ use std::sync::{Arc, Mutex};
 
 use async_trait::async_trait;
 use clinkz_wot_core::{
-    AsyncActionHandler, AsyncPropertyReadHandler, CoreError, InteractionInput, InteractionOptions,
-    InteractionOutput, Payload, PropertyObserveHandler, PropertyReadHandler, PropertyWriteHandler,
+    AsyncActionHandler, AsyncPropertyReadHandler, CoreError, ErrorPhase, InteractionInput,
+    InteractionOptions, InteractionOutput, Payload, PropertyObserveHandler, PropertyReadHandler,
+    PropertyWriteHandler, RetryClass,
 };
 use clinkz_wot_servient::ServientBuilder;
 use clinkz_wot_td::{
     affordance::{ActionAffordance, InteractionHelper, PropertyAffordance},
     data_schema::DataSchema,
+    data_type::Operation,
     thing::Thing,
 };
 
@@ -199,7 +201,13 @@ async fn sync_dispatch_refuses_async_handler() {
         .read_property("status", &InteractionInput::empty())
         .unwrap_err();
     assert!(
-        matches!(err, CoreError::MissingHandler { .. }),
+        matches!(
+            err,
+            CoreError::UnsupportedOperation(context)
+                if context.phase() == ErrorPhase::Handler
+                    && context.retry_class() == RetryClass::Never
+                    && context.operation() == Some(Operation::ReadProperty)
+        ),
         "sync dispatch refuses async handler, got {err:?}"
     );
 }
@@ -276,7 +284,7 @@ async fn local_observe_async_routes_through_sync_handler_and_pushes() {
 }
 
 #[tokio::test]
-async fn missing_handler_returns_missing_handler_error() {
+async fn missing_handler_returns_unsupported_operation_error() {
     let servient = build_servient();
     let handle = servient.produce(lamp_td()).expect("produce");
 
@@ -284,7 +292,13 @@ async fn missing_handler_returns_missing_handler_error() {
         .read_property_async("status", &InteractionInput::empty())
         .await
         .unwrap_err();
-    assert!(matches!(err, CoreError::MissingHandler { .. }));
+    assert!(matches!(
+        err,
+        CoreError::UnsupportedOperation(context)
+            if context.phase() == ErrorPhase::Handler
+                && context.retry_class() == RetryClass::Never
+                && context.operation() == Some(Operation::ReadProperty)
+    ));
 }
 
 #[tokio::test]

@@ -4,15 +4,12 @@
 //! session ownership, polling, and buffer management stay in target-specific
 //! platform code that implements [`ZenohPicoPlatform`].
 
-use alloc::{
-    borrow::Cow,
-    boxed::Box,
-    format,
-    string::{String, ToString},
-};
+use alloc::{borrow::Cow, boxed::Box, format, string::String};
 use core::{any::Any, cell::RefCell, fmt, time::Duration};
 
-use clinkz_wot_core::{CoreError, CoreResult, InteractionOutput, Payload};
+use clinkz_wot_core::{
+    CoreError, CoreResult, ErrorContext, ErrorPhase, InteractionOutput, Payload, RetryClass,
+};
 
 use super::selector::selector_with_parameters;
 use crate::{ZenohFormMetadata, ZenohOperationKind, ZenohTransport, ZenohTransportRequest};
@@ -293,20 +290,27 @@ impl ZenohPicoTransport {
 }
 
 fn transport_error(error: ZenohPicoError) -> CoreError {
-    CoreError::Transport(error.to_string())
+    let context = ErrorContext::new(ErrorPhase::Binding, RetryClass::CallerDecision);
+    match error.kind() {
+        ZenohPicoErrorKind::Request => {
+            CoreError::Validation(ErrorContext::new(ErrorPhase::Validate, RetryClass::Never))
+        }
+        ZenohPicoErrorKind::Platform => CoreError::Binding(context),
+        ZenohPicoErrorKind::Timeout => CoreError::TimedOut(context),
+    }
 }
 
-fn timeout_error(operation: &str, key_expr: &str) -> CoreError {
-    CoreError::Transport(timeout_message(operation, key_expr))
+fn timeout_error(_operation: &str, _key_expr: &str) -> CoreError {
+    CoreError::TimedOut(ErrorContext::new(
+        ErrorPhase::Binding,
+        RetryClass::CallerDecision,
+    ))
 }
 
 fn timeout_message(operation: &str, key_expr: &str) -> String {
     format!("Zenoh-pico {} for '{}' timed out", operation, key_expr)
 }
 
-fn parameter_error(error: CoreError) -> ZenohPicoError {
-    match error {
-        CoreError::Transport(message) => ZenohPicoError::invalid_request(message),
-        _ => ZenohPicoError::invalid_request(error.to_string()),
-    }
+fn parameter_error(_error: CoreError) -> ZenohPicoError {
+    ZenohPicoError::invalid_request("invalid zenoh selector parameters")
 }

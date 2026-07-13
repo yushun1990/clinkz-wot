@@ -6,12 +6,13 @@
 //! Driving is binding-owned (AD56): each binding's `serve()` starts its own
 //! driving model.
 
-use alloc::{boxed::Box, format, sync::Arc, vec::Vec};
+use alloc::{boxed::Box, sync::Arc, vec::Vec};
 
 use clinkz_wot_core::{
-    BindingContext, ClientBinding, CredentialStore, Dispatch, EventBroker, EventName, ExposedThing,
-    InboundRequest, InboundResponse, InteractionOutput, Payload, Principal, SecurityProvider,
-    ServerBinding, ThingId, WotLock,
+    BindingContext, ClientBinding, CoreError, CredentialStore, Dispatch, ErrorContext, ErrorPhase,
+    EventBroker, EventName, ExposedThing, InboundRequest, InboundResponse, InteractionOutput,
+    Payload, Principal, RetryClass, SecurityProvider, SelectionFailureReason, ServerBinding,
+    ThingId, WotLock,
 };
 use clinkz_wot_discovery::{Discoverer, DiscoveryFilter, ProcessState, ThingDiscoveryProcess};
 use clinkz_wot_td::{AbsoluteUri, thing::Thing};
@@ -210,7 +211,6 @@ impl Servient {
     /// binding invokes it via [`Dispatch::serve_request`] in whatever context
     /// fits its transport model.
     pub(crate) async fn dispatch(&self, request: InboundRequest) -> InboundResponse {
-        use clinkz_wot_core::CoreError;
         use clinkz_wot_td::data_type::Operation;
 
         let correlation = request.correlation;
@@ -226,13 +226,21 @@ impl Servient {
         let Some(slot) = self.exposed.get(&thing_id) else {
             return InboundResponse::error(
                 correlation,
-                CoreError::InboundDispatch("Thing gone".into()),
+                CoreError::Lifecycle(
+                    ErrorContext::new(ErrorPhase::Selection, RetryClass::CallerDecision)
+                        .with_operation(operation)
+                        .with_correlation(correlation),
+                ),
             );
         };
         if slot.with_read(|s| s.draining.load(core::sync::atomic::Ordering::SeqCst)) {
             return InboundResponse::error(
                 correlation,
-                CoreError::InboundDispatch("Thing gone".into()),
+                CoreError::Lifecycle(
+                    ErrorContext::new(ErrorPhase::Selection, RetryClass::CallerDecision)
+                        .with_operation(operation)
+                        .with_correlation(correlation),
+                ),
             );
         }
 
@@ -246,12 +254,11 @@ impl Servient {
             let mut established_principal: Option<Principal> = None;
             for scheme_name in &td.security {
                 let scheme = td.security_definitions.get(scheme_name).ok_or_else(|| {
-                    CoreError::Security(clinkz_wot_core::SecurityError::SchemeFailure(
-                        alloc::format!(
-                            "security definition '{}' referenced by Thing.security but not found in securityDefinitions",
-                            scheme_name
-                        ),
-                    ))
+                    CoreError::Validation(
+                        ErrorContext::new(ErrorPhase::Validate, RetryClass::Never)
+                            .with_operation(operation)
+                            .with_correlation(correlation),
+                    )
                 })?;
 
                 let provider = self
@@ -259,9 +266,12 @@ impl Servient {
                     .iter()
                     .find(|p| p.scheme_name() == scheme_name.as_str());
 
-                let provider = provider.ok_or(CoreError::Security(
-                    clinkz_wot_core::SecurityError::UnsupportedScheme,
-                ))?;
+                let provider = provider.ok_or(CoreError::Selection {
+                    reason: SelectionFailureReason::SecurityUnavailable,
+                    context: ErrorContext::new(ErrorPhase::Selection, RetryClass::Never)
+                        .with_operation(operation)
+                        .with_correlation(correlation),
+                })?;
 
                 let verify_req = InboundRequest::new(
                     thing_id.clone(),
@@ -271,10 +281,9 @@ impl Servient {
                 );
                 let mut verify_req = verify_req;
                 verify_req.auth = auth.clone();
+                verify_req.correlation = correlation;
 
-                let principal = provider
-                    .verify(&verify_req, scheme)
-                    .map_err(CoreError::from)?;
+                let principal = provider.verify(&verify_req, scheme)?;
                 if established_principal.is_none() {
                     established_principal = Some(principal);
                 }
@@ -307,10 +316,10 @@ impl Servient {
                 }
                 Operation::UnsubscribeEvent => s.thing.unsubscribe_event(name, &input),
                 Operation::UnobserveProperty => s.thing.unobserve_property(name, &input),
-                _ => Err(CoreError::UnsupportedOperation(format!(
-                    "operation {:?} not handled",
-                    operation
-                ))),
+                _ => Err(CoreError::UnsupportedOperation(
+                    ErrorContext::new(ErrorPhase::Handler, RetryClass::Never)
+                        .with_operation(operation),
+                )),
             }
         });
         match result {

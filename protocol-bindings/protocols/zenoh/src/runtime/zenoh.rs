@@ -1,13 +1,15 @@
 use alloc::{
     boxed::Box,
-    format,
     string::{String, ToString},
 };
 use core::time::Duration;
 
 use crate::ZenohTransportRequest;
 use crate::{ZenohFormMetadata, ZenohOperationKind, ZenohOperationPlan, ZenohTransport};
-use clinkz_wot_core::{CoreError, CoreResult, InteractionOutput, Subscription, SubscriptionGuard};
+use clinkz_wot_core::{
+    CoreError, CoreResult, ErrorContext, ErrorPhase, InteractionOutput, RetryClass, Subscription,
+    SubscriptionGuard,
+};
 use zenoh::{
     Wait, bytes::Encoding, handlers::FifoChannelHandler, pubsub::Subscriber, sample::Sample,
 };
@@ -74,13 +76,8 @@ impl ZenohSubscription {
         let sample = self
             .subscriber
             .recv_timeout(timeout)
-            .map_err(transport_error)?
-            .ok_or_else(|| {
-                CoreError::Transport(format!(
-                    "Zenoh subscription for '{}' timed out",
-                    self.key_expr()
-                ))
-            })?;
+            .map_err(binding_error)?
+            .ok_or_else(timeout_error)?;
 
         Ok(InteractionOutput::with_data(payload_from_sample(
             &sample,
@@ -90,7 +87,7 @@ impl ZenohSubscription {
 
     /// Explicitly undeclares the underlying zenoh subscriber.
     pub fn undeclare(self) -> CoreResult<()> {
-        self.subscriber.undeclare().wait().map_err(transport_error)
+        self.subscriber.undeclare().wait().map_err(cleanup_error)
     }
 }
 
@@ -105,7 +102,7 @@ impl ZenohSessionTransport {
 
     /// Opens a zenoh session from a zenoh configuration.
     pub fn open(config: zenoh::Config) -> CoreResult<Self> {
-        let session = zenoh::open(config).wait().map_err(transport_error)?;
+        let session = zenoh::open(config).wait().map_err(binding_error)?;
         Ok(Self::new(session))
     }
 
@@ -128,10 +125,7 @@ impl ZenohSessionTransport {
     /// Declares a long-lived zenoh subscription from a planned subscribe operation.
     pub fn subscribe(&self, plan: ZenohOperationPlan) -> CoreResult<ZenohSubscription> {
         if plan.kind != ZenohOperationKind::Subscribe {
-            return Err(CoreError::UnsupportedOperation(format!(
-                "Zenoh {:?} operation cannot be opened as a subscription",
-                plan.kind
-            )));
+            return Err(unsupported_operation());
         }
 
         self.declare_subscription(plan.key_expr, plan.metadata)
@@ -153,10 +147,7 @@ impl ZenohTransport for ZenohSessionTransport {
         request: ZenohTransportRequest,
     ) -> CoreResult<(Subscription, Box<dyn SubscriptionGuard>)> {
         if request.plan.kind != ZenohOperationKind::Subscribe {
-            return Err(CoreError::UnsupportedOperation(format!(
-                "Zenoh {:?} operation cannot be opened as a subscription",
-                request.plan.kind
-            )));
+            return Err(unsupported_operation());
         }
 
         let (sender, subscription) = Subscription::channel(0);
@@ -170,7 +161,7 @@ impl ZenohTransport for ZenohSessionTransport {
                 sender.push(payload);
             })
             .wait()
-            .map_err(transport_error)?;
+            .map_err(binding_error)?;
 
         let guard = Box::new(ZenohSubscriptionGuard {
             subscriber: Some(Box::new(subscriber)),
@@ -200,7 +191,7 @@ impl ZenohSessionTransport {
         if let Some(congestion_control) = request.plan.metadata.congestion_control.as_deref() {
             builder = builder.congestion_control(parse_congestion_control(congestion_control)?);
         }
-        builder.wait().map_err(transport_error)?;
+        builder.wait().map_err(binding_error)?;
         Ok(InteractionOutput::empty())
     }
 
@@ -223,17 +214,12 @@ impl ZenohSessionTransport {
             builder = builder.congestion_control(parse_congestion_control(congestion_control)?);
         }
 
-        let replies = builder.wait().map_err(transport_error)?;
+        let replies = builder.wait().map_err(binding_error)?;
         let reply = replies
             .recv_timeout(self.reply_timeout)
-            .map_err(transport_error)?
-            .ok_or_else(|| {
-                CoreError::Transport(format!(
-                    "Zenoh query for '{}' timed out",
-                    request.plan.key_expr
-                ))
-            })?;
-        let sample = reply.into_result().map_err(transport_error)?;
+            .map_err(binding_error)?
+            .ok_or_else(timeout_error)?;
+        let sample = reply.into_result().map_err(binding_error)?;
 
         Ok(InteractionOutput::with_data(payload_from_sample(
             &sample, None,
@@ -258,7 +244,7 @@ impl ZenohSessionTransport {
             .session
             .declare_subscriber(key_expr.as_str())
             .wait()
-            .map_err(transport_error)?;
+            .map_err(binding_error)?;
 
         Ok(ZenohSubscription {
             subscriber,
@@ -268,8 +254,29 @@ impl ZenohSessionTransport {
     }
 }
 
-fn transport_error(error: impl core::fmt::Display) -> CoreError {
-    CoreError::Transport(error.to_string())
+fn binding_error<T>(_error: T) -> CoreError {
+    CoreError::Binding(ErrorContext::new(
+        ErrorPhase::Binding,
+        RetryClass::CallerDecision,
+    ))
+}
+
+fn cleanup_error<T>(_error: T) -> CoreError {
+    CoreError::Cleanup(ErrorContext::new(
+        ErrorPhase::Cleanup,
+        RetryClass::CallerDecision,
+    ))
+}
+
+fn timeout_error() -> CoreError {
+    CoreError::TimedOut(ErrorContext::new(
+        ErrorPhase::Binding,
+        RetryClass::CallerDecision,
+    ))
+}
+
+fn unsupported_operation() -> CoreError {
+    CoreError::UnsupportedOperation(ErrorContext::new(ErrorPhase::Binding, RetryClass::Never))
 }
 
 // ---------------------------------------------------------------------------

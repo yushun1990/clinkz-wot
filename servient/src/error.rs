@@ -9,13 +9,9 @@
 //! ## Conversion tree
 //!
 //! ```text
-//! SecurityError  ─┐
-//! BindingError   ─┼─►  CoreError  ─┐
-//!                 │                 ├──►  ServientError
-//! DiscoveryError ─┘                 │
-//!                                  (CoreError variants funnel through
-//!                                   `Serve`; lifecycle variants are
-//!                                   native)
+//! BindingError   ────────►  ServientError
+//! CoreError      ────────►  ServientError
+//! DiscoveryError ────────►  ServientError
 //! ```
 //!
 //! - Handler code returns `CoreResult<T>` (`Result<T, CoreError>`).
@@ -26,8 +22,8 @@
 //! ## Discriminating errors
 //!
 //! Callers can either pattern-match on `ServientError` directly, or use the
-//! [`is_*`](Self::is_missing_handler) predicates and
-//! [`as_core`](Self::as_core) accessor for the common cases.
+//! typed [`as_core`](Self::as_core), [`as_binding`](Self::as_binding), and
+//! [`as_discovery`](Self::as_discovery) accessors.
 
 use core::fmt;
 
@@ -44,6 +40,10 @@ pub type ServientResult<T> = Result<T, ServientError>;
 /// The single application-facing error type. Non-exhaustive so future
 /// engine concerns can be added without breaking downstream `match`
 /// expressions.
+#[allow(
+    clippy::large_enum_variant,
+    reason = "boxing the frozen CoreError would allocate while converting a bounded core failure"
+)]
 #[derive(Debug)]
 #[non_exhaustive]
 pub enum ServientError {
@@ -55,11 +55,10 @@ pub enum ServientError {
     /// distinguish `UnknownAffordance` from `UnsupportedOperation`,
     /// `TargetResolution`, etc.
     Binding(BindingError),
-    /// A dispatch-level failure from the core runtime (handler returned
-    /// `Err`, missing handler, payload error, security denial, transport
-    /// error, timeout, ...). The pre-unification split between `Serve`
-    /// and `RouteRegistration` has been collapsed into this single variant
-    /// — both were `CoreError` payloads with the same discriminator surface.
+    /// A dispatch-level failure from the core runtime (handler, payload,
+    /// security, binding, lifecycle, or timeout failure). The pre-unification
+    /// split between `Serve` and `RouteRegistration` has been collapsed into
+    /// this single variant because both carried a `CoreError`.
     Serve(CoreError),
     /// A produced Thing is already exposed with this id (`expose()` of a
     /// duplicate — baseline §7.3 AD33).
@@ -123,43 +122,9 @@ impl From<CoreError> for ServientError {
     }
 }
 
-impl From<clinkz_wot_core::SecurityError> for ServientError {
-    fn from(value: clinkz_wot_core::SecurityError) -> Self {
-        // Route through `CoreError::Security` so the application-facing
-        // surface stays one-level deep (ServientError::Serve(CoreError::Security(...)))
-        // rather than introducing a separate flat ServientError::Security variant.
-        Self::Serve(value.into())
-    }
-}
-
 // --- predicates and accessors ----------------------------------------------
 
 impl ServientError {
-    /// Returns `true` when the error carries a `CoreError::MissingHandler`.
-    ///
-    /// Convenience for callers that want to detect "the affordance exists
-    /// but no handler is registered" without matching through three layers.
-    pub fn is_missing_handler(&self) -> bool {
-        matches!(self, Self::Serve(CoreError::MissingHandler { .. }))
-    }
-
-    /// Returns `true` when the error is security-related (missing or
-    /// invalid credentials, unsupported scheme, or scope denial).
-    pub fn is_security(&self) -> bool {
-        matches!(self, Self::Serve(CoreError::Security(_)))
-    }
-
-    /// Returns `true` when the error is a transport-level timeout, either
-    /// the engine's outbound `InteractionOptions.timeout` enforcement
-    /// (`CoreError::Timeout`) or the build-time `TimeoutUnsupported`
-    /// variant surfaced on bare `no_std` without a timer.
-    pub fn is_timeout(&self) -> bool {
-        matches!(
-            self,
-            Self::Serve(CoreError::Timeout) | Self::Serve(CoreError::TimeoutUnsupported)
-        )
-    }
-
     /// Returns `true` when the error originated in the discovery layer
     /// (`ServientError::Discovery(_)`).
     pub fn is_discovery(&self) -> bool {

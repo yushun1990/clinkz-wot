@@ -11,7 +11,10 @@ use alloc::{boxed::Box, format, string::String, sync::Arc};
 
 use std::collections::HashMap;
 
-use clinkz_wot_core::{CoreError, CoreResult, InteractionOutput, Subscription, SubscriptionGuard};
+use clinkz_wot_core::{
+    CoreError, CoreResult, ErrorContext, ErrorPhase, InteractionOutput, RetryClass, Subscription,
+    SubscriptionGuard,
+};
 use zenoh::Wait;
 
 use crate::{ZenohOperationPlan, ZenohSessionTransport, ZenohTransport, ZenohTransportRequest};
@@ -44,9 +47,7 @@ impl ZenohSessionPolicy for DefaultSessionPolicy {
         let locator = format!("{}/{}", plan.transport, plan.authority);
         config
             .insert_json5("connect/endpoints", &format!("[\"{locator}\"]"))
-            .map_err(|e| {
-                CoreError::Transport(format!("failed to set zenoh connect endpoint: {e}"))
-            })?;
+            .map_err(|_| validation_error())?;
         Ok(config)
     }
 }
@@ -116,14 +117,9 @@ impl ZenohSessionPool {
 
         // Slow path: build config and open a new session.
         let config = self.policy.config_for(plan)?;
-        let session = zenoh::open(config).wait().map_err(|e| {
-            CoreError::Transport(format!(
-                "failed to open zenoh session to '{authority}': {e}"
-            ))
-        })?;
-        let transport = Arc::new(
-            ZenohSessionTransport::new(session).with_reply_timeout(self.reply_timeout),
-        );
+        let session = zenoh::open(config).wait().map_err(|_| binding_error())?;
+        let transport =
+            Arc::new(ZenohSessionTransport::new(session).with_reply_timeout(self.reply_timeout));
 
         // Insert under the lock, but re-check: another thread may have won the
         // race and inserted first. The loser's duplicate session drops on the
@@ -147,6 +143,14 @@ impl ZenohSessionPool {
         let mut sessions = self.sessions.lock().expect("pool mutex poisoned");
         sessions.clear();
     }
+}
+
+fn validation_error() -> CoreError {
+    CoreError::Validation(ErrorContext::new(ErrorPhase::Prepare, RetryClass::Never))
+}
+
+fn binding_error() -> CoreError {
+    CoreError::Binding(ErrorContext::new(ErrorPhase::Binding, RetryClass::Safe))
 }
 
 impl ZenohTransport for ZenohSessionPool {

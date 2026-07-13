@@ -363,7 +363,7 @@ pub fn validate_form_operation(
     if operations.contains(&operation) {
         Ok(())
     } else {
-        Err(BindingError::UnsupportedOperation(format!(
+        Err(BindingError::SelectedFormOperationMismatch(format!(
             "Selected form does not support {:?}",
             operation
         )))
@@ -386,7 +386,7 @@ pub fn validate_affordance_form_with_criteria<'a>(
 
         let operations = effective_form_operations(form_set.context, candidate);
         if !criteria.matches_operation(operations.as_ref()) {
-            return Err(BindingError::UnsupportedOperation(format!(
+            return Err(BindingError::SelectedFormOperationMismatch(format!(
                 "Selected form does not support {:?}",
                 criteria.operation
             )));

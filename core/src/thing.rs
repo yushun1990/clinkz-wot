@@ -12,7 +12,7 @@ use alloc::{collections::BTreeMap, string::String, sync::Arc};
 use clinkz_wot_td::{data_type::Operation, thing::Thing};
 
 use crate::{
-    CoreError, CoreResult,
+    CoreError, CoreResult, ErrorContext, ErrorPhase, RetryClass,
     interaction::{InteractionInput, InteractionOutput},
 };
 
@@ -363,51 +363,48 @@ impl LocalThing {
         &self.thing
     }
 
-    /// Returns `Err(UnknownAffordance)` if no property with `name` is declared.
+    /// Returns [`CoreError::NotFound`] if no property with `name` is declared.
     pub fn ensure_property_affordance(&self, name: &str) -> CoreResult<()> {
-        ensure_affordance(AffordanceKind::Property, name, &self.thing.properties)
+        ensure_affordance(name, &self.thing.properties)
     }
 
-    /// Returns `Err(UnknownAffordance)` if no action with `name` is declared.
+    /// Returns [`CoreError::NotFound`] if no action with `name` is declared.
     pub fn ensure_action_affordance(&self, name: &str) -> CoreResult<()> {
-        ensure_affordance(AffordanceKind::Action, name, &self.thing.actions)
+        ensure_affordance(name, &self.thing.actions)
     }
 
-    /// Returns `Err(UnknownAffordance)` if no event with `name` is declared.
+    /// Returns [`CoreError::NotFound`] if no event with `name` is declared.
     pub fn ensure_event_affordance(&self, name: &str) -> CoreResult<()> {
-        ensure_affordance(AffordanceKind::Event, name, &self.thing.events)
+        ensure_affordance(name, &self.thing.events)
     }
 }
 
-fn ensure_affordance<T>(
-    kind: AffordanceKind,
-    name: &str,
-    affordances: &Option<BTreeMap<String, T>>,
-) -> CoreResult<()> {
+fn ensure_affordance<T>(name: &str, affordances: &Option<BTreeMap<String, T>>) -> CoreResult<()> {
     if affordances
         .as_ref()
         .is_some_and(|affordances| affordances.contains_key(name))
     {
         Ok(())
     } else {
-        Err(CoreError::UnknownAffordance {
-            kind,
-            name: name.into(),
-        })
+        Err(CoreError::NotFound(ErrorContext::new(
+            ErrorPhase::Selection,
+            RetryClass::Never,
+        )))
     }
 }
 
-/// Builds a [`CoreError::MissingHandler`] carrying the offending target and
-/// operation so diagnostics (e.g. HTTP 501 response bodies) are actionable.
-fn missing_handler(target: AffordanceTarget, operation: Operation) -> CoreError {
-    CoreError::MissingHandler { target, operation }
+/// Builds the frozen missing-handler disposition without retaining a name.
+fn missing_handler(operation: Operation) -> CoreError {
+    CoreError::UnsupportedOperation(
+        ErrorContext::new(ErrorPhase::Handler, RetryClass::Never).with_operation(operation),
+    )
 }
 
 // ---------------------------------------------------------------------------
 // ExposedThing — produced Thing plus handler sets (baseline §4.1). Lives
 // in core so the protocol-neutral dispatcher can drive it. Handlers may be
 // attached or replaced throughout the exposed lifetime (AD14); an unwired
-// affordance yields `MissingHandler`.
+// affordance yields `UnsupportedOperation` in the handler phase.
 // ---------------------------------------------------------------------------
 
 /// A produced Thing plus its per-affordance handler sets.
@@ -652,17 +649,13 @@ impl ExposedThing {
         input: &InteractionInput,
     ) -> CoreResult<InteractionOutput> {
         self.local.ensure_property_affordance(name)?;
-        let slot = self.property_handler_read(name).ok_or(missing_handler(
-            AffordanceTarget::Property(name.into()),
-            Operation::ReadProperty,
-        ))?;
+        let slot = self
+            .property_handler_read(name)
+            .ok_or(missing_handler(Operation::ReadProperty))?;
         match slot {
             ReadSlot::Sync(handler) => handler.read(input),
             #[cfg(feature = "async")]
-            ReadSlot::Async(_) => Err(missing_handler(
-                AffordanceTarget::Property(name.into()),
-                Operation::ReadProperty,
-            )),
+            ReadSlot::Async(_) => Err(missing_handler(Operation::ReadProperty)),
         }
     }
 
@@ -673,17 +666,13 @@ impl ExposedThing {
         input: &mut InteractionInput,
     ) -> CoreResult<InteractionOutput> {
         self.local.ensure_property_affordance(name)?;
-        let slot = self.property_handler_write(name).ok_or(missing_handler(
-            AffordanceTarget::Property(name.into()),
-            Operation::WriteProperty,
-        ))?;
+        let slot = self
+            .property_handler_write(name)
+            .ok_or(missing_handler(Operation::WriteProperty))?;
         match slot {
             WriteSlot::Sync(handler) => handler.write(input),
             #[cfg(feature = "async")]
-            WriteSlot::Async(_) => Err(missing_handler(
-                AffordanceTarget::Property(name.into()),
-                Operation::WriteProperty,
-            )),
+            WriteSlot::Async(_) => Err(missing_handler(Operation::WriteProperty)),
         }
     }
 
@@ -695,17 +684,13 @@ impl ExposedThing {
         push: PushFn<'_>,
     ) -> CoreResult<InteractionOutput> {
         self.local.ensure_property_affordance(name)?;
-        let slot = self.property_handler_observe(name).ok_or(missing_handler(
-            AffordanceTarget::Property(name.into()),
-            Operation::ObserveProperty,
-        ))?;
+        let slot = self
+            .property_handler_observe(name)
+            .ok_or(missing_handler(Operation::ObserveProperty))?;
         match slot {
             ObserveSlot::Sync(handler) => handler.observe(input, push),
             #[cfg(feature = "async")]
-            ObserveSlot::Async(_) => Err(missing_handler(
-                AffordanceTarget::Property(name.into()),
-                Operation::ObserveProperty,
-            )),
+            ObserveSlot::Async(_) => Err(missing_handler(Operation::ObserveProperty)),
         }
     }
 
@@ -718,17 +703,11 @@ impl ExposedThing {
         self.local.ensure_property_affordance(name)?;
         let slot = self
             .property_handler_unobserve(name)
-            .ok_or(missing_handler(
-                AffordanceTarget::Property(name.into()),
-                Operation::UnobserveProperty,
-            ))?;
+            .ok_or(missing_handler(Operation::UnobserveProperty))?;
         match slot {
             UnobserveSlot::Sync(handler) => handler.unobserve(input),
             #[cfg(feature = "async")]
-            UnobserveSlot::Async(_) => Err(missing_handler(
-                AffordanceTarget::Property(name.into()),
-                Operation::UnobserveProperty,
-            )),
+            UnobserveSlot::Async(_) => Err(missing_handler(Operation::UnobserveProperty)),
         }
     }
 
@@ -739,17 +718,13 @@ impl ExposedThing {
         input: &mut InteractionInput,
     ) -> CoreResult<InteractionOutput> {
         self.local.ensure_action_affordance(name)?;
-        let slot = self.action_handler_invoke(name).ok_or(missing_handler(
-            AffordanceTarget::Action(name.into()),
-            Operation::InvokeAction,
-        ))?;
+        let slot = self
+            .action_handler_invoke(name)
+            .ok_or(missing_handler(Operation::InvokeAction))?;
         match slot {
             InvokeSlot::Sync(handler) => handler.invoke(input),
             #[cfg(feature = "async")]
-            InvokeSlot::Async(_) => Err(missing_handler(
-                AffordanceTarget::Action(name.into()),
-                Operation::InvokeAction,
-            )),
+            InvokeSlot::Async(_) => Err(missing_handler(Operation::InvokeAction)),
         }
     }
 
@@ -760,17 +735,13 @@ impl ExposedThing {
         input: &InteractionInput,
     ) -> CoreResult<InteractionOutput> {
         self.local.ensure_action_affordance(name)?;
-        let slot = self.action_handler_query(name).ok_or(missing_handler(
-            AffordanceTarget::Action(name.into()),
-            Operation::QueryAction,
-        ))?;
+        let slot = self
+            .action_handler_query(name)
+            .ok_or(missing_handler(Operation::QueryAction))?;
         match slot {
             QuerySlot::Sync(handler) => handler.query(input),
             #[cfg(feature = "async")]
-            QuerySlot::Async(_) => Err(missing_handler(
-                AffordanceTarget::Action(name.into()),
-                Operation::QueryAction,
-            )),
+            QuerySlot::Async(_) => Err(missing_handler(Operation::QueryAction)),
         }
     }
 
@@ -781,17 +752,13 @@ impl ExposedThing {
         input: &mut InteractionInput,
     ) -> CoreResult<InteractionOutput> {
         self.local.ensure_action_affordance(name)?;
-        let slot = self.action_handler_cancel(name).ok_or(missing_handler(
-            AffordanceTarget::Action(name.into()),
-            Operation::CancelAction,
-        ))?;
+        let slot = self
+            .action_handler_cancel(name)
+            .ok_or(missing_handler(Operation::CancelAction))?;
         match slot {
             CancelSlot::Sync(handler) => handler.cancel(input),
             #[cfg(feature = "async")]
-            CancelSlot::Async(_) => Err(missing_handler(
-                AffordanceTarget::Action(name.into()),
-                Operation::CancelAction,
-            )),
+            CancelSlot::Async(_) => Err(missing_handler(Operation::CancelAction)),
         }
     }
 
@@ -803,17 +770,13 @@ impl ExposedThing {
         push: PushFn<'_>,
     ) -> CoreResult<InteractionOutput> {
         self.local.ensure_event_affordance(name)?;
-        let slot = self.event_handler_subscribe(name).ok_or(missing_handler(
-            AffordanceTarget::Event(name.into()),
-            Operation::SubscribeEvent,
-        ))?;
+        let slot = self
+            .event_handler_subscribe(name)
+            .ok_or(missing_handler(Operation::SubscribeEvent))?;
         match slot {
             SubscribeSlot::Sync(handler) => handler.subscribe(input, push),
             #[cfg(feature = "async")]
-            SubscribeSlot::Async(_) => Err(missing_handler(
-                AffordanceTarget::Event(name.into()),
-                Operation::SubscribeEvent,
-            )),
+            SubscribeSlot::Async(_) => Err(missing_handler(Operation::SubscribeEvent)),
         }
     }
 
@@ -824,17 +787,13 @@ impl ExposedThing {
         input: &InteractionInput,
     ) -> CoreResult<InteractionOutput> {
         self.local.ensure_event_affordance(name)?;
-        let slot = self.event_handler_unsubscribe(name).ok_or(missing_handler(
-            AffordanceTarget::Event(name.into()),
-            Operation::UnsubscribeEvent,
-        ))?;
+        let slot = self
+            .event_handler_unsubscribe(name)
+            .ok_or(missing_handler(Operation::UnsubscribeEvent))?;
         match slot {
             UnsubscribeSlot::Sync(handler) => handler.unsubscribe(input),
             #[cfg(feature = "async")]
-            UnsubscribeSlot::Async(_) => Err(missing_handler(
-                AffordanceTarget::Event(name.into()),
-                Operation::UnsubscribeEvent,
-            )),
+            UnsubscribeSlot::Async(_) => Err(missing_handler(Operation::UnsubscribeEvent)),
         }
     }
 
@@ -911,10 +870,7 @@ mod async_dispatch {
             match self.property_handler_read(name) {
                 Some(ReadSlot::Sync(handler)) => handler.read(input),
                 Some(ReadSlot::Async(handler)) => handler.read(input).await,
-                None => Err(missing_handler(
-                    AffordanceTarget::Property(name.into()),
-                    Operation::ReadProperty,
-                )),
+                None => Err(missing_handler(Operation::ReadProperty)),
             }
         }
 
@@ -928,10 +884,7 @@ mod async_dispatch {
             match self.property_handler_write(name) {
                 Some(WriteSlot::Sync(handler)) => handler.write(input),
                 Some(WriteSlot::Async(handler)) => handler.write(input).await,
-                None => Err(missing_handler(
-                    AffordanceTarget::Property(name.into()),
-                    Operation::WriteProperty,
-                )),
+                None => Err(missing_handler(Operation::WriteProperty)),
             }
         }
 
@@ -945,10 +898,7 @@ mod async_dispatch {
             match self.action_handler_invoke(name) {
                 Some(InvokeSlot::Sync(handler)) => handler.invoke(input),
                 Some(InvokeSlot::Async(handler)) => handler.invoke(input).await,
-                None => Err(missing_handler(
-                    AffordanceTarget::Action(name.into()),
-                    Operation::InvokeAction,
-                )),
+                None => Err(missing_handler(Operation::InvokeAction)),
             }
         }
 
@@ -963,10 +913,7 @@ mod async_dispatch {
             match self.property_handler_observe(name) {
                 Some(ObserveSlot::Sync(handler)) => handler.observe(input, push),
                 Some(ObserveSlot::Async(handler)) => handler.observe(input, push).await,
-                None => Err(missing_handler(
-                    AffordanceTarget::Property(name.into()),
-                    Operation::ObserveProperty,
-                )),
+                None => Err(missing_handler(Operation::ObserveProperty)),
             }
         }
 
@@ -980,10 +927,7 @@ mod async_dispatch {
             match self.property_handler_unobserve(name) {
                 Some(UnobserveSlot::Sync(handler)) => handler.unobserve(input),
                 Some(UnobserveSlot::Async(handler)) => handler.unobserve(input).await,
-                None => Err(missing_handler(
-                    AffordanceTarget::Property(name.into()),
-                    Operation::UnobserveProperty,
-                )),
+                None => Err(missing_handler(Operation::UnobserveProperty)),
             }
         }
 
@@ -997,10 +941,7 @@ mod async_dispatch {
             match self.action_handler_query(name) {
                 Some(QuerySlot::Sync(handler)) => handler.query(input),
                 Some(QuerySlot::Async(handler)) => handler.query(input).await,
-                None => Err(missing_handler(
-                    AffordanceTarget::Action(name.into()),
-                    Operation::QueryAction,
-                )),
+                None => Err(missing_handler(Operation::QueryAction)),
             }
         }
 
@@ -1014,10 +955,7 @@ mod async_dispatch {
             match self.action_handler_cancel(name) {
                 Some(CancelSlot::Sync(handler)) => handler.cancel(input),
                 Some(CancelSlot::Async(handler)) => handler.cancel(input).await,
-                None => Err(missing_handler(
-                    AffordanceTarget::Action(name.into()),
-                    Operation::CancelAction,
-                )),
+                None => Err(missing_handler(Operation::CancelAction)),
             }
         }
 
@@ -1032,10 +970,7 @@ mod async_dispatch {
             match self.event_handler_subscribe(name) {
                 Some(SubscribeSlot::Sync(handler)) => handler.subscribe(input, push),
                 Some(SubscribeSlot::Async(handler)) => handler.subscribe(input, push).await,
-                None => Err(missing_handler(
-                    AffordanceTarget::Event(name.into()),
-                    Operation::SubscribeEvent,
-                )),
+                None => Err(missing_handler(Operation::SubscribeEvent)),
             }
         }
 
@@ -1049,10 +984,7 @@ mod async_dispatch {
             match self.event_handler_unsubscribe(name) {
                 Some(UnsubscribeSlot::Sync(handler)) => handler.unsubscribe(input),
                 Some(UnsubscribeSlot::Async(handler)) => handler.unsubscribe(input).await,
-                None => Err(missing_handler(
-                    AffordanceTarget::Event(name.into()),
-                    Operation::UnsubscribeEvent,
-                )),
+                None => Err(missing_handler(Operation::UnsubscribeEvent)),
             }
         }
     }
@@ -1067,17 +999,17 @@ mod async_dispatch {
 
 #[cfg(feature = "async")]
 mod consumed {
-    use alloc::{boxed::Box, collections::BTreeMap, format, string::String, sync::Arc, vec::Vec};
+    use alloc::{boxed::Box, collections::BTreeMap, string::String, sync::Arc, vec::Vec};
 
-    use clinkz_wot_td::td_defaults::{FormContext, effective_form_operations};
     use clinkz_wot_td::td_defaults::effective_form_security;
+    use clinkz_wot_td::td_defaults::{FormContext, effective_form_operations};
     use clinkz_wot_td::{data_type::Operation, form::Form, thing::Thing};
 
     use crate::interaction::{InteractionInput, InteractionOutput};
     use crate::{
-        AffordanceKind, AffordanceTarget, BindingRequest, ClientBinding, CoreError, CoreResult,
-        CredentialStore, SecurityContext, SecurityProvider, Subscription, SubscriptionGuard,
-        TransportRequest,
+        AffordanceTarget, BindingRequest, ClientBinding, CoreError, CoreResult, CredentialStore,
+        ErrorContext, ErrorPhase, RetryClass, SecurityContext, SecurityProvider,
+        SelectionFailureReason, Subscription, SubscriptionGuard, TransportRequest,
     };
 
     /// A consumed Thing plus its registered client bindings.
@@ -1147,18 +1079,14 @@ mod consumed {
         /// schemes and returns the accumulated metadata (e.g. `Authorization`
         /// headers). Returns an empty map when no providers are registered or
         /// the scheme is `nosec`.
-        fn apply_outbound_security(
-            &self,
-            form: &Form,
-        ) -> CoreResult<BTreeMap<String, String>> {
+        fn apply_outbound_security(&self, form: &Form) -> CoreResult<BTreeMap<String, String>> {
             if self.security_providers.is_empty() {
                 return Ok(BTreeMap::new());
             }
             let scheme_names = effective_form_security(&self.thing, form);
             let mut transport_request = TransportRequest::new("", "");
             for def_name in scheme_names {
-                let Some(scheme) = self.thing.security_definitions.get(def_name.as_str())
-                else {
+                let Some(scheme) = self.thing.security_definitions.get(def_name.as_str()) else {
                     continue;
                 };
                 // Match the provider by scheme *type* (e.g. "bearer"), not the
@@ -1190,7 +1118,7 @@ mod consumed {
         /// Performs an operation against a caller-selected affordance form.
         ///
         /// The form must belong to the target affordance and support the
-        /// operation; otherwise an `InvalidInteraction` / `UnsupportedOperation`
+        /// operation; otherwise a structured selection or unsupported-operation
         /// error is returned before any binding is consulted.
         pub async fn request(
             &self,
@@ -1206,11 +1134,7 @@ mod consumed {
                 .iter()
                 .find(|binding| binding.supports_with_thing(&self.thing, &form, operation))
                 .ok_or_else(|| {
-                    CoreError::UnsupportedBinding(format!(
-                        "No binding supports {} for {}",
-                        operation.as_str(),
-                        form.href.as_str()
-                    ))
+                    selection_error(SelectionFailureReason::NoSupportingBinding, operation)
                 })?;
 
             let applied_security = self.apply_outbound_security(&form)?;
@@ -1255,11 +1179,7 @@ mod consumed {
                 .iter()
                 .find(|binding| binding.supports_with_thing(&self.thing, &form, operation))
                 .ok_or_else(|| {
-                    CoreError::UnsupportedBinding(format!(
-                        "No binding supports {} for {}",
-                        operation.as_str(),
-                        form.href.as_str()
-                    ))
+                    selection_error(SelectionFailureReason::NoSupportingBinding, operation)
                 })?;
 
             let applied_security = self.apply_outbound_security(&form)?;
@@ -1282,53 +1202,55 @@ mod consumed {
             operation: Operation,
             form: &Form,
         ) -> CoreResult<()> {
-            let form_set = self.forms_for_target(target)?;
+            let form_set = self.forms_for_target(target, operation)?;
 
             // The public entry point accepts a caller-supplied `Arc<Form>`;
             // verify the form actually belongs to this affordance, otherwise a
             // foreign form (or a no-`op` form) could pass by falling back to the
             // affordance's default operations and dispatch to the wrong binding.
             if !form_set.forms.iter().any(|candidate| candidate == form) {
-                return Err(CoreError::InvalidInteraction(format!(
-                    "Selected form does not belong to the {:?} affordance",
-                    target
-                )));
+                return Err(selection_error(
+                    SelectionFailureReason::StrictSelectionMismatch,
+                    operation,
+                ));
             }
 
             if effective_form_operations(form_set.context, form).contains(&operation) {
                 Ok(())
             } else {
-                Err(CoreError::UnsupportedOperation(format!(
-                    "Form does not support {}",
-                    operation.as_str()
-                )))
+                Err(CoreError::UnsupportedOperation(
+                    ErrorContext::new(ErrorPhase::Selection, RetryClass::Never)
+                        .with_operation(operation),
+                ))
             }
         }
 
-        fn forms_for_target(&self, target: &AffordanceTarget) -> CoreResult<FormSet<'_>> {
+        fn forms_for_target(
+            &self,
+            target: &AffordanceTarget,
+            operation: Operation,
+        ) -> CoreResult<FormSet<'_>> {
             match target {
                 AffordanceTarget::Thing => Ok(FormSet {
                     context: FormContext::Thing,
                     forms: self.thing.forms.as_deref().unwrap_or(&[]),
                 }),
                 AffordanceTarget::Property(name) => {
-                    let property =
-                        find_affordance(AffordanceKind::Property, name, &self.thing.properties)?;
+                    let property = find_affordance(name, &self.thing.properties, operation)?;
                     Ok(FormSet {
                         context: FormContext::Property(property),
                         forms: property._interaction.forms.as_slice(),
                     })
                 }
                 AffordanceTarget::Action(name) => {
-                    let action =
-                        find_affordance(AffordanceKind::Action, name, &self.thing.actions)?;
+                    let action = find_affordance(name, &self.thing.actions, operation)?;
                     Ok(FormSet {
                         context: FormContext::Action(action),
                         forms: action._interaction.forms.as_slice(),
                     })
                 }
                 AffordanceTarget::Event(name) => {
-                    let event = find_affordance(AffordanceKind::Event, name, &self.thing.events)?;
+                    let event = find_affordance(name, &self.thing.events, operation)?;
                     Ok(FormSet {
                         context: FormContext::Event(event),
                         forms: event._interaction.forms.as_slice(),
@@ -1338,23 +1260,28 @@ mod consumed {
         }
     }
 
+    fn selection_error(reason: SelectionFailureReason, operation: Operation) -> CoreError {
+        CoreError::Selection {
+            reason,
+            context: ErrorContext::new(ErrorPhase::Selection, RetryClass::Never)
+                .with_operation(operation),
+        }
+    }
+
     struct FormSet<'a> {
         context: FormContext<'a>,
         forms: &'a [Form],
     }
 
     fn find_affordance<'a, T>(
-        kind: AffordanceKind,
         name: &str,
         affordances: &'a Option<BTreeMap<String, T>>,
+        operation: Operation,
     ) -> CoreResult<&'a T> {
         affordances
             .as_ref()
             .and_then(|affordances| affordances.get(name))
-            .ok_or_else(|| CoreError::UnknownAffordance {
-                kind,
-                name: name.into(),
-            })
+            .ok_or_else(|| selection_error(SelectionFailureReason::AffordanceMissing, operation))
     }
 }
 

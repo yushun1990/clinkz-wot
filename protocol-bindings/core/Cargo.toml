@@ -7,6 +7,9 @@ edition.workspace = true
 clinkz-wot-core = { path = "../../core", default-features = false }
 clinkz-wot-td = { path = "../../td", default-features = false }
 
+[dev-dependencies]
+clinkz-wot-foundation = { path = "../../foundation", default-features = false }
+
 [features]
 default = ["std"]
 std = ["clinkz-wot-td/std"]

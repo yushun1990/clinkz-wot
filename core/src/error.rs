@@ -1,15 +1,12 @@
-use alloc::string::String;
 use core::fmt;
 use core::time::Duration;
 
+use clinkz_wot_foundation::ResourceKind;
 use clinkz_wot_td::data_type::Operation;
 
 use crate::identity::{
     AffordanceSlotId, BindingGeneration, BindingId, CorrelationId, PlanId, ThingSlotId,
 };
-use crate::security::SecurityError;
-use crate::thing::{AffordanceKind, AffordanceTarget};
-
 const REDACTED_CAUSE_CAPACITY: usize = 96;
 
 /// Caller-visible retry classification for a structured core error.
@@ -328,94 +325,173 @@ pub type CoreResult<T> = Result<T, CoreError>;
 ///
 /// Non-exhaustive: future engine concerns may add variants. Callers should
 /// keep a `_` arm in `match` expressions.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq)]
 #[non_exhaustive]
 pub enum CoreError {
-    /// The requested affordance does not exist on the Thing.
-    UnknownAffordance { kind: AffordanceKind, name: String },
-    /// The requested operation is not supported by the selected affordance or form.
-    UnsupportedOperation(String),
-    /// No binding could handle the requested form or operation.
-    UnsupportedBinding(String),
-    /// Payload encoding or decoding failed.
-    Payload(String),
-    /// Security material could not be applied or validated.
-    Security(SecurityError),
-    /// The transport adapter failed.
-    Transport(String),
-    /// The implementation returned an invalid interaction result.
-    InvalidInteraction(String),
-    /// An inbound interaction targeted an affordance with no attached handler
-    /// (baseline addendum §4). Carries the target and operation so clients
-    /// receive actionable diagnostics (e.g. HTTP 501 bodies) instead of an
-    /// opaque "no handler" message.
-    MissingHandler {
-        target: AffordanceTarget,
-        operation: Operation,
+    /// Parsing or decoding an external document failed.
+    InvalidDocument(ErrorContext),
+    /// A value failed structural or semantic validation.
+    Validation(ErrorContext),
+    /// A deterministic configured ceiling was exceeded.
+    LimitExceeded {
+        /// Exhausted resource kind.
+        resource: ResourceKind,
+        /// Configured ceiling.
+        limit: u64,
+        /// Requested amount when known.
+        requested: Option<u64>,
+        /// Observed amount when known.
+        observed: Option<u64>,
+        /// Bounded diagnostic context.
+        context: ErrorContext,
     },
-    /// An inbound dispatch or routing failure with an opaque English reason.
-    InboundDispatch(String),
-    /// A handler panicked during dispatch (`std`-only panic→reply contract,
-    /// AD30). Carries the target and operation for diagnostics.
-    HandlerPanic {
-        target: AffordanceTarget,
-        operation: Operation,
+    /// A requested entity or generation-bearing handle was not found.
+    NotFound(ErrorContext),
+    /// The requested operation is not supported at the applicable boundary.
+    UnsupportedOperation(ErrorContext),
+    /// Candidate selection failed before execution.
+    Selection {
+        /// Structured selection reason.
+        reason: SelectionFailureReason,
+        /// Bounded diagnostic context.
+        context: ErrorContext,
     },
-    /// An outbound call exceeded its requested `InteractionOptions.timeout`
-    /// (AD39).
-    Timeout,
-    /// A `timeout` was requested but this build has no timer cfg (bare `no_std`,
-    /// AD45). Fail-closed: never silently ignored.
-    TimeoutUnsupported,
-    /// A caller-pinned `form_index` points at a form no binding can drive
-    /// (AD47).
-    UnsupportedForm { index: usize },
-    /// A byte-level handler emitted a content type the request's `Accept` hint
-    /// did not permit. The engine does not transcode (AD48 / E1).
-    ContentTypeMismatch { content_type: String },
+    /// A committed security operation failed.
+    Security {
+        /// Redacted security reason.
+        reason: SecurityFailureReason,
+        /// Bounded diagnostic context.
+        context: ErrorContext,
+    },
+    /// Application code failed or panicked.
+    Application(ErrorContext),
+    /// Protocol binding execution failed.
+    Binding(ErrorContext),
+    /// Payload encoding, decoding, media, or representation validation failed.
+    Payload(ErrorContext),
+    /// Shared queue, slot, or concurrency capacity is currently occupied.
+    Backpressure(ErrorContext),
+    /// The operation was cancelled while a reply opportunity remained.
+    Cancelled(ErrorContext),
+    /// A deadline expired.
+    TimedOut(ErrorContext),
+    /// A generation-bearing handle no longer identifies the live object.
+    StaleHandle(ErrorContext),
+    /// A lifecycle transition could not complete.
+    Lifecycle(ErrorContext),
+    /// Explicit cleanup failed or retained residual state.
+    Cleanup(ErrorContext),
+    /// A detected engine invariant was violated.
+    InternalInvariant(ErrorContext),
+}
+
+impl CoreError {
+    /// Returns the bounded diagnostic context for every error category.
+    pub const fn context(&self) -> &ErrorContext {
+        match self {
+            Self::InvalidDocument(context)
+            | Self::Validation(context)
+            | Self::NotFound(context)
+            | Self::UnsupportedOperation(context)
+            | Self::Application(context)
+            | Self::Binding(context)
+            | Self::Payload(context)
+            | Self::Backpressure(context)
+            | Self::Cancelled(context)
+            | Self::TimedOut(context)
+            | Self::StaleHandle(context)
+            | Self::Lifecycle(context)
+            | Self::Cleanup(context)
+            | Self::InternalInvariant(context)
+            | Self::LimitExceeded { context, .. }
+            | Self::Selection { context, .. }
+            | Self::Security { context, .. } => context,
+        }
+    }
+
+    /// Returns the retry classification carried by this error.
+    pub const fn retry_class(&self) -> RetryClass {
+        self.context().retry_class()
+    }
+
+    /// Returns the optional retry-after hint carried by this error.
+    pub const fn retry_after(&self) -> Option<Duration> {
+        self.context().retry_after()
+    }
+
+    /// Returns the structured selection reason when this is a selection error.
+    pub const fn selection_reason(&self) -> Option<SelectionFailureReason> {
+        match self {
+            Self::Selection { reason, .. } => Some(*reason),
+            _ => None,
+        }
+    }
+
+    /// Returns the structured security reason when this is a security error.
+    pub const fn security_reason(&self) -> Option<SecurityFailureReason> {
+        match self {
+            Self::Security { reason, .. } => Some(*reason),
+            _ => None,
+        }
+    }
+
+    /// Returns structured limit details when this is a limit error.
+    pub const fn limit_details(&self) -> Option<(ResourceKind, u64, Option<u64>, Option<u64>)> {
+        match self {
+            Self::LimitExceeded {
+                resource,
+                limit,
+                requested,
+                observed,
+                ..
+            } => Some((*resource, *limit, *requested, *observed)),
+            _ => None,
+        }
+    }
+
+    const fn category(&self) -> &'static str {
+        match self {
+            Self::InvalidDocument(_) => "InvalidDocument",
+            Self::Validation(_) => "Validation",
+            Self::LimitExceeded { .. } => "LimitExceeded",
+            Self::NotFound(_) => "NotFound",
+            Self::UnsupportedOperation(_) => "UnsupportedOperation",
+            Self::Selection { .. } => "Selection",
+            Self::Security { .. } => "Security",
+            Self::Application(_) => "Application",
+            Self::Binding(_) => "Binding",
+            Self::Payload(_) => "Payload",
+            Self::Backpressure(_) => "Backpressure",
+            Self::Cancelled(_) => "Cancelled",
+            Self::TimedOut(_) => "TimedOut",
+            Self::StaleHandle(_) => "StaleHandle",
+            Self::Lifecycle(_) => "Lifecycle",
+            Self::Cleanup(_) => "Cleanup",
+            Self::InternalInvariant(_) => "InternalInvariant",
+        }
+    }
+}
+
+impl fmt::Debug for CoreError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("CoreError")
+            .field("category", &self.category())
+            .field("context", self.context())
+            .finish()
+    }
 }
 
 impl fmt::Display for CoreError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::UnknownAffordance { kind, name } => {
-                write!(f, "Unknown {} affordance: {}", kind, name)
-            }
-            Self::UnsupportedOperation(message) => write!(f, "Unsupported operation: {}", message),
-            Self::UnsupportedBinding(message) => write!(f, "Unsupported binding: {}", message),
-            Self::Payload(message) => write!(f, "Payload error: {}", message),
-            Self::Security(error) => write!(f, "Security error: {}", error),
-            Self::Transport(message) => write!(f, "Transport error: {}", message),
-            Self::InvalidInteraction(message) => write!(f, "Invalid interaction: {}", message),
-            Self::MissingHandler { target, operation } => {
-                write!(f, "No handler attached for {:?} on {:?}", operation, target)
-            }
-            Self::InboundDispatch(message) => write!(f, "Inbound dispatch error: {}", message),
-            Self::HandlerPanic { target, operation } => {
-                write!(f, "Handler panicked for {:?} on {:?}", operation, target)
-            }
-            Self::Timeout => write!(f, "Outbound call timed out"),
-            Self::TimeoutUnsupported => write!(
-                f,
-                "Outbound timeout requested but unsupported on this build"
-            ),
-            Self::UnsupportedForm { index } => {
-                write!(f, "Caller-pinned form index {} is unsupported", index)
-            }
-            Self::ContentTypeMismatch { content_type } => {
-                write!(f, "Content type not acceptable: {}", content_type)
-            }
-        }
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(formatter, "{}: {}", self.category(), self.context())
     }
 }
 
 #[cfg(feature = "std")]
 impl std::error::Error for CoreError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        match self {
-            Self::Security(err) => Some(err),
-            _ => None,
-        }
+        None
     }
 }
 
@@ -424,10 +500,13 @@ mod tests {
     use alloc::format;
     use core::mem::size_of;
 
-    use clinkz_wot_foundation::{Generation, SlotIndex};
+    use clinkz_wot_foundation::{Generation, ResourceKind, SlotIndex};
     use clinkz_wot_td::data_type::Operation;
 
-    use super::{ErrorContext, ErrorPhase, REDACTED_CAUSE_CAPACITY, RetryClass};
+    use super::{
+        CoreError, ErrorContext, ErrorPhase, REDACTED_CAUSE_CAPACITY, RetryClass,
+        SecurityFailureReason, SelectionFailureReason,
+    };
     use crate::{AffordanceSlotId, BindingGeneration, BindingId, CorrelationId, ThingSlotId};
 
     #[test]
@@ -485,5 +564,67 @@ mod tests {
 
         assert_copy::<ErrorContext>();
         assert!(size_of::<ErrorContext>() <= 256);
+    }
+
+    #[test]
+    fn core_error_exposes_structured_details_without_recovering_text() {
+        let context = ErrorContext::new(ErrorPhase::Selection, RetryClass::Never);
+        let selection = CoreError::Selection {
+            reason: SelectionFailureReason::NoSupportingBinding,
+            context,
+        };
+        assert_eq!(
+            selection.selection_reason(),
+            Some(SelectionFailureReason::NoSupportingBinding)
+        );
+        assert_eq!(selection.security_reason(), None);
+        assert_eq!(selection.context(), &context);
+
+        let security = CoreError::Security {
+            reason: SecurityFailureReason::AuthorizationDenied,
+            context,
+        };
+        assert_eq!(
+            security.security_reason(),
+            Some(SecurityFailureReason::AuthorizationDenied)
+        );
+
+        let limit = CoreError::LimitExceeded {
+            resource: ResourceKind::PayloadBytesMax,
+            limit: 128,
+            requested: Some(129),
+            observed: None,
+            context,
+        };
+        assert_eq!(
+            limit.limit_details(),
+            Some((ResourceKind::PayloadBytesMax, 128, Some(129), None))
+        );
+    }
+
+    #[test]
+    fn core_error_formatting_is_bounded_and_redacted() {
+        let context = ErrorContext::new(ErrorPhase::Binding, RetryClass::CallerDecision)
+            .with_redacted_cause(7, "reviewed diagnostic");
+        let error = CoreError::Binding(context);
+        let debug = format!("{error:?}");
+        let display = format!("{error}");
+
+        assert!(debug.contains("Binding"));
+        assert!(debug.contains("reviewed diagnostic"));
+        assert!(display.contains("cause_code=7"));
+        assert!(!debug.contains("CallerDecision"));
+    }
+
+    #[cfg(feature = "std")]
+    #[test]
+    fn core_error_never_retains_a_source_chain() {
+        use std::error::Error;
+
+        let error = CoreError::Application(ErrorContext::new(
+            ErrorPhase::Handler,
+            RetryClass::CallerDecision,
+        ));
+        assert!(error.source().is_none());
     }
 }

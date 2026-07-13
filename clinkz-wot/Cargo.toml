@@ -6,6 +6,10 @@ edition.workspace = true
 description = "clinkz-wot — Rust Web of Things engine. Umbrella crate re-exporting the application-facing API."
 license = "MIT"
 
+[lints.clippy]
+# ServientError keeps the frozen allocation-free CoreError inline at the umbrella boundary.
+result_large_err = "allow"
+
 [dependencies]
 # Always pull in the application-facing stack. Feature flags below add
 # protocol bindings and codecs on top.

@@ -18,7 +18,7 @@ use std::sync::{Arc, Mutex};
 use async_trait::async_trait;
 use clinkz_wot_core::{
     BindingContext, BindingRequest, ClientBinding, CoreError, CoreResult, InteractionOutput,
-    ServerBinding, ThingId,
+    SelectionFailureReason, ServerBinding, ThingId,
 };
 use clinkz_wot_servient::ServientBuilder;
 use clinkz_wot_td::{
@@ -182,7 +182,10 @@ async fn pure_exposer_binding_leaves_consume_without_client() {
     assert!(
         matches!(
             err,
-            CoreError::UnsupportedOperation(_) | CoreError::UnsupportedBinding(_)
+            CoreError::Selection {
+                reason: SelectionFailureReason::NoSupportingBinding,
+                ..
+            }
         ),
         "no client binding available, got {err:?}"
     );

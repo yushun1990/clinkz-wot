@@ -17,7 +17,10 @@ use clinkz_wot_td::{data_type::Operation, form::Form, thing::Thing};
 use crate::AffordanceTarget;
 use crate::interaction::InteractionInput;
 #[cfg(feature = "async")]
-use crate::{CoreError, CoreResult, Subscription, interaction::InteractionOutput};
+use crate::{
+    CoreError, CoreResult, ErrorContext, ErrorPhase, RetryClass, Subscription,
+    interaction::InteractionOutput,
+};
 
 /// Request passed from the core runtime to a protocol binding.
 ///
@@ -86,10 +89,11 @@ pub trait ClientBinding: Send + Sync {
     /// only support one-shot request/response operations.
     async fn subscribe(
         &self,
-        _request: BindingRequest,
+        request: BindingRequest,
     ) -> CoreResult<(Subscription, Box<dyn SubscriptionGuard>)> {
         Err(CoreError::UnsupportedOperation(
-            "Binding does not support streaming subscriptions".into(),
+            ErrorContext::new(ErrorPhase::Binding, RetryClass::Never)
+                .with_operation(request.operation),
         ))
     }
 }

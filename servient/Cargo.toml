@@ -3,6 +3,10 @@ name = "clinkz-wot-servient"
 version.workspace = true
 edition.workspace = true
 
+[lints.clippy]
+# CoreError is an exact allocation-free no_std schema and remains inline at this boundary.
+result_large_err = "allow"
+
 [dependencies]
 clinkz-wot-core = { path = "../core", default-features = false }
 clinkz-wot-discovery = { path = "../discovery", default-features = false }

@@ -93,6 +93,10 @@ pub enum StartStatus<T> {
 }
 
 /// One item or the retained terminal result of a process.
+///
+/// The terminal value remains inline because the frozen portable schema cannot
+/// require allocation or indirection in `no_std` builds.
+#[allow(clippy::large_enum_variant)]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum ProcessEvent<T, D = ()> {
     /// One process item.
@@ -102,6 +106,10 @@ pub enum ProcessEvent<T, D = ()> {
 }
 
 /// Retained terminal result shared by subscriptions and discovery processes.
+///
+/// [`CoreError`] is intentionally inline in the exact frozen schema, so this
+/// enum may be larger than its non-failure variants.
+#[allow(clippy::large_enum_variant)]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum ProcessTerminal<D = ()> {
     /// The process completed normally.

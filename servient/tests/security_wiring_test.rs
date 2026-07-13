@@ -7,7 +7,7 @@
 //! - Bearer token missing → `MissingCredentials`, handler NOT called.
 //! - Bearer token wrong → `InvalidCredentials`, handler NOT called.
 //! - NoSec (default) → always passes.
-//! - Declared scheme with no registered provider → `UnsupportedScheme`.
+//! - Declared scheme with no registered provider → `SecurityUnavailable` selection.
 //! - Scope denial after successful verification.
 
 #![cfg(all(feature = "async", feature = "std"))]
@@ -15,8 +15,9 @@
 use std::sync::{Arc, Mutex};
 
 use clinkz_wot_core::{
-    AffordanceTarget, AuthMaterial, CoreError, Dispatch, InboundRequest, InteractionInput,
-    NoSecurityProvider, PropertyReadHandler, SecurityError, ThingId,
+    AffordanceTarget, AuthMaterial, CoreError, Dispatch, ErrorPhase, InboundRequest,
+    InteractionInput, NoSecurityProvider, PropertyReadHandler, RetryClass, SecurityFailureReason,
+    SelectionFailureReason, ThingId,
 };
 use clinkz_wot_servient::ServientBuilder;
 use clinkz_wot_td::{
@@ -176,7 +177,10 @@ async fn bearer_missing_credentials_rejects_before_handler() {
     );
     assert!(matches!(
         resp.error,
-        Some(CoreError::Security(SecurityError::MissingCredentials))
+        Some(CoreError::Security {
+            reason: SecurityFailureReason::MissingCredentials,
+            ..
+        })
     ));
 }
 
@@ -216,7 +220,10 @@ async fn bearer_wrong_token_rejects_with_invalid_credentials() {
     );
     assert!(matches!(
         resp.error,
-        Some(CoreError::Security(SecurityError::InvalidCredentials))
+        Some(CoreError::Security {
+            reason: SecurityFailureReason::InvalidCredentials,
+            ..
+        })
     ));
 }
 
@@ -267,7 +274,33 @@ async fn declared_scheme_without_provider_rejects() {
 
     assert!(matches!(
         resp.error,
-        Some(CoreError::Security(SecurityError::UnsupportedScheme))
+        Some(CoreError::Selection {
+            reason: SelectionFailureReason::SecurityUnavailable,
+            context,
+        }) if context.phase() == ErrorPhase::Selection
+            && context.retry_class() == RetryClass::Never
+    ));
+}
+
+#[tokio::test]
+async fn missing_security_definition_is_a_validation_failure() {
+    let mut td = secure_td();
+    td.security_definitions.remove("bearer");
+
+    let servient = ServientBuilder::new().build().expect("build");
+    let handle = servient.produce(td).expect("produce");
+    handle.expose().await.expect("expose");
+
+    let response = servient
+        .serve_request(build_request("urn:test:secure-lamp", None))
+        .await;
+
+    assert!(matches!(
+        response.error,
+        Some(CoreError::Validation(context))
+            if context.phase() == ErrorPhase::Validate
+                && context.retry_class() == RetryClass::Never
+                && context.operation() == Some(Operation::ReadProperty)
     ));
 }
 

@@ -59,9 +59,11 @@ extern crate std;
 
 extern crate alloc;
 
-use alloc::{borrow::Cow, format, vec::Vec};
+use alloc::{borrow::Cow, vec::Vec};
 
-use clinkz_wot_core::{CodecInput, CoreError, CoreResult, Payload, PayloadCodec};
+use clinkz_wot_core::{
+    CodecInput, CoreError, CoreResult, ErrorContext, ErrorPhase, Payload, PayloadCodec, RetryClass,
+};
 
 /// Media type handled by [`CborCodec`].
 pub const CBOR_CONTENT_TYPE: &str = "application/cbor";
@@ -118,9 +120,10 @@ impl PayloadCodec for CborCodec {
     /// re-serialize → re-parse triple pass.
     fn decode_raw<'a>(&self, payload: &'a Payload) -> CoreResult<Cow<'a, [u8]>> {
         // Validate well-formedness once (cheap structural parse) so callers
-        // still get a clear error on malformed CBOR, but do not reserialize.
+        // still receive a structured payload error, but do not reserialize or
+        // retain the raw decoder error.
         ciborium::de::from_reader::<ciborium::Value, _>(payload.body.as_ref())
-            .map_err(|err| CoreError::Payload(format!("CBOR decode failed: {}", err)))?;
+            .map_err(|_| codec_payload_error())?;
         Ok(Cow::Borrowed(payload.body.as_ref()))
     }
 }
@@ -134,11 +137,18 @@ impl PayloadCodec for CborCodec {
 /// Returns [`CoreError::Payload`] when the input is not well-formed CBOR or
 /// when re-serialization fails (the latter is exceedingly rare for in-memory
 /// `Vec<u8>` writes).
+#[allow(
+    clippy::result_large_err,
+    reason = "CoreError is an exact allocation-free no_std schema"
+)]
 fn reencode(bytes: &[u8]) -> CoreResult<Vec<u8>> {
-    let value: ciborium::Value = ciborium::de::from_reader(bytes)
-        .map_err(|err| CoreError::Payload(format!("CBOR decode failed: {}", err)))?;
+    let value: ciborium::Value =
+        ciborium::de::from_reader(bytes).map_err(|_| codec_payload_error())?;
     let mut out = Vec::with_capacity(bytes.len());
-    ciborium::ser::into_writer(&value, &mut out)
-        .map_err(|err| CoreError::Payload(format!("CBOR encode failed: {}", err)))?;
+    ciborium::ser::into_writer(&value, &mut out).map_err(|_| codec_payload_error())?;
     Ok(out)
+}
+
+fn codec_payload_error() -> CoreError {
+    CoreError::Payload(ErrorContext::new(ErrorPhase::Codec, RetryClass::Never))
 }

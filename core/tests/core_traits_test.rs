@@ -10,9 +10,11 @@
 
 use std::sync::Arc;
 
+#[cfg(feature = "async")]
+use clinkz_wot_core::AffordanceTarget;
 use clinkz_wot_core::{
-    AffordanceKind, AffordanceTarget, CoreError, CoreResult, ExposedThing, InteractionInput,
-    InteractionOutput, InteractionStatus, Payload,
+    CoreError, CoreResult, ErrorContext, ErrorPhase, ExposedThing, InteractionInput,
+    InteractionOutput, InteractionStatus, Payload, RetryClass, SelectionFailureReason,
 };
 use clinkz_wot_td::{
     affordance::{ActionAffordance, EventAffordance, InteractionHelper, PropertyAffordance},
@@ -44,10 +46,12 @@ struct StoredWrite {
 
 impl clinkz_wot_core::PropertyWriteHandler for StoredWrite {
     fn write(&self, input: &mut InteractionInput) -> CoreResult<InteractionOutput> {
-        let payload = input
-            .data
-            .take()
-            .ok_or_else(|| CoreError::InvalidInteraction("Missing property payload".into()))?;
+        let payload = input.data.take().ok_or_else(|| {
+            CoreError::Payload(
+                ErrorContext::new(ErrorPhase::Handler, RetryClass::Never)
+                    .with_operation(Operation::WriteProperty),
+            )
+        })?;
         *self.value.lock().unwrap() = payload;
         Ok(InteractionOutput::empty())
     }
@@ -196,13 +200,9 @@ fn local_exposed_thing_rejects_unknown_affordance_before_dispatch() {
     let err = thing
         .read_property("missing", &InteractionInput::empty())
         .unwrap_err();
-    assert_eq!(
-        err,
-        CoreError::UnknownAffordance {
-            kind: AffordanceKind::Property,
-            name: "missing".into()
-        }
-    );
+    assert!(matches!(err, CoreError::NotFound(context)
+        if context.phase() == ErrorPhase::Selection
+            && context.retry_class() == RetryClass::Never));
 }
 
 #[test]
@@ -213,17 +213,20 @@ fn local_exposed_thing_reports_missing_registered_handler() {
         .unwrap_err();
     assert!(matches!(
         err,
-        CoreError::MissingHandler {
-            target: AffordanceTarget::Action(_),
-            operation: Operation::InvokeAction,
-        }
+        CoreError::UnsupportedOperation(context)
+            if context.phase() == ErrorPhase::Handler
+                && context.retry_class() == RetryClass::Never
+                && context.operation() == Some(Operation::InvokeAction)
     ));
 }
 
 #[test]
 fn core_error_display_is_english() {
-    let err = CoreError::UnsupportedBinding("no matching form".into());
-    assert_eq!(err.to_string(), "Unsupported binding: no matching form");
+    let err = CoreError::Selection {
+        reason: SelectionFailureReason::NoSupportingBinding,
+        context: ErrorContext::new(ErrorPhase::Selection, RetryClass::Never),
+    };
+    assert_eq!(err.to_string(), "Selection: phase=Selection");
 }
 
 #[test]
@@ -332,10 +335,12 @@ mod consumed_async {
             )
             .await
             .unwrap_err();
-        assert!(
-            matches!(err, CoreError::InvalidInteraction(_)),
-            "expected InvalidInteraction for a foreign form, got {err:?}"
-        );
+        assert!(matches!(err, CoreError::Selection {
+            reason: SelectionFailureReason::StrictSelectionMismatch,
+            context,
+        } if context.phase() == ErrorPhase::Selection
+            && context.retry_class() == RetryClass::Never
+            && context.operation() == Some(Operation::ReadProperty)));
     }
 
     #[tokio::test]
@@ -355,13 +360,12 @@ mod consumed_async {
             )
             .await
             .unwrap_err();
-        assert_eq!(
-            err,
-            CoreError::UnknownAffordance {
-                kind: AffordanceKind::Property,
-                name: "missing".into()
-            }
-        );
+        assert!(matches!(err, CoreError::Selection {
+            reason: SelectionFailureReason::AffordanceMissing,
+            context,
+        } if context.phase() == ErrorPhase::Selection
+            && context.retry_class() == RetryClass::Never
+            && context.operation() == Some(Operation::ReadProperty)));
     }
 
     #[tokio::test]
@@ -390,10 +394,10 @@ mod consumed_async {
             )
             .await
             .unwrap_err();
-        assert_eq!(
-            err,
-            CoreError::UnsupportedOperation("Form does not support writeproperty".into())
-        );
+        assert!(matches!(err, CoreError::UnsupportedOperation(context)
+            if context.phase() == ErrorPhase::Selection
+                && context.retry_class() == RetryClass::Never
+                && context.operation() == Some(Operation::WriteProperty)));
     }
 
     #[tokio::test]
@@ -409,12 +413,12 @@ mod consumed_async {
             )
             .await
             .unwrap_err();
-        assert_eq!(
-            err,
-            CoreError::UnsupportedBinding(
-                "No binding supports readproperty for wot://thing/properties/status".into()
-            )
-        );
+        assert!(matches!(err, CoreError::Selection {
+            reason: SelectionFailureReason::NoSupportingBinding,
+            context,
+        } if context.phase() == ErrorPhase::Selection
+            && context.retry_class() == RetryClass::Never
+            && context.operation() == Some(Operation::ReadProperty)));
     }
 
     #[tokio::test]
@@ -456,7 +460,10 @@ mod consumed_async {
             }
             async fn invoke(&self, request: BindingRequest) -> CoreResult<InteractionOutput> {
                 assert_eq!(
-                    request.applied_security.get("Authorization").map(|s| s.as_str()),
+                    request
+                        .applied_security
+                        .get("Authorization")
+                        .map(|s| s.as_str()),
                     Some("Bearer secret-token"),
                     "Bearer token should flow through applied_security"
                 );
@@ -468,9 +475,7 @@ mod consumed_async {
         }
 
         let mut thing = ConsumedThing::new(td);
-        thing.register_binding(
-            Arc::new(SecurityCheckingBinding) as Arc<dyn ClientBinding>,
-        );
+        thing.register_binding(Arc::new(SecurityCheckingBinding) as Arc<dyn ClientBinding>);
         thing.register_security(
             vec![
                 Arc::new(BearerSecurityProvider::new("dummy", "principal", [""]))

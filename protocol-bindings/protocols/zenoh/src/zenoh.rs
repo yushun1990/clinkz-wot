@@ -1,18 +1,20 @@
-use alloc::{
-    boxed::Box,
-    collections::BTreeMap,
-    string::{String, ToString},
-    sync::{Arc, Weak},
-};
+#[cfg(feature = "async")]
+use alloc::sync::Weak;
+use alloc::{boxed::Box, collections::BTreeMap, string::String, sync::Arc};
 
+#[cfg(feature = "async")]
 use clinkz_wot_core::{
-    AffordanceTarget, CoreError, CoreResult, InteractionInput, InteractionOutput, Payload,
-    Subscription, SubscriptionGuard, WotLock,
+    AffordanceTarget, BindingRequest, ClientBinding, SelectionFailureReason, WotLock,
+};
+use clinkz_wot_core::{
+    CoreError, CoreResult, ErrorContext, ErrorPhase, InteractionInput, InteractionOutput, Payload,
+    RetryClass, Subscription, SubscriptionGuard,
 };
 #[cfg(feature = "async")]
-use clinkz_wot_core::{BindingRequest, ClientBinding};
 use clinkz_wot_protocol_bindings::{AffordanceRef, validate_form_operation};
-use clinkz_wot_td::{data_type::Operation, form::Form};
+use clinkz_wot_td::data_type::Operation;
+#[cfg(feature = "async")]
+use clinkz_wot_td::form::Form;
 
 use crate::ZenohOperationPlan;
 
@@ -49,9 +51,10 @@ pub trait ZenohTransport {
         &self,
         _request: ZenohTransportRequest,
     ) -> CoreResult<(Subscription, Box<dyn SubscriptionGuard>)> {
-        Err(CoreError::UnsupportedOperation(
-            "Zenoh transport does not support streaming subscriptions".into(),
-        ))
+        Err(CoreError::UnsupportedOperation(ErrorContext::new(
+            ErrorPhase::Binding,
+            RetryClass::Never,
+        )))
     }
 }
 
@@ -78,18 +81,21 @@ pub struct ZenohBindingTransport<T> {
     /// Bitset of supported [`Operation`]s (bit position = discriminant).
     supported_operations: u32,
     transport: T,
+    #[cfg(feature = "async")]
     plan_cache: WotLock<BTreeMap<PlanCacheKey, PlanCacheEntry>>,
 }
 
 /// Identity key for the per-form plan cache. Uses the `Arc<Form>` allocation
 /// address, which is stable for the lifetime of the `Arc` and unique
 /// process-wide.
+#[cfg(feature = "async")]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 struct PlanCacheKey {
     form_ptr: usize,
     operation: Operation,
 }
 
+#[cfg(feature = "async")]
 #[derive(Clone)]
 struct PlanCacheEntry {
     /// Weak reference so the entry is evicted when the caller drops the form.
@@ -120,6 +126,7 @@ impl<T> ZenohBindingTransport<T> {
         Self {
             supported_operations: ops_to_bitset(operations),
             transport,
+            #[cfg(feature = "async")]
             plan_cache: WotLock::new(BTreeMap::new()),
         }
     }
@@ -129,6 +136,7 @@ impl<T> ZenohBindingTransport<T> {
         Self {
             supported_operations: default_supported_operations(),
             transport,
+            #[cfg(feature = "async")]
             plan_cache: WotLock::new(BTreeMap::new()),
         }
     }
@@ -199,6 +207,7 @@ where
     }
 }
 
+#[cfg(feature = "async")]
 impl<T> ZenohBindingTransport<T> {
     /// Returns the cached [`ZenohOperationPlan`] for the given form and
     /// operation, computing and inserting it on miss.
@@ -260,6 +269,7 @@ impl<T> ZenohBindingTransport<T> {
     }
 }
 
+#[cfg(feature = "async")]
 fn prune_dead_plan_cache_entries(cache: &mut BTreeMap<PlanCacheKey, PlanCacheEntry>) {
     cache.retain(|_, entry| entry.form_weak.upgrade().is_some());
 }
@@ -276,26 +286,38 @@ pub fn build_zenoh_transport_request(
     }
 }
 
+#[cfg(feature = "async")]
 fn core_error_from_zenoh_error(err: crate::ZenohBindingError) -> CoreError {
     match err {
-        // Preserve structured shared-binding errors by routing them through
-        // the canonical `From<BindingError> for CoreError` impl defined in
-        // `clinkz_wot_protocol_bindings::error`. Two variants map
-        // structurally; the rest funnel through `InvalidInteraction`.
         crate::ZenohBindingError::Shared(binding_error) => CoreError::from(binding_error),
-        crate::ZenohBindingError::Selection(message)
-        | crate::ZenohBindingError::UnsupportedForm(message)
-        | crate::ZenohBindingError::MissingAuthority(message)
-        | crate::ZenohBindingError::UnsupportedTransport(message)
-        | crate::ZenohBindingError::InvalidExtension { message, .. } => {
-            CoreError::InvalidInteraction(message)
+        crate::ZenohBindingError::Selection(_) => CoreError::InternalInvariant(ErrorContext::new(
+            ErrorPhase::Selection,
+            RetryClass::Never,
+        )),
+        crate::ZenohBindingError::UnsupportedForm(_) => {
+            selection_error(SelectionFailureReason::StrictSelectionMismatch)
         }
-        crate::ZenohBindingError::Target(message) => {
-            CoreError::InvalidInteraction(message.to_string())
+        crate::ZenohBindingError::InvalidExtension { .. } => {
+            CoreError::Validation(ErrorContext::new(ErrorPhase::Validate, RetryClass::Never))
+        }
+        crate::ZenohBindingError::MissingAuthority(_) | crate::ZenohBindingError::Target(_) => {
+            selection_error(SelectionFailureReason::TargetResolutionFailed)
+        }
+        crate::ZenohBindingError::UnsupportedTransport(_) => {
+            selection_error(SelectionFailureReason::NoSupportingBinding)
         }
     }
 }
 
+#[cfg(feature = "async")]
+fn selection_error(reason: SelectionFailureReason) -> CoreError {
+    CoreError::Selection {
+        reason,
+        context: ErrorContext::new(ErrorPhase::Selection, RetryClass::Never),
+    }
+}
+
+#[cfg(feature = "async")]
 fn affordance_ref_from_target(target: &AffordanceTarget) -> AffordanceRef<'_> {
     match target {
         AffordanceTarget::Thing => AffordanceRef::Thing,
@@ -330,7 +352,7 @@ fn default_supported_operations() -> u32 {
     ])
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "async"))]
 mod tests {
     use super::*;
 
@@ -346,6 +368,51 @@ mod tests {
     impl ZenohTransport for NoopZenohTransport {
         fn execute(&self, _request: ZenohTransportRequest) -> CoreResult<InteractionOutput> {
             Ok(InteractionOutput::empty())
+        }
+    }
+
+    #[test]
+    fn maps_zenoh_planning_errors_without_retaining_raw_text() {
+        let unsupported = core_error_from_zenoh_error(crate::ZenohBindingError::UnsupportedForm(
+            String::from("private-form"),
+        ));
+        assert_eq!(
+            unsupported.selection_reason(),
+            Some(SelectionFailureReason::StrictSelectionMismatch),
+        );
+
+        let missing_authority = core_error_from_zenoh_error(
+            crate::ZenohBindingError::MissingAuthority(String::from("private-authority")),
+        );
+        assert_eq!(
+            missing_authority.selection_reason(),
+            Some(SelectionFailureReason::TargetResolutionFailed),
+        );
+
+        let unsupported_transport = core_error_from_zenoh_error(
+            crate::ZenohBindingError::UnsupportedTransport(String::from("private-transport")),
+        );
+        assert_eq!(
+            unsupported_transport.selection_reason(),
+            Some(SelectionFailureReason::NoSupportingBinding),
+        );
+
+        let invalid_extension =
+            core_error_from_zenoh_error(crate::ZenohBindingError::InvalidExtension {
+                term: "cz:test",
+                message: String::from("private-extension"),
+            });
+        assert!(matches!(invalid_extension, CoreError::Validation(_)));
+
+        for error in [
+            unsupported,
+            missing_authority,
+            unsupported_transport,
+            invalid_extension,
+        ] {
+            let debug = alloc::format!("{error:?}");
+            assert!(!debug.contains("private-"));
+            assert!(error.context().redacted_cause().is_none());
         }
     }
 

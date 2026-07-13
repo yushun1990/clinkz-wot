@@ -363,6 +363,7 @@ name = "clinkz-wot-protocol-bindings"
 version = "0.1.0"
 dependencies = [
  "clinkz-wot-core",
+ "clinkz-wot-foundation",
  "clinkz-wot-td",
 ]
 

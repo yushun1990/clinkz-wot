@@ -5,7 +5,7 @@
 //! applies when this codec is registered.
 
 use clinkz_wot_codec_cbor::{CBOR_CONTENT_TYPE, CborCodec};
-use clinkz_wot_core::{CodecInput, Payload, PayloadCodec};
+use clinkz_wot_core::{CodecInput, CoreError, ErrorPhase, Payload, PayloadCodec, RetryClass};
 
 use ciborium::Value;
 
@@ -27,6 +27,13 @@ fn status_map() -> Value {
         .into_iter()
         .collect::<Vec<_>>(),
     )
+}
+
+fn assert_codec_payload_error(error: CoreError) {
+    assert!(matches!(error, CoreError::Payload(context)
+        if context.phase() == ErrorPhase::Codec
+            && context.retry_class() == RetryClass::Never
+            && context.redacted_cause().is_none()));
 }
 
 #[test]
@@ -106,12 +113,7 @@ fn encode_rejects_malformed_cbor() {
     let truncated = [0x61];
     let codec = CborCodec::new();
     let err = codec.encode(CodecInput { body: &truncated }).unwrap_err();
-    let message = format!("{}", err);
-    assert!(
-        message.contains("CBOR decode failed"),
-        "expected CBOR decode error in: {}",
-        message
-    );
+    assert_codec_payload_error(err);
 }
 
 #[test]
@@ -121,12 +123,7 @@ fn decode_rejects_malformed_cbor() {
     let payload = Payload::new(vec![0xc0], CBOR_CONTENT_TYPE);
     let codec = CborCodec::new();
     let err = codec.decode(&payload).unwrap_err();
-    let message = format!("{}", err);
-    assert!(
-        message.contains("CBOR decode failed"),
-        "expected CBOR decode error in: {}",
-        message
-    );
+    assert_codec_payload_error(err);
 }
 
 #[test]

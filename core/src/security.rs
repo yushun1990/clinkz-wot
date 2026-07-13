@@ -4,7 +4,10 @@ use core::fmt;
 use clinkz_wot_td::{form::Form, security_scheme::SecurityScheme, thing::Thing};
 
 use crate::inbound::InboundRequest;
-use crate::{CoreError, CoreResult, TransportRequest, WotLock};
+use crate::{
+    CoreError, CoreResult, ErrorContext, ErrorPhase, RetryClass, SecurityFailureReason,
+    TransportRequest, WotLock,
+};
 
 /// Security metadata available while preparing a transport request.
 #[derive(Clone, Copy)]
@@ -160,20 +163,20 @@ pub trait SecurityProvider: Send + Sync {
     /// (baseline v3.0 §8 / addendum §1.2).
     ///
     /// `scheme` is the security scheme resolved from the matched form. The
-    /// default implementation rejects every inbound request as
-    /// [`SecurityError::UnsupportedScheme`]; providers that handle inbound
-    /// authentication override this and return the established [`Principal`].
+    /// default implementation rejects every inbound request with
+    /// [`SecurityFailureReason::UnsupportedScheme`]; providers that handle
+    /// inbound authentication override this and return the established
+    /// [`Principal`].
     /// `verify` is synchronous, matching [`apply`](Self::apply).
     ///
     /// Per-affordance scope enforcement is performed by the dispatcher (using
     /// [`check_scopes`]) after `verify` succeeds, since the required scopes live
     /// on the matched form rather than the scheme.
-    fn verify(
-        &self,
-        _request: &InboundRequest,
-        _scheme: &SecurityScheme,
-    ) -> Result<Principal, SecurityError> {
-        Err(SecurityError::UnsupportedScheme)
+    fn verify(&self, request: &InboundRequest, _scheme: &SecurityScheme) -> CoreResult<Principal> {
+        Err(security_error(
+            SecurityFailureReason::UnsupportedScheme,
+            request,
+        ))
     }
 }
 
@@ -258,87 +261,31 @@ impl Principal {
     }
 }
 
-/// Failure reported by inbound security verification (baseline addendum §1.3).
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum SecurityError {
-    /// No auth material was supplied where the scheme requires it.
-    MissingCredentials,
-    /// Auth material was supplied but did not validate.
-    InvalidCredentials,
-    /// The matched security scheme is not supported by this provider.
-    UnsupportedScheme,
-    /// The principal lacks a required scope.
-    ScopeDenied {
-        /// Required scope names not satisfied by the caller.
-        required: Vec<String>,
-        /// Scope names established for the caller.
-        present: Vec<String>,
-    },
-    /// Scheme- or transport-specific failure with an opaque English reason.
-    SchemeFailure(String),
-}
-
-impl fmt::Display for SecurityError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::MissingCredentials => f.write_str("missing credentials"),
-            Self::InvalidCredentials => f.write_str("invalid credentials"),
-            Self::UnsupportedScheme => f.write_str("unsupported security scheme"),
-            Self::ScopeDenied { required, present } => {
-                write!(
-                    f,
-                    "scope denied: required {:?}, present {:?}",
-                    required, present
-                )
-            }
-            Self::SchemeFailure(message) => {
-                write!(f, "security scheme failure: {}", message)
-            }
-        }
-    }
-}
-
-#[cfg(feature = "std")]
-impl std::error::Error for SecurityError {}
-
-/// Maps a [`SecurityError`] into a [`CoreError`], preserving the structured
-/// taxonomy so callers can pattern-match on the specific failure.
-impl From<SecurityError> for CoreError {
-    fn from(error: SecurityError) -> Self {
-        CoreError::Security(error)
+fn security_error(reason: SecurityFailureReason, request: &InboundRequest) -> CoreError {
+    CoreError::Security {
+        reason,
+        context: ErrorContext::new(ErrorPhase::Commit, RetryClass::Never)
+            .with_operation(request.operation)
+            .with_correlation(request.correlation),
     }
 }
 
 /// Checks whether `present` scopes satisfy every `required` scope.
 ///
 /// Returns `Ok(())` when each required scope is among `present`. Otherwise
-/// returns [`SecurityError::ScopeDenied`] reporting the unsatisfied required
-/// scopes and the caller's present scopes for diagnostics.
+/// returns a bounded [`SecurityFailureReason::AuthorizationDenied`] error. Raw
+/// required and present scope lists are not retained in public errors.
 ///
 /// Intended for inbound dispatchers to run after [`SecurityProvider::verify`]
 /// succeeds, enforcing the matched form's required scopes (baseline v3.0 §8:
 /// "authenticate plus an optional scope match").
-pub fn check_scopes(required: &[String], present: &[String]) -> Result<(), SecurityError> {
-    // Single pass over `required`: the previous implementation scanned
-    // `present` twice — once via `all(contains)` for the success check and
-    // again via `filter(contains)` to build the missing list. Collecting the
-    // unsatisfied scopes once is strictly better on the failure path and equal
-    // on the success path, while staying allocation-free in the common
-    // fully-satisfied case (`Vec::new` does not allocate until the first push).
-    // A `BTreeSet` was considered but rejected: it would allocate and build a
-    // tree on every request, which hurts the typical small-scope hot path.
-    let mut missing: Vec<String> = Vec::new();
-    for req in required {
-        if !present.contains(req) {
-            missing.push(req.clone());
-        }
-    }
-    if missing.is_empty() {
+pub fn check_scopes(required: &[String], present: &[String]) -> CoreResult<()> {
+    if required.iter().all(|scope| present.contains(scope)) {
         Ok(())
     } else {
-        Err(SecurityError::ScopeDenied {
-            required: missing,
-            present: present.to_vec(),
+        Err(CoreError::Security {
+            reason: SecurityFailureReason::AuthorizationDenied,
+            context: ErrorContext::new(ErrorPhase::Validate, RetryClass::Never),
         })
     }
 }
@@ -398,11 +345,7 @@ impl SecurityProvider for NoSecurityProvider {
         Ok(())
     }
 
-    fn verify(
-        &self,
-        _request: &InboundRequest,
-        _scheme: &SecurityScheme,
-    ) -> Result<Principal, SecurityError> {
+    fn verify(&self, _request: &InboundRequest, _scheme: &SecurityScheme) -> CoreResult<Principal> {
         Ok(Principal::anonymous())
     }
 }
@@ -491,11 +434,7 @@ impl SecurityProvider for BearerSecurityProvider {
         Ok(())
     }
 
-    fn verify(
-        &self,
-        request: &InboundRequest,
-        _scheme: &SecurityScheme,
-    ) -> Result<Principal, SecurityError> {
+    fn verify(&self, request: &InboundRequest, _scheme: &SecurityScheme) -> CoreResult<Principal> {
         match &request.auth {
             Some(AuthMaterial::BearerToken(token)) => {
                 if constant_time_eq(token, &self.valid_token) {
@@ -504,11 +443,20 @@ impl SecurityProvider for BearerSecurityProvider {
                         scopes: self.scopes.clone(),
                     })
                 } else {
-                    Err(SecurityError::InvalidCredentials)
+                    Err(security_error(
+                        SecurityFailureReason::InvalidCredentials,
+                        request,
+                    ))
                 }
             }
-            Some(_) => Err(SecurityError::InvalidCredentials),
-            None => Err(SecurityError::MissingCredentials),
+            Some(_) => Err(security_error(
+                SecurityFailureReason::InvalidCredentials,
+                request,
+            )),
+            None => Err(security_error(
+                SecurityFailureReason::MissingCredentials,
+                request,
+            )),
         }
     }
 }
@@ -577,11 +525,7 @@ impl SecurityProvider for BasicSecurityProvider {
         Ok(())
     }
 
-    fn verify(
-        &self,
-        request: &InboundRequest,
-        _scheme: &SecurityScheme,
-    ) -> Result<Principal, SecurityError> {
+    fn verify(&self, request: &InboundRequest, _scheme: &SecurityScheme) -> CoreResult<Principal> {
         match &request.auth {
             Some(AuthMaterial::Basic { username, password }) => {
                 if constant_time_eq(username.as_bytes(), self.valid_username.as_bytes())
@@ -592,11 +536,20 @@ impl SecurityProvider for BasicSecurityProvider {
                         scopes: self.scopes.clone(),
                     })
                 } else {
-                    Err(SecurityError::InvalidCredentials)
+                    Err(security_error(
+                        SecurityFailureReason::InvalidCredentials,
+                        request,
+                    ))
                 }
             }
-            Some(_) => Err(SecurityError::InvalidCredentials),
-            None => Err(SecurityError::MissingCredentials),
+            Some(_) => Err(security_error(
+                SecurityFailureReason::InvalidCredentials,
+                request,
+            )),
+            None => Err(security_error(
+                SecurityFailureReason::MissingCredentials,
+                request,
+            )),
         }
     }
 }
@@ -673,7 +626,13 @@ mod provider_tests {
                 ),
             )
             .unwrap_err();
-        assert!(matches!(err, SecurityError::InvalidCredentials));
+        assert!(matches!(
+            err,
+            CoreError::Security {
+                reason: SecurityFailureReason::InvalidCredentials,
+                ..
+            }
+        ));
     }
 
     #[test]
@@ -687,7 +646,13 @@ mod provider_tests {
                 ),
             )
             .unwrap_err();
-        assert!(matches!(err, SecurityError::MissingCredentials));
+        assert!(matches!(
+            err,
+            CoreError::Security {
+                reason: SecurityFailureReason::MissingCredentials,
+                ..
+            }
+        ));
     }
 
     #[test]
@@ -720,7 +685,13 @@ mod provider_tests {
                 ),
             )
             .unwrap_err();
-        assert!(matches!(err, SecurityError::InvalidCredentials));
+        assert!(matches!(
+            err,
+            CoreError::Security {
+                reason: SecurityFailureReason::InvalidCredentials,
+                ..
+            }
+        ));
     }
 
     #[test]
@@ -768,32 +739,21 @@ mod tests {
     }
 
     #[test]
-    fn security_error_maps_into_core_error_security_variant() {
-        assert!(matches!(
-            CoreError::from(SecurityError::MissingCredentials),
-            CoreError::Security(SecurityError::MissingCredentials)
-        ));
-        assert!(matches!(
-            CoreError::from(SecurityError::InvalidCredentials),
-            CoreError::Security(SecurityError::InvalidCredentials)
-        ));
-        assert!(matches!(
-            CoreError::from(SecurityError::UnsupportedScheme),
-            CoreError::Security(SecurityError::UnsupportedScheme)
-        ));
-        let denied = CoreError::from(SecurityError::ScopeDenied {
-            required: alloc::vec![String::from("read")],
-            present: alloc::vec![],
-        });
-        assert!(matches!(
-            denied,
-            CoreError::Security(SecurityError::ScopeDenied { .. })
-        ));
-        let failure = CoreError::from(SecurityError::SchemeFailure(String::from("expired token")));
-        assert!(matches!(
-            failure,
-            CoreError::Security(SecurityError::SchemeFailure(_))
-        ));
+    fn security_error_uses_the_structured_core_taxonomy() {
+        let request = InboundRequest::new(
+            ThingId::from("urn:thing:1"),
+            AffordanceTarget::Thing,
+            Operation::ReadProperty,
+            InteractionInput::empty(),
+        );
+        let error = security_error(SecurityFailureReason::MissingCredentials, &request);
+        assert_eq!(
+            error.security_reason(),
+            Some(SecurityFailureReason::MissingCredentials)
+        );
+        assert_eq!(error.context().phase(), ErrorPhase::Commit);
+        assert_eq!(error.context().operation(), Some(Operation::ReadProperty));
+        assert_eq!(error.retry_class(), RetryClass::Never);
     }
 
     #[test]
@@ -812,17 +772,16 @@ mod tests {
     }
 
     #[test]
-    fn check_scopes_denies_reporting_unsatisfied_scopes() {
+    fn check_scopes_denies_without_retaining_scope_lists() {
         let required = alloc::vec![String::from("read"), String::from("write")];
         let present = alloc::vec![String::from("read")];
         let err = check_scopes(&required, &present).unwrap_err();
         assert_eq!(
-            err,
-            SecurityError::ScopeDenied {
-                required: alloc::vec![String::from("write")],
-                present: alloc::vec![String::from("read")],
-            }
+            err.security_reason(),
+            Some(SecurityFailureReason::AuthorizationDenied)
         );
+        assert_eq!(err.context().phase(), ErrorPhase::Validate);
+        assert_eq!(err.retry_class(), RetryClass::Never);
     }
 
     #[test]
@@ -844,9 +803,10 @@ mod tests {
             InteractionInput::empty(),
         );
         let scheme = SecurityScheme::NoSec(NoSecurityScheme::default());
+        let error = OutboundOnly.verify(&request, &scheme).unwrap_err();
         assert_eq!(
-            OutboundOnly.verify(&request, &scheme),
-            Err(SecurityError::UnsupportedScheme)
+            error.security_reason(),
+            Some(SecurityFailureReason::UnsupportedScheme)
         );
     }
 }
