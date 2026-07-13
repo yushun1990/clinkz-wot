@@ -124,7 +124,7 @@ async fn produce_expose_registers_and_dispatches() {
     let response = servient.serve_request(request).await;
 
     // The handler's value reached the response.
-    let body = response.output.data.as_ref().unwrap().body.as_ref();
+    let body = response.output.data().unwrap().body.as_ref();
     assert_eq!(body, b"on");
     assert!(response.error.is_none());
 }
@@ -326,7 +326,7 @@ async fn all_producer_handler_setters_compile_and_register() {
     let out = handle
         .read_property("status", &InteractionInput::empty())
         .expect("read");
-    assert_eq!(out.data.unwrap().body.as_ref(), b"x");
+    assert_eq!(out.data().unwrap().body.as_ref(), b"x");
 }
 
 // Trivial handler stubs for the compile-and-register smoke test.

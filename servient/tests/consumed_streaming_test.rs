@@ -390,7 +390,7 @@ async fn read_all_properties_aggregates_into_json_object() {
         .read_all_properties(InteractionOptions::new())
         .await
         .expect("read all");
-    let payload = out.data.expect("aggregated payload");
+    let payload = out.into_data().expect("aggregated payload");
     let body = std::str::from_utf8(payload.body.as_ref()).unwrap();
     assert!(
         body.contains("\"temperature\":\"21C\""),

@@ -182,7 +182,7 @@ async fn set_async_property_read_handler_runs_via_async_dispatch() {
         .read_property_async("status", &InteractionInput::empty())
         .await
         .expect("async read");
-    assert_eq!(out.data.unwrap().body.as_ref(), b"async-21C");
+    assert_eq!(out.data().unwrap().body.as_ref(), b"async-21C");
 }
 
 #[tokio::test]
@@ -222,7 +222,7 @@ async fn async_dispatch_drives_sync_handler_too() {
         .read_property_async("status", &InteractionInput::empty())
         .await
         .expect("async read of sync handler");
-    assert_eq!(out.data.unwrap().body.as_ref(), b"sync-42C");
+    assert_eq!(out.data().unwrap().body.as_ref(), b"sync-42C");
 }
 
 #[tokio::test]

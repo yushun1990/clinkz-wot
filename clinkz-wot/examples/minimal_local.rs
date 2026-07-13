@@ -155,7 +155,7 @@ async fn main() -> ServientResult<()> {
     let read_out = client
         .read_property("temperature", InteractionOptions::new())
         .await?;
-    let body = read_out.data.unwrap().body.to_vec();
+    let body = read_out.into_data().unwrap().body.to_vec();
     println!(
         "[consumer] read_property(temperature) = {:?}",
         String::from_utf8_lossy(&body)
@@ -179,7 +179,7 @@ async fn main() -> ServientResult<()> {
     let all = client
         .read_all_properties(InteractionOptions::new())
         .await?;
-    let all_body = all.data.unwrap().body.to_vec();
+    let all_body = all.into_data().unwrap().body.to_vec();
     println!(
         "[consumer] read_all_properties = {}",
         String::from_utf8_lossy(&all_body)

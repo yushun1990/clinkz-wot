@@ -302,7 +302,7 @@ mod tests {
             .dispatch(request)
             .expect("valid request dispatches");
         assert_eq!(response.correlation, CorrelationId::new(7));
-        assert!(response.output.data.is_none());
+        assert!(response.output.data().is_none());
     }
 
     #[test]

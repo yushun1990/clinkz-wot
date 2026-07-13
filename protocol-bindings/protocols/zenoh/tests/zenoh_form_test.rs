@@ -240,7 +240,7 @@ async fn runtime_binding_delegates_planned_operation_to_transport() {
         .await
         .unwrap();
 
-    assert_eq!(output.data.unwrap().body.as_ref(), b"accepted");
+    assert_eq!(output.into_data().unwrap().body.as_ref(), b"accepted");
 }
 
 #[cfg(feature = "zenoh")]
@@ -285,8 +285,14 @@ async fn shared_transport_reuses_underlying_runtime_state() {
         .await
         .unwrap();
 
-    assert_eq!(first.data.unwrap().body.as_ref(), b"1:things/lamp/status");
-    assert_eq!(second.data.unwrap().body.as_ref(), b"2:things/lamp/status");
+    assert_eq!(
+        first.into_data().unwrap().body.as_ref(),
+        b"1:things/lamp/status"
+    );
+    assert_eq!(
+        second.into_data().unwrap().body.as_ref(),
+        b"2:things/lamp/status"
+    );
     assert_eq!(
         shared
             .inner()

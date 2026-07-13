@@ -952,7 +952,10 @@ impl ConsumedThingHandle {
                             opts,
                         )
                         .await?;
-                    Ok::<_, CoreError>((name, out.data))
+                    // This legacy aggregate intentionally consumes only each
+                    // property payload. Per-response status and metadata are
+                    // not represented by its JSON compatibility shape.
+                    Ok::<_, CoreError>((name, out.into_data()))
                 }
             })
             .collect();

@@ -98,7 +98,7 @@ fn pico_transport_routes_put_and_query_requests_to_platform_hooks() {
         })
         .unwrap();
 
-    assert!(put.data.is_none());
+    assert!(put.data().is_none());
 
     let mut query_parameters = std::collections::BTreeMap::new();
     query_parameters.insert("trace".into(), "full".into());
@@ -116,7 +116,7 @@ fn pico_transport_routes_put_and_query_requests_to_platform_hooks() {
         })
         .unwrap();
 
-    assert_eq!(query.data.unwrap().body.as_ref(), b"query-reply");
+    assert_eq!(query.into_data().unwrap().body.as_ref(), b"query-reply");
     assert_eq!(
         transport
             .platform()
@@ -164,8 +164,8 @@ fn pico_transport_routes_subscription_lifecycle_hooks() {
         })
         .unwrap();
 
-    assert_eq!(subscribed.data.unwrap().body.as_ref(), b"event");
-    assert!(unsubscribed.data.is_none());
+    assert_eq!(subscribed.into_data().unwrap().body.as_ref(), b"event");
+    assert!(unsubscribed.data().is_none());
     assert_eq!(
         transport
             .platform()

@@ -61,10 +61,10 @@ struct EchoAction;
 
 impl clinkz_wot_core::ActionHandler for EchoAction {
     fn invoke(&self, input: &mut InteractionInput) -> CoreResult<InteractionOutput> {
-        Ok(InteractionOutput {
-            data: input.data.take(),
-            status: InteractionStatus::Ok,
-        })
+        Ok(input
+            .data
+            .take()
+            .map_or_else(InteractionOutput::empty, InteractionOutput::with_data))
     }
 }
 
@@ -152,7 +152,7 @@ fn local_exposed_thing_dispatches_registered_handlers() {
     let status = thing
         .read_property("status", &InteractionInput::empty())
         .unwrap()
-        .data
+        .into_data()
         .unwrap();
     assert_eq!(status.body.as_ref(), b"off");
 
@@ -161,7 +161,7 @@ fn local_exposed_thing_dispatches_registered_handlers() {
     let status = thing
         .read_property("status", &InteractionInput::empty())
         .unwrap()
-        .data
+        .into_data()
         .unwrap();
     assert_eq!(status.body.as_ref(), b"on");
 
@@ -170,7 +170,7 @@ fn local_exposed_thing_dispatches_registered_handlers() {
     let action = thing
         .invoke_action("echo", &mut action_input)
         .unwrap()
-        .data
+        .into_data()
         .unwrap();
     assert_eq!(action.body.as_ref(), b"hello");
 
@@ -232,7 +232,7 @@ fn core_error_display_is_english() {
 #[test]
 fn interaction_output_defaults_to_ok_status() {
     let out = InteractionOutput::with_data(Payload::new(b"x".to_vec(), "text/plain"));
-    assert_eq!(out.status, InteractionStatus::Ok);
+    assert_eq!(out.status(), InteractionStatus::Ok);
 }
 
 // ---------------------------------------------------------------------------
@@ -313,7 +313,7 @@ mod consumed_async {
             .await
             .unwrap();
 
-        assert_eq!(output.data.unwrap().body.as_ref(), b"on");
+        assert_eq!(output.into_data().unwrap().body.as_ref(), b"on");
     }
 
     #[tokio::test]
@@ -493,7 +493,7 @@ mod consumed_async {
             )
             .await
             .unwrap();
-        assert_eq!(output.data.unwrap().body.as_ref(), b"ok");
+        assert_eq!(output.into_data().unwrap().body.as_ref(), b"ok");
     }
 
     // Suppress unused-import warnings for fixtures only used in some tests.
@@ -528,10 +528,10 @@ mod async_dispatch {
     #[async_trait::async_trait]
     impl AsyncActionHandler for AsyncEchoAction {
         async fn invoke(&self, input: &mut InteractionInput) -> CoreResult<InteractionOutput> {
-            Ok(InteractionOutput {
-                data: input.data.take(),
-                status: InteractionStatus::Ok,
-            })
+            Ok(input
+                .data
+                .take()
+                .map_or_else(InteractionOutput::empty, InteractionOutput::with_data))
         }
     }
 
@@ -546,7 +546,7 @@ mod async_dispatch {
             )
             .await
             .unwrap();
-        assert_eq!(out.data.unwrap().body.as_ref(), b"hi");
+        assert_eq!(out.into_data().unwrap().body.as_ref(), b"hi");
     }
 
     #[tokio::test]
@@ -555,7 +555,7 @@ mod async_dispatch {
         thing.set_async_action_handler("echo", AsyncEchoAction);
         let mut input = InteractionInput::with_data(Payload::new(b"yo".to_vec(), "text/plain"));
         let out = thing.invoke_action_async("echo", &mut input).await.unwrap();
-        assert_eq!(out.data.unwrap().body.as_ref(), b"yo");
+        assert_eq!(out.into_data().unwrap().body.as_ref(), b"yo");
     }
 
     #[tokio::test]
@@ -576,6 +576,6 @@ mod async_dispatch {
             .read_property_async("status", &InteractionInput::empty())
             .await
             .unwrap();
-        assert_eq!(out.data.unwrap().body.as_ref(), b"v");
+        assert_eq!(out.into_data().unwrap().body.as_ref(), b"v");
     }
 }

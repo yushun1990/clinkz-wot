@@ -482,7 +482,7 @@ fn deliver_response(reply_targets: &Mutex<ReplyTargetState>, response: InboundRe
                     log::warn!("Zenoh server: failed to send error reply: {e}");
                 }
             } else {
-                let (payload_body, content_type) = match response.output.data {
+                let (payload_body, content_type) = match response.output.into_data() {
                     Some(payload) => (payload.body, payload.content_type),
                     None => (Default::default(), String::new()),
                 };

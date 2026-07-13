@@ -42,8 +42,9 @@ pub use inbound::{
     BindingContext, InboundDispatcher, InboundRequest, InboundResponse, ServerBinding,
 };
 pub use interaction::{
-    AcceptHint, InteractionInput, InteractionOptions, InteractionOutput, InteractionStatus,
-    MediaType,
+    AcceptHint, BindingResponseMetadata, InteractionInput, InteractionOptions, InteractionOutput,
+    InteractionOutputMetadata, InteractionStatus, MediaType, ResponsePayloadRole,
+    ResponseSelection,
 };
 pub use payload::{CodecInput, Payload, PayloadCodec};
 pub use security::{
