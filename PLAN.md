@@ -21,6 +21,7 @@ Normative implementation-support artifacts referenced by that design are:
 - `docs/requirements.csv`
 - `docs/work-packages/index.toml`
 - `docs/work-packages/*.md`
+- `docs/amendments/WP-100-error-cleanup-v1.md`
 
 The executable performance contract checker and deterministic fixture
 generator are in `tools/performance-harness`.
@@ -29,6 +30,10 @@ The v4.6 revision is frozen for coordinated implementation: every row in
 `docs/refactor-gates.csv` is closed. Runtime API migration proceeds only through
 the dependency order in `docs/work-packages/index.toml`. Reopening a gate blocks
 affected packages as specified by `REFACTOR-GATE-001`.
+
+The frozen WP-100 error, retry, correlation, and cleanup Rust schemas are closed
+by normative amendment `WP-100-ERR-CLEANUP-001`. The amendment resolves schema
+details left open by the base prose without changing the implementation DAG.
 
 The Directory performance artifact covers only the engine-side Directory client
 contract. Directory service topology, storage backends, server-side query

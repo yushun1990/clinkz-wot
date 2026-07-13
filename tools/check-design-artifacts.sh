@@ -73,6 +73,7 @@ fi
 "$root/tools/check-api-ownership.sh"
 "$root/tools/check-directory-client-scope.sh"
 "$root/tools/check-resource-limits.sh"
+"$root/tools/check-wp100-amendment.sh"
 cargo run --locked --quiet --manifest-path "$root/tools/performance-harness/Cargo.toml" -- verify
 cargo run --locked --quiet --manifest-path "$root/tools/design-check/Cargo.toml" -- check
 

@@ -57,8 +57,8 @@ Implement the frozen `clinkz_wot_core` surface in these groups:
 
 - status: `PendingWork`, `StartStatus`, `ProcessEvent`, `ProcessTerminal`, `StepStatus`,
   `CleanupOutcome`, `CleanupOperation`, `CleanupRecord`, and `CleanupHandle`;
-- errors: `CoreResult`, `CoreError`, `ErrorContext`, `SelectionFailureReason`, and
-  `RetryClass`;
+- errors: `CoreResult`, `CoreError`, `ErrorContext`, `ErrorPhase`,
+  `SelectionFailureReason`, `SecurityFailureReason`, and `RetryClass`;
 - identity: `ThingId`, `BindingId`, `BindingGeneration`, `PlanId`, `SubscriptionId`,
   `CorrelationId`, `ActionInvocationRef`, all frozen `*SlotId` types, `PreparedRouteId`,
   `ActiveRouteId`, and `PreparedRouteKey`;
@@ -77,6 +77,9 @@ Preserve only `CoreResult`, `ThingId`, `AffordanceTarget`, and `PrincipalId` in 
 by the ownership matrix. Replace every other listed current representation or add the absent
 target type. Public struct fields remain private unless the design intentionally freezes
 direct access; constructors validate bounded ids, media metadata, messages, and byte storage.
+
+The exact error, retry, correlation, and cleanup schemas and the coordinated
+legacy mapping are frozen by `docs/amendments/WP-100-error-cleanup-v1.md`.
 
 Operation-specific sync handlers receive `HandlerContext` plus their typed input and result.
 Async twins own their selected handler and cancellation state across suspension. Codec state

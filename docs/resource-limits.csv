@@ -86,6 +86,7 @@ cleanup_bytes_max,cleanup,bytes,global,all,disabled,4194304,4194304,262144,RES-L
 cleanup_item_bytes_max,cleanup,bytes,per-item,all,disabled,65536,65536,4096,RES-LIMIT-001|CLEANUP-RECORD-001
 cleanup_work_items_per_step_max,cleanup,items,per-step,all,disabled,256,128,16,CONSTRAINED-WORK-001|CLEANUP-RECORD-001
 cleanup_retry_records_max,cleanup,items,global,all,disabled,1024,1024,64,CLEANUP-RECORD-001
+cleanup_retry_attempts_max,cleanup,items,per-item,all,disabled,16,16,4,CLEANUP-RECORD-001
 endpoint_reservations_per_thing_max,binding,items,per-thing,producer,disabled,4096,NA,256,RES-LIMIT-001|FORM-OWNER-001
 endpoint_reservations_global_max,binding,items,global,producer,disabled,262144,NA,1024,RES-LIMIT-001|FORM-OWNER-001
 page_token_bytes_max,directory,bytes,per-item,directory-client,disabled,4096,4096,NA,RES-LIMIT-001|DIR-SNAPSHOT-001

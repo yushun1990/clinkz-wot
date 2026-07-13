@@ -3965,6 +3965,14 @@ default to `CallerDecision` unless an idempotency key or protocol acknowledgemen
 proves a safe retry. The engine never retries automatically merely because an
 error is transient.
 
+The exact WP-100 Rust schemas for error categories and payloads, retry context,
+correlation identity, cleanup operations, and cleanup records are frozen by
+`docs/amendments/WP-100-error-cleanup-v1.md`. That normative amendment resolves
+representation choices omitted from the prose above; an implementation must
+satisfy both documents. Where the amendment is more specific, it supersedes the
+category and representation sentences in `ERR-TAXONOMY-001`,
+`ERR-RETRY-001`, and `CLEANUP-RECORD-001`.
+
 ### Admission Transaction and Complexity
 
 `ADMIT-TXN-001`: Parsing, validation, effective-view construction, plan

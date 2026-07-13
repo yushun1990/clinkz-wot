@@ -29,6 +29,8 @@ CoreError,type,clinkz-wot-core,error,public,clinkz_wot_core::CoreError,no-defaul
 ErrorContext,type,clinkz-wot-core,error,public,clinkz_wot_core::ErrorContext,no-default|async-no-std|std,all,all,all,ERR-TAXONOMY-001,absent,add,frozen
 SelectionFailureReason,type,clinkz-wot-core,error,public,clinkz_wot_core::SelectionFailureReason,no-default|async-no-std|std,all,all,consumer,ERR-TAXONOMY-001,absent,add,frozen
 RetryClass,type,clinkz-wot-core,error,public,clinkz_wot_core::RetryClass,no-default|async-no-std|std,all,all,all,ERR-RETRY-001,absent,add,frozen
+ErrorPhase,type,clinkz-wot-core,error,public,clinkz_wot_core::ErrorPhase,no-default|async-no-std|std,all,all,all,ERR-TAXONOMY-001,absent,add,frozen
+SecurityFailureReason,type,clinkz-wot-core,error,public,clinkz_wot_core::SecurityFailureReason,no-default|async-no-std|std,all,all,producer|consumer,ERR-TAXONOMY-001|API-SECURITY-001,absent,add,frozen
 ThingId,type,clinkz-wot-core,identity,public,clinkz_wot_core::ThingId,no-default|async-no-std|std,all,all,all,API-TYPES-001,core/src/identity.rs,keep,frozen
 BindingId,type,clinkz-wot-core,identity,public,clinkz_wot_core::BindingId,no-default|async-no-std|std,all,all,producer|consumer,API-TYPES-001,absent,add,frozen
 BindingGeneration,type,clinkz-wot-core,identity,public,clinkz_wot_core::BindingGeneration,no-default|async-no-std|std,all,all,producer|consumer,API-TYPES-001,absent,add,frozen
