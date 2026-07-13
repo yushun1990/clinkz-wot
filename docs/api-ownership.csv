@@ -58,6 +58,7 @@ HandlerContext,type,clinkz-wot-core,interaction,public,clinkz_wot_core::HandlerC
 CancellationView,type,clinkz-wot-core,interaction,public,clinkz_wot_core::CancellationView,no-default|async-no-std|std,all,all,all,HANDLER-CANCEL-001,absent,add,frozen
 Deadline,type,clinkz-wot-core,interaction,public,clinkz_wot_core::Deadline,no-default|async-no-std|std,all,all,all,TIME-001,absent,add,frozen
 PayloadCodec,trait,clinkz-wot-core,codec,public,clinkz_wot_core::PayloadCodec,no-default|async-no-std|std,all,all,producer|consumer,API-CODEC-001,core/src/payload.rs,replace,frozen
+DecodedPayload,type,clinkz-wot-core,codec,public,clinkz_wot_core::DecodedPayload,no-default|async-no-std|std,all,all,producer|consumer,API-CODEC-001|VALIDATE-REUSE-001,absent,add,frozen
 PayloadDecoderState,state_record,clinkz-wot-core,codec,public,clinkz_wot_core::PayloadDecoderState,no-default|async-no-std|std,manual-poll,all,producer|consumer,API-CODEC-001,absent,add,frozen
 PayloadEncoderState,state_record,clinkz-wot-core,codec,public,clinkz_wot_core::PayloadEncoderState,no-default|async-no-std|std,manual-poll,all,producer|consumer,API-CODEC-001,absent,add,frozen
 DecodeStatus,type,clinkz-wot-core,codec,public,clinkz_wot_core::DecodeStatus,no-default|async-no-std|std,manual-poll,all,producer|consumer,API-CODEC-001,absent,add,frozen
@@ -74,6 +75,9 @@ ProbeResult,type,clinkz-wot-core,security,public,clinkz_wot_core::ProbeResult,no
 PrincipalId,type,clinkz-wot-core,security,public,clinkz_wot_core::PrincipalId,no-default|async-no-std|std,all,all,producer,API-SECURITY-001,core/src/security.rs,keep,frozen
 Principal,type,clinkz-wot-core,security,public,clinkz_wot_core::Principal,no-default|async-no-std|std,all,all,producer,API-SECURITY-001,core/src/security.rs,replace,frozen
 TransportAuthMaterial,type,clinkz-wot-core,security,public,clinkz_wot_core::TransportAuthMaterial,no-default|async-no-std|std,all,all,producer,BIND-IO-001|API-SECURITY-001,absent,add,frozen
+BodySecurityPlanView,type,clinkz-wot-core,security,public,clinkz_wot_core::BodySecurityPlanView,no-default|async-no-std|std,all,all,producer,API-SECURITY-001,absent,add,frozen
+BodyAuthSlot,state_record,clinkz-wot-core,security,public,clinkz_wot_core::BodyAuthSlot,no-default|async-no-std|std,all,all,producer,API-SECURITY-001,absent,add,frozen
+ApplicationPayloadProjection,type,clinkz-wot-core,security,public,clinkz_wot_core::ApplicationPayloadProjection,no-default|async-no-std|std,all,all,producer,API-SECURITY-001|VALIDATE-REUSE-001,absent,add,frozen
 BodyAuthProjector,trait,clinkz-wot-core,security,public,clinkz_wot_core::BodyAuthProjector,no-default|async-no-std|std,all,all,producer,API-SECURITY-001|VALIDATE-REUSE-001,absent,add,frozen
 AuthMaterial,type,clinkz-wot-core,security,public,clinkz_wot_core::AuthMaterial,no-default|async-no-std|std,all,all,producer,API-SECURITY-001,core/src/security.rs,replace,frozen
 AppliedSecurity,type,clinkz-wot-core,security,public,clinkz_wot_core::AppliedSecurity,no-default|async-no-std|std,all,all,consumer,API-SECURITY-001,absent,add,frozen

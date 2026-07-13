@@ -778,13 +778,16 @@ security fields are excluded or treated as provider-managed insertions. After th
 effective security branch is selected and committed, the `SecurityProvider`
 injects the body fields required by that branch, and strict profiles validate the
 resulting wire payload against the effective TD schema and media metadata before
-binding I/O. For inbound Producer dispatch, the engine parses enough of the wire
-payload to extract body-location `AuthMaterial`, verifies security and scopes,
-then validates and delivers an application-facing payload view to handlers with
-provider-managed security fields removed or redacted by default. Rust diagnostic
-APIs may expose the raw wire payload only through deliberately named surfaces
-that preserve the same secret-redaction and audit requirements as other security
-diagnostics.
+binding I/O. For inbound Producer dispatch, the binding supplies the wire
+payload and only transport-native `TransportAuthMaterial`. After route and
+generation validation, the core security pipeline decodes the wire payload once
+through `PayloadCodec`, applies the compiled body-security plan through
+`BodyAuthProjector`, and produces both body `AuthMaterial` and an
+application-facing projection. Extraction, validation, and field
+removal/redaction share that decoded representation or an overlay and MUST NOT
+decode the payload a second time. Rust diagnostic APIs may expose the raw wire
+payload only through deliberately named surfaces that preserve the same
+secret-redaction and audit requirements as other security diagnostics.
 
 Payload validation policy is selected separately from TD/TM document validation.
 The host `ServientBuilder` sets the default policy for produced dispatch,
@@ -849,10 +852,11 @@ Key types:
   `InteractionStatus` carry interaction payloads, URI variables, principals,
   media hints, and result metadata.
 - `Payload` and `PayloadCodec` provide media-aware payload handling.
-- `WotLock<T>` is the `std` host shared-lock handle. Constrained state uses
-  uniquely owned cells or generation-bearing runtime slots protected by the
-  caller's scoped critical-section boundary; the no-default surface does not
-  make a lock cloneable by requiring `Arc` or atomics.
+- `WotLock<T>` is an internal `std` host shared-lock handle, not a frozen
+  cross-crate public type. Constrained state uses uniquely owned cells or
+  generation-bearing runtime slots protected by the caller's scoped
+  critical-section boundary; the no-default surface does not make a lock
+  cloneable by requiring `Arc` or atomics.
 - `EventBroker`, `Subscription`, and `SubscriptionGuard` support event and
   observable-property delivery.
 - `SecurityProvider` and `CredentialStore` provide inbound verification and
@@ -1082,15 +1086,19 @@ when binding registrations change.
 form, binding-candidate, schema-node, security-branch, or compiled-byte budget.
 It MUST return a structured limit error rather than silently omit candidates.
 
-`PLAN-INDEX-001`: Binding registration builds a capability index keyed first by
+`PLAN-INDEX-001`: Separate generation-bearing capability indexes are built for
+the captured client and server registration snapshots. They are keyed first by
 resolved URI scheme and then, where declared, by protocol, subprotocol,
-operation class, and media family. A form probes only registrations returned by
-that index. Registration capability declarations are side-effect-free and
-generation-bearing. An undeclared wildcard is allowed but is charged as an
-explicit wildcard candidate. Normal planning complexity is O(`f + p + c`),
-where `p` is the number of indexed probes and `c` is the supported candidate
-count; O(`f * b`) is only an admitted wildcard worst case and remains bounded by
-`max_binding_probes_per_admission`.
+operation class, media family, and Producer contribution role. Server indexes
+cover both form contribution and application-supplied-form ownership probes. A
+form probes only registrations returned by the applicable index, including
+declared wildcards. Capability declarations are side-effect-free and MAY
+over-approximate support, but MUST NOT omit a key for which
+`supports(candidate)` could return a supported result. An undeclared wildcard
+is allowed only when admitted as an explicit wildcard candidate. Normal planning
+complexity is O(`f + p + c`), where `p` is the number of indexed probes and `c`
+is the supported candidate count; O(`f * b`) is only an admitted wildcard worst
+case and remains bounded by `max_binding_probes_per_admission`.
 
 `PLAN-LAZY-001`: Admission compiles compact logical metadata required for safe
 selection. Heavy schema validators, protocol-specific route/client state, and
@@ -1390,25 +1398,29 @@ resources.
 
 `FORM-OWNER-001`: Each compiled inbound plan has exactly one owning
 `BindingId`. A generated form is owned by its contributor. For an
-application-supplied form, the Servient probes every captured server binding
-with the same side-effect-free `supports(candidate)` categories used for client
-planning. Zero supporting registrations is a binding-selection error. More than
-one supporting registration is an ambiguous-owner error unless the application
+application-supplied form, the Servient probes exactly the captured server
+registrations returned by the server capability index, including declared
+wildcards, with the same side-effect-free `supports(candidate)` categories used
+for client planning. It MUST NOT probe a registration outside that candidate
+set. Zero supporting registrations is a binding-selection error. More than one
+supporting registration is an ambiguous-owner error unless the application
 selected a binding id through an explicitly named Rust configuration field; the
 engine MUST NOT resolve ambiguity by registration order. A selected binding that
 does not support the form fails closed. The owner receives that plan in
 `prepare`; non-owners do not.
 
-Endpoint collision comparison occurs within an owning binding's declared
-collision domain. The binding registration supplies a canonical, bounded
-`EndpointReservationKey` for every contributed or accepted route. Two live or
-transactionally prepared routes with equal binding id, binding generation, and
-reservation key collide unless the binding explicitly declares that the plans
-are aliases of one route. Alias declarations must name one canonical route,
-must have compatible operation/security semantics, and are checked during
-finalization. Cross-binding keys do not collide unless the registrations declare
-a shared collision-domain id, in which case the same rule applies across that
-domain.
+Endpoint collision identity is the pair (`CollisionDomainId`,
+`EndpointReservationKey`) and is independent of registration generation. The
+binding registration supplies a canonical, bounded reservation key and
+collision domain for every contributed or accepted route. Prepared, live,
+draining, and cleanup-pending reservations in the same domain conflict across
+binding generations. Route and binding generations distinguish ownership and
+idempotent cleanup; they do not make the physical endpoint distinct. A
+replacement may reuse a key only after the prior reservation is closed or
+through an explicitly typed atomic-handoff contract. Alias declarations apply
+only to compatible plans in one finalized route set, name one canonical route,
+and are checked during finalization. Cross-binding keys do not collide when
+their collision-domain ids differ.
 
 `FORM-COVERAGE-001`: An affordance is not required to have every operation for
 which a Producer handler exists. The frozen TD is authoritative. Conversely,
@@ -1469,12 +1481,27 @@ fn commit(
     route: &BindingRouteKey,
     guard: &ActiveRouteGuard,
 ) -> CoreResult<()>;
-fn shutdown(&self, route: &BindingRouteKey) -> CoreResult<()>;
+fn abort_prepared(
+    &self,
+    route: &BindingRouteKey,
+    guard: &mut ServerRouteGuard,
+    budget: &mut WorkBudget,
+) -> CoreResult<CleanupOutcome>;
+fn shutdown(
+    &self,
+    route: &BindingRouteKey,
+    guard: &mut ActiveRouteGuard,
+    budget: &mut WorkBudget,
+) -> CoreResult<CleanupOutcome>;
 fn poll_accept(
     &self,
     cx: &mut Context<'_>,
 ) -> Poll<CoreResult<Option<InboundRequest>>>;
 fn send_response(&self, response: InboundResponse) -> CoreResult<()>;
+fn publish(
+    &self,
+    emission: ProducerEmission,
+) -> BindingFuture<'_, BindingPublication>;
 ```
 
 `BindingRouteKey` contains the `ThingId`, owning `BindingId`, and immutable
@@ -1502,9 +1529,10 @@ metadata, the shared planning layer passes the preserved extension members
 through the candidate or inbound plan for that form.
 
 The core `ServerBinding` lifecycle surface is nonblocking. `prepare`,
-`activate`, `commit`, and `shutdown` may allocate, validate, update local
-binding state, and release resources, but they must not wait on network I/O,
-executor progress, remote peers, or unbounded protocol handshakes. Host
+`activate`, `commit`, `abort_prepared`, and `shutdown` may allocate, validate,
+update local binding state, and make bounded cleanup progress, but they must not
+wait on network I/O, executor progress, remote peers, or unbounded protocol
+handshakes. Host
 protocol crates that require asynchronous listener/session setup must expose
 that setup in their host constructors before the binding is registered, or
 through an explicit route-readiness driver stored in
@@ -1545,7 +1573,11 @@ fn poll_ready(
     token: &mut RouteReadinessToken,
     cx: &mut Context<'_>,
 ) -> Poll<CoreResult<RouteReadinessStatus>>;
-fn cancel(&self, token: RouteReadinessToken) -> CoreResult<()>;
+fn cancel(
+    &self,
+    token: &mut RouteReadinessToken,
+    budget: &mut WorkBudget,
+) -> CoreResult<CleanupOutcome>;
 ```
 
 `RouteReadinessStatus` has terminal states `Ready`, `Failed`, `Cancelled`, and
@@ -1555,8 +1587,10 @@ token. `poll_ready` is the only readiness operation that waits for executor or
 transport progress; it uses `Poll::Pending` instead of blocking. If `expose()`
 is cancelled, times out, or a different binding fails, the Servient calls
 `cancel` for every outstanding readiness token before rolling back prepared
-routes. A binding that completes readiness during `prepare` may omit a driver or
-return an already-ready key.
+routes. It retains a token until cancellation is complete, residual, or
+transferred to the cleanup owner under the same rules as a route guard. A
+binding that completes readiness during `prepare` may omit a driver or return an
+already-ready key.
 
 Constrained readiness uses the same states through a poll or step-driven
 contract. The constrained `expose` equivalent either runs readiness to a terminal
@@ -1599,15 +1633,36 @@ from another binding. Process-crash recovery, remote lease expiry, and durable
 cleanup are binding or host-integration responsibilities and MUST be documented
 by bindings that create external state.
 
+`abort_prepared` and `shutdown` are bounded cleanup-progress calls. `Complete`
+permits the Servient to release the corresponding guard. `PendingCleanup` is
+valid only after the registration, guard, and remaining cleanup work have been
+atomically retained by the cleanup owner named in `CleanupRecord`.
+`ResidualExternalState` means engine-local ownership has reached a terminal
+state while externally observable residue remains; the durable status record
+MUST retain that fact. An outer `CoreError` is reserved for an invalid or stale
+call that did not transfer cleanup ownership. A `prepare` error guarantees that
+the failing call left no caller-addressable or external resource requiring
+compensation. A binding that cannot make that guarantee MUST return an
+addressable prepared guard and surface the failure through readiness so rollback
+can call `abort_prepared`.
+
+For constrained cleanup, `Poll::Pending` means the caller still owns the same
+operation and route generation. `Poll::Ready(Ok(PendingCleanup(_)))` is valid
+only after cleanup ownership has transferred atomically to the named runtime
+owner and consumes the caller's route generation; otherwise the implementation
+MUST return `Poll::Pending`.
+
 `prepare` declares routes for one Thing and returns a route guard that owns the
 prepared binding resources. Prepared routes must not accept externally visible
 requests until the final serving-state transition after all `commit` calls
 succeed. This staged lifecycle lets `expose()` roll back all bindings without
-locally publishing a half-serving Thing. Dropping the guard or calling `shutdown`
-releases prepared or active resources idempotently. On the success path, the
-Servient must retain every active route guard in the servable registry entry or
-in equivalent handle-owned state until `destroy()` or handle drop releases the
-Thing.
+locally publishing a half-serving Thing. Guard destruction is not the reporting
+cleanup path and MUST NOT block. The Servient retains a prepared or active guard
+until explicit cleanup reaches `Complete`, reaches `ResidualExternalState`, or
+atomically transfers the guard and remaining work to reserved cleanup
+ownership. On the success path, the Servient retains every active route guard in
+the servable registry entry or in equivalent handle-owned state until
+`destroy()` or handle drop starts explicit cleanup.
 
 `activate` consumes a prepared route guard and returns an active route guard with
 the same ownership semantics. It starts or arms that binding's driving model for
@@ -1621,9 +1676,8 @@ state, rather than by blocking inside `prepare` or `activate`. After successful
 readiness, `activate` is an idempotent activation step that should only fail for
 errors that could not be detected before activation. If `activate` returns an
 error, `expose()` rolls back every prepared or activated binding and removes the
-registry entry.
-`shutdown` is idempotent and returns success when the binding route generation
-is already shut down.
+registry entry. `abort_prepared` and `shutdown` are idempotent for the same route
+generation and return `Complete` when that generation is already shut down.
 
 After every binding has activated successfully, the Servient calls `commit` for
 each active guard while the registry entry is still not serving. `commit`
@@ -1713,15 +1767,15 @@ runtime errors disappear from the Servient's observable lifecycle.
 Inbound requests must carry a protocol-neutral route match produced from an
 inbound binding plan. The route match includes the Thing id, affordance target,
 operation, original form index, compiled plan id, correlation id, URI variable
-values, inbound payload metadata, and extracted `AuthMaterial`. Dispatch uses
-this route match to apply the exact form-level security and scope semantics
-that were validated during `expose()`.
+values, inbound payload metadata, and transport-native
+`TransportAuthMaterial`. Dispatch uses this route match to apply the exact
+form-level security and scope semantics that were validated during `expose()`.
 
 The Servient does not own a transport driving loop.
 
 `BIND-IO-001`: `InboundRequest` owns its `BindingRouteKey`, route match,
-correlation id, application-independent wire `Payload`, extracted auth material,
-and binding status metadata. `InboundResponse` owns the same route and
+correlation id, application-independent wire `Payload`, transport-native auth
+material, and binding status metadata. `InboundResponse` owns the same route and
 correlation identities plus either an output or structured error mapping. A
 binding cannot borrow either value from a transport receive buffer after the
 call returns. Duplicate live correlation ids are rejected within one binding
@@ -1739,18 +1793,22 @@ URI parsing and route matching are binding responsibilities; semantic
 authorization and payload validation are core responsibilities. The binding
 MUST reject a transport target that cannot be matched to exactly one compiled
 inbound plan. It decodes only protocol framing and the fields needed to produce
-the route match, URI variables, payload media metadata, and `AuthMaterial`.
-Core dispatch then verifies the immutable plan id/route generation pair,
-security, scopes, schema, deadline, and handler before user code runs. A binding
-must not construct a route match from caller-controlled plan ids without
-checking it against its prepared route table.
+the route match, URI variables, payload media metadata, and transport-native
+authentication material. It MUST NOT interpret, remove, or redact TD
+body-location security fields. Core dispatch then verifies the immutable plan
+id/route generation pair, decodes the wire payload at most once, extracts body
+authentication material through the compiled plan, verifies the combined
+transport/body requirement and scopes, validates the application projection,
+and invokes the handler with only the verified `Principal`. A binding must not
+construct a route match from caller-controlled plan ids without checking it
+against its prepared route table.
 
 ### ClientBinding
 
 Host `ClientBinding` owns outbound protocol behavior:
 
 ```rust
-type BindingFuture<'a, T> =
+pub type BindingFuture<'a, T> =
     Pin<Box<dyn Future<Output = CoreResult<T>> + Send + 'a>>;
 
 fn supports(&self, candidate: &BindingCandidate) -> BindingSupport;
@@ -1854,6 +1912,13 @@ the response opportunity is consumed. Once a start is accepted, the application
 handler is never invoked again for retry, and a terminal delivery result consumes
 the response opportunity exactly once. This makes response backpressure
 progressable without an unbounded binding queue or a busy retry loop.
+
+Constrained Producer publication uses a caller-owned `ServerEmissionSlot` under
+the same rules. Start either completes or transfers the owned
+`ProducerEmission` and its admitted result capacity into the slot. Poll resumes
+the retained binding-target cursor, and cancel retains terminal outcomes for
+already accepted publications before consuming the slot generation. Slot
+exhaustion returns `Backpressure` before publication begins.
 
 ### Removed Facades
 
@@ -2090,12 +2155,22 @@ design and are not implementation requirements for this engine revision:
 - server-side watch fan-out and publication transaction implementation;
 - reference in-memory backends and production service SLOs.
 
+Non-normative design inputs for that later revision are retained in
+`docs/future/directory-service.md`; that file is not an active engine artifact.
+
 The interaction types preserve enough protocol information for a later service
 to implement the contract without putting service behavior into the engine.
 They do not prescribe how a server satisfies a query, stores revisions, creates
 page tokens, or retains snapshots. A future Directory service design may add
 service and backend crates, but it must treat this engine API as a client
 boundary and must not make a Directory service a Servient dependency.
+
+`DirectoryQuery`, publication requests, snapshot options, and watch options
+express client request intent and client-observable response invariants. This
+revision assigns no query evaluation, hidden-field authorization, redaction
+ordering, compare-and-set enforcement, lease-token validation, snapshot
+retention, compaction, or watch fan-out implementation to
+`clinkz-wot-discovery` or `clinkz-wot-servient`.
 
 `DiscoveryFilter` is the Rust carrier type for the Scripting API `ThingFilter`
 subset used by `discover(filter)` and Scripting-compatible
@@ -2104,20 +2179,16 @@ model in this document; `DiscoveryFilter` is the concrete Rust API type unless a
 lower-level API explicitly exposes a differently named adapter.
 
 The Scripting-compatible `ThingFilter` subset is intentionally small. An omitted
-filter is an empty filter. The `fragment` member, when present, is a JSON object
-matched property-by-property against the caller-authorized searchable TD view,
-not against hidden canonical fields that will later be redacted. The directory
-first applies the caller's authorization, projection, and redaction policy to
-derive the fields that are visible and searchable for that caller, then performs
-fragment matching, and finally returns the corresponding authorized TD view.
-Each key named by the fragment must exist in that authorized searchable view and
-its value must compare equal after normal JSON value comparison. Nested object
-fragments recurse by key; arrays compare by the selected policy documented by
-the `DiscoveryFilter` profile, with exact array equality as the portable
-Scripting-compatible default. A fragment that targets a hidden field, a
-non-object fragment, or an unsupported fragment comparison mode fails closed
-instead of broadening results or revealing whether the hidden field exists in
-the stored canonical TD.
+filter is an empty filter. `DiscoveryFilter::fragment` is serialized losslessly
+as a request for W3C fragment-filter semantics over the endpoint-authorized
+searchable view. A client adapter MUST NOT broaden, remove, or reinterpret the
+fragment. It MUST NOT emulate unsupported fragment filtering by fetching a
+broader canonical result set and filtering it locally. When endpoint capability
+is known to be insufficient, or the endpoint reports the operation unsupported,
+the client returns a structured unsupported-filter result. Server-side
+authorization, searchable-view construction, redaction order, fragment
+evaluation details, and hidden-field oracle prevention belong to the future
+Directory service design.
 Semantic query languages, projection, pagination, security posture filters,
 lease constraints, and watch options are Rust extensions represented by
 `DirectoryQuery` or other explicitly named types.
@@ -2188,10 +2259,11 @@ explicitly and the terminal or status item records the number of candidates lost
 when known. No discovery profile may recover from a full buffer by switching to
 an unbounded queue or by silently broadening, truncating, or hiding results.
 
-Directory queries must support protocol-neutral filters over TD metadata,
-security posture, capabilities, and semantic terms where available. Semantic
-query support can be partial in early implementations, but unsupported query
-languages must fail explicitly rather than silently returning broad results.
+`DirectoryQuery` can express protocol-neutral filters over TD metadata,
+security posture, capabilities, and semantic terms. A client adapter declares
+which request capabilities it can encode. Unsupported query languages or filter
+forms fail explicitly before a broader request is sent; an adapter never
+silently removes a requested predicate.
 
 ### Discovery Trust, Freshness, and Privacy
 
@@ -2224,17 +2296,16 @@ capability, semantic term, or query language is unsupported. Returning a broad
 unfiltered result set for an unsupported filter is a design defect because it
 can disclose TD metadata and cause Consumers to select unintended Things.
 
-TD privacy is part of discovery design. Directory APIs must provide projection
-or redaction hooks so deployments can avoid disclosing identifiers, locations,
-security metadata, or semantic annotations to callers that are not authorized to
-see them. Redaction must not mutate the stored canonical TD unless the directory
-is explicitly configured as a transforming directory; otherwise it returns a
-derived view with source identity and validation metadata preserved. Query
-evaluation must not use redacted fields as an oracle for unauthorized callers:
-filters over fields that are not visible in the caller-authorized searchable
-view either produce no match or return a structured unauthorized-filter error,
-according to the selected directory policy, but they must not reveal matching
-cardinality for hidden data.
+TD privacy remains part of the client boundary without assigning server policy
+to the engine. The client treats each returned `TdDocument` as the view supplied
+by the remote endpoint and preserves its source and policy-generation metadata.
+It MAY apply an additional local presentation projection, but that projection is
+not an authorization boundary and does not establish that the remote endpoint
+performed correct redaction. Client diagnostics and errors MUST redact lease
+tokens, credentials, caller authorization material, and fields hidden by a
+selected local presentation policy. Endpoint-side authorization, canonical
+storage, searchable-view construction, and hidden-field oracle prevention are
+requirements of the future Directory service design.
 
 ### Directory Consistency and Public Trait Contract
 
@@ -2268,30 +2339,37 @@ watch cursor are distinct opaque types. Publication results contain entry id,
 new entry revision, directory revision, canonical digest, effective lease
 expiry, and a newly issued or rotated `LeaseToken` when the Directory uses
 lease-capability authorization. `ExpectedRevision` is either `Any` or `Exact`; host defaults use
-`Exact` for replacement, renewal, and deletion. A mismatch is a structured
-conflict and never overwrites a newer value. Lease tokens are secret-bearing
-capabilities: Debug, Display, errors, and discovery envelopes redact them.
+`Exact` for replacement, renewal, and deletion. The client maps a reported
+mismatch to a structured conflict and does not retry by weakening the request to
+`Any`. Lease tokens are secret-bearing capabilities: Debug, Display, errors,
+and discovery envelopes redact them.
 
 `DIR-AUTH-001`: `PublicationAuthority` is a non-exhaustive typed choice between
 the request's authenticated publisher authority and an owned `LeaseToken`; it is
-not an `Option`, string, or ambiguous boolean. A Directory that issued a lease
-token MUST require the matching current token for token-authorized renew or
-delete and rotates or invalidates it according to the returned publication
-result. A client adapter MUST NOT copy a lease token into `TdSourceInfo`, page
-items, watch changes, diagnostics, or retryable error context. Retry after an
-unknown renewal outcome is `CallerDecision` until revision lookup establishes
-whether the token was rotated.
+not an `Option`, string, or ambiguous boolean. A client sends exactly one typed
+authority and never silently substitutes authenticated publisher authority for
+a lease token. It adopts a rotated token only from a successful publication
+result. It MUST NOT retry an unknown renewal or deletion outcome with
+`ExpectedRevision::Any` or a different authority. A client adapter MUST NOT copy
+a lease token into `TdSourceInfo`, page items, watch changes, diagnostics, or
+retryable error context. Retry after an unknown renewal outcome is
+`CallerDecision` until revision lookup establishes whether the token was
+rotated. Remote token validation, rotation, and invalidation policy are deferred
+service behavior.
 
-`DIR-SNAPSHOT-001`: A query session is bound to one authorization/redaction
-policy generation and one directory snapshot or explicitly documented weak
-snapshot. `DirectoryPage` contains ordered TD documents, the snapshot revision,
-an optional next-page token, and optional total count only when requested and
-authorized. Stable portable ordering is entry id ascending unless the query
-selects another supported order. A page token is opaque, bounded, tied to the
-query digest, caller authorization context, snapshot, projection, and expiry,
-and cannot be reused with changed query inputs. Invalid, stale, unauthorized, or
-cross-query tokens fail explicitly. Empty intermediate pages are forbidden: a
-page with no items and a next token would permit an implementation to spin.
+`DIR-SNAPSHOT-001`: A query requests one directory snapshot or explicitly
+documented weak snapshot. `DirectoryPage` contains ordered TD documents, the
+declared snapshot revision, an optional next-page token, and optional total
+count only when requested and returned as authorized metadata. Stable portable
+ordering is entry id ascending unless the query selects another supported
+order. The client records endpoint identity, query digest, authorization-context
+generation, projection, and declared snapshot mode in the session slot. A page
+token is opaque and bounded. The client refuses to reuse it after any recorded
+input changes, validates response metadata and ordering consistency, and rejects
+an empty intermediate page because it could spin without progress. Invalid,
+stale, unauthorized, or cross-query token statuses from the endpoint remain
+distinct structured errors. Token generation, cryptographic binding, snapshot
+storage, and expiry enforcement are deferred service concerns.
 
 A remote Directory that cannot hold a snapshot across pages declares
 weak-snapshot semantics in the first session result. Such pages still carry
@@ -2307,10 +2385,11 @@ to one entry also carry monotonically increasing entry revisions. Each item is
 `DirectoryTerminal::Compacted` status; it names the oldest resumable revision
 and terminates the current gap-free view without requiring a synthetic change
 item. The caller must query a new snapshot before claiming continuity. Redaction
-is applied before enqueue, and a policy-generation change terminates or emits a
-resnapshot-required status rather than leaking old visibility. Lease expiry is
-observable as deletion with an expiry cause. Cancellation and overflow follow
-the shared state and capacity contracts.
+is an endpoint concern. The adapter enqueues only the response view received for
+the active authorization-context generation. A reported policy-generation
+change terminates or requires resnapshot before later items become visible.
+Lease expiry reported by the endpoint is represented as deletion with an expiry
+cause. Cancellation and overflow follow the shared state and capacity contracts.
 
 `DIR-STREAM-001`: Directory response decoding and admission are incremental
 across transport bytes and page items. A client MUST NOT require the complete
@@ -2538,12 +2617,17 @@ Lifecycle:
    registry entry serving. Bindings release any activation gates by observing
    that final registry state through `BindingContext`.
 8. If any prepare, readiness, activate, or commit step fails, successful
-   bindings are shut down, stored guards are dropped, and the registry entry is
-   removed.
+   bindings are aborted or shut down through the explicit cleanup surface.
+   Guards remain retained until cleanup completes, becomes residual, or
+   transfers to the reserved cleanup owner. The non-serving registry entry is
+   removed while the retained cleanup/status record remains addressable.
 9. `destroy()` marks the registry entry draining before binding shutdown,
    rejects new inbound requests, waits for already-dispatched handlers only up to
-   the configured drain policy, calls `ServerBinding::shutdown`, drops stored
-   active route guards, and removes the registry entry.
+   the configured drain policy, drives `ServerBinding::shutdown` within the
+   cleanup budget, and releases stored active route guards only after cleanup
+   completes or transfers to a retained cleanup owner. It removes the registry
+   entry after local dispatch ownership is closed while retaining any required
+   cleanup/status record.
 
 The destroy drain policy is part of the exposed handle configuration. The
 portable default is bounded draining: requests already dispatched before the
@@ -2569,9 +2653,10 @@ prevents new requests from entering once `destroy()` starts.
 `HANDLE-DROP-001`: `destroy()` is the only Producer API that can report full
 drain and cleanup results. Dropping a draft handle releases its private
 reservations synchronously. Dropping a preparing or serving host handle requests
-the same draining transition exactly once and transfers cleanup ownership to
-the Servient cleanup executor or manual runtime; it MUST NOT block the destructor
-on user code or network progress. If no cleanup executor is configured, a host
+the applicable `Cancelling` or `Draining` transition exactly once and transfers
+cleanup ownership to the Servient cleanup executor or manual runtime; it MUST
+NOT block the destructor on user code or network progress. If no cleanup
+executor is configured, a host
 builder that permits exposure MUST retain cleanup work in a bounded Servient
 queue that applications drive explicitly. Exhausting that reserved queue makes
 the initiating lifecycle operation return `Cleanup`/`LimitExceeded`; it never
@@ -2600,6 +2685,28 @@ configured overflow policies, so drop-oldest sample loss is observable but does
 not retroactively turn a successfully accepted emission into an unclassified
 error. Concurrent emissions for the same Thing and affordance are serialized at
 one publication sequence point; cross-affordance ordering is unspecified.
+
+Exposure compiles the required publication targets from the owning inbound
+plans. Emission invokes only binding generations that own an applicable
+observable-property or event target; it does not scan every registered binding.
+The host `ServerBinding::publish` surface and the constrained
+`start_emission`/`poll_emission` surface return one `BindingPublication` per
+targeted binding generation.
+
+Capacity for the complete bounded per-binding result set is admitted before the
+first binding publication begins. A Rust-native emission MUST NOT truncate
+binding outcomes. Partial acceptance after admission is returned in
+`EmissionStatus`. The source payload remains in one immutable emission-owned
+storage allocation while local subscribers and binding publications reference
+it. Host adapters MAY use shared host storage; constrained adapters use a
+caller-owned arena lease or an equivalent bounded representation. Neither
+representation may copy payload bytes once per subscriber or binding target.
+
+A pending constrained emission retains generation-safe local-subscriber and
+binding-target cursors in its `ServerEmissionSlot`. A later step resumes from
+those cursors, and a later emission for the same Thing and affordance MUST NOT
+pass it. Cancelling the slot follows the common cleanup ownership contract and
+retains a terminal per-binding result for every publication already accepted.
 
 ### ConsumedThingHandle
 
@@ -2719,13 +2826,18 @@ unavailable.
 
 Inbound security is binding-assisted and core-verified:
 
-1. A server binding maps transport credentials into `AuthMaterial`.
-2. The dispatch path resolves the matched Thing, affordance, operation, form,
-   effective security, and scopes.
-3. A matching `SecurityProvider` verifies credentials and produces a
-   `Principal`.
-4. The dispatcher checks required scopes against the `Principal`.
-5. The principal is attached to `InteractionInput` before handler dispatch.
+1. A server binding maps transport-native credentials into
+   `TransportAuthMaterial` without interpreting payload body fields.
+2. The dispatch path resolves the immutable matched Thing, affordance,
+   operation, form, effective security, and scopes.
+3. Core decodes the payload once and projects body-location authentication
+   material plus the application payload view through the compiled plan.
+4. A matching `SecurityProvider` verifies the combined transport and body
+   material and produces a `Principal`.
+5. The dispatcher checks required scopes against the `Principal`.
+6. The principal and application payload projection are attached to
+   `InteractionInput` before handler dispatch; raw authentication material is
+   not.
 
 Bindings may reject requests earlier when a protocol cannot carry the required
 credentials, but the protocol-neutral dispatch path remains the authority for
@@ -2869,11 +2981,12 @@ the design does not claim a heapless profile.
 `CONSTRAINED-PROGRESS-001`: A manual runtime step accepts an explicit work
 budget expressed as maximum state transitions and typed work units. It
 returns `Idle`, `Progress { value, pending }`, or a structured terminal/error
-state. `value` carries at most one event produced by the step; `pending` is a
-nonempty bounded summary of work classes still known to be ready or queued. An
-event and pending work can therefore be reported by the same step without an
-extra table scan. Cleanup uses a reserved bounded queue that is part of
-construction. If
+state. `value` carries at most one event produced by the step; `pending` is an
+`Option<PendingWork>` and `PendingWork` is nonempty whenever present. `None` is
+valid when the call completed a transition or produced an event but no
+maintained state reports remaining work. An event and pending work can therefore
+be reported by the same step without an extra table scan. Cleanup uses a
+reserved bounded queue that is part of construction. If
 the queue is full, an explicit call performs cleanup synchronously within the
 caller's supplied work budget or returns a cleanup-pending handle that retains
 ownership; cleanup is never silently dropped.
@@ -3433,8 +3546,26 @@ pub enum ProcessTerminal<D = ()> {
 }
 pub enum StepStatus<T> {
     Idle,
-    Progress { value: Option<T>, pending: PendingWork },
+    Progress { value: Option<T>, pending: Option<PendingWork> },
     Terminal(T),
+}
+pub enum CleanupOutcome {
+    Complete,
+    PendingCleanup(CleanupRecord),
+    ResidualExternalState(CleanupRecord),
+}
+pub struct CleanupRecord {
+    /* subject, owner, retry class, and bounded redacted cause */
+}
+pub struct ProducerEmission {
+    /* route, target, sequence, kind, and immutable payload lease */
+}
+pub enum EmissionKind { PropertyChange, Event }
+pub struct BindingPublication {
+    /* binding generation, target count, and acceptance outcome */
+}
+pub struct EmissionStatus {
+    /* sequence, local outcome, and bounded per-binding outcomes */
 }
 pub trait RuntimeClock {
     fn now(&self) -> MonotonicInstant;
@@ -3531,6 +3662,24 @@ pub trait PollServerBinding {
         response: &mut ServerResponseSlot,
         budget: &mut WorkBudget,
     ) -> Poll<CoreResult<CleanupOutcome>>;
+    fn start_emission(
+        &mut self,
+        emission: ProducerEmission,
+        slot: &mut ServerEmissionSlot,
+        budget: &mut WorkBudget,
+    ) -> CoreResult<StartStatus<BindingPublication>>;
+    fn poll_emission(
+        &mut self,
+        cx: &mut Context<'_>,
+        emission: &mut ServerEmissionSlot,
+        budget: &mut WorkBudget,
+    ) -> Poll<CoreResult<BindingPublication>>;
+    fn poll_cancel_emission(
+        &mut self,
+        cx: &mut Context<'_>,
+        emission: &mut ServerEmissionSlot,
+        budget: &mut WorkBudget,
+    ) -> Poll<CoreResult<CleanupOutcome>>;
     fn poll_shutdown(
         &mut self,
         cx: &mut Context<'_>,
@@ -3548,8 +3697,9 @@ The block above is a normative public API skeleton. `Context`, `Poll`, input
 views, slot ids, and outcomes are `core`/`alloc` compatible. Implementations MAY
 split preparation and request slots into more specific types, but the public
 adapter MUST provide this lifecycle, typed budget, and terminal behavior.
-`ClientRequestSlot`, `ClientSubscriptionSlot`, and `ServerResponseSlot` are
-caller-owned, bounded, generation-bearing operation slots. A start method
+`ClientRequestSlot`, `ClientSubscriptionSlot`, `ServerResponseSlot`, and
+`ServerEmissionSlot` are caller-owned, bounded, generation-bearing operation
+slots. A start method
 initializes an empty reserved slot exactly once and either returns a synchronous
 result or `Pending`; request/response progress polling and start cancellation
 require a pending slot, while an active subscription is polled for samples or
@@ -3563,7 +3713,10 @@ after the guard-install
 transaction defined by `STATE-SUB-001`; cancellation before that point closes
 pending binding resources without publishing samples. No constrained start,
 poll, or cancel operation requires a boxed future or binding-owned unbounded
-request table.
+request table. A pending emission slot retains the immutable payload lease and
+generation-safe local-subscriber and binding-target cursors. A later step
+resumes those cursors; it does not restart fan-out or binding publication at
+target zero.
 `ProcessEvent` is the common terminal-bearing poll value for subscriptions,
 discovery processes, and Directory watches. A terminal event is retained by the
 owning slot or process and emitted at most once; status accessors remain
@@ -3585,12 +3738,18 @@ cleanup items; decrementing an exhausted counter returns `LimitExceeded` before
 the work begins. Codec byte counters are exact byte counts, not
 implementation-defined blocks: consuming `n` input bytes and producing `m`
 output bytes charges `n` and `m`, including bytes processed across incremental
-calls. `PendingWork` reports only work already known from maintained
-ready queues, cursors, or slot state; constructing it MUST NOT scan every runtime
-table. `Idle` means no work or event was observed within the supplied budget,
-while `Progress` means at least one transition occurred, one event was produced,
-or known work remains. `Terminal` is used only when the driven facade itself has
-a terminal state; an ordinary quiescent `StaticServient` returns `Idle`.
+calls. `PendingWork` reports only work already known from maintained ready
+queues, cursors, or slot state; constructing it MUST NOT scan every runtime
+table. It is nonempty whenever present and includes emission fan-out, binding
+publication, response delivery, subscription cancellation, route readiness,
+and route cleanup classes when maintained state reports them ready. `Idle`
+means no work or event was observed within the supplied budget. `Progress`
+means at least one transition occurred, one event was produced, or known work
+remains. `Progress { pending: None, .. }` is valid when the call made progress
+but no maintained queue, cursor, or slot reports remaining work; even
+`Progress { value: None, pending: None }` is therefore distinct from `Idle`.
+`Terminal` is used only when the driven facade itself has a terminal state; an
+ordinary quiescent `StaticServient` returns `Idle`.
 `MonotonicInstant` contains an opaque `ClockId` and an unsigned tick value.
 Values are ordered or subtracted only when their clock ids match. The associated
 `RuntimeClock::ticks_per_second()` is immutable for that clock id and defines
@@ -3611,6 +3770,16 @@ pub trait SecurityProvider {
     fn apply_probe(&self, input: ApplicationProbe<'_>) -> CoreResult<ProbeResult>;
     fn apply_commit(&self, input: ApplicationCommit<'_>)
         -> CoreResult<AppliedSecurity>;
+}
+
+pub trait BodyAuthProjector {
+    fn extract(
+        &self,
+        plan: BodySecurityPlanView<'_>,
+        payload: &mut DecodedPayload,
+        auth: &mut BodyAuthSlot,
+        budget: &mut WorkBudget,
+    ) -> CoreResult<ApplicationPayloadProjection>;
 }
 
 pub trait CredentialStore {
@@ -3795,25 +3964,56 @@ work is therefore bounded by the plan's candidate budget.
 ### Normative Lifecycle State Machines
 
 `STATE-EXPOSE-001`: An exposed handle has states `Draft`, `Preparing`,
-`ReadyPendingActivation`, `Activating`, `Committing`, `Serving`, `Draining`,
-`CleanupPending`, `Destroyed`, and `Failed`. Only `Draft -> Preparing` and
-`Serving -> Draining` are externally initiated linearization attempts. A
-successful expose follows the states in order and linearizes at
+`ReadyPendingActivation`, `Activating`, `Committing`, `Serving`, `Cancelling`,
+`Draining`, `CleanupPending`, `Cancelled`, `Destroyed`, and `Failed`. A
+successful expose follows the preparation states in order and linearizes at
 `Committing -> Serving`. Failure before serving enters `CleanupPending` when
-any cleanup remains, otherwise `Failed`; neither is dispatchable. Destroy
-linearizes at `Serving -> Draining`, or performs draft cleanup from `Draft`.
-`destroy()` on `Draining`, `CleanupPending`, or `Destroyed` joins or reports the
-same cleanup outcome. `expose()` outside `Draft` returns a lifecycle error and
-does not start a second transaction. Cleanup retry is allowed only for items
-whose `CleanupOutcome` says retryable, and never republishes the Thing.
+cleanup remains, otherwise `Failed`; neither is dispatchable. Destroy
+linearizes at `Serving -> Draining`, or performs private cleanup from `Draft`.
 
-`STATE-SUB-001`: A subscription has states `Starting`, `Active`, `Stopping`,
-`Closed`, and `Failed`. The guard-registry insertion linearizes
-`Starting -> Active`; failure before it closes the pending wire guard and never
-returns a public active subscription. Stop linearizes at `Active -> Stopping`;
-exactly one owner removes and closes the wire guard. Samples are admitted only
-in `Active`. Repeated stop calls observe the same terminal outcome. Drop may
-request the same transition but cannot manufacture missing teardown input.
+Cancellation of the host expose future, `destroy()` during exposure, and handle
+drop may request cancellation from `Preparing`, `ReadyPendingActivation`,
+`Activating`, or `Committing`. The cancellation request and
+`Committing -> Serving` publication use the same lifecycle linearization
+boundary. If cancellation wins, the handle enters `Cancelling` and the Thing
+never becomes dispatchable. If publication wins, the request follows
+`Serving -> Draining`.
+
+`Cancelling` cancels every outstanding readiness token, aborts every prepared
+route, and shuts down every active or committed route. It reaches `Cancelled`
+after complete cleanup or enters `CleanupPending` while ownership is retained or
+transferred. `CleanupPending` records its intended terminal state so
+cancellation, exposure failure, and destruction cannot be confused. Dropping an
+expose future or handle MUST NOT orphan a readiness token, route guard, endpoint
+reservation, or cleanup result. Host drop transfers them to the reserved
+Servient cleanup owner without blocking; constrained drop leaves a
+generation-bearing runtime work item. A cancelled exposure is not retryable on
+the same handle.
+
+`destroy()` on `Cancelling`, `Draining`, `CleanupPending`, `Cancelled`, or
+`Destroyed` joins or reports the same cleanup outcome. `expose()` outside
+`Draft` returns a lifecycle error and does not start a second transaction.
+Cleanup retry is allowed only for items whose `CleanupOutcome` says retryable,
+and never republishes the Thing.
+
+`STATE-SUB-001`: A subscription has states `Starting`, `CancellingStart`,
+`Active`, `Stopping`, `CleanupPending`, `Closed`, and `Failed`. The
+guard-registry insertion linearizes `Starting -> Active`; failure before it
+closes the pending wire guard and never returns a public active subscription.
+Cancellation or drop while `Starting` linearizes against guard installation. If
+cancellation wins, the slot enters `CancellingStart`, no public `Subscription`
+is created, pending samples remain invisible, and start cancellation closes the
+pending wire resource. If installation wins, the same request observes an
+active subscription and proceeds through `Active -> Stopping`.
+
+Stop linearizes at `Active -> Stopping`; exactly one owner removes and closes
+the wire guard. Samples are admitted only in `Active`. `CleanupPending` retains
+whether successful cleanup leads to `Closed` or whether an already observed
+failure leads to `Failed`. Repeated cancellation, stop, and drop operations join
+the same retained outcome. Drop cannot manufacture missing teardown input. If
+protocol teardown requires caller input that was not captured and is
+unavailable, local sample admission still closes exactly once and the retained
+result is `ResidualExternalState` with a bounded teardown-input-required cause.
 Terminal state and lost-sample count remain observable while either the handle
 or subscription view exists.
 
@@ -3830,8 +4030,10 @@ cancel policy alone decides whether pre-cancel buffered items drain.
 Active -> Committed -> Serving -> Draining -> Closed`, with `CleanupPending`
 reachable from any state after `Prepared`. The Servient owns state transitions;
 the binding guard owns protocol resources. Prepare, activate, commit, shutdown,
-readiness cancel, guard drop, and cleanup retry are idempotent for the same
-Thing/binding generation. A late callback includes its generation and is
+readiness cancel, prepared-route abort, and cleanup retry are idempotent for the
+same Thing/binding generation. `CleanupPending` retains the guard or records its
+atomic transfer to a named cleanup owner; guard drop is not a state transition.
+A late callback includes its generation and is
 discarded as stale after closure. A route cannot return from `Draining` or
 `Closed` to `Serving`.
 
@@ -4055,19 +4257,22 @@ Semantic verification must include:
   defaults, overflow observability, bounded buffering, and failure context
   preservation without secret disclosure.
 - Discovery admission, freshness, revision ordering, watch compaction,
-  projection/redaction, Scripting `ThingFilter.fragment` matching against the
-  caller-authorized searchable view, unauthorized hidden-field filter behavior,
-  unsupported-filter fail-closed behavior, discovery-process overflow terminal
-  status when producers cannot be backpressured, explicit lossy-profile
-  drop-newest reporting, and discovered TD trust policy tests.
+  lossless `ThingFilter.fragment` request serialization, refusal to emulate an
+  unsupported filter with a broader local query, returned-view projection and
+  secret redaction, unsupported-filter fail-closed behavior, discovery-process
+  overflow terminal status when producers cannot be backpressured, explicit
+  lossy-profile drop-newest reporting, and discovered TD trust policy tests.
 - Directory scope tests proving Servient construction does not create or depend
   on an in-process Directory and that discovery exposes no service or storage
   SPI.
-- Directory contract tests for compare-and-set revisions, lease-token
-  authority/rotation/redaction, stable page ordering,
-  token/query/authorization binding, snapshot
-  and weak-snapshot behavior, empty-page rejection, watch resume, compaction,
-  lease expiry, and redaction-policy generation changes.
+- Scripted remote Directory contract tests for exact-revision request encoding,
+  typed lease authority and successful rotation adoption, token redaction,
+  stable page-order validation, refusal to reuse tokens across query or
+  authorization contexts, snapshot and weak-snapshot response handling,
+  empty-page rejection, watch resume, compaction, reported lease expiry, and
+  policy-generation terminal handling. Server-side compare-and-set execution,
+  token issuance/validation, hidden-field authorization, lease expiry execution,
+  and redaction policy are excluded until the Directory service design.
 - Directory poll-client tests covering empty-slot start, synchronous completion,
   pending query/watch/publication/resolution, page and change delivery,
   cancellation races, explicit terminal watch events before and after the first
@@ -4115,6 +4320,7 @@ expanded row.
 | --- | --- | --- |
 | `DOC-GOV-001` | All | Inspection: normative-id and broken-reference checker |
 | `ARTIFACT-AUTH-001`, `IMPL-CONFORM-001`, `CHANGE-CONTROL-001` | All | Artifact-conflict, work-package, migration, waiver, and revision-control inspection |
+| `API-OWNERSHIP-001`, `REFACTOR-GATE-001` | All | Ownership uniqueness, dependency-direction, gate-evidence, and refactor-ready inspection |
 | `STD-BASELINE-001` | All | Pinned-publication and adopted-errata inspection |
 | `PROFILE-AXIS-001` | All | Feature/execution/resource/capability matrix inspection and compile fixtures |
 | `FEATURE-MATRIX-001` | All | Compile every required crate/feature/public-surface cell |
@@ -4136,13 +4342,13 @@ expanded row.
 | `LIFE-EXPOSE-001` through `LIFE-EXPOSE-003` | Gateway, constrained | Failure injection at every binding phase and compensating-cleanup outcomes |
 | Protocol binding family | Gateway, constrained | Object-safety compile test, poll/async contract tests, readiness and stale-generation tests |
 | `FORM-FINALIZE-001`, `FORM-FINALIZE-002`, `FORM-OWNER-001`, `FORM-COVERAGE-001` | Gateway, constrained | Contributor determinism, owner/collision, freeze, limit, and rollback tests |
-| `BIND-IO-001`, `BIND-OUT-001`, `BIND-PROGRESS-001` | Gateway, constrained | Ownership, generation, correlation, bounded subscription/response progress, validation, cancellation, and start-install race tests |
+| `BIND-IO-001`, `BIND-OUT-001`, `BIND-PROGRESS-001` | Gateway, constrained | Ownership, generation, correlation, bounded subscription/response/emission progress, validation, cancellation, and start-install race tests |
 | `HANDLER-API-001`, `HANDLER-SUB-001` | Gateway, constrained | Handler type/ownership compile tests and subscribe rollback/exactly-once teardown tests |
 | Subscription and bulk families | Gateway, constrained | State/race, exactly-once teardown, overflow, ordering, partial-result, and root-form tests |
 | `SUB-STORAGE-001`, `SUB-DATA-001` | Gateway, constrained | Shared-pool quota, empty-subscription footprint, direct-slot, and overflow tests |
 | Discovery family | Directory-client, gateway | Lazy start, terminal-state, cancellation, freshness, privacy, paging, watch, and overflow tests |
 | `DIR-SCOPE-001` | Directory-client, gateway | Dependency and public-surface inspection proving no service/storage implementation is in scope |
-| `DIR-CONTRACT-001`, `DIR-AUTH-001`, `DIR-SNAPSHOT-001`, `DIR-WATCH-001`, `API-DIRECTORY-POLL-001` | Directory-client, gateway, constrained | Owned-value, slot lifecycle, revision, lease authority/rotation/redaction, paging-token, snapshot-status, resume, compaction, cancellation, and adapter-equivalence tests |
+| `DIR-CONTRACT-001`, `DIR-AUTH-001`, `DIR-SNAPSHOT-001`, `DIR-WATCH-001`, `API-DIRECTORY-POLL-001` | Directory-client, gateway, constrained | Scripted-client owned-value, slot lifecycle, exact-revision/authority encoding, token-context reuse prevention, returned-view redaction, page/watch metadata validation, cancellation, and adapter-equivalence tests |
 | `DIR-STREAM-001` | Directory-client, gateway, constrained | Fragmented-input, one-over-limit, bounded-resume, partial-page rollback, and peak-residency tests |
 | Security family | All | Inheritance, combo expression, probe/commit side-effect, scope, redaction, and race tests |
 | `SEC-PERF-001`, `VALIDATE-COMPILE-001`, `VALIDATE-REUSE-001` | All | Generation cache, compiled validator, single-decode, and injection-view reuse tests |

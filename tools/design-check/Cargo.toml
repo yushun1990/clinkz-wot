@@ -1,0 +1,8 @@
+[package]
+name = "clinkz-wot-design-check"
+version.workspace = true
+edition.workspace = true
+publish = false
+
+[dependencies]
+toml_edit = "0.25"

@@ -51,6 +51,6 @@ ERR-TAXONOMY-001|ERR-RETRY-001,all,core|servient|discovery,test,error-taxonomy
 ADMIT-TXN-001|ADMIT-MEM-001,all,td|core|servient,test+benchmark,admission-ledger
 PERF-COMPLEXITY-001|PERF-INDEX-001,all,td|core|protocol-bindings,test+benchmark,complexity-scaling
 STATE-EXPOSE-001|STATE-SUB-001|STATE-DISC-001|STATE-BIND-001|STATE-INFLIGHT-001,all,core|servient|discovery|bindings,model+test,state-machines
-HANDLE-DROP-001|PRODUCER-EMIT-001,gateway|constrained,servient,test,drop-and-emission
+HANDLE-DROP-001|PRODUCER-EMIT-001,gateway|constrained,core|servient|bindings,test,drop-and-emission
 HOST-SHARD-001|HOST-SHARD-002|HOST-ASYNC-001,gateway|directory-client,core|servient|discovery|bindings,test+benchmark,host-independent-progress
 HOST-DEFAULT-001|HOST-DEFAULT-002|TIME-001,gateway|directory-client,core|servient|discovery,test,defaults-and-timeout-races

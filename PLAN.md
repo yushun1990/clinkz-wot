@@ -9,6 +9,7 @@ Normative implementation-support artifacts referenced by that design are:
 - `docs/artifacts.csv`
 - `docs/api-ownership.csv`
 - `docs/refactor-gates.csv`
+- `docs/state-machines.toml`
 - `docs/performance/constrained.toml`
 - `docs/performance/gateway.toml`
 - `docs/performance/directory.toml`
@@ -22,6 +23,8 @@ proceed while a gate is open; dependent runtime API migration may not.
 The Directory performance artifact covers only the engine-side Directory client
 contract. Directory service topology, storage backends, server-side query
 execution, and production service SLOs are deferred to a later design.
+Non-normative inputs retained for that future design are in
+`docs/future/directory-service.md`; they are not active engine requirements.
 
 Implementation refactoring starts from requirement-scoped work packages under
 `IMPL-CONFORM-001` after their design dependencies are closed. Existing code is

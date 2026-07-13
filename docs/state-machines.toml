@@ -1,0 +1,788 @@
+schema_version = 1
+design_revision = "4.6"
+
+[[machine]]
+id = "expose"
+requirements = ["STATE-EXPOSE-001", "HANDLE-DROP-001", "LIFE-EXPOSE-003"]
+initial = "Draft"
+states = [
+    "Draft",
+    "Preparing",
+    "ReadyPendingActivation",
+    "Activating",
+    "Committing",
+    "Serving",
+    "Cancelling",
+    "Draining",
+    "CleanupPending",
+    "Cancelled",
+    "Destroyed",
+    "Failed",
+]
+terminal = ["Cancelled", "Destroyed", "Failed"]
+required_events = [
+    "Preparing:cancel",
+    "Preparing:drop",
+    "Preparing:destroy",
+    "ReadyPendingActivation:cancel",
+    "ReadyPendingActivation:drop",
+    "ReadyPendingActivation:destroy",
+    "Activating:cancel",
+    "Activating:drop",
+    "Activating:destroy",
+    "Committing:cancel",
+    "Committing:drop",
+    "Committing:destroy",
+    "Serving:drop",
+    "Serving:destroy",
+]
+
+[[machine.transition]]
+from = "Draft"
+event = "expose"
+to = "Preparing"
+owner = "ExposedThingHandle"
+linearization = "publish expose transaction ownership"
+outcome = "in-progress"
+retryability = "same-handle-forbidden-after-transition"
+
+[[machine.transition]]
+from = "Draft"
+event = "destroy"
+to = "Destroyed"
+owner = "ExposedThingHandle"
+linearization = "release private reservations"
+outcome = "Complete"
+retryability = "idempotent"
+
+[[machine.transition]]
+from = "Draft"
+event = "drop"
+to = "Destroyed"
+owner = "ExposedThingHandle"
+linearization = "release private reservations"
+outcome = "Complete"
+retryability = "idempotent"
+
+[[machine.transition]]
+from = "Preparing"
+event = "all_routes_prepared"
+to = "ReadyPendingActivation"
+owner = "Servient"
+linearization = "retain every prepared guard"
+outcome = "in-progress"
+retryability = "not-applicable"
+
+[[machine.transition]]
+from = "ReadyPendingActivation"
+event = "readiness_complete"
+to = "Activating"
+owner = "Servient"
+linearization = "observe all readiness tokens ready"
+outcome = "in-progress"
+retryability = "not-applicable"
+
+[[machine.transition]]
+from = "Activating"
+event = "activation_complete"
+to = "Committing"
+owner = "Servient"
+linearization = "retain every active route guard"
+outcome = "in-progress"
+retryability = "not-applicable"
+
+[[machine.transition]]
+from = "Committing"
+event = "publish"
+to = "Serving"
+owner = "Servient"
+linearization = "registry generation becomes serving"
+outcome = "published"
+retryability = "not-applicable"
+
+[[machine.transition]]
+from = "Preparing"
+event = "cancel"
+to = "Cancelling"
+owner = "Servient"
+linearization = "cancel wins lifecycle publication boundary"
+outcome = "cleanup-required"
+retryability = "same-handle-never"
+
+[[machine.transition]]
+from = "Preparing"
+event = "drop"
+to = "Cancelling"
+owner = "ServientCleanupOwner"
+linearization = "transfer transaction ownership"
+outcome = "cleanup-required"
+retryability = "runtime-owned"
+
+[[machine.transition]]
+from = "Preparing"
+event = "destroy"
+to = "Cancelling"
+owner = "Servient"
+linearization = "cancel wins lifecycle publication boundary"
+outcome = "cleanup-required"
+retryability = "join-existing"
+
+[[machine.transition]]
+from = "ReadyPendingActivation"
+event = "cancel"
+to = "Cancelling"
+owner = "Servient"
+linearization = "cancel wins lifecycle publication boundary"
+outcome = "cleanup-required"
+retryability = "same-handle-never"
+
+[[machine.transition]]
+from = "ReadyPendingActivation"
+event = "drop"
+to = "Cancelling"
+owner = "ServientCleanupOwner"
+linearization = "transfer readiness and guard ownership"
+outcome = "cleanup-required"
+retryability = "runtime-owned"
+
+[[machine.transition]]
+from = "ReadyPendingActivation"
+event = "destroy"
+to = "Cancelling"
+owner = "Servient"
+linearization = "cancel wins lifecycle publication boundary"
+outcome = "cleanup-required"
+retryability = "join-existing"
+
+[[machine.transition]]
+from = "Activating"
+event = "cancel"
+to = "Cancelling"
+owner = "Servient"
+linearization = "cancel wins lifecycle publication boundary"
+outcome = "cleanup-required"
+retryability = "same-handle-never"
+
+[[machine.transition]]
+from = "Activating"
+event = "drop"
+to = "Cancelling"
+owner = "ServientCleanupOwner"
+linearization = "transfer prepared and active guard ownership"
+outcome = "cleanup-required"
+retryability = "runtime-owned"
+
+[[machine.transition]]
+from = "Activating"
+event = "destroy"
+to = "Cancelling"
+owner = "Servient"
+linearization = "cancel wins lifecycle publication boundary"
+outcome = "cleanup-required"
+retryability = "join-existing"
+
+[[machine.transition]]
+from = "Committing"
+event = "cancel"
+to = "Cancelling"
+owner = "Servient"
+linearization = "cancel wins shared publication boundary"
+outcome = "cleanup-required"
+retryability = "same-handle-never"
+
+[[machine.transition]]
+from = "Committing"
+event = "drop"
+to = "Cancelling"
+owner = "ServientCleanupOwner"
+linearization = "drop wins shared publication boundary"
+outcome = "cleanup-required"
+retryability = "runtime-owned"
+
+[[machine.transition]]
+from = "Committing"
+event = "destroy"
+to = "Cancelling"
+owner = "Servient"
+linearization = "destroy wins shared publication boundary"
+outcome = "cleanup-required"
+retryability = "join-existing"
+
+[[machine.transition]]
+from = "Serving"
+event = "destroy"
+to = "Draining"
+owner = "Servient"
+linearization = "registry generation becomes draining"
+outcome = "cleanup-required"
+retryability = "join-existing"
+
+[[machine.transition]]
+from = "Serving"
+event = "drop"
+to = "Draining"
+owner = "ServientCleanupOwner"
+linearization = "registry generation becomes draining"
+outcome = "cleanup-required"
+retryability = "runtime-owned"
+
+[[machine.transition]]
+from = "Preparing"
+event = "failure"
+to = "Cancelling"
+owner = "Servient"
+linearization = "retain primary error before rollback"
+outcome = "cleanup-required-for-Failed"
+retryability = "not-applicable"
+
+[[machine.transition]]
+from = "ReadyPendingActivation"
+event = "failure"
+to = "Cancelling"
+owner = "Servient"
+linearization = "retain primary error before rollback"
+outcome = "cleanup-required-for-Failed"
+retryability = "not-applicable"
+
+[[machine.transition]]
+from = "Activating"
+event = "failure"
+to = "Cancelling"
+owner = "Servient"
+linearization = "retain primary error before rollback"
+outcome = "cleanup-required-for-Failed"
+retryability = "not-applicable"
+
+[[machine.transition]]
+from = "Committing"
+event = "failure"
+to = "Cancelling"
+owner = "Servient"
+linearization = "retain primary error before rollback"
+outcome = "cleanup-required-for-Failed"
+retryability = "not-applicable"
+
+[[machine.transition]]
+from = "Cancelling"
+event = "cleanup_complete_cancel"
+to = "Cancelled"
+owner = "Servient"
+linearization = "last cleanup owner releases transaction"
+outcome = "Complete"
+retryability = "terminal"
+
+[[machine.transition]]
+from = "Cancelling"
+event = "cleanup_complete_failure"
+to = "Failed"
+owner = "Servient"
+linearization = "last cleanup owner releases transaction"
+outcome = "Complete-with-primary-failure"
+retryability = "terminal"
+
+[[machine.transition]]
+from = "Cancelling"
+event = "cleanup_pending"
+to = "CleanupPending"
+owner = "ServientCleanupOwner"
+linearization = "retain or transfer every cleanup item"
+outcome = "PendingCleanup"
+retryability = "recorded-per-item"
+
+[[machine.transition]]
+from = "Draining"
+event = "cleanup_complete"
+to = "Destroyed"
+owner = "Servient"
+linearization = "last route and in-flight owner released"
+outcome = "Complete"
+retryability = "terminal"
+
+[[machine.transition]]
+from = "Draining"
+event = "cleanup_pending"
+to = "CleanupPending"
+owner = "ServientCleanupOwner"
+linearization = "retain or transfer every cleanup item"
+outcome = "PendingCleanup"
+retryability = "recorded-per-item"
+
+[[machine.transition]]
+from = "CleanupPending"
+event = "complete_cancel"
+to = "Cancelled"
+owner = "ServientCleanupOwner"
+linearization = "last retained cancellation item terminates"
+outcome = "Complete"
+retryability = "terminal"
+
+[[machine.transition]]
+from = "CleanupPending"
+event = "complete_destroy"
+to = "Destroyed"
+owner = "ServientCleanupOwner"
+linearization = "last retained destroy item terminates"
+outcome = "Complete"
+retryability = "terminal"
+
+[[machine.transition]]
+from = "CleanupPending"
+event = "complete_failure"
+to = "Failed"
+owner = "ServientCleanupOwner"
+linearization = "last retained rollback item terminates"
+outcome = "Complete-with-primary-failure"
+retryability = "terminal"
+
+[[machine]]
+id = "subscription"
+requirements = ["STATE-SUB-001", "BIND-PROGRESS-001"]
+initial = "Starting"
+states = [
+    "Starting",
+    "CancellingStart",
+    "Active",
+    "Stopping",
+    "CleanupPending",
+    "Closed",
+    "Failed",
+]
+terminal = ["Closed", "Failed"]
+required_events = ["Starting:cancel", "Starting:drop", "Active:stop", "Active:drop"]
+
+[[machine.transition]]
+from = "Starting"
+event = "install_guard"
+to = "Active"
+owner = "ConsumedThingHandle"
+linearization = "guard registry publishes active generation"
+outcome = "active"
+retryability = "not-applicable"
+
+[[machine.transition]]
+from = "Starting"
+event = "cancel"
+to = "CancellingStart"
+owner = "ConsumedThingHandle"
+linearization = "cancel wins guard installation boundary"
+outcome = "cleanup-required"
+retryability = "join-existing"
+
+[[machine.transition]]
+from = "Starting"
+event = "drop"
+to = "CancellingStart"
+owner = "ConsumedThingHandle"
+linearization = "drop wins guard installation boundary"
+outcome = "cleanup-required"
+retryability = "runtime-owned"
+
+[[machine.transition]]
+from = "Starting"
+event = "start_failure"
+to = "Failed"
+owner = "ConsumedThingHandle"
+linearization = "retain terminal start error"
+outcome = "failed-without-wire-resource"
+retryability = "terminal"
+
+[[machine.transition]]
+from = "CancellingStart"
+event = "cleanup_complete"
+to = "Closed"
+owner = "ConsumedThingHandle"
+linearization = "pending wire guard closes"
+outcome = "Complete"
+retryability = "terminal"
+
+[[machine.transition]]
+from = "CancellingStart"
+event = "cleanup_pending"
+to = "CleanupPending"
+owner = "CleanupOwner"
+linearization = "retain or transfer pending guard"
+outcome = "PendingCleanup"
+retryability = "recorded"
+
+[[machine.transition]]
+from = "CancellingStart"
+event = "residual"
+to = "Failed"
+owner = "CleanupOwner"
+linearization = "local sample admission closes"
+outcome = "ResidualExternalState"
+retryability = "recorded"
+
+[[machine.transition]]
+from = "Active"
+event = "stop"
+to = "Stopping"
+owner = "ConsumedThingHandle"
+linearization = "guard registry marks generation stopping"
+outcome = "cleanup-required"
+retryability = "join-existing"
+
+[[machine.transition]]
+from = "Active"
+event = "drop"
+to = "Stopping"
+owner = "ConsumedThingHandle"
+linearization = "guard registry marks generation stopping"
+outcome = "cleanup-required"
+retryability = "runtime-owned"
+
+[[machine.transition]]
+from = "Stopping"
+event = "cleanup_complete"
+to = "Closed"
+owner = "ConsumedThingHandle"
+linearization = "wire guard and sample slot close"
+outcome = "Complete"
+retryability = "terminal"
+
+[[machine.transition]]
+from = "Stopping"
+event = "cleanup_pending"
+to = "CleanupPending"
+owner = "CleanupOwner"
+linearization = "retain or transfer wire guard"
+outcome = "PendingCleanup"
+retryability = "recorded"
+
+[[machine.transition]]
+from = "Stopping"
+event = "residual"
+to = "Failed"
+owner = "CleanupOwner"
+linearization = "local sample admission closes"
+outcome = "ResidualExternalState"
+retryability = "recorded"
+
+[[machine.transition]]
+from = "CleanupPending"
+event = "cleanup_complete"
+to = "Closed"
+owner = "CleanupOwner"
+linearization = "last retained cleanup item terminates"
+outcome = "Complete"
+retryability = "terminal"
+
+[[machine.transition]]
+from = "CleanupPending"
+event = "residual"
+to = "Failed"
+owner = "CleanupOwner"
+linearization = "retained cleanup becomes terminal residue"
+outcome = "ResidualExternalState"
+retryability = "recorded"
+
+[[machine]]
+id = "binding-route"
+requirements = ["STATE-BIND-001", "LIFE-EXPOSE-003"]
+initial = "Absent"
+states = [
+    "Absent",
+    "Prepared",
+    "Ready",
+    "Active",
+    "Committed",
+    "Serving",
+    "Draining",
+    "CleanupPending",
+    "Closed",
+]
+terminal = ["Closed"]
+required_events = [
+    "Prepared:abort",
+    "Ready:abort",
+    "Active:shutdown",
+    "Committed:shutdown",
+    "Serving:shutdown",
+    "Draining:shutdown",
+]
+
+[[machine.transition]]
+from = "Absent"
+event = "prepare"
+to = "Prepared"
+owner = "Servient"
+linearization = "retain addressable prepared guard"
+outcome = "prepared"
+retryability = "idempotent-by-generation"
+
+[[machine.transition]]
+from = "Prepared"
+event = "ready"
+to = "Ready"
+owner = "Servient"
+linearization = "readiness token reaches Ready"
+outcome = "ready"
+retryability = "idempotent-by-generation"
+
+[[machine.transition]]
+from = "Ready"
+event = "activate"
+to = "Active"
+owner = "Servient"
+linearization = "prepared guard becomes active guard"
+outcome = "active"
+retryability = "idempotent-by-generation"
+
+[[machine.transition]]
+from = "Active"
+event = "commit"
+to = "Committed"
+owner = "Servient"
+linearization = "binding observes commit"
+outcome = "committed"
+retryability = "idempotent-by-generation"
+
+[[machine.transition]]
+from = "Committed"
+event = "publish"
+to = "Serving"
+owner = "Servient"
+linearization = "registry activation gate becomes serving"
+outcome = "serving"
+retryability = "not-applicable"
+
+[[machine.transition]]
+from = "Serving"
+event = "drain"
+to = "Draining"
+owner = "Servient"
+linearization = "activation gate becomes draining"
+outcome = "draining"
+retryability = "idempotent-by-generation"
+
+[[machine.transition]]
+from = "Prepared"
+event = "abort"
+to = "CleanupPending"
+owner = "Servient"
+linearization = "abort retains prepared guard"
+outcome = "PendingCleanup"
+retryability = "recorded"
+
+[[machine.transition]]
+from = "Ready"
+event = "abort"
+to = "CleanupPending"
+owner = "Servient"
+linearization = "abort retains prepared guard and readiness token"
+outcome = "PendingCleanup"
+retryability = "recorded"
+
+[[machine.transition]]
+from = "Active"
+event = "shutdown"
+to = "CleanupPending"
+owner = "Servient"
+linearization = "shutdown retains active guard"
+outcome = "PendingCleanup"
+retryability = "recorded"
+
+[[machine.transition]]
+from = "Committed"
+event = "shutdown"
+to = "CleanupPending"
+owner = "Servient"
+linearization = "shutdown retains committed guard"
+outcome = "PendingCleanup"
+retryability = "recorded"
+
+[[machine.transition]]
+from = "Serving"
+event = "shutdown"
+to = "CleanupPending"
+owner = "Servient"
+linearization = "shutdown closes acceptance and retains active guard"
+outcome = "PendingCleanup"
+retryability = "recorded"
+
+[[machine.transition]]
+from = "Draining"
+event = "shutdown"
+to = "CleanupPending"
+owner = "Servient"
+linearization = "shutdown retains draining guard"
+outcome = "PendingCleanup"
+retryability = "recorded"
+
+[[machine.transition]]
+from = "CleanupPending"
+event = "complete"
+to = "Closed"
+owner = "CleanupOwner"
+linearization = "last route resource closes"
+outcome = "Complete"
+retryability = "terminal"
+
+[[machine.transition]]
+from = "CleanupPending"
+event = "residual"
+to = "Closed"
+owner = "CleanupOwner"
+linearization = "local owner closes with durable residual status"
+outcome = "ResidualExternalState"
+retryability = "recorded"
+
+[[machine]]
+id = "in-flight"
+requirements = ["STATE-INFLIGHT-001"]
+initial = "Vacant"
+states = ["Vacant", "Admitted", "Completing", "Cancelled", "Released"]
+terminal = ["Released"]
+required_events = ["Admitted:complete", "Admitted:drain_expired"]
+
+[[machine.transition]]
+from = "Vacant"
+event = "admit"
+to = "Admitted"
+owner = "Servient"
+linearization = "publish slot after serving generation recheck"
+outcome = "in-flight"
+retryability = "not-applicable"
+
+[[machine.transition]]
+from = "Admitted"
+event = "complete"
+to = "Completing"
+owner = "Dispatch"
+linearization = "claim response opportunity exactly once"
+outcome = "response-or-discard"
+retryability = "not-applicable"
+
+[[machine.transition]]
+from = "Admitted"
+event = "drain_expired"
+to = "Cancelled"
+owner = "Servient"
+linearization = "response gate closes"
+outcome = "late-results-discarded"
+retryability = "not-applicable"
+
+[[machine.transition]]
+from = "Completing"
+event = "release"
+to = "Released"
+owner = "Dispatch"
+linearization = "release slot once"
+outcome = "Complete"
+retryability = "terminal"
+
+[[machine.transition]]
+from = "Cancelled"
+event = "release"
+to = "Released"
+owner = "Servient"
+linearization = "release cancelled slot once"
+outcome = "Complete"
+retryability = "terminal"
+
+[[machine]]
+id = "directory-process"
+requirements = ["STATE-DISC-001", "API-DIRECTORY-POLL-001"]
+initial = "Created"
+states = [
+    "Created",
+    "Running",
+    "Stopping",
+    "Completed",
+    "Cancelled",
+    "TimedOut",
+    "Overflowed",
+    "Failed",
+]
+terminal = ["Completed", "Cancelled", "TimedOut", "Overflowed", "Failed"]
+required_events = ["Created:cancel", "Created:drop", "Running:cancel", "Running:drop"]
+
+[[machine.transition]]
+from = "Created"
+event = "start"
+to = "Running"
+owner = "ThingDiscoveryProcess"
+linearization = "first poll or explicit start"
+outcome = "running"
+retryability = "not-applicable"
+
+[[machine.transition]]
+from = "Created"
+event = "cancel"
+to = "Stopping"
+owner = "ThingDiscoveryProcess"
+linearization = "retain cancellation ownership before backend start"
+outcome = "cleanup-required"
+retryability = "join-existing"
+
+[[machine.transition]]
+from = "Created"
+event = "drop"
+to = "Stopping"
+owner = "DirectoryCleanupOwner"
+linearization = "transfer process ownership"
+outcome = "cleanup-required"
+retryability = "runtime-owned"
+
+[[machine.transition]]
+from = "Running"
+event = "cancel"
+to = "Stopping"
+owner = "ThingDiscoveryProcess"
+linearization = "prevent new backend work"
+outcome = "cleanup-required"
+retryability = "join-existing"
+
+[[machine.transition]]
+from = "Running"
+event = "drop"
+to = "Stopping"
+owner = "DirectoryCleanupOwner"
+linearization = "prevent new backend work and transfer ownership"
+outcome = "cleanup-required"
+retryability = "runtime-owned"
+
+[[machine.transition]]
+from = "Running"
+event = "source_exhausted"
+to = "Completed"
+owner = "ThingDiscoveryProcess"
+linearization = "retain terminal event"
+outcome = "Completed"
+retryability = "terminal"
+
+[[machine.transition]]
+from = "Running"
+event = "timeout"
+to = "TimedOut"
+owner = "ThingDiscoveryProcess"
+linearization = "retain timeout terminal event"
+outcome = "TimedOut"
+retryability = "terminal"
+
+[[machine.transition]]
+from = "Running"
+event = "overflow"
+to = "Overflowed"
+owner = "ThingDiscoveryProcess"
+linearization = "retain overflow terminal event"
+outcome = "Overflowed"
+retryability = "terminal"
+
+[[machine.transition]]
+from = "Running"
+event = "failure"
+to = "Failed"
+owner = "ThingDiscoveryProcess"
+linearization = "retain failed terminal event"
+outcome = "Failed"
+retryability = "terminal"
+
+[[machine.transition]]
+from = "Stopping"
+event = "cancel_complete"
+to = "Cancelled"
+owner = "DirectoryCleanupOwner"
+linearization = "backend cancellation reaches terminal"
+outcome = "Cancelled"
+retryability = "terminal"

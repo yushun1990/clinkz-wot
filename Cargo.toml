@@ -9,6 +9,7 @@ members = [
     "protocol-bindings/protocols/zenoh",
     "servient",
     "td",
+    "tools/design-check",
 ]
 
 [workspace.package]
