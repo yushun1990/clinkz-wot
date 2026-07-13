@@ -4,6 +4,7 @@ docs/design.md,architecture-and-behavior,normative,4.6,1,docs/design.md
 docs/artifacts.csv,artifact-registry,normative,4.6,1,docs/design.md
 docs/api-ownership.csv,public-api-ownership,normative,4.6,1,docs/design.md
 docs/refactor-gates.csv,implementation-admission,normative,4.6,1,docs/design.md
+docs/resource-limits.csv,resource-limit-schema-and-profiles,normative,4.6,1,docs/design.md
 docs/state-machines.toml,lifecycle-state-model,normative,4.6,1,docs/design.md
 docs/requirements.csv,requirement-and-evidence-index,normative-index,4.6,1,docs/design.md
 docs/performance/constrained.toml,constrained-performance-budget,normative,4.6,4,docs/design.md

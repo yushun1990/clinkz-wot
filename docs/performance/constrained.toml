@@ -1,5 +1,6 @@
 schema_version = 4
 profile = "BenchmarkStaticReferenceV1"
+resource_profile = "BenchmarkStaticReferenceV1"
 runtime_default = false
 feature_set = "no-default-features,application-static-profile"
 environment = "thumbv7em-none-eabihf"
@@ -30,24 +31,6 @@ include_codec = "workload-specific-and-recorded"
 allocation_boundary = "clinkz-wot-engine-excluding-handler-owned-output"
 peak_live_bytes_unit = "bytes"
 work_budget_codec_unit = "exact-bytes"
-
-[static_profile]
-document_bytes_max = 65536
-payload_bytes_max = 1024
-string_bytes_max = 16384
-extension_bytes_max = 16384
-td_nodes_max = 1024
-forms_max = 256
-bindings_max = 4
-candidates_per_operation_max = 32
-schema_nodes_max = 256
-security_branches_max = 64
-subscribers_max = 256
-admission_temporary_bytes_max = 1048576
-compiled_runtime_bytes_max = 1048576
-peak_live_bytes_max = 4194304
-largest_contiguous_allocation_max = 262144
-fanout_subscribers_per_step_max = 16
 
 [operation_boundary]
 local_sync_interaction = "before public local call -> result returned"

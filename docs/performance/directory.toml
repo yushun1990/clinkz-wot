@@ -1,5 +1,6 @@
 schema_version = 4
 profile = "DirectoryClientDefaultV1"
+resource_profile = "DirectoryClientDefaultV1"
 scope = "engine-side-directory-client"
 feature_set = "std,async"
 environment = "x86_64-unknown-linux-gnu"

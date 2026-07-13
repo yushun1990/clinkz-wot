@@ -9,6 +9,7 @@ Normative implementation-support artifacts referenced by that design are:
 - `docs/artifacts.csv`
 - `docs/api-ownership.csv`
 - `docs/refactor-gates.csv`
+- `docs/resource-limits.csv`
 - `docs/state-machines.toml`
 - `docs/performance/constrained.toml`
 - `docs/performance/gateway.toml`

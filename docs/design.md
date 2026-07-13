@@ -3023,7 +3023,9 @@ extension value is untrusted variable-size input. Queue item counts alone are
 not a resource bound.
 
 `RES-LIMIT-001`: Public ingestion and runtime construction surfaces MUST accept
-or inherit a `ResourceLimits` policy. At minimum it covers:
+or inherit a `ResourceLimits` policy. `docs/resource-limits.csv` is the
+exhaustive field schema and named-profile value source. The categories below
+explain that schema; they are not a second field list:
 
 - document, payload, extension, generated effective-document, and compiled-plan
   byte limits;
@@ -3042,7 +3044,13 @@ or inherit a `ResourceLimits` policy. At minimum it covers:
 - queue item count, total queued bytes, and maximum bytes per item;
 - cleanup work items and bytes, endpoint reservations, page-token bytes, and
   outstanding response opportunities;
-- cache and durable-status-record entries, bytes, generations, and retention.
+- cache and durable-status-record entries, bytes, generations, and retention;
+- Directory query bytes, depth, nodes, terms, strings, pages, watches, and
+  incremental decode scratch;
+- Producer emission slots, bounded per-binding results, fan-out cursors, and
+  subscribers/bindings processed per step;
+- hierarchical accounting batch, idle-reservation, reconciliation work, and
+  reconciliation interval or step limits.
 
 `RES-LIMIT-002`: A limit violation MUST return a structured `LimitExceeded`
 category identifying the resource kind, configured limit, observed or requested
@@ -3060,8 +3068,10 @@ Constrained construction MUST receive explicit limits or select a named static
 profile. A zero byte or count limit disables that resource unless the field is
 explicitly documented as rendezvous capacity. No zero value means unbounded.
 
-The default gateway profile uses the following admission ceilings. Applications
-may lower them directly and may raise them only through explicit configuration:
+The default gateway profile uses the following selected admission ceilings.
+This table is a readable summary; `docs/resource-limits.csv` is exhaustive and
+authoritative when a field is not shown here. Applications may lower values
+directly and may raise them only through explicit configuration:
 
 | Resource | Default gateway ceiling |
 | --- | ---: |
@@ -3083,7 +3093,8 @@ may lower them directly and may raise them only through explicit configuration:
 | generated effective-document bytes per Thing | 2 MiB |
 | retained source bytes per Thing / global | 1 MiB / 512 MiB |
 | admission temporary bytes per operation / global | 8 MiB / 256 MiB |
-| peak live bytes per admission / global | 24 MiB / 512 MiB |
+| admission peak live bytes per operation / aggregate | 24 MiB / 512 MiB |
+| total engine live bytes global | 2 GiB |
 | compiled runtime bytes per Thing / global | 4 MiB / 1 GiB |
 | validator/cache bytes per Thing / global | 2 MiB / 256 MiB |
 | largest contiguous engine allocation | 8 MiB |
@@ -3107,25 +3118,43 @@ may lower them directly and may raise them only through explicit configuration:
 | durable status entries and bytes per binding | 64 / 64 KiB |
 | durable status bytes global / retention | 16 MiB / 24 hours |
 
+Peak limits count engine-owned bytes that are actually live, including arena,
+pool, heap, and caller-provided capacity while it is exclusively reserved for
+the engine. They do not count a logical quota that has not acquired physical
+storage. `peak_live_bytes_per_admission_max` is attributed to one active
+admission transaction and includes its source, temporary, and not-yet-published
+persistent state. `admission_peak_live_bytes_global_max` aggregates those bytes
+across all simultaneously active admissions.
+`engine_live_bytes_global_max` covers all live engine-owned accounts, including
+published documents/runtime state, queues, caches, diagnostics, cleanup, and
+active admission. Individual ledger ceilings remain independently enforced even
+when this total has capacity. A reserved virtual address range or static array
+is charged by committed physical storage on host profiles and by its full linked
+or caller-dedicated capacity on static profiles; benchmark results state which
+representation applies.
+
 `RES-PROFILE-001`: A named host profile is represented by an exhaustive,
 versioned `ResourceLimits` value. Every field is a concrete bounded value or an
 explicit `NotApplicable` for a capability the profile does not expose; neither
 field omission nor zero means unlimited. Fields summarized in the table above
-use those values directly. Queue item defaults come from Capacity and Overflow;
-their byte defaults are item capacity multiplied by the smaller of maximum item
-bytes and 64 KiB unless the table gives a stricter value. Hierarchical scopes
-that are not independently configured inherit the stricter applicable parent
-or global ceiling, never an unlimited sentinel. A compile-time profile snapshot
-test MUST fail when a new `ResourceLimits` field lacks a value in
-`GatewayDefaultV1`.
+use those values directly. The CSV spelling `NA` maps only to the typed
+`NotApplicable` value; empty cells, `inherit`, and `unbounded` are invalid.
+Queue item and byte defaults are explicit CSV fields rather than a multiplication
+rule. Hierarchical scopes that are not independently configured inherit the
+stricter applicable parent or global ceiling at runtime, but every named-profile
+snapshot still contains a concrete value for every applicable field. A
+compile-time profile snapshot test MUST fail when a new `ResourceLimits` field
+lacks a value in any named profile.
 
 `DirectoryClientDefaultV1` is the engine-side remote Directory adapter profile.
-It inherits gateway document and payload structural limits, admits 16 active
-sessions and publications per principal, 1,024 of each globally, 64 active
+Its CSV snapshot repeats every applicable document and payload structural value
+rather than relying on implicit inheritance. It admits 16 active sessions,
+queries, and publications per principal, 1,024 of each globally, 64 active
 watches per principal, 8,192 globally, a maximum page of 128 TD documents, and
-16 MiB of total buffered Directory response bytes. It does not define Directory
-storage, snapshot retention, query execution, or service capacity. Those limits
-belong to the deferred service design.
+16 MiB of total buffered Directory response bytes. It also bounds query bytes,
+depth, nodes, terms, strings, watch/change bytes, and incremental decode scratch.
+It does not define Directory storage, snapshot retention, query execution, or
+service capacity. Those limits belong to the deferred service design.
 
 These values are admission quotas, not instructions to preallocate
 `item_capacity * maximum_item_size` for every owner. Physical allocation follows
@@ -3139,6 +3168,8 @@ silently select one.
 
 `BenchmarkStaticReferenceV1` in the constrained performance manifest is a
 reproducible verification fixture, not a runtime default. Its numeric capacities
+are the exhaustive snapshot in `docs/resource-limits.csv`; the manifest
+references that profile and MUST NOT carry a divergent partial copy. The values
 define the maximum benchmark case and MUST be recorded with the result. A
 product may reuse it only by selecting it explicitly as an application profile.
 
@@ -3372,7 +3403,10 @@ admission in an otherwise quiescent process, and has a 24 MiB peak-live ceiling.
 This ceiling is the maximum simultaneous engine-owned memory for that operation,
 not permission to move bytes from an exhausted ledger account into another
 account. Directory page and publication workloads apply the same rule to
-`DirectoryClientDefaultV1`.
+`DirectoryClientDefaultV1`. Measurement distinguishes the operation-attributed
+admission peak, aggregate concurrent-admission peak, and total engine live
+bytes exactly as defined by the resource schema. Reserved logical capacity is
+reported separately and cannot be substituted for an actual-live-byte metric.
 
 `PERF-CALL-001`: The successful interaction path decodes a payload at most once,
 performs no registry-wide provider or binding scan, and acquires no more than
@@ -3392,6 +3426,13 @@ code and binding callbacks. Reconciliation, snapshot reporting, and owner
 teardown may aggregate shards, but they MUST NOT stop unrelated interaction
 progress for work proportional to every active owner. Exact externally visible
 capacity and loss totals remain correct despite batching.
+
+Every profile bounds the maximum reservation batch, the unused reservation one
+owner may retain while idle, owners reconciled per step, and either a host
+reconciliation interval or constrained reconciliation-step deadline. A batch is
+charged to the global parent before becoming locally visible. Returning idle
+quota and reconciliation use the same fair scheduling class as cleanup; a hot
+owner cannot indefinitely retain quota needed by another admitted owner.
 
 `PERF-FANOUT-001`: Subscription fan-out reserves descriptors in bulk where the
 storage backend supports it and shares immutable payload storage. It MUST NOT
