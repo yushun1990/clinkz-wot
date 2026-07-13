@@ -13,6 +13,7 @@ pub mod inbound;
 pub mod interaction;
 pub mod payload;
 pub mod security;
+pub mod status;
 pub mod sync;
 pub mod thing;
 pub mod transport;
@@ -46,6 +47,9 @@ pub use security::{
     AuthMaterial, BasicSecurityProvider, BearerSecurityProvider, CredentialStore, Credentials,
     InMemoryCredentialStore, NoSecurityProvider, Principal, PrincipalId, SecurityContext,
     SecurityError, SecurityProvider, check_scopes,
+};
+pub use status::{
+    PendingWork, PendingWorkClass, ProcessEvent, ProcessTerminal, StartStatus, StepStatus,
 };
 pub use sync::WotLock;
 pub use thing::{
