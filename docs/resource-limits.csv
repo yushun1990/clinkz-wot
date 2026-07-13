@@ -24,6 +24,7 @@ json_value_nodes_per_document_max,document,nodes,per-document,all,disabled,65536
 affordances_per_thing_max,document,items,per-thing,all,disabled,1024,1024,256,RES-LIMIT-001
 forms_per_context_max,document,items,per-context,all,disabled,32,32,16,RES-LIMIT-001
 forms_per_thing_max,document,items,per-thing,all,disabled,4096,4096,256,RES-LIMIT-001
+additional_responses_per_form_max,document,items,per-form,all,disabled,32,32,16,RES-LIMIT-001|API-PAYLOAD-001
 uri_variables_per_form_max,uri,items,per-form,all,disabled,64,64,32,RES-LIMIT-001
 schema_nodes_per_document_max,schema,nodes,per-document,all,disabled,65536,65536,256,RES-LIMIT-001
 schema_composition_depth_max,schema,depth,per-schema,all,disabled,32,32,16,RES-LIMIT-001

@@ -1,6 +1,6 @@
 # WP-100 Core Interaction Semantics
 
-Status: In Progress
+Status: Planned
 
 Design revision: v4.6
 
@@ -64,7 +64,8 @@ Implement the frozen `clinkz_wot_core` surface in these groups:
   `ActiveRouteId`, and `PreparedRouteKey`;
 - interaction: `AffordanceTarget`, `Payload`, `MediaType`, `ContentCoding`,
   `InteractionInput`, `InteractionOptions`, `InteractionOutput`, `InteractionStatus`,
-  `HandlerContext`, `CancellationView`, and `Deadline`;
+  `ResponsePayloadRole`, `ResponseSelection`, `BindingResponseMetadata`,
+  `InteractionOutputMetadata`, `HandlerContext`, `CancellationView`, and `Deadline`;
 - codec: `PayloadCodec`, `DecodedPayload`, `PayloadDecoderState`, `PayloadEncoderState`,
   `DecodeStatus`, and `EncodeStatus`;
 - security: `SecurityProvider`, `SecurityProviderGeneration`, `SecurityRequirementView`,
@@ -80,6 +81,9 @@ direct access; constructors validate bounded ids, media metadata, messages, and 
 
 The exact error, retry, correlation, and cleanup schemas and the coordinated
 legacy mapping are frozen by `docs/amendments/WP-100-error-cleanup-v1.md`.
+The success/error boundary, shared default error disposition, handler-absence
+mapping, and legacy Servient predicate removals are frozen by
+`docs/amendments/WP-100-error-disposition-v1.md`.
 
 Operation-specific sync handlers receive `HandlerContext` plus their typed input and result.
 Async twins own their selected handler and cancellation state across suspension. Codec state

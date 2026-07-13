@@ -3,6 +3,7 @@ set -euo pipefail
 
 root=$(cd "$(dirname "$0")/.." && pwd)
 amendment="$root/docs/amendments/WP-100-error-cleanup-v1.md"
+disposition="$root/docs/amendments/WP-100-error-disposition-v1.md"
 
 for metadata in \
     'Status: Frozen' \
@@ -14,7 +15,114 @@ for metadata in \
     fi
 done
 
-for item in ErrorPhase SecurityFailureReason; do
+for metadata in \
+    'Status: Frozen' \
+    'Base design revision: v4.6' \
+    'Amendment id: WP-100-ERR-DISPOSITION-001'; do
+    if ! grep -Fq "$metadata" "$disposition"; then
+        echo "WP-100 disposition check: missing metadata: $metadata" >&2
+        exit 1
+    fi
+done
+
+for mapping in \
+    '| `InvalidDocument` | `400` |' \
+    '| `Validation` | `400` |' \
+    '| `LimitExceeded` | `400` |' \
+    '| `NotFound` | `404` |' \
+    '| `UnsupportedOperation` with `ErrorPhase::Handler` | `500` |' \
+    '| `UnsupportedOperation` with any other phase | `400` |' \
+    '| `Selection::AffordanceMissing` | `404` |' \
+    '| `Selection::OperationUnsupported` | `400` |' \
+    '| `Selection::NoFormSupportsOperation` | `400` |' \
+    '| `Selection::TargetResolutionFailed` | `400` |' \
+    '| `Selection::NoSupportingBinding` | `500` |' \
+    '| `Selection::AmbiguousBindingOwner` | `500` |' \
+    '| `Selection::SecurityUnavailable` | `401` |' \
+    '| `Selection::StrictSelectionMismatch` | `400` |' \
+    '| `Security::MissingCredentials` | `401` |' \
+    '| `Security::InvalidCredentials` | `401` |' \
+    '| `Security::AuthorizationDenied` | `403` |' \
+    '| `Security::UnsupportedScheme` | `401` |' \
+    '| `Security::ProviderFailure` | `500` |' \
+    '| `Application` | `500` |' \
+    '| `Binding` | `503` |' \
+    '| `Payload` | `400` |' \
+    '| `Backpressure` | `503` |' \
+    '| `Cancelled` while a reply opportunity remains | `503` |' \
+    '| `TimedOut` | `503` |' \
+    '| `StaleHandle` | `404` |' \
+    '| `Lifecycle` | `503` |' \
+    '| `Cleanup` | `500` |' \
+    '| `InternalInvariant` | `500` |' \
+    '| A future unknown `CoreError` or structured reason | `500` |'; do
+    if ! grep -Fq "$mapping" "$disposition"; then
+        echo "WP-100 disposition check: missing mapping: $mapping" >&2
+        exit 1
+    fi
+done
+
+for predicate in is_missing_handler is_security is_timeout; do
+    if ! grep -Fq "$predicate" "$disposition"; then
+        echo "WP-100 disposition check: missing predicate disposition: $predicate" >&2
+        exit 1
+    fi
+done
+
+for status_variant in Ok Created Accepted; do
+    if ! grep -Eq "^[[:space:]]*$status_variant,?$" "$disposition"; then
+        echo "WP-100 disposition check: missing InteractionStatus variant: $status_variant" >&2
+        exit 1
+    fi
+done
+
+if ! grep -Fq '#[non_exhaustive]' "$disposition" \
+    || ! grep -Fq '#[default]' "$disposition"; then
+    echo "WP-100 disposition check: InteractionStatus traits/default are not frozen" >&2
+    exit 1
+fi
+
+for output_field in \
+    'data: Option<Payload>' \
+    'status: InteractionStatus' \
+    'metadata: InteractionOutputMetadata' \
+    'action_invocation: Option<ActionInvocationRef>' \
+    'binding_response: Option<BindingResponseMetadata>' \
+    'payload_role: ResponsePayloadRole'; do
+    if ! grep -Fq "$output_field" "$disposition"; then
+        echo "WP-100 disposition check: missing InteractionOutput field: $output_field" >&2
+        exit 1
+    fi
+done
+
+for invariant in \
+    'exactly match the request' \
+    'additional-response count in that compiled plan' \
+    'came from the selected binding response' \
+    'constructors establish only bounded shape' \
+    'separate binding crate a protocol-neutral' \
+    '`Created` is reserved for creation of an addressable asynchronous action' \
+    '`Accepted` represents asynchronous action acceptance without an addressable'; do
+    if ! grep -Fq "$invariant" "$disposition"; then
+        echo "WP-100 disposition check: missing output invariant: $invariant" >&2
+        exit 1
+    fi
+done
+
+if grep -Eq 'handler-missing|unsupported-operation or handler-missing' "$root/docs/design.md"; then
+    echo "WP-100 disposition check: base design still permits handler-missing taxonomy" >&2
+    exit 1
+fi
+
+if ! grep -Fq '`query_action` and `cancel_action` return a validated' \
+    "$root/docs/design.md"; then
+    echo "WP-100 disposition check: action success boundary is not frozen" >&2
+    exit 1
+fi
+
+for item in \
+    ErrorPhase SecurityFailureReason ResponsePayloadRole ResponseSelection \
+    BindingResponseMetadata InteractionOutputMetadata; do
     if ! awk -F, -v item="$item" '
         NR > 1 && $1 == item && $3 == "clinkz-wot-core" && $14 == "frozen" { found = 1 }
         END { exit !found }
@@ -34,6 +142,21 @@ if ! awk -F, '
     exit 1
 fi
 
+if ! grep -Fq 'values greater than' "$disposition" \
+    || ! grep -Fq '`65_536`' "$disposition"; then
+    echo "WP-100 disposition check: additional-response index bound is not frozen" >&2
+    exit 1
+fi
+
+if ! awk -F, '
+    NR > 1 && $1 == "additional_responses_per_form_max" \
+        && $7 == 32 && $8 == 32 && $9 == 16 { found = 1 }
+    END { exit !found }
+' "$root/docs/resource-limits.csv"; then
+    echo "WP-100 disposition check: additional-response limit is not frozen" >&2
+    exit 1
+fi
+
 for legacy in \
     UnknownAffordance UnsupportedOperation UnsupportedBinding Payload Security \
     Transport InvalidInteraction MissingHandler InboundDispatch HandlerPanic \
@@ -44,4 +167,4 @@ for legacy in \
     fi
 done
 
-echo "WP-100 amendment check: error, cleanup, and migration schemas frozen"
+echo "WP-100 amendment check: schemas, disposition, and migration rules frozen"

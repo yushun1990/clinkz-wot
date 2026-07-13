@@ -1,6 +1,6 @@
 # WP-000 Foundation Primitives
 
-Status: Complete
+Status: In Progress
 
 Design revision: v4.6
 
@@ -21,6 +21,10 @@ host runtime behavior into the package.
 This package establishes the types and invariants consumed by every later work package. It
 does not migrate TD ingestion, core dispatch, binding execution, Directory clients, or
 Servient lifecycle orchestration.
+
+The package was reopened by `WP-100-ERR-DISPOSITION-001` solely to regenerate
+the exhaustive profile schema, boundary tests, and evidence for
+`additional_responses_per_form_max`. No foundation ownership boundary changed.
 
 ## Requirements
 

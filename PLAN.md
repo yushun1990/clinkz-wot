@@ -22,6 +22,7 @@ Normative implementation-support artifacts referenced by that design are:
 - `docs/work-packages/index.toml`
 - `docs/work-packages/*.md`
 - `docs/amendments/WP-100-error-cleanup-v1.md`
+- `docs/amendments/WP-100-error-disposition-v1.md`
 
 The executable performance contract checker and deterministic fixture
 generator are in `tools/performance-harness`.
@@ -34,6 +35,14 @@ affected packages as specified by `REFACTOR-GATE-001`.
 The frozen WP-100 error, retry, correlation, and cleanup Rust schemas are closed
 by normative amendment `WP-100-ERR-CLEANUP-001`. The amendment resolves schema
 details left open by the base prose without changing the implementation DAG.
+The success/error boundary, shared wire disposition, handler-absence mapping,
+and legacy Servient predicate removal are closed by normative amendment
+`WP-100-ERR-DISPOSITION-001`.
+
+That amendment adds `additional_responses_per_form_max`, so `WP-000` is
+temporarily reopened and `WP-100` returns to planned status until the generated
+foundation schema, profile snapshots, boundary tests, and evidence cover all
+118 resource fields.
 
 The Directory performance artifact covers only the engine-side Directory client
 contract. Directory service topology, storage backends, server-side query

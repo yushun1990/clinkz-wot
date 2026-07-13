@@ -754,11 +754,12 @@ Validation responsibilities:
   because it contains extra object members or array entries allowed by TD 1.1
   response compatibility rules.
 - An `additionalResponses` entry with `success: false` maps to a structured
-  operation error or status item, not to a successful `InteractionOutput`.
-  The error preserves the response payload, content type, schema reference,
-  and binding status metadata when available. An entry with `success: true`
-  may be reported as a successful alternative output after schema/media
-  validation. When `success` is absent, TD 1.1 defaulting treats it as `false`.
+  operation error, not to a successful `InteractionOutput`. The public
+  `CoreError` retains only bounded plan, binding, phase, cause-code, and
+  redacted-cause context; it does not retain the response payload, schema, or
+  raw protocol status or error. An entry with `success: true` may be reported as a
+  successful alternative output after schema/media validation. When `success`
+  is absent, TD 1.1 defaulting treats it as `false`.
 - Property `readOnly`, `writeOnly`, and `observable` defaults are enforced
   during form planning and dispatch; unsupported operations fail before handler
   invocation or binding I/O.
@@ -966,10 +967,10 @@ dispatches that select the slot after the replacement is published. A dispatch
 that has already selected a handler keeps its cloned handler reference and runs
 to completion, cancellation, or timeout according to the active drain policy.
 Removing or clearing a handler is allowed only through an explicitly named API;
-after removal, a matching request fails with a structured
-unsupported-operation or handler-missing error even though the frozen TD still
-advertises the operation. The error includes the Thing id, affordance target,
-operation, and selected plan id when known.
+after removal, a matching request fails with structured
+`UnsupportedOperation` even though the frozen TD still advertises the
+operation. The error includes the Thing id, affordance target, operation, and
+selected plan id when known.
 
 `HANDLER-STORAGE-001`: Handler storage is proportional to operations admitted or
 registered, not the Cartesian product of every handler trait and affordance.
@@ -1444,8 +1445,8 @@ path, or an explicit late-handler policy selected by the application. The
 portable and host default policy is strict-at-expose: missing behavior rejects
 `expose()`. A Rust-native `AllowLateHandlers` policy may admit the form, but a
 request received before handler publication returns the structured
-handler-missing error already defined, and selecting this policy is visible in
-the effective handle diagnostics.
+`UnsupportedOperation` error already defined, and selecting this policy is
+visible in the effective handle diagnostics.
 
 ### ServerBinding
 
@@ -1789,11 +1790,12 @@ The Servient does not own a transport driving loop.
 
 `BIND-IO-001`: `InboundRequest` owns its `BindingRouteKey`, route match,
 correlation id, application-independent wire `Payload`, transport-native auth
-material, and binding status metadata. `InboundResponse` owns the same route and
-correlation identities plus either an output or structured error mapping. A
-binding cannot borrow either value from a transport receive buffer after the
-call returns. Duplicate live correlation ids are rejected within one binding
-route; ids may repeat on unrelated routes. Host `send_response` and constrained
+material. `InboundResponse` owns the same route and correlation identities plus
+either an output with validated `InteractionOutputMetadata` or a structured
+error mapping. A binding cannot borrow either value from a transport receive
+buffer after the call returns. Duplicate live correlation ids are rejected
+within one binding route; ids may repeat on unrelated routes. Host
+`send_response` and constrained
 `start_response` validate that the route generation and correlation id still
 name an admitted in-flight request. Host delivery consumes that response
 opportunity in the call. Constrained delivery consumes it when start is accepted
@@ -2081,10 +2083,12 @@ method names, and their names must make the fallback behavior visible.
 Scripting-compatible `read_all_properties` and `read_multiple_properties`
 return `Result<PropertyReadMap, CoreError>`. They do not encode per-property
 failures inside `PropertyReadMap`; a TD-level response that reports partial
-failure is surfaced as a structured operation error that preserves the selected
-plan id, response payload, media metadata, and binding status. Rust extension
-helpers may expose non-lossy partial-result maps, but those helpers must use
-distinct names and must not be presented as the Scripting-compatible methods.
+failure is surfaced as a structured operation error that preserves bounded
+plan, binding, phase, cause-code, and redacted-cause context. It does not retain
+the response payload, schema, or raw protocol status in `CoreError`. Rust
+extension helpers may expose non-lossy partial-result maps, but those helpers
+must use distinct names and must not be presented as the Scripting-compatible
+methods.
 
 Fan-out write helpers may run writes concurrently only when the caller does not
 request sequential semantics. A sequential fan-out mode is required for Things
@@ -2746,19 +2750,20 @@ It provides async methods for Scripting API operations:
 - Subscription teardown through `Subscription::stop` and optional handle-level
   Rust convenience methods.
 
-`invoke_action` returns an `InteractionOutput`. `InteractionOutput` has an
-optional status metadata slot for operation status that is not part of the
-payload body. When the selected binding or TD operation exposes asynchronous
-action tracking, that status metadata contains an `ActionInvocationRef`.
+`invoke_action` returns an `InteractionOutput`. Its normalized
+`InteractionStatus` is separate from the single response payload. When the
+selected binding or TD operation exposes asynchronous action tracking,
+`InteractionOutputMetadata` contains an `ActionInvocationRef`.
 `query_action` and `cancel_action` take the action name plus either an
 `ActionInvocationRef` or caller-supplied
 `InteractionOptions` data required by the selected `queryaction` or
-`cancelaction` form. `query_action` returns an `InteractionStatus` with any
-binding status payload preserved as operation metadata. `cancel_action` returns
-an `InteractionStatus` describing cancellation acceptance, completion, or
-failure. If a TD exposes query or cancel forms but no invocation identity can be
-derived from the original action interaction or caller options, the method fails
-with a structured missing-action-reference error.
+`cancelaction` form. `query_action` and `cancel_action` return a validated
+`InteractionOutput`; an action-domain status response uses the single payload
+with `ResponsePayloadRole::OperationStatus`. Their `InteractionStatus` describes
+only successful request completion, and request-level failure is a `CoreError`.
+If a TD exposes query or cancel forms but no invocation identity can be derived
+from the original action interaction or caller options, the method fails with a
+structured missing-action-reference error.
 
 Streaming operations return local subscription streams while the handle stores
 wire-side guards so protocol resources are released on explicit teardown or
@@ -3923,8 +3928,10 @@ body. Borrowed inspection is always available; typed decoding is explicit,
 fallible, codec-selected, size-budgeted, and cached only when the cache is
 charged to the owning budget. `InteractionInput` owns the application payload,
 resolved URI variables, principal, deadline/cancellation view, and correlation
-metadata. `InteractionOutput` owns the response payload plus optional action and
-binding status metadata. None of these types borrows a binding call stack.
+metadata. `InteractionOutput` owns one response payload, a normalized
+`InteractionStatus`, and fixed-size `InteractionOutputMetadata` containing the
+payload role plus optional action-invocation and validated binding-response
+metadata. None of these types borrows a binding call stack.
 
 `API-OPTIONS-001`: `InteractionOptions` is an owned, non-exhaustive options
 value. It distinguishes omission from explicit selection for form index,
@@ -3972,6 +3979,13 @@ representation choices omitted from the prose above; an implementation must
 satisfy both documents. Where the amendment is more specific, it supersedes the
 category and representation sentences in `ERR-TAXONOMY-001`,
 `ERR-RETRY-001`, and `CLEANUP-RECORD-001`.
+
+The successful-interaction boundary, shared default error disposition,
+handler-absence mapping, and removal of legacy Servient Boolean error
+predicates are frozen by
+`docs/amendments/WP-100-error-disposition-v1.md`. The shared disposition is a
+binding-adapter default and does not introduce HTTP types into protocol-neutral
+core.
 
 ### Admission Transaction and Complexity
 
@@ -4301,8 +4315,8 @@ Semantic verification must include:
   policy exists.
 - Handler slot replacement tests proving replacement affects only later
   dispatches, in-flight dispatch keeps the selected handler, clearing a handler
-  yields a structured unsupported-operation or handler-missing error, and async
-  dispatch owns the selected handler before awaiting.
+  yields structured `UnsupportedOperation`, and async dispatch owns the selected
+  handler before awaiting.
 - Subscription lifecycle tests: observe, subscribe, `Subscription::stop`,
   Scripting-compatible duplicate-subscription rejection, explicit
   `unobserveproperty`, `unobserveallproperties`, `unsubscribeevent`, and
