@@ -673,7 +673,7 @@ fn handle_query(
     key_expr: &str,
     query: Query,
 ) -> Option<InboundRequest> {
-    let correlation = CorrelationId::from(next_correlation.fetch_add(1, Ordering::Relaxed));
+    let correlation = allocate_correlation(next_correlation)?;
     let input = query_to_input(&query);
     let auth = attachment_to_auth(query.attachment(), meta.auth_expectation);
     let request = build_inbound_request(meta, input, auth, correlation);
@@ -684,7 +684,7 @@ fn handle_query(
         },
         inserted_at: Instant::now(),
     };
-    insert_reply_target(reply_targets, request.correlation.clone(), entry);
+    insert_reply_target(reply_targets, request.correlation, entry);
     // The caller pushes the request to the sync pending queue or the async
     // channel — no clone needed here (the request is moved, not duplicated).
     Some(request)
@@ -700,7 +700,7 @@ fn handle_put_sample(
         return None;
     }
 
-    let correlation = CorrelationId::from(next_correlation.fetch_add(1, Ordering::Relaxed));
+    let correlation = allocate_correlation(next_correlation)?;
     let input = sample_to_input(&sample);
     let auth = attachment_to_auth(sample.attachment(), meta.auth_expectation);
     let request = build_inbound_request(meta, input, auth, correlation);
@@ -708,7 +708,7 @@ fn handle_put_sample(
         reply: ReplyTarget::Put,
         inserted_at: Instant::now(),
     };
-    insert_reply_target(reply_targets, request.correlation.clone(), entry);
+    insert_reply_target(reply_targets, request.correlation, entry);
     Some(request)
 }
 
@@ -729,6 +729,18 @@ fn build_inbound_request(
         auth,
         correlation,
     }
+}
+
+/// Allocates a nonzero correlation token without allowing the binding-local
+/// counter to wrap and reuse a live token.
+fn allocate_correlation(next_correlation: &AtomicU64) -> Option<CorrelationId> {
+    next_correlation
+        .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |value| {
+            value.checked_add(1)
+        })
+        .ok()
+        .filter(|value| *value != 0)
+        .map(CorrelationId::new)
 }
 
 /// Inserts a reply-target entry under the (single) reply-target lock. Returns
@@ -816,7 +828,7 @@ fn sweep_expired_reply_targets(reply_targets: &mut HashMap<CorrelationId, ReplyT
     let expired: Vec<CorrelationId> = reply_targets
         .iter()
         .filter(|(_, entry)| now.duration_since(entry.inserted_at) > REPLY_TARGET_TTL)
-        .map(|(id, _)| id.clone())
+        .map(|(id, _)| *id)
         .collect();
     for id in expired {
         if let Some(ReplyTargetEntry {
@@ -837,10 +849,10 @@ mod tests {
     #[test]
     fn async_enqueue_failure_removes_put_reply_target_immediately() {
         let reply_targets = Mutex::new(ReplyTargetState::new());
-        let correlation = CorrelationId::from(7_u64);
+        let correlation = CorrelationId::new(7);
         insert_reply_target(
             &reply_targets,
-            correlation.clone(),
+            correlation,
             ReplyTargetEntry {
                 reply: ReplyTarget::Put,
                 inserted_at: Instant::now(),
@@ -861,7 +873,7 @@ mod tests {
             Operation::ReadAllProperties,
             InteractionInput::empty(),
         );
-        dropped.correlation = correlation.clone();
+        dropped.correlation = correlation;
 
         handle_async_enqueue_result(&reply_targets, tx.try_send(dropped));
 
@@ -876,6 +888,17 @@ mod tests {
 
         let seeded = rx.try_recv().expect("seeded request remains buffered");
         assert_eq!(seeded.thing_id.as_str(), "urn:test:occupied");
+    }
+
+    #[test]
+    fn correlation_allocator_stops_before_counter_wraparound() {
+        let next = AtomicU64::new(u64::MAX - 1);
+        assert_eq!(
+            allocate_correlation(&next).map(CorrelationId::get),
+            Some(u64::MAX - 1)
+        );
+        assert!(allocate_correlation(&next).is_none());
+        assert_eq!(next.load(Ordering::Relaxed), u64::MAX);
     }
 }
 

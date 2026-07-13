@@ -213,7 +213,7 @@ impl Servient {
         use clinkz_wot_core::CoreError;
         use clinkz_wot_td::data_type::Operation;
 
-        let correlation = request.correlation.clone();
+        let correlation = request.correlation;
         let InboundRequest {
             thing_id,
             target,

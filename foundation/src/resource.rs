@@ -531,8 +531,8 @@ fn count_and_bytes(kind: ResourceKind, amount: u64) -> (u64, u64) {
 mod tests {
     use super::{
         AdmissionLedger, BenchmarkStaticReferenceV1, DirectoryClientDefaultV1, GatewayDefaultV1,
-        ResourceAccount, ResourceKind, ResourceProfileId, StaticResourceProfile,
-        RESOURCE_LIMIT_COUNT,
+        RESOURCE_LIMIT_COUNT, ResourceAccount, ResourceKind, ResourceProfileId,
+        StaticResourceProfile,
     };
     use crate::{Generation, SlotIndex};
 
@@ -559,6 +559,18 @@ mod tests {
         assert_eq!(
             BenchmarkStaticReferenceV1::LIMITS.cleanup_work_items_per_step_max(),
             Some(16)
+        );
+        assert_eq!(
+            GatewayDefaultV1::LIMITS.cleanup_retry_attempts_max(),
+            Some(16)
+        );
+        assert_eq!(
+            DirectoryClientDefaultV1::LIMITS.cleanup_retry_attempts_max(),
+            Some(16)
+        );
+        assert_eq!(
+            BenchmarkStaticReferenceV1::LIMITS.cleanup_retry_attempts_max(),
+            Some(4)
         );
     }
 

@@ -5,7 +5,7 @@
 //! identities use bounded numeric or slot/generation representations so stale
 //! handles cannot alias reused storage.
 
-use alloc::{string::String, sync::Arc, vec::Vec};
+use alloc::string::String;
 use core::fmt;
 
 use clinkz_wot_foundation::{Generation, SlotIndex};
@@ -235,81 +235,47 @@ impl fmt::Display for ThingId {
     }
 }
 
-/// Opaque, core-owned correlation token echoed between an inbound request and
-/// its response.
+/// Opaque, core-owned token for matching one request and response.
 ///
-/// A binding fills it from its transport (for example a zenoh query id) and
-/// echoes it unchanged in the matching [`crate::InboundResponse`]. It is owned
-/// by core; bindings only supply the byte content. See baseline addendum §1.1.
-///
-/// The token is backed by `Arc<[u8]>` rather than `Vec<u8>`: every inbound
-/// request clones the correlation id at least once (the Servient driving loop
-/// clones it out of the request to echo back in the response, and the zenoh
-/// server inserts another clone into its `reply_targets` map). `Arc` makes
-/// every clone a refcount bump instead of a heap allocation, while derived
-/// `Hash`/`Ord`/`Eq` keep the same byte-wise semantics as `Vec<u8>` so map keys
-/// behave identically.
-#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Default)]
-pub struct CorrelationId(Arc<[u8]>);
+/// A binding allocates a nonzero token within one live binding generation and
+/// retains any protocol-native correlation value in its own bounded in-flight
+/// table. Zero is reserved for flows that have no transport correlation.
+#[derive(Clone, Copy, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub struct CorrelationId(u64);
 
 impl CorrelationId {
-    /// Creates a correlation token from owned bytes.
-    pub fn new(bytes: Vec<u8>) -> Self {
-        Self(Arc::from(bytes))
+    /// Creates a correlation token from its binding-local numeric value.
+    pub const fn new(value: u64) -> Self {
+        Self(value)
+    }
+
+    /// Returns the binding-local numeric value.
+    pub const fn get(self) -> u64 {
+        self.0
     }
 
     /// Creates an empty correlation token for flows that have no transport
     /// correlation (for example in-process dispatch).
-    pub fn empty() -> Self {
-        Self::default()
+    pub const fn empty() -> Self {
+        Self(0)
     }
 
-    /// Returns the token bytes.
-    pub fn as_bytes(&self) -> &[u8] {
-        &self.0
-    }
-
-    /// Returns the underlying owned token bytes.
-    pub fn into_bytes(self) -> Vec<u8> {
-        self.0.to_vec()
+    /// Returns whether this token represents a flow without transport
+    /// correlation.
+    pub const fn is_empty(self) -> bool {
+        self.0 == 0
     }
 }
 
-impl AsRef<[u8]> for CorrelationId {
-    fn as_ref(&self) -> &[u8] {
-        &self.0
-    }
-}
-
-impl From<Vec<u8>> for CorrelationId {
-    fn from(bytes: Vec<u8>) -> Self {
-        Self(Arc::from(bytes))
-    }
-}
-
-impl From<&[u8]> for CorrelationId {
-    fn from(bytes: &[u8]) -> Self {
-        Self(Arc::from(bytes))
-    }
-}
-
-impl From<u64> for CorrelationId {
-    /// Encodes the integer as 8 big-endian bytes for a deterministic, portable
-    /// representation across hosts of different endianness.
-    fn from(value: u64) -> Self {
-        Self(Arc::from(value.to_be_bytes()))
+impl fmt::Debug for CorrelationId {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.0.fmt(formatter)
     }
 }
 
 impl fmt::Display for CorrelationId {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        if self.0.is_empty() {
-            return f.write_str("(none)");
-        }
-        for byte in self.0.iter() {
-            write!(f, "{:02x}", byte)?;
-        }
-        Ok(())
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.0.fmt(formatter)
     }
 }
 
@@ -339,24 +305,27 @@ mod tests {
     }
 
     #[test]
-    fn correlation_id_round_trips_bytes() {
-        let id = CorrelationId::new(alloc::vec![0x01, 0x02, 0x03]);
-        assert_eq!(id.as_bytes(), &[0x01, 0x02, 0x03]);
-        assert_eq!(id.into_bytes(), alloc::vec![0x01, 0x02, 0x03]);
+    fn correlation_id_round_trips_numeric_token() {
+        let id = CorrelationId::new(0x0102_0304_0506_0708);
+        assert_eq!(id.get(), 0x0102_0304_0506_0708);
     }
 
     #[test]
-    fn correlation_id_from_u64_is_big_endian_and_stable() {
-        let id = CorrelationId::from(0x0102_0304_0506_0708u64);
-        assert_eq!(
-            id.as_bytes(),
-            &[0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08]
-        );
+    fn correlation_id_is_copyable_and_formats_numerically() {
+        let id = CorrelationId::new(42);
+        let copied = id;
+        assert_eq!(id, copied);
+        assert_eq!(format!("{id}"), "42");
+        assert_eq!(format!("{id:?}"), "42");
     }
 
     #[test]
-    fn correlation_id_empty_displays_as_none() {
-        assert_eq!(format!("{}", CorrelationId::empty()), "(none)");
+    fn correlation_id_empty_is_reserved_zero() {
+        let empty = CorrelationId::empty();
+        assert!(empty.is_empty());
+        assert_eq!(empty.get(), 0);
+        assert_eq!(format!("{empty}"), "0");
+        assert!(!CorrelationId::new(1).is_empty());
     }
 
     #[test]

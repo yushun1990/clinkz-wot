@@ -4,7 +4,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 const EXPECTED_HEADER: &str = "field,resource_kind,unit,scope,capability_roles,zero_semantics,gateway_default_v1,directory_client_default_v1,benchmark_static_reference_v1,requirements";
-const EXPECTED_RESOURCE_LIMIT_COUNT: usize = 116;
+const EXPECTED_RESOURCE_LIMIT_COUNT: usize = 117;
 
 #[derive(Debug)]
 struct LimitRow {

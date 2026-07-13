@@ -197,13 +197,13 @@ mod tests {
         );
         assert_eq!(request.thing_id.as_str(), "urn:thing:1");
         assert!(request.auth.is_none());
-        assert!(request.correlation.as_bytes().is_empty());
+        assert!(request.correlation.is_empty());
     }
 
     #[test]
     fn response_carries_correlation_for_binding_matching() {
-        let correlation = CorrelationId::from(42u64);
-        let response = InboundResponse::new(InteractionOutput::empty(), correlation.clone());
+        let correlation = CorrelationId::new(42);
+        let response = InboundResponse::new(InteractionOutput::empty(), correlation);
         assert_eq!(response.correlation, correlation);
     }
 
@@ -292,12 +292,12 @@ mod tests {
             required_scopes: vec![String::from("read")],
         };
         let mut request = request_with(Some(AuthMaterial::BearerToken(vec![1, 2, 3])));
-        request.correlation = CorrelationId::from(7u64);
+        request.correlation = CorrelationId::new(7);
 
         let response = dispatcher
             .dispatch(request)
             .expect("valid request dispatches");
-        assert_eq!(response.correlation, CorrelationId::from(7u64));
+        assert_eq!(response.correlation, CorrelationId::new(7));
         assert!(response.output.data.is_none());
     }
 

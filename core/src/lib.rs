@@ -21,7 +21,10 @@ pub mod transport;
 pub use binding::SubscriptionGuard;
 #[cfg(feature = "async")]
 pub use binding::{BindingRequest, ClientBinding};
-pub use error::{CoreError, CoreResult};
+pub use error::{
+    CoreError, CoreResult, ErrorContext, ErrorPhase, RetryClass, SecurityFailureReason,
+    SelectionFailureReason,
+};
 #[cfg(feature = "async")]
 pub use event::EventStream;
 pub use event::{
@@ -49,7 +52,8 @@ pub use security::{
     SecurityError, SecurityProvider, check_scopes,
 };
 pub use status::{
-    PendingWork, PendingWorkClass, ProcessEvent, ProcessTerminal, StartStatus, StepStatus,
+    CleanupHandle, CleanupOperation, CleanupOutcome, CleanupRecord, PendingWork, PendingWorkClass,
+    ProcessEvent, ProcessTerminal, StartStatus, StepStatus,
 };
 pub use sync::WotLock;
 pub use thing::{
