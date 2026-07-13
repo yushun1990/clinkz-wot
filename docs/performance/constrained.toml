@@ -1,4 +1,4 @@
-schema_version = 4
+schema_version = 5
 profile = "BenchmarkStaticReferenceV1"
 resource_profile = "BenchmarkStaticReferenceV1"
 runtime_default = false
@@ -8,9 +8,10 @@ runner = "record-board-cpu-clock-memory-map-in-result"
 reference_runner_class = "cortex-m4f-single-core-zero-wait-state-sram"
 toolchain = "record-in-result"
 allocator = "record-in-result"
-fixture_generator = "engine-benchmark-fixtures-v1"
-fixture_digest = "record-in-result"
-fixture_seed = "record-in-result"
+fixture_generator = "clinkz-wot-fixture-generator-v1"
+fixture_lock = "docs/performance/fixtures.lock.toml"
+fixture_digest = "sha256:ea2bf54f6bbafc27e3e6ae1dcd5ad149d6a3b4ef878ed3c2aef6432b3f6b22c6"
+fixture_seed = 4603
 warmup_iterations = 100
 sample_count = 1000
 regression_tolerance_percent = 10
@@ -66,6 +67,12 @@ subscribers = [1, 16, 256]
 concurrency = [1]
 
 [[workload]]
+id = "PERF-CS-001"
+version = 1
+requirements = ["PERF-ALLOC-001", "PERF-CALL-001"]
+fixture_id = "FX-CS-001"
+harness_case = "local_sync_interaction"
+gating = true
 name = "local_sync_interaction"
 variants = ["read", "write", "invoke"]
 p95_target_cycles_max = 100000
@@ -73,23 +80,47 @@ engine_allocations_max = 0
 report = ["median", "p95", "p99", "allocations", "peak-live-bytes"]
 
 [[workload]]
+id = "PERF-CS-002"
+version = 1
+requirements = ["BIND-IO-001", "PERF-ALLOC-001", "PERF-CALL-001"]
+fixture_id = "FX-CS-002"
+harness_case = "inbound_dispatch_no_transport"
+gating = true
 name = "inbound_dispatch_no_transport"
 p99_target_cycles_max = 250000
 engine_allocations_max = 0
 report = ["median", "p95", "p99", "allocations", "peak-live-bytes"]
 
 [[workload]]
+id = "PERF-CS-003"
+version = 1
+requirements = ["PLAN-INDEX-001", "PERF-INDEX-001"]
+fixture_id = "FX-CS-003"
+harness_case = "compiled_plan_lookup"
+gating = true
 name = "compiled_plan_lookup"
 p95_target_cycles_max = 20000
 report = ["median", "p95", "p99", "allocations"]
 
 [[workload]]
+id = "PERF-CS-004"
+version = 1
+requirements = ["PLAN-BOUND-001", "PERF-CALL-001"]
+fixture_id = "FX-CS-004"
+harness_case = "candidate_selection_32"
+gating = true
 name = "candidate_selection_32"
 p95_target_cycles_max = 50000
 candidate_count = 32
 report = ["median", "p95", "p99", "candidates-visited", "allocations"]
 
 [[workload]]
+id = "PERF-CS-005"
+version = 1
+requirements = ["SEC-PERF-001", "PERF-CALL-001"]
+fixture_id = "FX-CS-005"
+harness_case = "security_selection_64_local_probes"
+gating = true
 name = "security_selection_64_local_probes"
 p95_target_cycles_max = 250000
 security_branch_count = 64
@@ -97,6 +128,12 @@ credential_cases = ["hit", "miss", "generation-invalidated"]
 report = ["median", "p95", "p99", "provider-probes", "allocations"]
 
 [[workload]]
+id = "PERF-CS-006"
+version = 1
+requirements = ["PERF-CALL-001", "VALIDATE-COMPILE-001", "VALIDATE-REUSE-001"]
+fixture_id = "FX-CS-006"
+harness_case = "composed_strict_interaction_1k"
+gating = true
 name = "composed_strict_interaction_1k"
 payload_bytes = 1024
 candidate_count = 8
@@ -109,12 +146,24 @@ p99_target_cycles_max = 750000
 report = ["median", "p95", "p99", "allocations", "peak-live-bytes", "provider-probes"]
 
 [[workload]]
+id = "PERF-CS-007"
+version = 1
+requirements = ["PERF-ALLOC-001", "PERF-FANOUT-001", "SUB-DATA-001"]
+fixture_id = "FX-CS-007"
+harness_case = "subscription_round_trip_one_subscriber"
+gating = true
 name = "subscription_round_trip_one_subscriber"
 p95_target_cycles_max = 5000
 payload_copies_per_subscriber_max = 0
 report = ["median", "p95", "p99", "allocations"]
 
 [[workload]]
+id = "PERF-CS-008"
+version = 1
+requirements = ["PERF-FANOUT-001", "SUB-DATA-001"]
+fixture_id = "FX-CS-008"
+harness_case = "shared_payload_fanout_256"
+gating = true
 name = "shared_payload_fanout_256"
 subscriber_count = 256
 p95_target_cycles_max = 500000
@@ -122,6 +171,12 @@ payload_copies_per_subscriber_max = 0
 report = ["median", "p95", "p99", "pool-bytes", "allocations"]
 
 [[workload]]
+id = "PERF-CS-009"
+version = 1
+requirements = ["CONSTRAINED-PROGRESS-001", "PERF-FANOUT-002"]
+fixture_id = "FX-CS-009"
+harness_case = "bounded_fanout_progress_256"
+gating = true
 name = "bounded_fanout_progress_256"
 subscriber_count = 256
 subscribers_per_step_max = 16
@@ -131,6 +186,12 @@ require_cancellation_progress_between_steps = true
 report = ["cycles-per-step", "steps", "maximum-service-gap", "queue-operations"]
 
 [[workload]]
+id = "PERF-CS-010"
+version = 1
+requirements = ["PLAN-CACHE-001", "PLAN-LAZY-001"]
+fixture_id = "FX-CS-010"
+harness_case = "lazy_plan_single_flight"
+gating = true
 name = "lazy_plan_single_flight"
 interleaved_callers = 8
 binding_compile_attempts_max = 1
@@ -138,6 +199,12 @@ require_bounded_slot_and_reclamation_work = true
 report = ["median", "p95", "p99", "compile-attempts", "cleanup-work-units", "peak-live-bytes"]
 
 [[workload]]
+id = "PERF-CS-011"
+version = 1
+requirements = ["CONSTRAINED-OWN-001", "PERF-ACCOUNT-001"]
+fixture_id = "FX-CS-011"
+harness_case = "interaction_accounting"
+gating = true
 name = "interaction_accounting"
 global_ledger_mutex_acquisitions_per_interaction_max = 0
 require_no_atomic_reference_counting = true
@@ -145,12 +212,24 @@ require_exact_capacity_and_loss_totals = true
 report = ["median", "p95", "p99", "reservation-refills", "critical-section-cycles"]
 
 [[workload]]
+id = "PERF-CS-012"
+version = 1
+requirements = ["CONSTRAINED-SCHED-001", "CONSTRAINED-WORK-001"]
+fixture_id = "FX-CS-012"
+harness_case = "manual_step_fairness"
+gating = true
 name = "manual_step_fairness"
 require_bounded_units = true
 require_no_starvation = true
 report = ["cycles-per-work-class", "maximum-service-gap", "peak-live-bytes"]
 
 [[workload]]
+id = "PERF-CS-013"
+version = 1
+requirements = ["PERF-ADMISSION-001", "PERF-BENCH-003", "PERF-PEAK-001"]
+fixture_id = "FX-CS-013"
+harness_case = "profile_maximum_td_planning"
+gating = true
 name = "profile_maximum_td_planning"
 cases = ["small", "profile-maximum", "adversarial"]
 require_within_declared_work_units = true
@@ -158,6 +237,12 @@ require_within_profile_bytes = true
 report = ["median", "p95", "p99", "plan-construction-bytes", "peak-live-bytes", "allocations"]
 
 [[workload]]
+id = "PERF-CS-014"
+version = 1
+requirements = ["ADMIT-MEM-001", "PERF-COMPLEXITY-001", "PERF-SCALE-001"]
+fixture_id = "FX-CS-014"
+harness_case = "admission_byte_and_structure_scaling"
+gating = true
 name = "admission_byte_and_structure_scaling"
 axes = [
     "document-bytes",
@@ -186,5 +271,6 @@ report = [
 ]
 
 [code_size]
+characterization = true
 report = ["text", "rodata", "data", "bss"]
 tolerance_percent = 10

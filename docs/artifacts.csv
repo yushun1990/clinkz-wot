@@ -7,6 +7,11 @@ docs/refactor-gates.csv,implementation-admission,normative,4.6,1,docs/design.md
 docs/resource-limits.csv,resource-limit-schema-and-profiles,normative,4.6,1,docs/design.md
 docs/state-machines.toml,lifecycle-state-model,normative,4.6,1,docs/design.md
 docs/requirements.csv,requirement-and-evidence-index,normative-index,4.6,1,docs/design.md
-docs/performance/constrained.toml,constrained-performance-budget,normative,4.6,4,docs/design.md
-docs/performance/gateway.toml,gateway-performance-budget,normative,4.6,4,docs/design.md
-docs/performance/directory.toml,directory-client-performance-budget,normative,4.6,4,docs/design.md
+docs/performance/manifest.schema.json,performance-manifest-schema,normative,4.6,5,docs/design.md
+docs/performance/result.schema.json,performance-result-schema,normative,4.6,1,docs/design.md
+docs/performance/fixtures.lock.toml,performance-fixture-lock,normative,4.6,1,docs/design.md
+docs/performance/fixture-generator.md,performance-fixture-and-harness-contract,normative,4.6,1,docs/design.md
+docs/performance/constrained.toml,constrained-performance-budget,normative,4.6,5,docs/design.md
+docs/performance/gateway.toml,gateway-performance-budget,normative,4.6,5,docs/design.md
+docs/performance/directory.toml,directory-client-performance-budget,normative,4.6,5,docs/design.md
+tools/performance-harness/Cargo.toml,performance-contract-checker,non-normative-checker,4.6,1,docs/design.md

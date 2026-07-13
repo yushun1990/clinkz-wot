@@ -1,4 +1,4 @@
-schema_version = 4
+schema_version = 5
 profile = "DirectoryClientDefaultV1"
 resource_profile = "DirectoryClientDefaultV1"
 scope = "engine-side-directory-client"
@@ -7,9 +7,10 @@ environment = "x86_64-unknown-linux-gnu"
 runner = "dedicated-4-physical-core-performance-governor"
 toolchain = "record-in-result"
 allocator = "system"
-fixture_generator = "directory-client-fixtures-v1"
-fixture_digest = "record-in-result"
-fixture_seed = "record-in-result"
+fixture_generator = "clinkz-wot-fixture-generator-v1"
+fixture_lock = "docs/performance/fixtures.lock.toml"
+fixture_digest = "sha256:ed9f40e86b98cad08ff8a89516f589da3a27af368027aa697d28aaa1efb23877"
+fixture_seed = 4602
 scripted_transport = "deterministic-poll-transport-v1"
 warmup_seconds = 3
 sample_count = 100
@@ -58,11 +59,23 @@ watchers = [1, 64, 8192]
 concurrent_sessions = [1, 16, 128]
 
 [[workload]]
+id = "PERF-DIR-001"
+version = 1
+requirements = ["DIR-CONTRACT-001", "PERF-BENCH-001"]
+fixture_id = "FX-DIR-001"
+harness_case = "directory_request_planning"
+gating = true
 name = "directory_request_planning"
 p95_latency_us_max = 25
 report = ["median", "p95", "p99", "allocations", "allocated-bytes"]
 
 [[workload]]
+id = "PERF-DIR-002"
+version = 1
+requirements = ["DIR-CONTRACT-001", "PERF-ADMISSION-001", "PERF-PEAK-001"]
+fixture_id = "FX-DIR-002"
+harness_case = "directory_page_admission_128"
+gating = true
 name = "directory_page_admission_128"
 page_entries = 128
 td_bytes_each = 1024
@@ -71,6 +84,12 @@ peak_live_bytes_max = 8388608
 report = ["median", "p95", "p99", "throughput", "allocations", "peak-live-bytes"]
 
 [[workload]]
+id = "PERF-DIR-003"
+version = 1
+requirements = ["DIR-STREAM-001", "PERF-ADMISSION-001", "PERF-PEAK-001"]
+fixture_id = "FX-DIR-003"
+harness_case = "directory_page_incremental_admission_128"
+gating = true
 name = "directory_page_incremental_admission_128"
 page_entries = 128
 td_bytes_each = 1024
@@ -83,6 +102,12 @@ peak_live_bytes_max = 8388608
 report = ["median", "p95", "p99", "peak-live-bytes", "input-bytes", "items-admitted"]
 
 [[workload]]
+id = "PERF-DIR-004"
+version = 1
+requirements = ["PERF-ACCOUNT-001"]
+fixture_id = "FX-DIR-004"
+harness_case = "directory_accounting_contention_128"
+gating = true
 name = "directory_accounting_contention_128"
 concurrent_sessions = 128
 global_ledger_mutex_acquisitions_per_item_max = 0
@@ -90,12 +115,24 @@ require_exact_capacity_and_loss_totals = true
 report = ["median", "p95", "p99", "throughput", "lock-wait", "reservation-refills"]
 
 [[workload]]
+id = "PERF-DIR-005"
+version = 1
+requirements = ["DIR-WATCH-001", "PERF-BENCH-001"]
+fixture_id = "FX-DIR-005"
+harness_case = "directory_watch_change_admission"
+gating = true
 name = "directory_watch_change_admission"
 change_bytes = 1024
 p99_latency_us_max = 100
 report = ["median", "p95", "p99", "throughput", "lock-wait", "queue-bytes"]
 
 [[workload]]
+id = "PERF-DIR-006"
+version = 1
+requirements = ["DIR-CONTRACT-001", "PERF-ADMISSION-001", "PERF-COMPLEXITY-001"]
+fixture_id = "FX-DIR-006"
+harness_case = "directory_publication_planning"
+gating = true
 name = "directory_publication_planning"
 td_bytes = [1024, 65536, 1048576]
 require_declared_complexity = true
@@ -104,18 +141,36 @@ peak_live_bytes_max = 25165824
 report = ["median", "p95", "p99", "allocations", "peak-live-bytes"]
 
 [[workload]]
+id = "PERF-DIR-007"
+version = 1
+requirements = ["DIR-CONTRACT-001", "STATE-DISC-001"]
+fixture_id = "FX-DIR-007"
+harness_case = "directory_cancel_local_terminal"
+gating = true
 name = "directory_cancel_local_terminal"
 variants = ["query", "watch", "publication"]
 p99_latency_us_max = 100
 report = ["median", "p95", "p99", "cleanup-steps", "allocations"]
 
 [[workload]]
+id = "PERF-DIR-008"
+version = 1
+requirements = ["CAP-OVERFLOW-001", "CAP-STATUS-001"]
+fixture_id = "FX-DIR-008"
+harness_case = "directory_buffer_overflow"
+gating = true
 name = "directory_buffer_overflow"
 variants = ["page-count", "page-bytes", "watch-count", "watch-bytes"]
 require_bounded_terminal_status = true
 report = ["median", "p95", "p99", "queue-bytes", "lost-items", "allocations"]
 
 [[workload]]
+id = "PERF-DIR-009"
+version = 1
+requirements = ["PERF-SCALE-001", "PERF-COMPLEXITY-001"]
+fixture_id = "FX-DIR-009"
+harness_case = "directory_admission_byte_and_structure_scaling"
+gating = true
 name = "directory_admission_byte_and_structure_scaling"
 axes = [
     "td-bytes",
@@ -139,10 +194,22 @@ report = [
 ]
 
 [[contention]]
+id = "PERF-DIR-010"
+version = 1
+requirements = ["HOST-SHARD-001", "HOST-SHARD-002"]
+fixture_id = "FX-DIR-010"
+harness_case = "unrelated_directory_sessions"
+gating = true
 name = "unrelated_directory_sessions"
 require_independent_progress = true
 
 [[contention]]
+id = "PERF-DIR-011"
+version = 1
+requirements = ["HOST-SHARD-001", "HOST-SHARD-002"]
+fixture_id = "FX-DIR-011"
+harness_case = "query_watch_publication_clients"
+gating = false
 name = "query_watch_publication_clients"
 characterization = true
 report = ["p99", "throughput", "lock_wait", "queue_bytes"]

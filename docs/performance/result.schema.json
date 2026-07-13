@@ -1,0 +1,58 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://clinkz.dev/schemas/wot/performance-result-v1.json",
+  "title": "clinkz-wot performance result v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "workload_id",
+    "workload_version",
+    "profile",
+    "resource_profile",
+    "manifest_sha256",
+    "fixture_id",
+    "fixture_sha256",
+    "harness_case",
+    "measurement_sha256",
+    "feature_set",
+    "target",
+    "toolchain",
+    "allocator",
+    "runner_class",
+    "status",
+    "sample_count",
+    "failed_samples",
+    "metrics"
+  ],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "workload_id": { "type": "string", "minLength": 1 },
+    "workload_version": { "type": "integer", "minimum": 1 },
+    "profile": { "type": "string", "minLength": 1 },
+    "resource_profile": { "type": "string", "minLength": 1 },
+    "manifest_sha256": { "pattern": "^[0-9a-f]{64}$" },
+    "fixture_id": { "type": "string", "minLength": 1 },
+    "fixture_sha256": { "pattern": "^[0-9a-f]{64}$" },
+    "harness_case": { "pattern": "^[a-z][a-z0-9_]*$" },
+    "measurement_sha256": { "pattern": "^[0-9a-f]{64}$" },
+    "feature_set": { "type": "string", "minLength": 1 },
+    "target": { "type": "string", "minLength": 1 },
+    "toolchain": { "type": "string", "minLength": 1 },
+    "allocator": { "type": "string", "minLength": 1 },
+    "runner_class": { "type": "string", "minLength": 1 },
+    "status": { "enum": ["passed", "failed", "characterization", "unavailable"] },
+    "sample_count": { "type": "integer", "minimum": 0 },
+    "failed_samples": { "type": "integer", "minimum": 0 },
+    "metrics": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "number"
+      }
+    },
+    "notes": {
+      "type": "array",
+      "items": { "type": "string" }
+    }
+  }
+}

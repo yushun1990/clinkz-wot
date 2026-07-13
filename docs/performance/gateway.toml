@@ -1,4 +1,4 @@
-schema_version = 4
+schema_version = 5
 profile = "GatewayDefaultV1"
 resource_profile = "GatewayDefaultV1"
 feature_set = "std,async"
@@ -6,9 +6,10 @@ environment = "x86_64-unknown-linux-gnu"
 runner = "dedicated-4-physical-core-performance-governor"
 toolchain = "record-in-result"
 allocator = "system"
-fixture_generator = "engine-benchmark-fixtures-v1"
-fixture_digest = "record-in-result"
-fixture_seed = "record-in-result"
+fixture_generator = "clinkz-wot-fixture-generator-v1"
+fixture_lock = "docs/performance/fixtures.lock.toml"
+fixture_digest = "sha256:a70e94d7ba7d6445ac6363c2bca24208d682834628841036a1bc281969822840"
+fixture_seed = 4601
 warmup_seconds = 3
 sample_count = 100
 regression_tolerance_percent = 10
@@ -64,6 +65,12 @@ subscribers = [1, 16, 256, 1024]
 concurrency = [1, 4, 32, 256]
 
 [[workload]]
+id = "PERF-GW-001"
+version = 1
+requirements = ["PERF-ALLOC-001", "PERF-CALL-001"]
+fixture_id = "FX-GW-001"
+harness_case = "local_sync_interaction"
+gating = true
 name = "local_sync_interaction"
 variants = ["read", "write", "invoke"]
 p95_latency_us_max = 25
@@ -71,23 +78,47 @@ engine_allocations_max = 0
 report = ["median", "p95", "p99", "allocations", "peak-live-bytes"]
 
 [[workload]]
+id = "PERF-GW-002"
+version = 1
+requirements = ["BIND-IO-001", "PERF-ALLOC-001", "PERF-CALL-001"]
+fixture_id = "FX-GW-002"
+harness_case = "inbound_dispatch_no_transport"
+gating = true
 name = "inbound_dispatch_no_transport"
 p99_latency_us_max = 100
 engine_allocations_max = 0
 report = ["median", "p95", "p99", "allocations", "peak-live-bytes"]
 
 [[workload]]
+id = "PERF-GW-003"
+version = 1
+requirements = ["PLAN-INDEX-001", "PERF-INDEX-001"]
+fixture_id = "FX-GW-003"
+harness_case = "compiled_plan_lookup"
+gating = true
 name = "compiled_plan_lookup"
 p95_latency_us_max = 5
 report = ["median", "p95", "p99", "allocations"]
 
 [[workload]]
+id = "PERF-GW-004"
+version = 1
+requirements = ["PLAN-BOUND-001", "PERF-CALL-001"]
+fixture_id = "FX-GW-004"
+harness_case = "candidate_selection_32"
+gating = true
 name = "candidate_selection_32"
 p95_latency_us_max = 10
 candidate_count = 32
 report = ["median", "p95", "p99", "candidates-visited", "allocations"]
 
 [[workload]]
+id = "PERF-GW-005"
+version = 1
+requirements = ["PERF-CALL-001", "SEC-PERF-001"]
+fixture_id = "FX-GW-005"
+harness_case = "security_selection_64_local_probes"
+gating = true
 name = "security_selection_64_local_probes"
 p95_latency_us_max = 100
 security_branch_count = 64
@@ -95,6 +126,12 @@ credential_cases = ["hit", "miss", "generation-invalidated"]
 report = ["median", "p95", "p99", "provider-probes", "allocations"]
 
 [[workload]]
+id = "PERF-GW-006"
+version = 1
+requirements = ["PERF-CALL-001", "VALIDATE-COMPILE-001", "VALIDATE-REUSE-001"]
+fixture_id = "FX-GW-006"
+harness_case = "composed_strict_interaction_1k"
+gating = true
 name = "composed_strict_interaction_1k"
 payload_bytes = 1024
 candidate_count = 8
@@ -107,6 +144,12 @@ p99_latency_us_max = 250
 report = ["median", "p95", "p99", "allocations", "peak-live-bytes", "provider-probes"]
 
 [[workload]]
+id = "PERF-GW-007"
+version = 1
+requirements = ["PERF-ALLOC-001", "PERF-FANOUT-001", "SUB-DATA-001"]
+fixture_id = "FX-GW-007"
+harness_case = "subscription_round_trip_one_subscriber"
+gating = true
 name = "subscription_round_trip_one_subscriber"
 p95_latency_ns_max = 250
 throughput_ops_per_second_min = 4000000
@@ -114,6 +157,12 @@ payload_copies_per_subscriber_max = 0
 report = ["median", "p95", "p99", "throughput", "allocations"]
 
 [[workload]]
+id = "PERF-GW-008"
+version = 1
+requirements = ["PERF-FANOUT-001", "PERF-FANOUT-002"]
+fixture_id = "FX-GW-008"
+harness_case = "shared_payload_fanout_1024"
+gating = true
 name = "shared_payload_fanout_1024"
 subscriber_count = 1024
 p99_latency_us_max = 1000
@@ -121,17 +170,35 @@ payload_copies_per_subscriber_max = 0
 report = ["median", "p95", "p99", "throughput", "lock-wait", "pool-bytes"]
 
 [[workload]]
+id = "PERF-GW-009"
+version = 1
+requirements = ["BIND-OUT-001", "HOST-ASYNC-001", "PERF-ALLOC-001"]
+fixture_id = "FX-GW-009"
+harness_case = "network_erased_metadata"
+gating = true
 name = "network_erased_metadata"
 engine_allocations_max = 2
 engine_allocated_bytes_max = 1024
 report = ["median", "p95", "p99", "allocations", "allocated-bytes"]
 
 [[workload]]
+id = "PERF-GW-010"
+version = 1
+requirements = ["BIND-OUT-001", "BIND-PROGRESS-001", "PERF-ALLOC-001"]
+fixture_id = "FX-GW-010"
+harness_case = "network_poll_metadata"
+gating = true
 name = "network_poll_metadata"
 engine_allocations_max = 0
 report = ["median", "p95", "p99", "allocations"]
 
 [[workload]]
+id = "PERF-GW-011"
+version = 1
+requirements = ["PLAN-CACHE-001", "PLAN-LAZY-001"]
+fixture_id = "FX-GW-011"
+harness_case = "lazy_plan_single_flight_32"
+gating = true
 name = "lazy_plan_single_flight_32"
 concurrent_callers = 32
 binding_compile_attempts_max = 1
@@ -140,6 +207,12 @@ require_bounded_waiter_backpressure = true
 report = ["median", "p95", "p99", "compile-attempts", "lock-wait", "peak-live-bytes"]
 
 [[workload]]
+id = "PERF-GW-012"
+version = 1
+requirements = ["PLAN-CACHE-001", "PLAN-INDEX-001"]
+fixture_id = "FX-GW-012"
+harness_case = "plan_generation_invalidation_4096_things"
+gating = true
 name = "plan_generation_invalidation_4096_things"
 active_things = 4096
 publisher_scanned_plans_max = 0
@@ -148,6 +221,12 @@ require_incremental_bounded_reclamation = true
 report = ["median", "p95", "p99", "plans-reclaimed", "cleanup-work-units"]
 
 [[workload]]
+id = "PERF-GW-013"
+version = 1
+requirements = ["HOST-SHARD-002", "PERF-ACCOUNT-001"]
+fixture_id = "FX-GW-013"
+harness_case = "interaction_accounting_contention_256"
+gating = true
 name = "interaction_accounting_contention_256"
 concurrency = 256
 global_ledger_mutex_acquisitions_per_interaction_max = 0
@@ -155,6 +234,12 @@ require_exact_capacity_and_loss_totals = true
 report = ["median", "p95", "p99", "throughput", "lock-wait", "reservation-refills"]
 
 [[workload]]
+id = "PERF-GW-014"
+version = 1
+requirements = ["PERF-ADMISSION-001", "PERF-BENCH-003", "PERF-PEAK-001"]
+fixture_id = "FX-GW-014"
+harness_case = "maximum_admitted_td_planning"
+gating = true
 name = "maximum_admitted_td_planning"
 p95_latency_ms_max = 2000
 peak_live_bytes_max = 25165824
@@ -162,6 +247,12 @@ cases = ["small", "maximum-admitted", "adversarial"]
 report = ["median", "p95", "p99", "plan-construction-bytes", "peak-live-bytes", "allocations"]
 
 [[workload]]
+id = "PERF-GW-015"
+version = 1
+requirements = ["ADMIT-MEM-001", "PERF-COMPLEXITY-001", "PERF-SCALE-001"]
+fixture_id = "FX-GW-015"
+harness_case = "admission_byte_and_structure_scaling"
+gating = true
 name = "admission_byte_and_structure_scaling"
 axes = [
     "document-bytes",
@@ -190,19 +281,46 @@ report = [
 ]
 
 [[contention]]
+id = "PERF-GW-016"
+version = 1
+requirements = ["CONCUR-LOCK-001", "HOST-SHARD-001"]
+fixture_id = "FX-GW-016"
+harness_case = "unrelated_things"
+gating = true
 name = "unrelated_things"
 require_independent_progress = true
 
 [[contention]]
+id = "PERF-GW-017"
+version = 1
+requirements = ["CONCUR-LOCK-001", "HOST-SHARD-001"]
+fixture_id = "FX-GW-017"
+harness_case = "same_thing_different_affordances"
+gating = true
 name = "same_thing_different_affordances"
 require_independent_progress = true
 
 [[contention]]
+id = "PERF-GW-018"
+version = 1
+requirements = ["HOST-SHARD-001", "PERF-FANOUT-001"]
+fixture_id = "FX-GW-018"
+harness_case = "hot_subscription"
+gating = false
 name = "hot_subscription"
 characterization = true
 report = ["median", "p95", "p99", "throughput", "lock_wait"]
 
 [[contention]]
+id = "PERF-GW-019"
+version = 1
+requirements = ["CONCUR-LOCK-001", "PERF-FANOUT-002"]
+fixture_id = "FX-GW-019"
+harness_case = "fanout_cancellation_progress"
+gating = true
 name = "fanout_cancellation_progress"
 require_independent_progress = true
 require_no_thing_lock_during_enqueue = true
+
+[code_size]
+characterization = true

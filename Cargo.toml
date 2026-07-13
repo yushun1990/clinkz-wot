@@ -10,6 +10,7 @@ members = [
     "servient",
     "td",
     "tools/design-check",
+    "tools/performance-harness",
 ]
 
 [workspace.package]

@@ -1,0 +1,123 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://clinkz.dev/schemas/wot/performance-manifest-v5.json",
+  "title": "clinkz-wot performance manifest v5",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "profile",
+    "resource_profile",
+    "feature_set",
+    "environment",
+    "runner",
+    "toolchain",
+    "allocator",
+    "fixture_generator",
+    "fixture_lock",
+    "fixture_digest",
+    "fixture_seed",
+    "gate_policy",
+    "measurement",
+    "operation_boundary",
+    "scales",
+    "workload"
+  ],
+  "properties": {
+    "schema_version": { "const": 5 },
+    "profile": { "type": "string", "minLength": 1 },
+    "resource_profile": { "type": "string", "minLength": 1 },
+    "feature_set": { "type": "string", "minLength": 1 },
+    "environment": { "type": "string", "minLength": 1 },
+    "runner": { "type": "string", "minLength": 1 },
+    "toolchain": { "type": "string", "minLength": 1 },
+    "allocator": { "type": "string", "minLength": 1 },
+    "fixture_generator": { "const": "clinkz-wot-fixture-generator-v1" },
+    "fixture_lock": { "const": "docs/performance/fixtures.lock.toml" },
+    "fixture_digest": { "pattern": "^sha256:[0-9a-f]{64}$" },
+    "fixture_seed": { "type": "integer", "minimum": 0 },
+    "gate_policy": { "type": "object" },
+    "measurement": { "type": "object" },
+    "operation_boundary": { "type": "object", "minProperties": 1 },
+    "scales": { "type": "object", "minProperties": 1 },
+    "workload": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/workload" }
+    },
+    "contention": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/caseIdentity" }
+    },
+    "code_size": {
+      "type": "object",
+      "properties": {
+        "characterization": { "type": "boolean" }
+      },
+      "anyOf": [
+        { "required": ["characterization"], "properties": { "characterization": { "const": true } } },
+        { "required": ["text_bytes_max"] },
+        { "required": ["total_bytes_max"] }
+      ]
+    }
+  },
+  "$defs": {
+    "caseIdentity": {
+      "type": "object",
+      "required": [
+        "id",
+        "version",
+        "name",
+        "requirements",
+        "fixture_id",
+        "harness_case",
+        "gating"
+      ],
+      "properties": {
+        "id": { "pattern": "^PERF-(GW|CS|DIR)-[0-9]{3}$" },
+        "version": { "type": "integer", "minimum": 1 },
+        "name": { "pattern": "^[a-z][a-z0-9_]*$" },
+        "requirements": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "pattern": "^[A-Z][A-Z0-9-]+-[0-9]{3}$" }
+        },
+        "fixture_id": { "pattern": "^FX-(GW|CS|DIR)-[0-9]{3}$" },
+        "harness_case": { "pattern": "^[a-z][a-z0-9_]*$" },
+        "gating": { "type": "boolean" },
+        "characterization": { "type": "boolean" }
+      },
+      "oneOf": [
+        {
+          "properties": {
+            "gating": { "const": true },
+            "characterization": { "const": false }
+          }
+        },
+        {
+          "required": ["characterization"],
+          "properties": {
+            "gating": { "const": false },
+            "characterization": { "const": true }
+          }
+        }
+      ]
+    },
+    "workload": {
+      "allOf": [
+        { "$ref": "#/$defs/caseIdentity" },
+        {
+          "type": "object",
+          "required": ["report"],
+          "properties": {
+            "report": {
+              "type": "array",
+              "minItems": 1,
+              "items": { "type": "string", "minLength": 1 }
+            }
+          }
+        }
+      ]
+    }
+  }
+}

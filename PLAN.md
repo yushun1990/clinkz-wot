@@ -11,10 +11,17 @@ Normative implementation-support artifacts referenced by that design are:
 - `docs/refactor-gates.csv`
 - `docs/resource-limits.csv`
 - `docs/state-machines.toml`
+- `docs/performance/manifest.schema.json`
+- `docs/performance/result.schema.json`
+- `docs/performance/fixtures.lock.toml`
+- `docs/performance/fixture-generator.md`
 - `docs/performance/constrained.toml`
 - `docs/performance/gateway.toml`
 - `docs/performance/directory.toml`
 - `docs/requirements.csv`
+
+The executable performance contract checker and deterministic fixture
+generator are in `tools/performance-harness`.
 
 The v4.6 revision is not frozen for the coordinated implementation refactor
 until every row in `docs/refactor-gates.csv` is closed. Design-only work,

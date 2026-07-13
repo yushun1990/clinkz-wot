@@ -1,0 +1,11 @@
+[package]
+name = "clinkz-wot-performance-harness"
+version.workspace = true
+edition.workspace = true
+publish = false
+
+[dependencies]
+hex = "0.4"
+serde_json = { workspace = true, features = ["std"] }
+sha2 = "0.10"
+toml_edit = "0.25"

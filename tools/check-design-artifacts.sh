@@ -73,6 +73,7 @@ fi
 "$root/tools/check-api-ownership.sh"
 "$root/tools/check-directory-client-scope.sh"
 "$root/tools/check-resource-limits.sh"
+cargo run --locked --quiet --manifest-path "$root/tools/performance-harness/Cargo.toml" -- verify
 cargo run --locked --quiet --manifest-path "$root/tools/design-check/Cargo.toml" -- check-state
 
 echo "design artifact check: $gate_count gates registered"

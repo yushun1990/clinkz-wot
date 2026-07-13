@@ -344,6 +344,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "clinkz-wot-performance-harness"
+version = "0.1.0"
+dependencies = [
+ "hex",
+ "serde_json",
+ "sha2",
+ "toml_edit",
+]
+
+[[package]]
 name = "clinkz-wot-protocol-bindings"
 version = "0.1.0"
 dependencies = [
