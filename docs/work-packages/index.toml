@@ -79,7 +79,7 @@ id = "WP-100"
 sequence = 100
 title = "Core handlers, security, codecs, and callback isolation"
 document = "docs/work-packages/WP-100-core.md"
-status = "planned"
+status = "in-progress"
 depends_on = ["WP-000"]
 requirements = [
     "CONCUR-LOCK-001",
@@ -91,6 +91,7 @@ requirements = [
     "HANDLER-CANCEL-001",
     "HANDLER-CANCEL-002",
     "HANDLER-STORAGE-001",
+    "API-SURFACE-001",
     "SEC-PERF-001",
     "API-SECURITY-001",
     "VALIDATE-COMPILE-001",
@@ -102,6 +103,11 @@ requirements = [
     "API-HOT-ID-001",
     "ERR-TAXONOMY-001",
     "ERR-RETRY-001",
+    "TIME-001",
+    "CLEANUP-RECORD-001",
+    "CONSTRAINED-PROGRESS-001",
+    "CONSTRAINED-OWN-001",
+    "CONSTRAINED-WORK-001",
     "PERF-ALLOC-001",
     "PERF-CALL-001",
 ]

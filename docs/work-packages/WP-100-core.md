@@ -1,6 +1,6 @@
 # WP-100 Core Interaction Semantics
 
-Status: Planned
+Status: In Progress
 
 Design revision: v4.6
 

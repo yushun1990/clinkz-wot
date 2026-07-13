@@ -1,6 +1,6 @@
 #![no_std]
 
-#[cfg(feature = "std")]
+#[cfg(any(feature = "std", test))]
 extern crate std;
 
 extern crate alloc;
@@ -27,7 +27,11 @@ pub use event::{
     DEFAULT_SUBSCRIPTION_CAPACITY, EventBroker, EventName, PublisherSink, Subscription,
     SubscriptionSender,
 };
-pub use identity::{CorrelationId, ThingId};
+pub use identity::{
+    ActionInvocationRef, ActiveRouteId, AffordanceSlotId, BindingGeneration, BindingId,
+    BindingSlotId, CleanupSlotId, CorrelationId, HandlerSlotId, PlanId, PlanSlotId,
+    PreparedRouteId, PreparedRouteKey, SubscriptionId, SubscriptionSlotId, ThingId, ThingSlotId,
+};
 #[cfg(feature = "async")]
 pub use inbound::Dispatch;
 pub use inbound::{
