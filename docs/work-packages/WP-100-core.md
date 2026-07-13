@@ -84,6 +84,10 @@ legacy mapping are frozen by `docs/amendments/WP-100-error-cleanup-v1.md`.
 The success/error boundary, shared default error disposition, handler-absence
 mapping, and legacy Servient predicate removals are frozen by
 `docs/amendments/WP-100-error-disposition-v1.md`.
+The exact metadata methods and response-validation staging are frozen by
+`docs/amendments/WP-100-interaction-output-api-v1.md`; WP-100 implements the
+interaction values but does not replace the WP-300-owned route-bearing response
+envelope with an interim public type.
 
 Operation-specific sync handlers receive `HandlerContext` plus their typed input and result.
 Async twins own their selected handler and cancellation state across suspension. Codec state

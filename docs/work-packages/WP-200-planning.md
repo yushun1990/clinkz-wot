@@ -22,10 +22,16 @@ compilers, capability indexes, form/operation/security resolution algorithms, an
 helpers. This package does not own binding execution traits, Servient registrations, route
 lifecycle, concrete protocols, or application handles.
 
+Response classification facts follow
+`docs/amendments/WP-100-interaction-output-api-v1.md`: this package compiles the
+primary/additional branch and schema/media facts consumed by WP-300, but does
+not publish an interaction response.
+
 ## Requirements
 
 - `PLAN-COST-001`, `PLAN-COST-002`, and `PLAN-COST-003` define logical sharing, bounded
   binding-specific compilation, and admission failures.
+- `API-PAYLOAD-001` governs the immutable response-classification facts consumed by WP-300.
 - `PLAN-INDEX-001`, `PLAN-LAZY-001`, `PLAN-CACHE-001`, `PLAN-REQUEST-001`, and
   `PLAN-BOUND-001` define pruning, lazy/single-flight state, per-call ownership, and candidate
   limits.
@@ -127,7 +133,8 @@ candidate vectors and retain enough source identity for strict selection and dia
 
 Produce these package evidence keys exactly as indexed by the work-package DAG:
 
-- `logical-plan-footprint` for two-level sharing and compact binding references;
+- `logical-plan-footprint` for two-level sharing, compact binding references, and immutable
+  primary/additional response-classification facts;
 - `capability-index-pruning` for keyed probes and admitted wildcard work;
 - `bounded-candidate-selection` for strict/fallback selection and 1/8/32 limits;
 - `lazy-plan-single-flight` for concurrency, deterministic negative entries, and backpressure;

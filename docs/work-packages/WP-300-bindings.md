@@ -21,10 +21,18 @@ This package defines and tests the execution SPI consumed by Servient and protoc
 WP-400 owns expose/destroy orchestration and registries; WP-600 owns zenoh and zenoh-pico
 implementations. No protocol-specific route, transport, or authentication semantics enter core.
 
+The final XOR-shaped `InboundResponse`, its producer-origin `try_success`
+validation, and the public shared consumer-origin
+`validate_untrusted_binding_output` function must follow
+`docs/amendments/WP-100-interaction-output-api-v1.md`. This package replaces the
+legacy response envelope once, after the route and planning values from WP-200
+exist.
+
 ## Requirements
 
 - `API-SURFACE-001`, `BIND-IO-001`, `BIND-OUT-001`, and `BIND-PROGRESS-001` freeze host and
   poll execution, ownership, response, cancellation, and subscription progress.
+- `API-PAYLOAD-001` governs response metadata, validation, and the exactly-one terminal value.
 - `LIFE-EXPOSE-002`, `LIFE-EXPOSE-003`, `STATE-BIND-001`, and `STATE-INFLIGHT-001` govern
   readiness, guard ownership, cleanup transfer, and admitted requests.
 - `STATE-SUB-001`, `HANDLE-DROP-001`, and `PRODUCER-EMIT-001` govern subscription and emission
@@ -142,6 +150,8 @@ Produce these package evidence keys exactly as indexed by the work-package DAG:
 - `form-finalization-and-collision` for deterministic contributions and reservation identity;
 - `binding-slot-state-model` for route, in-flight, subscription, response, and emission states;
 - `bounded-response-subscription-emission` for start/poll/cancel and terminal retention;
+- `binding-response-validation` for the response XOR, producer and consumer validation entry
+  points, identity/branch checks, action invariants, and additional-response bounds;
 - `drop-and-cleanup-ownership` for guard transfer, idempotent teardown, and residual state.
 
 These records satisfy the corresponding requirement-index evidence families:

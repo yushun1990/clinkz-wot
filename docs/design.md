@@ -3987,6 +3987,12 @@ predicates are frozen by
 binding-adapter default and does not introduce HTTP types into protocol-neutral
 core.
 
+The exact binding-response metadata method surface, final inbound response
+envelope, and response-validation work-package ownership are frozen by
+`docs/amendments/WP-100-interaction-output-api-v1.md`. That amendment preserves
+the logical schemas above while preventing a temporary route-free public
+response envelope from crossing the WP-100/WP-300 boundary.
+
 ### Admission Transaction and Complexity
 
 `ADMIT-TXN-001`: Parsing, validation, effective-view construction, plan

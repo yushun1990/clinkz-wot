@@ -23,6 +23,7 @@ Normative implementation-support artifacts referenced by that design are:
 - `docs/work-packages/*.md`
 - `docs/amendments/WP-100-error-cleanup-v1.md`
 - `docs/amendments/WP-100-error-disposition-v1.md`
+- `docs/amendments/WP-100-interaction-output-api-v1.md`
 
 The executable performance contract checker and deterministic fixture
 generator are in `tools/performance-harness`.
@@ -38,6 +39,12 @@ details left open by the base prose without changing the implementation DAG.
 The success/error boundary, shared wire disposition, handler-absence mapping,
 and legacy Servient predicate removal are closed by normative amendment
 `WP-100-ERR-DISPOSITION-001`.
+
+The exact binding-response metadata methods, final XOR-shaped inbound response
+envelope, and package-by-package response-validation ownership are closed by
+normative amendment `WP-100-OUTPUT-API-001`. WP-100 implements the interaction
+value surface; route-bearing response delivery remains in its declared WP-300
+owner package rather than introducing a temporary public envelope.
 
 That amendment adds `additional_responses_per_form_max`. The resulting `WP-000`
 refresh now covers all 118 resource fields in the generated foundation schema,
@@ -58,13 +65,14 @@ frozen `CoreError` surface, retry context, legacy `SecurityError` removal,
 handler-absence mapping, binding selection reasons, redacted protocol
 conversions, shared default status mapping, and workspace-wide legacy-surface
 evidence. It does not complete WP-100 or implement every requirement governed
-by the two normative amendments; those amendments remain frozen design inputs.
+by the normative amendments; those amendments remain frozen design inputs.
 
 The remaining WP-100 implementation tranches proceed in this order:
 
-1. Replace `InteractionOutput`, `InteractionStatus`, response metadata, and the
-   success/error boundary with the exact frozen schemas and eliminate ambiguous
-   output-plus-error states.
+1. Replace `InteractionOutput`, `InteractionStatus`, and response metadata with
+   the exact frozen value schemas. The final route-bearing XOR response envelope
+   is implemented once in WP-300 as required by `WP-100-OUTPUT-API-001`; WP-100
+   does not invent an interim public envelope.
 2. Complete the operation-specific sync, async, and bounded-step handler APIs,
    including `HandlerContext`, `CancellationView`, cancellation ownership, and
    sparse handler storage.

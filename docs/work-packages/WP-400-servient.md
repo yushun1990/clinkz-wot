@@ -20,11 +20,20 @@ layer contracts; it does not reinterpret forms, security expressions, Directory 
 binding-specific state. Work may begin only after `WP-300` is complete and every entry gate above
 is closed.
 
+Handler-origin response validation follows
+`docs/amendments/WP-100-interaction-output-api-v1.md`: every producer response
+uses WP-300 `InboundResponse::try_success`, which rejects binding metadata and
+invalid action/status combinations. Servient does not implement a second
+validator.
+
 ## Requirements
 
 - `LIFE-EXPOSE-001`
 - `LIFE-EXPOSE-002`
 - `LIFE-EXPOSE-003`
+- `API-PAYLOAD-001`
+- `HANDLER-API-001`
+- `BIND-IO-001`
 - `STATE-EXPOSE-001`
 - `STATE-SUB-001`
 - `HOST-SHARD-001`
@@ -135,6 +144,9 @@ No compatibility facade may keep the removed lifecycle callable on a releasable 
   idempotence, and stale-generation evidence.
 - `servient-constrained-fairness`: bounded manual steps, round-robin progress, reserved response
   and cleanup work, and no executor or atomic-reference-counting dependency.
+- `servient-response-validation`: every handler-origin result passes through the WP-300
+  `InboundResponse::try_success` boundary using the admitted route-match operation, including
+  binding-metadata and action/status failure cases plus route/generation/correlation rechecks.
 - `host-independent-progress`: contention evidence that unrelated Things and bindings progress
   independently and that callbacks execute outside engine locks.
 - `host-default-snapshots`: exhaustive `GatewayDefaultV1` and `DirectoryClientDefaultV1` timeout,

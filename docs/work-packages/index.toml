@@ -152,6 +152,7 @@ requirements = [
     "PLAN-REQUEST-001",
     "PLAN-CACHE-001",
     "PLAN-BOUND-001",
+    "API-PAYLOAD-001",
     "TD-MEM-001",
     "TD-MEM-002",
     "ADMIT-TXN-001",
@@ -207,6 +208,8 @@ requirements = [
     "BIND-IO-001",
     "BIND-OUT-001",
     "BIND-PROGRESS-001",
+    "API-PAYLOAD-001",
+    "API-SURFACE-001",
     "SUB-STORAGE-001",
     "SUB-DATA-001",
     "CONSTRAINED-PROGRESS-001",
@@ -227,6 +230,7 @@ evidence_keys = [
     "form-finalization-and-collision",
     "binding-slot-state-model",
     "bounded-response-subscription-emission",
+    "binding-response-validation",
     "drop-and-cleanup-ownership",
 ]
 performance_workloads = [
@@ -252,6 +256,9 @@ requirements = [
     "LIFE-EXPOSE-001",
     "LIFE-EXPOSE-002",
     "LIFE-EXPOSE-003",
+    "API-PAYLOAD-001",
+    "HANDLER-API-001",
+    "BIND-IO-001",
     "STATE-EXPOSE-001",
     "STATE-SUB-001",
     "HOST-SHARD-001",
@@ -267,6 +274,7 @@ evidence_keys = [
     "servient-expose-failure-injection",
     "servient-cleanup-outcomes",
     "servient-constrained-fairness",
+    "servient-response-validation",
     "host-independent-progress",
     "host-default-snapshots",
 ]
@@ -341,6 +349,7 @@ requirements = [
     "BIND-IO-001",
     "BIND-OUT-001",
     "BIND-PROGRESS-001",
+    "API-PAYLOAD-001",
     "API-SECURITY-001",
     "API-CODEC-001",
     "CONSTRAINED-PROGRESS-001",
@@ -356,6 +365,7 @@ evidence_keys = [
     "zenoh-binding-lifecycle",
     "zenoh-pico-bounded-progress",
     "binding-generation-and-correlation",
+    "binding-response-provenance",
 ]
 performance_workloads = ["PERF-GW-009", "PERF-GW-010", "PERF-CS-002"]
 
@@ -388,6 +398,7 @@ evidence_keys = [
     "old-api-removal",
     "workspace-feature-matrix",
     "requirement-evidence-completeness",
+    "end-to-end-response-boundary",
     "performance-baseline-and-regression-gates",
 ]
 performance_workloads = ["PERF-GW-001..019", "PERF-DIR-001..011", "PERF-CS-001..014"]

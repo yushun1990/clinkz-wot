@@ -4,6 +4,7 @@ set -euo pipefail
 root=$(cd "$(dirname "$0")/.." && pwd)
 amendment="$root/docs/amendments/WP-100-error-cleanup-v1.md"
 disposition="$root/docs/amendments/WP-100-error-disposition-v1.md"
+output_api="$root/docs/amendments/WP-100-interaction-output-api-v1.md"
 
 for metadata in \
     'Status: Frozen' \
@@ -11,6 +12,58 @@ for metadata in \
     'Amendment id: WP-100-ERR-CLEANUP-001'; do
     if ! grep -Fq "$metadata" "$amendment"; then
         echo "WP-100 amendment check: missing metadata: $metadata" >&2
+        exit 1
+    fi
+done
+
+for metadata in \
+    'Status: Frozen' \
+    'Base design revision: v4.6' \
+    'Amendment id: WP-100-OUTPUT-API-001'; do
+    if ! grep -Fq "$metadata" "$output_api"; then
+        echo "WP-100 output API check: missing metadata: $metadata" >&2
+        exit 1
+    fi
+done
+
+for signature in \
+    'pub const fn primary(' \
+    'pub fn try_additional(' \
+    'limits: &ResourceLimits' \
+    'pub const fn with_untrusted_binding_response(' \
+    'pub const fn binding_response(&self) -> Option<BindingResponseMetadata>' \
+    'result: CoreResult<InteractionOutput>' \
+    'pub fn try_success(' \
+    'pub fn failure(' \
+    'pub fn validate_untrusted_binding_output(' \
+    'pub fn result(&self) -> Result<&InteractionOutput, &CoreError>' \
+    'pub fn into_result(self) -> CoreResult<InteractionOutput>'; do
+    if ! grep -Fq "$signature" "$output_api"; then
+        echo "WP-100 output API check: missing frozen signature: $signature" >&2
+        exit 1
+    fi
+done
+
+for invariant in \
+    '`None` and `Some(0)` both reject every additional' \
+    'maximum accepted pair is limit `65_536` with index `65_535`' \
+    'The private `CoreResult<InteractionOutput>` is the only terminal channel' \
+    'WP-100 must not replace it with a' \
+    'shared consumer/binding-origin validator at' \
+    'WP-700 closes the end-to-end evidence'; do
+    if ! grep -Fq "$invariant" "$output_api"; then
+        echo "WP-100 output API check: missing invariant: $invariant" >&2
+        exit 1
+    fi
+done
+
+for evidence_key in \
+    core-public-surface logical-plan-footprint binding-response-validation \
+    servient-response-validation binding-response-provenance \
+    end-to-end-response-boundary; do
+    if ! grep -Fq "$evidence_key" "$output_api" \
+        || ! grep -Fq "\"$evidence_key\"" "$root/docs/work-packages/index.toml"; then
+        echo "WP-100 output API check: unstaged evidence key: $evidence_key" >&2
         exit 1
     fi
 done
@@ -122,7 +175,7 @@ fi
 
 for item in \
     ErrorPhase SecurityFailureReason ResponsePayloadRole ResponseSelection \
-    BindingResponseMetadata InteractionOutputMetadata; do
+    BindingResponseMetadata InteractionOutputMetadata InboundResponse; do
     if ! awk -F, -v item="$item" '
         NR > 1 && $1 == item && $3 == "clinkz-wot-core" && $14 == "frozen" { found = 1 }
         END { exit !found }
@@ -131,6 +184,36 @@ for item in \
         exit 1
     fi
 done
+
+if ! awk -F, '
+    NR > 1 && $1 == "InboundResponse" && $4 == "binding" && $14 == "frozen" {
+        found = 1
+    }
+    END { exit !found }
+' "$root/docs/api-ownership.csv"; then
+    echo "WP-100 output API check: InboundResponse ownership is not frozen" >&2
+    exit 1
+fi
+
+if ! awk -F, '
+    NR > 1 && $1 == "BindingResponseMetadata" \
+        && $11 ~ /BIND-IO-001/ && $11 ~ /BIND-OUT-001/ \
+        && $14 == "frozen" { found = 1 }
+    END { exit !found }
+' "$root/docs/api-ownership.csv"; then
+    echo "WP-100 output API check: binding response metadata roles are not frozen" >&2
+    exit 1
+fi
+
+if ! awk -F, '
+    NR > 1 && $1 == "validate_untrusted_binding_output" \
+        && $3 == "clinkz-wot-protocol-bindings" && $4 == "response" \
+        && $5 == "public" && $14 == "frozen" { found = 1 }
+    END { exit !found }
+' "$root/docs/api-ownership.csv"; then
+    echo "WP-100 output API check: binding response validator ownership is not frozen" >&2
+    exit 1
+fi
 
 if ! awk -F, '
     NR > 1 && $1 == "cleanup_retry_attempts_max" && $7 == 16 && $8 == 16 && $9 == 4 {
@@ -167,4 +250,4 @@ for legacy in \
     fi
 done
 
-echo "WP-100 amendment check: schemas, disposition, and migration rules frozen"
+echo "WP-100 amendment check: schemas, output APIs, disposition, and staging frozen"

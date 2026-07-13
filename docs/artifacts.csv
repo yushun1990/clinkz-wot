@@ -19,4 +19,5 @@ docs/work-packages/index.toml,implementation-work-package-dag,normative-migratio
 docs/work-packages,implementation-work-package-set,normative-migration-plan,4.6,1,docs/design.md
 docs/amendments/WP-100-error-cleanup-v1.md,wp-100-error-and-cleanup-schema,normative-amendment,4.6,1,docs/design.md
 docs/amendments/WP-100-error-disposition-v1.md,wp-100-error-disposition,normative-amendment,4.6,1,docs/design.md
+docs/amendments/WP-100-interaction-output-api-v1.md,wp-100-interaction-output-api-and-staging,normative-amendment,4.6,1,docs/design.md
 tools/check-wp100-amendment.sh,wp-100-amendment-checker,non-normative-checker,4.6,1,docs/design.md

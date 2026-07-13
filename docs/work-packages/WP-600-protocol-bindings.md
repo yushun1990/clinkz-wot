@@ -20,6 +20,13 @@ dependency on the concrete package. There is currently one concrete Cargo packag
 `clinkz-wot-protocol-bindings-zenoh`; zenoh-pico is a feature/backend of that package, not a
 separate Cargo package. Work may begin after `WP-300` and all entry gates are closed.
 
+Concrete response metadata follows
+`docs/amendments/WP-100-interaction-output-api-v1.md`: bindings populate the
+untrusted fixed-size metadata channel, while shared WP-300 validation retains it
+only after live identity and response-plan checks pass. Native status
+provenance is proved by the concrete binding rather than inferred from its
+opaque numeric value.
+
 ## Requirements
 
 - `CRATE-DEPS-001`
@@ -27,6 +34,7 @@ separate Cargo package. Work may begin after `WP-300` and all entry gates are cl
 - `BIND-IO-001`
 - `BIND-OUT-001`
 - `BIND-PROGRESS-001`
+- `API-PAYLOAD-001`
 - `API-SECURITY-001`
 - `API-CODEC-001`
 - `CONSTRAINED-PROGRESS-001`
@@ -129,6 +137,8 @@ No compatibility feature may reintroduce zenoh into a protocol-neutral crate.
   emission, cancellation, cleanup, byte-budget, and work-budget resume tests.
 - `binding-generation-and-correlation`: stale callback, route replacement, duplicate correlation,
   response opportunity, and idempotent cleanup evidence for both backends.
+- `binding-response-provenance`: protocol-native status/branch extraction, untrusted metadata
+  construction, shared validation, and structured failure translation for both backends.
 
 Feature evidence must include `--no-default-features`, host `zenoh`, constrained `zenoh-pico`, and
 an expected compile failure when both concrete backend features are selected.

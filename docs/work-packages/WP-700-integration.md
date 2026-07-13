@@ -19,6 +19,11 @@ missing owner, infeasible budget, or ambiguous state transition returns to desig
 `CHANGE-CONTROL-001`. Work begins only after `WP-400`, `WP-500`, and `WP-600` are complete and
 all entry gates remain closed.
 
+The final success/error XOR evidence and cross-binding response metadata checks
+defined by `docs/amendments/WP-100-interaction-output-api-v1.md` close here;
+earlier value, planning, binding, Servient, and protocol packages provide their
+package-scoped evidence without claiming end-to-end completion.
+
 ## Requirements
 
 - `DOC-GOV-001`
@@ -131,6 +136,9 @@ no-default, async, or optional binding cell restores it.
 - `requirement-evidence-completeness`: machine-readable proof that every applicable expanded
   requirement has current focused evidence and that all artifact, ownership, state, resource,
   gate, and work-package checks pass in one revision.
+- `end-to-end-response-boundary`: composed producer and consumer paths prove that a success owns
+  only validated `InteractionOutput`, a failure owns only `CoreError`, and protocol response
+  metadata retains its live identity and native provenance through shared validation.
 - `performance-baseline-and-regression-gates`: fixture-locked numeric baselines, absolute-budget
   results, regression comparisons, and approved runner identities for every gating workload.
 
