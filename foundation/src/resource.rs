@@ -63,8 +63,26 @@ pub struct ResourceLimits {
 
 impl ResourceLimits {
     /// Creates a complete application-defined limit set.
+    ///
+    /// # Panics
+    ///
+    /// Panics when a schema-level invariant is violated. Use [`Self::try_new`]
+    /// when profile values are supplied dynamically.
     pub const fn new(values: [Option<u64>; RESOURCE_LIMIT_COUNT]) -> Self {
-        Self { values }
+        match Self::try_new(values) {
+            Some(limits) => limits,
+            None => panic!("resource limits violate the frozen schema"),
+        }
+    }
+
+    /// Tries to create a complete application-defined limit set.
+    pub const fn try_new(values: [Option<u64>; RESOURCE_LIMIT_COUNT]) -> Option<Self> {
+        if !additional_response_limit_is_valid(
+            values[ResourceKind::AdditionalResponsesPerFormMax.index()],
+        ) {
+            return None;
+        }
+        Some(Self { values })
     }
 
     /// Returns the configured ceiling, or `None` when not applicable.
@@ -72,21 +90,58 @@ impl ResourceLimits {
         self.values[kind.index()]
     }
 
-    /// Replaces one ceiling explicitly.
-    pub fn set(&mut self, kind: ResourceKind, limit: Option<u64>) {
+    /// Replaces one ceiling explicitly when it satisfies schema invariants.
+    ///
+    /// Returns `false` without mutation when the value is invalid.
+    #[must_use]
+    pub fn set(&mut self, kind: ResourceKind, limit: Option<u64>) -> bool {
+        if kind.index() == ResourceKind::AdditionalResponsesPerFormMax.index()
+            && !additional_response_limit_is_valid(limit)
+        {
+            return false;
+        }
         self.values[kind.index()] = limit;
+        true
     }
 
     /// Returns a copy with one ceiling replaced explicitly.
+    ///
+    /// # Panics
+    ///
+    /// Panics when `limit` violates a schema-level invariant. Use
+    /// [`Self::try_with_limit`] for dynamically supplied values.
     #[must_use]
     pub const fn with_limit(mut self, kind: ResourceKind, limit: Option<u64>) -> Self {
+        if kind.index() == ResourceKind::AdditionalResponsesPerFormMax.index()
+            && !additional_response_limit_is_valid(limit)
+        {
+            panic!("resource limit violates the frozen schema");
+        }
         self.values[kind.index()] = limit;
         self
+    }
+
+    /// Returns a copy with one valid ceiling replaced explicitly.
+    pub const fn try_with_limit(mut self, kind: ResourceKind, limit: Option<u64>) -> Option<Self> {
+        if kind.index() == ResourceKind::AdditionalResponsesPerFormMax.index()
+            && !additional_response_limit_is_valid(limit)
+        {
+            return None;
+        }
+        self.values[kind.index()] = limit;
+        Some(self)
     }
 
     /// Returns all limits in the authoritative CSV order.
     pub const fn as_values(&self) -> &[Option<u64>; RESOURCE_LIMIT_COUNT] {
         &self.values
+    }
+}
+
+const fn additional_response_limit_is_valid(limit: Option<u64>) -> bool {
+    match limit {
+        Some(limit) => limit <= u16::MAX as u64 + 1,
+        None => true,
     }
 }
 
@@ -572,6 +627,40 @@ mod tests {
             BenchmarkStaticReferenceV1::LIMITS.cleanup_retry_attempts_max(),
             Some(4)
         );
+        assert_eq!(
+            GatewayDefaultV1::LIMITS.additional_responses_per_form_max(),
+            Some(32)
+        );
+        assert_eq!(
+            DirectoryClientDefaultV1::LIMITS.additional_responses_per_form_max(),
+            Some(32)
+        );
+        assert_eq!(
+            BenchmarkStaticReferenceV1::LIMITS.additional_responses_per_form_max(),
+            Some(16)
+        );
+    }
+
+    #[test]
+    fn additional_response_limit_fits_the_frozen_u16_index_space() {
+        let kind = ResourceKind::AdditionalResponsesPerFormMax;
+        let base = GatewayDefaultV1::LIMITS;
+
+        let mut values = *base.as_values();
+        values[kind.index()] = Some(65_536);
+        assert!(super::ResourceLimits::try_new(values).is_some());
+
+        values[kind.index()] = Some(65_537);
+        assert!(super::ResourceLimits::try_new(values).is_none());
+
+        assert!(base.try_with_limit(kind, Some(65_536)).is_some());
+        assert!(base.try_with_limit(kind, Some(65_537)).is_none());
+
+        let mut limits = base;
+        assert!(!limits.set(kind, Some(65_537)));
+        assert_eq!(limits.get(kind), Some(32));
+        assert!(limits.set(kind, Some(65_536)));
+        assert_eq!(limits.get(kind), Some(65_536));
     }
 
     #[test]
