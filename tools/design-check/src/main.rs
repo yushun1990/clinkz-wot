@@ -14,6 +14,20 @@ const REQUIRED_MACHINES: &[&str] = &[
     "in-flight",
     "subscription",
 ];
+const REQUIRED_WORK_PACKAGES: &[&str] = &[
+    "WP-000", "WP-100", "WP-200", "WP-300", "WP-400", "WP-500", "WP-600", "WP-700",
+];
+const REQUIRED_WORK_PACKAGE_HEADINGS: &[&str] = &[
+    "Scope",
+    "Requirements",
+    "Crates and Feature Cells",
+    "Public API and Data Migration",
+    "State and Ownership Migration",
+    "Old API Removal",
+    "Evidence",
+    "Performance Workloads",
+    "Completion Conditions",
+];
 
 #[derive(Debug)]
 struct Transition {
@@ -31,15 +45,28 @@ fn main() {
 
 fn run() -> Result<(), String> {
     let command = env::args().nth(1).unwrap_or_else(|| "check".to_owned());
-    if command != "check" && command != "check-state" {
-        return Err(format!(
-            "unknown command {command:?}; expected check or check-state"
-        ));
-    }
-
     let root = repository_root()?;
-    check_state_machines(&root)?;
-    println!("design structure check: state machines valid");
+    match command.as_str() {
+        "check" => {
+            check_state_machines(&root)?;
+            println!("design structure check: state machines valid");
+            check_work_packages(&root)?;
+            println!("design structure check: work-package DAG valid");
+        }
+        "check-state" => {
+            check_state_machines(&root)?;
+            println!("design structure check: state machines valid");
+        }
+        "check-work-packages" => {
+            check_work_packages(&root)?;
+            println!("design structure check: work-package DAG valid");
+        }
+        _ => {
+            return Err(format!(
+                "unknown command {command:?}; expected check, check-state, or check-work-packages"
+            ));
+        }
+    }
     Ok(())
 }
 
@@ -83,6 +110,400 @@ fn check_state_machines(root: &Path) -> Result<(), String> {
         ));
     }
     Ok(())
+}
+
+fn check_work_packages(root: &Path) -> Result<(), String> {
+    let path = root.join("docs/work-packages/index.toml");
+    let source = fs::read_to_string(&path)
+        .map_err(|error| format!("cannot read {}: {error}", path.display()))?;
+    let document = source
+        .parse::<DocumentMut>()
+        .map_err(|error| format!("invalid {}: {error}", path.display()))?;
+    require_integer(
+        document.get("schema_version"),
+        "work-package schema_version",
+        1,
+    )?;
+    require_string(
+        document.get("design_revision"),
+        "work-package design_revision",
+        "4.6",
+    )?;
+    require_string(
+        document.get("requirement"),
+        "work-package requirement",
+        "IMPL-CONFORM-001",
+    )?;
+    require_string(document.get("status"), "work-package status", "planned")?;
+
+    let entry_gates = root_string_set(&document, "implementation_entry_gates")?;
+    let known_gates = load_first_column(root, "docs/refactor-gates.csv")?;
+    if entry_gates != known_gates {
+        return Err(format!(
+            "implementation entry gates mismatch; expected {known_gates:?}, found {entry_gates:?}"
+        ));
+    }
+    let required_ids = root_string_set(&document, "required_package_ids")?;
+    let expected_ids = owned_set(REQUIRED_WORK_PACKAGES);
+    if required_ids != expected_ids {
+        return Err(format!(
+            "required work-package ids mismatch; expected {expected_ids:?}, found {required_ids:?}"
+        ));
+    }
+    let headings = root_string_set(&document, "required_headings")?;
+    let expected_headings = owned_set(REQUIRED_WORK_PACKAGE_HEADINGS);
+    if headings != expected_headings {
+        return Err(format!(
+            "required work-package headings mismatch; expected {expected_headings:?}, found {headings:?}"
+        ));
+    }
+
+    let known_requirements = load_requirement_ids(root)?;
+    let known_workloads = load_performance_ids(root)?;
+    let packages = document
+        .get("package")
+        .and_then(Item::as_array_of_tables)
+        .ok_or_else(|| "work-package index has no [[package]] entries".to_owned())?;
+    let expected_dependencies = expected_work_package_dependencies();
+    let expected_sequences: BTreeMap<&str, i64> = [
+        ("WP-000", 0),
+        ("WP-100", 100),
+        ("WP-200", 200),
+        ("WP-300", 300),
+        ("WP-400", 400),
+        ("WP-500", 500),
+        ("WP-600", 600),
+        ("WP-700", 700),
+    ]
+    .into_iter()
+    .collect();
+    let allowed_owners = owned_set(&[
+        "clinkz-wot",
+        "clinkz-wot-core",
+        "clinkz-wot-discovery",
+        "clinkz-wot-foundation",
+        "clinkz-wot-protocol-bindings",
+        "clinkz-wot-protocol-bindings-zenoh",
+        "clinkz-wot-servient",
+        "clinkz-wot-td",
+        "workspace",
+    ]);
+    let allowed_cells = owned_set(&["no-default", "async-no-std", "std"]);
+    let mut ids = BTreeSet::new();
+    let mut covered_requirements = BTreeSet::new();
+    let mut covered_workloads = BTreeSet::new();
+    let mut evidence_keys = BTreeSet::new();
+    let mut documents = BTreeSet::new();
+
+    for package in packages {
+        let id = string_field(package, "id", "work package")?;
+        if !ids.insert(id.clone()) || !expected_ids.contains(&id) {
+            return Err(format!("duplicate or unknown work package {id:?}"));
+        }
+        let expected_sequence = expected_sequences
+            .get(id.as_str())
+            .ok_or_else(|| format!("no expected sequence for {id:?}"))?;
+        let sequence = integer_field(package, "sequence", &id)?;
+        if sequence != *expected_sequence {
+            return Err(format!(
+                "{id} sequence mismatch; expected {expected_sequence}, found {sequence}"
+            ));
+        }
+        string_field(package, "title", &id)?;
+        if string_field(package, "status", &id)? != "planned" {
+            return Err(format!("{id} status must be planned at design freeze"));
+        }
+        let dependencies = string_set(array_field(package, "depends_on", &id)?, &id, "depends_on")?;
+        let expected = expected_dependencies
+            .get(id.as_str())
+            .ok_or_else(|| format!("no expected dependencies for {id:?}"))?;
+        if &dependencies != expected {
+            return Err(format!(
+                "{id} dependency mismatch; expected {expected:?}, found {dependencies:?}"
+            ));
+        }
+        for dependency in &dependencies {
+            let dependency_sequence = expected_sequences
+                .get(dependency.as_str())
+                .ok_or_else(|| format!("{id} has unknown dependency {dependency:?}"))?;
+            if dependency_sequence >= expected_sequence {
+                return Err(format!("{id} dependency {dependency:?} is not earlier"));
+            }
+        }
+
+        let requirements = package_string_set(package, "requirements", &id)?;
+        check_known_values(&id, "requirement", &requirements, &known_requirements)?;
+        covered_requirements.extend(requirements.iter().cloned());
+        let owners = package_string_set(package, "owner_packages", &id)?;
+        check_known_values(&id, "owner package", &owners, &allowed_owners)?;
+        let cells = package_string_set(package, "feature_cells", &id)?;
+        check_known_values(&id, "feature cell", &cells, &allowed_cells)?;
+        let evidence = package_string_set(package, "evidence_keys", &id)?;
+        for key in &evidence {
+            if !evidence_keys.insert(key.clone()) {
+                return Err(format!("evidence key {key:?} is assigned more than once"));
+            }
+        }
+        let workload_expressions = package_string_set(package, "performance_workloads", &id)?;
+        let workloads = expand_expressions(&workload_expressions)?;
+        check_known_values(&id, "performance workload", &workloads, &known_workloads)?;
+        covered_workloads.extend(workloads.iter().cloned());
+
+        let document_path = string_field(package, "document", &id)?;
+        if !documents.insert(document_path.clone()) {
+            return Err(format!("work-package document {document_path:?} is reused"));
+        }
+        check_work_package_document(
+            root,
+            &document_path,
+            &id,
+            &dependencies,
+            &requirements,
+            &owners,
+            &evidence,
+            &workload_expressions,
+        )?;
+    }
+    if ids != expected_ids {
+        return Err(format!(
+            "work-package set mismatch; expected {expected_ids:?}, found {ids:?}"
+        ));
+    }
+    if covered_requirements != known_requirements {
+        let missing: Vec<_> = known_requirements
+            .difference(&covered_requirements)
+            .cloned()
+            .collect();
+        return Err(format!(
+            "work-package DAG does not cover requirements {missing:?}"
+        ));
+    }
+    if covered_workloads != known_workloads {
+        let missing: Vec<_> = known_workloads
+            .difference(&covered_workloads)
+            .cloned()
+            .collect();
+        return Err(format!(
+            "work-package DAG does not cover performance workloads {missing:?}"
+        ));
+    }
+    Ok(())
+}
+
+fn expected_work_package_dependencies() -> BTreeMap<&'static str, BTreeSet<String>> {
+    [
+        ("WP-000", owned_set(&[])),
+        ("WP-100", owned_set(&["WP-000"])),
+        ("WP-200", owned_set(&["WP-100"])),
+        ("WP-300", owned_set(&["WP-200"])),
+        ("WP-400", owned_set(&["WP-300"])),
+        ("WP-500", owned_set(&["WP-300"])),
+        ("WP-600", owned_set(&["WP-300"])),
+        ("WP-700", owned_set(&["WP-400", "WP-500", "WP-600"])),
+    ]
+    .into_iter()
+    .collect()
+}
+
+fn load_first_column(root: &Path, relative_path: &str) -> Result<BTreeSet<String>, String> {
+    let path = root.join(relative_path);
+    let source = fs::read_to_string(&path)
+        .map_err(|error| format!("cannot read {}: {error}", path.display()))?;
+    let values: BTreeSet<String> = source
+        .lines()
+        .skip(1)
+        .filter(|line| !line.trim().is_empty())
+        .filter_map(|line| line.split(',').next())
+        .map(str::to_owned)
+        .collect();
+    if values.is_empty() {
+        return Err(format!("{} has no data rows", path.display()));
+    }
+    Ok(values)
+}
+
+fn load_requirement_ids(root: &Path) -> Result<BTreeSet<String>, String> {
+    let expressions = load_first_column(root, "docs/requirements.csv")?;
+    let components: BTreeSet<String> = expressions
+        .iter()
+        .flat_map(|expression| expression.split('|'))
+        .map(str::to_owned)
+        .collect();
+    expand_expressions(&components)
+}
+
+fn load_performance_ids(root: &Path) -> Result<BTreeSet<String>, String> {
+    let mut ids = BTreeSet::new();
+    for relative_path in [
+        "docs/performance/gateway.toml",
+        "docs/performance/directory.toml",
+        "docs/performance/constrained.toml",
+    ] {
+        let path = root.join(relative_path);
+        let source = fs::read_to_string(&path)
+            .map_err(|error| format!("cannot read {}: {error}", path.display()))?;
+        let document = source
+            .parse::<DocumentMut>()
+            .map_err(|error| format!("invalid {}: {error}", path.display()))?;
+        for kind in ["workload", "contention"] {
+            let Some(tables) = document.get(kind).and_then(Item::as_array_of_tables) else {
+                continue;
+            };
+            for table in tables {
+                let id = string_field(table, "id", relative_path)?;
+                if !ids.insert(id.clone()) {
+                    return Err(format!("duplicate performance id {id:?}"));
+                }
+            }
+        }
+    }
+    Ok(ids)
+}
+
+fn expand_expressions(expressions: &BTreeSet<String>) -> Result<BTreeSet<String>, String> {
+    let mut values = BTreeSet::new();
+    for expression in expressions {
+        let Some((first, last)) = expression.split_once("..") else {
+            if !values.insert(expression.clone()) {
+                return Err(format!("duplicate identity expression {expression:?}"));
+            }
+            continue;
+        };
+        if first.len() < 4 || last.len() != 3 {
+            return Err(format!("invalid identity range {expression:?}"));
+        }
+        let (prefix, first_number) = first.split_at(first.len() - 3);
+        let first_number = first_number
+            .parse::<u16>()
+            .map_err(|error| format!("invalid identity range {expression:?}: {error}"))?;
+        let last_number = last
+            .parse::<u16>()
+            .map_err(|error| format!("invalid identity range {expression:?}: {error}"))?;
+        if first_number > last_number {
+            return Err(format!("descending identity range {expression:?}"));
+        }
+        for number in first_number..=last_number {
+            let value = format!("{prefix}{number:03}");
+            if !values.insert(value.clone()) {
+                return Err(format!("identity {value:?} is covered more than once"));
+            }
+        }
+    }
+    Ok(values)
+}
+
+fn check_known_values(
+    context: &str,
+    kind: &str,
+    values: &BTreeSet<String>,
+    known: &BTreeSet<String>,
+) -> Result<(), String> {
+    if values.is_empty() {
+        return Err(format!("{context} has no {kind} entries"));
+    }
+    let unknown: Vec<&String> = values.difference(known).collect();
+    if !unknown.is_empty() {
+        return Err(format!("{context} has unknown {kind} entries {unknown:?}"));
+    }
+    Ok(())
+}
+
+#[allow(clippy::too_many_arguments)]
+fn check_work_package_document(
+    root: &Path,
+    relative_path: &str,
+    id: &str,
+    dependencies: &BTreeSet<String>,
+    requirements: &BTreeSet<String>,
+    owners: &BTreeSet<String>,
+    evidence: &BTreeSet<String>,
+    workloads: &BTreeSet<String>,
+) -> Result<(), String> {
+    if !relative_path.starts_with("docs/work-packages/")
+        || !relative_path.ends_with(".md")
+        || relative_path.contains("..")
+    {
+        return Err(format!("{id} has unsafe document path {relative_path:?}"));
+    }
+    let path = root.join(relative_path);
+    let source = fs::read_to_string(&path)
+        .map_err(|error| format!("cannot read {}: {error}", path.display()))?;
+    if !source.starts_with(&format!("# {id} ")) {
+        return Err(format!("{relative_path} title does not start with {id}"));
+    }
+    for metadata in [
+        "Status: Planned",
+        "Design revision: v4.6",
+        "Depends on:",
+        "Required gates:",
+        "Owner packages:",
+    ] {
+        if !source.contains(metadata) {
+            return Err(format!("{relative_path} is missing metadata {metadata:?}"));
+        }
+    }
+    let mut previous_heading = 0;
+    for heading in REQUIRED_WORK_PACKAGE_HEADINGS {
+        let marker = format!("## {heading}");
+        let position = source
+            .find(&marker)
+            .ok_or_else(|| format!("{relative_path} is missing heading {heading:?}"))?;
+        if position < previous_heading {
+            return Err(format!("{relative_path} headings are out of order"));
+        }
+        previous_heading = position;
+    }
+    let lower = source.to_ascii_lowercase();
+    for placeholder in ["tbd", "todo", "to be decided"] {
+        if lower.contains(placeholder) {
+            return Err(format!(
+                "{relative_path} contains unresolved placeholder {placeholder:?}"
+            ));
+        }
+    }
+    for value in dependencies
+        .iter()
+        .chain(requirements)
+        .chain(owners)
+        .chain(evidence)
+        .chain(workloads)
+    {
+        if !source.contains(value) {
+            return Err(format!("{relative_path} does not identify {value:?}"));
+        }
+    }
+    Ok(())
+}
+
+fn root_string_set(document: &DocumentMut, field: &str) -> Result<BTreeSet<String>, String> {
+    let array = document
+        .get(field)
+        .and_then(Item::as_array)
+        .ok_or_else(|| format!("work-package index has no {field:?} array"))?;
+    string_set(array, "work-package index", field)
+}
+
+fn package_string_set(
+    table: &Table,
+    field: &str,
+    context: &str,
+) -> Result<BTreeSet<String>, String> {
+    let values = string_set(array_field(table, field, context)?, context, field)?;
+    if values.is_empty() {
+        return Err(format!("{context} has no {field:?} entries"));
+    }
+    Ok(values)
+}
+
+fn integer_field(table: &Table, field: &str, context: &str) -> Result<i64, String> {
+    table
+        .get(field)
+        .and_then(Item::as_integer)
+        .ok_or_else(|| format!("{context:?} has no integer field {field:?}"))
+}
+
+fn owned_set(values: &[&str]) -> BTreeSet<String> {
+    values.iter().map(|value| (*value).to_owned()).collect()
 }
 
 fn check_machine(machine: &Table, design: &str, ids: &mut BTreeSet<String>) -> Result<(), String> {
@@ -302,4 +723,38 @@ fn require_string(item: Option<&Item>, field: &str, expected: &str) -> Result<()
         ));
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use std::collections::BTreeSet;
+
+    use super::{expand_expressions, expected_work_package_dependencies};
+
+    #[test]
+    fn identity_ranges_expand_inclusively() {
+        let expressions = BTreeSet::from(["PERF-GW-001..003".to_owned()]);
+        let expanded = expand_expressions(&expressions).expect("range must be valid");
+        assert_eq!(
+            expanded,
+            BTreeSet::from([
+                "PERF-GW-001".to_owned(),
+                "PERF-GW-002".to_owned(),
+                "PERF-GW-003".to_owned(),
+            ])
+        );
+    }
+
+    #[test]
+    fn final_package_joins_all_parallel_branches() {
+        let dependencies = expected_work_package_dependencies();
+        assert_eq!(
+            dependencies.get("WP-700"),
+            Some(&BTreeSet::from([
+                "WP-400".to_owned(),
+                "WP-500".to_owned(),
+                "WP-600".to_owned(),
+            ]))
+        );
+    }
 }

@@ -1,0 +1,381 @@
+schema_version = 1
+design_revision = "4.6"
+requirement = "IMPL-CONFORM-001"
+status = "planned"
+implementation_entry_gates = [
+    "GATE-1",
+    "GATE-2",
+    "GATE-3",
+    "GATE-4",
+    "GATE-5",
+    "GATE-6",
+]
+required_package_ids = [
+    "WP-000",
+    "WP-100",
+    "WP-200",
+    "WP-300",
+    "WP-400",
+    "WP-500",
+    "WP-600",
+    "WP-700",
+]
+required_headings = [
+    "Scope",
+    "Requirements",
+    "Crates and Feature Cells",
+    "Public API and Data Migration",
+    "State and Ownership Migration",
+    "Old API Removal",
+    "Evidence",
+    "Performance Workloads",
+    "Completion Conditions",
+]
+
+[[package]]
+id = "WP-000"
+sequence = 0
+title = "Foundation primitives and resource accounting"
+document = "docs/work-packages/WP-000-foundation.md"
+status = "planned"
+depends_on = []
+requirements = [
+    "PROFILE-AXIS-001",
+    "FEATURE-MATRIX-001",
+    "CRATE-DEPS-001",
+    "CONSTRAINED-STORAGE-001",
+    "CONSTRAINED-STORAGE-002",
+    "CONSTRAINED-WORK-001",
+    "CONSTRAINED-OWN-001",
+    "RES-LIMIT-001",
+    "RES-LIMIT-002",
+    "RES-LIMIT-003",
+    "RES-LIMIT-004",
+    "RES-PROFILE-001",
+    "API-RESOURCE-001",
+    "API-SOURCE-TIME-001",
+    "TIME-001",
+    "PERF-ACCOUNT-001",
+]
+owner_packages = ["clinkz-wot-foundation", "workspace"]
+feature_cells = ["no-default", "async-no-std", "std"]
+evidence_keys = [
+    "foundation-feature-matrix",
+    "resource-limit-boundaries",
+    "resource-profile-snapshots",
+    "resource-accounting-rollback",
+    "time-and-generation-api",
+]
+performance_workloads = ["PERF-GW-013", "PERF-DIR-004", "PERF-CS-011"]
+
+[[package]]
+id = "WP-100"
+sequence = 100
+title = "Core handlers, security, codecs, and callback isolation"
+document = "docs/work-packages/WP-100-core.md"
+status = "planned"
+depends_on = ["WP-000"]
+requirements = [
+    "CONCUR-LOCK-001",
+    "CONCUR-USER-001",
+    "CONCUR-CRIT-001",
+    "CONCUR-LIN-001",
+    "HANDLER-API-001",
+    "HANDLER-SUB-001",
+    "HANDLER-CANCEL-001",
+    "HANDLER-CANCEL-002",
+    "HANDLER-STORAGE-001",
+    "SEC-PERF-001",
+    "API-SECURITY-001",
+    "VALIDATE-COMPILE-001",
+    "VALIDATE-REUSE-001",
+    "API-CODEC-001",
+    "API-TYPES-001",
+    "API-PAYLOAD-001",
+    "API-OPTIONS-001",
+    "API-HOT-ID-001",
+    "ERR-TAXONOMY-001",
+    "ERR-RETRY-001",
+    "PERF-ALLOC-001",
+    "PERF-CALL-001",
+]
+owner_packages = ["clinkz-wot-core", "clinkz-wot-td"]
+feature_cells = ["no-default", "async-no-std", "std"]
+evidence_keys = [
+    "core-public-surface",
+    "handler-cancellation",
+    "callback-lock-isolation",
+    "security-selection-and-redaction",
+    "codec-validator-reuse",
+    "core-error-taxonomy",
+]
+performance_workloads = [
+    "PERF-GW-001",
+    "PERF-GW-002",
+    "PERF-GW-005",
+    "PERF-GW-006",
+    "PERF-CS-001",
+    "PERF-CS-002",
+    "PERF-CS-005",
+    "PERF-CS-006",
+]
+
+[[package]]
+id = "WP-200"
+sequence = 200
+title = "Logical plans, binding plans, and capability indexes"
+document = "docs/work-packages/WP-200-planning.md"
+status = "planned"
+depends_on = ["WP-100"]
+requirements = [
+    "DOC-RUNTIME-001",
+    "DOC-RUNTIME-002",
+    "DOC-RUNTIME-003",
+    "JSONLD-PREFIX-001",
+    "PLAN-COST-001",
+    "PLAN-COST-002",
+    "PLAN-COST-003",
+    "PLAN-INDEX-001",
+    "PLAN-LAZY-001",
+    "PLAN-REQUEST-001",
+    "PLAN-CACHE-001",
+    "PLAN-BOUND-001",
+    "TD-MEM-001",
+    "TD-MEM-002",
+    "ADMIT-TXN-001",
+    "ADMIT-MEM-001",
+    "PERF-COMPLEXITY-001",
+    "PERF-INDEX-001",
+    "PERF-ADMISSION-001",
+    "PERF-PEAK-001",
+]
+owner_packages = [
+    "clinkz-wot-core",
+    "clinkz-wot-protocol-bindings",
+    "clinkz-wot-td",
+]
+feature_cells = ["no-default", "async-no-std", "std"]
+evidence_keys = [
+    "logical-plan-footprint",
+    "capability-index-pruning",
+    "bounded-candidate-selection",
+    "lazy-plan-single-flight",
+    "plan-generation-invalidation",
+    "admission-transaction-rollback",
+]
+performance_workloads = [
+    "PERF-GW-003",
+    "PERF-GW-004",
+    "PERF-GW-011",
+    "PERF-GW-012",
+    "PERF-GW-014",
+    "PERF-GW-015",
+    "PERF-DIR-001",
+    "PERF-DIR-006",
+    "PERF-DIR-009",
+    "PERF-CS-003",
+    "PERF-CS-004",
+    "PERF-CS-010",
+    "PERF-CS-013",
+    "PERF-CS-014",
+]
+
+[[package]]
+id = "WP-300"
+sequence = 300
+title = "Binding registrations, lifecycle slots, and bounded emission"
+document = "docs/work-packages/WP-300-bindings.md"
+status = "planned"
+depends_on = ["WP-200"]
+requirements = [
+    "FORM-FINALIZE-001",
+    "FORM-FINALIZE-002",
+    "FORM-OWNER-001",
+    "FORM-COVERAGE-001",
+    "BIND-IO-001",
+    "BIND-OUT-001",
+    "BIND-PROGRESS-001",
+    "SUB-STORAGE-001",
+    "SUB-DATA-001",
+    "CONSTRAINED-PROGRESS-001",
+    "CONSTRAINED-SCHED-001",
+    "STATE-SUB-001",
+    "STATE-BIND-001",
+    "STATE-INFLIGHT-001",
+    "HANDLE-DROP-001",
+    "PRODUCER-EMIT-001",
+    "CLEANUP-RECORD-001",
+    "PERF-FANOUT-001",
+    "PERF-FANOUT-002",
+]
+owner_packages = ["clinkz-wot-core", "clinkz-wot-protocol-bindings"]
+feature_cells = ["no-default", "async-no-std", "std"]
+evidence_keys = [
+    "binding-registration-ownership",
+    "form-finalization-and-collision",
+    "binding-slot-state-model",
+    "bounded-response-subscription-emission",
+    "drop-and-cleanup-ownership",
+]
+performance_workloads = [
+    "PERF-GW-007",
+    "PERF-GW-008",
+    "PERF-GW-009",
+    "PERF-GW-010",
+    "PERF-GW-018",
+    "PERF-GW-019",
+    "PERF-CS-007",
+    "PERF-CS-008",
+    "PERF-CS-009",
+]
+
+[[package]]
+id = "WP-400"
+sequence = 400
+title = "Servient lifecycle and host runtime"
+document = "docs/work-packages/WP-400-servient.md"
+status = "planned"
+depends_on = ["WP-300"]
+requirements = [
+    "LIFE-EXPOSE-001",
+    "LIFE-EXPOSE-002",
+    "LIFE-EXPOSE-003",
+    "STATE-EXPOSE-001",
+    "STATE-SUB-001",
+    "HOST-SHARD-001",
+    "HOST-SHARD-002",
+    "HOST-ASYNC-001",
+    "HOST-DEFAULT-001",
+    "HOST-DEFAULT-002",
+    "OBS-PROFILE-001",
+]
+owner_packages = ["clinkz-wot-servient", "clinkz-wot-core"]
+feature_cells = ["no-default", "async-no-std", "std"]
+evidence_keys = [
+    "servient-expose-failure-injection",
+    "servient-cleanup-outcomes",
+    "servient-constrained-fairness",
+    "host-independent-progress",
+    "host-default-snapshots",
+]
+performance_workloads = [
+    "PERF-GW-001",
+    "PERF-GW-002",
+    "PERF-GW-007",
+    "PERF-GW-008",
+    "PERF-GW-011",
+    "PERF-GW-012",
+    "PERF-GW-013",
+    "PERF-GW-016",
+    "PERF-GW-017",
+    "PERF-GW-018",
+    "PERF-GW-019",
+    "PERF-CS-012",
+]
+
+[[package]]
+id = "WP-500"
+sequence = 500
+title = "Directory and Discovery client runtime"
+document = "docs/work-packages/WP-500-discovery.md"
+status = "planned"
+depends_on = ["WP-300"]
+requirements = [
+    "DIR-SCOPE-001",
+    "DIR-CONTRACT-001",
+    "DIR-AUTH-001",
+    "DIR-SNAPSHOT-001",
+    "DIR-WATCH-001",
+    "API-DIRECTORY-POLL-001",
+    "DIR-STREAM-001",
+    "API-DISCOVERY-EXEC-001",
+    "STATE-DISC-001",
+    "CAP-OVERFLOW-001",
+    "CAP-STATUS-001",
+]
+owner_packages = ["clinkz-wot-discovery", "clinkz-wot-core"]
+feature_cells = ["no-default", "async-no-std", "std"]
+evidence_keys = [
+    "directory-client-public-surface",
+    "directory-client-scope",
+    "directory-incremental-admission",
+    "directory-terminal-state",
+    "directory-cancel-and-overflow",
+]
+performance_workloads = [
+    "PERF-DIR-001",
+    "PERF-DIR-002",
+    "PERF-DIR-003",
+    "PERF-DIR-004",
+    "PERF-DIR-005",
+    "PERF-DIR-006",
+    "PERF-DIR-007",
+    "PERF-DIR-008",
+    "PERF-DIR-009",
+    "PERF-DIR-010",
+    "PERF-DIR-011",
+]
+
+[[package]]
+id = "WP-600"
+sequence = 600
+title = "Optional zenoh and zenoh-pico protocol bindings"
+document = "docs/work-packages/WP-600-protocol-bindings.md"
+status = "planned"
+depends_on = ["WP-300"]
+requirements = [
+    "CRATE-DEPS-001",
+    "FORM-COVERAGE-001",
+    "BIND-IO-001",
+    "BIND-OUT-001",
+    "BIND-PROGRESS-001",
+    "API-SECURITY-001",
+    "API-CODEC-001",
+    "CONSTRAINED-PROGRESS-001",
+]
+owner_packages = [
+    "clinkz-wot-protocol-bindings",
+    "clinkz-wot-protocol-bindings-zenoh",
+]
+feature_cells = ["async-no-std", "std"]
+evidence_keys = [
+    "protocol-neutral-core-dependencies",
+    "zenoh-form-and-route-compilation",
+    "zenoh-binding-lifecycle",
+    "zenoh-pico-bounded-progress",
+    "binding-generation-and-correlation",
+]
+performance_workloads = ["PERF-GW-009", "PERF-GW-010", "PERF-CS-002"]
+
+[[package]]
+id = "WP-700"
+sequence = 700
+title = "Umbrella API migration and final conformance"
+document = "docs/work-packages/WP-700-integration.md"
+status = "planned"
+depends_on = ["WP-400", "WP-500", "WP-600"]
+requirements = [
+    "DOC-GOV-001",
+    "ARTIFACT-AUTH-001",
+    "IMPL-CONFORM-001",
+    "CHANGE-CONTROL-001",
+    "API-OWNERSHIP-001",
+    "REFACTOR-GATE-001",
+    "STD-BASELINE-001",
+    "API-SURFACE-001",
+    "PERF-BENCH-001",
+    "PERF-BENCH-002",
+    "PERF-BENCH-003",
+    "PERF-BUDGET-001",
+    "PERF-SCALE-001",
+]
+owner_packages = ["clinkz-wot", "workspace"]
+feature_cells = ["no-default", "async-no-std", "std"]
+evidence_keys = [
+    "umbrella-public-surface",
+    "old-api-removal",
+    "workspace-feature-matrix",
+    "requirement-evidence-completeness",
+    "performance-baseline-and-regression-gates",
+]
+performance_workloads = ["PERF-GW-001..019", "PERF-DIR-001..011", "PERF-CS-001..014"]

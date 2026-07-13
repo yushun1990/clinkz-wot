@@ -1,7 +1,7 @@
 # clinkz-wot Design
 
-Status: v4.6 design-closeout revision; coordinated implementation refactor is
-blocked until the refactor gates are closed.
+Status: v4.6 frozen implementation-ready target; coordinated implementation
+proceeds only through the admitted work-package DAG.
 
 This document is the authoritative project design for `clinkz-wot`. It is a
 target design: implementation code may lag behind it. Previous architecture
@@ -62,11 +62,13 @@ crate, module, public path, feature cells, and migration disposition of frozen
 cross-crate items. `docs/artifacts.csv` enumerates the active artifact set and
 its revision/schema identities. `docs/refactor-gates.csv` records
 implementation-admission status. `docs/requirements.csv` indexes requirement
-ownership and evidence. The versioned files under `docs/performance/`, their
-schemas, and the fixture lock define profile-specific performance budgets and
+profile axes, package ownership, and evidence. The versioned files under
+`docs/performance/`, their schemas, and the fixture lock define profile-specific
+performance budgets and
 stable measurement identities; `tools/performance-harness` checks and
-orchestrates that contract. Work-package documents order
-implementation but are not a source of behavioral requirements. `PLAN.md`
+orchestrates that contract. `docs/work-packages/index.toml` defines the
+implementation dependency DAG, and its package documents define migration and
+removal work without becoming a source of behavioral requirements. `PLAN.md`
 selects the active revision but does not redefine it. When active artifacts
 disagree, implementation MUST stop
 at the conflicting requirement; neither code, a benchmark result, a work
@@ -96,6 +98,13 @@ merged. Temporary nonconformance is allowed only on a private refactor branch or
 behind an unavailable-by-default feature and must have an owner and removal
 condition; it is not a releasable compatibility mode.
 
+The admitted dependency order is `WP-000 -> WP-100 -> WP-200 -> WP-300`, then
+`WP-400`, `WP-500`, and `WP-600` may proceed independently, and `WP-700`
+depends on all three. The machine-readable package set MUST cover every indexed
+requirement and performance workload, use actual or explicitly target Cargo
+package names and feature cells, record old API removal and stable evidence
+keys, and contain no dependency cycle or undeclared predecessor.
+
 `CHANGE-CONTROL-001`: A semantic change to a frozen public API, lifecycle
 transition, error category, resource default, complexity bound, or performance
 budget requires a new design revision. The change records affected requirement
@@ -115,14 +124,17 @@ yet merged and requires an impact review for packages already completed.
 
 ### Revision Record
 
-v4.6 is the design-closeout revision. It replaces the earlier
-"implementation-ready" status with explicit admission gates, adds a
+v4.6 is the frozen implementation-ready revision. It replaces the earlier
+unqualified "implementation-ready" status with explicit admission gates, adds a
 machine-readable API ownership contract, introduces a narrow foundation crate
 for resource, work, time, and generation primitives, and makes work-package
 dependency on gate closure explicit. It also resolves the cross-layer ownership
-direction before any runtime API migration begins. Further v4.6 changes close
-the lifecycle, Directory, resource-profile, performance-harness, and
-work-package gates; the revision is frozen only after all of them are closed.
+direction before any runtime API migration begins. All six gates are closed:
+the lifecycle state machines terminate with owned cleanup; Directory is a
+client-only contract; resource profiles are exhaustive; performance workloads,
+fixtures, and result identities are executable; and the eight-package
+implementation DAG covers every requirement and workload. Reopening any gate
+removes implementation admission from its affected packages.
 
 v4.5 completes the performance-contention pass of the 2026-07-13 design audit.
 It adds `PLAN-CACHE-001`, `DIR-STREAM-001`, `PERF-ACCOUNT-001`, and
@@ -4360,9 +4372,12 @@ ownership review with exhaustive transition tests; “inspection” includes API
 feature, and documentation checks.
 
 The machine-readable ownership and evidence index is
-`docs/requirements.csv`. Its `requirement` expressions use an inclusive `..`
-range only for identifiers with the same prefix and a `|` separator for an
-explicit set. CI MUST expand those expressions, reject an unknown or duplicate
+`docs/requirements.csv`. It records compilation cells, execution models,
+resource profiles, capability roles, actual or target Cargo owner packages,
+evidence kinds, evidence key, and source path as independent columns. Its
+`requirement` expressions use an inclusive `..` range only for identifiers with
+the same prefix and a `|` separator for an explicit set. CI MUST validate every
+axis and package token, expand those expressions, reject an unknown or duplicate
 stable requirement, reject a normative id missing from the CSV, and reject a
 CSV id missing from this document. Each `evidence_key` becomes a stable test,
 compile fixture, model, inspection, or benchmark result key; implementation
