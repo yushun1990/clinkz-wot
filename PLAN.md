@@ -59,29 +59,31 @@ now advances one dependency-ordered work package and one reviewable tranche at
 a time. If implementation exposes a design contradiction, the affected gate is
 reopened and dependent work pauses until a normative revision closes it.
 
-`WP-100` remains **In Progress**. Commit `9181070` completes only its coordinated
+`WP-100` remains **In Progress**. Commit `9181070` completes its coordinated
 error-taxonomy migration and shared default error-disposition mapping: the
 frozen `CoreError` surface, retry context, legacy `SecurityError` removal,
 handler-absence mapping, binding selection reasons, redacted protocol
 conversions, shared default status mapping, and workspace-wide legacy-surface
-evidence. It does not complete WP-100 or implement every requirement governed
-by the normative amendments; those amendments remain frozen design inputs.
+evidence. Commit `3bd9aa5` completes the frozen interaction-output value
+surface: the six exact value schemas, private fields, bounded additional-response
+construction, metadata round trips, local `OperationStatus` shape check, and
+workspace caller migration across core, Servient, Zenoh, and the umbrella
+example. It deliberately leaves route-bearing `InboundResponse` replacement and
+binding-response authenticity validation in WP-300. Neither commit completes
+WP-100 or implements every requirement governed by the normative amendments;
+those amendments remain frozen design inputs.
 
 The remaining WP-100 implementation tranches proceed in this order:
 
-1. Replace `InteractionOutput`, `InteractionStatus`, and response metadata with
-   the exact frozen value schemas. The final route-bearing XOR response envelope
-   is implemented once in WP-300 as required by `WP-100-OUTPUT-API-001`; WP-100
-   does not invent an interim public envelope.
-2. Complete the operation-specific sync, async, and bounded-step handler APIs,
+1. Complete the operation-specific sync, async, and bounded-step handler APIs,
    including `HandlerContext`, `CancellationView`, cancellation ownership, and
    sparse handler storage.
-3. Implement `DecodedPayload`, incremental codec state, exact byte accounting,
+2. Implement `DecodedPayload`, incremental codec state, exact byte accounting,
    and one-decode validation reuse.
-4. Implement security probe/commit, credential leases, generation invalidation,
+3. Implement security probe/commit, credential leases, generation invalidation,
    body projection over `DecodedPayload`, fail-closed outbound application, and
    secret-redacted public `Debug` behavior.
-5. Remove the remaining legacy push/lock facades, complete bounded progress
+4. Remove the remaining legacy push/lock facades, complete bounded progress
    behavior, and then prove that every handler, provider, codec, and status
    callback executes outside engine locks or constrained critical sections.
    Register the WP-100 performance workloads and close every WP-100 evidence and
