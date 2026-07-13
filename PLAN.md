@@ -24,14 +24,18 @@ Normative implementation-support artifacts referenced by that design are:
 - `docs/amendments/WP-100-error-cleanup-v1.md`
 - `docs/amendments/WP-100-error-disposition-v1.md`
 - `docs/amendments/WP-100-interaction-output-api-v1.md`
+- `docs/audits/WP-100-handler-entry-audit.md`
 
 The executable performance contract checker and deterministic fixture
 generator are in `tools/performance-harness`.
 
-The v4.6 revision is frozen for coordinated implementation: every row in
-`docs/refactor-gates.csv` is closed. Runtime API migration proceeds only through
-the dependency order in `docs/work-packages/index.toml`. Reopening a gate blocks
-affected packages as specified by `REFACTOR-GATE-001`.
+The v4.6 base revision remains the coordinated design target. The handler entry
+audit reopened GATE-1, GATE-2, GATE-4, GATE-5, and GATE-6 because the next
+WP-100 tranche still requires exact handler APIs, cancellation state, resource
+limits, workloads, and acyclic migration ownership. GATE-3 remains closed.
+Runtime API migration proceeds only through the dependency order in
+`docs/work-packages/index.toml`; affected implementation is paused as required
+by `REFACTOR-GATE-001` until a normative handler amendment closes those gates.
 
 The frozen WP-100 error, retry, correlation, and cleanup Rust schemas are closed
 by normative amendment `WP-100-ERR-CLEANUP-001`. The amendment resolves schema
@@ -53,11 +57,12 @@ profile snapshots, boundary tests, and evidence. `WP-000` is complete and
 
 ## Current Implementation Checkpoint
 
-Design work is complete enough for implementation under the closed v4.6 gates;
-the repository is not performing an unconstrained full rewrite. Implementation
-now advances one dependency-ordered work package and one reviewable tranche at
-a time. If implementation exposes a design contradiction, the affected gate is
-reopened and dependent work pauses until a normative revision closes it.
+The repository is not performing an unconstrained full rewrite. Implementation
+advances one dependency-ordered work package and one reviewable tranche at a
+time. The completed error and interaction-output tranches remain valid, but the
+next handler tranche is paused after its entry audit exposed design
+contradictions. Affected work resumes only after a normative revision closes the
+reopened gates.
 
 `WP-100` remains **In Progress**. Commit `9181070` completes its coordinated
 error-taxonomy migration and shared default error-disposition mapping: the
@@ -73,7 +78,15 @@ binding-response authenticity validation in WP-300. Neither commit completes
 WP-100 or implements every requirement governed by the normative amendments;
 those amendments remain frozen design inputs.
 
-The remaining WP-100 implementation tranches proceed in this order:
+Before the remaining WP-100 implementation tranches proceed, the handler
+amendment must freeze the exact operation matrix, context/input ownership,
+cancellation and late-result state, Producer subscription transaction,
+registration/storage limits, workload evidence, and WP-100/WP-300/WP-400
+staging. It must also repair the invalid duplicate-receiver
+`PollClientBinding::poll_subscription` skeleton.
+
+After those gates close, the remaining WP-100 implementation tranches proceed
+in this order:
 
 1. Complete the operation-specific sync, async, and bounded-step handler APIs,
    including `HandlerContext`, `CancellationView`, cancellation ownership, and
