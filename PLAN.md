@@ -44,6 +44,46 @@ refresh now covers all 118 resource fields in the generated foundation schema,
 profile snapshots, boundary tests, and evidence. `WP-000` is complete and
 `WP-100` has resumed.
 
+## Current Implementation Checkpoint
+
+Design work is complete enough for implementation under the closed v4.6 gates;
+the repository is not performing an unconstrained full rewrite. Implementation
+now advances one dependency-ordered work package and one reviewable tranche at
+a time. If implementation exposes a design contradiction, the affected gate is
+reopened and dependent work pauses until a normative revision closes it.
+
+`WP-100` remains **In Progress**. Commit `9181070` completes only its coordinated
+error-taxonomy migration and shared default error-disposition mapping: the
+frozen `CoreError` surface, retry context, legacy `SecurityError` removal,
+handler-absence mapping, binding selection reasons, redacted protocol
+conversions, shared default status mapping, and workspace-wide legacy-surface
+evidence. It does not complete WP-100 or implement every requirement governed
+by the two normative amendments; those amendments remain frozen design inputs.
+
+The remaining WP-100 implementation tranches proceed in this order:
+
+1. Replace `InteractionOutput`, `InteractionStatus`, response metadata, and the
+   success/error boundary with the exact frozen schemas and eliminate ambiguous
+   output-plus-error states.
+2. Complete the operation-specific sync, async, and bounded-step handler APIs,
+   including `HandlerContext`, `CancellationView`, cancellation ownership, and
+   sparse handler storage.
+3. Implement `DecodedPayload`, incremental codec state, exact byte accounting,
+   and one-decode validation reuse.
+4. Implement security probe/commit, credential leases, generation invalidation,
+   body projection over `DecodedPayload`, fail-closed outbound application, and
+   secret-redacted public `Debug` behavior.
+5. Remove the remaining legacy push/lock facades, complete bounded progress
+   behavior, and then prove that every handler, provider, codec, and status
+   callback executes outside engine locks or constrained critical sections.
+   Register the WP-100 performance workloads and close every WP-100 evidence and
+   completion condition only after those API migrations are complete.
+
+`WP-200` does not start until the WP-100 completion audit passes. Later packages
+continue to follow `docs/work-packages/index.toml`; cross-crate compatibility
+changes needed by a WP-100 tranche are part of that coordinated tranche, not an
+independent start of a downstream package.
+
 The Directory performance artifact covers only the engine-side Directory client
 contract. Directory service topology, storage backends, server-side query
 execution, and production service SLOs are deferred to a later design.
