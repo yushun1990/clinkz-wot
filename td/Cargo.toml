@@ -4,6 +4,7 @@ version.workspace = true
 edition.workspace = true
 
 [dependencies]
+clinkz-wot-foundation = { path = "../foundation", default-features = false }
 fluent-uri = { version = "0.4", features = ["alloc", "serde"], default-features = false }
 
 # `quickcheck` is intentionally NOT enabled here: it pulls `getrandom`, which
@@ -27,7 +28,14 @@ serde_with = { version = "3.18", features = ["macros", "alloc"], default-feature
 
 [features]
 default = ["std"]
-std = ["serde/std", "serde_json/std", "serde_with/std", "fluent-uri/std", "time/std"]
+std = [
+    "clinkz-wot-foundation/std",
+    "serde/std",
+    "serde_json/std",
+    "serde_with/std",
+    "fluent-uri/std",
+    "time/std",
+]
 ## Experimental, incomplete TD 2.0 data-model extensions.
 ##
 ## When enabled, TD 2.0 fields and behaviors are surfaced alongside the

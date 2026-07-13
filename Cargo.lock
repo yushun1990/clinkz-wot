@@ -316,6 +316,7 @@ version = "0.1.0"
 dependencies = [
  "async-channel",
  "async-trait",
+ "clinkz-wot-foundation",
  "clinkz-wot-td",
  "critical-section",
  "futures-core",
@@ -342,6 +343,10 @@ dependencies = [
  "serde_json",
  "tokio",
 ]
+
+[[package]]
+name = "clinkz-wot-foundation"
+version = "0.1.0"
 
 [[package]]
 name = "clinkz-wot-performance-harness"
@@ -398,6 +403,7 @@ dependencies = [
 name = "clinkz-wot-td"
 version = "0.1.0"
 dependencies = [
+ "clinkz-wot-foundation",
  "fluent-uri",
  "serde",
  "serde_json",

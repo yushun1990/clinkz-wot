@@ -1,0 +1,13 @@
+[package]
+name = "clinkz-wot-foundation"
+version.workspace = true
+edition.workspace = true
+build = "build.rs"
+# The build consumes the repository-owned authoritative resource schema.
+# Release packaging remains disabled until WP-700 preserves that single source.
+publish = false
+
+[features]
+default = ["std"]
+std = []
+async = []

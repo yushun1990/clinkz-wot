@@ -5,6 +5,7 @@ members = [
     "codecs/cbor",
     "core",
     "discovery",
+    "foundation",
     "protocol-bindings/core",
     "protocol-bindings/protocols/zenoh",
     "servient",
