@@ -1,7 +1,13 @@
 //! Outbound protocol binding contract and consumed-side request model
 //! (baseline v4.1 §4.5 / §5.1).
 //!
-//! [`ClientBinding::invoke`] and [`ClientBinding::subscribe`] are `async fn`
+//! This module holds the consumer-side (outbound) binding contract; the
+//! producer-side (inbound) contract — [`ServerBinding`], [`BindingContext`],
+//! [`InboundDispatcher`] — lives in [`crate::inbound`]. A single concrete
+//! protocol binding may implement both directions and share one protocol
+//! session across them.
+//!
+//! [`ClientBinding::invoke`] and [`ClientBinding::subscribe`] are `async_fn`
 //! (resolved A1): the outbound path is network-bound, so one `async_trait`
 //! `Box` per call is accepted as network-amortized. The trait is therefore
 //! gated behind the `async` feature.
@@ -9,6 +15,10 @@
 //! v4.1 (AD57): `ClientBinding` is stored as a shared `Arc<dyn ClientBinding>`
 //! — one instance per protocol serves all consumed Things. The
 //! `ClientBindingFactory` trait is removed.
+//!
+//! [`ServerBinding`]: crate::ServerBinding
+//! [`BindingContext`]: crate::BindingContext
+//! [`InboundDispatcher`]: crate::InboundDispatcher
 
 use alloc::{boxed::Box, collections::BTreeMap, string::String, sync::Arc};
 

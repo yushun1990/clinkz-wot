@@ -5,7 +5,7 @@ extern crate std;
 
 extern crate alloc;
 
-pub mod binding;
+pub mod outbound;
 pub mod error;
 pub mod event;
 pub mod identity;
@@ -18,9 +18,9 @@ pub mod sync;
 pub mod thing;
 pub mod transport;
 
-pub use binding::SubscriptionGuard;
+pub use outbound::SubscriptionGuard;
 #[cfg(feature = "async")]
-pub use binding::{BindingRequest, ClientBinding};
+pub use outbound::{BindingRequest, ClientBinding};
 pub use error::{
     CoreError, CoreResult, ErrorContext, ErrorPhase, RetryClass, SecurityFailureReason,
     SelectionFailureReason,

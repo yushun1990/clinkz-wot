@@ -102,7 +102,7 @@ InboundBindingPlan,type,clinkz-wot-core,plan,public,clinkz_wot_core::InboundBind
 BindingThingView,type,clinkz-wot-core,plan,public,clinkz_wot_core::BindingThingView,no-default|async-no-std|std,all,all,producer,FORM-FINALIZE-001,absent,add,frozen
 InboundRouteMatch,type,clinkz-wot-core,plan,public,clinkz_wot_core::InboundRouteMatch,no-default|async-no-std|std,all,all,producer,BIND-IO-001,absent,add,frozen
 BindingCapability,type,clinkz-wot-core,plan,public,clinkz_wot_core::BindingCapability,no-default|async-no-std|std,all,all,producer|consumer,PLAN-INDEX-001,absent,add,frozen
-BindingRequest,type,clinkz-wot-core,binding,public,clinkz_wot_core::BindingRequest,no-default|async-no-std|std,all,all,consumer,BIND-OUT-001,core/src/binding.rs,replace,frozen
+BindingRequest,type,clinkz-wot-core,binding,public,clinkz_wot_core::BindingRequest,no-default|async-no-std|std,all,all,consumer,BIND-OUT-001,core/src/outbound.rs,replace,frozen
 InboundRequest,type,clinkz-wot-core,binding,public,clinkz_wot_core::InboundRequest,no-default|async-no-std|std,all,all,producer,BIND-IO-001,core/src/inbound.rs,replace,frozen
 InboundResponse,type,clinkz-wot-core,binding,public,clinkz_wot_core::InboundResponse,no-default|async-no-std|std,all,all,producer,BIND-IO-001,core/src/inbound.rs,replace,frozen
 PrepareInput,type,clinkz-wot-core,binding,public,clinkz_wot_core::PrepareInput,no-default|async-no-std|std,manual-poll,application-static,producer,API-SURFACE-001,absent,add,frozen
@@ -124,7 +124,7 @@ RouteReadinessToken,type,clinkz-wot-core,binding,public,clinkz_wot_core::RouteRe
 ServerBindingRegistration,registration,clinkz-wot-core,binding,public,clinkz_wot_core::ServerBindingRegistration,std,host-async,gateway-default-v1,producer,FORM-FINALIZE-001|API-SURFACE-001,absent,add,frozen
 RuntimeEventSinkConfig,type,clinkz-wot-core,binding,public,clinkz_wot_core::RuntimeEventSinkConfig,std,host-async,gateway-default-v1,producer,CAP-STATUS-001,absent,add,frozen
 BindingFuture,type,clinkz-wot-core,binding,public,clinkz_wot_core::BindingFuture,std,host-async,gateway-default-v1,producer|consumer,HOST-ASYNC-001,absent,add,frozen
-ClientBinding,trait,clinkz-wot-core,binding,public,clinkz_wot_core::ClientBinding,std,host-async,gateway-default-v1,consumer,BIND-OUT-001,core/src/binding.rs,replace,frozen
+ClientBinding,trait,clinkz-wot-core,binding,public,clinkz_wot_core::ClientBinding,std,host-async,gateway-default-v1,consumer,BIND-OUT-001,core/src/outbound.rs,replace,frozen
 HostSubscriptionStart,type,clinkz-wot-core,binding,public,clinkz_wot_core::HostSubscriptionStart,std,host-async,gateway-default-v1,consumer,BIND-PROGRESS-001,absent,add,frozen
 ClientBindingRegistration,registration,clinkz-wot-core,binding,public,clinkz_wot_core::ClientBindingRegistration,std,host-async,gateway-default-v1,consumer,API-SURFACE-001,absent,add,frozen
 RouteReadinessStatus,type,clinkz-wot-core,binding,public,clinkz_wot_core::RouteReadinessStatus,no-default|async-no-std|std,all,all,producer,LIFE-EXPOSE-003,absent,add,frozen
@@ -139,7 +139,7 @@ FormContributionCapability,type,clinkz-wot-core,form_contribution,public,clinkz_
 EndpointReservationKey,type,clinkz-wot-core,form_contribution,public,clinkz_wot_core::EndpointReservationKey,no-default|async-no-std|std,all,all,producer,FORM-OWNER-001,absent,add,frozen
 CollisionDomainId,type,clinkz-wot-core,form_contribution,public,clinkz_wot_core::CollisionDomainId,no-default|async-no-std|std,all,all,producer,FORM-OWNER-001,absent,add,frozen
 Subscription,type,clinkz-wot-core,subscription,public,clinkz_wot_core::Subscription,no-default|async-no-std|std,all,all,consumer,STATE-SUB-001,core/src/event.rs,replace,frozen
-SubscriptionGuard,trait,clinkz-wot-core,subscription,public,clinkz_wot_core::SubscriptionGuard,std,host-async,gateway-default-v1,consumer,STATE-SUB-001,core/src/binding.rs,replace,frozen
+SubscriptionGuard,trait,clinkz-wot-core,subscription,public,clinkz_wot_core::SubscriptionGuard,std,host-async,gateway-default-v1,consumer,STATE-SUB-001,core/src/outbound.rs,replace,frozen
 SubscriptionState,type,clinkz-wot-core,subscription,public,clinkz_wot_core::SubscriptionState,no-default|async-no-std|std,all,all,consumer,STATE-SUB-001,absent,add,frozen
 SubscriptionRecord,state_record,clinkz-wot-core,subscription,crate,-,no-default|async-no-std|std,all,all,consumer,STATE-SUB-001,absent,add,frozen
 RuntimeEvent,type,clinkz-wot-core,runtime_event,public,clinkz_wot_core::RuntimeEvent,no-default|async-no-std|std,all,all,all,CAP-STATUS-001,absent,add,frozen

@@ -129,7 +129,7 @@ builder conveniences are not the configuration contract.
   prepare/readiness/activate/commit/abort/shutdown contract and explicit
   `ServerBindingRegistration`. Remove any cleanup path whose only completion signal is guard
   drop or an unstructured outer error.
-- Replace the current `core/src/binding.rs::ClientBinding` request shape with the frozen owned
+- Replace the current `core/src/outbound.rs::ClientBinding` request shape with the frozen owned
   `BindingRequest`, validated output, and `HostSubscriptionStart` contract. Keep the name, not
   the obsolete signature or behavior.
 - Remove public `TransportRequest`, `TransportResponse`, and `TransportAdapter` facades that
