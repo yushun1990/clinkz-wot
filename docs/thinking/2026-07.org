@@ -40,3 +40,20 @@ event plus local polling and merging. Protocols such as Zenoh and MQTT can
 multiplex natively. The standard collection operation should use its Thing-level
 form and selected binding plan. Any per-affordance fan-out must be an explicit,
 bounded fallback owned outside core.
+
+* PLAN 和 design 文档臃肿，噪声太多 <2026-07-17 Fri>
+文档杂糅和态度具体细节的设计规范，导致我根本无法梳理引擎的主线逻辑，我认为 应该先确定并冻结主线逻辑、
+核心要点、模块角色、数据流转、SPI，再分步展会开比较清晰，能保证主线不失真。我认为有以下核心要点：
+
+1. 整体数据流图
+2. 核心模块及其职责边界，哪些放到Binding实现，哪些在引擎内实现？
+3. TD预编译计划的概念，设计决策（是否需要实现计划生命周期）
+4. 引擎对Protocol Binding 的 SPI，应用层如何添加新的PB， 动态链接库？还是通过build.rs 编译新的
+   PB crate到 引擎然后灰度发布？
+等等..
+
+我们缺少一份架构主干文档，所以我建议，重构当前的PLAN.md 和 design.md, 按由核心到边缘、由抽象到具体
+的方式，分阶段、分模块来设计，先保证主线不偏，不错。之前发现的core 中实现EventBroker 和 Subscription
+merge 的设计错误就是因为没有冻结主线，引擎实现目标不清晰，模块边界模糊所致。
+
+应该根据WoT规范设计系统， 以目标明确、性能稳定性可靠，引用层易用为基准, 而不是已有的实现和设计。
