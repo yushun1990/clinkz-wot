@@ -1,5 +1,338 @@
 schema_version = 1
-design_revision = "4.6"
+design_revision = "4.8"
+
+[[composition]]
+id = "handler-direct-response"
+requirements = ["STATE-INFLIGHT-001", "HANDLER-CANCEL-001", "CONCUR-LIN-001"]
+participants = [
+    "in-flight",
+    "handler-sync-execution|handler-async-execution|handler-step-execution",
+]
+trigger = "handler:Returned:claim_direct_response"
+response_claim_policy = "atomic-with-handler-release"
+preconditions = [
+    "handler-result-sink=DirectResponse",
+    "handler-call-generation-matches",
+    "in-flight-generation-matches",
+]
+atomic_transitions = [
+    "in-flight:Admitted:complete_direct->Completing",
+    "handler:Returned:claim_direct_response->Released",
+]
+failure_transitions = [
+    "handler:Returned:response_closed->LateReturned",
+    "handler:LateReturned:discard_direct_result->Released",
+]
+ownership = "The result moves once from HandlerCallOwner to ResponseCoordinator; the handler call reservation releases independently of response-delivery capacity"
+
+[[composition]]
+id = "producer-start-result-transfer"
+requirements = ["HANDLER-SUB-001", "HANDLER-CANCEL-001", "CONCUR-LIN-001"]
+participants = [
+    "handler-sync-execution|handler-async-execution|handler-step-execution",
+    "producer-subscription",
+]
+trigger = "handler:Returned:transfer_start_result"
+error_response_policy = "claim-before-failed-or-same-generation-terminal"
+preconditions = [
+    "handler-result-sink=ProducerAcceptance",
+    "handler-call-generation-matches-producer-setup-generation",
+    "producer-subscription-state=Accepting",
+]
+success_transitions = [
+    "handler:Returned:transfer_start_result->Released",
+    "producer-subscription:Accepting:accepted->Accepted",
+]
+deliverable_error_transitions = [
+    "handler:Returned:transfer_start_result->Released",
+    "in-flight:Admitted:complete_producer_start_error->Completing",
+    "producer-subscription:Accepting:handler_error->Failed",
+]
+unavailable_error_transitions = [
+    "handler:Returned:transfer_start_result->Released",
+    "producer-subscription:Accepting:handler_error_response_unavailable->Failed",
+]
+error_response_semantics = "The deliverable branch atomically claims the error response before Failed is observable; the unavailable branch requires the same InFlight generation already be Cancelled, Released, or terminal Completing and records that fact as start-response-terminal"
+success_in_flight_effect = "none; an Ok acceptance leaves the start response Admitted until installed-and-published"
+ownership = "Ok moves the linear SubscriptionAcceptance into ProducerSubscriptionOwner; Err releases setup ownership under the no-obligation-on-error contract"
+
+[[composition]]
+id = "producer-late-start-result-transfer"
+requirements = ["HANDLER-SUB-001", "HANDLER-CANCEL-001", "CONCUR-LIN-001"]
+participants = [
+    "handler-sync-execution|handler-async-execution|handler-step-execution",
+    "producer-subscription",
+]
+trigger = "handler:LateReturned:transfer_late_start_result"
+late_acceptance_policy = "create-teardown-before-discard"
+preconditions = [
+    "handler-result-sink=ProducerAcceptance",
+    "handler-call-generation-matches-producer-setup-generation",
+    "producer-subscription-state=AcceptingCancelled",
+]
+success_transitions = [
+    "handler:LateReturned:transfer_late_start_result->Released",
+    "producer-subscription:AcceptingCancelled:accepted_late->RollingBack",
+]
+error_transitions = [
+    "handler:LateReturned:transfer_late_start_result->Released",
+    "producer-subscription:AcceptingCancelled:error_late->Closed",
+]
+ownership = "A late Ok creates the application teardown bit before its response payload is discarded; a late Err creates no obligation"
+
+[[composition]]
+id = "producer-setup-abort"
+requirements = ["HANDLER-SUB-001", "HANDLER-CANCEL-002", "CONCUR-LIN-001"]
+participants = [
+    "handler-async-execution|handler-step-execution",
+    "producer-subscription",
+]
+trigger = "incomplete ProducerAcceptance execution terminates after cancellation without a CoreResult"
+incomplete_cleanup_policy = "complete-or-transfer-or-residual-before-terminal"
+setup_obligation_semantics = "A bounded-step Producer start creates SetupCancellation=Pending when cancellation first requires explicit state cleanup. Each cancel callback changes Pending to Claimed(callback_nonce), Pending return restores Pending, Ready or a no-state late result commits Complete, cleanup transfer commits PendingCleanup, and residual commits Residual. Sync and async starts keep SetupCancellation Absent under their no-external-obligation contracts."
+cancel_create_transitions = [
+    "handler-step-execution:StartingCancelled:state_ready->Cancelling",
+    "producer-subscription:AcceptingCancelled:setup_cancel_created->AcceptingCancelled",
+]
+cancel_claim_transitions = [
+    "handler-step-execution:Cancelling:begin_cancel->CancelPolling",
+    "producer-subscription:AcceptingCancelled:setup_cancel_claim->AcceptingCancelled",
+]
+cancel_pending_transitions = [
+    "handler-step-execution:CancelPolling:pending->Cancelling",
+    "producer-subscription:AcceptingCancelled:setup_cancel_pending->AcceptingCancelled",
+]
+clean_async_transitions = [
+    "handler-async-execution:Dropping:drop_complete_cancel->Cancelled",
+    "handler-async-execution:Dropping:drop_complete_deadline->TimedOut",
+    "producer-subscription:AcceptingCancelled:setup_aborted->Closed",
+]
+clean_step_transitions = [
+    "handler-step-execution:CancelPolling:ready_ok_cancel->Cancelled",
+    "handler-step-execution:CancelPolling:ready_ok_deadline->TimedOut",
+    "producer-subscription:AcceptingCancelled:setup_aborted->Closed",
+]
+late_step_start_error_transitions = [
+    "handler-step-execution:StartingCancelled:start_error_cancel->Cancelled",
+    "handler-step-execution:StartingCancelled:start_error_deadline->TimedOut",
+    "producer-subscription:AcceptingCancelled:error_late->Closed",
+]
+failed_step_transitions = [
+    "handler-step-execution:CancelPolling:ready_error->CleanupFailed",
+    "producer-subscription:AcceptingCancelled:setup_cleanup_failed->Failed",
+]
+transferred_step_transitions = [
+    "handler-step-execution:DrainExhausted:cleanup_transfer->CleanupTransferred",
+    "producer-subscription:AcceptingCancelled:setup_cleanup_pending->CleanupPending",
+]
+residual_step_transitions = [
+    "handler-step-execution:DrainExhausted:residual->CleanupFailed",
+    "producer-subscription:AcceptingCancelled:setup_residual->Failed",
+]
+ownership = "Producer remains AcceptingCancelled until the future drop or explicit step cleanup has completed or transferred; no destructor is an unrecorded fallible cleanup owner"
+
+[[composition]]
+id = "producer-start-publication"
+requirements = ["HANDLER-SUB-001", "STATE-INFLIGHT-001", "CONCUR-LIN-001"]
+participants = ["in-flight", "producer-subscription"]
+trigger = "guard installation returns a completely owned installed guard"
+success_response_claim = "atomic-with-installed-and-published"
+preconditions = [
+    "producer-subscription-state=Installing",
+    "subscription-generation-matches",
+    "cancellation-not-requested",
+    "deadline-not-elapsed",
+    "in-flight-state=Admitted",
+]
+atomic_transitions = [
+    "in-flight:Admitted:complete_producer_start->Completing",
+    "producer-subscription:Installing:installed_and_published->Active",
+]
+failure_transitions = [
+    "producer-subscription:Installing:response_claim_failure->RollingBack",
+]
+ownership = "The installed guard enters ProducerSubscriptionOwner before publication; the accepted response enters ResponseCoordinator in the same non-callback boundary"
+
+[[composition]]
+id = "producer-prepublication-failure-response"
+requirements = ["HANDLER-SUB-001", "STATE-INFLIGHT-001", "CONCUR-LIN-001"]
+participants = ["in-flight", "producer-subscription"]
+trigger = "accepted response validation or guard installation fails before Active"
+error_response_policy = "claim-before-rollback-or-same-generation-terminal"
+deliverable_validation_transitions = [
+    "in-flight:Admitted:complete_producer_start_error->Completing",
+    "producer-subscription:Accepted:response_invalid->RollingBack",
+]
+unavailable_validation_transitions = [
+    "producer-subscription:Accepted:response_invalid_response_unavailable->RollingBack",
+]
+deliverable_install_transitions = [
+    "in-flight:Admitted:complete_producer_start_error->Completing",
+    "producer-subscription:Installing:install_failure->RollingBack",
+]
+unavailable_install_transitions = [
+    "producer-subscription:Installing:install_failure_response_unavailable->RollingBack",
+]
+atomicity = "The Producer failure transition and deliverable InFlight error claim are one non-callback boundary; unavailable variants require the same InFlight generation already be Cancelled, Released, or terminal Completing"
+ownership = "Every partial installed guard remains addressable in ProducerSubscriptionOwner while the error response is delivered or recorded unavailable and rollback attempts the GuardClose and ApplicationTeardown bits; SetupCancellation is already Absent or Complete on this path"
+
+[[composition]]
+id = "handler-cancellation-response"
+requirements = ["HANDLER-CANCEL-001", "HANDLER-CANCEL-002", "STATE-INFLIGHT-001"]
+participants = [
+    "in-flight",
+    "handler-sync-execution|handler-async-execution|handler-step-execution",
+    "producer-subscription when present",
+]
+trigger = "first Manual, Deadline, Drain, or Drop cause"
+first_cause_policy = "immutable"
+response_transitions = [
+    "in-flight:Admitted:cancellation_error->Completing",
+    "in-flight:Admitted:deadline_error->Completing",
+    "in-flight:Admitted:cancel_close->Cancelled",
+    "in-flight:Admitted:deadline_close->Cancelled",
+    "in-flight:Admitted:drain_expired->Cancelled",
+    "in-flight:Admitted:drop->Cancelled",
+]
+handler_effect = "Under the documented lock order, record the same first cause in the handler execution record before any later poll or step is admitted; a running callback keeps its unique lease and becomes late"
+producer_effect = "When present, change Reserved, Accepting, Accepted, or Installing through its matching cause transition without taking a running CallbackLease"
+producer_teardown_exception = "Cancellation, deadline, or drop of one teardown response view closes and acknowledges only that InFlight view; it never cancels a ProducerTeardown HandlerCallOwner. Only Servient drain, Thing destroy, or an explicit HandlerCleanupOwner abort policy may cancel teardown execution."
+race_rule = "A response claim already in Completing wins; later causes join through the Completing self-loop transitions and cannot replace the result or first cause"
+
+[[composition]]
+id = "producer-teardown-handoff"
+requirements = ["HANDLER-SUB-001", "HANDLER-STORAGE-001", "CONCUR-LIN-001"]
+participants = [
+    "producer-subscription",
+    "handler-sync-execution|handler-async-execution|handler-step-execution",
+]
+trigger = "producer-subscription:Active:(stop|wire_teardown|drop|destroy|start_response_delivery_failure)->Stopping"
+active_pending_call_reservation = "none"
+application_teardown_admission = "acquire-count-and-bytes-at-claim"
+preconditions = [
+    "teardown-entry-generation-matches-reserved-generation",
+    "teardown-footprint-individually-fits-profile",
+    "ApplicationTeardown=Pending",
+]
+atomic_handoff = "ProducerSubscriptionOwner transfers teardown responsibility and retained generation metadata without a pending-call reservation; a wire request also attaches its separate InFlight view"
+call_admission = "After GuardClose is attempted, claim_next_obligation acquires normal pending-call count and bytes atomically with creation of one ProducerTeardown HandlerCallOwner; saturation leaves ApplicationTeardown Pending and publishes ProducerSubscriptionTeardown pending work"
+result_transitions = [
+    "handler:Returned:transfer_teardown_result->Released",
+    "handler:LateReturned:transfer_late_teardown_result->Released",
+]
+cleanup_rule = "HandlerCleanupOwner closes GuardClose first, then admits and invokes ApplicationTeardown at most once; cleanup capacity is charged only on actual transfer, and bounded drain exhaustion transfers a charged cleanup owner or records residual before terminal release"
+
+[[composition]]
+id = "producer-teardown-result-and-response"
+requirements = ["HANDLER-SUB-001", "STATE-INFLIGHT-001", "CONCUR-LIN-001"]
+participants = [
+    "in-flight when an initiating wire teardown view exists",
+    "handler-sync-execution|handler-async-execution|handler-step-execution",
+    "producer-subscription",
+]
+trigger = "ProducerTeardown HandlerCallOwner returns or terminates late"
+wire_response_owner = "initiating-view-only"
+wire_success_transitions = [
+    "handler:Returned:transfer_teardown_result->Released",
+    "in-flight:Admitted:complete_direct->Completing",
+    "producer-subscription:Stopping|CleanupPending:obligation_complete->same",
+]
+wire_error_transitions = [
+    "handler:Returned:transfer_teardown_result->Released",
+    "in-flight:Admitted:complete_direct->Completing",
+    "producer-subscription:Stopping|CleanupPending:obligation_error|obligation_residual->same",
+]
+local_transitions = [
+    "handler:Returned:transfer_teardown_result->Released",
+    "producer-subscription:RollingBack|Stopping|CleanupPending:obligation_complete|obligation_error|obligation_residual->same",
+]
+late_transitions = [
+    "handler:LateReturned:transfer_late_teardown_result->Released",
+    "producer-subscription:RollingBack|Stopping|CleanupPending:obligation_complete|obligation_error|obligation_residual->same",
+]
+async_no_result_transitions = [
+    "handler-async-execution:Dropping:drop_complete_cancel->Cancelled",
+    "handler-async-execution:Dropping:drop_complete_deadline->TimedOut",
+    "producer-subscription:RollingBack|Stopping|CleanupPending:obligation_residual->same",
+]
+step_cancel_complete_transitions = [
+    "handler-step-execution:CancelPolling:ready_ok_cancel->Cancelled",
+    "handler-step-execution:CancelPolling:ready_ok_deadline->TimedOut",
+    "producer-subscription:RollingBack|Stopping|CleanupPending:obligation_complete->same",
+]
+step_cancel_error_transitions = [
+    "handler-step-execution:CancelPolling:ready_error->CleanupFailed",
+    "producer-subscription:RollingBack|Stopping|CleanupPending:obligation_error->same",
+]
+step_cancel_transfer_transitions = [
+    "handler-step-execution:DrainExhausted:cleanup_transfer->CleanupTransferred",
+    "producer-subscription:RollingBack|Stopping|CleanupPending:obligation_pending->same",
+]
+step_cancel_residual_transitions = [
+    "handler-step-execution:DrainExhausted:residual->CleanupFailed",
+    "producer-subscription:RollingBack|Stopping|CleanupPending:obligation_residual->same",
+]
+owner_abort_response_transitions = [
+    "in-flight:Admitted:cancellation_error->Completing",
+    "in-flight:Admitted:deadline_error->Completing",
+    "in-flight:Admitted:drain_expired->Cancelled",
+    "in-flight:Admitted:drop->Cancelled",
+]
+no_result_response_precondition = "Before an owner abort may cancel ProducerTeardown execution, its initiating InFlight view is absent or atomically leaves Admitted through the transition matching the immutable abort cause. A view already Completing, Cancelled, or Released is joined without replacement. Thus a no-CoreResult terminal can never strand an Admitted response opportunity."
+no_result_semantics = "An incomplete async teardown conservatively commits ApplicationTeardown=Residual in the reserved Producer record because no CoreResult proves application teardown complete. Step cancel Ready(Ok) commits Complete, Ready(Err) commits Complete with terminal cleanup failure under the no-remaining-obligation contract, cleanup transfer commits PendingCleanup, and drain residual commits Residual. The already claimed cancellation response or closed view terminates and acknowledges independently."
+response_unavailable = "For an ordinary on-time result in Stopping or CleanupPending, an Admitted initiating view is claimed with complete_direct; if it is already Completing, Cancelled, or Released, HandlerCleanupOwner settles the obligation and discards the unavailable output without retry. Local and rollback cleanup have no initiating view."
+ownership = "Only the initiating wire teardown view receives the validated handler output; joined or later teardown requests receive the retained payload-free terminal summary through their own InFlight views"
+
+[[composition]]
+id = "producer-terminal-replay-and-release"
+requirements = ["HANDLER-SUB-001", "STATE-INFLIGHT-001", "CONCUR-LIN-001"]
+participants = ["producer-subscription", "in-flight"]
+trigger = "repeated stop or matched wire teardown after Active"
+replay_payload = "status-or-error-summary-only"
+release_condition = "all-terminal-preconditions"
+join_transitions = [
+    "producer-subscription:Stopping:join_stop->Stopping",
+    "producer-subscription:Stopping:join_runtime_stop->Stopping",
+    "producer-subscription:Stopping:join_wire_teardown->Stopping",
+    "producer-subscription:CleanupPending:join_stop->CleanupPending",
+    "producer-subscription:CleanupPending:join_runtime_stop->CleanupPending",
+    "producer-subscription:CleanupPending:join_wire_teardown->CleanupPending",
+    "producer-subscription:Closed:join_runtime_stop->Closed",
+    "producer-subscription:Failed:join_runtime_stop->Failed",
+]
+replay_transitions = [
+    "producer-subscription:Closed:replay_wire_teardown->Closed",
+    "producer-subscription:Failed:replay_wire_teardown->Failed",
+]
+local_replay_transitions = [
+    "producer-subscription:Closed|Failed:join_stop->same",
+]
+in_flight_release_transitions = [
+    "in-flight:Completing:release->Released",
+    "in-flight:Cancelled:release->Released",
+]
+start_response_ack_transitions = [
+    "producer-subscription:AcceptingCancelled|InstallingCancelled|Active|RollingBack|Stopping|CleanupPending|Closed|Failed:start_response_terminal->same",
+]
+teardown_view_ack_transitions = [
+    "producer-subscription:Stopping|CleanupPending|Closed|Failed:teardown_view_terminal->same",
+]
+local_view_release_transitions = [
+    "producer-subscription:Stopping|CleanupPending|Closed|Failed:local_view_released->same",
+]
+start_response_failure_transitions = [
+    "producer-subscription:AcceptingCancelled|InstallingCancelled|RollingBack|Stopping|CleanupPending|Failed:start_response_delivery_failure->same",
+    "producer-subscription:Active:start_response_delivery_failure->Stopping",
+    "producer-subscription:Closed:start_response_delivery_failure->Failed",
+]
+release_transitions = [
+    "producer-subscription:Closed:release_when_quiescent->Released",
+    "producer-subscription:Failed:release_when_quiescent->Released",
+]
+local_view_accounting = "Active:stop and each nonterminal join_stop attach exactly one generation-checked local view and increment the checked count once. join_runtime_stop for drop or destroy never creates a view. Closed or Failed join_stop returns the retained summary in one boundary with zero net count. Every retained local view decrements once through local_view_released; duplicate and stale releases are no-ops."
+ack_atomicity = "InFlight release and the matching generation-checked start-response or teardown-view acknowledgement are one non-callback boundary. A retained local view decrements through local_view_released. Duplicate or stale acknowledgements change no count."
+tombstone_eviction_policy = "A quiescent Closed or Failed record remains a bounded tombstone in its existing subscription slot. It is evicted only for Thing destruction or admission pressure from subscription-item or handler-state-byte ceilings. The deterministic victim is the smallest (ThingSlotId, SubscriptionId, subscription generation) tuple among quiescent tombstones eligible for the pressured scope; replay before eviction returns the retained summary and replay after eviction returns StaleHandle."
+ownership = "Each wire observer owns a separate bounded InFlight response; Producer stores only checked start/view acknowledgements and a payload-free summary. Quiescence makes a tombstone evictable but does not itself release it; release_when_quiescent performs deterministic eviction after every declared terminal precondition holds."
 
 [[machine]]
 id = "expose"
@@ -336,116 +669,417 @@ retryability = "terminal"
 
 [[machine]]
 id = "subscription"
-requirements = ["STATE-SUB-001", "BIND-PROGRESS-001"]
-initial = "Starting"
+requirements = [
+    "BIND-PROGRESS-001",
+    "CLEANUP-RECORD-001",
+    "CONCUR-LIN-001",
+    "HANDLE-DROP-001",
+    "STATE-SUB-001",
+    "SUB-DATA-001",
+    "SUB-STORAGE-001",
+]
+visibility = "cross-crate-contract"
+transition_contract = "exact"
+owner_record = "Servient SubscriptionRecord"
+scope = "Owns one engine-assigned SubscriptionId, admitted source and item/byte capacity, the binding start transaction, driver installation, the single public receive cursor, stop ownership, cleanup transfer, and the retained terminal outcome"
+driver_contract = "The selected binding returns one HostSubscriptionDriver or fills one caller-owned constrained slot only after start succeeds; the binding never allocates the engine SubscriptionId"
+source_contract = "Every SubscriptionItem carries the matching SubscriptionId and exact AffordanceTarget; collection start is rejected before side effects when the selected plan cannot guarantee exact source attribution"
+receive_contract = "Only the non-Clone Servient Subscription facade owns the receive lease. Control and status views cannot poll items and never create another receive cursor."
+installation_contract = "The driver moves BindingStartOwner -> SubscriptionInstallOwner -> SubscriptionDriverSlot exactly once. Active publication and driver-slot publication are one non-callback boundary."
+stop_contract = "Stop, drop, remote terminal, and Servient drain join one generation-checked stop owner. start_stop accepts one exact request before poll_stop progress; both execute outside engine locks or constrained critical sections and neither is concurrent with poll_item on the same driver."
+terminal_contract = "SubscriptionDriverEvent transfers the ProcessTerminal and CleanupOutcome together. SubscriptionState reports resource lifecycle independently from ProcessTerminal: Complete moves to Closed even when the retained terminal is Failed, PendingCleanup moves to CleanupPending after atomic transfer, and ResidualExternalState moves to Failed after durable recording. A no-driver start failure retains Failed plus Complete in its private record and closes without publishing a facade. Unrecorded cleanup remains pending."
+process_terminal_axis = ["Completed", "Cancelled", "TimedOut", "Overflowed", "Domain", "Failed"]
+cleanup_state_projection = ["Complete->Closed", "PendingCleanup->CleanupPending", "ResidualExternalState->Failed"]
+failed_state_cause = "ResidualExternalState"
+terminal_retention = "immutable-after-commit"
+retryable_stop_origins = ["Active:stop"]
+terminal_stop_origins = ["Active:drop", "CancellingStart:start_ready_late", "Installing:cancel", "Installing:drop", "Installing:install_failure"]
+public_state_projection = ["Reserved|Starting|Installing->Starting", "CancellingStart->CancellingStart", "Active->Active", "StopStarting|Stopping->Stopping", "CleanupPending->CleanupPending", "Closed->Closed", "Failed->Failed", "Released->unobservable"]
+stop_intent_contract = "Active:stop stages RetryableExplicit with Cancelled; Active:drop, CancellingStart:start_ready_late, Installing:cancel, and Installing:drop stage Terminal with Cancelled; Installing:install_failure stages Terminal with Failed(error). The candidate commits only after stop acceptance or terminal cleanup disposition. A claimed driver terminal wins and replaces an uncommitted candidate."
+drop_contract = "Drop never blocks. It transfers the driver and every remaining stop obligation to already reserved bounded cleanup capacity or records ResidualExternalState before releasing the application facade."
+resource_contract = "SubscriptionId, subscription slot, collection source count, binding-local storage allowance, engine item/byte accounting, and cleanup capacity are reserved before the binding start call"
+collection_source_limit = "collection_subscription_sources_per_subscription_max"
+initial = "Reserved"
 states = [
+    "Reserved",
     "Starting",
     "CancellingStart",
+    "Installing",
     "Active",
+    "StopStarting",
     "Stopping",
     "CleanupPending",
     "Closed",
     "Failed",
+    "Released",
 ]
-terminal = ["Closed", "Failed"]
-required_events = ["Starting:cancel", "Starting:drop", "Active:stop", "Active:drop"]
+terminal = ["Released"]
+required_events = [
+    "Reserved:begin_start",
+    "Reserved:cancel",
+    "Reserved:drop",
+    "Starting:start_ready",
+    "Starting:start_error",
+    "Starting:cancel",
+    "Starting:drop",
+    "CancellingStart:start_ready_late",
+    "CancellingStart:start_error_late",
+    "CancellingStart:start_cancel_pending",
+    "CancellingStart:start_cancel_complete",
+    "CancellingStart:start_cancel_cleanup_transfer",
+    "CancellingStart:start_cancel_residual",
+    "Installing:install_driver",
+    "Installing:cancel",
+    "Installing:drop",
+    "Installing:install_failure",
+    "Active:poll_item",
+    "Active:driver_terminal_complete",
+    "Active:driver_terminal_cleanup_transfer",
+    "Active:driver_terminal_residual",
+    "Active:stop",
+    "Active:drop",
+    "StopStarting:claimed_nonterminal",
+    "StopStarting:claimed_terminal_complete",
+    "StopStarting:claimed_terminal_cleanup_transfer",
+    "StopStarting:claimed_terminal_residual",
+    "StopStarting:explicit_start_rejected",
+    "StopStarting:implicit_start_invalid",
+    "StopStarting:start_pending",
+    "StopStarting:start_complete",
+    "StopStarting:cleanup_transfer",
+    "StopStarting:residual",
+    "Stopping:poll_stop_pending",
+    "Stopping:stop_complete",
+    "Stopping:cleanup_transfer",
+    "Stopping:residual",
+    "CleanupPending:cleanup_progress",
+    "CleanupPending:cleanup_complete",
+    "CleanupPending:residual",
+    "Closed:release",
+    "Failed:release",
+]
+
+[[machine.transition]]
+from = "Reserved"
+event = "begin_start"
+to = "Starting"
+owner = "SubscriptionStartOwner"
+linearization = "publish the generation-bearing start record only after every declared reservation succeeds"
+outcome = "binding-start-owned"
+retryability = "not-applicable"
+
+[[machine.transition]]
+from = "Reserved"
+event = "cancel"
+to = "Closed"
+owner = "SubscriptionStartOwner"
+linearization = "record local cancellation before any binding side effect"
+outcome = "Complete"
+retryability = "terminal"
+
+[[machine.transition]]
+from = "Reserved"
+event = "drop"
+to = "Closed"
+owner = "SubscriptionStartOwner"
+linearization = "release unconsumed start reservations before any binding side effect"
+outcome = "Complete"
+retryability = "terminal"
 
 [[machine.transition]]
 from = "Starting"
-event = "install_guard"
-to = "Active"
-owner = "ConsumedThingHandle"
-linearization = "guard registry publishes active generation"
-outcome = "active"
+event = "start_ready"
+to = "Installing"
+owner = "SubscriptionInstallOwner"
+linearization = "move the returned generation-matching driver out of BindingStartOwner"
+outcome = "driver-owned-not-published"
 retryability = "not-applicable"
+
+[[machine.transition]]
+from = "Starting"
+event = "start_error"
+to = "Closed"
+owner = "SubscriptionStartOwner"
+linearization = "retain ProcessTerminal::Failed and Complete cleanup after proving that no driver or remote resource escaped, then return the cloned start error without publishing a facade"
+outcome = "Complete"
+retryability = "terminal"
 
 [[machine.transition]]
 from = "Starting"
 event = "cancel"
 to = "CancellingStart"
-owner = "ConsumedThingHandle"
-linearization = "cancel wins guard installation boundary"
-outcome = "cleanup-required"
+owner = "SubscriptionStartOwner"
+linearization = "cancellation wins the start-result handoff boundary"
+outcome = "await-start-settlement"
 retryability = "join-existing"
 
 [[machine.transition]]
 from = "Starting"
 event = "drop"
 to = "CancellingStart"
-owner = "ConsumedThingHandle"
-linearization = "drop wins guard installation boundary"
-outcome = "cleanup-required"
+owner = "SubscriptionStartOwner"
+linearization = "drop wins the start-result handoff boundary and transfers ownership to the runtime"
+outcome = "runtime-awaits-start-settlement"
 retryability = "runtime-owned"
 
 [[machine.transition]]
-from = "Starting"
-event = "start_failure"
-to = "Failed"
-owner = "ConsumedThingHandle"
-linearization = "retain terminal start error"
-outcome = "failed-without-wire-resource"
-retryability = "terminal"
+from = "CancellingStart"
+event = "start_ready_late"
+to = "StopStarting"
+owner = "SubscriptionStopOwner"
+linearization = "move the late driver and an implicit stop request into start-stop ownership without publishing Active"
+outcome = "start-stop-required"
+retryability = "not-applicable"
 
 [[machine.transition]]
 from = "CancellingStart"
-event = "cleanup_complete"
+event = "start_error_late"
 to = "Closed"
-owner = "ConsumedThingHandle"
-linearization = "pending wire guard closes"
+owner = "SubscriptionStartOwner"
+linearization = "record the late no-driver result after cancellation"
 outcome = "Complete"
 retryability = "terminal"
 
 [[machine.transition]]
 from = "CancellingStart"
-event = "cleanup_pending"
+event = "start_cancel_pending"
+to = "CancellingStart"
+owner = "SubscriptionStartOwner"
+linearization = "retain the same binding-call cancellation cursor after bounded Pending progress"
+outcome = "pending"
+retryability = "retained-cursor"
+
+[[machine.transition]]
+from = "CancellingStart"
+event = "start_cancel_complete"
+to = "Closed"
+owner = "SubscriptionStartOwner"
+linearization = "binding start cancellation proves that no driver or remote resource escaped"
+outcome = "Complete"
+retryability = "terminal"
+
+[[machine.transition]]
+from = "CancellingStart"
+event = "start_cancel_cleanup_transfer"
 to = "CleanupPending"
-owner = "CleanupOwner"
-linearization = "retain or transfer pending guard"
+owner = "SubscriptionCleanupOwner"
+linearization = "retain the immutable cancellation or timeout terminal and atomically transfer the pending subscription-start cleanup record"
 outcome = "PendingCleanup"
 retryability = "recorded"
 
 [[machine.transition]]
 from = "CancellingStart"
-event = "residual"
+event = "start_cancel_residual"
 to = "Failed"
-owner = "CleanupOwner"
-linearization = "local sample admission closes"
+owner = "SubscriptionStartOwner"
+linearization = "retain the immutable cancellation or timeout terminal only after durable ResidualExternalState recording for the unresolved subscription start"
+outcome = "ResidualExternalState"
+retryability = "recorded"
+
+[[machine.transition]]
+from = "Installing"
+event = "install_driver"
+to = "Active"
+owner = "SubscriptionDriverRegistry"
+linearization = "publish the driver slot and active subscription generation atomically"
+outcome = "active"
+retryability = "not-applicable"
+
+[[machine.transition]]
+from = "Installing"
+event = "cancel"
+to = "StopStarting"
+owner = "SubscriptionStopOwner"
+linearization = "cancellation claims the unpublished driver and an implicit stop request before active publication"
+outcome = "start-stop-required"
+retryability = "join-existing"
+
+[[machine.transition]]
+from = "Installing"
+event = "drop"
+to = "StopStarting"
+owner = "SubscriptionStopOwner"
+linearization = "drop transfers the unpublished driver and implicit stop request to runtime ownership"
+outcome = "start-stop-required"
+retryability = "runtime-owned"
+
+[[machine.transition]]
+from = "Installing"
+event = "install_failure"
+to = "StopStarting"
+owner = "SubscriptionStopOwner"
+linearization = "retain the installation error and move the returned driver into implicit start-stop ownership"
+outcome = "start-stop-rollback-required"
+retryability = "recorded"
+
+[[machine.transition]]
+from = "Active"
+event = "poll_item"
+to = "Active"
+owner = "SubscriptionReceiveOwner"
+linearization = "commit one generation-matching ProcessEvent outside the registry boundary"
+outcome = "pending-or-item"
+retryability = "retained-cursor"
+
+[[machine.transition]]
+from = "Active"
+event = "driver_terminal_complete"
+to = "Closed"
+owner = "SubscriptionDriverRegistry"
+linearization = "retain the ProcessTerminal, Complete cleanup outcome, and exact loss totals before releasing the receive lease"
+outcome = "Complete"
+retryability = "terminal"
+
+[[machine.transition]]
+from = "Active"
+event = "driver_terminal_cleanup_transfer"
+to = "CleanupPending"
+owner = "SubscriptionCleanupOwner"
+linearization = "retain the ProcessTerminal and atomically transferred PendingCleanup record before releasing the receive lease"
+outcome = "PendingCleanup"
+retryability = "recorded"
+
+[[machine.transition]]
+from = "Active"
+event = "driver_terminal_residual"
+to = "Failed"
+owner = "SubscriptionDriverRegistry"
+linearization = "retain the ProcessTerminal, durable ResidualExternalState record, and exact loss totals"
 outcome = "ResidualExternalState"
 retryability = "recorded"
 
 [[machine.transition]]
 from = "Active"
 event = "stop"
-to = "Stopping"
-owner = "ConsumedThingHandle"
-linearization = "guard registry marks generation stopping"
-outcome = "cleanup-required"
+to = "StopStarting"
+owner = "SubscriptionStopOwner"
+linearization = "after option validation, atomically revoke the receive lease and claim the matching driver plus exact stop request"
+outcome = "start-stop-call-owned"
 retryability = "join-existing"
 
 [[machine.transition]]
 from = "Active"
 event = "drop"
-to = "Stopping"
-owner = "ConsumedThingHandle"
-linearization = "guard registry marks generation stopping"
-outcome = "cleanup-required"
+to = "StopStarting"
+owner = "SubscriptionStopOwner"
+linearization = "atomically revoke the receive lease and transfer the matching driver plus implicit stop request to runtime ownership"
+outcome = "start-stop-call-owned"
 retryability = "runtime-owned"
 
 [[machine.transition]]
-from = "Stopping"
-event = "cleanup_complete"
+from = "StopStarting"
+event = "claimed_nonterminal"
+to = "StopStarting"
+owner = "SubscriptionStopOwner"
+linearization = "discard and account a post-stop item or retain a Pending callback result, recover the matching driver, and keep the exact staged stop intent"
+outcome = "start-stop-call-owned"
+retryability = "join-existing"
+
+[[machine.transition]]
+from = "StopStarting"
+event = "claimed_terminal_complete"
 to = "Closed"
-owner = "ConsumedThingHandle"
-linearization = "wire guard and sample slot close"
+owner = "SubscriptionReceiveOwner"
+linearization = "discard the staged stop candidate, retain the callback ProcessTerminal and Complete cleanup, and retire the driver without start_stop"
+outcome = "Complete"
+retryability = "terminal"
+
+[[machine.transition]]
+from = "StopStarting"
+event = "claimed_terminal_cleanup_transfer"
+to = "CleanupPending"
+owner = "SubscriptionCleanupOwner"
+linearization = "discard the staged stop candidate and retain the callback ProcessTerminal plus atomically transferred PendingCleanup record without start_stop"
+outcome = "PendingCleanup"
+retryability = "recorded"
+
+[[machine.transition]]
+from = "StopStarting"
+event = "claimed_terminal_residual"
+to = "Failed"
+owner = "SubscriptionReceiveOwner"
+linearization = "discard the staged stop candidate and retain the callback ProcessTerminal only after durable ResidualExternalState recording"
+outcome = "ResidualExternalState"
+retryability = "recorded"
+
+[[machine.transition]]
+from = "StopStarting"
+event = "explicit_start_rejected"
+to = "Active"
+owner = "SubscriptionStopOwner"
+linearization = "for RetryableExplicit only, clear the uncommitted Cancelled candidate and restore the unchanged driver and receive lease"
+outcome = "invalid-call-active"
+retryability = "caller-may-correct"
+
+[[machine.transition]]
+from = "StopStarting"
+event = "implicit_start_invalid"
+to = "Failed"
+owner = "SubscriptionStopOwner"
+linearization = "preserve the terminal stop candidate, durably record the still-owned external resource, and retire local driver ownership without publishing Active"
+outcome = "ResidualExternalState"
+retryability = "recorded"
+
+[[machine.transition]]
+from = "StopStarting"
+event = "start_pending"
+to = "Stopping"
+owner = "SubscriptionStopOwner"
+linearization = "commit acceptance of the exact request and its staged ProcessTerminal while retaining the driver cursor; CleanupOutcome remains unset"
+outcome = "pending"
+retryability = "retained-cursor"
+
+[[machine.transition]]
+from = "StopStarting"
+event = "start_complete"
+to = "Closed"
+owner = "SubscriptionStopOwner"
+linearization = "atomically retain the staged ProcessTerminal and Complete cleanup before retiring the driver"
+outcome = "Complete"
+retryability = "terminal"
+
+[[machine.transition]]
+from = "StopStarting"
+event = "cleanup_transfer"
+to = "CleanupPending"
+owner = "SubscriptionCleanupOwner"
+linearization = "atomically retain the staged ProcessTerminal and transfer driver and request under PendingCleanup"
+outcome = "PendingCleanup"
+retryability = "recorded"
+
+[[machine.transition]]
+from = "StopStarting"
+event = "residual"
+to = "Failed"
+owner = "SubscriptionStopOwner"
+linearization = "retain the staged ProcessTerminal after durable ResidualExternalState recording and retire local driver ownership"
+outcome = "ResidualExternalState"
+retryability = "recorded"
+
+[[machine.transition]]
+from = "Stopping"
+event = "poll_stop_pending"
+to = "Stopping"
+owner = "SubscriptionStopOwner"
+linearization = "retain the same driver and bounded stop cursor after poll_stop returns Pending, preserving the retained ProcessTerminal unchanged"
+outcome = "pending"
+retryability = "retained-cursor"
+
+[[machine.transition]]
+from = "Stopping"
+event = "stop_complete"
+to = "Closed"
+owner = "SubscriptionStopOwner"
+linearization = "poll_stop returns Complete, preserves the retained ProcessTerminal unchanged, and drops the driver outside engine locks"
 outcome = "Complete"
 retryability = "terminal"
 
 [[machine.transition]]
 from = "Stopping"
-event = "cleanup_pending"
+event = "cleanup_transfer"
 to = "CleanupPending"
-owner = "CleanupOwner"
-linearization = "retain or transfer wire guard"
+owner = "SubscriptionCleanupOwner"
+linearization = "move the driver and stop cursor into an already reserved bounded cleanup record while preserving the retained ProcessTerminal unchanged"
 outcome = "PendingCleanup"
 retryability = "recorded"
 
@@ -453,17 +1087,26 @@ retryability = "recorded"
 from = "Stopping"
 event = "residual"
 to = "Failed"
-owner = "CleanupOwner"
-linearization = "local sample admission closes"
+owner = "SubscriptionStopOwner"
+linearization = "durably record the unmatched external resource, preserve the retained ProcessTerminal unchanged, and release the driver slot"
 outcome = "ResidualExternalState"
 retryability = "recorded"
 
 [[machine.transition]]
 from = "CleanupPending"
+event = "cleanup_progress"
+to = "CleanupPending"
+owner = "SubscriptionCleanupOwner"
+linearization = "commit one bounded generation-matching cleanup step, retain the driver cursor, and preserve the retained ProcessTerminal unchanged"
+outcome = "PendingCleanup"
+retryability = "recorded-per-step"
+
+[[machine.transition]]
+from = "CleanupPending"
 event = "cleanup_complete"
 to = "Closed"
-owner = "CleanupOwner"
-linearization = "last retained cleanup item terminates"
+owner = "SubscriptionCleanupOwner"
+linearization = "the final retained stop operation completes, preserves the retained ProcessTerminal unchanged, and releases the driver outside locks"
 outcome = "Complete"
 retryability = "terminal"
 
@@ -471,10 +1114,1315 @@ retryability = "terminal"
 from = "CleanupPending"
 event = "residual"
 to = "Failed"
-owner = "CleanupOwner"
-linearization = "retained cleanup becomes terminal residue"
+owner = "SubscriptionCleanupOwner"
+linearization = "the retained stop operation becomes a durable structured residual while preserving the retained ProcessTerminal unchanged"
 outcome = "ResidualExternalState"
 retryability = "recorded"
+
+[[machine.transition]]
+from = "Closed"
+event = "release"
+to = "Released"
+owner = "SubscriptionRegistry"
+linearization = "all facade, control, status, and cleanup views acknowledge the terminal generation"
+outcome = "released"
+retryability = "terminal"
+
+[[machine.transition]]
+from = "Failed"
+event = "release"
+to = "Released"
+owner = "SubscriptionRegistry"
+linearization = "all facade, control, status, and cleanup views acknowledge the retained failure"
+outcome = "released"
+retryability = "terminal"
+
+[[machine]]
+id = "subscription-driver-slot"
+requirements = [
+    "BIND-PROGRESS-001",
+    "CONCUR-LIN-001",
+    "HANDLE-DROP-001",
+    "STATE-SUB-001",
+]
+visibility = "crate-private-servient-or-caller-owned-constrained-slot"
+transition_contract = "exact"
+scope = "Owns the unique receive/stop access lease for one binding-owned HostSubscriptionDriver or caller-owned constrained driver state"
+claim_contract = "Every receive and stop callback uses a fresh nonce. Callback completion commits only when SubscriptionId, subscription generation, binding generation, state, and nonce still match."
+critical_section_contract = "Driver callbacks and driver destruction execute outside engine locks and constrained critical sections"
+terminal_contract = "SubscriptionDriverEvent transfers terminal reason and cleanup disposition together. The slot classifies driver and cleanup ownership, not the ProcessTerminal cause: Complete retires the driver into Closed even when the retained terminal is Failed, PendingCleanup transfers it, ResidualExternalState records it, and unrecorded cleanup returns Pending."
+cleanup_slot_projection = ["Complete->Closed", "PendingCleanup->CleanupPending", "ResidualExternalState->Residual"]
+callback_terminal_precedence = "claimed-driver-terminal-wins"
+retryable_rejection_intent = "RetryableExplicit"
+implicit_invalid_outcome = "ResidualExternalState"
+initial = "Vacant"
+states = [
+    "Vacant",
+    "Installing",
+    "Available",
+    "ReceiveClaimed",
+    "StopRequested",
+    "StopStarting",
+    "StopClaimed",
+    "CleanupPending",
+    "Closed",
+    "Residual",
+    "Released",
+]
+terminal = ["Released"]
+required_events = [
+    "Vacant:begin_install",
+    "Installing:publish",
+    "Installing:abort_to_stop",
+    "Available:claim_receive",
+    "Available:request_stop",
+    "Available:drop",
+    "ReceiveClaimed:poll_pending",
+    "ReceiveClaimed:item",
+    "ReceiveClaimed:terminal_complete",
+    "ReceiveClaimed:terminal_cleanup_transfer",
+    "ReceiveClaimed:terminal_residual",
+    "ReceiveClaimed:request_stop",
+    "ReceiveClaimed:drop",
+    "StopRequested:callback_nonterminal",
+    "StopRequested:callback_terminal_complete",
+    "StopRequested:callback_terminal_cleanup_transfer",
+    "StopRequested:callback_terminal_residual",
+    "StopStarting:explicit_start_rejected",
+    "StopStarting:implicit_start_invalid",
+    "StopStarting:start_pending",
+    "StopStarting:start_complete",
+    "StopStarting:cleanup_transfer",
+    "StopStarting:residual",
+    "StopClaimed:poll_pending",
+    "StopClaimed:complete",
+    "StopClaimed:cleanup_transfer",
+    "StopClaimed:residual",
+    "CleanupPending:progress",
+    "CleanupPending:complete",
+    "CleanupPending:residual",
+    "Closed:release",
+    "Residual:release",
+]
+
+[[machine.transition]]
+from = "Vacant"
+event = "begin_install"
+to = "Installing"
+owner = "SubscriptionInstallOwner"
+linearization = "place the returned generation-matching driver in the unpublished slot"
+outcome = "driver-owned-not-visible"
+retryability = "not-applicable"
+
+[[machine.transition]]
+from = "Installing"
+event = "publish"
+to = "Available"
+owner = "SubscriptionDriverRegistry"
+linearization = "publish the driver together with the Active subscription generation"
+outcome = "receive-available"
+retryability = "not-applicable"
+
+[[machine.transition]]
+from = "Installing"
+event = "abort_to_stop"
+to = "StopStarting"
+owner = "SubscriptionStopOwner"
+linearization = "claim the unpublished driver with an implicit stop request without exposing a receive cursor"
+outcome = "start-stop-call-owned"
+retryability = "not-applicable"
+
+[[machine.transition]]
+from = "Available"
+event = "claim_receive"
+to = "ReceiveClaimed"
+owner = "SubscriptionReceiveOwner"
+linearization = "claim the driver with a fresh callback nonce"
+outcome = "poll-item-call-owned"
+retryability = "not-applicable"
+
+[[machine.transition]]
+from = "Available"
+event = "request_stop"
+to = "StopStarting"
+owner = "SubscriptionStopOwner"
+linearization = "revoke receive availability and claim the driver plus exact request for start_stop"
+outcome = "start-stop-call-owned"
+retryability = "join-existing"
+
+[[machine.transition]]
+from = "Available"
+event = "drop"
+to = "StopStarting"
+owner = "SubscriptionStopOwner"
+linearization = "revoke receive availability and transfer the driver plus implicit request to runtime stop ownership"
+outcome = "start-stop-call-owned"
+retryability = "runtime-owned"
+
+[[machine.transition]]
+from = "ReceiveClaimed"
+event = "poll_pending"
+to = "Available"
+owner = "SubscriptionReceiveOwner"
+linearization = "return the matching driver after a Pending item poll"
+outcome = "pending"
+retryability = "retained-cursor"
+
+[[machine.transition]]
+from = "ReceiveClaimed"
+event = "item"
+to = "Available"
+owner = "SubscriptionReceiveOwner"
+linearization = "commit one exact-source item and return the matching driver"
+outcome = "item"
+retryability = "not-applicable"
+
+[[machine.transition]]
+from = "ReceiveClaimed"
+event = "terminal_complete"
+to = "Closed"
+owner = "SubscriptionReceiveOwner"
+linearization = "commit the terminal reason and Complete cleanup outcome and retire the driver"
+outcome = "Complete"
+retryability = "terminal"
+
+[[machine.transition]]
+from = "ReceiveClaimed"
+event = "terminal_cleanup_transfer"
+to = "CleanupPending"
+owner = "SubscriptionCleanupOwner"
+linearization = "commit the terminal reason and atomically transfer the driver under its PendingCleanup record"
+outcome = "PendingCleanup"
+retryability = "recorded"
+
+[[machine.transition]]
+from = "ReceiveClaimed"
+event = "terminal_residual"
+to = "Residual"
+owner = "SubscriptionReceiveOwner"
+linearization = "commit the terminal reason after durable ResidualExternalState recording and retire local driver ownership"
+outcome = "ResidualExternalState"
+retryability = "recorded"
+
+[[machine.transition]]
+from = "ReceiveClaimed"
+event = "request_stop"
+to = "StopRequested"
+owner = "SubscriptionStopOwner"
+linearization = "record stop while preserving the unique running receive callback lease"
+outcome = "stop-after-callback"
+retryability = "join-existing"
+
+[[machine.transition]]
+from = "ReceiveClaimed"
+event = "drop"
+to = "StopRequested"
+owner = "SubscriptionStopOwner"
+linearization = "transfer post-callback stop ownership without destroying a running driver"
+outcome = "runtime-stop-after-callback"
+retryability = "runtime-owned"
+
+[[machine.transition]]
+from = "StopRequested"
+event = "callback_nonterminal"
+to = "StopStarting"
+owner = "SubscriptionStopOwner"
+linearization = "for Pending, recover the matching driver; for Item, discard it and commit exact loss accounting; preserve the staged stop intent and claim the driver for start_stop"
+outcome = "start-stop-call-owned"
+retryability = "join-existing"
+
+[[machine.transition]]
+from = "StopRequested"
+event = "callback_terminal_complete"
+to = "Closed"
+owner = "SubscriptionReceiveOwner"
+linearization = "commit the callback ProcessTerminal and Complete cleanup, discard the staged stop intent, and retire the driver without start_stop"
+outcome = "Complete"
+retryability = "terminal"
+
+[[machine.transition]]
+from = "StopRequested"
+event = "callback_terminal_cleanup_transfer"
+to = "CleanupPending"
+owner = "SubscriptionCleanupOwner"
+linearization = "commit the callback ProcessTerminal and atomically transfer the driver under PendingCleanup, discarding the staged stop intent without start_stop"
+outcome = "PendingCleanup"
+retryability = "recorded"
+
+[[machine.transition]]
+from = "StopRequested"
+event = "callback_terminal_residual"
+to = "Residual"
+owner = "SubscriptionReceiveOwner"
+linearization = "commit the callback ProcessTerminal only after durable ResidualExternalState recording, discard the staged stop intent, and retire local ownership"
+outcome = "ResidualExternalState"
+retryability = "recorded"
+
+[[machine.transition]]
+from = "StopStarting"
+event = "explicit_start_rejected"
+to = "Available"
+owner = "SubscriptionStopOwner"
+linearization = "for RetryableExplicit only, clear its uncommitted terminal candidate and return the unchanged driver to receive availability"
+outcome = "invalid-call-active"
+retryability = "caller-may-correct"
+
+[[machine.transition]]
+from = "StopStarting"
+event = "implicit_start_invalid"
+to = "Residual"
+owner = "SubscriptionStopOwner"
+linearization = "durably record the still-owned external resource before retiring local driver ownership; an implicit or rollback request never returns to Available"
+outcome = "ResidualExternalState"
+retryability = "recorded"
+
+[[machine.transition]]
+from = "StopStarting"
+event = "start_pending"
+to = "StopClaimed"
+owner = "SubscriptionStopOwner"
+linearization = "commit the accepted stop request and retained cursor for poll_stop"
+outcome = "pending"
+retryability = "retained-cursor"
+
+[[machine.transition]]
+from = "StopStarting"
+event = "start_complete"
+to = "Closed"
+owner = "SubscriptionStopOwner"
+linearization = "start_stop completes synchronously and retires the driver"
+outcome = "Complete"
+retryability = "terminal"
+
+[[machine.transition]]
+from = "StopStarting"
+event = "cleanup_transfer"
+to = "CleanupPending"
+owner = "SubscriptionCleanupOwner"
+linearization = "start_stop atomically transfers the driver and request into already reserved cleanup ownership"
+outcome = "PendingCleanup"
+retryability = "recorded"
+
+[[machine.transition]]
+from = "StopStarting"
+event = "residual"
+to = "Residual"
+owner = "SubscriptionStopOwner"
+linearization = "start_stop durably records unmatched external state before retiring local driver ownership"
+outcome = "ResidualExternalState"
+retryability = "recorded"
+
+[[machine.transition]]
+from = "StopClaimed"
+event = "poll_pending"
+to = "StopClaimed"
+owner = "SubscriptionStopOwner"
+linearization = "retain the same driver and stop cursor after bounded Pending progress"
+outcome = "pending"
+retryability = "retained-cursor"
+
+[[machine.transition]]
+from = "StopClaimed"
+event = "complete"
+to = "Closed"
+owner = "SubscriptionStopOwner"
+linearization = "poll_stop completes and the driver is retired outside locks"
+outcome = "Complete"
+retryability = "terminal"
+
+[[machine.transition]]
+from = "StopClaimed"
+event = "cleanup_transfer"
+to = "CleanupPending"
+owner = "SubscriptionCleanupOwner"
+linearization = "move driver and cursor into an already reserved cleanup record"
+outcome = "PendingCleanup"
+retryability = "recorded"
+
+[[machine.transition]]
+from = "StopClaimed"
+event = "residual"
+to = "Residual"
+owner = "SubscriptionStopOwner"
+linearization = "durably record unmatched external state before retiring the local driver"
+outcome = "ResidualExternalState"
+retryability = "recorded"
+
+[[machine.transition]]
+from = "CleanupPending"
+event = "progress"
+to = "CleanupPending"
+owner = "SubscriptionCleanupOwner"
+linearization = "commit one bounded stop or cleanup step and retain the driver cursor"
+outcome = "PendingCleanup"
+retryability = "recorded-per-step"
+
+[[machine.transition]]
+from = "CleanupPending"
+event = "complete"
+to = "Closed"
+owner = "SubscriptionCleanupOwner"
+linearization = "the final retained stop operation completes and retires the driver"
+outcome = "Complete"
+retryability = "terminal"
+
+[[machine.transition]]
+from = "CleanupPending"
+event = "residual"
+to = "Residual"
+owner = "SubscriptionCleanupOwner"
+linearization = "the retained driver obligation becomes a durable structured residual"
+outcome = "ResidualExternalState"
+retryability = "recorded"
+
+[[machine.transition]]
+from = "Closed"
+event = "release"
+to = "Released"
+owner = "SubscriptionDriverRegistry"
+linearization = "the parent subscription terminal acknowledgement releases the empty slot"
+outcome = "released"
+retryability = "terminal"
+
+[[machine.transition]]
+from = "Residual"
+event = "release"
+to = "Released"
+owner = "SubscriptionDriverRegistry"
+linearization = "durable residual ownership is verified before the empty local slot releases"
+outcome = "released"
+retryability = "terminal"
+
+[[machine]]
+id = "emission-coordinator"
+requirements = [
+    "CONCUR-LIN-001",
+    "HANDLE-DROP-001",
+    "PERF-FANOUT-002",
+    "PRODUCER-EMIT-001",
+    "RES-LIMIT-001",
+]
+visibility = "crate-private-servient"
+transition_contract = "exact"
+owner_record = "EmissionRecord"
+scope = "Owns one validated ProducerEmission transaction, per-affordance sequence, local-subscriber cursor, compiled binding-target cursor, admitted result cells, payload lease, cancellation, and aggregate EmissionStatus"
+admission_contract = "Coordinator slot, exact aggregate local delivery counters, every binding result cell, every BindingEmissionSlot, host lane capacity when applicable, and cleanup capacity are reserved before the first local delivery or binding publication"
+coordinator_slot_limits = "emission_slots_per_thing_max and emission_slots_global_max"
+binding_slot_limits = "binding_emission_slots_per_binding_max and binding_emission_slots_global_max"
+host_lane_limits = "host_emission_lanes_per_binding_max and host_emission_lanes_global_max; these are not applicable to the constrained runtime"
+target_contract = "The coordinator consumes only generation-bearing publication targets from the committed exposure plan; it never scans a TD or constructs a target from a protocol label"
+ordering_contract = "Each affordance sequence is assigned before side effects. Local and binding progress may overlap, but completion for one sequence is published only after every selected target is terminal."
+result_contract = "One exact result cell exists for every admitted binding target. Local delivery retains exact aggregate accepted, rejected, and lost counts while the local cursor is live. Binding failures are never truncated, overwritten, or collapsed to one boolean."
+payload_contract = "All local and binding targets borrow or share one admitted immutable payload lease; fan-out performs no per-target payload-byte copy"
+callback_contract = "Subscriber delivery and binding publication calls execute outside engine locks and constrained critical sections; the closed dispatch-policy value invokes no application callback"
+initial = "Reserved"
+states = [
+    "Reserved",
+    "Ready",
+    "Dispatching",
+    "Cancelling",
+    "Completing",
+    "Completed",
+    "Failed",
+    "Cancelled",
+    "Released",
+]
+terminal = ["Released"]
+required_events = [
+    "Reserved:validate",
+    "Reserved:validation_error",
+    "Reserved:cancel",
+    "Reserved:drop",
+    "Ready:begin_dispatch",
+    "Ready:cancel",
+    "Ready:drop",
+    "Dispatching:progress",
+    "Dispatching:all_targets_terminal",
+    "Dispatching:cancel",
+    "Dispatching:drop",
+    "Cancelling:progress",
+    "Cancelling:all_targets_terminal",
+    "Completing:publish_success",
+    "Completing:publish_partial_failure",
+    "Completing:publish_cancelled",
+    "Completed:release",
+    "Failed:release",
+    "Cancelled:release",
+]
+
+[[machine.transition]]
+from = "Reserved"
+event = "validate"
+to = "Ready"
+owner = "EmissionCoordinator"
+linearization = "validate target and generations, assign sequence, and publish the fully admitted private record"
+outcome = "ready"
+retryability = "not-applicable"
+
+[[machine.transition]]
+from = "Reserved"
+event = "validation_error"
+to = "Failed"
+owner = "EmissionCoordinator"
+linearization = "retain a zero-side-effect validation or admission failure"
+outcome = "failed-before-side-effects"
+retryability = "terminal"
+
+[[machine.transition]]
+from = "Reserved"
+event = "cancel"
+to = "Cancelled"
+owner = "EmissionCoordinator"
+linearization = "record cancellation before validation publishes a dispatchable record"
+outcome = "cancelled-before-side-effects"
+retryability = "terminal"
+
+[[machine.transition]]
+from = "Reserved"
+event = "drop"
+to = "Cancelled"
+owner = "EmissionCoordinator"
+linearization = "record runtime cancellation and release unused reservations before side effects"
+outcome = "cancelled-before-side-effects"
+retryability = "terminal"
+
+[[machine.transition]]
+from = "Ready"
+event = "begin_dispatch"
+to = "Dispatching"
+owner = "EmissionCoordinator"
+linearization = "publish the first retained local and binding target cursors"
+outcome = "in-progress"
+retryability = "not-applicable"
+
+[[machine.transition]]
+from = "Ready"
+event = "cancel"
+to = "Cancelled"
+owner = "EmissionCoordinator"
+linearization = "record cancellation before any admitted target starts"
+outcome = "cancelled-before-side-effects"
+retryability = "terminal"
+
+[[machine.transition]]
+from = "Ready"
+event = "drop"
+to = "Cancelled"
+owner = "EmissionCoordinator"
+linearization = "transfer no external obligation because no target has started"
+outcome = "cancelled-before-side-effects"
+retryability = "terminal"
+
+[[machine.transition]]
+from = "Dispatching"
+event = "progress"
+to = "Dispatching"
+owner = "EmissionCoordinator"
+linearization = "commit bounded cursor progress and any generation-matching target result cells"
+outcome = "pending"
+retryability = "retained-cursors"
+
+[[machine.transition]]
+from = "Dispatching"
+event = "all_targets_terminal"
+to = "Completing"
+owner = "EmissionCoordinator"
+linearization = "observe every admitted result cell terminal for the matching emission generation"
+outcome = "aggregate-ready"
+retryability = "not-applicable"
+
+[[machine.transition]]
+from = "Dispatching"
+event = "cancel"
+to = "Cancelling"
+owner = "EmissionCoordinator"
+linearization = "record the first cancellation cause and request cancellation for every nonterminal target slot"
+outcome = "cancelling"
+retryability = "join-existing"
+
+[[machine.transition]]
+from = "Dispatching"
+event = "drop"
+to = "Cancelling"
+owner = "EmissionCoordinator"
+linearization = "transfer the admitted coordinator and nonterminal slots to runtime cancellation ownership"
+outcome = "runtime-cancelling"
+retryability = "runtime-owned"
+
+[[machine.transition]]
+from = "Cancelling"
+event = "progress"
+to = "Cancelling"
+owner = "EmissionCoordinator"
+linearization = "commit bounded cancellation and cleanup progress without restarting either cursor"
+outcome = "pending"
+retryability = "retained-cursors"
+
+[[machine.transition]]
+from = "Cancelling"
+event = "all_targets_terminal"
+to = "Completing"
+owner = "EmissionCoordinator"
+linearization = "observe every admitted target terminal or durably residual after cancellation"
+outcome = "cancel-aggregate-ready"
+retryability = "not-applicable"
+
+[[machine.transition]]
+from = "Completing"
+event = "publish_success"
+to = "Completed"
+owner = "EmissionCoordinator"
+linearization = "publish the complete non-truncated success status after every target result is committed"
+outcome = "Complete"
+retryability = "terminal"
+
+[[machine.transition]]
+from = "Completing"
+event = "publish_partial_failure"
+to = "Failed"
+owner = "EmissionCoordinator"
+linearization = "publish every target outcome and the aggregate failure without truncation"
+outcome = "PartialFailure"
+retryability = "terminal"
+
+[[machine.transition]]
+from = "Completing"
+event = "publish_cancelled"
+to = "Cancelled"
+owner = "EmissionCoordinator"
+linearization = "publish cancellation plus every completed or residual target outcome"
+outcome = "Cancelled"
+retryability = "terminal"
+
+[[machine.transition]]
+from = "Completed"
+event = "release"
+to = "Released"
+owner = "EmissionCoordinator"
+linearization = "the caller acknowledges status and all payload and slot leases release"
+outcome = "released"
+retryability = "terminal"
+
+[[machine.transition]]
+from = "Failed"
+event = "release"
+to = "Released"
+owner = "EmissionCoordinator"
+linearization = "the caller acknowledges the complete failure set and all payload and slot leases release"
+outcome = "released"
+retryability = "terminal"
+
+[[machine.transition]]
+from = "Cancelled"
+event = "release"
+to = "Released"
+owner = "EmissionCoordinator"
+linearization = "the caller or runtime acknowledges cancellation after all cleanup ownership is settled"
+outcome = "released"
+retryability = "terminal"
+
+[[machine]]
+id = "binding-call"
+requirements = [
+    "BIND-CALL-CANCEL-001",
+    "BIND-PROGRESS-001",
+    "CLEANUP-RECORD-001",
+    "CONCUR-LIN-001",
+]
+visibility = "cross-crate-contract"
+transition_contract = "exact"
+covered_records = [
+    "HostBindingCallRecord",
+    "ClientRequestSlotState",
+    "ClientSubscriptionSlotState:start-phase",
+    "ServerResponseSlotState",
+    "BindingEmissionSlotState:call-phase",
+]
+scope = "Owns construction, one result-poll lease, immutable first cancellation cause, explicit start/poll cancellation, cleanup transfer, late settlement, terminal acknowledgement, and generation-safe reuse for one binding call"
+construction_contract = "The host constructor or constrained start callback is nonblocking and runs outside engine locks with one nonce-bearing lease. It performs no protocol side effect before returning an owned call or accepting the caller-owned slot. Cancellation during construction is retained and a late call is cancelled before its first poll_result. Constructor Err certifies no remote resource or cleanup obligation."
+first_cause_contract = "The first Manual, Deadline, Drop, Drain, or ParentCancellation cause committed against the call generation is immutable; later causes join and cannot replace retry or terminal classification"
+poll_race_contract = "If cancellation is recorded while poll_result is claimed, Ready commits late Returned and Pending transfers the call to CancelStarting; after Pending no later poll_result is legal"
+settlement_contract = "BindingCallSettlement::Returned transfers CoreResult ownership without deciding caller delivery. Cancelled validates the matching CleanupTransferContext, RetryClass, and CleanupOutcome before state changes. Outer CoreResult Err is only an invalid or stale call with no state change."
+cleanup_state_projection = [
+    "Cancelled+Complete->Cancelled",
+    "Cancelled+PendingCleanup->CleanupPending",
+    "Cancelled+ResidualExternalState->Residual",
+]
+budget_contract = "Exhausted BindingPolls or cleanup work before a callback leaves the cursor unchanged and reports pending work; it never fabricates an atomic result Err or consumes the generation"
+wake_contract = "start_cancel receives Context, registers its waker, and rechecks before Pending; poll_cancel follows the same register-then-recheck rule"
+drop_contract = "Drop records a cause and transfers the complete call to reserved cancellation or cleanup ownership; a live call object is never destroyed until Returned, Cancelled, or durable Residual settlement"
+initial = "Reserved"
+states = [
+    "Reserved",
+    "Constructing",
+    "ConstructingCancelled",
+    "Accepted",
+    "PollClaimed",
+    "CancelRequested",
+    "CancelStarting",
+    "Cancelling",
+    "CleanupPending",
+    "Returned",
+    "Cancelled",
+    "Residual",
+    "Released",
+]
+terminal = ["Released"]
+required_events = [
+    "Reserved:begin_construct",
+    "Reserved:cancel",
+    "Reserved:drop",
+    "Constructing:constructed",
+    "Constructing:constructor_error",
+    "Constructing:cancel",
+    "Constructing:drop",
+    "ConstructingCancelled:constructed_late",
+    "ConstructingCancelled:constructor_error_late",
+    "Accepted:claim_poll",
+    "Accepted:cancel",
+    "Accepted:drop",
+    "PollClaimed:poll_pending",
+    "PollClaimed:returned",
+    "PollClaimed:cancel",
+    "PollClaimed:drop",
+    "CancelRequested:poll_pending",
+    "CancelRequested:poll_returned",
+    "CancelStarting:start_pending",
+    "CancelStarting:start_returned",
+    "CancelStarting:start_cancelled_complete",
+    "CancelStarting:start_cleanup_transfer",
+    "CancelStarting:start_residual",
+    "Cancelling:poll_pending",
+    "Cancelling:poll_returned",
+    "Cancelling:poll_cancelled_complete",
+    "Cancelling:poll_cleanup_transfer",
+    "Cancelling:poll_residual",
+    "CleanupPending:progress",
+    "CleanupPending:returned",
+    "CleanupPending:complete",
+    "CleanupPending:residual",
+    "Returned:release",
+    "Cancelled:release",
+    "Residual:release",
+]
+
+[[machine.transition]]
+from = "Reserved"
+event = "begin_construct"
+to = "Constructing"
+owner = "BindingCallConstructionOwner"
+linearization = "publish the nonce-bearing callback lease only after count, footprint, result, and cleanup reservations succeed"
+outcome = "construction-call-owned"
+retryability = "not-applicable"
+
+[[machine.transition]]
+from = "Reserved"
+event = "cancel"
+to = "Cancelled"
+owner = "BindingCallOwner"
+linearization = "record cancellation before the binding constructor is invoked"
+outcome = "Complete"
+retryability = "terminal"
+
+[[machine.transition]]
+from = "Reserved"
+event = "drop"
+to = "Cancelled"
+owner = "BindingCallOwner"
+linearization = "record drop and release unused reservations before the binding constructor is invoked"
+outcome = "Complete"
+retryability = "terminal"
+
+[[machine.transition]]
+from = "Constructing"
+event = "constructed"
+to = "Accepted"
+owner = "BindingCallOwner"
+linearization = "commit the matching returned call after its actual footprint fits the pre-reserved declaration"
+outcome = "call-owned-not-polled"
+retryability = "not-applicable"
+
+[[machine.transition]]
+from = "Constructing"
+event = "constructor_error"
+to = "Returned"
+owner = "BindingCallConstructionOwner"
+linearization = "retain the atomic constructor Err after proving that no call object, remote resource, or cleanup obligation escaped"
+outcome = "ReturnedErr"
+retryability = "terminal"
+
+[[machine.transition]]
+from = "Constructing"
+event = "cancel"
+to = "ConstructingCancelled"
+owner = "BindingCallCancellationOwner"
+linearization = "record the first cancellation cause while the unique constructor callback lease remains outside locks"
+outcome = "await-constructor-return"
+retryability = "join-existing"
+
+[[machine.transition]]
+from = "Constructing"
+event = "drop"
+to = "ConstructingCancelled"
+owner = "BindingCallCancellationOwner"
+linearization = "record Drop and transfer post-callback ownership while the constructor lease remains live"
+outcome = "runtime-awaits-constructor-return"
+retryability = "runtime-owned"
+
+[[machine.transition]]
+from = "ConstructingCancelled"
+event = "constructed_late"
+to = "CancelStarting"
+owner = "BindingCallCancellationOwner"
+linearization = "retain the matching late call and route it directly to start_cancel without one poll_result"
+outcome = "cancel-start-required"
+retryability = "not-applicable"
+
+[[machine.transition]]
+from = "ConstructingCancelled"
+event = "constructor_error_late"
+to = "Returned"
+owner = "BindingCallCancellationOwner"
+linearization = "retain the late atomic Err for classification while caller delivery remains closed"
+outcome = "ReturnedErrLate"
+retryability = "terminal"
+
+[[machine.transition]]
+from = "Accepted"
+event = "claim_poll"
+to = "PollClaimed"
+owner = "BindingCallPollOwner"
+linearization = "move the matching call into one nonce-bearing poll_result lease outside locks"
+outcome = "poll-call-owned"
+retryability = "not-applicable"
+
+[[machine.transition]]
+from = "Accepted"
+event = "cancel"
+to = "CancelStarting"
+owner = "BindingCallCancellationOwner"
+linearization = "record the first cause before a result poll is claimed"
+outcome = "cancel-start-required"
+retryability = "join-existing"
+
+[[machine.transition]]
+from = "Accepted"
+event = "drop"
+to = "CancelStarting"
+owner = "BindingCallCancellationOwner"
+linearization = "close caller delivery and transfer the unpolled call to runtime cancellation ownership"
+outcome = "runtime-cancel-start-required"
+retryability = "runtime-owned"
+
+[[machine.transition]]
+from = "PollClaimed"
+event = "poll_pending"
+to = "Accepted"
+owner = "BindingCallPollOwner"
+linearization = "return the matching call after Pending with its cursor and waker registration retained"
+outcome = "pending"
+retryability = "retained-cursor"
+
+[[machine.transition]]
+from = "PollClaimed"
+event = "returned"
+to = "Returned"
+owner = "BindingCallPollOwner"
+linearization = "commit the generation-matching result after validating that Err owns no cleanup obligation"
+outcome = "Returned"
+retryability = "terminal"
+
+[[machine.transition]]
+from = "PollClaimed"
+event = "cancel"
+to = "CancelRequested"
+owner = "BindingCallCancellationOwner"
+linearization = "record the first cause while preserving the unique running poll_result lease"
+outcome = "cancel-after-poll"
+retryability = "join-existing"
+
+[[machine.transition]]
+from = "PollClaimed"
+event = "drop"
+to = "CancelRequested"
+owner = "BindingCallCancellationOwner"
+linearization = "close delivery and transfer post-poll cancellation ownership without destroying the running call"
+outcome = "runtime-cancel-after-poll"
+retryability = "runtime-owned"
+
+[[machine.transition]]
+from = "CancelRequested"
+event = "poll_pending"
+to = "CancelStarting"
+owner = "BindingCallCancellationOwner"
+linearization = "recover the matching call after Pending and route it to start_cancel; poll_result is now permanently closed"
+outcome = "cancel-start-required"
+retryability = "not-applicable"
+
+[[machine.transition]]
+from = "CancelRequested"
+event = "poll_returned"
+to = "Returned"
+owner = "BindingCallCancellationOwner"
+linearization = "retain the late Returned settlement while caller delivery remains closed"
+outcome = "ReturnedLate"
+retryability = "terminal"
+
+[[machine.transition]]
+from = "CancelStarting"
+event = "start_pending"
+to = "Cancelling"
+owner = "BindingCallCancellationOwner"
+linearization = "commit acceptance of the exact CleanupTransferContext after start_cancel registers and rechecks its waker"
+outcome = "pending"
+retryability = "retained-cursor"
+
+[[machine.transition]]
+from = "CancelStarting"
+event = "start_returned"
+to = "Returned"
+owner = "BindingCallCancellationOwner"
+linearization = "retain Returned because normal completion won inside start_cancel; caller delivery remains governed by the recorded first cause"
+outcome = "ReturnedLate"
+retryability = "terminal"
+
+[[machine.transition]]
+from = "CancelStarting"
+event = "start_cancelled_complete"
+to = "Cancelled"
+owner = "BindingCallCancellationOwner"
+linearization = "validate the matching context and commit Cancelled with Complete cleanup"
+outcome = "Complete"
+retryability = "terminal"
+
+[[machine.transition]]
+from = "CancelStarting"
+event = "start_cleanup_transfer"
+to = "CleanupPending"
+owner = "BindingCallCleanupOwner"
+linearization = "validate the matching context and atomically transfer the complete call object and state under PendingCleanup"
+outcome = "PendingCleanup"
+retryability = "recorded"
+
+[[machine.transition]]
+from = "CancelStarting"
+event = "start_residual"
+to = "Residual"
+owner = "BindingCallCancellationOwner"
+linearization = "validate and durably commit ResidualExternalState before destroying the call outside locks"
+outcome = "ResidualExternalState"
+retryability = "recorded"
+
+[[machine.transition]]
+from = "Cancelling"
+event = "poll_pending"
+to = "Cancelling"
+owner = "BindingCallCancellationOwner"
+linearization = "retain the same call and cancellation cursor after bounded poll_cancel Pending"
+outcome = "pending"
+retryability = "retained-cursor"
+
+[[machine.transition]]
+from = "Cancelling"
+event = "poll_returned"
+to = "Returned"
+owner = "BindingCallCancellationOwner"
+linearization = "retain the late Returned settlement without reopening caller delivery"
+outcome = "ReturnedLate"
+retryability = "terminal"
+
+[[machine.transition]]
+from = "Cancelling"
+event = "poll_cancelled_complete"
+to = "Cancelled"
+owner = "BindingCallCancellationOwner"
+linearization = "validate the matching context and commit Cancelled with Complete cleanup"
+outcome = "Complete"
+retryability = "terminal"
+
+[[machine.transition]]
+from = "Cancelling"
+event = "poll_cleanup_transfer"
+to = "CleanupPending"
+owner = "BindingCallCleanupOwner"
+linearization = "validate the matching context and atomically transfer the complete call object and cancellation cursor under PendingCleanup"
+outcome = "PendingCleanup"
+retryability = "recorded"
+
+[[machine.transition]]
+from = "Cancelling"
+event = "poll_residual"
+to = "Residual"
+owner = "BindingCallCancellationOwner"
+linearization = "validate and durably commit ResidualExternalState before destroying the call outside locks"
+outcome = "ResidualExternalState"
+retryability = "recorded"
+
+[[machine.transition]]
+from = "CleanupPending"
+event = "progress"
+to = "CleanupPending"
+owner = "BindingCallCleanupOwner"
+linearization = "commit one bounded generation-matching cleanup step and retain the call cursor"
+outcome = "PendingCleanup"
+retryability = "recorded-per-step"
+
+[[machine.transition]]
+from = "CleanupPending"
+event = "returned"
+to = "Returned"
+owner = "BindingCallCleanupOwner"
+linearization = "retain a late Returned settlement produced while the transferred call was being cancelled"
+outcome = "ReturnedLate"
+retryability = "terminal"
+
+[[machine.transition]]
+from = "CleanupPending"
+event = "complete"
+to = "Cancelled"
+owner = "BindingCallCleanupOwner"
+linearization = "complete the retained cancellation and acknowledge the matching CleanupHandle"
+outcome = "Complete"
+retryability = "terminal"
+
+[[machine.transition]]
+from = "CleanupPending"
+event = "residual"
+to = "Residual"
+owner = "BindingCallCleanupOwner"
+linearization = "durably commit the retained call as ResidualExternalState before acknowledging its CleanupHandle"
+outcome = "ResidualExternalState"
+retryability = "recorded"
+
+[[machine.transition]]
+from = "Returned"
+event = "release"
+to = "Released"
+owner = "BindingCallOwner"
+linearization = "the owner-specific late-result or caller-delivery path acknowledges the retained CoreResult"
+outcome = "released"
+retryability = "terminal"
+
+[[machine.transition]]
+from = "Cancelled"
+event = "release"
+to = "Released"
+owner = "BindingCallOwner"
+linearization = "caller or runtime acknowledges cancellation after complete cleanup"
+outcome = "released"
+retryability = "terminal"
+
+[[machine.transition]]
+from = "Residual"
+event = "release"
+to = "Released"
+owner = "BindingCallOwner"
+linearization = "durable residual ownership is verified before the local call record releases"
+outcome = "released"
+retryability = "terminal"
+
+[[machine]]
+id = "binding-emission-slot"
+requirements = [
+    "BIND-PROGRESS-001",
+    "CLEANUP-RECORD-001",
+    "CONCUR-LIN-001",
+    "PERF-FANOUT-002",
+    "PRODUCER-EMIT-001",
+]
+visibility = "public-core-control-header-with-binding-owned-state"
+transition_contract = "exact"
+owner_record = "BindingEmissionSlot"
+scope = "Owns one selected binding generation's publication request, binding-local progress state, lane claim, cancellation, cleanup, and one exact coordinator result cell"
+generation_contract = "Thing slot, affordance, route, binding, plan, emission, and slot generations are checked at start and completion; stale work never publishes and stale completion cannot update a reused result cell"
+lane_contract = "Host Queued slots belong to the selected binding's bounded lane. A full or slow lane cannot consume another binding's reserved lane or slot capacity. Constrained slots retain their own cursor and WorkBudget progress."
+result_contract = "The terminal slot outcome transfers exactly once into its pre-reserved coordinator result cell before the slot releases"
+critical_section_contract = "Binding start, poll, cancel, cleanup, and state destruction execute outside engine locks and constrained critical sections"
+initial = "Reserved"
+states = [
+    "Reserved",
+    "Queued",
+    "Publishing",
+    "Cancelling",
+    "CleanupPending",
+    "Succeeded",
+    "Failed",
+    "Cancelled",
+    "Released",
+]
+terminal = ["Released"]
+required_events = [
+    "Reserved:enqueue_host",
+    "Reserved:begin_constrained",
+    "Reserved:stale_generation",
+    "Reserved:cancel",
+    "Reserved:drop",
+    "Queued:begin_publish",
+    "Queued:cancel",
+    "Queued:drop",
+    "Publishing:progress",
+    "Publishing:succeed",
+    "Publishing:fail",
+    "Publishing:cancel",
+    "Publishing:drop",
+    "Cancelling:progress",
+    "Cancelling:returned_success",
+    "Cancelling:returned_failure",
+    "Cancelling:complete",
+    "Cancelling:cleanup_transfer",
+    "Cancelling:residual",
+    "CleanupPending:progress",
+    "CleanupPending:returned_success",
+    "CleanupPending:returned_failure",
+    "CleanupPending:complete",
+    "CleanupPending:residual",
+    "Succeeded:release",
+    "Failed:release",
+    "Cancelled:release",
+]
+
+[[machine.transition]]
+from = "Reserved"
+event = "enqueue_host"
+to = "Queued"
+owner = "EmissionDispatchPolicy"
+linearization = "publish the slot in the selected binding's already reserved host lane"
+outcome = "queued"
+retryability = "not-applicable"
+
+[[machine.transition]]
+from = "Reserved"
+event = "begin_constrained"
+to = "Publishing"
+owner = "BindingEmissionOwner"
+linearization = "claim the caller-owned slot for the selected binding generation"
+outcome = "in-progress"
+retryability = "not-applicable"
+
+[[machine.transition]]
+from = "Reserved"
+event = "stale_generation"
+to = "Failed"
+owner = "BindingEmissionOwner"
+linearization = "commit StaleHandle before any binding callback"
+outcome = "StaleHandle"
+retryability = "terminal"
+
+[[machine.transition]]
+from = "Reserved"
+event = "cancel"
+to = "Cancelled"
+owner = "BindingEmissionOwner"
+linearization = "record cancellation before the binding observes the publication"
+outcome = "Cancelled"
+retryability = "terminal"
+
+[[machine.transition]]
+from = "Reserved"
+event = "drop"
+to = "Cancelled"
+owner = "BindingEmissionOwner"
+linearization = "runtime cancellation releases an unstarted slot"
+outcome = "Cancelled"
+retryability = "terminal"
+
+[[machine.transition]]
+from = "Queued"
+event = "begin_publish"
+to = "Publishing"
+owner = "BindingEmissionOwner"
+linearization = "remove the slot from its binding lane and start the matching publication outside lane locks"
+outcome = "in-progress"
+retryability = "not-applicable"
+
+[[machine.transition]]
+from = "Queued"
+event = "cancel"
+to = "Cancelled"
+owner = "EmissionDispatchPolicy"
+linearization = "remove the unstarted slot from its binding lane and commit cancellation"
+outcome = "Cancelled"
+retryability = "terminal"
+
+[[machine.transition]]
+from = "Queued"
+event = "drop"
+to = "Cancelled"
+owner = "EmissionDispatchPolicy"
+linearization = "runtime cancellation removes the unstarted slot from its binding lane"
+outcome = "Cancelled"
+retryability = "terminal"
+
+[[machine.transition]]
+from = "Publishing"
+event = "progress"
+to = "Publishing"
+owner = "BindingEmissionOwner"
+linearization = "commit bounded binding-local progress and retain its exact cursor"
+outcome = "pending"
+retryability = "retained-cursor"
+
+[[machine.transition]]
+from = "Publishing"
+event = "succeed"
+to = "Succeeded"
+owner = "BindingEmissionOwner"
+linearization = "commit the generation-matching success into the pre-reserved result cell"
+outcome = "Complete"
+retryability = "terminal"
+
+[[machine.transition]]
+from = "Publishing"
+event = "fail"
+to = "Failed"
+owner = "BindingEmissionOwner"
+linearization = "commit the complete binding error into the pre-reserved result cell"
+outcome = "Failed"
+retryability = "terminal"
+
+[[machine.transition]]
+from = "Publishing"
+event = "cancel"
+to = "Cancelling"
+owner = "BindingEmissionOwner"
+linearization = "record cancellation against the running binding progress generation"
+outcome = "cancelling"
+retryability = "join-existing"
+
+[[machine.transition]]
+from = "Publishing"
+event = "drop"
+to = "Cancelling"
+owner = "BindingEmissionOwner"
+linearization = "transfer the running slot to bounded runtime cancellation ownership"
+outcome = "runtime-cancelling"
+retryability = "runtime-owned"
+
+[[machine.transition]]
+from = "Cancelling"
+event = "progress"
+to = "Cancelling"
+owner = "BindingEmissionOwner"
+linearization = "commit bounded binding cancellation without restarting its cursor"
+outcome = "pending"
+retryability = "retained-cursor"
+
+[[machine.transition]]
+from = "Cancelling"
+event = "returned_success"
+to = "Succeeded"
+owner = "BindingEmissionOwner"
+linearization = "commit the late generation-matching BindingPublication into the pre-reserved result cell without reopening the emission caller"
+outcome = "CompleteLate"
+retryability = "terminal"
+
+[[machine.transition]]
+from = "Cancelling"
+event = "returned_failure"
+to = "Failed"
+owner = "BindingEmissionOwner"
+linearization = "commit the late atomic publication error into the pre-reserved result cell without restarting publication"
+outcome = "FailedLate"
+retryability = "terminal"
+
+[[machine.transition]]
+from = "Cancelling"
+event = "complete"
+to = "Cancelled"
+owner = "BindingEmissionOwner"
+linearization = "binding cancellation completes and the cancellation result cell is committed"
+outcome = "Cancelled"
+retryability = "terminal"
+
+[[machine.transition]]
+from = "Cancelling"
+event = "cleanup_transfer"
+to = "CleanupPending"
+owner = "BindingEmissionCleanupOwner"
+linearization = "move binding state and cursor into an already reserved bounded cleanup record"
+outcome = "PendingCleanup"
+retryability = "recorded"
+
+[[machine.transition]]
+from = "Cancelling"
+event = "residual"
+to = "Failed"
+owner = "BindingEmissionOwner"
+linearization = "durably record unmatched binding state and commit the residual result"
+outcome = "ResidualExternalState"
+retryability = "recorded"
+
+[[machine.transition]]
+from = "CleanupPending"
+event = "progress"
+to = "CleanupPending"
+owner = "BindingEmissionCleanupOwner"
+linearization = "commit one bounded cleanup step and retain the binding cursor"
+outcome = "PendingCleanup"
+retryability = "recorded-per-step"
+
+[[machine.transition]]
+from = "CleanupPending"
+event = "returned_success"
+to = "Succeeded"
+owner = "BindingEmissionCleanupOwner"
+linearization = "commit the late generation-matching BindingPublication and acknowledge its transferred cleanup handle"
+outcome = "CompleteLate"
+retryability = "terminal"
+
+[[machine.transition]]
+from = "CleanupPending"
+event = "returned_failure"
+to = "Failed"
+owner = "BindingEmissionCleanupOwner"
+linearization = "commit the late atomic publication error and acknowledge its transferred cleanup handle"
+outcome = "FailedLate"
+retryability = "terminal"
+
+[[machine.transition]]
+from = "CleanupPending"
+event = "complete"
+to = "Cancelled"
+owner = "BindingEmissionCleanupOwner"
+linearization = "the final retained cleanup operation completes and commits cancellation"
+outcome = "Cancelled"
+retryability = "terminal"
+
+[[machine.transition]]
+from = "CleanupPending"
+event = "residual"
+to = "Failed"
+owner = "BindingEmissionCleanupOwner"
+linearization = "the retained binding obligation becomes a durable structured residual"
+outcome = "ResidualExternalState"
+retryability = "recorded"
+
+[[machine.transition]]
+from = "Succeeded"
+event = "release"
+to = "Released"
+owner = "EmissionCoordinator"
+linearization = "the coordinator acknowledges the transferred result and releases slot and lane capacity"
+outcome = "released"
+retryability = "terminal"
+
+[[machine.transition]]
+from = "Failed"
+event = "release"
+to = "Released"
+owner = "EmissionCoordinator"
+linearization = "the coordinator acknowledges the transferred error and releases slot and lane capacity"
+outcome = "released"
+retryability = "terminal"
+
+[[machine.transition]]
+from = "Cancelled"
+event = "release"
+to = "Released"
+owner = "EmissionCoordinator"
+linearization = "the coordinator acknowledges cancellation after cleanup ownership settles"
+outcome = "released"
+retryability = "terminal"
 
 [[machine]]
 id = "binding-route"
@@ -630,10 +2578,34 @@ retryability = "recorded"
 [[machine]]
 id = "in-flight"
 requirements = ["STATE-INFLIGHT-001"]
+visibility = "crate-private"
+transition_contract = "exact"
+scope = "Owns only response opportunity and in-flight capacity; handler execution lifetime is owned by the handler execution machines"
+released_semantics = "Released closes response delivery and capacity ownership but does not imply that user handler code, a future, or step state has terminated"
+cancellation_causes = ["Manual", "Deadline", "Drain", "Drop"]
+first_cause_semantics = "The first cancellation transition serialized at the in-flight boundary stores one cause; later cancellation observations join it and cannot replace it"
+completion_semantics = "complete_direct is reserved for a non-start handler result; complete_producer_start is reserved for the Producer installed-and-published composition; complete_producer_start_error claims an on-time setup Err without publishing Active; cancellation_error claims a deliverable Cancelled response; deadline_error claims a deliverable TimedOut response"
 initial = "Vacant"
 states = ["Vacant", "Admitted", "Completing", "Cancelled", "Released"]
 terminal = ["Released"]
-required_events = ["Admitted:complete", "Admitted:drain_expired"]
+required_events = [
+    "Vacant:admit",
+    "Admitted:complete_direct",
+    "Admitted:complete_producer_start",
+    "Admitted:complete_producer_start_error",
+    "Admitted:cancellation_error",
+    "Admitted:deadline_error",
+    "Admitted:cancel_close",
+    "Admitted:deadline_close",
+    "Admitted:drain_expired",
+    "Admitted:drop",
+    "Completing:cancel_after_claim",
+    "Completing:deadline_after_claim",
+    "Completing:drain_after_claim",
+    "Completing:drop_after_claim",
+    "Completing:release",
+    "Cancelled:release",
+]
 
 [[machine.transition]]
 from = "Vacant"
@@ -646,29 +2618,128 @@ retryability = "not-applicable"
 
 [[machine.transition]]
 from = "Admitted"
-event = "complete"
+event = "complete_direct"
 to = "Completing"
-owner = "Dispatch"
-linearization = "claim response opportunity exactly once"
-outcome = "response-or-discard"
+owner = "ResponseCoordinator"
+linearization = "atomically claim the response opportunity for one non-start handler result and reject every stale handler-call generation"
+outcome = "direct-response-claimed"
 retryability = "not-applicable"
+
+[[machine.transition]]
+from = "Admitted"
+event = "complete_producer_start"
+to = "Completing"
+owner = "ProducerSubscriptionOwner"
+linearization = "atomically claim the start response as part of the Producer installed-and-published composition"
+outcome = "producer-start-response-claimed"
+retryability = "not-applicable"
+
+[[machine.transition]]
+from = "Admitted"
+event = "complete_producer_start_error"
+to = "Completing"
+owner = "ProducerSubscriptionOwner"
+linearization = "atomically claim the on-time setup error response without installing or publishing a Producer subscription"
+outcome = "producer-start-error-response-claimed"
+retryability = "not-applicable"
+
+[[machine.transition]]
+from = "Admitted"
+event = "cancellation_error"
+to = "Completing"
+owner = "CancellationOwner"
+linearization = "manual cancellation wins the response boundary and claims one deliverable Cancelled error response"
+outcome = "cancelled-response-claimed-handler-result-late"
+retryability = "not-applicable"
+
+[[machine.transition]]
+from = "Admitted"
+event = "deadline_error"
+to = "Completing"
+owner = "CancellationOwner"
+linearization = "deadline cancellation wins the response boundary and claims one deliverable TimedOut error response"
+outcome = "timed-out-response-claimed-handler-result-late"
+retryability = "not-applicable"
+
+[[machine.transition]]
+from = "Admitted"
+event = "cancel_close"
+to = "Cancelled"
+owner = "CancellationOwner"
+linearization = "manual cancellation closes a response channel that can no longer deliver an error and records Manual as the first cause"
+outcome = "response-closed-handler-result-late"
+retryability = "join-existing"
+
+[[machine.transition]]
+from = "Admitted"
+event = "deadline_close"
+to = "Cancelled"
+owner = "CancellationOwner"
+linearization = "deadline closes a response channel that can no longer deliver an error and records Deadline as the first cause"
+outcome = "response-closed-handler-result-late"
+retryability = "join-existing"
 
 [[machine.transition]]
 from = "Admitted"
 event = "drain_expired"
 to = "Cancelled"
 owner = "Servient"
-linearization = "response gate closes"
-outcome = "late-results-discarded"
+linearization = "response gate closes and records Drain as the first cause"
+outcome = "late-results-discarded-handler-execution-owned-separately"
 retryability = "not-applicable"
+
+[[machine.transition]]
+from = "Admitted"
+event = "drop"
+to = "Cancelled"
+owner = "CancellationOwner"
+linearization = "the last response owner drops and closes the response gate with Drop as the first cause"
+outcome = "response-owner-dropped-handler-execution-owned-separately"
+retryability = "runtime-owned"
+
+[[machine.transition]]
+from = "Completing"
+event = "cancel_after_claim"
+to = "Completing"
+owner = "CancellationOwner"
+linearization = "the already claimed response wins; cancellation joins response delivery and cannot replace its result"
+outcome = "response-claim-won"
+retryability = "join-existing"
+
+[[machine.transition]]
+from = "Completing"
+event = "deadline_after_claim"
+to = "Completing"
+owner = "CancellationOwner"
+linearization = "the already claimed response wins the deadline race and continues bounded delivery"
+outcome = "response-claim-won"
+retryability = "join-existing"
+
+[[machine.transition]]
+from = "Completing"
+event = "drain_after_claim"
+to = "Completing"
+owner = "Servient"
+linearization = "drain joins the already claimed bounded response-delivery owner"
+outcome = "response-delivery-owned"
+retryability = "join-existing"
+
+[[machine.transition]]
+from = "Completing"
+event = "drop_after_claim"
+to = "Completing"
+owner = "ResponseCoordinator"
+linearization = "drop transfers or cancels the already claimed bounded delivery without reopening the response opportunity"
+outcome = "response-delivery-owned"
+retryability = "runtime-owned"
 
 [[machine.transition]]
 from = "Completing"
 event = "release"
 to = "Released"
-owner = "Dispatch"
-linearization = "release slot once"
-outcome = "Complete"
+owner = "ResponseCoordinator"
+linearization = "retain the delivery terminal, then release response capacity and the generation exactly once"
+outcome = "response-terminal-released"
 retryability = "terminal"
 
 [[machine.transition]]
@@ -676,9 +2747,2361 @@ from = "Cancelled"
 event = "release"
 to = "Released"
 owner = "Servient"
-linearization = "release cancelled slot once"
-outcome = "Complete"
+linearization = "release cancelled response slot once without releasing handler execution ownership"
+outcome = "response-opportunity-released-handler-may-remain"
 retryability = "terminal"
+
+[[machine]]
+id = "handler-sync-execution"
+requirements = [
+    "CONCUR-USER-001",
+    "HANDLER-CANCEL-001",
+    "HANDLER-STORAGE-001",
+]
+visibility = "crate-private"
+transition_contract = "exact"
+owner_record = "HandlerCallOwner"
+selected_handler_record = "SelectedHandlerEntry"
+callback_lease = "CallbackLease"
+scope = "Owns the SelectedHandlerEntry, input and context snapshot, admitted footprint, callback lifetime, and late-result disposition; it does not own the in-flight response slot"
+result_sinks = ["DirectResponse", "ProducerAcceptance", "ProducerTeardown"]
+result_sink_semantics = "Admission fixes exactly one sink; DirectResponse may claim only its InFlight token, ProducerAcceptance transfers without claiming InFlight, and ProducerTeardown transfers to HandlerCleanupOwner with an optional teardown-response view"
+entry_handoff_semantics = "Selection transfers one SelectedHandlerEntry reference and one pending-call reservation into HandlerCallOwner; Released returns the call reservation exactly once and releases or transfers the selected generation reference to its declared sink owner"
+cancellation_causes = ["Manual", "Deadline", "Drain", "Drop"]
+first_cause_semantics = "The first cause committed against the call generation and callback nonce is immutable; later cancellation events join it and cannot change terminal classification"
+initial = "Reserved"
+states = [
+    "Reserved",
+    "Invoking",
+    "InvokingLate",
+    "Returned",
+    "LateReturned",
+    "Cancelled",
+    "TimedOut",
+    "Released",
+]
+terminal = ["Released"]
+required_events = [
+    "Reserved:begin_invoke",
+    "Reserved:cancel",
+    "Reserved:drop",
+    "Reserved:deadline",
+    "Invoking:return",
+    "Invoking:cancel",
+    "Invoking:drop",
+    "Invoking:deadline",
+    "InvokingLate:return",
+    "Returned:claim_direct_response",
+    "Returned:transfer_start_result",
+    "Returned:transfer_teardown_result",
+    "Returned:response_closed",
+    "Returned:cancel",
+    "Returned:drop",
+    "Returned:deadline",
+    "LateReturned:discard_direct_result",
+    "LateReturned:transfer_late_start_result",
+    "LateReturned:transfer_late_teardown_result",
+    "Cancelled:acknowledge",
+    "TimedOut:acknowledge",
+]
+
+[[machine.transition]]
+from = "Reserved"
+event = "begin_invoke"
+to = "Invoking"
+owner = "HandlerCallOwner"
+linearization = "authoritative cancellation and deadline check retains the selected generation before entering user code"
+outcome = "callback-running"
+retryability = "not-applicable"
+
+[[machine.transition]]
+from = "Reserved"
+event = "cancel"
+to = "Cancelled"
+owner = "CancellationOwner"
+linearization = "cancellation wins before callback entry"
+outcome = "Cancelled-without-callback"
+retryability = "terminal-recorded"
+
+[[machine.transition]]
+from = "Reserved"
+event = "drop"
+to = "Cancelled"
+owner = "CancellationOwner"
+linearization = "drop requests cancellation before callback entry"
+outcome = "Cancelled-without-callback"
+retryability = "runtime-owned"
+
+[[machine.transition]]
+from = "Reserved"
+event = "deadline"
+to = "TimedOut"
+owner = "CancellationOwner"
+linearization = "deadline wins before callback entry"
+outcome = "TimedOut-without-callback"
+retryability = "terminal-recorded"
+
+[[machine.transition]]
+from = "Invoking"
+event = "return"
+to = "Returned"
+owner = "CallbackLease"
+linearization = "authoritative post-return check records the result before cancellation or deadline closure"
+outcome = "response-eligible"
+retryability = "not-applicable"
+
+[[machine.transition]]
+from = "Invoking"
+event = "cancel"
+to = "InvokingLate"
+owner = "CancellationOwner"
+linearization = "the cancellation owner records the first cause against the callback nonce while the unique invocation lease remains pinned outside locks"
+outcome = "callback-running-result-will-be-late"
+retryability = "join-existing"
+
+[[machine.transition]]
+from = "Invoking"
+event = "drop"
+to = "InvokingLate"
+owner = "CancellationOwner"
+linearization = "drop records the first cause against the callback nonce while the unique invocation lease remains pinned outside locks"
+outcome = "callback-running-result-will-be-late"
+retryability = "runtime-owned"
+
+[[machine.transition]]
+from = "Invoking"
+event = "deadline"
+to = "InvokingLate"
+owner = "CancellationOwner"
+linearization = "deadline records the first cause against the callback nonce while the unique invocation lease remains pinned outside locks"
+outcome = "callback-running-result-will-be-late"
+retryability = "join-existing"
+
+[[machine.transition]]
+from = "InvokingLate"
+event = "return"
+to = "LateReturned"
+owner = "CallbackLease"
+linearization = "actual callback return records the late result and completes every callback-owned destructor outside locks before returning the nonce"
+outcome = "late-result-awaiting-sink-disposition"
+retryability = "terminal-recorded"
+
+[[machine.transition]]
+from = "Returned"
+event = "claim_direct_response"
+to = "Released"
+owner = "ResponseCoordinator"
+linearization = "atomically pair this handler generation with in-flight complete_direct, transfer the result, and release the call reservation"
+outcome = "direct-result-transferred"
+retryability = "terminal"
+
+[[machine.transition]]
+from = "Returned"
+event = "transfer_start_result"
+to = "Released"
+owner = "ProducerSubscriptionOwner"
+linearization = "transfer the start CoreResult to the matching Producer Accepting generation without touching the in-flight response opportunity"
+outcome = "producer-start-result-transferred"
+retryability = "terminal"
+
+[[machine.transition]]
+from = "Returned"
+event = "transfer_teardown_result"
+to = "Released"
+owner = "HandlerCleanupOwner"
+linearization = "transfer the paired teardown result and pending-call reservation disposition to the matching cleanup generation"
+outcome = "producer-teardown-result-transferred"
+retryability = "terminal"
+
+[[machine.transition]]
+from = "Returned"
+event = "response_closed"
+to = "LateReturned"
+owner = "ResponseCoordinator"
+linearization = "closed response opportunity converts the unclaimed result to a late result"
+outcome = "late-result-discarded"
+retryability = "terminal-recorded"
+
+[[machine.transition]]
+from = "Returned"
+event = "cancel"
+to = "LateReturned"
+owner = "ResponseCoordinator"
+linearization = "cancellation closes response eligibility before result claim"
+outcome = "late-result-discarded"
+retryability = "join-existing"
+
+[[machine.transition]]
+from = "Returned"
+event = "drop"
+to = "LateReturned"
+owner = "ResponseCoordinator"
+linearization = "drop closes response eligibility before result claim"
+outcome = "late-result-discarded"
+retryability = "runtime-owned"
+
+[[machine.transition]]
+from = "Returned"
+event = "deadline"
+to = "LateReturned"
+owner = "ResponseCoordinator"
+linearization = "deadline closes response eligibility before result claim"
+outcome = "late-result-discarded"
+retryability = "join-existing"
+
+[[machine.transition]]
+from = "LateReturned"
+event = "discard_direct_result"
+to = "Released"
+owner = "HandlerCallOwner"
+linearization = "discard a non-start late result outside locks, retain bounded cause and identity, then release the call reservation"
+outcome = "late-terminal-released"
+retryability = "terminal"
+
+[[machine.transition]]
+from = "LateReturned"
+event = "transfer_late_start_result"
+to = "Released"
+owner = "ProducerSubscriptionOwner"
+linearization = "transfer a late start CoreResult to the matching AcceptingCancelled generation before discarding its response payload"
+outcome = "producer-late-start-result-transferred"
+retryability = "terminal"
+
+[[machine.transition]]
+from = "LateReturned"
+event = "transfer_late_teardown_result"
+to = "Released"
+owner = "HandlerCleanupOwner"
+linearization = "transfer a late paired-teardown result to the cleanup owner for terminal or residual classification"
+outcome = "producer-late-teardown-result-transferred"
+retryability = "terminal"
+
+[[machine.transition]]
+from = "Cancelled"
+event = "acknowledge"
+to = "Released"
+owner = "HandlerCallOwner"
+linearization = "cancellation terminal result is retained before release"
+outcome = "cancelled-terminal-released"
+retryability = "terminal"
+
+[[machine.transition]]
+from = "TimedOut"
+event = "acknowledge"
+to = "Released"
+owner = "HandlerCallOwner"
+linearization = "timeout terminal result is retained before release"
+outcome = "timeout-terminal-released"
+retryability = "terminal"
+
+[[machine]]
+id = "handler-step-execution"
+requirements = [
+    "CONSTRAINED-WORK-001",
+    "CONCUR-USER-001",
+    "HANDLER-CANCEL-001",
+    "HANDLER-CANCEL-002",
+    "HANDLER-STORAGE-001",
+]
+visibility = "crate-private"
+transition_contract = "exact"
+owner_record = "HandlerCallOwner"
+selected_handler_record = "SelectedHandlerEntry"
+callback_lease = "CallbackLease"
+host_adapter = "HostStepAdapter"
+scope = "Owns the SelectedHandlerEntry, input and context snapshot, admitted footprint, bounded step state, retained cancellation cause, and explicit bounded cancellation progress"
+result_sinks = ["DirectResponse", "ProducerAcceptance", "ProducerTeardown"]
+result_sink_semantics = "Admission fixes exactly one sink; ProducerAcceptance and ProducerTeardown transfer results to their generation owners without claiming the in-flight response opportunity"
+entry_handoff_semantics = "Selection moves one entry and pending-call reservation into HandlerCallOwner; typed state moves into CallbackLease for each callback and returns only on Pending; Ready drops typed state outside locks before state commit"
+drain_budget_semantics = "handler_drain_steps_max is cumulative for one cancelled call; exhaustion, a zero-step policy, or host drain timeout enters DrainExhausted, admits no further cancel callback, and must atomically charge cleanup capacity while transferring typed state or durably record residual state before drop"
+cancellation_causes = ["Manual", "Deadline", "Drain", "Drop"]
+first_cause_semantics = "The first cause committed against the call generation and callback nonce is immutable and is supplied to every refreshed cancel snapshot until cleanup terminates or transfers"
+initial = "Reserved"
+states = [
+    "Reserved",
+    "Starting",
+    "StartingCancelled",
+    "Pending",
+    "Polling",
+    "PollingCancelled",
+    "Cancelling",
+    "CancelPolling",
+    "DrainExhausted",
+    "Returned",
+    "LateReturned",
+    "Cancelled",
+    "TimedOut",
+    "CleanupFailed",
+    "CleanupTransferred",
+    "Released",
+]
+terminal = ["Released"]
+required_events = [
+    "Reserved:begin_start",
+    "Reserved:cancel",
+    "Reserved:drop",
+    "Reserved:deadline",
+    "Starting:state_ready",
+    "Starting:start_error",
+    "Starting:cancel",
+    "Starting:drop",
+    "Starting:deadline",
+    "StartingCancelled:state_ready",
+    "StartingCancelled:start_error_cancel",
+    "StartingCancelled:start_error_deadline",
+    "Pending:begin_step",
+    "Pending:cancel",
+    "Pending:drop",
+    "Pending:deadline",
+    "Polling:ready",
+    "Polling:pending",
+    "Polling:cancel",
+    "Polling:drop",
+    "Polling:deadline",
+    "PollingCancelled:ready_cancel",
+    "PollingCancelled:ready_deadline",
+    "PollingCancelled:pending",
+    "Cancelling:begin_cancel",
+    "Cancelling:drain_steps_exhausted",
+    "Cancelling:zero_step_policy",
+    "Cancelling:drain_timeout",
+    "DrainExhausted:cleanup_transfer",
+    "DrainExhausted:residual",
+    "CancelPolling:pending",
+    "CancelPolling:ready_ok_cancel",
+    "CancelPolling:ready_ok_deadline",
+    "CancelPolling:ready_error",
+    "Returned:claim_direct_response",
+    "Returned:transfer_start_result",
+    "Returned:transfer_teardown_result",
+    "Returned:response_closed",
+    "Returned:cancel",
+    "Returned:drop",
+    "Returned:deadline",
+    "LateReturned:discard_direct_result",
+    "LateReturned:transfer_late_start_result",
+    "LateReturned:transfer_late_teardown_result",
+    "Cancelled:acknowledge",
+    "TimedOut:acknowledge",
+    "CleanupFailed:acknowledge",
+    "CleanupTransferred:acknowledge_transfer",
+]
+
+[[machine.transition]]
+from = "Reserved"
+event = "begin_start"
+to = "Starting"
+owner = "CallbackLease"
+linearization = "authoritative cancellation and deadline check grants the exclusive bounded start callback lease"
+outcome = "step-start-callback-running"
+retryability = "not-applicable"
+
+[[machine.transition]]
+from = "Reserved"
+event = "cancel"
+to = "Cancelled"
+owner = "CancellationOwner"
+linearization = "cancellation wins before step-state creation"
+outcome = "Cancelled-without-callback"
+retryability = "terminal-recorded"
+
+[[machine.transition]]
+from = "Reserved"
+event = "drop"
+to = "Cancelled"
+owner = "CancellationOwner"
+linearization = "drop requests cancellation before step-state creation"
+outcome = "Cancelled-without-callback"
+retryability = "runtime-owned"
+
+[[machine.transition]]
+from = "Reserved"
+event = "deadline"
+to = "TimedOut"
+owner = "CancellationOwner"
+linearization = "deadline wins before step-state creation"
+outcome = "TimedOut-without-callback"
+retryability = "terminal-recorded"
+
+[[machine.transition]]
+from = "Starting"
+event = "state_ready"
+to = "Pending"
+owner = "CallbackLease"
+linearization = "bounded start returns state before cancellation or deadline closure"
+outcome = "step-state-owned-pending"
+retryability = "step-again-with-budget"
+
+[[machine.transition]]
+from = "Starting"
+event = "start_error"
+to = "Returned"
+owner = "CallbackLease"
+linearization = "bounded start returns an operation error before cancellation or deadline closure"
+outcome = "error-result-response-eligible"
+retryability = "not-applicable"
+
+[[machine.transition]]
+from = "Starting"
+event = "cancel"
+to = "StartingCancelled"
+owner = "CancellationOwner"
+linearization = "cancellation records its first cause against the start nonce while the unique callback lease remains outside locks"
+outcome = "start-running-result-will-be-late"
+retryability = "join-existing"
+
+[[machine.transition]]
+from = "Starting"
+event = "drop"
+to = "StartingCancelled"
+owner = "CancellationOwner"
+linearization = "drop records its first cause against the start nonce while the unique callback lease remains outside locks"
+outcome = "start-running-result-will-be-late"
+retryability = "runtime-owned"
+
+[[machine.transition]]
+from = "Starting"
+event = "deadline"
+to = "StartingCancelled"
+owner = "CancellationOwner"
+linearization = "deadline records its first cause against the start nonce while the unique callback lease remains outside locks"
+outcome = "start-running-result-will-be-late"
+retryability = "join-existing"
+
+[[machine.transition]]
+from = "StartingCancelled"
+event = "state_ready"
+to = "Cancelling"
+owner = "CallbackLease"
+linearization = "late bounded start state is retained for explicit cancellation using the recorded cause"
+outcome = "step-cancellation-required"
+retryability = "not-applicable"
+
+[[machine.transition]]
+from = "StartingCancelled"
+event = "start_error_cancel"
+to = "Cancelled"
+owner = "CallbackLease"
+linearization = "cancelled bounded start returns no state and its late error is discarded"
+outcome = "Cancelled"
+retryability = "terminal-recorded"
+
+[[machine.transition]]
+from = "StartingCancelled"
+event = "start_error_deadline"
+to = "TimedOut"
+owner = "CallbackLease"
+linearization = "timed-out bounded start returns no state and its late error is discarded"
+outcome = "TimedOut"
+retryability = "terminal-recorded"
+
+[[machine.transition]]
+from = "Pending"
+event = "begin_step"
+to = "Polling"
+owner = "CallbackLease"
+linearization = "one admitted HandlerSteps work unit grants the exclusive bounded step callback lease"
+outcome = "step-callback-running"
+retryability = "not-applicable"
+
+[[machine.transition]]
+from = "Pending"
+event = "cancel"
+to = "Cancelling"
+owner = "CancellationOwner"
+linearization = "cancellation records its cause and prevents further normal steps"
+outcome = "step-cancellation-required"
+retryability = "join-existing"
+
+[[machine.transition]]
+from = "Pending"
+event = "drop"
+to = "Cancelling"
+owner = "CancellationOwner"
+linearization = "drop records cancellation and prevents further normal steps"
+outcome = "step-cancellation-required"
+retryability = "runtime-owned"
+
+[[machine.transition]]
+from = "Pending"
+event = "deadline"
+to = "Cancelling"
+owner = "CancellationOwner"
+linearization = "deadline records its cause and prevents further normal steps"
+outcome = "step-cancellation-required"
+retryability = "join-existing"
+
+[[machine.transition]]
+from = "Polling"
+event = "ready"
+to = "Returned"
+owner = "CallbackLease"
+linearization = "bounded step returns Ready, drops typed state and callback-owned values outside locks, and records the result before cancellation or deadline closure"
+outcome = "response-eligible"
+retryability = "not-applicable"
+
+[[machine.transition]]
+from = "Polling"
+event = "pending"
+to = "Pending"
+owner = "CallbackLease"
+linearization = "bounded step returns Pending and releases the callback lease"
+outcome = "step-state-owned-pending"
+retryability = "step-again-with-budget"
+
+[[machine.transition]]
+from = "Polling"
+event = "cancel"
+to = "PollingCancelled"
+owner = "CancellationOwner"
+linearization = "cancellation records its first cause against the poll nonce without taking or concurrently entering the leased step state"
+outcome = "step-running-result-will-be-late"
+retryability = "join-existing"
+
+[[machine.transition]]
+from = "Polling"
+event = "drop"
+to = "PollingCancelled"
+owner = "CancellationOwner"
+linearization = "drop records its first cause against the poll nonce without taking or concurrently entering the leased step state"
+outcome = "step-running-result-will-be-late"
+retryability = "runtime-owned"
+
+[[machine.transition]]
+from = "Polling"
+event = "deadline"
+to = "PollingCancelled"
+owner = "CancellationOwner"
+linearization = "deadline records its first cause against the poll nonce without taking or concurrently entering the leased step state"
+outcome = "step-running-result-will-be-late"
+retryability = "join-existing"
+
+[[machine.transition]]
+from = "PollingCancelled"
+event = "ready_cancel"
+to = "LateReturned"
+owner = "CallbackLease"
+linearization = "cancelled bounded step returns Ready, drops typed state outside locks, and records the late result for its fixed sink"
+outcome = "late-result-awaiting-sink-disposition"
+retryability = "terminal-recorded"
+
+[[machine.transition]]
+from = "PollingCancelled"
+event = "ready_deadline"
+to = "LateReturned"
+owner = "CallbackLease"
+linearization = "timed-out bounded step returns Ready, drops typed state outside locks, and records the late result with Deadline retained"
+outcome = "late-result-awaiting-sink-disposition"
+retryability = "terminal-recorded"
+
+[[machine.transition]]
+from = "PollingCancelled"
+event = "pending"
+to = "Cancelling"
+owner = "CallbackLease"
+linearization = "cancelled bounded step returns Pending and transfers state to explicit cancellation"
+outcome = "step-cancellation-required"
+retryability = "not-applicable"
+
+[[machine.transition]]
+from = "Cancelling"
+event = "begin_cancel"
+to = "CancelPolling"
+owner = "CallbackLease"
+linearization = "one admitted HandlerSteps work unit grants the exclusive explicit-cancel callback lease"
+outcome = "cancel-callback-running"
+retryability = "not-applicable"
+
+[[machine.transition]]
+from = "Cancelling"
+event = "drain_steps_exhausted"
+to = "DrainExhausted"
+owner = "HandlerCallOwner"
+linearization = "the cumulative cancel-step counter reaches handler_drain_steps_max and permanently prevents another cancel callback for this call"
+outcome = "cleanup-transfer-or-residual-required"
+retryability = "not-applicable"
+
+[[machine.transition]]
+from = "Cancelling"
+event = "zero_step_policy"
+to = "DrainExhausted"
+owner = "HandlerCallOwner"
+linearization = "the selected zero-step policy prevents the first cancel callback and requires cleanup transfer or durable residual"
+outcome = "cleanup-transfer-or-residual-required"
+retryability = "not-applicable"
+
+[[machine.transition]]
+from = "Cancelling"
+event = "drain_timeout"
+to = "DrainExhausted"
+owner = "HandlerCallOwner"
+linearization = "host drain timeout prevents another cancel callback and requires cleanup transfer or durable residual"
+outcome = "cleanup-transfer-or-residual-required"
+retryability = "not-applicable"
+
+[[machine.transition]]
+from = "DrainExhausted"
+event = "cleanup_transfer"
+to = "CleanupTransferred"
+owner = "HandlerCleanupOwner"
+linearization = "atomically acquire and charge cleanup capacity and transfer typed state, selected entry, retained cause, and existing byte reservation to the cleanup owner"
+outcome = "cleanup-ownership-transferred"
+retryability = "recorded-per-item"
+
+[[machine.transition]]
+from = "DrainExhausted"
+event = "residual"
+to = "CleanupFailed"
+owner = "HandlerCleanupOwner"
+linearization = "when cleanup transfer cannot be admitted, durable residual recording commits before typed state is dropped outside locks"
+outcome = "ResidualExternalState-with-primary-cause-retained"
+retryability = "recorded"
+
+[[machine.transition]]
+from = "CancelPolling"
+event = "pending"
+to = "Cancelling"
+owner = "CallbackLease"
+linearization = "bounded cancel returns Pending and releases the callback lease"
+outcome = "step-cancellation-pending"
+retryability = "step-again-with-budget"
+
+[[machine.transition]]
+from = "CancelPolling"
+event = "ready_ok_cancel"
+to = "Cancelled"
+owner = "CallbackLease"
+linearization = "bounded cancel completes for the retained cancellation or drop cause"
+outcome = "Cancelled"
+retryability = "terminal-recorded"
+
+[[machine.transition]]
+from = "CancelPolling"
+event = "ready_ok_deadline"
+to = "TimedOut"
+owner = "CallbackLease"
+linearization = "bounded cancel completes for the retained deadline cause"
+outcome = "TimedOut"
+retryability = "terminal-recorded"
+
+[[machine.transition]]
+from = "CancelPolling"
+event = "ready_error"
+to = "CleanupFailed"
+owner = "CallbackLease"
+linearization = "bounded cancel records its cleanup error and releases the callback lease"
+outcome = "CleanupFailed-with-primary-cause-retained"
+retryability = "terminal-recorded"
+
+[[machine.transition]]
+from = "Returned"
+event = "claim_direct_response"
+to = "Released"
+owner = "ResponseCoordinator"
+linearization = "atomically pair this handler generation with in-flight complete_direct and transfer the result"
+outcome = "direct-result-transferred"
+retryability = "terminal"
+
+[[machine.transition]]
+from = "Returned"
+event = "transfer_start_result"
+to = "Released"
+owner = "ProducerSubscriptionOwner"
+linearization = "transfer the start CoreResult to the matching Producer Accepting generation without touching InFlight"
+outcome = "producer-start-result-transferred"
+retryability = "terminal"
+
+[[machine.transition]]
+from = "Returned"
+event = "transfer_teardown_result"
+to = "Released"
+owner = "HandlerCleanupOwner"
+linearization = "transfer the paired teardown result to cleanup ownership and settle the pending-call reservation exactly once"
+outcome = "producer-teardown-result-transferred"
+retryability = "terminal"
+
+[[machine.transition]]
+from = "Returned"
+event = "response_closed"
+to = "LateReturned"
+owner = "ResponseCoordinator"
+linearization = "closed response opportunity converts the unclaimed result to a late result"
+outcome = "late-result-discarded"
+retryability = "terminal-recorded"
+
+[[machine.transition]]
+from = "Returned"
+event = "cancel"
+to = "LateReturned"
+owner = "ResponseCoordinator"
+linearization = "cancellation closes response eligibility before result claim"
+outcome = "late-result-discarded"
+retryability = "join-existing"
+
+[[machine.transition]]
+from = "Returned"
+event = "drop"
+to = "LateReturned"
+owner = "ResponseCoordinator"
+linearization = "drop closes response eligibility before result claim"
+outcome = "late-result-discarded"
+retryability = "runtime-owned"
+
+[[machine.transition]]
+from = "Returned"
+event = "deadline"
+to = "LateReturned"
+owner = "ResponseCoordinator"
+linearization = "deadline closes response eligibility before result claim"
+outcome = "late-result-discarded"
+retryability = "join-existing"
+
+[[machine.transition]]
+from = "LateReturned"
+event = "discard_direct_result"
+to = "Released"
+owner = "HandlerCallOwner"
+linearization = "discard a non-start result outside locks and retain bounded cause and identity before release"
+outcome = "late-terminal-released"
+retryability = "terminal"
+
+[[machine.transition]]
+from = "LateReturned"
+event = "transfer_late_start_result"
+to = "Released"
+owner = "ProducerSubscriptionOwner"
+linearization = "transfer a late start CoreResult to the matching AcceptingCancelled generation before discarding its response payload"
+outcome = "producer-late-start-result-transferred"
+retryability = "terminal"
+
+[[machine.transition]]
+from = "LateReturned"
+event = "transfer_late_teardown_result"
+to = "Released"
+owner = "HandlerCleanupOwner"
+linearization = "transfer a late teardown result for cleanup or residual classification"
+outcome = "producer-late-teardown-result-transferred"
+retryability = "terminal"
+
+[[machine.transition]]
+from = "Cancelled"
+event = "acknowledge"
+to = "Released"
+owner = "HandlerCallOwner"
+linearization = "cancellation terminal result is retained before release"
+outcome = "cancelled-terminal-released"
+retryability = "terminal"
+
+[[machine.transition]]
+from = "TimedOut"
+event = "acknowledge"
+to = "Released"
+owner = "HandlerCallOwner"
+linearization = "timeout terminal result is retained before release"
+outcome = "timeout-terminal-released"
+retryability = "terminal"
+
+[[machine.transition]]
+from = "CleanupFailed"
+event = "acknowledge"
+to = "Released"
+owner = "HandlerCleanupOwner"
+linearization = "cleanup failure and initiating cancellation or deadline cause are retained before release"
+outcome = "cleanup-failure-terminal-released"
+retryability = "terminal"
+
+[[machine.transition]]
+from = "CleanupTransferred"
+event = "acknowledge_transfer"
+to = "Released"
+owner = "HandlerCallOwner"
+linearization = "release only the empty call shell after HandlerCleanupOwner acknowledges receipt of every moved object and reservation"
+outcome = "call-shell-released-cleanup-retained"
+retryability = "terminal"
+
+[[machine]]
+id = "handler-async-execution"
+requirements = [
+    "CONCUR-USER-001",
+    "HANDLER-CANCEL-001",
+    "HANDLER-CANCEL-002",
+    "HANDLER-STORAGE-001",
+]
+visibility = "crate-private"
+transition_contract = "exact"
+owner_record = "HandlerCallOwner"
+selected_handler_record = "SelectedHandlerEntry"
+callback_lease = "CallbackLease"
+scope = "Owns the SelectedHandlerEntry, input and context snapshot, admitted footprint, one future, exclusive create-poll-drop leases, and late-result disposition; cancellation never detaches the future"
+result_sinks = ["DirectResponse", "ProducerAcceptance", "ProducerTeardown"]
+result_sink_semantics = "Admission fixes exactly one sink; only DirectResponse may claim InFlight, while ProducerAcceptance and ProducerTeardown transfer to their generation owners"
+async_abort_semantics = "Future construction and every Pending return assert that no fallible external obligation is owned only by the future; cancelling an incomplete ProducerAcceptance future drops it outside locks and reports setup_aborted, never success or handler_error"
+entry_handoff_semantics = "Selection moves one entry and reservation into HandlerCallOwner; the complete boxed future moves into CallbackLease for create, poll, and drop, returns only after Pending, and is destroyed outside locks before any Ready state commit"
+cancellation_causes = ["Manual", "Deadline", "Drain", "Drop"]
+first_cause_semantics = "The first cause committed against the call generation and callback nonce is immutable; later cancellation and stale wakes join or are rejected without changing it"
+initial = "Reserved"
+states = [
+    "Reserved",
+    "Creating",
+    "CreatingCancelled",
+    "Pollable",
+    "Polling",
+    "Suspended",
+    "PollingCancelled",
+    "Dropping",
+    "Returned",
+    "LateReturned",
+    "Cancelled",
+    "TimedOut",
+    "Released",
+]
+terminal = ["Released"]
+required_events = [
+    "Reserved:begin_create",
+    "Reserved:cancel",
+    "Reserved:drop",
+    "Reserved:deadline",
+    "Creating:future_created",
+    "Creating:cancel",
+    "Creating:drop",
+    "Creating:deadline",
+    "CreatingCancelled:future_created",
+    "Pollable:begin_poll",
+    "Pollable:cancel",
+    "Pollable:drop",
+    "Pollable:deadline",
+    "Polling:ready",
+    "Polling:pending",
+    "Polling:cancel",
+    "Polling:drop",
+    "Polling:deadline",
+    "Suspended:begin_poll",
+    "Suspended:cancel",
+    "Suspended:drop",
+    "Suspended:deadline",
+    "PollingCancelled:ready",
+    "PollingCancelled:pending",
+    "Dropping:drop_complete_cancel",
+    "Dropping:drop_complete_deadline",
+    "Returned:claim_direct_response",
+    "Returned:transfer_start_result",
+    "Returned:transfer_teardown_result",
+    "Returned:response_closed",
+    "Returned:cancel",
+    "Returned:drop",
+    "Returned:deadline",
+    "LateReturned:discard_direct_result",
+    "LateReturned:transfer_late_start_result",
+    "LateReturned:transfer_late_teardown_result",
+    "Cancelled:acknowledge",
+    "TimedOut:acknowledge",
+]
+
+[[machine.transition]]
+from = "Reserved"
+event = "begin_create"
+to = "Creating"
+owner = "CallbackLease"
+linearization = "authoritative cancellation and deadline check grants the exclusive future-creation callback lease"
+outcome = "future-creation-callback-running"
+retryability = "not-applicable"
+
+[[machine.transition]]
+from = "Reserved"
+event = "cancel"
+to = "Cancelled"
+owner = "CancellationOwner"
+linearization = "cancellation wins before future creation"
+outcome = "Cancelled-without-callback"
+retryability = "terminal-recorded"
+
+[[machine.transition]]
+from = "Reserved"
+event = "drop"
+to = "Cancelled"
+owner = "CancellationOwner"
+linearization = "drop requests cancellation before future creation"
+outcome = "Cancelled-without-callback"
+retryability = "runtime-owned"
+
+[[machine.transition]]
+from = "Reserved"
+event = "deadline"
+to = "TimedOut"
+owner = "CancellationOwner"
+linearization = "deadline wins before future creation"
+outcome = "TimedOut-without-callback"
+retryability = "terminal-recorded"
+
+[[machine.transition]]
+from = "Creating"
+event = "future_created"
+to = "Pollable"
+owner = "CallbackLease"
+linearization = "future creation returns and transfers the owned future to HandlerCallOwner"
+outcome = "future-owned-not-polled"
+retryability = "not-applicable"
+
+[[machine.transition]]
+from = "Creating"
+event = "cancel"
+to = "CreatingCancelled"
+owner = "CancellationOwner"
+linearization = "cancellation records its first cause against the creation nonce while the unique creation lease remains outside locks"
+outcome = "creation-running-future-must-be-dropped"
+retryability = "join-existing"
+
+[[machine.transition]]
+from = "Creating"
+event = "drop"
+to = "CreatingCancelled"
+owner = "CancellationOwner"
+linearization = "drop records its first cause against the creation nonce while the unique creation lease remains outside locks"
+outcome = "creation-running-future-must-be-dropped"
+retryability = "runtime-owned"
+
+[[machine.transition]]
+from = "Creating"
+event = "deadline"
+to = "CreatingCancelled"
+owner = "CancellationOwner"
+linearization = "deadline records its first cause against the creation nonce while the unique creation lease remains outside locks"
+outcome = "creation-running-future-must-be-dropped"
+retryability = "join-existing"
+
+[[machine.transition]]
+from = "CreatingCancelled"
+event = "future_created"
+to = "Dropping"
+owner = "CallbackLease"
+linearization = "late future creation transfers the future for mandatory out-of-lock drop"
+outcome = "future-drop-required"
+retryability = "not-applicable"
+
+[[machine.transition]]
+from = "Pollable"
+event = "begin_poll"
+to = "Polling"
+owner = "CallbackLease"
+linearization = "exclusive poll lease is granted outside every engine lock"
+outcome = "future-poll-running"
+retryability = "not-applicable"
+
+[[machine.transition]]
+from = "Suspended"
+event = "begin_poll"
+to = "Polling"
+owner = "CallbackLease"
+linearization = "exclusive poll lease is granted outside every engine lock"
+outcome = "future-poll-running"
+retryability = "not-applicable"
+
+[[machine.transition]]
+from = "Polling"
+event = "ready"
+to = "Returned"
+owner = "CallbackLease"
+linearization = "poll returns Ready, destroys the completed future outside locks, and records the result before cancellation or deadline closure"
+outcome = "response-eligible"
+retryability = "not-applicable"
+
+[[machine.transition]]
+from = "Polling"
+event = "pending"
+to = "Suspended"
+owner = "CallbackLease"
+linearization = "poll returns Pending and releases the exclusive poll lease"
+outcome = "future-owned-pending"
+retryability = "poll-again-on-wake-or-budget"
+
+[[machine.transition]]
+from = "Pollable"
+event = "cancel"
+to = "Dropping"
+owner = "CancellationOwner"
+linearization = "cancellation claims an unpolled future for out-of-lock drop"
+outcome = "future-drop-required"
+retryability = "join-existing"
+
+[[machine.transition]]
+from = "Pollable"
+event = "drop"
+to = "Dropping"
+owner = "CancellationOwner"
+linearization = "drop claims an unpolled future for out-of-lock drop"
+outcome = "future-drop-required"
+retryability = "runtime-owned"
+
+[[machine.transition]]
+from = "Pollable"
+event = "deadline"
+to = "Dropping"
+owner = "CancellationOwner"
+linearization = "deadline claims an unpolled future for out-of-lock drop"
+outcome = "future-drop-required"
+retryability = "join-existing"
+
+[[machine.transition]]
+from = "Suspended"
+event = "cancel"
+to = "Dropping"
+owner = "CancellationOwner"
+linearization = "cancellation claims the suspended future for out-of-lock drop"
+outcome = "future-drop-required"
+retryability = "join-existing"
+
+[[machine.transition]]
+from = "Suspended"
+event = "drop"
+to = "Dropping"
+owner = "CancellationOwner"
+linearization = "drop claims the suspended future for out-of-lock drop"
+outcome = "future-drop-required"
+retryability = "runtime-owned"
+
+[[machine.transition]]
+from = "Suspended"
+event = "deadline"
+to = "Dropping"
+owner = "CancellationOwner"
+linearization = "deadline claims the suspended future for out-of-lock drop"
+outcome = "future-drop-required"
+retryability = "join-existing"
+
+[[machine.transition]]
+from = "Polling"
+event = "cancel"
+to = "PollingCancelled"
+owner = "CancellationOwner"
+linearization = "cancellation records its first cause against the poll nonce without taking, detaching, or concurrently dropping the leased future"
+outcome = "poll-running-result-will-be-late"
+retryability = "join-existing"
+
+[[machine.transition]]
+from = "Polling"
+event = "drop"
+to = "PollingCancelled"
+owner = "CancellationOwner"
+linearization = "drop records its first cause against the poll nonce without taking, detaching, or concurrently dropping the leased future"
+outcome = "poll-running-result-will-be-late"
+retryability = "runtime-owned"
+
+[[machine.transition]]
+from = "Polling"
+event = "deadline"
+to = "PollingCancelled"
+owner = "CancellationOwner"
+linearization = "deadline records its first cause against the poll nonce without taking, detaching, or concurrently dropping the leased future"
+outcome = "poll-running-result-will-be-late"
+retryability = "join-existing"
+
+[[machine.transition]]
+from = "PollingCancelled"
+event = "ready"
+to = "LateReturned"
+owner = "CallbackLease"
+linearization = "cancelled poll returns Ready, destroys the completed future outside locks, and records the late result for its fixed sink"
+outcome = "late-result-awaiting-sink-disposition"
+retryability = "terminal-recorded"
+
+[[machine.transition]]
+from = "PollingCancelled"
+event = "pending"
+to = "Dropping"
+owner = "CallbackLease"
+linearization = "cancelled poll returns Pending and transfers the future for mandatory out-of-lock drop"
+outcome = "future-drop-required"
+retryability = "not-applicable"
+
+[[machine.transition]]
+from = "Dropping"
+event = "drop_complete_cancel"
+to = "Cancelled"
+owner = "CallbackLease"
+linearization = "future drop completes outside every engine lock for a retained cancellation cause"
+outcome = "Cancelled"
+retryability = "terminal-recorded"
+
+[[machine.transition]]
+from = "Dropping"
+event = "drop_complete_deadline"
+to = "TimedOut"
+owner = "CallbackLease"
+linearization = "future drop completes outside every engine lock for a retained deadline cause"
+outcome = "TimedOut"
+retryability = "terminal-recorded"
+
+[[machine.transition]]
+from = "Returned"
+event = "claim_direct_response"
+to = "Released"
+owner = "ResponseCoordinator"
+linearization = "atomically pair this handler generation with in-flight complete_direct and transfer the result"
+outcome = "direct-result-transferred"
+retryability = "terminal"
+
+[[machine.transition]]
+from = "Returned"
+event = "transfer_start_result"
+to = "Released"
+owner = "ProducerSubscriptionOwner"
+linearization = "transfer the start CoreResult to the matching Producer Accepting generation without touching InFlight"
+outcome = "producer-start-result-transferred"
+retryability = "terminal"
+
+[[machine.transition]]
+from = "Returned"
+event = "transfer_teardown_result"
+to = "Released"
+owner = "HandlerCleanupOwner"
+linearization = "transfer the paired teardown result and reservation disposition to cleanup ownership"
+outcome = "producer-teardown-result-transferred"
+retryability = "terminal"
+
+[[machine.transition]]
+from = "Returned"
+event = "response_closed"
+to = "LateReturned"
+owner = "ResponseCoordinator"
+linearization = "closed response opportunity converts the unclaimed result to a late result"
+outcome = "late-result-discarded"
+retryability = "terminal-recorded"
+
+[[machine.transition]]
+from = "Returned"
+event = "cancel"
+to = "LateReturned"
+owner = "ResponseCoordinator"
+linearization = "cancellation closes response eligibility before result claim"
+outcome = "late-result-discarded"
+retryability = "join-existing"
+
+[[machine.transition]]
+from = "Returned"
+event = "drop"
+to = "LateReturned"
+owner = "ResponseCoordinator"
+linearization = "drop closes response eligibility before result claim"
+outcome = "late-result-discarded"
+retryability = "runtime-owned"
+
+[[machine.transition]]
+from = "Returned"
+event = "deadline"
+to = "LateReturned"
+owner = "ResponseCoordinator"
+linearization = "deadline closes response eligibility before result claim"
+outcome = "late-result-discarded"
+retryability = "join-existing"
+
+[[machine.transition]]
+from = "LateReturned"
+event = "discard_direct_result"
+to = "Released"
+owner = "HandlerCallOwner"
+linearization = "discard a non-start late result outside locks and retain bounded cause and identity before release"
+outcome = "late-terminal-released"
+retryability = "terminal"
+
+[[machine.transition]]
+from = "LateReturned"
+event = "transfer_late_start_result"
+to = "Released"
+owner = "ProducerSubscriptionOwner"
+linearization = "transfer a late start CoreResult to the matching AcceptingCancelled generation before discarding its response payload"
+outcome = "producer-late-start-result-transferred"
+retryability = "terminal"
+
+[[machine.transition]]
+from = "LateReturned"
+event = "transfer_late_teardown_result"
+to = "Released"
+owner = "HandlerCleanupOwner"
+linearization = "transfer a late teardown result for cleanup or residual classification"
+outcome = "producer-late-teardown-result-transferred"
+retryability = "terminal"
+
+[[machine.transition]]
+from = "Cancelled"
+event = "acknowledge"
+to = "Released"
+owner = "HandlerCallOwner"
+linearization = "cancellation terminal result is retained before release"
+outcome = "cancelled-terminal-released"
+retryability = "terminal"
+
+[[machine.transition]]
+from = "TimedOut"
+event = "acknowledge"
+to = "Released"
+owner = "HandlerCallOwner"
+linearization = "timeout terminal result is retained before release"
+outcome = "timeout-terminal-released"
+retryability = "terminal"
+
+[[machine]]
+id = "producer-subscription"
+requirements = [
+    "CONCUR-LIN-001",
+    "CONCUR-USER-001",
+    "HANDLER-CANCEL-001",
+    "HANDLER-SUB-001",
+    "HANDLER-STORAGE-001",
+]
+visibility = "crate-private"
+transition_contract = "exact"
+owner_record = "ProducerSubscriptionOwner"
+cleanup_record = "HandlerCleanupOwner"
+callback_lease = "CallbackLease"
+scope = "Owns one reserved SubscriptionId, local guard slot, setup call capacity, selected setup entry, retained teardown generation plus footprint metadata, acceptance, installation, active publication, rollback, and retained terminal outcome"
+cancellation_causes = ["Manual", "Deadline", "Drain", "Drop"]
+first_cause_semantics = "The first cause committed against the subscription generation and active callback nonce is immutable; cleanup errors are retained separately and never overwrite it"
+paired_teardown_semantics = "Admission fails before application setup unless a required paired teardown generation exists and its declared footprint can individually fit the configured limits; it does not reserve teardown pending-call count or bytes while active; acceptance creates exactly one teardown obligation owned until completion, transfer, or residual recording"
+terminal_replay_semantics = "Closed and Failed retain one bounded payload-free terminal outcome; repeated stop, teardown, cancellation, and drop observers join the same generation through separately charged in-flight response views and never invoke application teardown again"
+terminal_retention_semantics = "Closed and Failed become evictable only after every terminal release precondition holds. Quiescence does not immediately release the record; deterministic admission-pressure or Thing-destruction eviction invokes release_when_quiescent."
+setup_handoff_semantics = "Reserved owns the setup entry and one setup pending-call reservation plus the teardown generation and footprint metadata; begin_accept atomically transfers only the setup entry and setup reservation to a HandlerCallOwner whose fixed sink is ProducerAcceptance"
+acceptance_handoff_semantics = "transfer_start_result returns the setup reservation exactly once and transfers Ok to accepted or Err to handler_error; transfer_late_start_result transfers Ok to accepted_late or Err to error_late before HandlerCallOwner releases"
+teardown_handoff_semantics = "Active-to-Stopping transfers only teardown responsibility and retained generation metadata; when ApplicationTeardown becomes runnable, HandlerCleanupOwner acquires a normal pending-call count and byte reservation atomically with creation of at most one ProducerTeardown HandlerCallOwner; saturation leaves the bit Pending and reports ProducerSubscriptionTeardown pending work"
+teardown_response_semantics = "Only the wire request that wins Active-to-Stopping may receive the validated paired-handler InteractionOutput; concurrent joiners and later wire teardown requests receive the retained payload-free terminal summary, and every view owns a separately admitted InFlight response opportunity"
+teardown_wait_budget_semantics = "The first failed ApplicationTeardown admission starts one cumulative wait. Host progress stops at handler_drain_timeout_millis_max and manual-poll progress charges one HandlerSteps unit per failed admission and stops at handler_drain_steps_max. Zero selects immediate fallback. At the first applicable bound, no further normal admission is attempted: the owner must charge cleanup transfer or commit its already reserved Producer residual record."
+resource_ledger_semantics = "One subscriptions item reservation jointly bounds SubscriptionId, ProducerSubscriptionOwner, and the embedded local guard slot; their measured bytes are charged to handler state. One independent Producer residual record token and its byte maximum are reserved before setup."
+setup_cancellation_obligation_semantics = "SetupCancellation is Absent for sync and async Producer starts. A bounded-step start changes it from Absent to Pending when cancellation first owns typed setup state, to Claimed(callback_nonce) only while cancel executes, back to Pending after HandlerStep::Pending, to Complete after clean completion or a no-state late result, to PendingCleanup after charged cleanup transfer, or to Residual only after durable Producer-residual commit. It never coexists as Pending or Claimed with a terminal Producer state."
+reservation_accounting = [
+    "subscription-slot:Reserved->Released",
+    "producer-record-and-local-guard:embedded-in-subscription-slot-and-charged-to-handler-state->Released",
+    "setup-call:Reserved->HandlerCallOwner->released-at-result",
+    "subscription-bytes:provisional-at-Reserved->active-at-Accepted->released-at-no-acceptance-or-ApplicationTeardown-complete-or-residual",
+    "teardown-generation:Reserved-metadata->ProducerSubscriptionOwner->released-at-terminal-or-residual",
+    "teardown-call:unreserved-while-active->acquired-at-application-teardown-claim->HandlerCallOwner->released-at-result",
+    "guard-slot:Reserved->installed-guard->closed-or-residual",
+    "join-view:separate-InFlight-token->response-terminal",
+    "cleanup-slot:uncharged-until-actual-transfer->HandlerCleanupOwner-or-residual",
+    "producer-residual-token:reserved-before-setup->released-after-no-residual-or-committed-to-independent-ledger-until-reconciliation",
+]
+obligation_bits = ["SetupCancellation", "GuardClose", "ApplicationTeardown"]
+obligation_states = [
+    "Absent",
+    "Pending",
+    "Claimed(callback_nonce)",
+    "Complete",
+    "PendingCleanup(cleanup_handle)",
+    "Residual(producer_residual_record)",
+]
+obligation_creation = "A bounded-step cancellation that owns typed pre-acceptance setup state changes SetupCancellation from Absent to Pending; acceptance changes ApplicationTeardown from Absent to Pending; complete guard installation changes GuardClose from Absent to Pending; reservation alone creates no obligation"
+cleanup_order = ["SetupCancellation", "GuardClose", "ApplicationTeardown"]
+cleanup_claim_semantics = "Under the subscription boundary, claim_next_obligation selects the first Pending or progressable PendingCleanup bit in cleanup_order. SetupCancellation moves its retained typed setup state to a budgeted cancel CallbackLease without a new pending-call charge; GuardClose moves its guard directly to Claimed; ApplicationTeardown first acquires normal pending-call count and bytes and creates its ProducerTeardown HandlerCallOwner atomically. Saturation leaves ApplicationTeardown Pending and publishes ProducerSubscriptionTeardown pending work; every successful claim uses a fresh nonce and commits only that nonce."
+cleanup_partial_semantics = "Each later bit is attempted after the earlier callback returns Complete, error, PendingCleanup, or Residual; an earlier failure never skips a later bit; terminal transitions require that no bit is Pending or Claimed"
+teardown_error_semantics = "A paired teardown Err is terminal only when the application asserts no retryable obligation remains; otherwise the engine durably records ResidualExternalState before releasing the selected generation"
+residual_record_semantics = "At most one fixed Producer residual record covers all three obligation bits. It contains only subscription and Thing slot generations, a three-bit residual mask, first cause, bounded error disposition, optional binding generation, and checked cleanup attempts. The added mask bit changes no record-capacity limit. It uses the independently reserved Producer residual ledger, never cleanup_items_max or cleanup_bytes_max."
+join_view_semantics = "The Producer record stores only a checked local-view count and terminal summary; Active:stop and nonterminal join_stop increment that count once, join_runtime_stop creates no view, and terminal join_stop has zero net count. Each joining wire request retains its own bounded InFlight token and correlation, so no unbounded waiter or response list is stored in the subscription."
+terminal_release_preconditions = [
+    "start-response-terminal",
+    "all-teardown-response-views-terminal",
+    "SetupCancellation-absent-or-complete-or-residual",
+    "ApplicationTeardown-absent-or-complete-or-residual",
+    "GuardClose-absent-or-complete-or-residual",
+    "cleanup-owner-absent-or-acknowledged",
+    "local-view-count-zero",
+]
+initial = "Reserved"
+states = [
+    "Reserved",
+    "Accepting",
+    "AcceptingCancelled",
+    "Accepted",
+    "Installing",
+    "InstallingCancelled",
+    "Active",
+    "RollingBack",
+    "Stopping",
+    "CleanupPending",
+    "Closed",
+    "Failed",
+    "Released",
+]
+terminal = ["Released"]
+required_events = [
+    "Reserved:begin_accept",
+    "Reserved:cancel",
+    "Reserved:drop",
+    "Reserved:deadline",
+    "Accepting:accepted",
+    "Accepting:handler_error",
+    "Accepting:handler_error_response_unavailable",
+    "Accepting:cancel",
+    "Accepting:drop",
+    "Accepting:deadline",
+    "AcceptingCancelled:accepted_late",
+    "AcceptingCancelled:error_late",
+    "AcceptingCancelled:setup_cancel_created",
+    "AcceptingCancelled:setup_cancel_claim",
+    "AcceptingCancelled:setup_cancel_pending",
+    "AcceptingCancelled:setup_aborted",
+    "AcceptingCancelled:setup_cleanup_pending",
+    "AcceptingCancelled:setup_cleanup_failed",
+    "AcceptingCancelled:setup_residual",
+    "AcceptingCancelled:start_response_terminal",
+    "AcceptingCancelled:start_response_delivery_failure",
+    "Accepted:response_invalid",
+    "Accepted:response_invalid_response_unavailable",
+    "Accepted:begin_install",
+    "Accepted:cancel",
+    "Accepted:drop",
+    "Accepted:deadline",
+    "Installing:installed_and_published",
+    "Installing:install_failure",
+    "Installing:install_failure_response_unavailable",
+    "Installing:response_claim_failure",
+    "Installing:cancel",
+    "Installing:drop",
+    "Installing:deadline",
+    "InstallingCancelled:installed_late",
+    "InstallingCancelled:install_failure",
+    "InstallingCancelled:start_response_terminal",
+    "InstallingCancelled:start_response_delivery_failure",
+    "Active:stop",
+    "Active:wire_teardown",
+    "Active:drop",
+    "Active:destroy",
+    "Active:start_response_delivery_failure",
+    "Active:start_response_terminal",
+    "Stopping:join_stop",
+    "Stopping:join_runtime_stop",
+    "Stopping:join_wire_teardown",
+    "Stopping:start_response_delivery_failure",
+    "Stopping:start_response_terminal",
+    "Stopping:teardown_view_terminal",
+    "Stopping:local_view_released",
+    "RollingBack:cleanup_complete_cancel",
+    "RollingBack:cleanup_complete_failure",
+    "RollingBack:cleanup_pending",
+    "RollingBack:residual",
+    "RollingBack:claim_next_obligation",
+    "RollingBack:obligation_complete",
+    "RollingBack:obligation_error",
+    "RollingBack:obligation_pending",
+    "RollingBack:obligation_residual",
+    "RollingBack:teardown_capacity_pending",
+    "RollingBack:teardown_cleanup_transfer",
+    "RollingBack:teardown_capacity_residual",
+    "RollingBack:start_response_terminal",
+    "RollingBack:start_response_delivery_failure",
+    "Stopping:teardown_complete",
+    "Stopping:teardown_failure",
+    "Stopping:cleanup_pending",
+    "Stopping:residual",
+    "Stopping:claim_next_obligation",
+    "Stopping:obligation_complete",
+    "Stopping:obligation_error",
+    "Stopping:obligation_pending",
+    "Stopping:obligation_residual",
+    "Stopping:teardown_capacity_pending",
+    "Stopping:teardown_cleanup_transfer",
+    "Stopping:teardown_capacity_residual",
+    "CleanupPending:complete_closed",
+    "CleanupPending:complete_failed",
+    "CleanupPending:residual",
+    "CleanupPending:join_stop",
+    "CleanupPending:join_runtime_stop",
+    "CleanupPending:join_wire_teardown",
+    "CleanupPending:start_response_delivery_failure",
+    "CleanupPending:start_response_terminal",
+    "CleanupPending:teardown_view_terminal",
+    "CleanupPending:local_view_released",
+    "CleanupPending:claim_next_obligation",
+    "CleanupPending:obligation_complete",
+    "CleanupPending:obligation_error",
+    "CleanupPending:obligation_pending",
+    "CleanupPending:obligation_residual",
+    "Closed:join_stop",
+    "Closed:join_runtime_stop",
+    "Closed:replay_wire_teardown",
+    "Closed:start_response_delivery_failure",
+    "Closed:start_response_terminal",
+    "Closed:teardown_view_terminal",
+    "Closed:local_view_released",
+    "Closed:release_when_quiescent",
+    "Failed:join_stop",
+    "Failed:join_runtime_stop",
+    "Failed:replay_wire_teardown",
+    "Failed:start_response_delivery_failure",
+    "Failed:start_response_terminal",
+    "Failed:teardown_view_terminal",
+    "Failed:local_view_released",
+    "Failed:release_when_quiescent",
+]
+
+[[machine.transition]]
+from = "Reserved"
+event = "begin_accept"
+to = "Accepting"
+owner = "ProducerSubscriptionOwner"
+linearization = "transfer the setup entry and reservation to one ProducerAcceptance HandlerCallOwner, publish Accepting and its nonce, then grant the callback lease outside locks"
+outcome = "application-setup-running"
+retryability = "not-applicable"
+
+[[machine.transition]]
+from = "Reserved"
+event = "cancel"
+to = "Closed"
+owner = "CancellationOwner"
+linearization = "cancellation wins before application setup"
+outcome = "Cancelled-without-setup"
+retryability = "terminal-recorded"
+
+[[machine.transition]]
+from = "Reserved"
+event = "drop"
+to = "Closed"
+owner = "CancellationOwner"
+linearization = "drop requests cancellation before application setup"
+outcome = "Cancelled-without-setup"
+retryability = "runtime-owned"
+
+[[machine.transition]]
+from = "Reserved"
+event = "deadline"
+to = "Closed"
+owner = "CancellationOwner"
+linearization = "deadline wins before application setup"
+outcome = "TimedOut-without-setup"
+retryability = "terminal-recorded"
+
+[[machine.transition]]
+from = "Accepting"
+event = "accepted"
+to = "Accepted"
+owner = "ProducerSubscriptionOwner"
+linearization = "consume the transferred acceptance, settle the setup-call reservation, and create exactly one paired teardown obligation"
+outcome = "acceptance-retained-not-published"
+retryability = "not-applicable"
+
+[[machine.transition]]
+from = "Accepting"
+event = "handler_error"
+to = "Failed"
+owner = "ProducerSubscriptionOwner"
+linearization = "as part of producer-start-error-response, consume the transferred setup error, settle setup-call capacity, claim its InFlight response, and retain failure before any teardown obligation exists"
+outcome = "setup-failed-error-response-claimed"
+retryability = "terminal-recorded"
+
+[[machine.transition]]
+from = "Accepting"
+event = "handler_error_response_unavailable"
+to = "Failed"
+owner = "ProducerSubscriptionOwner"
+linearization = "consume the transferred setup error, settle setup-call capacity, and record that the matching InFlight response was already closed or terminal before marking the start response terminal"
+outcome = "setup-failed-response-unavailable"
+retryability = "terminal-recorded"
+
+[[machine.transition]]
+from = "Accepting"
+event = "cancel"
+to = "AcceptingCancelled"
+owner = "CancellationOwner"
+linearization = "record the first cause against the setup call nonce while its unique CallbackLease remains outside locks; a bounded-step start that owns typed setup state also creates SetupCancellation=Pending"
+outcome = "setup-running-acceptance-will-be-late"
+retryability = "join-existing"
+
+[[machine.transition]]
+from = "Accepting"
+event = "drop"
+to = "AcceptingCancelled"
+owner = "CancellationOwner"
+linearization = "record Drop against the setup call nonce while its unique CallbackLease remains outside locks; a bounded-step start that owns typed setup state also creates SetupCancellation=Pending"
+outcome = "setup-running-acceptance-will-be-late"
+retryability = "runtime-owned"
+
+[[machine.transition]]
+from = "Accepting"
+event = "deadline"
+to = "AcceptingCancelled"
+owner = "CancellationOwner"
+linearization = "record Deadline against the setup call nonce while its unique CallbackLease remains outside locks; a bounded-step start that owns typed setup state also creates SetupCancellation=Pending"
+outcome = "setup-running-acceptance-will-be-late"
+retryability = "join-existing"
+
+[[machine.transition]]
+from = "AcceptingCancelled"
+event = "accepted_late"
+to = "RollingBack"
+owner = "ProducerSubscriptionOwner"
+linearization = "consume the transferred late acceptance, commit any pending SetupCancellation as Complete because typed setup state returned as the acceptance, create exactly one ApplicationTeardown obligation, and immediately transfer it to rollback"
+outcome = "rollback-required"
+retryability = "not-applicable"
+
+[[machine.transition]]
+from = "AcceptingCancelled"
+event = "error_late"
+to = "Closed"
+owner = "ProducerSubscriptionOwner"
+linearization = "consume the transferred late setup error, commit any pending SetupCancellation as Complete under the no-obligation-on-error contract, and settle the setup reservation because cancellation or deadline already closed publication"
+outcome = "cancelled-or-timed-out-without-obligation"
+retryability = "terminal-recorded"
+
+[[machine.transition]]
+from = "AcceptingCancelled"
+event = "setup_cancel_created"
+to = "AcceptingCancelled"
+owner = "CallbackLease"
+linearization = "a bounded start callback returns typed state after cancellation, atomically changes SetupCancellation from Absent to Pending, and transfers that state to explicit cancellation ownership"
+outcome = "setup-cancellation-required"
+retryability = "not-applicable"
+
+[[machine.transition]]
+from = "AcceptingCancelled"
+event = "setup_cancel_claim"
+to = "AcceptingCancelled"
+owner = "CallbackLease"
+linearization = "change SetupCancellation from Pending to Claimed with the same fresh nonce used by handler-step-execution begin_cancel before invoking the budgeted cancel callback outside locks"
+outcome = "setup-cancellation-callback-leased"
+retryability = "not-applicable"
+
+[[machine.transition]]
+from = "AcceptingCancelled"
+event = "setup_cancel_pending"
+to = "AcceptingCancelled"
+owner = "CallbackLease"
+linearization = "a matching bounded cancel Pending return changes SetupCancellation from Claimed back to Pending and releases the callback lease"
+outcome = "setup-cancellation-pending"
+retryability = "step-again-with-budget"
+
+[[machine.transition]]
+from = "AcceptingCancelled"
+event = "setup_aborted"
+to = "Closed"
+owner = "ProducerSubscriptionOwner"
+linearization = "an incomplete async setup future was dropped with SetupCancellation Absent, or bounded-step cancellation commits SetupCancellation from Claimed to Complete, with no acceptance and no external obligation"
+outcome = "cancelled-or-timed-out-without-obligation"
+retryability = "terminal-recorded"
+
+[[machine.transition]]
+from = "AcceptingCancelled"
+event = "setup_cleanup_pending"
+to = "CleanupPending"
+owner = "HandlerCleanupOwner"
+linearization = "zero-step or expired host drain atomically charges cleanup capacity, transfers typed setup state and its byte reservation, and changes SetupCancellation from Pending or Claimed to PendingCleanup with intended terminal Closed"
+outcome = "PendingCleanup"
+retryability = "recorded-per-item"
+
+[[machine.transition]]
+from = "AcceptingCancelled"
+event = "setup_cleanup_failed"
+to = "Failed"
+owner = "HandlerCleanupOwner"
+linearization = "bounded-step setup cancellation returns a terminal error, commits SetupCancellation from Claimed to Complete, and asserts that no retryable or external obligation remains"
+outcome = "setup-cancellation-failed-without-residual"
+retryability = "terminal-recorded"
+
+[[machine.transition]]
+from = "AcceptingCancelled"
+event = "setup_residual"
+to = "Failed"
+owner = "HandlerCleanupOwner"
+linearization = "change SetupCancellation from Pending or Claimed to Residual in the transaction's reserved three-bit Producer record before dropping or releasing the last typed setup owner"
+outcome = "ResidualExternalState"
+retryability = "recorded"
+
+[[machine.transition]]
+from = "Accepted"
+event = "response_invalid"
+to = "RollingBack"
+owner = "ProducerSubscriptionOwner"
+linearization = "atomically claim the validation error response through complete_producer_start_error before transferring the teardown obligation to rollback"
+outcome = "rollback-required-validation-response-claimed"
+retryability = "not-applicable"
+
+[[machine.transition]]
+from = "Accepted"
+event = "response_invalid_response_unavailable"
+to = "RollingBack"
+owner = "ProducerSubscriptionOwner"
+linearization = "record that the matching response is already closed or terminal before transferring the teardown obligation to rollback"
+outcome = "rollback-required-validation-response-unavailable"
+retryability = "not-applicable"
+
+[[machine.transition]]
+from = "Accepted"
+event = "begin_install"
+to = "Installing"
+owner = "ProducerSubscriptionOwner"
+linearization = "publish the installation nonce, move the installer into one CallbackLease, and retain acceptance plus teardown obligation"
+outcome = "guard-installation-running"
+retryability = "not-applicable"
+
+[[machine.transition]]
+from = "Accepted"
+event = "cancel"
+to = "RollingBack"
+owner = "CancellationOwner"
+linearization = "cancellation wins before installation and transfers the teardown obligation to rollback"
+outcome = "rollback-required-for-cancel"
+retryability = "join-existing"
+
+[[machine.transition]]
+from = "Accepted"
+event = "drop"
+to = "RollingBack"
+owner = "CancellationOwner"
+linearization = "drop wins before installation and transfers the teardown obligation to rollback"
+outcome = "rollback-required-for-cancel"
+retryability = "runtime-owned"
+
+[[machine.transition]]
+from = "Accepted"
+event = "deadline"
+to = "RollingBack"
+owner = "CancellationOwner"
+linearization = "deadline wins before installation and transfers the teardown obligation to rollback"
+outcome = "rollback-required-for-timeout"
+retryability = "join-existing"
+
+[[machine.transition]]
+from = "Installing"
+event = "installed_and_published"
+to = "Active"
+owner = "ProducerSubscriptionOwner"
+linearization = "one non-callback boundary claims the success response opportunity and publishes the active subscription generation after guard installation"
+outcome = "active"
+retryability = "not-applicable"
+
+[[machine.transition]]
+from = "Installing"
+event = "install_failure"
+to = "RollingBack"
+owner = "CallbackLease"
+linearization = "return every partial guard to ProducerSubscriptionOwner, then atomically claim the installation error response before rollback"
+outcome = "rollback-required-install-response-claimed"
+retryability = "not-applicable"
+
+[[machine.transition]]
+from = "Installing"
+event = "install_failure_response_unavailable"
+to = "RollingBack"
+owner = "CallbackLease"
+linearization = "return every partial guard, record that the matching response is already closed or terminal, and transfer all obligations to rollback"
+outcome = "rollback-required-install-response-unavailable"
+retryability = "not-applicable"
+
+[[machine.transition]]
+from = "Installing"
+event = "response_claim_failure"
+to = "RollingBack"
+owner = "ResponseCoordinator"
+linearization = "response opportunity closes before active publication and transfers installed guards plus teardown obligation to rollback"
+outcome = "rollback-required-for-response-close"
+retryability = "not-applicable"
+
+[[machine.transition]]
+from = "Installing"
+event = "cancel"
+to = "InstallingCancelled"
+owner = "CancellationOwner"
+linearization = "record the first cause against the installation nonce while its unique CallbackLease remains outside locks"
+outcome = "installation-running-must-roll-back"
+retryability = "join-existing"
+
+[[machine.transition]]
+from = "Installing"
+event = "drop"
+to = "InstallingCancelled"
+owner = "CancellationOwner"
+linearization = "record Drop against the installation nonce while its unique CallbackLease remains outside locks"
+outcome = "installation-running-must-roll-back"
+retryability = "runtime-owned"
+
+[[machine.transition]]
+from = "Installing"
+event = "deadline"
+to = "InstallingCancelled"
+owner = "CancellationOwner"
+linearization = "record Deadline against the installation nonce while its unique CallbackLease remains outside locks"
+outcome = "installation-running-must-roll-back"
+retryability = "join-existing"
+
+[[machine.transition]]
+from = "InstallingCancelled"
+event = "installed_late"
+to = "RollingBack"
+owner = "CallbackLease"
+linearization = "late installed guards remain unpublished and transfer with the teardown obligation to rollback"
+outcome = "rollback-required-for-cancel"
+retryability = "not-applicable"
+
+[[machine.transition]]
+from = "InstallingCancelled"
+event = "install_failure"
+to = "RollingBack"
+owner = "CallbackLease"
+linearization = "late installation failure transfers any partial guards and the teardown obligation to rollback"
+outcome = "rollback-required-with-cause-retained"
+retryability = "not-applicable"
+
+[[machine.transition]]
+from = "Active"
+event = "stop"
+to = "Stopping"
+owner = "ProducerSubscriptionOwner"
+linearization = "attach one generation-checked local stop view and increment its checked count once, close sample admission, transfer teardown responsibility plus retained generation metadata without pending-call capacity, and initialize GuardClose then ApplicationTeardown cleanup order"
+outcome = "teardown-required"
+retryability = "join-existing"
+
+[[machine.transition]]
+from = "Active"
+event = "wire_teardown"
+to = "Stopping"
+owner = "ProducerSubscriptionOwner"
+linearization = "attach the teardown request's separate InFlight view, close sample admission, and transfer teardown responsibility plus retained generation metadata without pending-call capacity"
+outcome = "teardown-required"
+retryability = "join-existing"
+
+[[machine.transition]]
+from = "Active"
+event = "drop"
+to = "Stopping"
+owner = "ProducerSubscriptionOwner"
+linearization = "close sample admission and transfer teardown responsibility, retained generation metadata, and the GuardClose and ApplicationTeardown bits without creating a response view or pending-call reservation"
+outcome = "teardown-required"
+retryability = "runtime-owned"
+
+[[machine.transition]]
+from = "Active"
+event = "destroy"
+to = "Stopping"
+owner = "ProducerSubscriptionOwner"
+linearization = "close sample admission and transfer teardown responsibility, retained generation metadata, and the GuardClose and ApplicationTeardown bits without charging a pending call before it is runnable"
+outcome = "teardown-required"
+retryability = "join-existing"
+
+[[machine.transition]]
+from = "Active"
+event = "start_response_delivery_failure"
+to = "Stopping"
+owner = "ProducerSubscriptionOwner"
+linearization = "retain the start delivery failure, close sample admission, and transfer teardown responsibility, retained generation metadata, and cleanup bits without pending-call capacity"
+outcome = "teardown-required-with-delivery-failure"
+retryability = "not-applicable"
+
+[[machine.transition]]
+from = "Stopping"
+event = "join_stop"
+to = "Stopping"
+owner = "ProducerSubscriptionOwner"
+linearization = "a repeated local stop attaches one generation-checked local view, increments the checked count once, and joins the existing cleanup generation without claiming an obligation bit"
+outcome = "join-existing-cleanup"
+retryability = "join-existing"
+
+[[machine.transition]]
+from = "Stopping"
+event = "join_runtime_stop"
+to = "Stopping"
+owner = "ProducerSubscriptionOwner"
+linearization = "a repeated drop or destroy joins existing cleanup ownership without creating a local response view or changing the checked local-view count"
+outcome = "runtime-owner-joined-existing-cleanup"
+retryability = "runtime-owned"
+
+[[machine.transition]]
+from = "Stopping"
+event = "join_wire_teardown"
+to = "Stopping"
+owner = "ProducerSubscriptionOwner"
+linearization = "attach one separately admitted InFlight response view to the existing terminal generation without reinvoking teardown"
+outcome = "join-existing-cleanup"
+retryability = "join-existing"
+
+[[machine.transition]]
+from = "Stopping"
+event = "start_response_delivery_failure"
+to = "Stopping"
+owner = "ResponseCoordinator"
+linearization = "retain the late start-response delivery failure as the primary or secondary terminal cause while existing cleanup continues"
+outcome = "cleanup-continues-with-delivery-failure"
+retryability = "not-applicable"
+
+[[machine.transition]]
+from = "RollingBack"
+event = "claim_next_obligation"
+to = "RollingBack"
+owner = "HandlerCleanupOwner"
+linearization = "select GuardClose before ApplicationTeardown, change the selected Pending or progressable PendingCleanup bit to Claimed with a fresh nonce, and move its exact object to CallbackLease"
+outcome = "cleanup-callback-leased"
+retryability = "not-applicable"
+
+[[machine.transition]]
+from = "RollingBack"
+event = "obligation_complete"
+to = "RollingBack"
+owner = "CallbackLease"
+linearization = "commit the matching claimed bit as Complete after callback return and out-of-lock destructor completion"
+outcome = "cleanup-bit-complete"
+retryability = "not-applicable"
+
+[[machine.transition]]
+from = "RollingBack"
+event = "obligation_error"
+to = "RollingBack"
+owner = "CallbackLease"
+linearization = "commit the matching claimed bit as Complete with bounded failure only under the no-remaining-obligation contract, then continue to the next bit in cleanup_order"
+outcome = "cleanup-bit-terminal-error"
+retryability = "terminal-recorded"
+
+[[machine.transition]]
+from = "RollingBack"
+event = "obligation_pending"
+to = "RollingBack"
+owner = "CallbackLease"
+linearization = "atomically transfer the matching claimed object to PendingCleanup with its CleanupHandle, then continue to the next bit in cleanup_order"
+outcome = "cleanup-bit-pending"
+retryability = "recorded-per-item"
+
+[[machine.transition]]
+from = "RollingBack"
+event = "obligation_residual"
+to = "RollingBack"
+owner = "CallbackLease"
+linearization = "durably commit the matching claimed bit into the transaction's reserved Producer residual record before dropping its local object, then continue to the next bit in cleanup_order"
+outcome = "cleanup-bit-residual"
+retryability = "recorded"
+
+[[machine.transition]]
+from = "RollingBack"
+event = "teardown_capacity_pending"
+to = "RollingBack"
+owner = "HandlerCleanupOwner"
+linearization = "normal teardown call admission is saturated, so ApplicationTeardown remains Pending, ProducerSubscriptionTeardown pending work is published, and the cumulative host-time or HandlerSteps wait budget advances exactly once"
+outcome = "teardown-awaiting-call-capacity"
+retryability = "resume-when-capacity-available"
+
+[[machine.transition]]
+from = "RollingBack"
+event = "teardown_cleanup_transfer"
+to = "RollingBack"
+owner = "HandlerCleanupOwner"
+linearization = "bounded drain acquires and charges one cleanup slot, then changes ApplicationTeardown from Pending to PendingCleanup without charging pending-call count or bytes"
+outcome = "teardown-responsibility-transferred"
+retryability = "recorded-per-item"
+
+[[machine.transition]]
+from = "RollingBack"
+event = "teardown_capacity_residual"
+to = "RollingBack"
+owner = "HandlerCleanupOwner"
+linearization = "when the cumulative admission wait bound is reached and cleanup transfer cannot be charged, commit ApplicationTeardown to the already reserved Producer residual record before releasing local responsibility"
+outcome = "teardown-capacity-residual"
+retryability = "recorded"
+
+[[machine.transition]]
+from = "RollingBack"
+event = "cleanup_complete_cancel"
+to = "Closed"
+owner = "HandlerCleanupOwner"
+linearization = "after SetupCancellation, GuardClose, and ApplicationTeardown were each skipped or attempted in cleanup_order, all three bits are Absent or Complete and cancellation or deadline remains the primary cause"
+outcome = "Closed-with-cancel-or-timeout-retained"
+retryability = "terminal-recorded"
+
+[[machine.transition]]
+from = "RollingBack"
+event = "cleanup_complete_failure"
+to = "Failed"
+owner = "HandlerCleanupOwner"
+linearization = "after all applicable obligation bits were attempted, all three are Absent or Complete and the primary setup, validation, installation, or response-claim failure is retained"
+outcome = "Failed-cleanup-complete"
+retryability = "terminal-recorded"
+
+[[machine.transition]]
+from = "RollingBack"
+event = "cleanup_pending"
+to = "CleanupPending"
+owner = "HandlerCleanupOwner"
+linearization = "after all applicable bits received an initial attempt, at least one is PendingCleanup, none is Pending or Claimed, and every object and reservation has a named owner"
+outcome = "PendingCleanup"
+retryability = "recorded-per-item"
+
+[[machine.transition]]
+from = "RollingBack"
+event = "residual"
+to = "Failed"
+owner = "HandlerCleanupOwner"
+linearization = "after all applicable bits received an initial attempt, at least one residual bit is durable in the reserved Producer record, no bit is Pending or Claimed, and local publication is closed"
+outcome = "ResidualExternalState"
+retryability = "recorded"
+
+[[machine.transition]]
+from = "Stopping"
+event = "claim_next_obligation"
+to = "Stopping"
+owner = "HandlerCleanupOwner"
+linearization = "select GuardClose before ApplicationTeardown, change the selected Pending bit to Claimed with a fresh nonce, and move its exact object to CallbackLease"
+outcome = "cleanup-callback-leased"
+retryability = "not-applicable"
+
+[[machine.transition]]
+from = "Stopping"
+event = "obligation_complete"
+to = "Stopping"
+owner = "CallbackLease"
+linearization = "commit the matching claimed bit as Complete after callback return and out-of-lock destructor completion"
+outcome = "cleanup-bit-complete"
+retryability = "not-applicable"
+
+[[machine.transition]]
+from = "Stopping"
+event = "obligation_error"
+to = "Stopping"
+owner = "CallbackLease"
+linearization = "commit the matching claimed bit as Complete with bounded failure only under the no-remaining-obligation contract, then continue to the next bit in cleanup_order"
+outcome = "cleanup-bit-terminal-error"
+retryability = "terminal-recorded"
+
+[[machine.transition]]
+from = "Stopping"
+event = "obligation_pending"
+to = "Stopping"
+owner = "CallbackLease"
+linearization = "atomically transfer the matching claimed object to PendingCleanup with its CleanupHandle, then continue to the next bit in cleanup_order"
+outcome = "cleanup-bit-pending"
+retryability = "recorded-per-item"
+
+[[machine.transition]]
+from = "Stopping"
+event = "obligation_residual"
+to = "Stopping"
+owner = "CallbackLease"
+linearization = "durably commit the matching claimed bit into the transaction's reserved Producer residual record before dropping its local object, then continue to the next bit in cleanup_order"
+outcome = "cleanup-bit-residual"
+retryability = "recorded"
+
+[[machine.transition]]
+from = "Stopping"
+event = "teardown_capacity_pending"
+to = "Stopping"
+owner = "HandlerCleanupOwner"
+linearization = "normal teardown call admission is saturated, so ApplicationTeardown remains Pending, ProducerSubscriptionTeardown pending work is published, and the cumulative host-time or HandlerSteps wait budget advances exactly once"
+outcome = "teardown-awaiting-call-capacity"
+retryability = "resume-when-capacity-available"
+
+[[machine.transition]]
+from = "Stopping"
+event = "teardown_cleanup_transfer"
+to = "Stopping"
+owner = "HandlerCleanupOwner"
+linearization = "bounded drain acquires and charges one cleanup slot, then changes ApplicationTeardown from Pending to PendingCleanup without charging pending-call count or bytes"
+outcome = "teardown-responsibility-transferred"
+retryability = "recorded-per-item"
+
+[[machine.transition]]
+from = "Stopping"
+event = "teardown_capacity_residual"
+to = "Stopping"
+owner = "HandlerCleanupOwner"
+linearization = "when the cumulative admission wait bound is reached and cleanup transfer cannot be charged, commit ApplicationTeardown to the already reserved Producer residual record before releasing local responsibility"
+outcome = "teardown-capacity-residual"
+retryability = "recorded"
+
+[[machine.transition]]
+from = "Stopping"
+event = "teardown_complete"
+to = "Closed"
+owner = "HandlerCleanupOwner"
+linearization = "SetupCancellation is Absent or Complete and GuardClose then ApplicationTeardown were each attempted exactly once and are Complete"
+outcome = "Closed"
+retryability = "terminal-recorded"
+
+[[machine.transition]]
+from = "Stopping"
+event = "teardown_failure"
+to = "Failed"
+owner = "HandlerCleanupOwner"
+linearization = "GuardClose completed or became residual, paired teardown returned terminal Err, and any possible external application state was durably classified before release"
+outcome = "Failed-with-teardown-error-or-residual"
+retryability = "terminal-recorded"
+
+[[machine.transition]]
+from = "Stopping"
+event = "cleanup_pending"
+to = "CleanupPending"
+owner = "HandlerCleanupOwner"
+linearization = "after all applicable bits received an initial attempt, at least one is PendingCleanup, none is Pending or Claimed, and every object and reservation has a named owner"
+outcome = "PendingCleanup"
+retryability = "recorded-per-item"
+
+[[machine.transition]]
+from = "Stopping"
+event = "residual"
+to = "Failed"
+owner = "HandlerCleanupOwner"
+linearization = "after all applicable bits received an initial attempt, at least one residual bit is durable in the reserved Producer record, no bit is Pending or Claimed, and local sample admission is closed"
+outcome = "ResidualExternalState"
+retryability = "recorded"
+
+[[machine.transition]]
+from = "CleanupPending"
+event = "claim_next_obligation"
+to = "CleanupPending"
+owner = "HandlerCleanupOwner"
+linearization = "select the first progressable PendingCleanup bit in cleanup_order, change it to Claimed with a fresh nonce, and move its retained typed setup state, guard, or teardown entry to CallbackLease under the bit-specific admission rule"
+outcome = "cleanup-retry-leased"
+retryability = "not-applicable"
+
+[[machine.transition]]
+from = "CleanupPending"
+event = "obligation_complete"
+to = "CleanupPending"
+owner = "CallbackLease"
+linearization = "commit the matching retried bit as Complete and acknowledge its CleanupHandle after out-of-lock destructor completion"
+outcome = "cleanup-bit-complete"
+retryability = "not-applicable"
+
+[[machine.transition]]
+from = "CleanupPending"
+event = "obligation_error"
+to = "CleanupPending"
+owner = "CallbackLease"
+linearization = "commit the matching retried bit as Complete with bounded failure only when no remaining external obligation exists"
+outcome = "cleanup-bit-terminal-error"
+retryability = "terminal-recorded"
+
+[[machine.transition]]
+from = "CleanupPending"
+event = "obligation_pending"
+to = "CleanupPending"
+owner = "CallbackLease"
+linearization = "return the matching claimed object to PendingCleanup with updated bounded retry state"
+outcome = "cleanup-bit-pending"
+retryability = "recorded-per-item"
+
+[[machine.transition]]
+from = "CleanupPending"
+event = "obligation_residual"
+to = "CleanupPending"
+owner = "CallbackLease"
+linearization = "durably change the matching claimed bit to Residual in the reserved Producer record, acknowledge its live CleanupHandle, and only then drop the local object"
+outcome = "cleanup-bit-residual"
+retryability = "recorded"
+
+[[machine.transition]]
+from = "CleanupPending"
+event = "complete_closed"
+to = "Closed"
+owner = "HandlerCleanupOwner"
+linearization = "last retained cleanup item terminates with the recorded closed outcome"
+outcome = "Closed"
+retryability = "terminal-recorded"
+
+[[machine.transition]]
+from = "CleanupPending"
+event = "complete_failed"
+to = "Failed"
+owner = "HandlerCleanupOwner"
+linearization = "last retained cleanup item terminates with the recorded primary failure"
+outcome = "Failed"
+retryability = "terminal-recorded"
+
+[[machine.transition]]
+from = "CleanupPending"
+event = "residual"
+to = "Failed"
+owner = "HandlerCleanupOwner"
+linearization = "the last retained cleanup owner durably records residual state and acknowledges every moved reservation"
+outcome = "ResidualExternalState"
+retryability = "recorded"
+
+[[machine.transition]]
+from = "CleanupPending"
+event = "join_stop"
+to = "CleanupPending"
+owner = "ProducerSubscriptionOwner"
+linearization = "a repeated local stop attaches one generation-checked local view, increments the checked count once, and joins the retained cleanup generation without claiming an obligation bit"
+outcome = "join-existing-cleanup"
+retryability = "join-existing"
+
+[[machine.transition]]
+from = "CleanupPending"
+event = "join_runtime_stop"
+to = "CleanupPending"
+owner = "ProducerSubscriptionOwner"
+linearization = "a repeated drop or destroy joins retained cleanup ownership without creating a local response view or changing the checked local-view count"
+outcome = "runtime-owner-joined-existing-cleanup"
+retryability = "runtime-owned"
+
+[[machine.transition]]
+from = "CleanupPending"
+event = "join_wire_teardown"
+to = "CleanupPending"
+owner = "ProducerSubscriptionOwner"
+linearization = "attach one separately admitted InFlight response view to the retained cleanup generation without reinvoking teardown"
+outcome = "join-existing-cleanup"
+retryability = "join-existing"
+
+[[machine.transition]]
+from = "CleanupPending"
+event = "start_response_delivery_failure"
+to = "CleanupPending"
+owner = "ResponseCoordinator"
+linearization = "retain a late start-response delivery failure while existing cleanup ownership continues"
+outcome = "cleanup-continues-with-delivery-failure"
+retryability = "not-applicable"
+
+[[machine.transition]]
+from = "Closed"
+event = "join_stop"
+to = "Closed"
+owner = "ProducerSubscriptionOwner"
+linearization = "a repeated local stop validates the generation and returns the retained closed summary in one boundary without retaining or changing the checked local-view count"
+outcome = "closed-terminal-replayed"
+retryability = "terminal"
+
+[[machine.transition]]
+from = "Closed"
+event = "join_runtime_stop"
+to = "Closed"
+owner = "ProducerSubscriptionOwner"
+linearization = "a repeated drop or destroy observes the retained terminal generation without creating a view or changing cleanup ownership"
+outcome = "closed-runtime-owner-joined"
+retryability = "terminal"
+
+[[machine.transition]]
+from = "Closed"
+event = "replay_wire_teardown"
+to = "Closed"
+owner = "ResponseCoordinator"
+linearization = "claim the joining request's own InFlight response and replay the bounded payload-free closed summary without invoking application code"
+outcome = "closed-terminal-replayed"
+retryability = "terminal"
+
+[[machine.transition]]
+from = "Closed"
+event = "start_response_delivery_failure"
+to = "Failed"
+owner = "ResponseCoordinator"
+linearization = "a late failure of the still-retained start response changes the terminal summary to failed before generation release"
+outcome = "Failed-with-start-response-delivery-error"
+retryability = "terminal-recorded"
+
+[[machine.transition]]
+from = "Closed"
+event = "release_when_quiescent"
+to = "Released"
+owner = "ProducerSubscriptionOwner"
+linearization = "on Thing destruction or deterministic admission-pressure eviction, atomically verify every terminal_release_preconditions entry and release the quiescent tombstone, subscription slot, and remaining engine reservations"
+outcome = "closed-terminal-released"
+retryability = "terminal"
+
+[[machine.transition]]
+from = "Failed"
+event = "join_stop"
+to = "Failed"
+owner = "ProducerSubscriptionOwner"
+linearization = "a repeated local stop validates the generation and returns the retained failed summary in one boundary without retaining or changing the checked local-view count"
+outcome = "failed-terminal-replayed"
+retryability = "terminal"
+
+[[machine.transition]]
+from = "Failed"
+event = "join_runtime_stop"
+to = "Failed"
+owner = "ProducerSubscriptionOwner"
+linearization = "a repeated drop or destroy observes the retained terminal generation without creating a view or changing cleanup ownership"
+outcome = "failed-runtime-owner-joined"
+retryability = "terminal"
+
+[[machine.transition]]
+from = "Failed"
+event = "replay_wire_teardown"
+to = "Failed"
+owner = "ResponseCoordinator"
+linearization = "claim the joining request's own InFlight response and replay the bounded payload-free failed summary without invoking application code"
+outcome = "failed-terminal-replayed"
+retryability = "terminal"
+
+[[machine.transition]]
+from = "Failed"
+event = "start_response_delivery_failure"
+to = "Failed"
+owner = "ResponseCoordinator"
+linearization = "retain a late start-response delivery failure as a bounded secondary cause before response-view release"
+outcome = "failed-terminal-retained"
+retryability = "terminal-recorded"
+
+[[machine.transition]]
+from = "Failed"
+event = "release_when_quiescent"
+to = "Released"
+owner = "ProducerSubscriptionOwner"
+linearization = "on Thing destruction or deterministic admission-pressure eviction, atomically verify every terminal_release_preconditions entry and release the quiescent tombstone, subscription slot, and remaining engine reservations"
+outcome = "failed-terminal-released"
+retryability = "terminal"
+
+[[machine.transition]]
+from = "AcceptingCancelled"
+event = "start_response_terminal"
+to = "AcceptingCancelled"
+owner = "ResponseCoordinator"
+linearization = "atomically acknowledge release of the matching start-response generation while setup termination remains independently owned"
+outcome = "start-response-terminal-acknowledged"
+retryability = "idempotent-generation-checked"
+
+[[machine.transition]]
+from = "AcceptingCancelled"
+event = "start_response_delivery_failure"
+to = "AcceptingCancelled"
+owner = "ResponseCoordinator"
+linearization = "retain the start delivery failure without taking the running setup CallbackLease"
+outcome = "setup-continues-with-delivery-failure"
+retryability = "not-applicable"
+
+[[machine.transition]]
+from = "InstallingCancelled"
+event = "start_response_terminal"
+to = "InstallingCancelled"
+owner = "ResponseCoordinator"
+linearization = "atomically acknowledge release of the matching start-response generation while late installation remains independently owned"
+outcome = "start-response-terminal-acknowledged"
+retryability = "idempotent-generation-checked"
+
+[[machine.transition]]
+from = "InstallingCancelled"
+event = "start_response_delivery_failure"
+to = "InstallingCancelled"
+owner = "ResponseCoordinator"
+linearization = "retain the start delivery failure without taking the running installation CallbackLease"
+outcome = "installation-continues-to-rollback"
+retryability = "not-applicable"
+
+[[machine.transition]]
+from = "Active"
+event = "start_response_terminal"
+to = "Active"
+owner = "ResponseCoordinator"
+linearization = "atomically acknowledge release of the matching successfully claimed start-response generation"
+outcome = "start-response-terminal-acknowledged"
+retryability = "idempotent-generation-checked"
+
+[[machine.transition]]
+from = "RollingBack"
+event = "start_response_terminal"
+to = "RollingBack"
+owner = "ResponseCoordinator"
+linearization = "atomically acknowledge release of the matching start-response generation while rollback continues"
+outcome = "start-response-terminal-acknowledged"
+retryability = "idempotent-generation-checked"
+
+[[machine.transition]]
+from = "RollingBack"
+event = "start_response_delivery_failure"
+to = "RollingBack"
+owner = "ResponseCoordinator"
+linearization = "retain the start delivery failure as primary or secondary cause while both rollback obligations continue"
+outcome = "rollback-continues-with-delivery-failure"
+retryability = "not-applicable"
+
+[[machine.transition]]
+from = "Stopping"
+event = "start_response_terminal"
+to = "Stopping"
+owner = "ResponseCoordinator"
+linearization = "atomically acknowledge release of the matching start-response generation while teardown continues"
+outcome = "start-response-terminal-acknowledged"
+retryability = "idempotent-generation-checked"
+
+[[machine.transition]]
+from = "Stopping"
+event = "teardown_view_terminal"
+to = "Stopping"
+owner = "ResponseCoordinator"
+linearization = "atomically acknowledge one matching teardown InFlight release and decrement the checked teardown-view count exactly once"
+outcome = "teardown-view-terminal-acknowledged"
+retryability = "idempotent-generation-checked"
+
+[[machine.transition]]
+from = "Stopping"
+event = "local_view_released"
+to = "Stopping"
+owner = "ProducerSubscriptionOwner"
+linearization = "decrement one matching checked local view exactly once while teardown continues"
+outcome = "local-view-released"
+retryability = "idempotent-generation-checked"
+
+[[machine.transition]]
+from = "CleanupPending"
+event = "start_response_terminal"
+to = "CleanupPending"
+owner = "ResponseCoordinator"
+linearization = "atomically acknowledge release of the matching start-response generation while transferred cleanup continues"
+outcome = "start-response-terminal-acknowledged"
+retryability = "idempotent-generation-checked"
+
+[[machine.transition]]
+from = "CleanupPending"
+event = "teardown_view_terminal"
+to = "CleanupPending"
+owner = "ResponseCoordinator"
+linearization = "atomically acknowledge one matching teardown InFlight release and decrement the checked teardown-view count exactly once"
+outcome = "teardown-view-terminal-acknowledged"
+retryability = "idempotent-generation-checked"
+
+[[machine.transition]]
+from = "CleanupPending"
+event = "local_view_released"
+to = "CleanupPending"
+owner = "ProducerSubscriptionOwner"
+linearization = "decrement one matching checked local view exactly once while transferred cleanup continues"
+outcome = "local-view-released"
+retryability = "idempotent-generation-checked"
+
+[[machine.transition]]
+from = "Closed"
+event = "start_response_terminal"
+to = "Closed"
+owner = "ResponseCoordinator"
+linearization = "atomically acknowledge release of the matching start-response generation and make the terminal predicate progress"
+outcome = "start-response-terminal-acknowledged"
+retryability = "idempotent-generation-checked"
+
+[[machine.transition]]
+from = "Closed"
+event = "teardown_view_terminal"
+to = "Closed"
+owner = "ResponseCoordinator"
+linearization = "atomically acknowledge one matching teardown InFlight release and decrement the checked teardown-view count exactly once"
+outcome = "teardown-view-terminal-acknowledged"
+retryability = "idempotent-generation-checked"
+
+[[machine.transition]]
+from = "Closed"
+event = "local_view_released"
+to = "Closed"
+owner = "ProducerSubscriptionOwner"
+linearization = "decrement one matching checked local view exactly once and make the tombstone eviction predicate progress"
+outcome = "local-view-released"
+retryability = "idempotent-generation-checked"
+
+[[machine.transition]]
+from = "Failed"
+event = "start_response_terminal"
+to = "Failed"
+owner = "ResponseCoordinator"
+linearization = "atomically acknowledge release of the matching start-response generation without replacing the retained failure"
+outcome = "start-response-terminal-acknowledged"
+retryability = "idempotent-generation-checked"
+
+[[machine.transition]]
+from = "Failed"
+event = "teardown_view_terminal"
+to = "Failed"
+owner = "ResponseCoordinator"
+linearization = "atomically acknowledge one matching teardown InFlight release and decrement the checked teardown-view count exactly once"
+outcome = "teardown-view-terminal-acknowledged"
+retryability = "idempotent-generation-checked"
+
+[[machine.transition]]
+from = "Failed"
+event = "local_view_released"
+to = "Failed"
+owner = "ProducerSubscriptionOwner"
+linearization = "decrement one matching checked local view exactly once and make the tombstone eviction predicate progress"
+outcome = "local-view-released"
+retryability = "idempotent-generation-checked"
 
 [[machine]]
 id = "directory-process"

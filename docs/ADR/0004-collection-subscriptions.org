@@ -1,0 +1,65 @@
+#+title: ADR-0004: Collection Subscription Planning and Multiplexing
+#+date: 2026-07-16
+#+status: Accepted
+
+* Context
+
+The current =subscribe_all_events= scans all event affordances, opens one
+=SubscribeEvent= interaction per event, and merges local queues. It never tries
+a Thing-level =SubscribeAllEvents= form even when the selected protocol supports
+native multiplexing. The behavior is expensive, unfair, and semantically
+different from the advertised collection operation.
+
+* Decision
+
+=subscribe_all_events= and =observe_all_properties= are first-class collection
+operations. Their standard names perform exactly one selected Thing-level
+operation from the root =forms= array:
+
+1. the shared compiler selects the root form and exact binding generation;
+2. the binding capability and compiled plan prove exact source attribution and
+   admitted target bounds;
+3. =ClientBinding= starts one collection subscription driver; and
+4. the binding uses protocol-native multiplexing when its selected plan permits
+   it.
+
+The Servient and core never interpret Zenoh wildcards, MQTT topic filters, or
+another protocol's multiplexing syntax. Those details remain in the concrete
+binding compiler and driver.
+
+If no compatible root form exists, the standard method returns a structured
+no-compatible-form error. It does not silently lower to N per-affordance
+subscriptions.
+
+Per-affordance fan-out is deferred from the initial conforming surface. A later
+revision may add explicitly named Rust extensions such as
+=subscribe_events_fan_out= and =observe_properties_fan_out= only after it
+freezes all of the following:
+
+- reservation of every start, guard, queue/item byte, result, and cleanup slot
+  before the first side effect;
+- deterministic start order and bounded concurrency;
+- partial-start rollback and retained cleanup outcomes;
+- fair retained progress cursors and per-source ordering;
+- exact source attribution and terminal aggregation;
+- target-count and per-step limits; and
+- workloads comparing native collection subscriptions with the explicit
+  fallback.
+
+A concrete binding may later coalesce an explicit per-affordance plan into one
+physical protocol subscription only when the compiler proves equivalent route,
+security, media, source-attribution, ordering, and teardown semantics. This is
+an optimization of an explicit plan, not a hidden core fallback.
+
+* Consequences
+
+- =Subscription::merge= and =EventStream= are not target APIs.
+- =SubscriptionItem= provides the event or property source for both single and
+  collection subscriptions.
+- Client binding capability metadata gains a constructible typed
+  collection-subscription capability with topology, exact-source,
+  maximum-target, atomic-start, and teardown facts; protocol syntax does not
+  enter that value. Host and static registrations expose the same two
+  operation-keyed capability methods.
+- WP-200 owns selection and capability compilation, WP-300 owns the SPI, WP-400
+  owns the application transaction, and WP-600 owns native Zenoh behavior.

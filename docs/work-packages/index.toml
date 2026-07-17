@@ -1,5 +1,5 @@
 schema_version = 1
-design_revision = "4.6"
+design_revision = "4.8"
 requirement = "IMPL-CONFORM-001"
 status = "in-progress"
 implementation_entry_gates = [
@@ -31,6 +31,60 @@ required_headings = [
     "Performance Workloads",
     "Completion Conditions",
 ]
+
+[[entrypoint]]
+id = "WP-100-HANDLER-ENTRY"
+work_package = "WP-100"
+depends_on_tranches = ["WP-100-FOUNDATION-REFRESH"]
+
+[[tranche]]
+id = "WP-100-FOUNDATION-REFRESH"
+work_package = "WP-100"
+sequence = 110
+status = "pending"
+depends_on = []
+blocks_entrypoints = ["WP-100-HANDLER-ENTRY"]
+requirements = [
+    "API-RESOURCE-001",
+    "API-SURFACE-001",
+    "CONSTRAINED-PROGRESS-001",
+    "CONSTRAINED-WORK-001",
+    "CLEANUP-RECORD-001",
+    "HANDLER-CANCEL-002",
+    "HANDLER-STORAGE-001",
+    "HANDLER-SUB-001",
+    "RES-LIMIT-001",
+    "RES-PROFILE-001",
+]
+owner_packages = ["clinkz-wot-core", "clinkz-wot-foundation"]
+feature_cells = ["no-default", "async-no-std", "std"]
+expected_resource_limit_count = 139
+expected_additive_resource_fields = [
+    "handler_slots_per_thing_max",
+    "handler_slots_global_max",
+    "handler_state_bytes_per_thing_max",
+    "handler_state_bytes_global_max",
+    "pending_handler_calls_per_thing_max",
+    "pending_handler_calls_global_max",
+    "handler_generations_per_slot_max",
+    "handler_drain_timeout_millis_max",
+    "handler_drain_steps_max",
+    "producer_residual_records_global_max",
+    "producer_residual_record_bytes_max",
+    "producer_residual_bytes_global_max",
+    "binding_emission_slots_per_binding_max",
+    "binding_emission_slots_global_max",
+    "collection_subscription_sources_per_subscription_max",
+    "host_emission_lanes_per_binding_max",
+    "host_emission_lanes_global_max",
+    "pending_client_calls_per_binding_max",
+    "pending_client_calls_per_thing_max",
+    "pending_client_calls_global_max",
+    "host_binding_cancel_drain_timeout_millis_max",
+]
+evidence_key = "handler-foundation-refresh"
+evidence_path = "docs/evidence/WP-100-foundation-refresh.toml"
+verification_check = "wp100-foundation-refresh-check"
 
 [[package]]
 id = "WP-000"
@@ -108,14 +162,21 @@ requirements = [
     "CONSTRAINED-PROGRESS-001",
     "CONSTRAINED-OWN-001",
     "CONSTRAINED-WORK-001",
+    "RES-LIMIT-001",
+    "RES-PROFILE-001",
+    "API-RESOURCE-001",
     "PERF-ALLOC-001",
     "PERF-CALL-001",
 ]
-owner_packages = ["clinkz-wot-core", "clinkz-wot-td"]
+owner_packages = ["clinkz-wot-core", "clinkz-wot-foundation", "clinkz-wot-td"]
 feature_cells = ["no-default", "async-no-std", "std"]
 evidence_keys = [
+    "handler-foundation-refresh",
     "core-public-surface",
+    "handler-api-matrix",
     "handler-cancellation",
+    "handler-storage-replacement",
+    "affordance-target-no-atomics",
     "callback-lock-isolation",
     "security-selection-and-redaction",
     "codec-validator-reuse",
@@ -126,10 +187,14 @@ performance_workloads = [
     "PERF-GW-002",
     "PERF-GW-005",
     "PERF-GW-006",
+    "PERF-GW-020",
+    "PERF-GW-021",
     "PERF-CS-001",
     "PERF-CS-002",
     "PERF-CS-005",
     "PERF-CS-006",
+    "PERF-CS-015",
+    "PERF-CS-016",
 ]
 
 [[package]]
@@ -152,6 +217,7 @@ requirements = [
     "PLAN-REQUEST-001",
     "PLAN-CACHE-001",
     "PLAN-BOUND-001",
+    "BIND-PROGRESS-001",
     "API-PAYLOAD-001",
     "TD-MEM-001",
     "TD-MEM-002",
@@ -175,6 +241,7 @@ evidence_keys = [
     "lazy-plan-single-flight",
     "plan-generation-invalidation",
     "admission-transaction-rollback",
+    "native-collection-plan-selection",
 ]
 performance_workloads = [
     "PERF-GW-003",
@@ -191,12 +258,16 @@ performance_workloads = [
     "PERF-CS-010",
     "PERF-CS-013",
     "PERF-CS-014",
+    "PERF-CS-019",
+    "PERF-GW-023",
+    "PERF-GW-026",
+    "PERF-GW-027",
 ]
 
 [[package]]
 id = "WP-300"
 sequence = 300
-title = "Binding registrations, lifecycle slots, and bounded emission"
+title = "Binding registrations, lifecycle slots, and binding-local publication"
 document = "docs/work-packages/WP-300-bindings.md"
 status = "planned"
 depends_on = ["WP-200"]
@@ -208,6 +279,8 @@ requirements = [
     "BIND-IO-001",
     "BIND-OUT-001",
     "BIND-PROGRESS-001",
+    "BIND-CALL-CANCEL-001",
+    "BIND-HOST-CANCEL-001",
     "API-PAYLOAD-001",
     "API-SURFACE-001",
     "SUB-STORAGE-001",
@@ -220,10 +293,8 @@ requirements = [
     "HANDLE-DROP-001",
     "PRODUCER-EMIT-001",
     "CLEANUP-RECORD-001",
-    "PERF-FANOUT-001",
-    "PERF-FANOUT-002",
 ]
-owner_packages = ["clinkz-wot-core", "clinkz-wot-protocol-bindings"]
+owner_packages = ["clinkz-wot-core"]
 feature_cells = ["no-default", "async-no-std", "std"]
 evidence_keys = [
     "binding-registration-ownership",
@@ -232,6 +303,10 @@ evidence_keys = [
     "bounded-response-subscription-emission",
     "binding-response-validation",
     "drop-and-cleanup-ownership",
+    "producer-emission-migration",
+    "host-subscription-driver",
+    "binding-emission-slot",
+    "binding-call-settlement",
 ]
 performance_workloads = [
     "PERF-GW-007",
@@ -243,6 +318,8 @@ performance_workloads = [
     "PERF-CS-007",
     "PERF-CS-008",
     "PERF-CS-009",
+    "PERF-CS-018",
+    "PERF-GW-024",
 ]
 
 [[package]]
@@ -258,9 +335,24 @@ requirements = [
     "LIFE-EXPOSE-003",
     "API-PAYLOAD-001",
     "HANDLER-API-001",
+    "HANDLER-SUB-001",
+    "HANDLER-CANCEL-001",
+    "HANDLER-CANCEL-002",
+    "HANDLER-STORAGE-001",
     "BIND-IO-001",
+    "BIND-OUT-001",
+    "BIND-CALL-CANCEL-001",
+    "BIND-HOST-CANCEL-001",
+    "BIND-PROGRESS-001",
+    "SUB-STORAGE-001",
+    "SUB-DATA-001",
+    "PRODUCER-EMIT-001",
     "STATE-EXPOSE-001",
     "STATE-SUB-001",
+    "HANDLE-DROP-001",
+    "CLEANUP-RECORD-001",
+    "PERF-FANOUT-001",
+    "PERF-FANOUT-002",
     "HOST-SHARD-001",
     "HOST-SHARD-002",
     "HOST-ASYNC-001",
@@ -273,10 +365,15 @@ feature_cells = ["no-default", "async-no-std", "std"]
 evidence_keys = [
     "servient-expose-failure-injection",
     "servient-cleanup-outcomes",
+    "host-binding-call-ownership",
     "servient-constrained-fairness",
     "servient-response-validation",
     "host-independent-progress",
     "host-default-snapshots",
+    "producer-subscription-transaction",
+    "binding-owned-subscription-driver",
+    "emission-coordinator",
+    "native-collection-subscriptions",
 ]
 performance_workloads = [
     "PERF-GW-001",
@@ -290,7 +387,17 @@ performance_workloads = [
     "PERF-GW-017",
     "PERF-GW-018",
     "PERF-GW-019",
+    "PERF-GW-022",
+    "PERF-GW-024",
+    "PERF-GW-025",
+    "PERF-GW-026",
+    "PERF-GW-027",
     "PERF-CS-012",
+    "PERF-CS-008",
+    "PERF-CS-009",
+    "PERF-CS-017",
+    "PERF-CS-018",
+    "PERF-CS-019",
 ]
 
 [[package]]
@@ -349,16 +456,21 @@ requirements = [
     "BIND-IO-001",
     "BIND-OUT-001",
     "BIND-PROGRESS-001",
+    "SUB-STORAGE-001",
+    "SUB-DATA-001",
     "API-PAYLOAD-001",
     "API-SECURITY-001",
     "API-CODEC-001",
     "CONSTRAINED-PROGRESS-001",
+    "PRODUCER-EMIT-001",
+    "PERF-FANOUT-001",
+    "PERF-FANOUT-002",
 ]
 owner_packages = [
     "clinkz-wot-protocol-bindings",
     "clinkz-wot-protocol-bindings-zenoh",
 ]
-feature_cells = ["async-no-std", "std"]
+feature_cells = ["no-default", "async-no-std", "std"]
 evidence_keys = [
     "protocol-neutral-core-dependencies",
     "zenoh-form-and-route-compilation",
@@ -366,8 +478,28 @@ evidence_keys = [
     "zenoh-pico-bounded-progress",
     "binding-generation-and-correlation",
     "binding-response-provenance",
+    "binding-owned-flow-control",
+    "zenoh-native-collection-subscriptions",
 ]
-performance_workloads = ["PERF-GW-009", "PERF-GW-010", "PERF-CS-002"]
+performance_workloads = [
+    "PERF-GW-007",
+    "PERF-GW-008",
+    "PERF-GW-009",
+    "PERF-GW-010",
+    "PERF-GW-018",
+    "PERF-GW-019",
+    "PERF-CS-002",
+    "PERF-CS-007",
+    "PERF-CS-008",
+    "PERF-CS-009",
+    "PERF-CS-018",
+    "PERF-CS-019",
+    "PERF-GW-023",
+    "PERF-GW-024",
+    "PERF-GW-025",
+    "PERF-GW-026",
+    "PERF-GW-027",
+]
 
 [[package]]
 id = "WP-700"
@@ -400,5 +532,9 @@ evidence_keys = [
     "requirement-evidence-completeness",
     "end-to-end-response-boundary",
     "performance-baseline-and-regression-gates",
+    "legacy-handler-surface-removal",
+    "architecture-boundary-conformance",
+    "subscription-and-emission-boundaries",
+    "native-collection-operation-conformance",
 ]
-performance_workloads = ["PERF-GW-001..019", "PERF-DIR-001..011", "PERF-CS-001..014"]
+performance_workloads = ["PERF-GW-001..027", "PERF-DIR-001..011", "PERF-CS-001..019"]

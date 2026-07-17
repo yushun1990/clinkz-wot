@@ -5,7 +5,7 @@ root=$(cd "$(dirname "$0")/.." && pwd)
 design="$root/docs/design.md"
 index="$root/docs/requirements.csv"
 expected_header='requirement,compilation_cells,execution_models,resource_profiles,capability_roles,owner_packages,evidence_kinds,evidence_key,source_path'
-expected_requirement_count=111
+expected_requirement_count=112
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
 

@@ -2,13 +2,15 @@
 
 Status: In Progress
 
-Design revision: v4.6
+Design revision: v4.8
 
 Depends on: WP-000
 
 Required gates: GATE-1, GATE-2, GATE-3, GATE-4, GATE-5, GATE-6
 
-Owner packages: clinkz-wot-core, clinkz-wot-td
+Owner packages: clinkz-wot-core, clinkz-wot-foundation, clinkz-wot-td
+
+Handler entry prerequisite: WP-100-FOUNDATION-REFRESH -> WP-100-HANDLER-ENTRY
 
 ## Scope
 
@@ -20,6 +22,21 @@ locks or constrained critical sections.
 This package does not build logical/binding plans, registration indexes, binding execution
 traits, Servient lifecycle orchestration, Directory clients, or concrete protocols. WP-200
 and WP-300 consume the values and callback invariants established here.
+
+The first handler subtranche is an additive cross-crate prerequisite owned by
+WP-100: refresh the foundation resource schema, named profiles, generated
+snapshots, boundary tests, and work-budget counter order for the nine handler
+limits, three Producer residual limits, nine v4.8 architecture limits, and
+`WorkClass::HandlerSteps`, then append the three core pending-work variants.
+This raises the active schema from the historical 118-field checkpoint to 139
+fields without reopening the completed WP-000 package; its new evidence is
+recorded against WP-100 before handler implementation continues.
+
+The machine-readable tranche record in `docs/work-packages/index.toml` is the
+source of truth for this prerequisite. Ordinary design validation permits its
+`pending` state, but handler implementation entry requires
+`tools/check-design-artifacts.sh --handler-entry-ready` to verify that the
+tranche is complete and backed by same-revision evidence.
 
 ## Requirements
 
@@ -35,13 +52,17 @@ and WP-300 consume the values and callback invariants established here.
   retry advice, deadlines, and bounded cleanup diagnostics.
 - `CONSTRAINED-PROGRESS-001`, `CONSTRAINED-OWN-001`, and `CONSTRAINED-WORK-001` govern core
   status values and bounded incremental codec/security progress.
+- `RES-LIMIT-001`, `RES-PROFILE-001`, and `API-RESOURCE-001` govern the additive handler-limit
+  schema, exact named-profile values, and generated foundation surface required by this package.
 - `PERF-ALLOC-001` and `PERF-CALL-001` govern allocation-sensitive and composed interaction
   call paths.
 
 ## Crates and Feature Cells
 
-- Modify Cargo package `clinkz-wot-core`; consume `clinkz-wot-foundation` and
-  `clinkz-wot-td` only in the allowed dependency direction.
+- Modify Cargo package `clinkz-wot-core`. Modify `clinkz-wot-foundation` only for the seventeen
+  additive handler, Producer-residual, binding-emission, collection-source, and host-lane
+  resource fields, named-profile values, generated tests and snapshots, and
+  `WorkClass::HandlerSteps`; consume `clinkz-wot-td` only in the allowed dependency direction.
 - The `no-default` cell exposes interaction values, synchronous local dispatch roles,
   incremental codec/security roles, status values, and generation-bearing ids without
   requiring atomics, `Arc`, boxed futures, or an executor.
@@ -55,8 +76,8 @@ and WP-300 consume the values and callback invariants established here.
 
 Implement the frozen `clinkz_wot_core` surface in these groups:
 
-- status: `PendingWork`, `StartStatus`, `ProcessEvent`, `ProcessTerminal`, `StepStatus`,
-  `CleanupOutcome`, `CleanupOperation`, `CleanupRecord`, and `CleanupHandle`;
+- status: `PendingWork`, `PendingWorkClass`, `StartStatus`, `ProcessEvent`, `ProcessTerminal`,
+  `StepStatus`, `CleanupOutcome`, `CleanupOperation`, `CleanupRecord`, and `CleanupHandle`;
 - errors: `CoreResult`, `CoreError`, `ErrorContext`, `ErrorPhase`,
   `SelectionFailureReason`, `SecurityFailureReason`, and `RetryClass`;
 - identity: `ThingId`, `BindingId`, `BindingGeneration`, `PlanId`, `SubscriptionId`,
@@ -65,7 +86,10 @@ Implement the frozen `clinkz_wot_core` surface in these groups:
 - interaction: `AffordanceTarget`, `Payload`, `MediaType`, `ContentCoding`,
   `InteractionInput`, `InteractionOptions`, `InteractionOutput`, `InteractionStatus`,
   `ResponsePayloadRole`, `ResponseSelection`, `BindingResponseMetadata`,
-  `InteractionOutputMetadata`, `HandlerContext`, `CancellationView`, and `Deadline`;
+  `InteractionOutputMetadata`, `HandlerContext`, `CancellationView`, `Deadline`,
+  `SubscriptionAcceptance`, `HandlerFootprint`, `HandlerStep`, and
+  `StaticHandlerRegistration`; the GAT future is associated with each async
+  trait rather than exposed as a public `HandlerFuture` alias;
 - codec: `PayloadCodec`, `DecodedPayload`, `PayloadDecoderState`, `PayloadEncoderState`,
   `DecodeStatus`, and `EncodeStatus`;
 - security: `SecurityProvider`, `SecurityProviderGeneration`, `SecurityRequirementView`,
@@ -74,9 +98,23 @@ Implement the frozen `clinkz_wot_core` surface in these groups:
   `ApplicationPayloadProjection`, `BodyAuthProjector`, `AuthMaterial`, `AppliedSecurity`,
   `CredentialStore`, credential probe/lease/generation values, and `EffectiveSecurityPlan`.
 
-Preserve only `CoreResult`, `ThingId`, `AffordanceTarget`, and `PrincipalId` in place as allowed
-by the ownership matrix. Replace every other listed current representation or add the absent
-target type. Public struct fields remain private unless the design intentionally freezes
+Before adding these handler values, refresh the foundation schema from
+`docs/resource-limits.csv` with all seventeen fields added after the historical
+WP-000 checkpoint: the twelve v4.7 handler and Producer residual limits followed
+by the nine v4.8 binding-emission, collection-source, host-lane, and host-call limits, with
+exact Gateway, Directory, and static-reference values including `NA`. Append
+`WorkClass::HandlerSteps` to the stable counter order and regenerate the three
+feature-cell compile fixtures, profile snapshots, and exact/one-over boundary
+tests. Every bounded handler `start`, `step`, `cancel`, or constrained adapter
+poll charges this caller-supplied counter before work begins. The refresh must
+not create a duplicate Rust-side resource schema or change the downward
+dependency graph.
+
+Preserve only `CoreResult`, `ThingId`, and `PrincipalId` in place as allowed by the ownership
+matrix. Preserve the public name and variants of `AffordanceTarget`, but replace its
+`Arc<str>` representation with bounded `alloc` ownership that requires neither atomic reference
+counting nor pointer-width atomics. Replace every other listed current representation or add the
+absent target type. Public struct fields remain private unless the design intentionally freezes
 direct access; constructors validate bounded ids, media metadata, messages, and byte storage.
 
 The exact error, retry, correlation, and cleanup schemas and the coordinated
@@ -89,9 +127,43 @@ The exact metadata methods and response-validation staging are frozen by
 interaction values but does not replace the WP-300-owned route-bearing response
 envelope with an interim public type.
 
-Operation-specific sync handlers receive `HandlerContext` plus their typed input and result.
-Async twins own their selected handler and cancellation state across suspension. Codec state
+The exact operation stems are `ReadProperty`, `WriteProperty`, `ObserveProperty`,
+`UnobserveProperty`, `InvokeAction`, `QueryAction`, `CancelAction`, `SubscribeEvent`,
+`UnsubscribeEvent`, `ReadAllProperties`, `WriteAllProperties`, `ReadMultipleProperties`,
+`WriteMultipleProperties`, `ObserveAllProperties`, `UnobserveAllProperties`,
+`QueryAllActions`, `SubscribeAllEvents`, and `UnsubscribeAllEvents`. Core owns exactly three
+traits for each stem: `{Stem}Handler`, `Async{Stem}Handler`, and `Step{Stem}Handler`. The 54
+public trait paths, feature cells, and migration dispositions are enumerated individually in
+`docs/api-ownership.csv`; a catch-all handler trait is not an equivalent public surface.
+
+Every flavor receives the frozen `HandlerContext` and `InteractionInput` boundary and returns
+the operation result frozen by the handler amendment. `InteractionInput` is the sole owner of
+application input, verified principal, URI variables, correlation facts, deadline, and current
+cancellation snapshot. `HandlerContext` is a call-lifetime dispatch-identity view; it does not
+duplicate or override those facts. Async twins expose a feature-additive GAT associated future;
+only the crate-private `std-async` `HostAsyncAdapter` erases it into
+`HostHandlerFuture` after the generic host setter proves
+`for<'a> <H as Async{Stem}Handler>::Future<'a>: Send`. Step twins return `HandlerStep` and
+accept a refreshed cancellation view and typed `WorkBudget` on every bounded call. Codec state
 reports exact consumed and produced bytes and resumes without re-decoding prior input.
+
+Append `PendingWorkClass::HandlerCall = 1 << 11`,
+`PendingWorkClass::ProducerSubscriptionSetup = 1 << 12`, and
+`PendingWorkClass::ProducerSubscriptionTeardown = 1 << 13` to the public `#[repr(u16)]`
+bit schema. Every existing discriminant through `RouteCleanup = 1 << 10` remains unchanged.
+These bits describe maintained, locally progressable work; they do not treat a synchronous
+callback currently running on another thread as ready local work.
+
+WP-100 owns the portable `StaticHandlerRegistration` descriptor, not a heterogeneous constrained
+registry object. A constrained application registers any subset of the 54 traits in caller-owned
+generated tables or explicit static fields keyed by `HandlerSlotId`; each descriptor carries the
+generation-bearing slot id, borrowed handler, and declared `HandlerFootprint` charged before
+publication. The generated field or dispatch method fixes the operation and flavor through its
+concrete handler bound; the descriptor does not duplicate those facts at runtime. Generated table
+storage and lookup code remains application-owned, while the descriptor has the single frozen
+core path recorded in `docs/api-ownership.csv`. Both use the same traits, generation checks,
+replacement reducer, and resource admission rules. This prevents an erased registry from silently
+requiring `Arc`, atomics, `Send`, `Sync`, or boxed futures.
 
 ## State and Ownership Migration
 
@@ -100,6 +172,15 @@ reports exact consumed and produced bytes and resumes without re-decoding prior 
   rule to probe, commit, codec extension, and status-sink callbacks.
 - Linearize handler replacement at slot publication. An admitted dispatch retains one old or
   new handler for its entire call and never switches after selection.
+- Implement the crate-private records `SelectedHandlerEntry`, `HandlerCallOwner`,
+  `CallbackLease`, `ProducerSubscriptionOwner`, and `HandlerCleanupOwner` exactly as assigned by
+  the ownership matrix. `HostStepAdapter` is `std`-only. These records make selected generation,
+  pending-call admission, non-preemptible synchronous late return, callback exclusivity,
+  subscription setup/teardown, and retained cleanup explicit without exposing mutable slots.
+- Charge handler count and retained bytes before a replacement is published. A failed
+  replacement leaves the previous generation selected and releases every temporary charge.
+  At most the active and one retiring generation occupy one slot; a selected retiring generation
+  remains charged until its final `HandlerCallOwner` and `CallbackLease` release.
 - Decode the wire payload once into `DecodedPayload`. `BodyAuthProjector` extracts body
   credentials into `BodyAuthSlot` and returns the application projection; security and schema
   validation reuse that representation or an overlay.
@@ -123,17 +204,33 @@ reports exact consumed and produced bytes and resumes without re-decoding prior 
   to credential-bearing debug output and immutable-plan credential storage.
 - Replace the current `CorrelationId` representation that requires `Arc` in portable builds
   with a bounded no-std-capable owned representation.
-- Remove `PushFn`, `PublisherSink`, and other handler return/push facades that bypass typed
-  Producer emission ownership. Do not retain them as deprecated public aliases.
-- Remove any public re-export of internal `WotLock`, raw handler slots, or mutable registry
-  access once the target handler surface is available.
+- Add the target handler values, 54 traits, reducers, and constrained storage boundary without
+  deleting a facade still required by a later package. WP-300 first supplies
+  `ProducerEmission` plus compatibility adapters; WP-400 then removes `PushFn`, the
+  `SubscriptionSender` handler path, the legacy nine sync/async handler families, `ReadSlot`,
+  `WriteSlot`, `ObserveSlot`, `UnobserveSlot`, `InvokeSlot`, `QuerySlot`, `CancelSlot`,
+  `SubscribeSlot`, `UnsubscribeSlot`, and all nine public raw handler lookup methods. WP-600
+  removes `PublisherSink` from concrete protocol publication. WP-700 proves the final absence.
+- No new WP-100 implementation may call a legacy push or raw lookup surface. The bounded
+  compatibility interval above is a downstream migration bridge, not a deprecated target API,
+  and its removal owners are recorded as explicit completion conditions in those packages.
+- Remove any public re-export of internal `WotLock` or mutable registry access once the target
+  handler surface is available.
 
 ## Evidence
 
 Produce these package evidence keys exactly as indexed by the work-package DAG:
 
+- `handler-foundation-refresh` for all seventeen resource fields, exact profile values including
+  `NA`, `WorkClass::HandlerSteps`, generated snapshots, boundaries, and three feature cells;
 - `core-public-surface` for paths, feature cells, owned values, and trait shapes;
+- `handler-api-matrix` for every one of the 18 operation results, three handler flavors, and
+  applicable compilation cells;
 - `handler-cancellation` for sync-late, async-cooperative, and bounded-step behavior;
+- `handler-storage-replacement` for exact/one-over count and byte admission, rollback, sparse
+  density, generation pinning, clear, and replacement races;
+- `affordance-target-no-atomics` for a true constrained-target compile fixture proving that
+  `AffordanceTarget` and the static handler boundary require no atomic reference counting;
 - `callback-lock-isolation` for handlers, providers, codecs, and status callbacks;
 - `security-selection-and-redaction` for probe/commit, leases, body projection, and secrets;
 - `codec-validator-reuse` for incremental accounting and one-decode reuse;
@@ -162,17 +259,29 @@ all public error and debug representations.
 - `PERF-GW-002` and `PERF-CS-002` cover core inbound dispatch without transport cost.
 - `PERF-GW-005` and `PERF-CS-005` cover bounded security branch/provider probes.
 - `PERF-GW-006` and `PERF-CS-006` cover one-decode composed validation/security interaction.
+- `PERF-GW-020` and `PERF-CS-015` cover sparse handler density, flavor mix, replacement,
+  rollback, clear, and generation retention at the exact storage limits.
+- `PERF-GW-021` and `PERF-CS-016` cover synchronous late return, async drop, bounded-step
+  cancellation, replacement during dispatch, and reentrant handler operations.
 ## Completion Conditions
 
+- The WP-100 handler-foundation subtranche is complete before handler implementation resumes:
+  generated schemas and snapshots contain all 139 fields, including the nine handler, three
+  Producer residual, and nine v4.8 architecture fields, plus `WorkClass::HandlerSteps` and the
+  three core pending-work variants, with no duplicate schema or reopened WP-000 completion claim.
 - Every WP-100 ownership item exists at its frozen path in each applicable feature cell, and
   `--no-default-features` has no required `std`, atomics, `Arc`, executor, or boxed-future path.
 - Reentrant handler, provider, codec, and status callbacks run with no engine lock or critical
   section held; replacement and cancellation race tests pass.
+- Every operation has the exact sync, async, and step trait and result shape; sparse constrained
+  registration proves zero storage for unsupported operations, while host setter activation
+  remains assigned to WP-400.
 - Security probe/commit selection, lease lifetime, body projection, one-decode validation, and
   generation invalidation have focused tests and bounded failure behavior.
 - `CoreError`, retry advice, hot ids, cleanup records, codec states, and progress values satisfy
   their compile, size, redaction, and transition evidence.
 - All listed workload adapters attributable to core are registered and emit schema-valid result
   identity, even when a later package supplies the final end-to-end runner.
-- The old public security, codec, error, push, and lock facades listed above are absent; no
-  unavailable-by-default compatibility feature remains.
+- The old public security, codec, error, and lock facades owned by WP-100 are absent. Only the
+  explicitly staged handler/emission compatibility bridge may remain, and source inspection must
+  prove it has no new callers and names WP-300, WP-400, WP-600, and WP-700 as its removal owners.

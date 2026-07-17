@@ -1,0 +1,177 @@
+schema_version = 1
+design_revision = "4.8"
+
+# Gate artifact paths must resolve either directly through docs/artifacts.csv or
+# through one of these reviewed aliases. Aliases do not promote deferred inputs
+# into the active normative artifact set.
+
+[[artifact_alias]]
+path = "tools/performance-harness"
+registered_by = "tools/performance-harness/Cargo.toml"
+kind = "package-root"
+
+[[artifact_alias]]
+path = "docs/future/directory-service.md"
+registered_by = "docs/governance.toml"
+kind = "deferred-review-input"
+
+# Check ids used by docs/refactor-gates.csv have one exact command mapping. A
+# pending mapping is a deliberate tranche-entry blocker; it does not block the
+# design gates unless a gate explicitly names it.
+
+[[check]]
+id = "api-ownership-check"
+status = "executable"
+artifact = "tools/check-api-ownership.sh"
+command = ["tools/check-api-ownership.sh"]
+
+[[check]]
+id = "architecture-adr-check"
+status = "executable"
+artifact = "tools/check-architecture-adrs.sh"
+command = ["tools/check-architecture-adrs.sh"]
+
+[[check]]
+id = "wp100-amendment-check"
+status = "executable"
+artifact = "tools/check-wp100-amendment.sh"
+command = ["tools/check-wp100-amendment.sh"]
+
+[[check]]
+id = "state-machine-check"
+status = "executable"
+artifact = "tools/design-check/Cargo.toml"
+command = [
+    "cargo",
+    "run",
+    "--locked",
+    "--quiet",
+    "--manifest-path",
+    "tools/design-check/Cargo.toml",
+    "--",
+    "check-state",
+]
+
+[[check]]
+id = "directory-client-scope-check"
+status = "executable"
+artifact = "tools/check-directory-client-scope.sh"
+command = ["tools/check-directory-client-scope.sh"]
+
+[[check]]
+id = "resource-profile-check"
+status = "executable"
+artifact = "tools/check-resource-limits.sh"
+command = ["tools/check-resource-limits.sh"]
+
+[[check]]
+id = "performance-contract-check"
+status = "executable"
+artifact = "tools/performance-harness/Cargo.toml"
+command = [
+    "cargo",
+    "run",
+    "--locked",
+    "--quiet",
+    "--manifest-path",
+    "tools/performance-harness/Cargo.toml",
+    "--",
+    "verify",
+]
+
+[[check]]
+id = "work-package-dag-check"
+status = "executable"
+artifact = "tools/design-check/Cargo.toml"
+command = [
+    "cargo",
+    "run",
+    "--locked",
+    "--quiet",
+    "--manifest-path",
+    "tools/design-check/Cargo.toml",
+    "--",
+    "check-work-packages",
+]
+
+[[check]]
+id = "wp100-handler-amendment-check"
+status = "executable"
+artifact = "tools/check-wp100-handler-amendment.sh"
+command = ["tools/check-wp100-handler-amendment.sh"]
+
+[[check]]
+id = "wp100-foundation-refresh-check"
+status = "pending"
+artifact = "tools/check-wp100-foundation-refresh.sh"
+command = ["tools/check-wp100-foundation-refresh.sh"]
+
+# Architecture Review 02 is the independent same-revision review for every gate
+# affected by the architecture decisions. Its blocking status is authoritative
+# until every reported contradiction is resolved and the review is rerun.
+
+[[review]]
+id = "architecture-review-02-2026-07-16-open"
+design_revision = "4.8"
+status = "blocking"
+review_type = "audit"
+gates = ["GATE-1", "GATE-2", "GATE-4", "GATE-5", "GATE-6"]
+artifacts = [
+    "docs/design.md",
+    "docs/api-ownership.csv",
+    "docs/state-machines.toml",
+    "docs/resource-limits.csv",
+    "docs/performance/manifest.schema.json",
+    "docs/performance/result.schema.json",
+    "docs/performance/fixtures.lock.toml",
+    "docs/performance/fixture-generator.md",
+    "docs/performance/constrained.toml",
+    "docs/performance/gateway.toml",
+    "docs/performance/directory.toml",
+    "tools/performance-harness",
+    "docs/work-packages/index.toml",
+    "docs/work-packages",
+    "docs/amendments/WP-100-error-cleanup-v1.md",
+    "docs/amendments/WP-100-error-disposition-v1.md",
+    "docs/amendments/WP-100-interaction-output-api-v1.md",
+    "docs/amendments/WP-100-handler-api-v1.md",
+    "docs/ADR/core.org",
+    "docs/ADR/0001-crate-and-module-boundaries.org",
+    "docs/ADR/0002-producer-emission-dispatch.org",
+    "docs/ADR/0003-subscription-driver-ownership.org",
+    "docs/ADR/0004-collection-subscriptions.org",
+    "docs/ADR/0005-outbound-request.org",
+    "docs/ADR/0006-host-binding-call-cancellation.org",
+    "docs/review/review-01.org",
+    "docs/review/review-02.org",
+]
+checks = [
+    "api-ownership-check",
+    "architecture-adr-check",
+    "wp100-amendment-check",
+    "state-machine-check",
+    "resource-profile-check",
+    "performance-contract-check",
+    "work-package-dag-check",
+    "wp100-handler-amendment-check",
+]
+impact = "Architecture Review 02 found unresolved same-revision contradictions. GATE-1, GATE-2, GATE-4, GATE-5, and GATE-6 remain open until the findings are corrected and independently re-reviewed."
+
+# GATE-3 retains the reviewed v4.6 Directory client contract. This v4.8 record
+# performs the required same-revision impact review; ADR-0001 reinforces the
+# client/service boundary but does not change the frozen client behavior.
+
+[[review]]
+id = "directory-client-v4.6-review"
+design_revision = "4.8"
+status = "passed"
+review_type = "carry-forward"
+basis_revision = "4.6"
+gates = ["GATE-3"]
+artifacts = [
+    "docs/design.md",
+    "docs/future/directory-service.md",
+    "docs/ADR/0001-crate-and-module-boundaries.org",
+]
+checks = ["directory-client-scope-check"]
+impact = "Revision v4.8 changes engine and binding ownership around emission, subscriptions, collection operations, and outbound requests. It does not change the engine-side Directory client contract, deferred service scope, or Directory requirements carried forward from v4.6."

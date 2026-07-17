@@ -1,0 +1,63 @@
+#+title: ADR-0001: Crate and Module Responsibility Boundaries
+#+date: 2026-07-16
+#+status: Accepted
+
+* Context
+
+The current implementation places data contracts, planning, application
+orchestration, concrete queue policy, and protocol behavior across overlapping
+modules. The v4.7 candidate describes a mostly correct dependency direction,
+but some normative prose still assigns concrete dispatch and subscription
+behavior to core. That ambiguity allows the implementation to spread again.
+
+* Decision
+
+The dependency graph in =CRATE-DEPS-001= remains authoritative. Each crate owns
+one semantic layer and must not acquire behavior from a higher layer merely to
+reuse an implementation.
+
+| Crate | Owns | Must not own |
+|-
+| =clinkz-wot-foundation= | Resource limits and reservations, work budgets, monotonic time, generations, and profile-independent accounting values. | TD vocabulary, interaction semantics, plans, registries, queues, protocol behavior, or host runtime policy. |
+| =clinkz-wot-td= | Lossless TD/TM models, builders, Serde, validation, W3C defaults, extension preservation, and URI value helpers. | Form selection, binding capability lookup, caches, runtime state, or transport behavior. |
+| =clinkz-wot-core= | Protocol-neutral IDs, errors, interaction and payload values, handler/security/codec contracts, immutable plan values, binding SPI values and traits, lifecycle outcomes, and portable operation slots. | Application handles, Servient registries, concrete emission schedulers, concrete subscription queues, local stream merging, TD-tree scans on interaction hot paths, protocol I/O, or concrete Directory behavior. |
+| =clinkz-wot-protocol-bindings= | Shared plan compiler, capability indexes, form/operation/security/target resolution, URI-template compilation, and immutable plan construction. | Binding execution traits, Servient registrations, runtime queues, or concrete protocol behavior. |
+| =clinkz-wot-servient= | Composition, plan admission, exposed and consumed registries, lifecycle transactions, security and handler orchestration, application handles, the public Subscription facade, cleanup ownership, and profile-specific emission coordination. | Concrete protocol syntax or I/O, protocol driving loops, TD reparsing, or an implicit Directory service. |
+| =clinkz-wot-discovery= | Engine-side Discovery and Directory client values, poll processes, client sessions, watches, publication client contracts, and async adapters. | Directory service composition, storage backends, server query execution, redaction service policy, or endpoint hosting. |
+| Concrete binding crates | Protocol compiler extensions, client/server binding implementations, route and correlation handling, protocol-native flow control and multiplexing, authentication extraction, publication, and bounded cleanup. | Servient registries, application handlers, TD defaulting, shared form selection, core queues, or cross-binding scheduling. |
+| Codec crates | Bounded protocol-neutral codec implementations and incremental state. | Servient/runtime or transport policy. |
+| Umbrella crate | Intentional feature composition and public re-exports. | Runtime behavior or a second ownership surface. |
+
+Core may define the semantics of a state machine without owning the runtime
+container that stores or schedules every instance of that state machine.
+Similarly, a concrete binding may own protocol-local buffering without defining
+the engine-wide resource or overflow semantics.
+
+Large modules are split by responsibility as their target APIs land. Core uses
+=handler/=, =binding/=, and =plan/= submodules; Servient uses lifecycle,
+dispatch, emission, subscription, producer, consumer, and host/static runtime
+modules; concrete bindings separate compiler, client, server, subscription,
+emission, authentication, lifecycle, and runtime adapters. Modern module layout
+is required; no =mod.rs= files are introduced.
+
+* Consequences
+
+- The current =core/src/event.rs= and =core/src/transport.rs= are migration
+  sources, not target modules.
+- The current consumed-Thing planning and application orchestration in
+  =core/src/thing.rs= move to their declared compiler and Servient owners.
+- The in-memory Directory backend and implicit Servient default move out of the
+  engine-side Discovery client surface.
+- Servient's normal dependency graph contains no concrete protocol crate.
+- Feature fixtures must prove that no-default Servient exposes a useful manual
+  runtime rather than an empty placeholder.
+
+* Rejected alternatives
+
+- Keeping all protocol-neutral code in core was rejected because vocabulary
+  neutrality does not make a concrete queue or scheduling policy a semantic
+  kernel responsibility.
+- Moving binding execution traits into the shared compiler crate was rejected
+  because it would invert the frozen dependency direction.
+- Creating duplicate host and constrained semantics was rejected; they share
+  core values and outcomes but use different runtime representations.

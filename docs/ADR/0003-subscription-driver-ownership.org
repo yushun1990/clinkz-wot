@@ -1,0 +1,114 @@
+#+title: ADR-0003: Subscription Driver and Flow-Control Ownership
+#+date: 2026-07-16
+#+status: Accepted
+
+* Context
+
+The current core =Subscription= owns a =VecDeque=, a lock, a single waker, a
+drop-oldest policy, and a local merge implementation. =ClientBinding= must
+construct this queue even when a protocol has a native pull or credit model.
+=Subscription::stop= stops only the local queue and does not drive wire
+teardown. The v4.7 candidate names =HostSubscriptionStart= but does not freeze
+the receive/driver contract needed to replace this implementation.
+
+* Decision
+
+Core owns subscription semantics, not a universal storage mechanism. It owns:
+
+- =SubscriptionId=, target and generation identity;
+- =SubscriptionStart=, =SubscriptionStopRequest=, =SubscriptionItem=,
+  =SubscriptionDriverEvent=, =SubscriptionState=, terminal and
+  cleanup outcomes, capacity admission, loss accounting, and =OverflowPolicy=;
+- =PollClientBinding= and caller-owned constrained subscription slots; and
+- the std-only object-safe =HostSubscriptionDriver= SPI.
+
+=SubscriptionItem= always carries its =SubscriptionId=, exact protocol-neutral
+source =AffordanceTarget=, and payload. A collection subscription cannot start
+unless the selected binding plan can provide exact source attribution.
+
+The host SPI has the following semantic shape:
+
+#+begin_src rust
+pub trait HostSubscriptionDriver: Send {
+    fn poll_item(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        budget: &mut WorkBudget,
+    ) -> Poll<CoreResult<SubscriptionDriverEvent>>;
+
+    fn start_stop(
+        self: Pin<&mut Self>,
+        request: SubscriptionStopRequest,
+        budget: &mut WorkBudget,
+    ) -> CoreResult<StartStatus<CleanupOutcome>>;
+
+    fn poll_stop(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        budget: &mut WorkBudget,
+    ) -> Poll<CoreResult<CleanupOutcome>>;
+}
+
+pub struct HostSubscriptionStart {
+    /* exact start metadata plus Pin<Box<dyn HostSubscriptionDriver>> */
+}
+#+end_src
+
+The exact field and method schema is frozen in design revision v4.8 and its
+ownership matrix. A binding returns the driver only after remote or local start
+succeeds. The Servient reserves the engine-scoped =SubscriptionId=,
+slot, item/byte budget, and cleanup capacity before the binding call; the
+outbound start request carries that identity and the returned metadata must
+match it. A binding does not manufacture an engine subscription id.
+
+The application-facing non-=Clone= =Subscription= facade belongs to Servient.
+It yields =ProcessEvent<SubscriptionItem>=, owns one receive cursor, and reaches
+the handle-owned driver registry by =SubscriptionId=. =Subscription::stop=
+selects and validates one explicit teardown request when applicable, then
+drives =start_stop=/=poll_stop= on the same binding driver and retained cleanup
+state as handle drop. Drop uses an implicit stop request and records residual
+external state rather than inventing caller options. A cloneable control or
+receive view is not part of v4.8 and cannot create a competing cursor.
+
+=SubscriptionDriverEvent::Terminal= transfers the retained
+=ProcessTerminal= and =CleanupOutcome= together. Servient publishes the process
+terminal once while preserving complete, transferred, or residual cleanup
+status; the application-facing event never hides an unowned binding resource.
+The public =SubscriptionState= describes resource lifecycle independently from
+the retained process terminal. Consequently, a failed process whose cleanup is
+complete is =Closed= with =terminal()= retaining the failure; =Failed= is
+reserved for durable residual external state. A pre-publication start error
+with no escaped resource closes its private record and returns the error without
+constructing a public facade.
+
+Flow-control ownership is split deliberately:
+
+- core defines admitted item/byte limits, overflow choices, loss semantics, and
+  terminal behavior;
+- a concrete binding owns protocol-native credit, prefetch, callback ingress,
+  and any protocol-local bounded storage;
+- Servient owns engine accounting, registration, lifecycle, and the public
+  facade; and
+- an optional reusable bounded-buffer adapter may live in host runtime support,
+  but its sender is internal and it is not the core representation.
+
+Constrained bindings use caller-owned storage and generation-bearing slots.
+They require no =Arc=, boxed future, executor, OS thread, or allocation inside a
+critical section. A slot may contain a core control header plus binding-specific
+caller-provided state; core does not mandate a =VecDeque= layout.
+
+Drop never blocks and never creates an unbounded cleanup queue. It transfers the
+driver and remaining teardown work atomically to a reserved bounded cleanup
+owner or records a structured residual outcome.
+
+* Consequences
+
+- Public =SubscriptionSender= and =EventStream= are removed.
+- The current core =Subscription= is replaced by the Servient facade; its
+  identity, item, terminal, and SPI types remain in core.
+- Guards are keyed by =SubscriptionId=, not =AffordanceTarget=.
+- The public receive facade is linear; multiple active subscriptions are
+  represented by distinct ids rather than cloned consumers of one queue.
+- Current fairness, waker-overwrite, local-only stop, and merged =is_empty=
+  defects disappear with the legacy queue and merge implementation rather than
+  being patched into the target architecture.

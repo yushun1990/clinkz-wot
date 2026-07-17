@@ -3,18 +3,30 @@ profile = "GatewayDefaultV1"
 resource_profile = "GatewayDefaultV1"
 feature_set = "std,async"
 environment = "x86_64-unknown-linux-gnu"
-runner = "dedicated-4-physical-core-performance-governor"
+runner = "aws-c7i-metal-24xl-pinned-4c-linux-6.12-v1"
 toolchain = "record-in-result"
 allocator = "system"
-fixture_generator = "clinkz-wot-fixture-generator-v1"
+fixture_generator = "clinkz-wot-fixture-generator-v2"
 fixture_lock = "docs/performance/fixtures.lock.toml"
-fixture_digest = "sha256:a70e94d7ba7d6445ac6363c2bca24208d682834628841036a1bc281969822840"
+fixture_digest = "sha256:d2bba918347308896b44d17a43ef6423e58a6c9e7ba29566f6d024d303261a30"
 fixture_seed = 4601
 warmup_seconds = 3
 sample_count = 100
 regression_tolerance_percent = 10
 outlier_policy = "none-unless-predeclared-and-recorded"
 failed_sample_policy = "record-and-fail-gate"
+
+[runner_fingerprint]
+class = "aws-c7i-metal-24xl-pinned-4c-linux-6.12-v1"
+board = "aws-ec2-c7i.metal-24xl"
+cpu_model = "intel-xeon-scalable-sapphire-rapids"
+physical_cores = "4-pinned-isolated"
+threads_per_core = "1"
+frequency_policy = "fixed-3200000000-hz-turbo-disabled"
+memory = "ddr5-numa-node-local"
+os_or_firmware = "linux"
+kernel_or_runtime = "6.12.y"
+clock_source = "invariant-tsc-monotonic-raw"
 
 [gate_policy]
 minimum_metrics_regress_when = "decrease"
@@ -47,6 +59,14 @@ plan_generation_invalidation_4096_things = "before generation publication -> new
 interaction_accounting_contention_256 = "before admitted interaction accounting -> local counters and reservations committed"
 maximum_admitted_td_planning = "source bytes admitted -> private compiled plan complete before publication"
 admission_byte_and_structure_scaling = "source bytes admitted -> private admission result or limit error"
+handler_storage_replacement_matrix = "before handler registration, replacement, removal, or clear -> slot generation published or every reservation rolled back"
+handler_cancellation_reentrancy = "selected handler and input owned -> terminal result delivered or discarded and retained invocation ownership released"
+producer_subscription_transaction = "before subscription admission -> the declared matrix cell reaches Active or its retained terminal outcome; teardown and replay cells continue through every response and cleanup acknowledgement plus the declared eviction or stale-replay observation"
+compiled_emission_target_lookup = "generation-bearing emission key ready -> immutable compiled publication target slice acquired"
+emission_binding_scaling = "fully admitted emission ready -> every selected binding result cell reaches a terminal outcome"
+slow_binding_isolation = "one per-binding lane is slow or full under declared offered load -> every unrelated binding reaches its progress checkpoint or the blocked emission fails admission without side effects"
+exposure_publication_target_construction = "private exposure plans admitted -> committed generation-bearing publication target index becomes visible"
+native_collection_subscription = "root collection plan and reserved SubscriptionId ready -> one binding driver is installed or a terminal start error is retained"
 
 [scales]
 payload_bytes = [0, 64, 4096, 1048576]
@@ -57,16 +77,18 @@ uri_template_bytes = [0, 1024, 16384]
 expanded_uri_bytes = [0, 1024, 16384]
 td_nodes = [64, 1024, 65536]
 forms = [1, 32, 4096]
-bindings = [1, 8, 64]
+bindings = [1, 4, 16, 64]
 schema_nodes = [16, 1024, 65536]
 candidates = [1, 8, 32]
 security_branches = [1, 8, 64]
 subscribers = [1, 16, 256, 1024]
 concurrency = [1, 4, 32, 256]
+handler_slots = [0, 1, 64, 1024, 4105]
+collection_sources = [1, 16, 256, 1024]
 
 [[workload]]
 id = "PERF-GW-001"
-version = 1
+version = 2
 requirements = ["PERF-ALLOC-001", "PERF-CALL-001"]
 fixture_id = "FX-GW-001"
 harness_case = "local_sync_interaction"
@@ -79,7 +101,7 @@ report = ["median", "p95", "p99", "allocations", "peak-live-bytes"]
 
 [[workload]]
 id = "PERF-GW-002"
-version = 1
+version = 2
 requirements = ["BIND-IO-001", "PERF-ALLOC-001", "PERF-CALL-001"]
 fixture_id = "FX-GW-002"
 harness_case = "inbound_dispatch_no_transport"
@@ -91,7 +113,7 @@ report = ["median", "p95", "p99", "allocations", "peak-live-bytes"]
 
 [[workload]]
 id = "PERF-GW-003"
-version = 1
+version = 2
 requirements = ["PLAN-INDEX-001", "PERF-INDEX-001"]
 fixture_id = "FX-GW-003"
 harness_case = "compiled_plan_lookup"
@@ -102,7 +124,7 @@ report = ["median", "p95", "p99", "allocations"]
 
 [[workload]]
 id = "PERF-GW-004"
-version = 1
+version = 2
 requirements = ["PLAN-BOUND-001", "PERF-CALL-001"]
 fixture_id = "FX-GW-004"
 harness_case = "candidate_selection_32"
@@ -114,7 +136,7 @@ report = ["median", "p95", "p99", "candidates-visited", "allocations"]
 
 [[workload]]
 id = "PERF-GW-005"
-version = 1
+version = 2
 requirements = ["PERF-CALL-001", "SEC-PERF-001"]
 fixture_id = "FX-GW-005"
 harness_case = "security_selection_64_local_probes"
@@ -127,7 +149,7 @@ report = ["median", "p95", "p99", "provider-probes", "allocations"]
 
 [[workload]]
 id = "PERF-GW-006"
-version = 1
+version = 2
 requirements = ["PERF-CALL-001", "VALIDATE-COMPILE-001", "VALIDATE-REUSE-001"]
 fixture_id = "FX-GW-006"
 harness_case = "composed_strict_interaction_1k"
@@ -145,7 +167,7 @@ report = ["median", "p95", "p99", "allocations", "peak-live-bytes", "provider-pr
 
 [[workload]]
 id = "PERF-GW-007"
-version = 1
+version = 2
 requirements = ["PERF-ALLOC-001", "PERF-FANOUT-001", "SUB-DATA-001"]
 fixture_id = "FX-GW-007"
 harness_case = "subscription_round_trip_one_subscriber"
@@ -158,7 +180,7 @@ report = ["median", "p95", "p99", "throughput", "allocations"]
 
 [[workload]]
 id = "PERF-GW-008"
-version = 1
+version = 2
 requirements = ["PERF-FANOUT-001", "PERF-FANOUT-002"]
 fixture_id = "FX-GW-008"
 harness_case = "shared_payload_fanout_1024"
@@ -171,7 +193,7 @@ report = ["median", "p95", "p99", "throughput", "lock-wait", "pool-bytes"]
 
 [[workload]]
 id = "PERF-GW-009"
-version = 1
+version = 2
 requirements = ["BIND-OUT-001", "HOST-ASYNC-001", "PERF-ALLOC-001"]
 fixture_id = "FX-GW-009"
 harness_case = "network_erased_metadata"
@@ -183,7 +205,7 @@ report = ["median", "p95", "p99", "allocations", "allocated-bytes"]
 
 [[workload]]
 id = "PERF-GW-010"
-version = 1
+version = 2
 requirements = ["BIND-OUT-001", "BIND-PROGRESS-001", "PERF-ALLOC-001"]
 fixture_id = "FX-GW-010"
 harness_case = "network_poll_metadata"
@@ -194,7 +216,7 @@ report = ["median", "p95", "p99", "allocations"]
 
 [[workload]]
 id = "PERF-GW-011"
-version = 1
+version = 2
 requirements = ["PLAN-CACHE-001", "PLAN-LAZY-001"]
 fixture_id = "FX-GW-011"
 harness_case = "lazy_plan_single_flight_32"
@@ -208,7 +230,7 @@ report = ["median", "p95", "p99", "compile-attempts", "lock-wait", "peak-live-by
 
 [[workload]]
 id = "PERF-GW-012"
-version = 1
+version = 2
 requirements = ["PLAN-CACHE-001", "PLAN-INDEX-001"]
 fixture_id = "FX-GW-012"
 harness_case = "plan_generation_invalidation_4096_things"
@@ -222,7 +244,7 @@ report = ["median", "p95", "p99", "plans-reclaimed", "cleanup-work-units"]
 
 [[workload]]
 id = "PERF-GW-013"
-version = 1
+version = 2
 requirements = ["HOST-SHARD-002", "PERF-ACCOUNT-001"]
 fixture_id = "FX-GW-013"
 harness_case = "interaction_accounting_contention_256"
@@ -235,7 +257,7 @@ report = ["median", "p95", "p99", "throughput", "lock-wait", "reservation-refill
 
 [[workload]]
 id = "PERF-GW-014"
-version = 1
+version = 2
 requirements = ["PERF-ADMISSION-001", "PERF-BENCH-003", "PERF-PEAK-001"]
 fixture_id = "FX-GW-014"
 harness_case = "maximum_admitted_td_planning"
@@ -248,7 +270,7 @@ report = ["median", "p95", "p99", "plan-construction-bytes", "peak-live-bytes", 
 
 [[workload]]
 id = "PERF-GW-015"
-version = 1
+version = 2
 requirements = ["ADMIT-MEM-001", "PERF-COMPLEXITY-001", "PERF-SCALE-001"]
 fixture_id = "FX-GW-015"
 harness_case = "admission_byte_and_structure_scaling"
@@ -265,7 +287,7 @@ axes = [
     "schema-nodes",
     "security-branches",
 ]
-vary_one_axis_at_a_time = true
+require_vary_one_axis_at_a_time = true
 require_declared_complexity = true
 require_no_logical_plan_duplication_per_candidate = true
 report = [
@@ -282,7 +304,7 @@ report = [
 
 [[contention]]
 id = "PERF-GW-016"
-version = 1
+version = 2
 requirements = ["CONCUR-LOCK-001", "HOST-SHARD-001"]
 fixture_id = "FX-GW-016"
 harness_case = "unrelated_things"
@@ -292,7 +314,7 @@ require_independent_progress = true
 
 [[contention]]
 id = "PERF-GW-017"
-version = 1
+version = 2
 requirements = ["CONCUR-LOCK-001", "HOST-SHARD-001"]
 fixture_id = "FX-GW-017"
 harness_case = "same_thing_different_affordances"
@@ -302,7 +324,7 @@ require_independent_progress = true
 
 [[contention]]
 id = "PERF-GW-018"
-version = 1
+version = 2
 requirements = ["HOST-SHARD-001", "PERF-FANOUT-001"]
 fixture_id = "FX-GW-018"
 harness_case = "hot_subscription"
@@ -313,7 +335,7 @@ report = ["median", "p95", "p99", "throughput", "lock_wait"]
 
 [[contention]]
 id = "PERF-GW-019"
-version = 1
+version = 2
 requirements = ["CONCUR-LOCK-001", "PERF-FANOUT-002"]
 fixture_id = "FX-GW-019"
 harness_case = "fanout_cancellation_progress"
@@ -321,6 +343,337 @@ gating = true
 name = "fanout_cancellation_progress"
 require_independent_progress = true
 require_no_thing_lock_during_enqueue = true
+
+[[workload]]
+id = "PERF-GW-020"
+version = 1
+requirements = ["CONCUR-LIN-001", "HANDLER-STORAGE-001", "RES-LIMIT-001"]
+fixture_id = "FX-GW-020"
+harness_case = "handler_storage_replacement_matrix"
+gating = true
+name = "handler_storage_replacement_matrix"
+registered_slot_densities = [0, 1, 64, 1024, 4105]
+handler_kinds = ["sync", "async", "step", "mixed"]
+mutation_cases = [
+    "replace-with-selected-generation-pinned",
+    "remove",
+    "clear",
+    "profile-maximum",
+    "profile-maximum-plus-one",
+]
+handler_generations_per_slot_max = 2
+unsupported_operation_retained_bytes_max = 0
+require_atomic_admission_rollback = true
+report = [
+    "registered-slots",
+    "retained-handler-bytes",
+    "pending-handler-bytes",
+    "live-generations",
+    "rollback-bytes",
+]
+
+[[workload]]
+id = "PERF-GW-021"
+version = 1
+requirements = [
+    "CONCUR-LIN-001",
+    "CONCUR-USER-001",
+    "HANDLER-CANCEL-001",
+    "HANDLER-CANCEL-002",
+]
+fixture_id = "FX-GW-021"
+harness_case = "handler_cancellation_reentrancy"
+gating = true
+name = "handler_cancellation_reentrancy"
+handler_kinds = ["sync", "async", "step"]
+cancellation_cases = [
+    "sync-return-before-deadline",
+    "sync-return-after-cancellation",
+    "async-cancel-before-first-pending",
+    "async-cancel-after-pending",
+    "async-future-drop",
+    "step-budget-boundary",
+]
+replacement_cases = [
+    "replace-during-dispatch",
+    "reentrant-replace",
+    "reentrant-clear",
+    "reentrant-dispatch",
+]
+engine_guards_held_during_callback_max = 0
+engine_guards_held_during_future_drop_max = 0
+selected_handler_calls_per_operation_target_max = 1
+late_results_delivered_max = 0
+require_stable_selected_generation = true
+report = [
+    "handler-invocations",
+    "late-results",
+    "retained-invocation-bytes",
+    "future-drops",
+    "handler-steps",
+    "engine-guards-held",
+    "future-drop-engine-guards-held",
+]
+
+[[workload]]
+id = "PERF-GW-022"
+version = 1
+requirements = [
+    "CLEANUP-RECORD-001",
+    "CONCUR-LIN-001",
+    "CONCUR-USER-001",
+    "HANDLER-CANCEL-001",
+    "HANDLER-CANCEL-002",
+    "HANDLER-STORAGE-001",
+    "HANDLER-SUB-001",
+    "RES-LIMIT-001",
+]
+fixture_id = "FX-GW-022"
+harness_case = "producer_subscription_transaction"
+gating = true
+name = "producer_subscription_transaction"
+subscriber_count = 1024
+setup_handler_kinds = ["sync", "async", "step"]
+teardown_handler_kinds = ["sync", "async", "step"]
+handler_kind_pairs = [
+    "sync-sync",
+    "sync-async",
+    "sync-step",
+    "async-sync",
+    "async-async",
+    "async-step",
+    "step-sync",
+    "step-async",
+    "step-step",
+]
+coverage_dimensions = ["handler_kind_pairs", "transaction_cases"]
+transaction_cases = [
+    "accept-install-active",
+    "application-reject",
+    "early-terminal-absent-obligations",
+    "accepted-response-invalid",
+    "success-response-claim-race",
+    "start-response-release-ack",
+    "start-response-delivery-failure",
+    "cancel-during-setup",
+    "drop-during-setup",
+    "setup-cancel-cleanup-transfer",
+    "setup-cancel-residual",
+    "late-acceptance",
+    "late-external-guard",
+    "installation-failure-rollback",
+    "active-stop",
+    "cancel-during-teardown",
+    "drop-during-teardown",
+    "teardown-response-release-ack",
+    "teardown-view-cancel-detaches-only",
+    "teardown-view-drop-detaches-only",
+    "owner-abort-async-teardown-no-result",
+    "owner-abort-step-teardown-no-result",
+    "late-teardown-result",
+    "repeated-stop",
+    "teardown-failure-cleanup",
+    "reentrant-stop",
+    "pending-call-capacity-saturation",
+    "handler-state-capacity-saturation",
+    "cleanup-capacity-saturation-residual",
+    "terminal-replay-before-eviction",
+    "terminal-eviction-stale-replay",
+]
+handler_footprint_retained_bytes = 64
+handler_footprint_pending_call_bytes = 256
+handler_footprint_subscription_bytes = 256
+pending_handler_calls_prefill = 1024
+handler_state_bytes_charged_after_active = 4194304
+cleanup_items_prefill = 1024
+cleanup_bytes_prefill = 4194304
+producer_residual_records_prefill = 64512
+producer_residual_bytes_prefill = 16515072
+producer_residual_records_reserved_per_subscription = 1
+producer_residual_record_bytes_reserved_per_subscription = 256
+teardown_admission_wait_timeout_millis_max = 5000
+teardown_admission_wait_steps_max = 1024
+terminal_replay_attempts_before_eviction_min = 2
+require_stale_handle_after_tombstone_eviction = true
+early_terminal_reservation_leaks_max = 0
+duplicate_response_ack_count_changes_max = 0
+teardown_wait_budget_overshoot_units_max = 0
+application_setup_calls_per_subscription_max = 1
+application_teardown_calls_per_subscription_max = 1
+publications_before_active_max = 0
+leaked_guards_max = 0
+engine_guards_held_during_application_callback_max = 0
+require_retained_terminal_teardown_replay = true
+require_complete_matrix_coverage = true
+report = [
+    "setup-calls",
+    "teardown-calls",
+    "published-subscriptions",
+    "rolled-back-guards",
+    "cleanup-records",
+    "leaked-guards",
+    "engine-guards-held",
+    "start-response-acks",
+    "teardown-view-acks",
+    "local-view-releases",
+    "teardown-admission-wait-units",
+    "producer-residual-records",
+    "terminal-replays",
+    "tombstone-evictions",
+    "handler-state-bytes",
+    "subscription-bytes",
+]
+
+[[workload]]
+id = "PERF-GW-023"
+version = 1
+requirements = ["PERF-INDEX-001", "PLAN-INDEX-001", "PRODUCER-EMIT-001"]
+fixture_id = "FX-GW-023"
+harness_case = "compiled_emission_target_lookup"
+gating = true
+name = "compiled_emission_target_lookup"
+binding_count = 64
+p95_latency_us_max = 5
+td_nodes_scanned_max = 0
+require_generation_safe_lookup = true
+require_full_affordance_target_key = true
+report = [
+    "median",
+    "p95",
+    "p99",
+    "targets",
+    "td-nodes-scanned",
+    "allocations",
+]
+
+[[workload]]
+id = "PERF-GW-024"
+version = 2
+requirements = ["PERF-FANOUT-002", "PRODUCER-EMIT-001", "RES-LIMIT-001"]
+fixture_id = "FX-GW-024"
+harness_case = "emission_binding_scaling"
+gating = true
+name = "emission_binding_scaling"
+lanes_per_binding = 1
+max_in_flight_per_lane = 16
+binding_count_cases = ["1", "4", "16", "64"]
+coverage_dimensions = ["binding_count_cases"]
+p99_latency_us_at_64_max = 1000
+payload_copies_per_binding_max = 0
+result_cells_missing_max = 0
+require_exact_target_visit_count = true
+require_exact_emission_policy_configuration = true
+require_complete_matrix_coverage = true
+report = [
+    "median",
+    "p95",
+    "p99",
+    "binding-target-visits",
+    "payload-copies-per-binding",
+    "result-cells-missing",
+]
+
+[[workload]]
+id = "PERF-GW-025"
+version = 2
+requirements = [
+    "CONCUR-LOCK-001",
+    "HOST-SHARD-001",
+    "PERF-FANOUT-002",
+    "PRODUCER-EMIT-001",
+]
+fixture_id = "FX-GW-025"
+harness_case = "slow_binding_isolation"
+gating = true
+name = "slow_binding_isolation"
+binding_count = 64
+slow_binding_count = 1
+pressure_cases = ["slow-pending", "capacity-full"]
+lanes_per_binding_cases = ["1", "4"]
+max_in_flight_per_lane = 16
+offered_load_cases = ["at-capacity", "four-times-capacity"]
+coverage_dimensions = [
+    "pressure_cases",
+    "lanes_per_binding_cases",
+    "offered_load_cases",
+]
+unrelated_lane_progress_gap_us_max = 1000
+blocked_emission_admission_latency_us_max = 100
+unbounded_lane_growth_max = 0
+engine_guards_held_during_binding_call_max = 0
+require_independent_binding_lane_progress = true
+require_exact_emission_policy_configuration = true
+require_bounded_slow_lane_capacity = true
+require_pre_side_effect_lane_reservation_rollback = true
+require_no_cross_binding_capacity_borrow = true
+require_complete_matrix_coverage = true
+report = [
+    "median",
+    "p95",
+    "p99",
+    "unrelated-lane-progress-gap-us",
+    "blocked-emission-admission-latency-us",
+    "slow-lane-depth",
+    "unbounded-lane-growth",
+    "engine-guards-held-during-binding-call",
+]
+
+[[workload]]
+id = "PERF-GW-026"
+version = 1
+requirements = [
+    "LIFE-EXPOSE-003",
+    "PERF-ADMISSION-001",
+    "PLAN-INDEX-001",
+    "PRODUCER-EMIT-001",
+]
+fixture_id = "FX-GW-026"
+harness_case = "exposure_publication_target_construction"
+gating = true
+name = "exposure_publication_target_construction"
+binding_count = 64
+p95_latency_ms_max = 2000
+td_rescans_after_compile_max = 0
+publication_targets_without_binding_owner_max = 0
+require_targets_from_committed_plan = true
+report = [
+    "median",
+    "p95",
+    "p99",
+    "publication-targets",
+    "td-rescans-after-compile",
+    "publication-targets-without-binding-owner",
+    "peak-live-bytes",
+]
+
+[[workload]]
+id = "PERF-GW-027"
+version = 1
+requirements = [
+    "BIND-OUT-001",
+    "PLAN-BOUND-001",
+    "STATE-SUB-001",
+    "SUB-DATA-001",
+]
+fixture_id = "FX-GW-027"
+harness_case = "native_collection_subscription"
+gating = true
+name = "native_collection_subscription"
+collection_source_count = 1024
+binding_start_calls_max = 1
+per_affordance_start_calls_max = 0
+local_merge_queues_created_max = 0
+require_root_form_selection = true
+require_exact_source_attribution = true
+report = [
+    "median",
+    "p95",
+    "p99",
+    "binding-start-calls",
+    "per-affordance-start-calls",
+    "local-merge-queues-created",
+    "attributed-sources",
+]
 
 [code_size]
 characterization = true

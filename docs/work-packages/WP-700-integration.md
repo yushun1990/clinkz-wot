@@ -1,7 +1,7 @@
 # WP-700 Umbrella API Migration and Final Conformance
 
 Status: Planned
-Design revision: v4.6
+Design revision: v4.8
 Depends on: `WP-400`, `WP-500`, `WP-600`
 Required gates: `GATE-1`, `GATE-2`, `GATE-3`, `GATE-4`, `GATE-5`, `GATE-6`
 Owner packages: `clinkz-wot`, workspace
@@ -70,6 +70,9 @@ revision.
 - Re-export each frozen item from its defining package and public path in
   `docs/api-ownership.csv`. The umbrella may provide a shorter path, but it must not define a
   second type, trait, registration, slot, state record, or profile with the same role.
+- Re-export `OutboundRequest` and core subscription SPI values from core, and the linear
+  application `Subscription` facade from Servient. Do not expose a second queue-backed
+  subscription or an emission coordinator implementation from the umbrella.
 - Replace broad accidental prelude exposure with a reviewed application-facing list covering
   documents, interaction values, handlers, Servient construction, produced/consumed handles,
   Discovery client values, resource policy, and selected optional bindings/codecs.
@@ -95,6 +98,9 @@ revision.
 - Verify an end-to-end Consumer and Directory-client lifecycle from plan selection through request
   or subscription progress, terminal status, cancellation, and cleanup with stable binding and
   slot generations.
+- Verify each standard collection subscription selects one root form and starts one binding-owned
+  driver. A missing native capability must remain a structured error; integration conveniences
+  may not introduce implicit per-affordance fan-out.
 - Verify that a source document, compiled plan, registration, route guard, payload lease,
   subscription guard, Directory slot, cleanup record, and performance result each have exactly one
   live owner at every cross-crate handoff.
@@ -119,6 +125,13 @@ revision.
 - Remove legacy security, payload, error, and resource aliases that define a second cross-crate
   role instead of re-exporting the frozen owner. A transitional alias may not remain enabled in a
   releasable feature cell.
+- Remove every legacy handler/emission/subscription bridge and export: `PushFn`, `EventBroker`,
+  `EventName`, `EventStream`, `PublisherSink`, `SubscriptionSender`, core `Subscription`,
+  `SubscriptionGuard`, `BindingRequest`, `ServerEmissionSlot`, the affordance-first sync/async handler traits
+  and setters, all nine public `ReadSlot` through `UnsubscribeSlot` enums, and all nine raw
+  `property_handler_*`, `action_handler_*`, and `event_handler_*` lookup methods. The final
+  umbrella exposes only the 54 operation-specific core traits and the 73 WP-400 host
+  registration methods frozen in `docs/api-ownership.csv`.
 - Remove stale crate documentation claiming that the default `std` feature installs Tokio or a
   concrete transport when the actual feature graph does not do so.
 
@@ -141,15 +154,26 @@ no-default, async, or optional binding cell restores it.
   metadata retains its live identity and native provenance through shared validation.
 - `performance-baseline-and-regression-gates`: fixture-locked numeric baselines, absolute-budget
   results, regression comparisons, and approved runner identities for every gating workload.
+- `legacy-handler-surface-removal`: negative compile fixtures and source/reference inspection for
+  every removed trait, slot, lookup, setter spelling, push facade, compatibility adapter, and
+  optional feature cell, plus positive type-identity checks for all target handler paths.
+- `architecture-boundary-conformance`: dependency and source inspection proving that core owns no
+  application handle, concrete queue, dispatch policy, plan compiler, Servient registry, or
+  protocol I/O and that shared compiler crates own no execution trait or runtime scheduler.
+- `subscription-and-emission-boundaries`: type-identity and end-to-end evidence for the core
+  driver and binding-local slot SPI, Servient facade/private records, binding-owned flow control,
+  and absence of the legacy broker/queue/sink surface.
+- `native-collection-operation-conformance`: root-form selection, one driver start, exact source
+  items, native protocol multiplexing, and structured rejection without implicit fan-out.
 
 Release evidence also includes formatting, Clippy, rustdoc, unit, integration, round-trip,
 failure-injection, no-std compile, and dependency-direction checks across the full workspace.
 
 ## Performance Workloads
 
-- Gateway: `PERF-GW-001..019` (`PERF-GW-001` through `PERF-GW-019`).
+- Gateway: `PERF-GW-001..027` (`PERF-GW-001` through `PERF-GW-027`).
 - Directory client: `PERF-DIR-001..011` (`PERF-DIR-001` through `PERF-DIR-011`).
-- Constrained: `PERF-CS-001..014` (`PERF-CS-001` through `PERF-CS-014`).
+- Constrained: `PERF-CS-001..019` (`PERF-CS-001` through `PERF-CS-019`).
 
 Run every workload through `tools/performance-harness` with the manifest, fixture, measurement,
 profile, feature, target, toolchain, allocator, runner, and workload identities locked. Populate
@@ -168,6 +192,14 @@ reference gate.
 - Every positive and negative public-surface fixture passes, including useful no-default and async
   no-std umbrella builds, optional `zenoh`, optional `zenoh-pico`, `cbor`, and additive
   `td2-preview`.
+- `legacy-handler-surface-removal` proves that no old handler, slot, raw lookup, push facade, or
+  migration adapter survives in any releasable cell and that every target operation/flavor and
+  host registration path resolves to its single defining type or method.
+- Negative compile/source checks cover `BindingRequest`, `EventBroker`, `EventName`, `EventStream`,
+  core `Subscription`, `SubscriptionGuard`, `SubscriptionSender`, `PublisherSink`, and
+  `ServerEmissionSlot`; positive checks resolve `OutboundRequest`, `HostSubscriptionDriver`,
+  `SubscriptionStopRequest`, `BindingEmissionSlot`, and the Servient `Subscription` to one
+  defining owner each.
 - Every applicable requirement has current focused evidence; no waiver, open design ambiguity,
   temporary nonconformance feature, or unrecorded old API remains.
 - All gating performance workloads have accepted numeric baselines and pass their absolute,
@@ -175,4 +207,4 @@ reference gate.
 - Workspace formatting, Clippy, rustdoc, tests, state models, artifact checks, no-std checks, and
   old-API inspections pass from a clean tree.
 - The release notes identify the intentional breaking migrations and final public paths. Only then
-  may the coordinated implementation refactor be declared conforming to design revision v4.6.
+  may the coordinated implementation refactor be declared conforming to design revision v4.8.

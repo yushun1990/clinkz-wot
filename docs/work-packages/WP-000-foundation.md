@@ -2,7 +2,7 @@
 
 Status: Complete
 
-Design revision: v4.6
+Design revision: v4.8
 
 Depends on: None
 
@@ -25,6 +25,13 @@ Servient lifecycle orchestration.
 The package refresh required by `WP-100-ERR-DISPOSITION-001` regenerated the
 exhaustive profile schema, boundary tests, and evidence for
 `additional_responses_per_form_max`. No foundation ownership boundary changed.
+
+WP-000 completion is the historical v4.6 checkpoint recorded in
+`docs/evidence/WP-000.toml`: 118 resource fields and the work classes then
+required by its consumers. Revision v4.7 does not retroactively change that
+completion claim. The nine additive handler fields and `HandlerSteps` work
+classes are a foundation-owned surface change performed and evidenced by the
+active WP-100 foundation-entry subtranche.
 
 ## Requirements
 
@@ -69,11 +76,14 @@ Implement these frozen public paths exactly as owned by `docs/api-ownership.csv`
 - `ClockId`, `MonotonicInstant`, `RuntimeClock`, and `SourceTimestamp` in `time`;
 - `Generation` and `SlotIndex` in `generation`.
 
-Generate or validate every `ResourceLimits` field and named-profile value against
-`docs/resource-limits.csv`; a Rust-side field list or default table must not become a second
-schema. Represent `NA` as a typed non-applicable value and reject omission, inheritance
-markers, and implicit infinity. Keep counters, ids, and units as newtypes where mixing them
-could bypass admission or work accounting.
+At the WP-000 completion revision, generate or validate every then-authoritative
+`ResourceLimits` field and named-profile value against
+`docs/resource-limits.csv`; a Rust-side field list or default table must not
+become a second schema. Later additive fields remain governed by the same
+generator and are assigned to the active consumer work package that requires
+them. Represent `NA` as a typed non-applicable value and reject omission,
+inheritance markers, and implicit infinity. Keep counters, ids, and units as
+newtypes where mixing them could bypass admission or work accounting.
 
 `WorkBudget` contains the frozen typed counters, decrements before work starts, and returns a
 structured exhaustion result without wrapping. `MonotonicInstant` retains `ClockId`; checked
@@ -127,9 +137,10 @@ These records satisfy the corresponding requirement-index evidence families:
 - `admission-ledger` for reserve, commit, rollback, phase release, peak, and contiguous bytes;
 - `defaults-and-timeout-races` for profile snapshots and clock comparison/wrap behavior.
 
-Each evidence record names WP-000, its requirement ids, the compilation cell, and the selected
-resource profile. Evidence from a later integration package may supplement but not replace the
-foundation unit and compile evidence.
+Each evidence record names WP-000, its requirement ids, the compilation cell,
+the selected resource profile, and its v4.6 completion revision. Evidence from
+a later work package supplements rather than rewrites that checkpoint when the
+foundation owner adds a consumer-driven field or counter.
 
 ## Performance Workloads
 
@@ -145,11 +156,12 @@ to satisfy a budget.
   feature cells, including a no-std compile fixture.
 - Every ownership-matrix item assigned to foundation exists at its frozen public path and no
   duplicate public definition exists elsewhere.
-- Every resource field and named profile has an exact snapshot test tied to
-  `docs/resource-limits.csv`.
+- All 118 fields and named profiles in the v4.6 completion schema have exact
+  snapshot tests tied to that revision's `docs/resource-limits.csv`; later
+  additive fields are not claimed by this evidence record.
 - Reservation rollback, peak accounting, work exhaustion, clock mismatch, and generation
   reuse tests pass without panic or counter wrap.
 - Cargo dependency inspection proves the required downward graph and absence of host/runtime
   dependencies.
-- All listed stable evidence keys have current WP-000 records; no temporary compatibility
-  type or duplicate profile schema remains.
+- All listed stable evidence keys have the recorded v4.6 WP-000 result; no
+  temporary compatibility type or duplicate profile schema remains.

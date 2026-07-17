@@ -10,6 +10,7 @@
     "feature_set",
     "environment",
     "runner",
+    "runner_fingerprint",
     "toolchain",
     "allocator",
     "fixture_generator",
@@ -29,9 +30,10 @@
     "feature_set": { "type": "string", "minLength": 1 },
     "environment": { "type": "string", "minLength": 1 },
     "runner": { "type": "string", "minLength": 1 },
+    "runner_fingerprint": { "$ref": "#/$defs/runnerFingerprint" },
     "toolchain": { "type": "string", "minLength": 1 },
     "allocator": { "type": "string", "minLength": 1 },
-    "fixture_generator": { "const": "clinkz-wot-fixture-generator-v1" },
+    "fixture_generator": { "const": "clinkz-wot-fixture-generator-v2" },
     "fixture_lock": { "const": "docs/performance/fixtures.lock.toml" },
     "fixture_digest": { "pattern": "^sha256:[0-9a-f]{64}$" },
     "fixture_seed": { "type": "integer", "minimum": 0 },
@@ -61,6 +63,34 @@
     }
   },
   "$defs": {
+    "runnerFingerprint": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "board",
+        "class",
+        "clock_source",
+        "cpu_model",
+        "frequency_policy",
+        "kernel_or_runtime",
+        "memory",
+        "os_or_firmware",
+        "physical_cores",
+        "threads_per_core"
+      ],
+      "properties": {
+        "board": { "type": "string", "minLength": 1 },
+        "class": { "type": "string", "minLength": 1 },
+        "clock_source": { "type": "string", "minLength": 1 },
+        "cpu_model": { "type": "string", "minLength": 1 },
+        "frequency_policy": { "type": "string", "minLength": 1 },
+        "kernel_or_runtime": { "type": "string", "minLength": 1 },
+        "memory": { "type": "string", "minLength": 1 },
+        "os_or_firmware": { "type": "string", "minLength": 1 },
+        "physical_cores": { "type": "string", "minLength": 1 },
+        "threads_per_core": { "type": "string", "minLength": 1 }
+      }
+    },
     "caseIdentity": {
       "type": "object",
       "required": [

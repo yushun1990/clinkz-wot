@@ -1,7 +1,9 @@
 # clinkz-wot Design
 
-Status: v4.6 frozen implementation-ready target; coordinated implementation
-proceeds only through the admitted work-package DAG.
+Status: v4.8 design-closure candidate. Runtime migration remains
+blocked until every affected refactor gate records passing same-revision review
+evidence; admitted implementation then proceeds only through the work-package
+DAG.
 
 This document is the authoritative project design for `clinkz-wot`. It is a
 target design: implementation code may lag behind it. Previous architecture
@@ -69,7 +71,14 @@ stable measurement identities; `tools/performance-harness` checks and
 orchestrates that contract. `docs/work-packages/index.toml` defines the
 implementation dependency DAG, and its package documents define migration and
 removal work without becoming a source of behavioral requirements. `PLAN.md`
-selects the active revision but does not redefine it. When active artifacts
+selects the active revision but does not redefine it. The accepted records under
+`docs/ADR/` are normative architecture inputs to the selected revision and
+constrain interpretation of crate, dispatch, subscription, collection-operation,
+and binding-request ownership. They do not amend this document implicitly. If an
+accepted ADR, this document, or another authoritative artifact disagrees,
+implementation MUST stop and all affected artifacts MUST be corrected in one
+reviewed revision. The review records under `docs/review/` provide evidence and
+rationale but are not an independent normative source. When active artifacts
 disagree, implementation MUST stop
 at the conflicting requirement; neither code, a benchmark result, a work
 package, nor an older document resolves the conflict implicitly. The design and
@@ -85,6 +94,14 @@ the current implementation keeps, relocates, adds, replaces, or removes the
 item. Its checker MUST reject duplicate items and paths, unknown crates,
 unindexed requirement ids, invalid feature cells, missing current paths for
 keep/relocate entries, and placeholder ownership decisions.
+
+The ownership matrix uses `no-default`, `async-no-std`, and `std` for the three
+baseline compilation environments. It additionally uses `std-async` when an
+individual item requires both orthogonal Cargo features. A `std-async` row does
+not imply that enabling `std` enables `async`, and a `std` row does not make an
+`async`-gated item available. This refinement applies to item ownership only;
+requirements and work packages may continue to name the broader `std`
+environment when their verification covers more than one exact feature set.
 
 `IMPL-CONFORM-001`: The coordinated implementation refactor is planned and
 reviewed by requirement id. Every implementation work package MUST identify its
@@ -124,12 +141,42 @@ yet merged and requires an impact review for packages already completed.
 
 ### Revision Record
 
-v4.6 is the frozen implementation-ready revision. It replaces the earlier
-unqualified "implementation-ready" status with explicit admission gates, adds a
+v4.8 supersedes the v4.7 candidate before runtime migration resumes. It
+incorporates `ADR-0001`, `ADR-0002`, `ADR-0003`, `ADR-0004`, `ADR-0005`, and
+`ADR-0006`
+from the July 2026 architecture review.
+The revision freezes the crate responsibility boundaries; replaces the legacy
+core-owned event broker and sink topology with Servient-owned emission
+coordination and binding-local publication progress; assigns the public
+`Subscription` facade to Servient while core owns subscription identities,
+outcomes, portable slots, and `HostSubscriptionDriver`; requires exact source
+attribution on every `SubscriptionItem`; makes collection subscriptions one
+native root-form operation without implicit per-affordance fan-out; and renames
+the selected Consumer execution envelope to `OutboundRequest`. It also separates
+Servient's aggregate `EmissionRecord` from core's one-binding
+`BindingEmissionSlot`. Every affected ownership, lifecycle, API, resource,
+performance, and work-package gate is reopened until the v4.8 artifact set and
+independent review agree.
+
+v4.7 was the previous design-closure candidate. It closed the handler-entry
+audit before handler implementation could resume and froze the eighteen-operation
+sync, async-GAT, and bounded-step surface; made
+the portable async traits independent of host `Send` erasure; separated direct
+response completion from Producer subscription acceptance; and composed
+handler, in-flight, cancellation, setup, teardown, cleanup, and terminal-replay
+ownership. It also added exhaustive handler resource accounting, admissible
+handler performance fixtures, exact failure mappings, and an active WP-100
+foundation-entry subtranche without rewriting the historical WP-000 completion
+record. Revision v4.8 retains those handler decisions and adds the architecture
+corrections above.
+
+v4.6 was the previous implementation-ready revision. Revision v4.7 supersedes
+it after closing the handler-entry audit through explicit admission gates, adds a
 machine-readable API ownership contract, introduces a narrow foundation crate
 for resource, work, time, and generation primitives, and makes work-package
 dependency on gate closure explicit. It also resolves the cross-layer ownership
-direction before any runtime API migration begins. All six gates are closed:
+direction before any runtime API migration begins. At the v4.6 checkpoint, all
+six gates were closed for that revision:
 the lifecycle state machines terminate with owned cleanup; Directory is a
 client-only contract; resource profiles are exhaustive; performance workloads,
 fixtures, and result identities are executable; and the eight-package
@@ -322,8 +369,9 @@ The following deviations are intentional:
 7. The Rust subscription model may expose an extended mode with multiple active
    subscriptions for one property or event. A Scripting-compatible mode must
    reject a second active subscription for the same property or event.
-8. `Subscription::stop` may be implemented through an owned Rust teardown guard,
-   but protocols that require explicit `unobserveproperty` or
+8. `Subscription::stop` is implemented through the Servient driver registry and
+   retained cleanup state, but protocols that require explicit
+   `unobserveproperty` or
    `unsubscribeevent` interactions must preserve those TD operation semantics.
 9. Rust may expose directory-native query, projection, pagination, and watch
    options beyond the Scripting API `ThingFilter`. The Scripting-compatible
@@ -367,10 +415,13 @@ application.
   TD/TM data models, builders, serde, validation, and URI helpers. Root crate
   supports `no_std + alloc`.
 - `clinkz-wot-core` (`core`):
-  Interaction core, handlers, locks, payloads, security, protocol-neutral
-  logical and binding plan values, binding request/response data, and host and
-  constrained binding contracts. Root crate supports `no_std + alloc`;
-  host-erased traits and guard wrappers are feature-gated.
+  Protocol-neutral interaction values, handlers, payloads, security and codec
+  contracts, immutable logical and binding plan values, binding request/response
+  data, lifecycle outcomes, portable operation slots, and host and constrained
+  binding contracts. It does not own application handles, Servient registries,
+  concrete emission schedulers, concrete subscription queues, or local stream
+  merging. Root crate supports `no_std + alloc`; host-erased traits and driver
+  wrappers are feature-gated.
 - `clinkz-wot-discovery` (`discovery`):
   Discovery data model, protocol-neutral Directory client contracts,
   publisher/watch client traits, and lazy discovery processes. Data model and
@@ -388,9 +439,12 @@ application.
   constrained builds; Rust zenoh backend is `std`; `zenoh-pico` is constrained
   runtime work.
 - `clinkz-wot-servient` (`servient`):
-  Application-facing Servient, produced/consumed handles, dispatch, and
-  discovery facade. Registry and API abstractions are no_std-capable; host
-  builder and concrete runtimes are feature gated.
+  Application-facing Servient, produced/consumed handles, lifecycle
+  transactions, plan admission, handler and security orchestration, the public
+  subscription facade, cleanup ownership, profile-specific emission
+  coordination, and discovery facade. It does not own concrete protocol syntax,
+  protocol I/O, or binding driving loops. Registry and API abstractions are
+  no_std-capable; host builder and concrete runtimes are feature gated.
 - `clinkz-wot-codec-cbor` (`codecs/cbor`):
   CBOR payload codec. Root crate supports `no_std + alloc`.
 - `clinkz-wot` (`clinkz-wot`):
@@ -434,10 +488,10 @@ surface. Empty cells are unsupported rather than silently reduced APIs.
 | --- | --- | --- | --- | --- |
 | `foundation` | Resource/work/time/generation values | Same API; no executor | Host conversion conveniences only | No TD/runtime/protocol dependency |
 | `td` | TD/TM values, builders, serde, validation, URI helpers | Same API; no executor | Host conveniences only | `td2-preview` additive |
-| `core` | Interaction and plan values, local sync dispatch, poll binding contracts | Native async handler and binding traits without executor | Host locks, erased handlers, and erased binding traits | No higher-layer dependency |
+| `core` | Interaction and plan values, local handler dispatch, poll binding contracts and operation slots | Native async handler twins plus the same poll binding contracts; user adapters may await them without a frozen native-async binding trait | Host locks, erased handlers, erased binding traits, cancellation signals, and subscription driver SPI | No concrete queue, emission scheduler, or higher-layer dependency |
 | `protocol-bindings/core` | Plan compilers, capability indexes, form/security/URI helpers | Async compiler adapters without executor | Host compiler conveniences | No execution-trait or concrete protocol ownership |
 | `discovery` | Values and poll Directory client/session/watch/publisher traits | Async twins | Host client adapters | No servient, Directory service, or storage-backend dependency |
-| `servient` | `StaticServient` and manual progress API | Async twins over caller driver | `ServientBuilder` and host handles | Same validation/security semantics |
+| `servient` | `StaticServient`, `StaticSubscription`, and manual progress | The same caller-driven poll surface plus optional user async adapters; no executor or separate native-async binding SPI is frozen | `ServientBuilder`, host handles, public host `Subscription`, and emission coordination | Same validation/security semantics; no protocol I/O |
 | `zenoh` binding | Planning and constrained adapter types | Constrained async adapter when enabled | Rust zenoh backend | `zenoh-pico` does not enable `std` |
 | `codecs/cbor` | Bounded codec and incremental/poll decode | Same value API | Host I/O conveniences | No runtime dependency |
 | umbrella | Re-export selected constrained surfaces | Re-export selected async surfaces | Feature-composed host API | No-default build is useful |
@@ -485,6 +539,19 @@ lowest crate that owns their semantics; they are not duplicated to avoid an
 otherwise invalid dependency edge. `foundation` is deliberately narrow: moving
 an item there requires it to be independent of TD vocabulary, interaction error
 semantics, binding execution, discovery, and lifecycle composition.
+
+The module boundary follows the same dependency direction. Core separates
+handler contracts, binding SPI values and traits, and immutable plan values; it
+does not use a catch-all event module to host queues, scheduling, or application
+facades. Servient separates lifecycle, producer and consumer handles,
+subscription facade and registry, emission coordination, cleanup, and host or
+static runtime policy. Concrete bindings separate compiler extensions, client
+and server execution, subscription flow control, publication, authentication,
+lifecycle, and runtime adapters. A binding owns protocol-local buffering and
+credit, but shared capacity, overflow, loss, and terminal semantics remain core
+contracts. Codec crates implement bounded codecs without acquiring runtime or
+transport policy, and the umbrella crate provides re-exports without becoming a
+second implementation owner.
 
 ## Data Contract
 
@@ -872,8 +939,15 @@ Key types:
   generation-bearing runtime slots protected by the caller's scoped
   critical-section boundary; the no-default surface does not make a lock
   cloneable by requiring `Arc` or atomics.
-- `EventBroker`, `Subscription`, and `SubscriptionGuard` support event and
-  observable-property delivery.
+- `SubscriptionId`, `SubscriptionStart`, `SubscriptionStopRequest`,
+  `SubscriptionItem`, `SubscriptionDriverEvent`, `SubscriptionState`,
+  `HostSubscriptionDriver`, and constrained subscription
+  slots define protocol-neutral subscription semantics and binding progress.
+  Core does not provide the application-facing `Subscription`, a concrete
+  subscription queue, or a local stream merger.
+- `ProducerEmission`, `BindingPublication`, and `BindingEmissionSlot` define
+  one binding publication. Servient owns aggregate emission coordination and
+  scheduling policy.
 - `SecurityProvider` and `CredentialStore` provide inbound verification and
   outbound request credential application.
 
@@ -897,7 +971,8 @@ depend on a recursively acquired engine lock.
 `CONCUR-LIN-001`: Public lifecycle and replacement APIs document a
 linearization point. Handler replacement linearizes when the new slot is
 published; an already selected dispatch retains the old handler. Subscription
-stop linearizes when the guard registry marks the subscription stopping, after
+stop linearizes when the Servient driver registry marks the subscription
+stopping, after
 which no new sample is admitted for that subscription. `expose()` linearizes at
 the registry transition to serving. `destroy()` linearizes at the transition to
 draining, after which no new dispatch is admitted. Event publication racing
@@ -911,8 +986,11 @@ collection whose maximum work is not fixed by the selected static profile.
 
 ### Produced Thing State
 
-`ExposedThing` is a concrete core type that stores a TD plus per-affordance
-handler slots. It is not the application-facing handle.
+Core owns the protocol-neutral handler traits, sparse handler-table values, and
+dispatch outcomes. Servient owns the produced-Thing record that composes an
+effective TD, immutable inbound plans, handler tables, lifecycle state, and
+application handle identity. No concrete core `ExposedThing` becomes a second
+application or registry owner.
 
 Handlers are sync-primary:
 
@@ -929,22 +1007,25 @@ operation also has an async twin. Sync handlers are the zero-allocation hot path
 for bounded local work. Async or poll/step handlers are opt-in for I/O-bound
 behavior.
 
-`HANDLER-API-001`: Every operation-specific handler receives an owned or
-call-lifetime-borrowed `HandlerContext` and the operation input appropriate to
-the compiled plan. The context exposes Thing id/generation, target, operation,
-plan id, correlation id, verified `Principal`, validated URI variables,
-deadline/cancellation view, and binding metadata safe for applications. It never
-exposes credentials, raw `AuthMaterial`, provider-managed body fields, or a
-mutable registry. Read and query operations return `InteractionOutput`; write,
-cancel, subscribe, and unsubscribe operations return an operation-specific
-status or output required by the selected response schema. Observe/subscribe
-handlers return a Producer-side guard or acceptance value; notification samples
-are published through the broker/emission APIs rather than by returning an
-unbounded stream from the handler.
+`HANDLER-API-001`: Every operation-specific handler receives a
+call-lifetime-borrowed request plus a copyable `HandlerContext` appropriate to
+the compiled plan. The combined handler boundary exposes Thing identity,
+target, operation, plan id, correlation id, verified `Principal`, validated URI
+variables, deadline/cancellation view, and binding metadata safe for
+applications. The request owns request-varying facts; the context contains only
+dispatch identity as frozen by the handler amendment. Neither value exposes
+credentials, raw `AuthMaterial`, provider-managed body fields, or a mutable
+registry. Read and query operations return `InteractionOutput`; write, cancel,
+subscribe, and unsubscribe operations return the exact result frozen by the
+operation matrix. Observe/subscribe handlers return a Producer acceptance value;
+notification samples are published through the Servient emission APIs rather than
+by returning an unbounded stream from the handler.
 
 The host sync registration accepts owned `Send + Sync + 'static` handler
-objects. The host async twin returns one owned, cancellation-aware future whose
-output has the same operation result; it does not borrow a handler-slot lock.
+objects. The portable async twin uses an associated future whose output has the
+same operation result; it may borrow the selected handler and call owner but
+never a handler-slot lock. Host registration privately erases that future and
+adds a `Send` bound without changing the portable trait.
 Constrained registration accepts caller-owned static slots or lifetime-bounded
 handler references and does not require `Send`, `Sync`, `Arc`, or boxed futures
 unless its selected execution environment does. Each concrete setter name fixes
@@ -954,10 +1035,10 @@ their bounded application error code and redacted message.
 
 `HANDLER-SUB-001`: A Producer subscribe/observe handler authorizes and performs
 application setup for one subscription request. Success is not published until
-both the handler acceptance and binding/local subscription guard installation
+both the handler acceptance and binding/local subscription record installation
 succeed. The corresponding unsubscribe/unobserve handler is invoked at most once
 for an explicitly matched active subscription when the compiled teardown
-operation requires application behavior. Failure rolls back guards already
+operation requires application behavior. Failure rolls back records already
 created for that start. Repeated wire teardown observes the retained terminal
 outcome and does not invoke application teardown twice.
 
@@ -1034,6 +1115,15 @@ cancellation statuses describe the aggregate request and response lifecycle,
 not preemption of synchronous user code. API documentation MUST state this
 distinction.
 
+The exact request/context ownership split, eighteen-operation sync/async/step
+matrix, registration methods, cancellation reducers, Producer subscription
+transaction, handler resource limits, workload identities, and acyclic removal
+checkpoints are frozen by
+`docs/amendments/WP-100-handler-api-v1.md`. That amendment resolves the
+alternatives left open in `HANDLER-API-001`, `HANDLER-SUB-001`,
+`HANDLER-CANCEL-001`, `HANDLER-CANCEL-002`, and `HANDLER-STORAGE-001`; where it
+is more specific, its schemas and staging take precedence.
+
 Producer-side aggregation has an explicit response contract. A fail-fast policy
 returns the first structured operation error with the Thing id, target property,
 operation, and plan id. A structured partial-result policy returns a
@@ -1063,15 +1153,17 @@ selected handler reference out of shared state before awaiting.
 
 ### Consumed Thing State
 
-`ConsumedThing` is a concrete core type that stores compact effective TD
-metadata plus interaction indexes and plans. Source document retention follows
-`SourceRetention`; it is not part of the required runtime representation. In the
-host async profile, plans may refer to shared
+The Servient-owned consumed-Thing record stores compact effective TD metadata
+plus interaction indexes and immutable plans compiled by the shared planning
+crate. Core owns the referenced protocol-neutral value schemas; it does not own
+the application handle or planning transaction. Source document retention
+follows `SourceRetention`; it is not part of the required runtime
+representation. In the host async profile, plans may refer to shared
 `Arc<dyn ClientBinding>` references. In constrained profiles, the same
 protocol-neutral plans must be usable with a poll-based binding table, static
 binding indexes, or owned adapters. The plan representation must not require
 boxed futures or `Arc` in order to compile for `no_std + alloc`. All per-call
-context is carried in `BindingRequest`, so a single client binding instance can
+context is carried in `OutboundRequest`, so a single client binding instance can
 serve many consumed Things.
 
 `consume(td)` precomputes protocol-neutral work shared by calls:
@@ -1114,6 +1206,79 @@ is allowed only when admitted as an explicit wildcard candidate. Normal planning
 complexity is O(`f + p + c`), where `p` is the number of indexed probes and `c`
 is the supported candidate count; O(`f * b`) is only an admitted wildcard worst
 case and remains bounded by `max_binding_probes_per_admission`.
+
+Collection subscription support is declared through the core-owned typed
+`CollectionSubscriptionCapability`, not a protocol string or an untyped flag.
+Its normative public schema is:
+
+```rust
+pub struct CollectionSubscriptionCapability {
+    topology: CollectionSubscriptionTopology,
+    source_attribution: CollectionSourceAttribution,
+    max_targets: NonZeroU32,
+    teardown_mode: CollectionTeardownMode,
+}
+
+pub enum CollectionSubscriptionTopology {
+    NativeMultiplexed,
+    BindingCoalesced,
+}
+pub enum CollectionSourceAttribution {
+    ExactAffordanceTarget,
+    Unavailable,
+}
+pub enum CollectionTeardownMode {
+    ImplicitDriverStop,
+    RootForm,
+    ImplicitOrRootForm,
+}
+
+impl CollectionSubscriptionCapability {
+    pub const fn new(
+        topology: CollectionSubscriptionTopology,
+        source_attribution: CollectionSourceAttribution,
+        max_targets: NonZeroU32,
+        teardown_mode: CollectionTeardownMode,
+    ) -> Self;
+    pub const fn topology(&self) -> CollectionSubscriptionTopology;
+    pub const fn source_attribution(&self) -> CollectionSourceAttribution;
+    pub const fn max_targets(&self) -> NonZeroU32;
+    pub const fn teardown_mode(&self) -> CollectionTeardownMode;
+}
+```
+
+The fields are private and the accessors above are exact. The enums and
+capability implement `Copy`, `Clone`, `Debug`, `Eq`, `PartialEq`, `Ord`,
+`PartialOrd`, and `Hash`. `new` is the exact public constructor. Both
+`ClientBindingRegistration` and `StaticClientBindingRegistration` expose these
+exact keyed operations:
+
+```rust
+pub fn try_with_collection_subscription_capability(
+    self,
+    operation: Operation,
+    capability: CollectionSubscriptionCapability,
+) -> CoreResult<Self>;
+pub fn collection_subscription_capability(
+    &self,
+    operation: Operation,
+) -> Option<CollectionSubscriptionCapability>;
+```
+
+Only `ObserveAllProperties` and `SubscribeAllEvents` are valid keys; another
+operation is rejected without changing the registration. The registration
+stores at most one capability per key and captures it with the binding
+generation. A standard collection method admits only
+`ExactAffordanceTarget`, rejects a target count greater than `max_targets`, and
+records topology and teardown mode in the immutable selected plan. Advertising
+this capability certifies native root-form execution, exact source attribution,
+and the declared target bound. The global host and poll subscription contracts
+already require `subscribe` to return a live driver on success while an error
+leaves no remote resource or cleanup obligation. A binding that can fail only
+after creating compensating state cannot implement any v4.8 subscription start;
+a later revision may add a failed-start cleanup handle. `BindingCoalesced` means that the binding compiler proved one
+physical subscription equivalent to the one selected root operation; it does
+not authorize Servient or core to construct a per-affordance fallback.
 
 `PLAN-LAZY-001`: Admission compiles compact logical metadata required for safe
 selection. Heavy schema validators, protocol-specific route/client state, and
@@ -1235,9 +1400,19 @@ by original form index must account for the form's context, because form index
 values are scoped to the array that contained the form.
 
 When a Scripting API-compatible method maps to a Thing-level TD operation, the
-engine selects from Thing-level forms first. Per-affordance fan-out helpers are
+engine selects from Thing-level forms. Per-affordance fan-out helpers are
 separate Rust extensions and must not be used to pretend that a missing
-Thing-level bulk form exists. For Consumer bulk property methods,
+Thing-level bulk form exists. `observe_all_properties` and
+`subscribe_all_events` each select exactly one compatible form from the TD root
+`forms` array and start exactly one collection subscription. Their selected
+binding plan MUST prove protocol-neutral exact source attribution and an
+admitted maximum target count. If no such root form and binding capability
+exist, the standard method returns a structured no-compatible-form selection
+error; core and Servient MUST NOT silently lower the call to per-affordance
+subscriptions. A concrete binding may use protocol-native multiplexing only as
+compiled by its binding plan. A later design may introduce explicitly named
+fan-out methods after freezing complete pre-admission, rollback, fairness,
+source-attribution, teardown, and bounded-progress semantics. For Consumer bulk property methods,
 `readallproperties`, `readmultipleproperties`, and `writemultipleproperties`
 are selected from the TD root `forms` array, and a caller-supplied `formIndex`
 is interpreted as an index into that root array. The `formIndex` for a property,
@@ -1317,7 +1492,7 @@ Bindings are extension points implemented by protocol crates.
 The binding model has three layers:
 
 - Protocol-neutral data types:
-  `BindingCandidate`, `BindingRequest`, `InboundBindingPlan`,
+  `BindingCandidate`, `OutboundRequest`, `InboundBindingPlan`,
   `BindingThingView`, `InboundRequest`, `InboundResponse`, support results,
   route matches, and security metadata. These types live in no_std-capable
   crates and must not require `Arc`, boxed futures, spawned tasks, or host
@@ -1448,6 +1623,172 @@ request received before handler publication returns the structured
 `UnsupportedOperation` error already defined, and selecting this policy is
 visible in the effective handle diagnostics.
 
+### Host Binding Call Cancellation
+
+`BIND-CALL-CANCEL-001`: Host and constrained bindings use one explicit
+settlement value for cancellation races. The snapshot carried in
+`OutboundRequest` remains useful for rejecting work before a call is
+constructed, but it is not a live cancellation channel. This portable
+requirement owns `CleanupTransferContext`, `BindingCallSettlement<T>`, and the
+same settlement semantics for every constrained request, subscription-start,
+response, and publication slot. The std-only owned-call representation and
+Servient retention policy are specified separately by `BIND-HOST-CANCEL-001`.
+
+```rust
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub struct CleanupTransferContext {
+    /* reserved CleanupHandle, operation, and independent drain deadline */
+}
+
+impl CleanupTransferContext {
+    pub fn try_from_reserved(
+        handle: CleanupHandle,
+        operation: CleanupOperation,
+        deadline: Option<MonotonicInstant>,
+    ) -> CoreResult<Self>;
+    pub const fn handle(&self) -> CleanupHandle;
+    pub const fn operation(&self) -> CleanupOperation;
+    pub const fn deadline(&self) -> Option<MonotonicInstant>;
+    pub fn try_pending(
+        self,
+        retry_class: RetryClass,
+        retry_not_before: Option<MonotonicInstant>,
+        attempts: u16,
+        status_code: u16,
+    ) -> CoreResult<CleanupOutcome>;
+    pub fn try_residual(
+        self,
+        retry_class: RetryClass,
+        attempts: u16,
+        status_code: u16,
+    ) -> CoreResult<CleanupOutcome>;
+}
+
+#[derive(Debug)]
+pub enum BindingCallSettlement<T> {
+    Returned(CoreResult<T>),
+    Cancelled {
+        retry_class: RetryClass,
+        cleanup: CleanupOutcome,
+    },
+}
+
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub struct BindingCallFootprint {
+    retained_bytes: u64,
+}
+
+impl BindingCallFootprint {
+    pub const fn new(retained_bytes: u64) -> Self;
+    pub const fn retained_bytes(self) -> u64;
+}
+
+pub trait HostBindingCall: Send + 'static {
+    type Output: Send + 'static;
+
+    fn footprint(&self) -> BindingCallFootprint;
+
+    fn poll_result(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        budget: &mut WorkBudget,
+    ) -> Poll<CoreResult<Self::Output>>;
+
+    fn start_cancel(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        cleanup: CleanupTransferContext,
+        budget: &mut WorkBudget,
+    ) -> CoreResult<StartStatus<BindingCallSettlement<Self::Output>>>;
+
+    fn poll_cancel(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        budget: &mut WorkBudget,
+    ) -> Poll<CoreResult<BindingCallSettlement<Self::Output>>>;
+}
+
+pub type HostBindingCallBox<T> =
+    Pin<Box<dyn HostBindingCall<Output = T>>>;
+```
+
+`BindingCallSettlement` has exactly the two variants above and is not
+`non_exhaustive`. `Returned` transfers a normal or error result; it does not say
+that caller delivery won a race. `Cancelled` proves cancellation settlement and
+returns its retry classification together with complete, transferred, or
+durably residual cleanup. An outer `CoreResult` error is reserved for an
+invalid or stale call that leaves the call state unchanged.
+
+`CleanupTransferContext` is a copyable view of one engine-reserved cleanup
+generation, not ownership of the registry slot. Only the matching Servient or
+static runtime can validate and commit its `CleanupRecord`; a forged, stale, or
+mismatched handle is rejected without transfer. `try_pending` and
+`try_residual` are the only binding-facing record constructors. They populate
+subject and owner identity from the reserved handle and enforce deadline,
+attempt, retry, and record-size limits.
+
+`BIND-HOST-CANCEL-001`: Servient owns a crate-private
+`HostBindingCallRecord` containing the binding and route generations, boxed
+call, immutable first cause, result cell, unique poll/cancel lease, independent
+cancel-drain deadline, and pre-reserved cleanup item/byte capacity. The record,
+not the application-facing future, remains the unique progress and late-result
+owner. Binding methods and call destruction execute outside engine locks.
+
+Caller cancellation, deadline, caller-future drop, Servient drain, and emission
+cancellation first record one immutable cause against the call generation. If a
+currently claimed `poll_result` returns `Ready`, its value becomes a late
+`Returned` settlement. If it returns `Pending`, the owner invokes
+`start_cancel`, then only `poll_cancel`; `poll_result` is never called again for
+that generation. A late invoke result is never delivered or retried, but its
+terminal and retry/side-effect classification are retained. A late successful
+subscription start is handed to the subscription state machine and its returned
+driver is closed with one implicit stop request. A late publication result is
+written to its already reserved binding-result cell and cannot restart fan-out.
+
+`start_cancel` receives the reserved transfer context and a `Context`. Before it
+returns `Pending`, it registers the waker and rechecks cancellation progress;
+the runtime may then yield without a lost wake. The context is retained by the
+call until `poll_cancel` returns a settlement. Budget exhaustion before work
+does not become an operational outer error: the call cursor remains unchanged,
+the runtime reports binding-poll pending work, replenishes the budget, and polls
+again. The constrained slot methods obey the same zero-budget rule.
+
+A call constructor error or `poll_result` `Ready(Err(_))` is legal only after
+the binding certifies that it owns no
+unaddressed remote resource or cleanup obligation. This atomic-error rule
+applies to every invoke, single subscription, collection subscription, and
+publication call, not only to bindings advertising collection capability. A
+binding that cannot make this guarantee retains its owned call and reports the
+obligation through `Cancelled.cleanup`; it never hides cleanup in an outer
+error.
+
+Cancellation drain charges `WorkClass::BindingPolls` and the retained cleanup
+record on every step. Its independent drain deadline starts at cancellation
+linearization and is bounded by
+`host_binding_cancel_drain_timeout_millis_max`; an already elapsed interaction
+deadline does not eliminate the cleanup window. `Cancelled(PendingCleanup)` or
+`Cancelled(ResidualExternalState)` becomes visible only after the complete call
+object and state transfer atomically to the reserved owner. An uncooperative
+call becomes durable `ResidualExternalState` before it is destroyed outside
+locks. The runtime does not detach work or consume an unreserved cleanup record.
+Host client-call admission is additionally bounded by
+`pending_client_calls_per_binding_max`,
+`pending_client_calls_per_thing_max`, and
+`pending_client_calls_global_max`. A saturated binding returns local structured
+backpressure without consuming another binding's reservation; subscription
+starts and publications retain
+their separately frozen subscription and binding-emission reservations.
+
+Every host binding reports a worst-case call footprint before construction, and
+each returned call reports its actual retained footprint. Servient reserves the
+declared maximum against engine-live and cleanup bytes before invoking the
+nonblocking, side-effect-free constructor, rejects an actual value above the
+declaration before the first poll, and releases unused reservation bytes. The
+footprint includes memory exclusively retained by the call, including
+binding-owned buffers, but excludes immutable registration state and payload
+storage already charged to another owner. It must fit
+`cleanup_item_bytes_max`; concrete binding evidence verifies the declaration.
+
 ### ServerBinding
 
 Host `ServerBinding` owns inbound protocol lifecycle:
@@ -1477,46 +1818,50 @@ subscription, or cleanup operation can still reference them.
 
 ```rust
 use core::task::{Context, Poll};
+use std::sync::Arc;
 
-fn supports(&self, candidate: &BindingCandidate) -> BindingSupport;
-fn prepare(
-    &self,
-    route: &BindingRouteKey,
-    thing: BindingThingView<'_>,
-    plans: &[InboundBindingPlan],
-    ctx: BindingContext,
-) -> CoreResult<ServerRouteGuard>;
-fn activate(
-    &self,
-    route: &BindingRouteKey,
-    guard: ServerRouteGuard,
-) -> CoreResult<ActiveRouteGuard>;
-fn commit(
-    &self,
-    route: &BindingRouteKey,
-    guard: &ActiveRouteGuard,
-) -> CoreResult<()>;
-fn abort_prepared(
-    &self,
-    route: &BindingRouteKey,
-    guard: &mut ServerRouteGuard,
-    budget: &mut WorkBudget,
-) -> CoreResult<CleanupOutcome>;
-fn shutdown(
-    &self,
-    route: &BindingRouteKey,
-    guard: &mut ActiveRouteGuard,
-    budget: &mut WorkBudget,
-) -> CoreResult<CleanupOutcome>;
-fn poll_accept(
-    &self,
-    cx: &mut Context<'_>,
-) -> Poll<CoreResult<Option<InboundRequest>>>;
-fn send_response(&self, response: InboundResponse) -> CoreResult<()>;
-fn publish(
-    &self,
-    emission: ProducerEmission,
-) -> BindingFuture<'_, BindingPublication>;
+pub trait ServerBinding: Send + Sync + 'static {
+    fn max_call_footprint(&self) -> BindingCallFootprint;
+    fn supports(&self, candidate: &BindingCandidate) -> BindingSupport;
+    fn prepare(
+        &self,
+        route: &BindingRouteKey,
+        thing: BindingThingView<'_>,
+        plans: &[InboundBindingPlan],
+        ctx: BindingContext,
+    ) -> CoreResult<ServerRouteGuard>;
+    fn activate(
+        &self,
+        route: &BindingRouteKey,
+        guard: ServerRouteGuard,
+    ) -> CoreResult<ActiveRouteGuard>;
+    fn commit(
+        &self,
+        route: &BindingRouteKey,
+        guard: &ActiveRouteGuard,
+    ) -> CoreResult<()>;
+    fn abort_prepared(
+        &self,
+        route: &BindingRouteKey,
+        guard: &mut ServerRouteGuard,
+        budget: &mut WorkBudget,
+    ) -> CoreResult<CleanupOutcome>;
+    fn shutdown(
+        &self,
+        route: &BindingRouteKey,
+        guard: &mut ActiveRouteGuard,
+        budget: &mut WorkBudget,
+    ) -> CoreResult<CleanupOutcome>;
+    fn poll_accept(
+        &self,
+        cx: &mut Context<'_>,
+    ) -> Poll<CoreResult<Option<InboundRequest>>>;
+    fn send_response(&self, response: InboundResponse) -> CoreResult<()>;
+    fn publish(
+        self: Arc<Self>,
+        emission: ProducerEmission,
+    ) -> CoreResult<HostBindingCallBox<BindingPublication>>;
+}
 ```
 
 `BindingRouteKey` contains the `ThingId`, owning `BindingId`, and immutable
@@ -1824,40 +2169,68 @@ against its prepared route table.
 Host `ClientBinding` owns outbound protocol behavior:
 
 ```rust
-pub type BindingFuture<'a, T> =
-    Pin<Box<dyn Future<Output = CoreResult<T>> + Send + 'a>>;
+use std::sync::Arc;
 
-fn supports(&self, candidate: &BindingCandidate) -> BindingSupport;
-fn invoke(&self, request: BindingRequest) -> BindingFuture<'_, InteractionOutput>;
-fn subscribe(
-    &self,
-    request: BindingRequest,
-) -> BindingFuture<'_, HostSubscriptionStart>;
+pub trait ClientBinding: Send + Sync + 'static {
+    fn max_call_footprint(&self) -> BindingCallFootprint;
+    fn supports(&self, candidate: &BindingCandidate) -> BindingSupport;
+    fn invoke(
+        self: Arc<Self>,
+        request: OutboundRequest,
+    ) -> CoreResult<HostBindingCallBox<InteractionOutput>>;
+    fn subscribe(
+        self: Arc<Self>,
+        request: OutboundRequest,
+    ) -> CoreResult<HostBindingCallBox<HostSubscriptionStart>>;
+}
 ```
 
-`BIND-OUT-001`: `BindingRequest` owns the selected `BindingId`, binding
-generation, plan id, operation, resolved target, payload, media and response
-metadata, URI variables after expansion, applied-security fields, correlation
-id, deadline/cancellation view, and idempotency metadata when supplied. It does
-not contain the full TD. The shared layer constructs it only after selection and
-security commit. A binding MUST NOT select a different form, weaken security,
-or reinterpret application payload fields as credentials.
+Both methods return an owned cancellation-aware call before the first protocol
+side effect. A binding that does not support subscriptions returns
+`UnsupportedOperation` from `subscribe` and performs no side effect; there is no
+omitted or alternate default signature.
+
+`BIND-OUT-001`: `OutboundRequest` is the directional counterpart of
+`InboundRequest`. It owns the selected `BindingId`, binding generation, plan id,
+route and target identity, operation, resolved target, expanded URI variables,
+input payload and media metadata, typed committed `AppliedSecurity`, response
+classification metadata, correlation id, deadline/cancellation view, and
+idempotency metadata when supplied. Subscription starts additionally carry the
+engine-created `SubscriptionStart` reservation metadata; explicit subscription
+teardowns carry the same reserved `SubscriptionId`. It does not contain the full
+TD, a raw `Form`,
+credentials, a provider handle, or mutable application options. The shared layer
+constructs it only after selection and security commit. A binding MUST NOT
+select a different form, scan the TD, weaken security, or reinterpret
+application payload fields as credentials. The legacy public name
+`BindingRequest` is not part of the target API.
 
 `invoke` has exactly one terminal result. Successful transport exchange is not
 automatically successful WoT output: the binding maps protocol status and bytes
 into response metadata, then the shared response validator classifies the
 primary or `additionalResponses` result. Implementations may place that shared
 validation immediately above or below the trait call, but the public future
-returns only a validated successful `InteractionOutput` or a structured error.
+poll returns only a validated successful `InteractionOutput` or a structured
+error.
 Cancellation before protocol commit returns `Cancelled`; cancellation after an
 unknown or completed side effect preserves a `CallerDecision` retry class.
 
 `subscribe` returns `HostSubscriptionStart` only after the remote or local start
-operation has succeeded and its start response has passed validation. Samples
-arriving before guard-registry installation are held in the same bounded queue
-charged to the pending start; overflow applies the selected subscription policy.
-If installation fails, no sample becomes visible through a public
-`Subscription`, and pending samples are discarded with the guard cleanup.
+operation has succeeded and its start response has passed validation. The
+Servient reserves the `SubscriptionId`, active slot, item and byte capacity, and
+cleanup capacity before calling the binding and carries the resulting
+`SubscriptionStart` in the `OutboundRequest`; a binding does not manufacture or
+alter engine subscription metadata.
+Samples arriving before driver-registry installation remain under the binding
+driver's admitted flow-control or bounded-storage policy and are not visible to
+the application. If installation fails, the Servient drives the returned driver
+to cleanup and publishes no `Subscription`.
+
+For every subscription operation, `Err` certifies that no driver, remote
+resource, or cleanup obligation remains. This is the global atomic-error rule
+from `BIND-HOST-CANCEL-001`. Collection capability advertising adds root-form,
+source-attribution, and target-count guarantees; it does not weaken or uniquely
+own the atomic-error rule.
 
 `BindingCandidate` is the protocol-neutral, pre-resolved form view produced by
 the shared planning layer. It contains the resolved target URI, effective
@@ -1869,22 +2242,178 @@ unsupported protocol, unsupported operation, unsupported media, unsupported
 security, and binding-specific preflight failure when that information is
 available.
 
-`SubscriptionStart` is protocol-neutral start metadata containing the stable
-`SubscriptionId`, selected plan and binding generations, and admitted queue and
-overflow policy. `HostSubscriptionStart` contains that metadata plus the receive
-side and wire-side `SubscriptionGuard`. The guard owns the binding's subscription resource and any
-compiled teardown metadata needed to perform an explicit `unobserveproperty`,
-`unobserveallproperties`, `unsubscribeevent`, or `unsubscribeallevents`
-interaction. This metadata stores the selected teardown plan, route identity, and
-credential lookup requirements, but it must not store secret bytes or committed
-credential material longer than the binding protocol itself requires. The
-`ConsumedThingHandle` installs the guard into its guard registry atomically
-before constructing and returning the public `Subscription`. If guard
-installation fails after the binding created a wire resource, the handle
-immediately closes the guard or runs the compiled teardown path before returning
-the installation error. A returned public `Subscription` therefore never owns a
-second copy of the wire-side guard. `subscribe` defaults to unsupported for
-bindings that only implement one-shot request/response interactions.
+`SubscriptionStart` is protocol-neutral start metadata containing the exact
+engine-reserved `SubscriptionId`, source or collection target, selected plan id,
+selected `BindingId` and binding generation, admitted item and byte limits, and
+`OverflowPolicy`, plus the engine-reserved `CleanupTransferContext` that moves
+from start-call cancellation ownership into the active driver on success.
+Returned identity and generation fields MUST equal those in
+the selected request and plan. The Servient also retains the immutable paired
+teardown plan identity when one exists; the binding does not invent or reselect
+that plan at stop time.
+
+`SubscriptionStopRequest` is the one owned stop input accepted by both host and
+constrained binding SPIs:
+
+```rust
+pub struct SubscriptionStopRequest {
+    subscription_id: SubscriptionId,
+    outbound: Option<OutboundRequest>,
+}
+
+impl SubscriptionStopRequest {
+    pub const fn implicit(subscription_id: SubscriptionId) -> Self;
+    pub fn try_explicit(outbound: OutboundRequest) -> CoreResult<Self>;
+    pub const fn subscription_id(&self) -> SubscriptionId;
+    pub fn outbound(&self) -> Option<&OutboundRequest>;
+    pub fn into_outbound(self) -> Option<OutboundRequest>;
+}
+```
+
+`try_explicit` accepts only a selected paired teardown operation carrying one
+matching `SubscriptionId`; it rejects a start, one-shot, mismatched-id, or
+unselected request without mutation. `implicit` requests binding-native close
+of the already owned protocol resource and carries no new caller input.
+
+The binding-to-Servient receive result carries cleanup disposition without
+changing the application-facing `ProcessEvent` schema:
+
+```rust
+pub enum SubscriptionDriverEvent {
+    Item(SubscriptionItem),
+    Terminal {
+        terminal: ProcessTerminal,
+        cleanup: CleanupOutcome,
+    },
+}
+```
+
+The driver transfers the terminal reason and cleanup outcome together. A
+`PendingCleanup` value is legal only after cleanup ownership transfers
+atomically to the owner named by its record; `ResidualExternalState` is legal
+only after durable residual recording. Servient retains both values, publishes
+the `ProcessTerminal` once through its facade, and keeps the cleanup result
+available through status accessors. `SubscriptionState` reports resource
+lifecycle and cleanup ownership, not the `ProcessTerminal` classification. A
+terminal `ProcessTerminal::Failed` with `Complete` cleanup is therefore
+`Closed`, while its failure reason remains available from `terminal()`.
+`Failed` denotes durably recorded residual external state; it is not inferred
+from the retained process terminal alone. A start error that proves no driver
+or remote resource escaped retains `ProcessTerminal::Failed` with `Complete`
+cleanup in the private start record, returns the error, and closes without
+publishing a facade.
+
+`HostSubscriptionStart` contains exactly that
+metadata plus one `Pin<Box<dyn HostSubscriptionDriver>>`. The driver owns the
+binding's live receive cursor, protocol resource, protocol-native flow control,
+and binding-local cleanup state; it is not a core queue or a cloneable receive
+handle. The `ConsumedThingHandle` installs it into its Servient-owned driver
+registry atomically before constructing the public `Subscription`. `subscribe`
+defaults to unsupported for bindings that only implement one-shot
+request/response interactions.
+
+The exact portable metadata and std-only host SPI have this normative public
+shape:
+
+```rust
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct SubscriptionStart {
+    subscription_id: SubscriptionId,
+    target: AffordanceTarget,
+    plan_id: PlanId,
+    binding_id: BindingId,
+    binding_generation: BindingGeneration,
+    admitted_items: NonZeroU32,
+    admitted_bytes: NonZeroU64,
+    overflow_policy: OverflowPolicy,
+    cleanup: CleanupTransferContext,
+}
+
+impl SubscriptionStart {
+    pub fn new(
+        subscription_id: SubscriptionId,
+        target: AffordanceTarget,
+        plan_id: PlanId,
+        binding_id: BindingId,
+        binding_generation: BindingGeneration,
+        admitted_items: NonZeroU32,
+        admitted_bytes: NonZeroU64,
+        overflow_policy: OverflowPolicy,
+        cleanup: CleanupTransferContext,
+    ) -> Self;
+    pub const fn subscription_id(&self) -> SubscriptionId;
+    pub fn target(&self) -> &AffordanceTarget;
+    pub const fn plan_id(&self) -> PlanId;
+    pub const fn binding_id(&self) -> BindingId;
+    pub const fn binding_generation(&self) -> BindingGeneration;
+    pub const fn admitted_items(&self) -> NonZeroU32;
+    pub const fn admitted_bytes(&self) -> NonZeroU64;
+    pub const fn overflow_policy(&self) -> OverflowPolicy;
+    pub const fn cleanup(&self) -> CleanupTransferContext;
+}
+
+pub trait HostSubscriptionDriver: Send {
+    fn poll_item(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        budget: &mut WorkBudget,
+    ) -> Poll<CoreResult<SubscriptionDriverEvent>>;
+
+    fn start_stop(
+        self: Pin<&mut Self>,
+        request: SubscriptionStopRequest,
+        budget: &mut WorkBudget,
+    ) -> CoreResult<StartStatus<CleanupOutcome>>;
+
+    fn poll_stop(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        budget: &mut WorkBudget,
+    ) -> Poll<CoreResult<CleanupOutcome>>;
+}
+
+pub struct HostSubscriptionStart {
+    metadata: SubscriptionStart,
+    driver: Pin<Box<dyn HostSubscriptionDriver>>,
+}
+
+impl HostSubscriptionStart {
+    pub fn new(
+        metadata: SubscriptionStart,
+        driver: Pin<Box<dyn HostSubscriptionDriver>>,
+    ) -> Self;
+    pub fn metadata(&self) -> &SubscriptionStart;
+    pub fn into_parts(
+        self,
+    ) -> (SubscriptionStart, Pin<Box<dyn HostSubscriptionDriver>>);
+}
+```
+
+`poll_item` has one mutable receive cursor and MUST emit exactly one
+`SubscriptionDriverEvent::Terminal` at most once. `Pending` means that no item or terminal event is
+currently available and that the driver arranged wakeup or requires documented
+manual progress; it never means silent loss. `start_stop` consumes the exact
+implicit or explicit stop request once. It either completes synchronously,
+accepts the request into retained driver state and returns `Pending`, or rejects
+an invalid call without changing the active driver. After `Pending`, only
+`poll_stop` advances that same request to `CleanupOutcome`; options are never
+reselected on a poll. Neither method may block, restart a completed operation,
+create an unbounded internal queue, or
+hold an engine lock or constrained critical section across binding or user code.
+An operational transport, validation, overflow, timeout, cancellation, or remote
+failure is emitted exactly once in `SubscriptionDriverEvent::Terminal`; the outer
+`CoreResult` is reserved for a stale identity, mismatched driver, illegal poll,
+or another invalid call that does not change subscription state. A driver that
+still owns unrecorded cleanup returns `Pending` and progresses or transfers that
+cleanup before it exposes the terminal event. Operational
+stop failure becomes `ResidualExternalState` with a bounded `CleanupRecord`.
+Drop and handle teardown use an implicit request; if binding-native close cannot
+settle remote state without caller input, they retain a residual rather than
+fabricating options or credentials.
+`HostSubscriptionStart` fields are private; `new` is the only binding-facing
+constructor, `metadata()` borrows the exact start
+metadata and `into_parts()` transfers the metadata and driver exactly once into
+the Servient registry.
 
 The registered `ClientBinding` surface is object-safe because applications
 register `Arc<dyn ClientBinding>` for host async use. Network-bound binding
@@ -1894,7 +2423,7 @@ synchronous handler paths remain separate allocation-sensitive paths.
 The object-safe async surface is not the only binding contract. Constrained
 builds that cannot or should not allocate boxed futures use the frozen manually
 driven `PollClientBinding` surface that accepts the same
-`BindingCandidate` and `BindingRequest` data. Host adapters may wrap a
+`BindingCandidate` and `OutboundRequest` data. Host adapters may wrap a
 poll-based binding in the erased async `ClientBinding`; embedded adapters may
 drive the poll surface directly from a super-loop.
 
@@ -1914,7 +2443,8 @@ caller-owned `ClientSubscriptionSlot` to `Active` when `SubscriptionStart` is
 returned; unlike a one-shot request slot, successful start does not consume that
 slot. The public constrained subscription retains only the slot index and
 generation. Samples, terminal status, explicit stop, and drop cleanup are driven
-through `poll_subscription_item` and `poll_stop_subscription`; they do not
+through `poll_subscription_item`, `start_stop_subscription`, and
+`poll_stop_subscription`; they do not
 require a type-erased receive object or a binding-owned unbounded table. Exactly
 one owner may transition the slot from active to stopping, and a terminal stop
 consumes its generation only after the terminal outcome has been retained.
@@ -1929,12 +2459,13 @@ handler is never invoked again for retry, and a terminal delivery result consume
 the response opportunity exactly once. This makes response backpressure
 progressable without an unbounded binding queue or a busy retry loop.
 
-Constrained Producer publication uses a caller-owned `ServerEmissionSlot` under
-the same rules. Start either completes or transfers the owned
-`ProducerEmission` and its admitted result capacity into the slot. Poll resumes
-the retained binding-target cursor, and cancel retains terminal outcomes for
-already accepted publications before consuming the slot generation. Slot
-exhaustion returns `Backpressure` before publication begins.
+Constrained publication by one `PollServerBinding` uses a caller-owned
+`BindingEmissionSlot` under the same rules. Start either completes or transfers
+one selected binding generation's `ProducerEmission` and result capacity into
+the slot. Poll resumes that binding-local publication and cleanup state; it does
+not own local-subscriber or cross-binding cursors. Cancel retains that binding's
+terminal publication outcome before consuming the slot generation. Slot
+exhaustion returns `Backpressure` before this binding publication begins.
 
 ### Removed Facades
 
@@ -1948,101 +2479,201 @@ registration values.
 
 ## Subscription Model
 
-Consumed-side subscriptions use a Rust pull-stream model.
+Consumed-side subscriptions use a Rust pull-stream model. Core owns their
+protocol-neutral identity, item, state, loss, overflow, terminal, driver, and
+portable-slot semantics. Servient owns the application-facing facade and the
+registry that composes those contracts with a selected binding.
 
-Target semantics:
+`SubscriptionItem` has exactly three semantic fields: the engine-reserved
+`SubscriptionId`, the exact protocol-neutral source `AffordanceTarget`, and the
+`Payload`. Source is never optional, inferred from polling order, or encoded only
+inside protocol-specific metadata. A single-affordance item repeats its exact
+source; a collection item identifies its originating property or event. A
+collection subscription MUST NOT start when its compiled binding plan cannot
+provide exact source attribution. Loss and terminal information use the
+subscription state and `ProcessEvent` rather than sentinel payloads.
 
-- `observe_property` and `subscribe_event` return a `Subscription` that can be
-  drained by polling or by `Stream` when `async` support is enabled.
-- Collection-level subscription operations such as `observeallproperties` and
-  `subscribeallevents` use the same `Subscription` model with a collection
-  target context. Each delivered item identifies the originating property or
-  event when that information is available from the protocol or payload.
+```rust
+pub struct SubscriptionItem {
+    subscription_id: SubscriptionId,
+    source: AffordanceTarget,
+    payload: Payload,
+}
+
+impl SubscriptionItem {
+    pub fn new(
+        subscription_id: SubscriptionId,
+        source: AffordanceTarget,
+        payload: Payload,
+    ) -> Self;
+    pub const fn subscription_id(&self) -> SubscriptionId;
+    pub fn source(&self) -> &AffordanceTarget;
+    pub fn payload(&self) -> &Payload;
+    pub fn into_payload(self) -> Payload;
+    pub fn into_parts(self) -> (SubscriptionId, AffordanceTarget, Payload);
+}
+```
+
+This is the normative field and accessor schema. The selected driver MUST reject
+or terminal-fail an item whose id does not match its reserved id, whose source is
+outside the immutable single or collection plan, or whose payload cannot be
+validated for that source. Validation occurs before the item becomes visible.
+
+The public, non-`Clone` `Subscription` facade is defined by
+`clinkz-wot-servient`. It owns one receive cursor, immutable start metadata, and
+a capability into the Servient-owned driver registry. Its v4.8 host API is:
+
+```rust
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub enum SubscriptionState {
+    Starting,
+    CancellingStart,
+    Active,
+    Stopping,
+    CleanupPending,
+    Closed,
+    Failed,
+}
+
+pub struct Subscription { /* private linear facade state */ }
+
+impl Subscription {
+    pub const fn id(&self) -> SubscriptionId;
+    pub fn metadata(&self) -> &SubscriptionStart;
+    pub fn status(&self) -> SubscriptionState;
+    pub fn terminal(&self) -> Option<&ProcessTerminal>;
+    pub fn cleanup_outcome(&self) -> Option<&CleanupOutcome>;
+    pub fn poll_event(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        budget: &mut WorkBudget,
+    ) -> Poll<CoreResult<ProcessEvent<SubscriptionItem>>>;
+    pub fn stop(
+        &mut self,
+        options: InteractionOptions,
+        budget: &mut WorkBudget,
+    ) -> CoreResult<StartStatus<CleanupOutcome>>;
+    pub fn poll_stop(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        budget: &mut WorkBudget,
+    ) -> Poll<CoreResult<CleanupOutcome>>;
+}
+```
+
+`SubscriptionState` and `ProcessTerminal` are deliberately orthogonal. In
+particular, `Closed` means that no live subscription or unowned cleanup
+resource remains; it does not imply successful source exhaustion. Callers that
+need the stream result inspect `terminal()`, and callers that need cleanup
+disposition inspect `cleanup_outcome()`.
+
+The facade is `Send` when its installed driver is `Send`, is not `Sync`, and does
+not implement `Clone`. `poll_event` charges the caller's explicit work budget
+before delegating to the one driver cursor; its outer-error and terminal rules
+are identical to `HostSubscriptionDriver::poll_item`. The facade translates a
+`SubscriptionDriverEvent::Terminal` into one `ProcessEvent::Terminal` after
+retaining its cleanup disposition. `stop`
+borrows the non-`Clone` facade mutably, so no receive cursor can race teardown,
+and uses
+`InteractionOptions` for teardown form index, URI variables, deadline,
+cancellation, and security selection. Selection and option validation occur
+before `HostSubscriptionDriver::start_stop`; rejection leaves the facade active
+and retryable. `Pending` leaves the facade `Stopping`; `poll_stop` advances that
+same request, and a later `stop` call joins it rather than starting another
+teardown. A cloneable receive/control facade and a default-budget `Stream`
+adapter are not part of v4.8. Applications may build an async adapter by polling
+with their own replenished budgets. Direct `poll_event` after terminal emission
+returns the documented invalid-call error without changing retained status.
+
+The manual/static Servient surface exposes a separately named token in every
+feature cell. It is the required subscription facade for the no-default and
+async-no-std cells, which cannot pretend that the boxed host driver exists:
+
+```rust
+pub struct StaticSubscription {
+    /* private SubscriptionStart, SubscriptionSlotId, state, terminal, cleanup */
+}
+
+impl StaticSubscription {
+    pub const fn id(&self) -> SubscriptionId;
+    pub fn metadata(&self) -> &SubscriptionStart;
+    pub const fn slot_id(&self) -> SubscriptionSlotId;
+    pub fn status(&self) -> SubscriptionState;
+    pub fn terminal(&self) -> Option<&ProcessTerminal>;
+    pub fn cleanup_outcome(&self) -> Option<&CleanupOutcome>;
+}
+```
+
+`StaticSubscription` is non-`Clone`, owns no binding storage, and retains only
+the generation-bearing caller-owned slot identity plus public status. The
+application passes it back to `StaticServient` for bounded item and stop
+progress. This keeps the constrained facade named and useful without `Box`,
+`Arc`, atomics, an executor, or a hidden queue.
+
+Target semantics are:
+
+- `observe_property` and `subscribe_event` return one Servient `Subscription`.
+- `observe_all_properties` and `subscribe_all_events` each select one compatible
+  TD root form, start one binding driver, and return the same facade with a
+  collection target. They never create or merge local per-affordance streams.
 - A Scripting-compatible mode permits at most one active subscription per
   property, event, or collection target and rejects a second active
   subscription for the same target. Rust extension modes may allow multiple
   active subscriptions for the same target.
 - Every active subscription has a stable `SubscriptionId` scoped to the owning
-  consumed Thing. The id is returned with or embedded in the `Subscription`,
-  including in Scripting-compatible mode.
-- Each active subscription has a wire-side `SubscriptionGuard`.
-- The `ConsumedThingHandle` owns guards by subscription id so callers do not
-  leak protocol resources by forgetting a guard.
-- The returned `Subscription` owns the receive side, the `SubscriptionId`, and a
-  teardown capability back to the handle-owned guard registry. It must not own a
-  second copy of the wire-side guard.
-- `Subscription::stop` is the explicit teardown API. It uses the teardown
-  capability to remove and close the matching guard, may accept stop options
-  when the selected protocol needs TD-level teardown input, and reports the
-  resulting terminal status. Calling `stop` after the handle has already been
-  dropped is idempotent and reports completion or a structured already-closed
-  status.
-- The handle and all returned subscriptions share a subscription inner state
-  whose lifetime can outlive either side. The handle is the exclusive owner of
-  wire-side guards while it is alive. Dropping the handle marks the shared state
-  closed, closes every remaining guard, and records the terminal status for
-  subscriptions that still exist. A later `Subscription::stop` observes this
-  closed state and returns the recorded status instead of trying to access a
-  dropped handle or duplicate guard.
-- If an explicit teardown form is required, `Subscription::stop` selects an
+  consumed Thing. The Servient reserves it before binding start and keys the
+  driver registry by it.
+- `Subscription::stop` is the explicit teardown API. Stop options are validated
+  and committed by the Servient record into one `SubscriptionStopRequest`
+  before the same registered driver and retained cleanup state are driven.
+  Calling stop after handle teardown is
+  idempotent and returns the retained completion or structured closed outcome.
+- If an explicit TD teardown form is required, stop uses the compiled
   `unobserveproperty`, `unobserveallproperties`, `unsubscribeevent`, or
-  `unsubscribeallevents` plan associated with the original subscription,
-  respecting caller-provided teardown `formIndex`, URI variables, and event
-  unsubscribe data. If the binding supports implicit teardown, the guard may
-  close the wire resource directly without issuing a second TD operation.
-- Dropping a `Subscription` without calling `stop` requests teardown through the
-  same shared state, but it cannot provide new caller input or report a direct
-  `Result`. The runtime must remove or schedule removal of the handle-owned
-  guard exactly once, close the local receive side, and record an observable
-  terminal status when the profile has a status channel. Drop cleanup may run a
-  protocol-level teardown only when the original subscription plan already
-  contains all required URI variables, form selection, cancellation payload, and
-  a teardown security plan with credential lookup policy. Drop cleanup must
-  reapply or refresh credentials through the configured provider when protocol
-  teardown needs security material; it must not keep application secrets in the
-  subscription solely to make later drop cleanup possible. If credentials are no
-  longer available, have expired, require caller input, or the provider cannot
-  safely commit them during drop cleanup, the runtime closes local resources,
-  marks the subscription terminal, and records a structured teardown-not-run or
-  teardown-auth-failed status. Documentation for each binding must state whether
-  drop performs protocol-level teardown, local-only cleanup, or best-effort
-  scheduled teardown.
+  `unsubscribeallevents` plan associated with the original subscription and
+  respects supplied teardown form index and URI variables. Any required
+  teardown payload must already be fixed by the immutable start plan; v4.8 stop
+  does not accept a new application payload.
+  Implicit binding teardown may close the protocol resource directly.
+- Dropping the facade never blocks. It atomically transfers the one driver and
+  retained teardown work to an already reserved bounded cleanup owner, or
+  records a structured residual outcome. It cannot manufacture caller input or
+  retain secret credentials solely for later cleanup.
+- Dropping `ConsumedThingHandle` stops every registered driver exactly once and
+  retains terminal state for a surviving facade. Explicit stop,
+  handle drop, and facade drop join the same state-machine outcome.
 - Rust extension methods such as `unobserve_property` and `unsubscribe_event`
-  must either take an explicit `SubscriptionId` or fail when the target is
-  ambiguous.
-- Dropping the handle closes every remaining guard.
+  take a `SubscriptionId` or fail when the target is ambiguous.
 
-Backpressure must be explicit:
+Flow control and backpressure are explicit but do not prescribe one core queue.
+Core defines admitted item and byte limits, `OverflowPolicy`, loss accounting,
+and terminal behavior. Each concrete binding owns protocol-native credit,
+prefetch, callback ingress, and any binding-local bounded storage. Servient owns
+engine accounting, driver registration, lifecycle, and cleanup. A reusable host
+bounded-buffer adapter MAY provide the default 16-item drop-oldest behavior, but
+its sender is private host-runtime support and is not the core subscription
+representation. Constrained profiles require caller-owned storage or a
+documented static capacity. A slow consumer MUST NOT cause unbounded growth, and
+every loss remains observable through a durable counter and status or terminal
+event.
 
-- Every subscription queue has a bounded capacity selected through the shared
-  capacity policy.
-- The host default subscription queue capacity is 16 samples. Constrained
-  runtimes must require an explicit capacity or document a profile default.
-- The default overflow policy is drop-oldest unless a binding or caller selects
-  another policy.
-- Dropped samples must be observable through a loss counter and through status
-  or an error item. If the status/error channel is itself unavailable or full,
-  the durable loss counter remains queryable and records the number lost when
-  known.
-- A slow consumer must not allow unbounded heap growth.
-
-`SUB-STORAGE-001`: A logical queue per subscription does not require a distinct
-heap allocation or a queue preallocated to its maximum payload size. Runtime
-profiles define the physical storage strategy: shared sample descriptors,
-fixed-size rings, latest-value mailboxes, rendezvous slots, and shared payload
-slab/block pools are all valid. Per-subscription count and byte quotas plus
-global descriptor and payload-pool quotas are enforced independently. Empty or
-low-rate subscriptions MUST NOT reserve their maximum payload-byte allowance by
-default. Oversized payload behavior is explicit and never triggers an
-unbounded fallback allocation.
+`SUB-STORAGE-001`: Runtime profiles and bindings choose the physical storage
+strategy: protocol-native credit, shared sample descriptors, fixed-size rings,
+latest-value mailboxes, rendezvous slots, and shared payload slab/block pools are
+all valid. Per-subscription count and byte quotas plus global descriptor and
+payload-pool quotas are enforced independently. Empty or low-rate subscriptions
+MUST NOT reserve their maximum payload-byte allowance by default. Oversized
+payload behavior is explicit and never triggers an unbounded fallback
+allocation.
 
 `SUB-DATA-001`: Subscription control and sample data paths are separate. Stop,
-drop, and teardown use the guard registry; sample enqueue/dequeue uses a direct
-generation-bearing subscription slot and its queue/loss counters. The sample
-hot path MUST NOT acquire a Thing-wide guard-registry lock or copy teardown
-metadata. Shared payload fan-out uses immutable references or slab blocks where
-the execution environment permits, with reference operations defined by the
-selected ownership model rather than requiring atomics.
+drop, and teardown use the Servient driver registry and retained cleanup record;
+item progress uses the driver's direct generation-bearing slot, native credit,
+or bounded local storage. The item hot path MUST NOT acquire a Thing-wide driver
+registry lock or copy teardown metadata. Shared payload delivery uses immutable
+references or slab blocks where the execution environment permits, with
+reference operations defined by the selected ownership model rather than
+requiring atomics.
 
 Ordering is per subscription. The engine does not guarantee global ordering
 across unrelated properties or events.
@@ -2549,7 +3180,9 @@ The host `Servient` is non-generic. It holds:
 - Default client binding registrations under `async`.
 - Security providers and optional credential store.
 - A `Discoverer`.
-- Shared `EventBroker`.
+- A profile-specific `EmissionCoordinator`, `EmissionDispatchPolicy`, and
+  bounded Servient-private `EmissionRecord` storage.
+- A bounded subscription-driver registry keyed by `SubscriptionId`.
 - Per-binding or sharded bounded runtime event sinks plus an aggregate drain
   facade for host self-driving bindings.
 
@@ -2683,6 +3316,55 @@ causes a live route guard to be forgotten. Constrained drop follows
 runtime-owned work item. Status APIs retain the final `CleanupOutcome` after the
 public handle is gone.
 
+The std cleanup handoff and explicit fallback driver have this exact public
+shape:
+
+```rust
+pub struct CleanupTask { /* private owned call/guard and status capability */ }
+
+impl Future for CleanupTask {
+    type Output = ();
+    /* poll is supplied by the implementation */
+}
+
+pub trait CleanupExecutor: Send + Sync + 'static {
+    fn try_spawn(&self, task: CleanupTask) -> Result<(), CleanupTask>;
+}
+
+impl ServientBuilder {
+    pub fn cleanup_executor(
+        self,
+        executor: Arc<dyn CleanupExecutor>,
+    ) -> Self;
+}
+
+impl Servient {
+    pub fn poll_cleanup(
+        &self,
+        cx: &mut Context<'_>,
+        budget: &mut WorkBudget,
+    ) -> Poll<CoreResult<StepStatus<RuntimeEvent>>>;
+}
+```
+
+`CleanupTask` is `Send + 'static`, non-`Clone`, and owns the complete retained
+operation; the executor is only a scheduling owner and cannot extract its call
+object or status capability. `Ok(())` commits scheduling ownership and requires
+the executor to poll the task to terminal. `Err(task)` returns the identical
+task, which Servient inserts into the manual queue slot reserved before the
+initiating side effect. `poll_cleanup` is the explicit driver for that queue and
+never uses a hidden default work budget.
+
+An executor that accepts and then drops a task, including during executor
+shutdown, triggers the task's already reserved, allocation-free durable
+`ResidualExternalState` fallback before the call or guard is destroyed outside
+locks. Task drop never reports successful cleanup, blocks, allocates, calls user
+code, or starts another task. A queue reservation failure before a side effect
+returns structured backpressure. Discovering an absent reservation after a
+side effect is an invariant failure recorded as residual; it is not permission
+to forget the task or grow the queue. Final status remains queryable through
+the Servient-owned status record after either executor or manual progress.
+
 `PRODUCER-EMIT-001`: `emit_property_change(name, payload)` and
 `emit_event(name, payload)` are valid only for an effective TD affordance that
 advertises the corresponding observable property or event data semantics. They
@@ -2698,8 +3380,9 @@ Local enqueue and protocol publication outcomes are represented by a bounded
 `EmissionStatus`: accepted subscriber count, bindings accepted, bindings failed,
 and loss counts when known. The Scripting-compatible convenience call succeeds
 only when every required binding publication was accepted; Rust-native methods
-may return the non-lossy per-binding status. Subscriber queues apply their own
-configured overflow policies, so drop-oldest sample loss is observable but does
+may return the non-lossy per-binding status. Each local subscriber's admitted
+flow-control or bounded-storage path applies its configured overflow policy, so
+drop-oldest sample loss is observable but does
 not retroactively turn a successfully accepted emission into an unclassified
 error. Concurrent emissions for the same Thing and affordance are serialized at
 one publication sequence point; cross-affordance ordering is unspecified.
@@ -2707,6 +3390,11 @@ one publication sequence point; cross-affordance ordering is unspecified.
 Exposure compiles the required publication targets from the owning inbound
 plans. Emission invokes only binding generations that own an applicable
 observable-property or event target; it does not scan every registered binding.
+`ProducerEmission` carries the full `AffordanceTarget`, `EmissionKind`, immutable
+handle, route, and binding generations, sequence, and immutable payload lease.
+An event and an observable property with the same textual name remain distinct
+targets and cannot collide. Stale handle, route, or binding generations fail
+without publishing.
 The host `ServerBinding::publish` surface and the constrained
 `start_emission`/`poll_emission` surface return one `BindingPublication` per
 targeted binding generation.
@@ -2720,16 +3408,93 @@ it. Host adapters MAY use shared host storage; constrained adapters use a
 caller-owned arena lease or an equivalent bounded representation. Neither
 representation may copy payload bytes once per subscriber or binding target.
 
-A pending constrained emission retains generation-safe local-subscriber and
-binding-target cursors in its `ServerEmissionSlot`. A later step resumes from
-those cursors, and a later emission for the same Thing and affordance MUST NOT
-pass it. Cancelling the slot follows the common cleanup ownership contract and
-retains a terminal per-binding result for every publication already accepted.
+The Servient-owned `EmissionCoordinator` validates the emission, assigns the
+per-affordance sequence, admits local subscribers and the complete result set,
+and progresses only the publication targets already frozen in the exposure
+plan. Its configurable `EmissionDispatchPolicy` selects bounded per-binding
+host lanes and a configured per-lane concurrency limit. A slow or full binding
+lane MUST NOT indefinitely block another binding. The constrained
+runtime instead uses retained cursors under `WorkBudget`. Neither policy is a
+core concrete scheduler, and neither discovers targets by TD rescanning or by a
+protocol label.
+
+`EmissionDispatchPolicy` is a public Servient configuration value, not a
+callback or extension trait. Its normative shape is:
+
+```rust
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub struct EmissionDispatchPolicy {
+    lanes_per_binding: NonZeroU32,
+    max_in_flight_per_lane: NonZeroU32,
+}
+
+impl EmissionDispatchPolicy {
+    pub const fn new(
+        lanes_per_binding: NonZeroU32,
+        max_in_flight_per_lane: NonZeroU32,
+    ) -> Self;
+    pub const fn lanes_per_binding(&self) -> NonZeroU32;
+    pub const fn max_in_flight_per_lane(&self) -> NonZeroU32;
+}
+```
+
+`ServientBuilder::emission_dispatch_policy(policy)` accepts the value;
+`emission_per_binding_lanes(lanes_per_binding, max_in_flight_per_lane)` is the
+equivalent convenience method. Builder admission validates requested lanes and
+in-flight publications
+against `host_emission_lanes_per_binding_max`,
+`host_emission_lanes_global_max`, and the binding-emission slot limits before
+exposure can use the policy. The product of lanes and per-lane in-flight work
+cannot exceed `binding_emission_slots_per_binding_max`, and the corresponding
+global reservations cannot exceed either global limit. Every
+queued or running publication consumes one admitted `BindingEmissionSlot` under
+the per-binding and global slot limits. A lane stores only slot and payload-lease
+references, never a per-lane payload copy, so referenced payload bytes remain
+charged once to the owning `EmissionRecord` and the engine live-byte account.
+Every binding generation owns an independent lane set. The coordinator maps one
+affordance deterministically to a lane in that set and preserves its FIFO
+sequence. It reserves every targeted lane and binding slot before the first
+local or binding side effect; inability to reserve any target rolls back the
+whole emission admission and returns structured backpressure. It is not reported
+as a post-admission partial binding result. Actual publication failures after
+admission remain exact per-binding outcomes. Applications that need an append log or
+another external scheduler implement it behind a concrete binding publication
+target; v4.8 does not expose a scheduler callback from inside the coordinator.
+
+`GatewayDefaultV1` constructs `EmissionDispatchPolicy::new(1, 16)` using
+nonzero values: one lane per binding generation and at most sixteen in-flight
+publications per lane. A builder that selects this named profile and does not
+set an explicit policy uses those exact values. A custom resource profile must
+admit both the default policy and its complete per-binding/global reservations;
+otherwise builder construction returns a structured limit error and the caller
+must choose an admissible explicit policy. Constrained profiles do not
+instantiate this host policy.
+
+Servient's private `EmissionRecord` is the aggregate transaction. It retains the
+immutable payload lease, local-subscriber cursor, binding-target cursor,
+aggregate result capacity, ordering state, and terminal `EmissionStatus`. Core's
+public `BindingEmissionSlot` represents exactly one selected binding generation
+and retains only that binding's pending publication, result, and cleanup state.
+A `BindingEmissionSlot` never owns the local-subscriber cursor, cross-binding
+cursor, aggregate result storage, or dispatch policy. A pending constrained
+`EmissionRecord` resumes both aggregate cursors and a later emission for the
+same Thing and affordance MUST NOT pass it; it drives one or more distinct
+binding slots without moving aggregate state into them. Cancellation follows
+the common cleanup ownership contract and retains one result for every binding
+publication already accepted.
+
+Publication targets originate only from the frozen exposure plan: form
+contribution or application input creates a candidate, finalization selects one
+`BindingId`, plan compilation creates the publication target, and
+prepare/activate/commit binds it to an active route generation. The concrete
+binding implements publication for that target and may represent many remote
+protocol subscribers internally. A TD protocol label alone never creates a
+target, and a binding does not register a global sink by rescanning the TD.
 
 ### ConsumedThingHandle
 
-`ConsumedThingHandle` is the Consumer-facing handle. It owns a `ConsumedThing`
-that was populated with precompiled interaction plans. In the host async profile,
+`ConsumedThingHandle` is the Consumer-facing handle. It owns a Servient consumed
+record populated with precompiled interaction plans. In the host async profile,
 those plans may include cloned `Arc<dyn ClientBinding>` references captured from
 the Servient defaults at `consume()` time. In constrained profiles, the same
 logical plans refer to binding slots, static binding indexes, or owned/manual
@@ -2765,9 +3530,10 @@ If a TD exposes query or cancel forms but no invocation identity can be derived
 from the original action interaction or caller options, the method fails with a
 structured missing-action-reference error.
 
-Streaming operations return local subscription streams while the handle stores
-wire-side guards so protocol resources are released on explicit teardown or
-handle drop. Collection-level teardown is normally performed through
+Streaming operations return Servient-owned subscription facades while the
+handle registry stores the binding-owned drivers so protocol resources are
+released on explicit teardown or handle drop. Collection-level teardown is
+normally performed through
 `Subscription::stop`; optional handle-level helpers for
 `unobserve_all_properties` and `unsubscribe_all_events` follow the same
 `SubscriptionId` ambiguity rules as single-affordance helpers.
@@ -2881,7 +3647,7 @@ Outbound security is request-applied:
    restart side-effect-free selection without having committed the failed
    branch.
 4. Matching `SecurityProvider::apply` calls write protocol-neutral request
-   metadata into `BindingRequest::applied_security`. This metadata can include
+   metadata into `OutboundRequest::applied_security`. This metadata can include
    URI-template values for security schemes whose location is `uri`, header or
    body fields, and protocol-specific opaque data.
 5. The shared planning layer expands the resolved target URI template after
@@ -3132,7 +3898,7 @@ directly and may raise them only through explicit configuration:
 | URI template source bytes | 16 KiB |
 | remote resolver requests / redirects / bytes | 8 / 4 / 1 MiB |
 | in-flight responses per Thing / global | 1,024 / 65,536 |
-| subscription queued bytes per subscription / global | 1 MiB / 512 MiB |
+| subscription buffered bytes per subscription / global | 1 MiB / 512 MiB |
 | cache entries per Thing / global | 4,096 / 262,144 |
 | durable status entries and bytes per binding | 64 / 64 KiB |
 | durable status bytes global / retention | 16 MiB / 24 hours |
@@ -3228,7 +3994,9 @@ Outbound interaction hot path:
 
 Subscription hot path:
 
-1. Queues are bounded.
+1. Binding-native credit or storage and any optional host adapter buffer are
+   bounded by the admitted item and byte limits; core supplies no mandatory
+   queue.
 2. Backpressure behavior is explicit.
 3. Static metadata is compiled into the subscription plan and is not reparsed
    per sample.
@@ -3269,7 +4037,7 @@ non-allocating metrics:
 - local property read;
 - local property write;
 - local action invoke;
-- local event emit into already-allocated broker capacity;
+- local event emit into already-allocated emission-coordinator capacity;
 - inbound dispatch to sync handlers.
 
 Handler-created output and caller-requested owned TD materialization are outside
@@ -3294,7 +4062,8 @@ The verification suite MUST include benchmark or measurement hooks for:
 - bounded candidate and security-branch selection latency;
 - composed interaction latency with codec, strict schema validation, security
   selection/application, and dispatch measured in one operation;
-- subscription enqueue/dequeue throughput and multi-subscriber fan-out latency;
+- host buffered-driver item throughput, native driver polling, and
+  multi-subscriber fan-out latency;
 - Directory client request planning, page/change ingestion, cancellation, and
   bounded-buffer overflow latency;
 - lazy-plan cold-start single-flight and generation invalidation work;
@@ -3391,7 +4160,7 @@ implementations but strict enough to catch structural regressions:
 | Local sync read/write/invoke, warm p95 | 25 us | 100,000 target cycles | n/a |
 | Inbound dispatch excluding transport, warm p99 | 100 us | 250,000 target cycles | n/a |
 | Compiled plan lookup, warm p95 | 5 us | 20,000 target cycles | n/a |
-| Subscription enqueue+dequeue, one subscriber | 250 ns minimum 4 Mops/s | 5,000 target cycles | n/a |
+| Buffered subscription-driver push+poll, one subscriber | 250 ns minimum 4 Mops/s | 5,000 target cycles | n/a |
 | Candidate selection, 32 admitted candidates, warm p95 | 10 us | 50,000 target cycles | n/a |
 | Security selection, 64 local side-effect-free probes, warm p95 | 100 us | 250,000 target cycles | n/a |
 | Composed 1 KiB strict interaction, 8 candidates/8 security branches, warm p99 | 250 us | 750,000 target cycles | n/a |
@@ -3499,7 +4268,7 @@ Reliability requirements apply to both host and constrained profiles:
   missing credentials, transport errors, cancellation, or backpressure. These
   conditions return structured errors or observable status items.
 - Resource ownership is explicit. Every opened server route, client
-  subscription, discovery session, queue, and guard has a documented owner and
+  subscription driver, discovery session, buffer, and cleanup record has a documented owner and
   release path.
 - Cancellation starts cleanup immediately and prevents new work from entering
   through that handle. Engine-owned async or poll/step cleanup is cooperative
@@ -3521,14 +4290,16 @@ Reliability requirements apply to both host and constrained profiles:
 ## Capacity and Overflow Policy
 
 All buffers that can grow because of external input use an explicit capacity
-policy. The policy records the logical queue kind, item capacity, byte capacity,
+policy. The policy records the logical buffer kind, item capacity, byte capacity,
 maximum item bytes, owner and global quota, overflow behavior, and whether
 overflow is reported inline, through a status stream, through metrics, or
 through both status and metrics.
 
 Host defaults are:
 
-- subscription queue: 16 items, drop-oldest with a lost-sample status or metric;
+- optional host buffered subscription driver: 16 items, drop-oldest with a
+  lost-sample status or metric; protocol-native credit or pull drivers apply the
+  same admitted item and byte ceilings without constructing this buffer;
 - discovery process buffer: 16 TD candidates, backpressure to the discovery
   producer where possible and otherwise structured terminal overflow; lossy
   profiles may choose drop-newest only when explicitly selected and observable
@@ -3547,12 +4318,12 @@ Host defaults are:
 
 The subscription item default is a logical per-subscription ceiling. Storage is
 drawn on demand from the bounded global descriptor and payload pools and remains
-subject to the 512 MiB global queued-byte ceiling; an empty subscription does
+subject to the 512 MiB global buffered-byte ceiling; an empty subscription does
 not reserve sixteen maximum-size payloads.
 
 These item-count defaults are active only together with the host
 `ResourceLimits` byte and concurrency defaults. An item larger than the maximum
-item size is rejected before enqueue. Admission fails when either count or byte
+item size is rejected before application visibility. Admission fails when either count or byte
 capacity would be exceeded; a drop policy releases the dropped item's byte
 reservation before admitting its replacement.
 
@@ -3628,11 +4399,14 @@ pub struct CleanupRecord {
     /* subject, owner, retry class, and bounded redacted cause */
 }
 pub struct ProducerEmission {
-    /* route, target, sequence, kind, and immutable payload lease */
+    /* full target, kind, handle/route/binding generations, sequence, and payload lease */
 }
 pub enum EmissionKind { PropertyChange, Event }
 pub struct BindingPublication {
     /* binding generation, target count, and acceptance outcome */
+}
+pub struct BindingEmissionSlot {
+    /* one binding generation's bounded pending publication and cleanup state */
 }
 pub struct EmissionStatus {
     /* sequence, local outcome, and bounded per-binding outcomes */
@@ -3645,7 +4419,7 @@ pub trait RuntimeClock {
 pub trait PollClientBinding {
     fn start_request(
         &mut self,
-        request: BindingRequest,
+        request: OutboundRequest,
         slot: &mut ClientRequestSlot,
         budget: &mut WorkBudget,
     ) -> CoreResult<StartStatus<InteractionOutput>>;
@@ -3657,7 +4431,7 @@ pub trait PollClientBinding {
     ) -> Poll<CoreResult<InteractionOutput>>;
     fn start_subscription(
         &mut self,
-        request: BindingRequest,
+        request: OutboundRequest,
         slot: &mut ClientSubscriptionSlot,
         budget: &mut WorkBudget,
     ) -> CoreResult<StartStatus<SubscriptionStart>>;
@@ -3672,19 +4446,27 @@ pub trait PollClientBinding {
         cx: &mut Context<'_>,
         subscription: &mut ClientSubscriptionSlot,
         budget: &mut WorkBudget,
-    ) -> Poll<CoreResult<ProcessEvent<SubscriptionItem>>>;
+    ) -> Poll<CoreResult<SubscriptionDriverEvent>>;
+    fn start_stop_subscription(
+        &mut self,
+        request: SubscriptionStopRequest,
+        subscription: &mut ClientSubscriptionSlot,
+        budget: &mut WorkBudget,
+    ) -> CoreResult<StartStatus<CleanupOutcome>>;
     fn poll_cancel_request(
         &mut self,
         cx: &mut Context<'_>,
         request: &mut ClientRequestSlot,
+        cleanup: CleanupTransferContext,
         budget: &mut WorkBudget,
-    ) -> Poll<CoreResult<CleanupOutcome>>;
+    ) -> Poll<CoreResult<BindingCallSettlement<InteractionOutput>>>;
     fn poll_cancel_subscription_start(
         &mut self,
         cx: &mut Context<'_>,
         subscription: &mut ClientSubscriptionSlot,
+        cleanup: CleanupTransferContext,
         budget: &mut WorkBudget,
-    ) -> Poll<CoreResult<CleanupOutcome>>;
+    ) -> Poll<CoreResult<BindingCallSettlement<SubscriptionStart>>>;
     fn poll_stop_subscription(
         &mut self,
         cx: &mut Context<'_>,
@@ -3730,26 +4512,28 @@ pub trait PollServerBinding {
         &mut self,
         cx: &mut Context<'_>,
         response: &mut ServerResponseSlot,
+        cleanup: CleanupTransferContext,
         budget: &mut WorkBudget,
-    ) -> Poll<CoreResult<CleanupOutcome>>;
+    ) -> Poll<CoreResult<BindingCallSettlement<ResponseDelivery>>>;
     fn start_emission(
         &mut self,
         emission: ProducerEmission,
-        slot: &mut ServerEmissionSlot,
+        slot: &mut BindingEmissionSlot,
         budget: &mut WorkBudget,
     ) -> CoreResult<StartStatus<BindingPublication>>;
     fn poll_emission(
         &mut self,
         cx: &mut Context<'_>,
-        emission: &mut ServerEmissionSlot,
+        emission: &mut BindingEmissionSlot,
         budget: &mut WorkBudget,
     ) -> Poll<CoreResult<BindingPublication>>;
     fn poll_cancel_emission(
         &mut self,
         cx: &mut Context<'_>,
-        emission: &mut ServerEmissionSlot,
+        emission: &mut BindingEmissionSlot,
+        cleanup: CleanupTransferContext,
         budget: &mut WorkBudget,
-    ) -> Poll<CoreResult<CleanupOutcome>>;
+    ) -> Poll<CoreResult<BindingCallSettlement<BindingPublication>>>;
     fn poll_shutdown(
         &mut self,
         cx: &mut Context<'_>,
@@ -3760,6 +4544,24 @@ pub trait PollServerBinding {
 
 pub trait StaticServient {
     fn step(&mut self, budget: &mut WorkBudget) -> CoreResult<StepStatus<RuntimeEvent>>;
+    fn poll_subscription_event(
+        &mut self,
+        subscription: &mut StaticSubscription,
+        cx: &mut Context<'_>,
+        budget: &mut WorkBudget,
+    ) -> Poll<CoreResult<ProcessEvent<SubscriptionItem>>>;
+    fn stop_subscription(
+        &mut self,
+        subscription: &mut StaticSubscription,
+        options: InteractionOptions,
+        budget: &mut WorkBudget,
+    ) -> CoreResult<StartStatus<CleanupOutcome>>;
+    fn poll_stop_subscription(
+        &mut self,
+        subscription: &mut StaticSubscription,
+        cx: &mut Context<'_>,
+        budget: &mut WorkBudget,
+    ) -> Poll<CoreResult<CleanupOutcome>>;
 }
 ```
 
@@ -3768,25 +4570,33 @@ views, slot ids, and outcomes are `core`/`alloc` compatible. Implementations MAY
 split preparation and request slots into more specific types, but the public
 adapter MUST provide this lifecycle, typed budget, and terminal behavior.
 `ClientRequestSlot`, `ClientSubscriptionSlot`, `ServerResponseSlot`, and
-`ServerEmissionSlot` are caller-owned, bounded, generation-bearing operation
+`BindingEmissionSlot` are caller-owned, bounded, generation-bearing operation
 slots. A start method
 initializes an empty reserved slot exactly once and either returns a synchronous
 result or `Pending`; request/response progress polling and start cancellation
 require a pending slot, while an active subscription is polled for samples or
 stopped through its active slot. Start
-failure leaves the slot empty. A synchronous request or response `Ready`,
-terminal poll, or cancellation consumes that slot generation before it can be
-reused. A successful subscription start instead transitions its slot to
+failure leaves the slot empty and certifies that the binding owns no remote
+resource or cleanup obligation. This atomic-error rule applies to one-shot,
+single-subscription, collection-subscription, response, and emission starts; a
+pending obligation must remain addressable in its slot instead of escaping as
+an outer error. A synchronous request or response `Ready` or terminal poll
+consumes that slot generation before it can be reused. Cancellation consumes a
+generation only after `BindingCallSettlement`: `Returned` routes the late
+result through the same owner-specific race logic as the host call record, and
+`Cancelled` validates and commits the exact cleanup disposition. Pending or
+transferred cleanup retains the slot generation. A successful subscription
+start instead transitions its slot to
 `Active`; sample polling and stop retain that generation until terminal cleanup.
 Subscription start becomes public only
 after the guard-install
 transaction defined by `STATE-SUB-001`; cancellation before that point closes
 pending binding resources without publishing samples. No constrained start,
 poll, or cancel operation requires a boxed future or binding-owned unbounded
-request table. A pending emission slot retains the immutable payload lease and
-generation-safe local-subscriber and binding-target cursors. A later step
-resumes those cursors; it does not restart fan-out or binding publication at
-target zero.
+request table. A pending `BindingEmissionSlot` retains the immutable payload
+lease plus one binding generation's publication and cleanup state. A later step
+resumes that binding publication; local-subscriber and cross-binding cursors
+remain exclusively in Servient's private `EmissionRecord`.
 `ProcessEvent` is the common terminal-bearing poll value for subscriptions,
 discovery processes, and Directory watches. A terminal event is retained by the
 owning slot or process and emitted at most once; status accessors remain
@@ -3993,6 +4803,12 @@ envelope, and response-validation work-package ownership are frozen by
 the logical schemas above while preventing a temporary route-free public
 response envelope from crossing the WP-100/WP-300 boundary.
 
+The exact handler API, execution ownership, Producer subscription state,
+resource admission, performance identities, and cross-package removal staging
+are frozen by `docs/amendments/WP-100-handler-api-v1.md`. The amendment keeps
+the core engine protocol-neutral and does not move plan, binding, Servient, or
+concrete protocol ownership into WP-100.
+
 ### Admission Transaction and Complexity
 
 `ADMIT-TXN-001`: Parsing, validation, effective-view construction, plan
@@ -4091,18 +4907,23 @@ and never republishes the Thing.
 
 `STATE-SUB-001`: A subscription has states `Starting`, `CancellingStart`,
 `Active`, `Stopping`, `CleanupPending`, `Closed`, and `Failed`. The
-guard-registry insertion linearizes `Starting -> Active`; failure before it
-closes the pending wire guard and never returns a public active subscription.
-Cancellation or drop while `Starting` linearizes against guard installation. If
+Servient driver-registry insertion linearizes `Starting -> Active`; failure
+before it drives the pending binding driver to cleanup and never returns a
+public active subscription. Cancellation or drop while `Starting` linearizes
+against driver installation. If
 cancellation wins, the slot enters `CancellingStart`, no public `Subscription`
 is created, pending samples remain invisible, and start cancellation closes the
 pending wire resource. If installation wins, the same request observes an
 active subscription and proceeds through `Active -> Stopping`.
 
 Stop linearizes at `Active -> Stopping`; exactly one owner removes and closes
-the wire guard. Samples are admitted only in `Active`. `CleanupPending` retains
-whether successful cleanup leads to `Closed` or whether an already observed
-failure leads to `Failed`. Repeated cancellation, stop, and drop operations join
+the registered driver. Samples are admitted only in `Active`. `CleanupPending`
+retains the independent `ProcessTerminal`, when one has already been observed,
+but successful cleanup always leads to `Closed`; the retained terminal still
+distinguishes completion, cancellation, and source failure. `Failed` is reached
+only for durable residual external state. A start error with no escaped resource
+retains its error and closes the unpublished record with complete cleanup.
+Repeated cancellation, stop, and drop operations join
 the same retained outcome. Drop cannot manufacture missing teardown input. If
 protocol teardown requires caller input that was not captured and is
 unavailable, local sample admission still closes exactly once and the retained
@@ -4142,9 +4963,12 @@ without retaining the registry entry indefinitely.
 
 `HOST-DEFAULT-001`: The named `GatewayDefaultV1` profile is the gateway limits
 table in Resource Limits plus the queue defaults in Capacity and Overflow. It
+uses one emission lane per binding generation and sixteen in-flight
+publications per lane, as frozen by `EmissionDispatchPolicy` above. It
 also sets a 30-second interaction deadline, 10-second expose-readiness deadline,
 5-second destroy drain deadline, 5-second subscription teardown deadline, and
-30-second discovery timeout. Deadlines are monotonic durations. A caller may
+5-second host binding cancellation drain deadline, plus a 30-second discovery
+timeout. Deadlines are monotonic durations. A caller may
 disable a convenience deadline explicitly, but work-unit, count, and byte limits
 remain mandatory. The default aggregation policy is sequential, fail-fast, and
 TD/caller order as specified above. Automatic interaction retries are disabled.
@@ -4329,7 +5153,7 @@ Semantic verification must include:
   `unsubscribeallevents` teardown forms, collection-level subscriptions,
   optional handle-level teardown helpers, drop cleanup, teardown-not-run status
   when caller input is required but unavailable, teardown-auth-failed status when
-  teardown credentials cannot be reacquired, proof that subscription guards do
+  teardown credentials cannot be reacquired, proof that subscription drivers do
   not retain secret credential material solely for later drop cleanup,
   backpressure, error delivery, and durable lost-sample counters when the
   status/error channel is unavailable or full.
@@ -4487,9 +5311,10 @@ The design is frozen for implementation only when all of the following hold:
 4. Host and constrained `ResourceLimits` profiles define numeric defaults or
    require explicit caller values; no externally influenced collection is
    implicitly unbounded.
-5. State machines for expose/destroy, subscription teardown, discovery
-   cancellation, and binding cleanup define linearization points, owners,
-   retryability, and terminal outcomes.
+5. State machines for expose/destroy, Consumer subscription teardown, handler
+   sync/async/step cancellation, Producer subscription setup/teardown,
+   discovery cancellation, and binding cleanup define linearization points,
+   owners, retryability, and terminal outcomes.
 6. Concurrency documentation defines lock ordering, reentrancy policy, and the
    rule that no engine lock spans user code.
 7. Constrained design includes a reference storage layout covering arenas or

@@ -1,7 +1,7 @@
 # Deferred Directory Service Design Inputs
 
 Status: non-normative input for a future design revision. This file is not part
-of the active v4.6 engine contract and does not authorize a Directory service or
+of the active v4.8 engine contract and does not authorize a Directory service or
 storage implementation in `clinkz-wot-discovery` or `clinkz-wot-servient`.
 
 The active engine revision freezes only the remote-client request, response,

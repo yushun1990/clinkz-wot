@@ -1,7 +1,7 @@
 # WP-500 Directory and Discovery Client Runtime
 
 Status: Planned
-Design revision: v4.6
+Design revision: v4.8
 Depends on: `WP-300`
 Required gates: `GATE-1`, `GATE-2`, `GATE-3`, `GATE-4`, `GATE-5`, `GATE-6`
 Owner packages: `clinkz-wot-discovery`, `clinkz-wot-core`

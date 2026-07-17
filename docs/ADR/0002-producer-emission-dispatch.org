@@ -1,0 +1,98 @@
+#+title: ADR-0002: Producer Emission Dispatch Ownership
+#+date: 2026-07-16
+#+status: Accepted
+
+* Context
+
+=EventBroker= is a global core-owned fan-out table. It keys routes by textual
+Thing id and name, calls synchronous =PublisherSink= objects serially, and
+collapses partial failures. The same key is used for a property and event with
+the same name, and one binding shutdown can remove another binding's routes.
+The type is neither a durable broker nor the correct owner of runtime policy.
+
+* Decision
+
+The legacy =EventBroker= and =PublisherSink= contracts are removed; they are not
+renamed in place.
+
+Core owns only the protocol-neutral emission values and the per-binding
+publication SPI:
+
+- =ProducerEmission=, including full =AffordanceTarget=, =EmissionKind=,
+  immutable route and binding generations, sequence, and payload lease;
+- =BindingPublication= and =EmissionStatus= with bounded, non-truncated
+  outcomes;
+- a generation-bearing =BindingEmissionSlot= for one binding publication; and
+- the =ServerBinding::publish= and constrained start/poll/cancel operations.
+
+The host =publish= call receives one owned
+=HostBindingCancellationSignal=. Servient retains the paired source and boxed
+future in its bounded host binding-call record until publication completes,
+late completion is recorded, cleanup transfers, or durable residual state is
+recorded. Dropping an application or emission future never detaches a binding
+publication.
+
+Servient owns an =EmissionCoordinator=. It performs validation, per-affordance
+sequencing, local subscriber admission, result reservation, and bounded progress
+across the already compiled publication targets. A configurable
+=EmissionDispatchPolicy= chooses host scheduling. The constrained runtime uses
+its own work-budgeted cursor. Neither strategy is a core concrete type.
+
+The global coordinator record and a binding-local publication slot are distinct:
+
+- Servient's private =EmissionRecord= owns the local-subscriber cursor, the
+  binding-target cursor, aggregate result capacity, and terminal status.
+- Core's public =BindingEmissionSlot= owns only one selected binding
+  generation's pending publication and cleanup state.
+
+Publication targets originate from the frozen exposure plan:
+
+1. a form contributor or application form creates a candidate;
+2. form finalization assigns exactly one =BindingId= owner;
+3. the shared compiler creates an inbound plan and publication target;
+4. prepare/activate/commit binds that target to an active route generation;
+5. emission uses that compiled target set directly.
+
+A TD protocol label alone never creates a target. A concrete binding never
+registers a core sink by rescanning the TD. Protocol-native remote subscriber
+fan-out remains internal to the binding; for example, one Zenoh publication
+target may represent a key expression with many remote subscribers.
+
+The dispatch policies must satisfy these invariants:
+
+- property and event targets cannot collide;
+- stale handle, route, and binding generations cannot publish;
+- per-affordance ordering is preserved;
+- a slow or full binding cannot block unrelated binding lanes indefinitely;
+- callbacks and binding calls run outside engine locks and constrained critical
+  sections;
+- all result capacity is admitted before the first publication;
+- constrained progress resumes retained cursors instead of restarting fan-out;
+- no payload bytes are copied once per local subscriber or binding target.
+
+The v4.8 host policy uses independently reserved bounded per-binding lane sets
+and a configured per-lane concurrency limit. It deliberately does not expose a
+sharded policy whose hash collisions could reintroduce cross-binding
+head-of-line blocking. Every targeted lane is reserved before emission side
+effects; a failed reservation rolls the whole admission back. An application
+that needs a Kafka-like append log or another scheduler places it behind a
+concrete binding publication target rather than replacing the Servient
+coordinator. The constrained reference policy uses direct or bounded-cursor
+progress under =WorkBudget=.
+
+* Naming
+
+=EventDispatcher= was rejected as the target name because the same mechanism
+publishes observable property changes. =EmissionCoordinator= names ownership of
+the transaction; =EmissionDispatchPolicy= names the public bounded host
+configuration while the scheduling implementation stays private.
+
+* Consequences
+
+- The active design must remove remaining normative =EventBroker= references.
+- API ownership must record removal of =EventBroker= and =EventName= where it
+  exists only for broker routing.
+- A Producer emission state machine and slow-binding isolation workloads are
+  required before the emission gates close.
+- Zenoh migrates from blocking =PublisherSink::publish= to its selected binding
+  publication operation in WP-600.

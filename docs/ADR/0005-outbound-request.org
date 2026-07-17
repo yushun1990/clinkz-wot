@@ -1,0 +1,47 @@
+#+title: ADR-0005: Directional Outbound Binding Request Naming
+#+date: 2026-07-16
+#+status: Accepted
+
+* Context
+
+=BindingRequest= is passed only from the engine's Consumer path to a selected
+client binding. The name does not state direction and is asymmetric with the
+existing =InboundRequest=. Its current implementation also carries a full TD,
+selected =Form=, and an untyped security string map, contrary to the compiled
+plan boundary in the target design.
+
+* Decision
+
+Rename the target public execution envelope to =OutboundRequest= and pair it
+with =InboundRequest=. The type remains owned by =clinkz-wot-core= because it is
+a protocol-neutral binding SPI value.
+
+=OutboundRequest= is constructed only after form, binding, target, operation,
+security, and response classification are selected. It owns or references only
+the selected execution facts:
+
+- binding id and generation, plan id, route/target identity, and operation;
+- resolved target and expanded URI variables;
+- input payload and media metadata;
+- typed committed =AppliedSecurity= data safe for the selected binding;
+- response classification metadata;
+- correlation, deadline/cancellation, and idempotency metadata; and
+- a pre-reserved =SubscriptionId= for subscription starts when applicable.
+
+It does not carry a full TD, a raw =Form=, credentials, a provider handle, or
+mutable application options. A binding must not select a different form, scan
+the TD, weaken security, or reinterpret application fields as credentials.
+
+The workspace migration is coordinated in WP-300. Because the crate is still a
+pre-conformance 0.1 implementation and the old shape is being replaced in the
+same work package, no permanent public alias is frozen. A private migration
+alias may exist within one atomic tranche, but =BindingRequest= is absent from
+the public surface and source tree at WP-300 completion.
+
+* Consequences
+
+- =BIND-OUT-001= remains the requirement id but names =OutboundRequest=.
+- API ownership, design skeletons, amendments, work packages, fixtures, and
+  concrete binding signatures change together before implementation resumes.
+- =BindingCandidate= remains a planning-time view and is not reused as the
+  execution request.

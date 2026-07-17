@@ -4,19 +4,30 @@ resource_profile = "BenchmarkStaticReferenceV1"
 runtime_default = false
 feature_set = "no-default-features,application-static-profile"
 environment = "thumbv7em-none-eabihf"
-runner = "record-board-cpu-clock-memory-map-in-result"
-reference_runner_class = "cortex-m4f-single-core-zero-wait-state-sram"
+runner = "stm32f407vg-discovery-168mhz-flash5ws-sram-v1"
 toolchain = "record-in-result"
 allocator = "record-in-result"
-fixture_generator = "clinkz-wot-fixture-generator-v1"
+fixture_generator = "clinkz-wot-fixture-generator-v2"
 fixture_lock = "docs/performance/fixtures.lock.toml"
-fixture_digest = "sha256:ea2bf54f6bbafc27e3e6ae1dcd5ad149d6a3b4ef878ed3c2aef6432b3f6b22c6"
+fixture_digest = "sha256:d9161f932491c68bcb36e4bba5a334524186377bba198b28e49d7c5fd670290e"
 fixture_seed = 4603
 warmup_iterations = 100
 sample_count = 1000
 regression_tolerance_percent = 10
 outlier_policy = "none-unless-predeclared-and-recorded"
 failed_sample_policy = "record-and-fail-gate"
+
+[runner_fingerprint]
+class = "stm32f407vg-discovery-168mhz-flash5ws-sram-v1"
+board = "stm32f407g-disc1"
+cpu_model = "arm-cortex-m4f-r0p1"
+physical_cores = "1"
+threads_per_core = "1"
+frequency_policy = "fixed-168000000-hz-hse-pll"
+memory = "128k-sram-plus-64k-ccm-flash-5-wait-states"
+os_or_firmware = "bare-metal"
+kernel_or_runtime = "no-rtos"
+clock_source = "dwt-cyccnt"
 
 [gate_policy]
 minimum_metrics_regress_when = "decrease"
@@ -48,6 +59,11 @@ interaction_accounting = "before admitted interaction accounting -> local counte
 manual_step_fairness = "before runtime step -> step returns at work boundary"
 profile_maximum_td_planning = "source bytes admitted -> private compiled plan complete before publication"
 admission_byte_and_structure_scaling = "source bytes admitted -> private admission result or limit error"
+handler_storage_replacement_matrix = "before handler registration, replacement, removal, or clear -> slot generation published or every reservation rolled back"
+handler_cancellation_reentrancy = "selected handler and input owned -> terminal result delivered or discarded and retained invocation ownership released within bounded steps"
+producer_subscription_transaction = "before subscription admission -> the declared matrix cell reaches Active or its retained terminal outcome within declared work and drain budgets; teardown and replay cells continue through every response and cleanup acknowledgement plus the declared eviction or stale-replay observation"
+emission_binding_bounded_progress = "fully admitted emission and caller-owned slots ready -> one runtime step returns at its work boundary with retained binding cursor progress"
+native_collection_subscription = "root collection plan, caller-owned driver slot, and reserved SubscriptionId ready -> one binding driver is installed or a terminal start error is retained"
 
 [scales]
 payload_bytes = [0, 64, 1024]
@@ -57,7 +73,7 @@ extension_bytes = [0, 1024, 16384]
 uri_template_bytes = [0, 256, 4096]
 expanded_uri_bytes = [0, 256, 4096]
 td_nodes = [64, 1024]
-forms = [1, 8]
+forms = [1, 8, 16, 256]
 bindings = [1, 4]
 schema_nodes = [16, 256]
 maximum_case = "BenchmarkStaticReferenceV1-limits"
@@ -65,10 +81,12 @@ candidates = [1, 8, 32]
 security_branches = [1, 8, 64]
 subscribers = [1, 16, 256]
 concurrency = [1]
+handler_slots = [0, 1, 16, 64, 256]
+collection_sources = [1, 16, 256]
 
 [[workload]]
 id = "PERF-CS-001"
-version = 1
+version = 2
 requirements = ["PERF-ALLOC-001", "PERF-CALL-001"]
 fixture_id = "FX-CS-001"
 harness_case = "local_sync_interaction"
@@ -81,7 +99,7 @@ report = ["median", "p95", "p99", "allocations", "peak-live-bytes"]
 
 [[workload]]
 id = "PERF-CS-002"
-version = 1
+version = 2
 requirements = ["BIND-IO-001", "PERF-ALLOC-001", "PERF-CALL-001"]
 fixture_id = "FX-CS-002"
 harness_case = "inbound_dispatch_no_transport"
@@ -93,7 +111,7 @@ report = ["median", "p95", "p99", "allocations", "peak-live-bytes"]
 
 [[workload]]
 id = "PERF-CS-003"
-version = 1
+version = 2
 requirements = ["PLAN-INDEX-001", "PERF-INDEX-001"]
 fixture_id = "FX-CS-003"
 harness_case = "compiled_plan_lookup"
@@ -104,7 +122,7 @@ report = ["median", "p95", "p99", "allocations"]
 
 [[workload]]
 id = "PERF-CS-004"
-version = 1
+version = 2
 requirements = ["PLAN-BOUND-001", "PERF-CALL-001"]
 fixture_id = "FX-CS-004"
 harness_case = "candidate_selection_32"
@@ -116,7 +134,7 @@ report = ["median", "p95", "p99", "candidates-visited", "allocations"]
 
 [[workload]]
 id = "PERF-CS-005"
-version = 1
+version = 2
 requirements = ["SEC-PERF-001", "PERF-CALL-001"]
 fixture_id = "FX-CS-005"
 harness_case = "security_selection_64_local_probes"
@@ -129,7 +147,7 @@ report = ["median", "p95", "p99", "provider-probes", "allocations"]
 
 [[workload]]
 id = "PERF-CS-006"
-version = 1
+version = 2
 requirements = ["PERF-CALL-001", "VALIDATE-COMPILE-001", "VALIDATE-REUSE-001"]
 fixture_id = "FX-CS-006"
 harness_case = "composed_strict_interaction_1k"
@@ -147,7 +165,7 @@ report = ["median", "p95", "p99", "allocations", "peak-live-bytes", "provider-pr
 
 [[workload]]
 id = "PERF-CS-007"
-version = 1
+version = 2
 requirements = ["PERF-ALLOC-001", "PERF-FANOUT-001", "SUB-DATA-001"]
 fixture_id = "FX-CS-007"
 harness_case = "subscription_round_trip_one_subscriber"
@@ -159,7 +177,7 @@ report = ["median", "p95", "p99", "allocations"]
 
 [[workload]]
 id = "PERF-CS-008"
-version = 1
+version = 2
 requirements = ["PERF-FANOUT-001", "SUB-DATA-001"]
 fixture_id = "FX-CS-008"
 harness_case = "shared_payload_fanout_256"
@@ -172,7 +190,7 @@ report = ["median", "p95", "p99", "pool-bytes", "allocations"]
 
 [[workload]]
 id = "PERF-CS-009"
-version = 1
+version = 2
 requirements = ["CONSTRAINED-PROGRESS-001", "PERF-FANOUT-002"]
 fixture_id = "FX-CS-009"
 harness_case = "bounded_fanout_progress_256"
@@ -187,7 +205,7 @@ report = ["cycles-per-step", "steps", "maximum-service-gap", "queue-operations"]
 
 [[workload]]
 id = "PERF-CS-010"
-version = 1
+version = 2
 requirements = ["PLAN-CACHE-001", "PLAN-LAZY-001"]
 fixture_id = "FX-CS-010"
 harness_case = "lazy_plan_single_flight"
@@ -200,7 +218,7 @@ report = ["median", "p95", "p99", "compile-attempts", "cleanup-work-units", "pea
 
 [[workload]]
 id = "PERF-CS-011"
-version = 1
+version = 2
 requirements = ["CONSTRAINED-OWN-001", "PERF-ACCOUNT-001"]
 fixture_id = "FX-CS-011"
 harness_case = "interaction_accounting"
@@ -213,7 +231,7 @@ report = ["median", "p95", "p99", "reservation-refills", "critical-section-cycle
 
 [[workload]]
 id = "PERF-CS-012"
-version = 1
+version = 2
 requirements = ["CONSTRAINED-SCHED-001", "CONSTRAINED-WORK-001"]
 fixture_id = "FX-CS-012"
 harness_case = "manual_step_fairness"
@@ -225,7 +243,7 @@ report = ["cycles-per-work-class", "maximum-service-gap", "peak-live-bytes"]
 
 [[workload]]
 id = "PERF-CS-013"
-version = 1
+version = 2
 requirements = ["PERF-ADMISSION-001", "PERF-BENCH-003", "PERF-PEAK-001"]
 fixture_id = "FX-CS-013"
 harness_case = "profile_maximum_td_planning"
@@ -238,7 +256,7 @@ report = ["median", "p95", "p99", "plan-construction-bytes", "peak-live-bytes", 
 
 [[workload]]
 id = "PERF-CS-014"
-version = 1
+version = 2
 requirements = ["ADMIT-MEM-001", "PERF-COMPLEXITY-001", "PERF-SCALE-001"]
 fixture_id = "FX-CS-014"
 harness_case = "admission_byte_and_structure_scaling"
@@ -255,7 +273,7 @@ axes = [
     "schema-nodes",
     "security-branches",
 ]
-vary_one_axis_at_a_time = true
+require_vary_one_axis_at_a_time = true
 require_declared_complexity = true
 require_no_logical_plan_duplication_per_candidate = true
 report = [
@@ -268,6 +286,246 @@ report = [
     "binding-states",
     "persistent-bytes",
     "peak-live-bytes",
+]
+
+[[workload]]
+id = "PERF-CS-015"
+version = 1
+requirements = [
+    "CONCUR-LIN-001",
+    "CONSTRAINED-OWN-001",
+    "HANDLER-STORAGE-001",
+    "RES-LIMIT-001",
+]
+fixture_id = "FX-CS-015"
+harness_case = "handler_storage_replacement_matrix"
+gating = true
+name = "handler_storage_replacement_matrix"
+registered_slot_densities = [0, 1, 16, 64, 256]
+handler_kinds = ["sync", "step", "mixed"]
+mutation_cases = [
+    "replace-with-selected-generation-pinned",
+    "remove",
+    "clear",
+    "profile-maximum",
+    "profile-maximum-plus-one",
+]
+handler_generations_per_slot_max = 2
+unsupported_operation_retained_bytes_max = 0
+engine_allocations_max = 0
+require_no_atomic_reference_counting = true
+require_atomic_admission_rollback = true
+report = [
+    "registered-slots",
+    "retained-handler-bytes",
+    "pending-handler-bytes",
+    "live-generations",
+    "rollback-bytes",
+    "allocations",
+]
+
+[[workload]]
+id = "PERF-CS-016"
+version = 1
+requirements = [
+    "CONCUR-CRIT-001",
+    "CONCUR-LIN-001",
+    "CONSTRAINED-WORK-001",
+    "HANDLER-CANCEL-001",
+    "HANDLER-CANCEL-002",
+]
+fixture_id = "FX-CS-016"
+harness_case = "handler_cancellation_reentrancy"
+gating = true
+name = "handler_cancellation_reentrancy"
+handler_kinds = ["sync", "step"]
+cancellation_cases = [
+    "sync-return-before-deadline",
+    "sync-return-after-cancellation",
+    "step-cancel-before-entry",
+    "step-cancel-after-pending",
+    "step-budget-boundary",
+]
+replacement_cases = [
+    "replace-during-dispatch",
+    "reentrant-replace",
+    "reentrant-clear",
+    "reentrant-dispatch",
+]
+critical_section_guards_held_during_callback_max = 0
+critical_section_guards_held_during_step_state_drop_max = 0
+selected_handler_calls_per_operation_target_max = 1
+late_results_delivered_max = 0
+work_budget_overshoot_units_max = 0
+require_stable_selected_generation = true
+report = [
+    "handler-invocations",
+    "late-results",
+    "retained-invocation-bytes",
+    "handler-steps",
+    "work-budget-overshoot",
+    "critical-section-guards-held",
+    "step-state-drop-critical-section-guards-held",
+]
+
+[[workload]]
+id = "PERF-CS-017"
+version = 1
+requirements = [
+    "CLEANUP-RECORD-001",
+    "CONCUR-CRIT-001",
+    "CONCUR-LIN-001",
+    "CONCUR-USER-001",
+    "CONSTRAINED-WORK-001",
+    "HANDLER-CANCEL-001",
+    "HANDLER-CANCEL-002",
+    "HANDLER-STORAGE-001",
+    "HANDLER-SUB-001",
+    "RES-LIMIT-001",
+]
+fixture_id = "FX-CS-017"
+harness_case = "producer_subscription_transaction"
+gating = true
+name = "producer_subscription_transaction"
+subscriber_count = 256
+setup_handler_kinds = ["sync", "step"]
+teardown_handler_kinds = ["sync", "step"]
+handler_kind_pairs = ["sync-sync", "sync-step", "step-sync", "step-step"]
+coverage_dimensions = ["handler_kind_pairs", "transaction_cases"]
+transaction_cases = [
+    "accept-install-active",
+    "application-reject",
+    "early-terminal-absent-obligations",
+    "accepted-response-invalid",
+    "success-response-claim-race",
+    "start-response-release-ack",
+    "start-response-delivery-failure",
+    "cancel-during-setup",
+    "drop-during-setup",
+    "setup-cancel-cleanup-transfer",
+    "setup-cancel-residual",
+    "late-acceptance",
+    "late-external-guard",
+    "installation-failure-rollback",
+    "active-stop",
+    "cancel-during-teardown",
+    "drop-during-teardown",
+    "teardown-response-release-ack",
+    "teardown-view-cancel-detaches-only",
+    "teardown-view-drop-detaches-only",
+    "owner-abort-step-teardown-no-result",
+    "late-teardown-result",
+    "repeated-stop",
+    "teardown-failure-cleanup",
+    "reentrant-stop",
+    "pending-call-capacity-saturation",
+    "handler-state-capacity-saturation",
+    "cleanup-capacity-saturation-residual",
+    "terminal-replay-before-eviction",
+    "terminal-eviction-stale-replay",
+]
+handler_footprint_retained_bytes = 32
+handler_footprint_pending_call_bytes = 128
+handler_footprint_subscription_bytes = 64
+pending_handler_calls_prefill = 32
+handler_state_bytes_charged_after_active = 65536
+cleanup_items_prefill = 64
+cleanup_bytes_prefill = 262144
+producer_residual_records_prefill = 0
+producer_residual_bytes_prefill = 0
+producer_residual_records_reserved_per_subscription = 1
+producer_residual_record_bytes_reserved_per_subscription = 128
+teardown_admission_wait_steps_max = 64
+terminal_replay_attempts_before_eviction_min = 2
+require_stale_handle_after_tombstone_eviction = true
+early_terminal_reservation_leaks_max = 0
+duplicate_response_ack_count_changes_max = 0
+teardown_wait_budget_overshoot_units_max = 0
+application_setup_calls_per_subscription_max = 1
+application_teardown_calls_per_subscription_max = 1
+publications_before_active_max = 0
+leaked_guards_max = 0
+critical_section_guards_held_during_application_callback_max = 0
+work_budget_overshoot_units_max = 0
+require_retained_terminal_teardown_replay = true
+require_complete_matrix_coverage = true
+report = [
+    "setup-calls",
+    "teardown-calls",
+    "published-subscriptions",
+    "rolled-back-guards",
+    "cleanup-records",
+    "leaked-guards",
+    "work-budget-overshoot",
+    "critical-section-guards-held",
+    "start-response-acks",
+    "teardown-view-acks",
+    "local-view-releases",
+    "teardown-admission-wait-units",
+    "producer-residual-records",
+    "terminal-replays",
+    "tombstone-evictions",
+    "handler-state-bytes",
+    "subscription-bytes",
+]
+
+[[workload]]
+id = "PERF-CS-018"
+version = 1
+requirements = [
+    "CONSTRAINED-WORK-001",
+    "PERF-FANOUT-002",
+    "PRODUCER-EMIT-001",
+    "RES-LIMIT-001",
+]
+fixture_id = "FX-CS-018"
+harness_case = "emission_binding_bounded_progress"
+gating = true
+name = "emission_binding_bounded_progress"
+binding_count_cases = ["1", "4"]
+coverage_dimensions = ["binding_count_cases"]
+binding_targets_per_step_max = 4
+payload_copies_per_binding_max = 0
+work_budget_overshoot_units_max = 0
+require_generation_safe_resume_cursor = true
+require_no_restart_after_budget_exhaustion = true
+require_complete_matrix_coverage = true
+report = [
+    "cycles-per-step",
+    "steps",
+    "binding-targets-per-step",
+    "payload-copies-per-binding",
+    "work-budget-overshoot-units",
+    "maximum-service-gap",
+]
+
+[[workload]]
+id = "PERF-CS-019"
+version = 1
+requirements = [
+    "BIND-PROGRESS-001",
+    "PLAN-BOUND-001",
+    "STATE-SUB-001",
+    "SUB-DATA-001",
+]
+fixture_id = "FX-CS-019"
+harness_case = "native_collection_subscription"
+gating = true
+name = "native_collection_subscription"
+collection_source_count = 256
+binding_start_calls_max = 1
+per_affordance_start_calls_max = 0
+local_merge_queues_created_max = 0
+engine_allocations_max = 0
+require_root_form_selection = true
+require_exact_source_attribution = true
+report = [
+    "cycles",
+    "binding-start-calls",
+    "per-affordance-start-calls",
+    "local-merge-queues-created",
+    "attributed-sources",
+    "allocations",
 ]
 
 [code_size]

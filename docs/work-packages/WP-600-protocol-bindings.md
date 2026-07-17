@@ -1,7 +1,7 @@
 # WP-600 Optional Zenoh and Zenoh-Pico Protocol Bindings
 
 Status: Planned
-Design revision: v4.6
+Design revision: v4.8
 Depends on: `WP-300`
 Required gates: `GATE-1`, `GATE-2`, `GATE-3`, `GATE-4`, `GATE-5`, `GATE-6`
 Owner packages: `clinkz-wot-protocol-bindings`, `clinkz-wot-protocol-bindings-zenoh`
@@ -34,10 +34,17 @@ opaque numeric value.
 - `BIND-IO-001`
 - `BIND-OUT-001`
 - `BIND-PROGRESS-001`
+- `BIND-CALL-CANCEL-001`
+- `BIND-HOST-CANCEL-001`
+- `SUB-STORAGE-001`
+- `SUB-DATA-001`
 - `API-PAYLOAD-001`
 - `API-SECURITY-001`
 - `API-CODEC-001`
 - `CONSTRAINED-PROGRESS-001`
+- `PRODUCER-EMIT-001`
+- `PERF-FANOUT-001`
+- `PERF-FANOUT-002`
 
 The package consumes `PLAN-INDEX-001`, `PLAN-REQUEST-001`, `STATE-BIND-001`,
 `STATE-SUB-001`, `LIFE-EXPOSE-003`, and `PRODUCER-EMIT-001` without changing their semantics.
@@ -58,6 +65,9 @@ surface only and must not enable Tokio, the Rust zenoh runtime, or another execu
 feature may enable its host runtime dependencies; `zenoh-pico` must not enable `std`, Tokio,
 `Arc`-only registration, or boxed-future-only progress.
 
+The WP-600 feature-cell set is exactly `no-default`, `async-no-std`, and `std`.
+The `no-default` cell is an independent baseline and is not implied by `async-no-std`.
+
 ## Public API and Data Migration
 
 - Use `clinkz_wot_protocol_bindings::{CapabilityIndex, PlanCompiler, PlanBuildInput,
@@ -69,7 +79,7 @@ feature may enable its host runtime dependencies; `zenoh-pico` must not enable `
   `clinkz-wot-core`. Route guards contain protocol-local resources behind the core's erased host
   wrappers.
 - Migrate zenoh client integration to `ClientBindingRegistration` and `ClientBinding` using an
-  owned `BindingRequest`. The binding must use the selected plan, route and binding generations,
+  owned `OutboundRequest`. The binding must use the selected plan, route and binding generations,
   applied security, correlation id, and response validation contract without selecting another
   form.
 - Preserve the host convenience constructors `shared`, `server`, `client`, `client_pooled`, and
@@ -78,11 +88,18 @@ feature may enable its host runtime dependencies; `zenoh-pico` must not enable `
   mode, readiness, form contribution, status, or overflow metadata.
 - Implement zenoh-pico through `PollClientBinding` and `PollServerBinding`, including
   `ClientRequestSlot`, `ClientSubscriptionSlot`, `ServerResponseSlot`, and
-  `ServerEmissionSlot`. `ZenohPicoTransport` and its platform callbacks may remain
+  `BindingEmissionSlot`. `ZenohPicoTransport` and its platform callbacks may remain
   protocol-specific, but all engine-visible progress and terminal values use core types.
 - Map transport credentials only into `TransportAuthMaterial`; core owns body authentication,
   security branch verification, scope checks, and the application payload projection. Outbound
-  zenoh metadata comes only from `BindingRequest::applied_security` after provider commit.
+  zenoh metadata comes only from `OutboundRequest::applied_security` after provider commit.
+- Implement the host subscription receive and teardown path as a binding-owned
+  `HostSubscriptionDriver`. Zenoh and zenoh-pico own protocol credit, callback ingress, prefetch,
+  and any bounded protocol-local storage; neither returns a core queue or public sender.
+- Advertise a typed native capability for root-form `subscribe_all_events` and
+  `observe_all_properties` only when the selected route provides exact source attribution and
+  bounded teardown. The concrete compiler maps Zenoh wildcard or selector syntax; core and
+  Servient never interpret it.
 
 ## State and Ownership Migration
 
@@ -104,6 +121,12 @@ feature may enable its host runtime dependencies; `zenoh-pico` must not enable `
 - For zenoh-pico, retain progress cursors and owned buffers in caller-visible generation-bearing
   slots. Budget exhaustion returns pending work without restarting decode, fan-out, response, or
   cleanup from the beginning.
+- Consume only WP-300 `ProducerEmission` and `BindingPublication` at the engine boundary. Host
+  zenoh and zenoh-pico preserve emission target, route, subscription, binding generation, payload
+  lease, overflow result, and retained cursor without re-entering a legacy `PublisherSink`.
+- Treat one `BindingEmissionSlot` as one selected binding publication. Remote subscriber fan-out
+  behind a Zenoh key expression remains internal to that binding and does not create one engine
+  sink or payload copy per remote subscriber.
 
 ## Old API Removal
 
@@ -122,6 +145,12 @@ feature may enable its host runtime dependencies; `zenoh-pico` must not enable `
   zenoh-pico path that requires `std`, Tokio, `Arc<dyn ...>`, or a boxed future to make progress.
 - Remove transport-specific security interpretation that bypasses `TransportAuthMaterial`,
   `SecurityProvider` probe/commit, or the shared response validation path.
+- Remove `PublisherSink` and the WP-300 protocol-side compatibility adapter after both zenoh and
+  zenoh-pico publish exclusively through `ProducerEmission`. No concrete binding may call
+  `PushFn`, `SubscriptionSender`, a Servient handler setter, or an application handler directly.
+- Remove `BindingRequest`, core queue construction, `SubscriptionGuard`, `EventStream`, and any
+  binding path that asks Servient to synthesize a collection subscription by opening N event
+  subscriptions.
 
 No compatibility feature may reintroduce zenoh into a protocol-neutral crate.
 
@@ -139,6 +168,14 @@ No compatibility feature may reintroduce zenoh into a protocol-neutral crate.
   response opportunity, and idempotent cleanup evidence for both backends.
 - `binding-response-provenance`: protocol-native status/branch extraction, untrusted metadata
   construction, shared validation, and structured failure translation for both backends.
+- `binding-owned-flow-control`: driver polling, protocol credit/prefetch, admitted storage,
+  overflow/loss accounting, exact source items, and stop/drop teardown for both backends.
+- `zenoh-native-collection-subscriptions`: one root-form start, exact source attribution, native
+  multiplexing, bounded cleanup, and negative capability cases without implicit fan-out.
+
+The `producer-emission-migration` evidence owned by WP-300 is consumed here with concrete source
+inspection proving that both backend features have removed their adapter exit and every
+`PublisherSink` reference.
 
 Feature evidence must include `--no-default-features`, host `zenoh`, constrained `zenoh-pico`, and
 an expected compile failure when both concrete backend features are selected.
@@ -148,6 +185,14 @@ an expected compile failure when both concrete backend features are selected.
 - `PERF-GW-009`: erased host network-call metadata allocations.
 - `PERF-GW-010`: allocation-sensitive poll/native network-call metadata.
 - `PERF-CS-002`: constrained inbound dispatch excluding transport I/O.
+- `PERF-GW-007`, `PERF-GW-018`, `PERF-GW-019`, and `PERF-CS-007` cover binding-owned
+  subscription start, receive, cancellation, and stop progress.
+- `PERF-GW-008`, `PERF-CS-008`, and `PERF-CS-009` cover binding-local publication and remote
+  fan-out without per-subscriber engine payload copies.
+- `PERF-GW-023`, `PERF-GW-024`, `PERF-GW-025`, `PERF-GW-026`, and `PERF-GW-027` cover compiled
+  Zenoh targets, binding scaling and isolation, exposure construction, and native collection
+  behavior. `PERF-CS-018` and `PERF-CS-019` cover the corresponding zenoh-pico retained progress
+  and native collection paths.
 
 Adapter results must identify the backend feature, target, toolchain, allocator, runner, manifest,
 fixture, and workload. Transport I/O is outside the two metadata workload boundaries unless the
@@ -165,5 +210,9 @@ manifest explicitly includes it; a host result cannot stand in for zenoh-pico ev
   caller-driven surface without `std` or erased host traits.
 - Removed monolithic lifecycle and direct-TD runtime planning APIs are absent from public compile
   fixtures and production call sites.
+- `PublisherSink` and the protocol-side emission adapter are absent from both concrete feature
+  cells; all Producer publication reaches the WP-300 bounded emission state.
+- Native collection tests use one selected root route and one driver, while missing or inexact
+  capability returns no-compatible-form without Servient-side fan-out.
 - The listed performance workloads satisfy their fixture-locked budgets and structural invariants
   through `tools/performance-harness`.

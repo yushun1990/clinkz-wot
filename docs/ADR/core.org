@@ -1,0 +1,21 @@
+#+title: Core and Runtime Architecture Decision Index
+#+date: 2026-07-16
+
+This directory records accepted architecture decisions discovered by the July
+2026 architecture review. The decisions apply to the design revision that
+supersedes the v4.7 candidate. They are normative inputs to that revision, but
+they do not claim that the current implementation already conforms.
+
+* Accepted decisions
+
+- [[file:0001-crate-and-module-boundaries.org][ADR-0001: Crate and module responsibility boundaries]]
+- [[file:0002-producer-emission-dispatch.org][ADR-0002: Producer emission dispatch ownership]]
+- [[file:0003-subscription-driver-ownership.org][ADR-0003: Subscription driver and flow-control ownership]]
+- [[file:0004-collection-subscriptions.org][ADR-0004: Collection subscription planning and multiplexing]]
+- [[file:0005-outbound-request.org][ADR-0005: Directional outbound binding request naming]]
+- [[file:0006-host-binding-call-cancellation.org][ADR-0006: Host binding call cancellation and late-result ownership]]
+
+* Review record
+
+The evidence, current implementation deviations, design blockers, and migration
+order are recorded in [[file:../review/review-01.org][Architecture Review 01]].

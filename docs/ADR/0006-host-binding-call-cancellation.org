@@ -1,0 +1,95 @@
+#+title: ADR-0006: Host Binding Call Cancellation and Late-Result Ownership
+#+date: 2026-07-16
+#+status: Accepted
+
+* Context
+
+The v4.7 host binding surface returned an ordinary boxed future from Consumer
+invoke, Consumer subscription start, and Producer publication. The owned
+request carried only a copyable =CancellationView= snapshot. Dropping the
+application future could therefore drop the binding future while protocol work
+was still live, lose a late subscription driver or publication result, and
+bypass the cleanup state machines that the constrained binding SPI already
+required.
+
+Retaining the future in an unbounded detached task is not a valid repair. It
+would move the ownership leak into an unbounded runtime queue and would still
+leave cancellation races and late results unspecified.
+
+* Decision
+
+Core defines portable =BindingCallSettlement<T>= with exactly two variants:
+=Returned(CoreResult<T>)= and =Cancelled { retry_class, cleanup }=. The first
+transfers a normal or error result without deciding which side won caller
+delivery. The second transfers complete, pending, or residual cleanup together
+with retry classification. An outer error is reserved for an invalid call that
+does not change state.
+
+The std-only surface defines an owned =HostBindingCall= trait with
+=poll_result=, =start_cancel=, and =poll_cancel=, plus a boxed type-erased
+=HostBindingCallBox<T>=. The exact host binding methods consume a cloned
+=Arc<Self>= and construct one owned call before any protocol side effect:
+
+- =ClientBinding::invoke=;
+- =ClientBinding::subscribe=; and
+- =ServerBinding::publish=.
+
+Servient owns a bounded, crate-private =HostBindingCallRecord=. It retains the
+binding and route generations, call object, immutable first cause, result cell,
+unique poll/cancel lease, independent cancel-drain deadline, and pre-reserved
+cleanup item/byte capacity. Binding construction, polling, cancellation, and
+call destruction execute outside engine locks. The application-facing future
+is only a delivery view and never becomes the cleanup owner.
+
+Completion already committed at the call-record boundary wins a cancellation
+race. If cancellation is recorded while =poll_result= is claimed, a =Ready=
+return is handled as late =Returned=; a =Pending= return moves the call through
+=start_cancel= and then =poll_cancel=, and =poll_result= is never used again for
+that generation. A late invoke result is retained for side-effect and retry
+classification but is not delivered or retried. A late subscription start
+transfers its driver into the implicit-stop machine. A late publication result
+fills the already reserved binding result cell.
+
+A constructor error or normal result error certifies that no remote resource,
+driver, or cleanup obligation remains. This rule applies to single and
+collection subscriptions alike. An implementation that cannot provide this
+atomic error boundary retains the call and reports the obligation through a
+cancelled settlement; it never hides cleanup in an outer error.
+
+The constrained request, subscription-start, response, and emission cancel
+methods return the same settlement type. Caller-owned slots and the std host
+call record therefore implement one exact binding-call state model, including
+late results, complete cleanup, cleanup transfer, durable residual state, stale
+generation rejection, and reuse only after terminal acknowledgement.
+
+Every host call reserves cleanup item and byte capacity before the first
+binding poll. Consumer one-shot concurrency is bounded by
+=pending_client_calls_per_binding_max=, =pending_client_calls_per_thing_max=,
+and =pending_client_calls_global_max=;
+subscription starts and publications also consume their existing subscription
+and binding-emission reservations. The cancellation drain deadline starts at
+cancellation linearization and is bounded by
+=host_binding_cancel_drain_timeout_millis_max= plus typed binding-poll work; an
+expired interaction deadline does not erase this cleanup window. Exhaustion
+records =ResidualExternalState= durably before the call is destroyed.
+
+Dropped delivery views hand one =CleanupTask= to the public =CleanupExecutor=
+using a lossless =try_spawn= operation. Rejection returns the original task to
+the already reserved Servient manual cleanup slot. Acceptance requires the
+executor to poll the task to terminal; shutdown/drop commits the task's
+pre-reserved durable residual fallback before destroying the call.
+
+* Consequences
+
+- The host traits have a complete object-safe =Send + Sync + 'static= shape and
+  return owned call objects that can move to cleanup ownership without a
+  self-referential borrow.
+- =CancellationView= remains a portable snapshot and does not gain pointers,
+  atomics, or waker behavior.
+- The async-no-std feature cell continues to use the frozen poll binding SPI;
+  it does not acquire boxed host calls.
+- =BindingFuture= and the proposed source/signal pair are not target APIs.
+- A new exact host binding-call state machine and executable cancellation/late
+  result performance workload are required before refactoring may begin.
+- Concrete host protocol bindings must retain cancellation state in the call
+  object and must not detach protocol work from it.

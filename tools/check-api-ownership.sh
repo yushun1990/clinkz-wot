@@ -36,7 +36,7 @@ if [[ -n "$duplicates" ]]; then
     exit 1
 fi
 
-awk -F, '$5 == "public" { print $6 }' "$matrix" | tail -n +2 | sort >"$tmp/paths"
+awk -F, 'NR > 1 && $5 == "public" { print $6 }' "$matrix" | sort >"$tmp/paths"
 duplicates=$(uniq -d "$tmp/paths")
 if [[ -n "$duplicates" ]]; then
     printf 'api ownership check: duplicate public paths:\n%s\n' "$duplicates" >&2
@@ -56,6 +56,7 @@ awk -F, '
         migrations["add"] = migrations["keep"] = migrations["replace"] = 1
         migrations["relocate"] = migrations["remove"] = 1
         compilation["no-default"] = compilation["async-no-std"] = compilation["std"] = 1
+        compilation["std-async"] = 1
         execution["all"] = execution["manual-poll"] = execution["host-async"] = 1
         resources["all"] = resources["application-static"] = 1
         resources["gateway-default-v1"] = resources["directory-client-default-v1"] = 1

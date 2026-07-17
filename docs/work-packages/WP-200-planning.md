@@ -2,7 +2,7 @@
 
 Status: Planned
 
-Design revision: v4.6
+Design revision: v4.8
 
 Depends on: WP-100
 
@@ -27,6 +27,15 @@ Response classification facts follow
 primary/additional branch and schema/media facts consumed by WP-300, but does
 not publish an interaction response.
 
+Collection subscription planning is first-class. `subscribe_all_events` and
+`observe_all_properties` select one compatible Thing-level form from the root `forms` array;
+planning never lowers either operation into per-affordance requests or a local merged stream.
+
+WP-200 consumes the WP-100 handler context and operation identities only as immutable plan
+facts. It neither activates host handler registrations nor removes a compatibility facade needed
+by WP-300, WP-400, or WP-600. New planning code must not call `PushFn`, `PublisherSink`,
+`SubscriptionSender`, a legacy raw handler lookup, or an old handler trait.
+
 ## Requirements
 
 - `PLAN-COST-001`, `PLAN-COST-002`, and `PLAN-COST-003` define logical sharing, bounded
@@ -35,6 +44,8 @@ not publish an interaction response.
 - `PLAN-INDEX-001`, `PLAN-LAZY-001`, `PLAN-CACHE-001`, `PLAN-REQUEST-001`, and
   `PLAN-BOUND-001` define pruning, lazy/single-flight state, per-call ownership, and candidate
   limits.
+- `BIND-PROGRESS-001` requires a collection plan to preserve exact source attribution and the
+  selected binding generation for one native subscription driver.
 - `TD-MEM-001` and `TD-MEM-002` prevent duplicated resident TD trees and charge explicit
   effective-view materialization.
 - `DOC-RUNTIME-001`, `DOC-RUNTIME-002`, and `DOC-RUNTIME-003` define source retention, runtime
@@ -73,6 +84,8 @@ Implement the frozen core-owned values:
 - `clinkz_wot_core::LogicalInteractionPlan`, `BindingPlanRef`, `BindingCandidate`,
   `BindingSupport`, `InboundBindingPlan`, `BindingThingView`, `InboundRouteMatch`, and
   `BindingCapability`;
+- `clinkz_wot_core::CollectionSubscriptionCapability` for the protocol-neutral topology,
+  exact-source, target-bound, start, and teardown facts used by root collection plans;
 - use WP-100 `PlanId`, `BindingId`, `BindingGeneration`, slot ids, `EffectiveSecurityPlan`,
   and compact metadata references rather than cloning static request data.
 
@@ -80,6 +93,11 @@ Implement the frozen compiler-owned surface:
 
 - `clinkz_wot_protocol_bindings::CapabilityIndex`, `PlanCompiler`, `PlanBuildInput`,
   `PlanBuildOutput`, `CompiledUriTemplate`, and `ResolvedFormTarget`.
+
+Compile `CollectionSubscriptionCapability` so it records topology, exact source
+attribution, maximum target count, start semantics, and teardown semantics. A standard collection
+plan is admitted only when a compatible root form and one binding generation provide those
+facts. Protocol wildcard or topic-filter syntax remains private to a concrete binding compiler.
 
 Keep `ResolvedFormTarget` at its current owner and public path. Replace the remaining current
 selection views with the target compiler inputs/outputs or make narrowly useful helpers
@@ -111,6 +129,10 @@ candidate vectors and retain enough source identity for strict selection and dia
 - Keep source documents authoritative when retained. Effective views use immutable sharing,
   overlays, indexes, or side tables; owned effective-document materialization is explicit and
   charged.
+- Carry only `HandlerSlotId`, operation, generation, and response facts needed for later
+  dispatch. Do not embed a handler object, associated handler future,
+  `HostHandlerFuture`, step state, generated static registry, or compatibility
+  adapter in an immutable logical or binding plan.
 
 ## Old API Removal
 
@@ -123,11 +145,17 @@ candidate vectors and retain enough source identity for strict selection and dia
   helper may keep an internal role but not the obsolete cross-crate contract.
 - Remove per-call TD-tree scanning, repeated `base`/default/security resolution, and plan-time
   cloning of target strings, schemas, response metadata, security expressions, or extension
-  maps into `BindingRequest`.
+  maps into `OutboundRequest`.
+- Remove planning paths that expand a standard root collection operation into N affordance
+  operations, `EventStream`, or `Subscription::merge`. With no compatible root form, selection
+  returns the structured no-compatible-form failure.
 - Remove any full logical-plan copy stored per binding candidate and any invalidation path that
   synchronously scans all Things or plans.
 - Do not move `ClientBinding`, `ServerBinding`, or their registrations into
   `clinkz-wot-protocol-bindings`; that ownership would violate the frozen dependency graph.
+- Do not remove or extend the staged handler/emission compatibility bridge in this package.
+  WP-300 owns `ProducerEmission` and its adapters, WP-400 owns host handler activation and the
+  legacy handler-path removal, and WP-600 owns concrete-protocol `PublisherSink` removal.
 
 ## Evidence
 
@@ -139,7 +167,10 @@ Produce these package evidence keys exactly as indexed by the work-package DAG:
 - `bounded-candidate-selection` for strict/fallback selection and 1/8/32 limits;
 - `lazy-plan-single-flight` for concurrency, deterministic negative entries, and backpressure;
 - `plan-generation-invalidation` for O(1) publication and incremental reclamation;
-- `admission-transaction-rollback` for exact charges, phase release, and peak memory.
+- `admission-transaction-rollback` for exact charges, phase release, and peak memory;
+- `native-collection-plan-selection` for root-form selection, exact source attribution, typed
+  capability rejection, one selected binding generation, and proof that no implicit fan-out plan
+  is produced.
 
 These records satisfy the corresponding requirement-index evidence families:
 
@@ -174,6 +205,10 @@ plan, registration, provider, schema, credential, and policy generations used by
   planning primitives; Directory client orchestration remains WP-500.
 - `PERF-DIR-009` covers Directory-facing admission byte and structure scaling on the shared
   planning substrate.
+- `PERF-GW-023` proves constant-time compiled emission-target lookup without TD rescans, and
+  `PERF-GW-026` covers publication-target construction at maximum exposure scale.
+- `PERF-GW-027` and `PERF-CS-019` cover exact-source native collection plan selection with one
+  root-form start and no per-affordance fallback.
 
 ## Completion Conditions
 
@@ -181,6 +216,8 @@ plan, registration, provider, schema, credential, and policy generations used by
   feature cells; compiler crates contain no binding execution trait or Servient registration.
 - Plan fixtures cover root and affordance forms, multiple forms, relative targets, strict form
   selection, ordered fallback, inherited/form security, and structured selection errors.
+- Collection fixtures prove that each standard root operation creates one native plan and rejects
+  missing or inexact collection capability instead of silently creating per-affordance plans.
 - Structural tests prove logical plans are shared rather than copied per binding pair and
   per-call requests contain only varying data plus compact plan references.
 - Capability probes are pruned by generation-bearing indexes, wildcard work is admitted, and
@@ -189,3 +226,5 @@ plan, registration, provider, schema, credential, and policy generations used by
   reclaimed incrementally; callbacks run outside global/cache-eviction locks.
 - All obsolete public selector views, per-call TD scans, execution-trait ownership leaks, and
   eager global invalidation scans listed above are removed.
+- Source inspection proves planning has no dependency on either the legacy handler surface or the
+  future WP-300 `ProducerEmission` implementation boundary.

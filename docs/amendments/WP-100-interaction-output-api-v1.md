@@ -177,13 +177,13 @@ The response contract is implemented without crossing the frozen DAG:
 
    ```rust
    pub fn validate_untrusted_binding_output(
-       request: &BindingRequest,
+       request: &OutboundRequest,
        output: InteractionOutput,
        limits: &ResourceLimits,
    ) -> CoreResult<InteractionOutput>;
    ```
 
-   `BindingRequest` supplies the selected live binding, generation, plan, and
+   `OutboundRequest` supplies the selected live binding, generation, plan, and
    compiled response facts. The function checks those identities, the
    classified branch, actual plan count, active resource limit, schema/media
    result, and operation-specific output invariants before returning success.
