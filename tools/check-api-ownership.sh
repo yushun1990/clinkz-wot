@@ -114,8 +114,22 @@ while IFS=, read -r item current_path; do
     fi
 done
 
-sed -nE 's/.*`([A-Z][A-Z0-9-]+-[0-9]{3})`:.*/\1/p' \
-    "$root/docs/design.md" | sort -u >"$tmp/requirements"
+tail -n +2 "$root/docs/requirements.csv" | cut -d, -f1 | tr '|' '\n' \
+    >"$tmp/requirement-expressions"
+: >"$tmp/requirements-unsorted"
+while IFS= read -r expression; do
+    if [[ "$expression" =~ ^([A-Z][A-Z0-9-]*-)([0-9]{3})\.\.([0-9]{3})$ ]]; then
+        prefix=${BASH_REMATCH[1]}
+        first=$((10#${BASH_REMATCH[2]}))
+        last=$((10#${BASH_REMATCH[3]}))
+        for ((i = first; i <= last; i++)); do
+            printf '%s%03d\n' "$prefix" "$i" >>"$tmp/requirements-unsorted"
+        done
+    else
+        printf '%s\n' "$expression" >>"$tmp/requirements-unsorted"
+    fi
+done <"$tmp/requirement-expressions"
+sort -u "$tmp/requirements-unsorted" >"$tmp/requirements"
 tail -n +2 "$matrix" | cut -d, -f11 | tr '|' '\n' | sort -u >"$tmp/referenced"
 comm -23 "$tmp/referenced" "$tmp/requirements" >"$tmp/unknown"
 if [[ -s "$tmp/unknown" ]]; then

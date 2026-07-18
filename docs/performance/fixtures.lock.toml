@@ -1,6 +1,6 @@
 schema_version = 1
 design_revision = "4.9"
-generator = "clinkz-wot-fixture-generator-v2"
+generator = "clinkz-wot-fixture-generator-v3"
 
 [[fixture]]
 id = "FX-GW-001"
@@ -9,7 +9,7 @@ harness_case = "local_sync_interaction"
 version = 2
 seed = 4601001
 recipe = "actors=1;document_bytes=1024;forms=1;payload_bytes=64"
-content_sha256 = "9bd0a0e8276feb4ec6b155b619981cb4b6b92a37ef45fa8c6ad2f22cf08131a0"
+content_sha256 = "7b74c1a9c6f4a6c9100c609d1fb5724b60874b19feace2f8e1271787ce7706b5"
 
 [[fixture]]
 id = "FX-GW-002"
@@ -18,7 +18,7 @@ harness_case = "inbound_dispatch_no_transport"
 version = 2
 seed = 4601002
 recipe = "actors=1;document_bytes=1024;forms=1;payload_bytes=64"
-content_sha256 = "492fb1125dc1df769fd13eafb4c38dad97c71eae63cd6b17c050391f849be981"
+content_sha256 = "b0efb79f5e1dc853bea3c386d285802c67c381057ad3c0ccca8dbf2d0428794c"
 
 [[fixture]]
 id = "FX-GW-003"
@@ -27,7 +27,7 @@ harness_case = "compiled_plan_lookup"
 version = 2
 seed = 4601003
 recipe = "actors=1;document_bytes=16384;forms=8"
-content_sha256 = "acff1398737db3f4bafc06b60759aaca80fc00ed35cb8e1407e6da9fa5e89ccb"
+content_sha256 = "7edfbcc7c242482d100f3bd0f624dc7a3e7c83d6400f842002182886f1544ba1"
 
 [[fixture]]
 id = "FX-GW-004"
@@ -36,7 +36,7 @@ harness_case = "candidate_selection_32"
 version = 2
 seed = 4601004
 recipe = "document_bytes=16384;forms=32"
-content_sha256 = "777baebd5c3c46281820d164d34e65c6d92962c43b87464b555a795e6c2a5d9e"
+content_sha256 = "39d4c15024e6aedc25d59cb7965a2317b3cc996fe6e5d8d60271ccb6654572c1"
 
 [[fixture]]
 id = "FX-GW-005"
@@ -45,7 +45,7 @@ harness_case = "security_selection_64_local_probes"
 version = 2
 seed = 4601005
 recipe = "actors=64;document_bytes=16384;forms=8"
-content_sha256 = "20dd73bf399a152657c2513a75ee374c32c47993c477610740659f30b5ea66f5"
+content_sha256 = "4643ef1d61e3b6400c7a23501ecb17421fae97f54d90bfa0ae46d0a0dd79438c"
 
 [[fixture]]
 id = "FX-GW-006"
@@ -54,7 +54,7 @@ harness_case = "composed_strict_interaction_1k"
 version = 2
 seed = 4601006
 recipe = "document_bytes=16384;forms=8;payload_bytes=1024"
-content_sha256 = "3c81902b983b006804e899afaafa30bbf7ba5b9b45fba69758ddf2d6bf228871"
+content_sha256 = "0186d03fb6a681335c3408b2a3b37d625d7668b9316c14daabfae19a4702af86"
 
 [[fixture]]
 id = "FX-GW-007"
@@ -63,7 +63,7 @@ harness_case = "subscription_round_trip_one_subscriber"
 version = 2
 seed = 4601007
 recipe = "payload_bytes=64;subscribers=1"
-content_sha256 = "673d592f6f58caeeff4a61d67b84a4450097366f8e161d2a8e57fd095d7d6d16"
+content_sha256 = "47a7df138aaf09720c4687d98d96679a8026eaf845816e18ab366e7c50af8f7a"
 
 [[fixture]]
 id = "FX-GW-008"
@@ -72,7 +72,7 @@ harness_case = "shared_payload_fanout_1024"
 version = 2
 seed = 4601008
 recipe = "payload_bytes=1024;subscribers=1024"
-content_sha256 = "f5154246430109fe959013f900147e2e0099b8482a7da3a9c1c2f204ba2d937d"
+content_sha256 = "b43a07eb32534f1656bbc0d105f44e2e2d2ccfe94adb45cf142e0ba713901fff"
 
 [[fixture]]
 id = "FX-GW-009"
@@ -81,7 +81,7 @@ harness_case = "network_erased_metadata"
 version = 2
 seed = 4601009
 recipe = "document_bytes=1024;forms=1;payload_bytes=64"
-content_sha256 = "00709c44ab933d6bae4897d6c09da77c6ec14870b41cfae8399d5c8791980b25"
+content_sha256 = "23142c8b7915b3d90350bf5fb68c875e79d8ae647fbda5e83e91f0ffca5ec113"
 
 [[fixture]]
 id = "FX-GW-010"
@@ -90,7 +90,7 @@ harness_case = "network_poll_metadata"
 version = 2
 seed = 4601010
 recipe = "document_bytes=1024;forms=1;payload_bytes=64"
-content_sha256 = "bb58262d511c3e51bd92843aee31a85117144194e9a0d47d7aa810ed54eda30e"
+content_sha256 = "21d84884c596dd944b2addb20c9218ece959c7431f4a6355caf579c1eda1930e"
 
 [[fixture]]
 id = "FX-GW-011"
@@ -99,16 +99,16 @@ harness_case = "lazy_plan_single_flight_32"
 version = 2
 seed = 4601011
 recipe = "actors=32;document_bytes=16384;forms=8"
-content_sha256 = "5ea04be0eaf00b9022a7d15cf0d4b6ebda2855547822deb7e0aeeb2157ec3930"
+content_sha256 = "6c10d410c69f2dce5a8ab264373b77a7e2b061433b058f84054a77e8569d0bac"
 
 [[fixture]]
 id = "FX-GW-012"
 profile = "GatewayDefaultV1"
-harness_case = "plan_generation_invalidation_4096_things"
-version = 2
+harness_case = "startup_snapshot_isolation_4096_things"
+version = 3
 seed = 4601012
 recipe = "actors=4096;document_bytes=1024;forms=1"
-content_sha256 = "7e32fdb99833616ce6685aff0ef9595834c71e2c825abdcff0e35c4f3f9ac622"
+content_sha256 = "b9b0cf244ef532172f022a2c6ca65b5457f8c1a4c671d68916318faee1067259"
 
 [[fixture]]
 id = "FX-GW-013"
@@ -117,7 +117,7 @@ harness_case = "interaction_accounting_contention_256"
 version = 2
 seed = 4601013
 recipe = "actors=256;document_bytes=1024;forms=1"
-content_sha256 = "78d4621c8f16bd3d5c3ba5413785e73cef0e519dfcfdfdcdec6587200c2795ab"
+content_sha256 = "31903741f6dbe9f29229f6b29e4697273a85e5e00591b9904eedf4ea3a922b64"
 
 [[fixture]]
 id = "FX-GW-014"
@@ -126,7 +126,7 @@ harness_case = "maximum_admitted_td_planning"
 version = 2
 seed = 4601014
 recipe = "document_bytes=1048576;forms=4096"
-content_sha256 = "d6d3c4dc8ccdc40da56a7405d8a1332ceef86fcf4de1f739536ceba293ae7181"
+content_sha256 = "a78b566f5569320aecc87f90ac336f52fc92578db08615089a3a2a8ae3115959"
 
 [[fixture]]
 id = "FX-GW-015"
@@ -135,7 +135,7 @@ harness_case = "admission_byte_and_structure_scaling"
 version = 2
 seed = 4601015
 recipe = "bindings=64;document_bytes=1048576;extension_bytes=262144;forms=4096;schema_nodes=65536;security_branches=64;string_bytes=262144;td_nodes=65536;uri_template_bytes=16384"
-content_sha256 = "18c01fa69aa2bf482e3020332df47bff0166a5cdaa7c3853049f71f2edc3ca8a"
+content_sha256 = "14e050ccc65586c41976da53ba5fa4c911dd3b2301ec83ab5e8e7954902e6667"
 
 [[fixture]]
 id = "FX-GW-016"
@@ -144,7 +144,7 @@ harness_case = "unrelated_things"
 version = 2
 seed = 4601016
 recipe = "actors=32;document_bytes=1024;forms=1"
-content_sha256 = "29479fa8e7fc718e5905984a9d5db700c2d718070c21f6e2887a49a9b857714a"
+content_sha256 = "e558e39303a0aa86f87fa5f293441a351b5926ba045f64a2fce86950954d6229"
 
 [[fixture]]
 id = "FX-GW-017"
@@ -153,7 +153,7 @@ harness_case = "same_thing_different_affordances"
 version = 2
 seed = 4601017
 recipe = "actors=32;document_bytes=16384;forms=8"
-content_sha256 = "1ab6eefaa52bf95ad0d411344f8fdf61a014e7b85549be188cf50b1bb9325e87"
+content_sha256 = "b2e23bec1701610792c8ff3b3e6bff7f48b160c94179b9f10333d8dd5dd71ff6"
 
 [[fixture]]
 id = "FX-GW-018"
@@ -162,7 +162,7 @@ harness_case = "hot_subscription"
 version = 2
 seed = 4601018
 recipe = "actors=32;payload_bytes=1024;subscribers=1024"
-content_sha256 = "f7fdd2cc101ce2c4d0e08781fde42af6b8fd1780c899926768d05d268517ae66"
+content_sha256 = "56e835b5f8fcdba0e09bd35fe7d742e12231fe2d10dfc64ca0c0c72912abe733"
 
 [[fixture]]
 id = "FX-GW-019"
@@ -171,7 +171,7 @@ harness_case = "fanout_cancellation_progress"
 version = 2
 seed = 4601019
 recipe = "actors=32;payload_bytes=1024;subscribers=1024"
-content_sha256 = "6a346081bb431ac21a5bc73ab4ff3b2f1afbd93fc7524ac5f14bade8d804e8a4"
+content_sha256 = "e17a6d8e9318076d6398ca4246d2ebc74b8a5e28196d18e2500b051b43a7c325"
 
 [[fixture]]
 id = "FX-GW-020"
@@ -180,7 +180,7 @@ harness_case = "handler_storage_replacement_matrix"
 version = 1
 seed = 4601020
 recipe = "document_bytes=1048576;forms=32;handler_slots=4105"
-content_sha256 = "72ba105f3a473d314a638c8cdf8e8d02e8f4731b58412574702b974c63817160"
+content_sha256 = "fb7777a0d6c49c062f8952897b5d574c23eed6aa6d2742efbaa1a8401258b4f7"
 
 [[fixture]]
 id = "FX-GW-021"
@@ -189,7 +189,7 @@ harness_case = "handler_cancellation_reentrancy"
 version = 1
 seed = 4601021
 recipe = "document_bytes=1024;forms=1;handler_slots=32;payload_bytes=64"
-content_sha256 = "528e1ef7cd9815e97bc7095dbc36caab8f003d1d246ee9fbbcd3ab711149a585"
+content_sha256 = "b778b51583d4ff5d439f6024e1fa1f30491e2f29a3ad724b32d94c66ac16d4f0"
 
 [[fixture]]
 id = "FX-GW-022"
@@ -198,7 +198,7 @@ harness_case = "producer_subscription_transaction"
 version = 1
 seed = 4601022
 recipe = "document_bytes=16384;forms=32;handler_slots=32;payload_bytes=64;subscribers=1024"
-content_sha256 = "2b6af1fdbb6b0d5692103dcaee038b158c7aa958dcd9f1c1b4026e9cf3029b2b"
+content_sha256 = "45fae0d23f5ff89106d5de6d57219e2bd43e02262ab8995b9f4dd2d7e53012bb"
 
 [[fixture]]
 id = "FX-GW-023"
@@ -207,7 +207,7 @@ harness_case = "compiled_emission_target_lookup"
 version = 1
 seed = 4601023
 recipe = "bindings=64;document_bytes=16384;forms=64;payload_bytes=64"
-content_sha256 = "5542a08015451766fe06f696755957fe18d0cb2c5d4a19316e03189b598d561b"
+content_sha256 = "37c75c58ce274df0806478e4712b84c71820785e54abcfccc257f1f3d02f68ae"
 
 [[fixture]]
 id = "FX-GW-024"
@@ -216,7 +216,7 @@ harness_case = "emission_binding_scaling"
 version = 2
 seed = 4601024
 recipe = "bindings=64;document_bytes=16384;forms=64;payload_bytes=64"
-content_sha256 = "744b2814e83e17a287207256ff4887527dd071401de4aa55e1633d1178ed2e17"
+content_sha256 = "473225ef2def4c59cd42fb593f21a189ae9180954961d72baed8de34d3657040"
 
 [[fixture]]
 id = "FX-GW-025"
@@ -225,7 +225,7 @@ harness_case = "slow_binding_isolation"
 version = 2
 seed = 4601025
 recipe = "actors=4;bindings=64;payload_bytes=1024"
-content_sha256 = "4405e4e3d7eea55159d5210e05013461350b535d904e4e503a313919dee30a47"
+content_sha256 = "4693900abcf1fa593d2de71ffaa57d57784eb427c1e094279737199cdacf38da"
 
 [[fixture]]
 id = "FX-GW-026"
@@ -234,7 +234,7 @@ harness_case = "exposure_publication_target_construction"
 version = 1
 seed = 4601026
 recipe = "bindings=64;document_bytes=1048576;forms=4096"
-content_sha256 = "421bae51b5f5b3a1fd0cd9e94a515dbfa4d59aa8e70554aec35e00a19bdc30fa"
+content_sha256 = "887c23e6a3efd05a58d578fede65f31fdc9c06ddb85b4c3442b329a71663ae92"
 
 [[fixture]]
 id = "FX-GW-027"
@@ -243,7 +243,52 @@ harness_case = "native_collection_subscription"
 version = 1
 seed = 4601027
 recipe = "collection_sources=1024;document_bytes=16384;forms=1;payload_bytes=64"
-content_sha256 = "98ef5d6f349fe4c2abfa37b4936441e9757b17df49e1f9bd029dfe9eab43a5c0"
+content_sha256 = "1253b1e5976e98a6c82f370f2f6895ccc0f0ac0f653e19fc291fd66ff4f5b202"
+
+[[fixture]]
+id = "FX-GW-028"
+profile = "GatewayDefaultV1"
+harness_case = "owned_host_cancellation_matrix"
+version = 1
+seed = 4601028
+recipe = "bindings=4;call_bytes=1048576;driver_bytes=1048576;payload_bytes=1024"
+content_sha256 = "45ca322ddf91712c641f1d3ec7cc6937346e4c68141214e5e362f43c87ce7c0c"
+
+[[fixture]]
+id = "FX-GW-029"
+profile = "GatewayDefaultV1"
+harness_case = "compiled_plan_set_lifecycle"
+version = 1
+seed = 4601029
+recipe = "binding_artifacts=4096;document_bytes=16384;forms=64;plan_sets=4"
+content_sha256 = "fb4a46a8f0a8ff62a610a0ec8cef5dc96431de0de902259d2b159789d5271757"
+
+[[fixture]]
+id = "FX-GW-030"
+profile = "GatewayDefaultV1"
+harness_case = "route_guard_readiness_lifecycle"
+version = 1
+seed = 4601030
+recipe = "readiness_tokens=4096;routes=4096;slot_state_bytes=65536"
+content_sha256 = "efa4404893c69c8497a91e0ecbe4ac6dbeff988f070c2f4d24d403239894ad9d"
+
+[[fixture]]
+id = "FX-GW-031"
+profile = "GatewayDefaultV1"
+harness_case = "complete_third_party_registration"
+version = 1
+seed = 4601031
+recipe = "binding_artifacts=64;bindings=64;call_bytes=65536;driver_bytes=65536;routes=64;slot_state_bytes=65536"
+content_sha256 = "692873ea566fac06023b0c32eaf332e466d1567bbb421502c32f1d837dc5f1a9"
+
+[[fixture]]
+id = "FX-GW-032"
+profile = "GatewayDefaultV1"
+harness_case = "bounded_binding_ingress"
+version = 1
+seed = 4601032
+recipe = "bindings=64;ingress_bytes=4194304;ingress_items=1024;routes=64"
+content_sha256 = "0126ca8bf8394a25e43ba20fd6a225c95e3983d4946222cdd987baaf25b712c3"
 
 [[fixture]]
 id = "FX-DIR-001"
@@ -252,7 +297,7 @@ harness_case = "directory_request_planning"
 version = 2
 seed = 4602001
 recipe = "document_bytes=1024;forms=1"
-content_sha256 = "5525211eb13087039ef6e92b254b56c5616c04119ad947980985eab556106a41"
+content_sha256 = "8da0605ed0c8fa9851a88d4cc9d0c5c3d1e6051084f8f6f0163e7b185e601a07"
 
 [[fixture]]
 id = "FX-DIR-002"
@@ -261,7 +306,7 @@ harness_case = "directory_page_admission_128"
 version = 2
 seed = 4602002
 recipe = "forms=1;page_entries=128;page_item_bytes=1024"
-content_sha256 = "1e012d6da8046cec8b0dedd728bf02f202a570ec4c95d23f567344f05b1a6bd6"
+content_sha256 = "30902316a283c68cde171d26b62807a99fc102eaef75c24ea9f2bbbb9bb5182d"
 
 [[fixture]]
 id = "FX-DIR-003"
@@ -270,7 +315,7 @@ harness_case = "directory_page_incremental_admission_128"
 version = 2
 seed = 4602003
 recipe = "forms=1;page_entries=128;page_item_bytes=1024"
-content_sha256 = "e397a303508dc766f1fd9da44ea45686a4d3419c732ce9b35b27437c32502d9b"
+content_sha256 = "ffaea4b209f7f4d0cdfb3cd122443e8ab923c3d496d4b3ccd8456b6ab82c738f"
 
 [[fixture]]
 id = "FX-DIR-004"
@@ -279,7 +324,7 @@ harness_case = "directory_accounting_contention_128"
 version = 2
 seed = 4602004
 recipe = "actors=128;document_bytes=1024;forms=1"
-content_sha256 = "49cc9928a7bf9d963a69de8470a98237f17fd30c2c8d9bedfd03b32202ab5ae9"
+content_sha256 = "8b1dd56373b46f495414e7a8226338441e9b0324d4e0628a1c591c8a7563a6c1"
 
 [[fixture]]
 id = "FX-DIR-005"
@@ -288,7 +333,7 @@ harness_case = "directory_watch_change_admission"
 version = 2
 seed = 4602005
 recipe = "actors=1;payload_bytes=1024"
-content_sha256 = "6af4ee74e86bd5a56854124c8ef162647732c4aaf8c35cd0daf76062a916810d"
+content_sha256 = "9709d02c853ce3ab01e0fe99fc6e2a5181f6b1d526733cc25c32f4dbd4ee07c0"
 
 [[fixture]]
 id = "FX-DIR-006"
@@ -297,7 +342,7 @@ harness_case = "directory_publication_planning"
 version = 2
 seed = 4602006
 recipe = "document_bytes=1048576;forms=32"
-content_sha256 = "603d9e1f223bc1efd47da02ccb5df112c6c2ea630eeba9b5d60a8f93d41d103d"
+content_sha256 = "c1195d34ddc922256aef59a738969605cfebe4dd3f9813c519c71a8679a318a8"
 
 [[fixture]]
 id = "FX-DIR-007"
@@ -306,7 +351,7 @@ harness_case = "directory_cancel_local_terminal"
 version = 2
 seed = 4602007
 recipe = "actors=1;document_bytes=1024;forms=1"
-content_sha256 = "dd38fa8c03c76e423c4f4faca1605a403321ba0d0339010f2cab1a1961d5fe83"
+content_sha256 = "c66925279227c07061cf461625c682e058e2223b3b55a977d335dbd003e3e327"
 
 [[fixture]]
 id = "FX-DIR-008"
@@ -315,7 +360,7 @@ harness_case = "directory_buffer_overflow"
 version = 2
 seed = 4602008
 recipe = "forms=1;page_entries=128;page_item_bytes=1024;payload_bytes=1024"
-content_sha256 = "5ecc4f7f37c2839d6826f8ac4c3456544e7a364c632fe59af242f0a1502c679c"
+content_sha256 = "113613bf531703cf0b13b6287ab345774f6f7e0e29fbfd44bfcc30dc796d1c71"
 
 [[fixture]]
 id = "FX-DIR-009"
@@ -324,7 +369,7 @@ harness_case = "directory_admission_byte_and_structure_scaling"
 version = 2
 seed = 4602009
 recipe = "document_bytes=1048576;extension_bytes=262144;forms=4096;page_entries=128;page_item_bytes=4096;schema_nodes=65536;string_bytes=262144;td_nodes=65536"
-content_sha256 = "752ba402925a0d563d1d49853a892b6304710560c74c23ae552615c7a4d5d62a"
+content_sha256 = "f2b9644358d0a66e84f068fdf5c3f270e9e12f310c0bcb3618d664ff315662d3"
 
 [[fixture]]
 id = "FX-DIR-010"
@@ -333,7 +378,7 @@ harness_case = "unrelated_directory_sessions"
 version = 2
 seed = 4602010
 recipe = "actors=128;document_bytes=1024;forms=1"
-content_sha256 = "a2188060141aa47281a30de1257610328ea436e7f038f722f5ee9fb1a5a26c27"
+content_sha256 = "b5c2b883bca1264ef539fad80c08ee749e270d4c41698b909b527141ccb9aec3"
 
 [[fixture]]
 id = "FX-DIR-011"
@@ -342,7 +387,7 @@ harness_case = "query_watch_publication_clients"
 version = 2
 seed = 4602011
 recipe = "actors=128;document_bytes=1048576;forms=32;payload_bytes=1024"
-content_sha256 = "26963ed65937323bf3493c8aaf26c574709436e623adab9b29ddd919cec140df"
+content_sha256 = "ab5d434d96420bc68d0c71c820388b8b1543b2ec9313241276e7be45ca736df1"
 
 [[fixture]]
 id = "FX-CS-001"
@@ -351,7 +396,7 @@ harness_case = "local_sync_interaction"
 version = 2
 seed = 4603001
 recipe = "actors=1;document_bytes=1024;forms=1;payload_bytes=64"
-content_sha256 = "cc76249c7d877210ee614cc4d499d9ad2b6b958714664be2006c2461c9a1e6f6"
+content_sha256 = "6c62cf5724d963fec3f47e01addc5b5e4db15ddfa09b35894d0721674a3ea8f2"
 
 [[fixture]]
 id = "FX-CS-002"
@@ -360,7 +405,7 @@ harness_case = "inbound_dispatch_no_transport"
 version = 2
 seed = 4603002
 recipe = "actors=1;document_bytes=1024;forms=1;payload_bytes=64"
-content_sha256 = "b97c443878691d8accdd66e88f24bf1ec9b68e99c4f9b7804e9c57bc39cc1b1e"
+content_sha256 = "fbb250aa6ffe9aa052950c052b0ca85cce7581cd63be64471ba95455c4182b27"
 
 [[fixture]]
 id = "FX-CS-003"
@@ -369,7 +414,7 @@ harness_case = "compiled_plan_lookup"
 version = 2
 seed = 4603003
 recipe = "actors=1;document_bytes=16384;forms=8"
-content_sha256 = "c9b2dfd64d7cbb76031b48e9438f6a6cb66bdcb1ae447eb35ee32d0b80e295fc"
+content_sha256 = "b6f5af6020784d708c62d8952412ec469f51b8fc9067c3e4fa8c2476d8bcbdaa"
 
 [[fixture]]
 id = "FX-CS-004"
@@ -378,7 +423,7 @@ harness_case = "candidate_selection_32"
 version = 2
 seed = 4603004
 recipe = "bindings=2;document_bytes=16384;forms=16"
-content_sha256 = "11e78c2d0c8acc7eb998effa5053b3a39b3c0cabcd8b19673cd0de0ee239d7d8"
+content_sha256 = "59d3aeff83755b9dbb5c6c5dea6438b17fbe9586495762ce912e34ed2d69d2c3"
 
 [[fixture]]
 id = "FX-CS-005"
@@ -387,7 +432,7 @@ harness_case = "security_selection_64_local_probes"
 version = 2
 seed = 4603005
 recipe = "actors=64;document_bytes=16384;forms=8"
-content_sha256 = "0c118bbe1d1f0b6d27b05983d4ed3b020ea4d3e2dc3f26c2daff46807ee95828"
+content_sha256 = "3cbc33e18a9f515c5b5cad5e131aeacf8f7c6ba7bb05e110f9edec2dcc1e5fbc"
 
 [[fixture]]
 id = "FX-CS-006"
@@ -396,7 +441,7 @@ harness_case = "composed_strict_interaction_1k"
 version = 2
 seed = 4603006
 recipe = "document_bytes=16384;forms=8;payload_bytes=1024"
-content_sha256 = "71ec0a4bfcf26b0786b791b1c1445f5fd5088de7ebc57d96705a0904f364ef4c"
+content_sha256 = "71574d4f158e939eed5c2bb660b2964adb0103744a89ee18645420896640a603"
 
 [[fixture]]
 id = "FX-CS-007"
@@ -405,7 +450,7 @@ harness_case = "subscription_round_trip_one_subscriber"
 version = 2
 seed = 4603007
 recipe = "payload_bytes=64;subscribers=1"
-content_sha256 = "ae95f422a09183f8605679793447206cababdb730bfc3b77b94ab49054c95b1f"
+content_sha256 = "bd8f867e3d68b863f230ee54cb147b701fe7217a5b309bc0c4277714d76b4b23"
 
 [[fixture]]
 id = "FX-CS-008"
@@ -414,7 +459,7 @@ harness_case = "shared_payload_fanout_256"
 version = 2
 seed = 4603008
 recipe = "payload_bytes=1024;subscribers=256"
-content_sha256 = "f87a18ede3a725458b62b1ccd9156640af7983d527e5be9e6dfc073310de6eaf"
+content_sha256 = "e63536a95160d3fb8f86ab1f6989fc8b458e26566ffccaa14782112aa88df2a3"
 
 [[fixture]]
 id = "FX-CS-009"
@@ -423,7 +468,7 @@ harness_case = "bounded_fanout_progress_256"
 version = 2
 seed = 4603009
 recipe = "payload_bytes=1024;subscribers=256"
-content_sha256 = "88dd07ec6748cba224603bf22d35b856c35443bb4a905674964c9386788e3e42"
+content_sha256 = "13100878a608cdd3eed19eca41ef8e8562c4bf742df4d2c834b1141c52415a33"
 
 [[fixture]]
 id = "FX-CS-010"
@@ -432,7 +477,7 @@ harness_case = "lazy_plan_single_flight"
 version = 2
 seed = 4603010
 recipe = "actors=8;document_bytes=16384;forms=8"
-content_sha256 = "ab5531a00014642a0121d40a5ef4ec9f431fc6848b6b30eb422d466158f282d4"
+content_sha256 = "87ebeec4fb683674400de76791cbd66d467184fe95c8df2cf2f005f9723c4b82"
 
 [[fixture]]
 id = "FX-CS-011"
@@ -441,7 +486,7 @@ harness_case = "interaction_accounting"
 version = 2
 seed = 4603011
 recipe = "actors=1;document_bytes=1024;forms=1"
-content_sha256 = "8bcb5b0d2e804089b57e4d034c857c0fafe033e3e31dda814245f892ef5e97fd"
+content_sha256 = "14b67d8d40032ba554c9e50b672f7ed764dede53ac3b45878baebbff5efb4084"
 
 [[fixture]]
 id = "FX-CS-012"
@@ -450,7 +495,7 @@ harness_case = "manual_step_fairness"
 version = 2
 seed = 4603012
 recipe = "actors=4;document_bytes=1024;forms=1"
-content_sha256 = "3d69a46636813a7faeebcb1cb77a556bebb2f041b9e4e8628f5037e812f78ea1"
+content_sha256 = "a2a2183f08aa23fb2f256a4641449b098465f06b43683d2d6c455cf8afb91ed0"
 
 [[fixture]]
 id = "FX-CS-013"
@@ -459,7 +504,7 @@ harness_case = "profile_maximum_td_planning"
 version = 2
 seed = 4603013
 recipe = "document_bytes=65536;forms=256"
-content_sha256 = "43d4eeafbf4defc5d6bcf4df2778c5271e1c27cb97bcee8a89e786d34700a8a2"
+content_sha256 = "756328a67967a6cc6a3724d45850074bb8d01627f11be5771f92d66c112254d9"
 
 [[fixture]]
 id = "FX-CS-014"
@@ -468,7 +513,7 @@ harness_case = "admission_byte_and_structure_scaling"
 version = 2
 seed = 4603014
 recipe = "bindings=4;document_bytes=65536;extension_bytes=16384;forms=256;schema_nodes=256;security_branches=64;string_bytes=16384;td_nodes=1024;uri_template_bytes=4096"
-content_sha256 = "d5c7b89577981fdb5f7d8fdc2c08fbe2de23b0f5e501f6d37d2dc8f0ca319a14"
+content_sha256 = "ee160dfb5fc0d2089ed91e1051afef0ba0458dd3f533626f83690e5281fd208a"
 
 [[fixture]]
 id = "FX-CS-015"
@@ -477,7 +522,7 @@ harness_case = "handler_storage_replacement_matrix"
 version = 1
 seed = 4603015
 recipe = "document_bytes=65536;forms=16;handler_slots=256"
-content_sha256 = "541bba27bf178cc09ca997cecf9d8df46963f80df189d67a7515bb2e9106cb52"
+content_sha256 = "a264570800087c074c2ead3ad0fd1908dff213567a069c5293ef135fefab0873"
 
 [[fixture]]
 id = "FX-CS-016"
@@ -486,7 +531,7 @@ harness_case = "handler_cancellation_reentrancy"
 version = 1
 seed = 4603016
 recipe = "document_bytes=1024;forms=1;handler_slots=8;payload_bytes=64"
-content_sha256 = "ed61ee3bee299f4e06090a77cfa3ece977c0127ba91d64a1780ddd81114ec979"
+content_sha256 = "a032da4e1edf8477777ef3280afe09ebc6002adf04e7b0ee21bf0d01fd1c2273"
 
 [[fixture]]
 id = "FX-CS-017"
@@ -495,7 +540,7 @@ harness_case = "producer_subscription_transaction"
 version = 1
 seed = 4603017
 recipe = "document_bytes=16384;forms=16;handler_slots=4;payload_bytes=64;subscribers=256"
-content_sha256 = "eb7f9906954be0dca75dd52ad30a21b1cf36e5ec46e91013699f9abefb8cee98"
+content_sha256 = "b496f1897e6bf062db1db526b059be7d6f91f6d6ed3c1941bb21b4d3bfd1e805"
 
 [[fixture]]
 id = "FX-CS-018"
@@ -504,7 +549,7 @@ harness_case = "emission_binding_bounded_progress"
 version = 1
 seed = 4603018
 recipe = "bindings=4;payload_bytes=1024"
-content_sha256 = "ed79a55784a7f22dec98c8b487824658e6f6e8821967edd8a9263ab09e153df5"
+content_sha256 = "9cc0f8dbf0b7decfc94c2928bf3c9eed55905e397a9429092f4637b21706f8e2"
 
 [[fixture]]
 id = "FX-CS-019"
@@ -513,4 +558,40 @@ harness_case = "native_collection_subscription"
 version = 1
 seed = 4603019
 recipe = "collection_sources=256;document_bytes=16384;forms=1;payload_bytes=64"
-content_sha256 = "c9db7503005c7e13acff3448a51a0093e3d54ed0b563a42df36c39b6dff79ab7"
+content_sha256 = "780a9fa554132bf6e3d11416f946c54a35c5797a501ac083d1c64cf5fbe60b03"
+
+[[fixture]]
+id = "FX-CS-020"
+profile = "BenchmarkStaticReferenceV1"
+harness_case = "typed_binding_slots_and_input_rejection"
+version = 1
+seed = 4603020
+recipe = "call_bytes=16384;driver_bytes=16384;payload_bytes=1024;slot_state_bytes=4096"
+content_sha256 = "8f19f14b2af2613a40b6bdadfb93a04563a4415f31501d541d06767a9f3eb089"
+
+[[fixture]]
+id = "FX-CS-021"
+profile = "BenchmarkStaticReferenceV1"
+harness_case = "compiled_plan_set_lifecycle"
+version = 1
+seed = 4603021
+recipe = "binding_artifacts=256;document_bytes=16384;forms=16;plan_sets=2"
+content_sha256 = "a2fe8810cb9721593e135d35db388bef714db022d1fd4d398c5676e07e1ae048"
+
+[[fixture]]
+id = "FX-CS-022"
+profile = "BenchmarkStaticReferenceV1"
+harness_case = "route_guard_readiness_lifecycle"
+version = 1
+seed = 4603022
+recipe = "readiness_tokens=256;routes=256;slot_state_bytes=4096"
+content_sha256 = "a82f0c187f01bc0d84e20e52b7ccf2d70f96842d81a776b4f5a4d9a9f21cc273"
+
+[[fixture]]
+id = "FX-CS-023"
+profile = "BenchmarkStaticReferenceV1"
+harness_case = "bounded_binding_ingress"
+version = 1
+seed = 4603023
+recipe = "bindings=4;ingress_bytes=16384;ingress_items=16;routes=4"
+content_sha256 = "95b0a29acd13262e5048e848636d0d12a813e456df9b623fb2f1a880ca5fba75"

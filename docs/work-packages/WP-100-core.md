@@ -24,13 +24,14 @@ traits, Servient lifecycle orchestration, Directory clients, or concrete protoco
 and WP-300 consume the values and callback invariants established here.
 
 The first handler subtranche is an additive cross-crate prerequisite owned by
-WP-100: refresh the foundation resource schema, named profiles, generated
-snapshots, boundary tests, and work-budget counter order for the nine handler
-limits, three Producer residual limits, nine v4.8 architecture limits, and
-`WorkClass::HandlerSteps`, then append the three core pending-work variants.
-This raises the active schema from the historical 118-field checkpoint to 139
-fields without reopening the completed WP-000 package; its new evidence is
-recorded against WP-100 before handler implementation continues.
+WP-100. It preserves the historical v4.8 139-field `ResourceKind` prefix,
+appends the exact 56-field v4.9 planning and Protocol Binding resource
+projection, and regenerates the named profiles, generated schema, snapshots,
+and boundary tests. The resulting active schema has 195 fields. The previously
+assigned `WorkClass::HandlerSteps` and three core pending-work variants remain
+part of the same foundation checkpoint. This does not reopen the completed
+WP-000 package; new evidence is recorded against WP-100 before implementation
+continues.
 
 The machine-readable tranche record in `docs/work-packages/index.toml` is the
 source of truth for this prerequisite. Ordinary design validation permits its
@@ -54,15 +55,19 @@ tranche is complete and backed by same-revision evidence.
   status values and bounded incremental codec/security progress.
 - `RES-LIMIT-001`, `RES-PROFILE-001`, and `API-RESOURCE-001` govern the additive handler-limit
   schema, exact named-profile values, and generated foundation surface required by this package.
+- `PLAN-SET-001`, `PLAN-ARTIFACT-001`, `BIND-ROUTE-001`, `BIND-STORAGE-001`,
+  `BIND-MEM-001`, `BIND-DELIVERY-001`, and `BIND-CALL-CANCEL-001` govern the
+  v4.9 planning and binding limits projected into the shared foundation schema.
 - `PERF-ALLOC-001` and `PERF-CALL-001` govern allocation-sensitive and composed interaction
   call paths.
 
 ## Crates and Feature Cells
 
-- Modify Cargo package `clinkz-wot-core`. Modify `clinkz-wot-foundation` only for the seventeen
-  additive handler, Producer-residual, binding-emission, collection-source, and host-lane
-  resource fields, named-profile values, generated tests and snapshots, and
-  `WorkClass::HandlerSteps`; consume `clinkz-wot-td` only in the allowed dependency direction.
+- Modify Cargo package `clinkz-wot-core`. Modify `clinkz-wot-foundation` only
+  for the append-only resource schema, named-profile values, generated tests
+  and snapshots, and `WorkClass::HandlerSteps`; consume `clinkz-wot-td` only
+  in the allowed dependency direction. This tranche projects limits and does
+  not implement planning or binding runtime behavior.
 - The `no-default` cell exposes interaction values, synchronous local dispatch roles,
   incremental codec/security roles, status values, and generation-bearing ids without
   requiring atomics, `Arc`, boxed futures, or an executor.
@@ -99,14 +104,16 @@ Implement the frozen `clinkz_wot_core` surface in these groups:
   `CredentialStore`, credential probe/lease/generation values, and `EffectiveSecurityPlan`.
 
 Before adding these handler values, refresh the foundation schema from
-`docs/resource-limits.csv` with all seventeen fields added after the historical
-WP-000 checkpoint: the twelve v4.7 handler and Producer residual limits followed
-by the nine v4.8 binding-emission, collection-source, host-lane, and host-call limits, with
-exact Gateway, Directory, and static-reference values including `NA`. Append
-`WorkClass::HandlerSteps` to the stable counter order and regenerate the three
+`docs/resource-limits.csv`. Indices `0..=138` are the immutable v4.8
+checkpoint. Indices `139..=194` are exactly the 18 compiled-plan-set and
+artifact limits followed by the 38 route, ingress, host-call, subscription,
+typed-slot, temporary-poll, response, cancellation, cleanup-transfer, wake,
+and reactor-queue limits registered by design revision v4.9. Gateway and
+static-reference values are finite and nonzero for every appended field; all
+56 fields are `NA` for `DirectoryClientDefaultV1`. Regenerate the three
 feature-cell compile fixtures, profile snapshots, and exact/one-over boundary
 tests. Every bounded handler `start`, `step`, `cancel`, or constrained adapter
-poll charges this caller-supplied counter before work begins. The refresh must
+poll charges its caller-supplied counter before work begins. The refresh must
 not create a duplicate Rust-side resource schema or change the downward
 dependency graph.
 
@@ -221,8 +228,10 @@ requiring `Arc`, atomics, `Send`, `Sync`, or boxed futures.
 
 Produce these package evidence keys exactly as indexed by the work-package DAG:
 
-- `handler-foundation-refresh` for all seventeen resource fields, exact profile values including
-  `NA`, `WorkClass::HandlerSteps`, generated snapshots, boundaries, and three feature cells;
+- `handler-foundation-refresh` for the immutable 139-field prefix, exact
+  56-field v4.9 suffix, all named-profile values including `NA`,
+  `WorkClass::HandlerSteps`, generated snapshots, boundaries, and three feature
+  cells;
 - `core-public-surface` for paths, feature cells, owned values, and trait shapes;
 - `handler-api-matrix` for every one of the 18 operation results, three handler flavors, and
   applicable compilation cells;
@@ -265,10 +274,11 @@ all public error and debug representations.
   cancellation, replacement during dispatch, and reentrant handler operations.
 ## Completion Conditions
 
-- The WP-100 handler-foundation subtranche is complete before handler implementation resumes:
-  generated schemas and snapshots contain all 139 fields, including the nine handler, three
-  Producer residual, and nine v4.8 architecture fields, plus `WorkClass::HandlerSteps` and the
-  three core pending-work variants, with no duplicate schema or reopened WP-000 completion claim.
+- The WP-100 handler-foundation subtranche is complete before implementation
+  resumes: generated schemas and snapshots contain the unchanged 139-field
+  v4.8 prefix and exact 56-field v4.9 suffix for 195 fields total, plus
+  `WorkClass::HandlerSteps` and the three core pending-work variants, with no
+  duplicate schema or reopened WP-000 completion claim.
 - Every WP-100 ownership item exists at its frozen path in each applicable feature cell, and
   `--no-default-features` has no required `std`, atomics, `Arc`, executor, or boxed-future path.
 - Reentrant handler, provider, codec, and status callbacks run with no engine lock or critical

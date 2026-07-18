@@ -17,6 +17,8 @@ they do not claim that the current implementation already conforms.
 - [[file:0007-normative-document-hierarchy.org][ADR-0007: Normative document hierarchy and architecture backbone]]
 - [[file:0008-compiled-plan-lifecycle.org][ADR-0008: Compiled plan-set lifecycle and binding artifact ownership]]
 - [[file:0009-protocol-binding-integration-and-deployment.org][ADR-0009: Protocol Binding integration, driving, and deployment]]
+- [[file:0010-server-route-lifecycle.org][ADR-0010: Engine-orchestrated server route lifecycle]]
+- [[file:0011-cleanup-reservation-and-transfer.org][ADR-0011: Cleanup reservation, transfer, and residual ownership]]
 
 * Review record
 

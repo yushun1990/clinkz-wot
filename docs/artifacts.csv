@@ -8,13 +8,16 @@ docs/architecture/20-module-boundaries.md,module-responsibility-boundaries,norma
 docs/architecture/30-compiled-plan-lifecycle.md,compiled-plan-lifecycle,normative-architecture,4.9,1,docs/design.md
 docs/architecture/40-protocol-binding-spi-and-deployment.md,protocol-binding-integration-and-deployment,normative-architecture,4.9,1,docs/design.md
 docs/architecture/50-servient-runtime-lifecycle.md,servient-runtime-lifecycle,normative-architecture,4.9,1,docs/design.md
+docs/spec/README.md,domain-specification-index,normative-specification-index,4.9,1,docs/design.md
+docs/spec/planning.md,planning-and-compiled-plan-set-specification,normative-specification,4.9,1,docs/spec/planning.md
+docs/spec/binding-spi.md,protocol-binding-spi-specification,normative-specification,4.9,1,docs/spec/binding-spi.md
 docs/artifacts.csv,artifact-registry,normative,4.9,1,docs/design.md
 docs/governance.toml,gate-evidence-check-and-alias-registry,normative,4.9,1,docs/design.md
 docs/api-ownership.csv,public-api-ownership,normative,4.9,1,docs/design.md
 docs/refactor-gates.csv,implementation-admission,normative,4.9,1,docs/design.md
 docs/resource-limits.csv,resource-limit-schema-and-profiles,normative,4.9,1,docs/design.md
 docs/state-machines.toml,lifecycle-state-model,normative,4.9,1,docs/design.md
-docs/requirements.csv,requirement-profile-ownership-and-evidence-index,normative-index,4.9,2,docs/design.md
+docs/requirements.csv,requirement-profile-ownership-and-evidence-index,normative-index,4.9,3,docs/design.md
 docs/performance/manifest.schema.json,performance-manifest-schema,normative,4.9,5,docs/design.md
 docs/performance/result.schema.json,performance-result-schema,normative,4.9,2,docs/design.md
 docs/performance/fixtures.lock.toml,performance-fixture-lock,normative,4.9,1,docs/design.md
@@ -41,6 +44,7 @@ docs/amendments/WP-100-handler-api-v1.md,wp-100-handler-api-execution-and-stagin
 docs/audits/WP-100-handler-entry-audit.md,wp-100-handler-entry-audit,non-normative-review,4.9,1,docs/design.md
 docs/review/review-01.org,architecture-boundary-audit,historical-review,4.9,1,docs/design.md
 docs/review/review-02.org,architecture-design-follow-up,blocking-review,4.9,1,docs/design.md
+docs/review/review-03.org,architecture-v4.9-interim-audit,blocking-review,4.9,1,docs/design.md
 docs/ADR/core.org,architecture-decision-index,normative-decision-index,4.9,1,docs/design.md
 docs/ADR/0001-crate-and-module-boundaries.org,crate-and-module-boundary-decision,normative-decision,4.9,1,docs/design.md
 docs/ADR/0002-producer-emission-dispatch.org,producer-emission-decision,normative-decision,4.9,1,docs/design.md
@@ -51,6 +55,8 @@ docs/ADR/0006-host-binding-call-cancellation.org,host-binding-call-cancellation-
 docs/ADR/0007-normative-document-hierarchy.org,normative-document-hierarchy-decision,normative-decision,4.9,1,docs/design.md
 docs/ADR/0008-compiled-plan-lifecycle.org,compiled-plan-lifecycle-decision,normative-decision,4.9,1,docs/design.md
 docs/ADR/0009-protocol-binding-integration-and-deployment.org,protocol-binding-integration-and-deployment-decision,normative-decision,4.9,1,docs/design.md
+docs/ADR/0010-server-route-lifecycle.org,server-route-lifecycle-decision,normative-decision,4.9,1,docs/design.md
+docs/ADR/0011-cleanup-reservation-and-transfer.org,cleanup-reservation-and-transfer-decision,normative-decision,4.9,1,docs/design.md
 tools/check-wp100-amendment.sh,wp-100-amendment-checker,non-normative-checker,4.9,1,docs/design.md
 tools/check-wp100-handler-amendment.sh,wp-100-handler-amendment-checker,non-normative-checker,4.9,1,docs/design.md
 tools/check-wp100-foundation-refresh.sh,wp-100-foundation-refresh-checker,non-normative-checker,4.9,1,docs/design.md

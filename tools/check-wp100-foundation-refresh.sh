@@ -3,7 +3,7 @@ set -euo pipefail
 
 root=$(cd "$(dirname "$0")/.." && pwd)
 
-expected_fields=(
+v48_additive_fields=(
     handler_slots_per_thing_max
     handler_slots_global_max
     handler_state_bytes_per_thing_max
@@ -27,25 +27,100 @@ expected_fields=(
     host_binding_cancel_drain_timeout_millis_max
 )
 
+v49_fields=(
+    plan_sets_per_thing_max
+    plan_sets_global_max
+    plan_pins_per_plan_set_max
+    plan_pins_global_max
+    logical_plan_bytes_per_thing_max
+    binding_artifacts_per_thing_max
+    binding_artifacts_global_max
+    binding_artifact_bytes_per_item_max
+    binding_artifact_bytes_per_thing_max
+    binding_artifact_bytes_global_max
+    lazy_artifact_negative_bytes_per_item_max
+    lazy_artifact_negative_bytes_global_max
+    binding_compiler_cursor_bytes_per_item_max
+    binding_compiler_cursor_bytes_global_max
+    lazy_artifact_waiters_per_slot_max
+    lazy_artifact_waiters_global_max
+    plan_compile_work_units_per_step_max
+    plan_reclaim_bytes_per_step_max
+    binding_routes_per_thing_max
+    binding_routes_global_max
+    route_guard_bytes_per_item_max
+    route_guard_bytes_per_thing_max
+    route_guard_bytes_global_max
+    route_readiness_tokens_per_thing_max
+    route_readiness_tokens_global_max
+    route_readiness_token_bytes_per_item_max
+    route_readiness_token_bytes_global_max
+    route_readiness_timeout_millis_max
+    route_readiness_steps_max
+    binding_ingress_items_per_route_max
+    binding_ingress_items_per_binding_max
+    binding_ingress_items_global_max
+    binding_ingress_bytes_per_route_max
+    binding_ingress_bytes_per_binding_max
+    binding_ingress_bytes_global_max
+    host_binding_call_bytes_per_item_max
+    host_binding_call_bytes_per_binding_max
+    host_binding_call_bytes_per_thing_max
+    host_binding_call_bytes_global_max
+    host_subscription_driver_bytes_per_item_max
+    host_subscription_driver_bytes_per_thing_max
+    host_subscription_driver_bytes_global_max
+    binding_slot_state_bytes_per_item_max
+    binding_slot_state_bytes_per_thing_max
+    binding_slot_state_bytes_global_max
+    binding_poll_temporary_bytes_per_call_max
+    binding_poll_temporary_bytes_global_max
+    binding_response_buffer_bytes_per_route_max
+    binding_response_buffer_bytes_global_max
+    binding_cancel_buffer_bytes_per_call_max
+    binding_cancel_buffer_bytes_global_max
+    cleanup_transfer_slots_global_max
+    cleanup_transfer_bytes_global_max
+    binding_wake_leases_global_max
+    binding_reactor_queue_items_per_binding_max
+    binding_reactor_queue_bytes_per_binding_max
+)
+
 mapfile -t resource_fields < <(tail -n +2 "$root/docs/resource-limits.csv" | cut -d, -f1)
-if [[ "${#resource_fields[@]}" -ne 139 ]]; then
-    echo "WP-100 foundation refresh check: expected 139 resource fields" >&2
+if [[ "${#resource_fields[@]}" -lt 195 ]]; then
+    echo "WP-100 foundation refresh check: active schema lost the 195-field v4.9 prefix" >&2
     exit 1
 fi
-for offset in "${!expected_fields[@]}"; do
+
+expected_v48_prefix_hash=309816c7533d0a2dbde24f89329120331327fb35bb0b4f8b9c1575a638741f82
+actual_v48_prefix_hash=$(sed -n '2,140p' "$root/docs/resource-limits.csv" \
+    | cut -d, -f1 | sha256sum | cut -d' ' -f1)
+if [[ "$actual_v48_prefix_hash" != "$expected_v48_prefix_hash" ]]; then
+    echo "WP-100 foundation refresh check: the first 139 v4.8 ResourceKind fields moved" >&2
+    exit 1
+fi
+
+for offset in "${!v48_additive_fields[@]}"; do
     index=$((118 + offset))
-    if [[ "${resource_fields[$index]}" != "${expected_fields[$offset]}" ]]; then
-        echo "WP-100 foundation refresh check: ResourceKind index $index is not ${expected_fields[$offset]}" >&2
+    if [[ "${resource_fields[$index]}" != "${v48_additive_fields[$offset]}" ]]; then
+        echo "WP-100 foundation refresh check: ResourceKind index $index is not ${v48_additive_fields[$offset]}" >&2
+        exit 1
+    fi
+done
+for offset in "${!v49_fields[@]}"; do
+    index=$((139 + offset))
+    if [[ "${resource_fields[$index]}" != "${v49_fields[$offset]}" ]]; then
+        echo "WP-100 foundation refresh check: ResourceKind index $index is not ${v49_fields[$offset]}" >&2
         exit 1
     fi
 done
 
 for source_invariant in \
-    'const EXPECTED_RESOURCE_LIMIT_COUNT: usize = 139;' \
-    'revision v4.8 requires {EXPECTED_RESOURCE_LIMIT_COUNT} resource fields' \
-    'revision v4.8 resource-limit schema'; do
+    'const EXPECTED_RESOURCE_LIMIT_COUNT: usize = 195;' \
+    'revision v4.9 requires {EXPECTED_RESOURCE_LIMIT_COUNT} resource fields' \
+    'revision v4.9 resource-limit schema'; do
     if ! grep -Fq "$source_invariant" "$root/foundation/build.rs"; then
-        echo "WP-100 foundation refresh check: foundation generator is not at v4.8/139" >&2
+        echo "WP-100 foundation refresh check: foundation generator is not at v4.9/195" >&2
         exit 1
     fi
 done
@@ -76,4 +151,4 @@ cargo test --locked -p clinkz-wot-foundation --all-features \
 cargo test --locked -p clinkz-wot-core --all-features \
     pending_work_class_discriminants_are_exact --manifest-path "$root/Cargo.toml"
 
-echo "WP-100 foundation refresh check: 139-field and work-class ABI refresh valid"
+echo "WP-100 foundation refresh check: v4.8 prefix and 195-field v4.9 ABI refresh valid"

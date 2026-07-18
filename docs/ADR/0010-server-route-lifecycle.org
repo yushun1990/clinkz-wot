@@ -1,0 +1,118 @@
+#+title: ADR-0010: Engine-Orchestrated Server Route Lifecycle
+#+date: 2026-07-19
+#+status: Accepted
+
+* Context
+
+The v4.8 server binding surface exposed prepare, readiness, activation,
+commit, acceptance, and cleanup fragments without one implementable ownership
+transaction. A fallible activation could consume its prepared guard without
+returning it, registration-wide acceptance had no route identity or unique
+waker owner, and cleanup borrowed guards even when a pending result claimed to
+transfer them. Bare readiness functions also left fairness, cancellation, and
+deadline progress unspecified.
+
+The alternative self-driving path depended on an undefined application
+=Dispatch= capability. It allowed a binding task to bypass Servient admission,
+handler scheduling, status, and cleanup ownership. ADR-0009 therefore selected
+engine-orchestrated, route-scoped server progress for v1, but the lifecycle and
+failure invariants still require an explicit decision.
+
+* Decision
+
+Servient owns one generation-bearing route record from admission through
+terminal cleanup. That record retains the unique lease for every in-progress
+binding transition and the current prepared or active guard. The semantic route
+lifecycle is:
+
+#+begin_example
+Admitted -> Preparing -> Prepared -> AwaitingReadiness -> Ready
+         -> Activating -> Active -> Committing -> Serving
+         -> Draining -> Cleaning -> Terminal
+#+end_example
+
+Preparation, readiness, activation, commit, acceptance, and shutdown are all
+route-scoped. Their inputs identify one binding generation and one route
+generation; a registration-wide callback cannot infer which route owns an
+event, guard, wakeup, or terminal outcome.
+
+Every fallible or pending transition preserves ownership. A transition outcome
+must do one of the following:
+
+- transfer the complete successor guard or progress object back to the route
+  record;
+- return the predecessor guard so the route record can retry or run the
+  stage-appropriate abort or shutdown path;
+- transfer that complete object to an acknowledged cleanup owner; or
+- certify that no guard, external resource, or cleanup obligation was created.
+
+An error or cancellation may not consume a guard and leave its disposition in
+prose. Preparation failure either certifies the no-resource boundary or returns
+an abortable preparation result. Activation failure preserves the prepared
+guard or returns an explicit cleanup successor. Commit failure preserves the
+active guard for shutdown. A late result after route cancellation is classified
+by the stage it actually reached and is routed through the corresponding abort
+or shutdown transaction.
+
+Readiness is a retained, cancellable progress operation for one prepared route.
+Servient polls ready routes fairly under one overall expose deadline and a
+bounded work budget. A readiness poll follows register-then-recheck semantics;
+one slow or never-ready route cannot prevent other routes from progressing or
+being cancelled. Deadline expiry fixes one first cause and moves every retained
+guard through its stage-appropriate cleanup path.
+
+Commit is the final route transition before request admission. A produced Thing
+is published as serving only after every required route has committed and its
+activation gate can enforce the same boundary. No request is accepted for an
+uncommitted or draining route.
+
+Acceptance has exactly one poll and waker lease per active route. Every accepted
+request, operational error, and terminal event carries the binding and route
+generation. Operational errors do not silently terminate the route. A route
+terminal event is emitted at most once, stops later acceptance for that route,
+and does not ambiguously terminate sibling routes or the whole registration.
+Stale wakeups and events are rejected by generation before they can mutate the
+route record.
+
+Destroy first marks routes draining, which closes request admission. Servient
+then drives stage-appropriate abort or shutdown outside engine locks and commits
+the result under the route lease. Cleanup may complete synchronously, transfer
+pending work, or record bounded residual external state; all three dispositions
+are legal lifecycle outcomes. Terminal status is committed before the final
+guard is destroyed outside locks.
+
+A binding never receives an application =Dispatch= capability and never calls
+handlers from a hidden self-driving task. A host binding may operate a bounded
+protocol reactor, but the reactor only advances protocol-local state and wakes
+the route lease. Servient remains the owner of admission, application dispatch,
+fair scheduling, status, cancellation, and cleanup.
+
+This ADR freezes lifecycle semantics and ownership, not exact Rust trait,
+method, guard, token, or result spelling. Those exact public surfaces belong to
+the binding SPI specification and its API/state projections.
+
+* Consequences
+
+- Server registration must expose complete route preparation, readiness,
+  activation, commit, acceptance, and cleanup capabilities; bare trait-object
+  registration cannot supply missing lifecycle policy.
+- Prepared and active guard representations need ownership-preserving fallible
+  outcomes for host and constrained profiles.
+- Route state projections must include late results, activation and commit
+  failure retention, synchronous cleanup, transferred cleanup, residual
+  cleanup, deadline expiry, and stale-generation rejection.
+- Resource artifacts must bound prepared guards, readiness progress, active
+  guards, acceptance ingress, wake leases, and cleanup successors for their
+  complete lifetime.
+- Performance evidence must cover many-route readiness fairness, a never-ready
+  route, request admission at commit/drain boundaries, terminal isolation, and
+  cleanup at every lifecycle phase.
+
+* Rejected alternatives
+
+- Registration-wide acceptance was rejected because it cannot assign a unique
+  guard, waker, generation, ingress budget, or terminal event to one route.
+- Consuming guards on fallible transitions was rejected because ordinary errors
+  cannot prove cleanup after ownership has been lost.
+- Direct self-driving dispatch was rejected because it bypasses Servient's
+  admission, handler, fairness, observability, and cleanup transactions.

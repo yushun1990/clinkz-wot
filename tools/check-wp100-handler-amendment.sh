@@ -272,8 +272,8 @@ check_limit producer_residual_records_global_max cleanup 65536 NA 256
 check_limit producer_residual_record_bytes_max cleanup 256 NA 128
 check_limit producer_residual_bytes_global_max cleanup 16777216 NA 32768
 
-if [[ $(($(wc -l <"$limits") - 1)) -ne 139 ]]; then
-    echo "WP-100 handler amendment check: active resource schema must contain 139 fields" >&2
+if [[ $(($(wc -l <"$limits") - 1)) -lt 139 ]]; then
+    echo "WP-100 handler amendment check: active resource schema lost the 139-field v4.8 prefix" >&2
     exit 1
 fi
 expected_additive_order=$(cat <<'EOF'
@@ -608,12 +608,12 @@ if [[ $(grep -Fc '&mut self' <<<"$poll_block") -ne 1 ]] \
 fi
 
 design_poll_block=$(awk '
-    /fn poll_subscription\(/ { capture = 1 }
+    /fn poll_subscription_start\(/ { capture = 1 }
     capture { print }
     capture && /Poll<CoreResult<SubscriptionStart>>;/ { exit }
-' "$root/docs/design.md")
+' "$root/docs/spec/binding-spi.md")
 if [[ $(grep -Fc '&mut self' <<<"$design_poll_block") -ne 1 ]]; then
-    echo "WP-100 handler amendment check: base poll_subscription has duplicate receiver" >&2
+    echo "WP-100 handler amendment check: binding SPI poll_subscription_start has an invalid receiver" >&2
     exit 1
 fi
 

@@ -167,6 +167,75 @@ checks = [
 ]
 impact = "Architecture Review 02 rejected v4.8 and established the v4.9 architecture-closure work. GATE-1, GATE-2, GATE-4, GATE-5, and GATE-6 remain open until modular v4.9 artifacts pass a new independent same-revision review."
 
+# Architecture Review 03 audits the modular v4.9 projection. It is the current
+# blocking evidence for the affected gates, not closure evidence. Review 02 is
+# retained above as the historical rejected predecessor.
+
+[[review]]
+id = "architecture-review-03-v4.9-interim"
+design_revision = "4.9"
+status = "blocking"
+review_type = "audit"
+gates = ["GATE-1", "GATE-2", "GATE-4", "GATE-5", "GATE-6"]
+artifacts = [
+    "docs/design.md",
+    "docs/artifacts.csv",
+    "docs/governance.toml",
+    "docs/refactor-gates.csv",
+    "docs/requirements.csv",
+    "docs/spec/README.md",
+    "docs/spec/planning.md",
+    "docs/spec/binding-spi.md",
+    "docs/api-ownership.csv",
+    "docs/state-machines.toml",
+    "docs/resource-limits.csv",
+    "docs/performance/manifest.schema.json",
+    "docs/performance/result.schema.json",
+    "docs/performance/fixtures.lock.toml",
+    "docs/performance/fixture-generator.md",
+    "docs/performance/constrained.toml",
+    "docs/performance/gateway.toml",
+    "docs/performance/directory.toml",
+    "tools/performance-harness",
+    "docs/work-packages/index.toml",
+    "docs/work-packages",
+    "docs/amendments/WP-100-error-cleanup-v1.md",
+    "docs/amendments/WP-100-error-disposition-v1.md",
+    "docs/amendments/WP-100-interaction-output-api-v1.md",
+    "docs/amendments/WP-100-handler-api-v1.md",
+    "docs/ADR/core.org",
+    "docs/ADR/0001-crate-and-module-boundaries.org",
+    "docs/ADR/0002-producer-emission-dispatch.org",
+    "docs/ADR/0003-subscription-driver-ownership.org",
+    "docs/ADR/0004-collection-subscriptions.org",
+    "docs/ADR/0005-outbound-request.org",
+    "docs/ADR/0006-host-binding-call-cancellation.org",
+    "docs/ADR/0007-normative-document-hierarchy.org",
+    "docs/ADR/0008-compiled-plan-lifecycle.org",
+    "docs/ADR/0009-protocol-binding-integration-and-deployment.org",
+    "docs/ADR/0010-server-route-lifecycle.org",
+    "docs/ADR/0011-cleanup-reservation-and-transfer.org",
+    "docs/architecture/README.md",
+    "docs/architecture/00-system-goals-and-context.md",
+    "docs/architecture/10-primary-data-flows.md",
+    "docs/architecture/20-module-boundaries.md",
+    "docs/architecture/30-compiled-plan-lifecycle.md",
+    "docs/architecture/40-protocol-binding-spi-and-deployment.md",
+    "docs/architecture/50-servient-runtime-lifecycle.md",
+    "docs/review/review-03.org",
+]
+checks = [
+    "api-ownership-check",
+    "architecture-adr-check",
+    "wp100-amendment-check",
+    "state-machine-check",
+    "resource-profile-check",
+    "performance-contract-check",
+    "work-package-dag-check",
+    "wp100-handler-amendment-check",
+]
+impact = "Architecture Review 03 evaluates the modular v4.9 planning, Protocol Binding, lifecycle, resource, performance, and migration projections. Its blocking findings keep GATE-1, GATE-2, GATE-4, GATE-5, and GATE-6 open pending corrective design work and a later closure review."
+
 # GATE-3 retains the reviewed v4.6 Directory client contract. This v4.9 record
 # performs the required same-revision impact review; the backbone reinforces the
 # client/service boundary but does not change the frozen client behavior.

@@ -2,6 +2,16 @@
 set -euo pipefail
 
 root=$(cd "$(dirname "$0")/.." && pwd)
+normative_sources=(
+    "$root/docs/design.md"
+    "$root/docs/architecture"
+    "$root/docs/spec"
+)
+
+contains_normative_fragment() {
+    local fragment=$1
+    grep -RFq "$fragment" "${normative_sources[@]}"
+}
 
 adrs=(
     "docs/ADR/0001-crate-and-module-boundaries.org"
@@ -13,6 +23,8 @@ adrs=(
     "docs/ADR/0007-normative-document-hierarchy.org"
     "docs/ADR/0008-compiled-plan-lifecycle.org"
     "docs/ADR/0009-protocol-binding-integration-and-deployment.org"
+    "docs/ADR/0010-server-route-lifecycle.org"
+    "docs/ADR/0011-cleanup-reservation-and-transfer.org"
 )
 
 if [[ ! -f "$root/docs/ADR/core.org" ]]; then
@@ -32,7 +44,7 @@ for relative in "${adrs[@]}"; do
     fi
 done
 
-for id in ADR-0001 ADR-0002 ADR-0003 ADR-0004 ADR-0005 ADR-0006 ADR-0007 ADR-0008 ADR-0009; do
+for id in ADR-0001 ADR-0002 ADR-0003 ADR-0004 ADR-0005 ADR-0006 ADR-0007 ADR-0008 ADR-0009 ADR-0010 ADR-0011; do
     if ! grep -Fq "$id" "$root/docs/ADR/core.org"; then
         echo "architecture ADR check: decision index does not reference $id" >&2
         exit 1
@@ -129,8 +141,9 @@ for removed in BindingRequest BindingDrivingMode EventBroker EventName EventStre
     fi
 done
 
-if grep -Eq '(pub[[:space:]]+(struct|enum|trait|type)[[:space:]]+BindingRequest|impl[[:space:]]+BindingRequest)' \
+if grep -REq '(pub[[:space:]]+(struct|enum|trait|type)[[:space:]]+BindingRequest|impl[[:space:]]+BindingRequest)' \
     "$root/docs/design.md" \
+    "$root/docs/spec" \
     "$root/docs/work-packages/WP-200-planning.md" \
     "$root/docs/work-packages/WP-300-bindings.md" \
     "$root/docs/work-packages/WP-400-servient.md" \
@@ -144,7 +157,7 @@ for fragment in \
     'lanes_per_binding: NonZeroU32' \
     'max_in_flight_per_lane: NonZeroU32' \
     '`GatewayDefaultV1` constructs `EmissionDispatchPolicy::new(1, 16)`'; do
-    if ! grep -Fq "$fragment" "$root/docs/design.md"; then
+    if ! contains_normative_fragment "$fragment"; then
         echo "architecture ADR check: dispatch policy schema is missing $fragment" >&2
         exit 1
     fi
@@ -155,8 +168,8 @@ for fragment in \
     'pub enum SubscriptionDriverEvent' \
     'pub struct StaticSubscription' \
     'fn start_stop(' \
-    'fn start_stop_subscription('; do
-    if ! grep -Fq "$fragment" "$root/docs/design.md"; then
+    'fn start_subscription_stop('; do
+    if ! contains_normative_fragment "$fragment"; then
         echo "architecture ADR check: implementable API schema is missing $fragment" >&2
         exit 1
     fi
@@ -174,4 +187,4 @@ for fragment in \
     fi
 done
 
-echo "architecture ADR check: nine accepted decisions and the v4.9 backbone are registered"
+echo "architecture ADR check: eleven accepted decisions and the v4.9 backbone are registered"

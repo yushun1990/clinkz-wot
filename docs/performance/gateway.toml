@@ -6,9 +6,9 @@ environment = "x86_64-unknown-linux-gnu"
 runner = "aws-c7i-metal-24xl-pinned-4c-linux-6.12-v1"
 toolchain = "record-in-result"
 allocator = "system"
-fixture_generator = "clinkz-wot-fixture-generator-v2"
+fixture_generator = "clinkz-wot-fixture-generator-v3"
 fixture_lock = "docs/performance/fixtures.lock.toml"
-fixture_digest = "sha256:d2bba918347308896b44d17a43ef6423e58a6c9e7ba29566f6d024d303261a30"
+fixture_digest = "sha256:182286213efceddf5281d371a1675fe8e8af74602498d2c72cf4bbbdc5b8267d"
 fixture_seed = 4601
 warmup_seconds = 3
 sample_count = 100
@@ -55,7 +55,7 @@ shared_payload_fanout_1024 = "before sequence assignment -> every enqueue or ove
 network_erased_metadata = "binding request inputs ready -> erased binding start accepted"
 network_poll_metadata = "binding request inputs and caller slot ready -> poll binding start accepted"
 lazy_plan_single_flight_32 = "first waiter publishes compile intent -> all waiters observe result or backpressure"
-plan_generation_invalidation_4096_things = "before generation publication -> new generation visible and reclamation scheduled"
+startup_snapshot_isolation_4096_things = "startup registration snapshot ready -> 4096 plan sets capture that immutable snapshot and every post-start registration mutation is rejected"
 interaction_accounting_contention_256 = "before admitted interaction accounting -> local counters and reservations committed"
 maximum_admitted_td_planning = "source bytes admitted -> private compiled plan complete before publication"
 admission_byte_and_structure_scaling = "source bytes admitted -> private admission result or limit error"
@@ -67,6 +67,11 @@ emission_binding_scaling = "fully admitted emission ready -> every selected bind
 slow_binding_isolation = "one per-binding lane is slow or full under declared offered load -> every unrelated binding reaches its progress checkpoint or the blocked emission fails admission without side effects"
 exposure_publication_target_construction = "private exposure plans admitted -> committed generation-bearing publication target index becomes visible"
 native_collection_subscription = "root collection plan and reserved SubscriptionId ready -> one binding driver is installed or a terminal start error is retained"
+owned_host_cancellation_matrix = "accepted owned host call and declared cancellation cell ready -> the call reaches direct cleanup, acknowledged complete transfer, or durable residual settlement with one retained terminal outcome"
+compiled_plan_set_lifecycle = "logical plans, binding compiler snapshot, and reserved plan-set footprint ready -> one immutable plan set is published, pinned, drained, and incrementally reclaimed"
+route_guard_readiness_lifecycle = "admitted route plans and complete server registration ready -> every route guard reaches committed serving or an ownership-preserving terminal cleanup disposition"
+complete_third_party_registration = "external crate registration bundle ready -> validation either publishes the complete startup snapshot entry or rejects it without partial registration"
+bounded_binding_ingress = "route-scoped ingress admission ready -> item and byte saturation decisions are committed while unrelated routes retain bounded progress"
 
 [scales]
 payload_bytes = [0, 64, 4096, 1048576]
@@ -85,6 +90,15 @@ subscribers = [1, 16, 256, 1024]
 concurrency = [1, 4, 32, 256]
 handler_slots = [0, 1, 64, 1024, 4105]
 collection_sources = [1, 16, 256, 1024]
+plan_sets = [1, 2, 4]
+binding_artifacts = [1, 64, 1024, 4096]
+routes = [1, 64, 1024, 4096]
+readiness_tokens = [1, 64, 1024, 4096]
+ingress_items = [1, 16, 1024]
+ingress_bytes = [64, 16384, 4194304]
+call_bytes = [64, 16384, 1048576]
+driver_bytes = [64, 16384, 1048576]
+slot_state_bytes = [64, 4096, 65536]
 
 [[workload]]
 id = "PERF-GW-001"
@@ -230,17 +244,26 @@ report = ["median", "p95", "p99", "compile-attempts", "lock-wait", "peak-live-by
 
 [[workload]]
 id = "PERF-GW-012"
-version = 2
-requirements = ["PLAN-CACHE-001", "PLAN-INDEX-001"]
+version = 3
+requirements = ["BIND-REG-001", "PLAN-INDEX-001", "PLAN-SET-001"]
 fixture_id = "FX-GW-012"
-harness_case = "plan_generation_invalidation_4096_things"
+harness_case = "startup_snapshot_isolation_4096_things"
 gating = true
-name = "plan_generation_invalidation_4096_things"
+name = "startup_snapshot_isolation_4096_things"
 active_things = 4096
-publisher_scanned_plans_max = 0
-publisher_scanned_things_max = 0
-require_incremental_bounded_reclamation = true
-report = ["median", "p95", "p99", "plans-reclaimed", "cleanup-work-units"]
+post_start_registration_mutations_accepted_max = 0
+plan_sets_with_mixed_registration_generations_max = 0
+registration_rescans_per_plan_set_max = 0
+require_startup_snapshot_generation_stability = true
+report = [
+    "median",
+    "p95",
+    "p99",
+    "registration-snapshot-pins",
+    "post-start-registration-mutations-accepted",
+    "plan-sets-with-mixed-registration-generations",
+    "registration-rescans-per-plan-set",
+]
 
 [[workload]]
 id = "PERF-GW-013"
@@ -673,6 +696,214 @@ report = [
     "per-affordance-start-calls",
     "local-merge-queues-created",
     "attributed-sources",
+]
+
+[[workload]]
+id = "PERF-GW-028"
+version = 1
+requirements = [
+    "BIND-CALL-CANCEL-001",
+    "BIND-HOST-CANCEL-001",
+    "BIND-MEM-001",
+]
+fixture_id = "FX-GW-028"
+harness_case = "owned_host_cancellation_matrix"
+gating = true
+name = "owned_host_cancellation_matrix"
+operation_kinds = ["invoke", "subscribe", "response", "emission"]
+cancellation_points = [
+    "before-first-poll",
+    "while-pending",
+    "completion-race",
+    "future-drop",
+    "drain-expiry",
+]
+cleanup_outcomes = ["direct-complete", "acknowledged-transfer", "durable-residual"]
+coverage_dimensions = [
+    "operation_kinds",
+    "cancellation_points",
+    "cleanup_outcomes",
+]
+lost_call_owners_max = 0
+constructor_side_effects_before_acceptance_max = 0
+unacknowledged_cleanup_transfers_max = 0
+late_terminal_values_lost_max = 0
+engine_guards_held_during_binding_poll_max = 0
+require_first_cancellation_cause_stability = true
+require_complete_object_transfer = true
+require_complete_matrix_coverage = true
+report = [
+    "median",
+    "p95",
+    "p99",
+    "call-owner-transitions",
+    "cleanup-transfer-acks",
+    "late-terminal-values",
+    "durable-residual-records",
+]
+
+[[workload]]
+id = "PERF-GW-029"
+version = 1
+requirements = [
+    "PLAN-ARTIFACT-001",
+    "PLAN-CACHE-001",
+    "PLAN-SET-001",
+    "RES-LIMIT-001",
+]
+fixture_id = "FX-GW-029"
+harness_case = "compiled_plan_set_lifecycle"
+gating = true
+name = "compiled_plan_set_lifecycle"
+lifecycle_cases = [
+    "atomic-publish",
+    "pin-before-drain",
+    "pin-after-drain",
+    "lazy-ready-single-flight",
+    "lazy-deterministic-negative",
+    "compiler-incompatible",
+    "artifact-footprint-over-limit",
+    "last-pin-incremental-reclaim",
+]
+coverage_dimensions = ["lifecycle_cases"]
+partial_plan_sets_published_max = 0
+post_drain_pins_accepted_max = 0
+compiler_attempts_per_lazy_key_max = 1
+reclaimed_bytes_retained_after_last_pin_max = 0
+plan_reclaim_bytes_per_step_max = 1048576
+require_generation_safe_plan_pins = true
+require_zero_retained_bytes_after_reclaim = true
+require_complete_matrix_coverage = true
+report = [
+    "median",
+    "p95",
+    "p99",
+    "plan-set-publications",
+    "plan-pins",
+    "compile-attempts",
+    "cleanup-work-units",
+    "peak-live-bytes",
+]
+
+[[workload]]
+id = "PERF-GW-030"
+version = 1
+requirements = [
+    "BIND-MEM-001",
+    "BIND-PROGRESS-001",
+    "BIND-ROUTE-001",
+    "LIFE-EXPOSE-003",
+]
+fixture_id = "FX-GW-030"
+harness_case = "route_guard_readiness_lifecycle"
+gating = true
+name = "route_guard_readiness_lifecycle"
+route_phases = [
+    "prepare",
+    "readiness",
+    "activate",
+    "commit",
+    "accept",
+    "drain",
+    "shutdown",
+]
+terminal_dispositions = ["direct-complete", "acknowledged-transfer", "durable-residual"]
+coverage_dimensions = ["route_phases", "terminal_dispositions"]
+never_ready_routes = 1
+accept_wakers_per_route_max = 1
+lost_route_guards_max = 0
+route_generation_mismatches_accepted_max = 0
+engine_guards_held_during_route_poll_max = 0
+unrelated_route_progress_gap_us_max = 1000
+require_route_terminal_isolation = true
+require_complete_guard_transfer = true
+require_complete_matrix_coverage = true
+report = [
+    "median",
+    "p95",
+    "p99",
+    "route-progress-steps",
+    "readiness-wakes",
+    "guard-transfer-acks",
+    "durable-residual-records",
+]
+
+[[workload]]
+id = "PERF-GW-031"
+version = 1
+requirements = [
+    "BIND-REG-001",
+    "FORM-FINALIZE-001",
+    "PLAN-ARTIFACT-001",
+]
+fixture_id = "FX-GW-031"
+harness_case = "complete_third_party_registration"
+gating = true
+name = "complete_third_party_registration"
+registration_cells = [
+    "host-client",
+    "host-server",
+    "host-complete",
+    "static-client",
+    "static-server",
+    "static-complete",
+]
+validation_cases = [
+    "complete",
+    "incomplete-component",
+    "configuration-digest-mismatch",
+    "compiler-compatibility-mismatch",
+    "unsupported-profile-cell",
+    "declared-footprint-over-limit",
+]
+coverage_dimensions = ["registration_cells", "validation_cases"]
+partial_registrations_published_max = 0
+runtime_registration_mutations_accepted_max = 0
+umbrella_crate_edits_max = 0
+require_external_crate_complete_bundle = true
+require_startup_only_snapshot_publication = true
+require_complete_matrix_coverage = true
+report = [
+    "median",
+    "p95",
+    "p99",
+    "registration-validation-probes",
+    "published-registration-generations",
+    "rejected-registration-bundles",
+]
+
+[[workload]]
+id = "PERF-GW-032"
+version = 1
+requirements = [
+    "BIND-MEM-001",
+    "BIND-PROGRESS-001",
+    "BIND-ROUTE-001",
+    "RES-LIMIT-001",
+]
+fixture_id = "FX-GW-032"
+harness_case = "bounded_binding_ingress"
+gating = true
+name = "bounded_binding_ingress"
+pressure_scopes = ["per-route", "per-binding", "global"]
+saturation_axes = ["items", "bytes", "items-and-bytes"]
+coverage_dimensions = ["pressure_scopes", "saturation_axes"]
+accepted_items_over_limit_max = 0
+accepted_bytes_over_limit_max = 0
+unowned_ingress_inputs_max = 0
+hidden_ingress_bytes_max = 0
+engine_guards_held_during_ingress_admission_max = 0
+unrelated_route_progress_gap_us_max = 1000
+require_exact_ingress_admission_accounting = true
+require_complete_matrix_coverage = true
+report = [
+    "median",
+    "p95",
+    "p99",
+    "ingress-items",
+    "ingress-bytes",
+    "rejected-items",
+    "unrelated-route-progress-gap-us",
 ]
 
 [code_size]

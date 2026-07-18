@@ -8,17 +8,19 @@ Owner packages: `clinkz-wot-servient`, `clinkz-wot-core`
 
 ## Scope
 
-Implement the Servient composition and lifecycle layer after the binding registrations,
-operation slots, cleanup records, and emission contracts from `WP-300` are complete. This
-package owns the host `Servient`, the manually driven `StaticServient`, produced and consumed
-handles, registry records, lifecycle transactions, cleanup ownership, the application-facing
-`Subscription` facade, and profile-specific Producer emission coordination.
+Implement the Servient composition and lifecycle layer after the complete binding bundles,
+associated-state operation slots, cleanup ownership contracts, and emission contracts from
+`WP-300` are complete. This package owns the host `Servient`, the manually driven
+`StaticServient`, immutable startup registration snapshots, produced and consumed handles,
+compiled-plan-set records, route and plan-set schedulers, lifecycle transactions, cleanup
+ownership, the application-facing `Subscription` facade, and profile-specific Producer emission
+coordination.
 
-The work includes host and constrained construction paths, but it does not add a protocol driving
-loop, a concrete transport, or a Directory service. `clinkz-wot-servient` composes frozen lower
-layer contracts; it does not reinterpret forms, security expressions, Directory requests, or
-binding-specific state. Work may begin only after `WP-300` is complete and every entry gate above
-is closed.
+The work includes host and constrained construction paths and owns fair engine polling of retained
+route and operation leases, but it does not own a protocol-local reactor/I/O loop, a concrete
+transport, or a Directory service. `clinkz-wot-servient` composes frozen lower-layer contracts; it
+does not reinterpret forms, security expressions, Directory requests, or binding-specific state.
+Work may begin only after `WP-300` is complete and every entry gate above is closed.
 
 Handler-origin response validation follows
 `docs/amendments/WP-100-interaction-output-api-v1.md`: every producer response
@@ -31,6 +33,11 @@ validator.
 - `LIFE-EXPOSE-001`
 - `LIFE-EXPOSE-002`
 - `LIFE-EXPOSE-003`
+- `BIND-REG-001`
+- `BIND-ROUTE-001`
+- `BIND-STORAGE-001`
+- `BIND-MEM-001`
+- `BIND-DELIVERY-001`
 - `API-PAYLOAD-001`
 - `HANDLER-API-001`
 - `HANDLER-SUB-001`
@@ -60,15 +67,18 @@ validator.
 
 The package also consumes, without redefining, the `STATE-BIND-001`, `STATE-INFLIGHT-001`,
 `HANDLE-DROP-001`, `PRODUCER-EMIT-001`, and `CLEANUP-RECORD-001` results delivered by `WP-300`.
+It implements the Servient-owned halves of the five binding requirements: startup snapshot
+validation, route-scoped fairness, caller-owned typed-slot scheduling, lifetime/ingress admission,
+and typed rejection plus complete cleanup-work retention.
 
 ## Crates and Feature Cells
 
 | Cargo package | Feature cell | Required surface |
 | --- | --- | --- |
-| `clinkz-wot-servient` | `--no-default-features` | `StaticServient`, `StaticServientBuilder`, caller-owned records, and manual progress without host synchronization or erased futures |
+| `clinkz-wot-servient` | `--no-default-features` | `StaticServient`, `StaticServientBuilder`, caller-owned associated-state records, plan-set and route cursors, and manual progress without host synchronization or erased futures |
 | `clinkz-wot-servient` | `async`, no `std` | Async adapters over the same lifecycle and operation state without an executor dependency |
 | `clinkz-wot-servient` | `std` | `Servient`, `ServientBuilder`, host handles, cleanup executor, sharded status, and named host defaults |
-| `clinkz-wot-core` | all required cells | Frozen binding registrations, route and operation identities, runtime events, cleanup outcomes, and dispatch values consumed by the Servient |
+| `clinkz-wot-core` | all required cells | Complete binding bundles, compiler/artifact SPI values, route and operation identities, runtime events, cleanup outcomes, and dispatch values consumed by the Servient |
 | `clinkz-wot-foundation` | all required cells | `ResourceLimits`, `WorkBudget`, clocks, generations, reservations, and named profiles consumed without a higher-layer dependency |
 
 The Servient may depend on `clinkz-wot-discovery` and
@@ -83,23 +93,32 @@ integration remains behind an explicit test feature.
   `clinkz_wot_servient::StaticServientBuilder` surfaces for caller-owned storage and manual
   progress. Their `step` operation uses `WorkBudget` and returns
   `StepStatus<RuntimeEvent>` exactly as frozen by `API-SURFACE-001`.
-- Replace the current host builder's bare binding vectors with
-  `ServerBindingRegistration` and `ClientBindingRegistration` snapshots. Convenience methods may
-  still accept `Arc<dyn ServerBinding>` or `Arc<dyn ClientBinding>` and construct complete default
-  registrations.
+- Replace the current host builder's bare binding vectors with one validated
+  `HostBindingRegistration` per installed binding. Replace the static split client/server lists
+  with `StaticBindingRegistration<B>`. No builder method accepts a bare `Arc<dyn ServerBinding>`,
+  `Arc<dyn ClientBinding>`, compiler, form contributor, or status sink; every accepted value is a
+  complete startup bundle. Freeze one immutable `BindingRegistrationSnapshot` before any plan or
+  route publication.
 - Replace the current `Servient`, `ServientBuilder`, `ExposedThingHandle`, and
   `ConsumedThingHandle` implementations while preserving those frozen public names. Add
   `CleanupTask`, `CleanupExecutor`, and the public `ExposeState`; keep `ExposedThingRecord`,
   `BindingRouteRecord`, `InFlightRecord`, `StaticServientRecord`, and `CleanupQueueRecord`
   crate-private as assigned by `docs/api-ownership.csv`.
-- Keep every host invoke, subscription-start, and publication operation in one crate-private
+- Implement the Servient-owned `CompiledPlanSetRecord` lifecycle as
+  `Building -> Frozen -> Published -> Draining -> Reclaimed`. One produced or consumed handle
+  generation pins one plan-set generation. Draining rejects new pins but never invalidates an
+  existing route, call, subscription, or artifact lease; reclamation is incremental and starts
+  only after every retained generation-bearing owner is terminal.
+- Keep every host invoke, subscription-start, response, and publication operation in one crate-private
   `HostBindingCallRecord` across constructor, result poll, cancel, late return, cleanup transfer,
   and residual settlement. Reserve per-binding/per-Thing/global call counts, declared footprint,
   result capacity, and cleanup item/bytes before the side-effect-free binding constructor.
 - Implement the exact lossless cleanup handoff: `CleanupExecutor::try_spawn` either accepts the
-  complete non-Clone `CleanupTask` or returns that same task to its already reserved manual queue
-  slot. `Servient::poll_cleanup` drives that queue with an explicit `WorkBudget`. Executor
-  shutdown/drop commits the task's pre-reserved residual fallback before destroying a live call.
+  complete non-Clone `CleanupTask`, including its call, guard, driver, response/publication input,
+  or typed slot, or returns that same task to its already reserved manual queue slot. A
+  `CleanupRecord` is status only and never substitutes for the work object. `Servient::poll_cleanup`
+  drives that queue with an explicit `WorkBudget`; executor shutdown/drop commits the task's
+  pre-reserved residual fallback before destroying a live object outside locks.
 - Add the non-`Clone` `clinkz_wot_servient::Subscription` facade and keep its driver registry in
   the crate-private `SubscriptionRecord`, keyed by `SubscriptionId`. One facade owns one receive
   cursor. `stop` validates options, builds one WP-300 `SubscriptionStopRequest`, and drives the
@@ -140,8 +159,10 @@ integration remains behind an explicit test feature.
   `produce_document` paths for complete `ThingDescription` and `TdDocument` inputs rather than
   overloading one method with incompatible source-retention semantics.
 - Build `consume` from the immutable plans produced by `WP-200`; the handle captures binding
-  registrations and plan generations rather than registering bindings into a mutable
-  `ConsumedThing` after construction.
+  registration snapshot and plan-set generation rather than registering bindings into a mutable
+  `ConsumedThing` after construction. Startup-only binding composition means there is no runtime
+  registration generation update that invalidates a published plan set; a different bundle set
+  requires a new Servient generation and the old plan set drains under its existing leases.
 - The standard `ConsumedThingHandle::subscribe_all_events` and `observe_all_properties` methods
   execute exactly one selected root-form `OutboundRequest` and install the returned binding-owned
   driver. If no exact-source native collection plan exists, return the structured
@@ -168,6 +189,10 @@ integration remains behind an explicit test feature.
   shutdown. In-flight admission rechecks the serving generation at the same synchronization
   boundary; late handler results lose their response opportunity and are reported rather than
   reviving the route.
+- Maintain one accept cursor and one waker lease per active route. Schedule readiness, acceptance,
+  response, emission, subscription, cleanup, lazy compilation, and plan reclamation by retained
+  cursors with bounded per-owner quanta. A never-ready route, hot route, slow binding, or large
+  draining plan set cannot starve a sibling route or an older cleanup owner.
 - Implement Producer observe/subscribe as one transaction owned by
   `ProducerSubscriptionOwner`: reserve the `SubscriptionId`, setup-call capacity,
   `subscription_bytes`, Producer record, and local guard slot before user setup;
@@ -194,9 +219,15 @@ integration remains behind an explicit test feature.
   `AffordanceTarget`, route and binding generations, and per-affordance order; isolate slow or
   full binding lanes and invoke every binding outside engine locks. A TD protocol label or runtime
   TD rescan never creates a publication target.
-- Reserve cleanup capacity at construction. `CleanupOutcome::PendingCleanup` is published only
-  after the guard and remaining operation have transferred atomically to the owner named by the
-  `CleanupRecord`.
+- Reserve cleanup capacity and complete subject identity before side effects. Bind a fresh
+  `CleanupPhaseContext` for each cancel, stop, abort, shutdown, response, or emission cleanup.
+  `CleanupOutcome::PendingCleanup` is published only after the complete guard, call, driver,
+  input, or typed slot has transferred atomically to an acknowledged owner; the associated
+  `CleanupRecord` only reports that ownership disposition.
+- Preserve response and publication inputs through every pre-acceptance failure by returning the
+  exact `BindingInputRejection<T>`. After acceptance, retain the object until exactly one terminal
+  result, late-result classification, committed cleanup transfer, or durable residual outcome;
+  never invoke an application handler again to reconstruct consumed input.
 
 ## Old API Removal
 
@@ -210,12 +241,18 @@ integration remains behind an explicit test feature.
   ordering. It cannot represent preparation, cancellation, cleanup ownership, generations, or
   in-flight linearization.
 - Remove post-construction `ConsumedThing::register_binding` assembly and any hot-path scan of the
-  current bare binding arrays. Handles use captured registration generations and compiled indexes.
+  current bare binding arrays. Remove runtime bundle replacement and plan invalidation. Handles use
+  one startup snapshot plus pinned plan-set, binding, and route generations until drain and
+  reclamation.
 - Remove or make private `ShutdownHandle` if it only toggles the current unowned global flag.
   Shutdown must instead be a documented, bounded lifecycle operation with retained cleanup and
   status outcomes.
 - Remove legacy Servient error variants and public aliases that collapse the frozen error taxonomy
   or omit binding, plan, generation, correlation, and cleanup context.
+- Remove independently installable client/server/compiler/contributor/event-sink builder methods,
+  any bare `Arc` registration convenience, any registration-wide `poll_accept` loop, and any
+  static runtime that allocates opaque concrete core slot payloads instead of scheduling the
+  binding's associated-state slots.
 - After every host registration call site uses the 73 target methods, remove `PushFn` and every
   `SubscriptionSender`-based handler setup/publication path. Remove the legacy affordance-first
   sync/async handler traits and setters, all nine public `*Slot` enums (`ReadSlot`, `WriteSlot`,
@@ -235,11 +272,24 @@ No compatibility facade may keep the removed lifecycle callable on a releasable 
   cancellation, timeout, and rollback failure injection with retained primary and cleanup results.
 - `servient-cleanup-outcomes`: drop, destroy, full cleanup queue, pending cleanup, residual state,
   idempotence, and stale-generation evidence.
+- `servient-registration-snapshot`: complete-bundle validation, deterministic startup ordering,
+  compiler/execution compatibility, duplicate rejection, and proof that no partial or runtime
+  registration path exists.
+- `servient-plan-route-fairness`: plan-set publication/pinning/draining/reclamation plus
+  route-scoped readiness and acceptance fairness, per-owner quanta, deadline progress, and no
+  generation invalidation of existing leases.
+- `servient-typed-slot-scheduling`: caller-owned associated-state layouts, static storage
+  admission, typed slot generation reuse, state drop, and fair manual progress.
+- `servient-binding-memory-ledger`: lifetime and transient footprint admission, ingress item/byte
+  saturation at every scope, hidden-buffer accounting, rollback, and unrelated-route progress.
+- `servient-delivery-cleanup-retention`: typed response/publication rejection before acceptance,
+  exactly-once settlement after acceptance, complete cleanup-work transfer, manual fallback, and
+  durable residual commitment.
 - `host-binding-call-ownership`: construction cancellation, late Returned routing, independent
   cancel-drain deadline, Complete/PendingCleanup/Residual settlement, declared footprint
   accounting, executor accept/reject/shutdown, manual cleanup progress, and zero owner loss.
-- `servient-constrained-fairness`: bounded manual steps, round-robin progress, reserved response
-  and cleanup work, and no executor or atomic-reference-counting dependency.
+- `servient-constrained-fairness`: bounded manual steps, round-robin route/slot/plan-set progress,
+  reserved response and cleanup work, and no executor or atomic-reference-counting dependency.
 - `servient-response-validation`: every handler-origin result passes through the WP-300
   `InboundResponse::try_success` boundary using the admitted route-match operation, including
   binding-metadata and action/status failure cases plus route/generation/correlation rechecks.
@@ -278,6 +328,12 @@ machines.
   `PERF-CS-018` covers retained constrained binding progress.
 - Native collection subscriptions: `PERF-GW-027` and `PERF-CS-019` prove one root-form driver,
   exact source attribution, and no local merge queues.
+- Binding ownership: `PERF-GW-028` and `PERF-CS-020` cover owned cancellation, typed slots, and
+  complete input preservation across host and constrained scheduling.
+- Plan and route lifecycle: `PERF-GW-029`, `PERF-CS-021`, `PERF-GW-030`, and `PERF-CS-022` cover
+  plan-set pin/reclaim fairness and route readiness/cleanup under one runtime scheduler.
+- Registration and ingress: `PERF-GW-031`, `PERF-GW-032`, and `PERF-CS-023` cover complete bundle
+  admission and bounded per-route/per-binding ingress isolation.
 
 Every gating workload must run with the locked fixture and named resource profile. The erased
 async and allocation-sensitive paths remain distinct result series. `PERF-GW-018` is
@@ -292,10 +348,14 @@ exhausted transfer capacity falls back to durable residual recording.
 
 - `WP-300` is complete, all entry gates remain closed, and no lower crate acquires a Servient
   dependency.
+- The builder accepts only complete host/static startup bundles, publishes one immutable
+  registration snapshot, and exposes no runtime add/remove/replace or bare component path.
 - All frozen Servient items have the owner, visibility, public path, feature cells, and migration
   disposition recorded in `docs/api-ownership.csv`.
 - Host and constrained exposure, destroy, drop, subscription, cleanup, and emission integration
   pass their state-model and failure-injection evidence without a leaked guard or reservation.
+- Plan-set and route schedulers pass never-ready, continuously-ready, drain, cleanup, and
+  reclamation fairness fixtures with every old lease remaining valid until its terminal release.
 - Application subscription tests prove linear receive ownership and binding-driven teardown;
   collection tests prove one native root operation and no hidden per-affordance merge.
 - All 73 host registration methods have positive type-check fixtures; incompatible operation
@@ -303,8 +363,8 @@ exhausted transfer capacity falls back to durable residual recording.
   cases pass with no leaked owner, late delivery, or duplicate callback.
 - Every required feature cell compiles with its documented public surface; `async` alone pulls no
   executor and `--no-default-features` exposes a useful manual runtime.
-- No Servient constructor creates a Directory service, and no protocol driving loop is owned by
-  the Servient.
+- No Servient constructor creates a Directory service. Servient owns bounded route-scoped engine
+  scheduling, while protocol-local reactors and I/O remain binding-owned.
 - The listed performance workloads satisfy their absolute budgets and structural invariants, with
   result identities accepted by `tools/performance-harness`.
 - The legacy lifecycle and default in-process Directory APIs listed above are absent from public

@@ -58,10 +58,110 @@ if [[ -n "$duplicates" ]]; then
     exit 1
 fi
 
+expected_field_count=195
+actual_field_count=$(($(wc -l <"$schema") - 1))
+if [[ "$actual_field_count" -ne "$expected_field_count" ]]; then
+    echo \
+        "resource limit check: expected $expected_field_count fields; found $actual_field_count" \
+        >&2
+    exit 1
+fi
+
+v49_fields=(
+    plan_sets_per_thing_max
+    plan_sets_global_max
+    plan_pins_per_plan_set_max
+    plan_pins_global_max
+    logical_plan_bytes_per_thing_max
+    binding_artifacts_per_thing_max
+    binding_artifacts_global_max
+    binding_artifact_bytes_per_item_max
+    binding_artifact_bytes_per_thing_max
+    binding_artifact_bytes_global_max
+    lazy_artifact_negative_bytes_per_item_max
+    lazy_artifact_negative_bytes_global_max
+    binding_compiler_cursor_bytes_per_item_max
+    binding_compiler_cursor_bytes_global_max
+    lazy_artifact_waiters_per_slot_max
+    lazy_artifact_waiters_global_max
+    plan_compile_work_units_per_step_max
+    plan_reclaim_bytes_per_step_max
+    binding_routes_per_thing_max
+    binding_routes_global_max
+    route_guard_bytes_per_item_max
+    route_guard_bytes_per_thing_max
+    route_guard_bytes_global_max
+    route_readiness_tokens_per_thing_max
+    route_readiness_tokens_global_max
+    route_readiness_token_bytes_per_item_max
+    route_readiness_token_bytes_global_max
+    route_readiness_timeout_millis_max
+    route_readiness_steps_max
+    binding_ingress_items_per_route_max
+    binding_ingress_items_per_binding_max
+    binding_ingress_items_global_max
+    binding_ingress_bytes_per_route_max
+    binding_ingress_bytes_per_binding_max
+    binding_ingress_bytes_global_max
+    host_binding_call_bytes_per_item_max
+    host_binding_call_bytes_per_binding_max
+    host_binding_call_bytes_per_thing_max
+    host_binding_call_bytes_global_max
+    host_subscription_driver_bytes_per_item_max
+    host_subscription_driver_bytes_per_thing_max
+    host_subscription_driver_bytes_global_max
+    binding_slot_state_bytes_per_item_max
+    binding_slot_state_bytes_per_thing_max
+    binding_slot_state_bytes_global_max
+    binding_poll_temporary_bytes_per_call_max
+    binding_poll_temporary_bytes_global_max
+    binding_response_buffer_bytes_per_route_max
+    binding_response_buffer_bytes_global_max
+    binding_cancel_buffer_bytes_per_call_max
+    binding_cancel_buffer_bytes_global_max
+    cleanup_transfer_slots_global_max
+    cleanup_transfer_bytes_global_max
+    binding_wake_leases_global_max
+    binding_reactor_queue_items_per_binding_max
+    binding_reactor_queue_bytes_per_binding_max
+)
+mapfile -t actual_v49_fields < <(tail -n +141 "$schema" | cut -d, -f1)
+if [[ "${actual_v49_fields[*]}" != "${v49_fields[*]}" ]]; then
+    echo "resource limit check: v4.9 append-only field order is not frozen at 139..194" >&2
+    exit 1
+fi
+
+for field in "${v49_fields[@]}"; do
+    if ! awk -F, -v field="$field" '
+        $1 == field && $7 ~ /^[1-9][0-9]*$/ && $8 == "NA" \
+            && $9 ~ /^[1-9][0-9]*$/ && $10 ~ /(^|\|)RES-LIMIT-001(\||$)/ {
+            found = 1
+        }
+        END { exit !found }
+    ' "$schema"; then
+        echo "resource limit check: incomplete v4.9 projection for field: $field" >&2
+        exit 1
+    fi
+done
+
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
-sed -nE 's/.*`([A-Z][A-Z0-9-]+-[0-9]{3})`:.*/\1/p' \
-    "$root/docs/design.md" | sort -u >"$tmp/requirements"
+tail -n +2 "$root/docs/requirements.csv" | cut -d, -f1 | tr '|' '\n' \
+    >"$tmp/requirement-expressions"
+: >"$tmp/requirements-unsorted"
+while IFS= read -r expression; do
+    if [[ "$expression" =~ ^([A-Z][A-Z0-9-]*-)([0-9]{3})\.\.([0-9]{3})$ ]]; then
+        prefix=${BASH_REMATCH[1]}
+        first=$((10#${BASH_REMATCH[2]}))
+        last=$((10#${BASH_REMATCH[3]}))
+        for ((i = first; i <= last; i++)); do
+            printf '%s%03d\n' "$prefix" "$i" >>"$tmp/requirements-unsorted"
+        done
+    else
+        printf '%s\n' "$expression" >>"$tmp/requirements-unsorted"
+    fi
+done <"$tmp/requirement-expressions"
+sort -u "$tmp/requirements-unsorted" >"$tmp/requirements"
 tail -n +2 "$schema" | cut -d, -f10 | tr '|' '\n' | sort -u >"$tmp/referenced"
 comm -23 "$tmp/referenced" "$tmp/requirements" >"$tmp/unknown"
 if [[ -s "$tmp/unknown" ]]; then
@@ -91,6 +191,7 @@ required_fields=(
     query_nesting_depth_max
     query_nodes_max
     query_terms_max
+    "${v49_fields[@]}"
 )
 for field in "${required_fields[@]}"; do
     if ! awk -F, -v field="$field" 'NR > 1 && $1 == field { found = 1 } END { exit !found }' \

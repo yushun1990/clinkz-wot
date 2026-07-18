@@ -29,24 +29,40 @@ referenced by that manifest in workload-id order.
 
 ## Generator
 
-`clinkz-wot-fixture-generator-v2` is implemented by
+`clinkz-wot-fixture-generator-v3` is implemented by
 `tools/performance-harness`. It produces a deterministic binary bundle with:
 
 1. canonical UTF-8 identity and recipe metadata;
 2. an actual deterministic TD-like JSON document of the requested byte size;
 3. independent deterministic byte sections for extension, string, and URI-template axes;
-4. deterministic payload and requested page-entry document bytes; and
-5. fixed-width actor, binding, schema-node, security-branch, subscriber, and TD-node records.
+4. deterministic payload and requested page-entry document bytes;
+5. independent call, driver, ingress, and constrained slot-state byte sections; and
+6. fixed-width actor, artifact, binding, collection-source, handler-slot,
+   ingress-item, plan-set, readiness-token, route, schema-node,
+   security-branch, subscriber, and TD-node records.
 
 The recipe uses semicolon-separated `key=value` pairs in ascending key order.
-The v2 keys are `actors`, `bindings`, `collection_sources`, `document_bytes`,
-`extension_bytes`, `forms`, `handler_slots`, `page_entries`,
-`page_item_bytes`, `payload_bytes`, `schema_nodes`, `security_branches`,
-`string_bytes`, `subscribers`, `td_nodes`, and `uri_template_bytes`. Omitted
+The v3 keys are `actors`, `binding_artifacts`, `bindings`, `call_bytes`,
+`collection_sources`, `document_bytes`, `driver_bytes`, `extension_bytes`,
+`forms`, `handler_slots`, `ingress_bytes`, `ingress_items`, `page_entries`,
+`page_item_bytes`, `payload_bytes`, `plan_sets`, `readiness_tokens`, `routes`,
+`schema_nodes`, `security_branches`, `slot_state_bytes`, `string_bytes`,
+`subscribers`, `td_nodes`, and `uri_template_bytes`. Omitted
 keys are zero. Unknown, duplicate, unsorted, or profile-inadmissible values are
 rejected against `docs/resource-limits.csv`.
 Generated sections, not only recipe parameters, are included in the locked
 digest.
+
+The planning and binding keys are validated directly against their narrowest
+per-Thing, per-route, or per-item profile limit. `plan_sets`,
+`binding_artifacts`, `routes`, and `readiness_tokens` generate stable identity
+records. `ingress_items` generates stable owned-input identities.
+`ingress_bytes`, `call_bytes`, `driver_bytes`, and `slot_state_bytes` generate
+independent deterministic byte sections. A workload adapter may apply one
+locked per-route or per-item section repeatedly to an explicitly declared
+per-binding or global pressure cell, but it must charge every application to
+the active profile ledger and must not treat the fixture recipe as a larger
+implicit allowance.
 
 `forms` is the total form count for one Thing, not the length of one form
 array. The generator emits it as an independent canonical `form-contexts`
@@ -68,7 +84,7 @@ The scaling fixture is an axis bundle. Its document and each byte/record
 section are independent maximum inputs; an adapter constructs the baseline and
 then substitutes exactly one named axis section at a time. It must not
 concatenate every maximum into one document while claiming
-`vary_one_axis_at_a_time`. The v2 generator validates document, payload,
+`vary_one_axis_at_a_time`. The v3 generator validates document, payload,
 string, extension, form, page, binding, schema, security, subscription,
 TD-node, and URI-template recipe values against the selected named profile.
 
@@ -80,7 +96,7 @@ provides stable Producer subscription identities. The operation-mode,
 cancellation, replacement, and transaction case matrices remain explicit
 manifest inputs; they do not introduce an implicit fixture-generator default.
 
-The handler closure uses these locked v2 bundles:
+The handler closure uses these locked v3 bundles:
 
 | Fixture | Seed | Canonical recipe |
 | --- | ---: | --- |
@@ -91,12 +107,26 @@ The handler closure uses these locked v2 bundles:
 | `FX-CS-016` | 4603016 | `document_bytes=1024;forms=1;handler_slots=8;payload_bytes=64` |
 | `FX-CS-017` | 4603017 | `document_bytes=16384;forms=16;handler_slots=4;payload_bytes=64;subscribers=256` |
 
-The architecture-review closure adds the following stable workload families:
+The carried-forward architecture workloads include these stable families:
 
 | Profile | Workloads | Contract covered |
 | --- | --- | --- |
 | Gateway | `PERF-GW-023` through `PERF-GW-027` | Compiled emission-target lookup, exact 1/4/16/64 binding scaling, slow-binding lane isolation, exposure target construction, and one native collection-subscription start. |
 | Constrained | `PERF-CS-018` and `PERF-CS-019` | Retained 1/4 binding publication progress and one caller-owned native collection-subscription start. |
+
+The v4.9 planning and complete-binding projection adds these stable workload
+families:
+
+| Profile | Workloads | Contract covered |
+| --- | --- | --- |
+| Gateway | `PERF-GW-028` through `PERF-GW-032` | Owned host-call cancellation and complete transfer, compiled-plan-set publication/drain/reclaim, route guard/readiness ownership, external complete-bundle registration, and bounded ingress item/byte saturation. |
+| Constrained | `PERF-CS-020` through `PERF-CS-023` | Typed associated-state slots and pre-acceptance input return, bounded compiled-plan-set lifecycle, bounded route guard/readiness progress, and bounded ingress item/byte saturation. |
+
+`PERF-GW-012` version 3 is the startup registration-snapshot isolation case.
+It replaces the former runtime registration-invalidation interpretation: v1
+registration composition is startup-only, so the executable invariant is that
+all admitted plan sets pin one immutable captured snapshot and every post-start
+registration mutation is rejected.
 
 The storage-bundle actor identities cover every Gateway handler slot, including
 the Thing-level operations, and the complete constrained static-reference
@@ -115,11 +145,14 @@ cross-product explicitly.
 
 ## Harness
 
-The executable harness supports three design-time operations:
+The executable harness supports these design-time operations:
 
 - `verify`: parse the fixture lock and manifests, regenerate every fixture,
   verify content and manifest fixture digests, and reject unknown workload,
   fixture, requirement, or harness identities;
+- `refresh-lock`: regenerate every fixture digest and all three manifest-level
+  fixture digests from the canonical recipes, then reload and verify the
+  resulting contract before returning success;
 - `list`: print stable workload identity tuples in deterministic order;
 - `run WORKLOAD_ID ADAPTER`: generate the locked fixture into a temporary file
   and execute an implementation-owned adapter with explicit manifest, workload,

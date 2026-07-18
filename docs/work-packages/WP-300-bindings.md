@@ -12,11 +12,12 @@ Owner packages: clinkz-wot-core
 
 ## Scope
 
-Replace the host-only binding shapes in `clinkz-wot-core` with the frozen host registration
-and constrained poll contracts. Implement route readiness, request/response ownership,
-subscription start/stop, Producer emission, runtime status, form contribution, generation-safe
-operation slots, binding-owned subscription progress, binding-local publication slots, and
-bounded cleanup progress without adding a concrete protocol or a Servient scheduler.
+Replace the host-only binding shapes in `clinkz-wot-core` with the frozen complete-registration
+and constrained associated-state contracts. Implement the core compiler-extension envelope,
+route-scoped readiness and acceptance, request/response ownership, subscription start/stop,
+Producer emission, runtime status, form contribution, generation-safe typed operation slots,
+binding-owned subscription progress, binding-local publication slots, and bounded cleanup
+progress without adding a concrete protocol or a Servient scheduler.
 
 This package defines and tests the execution SPI consumed by Servient and protocol packages.
 WP-400 owns expose/destroy orchestration and registries; WP-600 owns zenoh and zenoh-pico
@@ -29,6 +30,12 @@ compatibility adapters so the still-unmigrated WP-400 Servient and WP-600 concre
 cross this checkpoint without a dependency cycle. An adapter is not a second public emission
 contract and accepts no new callers after this package completes.
 
+One host or static binding is installable only as a complete startup bundle. Component traits
+remain constructible and independently testable, but a compiler, contributor, client half,
+server half, status policy, or ingress policy cannot be installed separately. The bundle is
+immutable after `ServientBuilder` freezes its registration snapshot; v1 has no runtime binding
+add, replace, remove, or unload path.
+
 The final XOR-shaped `InboundResponse`, its producer-origin `try_success`
 validation, and the public shared consumer-origin
 `validate_untrusted_binding_output` function must follow
@@ -38,6 +45,9 @@ exist.
 
 ## Requirements
 
+- `BIND-REG-001`, `BIND-ROUTE-001`, `BIND-STORAGE-001`, `BIND-MEM-001`, and
+  `BIND-DELIVERY-001` govern complete startup bundles, route-scoped engine progress,
+  associated-state storage, lifetime and ingress bounds, and input preservation at acceptance.
 - `API-SURFACE-001`, `BIND-IO-001`, `BIND-OUT-001`, `BIND-PROGRESS-001`,
   `BIND-CALL-CANCEL-001`, and `BIND-HOST-CANCEL-001` freeze host and poll execution,
   ownership, response, cancellation settlement, and subscription progress.
@@ -64,38 +74,48 @@ exist.
 
 - Modify Cargo package `clinkz-wot-core`; consume WP-000 foundation values and WP-100/WP-200
   core values without depending on Servient or a concrete protocol.
-- The `no-default` cell exposes `PollClientBinding`, `PollServerBinding`, static registration
-  values, caller-owned slots, form-contribution values, state/status records, and public
-  subscription/emission values without `Arc`, boxed futures, atomics, or an executor.
+- The `no-default` cell exposes `PollClientBinding`, `PollServerBinding`,
+  `StaticBindingRegistration<B>`, associated-state layouts, caller-owned typed slots,
+  form-contribution values, state/status records, and public subscription/emission values
+  without `Arc`, boxed futures, atomics, or an executor.
 - The `async-no-std` cell preserves the poll contract and may provide native async adapters
   without executor selection.
-- The `std` cell exposes object-safe `ServerBinding`, `ClientBinding`, and `HostBindingCall`,
-  owned call boxes, route guards, `HostSubscriptionDriver`, host subscription start, runtime event sink
-  configuration, and explicit registration values. Boxed futures are allowed only on these
-  erased network paths.
+- The `std` cell exposes object-safe server/client execution components and `HostBindingCall`,
+  owned call boxes, owned route guards, `HostSubscriptionDriver`, host subscription start, and
+  one complete `HostBindingRegistration`. Boxed futures are allowed only on these erased network
+  paths; status, overflow, reactor, and ingress policies are fields of the bundle rather than a
+  separately installable sink configuration.
 - Use fake bindings and caller-owned tables in core integration tests. Do not implement zenoh,
   sockets, spawned transport tasks, or Servient registries in this package.
 
 ## Public API and Data Migration
 
-Implement the frozen binding surface:
+Implement the frozen shared binding surface:
 
 - values: `OutboundRequest`, `InboundRequest`, `InboundResponse`, `PrepareInput`,
   `BindingRouteKey`, `BindingContext`, `ResponseDelivery`, `SubscriptionStart`,
   `SubscriptionStopRequest`, `SubscriptionItem`, `SubscriptionDriverEvent`,
-  `CleanupTransferContext`, and `BindingCallSettlement`;
+  `BindingInputRejection<T>`, `CleanupReservation`, `CleanupPhaseContext`, and
+  `BindingCallSettlement<T>`;
+- compiler-extension values: `BindingArtifactCompatibility`, `BindingArtifactFootprint`,
+  `BindingArtifact`, `BindingArtifactEnvelope`, `BindingArtifactRef`, `BindingCompilerInput`,
+  and `BindingCompilerExtension`; core owns this protocol-neutral SPI while WP-200 planning owns
+  compiler coordination and plan-set construction;
 - consume the WP-200 `CollectionSubscriptionCapability` unchanged when starting a root collection
   request; the SPI may not infer capability from protocol text or synthesize affordance fan-out;
-- constrained slots/traits: `ClientRequestSlot`, `ClientSubscriptionSlot`,
-  `ServerResponseSlot`, `PollClientBinding`, and `PollServerBinding`;
-- host traits/registrations: `ServerBinding`, `ServerRouteGuard`, `ActiveRouteGuard`,
-  `RouteReadinessDriver`, `RouteReadinessToken`, `ServerBindingRegistration`,
-  `RuntimeEventSinkConfig`, `BindingCallFootprint`, `HostBindingCall`, `HostBindingCallBox`,
-  `ClientBinding`, `HostSubscriptionDriver`, `HostSubscriptionStart`, and
-  `ClientBindingRegistration`;
-- common/static registration: `RouteReadinessStatus`, `BindingDrivingMode`,
-  `StaticServerBindingRegistration`, and `StaticClientBindingRegistration`.
-- Host and static client registrations expose the same exact
+- constrained traits and storage: `BindingStateLayout`, `PollClientBinding`,
+  `PollServerBinding`, and typed `ClientRequestSlot<B::RequestState>`,
+  `ClientSubscriptionSlot<B::SubscriptionState>`, route/readiness slots over the server
+  associated states, `ServerResponseSlot<B::ResponseState>`, and
+  `BindingEmissionSlot<B::EmissionState>`;
+- host execution components: `ServerBinding`, owned prepared/readiness/active route wrappers,
+  route-scoped `RouteAcceptEvent`, `BindingCallFootprint`, `HostBindingCall`,
+  `HostBindingCallBox`, `ClientBinding`, `HostSubscriptionDriver`, and
+  `HostSubscriptionStart`;
+- installable units: `HostBindingRegistration` and `StaticBindingRegistration<B>`, each carrying
+  compiler, execution, contribution, footprint, ingress, status, overflow, readiness, reactor,
+  cleanup, capability, and profile-cell metadata as one validated startup bundle.
+- Host and static complete registrations expose the same exact
   `try_with_collection_subscription_capability` and
   `collection_subscription_capability` methods, keyed only by
   `ObserveAllProperties` or `SubscribeAllEvents`; they do not infer native
@@ -112,39 +132,47 @@ Implement the frozen contribution and runtime surfaces:
   `CleanupOutcome`, while `ProcessTerminal` is retained unchanged for the parent facade. Complete
   cleanup retires the driver even when the process terminal is `Failed`; it must not be recoded as
   a driver residual.
-- Implement the exact `binding-call` machine for host call records and all four constrained slot
-  headers. Host constructors are nonblocking and side-effect-free, declare and report retained
-  footprint, and return owned `HostBindingCallBox` values. Cancellation uses
-  `BindingCallSettlement`, retains the first cause, routes late request/subscription/publication
-  results, validates `CleanupTransferContext`, and never drops a live call as cleanup.
+- Implement the exact `binding-call` machine for host call records and every constrained typed
+  slot header. Host constructors are nonblocking and side-effect-free, declare and report their
+  complete lifetime footprint, and return owned `HostBindingCallBox` values. Cancellation binds
+  a pre-admitted `CleanupReservation` into a phase-specific `CleanupPhaseContext`, retains the
+  first cause, routes late request/subscription/response/publication results, and never drops a
+  live call as cleanup.
 - Make `poll_cancel_request`, `poll_cancel_subscription_start`, `poll_cancel_response`, and
-  `poll_cancel_emission` return the portable settlement type. A returned late value and each of
-  Complete, PendingCleanup, and ResidualExternalState must be generation-safe and must retain the
-  slot until its terminal acknowledgement.
+  `poll_cancel_emission` return the portable settlement type. A returned late value, verified
+  completion, transfer request, committed pending owner, and durable residual state are
+  generation-safe and retain the complete work object until terminal acknowledgement. A
+  `CleanupRecord` alone is never transferable work.
 - `RuntimeEvent`, `BindingRuntimeEvent`, `BindingStatusRecord`, and `OverflowPolicy`;
 - `ProducerEmission`, `EmissionKind`, `BindingPublication`, `EmissionStatus`, and
   `BindingEmissionSlot`;
 - `BindingRouteState`, `InFlightState`, and the crate-private request, subscription, response,
   and emission slot state records.
 
-All request, response, route, correlation, auth, payload, plan, binding-generation, and
-deadline values are owned across an SPI call. A registration carries identity, capabilities,
-driving mode, readiness, diagnostics, overflow, and contributor metadata; bare trait-object
-builder conveniences are not the configuration contract.
+All request, response, route, correlation, auth, payload, plan, binding-generation, and deadline
+values are owned across an SPI call. Every consuming start has one typed pre-acceptance rejection
+that returns the complete input. A registration carries the complete compiler/execution pairing,
+identity, capabilities, readiness, diagnostics, ingress, reactor, status, overflow, cleanup, and
+contributor metadata; a bare trait object is never the configuration contract.
 
 ## State and Ownership Migration
 
-- A prepared route remains caller-addressable until activation consumes its generation.
-  Readiness failure/cancellation uses abort; active or committed cleanup uses shutdown.
-  `PendingCleanup` is returned only after atomic transfer to the named cleanup owner.
+- A prepared route remains caller-addressable through every fallible readiness and activation
+  outcome; commit failure returns an active guard suitable for shutdown. Readiness
+  failure/cancellation uses abort; active or committed cleanup uses shutdown. `PendingCleanup`
+  is returned only after the complete guard or call moves to and is acknowledged by the named
+  cleanup owner.
 - `BindingRouteState` follows the frozen route machine and never uses guard drop as a
-  transition. Readiness, abort, shutdown, and retry are idempotent for one route generation;
-  late callbacks with stale generations are discarded and recorded.
+  transition. Readiness, activation, commit, route-scoped acceptance, abort, shutdown, and retry
+  are idempotent for one route generation; late callbacks with stale generations are discarded
+  and recorded. There is one accept cursor and waker lease per active route, never one
+  registration-wide `poll_accept` cursor.
 - Admit an in-flight response opportunity only after the serving state and generation recheck.
   Host send consumes it in the call; constrained start consumes it only after the response is
   accepted into `ServerResponseSlot`.
-- A constrained request slot is consumed by a terminal result. A successful subscription start
-  instead retains its slot/generation as `Active`; start cancellation, item polling, stop, and
+- A constrained request slot is generic over its binding's associated request state and is
+  consumed by a terminal result. A successful subscription start instead retains its typed
+  slot/generation as `Active`; start cancellation, item polling, stop, state destruction, and
   terminal retention use that same slot.
 - `HostSubscriptionDriver` is the object-safe receive/stop SPI. It has one linear receive cursor,
   returns `SubscriptionItem` with the exact `SubscriptionId` and `AffordanceTarget`, and drives
@@ -165,13 +193,17 @@ builder conveniences are not the configuration contract.
   enter status storage.
 - Invoke readiness, transport, contributor, guard, event-sink, and status callbacks outside
   engine locks and critical sections. Reserve response and cleanup progress before new work.
+- Declare and admit the immutable maximum lifetime footprint for every call, guard, driver,
+  artifact, slot state, reactor queue, and ingress buffer before first side effect. Bound external
+  ingress independently per route, per binding, per Thing where applicable, and globally; no
+  hidden transport queue may turn zero or an omitted limit into unbounded storage.
 
 ## Old API Removal
 
 - Replace the current `core/src/inbound.rs::ServerBinding` methods with the frozen
-  prepare/readiness/activate/commit/abort/shutdown contract and explicit
-  `ServerBindingRegistration`. Remove any cleanup path whose only completion signal is guard
-  drop or an unstructured outer error.
+  route-scoped prepare/readiness/activate/commit/accept/abort/shutdown contract and the server
+  component inside a complete registration bundle. Remove any registration-wide acceptance and
+  any cleanup path whose only completion signal is guard drop or an unstructured outer error.
 - Replace the current `core/src/outbound.rs::ClientBinding` request shape with the frozen owned
   `OutboundRequest`, validated output, owned `HostBindingCall`, `HostSubscriptionDriver`, and
   `HostSubscriptionStart` contracts. Remove `BindingRequest` and `BindingFuture`; no public
@@ -189,8 +221,11 @@ builder conveniences are not the configuration contract.
   concrete `PublisherSink` call sites must migrate through WP-600 and are absent from the final
   target surface.
 - Remove binding vectors embedded in consumed Things and bare trait objects as the stored
-  Servient configuration record. Host conveniences may wrap a trait object in a complete
-  registration at the call boundary.
+- Remove independently installable `ServerBindingRegistration`, `ClientBindingRegistration`,
+  `StaticServerBindingRegistration`, `StaticClientBindingRegistration`,
+  `RuntimeEventSinkConfig`, and `BindingDrivingMode` targets. Component values remain usable for
+  constructing and testing one complete `HostBindingRegistration` or
+  `StaticBindingRegistration<B>` only.
 - Do not restore the removed `ProtocolBinding` or `ClientBindingFactory` facades, and do not
   retain a binding-owned unbounded pending request, subscription, response, or emission table.
 
@@ -198,21 +233,32 @@ builder conveniences are not the configuration contract.
 
 Produce these package evidence keys exactly as indexed by the work-package DAG:
 
-- `binding-registration-ownership` for registration metadata and owned I/O values;
+- `complete-binding-registration` for atomic compiler/execution/contributor/policy bundles,
+  startup-only publication, rejection of incomplete bundles, and owned I/O values;
+- `route-scoped-binding-lifecycle` for ownership-preserving route transitions, one accept/waker
+  lease per route, terminal isolation, and absence of direct handler dispatch;
+- `typed-binding-state-storage` for associated-state layout limits, typed slots, generation-safe
+  construction/destruction, and zero-budget retention;
+- `binding-lifetime-and-ingress-memory` for declared lifetime/transient footprints, per-route,
+  per-binding, per-Thing/global ingress saturation, and hidden-buffer detection;
+- `response-emission-input-preservation` for typed pre-acceptance rejection, exactly-once
+  post-acceptance settlement, late results, and host/constrained classification parity;
 - `form-finalization-and-collision` for deterministic contributions and reservation identity;
 - `binding-slot-state-model` for route, in-flight, subscription, response, and emission states;
 - `bounded-response-subscription-emission` for start/poll/cancel and terminal retention;
 - `binding-response-validation` for the response XOR, producer and consumer validation entry
   points, identity/branch checks, action invariants, and additional-response bounds;
-- `drop-and-cleanup-ownership` for guard transfer, idempotent teardown, and residual state.
+- `drop-and-cleanup-ownership` for complete work-object transfer, handoff rejection/manual
+  fallback, idempotent teardown, deadline progress, and durable residual state.
 - `producer-emission-migration` for the one-way legacy-adapter boundary, identity preservation,
   bounded admission, and proof that no new caller enters the bridge.
 - `host-subscription-driver` for object safety, exact source attribution, one receive cursor,
   binding-owned flow control, stop/drop teardown, and absence of a core queue.
 - `binding-emission-slot` for one-binding ownership, retained poll/cancel progress, stale
   generation rejection, and proof that Servient-wide fan-out is not stored in core.
-- `binding-call-settlement` for constructor/poll/cancel races, late Returned routing, exact cleanup
-  transfer, declared footprint admission, zero-budget retry, and generation-safe slot reuse.
+- `binding-call-settlement` for constructor/poll/cancel races, late Returned routing, exact
+  cleanup-reservation binding and acknowledged work transfer, declared footprint admission,
+  zero-budget retry, and generation-safe slot reuse.
 
 These records satisfy the corresponding requirement-index evidence families:
 
@@ -247,10 +293,21 @@ terminal or critical status is lost merely because a bounded queue is full.
 - `PERF-GW-009` and `PERF-GW-010` compare host-erased and poll metadata/allocation paths.
 - `PERF-GW-024` covers exact per-binding publication result scaling, and `PERF-CS-018` proves
   that a retained `BindingEmissionSlot` resumes within its work budget without restarting.
+- `PERF-GW-028` covers the owned host-call cancellation, late-result, transfer, and residual
+  matrix; `PERF-CS-020` covers typed slots and complete pre-acceptance input rejection.
+- `PERF-GW-030` and `PERF-CS-022` cover route preparation, readiness fairness, activation gates,
+  guard retention, and route-scoped terminal isolation.
+- `PERF-GW-031` validates a complete third-party registration and rejects every incomplete bundle.
+- `PERF-GW-032` and `PERF-CS-023` cover bounded ingress items/bytes, backpressure, and hidden
+  buffer detection at route, binding, Thing, and global scopes.
+
 ## Completion Conditions
 
 - Every WP-300 ownership item exists at its frozen path and applicable feature cells; the
   no-default poll surface is useful and the host traits are object-safe.
+- Complete host and static startup bundles are the only installable binding units; their compiler
+  and execution compatibility, resource maxima, ingress policy, status policy, and supported
+  profile cells are validated before snapshot publication.
 - Core exposes no concrete subscription queue, merged stream, global emission coordinator, or
   dispatch policy; `BindingEmissionSlot` represents one binding generation only.
 - Exhaustive transition tests cover route readiness through cleanup, in-flight admission and
@@ -262,7 +319,8 @@ terminal or critical status is lost merely because a bounded queue is full.
   under full-queue and full-journal cases.
 - All listed workload adapters emit schema-valid, fixture-identified results for both poll and
   host-erased paths where applicable.
-- The obsolete transport, push, bare-registration, old-signature, and unbounded pending-work
-  facades owned by WP-300 are absent, and no concrete protocol logic has entered core. Only the
-  explicitly named WP-400/WP-600 compatibility adapter edges may remain, with compile and source
-  evidence assigning their removal to those packages.
+- The obsolete transport, push, split-registration, bare-registration, registration-wide accept,
+  old-signature, opaque concrete-slot, and unbounded pending-work facades owned by WP-300 are
+  absent, and no concrete protocol logic has entered core. Only the explicitly named
+  WP-400/WP-600 compatibility adapter edges may remain, with compile and source evidence assigning
+  their removal to those packages.

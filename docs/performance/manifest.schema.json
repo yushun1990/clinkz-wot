@@ -33,7 +33,7 @@
     "runner_fingerprint": { "$ref": "#/$defs/runnerFingerprint" },
     "toolchain": { "type": "string", "minLength": 1 },
     "allocator": { "type": "string", "minLength": 1 },
-    "fixture_generator": { "const": "clinkz-wot-fixture-generator-v2" },
+    "fixture_generator": { "const": "clinkz-wot-fixture-generator-v3" },
     "fixture_lock": { "const": "docs/performance/fixtures.lock.toml" },
     "fixture_digest": { "pattern": "^sha256:[0-9a-f]{64}$" },
     "fixture_seed": { "type": "integer", "minimum": 0 },

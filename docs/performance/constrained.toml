@@ -7,9 +7,9 @@ environment = "thumbv7em-none-eabihf"
 runner = "stm32f407vg-discovery-168mhz-flash5ws-sram-v1"
 toolchain = "record-in-result"
 allocator = "record-in-result"
-fixture_generator = "clinkz-wot-fixture-generator-v2"
+fixture_generator = "clinkz-wot-fixture-generator-v3"
 fixture_lock = "docs/performance/fixtures.lock.toml"
-fixture_digest = "sha256:d9161f932491c68bcb36e4bba5a334524186377bba198b28e49d7c5fd670290e"
+fixture_digest = "sha256:ce126b385cdd2526322407f4cad9f814db8e25d0800ebdb69f72a6e13e32d5a1"
 fixture_seed = 4603
 warmup_iterations = 100
 sample_count = 1000
@@ -64,6 +64,10 @@ handler_cancellation_reentrancy = "selected handler and input owned -> terminal 
 producer_subscription_transaction = "before subscription admission -> the declared matrix cell reaches Active or its retained terminal outcome within declared work and drain budgets; teardown and replay cells continue through every response and cleanup acknowledgement plus the declared eviction or stale-replay observation"
 emission_binding_bounded_progress = "fully admitted emission and caller-owned slots ready -> one runtime step returns at its work boundary with retained binding cursor progress"
 native_collection_subscription = "root collection plan, caller-owned driver slot, and reserved SubscriptionId ready -> one binding driver is installed or a terminal start error is retained"
+typed_binding_slots_and_input_rejection = "caller-owned typed binding slots and owned delivery input ready -> each operation retains generation-safe state or rejects before acceptance with the complete input returned"
+compiled_plan_set_lifecycle = "logical plans, binding compiler snapshot, caller-owned artifact slots, and reserved footprint ready -> bounded steps publish, pin, drain, and reclaim one immutable plan set"
+route_guard_readiness_lifecycle = "admitted route plans, typed route slots, and complete static registration ready -> bounded steps retain every guard through readiness, serving, or terminal cleanup"
+bounded_binding_ingress = "caller-owned ingress capacity and route slot ready -> bounded steps commit item and byte saturation decisions while unrelated routes retain progress"
 
 [scales]
 payload_bytes = [0, 64, 1024]
@@ -83,6 +87,15 @@ subscribers = [1, 16, 256]
 concurrency = [1]
 handler_slots = [0, 1, 16, 64, 256]
 collection_sources = [1, 16, 256]
+plan_sets = [1, 2]
+binding_artifacts = [1, 16, 256]
+routes = [1, 4, 16, 256]
+readiness_tokens = [1, 4, 16, 256]
+ingress_items = [1, 16]
+ingress_bytes = [64, 1024, 16384]
+call_bytes = [64, 4096, 16384]
+driver_bytes = [64, 4096, 16384]
+slot_state_bytes = [64, 1024, 4096]
 
 [[workload]]
 id = "PERF-CS-001"
@@ -525,6 +538,188 @@ report = [
     "per-affordance-start-calls",
     "local-merge-queues-created",
     "attributed-sources",
+    "allocations",
+]
+
+[[workload]]
+id = "PERF-CS-020"
+version = 1
+requirements = [
+    "BIND-DELIVERY-001",
+    "BIND-MEM-001",
+    "BIND-PROGRESS-001",
+    "BIND-STORAGE-001",
+    "CONSTRAINED-WORK-001",
+]
+fixture_id = "FX-CS-020"
+harness_case = "typed_binding_slots_and_input_rejection"
+gating = true
+name = "typed_binding_slots_and_input_rejection"
+slot_kinds = [
+    "request",
+    "subscription",
+    "response",
+    "emission",
+    "route",
+    "readiness",
+    "cleanup",
+]
+slot_cases = [
+    "layout-maximum",
+    "zero-budget",
+    "stale-generation",
+    "cancel",
+    "drop",
+    "terminal-ack-reuse",
+]
+delivery_cases = [
+    "response-accepted",
+    "response-rejected-input-returned",
+    "emission-accepted",
+    "emission-rejected-input-returned",
+]
+coverage_dimensions = ["slot_kinds", "slot_cases", "delivery_cases"]
+engine_allocations_max = 0
+accepted_stale_generations_max = 0
+lost_delivery_inputs_max = 0
+work_budget_overshoot_units_max = 0
+critical_section_guards_held_during_binding_poll_max = 0
+require_typed_layout_alignment = true
+require_terminal_ack_before_slot_reuse = true
+require_complete_matrix_coverage = true
+report = [
+    "cycles-per-step",
+    "steps",
+    "slot-state-bytes",
+    "input-return-count",
+    "slot-drop-count",
+    "allocations",
+]
+
+[[workload]]
+id = "PERF-CS-021"
+version = 1
+requirements = [
+    "CONSTRAINED-WORK-001",
+    "PLAN-ARTIFACT-001",
+    "PLAN-CACHE-001",
+    "PLAN-SET-001",
+    "RES-LIMIT-001",
+]
+fixture_id = "FX-CS-021"
+harness_case = "compiled_plan_set_lifecycle"
+gating = true
+name = "compiled_plan_set_lifecycle"
+lifecycle_cases = [
+    "atomic-publish",
+    "pin-before-drain",
+    "pin-after-drain",
+    "lazy-ready-single-flight",
+    "lazy-deterministic-negative",
+    "compiler-incompatible",
+    "artifact-footprint-over-limit",
+    "last-pin-incremental-reclaim",
+]
+coverage_dimensions = ["lifecycle_cases"]
+engine_allocations_max = 0
+partial_plan_sets_published_max = 0
+post_drain_pins_accepted_max = 0
+compiler_attempts_per_lazy_key_max = 1
+reclaimed_bytes_retained_after_last_pin_max = 0
+plan_reclaim_bytes_per_step_max = 65536
+work_budget_overshoot_units_max = 0
+require_generation_safe_plan_pins = true
+require_zero_retained_bytes_after_reclaim = true
+require_complete_matrix_coverage = true
+report = [
+    "cycles-per-step",
+    "steps",
+    "plan-set-publications",
+    "plan-pins",
+    "compile-attempts",
+    "cleanup-work-units",
+    "peak-live-bytes",
+    "allocations",
+]
+
+[[workload]]
+id = "PERF-CS-022"
+version = 1
+requirements = [
+    "BIND-MEM-001",
+    "BIND-PROGRESS-001",
+    "BIND-ROUTE-001",
+    "CONSTRAINED-WORK-001",
+    "LIFE-EXPOSE-003",
+]
+fixture_id = "FX-CS-022"
+harness_case = "route_guard_readiness_lifecycle"
+gating = true
+name = "route_guard_readiness_lifecycle"
+route_phases = [
+    "prepare",
+    "readiness",
+    "activate",
+    "commit",
+    "accept",
+    "drain",
+    "shutdown",
+]
+terminal_dispositions = ["direct-complete", "acknowledged-transfer", "durable-residual"]
+coverage_dimensions = ["route_phases", "terminal_dispositions"]
+never_ready_routes = 1
+accept_wakers_per_route_max = 1
+lost_route_guards_max = 0
+route_generation_mismatches_accepted_max = 0
+critical_section_guards_held_during_route_poll_max = 0
+work_budget_overshoot_units_max = 0
+maximum_route_service_gap_steps_max = 64
+require_route_terminal_isolation = true
+require_complete_guard_transfer = true
+require_complete_matrix_coverage = true
+report = [
+    "cycles-per-step",
+    "steps",
+    "route-progress-steps",
+    "readiness-wakes",
+    "guard-transfer-acks",
+    "durable-residual-records",
+]
+
+[[workload]]
+id = "PERF-CS-023"
+version = 1
+requirements = [
+    "BIND-MEM-001",
+    "BIND-PROGRESS-001",
+    "BIND-ROUTE-001",
+    "CONSTRAINED-WORK-001",
+    "RES-LIMIT-001",
+]
+fixture_id = "FX-CS-023"
+harness_case = "bounded_binding_ingress"
+gating = true
+name = "bounded_binding_ingress"
+pressure_scopes = ["per-route", "per-binding", "global"]
+saturation_axes = ["items", "bytes", "items-and-bytes"]
+coverage_dimensions = ["pressure_scopes", "saturation_axes"]
+engine_allocations_max = 0
+accepted_items_over_limit_max = 0
+accepted_bytes_over_limit_max = 0
+unowned_ingress_inputs_max = 0
+hidden_ingress_bytes_max = 0
+critical_section_guards_held_during_ingress_admission_max = 0
+work_budget_overshoot_units_max = 0
+maximum_unrelated_route_service_gap_steps_max = 64
+require_exact_ingress_admission_accounting = true
+require_complete_matrix_coverage = true
+report = [
+    "cycles-per-step",
+    "steps",
+    "ingress-items",
+    "ingress-bytes",
+    "rejected-items",
+    "maximum-service-gap",
     "allocations",
 ]
 

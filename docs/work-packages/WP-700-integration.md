@@ -8,11 +8,11 @@ Owner packages: `clinkz-wot`, workspace
 
 ## Scope
 
-Integrate the completed foundation, TD, core, planning, binding, Servient, Discovery client,
-zenoh/zenoh-pico, and codec migrations into the application-facing `clinkz-wot` crate. Freeze the
-intentional re-export surface, remove obsolete compatibility APIs, run the complete feature and
-requirement evidence matrix, establish implementation baselines, and make the final conformance
-decision.
+Integrate the completed foundation, TD, core, planning, complete binding SPI, Servient, Discovery
+client, zenoh/zenoh-pico, and codec migrations into the application-facing `clinkz-wot` crate.
+Freeze the intentional re-export surface, remove obsolete compatibility APIs, run the complete
+feature and requirement evidence matrix, establish implementation baselines, and make the final
+conformance decision.
 
 This work package does not redesign behavior or create another implementation layer. A conflict,
 missing owner, infeasible budget, or ambiguous state transition returns to design review under
@@ -40,8 +40,11 @@ package-scoped evidence without claiming end-to-end completion.
 - `PERF-BUDGET-001`
 - `PERF-SCALE-001`
 
-All other indexed requirements are transitive completion inputs. This package may aggregate their
-evidence, but it cannot replace a focused package-level result with one broad integration test.
+All other indexed requirements are transitive completion inputs. In particular,
+`BIND-REG-001`, `BIND-ROUTE-001`, `BIND-STORAGE-001`, `BIND-MEM-001`, and
+`BIND-DELIVERY-001` require composed final-conformance evidence from the core, planning, Servient,
+and concrete-binding work packages. WP-700 may aggregate that evidence, but it cannot replace a
+focused package-level result with one broad integration test.
 
 ## Crates and Feature Cells
 
@@ -73,6 +76,13 @@ revision.
 - Re-export `OutboundRequest` and core subscription SPI values from core, and the linear
   application `Subscription` facade from Servient. Do not expose a second queue-backed
   subscription or an emission coordinator implementation from the umbrella.
+- Re-export only the complete `HostBindingRegistration` and `StaticBindingRegistration<B>`
+  installation boundaries plus intentionally public construction components. Do not re-export a
+  split client/server registration, separately installable compiler or contributor, runtime event
+  sink configuration, driving-mode selector, or bare trait-object builder convenience.
+- Re-export the core `BindingCompilerExtension` and immutable artifact envelope/reference SPI and
+  the planning crate's compiler coordinator under their defining type identities. Do not recreate
+  the former shared protocol-bindings planning namespace.
 - Replace broad accidental prelude exposure with a reviewed application-facing list covering
   documents, interaction values, handlers, Servient construction, produced/consumed handles,
   Discovery client values, resource policy, and selected optional bindings/codecs.
@@ -104,6 +114,17 @@ revision.
 - Verify that a source document, compiled plan, registration, route guard, payload lease,
   subscription guard, Directory slot, cleanup record, and performance result each have exactly one
   live owner at every cross-crate handoff.
+- Verify the complete plan-set lifecycle from startup registration snapshot through
+  `Building -> Frozen -> Published -> Draining -> Reclaimed`. Existing routes, calls,
+  subscriptions, and artifacts keep their generation leases while draining; final composition has
+  no runtime bundle replacement or generation invalidation shortcut.
+- Verify route-scoped readiness and acceptance fairness, one accept cursor/waker lease per route,
+  terminal isolation, and absence of a binding-visible application dispatch capability. Verify
+  associated-state static slots at their declared layouts and terminal-drop boundaries.
+- Verify typed response and publication rejection returns the complete input before acceptance.
+  After acceptance, verify exactly-once settlement and transfer of the complete call, guard,
+  driver, input, or typed slot to an acknowledged cleanup owner; a durable record alone cannot
+  close the ownership chain.
 - Run the lock/reentrancy and dependency inspections across the composed workspace so an umbrella
   convenience adapter cannot reintroduce a global hot-path mutex, a callback under lock, or a
   forbidden concrete transport dependency.
@@ -111,14 +132,14 @@ revision.
 ## Old API Removal
 
 - Remove `ProtocolBinding` and `ClientBindingFactory` names, documentation, prelude exports, and
-  examples. Applications register `ServerBindingRegistration` and
-  `ClientBindingRegistration`, with explicit convenience wrapping where appropriate.
+  examples. Applications install complete host or static startup bundles; no split server/client
+  registration or bare-component wrapping is an application configuration path.
 - Remove umbrella exposure of Directory backends, storage adapters, `InMemoryDirectory`,
   `LocalDiscoverer`, local Directory defaults, and all service-shaped query/publication types
   removed by `WP-500`.
 - Remove exports of the old monolithic `ServerBinding::serve`/`shutdown` lifecycle, implicit
   subscription/discovery end markers, and current binding registration methods superseded by
-  generation-bearing registrations and slots.
+  complete generation-bearing bundles, route-scoped acceptance, and associated-state slots.
 - Remove or rename ambiguous `produce(Thing)` and source-envelope methods whose result shape does
   not match their documented Scripting-compatible contract. Complete TD and source-document paths
   remain available only under their explicit names.
@@ -134,6 +155,10 @@ revision.
   registration methods frozen in `docs/api-ownership.csv`.
 - Remove stale crate documentation claiming that the default `std` feature installs Tokio or a
   concrete transport when the actual feature graph does not do so.
+- Remove `RuntimeEventSinkConfig`, `BindingDrivingMode`, independently installable host/static
+  client and server registrations, registration-wide `poll_accept`, concrete opaque constrained
+  slot payloads, and any runtime binding replacement API from every umbrella module and feature
+  cell.
 
 The old-API compile-fail suite names every removed public path and proves that no default,
 no-default, async, or optional binding cell restores it.
@@ -149,6 +174,10 @@ no-default, async, or optional binding cell restores it.
 - `requirement-evidence-completeness`: machine-readable proof that every applicable expanded
   requirement has current focused evidence and that all artifact, ownership, state, resource,
   gate, and work-package checks pass in one revision.
+- `binding-spi-final-conformance`: type-identity and composed lifecycle evidence for complete
+  startup bundles, core compiler-extension artifacts, immutable plan-set leases, route-scoped
+  fairness, associated-state slots, lifetime/ingress accounting, typed input rejection, and
+  acknowledged complete-work cleanup transfer across host and constrained feature cells.
 - `end-to-end-response-boundary`: composed producer and consumer paths prove that a success owns
   only validated `InteractionOutput`, a failure owns only `CoreError`, and protocol response
   metadata retains its live identity and native provenance through shared validation.
@@ -171,9 +200,9 @@ failure-injection, no-std compile, and dependency-direction checks across the fu
 
 ## Performance Workloads
 
-- Gateway: `PERF-GW-001..027` (`PERF-GW-001` through `PERF-GW-027`).
+- Gateway: `PERF-GW-001..032` (`PERF-GW-001` through `PERF-GW-032`).
 - Directory client: `PERF-DIR-001..011` (`PERF-DIR-001` through `PERF-DIR-011`).
-- Constrained: `PERF-CS-001..019` (`PERF-CS-001` through `PERF-CS-019`).
+- Constrained: `PERF-CS-001..023` (`PERF-CS-001` through `PERF-CS-023`).
 
 Run every workload through `tools/performance-harness` with the manifest, fixture, measurement,
 profile, feature, target, toolchain, allocator, runner, and workload identities locked. Populate
@@ -200,6 +229,11 @@ reference gate.
   `ServerEmissionSlot`; positive checks resolve `OutboundRequest`, `HostSubscriptionDriver`,
   `SubscriptionStopRequest`, `BindingEmissionSlot`, and the Servient `Subscription` to one
   defining owner each.
+- Negative compile/source checks also cover split registration types, bare component builder
+  methods, `RuntimeEventSinkConfig`, `BindingDrivingMode`, registration-wide acceptance, runtime
+  bundle mutation, and non-generic opaque constrained slots. Positive checks resolve the complete
+  host/static bundles, compiler SPI, generic associated-state slots, typed input rejection, and
+  complete cleanup task to one defining owner each.
 - Every applicable requirement has current focused evidence; no waiver, open design ambiguity,
   temporary nonconformance feature, or unrecorded old API remains.
 - All gating performance workloads have accepted numeric baselines and pass their absolute,
@@ -207,4 +241,4 @@ reference gate.
 - Workspace formatting, Clippy, rustdoc, tests, state models, artifact checks, no-std checks, and
   old-API inspections pass from a clean tree.
 - The release notes identify the intentional breaking migrations and final public paths. Only then
-  may the coordinated implementation refactor be declared conforming to design revision v4.8.
+  may the coordinated implementation refactor be declared conforming to design revision v4.9.

@@ -9,9 +9,9 @@ use std::process::Command;
 
 use serde_json::Value as JsonValue;
 use sha2::{Digest, Sha256};
-use toml_edit::{DocumentMut, Item, Table};
+use toml_edit::{DocumentMut, Item, Table, value};
 
-const GENERATOR: &str = "clinkz-wot-fixture-generator-v2";
+const GENERATOR: &str = "clinkz-wot-fixture-generator-v3";
 const MANIFESTS: &[&str] = &[
     "docs/performance/gateway.toml",
     "docs/performance/directory.toml",
@@ -19,17 +19,26 @@ const MANIFESTS: &[&str] = &[
 ];
 const RECIPE_KEYS: &[&str] = &[
     "actors",
+    "binding_artifacts",
     "bindings",
+    "call_bytes",
     "collection_sources",
     "document_bytes",
+    "driver_bytes",
     "extension_bytes",
     "forms",
     "handler_slots",
+    "ingress_bytes",
+    "ingress_items",
     "page_entries",
     "page_item_bytes",
     "payload_bytes",
+    "plan_sets",
+    "readiness_tokens",
+    "routes",
     "schema_nodes",
     "security_branches",
+    "slot_state_bytes",
     "string_bytes",
     "subscribers",
     "td_nodes",
@@ -186,6 +195,17 @@ fn run() -> Result<(), String> {
                 );
             }
         }
+        "refresh-lock" => {
+            reject_extra(arguments)?;
+            refresh_digests(&root)?;
+            let (fixtures, manifests) = load_contract(&root, false)?;
+            verify_digests(&fixtures, &manifests)?;
+            println!(
+                "performance harness: refreshed {} fixtures and {} manifest digests",
+                fixtures.len(),
+                manifests.len(),
+            );
+        }
         "fixture" => {
             let id = required_argument(&mut arguments, "fixture id")?;
             reject_extra(arguments)?;
@@ -205,7 +225,7 @@ fn run() -> Result<(), String> {
         }
         command => {
             return Err(format!(
-                "unknown command {command:?}; expected verify, list, digest-lines, fixture, or run"
+                "unknown command {command:?}; expected verify, list, digest-lines, refresh-lock, fixture, or run"
             ));
         }
     }
@@ -454,20 +474,32 @@ fn validate_fixture_recipe(
     limits: &FixtureProfileLimits,
 ) -> Result<(), String> {
     for (recipe_key, limit_field) in [
+        ("binding_artifacts", "binding_artifacts_per_thing_max"),
         ("bindings", "bindings_global_max"),
+        ("call_bytes", "host_binding_call_bytes_per_item_max"),
         (
             "collection_sources",
             "collection_subscription_sources_per_subscription_max",
         ),
         ("document_bytes", "document_bytes_max"),
+        (
+            "driver_bytes",
+            "host_subscription_driver_bytes_per_item_max",
+        ),
         ("extension_bytes", "extension_bytes_max"),
         ("forms", "forms_per_thing_max"),
         ("handler_slots", "handler_slots_per_thing_max"),
+        ("ingress_bytes", "binding_ingress_bytes_per_route_max"),
+        ("ingress_items", "binding_ingress_items_per_route_max"),
         ("page_entries", "directory_page_entries_max"),
         ("page_item_bytes", "directory_page_item_bytes_max"),
         ("payload_bytes", "payload_bytes_max"),
+        ("plan_sets", "plan_sets_per_thing_max"),
+        ("readiness_tokens", "route_readiness_tokens_per_thing_max"),
+        ("routes", "binding_routes_per_thing_max"),
         ("schema_nodes", "schema_nodes_per_document_max"),
         ("security_branches", "security_branches_per_plan_max"),
+        ("slot_state_bytes", "binding_slot_state_bytes_per_item_max"),
         ("string_bytes", "string_bytes_max"),
         ("subscribers", "subscriptions_per_thing_max"),
         ("td_nodes", "json_value_nodes_per_document_max"),
@@ -1001,6 +1033,40 @@ fn verify_digests(
     Ok(())
 }
 
+fn refresh_digests(root: &Path) -> Result<(), String> {
+    let (fixtures, manifests) = load_contract(root, true)?;
+    let lock_path = root.join("docs/performance/fixtures.lock.toml");
+    let mut lock = parse_toml(&lock_path)?;
+    let tables = lock
+        .get_mut("fixture")
+        .and_then(Item::as_array_of_tables_mut)
+        .ok_or_else(|| "fixture lock has no [[fixture]] entries".to_owned())?;
+    for table in tables.iter_mut() {
+        let id = string_field(table, "id", "fixture")?;
+        let fixture = fixtures
+            .get(&id)
+            .ok_or_else(|| format!("fixture lock contains unknown fixture {id:?}"))?;
+        table["content_sha256"] = value(fixture_digest(fixture)?);
+    }
+    fs::write(&lock_path, lock.to_string())
+        .map_err(|error| format!("cannot write {}: {error}", lock_path.display()))?;
+
+    for manifest in &manifests {
+        let source = fs::read_to_string(&manifest.path)
+            .map_err(|error| format!("cannot read {}: {error}", manifest.path.display()))?;
+        let mut document = source
+            .parse::<DocumentMut>()
+            .map_err(|error| format!("invalid {}: {error}", manifest.path.display()))?;
+        document["fixture_digest"] = value(format!(
+            "sha256:{}",
+            manifest_fixture_digest(manifest, &fixtures)?,
+        ));
+        fs::write(&manifest.path, document.to_string())
+            .map_err(|error| format!("cannot write {}: {error}", manifest.path.display()))?;
+    }
+    Ok(())
+}
+
 fn manifest_fixture_digest(
     manifest: &Manifest,
     fixtures: &BTreeMap<String, Fixture>,
@@ -1026,7 +1092,7 @@ fn fixture_digest(fixture: &Fixture) -> Result<String, String> {
 
 fn generate_fixture(fixture: &Fixture) -> Result<Vec<u8>, String> {
     let recipe = parse_recipe(&fixture.recipe)?;
-    let mut output = b"clinkz-wot-fixture-v2\0".to_vec();
+    let mut output = b"clinkz-wot-fixture-v3\0".to_vec();
     append_section(&mut output, "fixture-id", fixture.id.as_bytes())?;
     append_section(&mut output, "profile", fixture.profile.as_bytes())?;
     append_section(&mut output, "harness-case", fixture.harness_case.as_bytes())?;
@@ -1062,6 +1128,30 @@ fn generate_fixture(fixture: &Fixture) -> Result<Vec<u8>, String> {
         recipe_value(&recipe, "uri_template_bytes")?,
         fixture.seed ^ 0x5552_4954_454d_5001,
     )?;
+    append_deterministic_bytes(
+        &mut output,
+        "call-bytes",
+        recipe_value(&recipe, "call_bytes")?,
+        fixture.seed ^ 0x4341_4c4c_0000_0001,
+    )?;
+    append_deterministic_bytes(
+        &mut output,
+        "driver-bytes",
+        recipe_value(&recipe, "driver_bytes")?,
+        fixture.seed ^ 0x4452_4956_4552_0001,
+    )?;
+    append_deterministic_bytes(
+        &mut output,
+        "ingress-bytes",
+        recipe_value(&recipe, "ingress_bytes")?,
+        fixture.seed ^ 0x494e_4752_4553_5301,
+    )?;
+    append_deterministic_bytes(
+        &mut output,
+        "slot-state-bytes",
+        recipe_value(&recipe, "slot_state_bytes")?,
+        fixture.seed ^ 0x534c_4f54_5354_0001,
+    )?;
 
     let payload_bytes = recipe_value(&recipe, "payload_bytes")?;
     if payload_bytes > 0 {
@@ -1095,6 +1185,12 @@ fn generate_fixture(fixture: &Fixture) -> Result<Vec<u8>, String> {
     )?;
     append_fixed_records(
         &mut output,
+        "binding-artifact",
+        recipe_value(&recipe, "binding_artifacts")?,
+        fixture.seed ^ 0x4152_5449_4641_4354,
+    )?;
+    append_fixed_records(
+        &mut output,
         "binding",
         recipe_value(&recipe, "bindings")?,
         fixture.seed ^ 0x4249_4e44_494e_4701,
@@ -1110,6 +1206,30 @@ fn generate_fixture(fixture: &Fixture) -> Result<Vec<u8>, String> {
         "handler-slot",
         recipe_value(&recipe, "handler_slots")?,
         fixture.seed ^ 0x4841_4e44_4c45_5201,
+    )?;
+    append_fixed_records(
+        &mut output,
+        "ingress-item",
+        recipe_value(&recipe, "ingress_items")?,
+        fixture.seed ^ 0x494e_4752_4553_5302,
+    )?;
+    append_fixed_records(
+        &mut output,
+        "plan-set",
+        recipe_value(&recipe, "plan_sets")?,
+        fixture.seed ^ 0x504c_414e_5345_5401,
+    )?;
+    append_fixed_records(
+        &mut output,
+        "readiness-token",
+        recipe_value(&recipe, "readiness_tokens")?,
+        fixture.seed ^ 0x5245_4144_594e_0001,
+    )?;
+    append_fixed_records(
+        &mut output,
+        "route",
+        recipe_value(&recipe, "routes")?,
+        fixture.seed ^ 0x524f_5554_4500_0001,
     )?;
     append_fixed_records(
         &mut output,
@@ -1894,6 +2014,45 @@ mod tests {
         let first = generate_fixture(&fixture).expect("fixture must generate");
         let second = generate_fixture(&fixture).expect("fixture must generate again");
         assert_eq!(first, second);
+        assert!(first.starts_with(b"clinkz-wot-fixture-v3\0"));
+    }
+
+    #[test]
+    fn fixture_generation_emits_planning_and_binding_sections() {
+        let fixture = Fixture {
+            id: "FX-TEST-002".to_owned(),
+            profile: "TestProfileV1".to_owned(),
+            harness_case: "planning_binding_sections".to_owned(),
+            version: 1,
+            seed: 47,
+            recipe: concat!(
+                "binding_artifacts=2;call_bytes=8;driver_bytes=8;",
+                "ingress_bytes=8;ingress_items=2;plan_sets=2;",
+                "readiness_tokens=2;routes=2;slot_state_bytes=8",
+            )
+            .to_owned(),
+            content_sha256: String::new(),
+            forms_per_context_max: 16,
+        };
+        let generated = generate_fixture(&fixture).expect("fixture must generate");
+        for section in [
+            "binding-artifact",
+            "call-bytes",
+            "driver-bytes",
+            "ingress-bytes",
+            "ingress-item",
+            "plan-set",
+            "readiness-token",
+            "route",
+            "slot-state-bytes",
+        ] {
+            assert!(
+                generated
+                    .windows(section.len())
+                    .any(|window| window == section.as_bytes()),
+                "fixture is missing section {section:?}",
+            );
+        }
     }
 
     #[test]

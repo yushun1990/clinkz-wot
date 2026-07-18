@@ -1,0 +1,119 @@
+#+title: ADR-0011: Cleanup Reservation, Transfer, and Residual Ownership
+#+date: 2026-07-19
+#+status: Accepted
+
+* Context
+
+The v4.8 design reused one cleanup transfer context for semantically different
+phases such as binding-call start cancellation and active subscription stop.
+Those phases have different operations, cancellation linearization points,
+deadlines, first causes, and owned work objects. A cleanup handle also could not
+materialize its required bounded subject identity by itself.
+
+Several APIs returned pending cleanup after producing only a =CleanupRecord= or
+while merely borrowing the call, route guard, driver, or constrained slot. That
+reports status but does not identify who can still poll the work. Wake-at-
+deadline behavior, work accounting, rejected task handoff, and residual
+commitment were consequently not closed.
+
+* Decision
+
+Cleanup uses two separate concepts. =CleanupReservation= is the reusable,
+phase-neutral reservation model: before a side effect, Servient or the static
+runtime reserves the bounded item capacity, byte capacity, durable status
+capacity, and complete identity seed that a possible cleanup obligation needs.
+Each independent obligation owns an independent reservation; sharing the model
+does not permit two routes or phases to compete for one reserved item.
+
+At the cancellation, stop, abort, shutdown, or transfer linearization point,
+one reservation is bound into a phase-specific cleanup context or token. That
+phase value fixes all of the following independently:
+
+- the exact operation being cleaned up, such as call cancellation,
+  subscription stop, readiness cancellation, prepared-route abort,
+  active-route shutdown, response cancellation, or emission cancellation;
+- the immutable first cause for that obligation;
+- the binding, subject, owner, and plan or route generations derived from the
+  pre-reserved identity seed;
+- an independent cleanup-drain deadline measured from that phase's
+  linearization point; and
+- the admitted work and footprint bounds for the complete cleanup lifetime.
+
+An interaction deadline and a cleanup-drain deadline are not interchangeable.
+Starting a later phase does not overwrite an earlier phase's first cause, and a
+generic handle does not invent identity, operation, or capacity after the side
+effect has begun. Independent obligations, including readiness cancellation
+and prepared-route abort, bind independent phase values even when they arise
+from one higher-level destroy request.
+
+=Pending= is an ownership disposition, not an observation. It is legal only
+after the complete call, guard, driver, response/emission input, or constrained
+slot has moved to a named owner that has acknowledged capacity and responsibility
+for progress. Until acknowledgement, the source remains the owner. Rejected
+executor or queue handoff returns the complete object to its pre-reserved
+Servient manual-cleanup owner; it never degrades into a record-only transfer.
+
+A =CleanupRecord= is bounded durable identity and status. It can report the
+first cause, operation, generations, terminal disposition, and residual facts,
+but it is not the work object and cannot be polled to release protocol state.
+Creating or retaining a record therefore never proves that a live call, guard,
+driver, or slot was transferred.
+
+Every pending owner has one progress lease and an explicit progress contract:
+
+- cleanup calls execute outside engine locks and consume a bounded work budget;
+- zero available work retains the object without invoking binding code;
+- a pending poll registers its wake interest before rechecking observable
+  progress, so a wake cannot be lost between start and first poll;
+- the runtime supplies deadline progress even when the binding or transport
+  never wakes; and
+- stale wakes or results cannot act after the phase or generation has become
+  terminal.
+
+Terminal completion already committed under the progress lease wins a
+simultaneous cancellation or deadline race. Otherwise, deadline expiry fixes
+the deadline disposition. Before destroying the work object, the owner commits
+either verified completion or bounded durable residual external state using the
+pre-reserved status capacity. Residual commitment includes enough operation,
+identity, cause, and last-known disposition information for audit and explicit
+shutdown reporting; it is not represented as successful cleanup. Destruction
+occurs outside engine locks, and no destructor is permitted to block or to be
+the only cleanup mechanism.
+
+The complete object's declared lifetime footprint includes cancellation and
+cleanup state. Transfer changes the owner ledger but does not reduce or
+re-admit that footprint. Capacity is released only after completion or durable
+residual commitment and terminal acknowledgement.
+
+This ADR freezes the ownership and progress invariants, not exact Rust names,
+generic parameters, trait methods, or outcome enum shapes. The binding SPI
+specification defines those public surfaces separately for host-owned erased
+objects and constrained caller-owned typed slots.
+
+* Consequences
+
+- Host binding calls, subscription drivers, server route guards, response and
+  emission inputs, and constrained slots use the same cleanup ownership model
+  without sharing one phase context.
+- API projections must distinguish reservation, phase context/token, complete
+  work transfer, acknowledged owner, durable record, and residual result.
+- State projections must include handoff rejection, manual-owner fallback,
+  first-cause races, deadline wakeup, zero-budget retention, drain expiry,
+  residual commitment, stale results, and terminal acknowledgement.
+- Resource limits must cover independent reservations, complete lifetime
+  footprints, manual cleanup slots, pending task capacity, and durable residual
+  records before a side effect begins.
+- Deterministic workloads must exercise transfer to every supported owner,
+  executor rejection/drop, a transport that never wakes, deadline races, and
+  cleanup objects whose retained footprint reaches the declared maximum.
+
+* Rejected alternatives
+
+- Reusing one mutable transfer context across phases was rejected because it
+  conflates operations, first causes, deadlines, and independently owned work.
+- Treating =CleanupRecord= as cleanup work was rejected because status has no
+  authority or object with which to advance protocol cleanup.
+- Reporting pending while the source still owns or borrows the object was
+  rejected because no acknowledged owner can guarantee later progress.
+- Relying on task detachment or destructor cleanup was rejected because it
+  loses bounded ownership, wake, deadline, shutdown, and residual evidence.

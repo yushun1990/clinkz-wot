@@ -11,13 +11,16 @@ use toml_edit::{Array, ArrayOfTables, DocumentMut, Item, Table};
 const ACTIVE_DESIGN_REVISION: &str = "4.9";
 const REJECTED_DESIGN_REVISION: &str = "4.8";
 const WP000_EVIDENCE_REVISION: &str = "4.6";
-const ARCHITECTURE_CLOSURE_REVIEW: &str = "architecture-closure-2026-07-19-v4.9";
-const ARCHITECTURE_REVIEW_02_OPEN: &str = "architecture-review-02-v4.8-rejected";
+const ARCHITECTURE_INTERIM_REVIEW: &str = "architecture-review-03-v4.9-interim";
+const ARCHITECTURE_REVIEW_02_PREDECESSOR: &str = "architecture-review-02-v4.8-rejected";
 
 const REQUIRED_MACHINES: &[&str] = &[
+    "active-route-driver",
     "binding-call",
     "binding-emission-slot",
     "binding-route",
+    "cleanup-task",
+    "compiled-plan-set",
     "directory-process",
     "emission-coordinator",
     "expose",
@@ -25,14 +28,25 @@ const REQUIRED_MACHINES: &[&str] = &[
     "handler-step-execution",
     "handler-sync-execution",
     "in-flight",
+    "lazy-binding-artifact",
     "producer-subscription",
+    "route-lifecycle-call",
+    "route-readiness",
     "subscription",
     "subscription-driver-slot",
 ];
 const REQUIRED_COMPOSITIONS: &[&str] = &[
+    "active-route-acceptance",
+    "binding-call-cleanup-transfer",
+    "binding-route-lifecycle",
+    "binding-route-readiness",
+    "consumer-plan-publication",
+    "emission-delivery-ownership",
     "handler-cancellation-response",
     "handler-direct-response",
     "producer-late-start-result-transfer",
+    "producer-plan-drain",
+    "producer-plan-serving-publication",
     "producer-prepublication-failure-response",
     "producer-setup-abort",
     "producer-start-publication",
@@ -40,6 +54,8 @@ const REQUIRED_COMPOSITIONS: &[&str] = &[
     "producer-teardown-handoff",
     "producer-teardown-result-and-response",
     "producer-terminal-replay-and-release",
+    "response-delivery-ownership",
+    "subscription-process-cleanup",
 ];
 const REQUIRED_WORK_PACKAGES: &[&str] = &[
     "WP-000", "WP-100", "WP-200", "WP-300", "WP-400", "WP-500", "WP-600", "WP-700",
@@ -573,13 +589,12 @@ fn check_state_machines(root: &Path) -> Result<(), String> {
         .get("machine")
         .and_then(Item::as_array_of_tables)
         .ok_or_else(|| "state artifact has no [[machine]] entries".to_owned())?;
-    let design = fs::read_to_string(root.join("docs/design.md"))
-        .map_err(|error| format!("cannot read docs/design.md: {error}"))?;
+    let known_requirements = load_requirement_ids(root)?;
 
     let mut ids = BTreeSet::new();
     let mut machine_transitions = BTreeMap::new();
     for machine in machines {
-        let (id, transitions) = check_machine(machine, &design, &mut ids)?;
+        let (id, transitions) = check_machine(machine, &known_requirements, &mut ids)?;
         machine_transitions.insert(id, transitions);
     }
 
@@ -592,7 +607,7 @@ fn check_state_machines(root: &Path) -> Result<(), String> {
             "state machine set mismatch; expected {expected:?}, found {ids:?}"
         ));
     }
-    check_compositions(&document, &design, &machine_transitions)?;
+    check_compositions(&document, &known_requirements, &machine_transitions)?;
     Ok(())
 }
 
@@ -814,15 +829,15 @@ fn check_governance(root: &Path, require_ready: bool) -> Result<(), String> {
 
         if gate != "GATE-3"
             && (status != "open"
-                || review_id != ARCHITECTURE_REVIEW_02_OPEN
+                || review_id != ARCHITECTURE_INTERIM_REVIEW
                 || review.review_type != "audit"
-                || review.design_revision != REJECTED_DESIGN_REVISION
+                || review.design_revision != ACTIVE_DESIGN_REVISION
                 || review.status != "blocking"
-                || !review.artifacts.contains("docs/review/review-02.org"))
+                || !review.artifacts.contains("docs/review/review-03.org"))
         {
             return Err(format!(
-                "{gate} must remain open under the rejected v{REJECTED_DESIGN_REVISION} \
-                 Architecture Review 02 record while v{ACTIVE_DESIGN_REVISION} is rebuilt"
+                "{gate} must remain open under the blocking v{ACTIVE_DESIGN_REVISION} \
+                 Architecture Review 03 interim audit"
             ));
         }
 
@@ -846,10 +861,23 @@ fn check_governance(root: &Path, require_ready: bool) -> Result<(), String> {
         ));
     }
     let review_ids: BTreeSet<String> = reviews.keys().cloned().collect();
-    if referenced_reviews != review_ids {
-        let unused: Vec<_> = review_ids.difference(&referenced_reviews).collect();
+    let expected_review_ids = owned_set(&[
+        ARCHITECTURE_REVIEW_02_PREDECESSOR,
+        ARCHITECTURE_INTERIM_REVIEW,
+        "directory-client-v4.6-review",
+    ]);
+    if review_ids != expected_review_ids {
         return Err(format!(
-            "governance contains unreferenced reviews {unused:?}"
+            "governance review set mismatch; expected {expected_review_ids:?}, found \
+             {review_ids:?}"
+        ));
+    }
+    let expected_referenced_reviews =
+        owned_set(&[ARCHITECTURE_INTERIM_REVIEW, "directory-client-v4.6-review"]);
+    if referenced_reviews != expected_referenced_reviews {
+        return Err(format!(
+            "current gate review evidence mismatch; expected {expected_referenced_reviews:?}, \
+             found {referenced_reviews:?}"
         ));
     }
     if require_ready && !open_gates.is_empty() {
@@ -879,8 +907,15 @@ fn expected_gate_contract(gate: &str) -> Option<GateContract> {
                 "CLEANUP-RECORD-001",
                 "PLAN-COST-001",
                 "PLAN-INDEX-001",
+                "PLAN-SET-001",
+                "PLAN-ARTIFACT-001",
                 "FORM-FINALIZE-001",
                 "FORM-OWNER-001",
+                "BIND-REG-001",
+                "BIND-ROUTE-001",
+                "BIND-STORAGE-001",
+                "BIND-MEM-001",
+                "BIND-DELIVERY-001",
                 "BIND-IO-001",
                 "BIND-OUT-001",
                 "BIND-CALL-CANCEL-001",
@@ -888,6 +923,8 @@ fn expected_gate_contract(gate: &str) -> Option<GateContract> {
             ]),
             owned_set(&[
                 "docs/design.md",
+                "docs/spec/planning.md",
+                "docs/spec/binding-spi.md",
                 "docs/architecture/README.md",
                 "docs/architecture/20-module-boundaries.md",
                 "docs/architecture/30-compiled-plan-lifecycle.md",
@@ -908,6 +945,8 @@ fn expected_gate_contract(gate: &str) -> Option<GateContract> {
                 "docs/ADR/0007-normative-document-hierarchy.org",
                 "docs/ADR/0008-compiled-plan-lifecycle.org",
                 "docs/ADR/0009-protocol-binding-integration-and-deployment.org",
+                "docs/ADR/0010-server-route-lifecycle.org",
+                "docs/ADR/0011-cleanup-reservation-and-transfer.org",
             ]),
             owned_set(&[
                 "api-ownership-check",
@@ -928,7 +967,12 @@ fn expected_gate_contract(gate: &str) -> Option<GateContract> {
                 "PRODUCER-EMIT-001",
                 "PLAN-COST-001",
                 "PLAN-INDEX-001",
+                "PLAN-SET-001",
+                "PLAN-ARTIFACT-001",
                 "FORM-OWNER-001",
+                "BIND-ROUTE-001",
+                "BIND-STORAGE-001",
+                "BIND-DELIVERY-001",
                 "BIND-IO-001",
                 "BIND-OUT-001",
                 "BIND-CALL-CANCEL-001",
@@ -943,6 +987,8 @@ fn expected_gate_contract(gate: &str) -> Option<GateContract> {
             ]),
             owned_set(&[
                 "docs/design.md",
+                "docs/spec/planning.md",
+                "docs/spec/binding-spi.md",
                 "docs/architecture/README.md",
                 "docs/architecture/10-primary-data-flows.md",
                 "docs/architecture/30-compiled-plan-lifecycle.md",
@@ -963,6 +1009,8 @@ fn expected_gate_contract(gate: &str) -> Option<GateContract> {
                 "docs/ADR/0007-normative-document-hierarchy.org",
                 "docs/ADR/0008-compiled-plan-lifecycle.org",
                 "docs/ADR/0009-protocol-binding-integration-and-deployment.org",
+                "docs/ADR/0010-server-route-lifecycle.org",
+                "docs/ADR/0011-cleanup-reservation-and-transfer.org",
             ]),
             owned_set(&[
                 "architecture-adr-check",
@@ -997,13 +1045,22 @@ fn expected_gate_contract(gate: &str) -> Option<GateContract> {
                 "API-RESOURCE-001",
                 "ADMIT-MEM-001",
                 "PLAN-COST-001",
+                "PLAN-SET-001",
+                "PLAN-ARTIFACT-001",
                 "HANDLER-STORAGE-001",
                 "HANDLER-CANCEL-002",
+                "BIND-REG-001",
+                "BIND-ROUTE-001",
+                "BIND-STORAGE-001",
+                "BIND-MEM-001",
+                "BIND-DELIVERY-001",
                 "BIND-CALL-CANCEL-001",
                 "BIND-HOST-CANCEL-001",
                 "CLEANUP-RECORD-001",
             ]),
             owned_set(&[
+                "docs/spec/planning.md",
+                "docs/spec/binding-spi.md",
                 "docs/architecture/30-compiled-plan-lifecycle.md",
                 "docs/architecture/40-protocol-binding-spi-and-deployment.md",
                 "docs/architecture/50-servient-runtime-lifecycle.md",
@@ -1025,6 +1082,8 @@ fn expected_gate_contract(gate: &str) -> Option<GateContract> {
                 "docs/ADR/0007-normative-document-hierarchy.org",
                 "docs/ADR/0008-compiled-plan-lifecycle.org",
                 "docs/ADR/0009-protocol-binding-integration-and-deployment.org",
+                "docs/ADR/0010-server-route-lifecycle.org",
+                "docs/ADR/0011-cleanup-reservation-and-transfer.org",
             ]),
             owned_set(&[
                 "architecture-adr-check",
@@ -1044,6 +1103,13 @@ fn expected_gate_contract(gate: &str) -> Option<GateContract> {
                 "PERF-FANOUT-002",
                 "PLAN-COST-001",
                 "PLAN-INDEX-001",
+                "PLAN-SET-001",
+                "PLAN-ARTIFACT-001",
+                "BIND-REG-001",
+                "BIND-ROUTE-001",
+                "BIND-STORAGE-001",
+                "BIND-MEM-001",
+                "BIND-DELIVERY-001",
                 "BIND-PROGRESS-001",
                 "BIND-CALL-CANCEL-001",
                 "BIND-HOST-CANCEL-001",
@@ -1053,11 +1119,14 @@ fn expected_gate_contract(gate: &str) -> Option<GateContract> {
                 "HANDLER-CANCEL-002",
             ]),
             owned_set(&[
+                "docs/spec/planning.md",
+                "docs/spec/binding-spi.md",
                 "docs/architecture/10-primary-data-flows.md",
                 "docs/architecture/30-compiled-plan-lifecycle.md",
                 "docs/architecture/40-protocol-binding-spi-and-deployment.md",
                 "docs/architecture/50-servient-runtime-lifecycle.md",
                 "docs/state-machines.toml",
+                "docs/resource-limits.csv",
                 "docs/performance/manifest.schema.json",
                 "docs/performance/result.schema.json",
                 "docs/performance/fixtures.lock.toml",
@@ -1077,10 +1146,13 @@ fn expected_gate_contract(gate: &str) -> Option<GateContract> {
                 "docs/ADR/0007-normative-document-hierarchy.org",
                 "docs/ADR/0008-compiled-plan-lifecycle.org",
                 "docs/ADR/0009-protocol-binding-integration-and-deployment.org",
+                "docs/ADR/0010-server-route-lifecycle.org",
+                "docs/ADR/0011-cleanup-reservation-and-transfer.org",
             ]),
             owned_set(&[
                 "architecture-adr-check",
                 "state-machine-check",
+                "resource-profile-check",
                 "performance-contract-check",
                 "wp100-handler-amendment-check",
             ]),
@@ -1090,7 +1162,14 @@ fn expected_gate_contract(gate: &str) -> Option<GateContract> {
                 "IMPL-CONFORM-001",
                 "PLAN-COST-001",
                 "PLAN-INDEX-001",
+                "PLAN-SET-001",
+                "PLAN-ARTIFACT-001",
                 "FORM-OWNER-001",
+                "BIND-REG-001",
+                "BIND-ROUTE-001",
+                "BIND-STORAGE-001",
+                "BIND-MEM-001",
+                "BIND-DELIVERY-001",
                 "BIND-IO-001",
                 "BIND-OUT-001",
                 "BIND-CALL-CANCEL-001",
@@ -1104,6 +1183,8 @@ fn expected_gate_contract(gate: &str) -> Option<GateContract> {
             ]),
             owned_set(&[
                 "docs/design.md",
+                "docs/spec/planning.md",
+                "docs/spec/binding-spi.md",
                 "docs/architecture/README.md",
                 "docs/architecture/10-primary-data-flows.md",
                 "docs/architecture/20-module-boundaries.md",
@@ -1124,6 +1205,8 @@ fn expected_gate_contract(gate: &str) -> Option<GateContract> {
                 "docs/ADR/0007-normative-document-hierarchy.org",
                 "docs/ADR/0008-compiled-plan-lifecycle.org",
                 "docs/ADR/0009-protocol-binding-integration-and-deployment.org",
+                "docs/ADR/0010-server-route-lifecycle.org",
+                "docs/ADR/0011-cleanup-reservation-and-transfer.org",
             ]),
             owned_set(&[
                 "architecture-adr-check",
@@ -1147,6 +1230,7 @@ fn load_artifact_registry(root: &Path) -> Result<BTreeSet<String>, String> {
     if lines.next() != Some(expected_header) {
         return Err(format!("{relative_path} has an invalid header"));
     }
+    let known_requirement_sources = load_requirement_source_paths(root)?;
     let mut artifacts = BTreeSet::new();
     for (offset, line) in lines.enumerate() {
         if line.trim().is_empty() {
@@ -1194,7 +1278,7 @@ fn load_artifact_registry(root: &Path) -> Result<BTreeSet<String>, String> {
                 "performance result schema registry row must declare schema version 2".to_owned(),
             );
         }
-        if fields[5] != "docs/design.md" {
+        if !known_requirement_sources.contains(fields[5]) {
             return Err(format!(
                 "registered artifact {artifact:?} has unknown requirement source {:?}",
                 fields[5]
@@ -1203,6 +1287,12 @@ fn load_artifact_registry(root: &Path) -> Result<BTreeSet<String>, String> {
     }
     if artifacts.is_empty() {
         return Err(format!("{relative_path} has no data rows"));
+    }
+    if !known_requirement_sources.is_subset(&artifacts) {
+        let missing: Vec<_> = known_requirement_sources.difference(&artifacts).collect();
+        return Err(format!(
+            "requirement sources are not registered as active artifacts: {missing:?}"
+        ));
     }
     Ok(artifacts)
 }
@@ -1412,7 +1502,7 @@ fn check_governance_reviews(
                 }
             }
         }
-        if id == ARCHITECTURE_REVIEW_02_OPEN {
+        if id == ARCHITECTURE_REVIEW_02_PREDECESSOR {
             let expected_gates = owned_set(&["GATE-1", "GATE-2", "GATE-4", "GATE-5", "GATE-6"]);
             let expected_checks = owned_set(&[
                 "api-ownership-check",
@@ -1438,7 +1528,7 @@ fn check_governance_reviews(
                 ));
             }
         }
-        if review_type == "closure" {
+        if id == ARCHITECTURE_INTERIM_REVIEW {
             let expected_gates = owned_set(&["GATE-1", "GATE-2", "GATE-4", "GATE-5", "GATE-6"]);
             let expected_checks = owned_set(&[
                 "api-ownership-check",
@@ -1450,16 +1540,43 @@ fn check_governance_reviews(
                 "work-package-dag-check",
                 "wp100-handler-amendment-check",
             ]);
-            if id != ARCHITECTURE_CLOSURE_REVIEW
-                || status != "passed"
+            let required_artifacts = owned_set(&[
+                "docs/artifacts.csv",
+                "docs/governance.toml",
+                "docs/refactor-gates.csv",
+                "docs/requirements.csv",
+                "docs/spec/README.md",
+                "docs/spec/planning.md",
+                "docs/spec/binding-spi.md",
+                "docs/api-ownership.csv",
+                "docs/state-machines.toml",
+                "docs/resource-limits.csv",
+                "docs/performance/manifest.schema.json",
+                "docs/performance/result.schema.json",
+                "docs/performance/fixtures.lock.toml",
+                "docs/performance/fixture-generator.md",
+                "docs/performance/constrained.toml",
+                "docs/performance/gateway.toml",
+                "docs/performance/directory.toml",
+                "tools/performance-harness",
+                "docs/work-packages/index.toml",
+                "docs/work-packages",
+                "docs/ADR/0010-server-route-lifecycle.org",
+                "docs/ADR/0011-cleanup-reservation-and-transfer.org",
+                "docs/architecture/README.md",
+                "docs/review/review-03.org",
+            ]);
+            if status != "blocking"
+                || review_type != "audit"
+                || design_revision != ACTIVE_DESIGN_REVISION
                 || basis_revision.is_some()
                 || gates != expected_gates
                 || checks != expected_checks
-                || !artifacts.contains("docs/review/review-03.org")
+                || !required_artifacts.is_subset(&artifacts)
             {
                 return Err(format!(
-                    "closure review {id:?} does not match the frozen v{ACTIVE_DESIGN_REVISION} \
-                     Architecture Review 02 record"
+                    "Architecture Review 03 does not match the blocking modular \
+                     v{ACTIVE_DESIGN_REVISION} interim audit record"
                 ));
             }
         }
@@ -1833,6 +1950,13 @@ fn check_work_package_tranches(
         "HANDLER-SUB-001",
         "RES-LIMIT-001",
         "RES-PROFILE-001",
+        "PLAN-SET-001",
+        "PLAN-ARTIFACT-001",
+        "BIND-ROUTE-001",
+        "BIND-STORAGE-001",
+        "BIND-MEM-001",
+        "BIND-DELIVERY-001",
+        "BIND-CALL-CANCEL-001",
     ]);
     let requirements = package_string_set(tranche, "requirements", HANDLER_FOUNDATION_TRANCHE)?;
     check_known_values(
@@ -1876,33 +2000,78 @@ fn check_work_package_tranches(
         "expected_resource_limit_count",
         HANDLER_FOUNDATION_TRANCHE,
     )?;
-    if expected_resource_limit_count != 139 {
+    if expected_resource_limit_count != 195 {
         return Err(format!(
-            "{HANDLER_FOUNDATION_TRANCHE} must freeze 139 resource-limit rows"
+            "{HANDLER_FOUNDATION_TRANCHE} must freeze 195 resource-limit rows"
+        ));
+    }
+    let historical_resource_limit_prefix_count = integer_field(
+        tranche,
+        "historical_resource_limit_prefix_count",
+        HANDLER_FOUNDATION_TRANCHE,
+    )?;
+    if historical_resource_limit_prefix_count != 139 {
+        return Err(format!(
+            "{HANDLER_FOUNDATION_TRANCHE} must preserve the 139-field v4.8 prefix"
         ));
     }
     let expected_additive_fields = owned_set(&[
-        "handler_slots_per_thing_max",
-        "handler_slots_global_max",
-        "handler_state_bytes_per_thing_max",
-        "handler_state_bytes_global_max",
-        "pending_handler_calls_per_thing_max",
-        "pending_handler_calls_global_max",
-        "handler_generations_per_slot_max",
-        "handler_drain_timeout_millis_max",
-        "handler_drain_steps_max",
-        "producer_residual_records_global_max",
-        "producer_residual_record_bytes_max",
-        "producer_residual_bytes_global_max",
-        "binding_emission_slots_per_binding_max",
-        "binding_emission_slots_global_max",
-        "collection_subscription_sources_per_subscription_max",
-        "host_emission_lanes_per_binding_max",
-        "host_emission_lanes_global_max",
-        "pending_client_calls_per_binding_max",
-        "pending_client_calls_per_thing_max",
-        "pending_client_calls_global_max",
-        "host_binding_cancel_drain_timeout_millis_max",
+        "plan_sets_per_thing_max",
+        "plan_sets_global_max",
+        "plan_pins_per_plan_set_max",
+        "plan_pins_global_max",
+        "logical_plan_bytes_per_thing_max",
+        "binding_artifacts_per_thing_max",
+        "binding_artifacts_global_max",
+        "binding_artifact_bytes_per_item_max",
+        "binding_artifact_bytes_per_thing_max",
+        "binding_artifact_bytes_global_max",
+        "lazy_artifact_negative_bytes_per_item_max",
+        "lazy_artifact_negative_bytes_global_max",
+        "binding_compiler_cursor_bytes_per_item_max",
+        "binding_compiler_cursor_bytes_global_max",
+        "lazy_artifact_waiters_per_slot_max",
+        "lazy_artifact_waiters_global_max",
+        "plan_compile_work_units_per_step_max",
+        "plan_reclaim_bytes_per_step_max",
+        "binding_routes_per_thing_max",
+        "binding_routes_global_max",
+        "route_guard_bytes_per_item_max",
+        "route_guard_bytes_per_thing_max",
+        "route_guard_bytes_global_max",
+        "route_readiness_tokens_per_thing_max",
+        "route_readiness_tokens_global_max",
+        "route_readiness_token_bytes_per_item_max",
+        "route_readiness_token_bytes_global_max",
+        "route_readiness_timeout_millis_max",
+        "route_readiness_steps_max",
+        "binding_ingress_items_per_route_max",
+        "binding_ingress_items_per_binding_max",
+        "binding_ingress_items_global_max",
+        "binding_ingress_bytes_per_route_max",
+        "binding_ingress_bytes_per_binding_max",
+        "binding_ingress_bytes_global_max",
+        "host_binding_call_bytes_per_item_max",
+        "host_binding_call_bytes_per_binding_max",
+        "host_binding_call_bytes_per_thing_max",
+        "host_binding_call_bytes_global_max",
+        "host_subscription_driver_bytes_per_item_max",
+        "host_subscription_driver_bytes_per_thing_max",
+        "host_subscription_driver_bytes_global_max",
+        "binding_slot_state_bytes_per_item_max",
+        "binding_slot_state_bytes_per_thing_max",
+        "binding_slot_state_bytes_global_max",
+        "binding_poll_temporary_bytes_per_call_max",
+        "binding_poll_temporary_bytes_global_max",
+        "binding_response_buffer_bytes_per_route_max",
+        "binding_response_buffer_bytes_global_max",
+        "binding_cancel_buffer_bytes_per_call_max",
+        "binding_cancel_buffer_bytes_global_max",
+        "cleanup_transfer_slots_global_max",
+        "cleanup_transfer_bytes_global_max",
+        "binding_wake_leases_global_max",
+        "binding_reactor_queue_items_per_binding_max",
+        "binding_reactor_queue_bytes_per_binding_max",
     ]);
     let additive_fields = package_string_set(
         tranche,
@@ -2104,6 +2273,40 @@ fn load_requirement_ids(root: &Path) -> Result<BTreeSet<String>, String> {
         .map(str::to_owned)
         .collect();
     expand_expressions(&components)
+}
+
+fn load_requirement_source_paths(root: &Path) -> Result<BTreeSet<String>, String> {
+    let relative_path = "docs/requirements.csv";
+    let path = root.join(relative_path);
+    let source = fs::read_to_string(&path)
+        .map_err(|error| format!("cannot read {}: {error}", path.display()))?;
+    let mut paths = BTreeSet::new();
+    for (offset, line) in source.lines().skip(1).enumerate() {
+        if line.trim().is_empty() {
+            return Err(format!(
+                "{relative_path} has a blank data row on line {}",
+                offset + 2
+            ));
+        }
+        let fields: Vec<&str> = line.split(',').collect();
+        let requirement_source = fields.get(8).ok_or_else(|| {
+            format!(
+                "{relative_path} line {} has no requirement source",
+                offset + 2
+            )
+        })?;
+        validate_relative_path(requirement_source, "requirement source")?;
+        if !root.join(requirement_source).is_file() {
+            return Err(format!(
+                "requirement source {requirement_source:?} does not exist"
+            ));
+        }
+        paths.insert((*requirement_source).to_owned());
+    }
+    if paths.is_empty() {
+        return Err(format!("{relative_path} has no requirement sources"));
+    }
+    Ok(paths)
 }
 
 fn load_performance_ids(root: &Path) -> Result<BTreeSet<String>, String> {
@@ -2357,7 +2560,7 @@ fn owned_set(values: &[&str]) -> BTreeSet<String> {
 
 fn check_machine(
     machine: &Table,
-    design: &str,
+    known_requirements: &BTreeSet<String>,
     ids: &mut BTreeSet<String>,
 ) -> Result<(String, Vec<Transition>), String> {
     let id = string_field(machine, "id", "machine")?;
@@ -2382,7 +2585,7 @@ fn check_machine(
         &id,
         "requirements",
     )? {
-        if !design.contains(&format!("`{requirement}`:")) {
+        if !known_requirements.contains(&requirement) {
             return Err(format!(
                 "machine {id:?} references unknown requirement {requirement:?}"
             ));
@@ -2412,10 +2615,717 @@ fn check_machine(
     )?;
     check_required_events(machine, &id, &transitions)?;
     check_reachability(&id, &initial, &states, &terminals, &transitions)?;
-    if id == "producer-subscription" {
-        check_producer_subscription_contract(machine)?;
+    match id.as_str() {
+        "active-route-driver" => check_active_route_driver_contract(machine)?,
+        "binding-call" => check_binding_call_contract(machine)?,
+        "binding-emission-slot" => check_binding_emission_slot_contract(machine)?,
+        "binding-route" => check_binding_route_contract(machine)?,
+        "cleanup-task" => check_cleanup_task_contract(machine)?,
+        "compiled-plan-set" => check_compiled_plan_set_contract(machine)?,
+        "lazy-binding-artifact" => check_lazy_binding_artifact_contract(machine)?,
+        "producer-subscription" => check_producer_subscription_contract(machine)?,
+        "route-lifecycle-call" => check_route_lifecycle_call_contract(machine)?,
+        "route-readiness" => check_route_readiness_contract(machine)?,
+        "subscription" => check_binding_subscription_contract(machine)?,
+        _ => {}
     }
     Ok((id, transitions))
+}
+
+fn check_active_route_driver_contract(machine: &Table) -> Result<(), String> {
+    let id = "active-route-driver";
+    require_table_string(
+        machine,
+        "owner_record",
+        "Servient ActiveRouteDriverRecord",
+        id,
+    )?;
+    for field in ["scope", "wake_contract", "terminal_contract"] {
+        string_field(machine, field, id)?;
+    }
+    check_exact_machine_set(
+        machine,
+        id,
+        "states",
+        &[
+            "AcceptClaimed",
+            "Active",
+            "Draining",
+            "DrainingClaimed",
+            "Released",
+            "Reserved",
+            "TerminalRetained",
+        ],
+    )?;
+    check_required_transition_owners_and_outcomes(
+        machine,
+        id,
+        &[
+            (
+                "AcceptClaimed",
+                "pending_registered",
+                "RouteAcceptOwner",
+                "pending-register-then-recheck",
+            ),
+            (
+                "AcceptClaimed",
+                "operational_error",
+                "RouteAcceptOwner",
+                "operational-error-route-active",
+            ),
+            (
+                "AcceptClaimed",
+                "terminal",
+                "ActiveRouteDriverOwner",
+                "route-terminal-retained",
+            ),
+            (
+                "Active",
+                "drain",
+                "ActiveRouteDriverOwner",
+                "draining-no-new-accept",
+            ),
+            (
+                "DrainingClaimed",
+                "request_late",
+                "RouteAcceptOwner",
+                "pre-drain-request-owned-by-servient",
+            ),
+        ],
+    )
+}
+
+fn check_binding_call_contract(machine: &Table) -> Result<(), String> {
+    let id = "binding-call";
+    for field in [
+        "scope",
+        "construction_contract",
+        "first_cause_contract",
+        "poll_race_contract",
+        "settlement_contract",
+        "budget_contract",
+        "wake_contract",
+        "transfer_contract",
+        "drop_contract",
+    ] {
+        string_field(machine, field, id)?;
+    }
+    check_exact_machine_set(
+        machine,
+        id,
+        "states",
+        &[
+            "Accepted",
+            "CancelRequested",
+            "CancelStarting",
+            "Cancelled",
+            "Cancelling",
+            "CleanupTransferred",
+            "Constructing",
+            "ConstructingCancelled",
+            "PollClaimed",
+            "RejectedInput",
+            "Released",
+            "Reserved",
+            "Residual",
+            "Returned",
+            "TransferRequired",
+        ],
+    )?;
+    check_required_transition_owners_and_outcomes(
+        machine,
+        id,
+        &[
+            (
+                "Constructing",
+                "input_rejected",
+                "BindingCallConstructionOwner",
+                "BindingInputRejection-complete-input-returned",
+            ),
+            (
+                "CancelStarting",
+                "transfer_required",
+                "BindingCallCancellationOwner",
+                "TransferRequired-source-owned",
+            ),
+            (
+                "TransferRequired",
+                "transfer_committed",
+                "BindingCallCleanupOwner",
+                "TransferCommitted-PendingCleanup",
+            ),
+            (
+                "TransferRequired",
+                "executor_rejected",
+                "BindingCallManualCleanupOwner",
+                "ManualFallback-complete-object-retained",
+            ),
+            (
+                "CleanupTransferred",
+                "complete",
+                "BindingCallCleanupOwner",
+                "Complete",
+            ),
+            (
+                "CleanupTransferred",
+                "residual",
+                "BindingCallCleanupOwner",
+                "ResidualExternalState",
+            ),
+        ],
+    )
+}
+
+fn check_binding_emission_slot_contract(machine: &Table) -> Result<(), String> {
+    let id = "binding-emission-slot";
+    for field in [
+        "scope",
+        "input_contract",
+        "generation_contract",
+        "lane_contract",
+        "result_contract",
+        "critical_section_contract",
+    ] {
+        string_field(machine, field, id)?;
+    }
+    check_required_transition_owners_and_outcomes(
+        machine,
+        id,
+        &[
+            (
+                "Reserved",
+                "stale_generation",
+                "BindingEmissionOwner",
+                "BindingInputRejection-StaleHandle-complete-input-returned",
+            ),
+            (
+                "Cancelling",
+                "transfer_required",
+                "BindingEmissionOwner",
+                "TransferRequired-source-owned",
+            ),
+            (
+                "TransferRequired",
+                "transfer_committed",
+                "BindingEmissionCleanupOwner",
+                "TransferCommitted-PendingCleanup",
+            ),
+            (
+                "TransferRequired",
+                "executor_rejected",
+                "BindingEmissionManualCleanupOwner",
+                "ManualFallback-complete-input-retained",
+            ),
+            (
+                "CleanupTransferred",
+                "residual",
+                "BindingEmissionCleanupOwner",
+                "ResidualExternalState",
+            ),
+        ],
+    )
+}
+
+fn check_binding_route_contract(machine: &Table) -> Result<(), String> {
+    let id = "binding-route";
+    require_table_string(machine, "owner_record", "Servient BindingRouteRecord", id)?;
+    for field in [
+        "scope",
+        "guard_contract",
+        "publication_contract",
+        "cleanup_contract",
+    ] {
+        string_field(machine, field, id)?;
+    }
+    check_required_transition_owners_and_outcomes(
+        machine,
+        id,
+        &[
+            (
+                "Activating",
+                "activation_failed_prepared_retained",
+                "BindingRouteOwner",
+                "activation-failed-prepared-guard-retained",
+            ),
+            (
+                "Committing",
+                "commit_failed_active_retained",
+                "BindingRouteOwner",
+                "commit-failed-active-guard-retained",
+            ),
+            (
+                "ActivatingCancelled",
+                "active_late",
+                "BindingRouteOwner",
+                "ActiveLate-shutdown-required",
+            ),
+            (
+                "Cleaning",
+                "cleanup_complete",
+                "BindingRouteCleanupSource",
+                "Complete",
+            ),
+            (
+                "Cleaning",
+                "transfer_required",
+                "BindingRouteCleanupSource",
+                "TransferRequired-source-owned",
+            ),
+            (
+                "TransferRequired",
+                "transfer_committed",
+                "BindingRouteCleanupOwner",
+                "TransferCommitted-PendingCleanup",
+            ),
+            (
+                "TransferRequired",
+                "executor_rejected",
+                "BindingRouteManualCleanupOwner",
+                "ManualFallback-complete-guard-retained",
+            ),
+        ],
+    )
+}
+
+fn check_cleanup_task_contract(machine: &Table) -> Result<(), String> {
+    let id = "cleanup-task";
+    require_table_string(machine, "owner_record", "Servient CleanupTaskRecord", id)?;
+    for field in [
+        "scope",
+        "record_contract",
+        "progress_contract",
+        "transfer_contract",
+    ] {
+        string_field(machine, field, id)?;
+    }
+    check_required_transition_owners_and_outcomes(
+        machine,
+        id,
+        &[
+            (
+                "Reserved",
+                "offer",
+                "CleanupSourceOwner",
+                "TransferRequired-source-owned",
+            ),
+            (
+                "Offered",
+                "accepted",
+                "ExecutorCleanupOwner",
+                "TransferCommitted-PendingCleanup",
+            ),
+            (
+                "Offered",
+                "executor_rejected",
+                "ManualCleanupOwner",
+                "ManualFallback-complete-object-retained",
+            ),
+            (
+                "ExecutorOwned",
+                "zero_budget",
+                "ExecutorCleanupOwner",
+                "TransferCommitted-PendingCleanup",
+            ),
+            (
+                "ExecutorOwned",
+                "executor_drop",
+                "CleanupTaskOwner",
+                "ResidualExternalState",
+            ),
+            (
+                "ManualOwned",
+                "drain_expired",
+                "ManualCleanupOwner",
+                "ResidualExternalState",
+            ),
+            (
+                "ResidualRetained",
+                "acknowledge",
+                "CleanupTaskOwner",
+                "residual-acknowledged",
+            ),
+        ],
+    )
+}
+
+fn check_route_lifecycle_call_contract(machine: &Table) -> Result<(), String> {
+    let id = "route-lifecycle-call";
+    require_table_string(
+        machine,
+        "owner_record",
+        "Servient RouteLifecycleCallRecord",
+        id,
+    )?;
+    for field in ["scope", "guard_contract", "transfer_contract"] {
+        string_field(machine, field, id)?;
+    }
+    check_required_transition_owners_and_outcomes(
+        machine,
+        id,
+        &[
+            (
+                "Reserved",
+                "typed_rejection",
+                "RouteLifecycleCallOwner",
+                "BindingInputRejection-complete-input-returned",
+            ),
+            (
+                "InProgress",
+                "complete_success",
+                "BindingRouteOwner",
+                "Complete-successor-guard-retained",
+            ),
+            (
+                "InProgress",
+                "complete_failure_predecessor",
+                "BindingRouteOwner",
+                "Complete-failure-predecessor-guard-retained",
+            ),
+            (
+                "CancelRequested",
+                "late_success",
+                "BindingRouteOwner",
+                "LateValue-successor-guard-retained",
+            ),
+            (
+                "TransferRequired",
+                "transfer_committed",
+                "RouteLifecycleCleanupOwner",
+                "TransferCommitted-PendingCleanup",
+            ),
+        ],
+    )
+}
+
+fn check_route_readiness_contract(machine: &Table) -> Result<(), String> {
+    let id = "route-readiness";
+    require_table_string(machine, "owner_record", "Servient RouteReadinessRecord", id)?;
+    for field in ["scope", "wake_contract", "guard_contract"] {
+        string_field(machine, field, id)?;
+    }
+    check_required_transition_owners_and_outcomes(
+        machine,
+        id,
+        &[
+            (
+                "Polling",
+                "pending_registered",
+                "RouteReadinessOwner",
+                "pending-register-then-recheck",
+            ),
+            (
+                "Polling",
+                "failed_guard_retained",
+                "BindingRouteOwner",
+                "Complete-failure-prepared-guard-retained",
+            ),
+            (
+                "Cancelling",
+                "drain_expired",
+                "RouteReadinessOwner",
+                "TransferRequired-drain-expired-source-owned",
+            ),
+            (
+                "TransferRequired",
+                "executor_rejected",
+                "RouteReadinessManualCleanupOwner",
+                "ManualFallback-complete-object-retained",
+            ),
+        ],
+    )
+}
+
+fn check_binding_subscription_contract(machine: &Table) -> Result<(), String> {
+    let id = "subscription";
+    check_exact_machine_set(
+        machine,
+        id,
+        "process_terminal_axis",
+        &[
+            "Cancelled",
+            "Completed",
+            "Domain",
+            "Failed",
+            "Overflowed",
+            "TimedOut",
+        ],
+    )?;
+    for field in ["terminal_contract", "terminal_retention", "stop_contract"] {
+        string_field(machine, field, id)?;
+    }
+    check_required_transition_owners_and_outcomes(
+        machine,
+        id,
+        &[
+            (
+                "Active",
+                "driver_terminal_complete",
+                "SubscriptionDriverRegistry",
+                "Complete",
+            ),
+            (
+                "Active",
+                "driver_terminal_cleanup_transfer",
+                "SubscriptionCleanupOwner",
+                "PendingCleanup",
+            ),
+            (
+                "Active",
+                "driver_terminal_residual",
+                "SubscriptionDriverRegistry",
+                "ResidualExternalState",
+            ),
+        ],
+    )
+}
+
+fn check_compiled_plan_set_contract(machine: &Table) -> Result<(), String> {
+    let id = "compiled-plan-set";
+    require_table_string(
+        machine,
+        "owner_record",
+        "Servient CompiledPlanSetRecord",
+        id,
+    )?;
+    for field in [
+        "scope",
+        "publication_contract",
+        "pin_contract",
+        "failed_disposition_contract",
+        "reclaimed_disposition_contract",
+    ] {
+        string_field(machine, field, id)?;
+    }
+    check_exact_machine_set(
+        machine,
+        id,
+        "states",
+        &[
+            "Building",
+            "Draining",
+            "Failed",
+            "Frozen",
+            "Published",
+            "Reclaimed",
+        ],
+    )?;
+    check_exact_machine_set(machine, id, "terminal", &["Failed", "Reclaimed"])?;
+    check_exact_transition_owners_and_outcomes(
+        machine,
+        id,
+        &[
+            (
+                "Building",
+                "build_complete",
+                "PlanningBuildOwner",
+                "Frozen-unpublished",
+            ),
+            (
+                "Building",
+                "build_failed",
+                "PlanSetReclaimOwner",
+                "Failed-unpublished-cleanup-owned",
+            ),
+            (
+                "Building",
+                "cancel",
+                "PlanSetReclaimOwner",
+                "Failed-unpublished-cancelled-cleanup-owned",
+            ),
+            (
+                "Frozen",
+                "publish_consumer",
+                "Servient",
+                "Published-consumer",
+            ),
+            (
+                "Frozen",
+                "publish_producer",
+                "Servient",
+                "Published-producer-serving",
+            ),
+            (
+                "Frozen",
+                "route_failure",
+                "PlanSetReclaimOwner",
+                "Failed-unpublished-route-rollback-owned",
+            ),
+            (
+                "Frozen",
+                "cancel",
+                "PlanSetReclaimOwner",
+                "Failed-unpublished-cancelled-cleanup-owned",
+            ),
+            (
+                "Published",
+                "begin_drain",
+                "ServientPlanSetOwner",
+                "Draining-existing-leases-retained",
+            ),
+            (
+                "Draining",
+                "reclaim_complete",
+                "PlanSetReclaimOwner",
+                "Reclaimed-zero-retained-plan-and-artifact-bytes",
+            ),
+        ],
+    )
+}
+
+fn check_lazy_binding_artifact_contract(machine: &Table) -> Result<(), String> {
+    let id = "lazy-binding-artifact";
+    require_table_string(
+        machine,
+        "owner_record",
+        "Servient LazyBindingArtifactSlot",
+        id,
+    )?;
+    for field in [
+        "scope",
+        "single_flight_contract",
+        "abort_disposition_contract",
+        "negative_disposition_contract",
+        "reclaim_disposition_contract",
+        "quiescent_terminal_semantics",
+    ] {
+        string_field(machine, field, id)?;
+    }
+    check_exact_machine_set(
+        machine,
+        id,
+        "states",
+        &["Compiling", "Empty", "Negative", "Ready", "Reclaiming"],
+    )?;
+    check_exact_machine_set(machine, id, "terminal", &["Empty"])?;
+    check_exact_machine_set(
+        machine,
+        id,
+        "reusable_terminal_events",
+        &["Empty:begin_compile"],
+    )?;
+    check_exact_transition_owners_and_outcomes(
+        machine,
+        id,
+        &[
+            (
+                "Empty",
+                "begin_compile",
+                "LazyArtifactCompilerOwner",
+                "Compiling-single-flight",
+            ),
+            (
+                "Compiling",
+                "publish_ready",
+                "LazyArtifactSlotOwner",
+                "Ready-shared-immutable-artifact",
+            ),
+            (
+                "Compiling",
+                "publish_negative",
+                "LazyArtifactSlotOwner",
+                "Negative-shared-deterministic-failure",
+            ),
+            (
+                "Compiling",
+                "abort",
+                "LazyArtifactCompilerOwner",
+                "Empty-noncacheable-abort",
+            ),
+            (
+                "Compiling",
+                "retryable_failure",
+                "LazyArtifactCompilerOwner",
+                "Empty-noncacheable-failure",
+            ),
+            (
+                "Ready",
+                "begin_reclaim",
+                "PlanSetReclaimOwner",
+                "Reclaiming-ready-artifact",
+            ),
+            (
+                "Negative",
+                "begin_reclaim",
+                "PlanSetReclaimOwner",
+                "Reclaiming-negative-diagnostic",
+            ),
+            (
+                "Reclaiming",
+                "reclaim_complete",
+                "PlanSetReclaimOwner",
+                "Empty-reclaimed",
+            ),
+        ],
+    )
+}
+
+fn check_exact_machine_set(
+    machine: &Table,
+    id: &str,
+    field: &str,
+    expected: &[&str],
+) -> Result<(), String> {
+    let expected = owned_set(expected);
+    let actual = string_set(array_field(machine, field, id)?, id, field)?;
+    if actual != expected {
+        return Err(format!(
+            "machine {id:?} {field:?} mismatch; expected {expected:?}, found {actual:?}"
+        ));
+    }
+    Ok(())
+}
+
+fn check_exact_transition_owners_and_outcomes(
+    machine: &Table,
+    id: &str,
+    expected: &[(&str, &str, &str, &str)],
+) -> Result<(), String> {
+    let transitions = machine
+        .get("transition")
+        .and_then(Item::as_array_of_tables)
+        .ok_or_else(|| format!("machine {id:?} has no transitions"))?;
+    if transitions.len() != expected.len() {
+        return Err(format!(
+            "machine {id:?} transition ownership contract expected {} entries, found {}",
+            expected.len(),
+            transitions.len()
+        ));
+    }
+    for (from, event, owner, outcome) in expected {
+        let transition = transitions
+            .iter()
+            .find(|transition| {
+                transition.get("from").and_then(Item::as_str) == Some(*from)
+                    && transition.get("event").and_then(Item::as_str) == Some(*event)
+            })
+            .ok_or_else(|| format!("machine {id:?} has no transition {from:?}:{event:?}"))?;
+        require_table_string(transition, "owner", owner, id)?;
+        require_table_string(transition, "outcome", outcome, id)?;
+    }
+    Ok(())
+}
+
+fn check_required_transition_owners_and_outcomes(
+    machine: &Table,
+    id: &str,
+    expected: &[(&str, &str, &str, &str)],
+) -> Result<(), String> {
+    let transitions = machine
+        .get("transition")
+        .and_then(Item::as_array_of_tables)
+        .ok_or_else(|| format!("machine {id:?} has no transitions"))?;
+    for (from, event, owner, outcome) in expected {
+        let transition = transitions
+            .iter()
+            .find(|transition| {
+                transition.get("from").and_then(Item::as_str) == Some(*from)
+                    && transition.get("event").and_then(Item::as_str) == Some(*event)
+            })
+            .ok_or_else(|| format!("machine {id:?} has no transition {from:?}:{event:?}"))?;
+        require_table_string(transition, "owner", owner, id)?;
+        require_table_string(transition, "outcome", outcome, id)?;
+    }
+    Ok(())
 }
 
 fn check_producer_subscription_contract(machine: &Table) -> Result<(), String> {
@@ -2479,7 +3389,7 @@ fn check_producer_subscription_contract(machine: &Table) -> Result<(), String> {
 
 fn check_compositions(
     document: &DocumentMut,
-    design: &str,
+    known_requirements: &BTreeSet<String>,
     machine_transitions: &BTreeMap<String, Vec<Transition>>,
 ) -> Result<(), String> {
     let compositions = document
@@ -2502,7 +3412,7 @@ fn check_compositions(
             return Err(format!("composition {id:?} has no requirements"));
         }
         for requirement in requirements {
-            if !design.contains(&format!("`{requirement}`:")) {
+            if !known_requirements.contains(&requirement) {
                 return Err(format!(
                     "composition {id:?} references unknown requirement {requirement:?}"
                 ));
@@ -2565,6 +3475,52 @@ fn check_compositions(
 
 fn required_composition_fields(id: &str) -> Result<&'static [&'static str], String> {
     match id {
+        "active-route-acceptance" => Ok(&[
+            "accept_policy",
+            "publish_transitions",
+            "accept_transitions",
+            "status_transitions",
+            "terminal_transitions",
+            "drain_transitions",
+            "ownership",
+        ]),
+        "binding-call-cleanup-transfer" => Ok(&[
+            "transfer_policy",
+            "request_transitions",
+            "commit_transitions",
+            "fallback_transitions",
+            "terminal_transitions",
+            "ownership",
+        ]),
+        "binding-route-lifecycle" => Ok(&[
+            "guard_policy",
+            "start_transitions",
+            "success_transitions",
+            "failure_transitions",
+            "late_transitions",
+            "cleanup_transitions",
+            "ownership",
+        ]),
+        "binding-route-readiness" => Ok(&[
+            "wake_policy",
+            "start_transitions",
+            "progress_transitions",
+            "ready_transitions",
+            "failure_transitions",
+            "cancel_transitions",
+            "ownership",
+        ]),
+        "consumer-plan-publication" => {
+            Ok(&["publication_policy", "atomic_transitions", "ownership"])
+        }
+        "emission-delivery-ownership" => Ok(&[
+            "input_policy",
+            "accept_transitions",
+            "reject_transitions",
+            "transfer_transitions",
+            "terminal_transitions",
+            "ownership",
+        ]),
         "handler-direct-response" => Ok(&[
             "response_claim_policy",
             "preconditions",
@@ -2589,6 +3545,15 @@ fn required_composition_fields(id: &str) -> Result<&'static [&'static str], Stri
             "error_transitions",
             "ownership",
         ]),
+        "producer-plan-drain" => Ok(&[
+            "drain_policy",
+            "drain_transitions",
+            "reclaim_preconditions",
+            "ownership",
+        ]),
+        "producer-plan-serving-publication" => {
+            Ok(&["publication_policy", "atomic_transitions", "ownership"])
+        }
         "producer-setup-abort" => Ok(&[
             "incomplete_cleanup_policy",
             "setup_obligation_semantics",
@@ -2670,6 +3635,23 @@ fn required_composition_fields(id: &str) -> Result<&'static [&'static str], Stri
             "tombstone_eviction_policy",
             "ownership",
         ]),
+        "response-delivery-ownership" => Ok(&[
+            "input_policy",
+            "accept_transitions",
+            "reject_transitions",
+            "transfer_transitions",
+            "terminal_transitions",
+            "ownership",
+        ]),
+        "subscription-process-cleanup" => Ok(&[
+            "terminal_policy",
+            "complete_transitions",
+            "request_transitions",
+            "commit_transitions",
+            "fallback_transitions",
+            "residual_transitions",
+            "ownership",
+        ]),
         _ => Err(format!("unknown state composition {id:?}")),
     }
 }
@@ -2698,13 +3680,28 @@ fn require_nonempty_composition_field(
 
 fn check_composition_policy(composition: &Table, id: &str) -> Result<(), String> {
     let (field, expected) = match id {
+        "active-route-acceptance" => ("accept_policy", "one-poll-and-waker-lease-per-route"),
+        "binding-call-cleanup-transfer" => ("transfer_policy", "source-owned-until-acknowledged"),
+        "binding-route-lifecycle" => ("guard_policy", "predecessor-or-successor-always-retained"),
+        "binding-route-readiness" => ("wake_policy", "register-then-recheck-one-lease-per-route"),
+        "consumer-plan-publication" => (
+            "publication_policy",
+            "atomic-plan-set-and-consumer-registry",
+        ),
         "handler-direct-response" => ("response_claim_policy", "atomic-with-handler-release"),
+        "emission-delivery-ownership" => {
+            ("input_policy", "return-complete-input-before-acceptance")
+        }
         "producer-start-result-transfer" => (
             "error_response_policy",
             "claim-before-failed-or-same-generation-terminal",
         ),
         "producer-late-start-result-transfer" => {
             ("late_acceptance_policy", "create-teardown-before-discard")
+        }
+        "producer-plan-drain" => ("drain_policy", "close-ingress-before-reclamation"),
+        "producer-plan-serving-publication" => {
+            ("publication_policy", "atomic-with-serving-registry")
         }
         "producer-setup-abort" => (
             "incomplete_cleanup_policy",
@@ -2724,6 +3721,13 @@ fn check_composition_policy(composition: &Table, id: &str) -> Result<(), String>
         "producer-terminal-replay-and-release" => {
             ("replay_payload", "status-or-error-summary-only")
         }
+        "response-delivery-ownership" => {
+            ("input_policy", "return-complete-input-before-acceptance")
+        }
+        "subscription-process-cleanup" => (
+            "terminal_policy",
+            "process-terminal-retained-separately-from-cleanup",
+        ),
         _ => return Err(format!("unknown state composition {id:?}")),
     };
     require_string(
