@@ -2,7 +2,7 @@
 
 Status: In Progress
 
-Design revision: v4.8
+Design revision: v4.9
 
 Depends on: WP-000
 

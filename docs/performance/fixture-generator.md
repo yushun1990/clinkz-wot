@@ -1,6 +1,6 @@
 # Performance Fixture and Harness Contract
 
-Status: normative implementation-support contract for design revision v4.8.
+Status: normative implementation-support contract for design revision v4.9.
 
 ## Identity
 

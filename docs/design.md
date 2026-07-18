@@ -1,14 +1,17 @@
 # clinkz-wot Design
 
-Status: v4.8 design-closure candidate. Runtime migration remains
-blocked until every affected refactor gate records passing same-revision review
-evidence; admitted implementation then proceeds only through the work-package
-DAG.
+Status: v4.8 detailed-design candidate rejected by Architecture Review 02.
+Runtime migration remains blocked while this material is decomposed and
+reconciled into the v4.9 modular design revision.
 
-This document is the authoritative project design for `clinkz-wot`. It is a
-target design: implementation code may lag behind it. Previous architecture
-baselines, implementation plans, audit notes, and target documents are
-historical references under `docs/deprecated/`.
+The v4.9 authority entry point is `docs/architecture/README.md`. This file is a
+normative migration source for detailed requirements that have not yet moved to
+their single-owner domain specifications; it is no longer sufficient by itself
+to authorize implementation. When this file conflicts with the v4.9
+architecture backbone or an accepted v4.9 ADR, the conflict opens the affected
+gate and implementation stops until all registered artifacts are corrected in
+one revision. Previous architecture baselines, plans, audits, and target notes
+remain historical references under `docs/deprecated/`.
 
 ## Normative Language and Requirement Identity
 
@@ -58,13 +61,17 @@ design scope.
 
 ### Design Authority and Change Control
 
-`ARTIFACT-AUTH-001`: `docs/design.md` defines normative behavior and public
-architecture. `docs/api-ownership.csv` is authoritative only for the defining
-crate, module, public path, feature cells, and migration disposition of frozen
-cross-crate items. `docs/artifacts.csv` enumerates the active artifact set and
-its revision/schema identities. `docs/refactor-gates.csv` records
-implementation-admission status. `docs/requirements.csv` indexes requirement
-profile axes, package ownership, and evidence. The versioned files under
+`ARTIFACT-AUTH-001`: Beginning with v4.9, `docs/design.md` selects the active
+revision and indexes normative sources. The registered files under
+`docs/architecture/` define cross-module architecture and primary flows; the
+registered files under `docs/spec/` define detailed behavior and public API
+contracts for one domain each. `docs/api-ownership.csv` is authoritative only
+for the defining crate, module, public path, feature cells, and migration
+disposition of frozen cross-crate items. `docs/artifacts.csv` enumerates the
+active artifact set and its revision/schema identities.
+`docs/refactor-gates.csv` records implementation-admission status.
+`docs/requirements.csv` indexes requirement profile axes, package ownership,
+evidence, and registered requirement source. The versioned files under
 `docs/performance/`, their schemas, and the fixture lock define profile-specific
 performance budgets and
 stable measurement identities; `tools/performance-harness` checks and
@@ -72,10 +79,11 @@ orchestrates that contract. `docs/work-packages/index.toml` defines the
 implementation dependency DAG, and its package documents define migration and
 removal work without becoming a source of behavioral requirements. `PLAN.md`
 selects the active revision but does not redefine it. The accepted records under
-`docs/ADR/` are normative architecture inputs to the selected revision and
-constrain interpretation of crate, dispatch, subscription, collection-operation,
-and binding-request ownership. They do not amend this document implicitly. If an
-accepted ADR, this document, or another authoritative artifact disagrees,
+`docs/ADR/` record accepted architecture inputs, rationale, rejected
+alternatives, and explicit supersession. An accepted decision must be integrated
+into the architecture, domain specification, and machine artifacts in the same
+revision; it does not amend them implicitly. If an accepted ADR, this document,
+or another authoritative artifact disagrees,
 implementation MUST stop and all affected artifacts MUST be corrected in one
 reviewed revision. The review records under `docs/review/` provide evidence and
 rationale but are not an independent normative source. When active artifacts
@@ -140,6 +148,18 @@ runtime migration is blocked. Reopening a gate blocks packages that have not
 yet merged and requires an impact review for packages already completed.
 
 ### Revision Record
+
+v4.9 supersedes the rejected v4.8 detailed-design candidate before runtime
+migration resumes. It introduces the modular architecture backbone and
+incorporates `ADR-0007`, `ADR-0008`, and `ADR-0009`: a single-owner normative
+document hierarchy, an explicit Servient-owned compiled-plan-set lifecycle with
+the `clinkz-wot-planning` compiler boundary, and Cargo-linked complete Protocol
+Binding registration with engine-orchestrated route progress. V1 binding
+composition is startup-only; `build.rs` discovery, direct Rust dynamic-library
+trait ABI, runtime code unload, and self-driving handler dispatch are deferred.
+All v4.8 detailed requirements remain migration inputs until they are
+reconciled into registered v4.9 domain specifications and same-revision gates
+close.
 
 v4.8 supersedes the v4.7 candidate before runtime migration resumes. It
 incorporates `ADR-0001`, `ADR-0002`, `ADR-0003`, `ADR-0004`, `ADR-0005`, and

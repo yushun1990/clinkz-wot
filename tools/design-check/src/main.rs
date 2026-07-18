@@ -8,12 +8,14 @@ use std::process::Command;
 
 use toml_edit::{Array, ArrayOfTables, DocumentMut, Item, Table};
 
-const ACTIVE_DESIGN_REVISION: &str = "4.8";
+const ACTIVE_DESIGN_REVISION: &str = "4.9";
+const REJECTED_DESIGN_REVISION: &str = "4.8";
 const WP000_EVIDENCE_REVISION: &str = "4.6";
-const ARCHITECTURE_CLOSURE_REVIEW: &str = "architecture-closure-2026-07-16-v4.8";
-const ARCHITECTURE_REVIEW_02_OPEN: &str = "architecture-review-02-2026-07-16-open";
+const ARCHITECTURE_CLOSURE_REVIEW: &str = "architecture-closure-2026-07-19-v4.9";
+const ARCHITECTURE_REVIEW_02_OPEN: &str = "architecture-review-02-v4.8-rejected";
 
 const REQUIRED_MACHINES: &[&str] = &[
+    "binding-call",
     "binding-emission-slot",
     "binding-route",
     "directory-process",
@@ -814,13 +816,13 @@ fn check_governance(root: &Path, require_ready: bool) -> Result<(), String> {
             && (status != "open"
                 || review_id != ARCHITECTURE_REVIEW_02_OPEN
                 || review.review_type != "audit"
-                || review.design_revision != ACTIVE_DESIGN_REVISION
+                || review.design_revision != REJECTED_DESIGN_REVISION
                 || review.status != "blocking"
                 || !review.artifacts.contains("docs/review/review-02.org"))
         {
             return Err(format!(
-                "{gate} must remain open under the blocking v{ACTIVE_DESIGN_REVISION} \
-                 Architecture Review 02 record"
+                "{gate} must remain open under the rejected v{REJECTED_DESIGN_REVISION} \
+                 Architecture Review 02 record while v{ACTIVE_DESIGN_REVISION} is rebuilt"
             ));
         }
 
@@ -834,7 +836,7 @@ fn check_governance(root: &Path, require_ready: bool) -> Result<(), String> {
                 || review.impact.trim().is_empty())
         {
             return Err(
-                "GATE-3 must use the passed v4.8 carry-forward review based on v4.6".to_owned(),
+                "GATE-3 must use the passed v4.9 carry-forward review based on v4.6".to_owned(),
             );
         }
     }
@@ -875,9 +877,22 @@ fn expected_gate_contract(gate: &str) -> Option<GateContract> {
                 "ERR-TAXONOMY-001",
                 "ERR-RETRY-001",
                 "CLEANUP-RECORD-001",
+                "PLAN-COST-001",
+                "PLAN-INDEX-001",
+                "FORM-FINALIZE-001",
+                "FORM-OWNER-001",
+                "BIND-IO-001",
+                "BIND-OUT-001",
+                "BIND-CALL-CANCEL-001",
+                "BIND-HOST-CANCEL-001",
             ]),
             owned_set(&[
                 "docs/design.md",
+                "docs/architecture/README.md",
+                "docs/architecture/20-module-boundaries.md",
+                "docs/architecture/30-compiled-plan-lifecycle.md",
+                "docs/architecture/40-protocol-binding-spi-and-deployment.md",
+                "docs/architecture/50-servient-runtime-lifecycle.md",
                 "docs/api-ownership.csv",
                 "docs/amendments/WP-100-error-cleanup-v1.md",
                 "docs/amendments/WP-100-error-disposition-v1.md",
@@ -889,6 +904,10 @@ fn expected_gate_contract(gate: &str) -> Option<GateContract> {
                 "docs/ADR/0003-subscription-driver-ownership.org",
                 "docs/ADR/0004-collection-subscriptions.org",
                 "docs/ADR/0005-outbound-request.org",
+                "docs/ADR/0006-host-binding-call-cancellation.org",
+                "docs/ADR/0007-normative-document-hierarchy.org",
+                "docs/ADR/0008-compiled-plan-lifecycle.org",
+                "docs/ADR/0009-protocol-binding-integration-and-deployment.org",
             ]),
             owned_set(&[
                 "api-ownership-check",
@@ -907,10 +926,13 @@ fn expected_gate_contract(gate: &str) -> Option<GateContract> {
                 "STATE-INFLIGHT-001",
                 "HANDLE-DROP-001",
                 "PRODUCER-EMIT-001",
+                "PLAN-COST-001",
                 "PLAN-INDEX-001",
                 "FORM-OWNER-001",
                 "BIND-IO-001",
                 "BIND-OUT-001",
+                "BIND-CALL-CANCEL-001",
+                "BIND-HOST-CANCEL-001",
                 "HANDLER-API-001",
                 "HANDLER-SUB-001",
                 "HANDLER-CANCEL-001",
@@ -921,6 +943,11 @@ fn expected_gate_contract(gate: &str) -> Option<GateContract> {
             ]),
             owned_set(&[
                 "docs/design.md",
+                "docs/architecture/README.md",
+                "docs/architecture/10-primary-data-flows.md",
+                "docs/architecture/30-compiled-plan-lifecycle.md",
+                "docs/architecture/40-protocol-binding-spi-and-deployment.md",
+                "docs/architecture/50-servient-runtime-lifecycle.md",
                 "docs/state-machines.toml",
                 "docs/amendments/WP-100-error-cleanup-v1.md",
                 "docs/amendments/WP-100-error-disposition-v1.md",
@@ -932,6 +959,10 @@ fn expected_gate_contract(gate: &str) -> Option<GateContract> {
                 "docs/ADR/0003-subscription-driver-ownership.org",
                 "docs/ADR/0004-collection-subscriptions.org",
                 "docs/ADR/0005-outbound-request.org",
+                "docs/ADR/0006-host-binding-call-cancellation.org",
+                "docs/ADR/0007-normative-document-hierarchy.org",
+                "docs/ADR/0008-compiled-plan-lifecycle.org",
+                "docs/ADR/0009-protocol-binding-integration-and-deployment.org",
             ]),
             owned_set(&[
                 "architecture-adr-check",
@@ -948,7 +979,15 @@ fn expected_gate_contract(gate: &str) -> Option<GateContract> {
                 "DIR-SNAPSHOT-001",
                 "DIR-WATCH-001",
             ]),
-            owned_set(&["docs/design.md", "docs/future/directory-service.md"]),
+            owned_set(&[
+                "docs/design.md",
+                "docs/architecture/00-system-goals-and-context.md",
+                "docs/architecture/20-module-boundaries.md",
+                "docs/future/directory-service.md",
+                "docs/ADR/0001-crate-and-module-boundaries.org",
+                "docs/ADR/0007-normative-document-hierarchy.org",
+                "docs/ADR/0009-protocol-binding-integration-and-deployment.org",
+            ]),
             owned_set(&["directory-client-scope-check"]),
         ),
         "GATE-4" => (
@@ -956,11 +995,18 @@ fn expected_gate_contract(gate: &str) -> Option<GateContract> {
                 "RES-LIMIT-001",
                 "RES-PROFILE-001",
                 "API-RESOURCE-001",
+                "ADMIT-MEM-001",
+                "PLAN-COST-001",
                 "HANDLER-STORAGE-001",
                 "HANDLER-CANCEL-002",
+                "BIND-CALL-CANCEL-001",
+                "BIND-HOST-CANCEL-001",
                 "CLEANUP-RECORD-001",
             ]),
             owned_set(&[
+                "docs/architecture/30-compiled-plan-lifecycle.md",
+                "docs/architecture/40-protocol-binding-spi-and-deployment.md",
+                "docs/architecture/50-servient-runtime-lifecycle.md",
                 "docs/resource-limits.csv",
                 "docs/performance/constrained.toml",
                 "docs/performance/gateway.toml",
@@ -975,6 +1021,10 @@ fn expected_gate_contract(gate: &str) -> Option<GateContract> {
                 "docs/ADR/0003-subscription-driver-ownership.org",
                 "docs/ADR/0004-collection-subscriptions.org",
                 "docs/ADR/0005-outbound-request.org",
+                "docs/ADR/0006-host-binding-call-cancellation.org",
+                "docs/ADR/0007-normative-document-hierarchy.org",
+                "docs/ADR/0008-compiled-plan-lifecycle.org",
+                "docs/ADR/0009-protocol-binding-integration-and-deployment.org",
             ]),
             owned_set(&[
                 "architecture-adr-check",
@@ -992,13 +1042,21 @@ fn expected_gate_contract(gate: &str) -> Option<GateContract> {
                 "PERF-ALLOC-001",
                 "PERF-FANOUT-001",
                 "PERF-FANOUT-002",
+                "PLAN-COST-001",
+                "PLAN-INDEX-001",
                 "BIND-PROGRESS-001",
+                "BIND-CALL-CANCEL-001",
+                "BIND-HOST-CANCEL-001",
                 "PRODUCER-EMIT-001",
                 "HANDLER-STORAGE-001",
                 "HANDLER-CANCEL-001",
                 "HANDLER-CANCEL-002",
             ]),
             owned_set(&[
+                "docs/architecture/10-primary-data-flows.md",
+                "docs/architecture/30-compiled-plan-lifecycle.md",
+                "docs/architecture/40-protocol-binding-spi-and-deployment.md",
+                "docs/architecture/50-servient-runtime-lifecycle.md",
                 "docs/state-machines.toml",
                 "docs/performance/manifest.schema.json",
                 "docs/performance/result.schema.json",
@@ -1015,6 +1073,10 @@ fn expected_gate_contract(gate: &str) -> Option<GateContract> {
                 "docs/ADR/0003-subscription-driver-ownership.org",
                 "docs/ADR/0004-collection-subscriptions.org",
                 "docs/ADR/0005-outbound-request.org",
+                "docs/ADR/0006-host-binding-call-cancellation.org",
+                "docs/ADR/0007-normative-document-hierarchy.org",
+                "docs/ADR/0008-compiled-plan-lifecycle.org",
+                "docs/ADR/0009-protocol-binding-integration-and-deployment.org",
             ]),
             owned_set(&[
                 "architecture-adr-check",
@@ -1026,6 +1088,13 @@ fn expected_gate_contract(gate: &str) -> Option<GateContract> {
         "GATE-6" => (
             owned_set(&[
                 "IMPL-CONFORM-001",
+                "PLAN-COST-001",
+                "PLAN-INDEX-001",
+                "FORM-OWNER-001",
+                "BIND-IO-001",
+                "BIND-OUT-001",
+                "BIND-CALL-CANCEL-001",
+                "BIND-HOST-CANCEL-001",
                 "HANDLER-API-001",
                 "HANDLER-SUB-001",
                 "HANDLER-CANCEL-001",
@@ -1035,6 +1104,12 @@ fn expected_gate_contract(gate: &str) -> Option<GateContract> {
             ]),
             owned_set(&[
                 "docs/design.md",
+                "docs/architecture/README.md",
+                "docs/architecture/10-primary-data-flows.md",
+                "docs/architecture/20-module-boundaries.md",
+                "docs/architecture/30-compiled-plan-lifecycle.md",
+                "docs/architecture/40-protocol-binding-spi-and-deployment.md",
+                "docs/architecture/50-servient-runtime-lifecycle.md",
                 "docs/work-packages/index.toml",
                 "docs/work-packages",
                 "docs/amendments/WP-100-interaction-output-api-v1.md",
@@ -1045,6 +1120,10 @@ fn expected_gate_contract(gate: &str) -> Option<GateContract> {
                 "docs/ADR/0003-subscription-driver-ownership.org",
                 "docs/ADR/0004-collection-subscriptions.org",
                 "docs/ADR/0005-outbound-request.org",
+                "docs/ADR/0006-host-binding-call-cancellation.org",
+                "docs/ADR/0007-normative-document-hierarchy.org",
+                "docs/ADR/0008-compiled-plan-lifecycle.org",
+                "docs/ADR/0009-protocol-binding-integration-and-deployment.org",
             ]),
             owned_set(&[
                 "architecture-adr-check",
@@ -1347,15 +1426,15 @@ fn check_governance_reviews(
             ]);
             if status != "blocking"
                 || review_type != "audit"
-                || design_revision != ACTIVE_DESIGN_REVISION
+                || design_revision != REJECTED_DESIGN_REVISION
                 || basis_revision.is_some()
                 || gates != expected_gates
                 || checks != expected_checks
                 || !artifacts.contains("docs/review/review-02.org")
             {
                 return Err(format!(
-                    "Architecture Review 02 does not match the frozen blocking \
-                     v{ACTIVE_DESIGN_REVISION} record"
+                    "Architecture Review 02 does not match the rejected \
+                     v{REJECTED_DESIGN_REVISION} predecessor record"
                 ));
             }
         }
@@ -1376,7 +1455,7 @@ fn check_governance_reviews(
                 || basis_revision.is_some()
                 || gates != expected_gates
                 || checks != expected_checks
-                || !artifacts.contains("docs/review/review-02.org")
+                || !artifacts.contains("docs/review/review-03.org")
             {
                 return Err(format!(
                     "closure review {id:?} does not match the frozen v{ACTIVE_DESIGN_REVISION} \
@@ -1524,7 +1603,7 @@ fn check_work_packages(root: &Path, require_handler_entry: bool) -> Result<(), S
         "clinkz-wot-core",
         "clinkz-wot-discovery",
         "clinkz-wot-foundation",
-        "clinkz-wot-protocol-bindings",
+        "clinkz-wot-planning",
         "clinkz-wot-protocol-bindings-zenoh",
         "clinkz-wot-servient",
         "clinkz-wot-td",
@@ -2135,7 +2214,7 @@ fn check_work_package_document(
     };
     for metadata in [
         status_metadata,
-        "Design revision: v4.8",
+        "Design revision: v4.9",
         "Depends on:",
         "Required gates:",
         "Owner packages:",

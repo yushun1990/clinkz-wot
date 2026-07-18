@@ -404,7 +404,7 @@ fn load_fixtures(
     require_string(
         document.get("design_revision"),
         "fixture design_revision",
-        "4.8",
+        "4.9",
     )?;
     require_string(document.get("generator"), "fixture generator", GENERATOR)?;
     let tables = document

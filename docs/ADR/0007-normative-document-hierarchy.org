@@ -1,0 +1,71 @@
+#+title: ADR-0007: Normative Document Hierarchy and Architecture Backbone
+#+date: 2026-07-19
+#+status: Accepted
+
+* Context
+
+The v4.8 candidate placed architecture, exact Rust APIs, state-machine prose,
+resource defaults, performance workloads, verification lists, migration history,
+and implementation status in one large =docs/design.md=. Temporary amendments,
+ADRs, work packages, and machine-readable artifacts then repeated parts of the
+same behavior.
+
+The result obscured the engine's primary flow and allowed locally plausible
+details to conflict. In particular, the document froze incompatible binding
+cancellation models and left the compiled-plan lifecycle and Protocol Binding
+integration path implicit. Adding more paragraphs to the monolith would not
+restore a clear authority chain.
+
+* Decision
+
+The v4.9 design uses a modular normative hierarchy:
+
+1. =docs/design.md= is the revision and normative-source manifest.
+2. =docs/architecture/= owns the architecture backbone: system context,
+   primary flows, module boundaries, compiled-plan lifecycle, Protocol Binding
+   integration, and Servient lifecycle invariants.
+3. =docs/spec/= contains one detailed behavioral/API specification per domain.
+4. Registered CSV, TOML, JSON Schema, and performance manifests contain the
+   exact machine-readable projection for ownership, states, limits, evidence,
+   and workloads.
+5. ADRs record decisions, rationale, rejected alternatives, and explicit
+   supersession. They must be integrated into the architecture/specification
+   sources in the same revision; an ADR does not silently override them.
+6. Work packages own dependency-ordered migration, removal, and evidence. They
+   do not define observable behavior.
+
+=PLAN.md= is a short non-normative selector and status page. Reviews, audits,
+thinking notes, and deprecated files are evidence or inputs, not behavioral
+authority.
+
+Each normative statement has one domain owner. An amendment is temporary; its
+accepted content is merged into the domain specification and the amendment is
+then retained only as historical migration evidence. A conflict between
+normative artifacts opens the affected gate. Implementers do not choose a
+winner by file order.
+
+Requirement definitions may be distributed across registered specification
+files. The requirement checker must read the artifact registry instead of
+assuming that every requirement occurs in one =docs/design.md=.
+
+* Consequences
+
+- The v4.8 monolith remains a migration source while its valid content is
+  decomposed; it cannot authorize runtime refactoring by itself.
+- Architecture documents stay concise and link to exact contracts instead of
+  repeating API blocks, limits, and test catalogs.
+- Domain specifications become the only detailed prose owner for their
+  behavior.
+- ADR partial or complete supersession is explicit and checkable.
+- Work-package and review prose cannot accidentally create a second API.
+- The design gate checker must validate the authority graph, unique domain
+  ownership, registered requirement sources, and same-revision identities.
+
+* Rejected alternatives
+
+- Continuing to grow one design file was rejected because it already hid
+  cross-domain contradictions.
+- Treating ADRs as implicit overrides was rejected because implementation would
+  depend on undocumented precedence.
+- Moving all detail into work packages was rejected because migration plans are
+  temporary and package-oriented rather than semantic.

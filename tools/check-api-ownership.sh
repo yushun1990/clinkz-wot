@@ -48,7 +48,7 @@ awk -F, '
         packages["clinkz-wot-foundation"] = 1
         packages["clinkz-wot-td"] = 1
         packages["clinkz-wot-core"] = 1
-        packages["clinkz-wot-protocol-bindings"] = 1
+        packages["clinkz-wot-planning"] = 1
         packages["clinkz-wot-discovery"] = 1
         packages["clinkz-wot-servient"] = 1
         kinds["type"] = kinds["trait"] = kinds["registration"] = 1
@@ -66,7 +66,7 @@ awk -F, '
         prefixes["clinkz-wot-foundation"] = "clinkz_wot_foundation::"
         prefixes["clinkz-wot-td"] = "clinkz_wot_td::"
         prefixes["clinkz-wot-core"] = "clinkz_wot_core::"
-        prefixes["clinkz-wot-protocol-bindings"] = "clinkz_wot_protocol_bindings::"
+        prefixes["clinkz-wot-planning"] = "clinkz_wot_planning::"
         prefixes["clinkz-wot-discovery"] = "clinkz_wot_discovery::"
         prefixes["clinkz-wot-servient"] = "clinkz_wot_servient::"
     }

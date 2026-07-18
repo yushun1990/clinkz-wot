@@ -1,5 +1,5 @@
 #+title: Core and Runtime Architecture Decision Index
-#+date: 2026-07-16
+#+date: 2026-07-19
 
 This directory records accepted architecture decisions discovered by the July
 2026 architecture review. The decisions apply to the design revision that
@@ -14,8 +14,13 @@ they do not claim that the current implementation already conforms.
 - [[file:0004-collection-subscriptions.org][ADR-0004: Collection subscription planning and multiplexing]]
 - [[file:0005-outbound-request.org][ADR-0005: Directional outbound binding request naming]]
 - [[file:0006-host-binding-call-cancellation.org][ADR-0006: Host binding call cancellation and late-result ownership]]
+- [[file:0007-normative-document-hierarchy.org][ADR-0007: Normative document hierarchy and architecture backbone]]
+- [[file:0008-compiled-plan-lifecycle.org][ADR-0008: Compiled plan-set lifecycle and binding artifact ownership]]
+- [[file:0009-protocol-binding-integration-and-deployment.org][ADR-0009: Protocol Binding integration, driving, and deployment]]
 
 * Review record
 
-The evidence, current implementation deviations, design blockers, and migration
-order are recorded in [[file:../review/review-01.org][Architecture Review 01]].
+The original implementation deviations are recorded in
+[[file:../review/review-01.org][Architecture Review 01]]. The rejection of the
+v4.8 detailed candidate and the v4.9 architecture-closure requirements are
+recorded in [[file:../review/review-02.org][Architecture Review 02]].

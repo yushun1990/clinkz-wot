@@ -1,7 +1,7 @@
 # WP-400 Servient Lifecycle and Host Runtime
 
 Status: Planned
-Design revision: v4.8
+Design revision: v4.9
 Depends on: `WP-300`
 Required gates: `GATE-1`, `GATE-2`, `GATE-3`, `GATE-4`, `GATE-5`, `GATE-6`
 Owner packages: `clinkz-wot-servient`, `clinkz-wot-core`
@@ -72,7 +72,7 @@ The package also consumes, without redefining, the `STATE-BIND-001`, `STATE-INFL
 | `clinkz-wot-foundation` | all required cells | `ResourceLimits`, `WorkBudget`, clocks, generations, reservations, and named profiles consumed without a higher-layer dependency |
 
 The Servient may depend on `clinkz-wot-discovery` and
-`clinkz-wot-protocol-bindings`, but neither package may depend back on the Servient. A concrete
+`clinkz-wot-planning`, but neither package may depend back on the Servient. A concrete
 protocol package is not a mandatory dependency of `clinkz-wot-servient`; protocol-specific test
 integration remains behind an explicit test feature.
 

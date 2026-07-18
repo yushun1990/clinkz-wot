@@ -52,6 +52,14 @@ is required; no =mod.rs= files are introduced.
 - Feature fixtures must prove that no-default Servient exposes a useful manual
   runtime rather than an empty placeholder.
 
+* Partial supersession
+
+ADR-0008 supersedes only the shared compiler package name and corresponding
+ownership row. The v4.9 target is =clinkz-wot-planning= rather than
+=clinkz-wot-protocol-bindings=. Its responsibility and dependency direction are
+otherwise the shared planning role described above. All other crate and module
+boundaries in this decision remain accepted.
+
 * Rejected alternatives
 
 - Keeping all protocol-neutral code in core was rejected because vocabulary

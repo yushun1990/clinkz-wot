@@ -1,5 +1,5 @@
 schema_version = 1
-design_revision = "4.8"
+design_revision = "4.9"
 requirement = "IMPL-CONFORM-001"
 status = "in-progress"
 implementation_entry_gates = [
@@ -230,7 +230,7 @@ requirements = [
 ]
 owner_packages = [
     "clinkz-wot-core",
-    "clinkz-wot-protocol-bindings",
+    "clinkz-wot-planning",
     "clinkz-wot-td",
 ]
 feature_cells = ["no-default", "async-no-std", "std"]
@@ -467,7 +467,7 @@ requirements = [
     "PERF-FANOUT-002",
 ]
 owner_packages = [
-    "clinkz-wot-protocol-bindings",
+    "clinkz-wot-planning",
     "clinkz-wot-protocol-bindings-zenoh",
 ]
 feature_cells = ["no-default", "async-no-std", "std"]

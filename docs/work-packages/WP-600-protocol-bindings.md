@@ -1,10 +1,10 @@
 # WP-600 Optional Zenoh and Zenoh-Pico Protocol Bindings
 
 Status: Planned
-Design revision: v4.8
+Design revision: v4.9
 Depends on: `WP-300`
 Required gates: `GATE-1`, `GATE-2`, `GATE-3`, `GATE-4`, `GATE-5`, `GATE-6`
-Owner packages: `clinkz-wot-protocol-bindings`, `clinkz-wot-protocol-bindings-zenoh`
+Owner packages: `clinkz-wot-planning`, `clinkz-wot-protocol-bindings-zenoh`
 
 ## Scope
 
@@ -53,9 +53,9 @@ The package consumes `PLAN-INDEX-001`, `PLAN-REQUEST-001`, `STATE-BIND-001`,
 
 | Cargo package | Feature cell | Required surface |
 | --- | --- | --- |
-| `clinkz-wot-protocol-bindings` | `--no-default-features` | `CapabilityIndex`, `PlanCompiler`, form/security/target resolution, and URI-template compilation without execution-trait ownership |
-| `clinkz-wot-protocol-bindings` | `async`, no `std` where provided | Async compiler adapters without an executor or concrete transport |
-| `clinkz-wot-protocol-bindings` | `std` | Host planning conveniences only; no concrete zenoh dependency |
+| `clinkz-wot-planning` | `--no-default-features` | `CapabilityIndex`, `PlanCompiler`, form/security/target resolution, and URI-template compilation without execution-trait ownership |
+| `clinkz-wot-planning` | `async`, no `std` where provided | Async compiler adapters without an executor or concrete transport |
+| `clinkz-wot-planning` | `std` | Host planning conveniences only; no concrete zenoh dependency |
 | `clinkz-wot-protocol-bindings-zenoh` | `--no-default-features` | Zenoh form metadata, protocol-local compiler data, and constrained adapter types without a concrete runtime |
 | `clinkz-wot-protocol-bindings-zenoh` | `zenoh` | Rust zenoh host backend implementing the host binding registrations and runtime status contract |
 | `clinkz-wot-protocol-bindings-zenoh` | `zenoh-pico` | Constrained zenoh-pico client/server adapters implementing poll progress with caller-owned slots and no `std` |

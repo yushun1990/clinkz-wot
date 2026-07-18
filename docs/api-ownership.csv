@@ -63,7 +63,7 @@ ResponsePayloadRole,type,clinkz-wot-core,interaction,public,clinkz_wot_core::Res
 ResponseSelection,type,clinkz-wot-core,interaction,public,clinkz_wot_core::ResponseSelection,no-default|async-no-std|std,all,all,producer|consumer,API-PAYLOAD-001,absent,add,frozen
 BindingResponseMetadata,type,clinkz-wot-core,interaction,public,clinkz_wot_core::BindingResponseMetadata,no-default|async-no-std|std,all,all,producer|consumer,API-PAYLOAD-001|BIND-IO-001|BIND-OUT-001,absent,add,frozen
 InteractionOutputMetadata,type,clinkz-wot-core,interaction,public,clinkz_wot_core::InteractionOutputMetadata,no-default|async-no-std|std,all,all,producer|consumer,API-PAYLOAD-001,absent,add,frozen
-validate_untrusted_binding_output,function,clinkz-wot-protocol-bindings,response,public,clinkz_wot_protocol_bindings::validate_untrusted_binding_output,no-default|async-no-std|std,all,all,consumer,API-PAYLOAD-001|BIND-OUT-001,absent,add,frozen
+validate_untrusted_binding_output,function,clinkz-wot-planning,response,public,clinkz_wot_planning::validate_untrusted_binding_output,no-default|async-no-std|std,all,all,consumer,API-PAYLOAD-001|BIND-OUT-001,absent,add,frozen
 HandlerContext,type,clinkz-wot-core,handler,public,clinkz_wot_core::HandlerContext,no-default|async-no-std|std,all,all,producer,HANDLER-API-001,absent,add,frozen
 CancellationView,type,clinkz-wot-core,handler,public,clinkz_wot_core::CancellationView,no-default|async-no-std|std,all,all,all,HANDLER-CANCEL-001|HANDLER-CANCEL-002,absent,add,frozen
 Deadline,type,clinkz-wot-core,handler,public,clinkz_wot_core::Deadline,no-default|async-no-std|std,all,all,all,TIME-001|HANDLER-CANCEL-001|HANDLER-CANCEL-002,absent,add,frozen
@@ -303,7 +303,7 @@ ActiveRouteGuard,type,clinkz-wot-core,binding,public,clinkz_wot_core::ActiveRout
 RouteReadinessDriver,trait,clinkz-wot-core,binding,public,clinkz_wot_core::RouteReadinessDriver,std,host-async,gateway-default-v1,producer,LIFE-EXPOSE-003,absent,add,frozen
 RouteReadinessToken,type,clinkz-wot-core,binding,public,clinkz_wot_core::RouteReadinessToken,std,host-async,gateway-default-v1,producer,LIFE-EXPOSE-003,absent,add,frozen
 ServerBindingRegistration,registration,clinkz-wot-core,binding,public,clinkz_wot_core::ServerBindingRegistration,std,host-async,gateway-default-v1,producer,FORM-FINALIZE-001|API-SURFACE-001,absent,add,frozen
-RuntimeEventSinkConfig,type,clinkz-wot-core,binding,public,clinkz_wot_core::RuntimeEventSinkConfig,std,host-async,gateway-default-v1,producer,CAP-STATUS-001,absent,add,frozen
+RuntimeEventSinkConfig,type,clinkz-wot-core,binding,public,clinkz_wot_core::RuntimeEventSinkConfig,std,host-async,gateway-default-v1,producer,CAP-STATUS-001,absent,remove,removed
 BindingFuture,type,clinkz-wot-core,binding,public,clinkz_wot_core::BindingFuture,std,host-async,gateway-default-v1,producer|consumer,HOST-ASYNC-001,absent,remove,removed
 BindingCallFootprint,type,clinkz-wot-core,binding,public,clinkz_wot_core::BindingCallFootprint,std,host-async,gateway-default-v1,producer|consumer,BIND-HOST-CANCEL-001|ADMIT-MEM-001,absent,add,frozen
 HostBindingCall,trait,clinkz-wot-core,binding,public,clinkz_wot_core::HostBindingCall,std,host-async,gateway-default-v1,producer|consumer,BIND-HOST-CANCEL-001|BIND-CALL-CANCEL-001,absent,add,frozen
@@ -313,7 +313,7 @@ HostSubscriptionStart,type,clinkz-wot-core,binding,public,clinkz_wot_core::HostS
 HostSubscriptionDriver,trait,clinkz-wot-core,binding,public,clinkz_wot_core::HostSubscriptionDriver,std,host-async,gateway-default-v1,consumer,BIND-PROGRESS-001|STATE-SUB-001|CONSTRAINED-WORK-001,absent,add,frozen
 ClientBindingRegistration,registration,clinkz-wot-core,binding,public,clinkz_wot_core::ClientBindingRegistration,std,host-async,gateway-default-v1,consumer,API-SURFACE-001,absent,add,frozen
 RouteReadinessStatus,type,clinkz-wot-core,binding,public,clinkz_wot_core::RouteReadinessStatus,no-default|async-no-std|std,all,all,producer,LIFE-EXPOSE-003,absent,add,frozen
-BindingDrivingMode,type,clinkz-wot-core,binding,public,clinkz_wot_core::BindingDrivingMode,no-default|async-no-std|std,all,all,producer,STATE-BIND-001,absent,add,frozen
+BindingDrivingMode,type,clinkz-wot-core,binding,public,clinkz_wot_core::BindingDrivingMode,no-default|async-no-std|std,all,all,producer,STATE-BIND-001,absent,remove,removed
 StaticServerBindingRegistration,registration,clinkz-wot-core,binding,public,clinkz_wot_core::StaticServerBindingRegistration,no-default|async-no-std|std,manual-poll,application-static,producer,API-SURFACE-001,absent,add,frozen
 StaticClientBindingRegistration,registration,clinkz-wot-core,binding,public,clinkz_wot_core::StaticClientBindingRegistration,no-default|async-no-std|std,manual-poll,application-static,consumer,API-SURFACE-001,absent,add,frozen
 ServerFormContributor,trait,clinkz-wot-core,form_contribution,public,clinkz_wot_core::ServerFormContributor,no-default|async-no-std|std,all,all,producer,FORM-FINALIZE-001,absent,add,frozen
@@ -346,12 +346,12 @@ ClientRequestSlotState,state_record,clinkz-wot-core,state,crate,-,no-default|asy
 ClientSubscriptionSlotState,state_record,clinkz-wot-core,state,crate,-,no-default|async-no-std|std,manual-poll,application-static,consumer,BIND-PROGRESS-001,absent,add,frozen
 ServerResponseSlotState,state_record,clinkz-wot-core,state,crate,-,no-default|async-no-std|std,manual-poll,application-static,producer,BIND-PROGRESS-001,absent,add,frozen
 BindingEmissionSlotState,state_record,clinkz-wot-core,state,crate,-,no-default|async-no-std|std,manual-poll,application-static,producer,PRODUCER-EMIT-001,absent,add,frozen
-CapabilityIndex,type,clinkz-wot-protocol-bindings,plan,public,clinkz_wot_protocol_bindings::CapabilityIndex,no-default|async-no-std|std,all,all,producer|consumer,PLAN-INDEX-001,absent,add,frozen
-PlanCompiler,trait,clinkz-wot-protocol-bindings,plan,public,clinkz_wot_protocol_bindings::PlanCompiler,no-default|async-no-std|std,all,all,producer|consumer,PLAN-COST-001,absent,add,frozen
-PlanBuildInput,type,clinkz-wot-protocol-bindings,plan,public,clinkz_wot_protocol_bindings::PlanBuildInput,no-default|async-no-std|std,all,all,producer|consumer,PLAN-COST-001,absent,add,frozen
-PlanBuildOutput,type,clinkz-wot-protocol-bindings,plan,public,clinkz_wot_protocol_bindings::PlanBuildOutput,no-default|async-no-std|std,all,all,producer|consumer,PLAN-COST-001,absent,add,frozen
-CompiledUriTemplate,type,clinkz-wot-protocol-bindings,uri_template,public,clinkz_wot_protocol_bindings::CompiledUriTemplate,no-default|async-no-std|std,all,all,producer|consumer,PERF-COMPLEXITY-001,absent,add,frozen
-ResolvedFormTarget,type,clinkz-wot-protocol-bindings,form,public,clinkz_wot_protocol_bindings::ResolvedFormTarget,no-default|async-no-std|std,all,all,producer|consumer,PLAN-REQUEST-001,protocol-bindings/core/src/form.rs,keep,frozen
+CapabilityIndex,type,clinkz-wot-planning,plan,public,clinkz_wot_planning::CapabilityIndex,no-default|async-no-std|std,all,all,producer|consumer,PLAN-INDEX-001,absent,add,frozen
+PlanCompiler,trait,clinkz-wot-planning,plan,public,clinkz_wot_planning::PlanCompiler,no-default|async-no-std|std,all,all,producer|consumer,PLAN-COST-001,absent,add,frozen
+PlanBuildInput,type,clinkz-wot-planning,plan,public,clinkz_wot_planning::PlanBuildInput,no-default|async-no-std|std,all,all,producer|consumer,PLAN-COST-001,absent,add,frozen
+PlanBuildOutput,type,clinkz-wot-planning,plan,public,clinkz_wot_planning::PlanBuildOutput,no-default|async-no-std|std,all,all,producer|consumer,PLAN-COST-001,absent,add,frozen
+CompiledUriTemplate,type,clinkz-wot-planning,uri_template,public,clinkz_wot_planning::CompiledUriTemplate,no-default|async-no-std|std,all,all,producer|consumer,PERF-COMPLEXITY-001,absent,add,frozen
+ResolvedFormTarget,type,clinkz-wot-planning,form,public,clinkz_wot_planning::ResolvedFormTarget,no-default|async-no-std|std,all,all,producer|consumer,PLAN-REQUEST-001,protocol-bindings/core/src/form.rs,relocate,frozen
 ThingDocument,type,clinkz-wot-td,document,public,clinkz_wot_td::ThingDocument,no-default|async-no-std|std,all,all,all,DOC-RUNTIME-001,absent,add,frozen
 TdDocument,type,clinkz-wot-td,document,public,clinkz_wot_td::TdDocument,no-default|async-no-std|std,all,all,all,DOC-RUNTIME-001,absent,add,frozen
 TmDocument,type,clinkz-wot-td,document,public,clinkz_wot_td::TmDocument,no-default|async-no-std|std,all,all,all,DOC-RUNTIME-001,absent,add,frozen

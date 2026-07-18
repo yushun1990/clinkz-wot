@@ -25,12 +25,12 @@ publication SPI:
 - a generation-bearing =BindingEmissionSlot= for one binding publication; and
 - the =ServerBinding::publish= and constrained start/poll/cancel operations.
 
-The host =publish= call receives one owned
-=HostBindingCancellationSignal=. Servient retains the paired source and boxed
-future in its bounded host binding-call record until publication completes,
-late completion is recorded, cleanup transfers, or durable residual state is
-recorded. Dropping an application or emission future never detaches a binding
-publication.
+As amended by ADR-0006, the host =publish= call returns one owned
+=HostBindingCall=; the earlier source/signal and boxed-future pair is not a
+target API. Servient retains the call in its bounded host binding-call record
+until publication completes, a late completion is recorded, cleanup ownership
+transfers, or durable residual state is recorded. Dropping an application or
+emission delivery view never detaches a binding publication.
 
 Servient owns an =EmissionCoordinator=. It performs validation, per-affordance
 sequencing, local subscriber admission, result reservation, and bounded progress

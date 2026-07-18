@@ -207,7 +207,7 @@ fi
 
 if ! awk -F, '
     NR > 1 && $1 == "validate_untrusted_binding_output" \
-        && $3 == "clinkz-wot-protocol-bindings" && $4 == "response" \
+        && $3 == "clinkz-wot-planning" && $4 == "response" \
         && $5 == "public" && $14 == "frozen" { found = 1 }
     END { exit !found }
 ' "$root/docs/api-ownership.csv"; then

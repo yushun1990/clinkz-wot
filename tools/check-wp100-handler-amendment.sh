@@ -586,7 +586,7 @@ fi
 
 for invariant in \
     'The WP-600 feature-cell set is exactly `no-default`, `async-no-std`, and `std`.' \
-    '| `clinkz-wot-protocol-bindings` | `--no-default-features` |' \
+    '| `clinkz-wot-planning` | `--no-default-features` |' \
     '| `clinkz-wot-protocol-bindings-zenoh` | `--no-default-features` |'; do
     if ! grep -Fq "$invariant" "$wp600"; then
         echo "WP-100 handler amendment check: WP-600 no-default contract misses: $invariant" >&2

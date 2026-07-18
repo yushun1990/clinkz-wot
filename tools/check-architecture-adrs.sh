@@ -10,6 +10,9 @@ adrs=(
     "docs/ADR/0004-collection-subscriptions.org"
     "docs/ADR/0005-outbound-request.org"
     "docs/ADR/0006-host-binding-call-cancellation.org"
+    "docs/ADR/0007-normative-document-hierarchy.org"
+    "docs/ADR/0008-compiled-plan-lifecycle.org"
+    "docs/ADR/0009-protocol-binding-integration-and-deployment.org"
 )
 
 if [[ ! -f "$root/docs/ADR/core.org" ]]; then
@@ -29,13 +32,42 @@ for relative in "${adrs[@]}"; do
     fi
 done
 
-for id in ADR-0001 ADR-0002 ADR-0003 ADR-0004 ADR-0005 ADR-0006; do
+for id in ADR-0001 ADR-0002 ADR-0003 ADR-0004 ADR-0005 ADR-0006 ADR-0007 ADR-0008 ADR-0009; do
     if ! grep -Fq "$id" "$root/docs/ADR/core.org"; then
         echo "architecture ADR check: decision index does not reference $id" >&2
         exit 1
     fi
     if ! grep -Fq "$id" "$root/docs/design.md"; then
         echo "architecture ADR check: active design does not reference $id" >&2
+        exit 1
+    fi
+done
+
+architecture_files=(
+    "docs/architecture/README.md"
+    "docs/architecture/00-system-goals-and-context.md"
+    "docs/architecture/10-primary-data-flows.md"
+    "docs/architecture/20-module-boundaries.md"
+    "docs/architecture/30-compiled-plan-lifecycle.md"
+    "docs/architecture/40-protocol-binding-spi-and-deployment.md"
+    "docs/architecture/50-servient-runtime-lifecycle.md"
+)
+
+for relative in "${architecture_files[@]}"; do
+    if [[ ! -f "$root/$relative" ]]; then
+        echo "architecture ADR check: missing $relative" >&2
+        exit 1
+    fi
+done
+
+for fragment in \
+    'The engine has an explicit compiled-plan-set lifecycle' \
+    'The v1 registration set is startup-only' \
+    'A Protocol Binding is an ordinary Rust crate' \
+    'The v1 server SPI is engine-orchestrated and route-scoped' \
+    'The v4.9 target renames the current shared'; do
+    if ! grep -RFq "$fragment" "$root/docs/architecture"; then
+        echo "architecture ADR check: backbone is missing $fragment" >&2
         exit 1
     fi
 done
@@ -53,6 +85,10 @@ expected_rows=(
     'EmissionCoordinator,type,clinkz-wot-servient,crate,-,frozen'
     'EmissionDispatchPolicy,type,clinkz-wot-servient,public,clinkz_wot_servient::EmissionDispatchPolicy,frozen'
     'EmissionRecord,state_record,clinkz-wot-servient,crate,-,frozen'
+    'CapabilityIndex,type,clinkz-wot-planning,public,clinkz_wot_planning::CapabilityIndex,frozen'
+    'PlanCompiler,trait,clinkz-wot-planning,public,clinkz_wot_planning::PlanCompiler,frozen'
+    'PlanBuildInput,type,clinkz-wot-planning,public,clinkz_wot_planning::PlanBuildInput,frozen'
+    'PlanBuildOutput,type,clinkz-wot-planning,public,clinkz_wot_planning::PlanBuildOutput,frozen'
 )
 
 for expected in "${expected_rows[@]}"; do
@@ -85,7 +121,7 @@ for expected in "${expected_cells[@]}"; do
     fi
 done
 
-for removed in BindingRequest EventBroker EventName EventStream PublisherSink SubscriptionSender; do
+for removed in BindingRequest BindingDrivingMode EventBroker EventName EventStream PublisherSink RuntimeEventSinkConfig SubscriptionSender; do
     status=$(awk -F, -v item="$removed" '$1 == item { print $14 }' "$matrix")
     if [[ "$status" != "removed" ]]; then
         echo "architecture ADR check: $removed is not recorded as removed" >&2
@@ -138,4 +174,4 @@ for fragment in \
     fi
 done
 
-echo "architecture ADR check: six accepted decisions are reflected in the active surface"
+echo "architecture ADR check: nine accepted decisions and the v4.9 backbone are registered"

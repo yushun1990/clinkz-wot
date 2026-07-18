@@ -173,7 +173,7 @@ The response contract is implemented without crossing the frozen DAG:
    additional-response count. It does not publish a response.
 3. WP-300 owns the final core-owned binding request and response envelopes and
    the shared consumer/binding-origin validator at
-   `clinkz_wot_protocol_bindings::validate_untrusted_binding_output`:
+   `clinkz_wot_planning::validate_untrusted_binding_output`:
 
    ```rust
    pub fn validate_untrusted_binding_output(

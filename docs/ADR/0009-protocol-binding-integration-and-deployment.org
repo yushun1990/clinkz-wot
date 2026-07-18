@@ -1,0 +1,85 @@
+#+title: ADR-0009: Protocol Binding Integration, Driving, and Deployment
+#+date: 2026-07-19
+#+status: Accepted
+
+* Context
+
+The design described Protocol Bindings as extension points but did not explain
+how a third-party binding enters an application, whether =build.rs= compiles it,
+whether Rust dynamic libraries are supported, how compiler and runtime halves
+share one identity, or how new code is rolled out.
+
+The host server design also offered both externally driven and self-driving
+modes. The self-driving prose depended on an undefined application =Dispatch=
+capability and had no complete task, status, overflow, shutdown, or cleanup
+ownership contract. That ambiguity would force every binding to invent a
+different runtime topology.
+
+* Decision
+
+V1 supports ordinary Cargo-linked Protocol Binding crates and explicit
+application registration.
+
+- A binding crate depends on core and planning, not Servient.
+- It exports constructors for one complete, generation-bearing registration
+  bundle containing compiler capabilities/extensions, optional form
+  contribution, client/server execution halves, and resource/cleanup
+  declarations.
+- The application declares the binding crate in its Cargo dependency graph and
+  supplies the complete bundle to =ServientBuilder= before =build=.
+- Official umbrella features are convenience re-exports, not the extension
+  mechanism. Third-party bindings do not need to join this workspace.
+- =build.rs= is not used to discover or recursively compile arbitrary Rust
+  bindings.
+
+One Servient's binding set is startup-only in v1. Duplicate binding identities,
+incomplete compiler/execution pairs, ambiguous exclusive route ownership, and
+inadmissible footprints fail builder validation before runtime publication.
+
+V1 server progress is engine-orchestrated and route-scoped. Servient retains
+the unique call/route/subscription/cleanup owner and polls or steps the binding
+SPI. A binding may own a bounded protocol reactor that wakes those drivers, but
+it does not receive a general application-dispatch handle, invoke handlers from
+a hidden task, or detach semantic ownership. Self-driving direct dispatch is
+deferred.
+
+Host and constrained bindings share semantics but not representation. Host
+builds may erase owned calls, guards, and drivers; constrained builds use
+associated state types, caller-owned slots, static tables, and manual progress.
+
+Rollout uses a new binary, container, process, or firmware image. A new instance
+completes readiness before traffic/ownership cutover; the old instance then
+drains and shuts down. Cargo features are compile-time selection, not hot
+runtime switches.
+
+Rust trait objects and engine Rust values are not a stable dynamic-library ABI.
+V1 does not load or unload arbitrary Rust =dylib= bindings. A future host-only
+plugin design must use a versioned stable C ABI or an out-of-process protocol
+and separately define allocation, panic isolation, capability negotiation,
+poll/cancel/drop, resource limits, and safe unload after all owners terminate.
+
+* Consequences
+
+- The exact registration schema must be constructible by a downstream binding
+  without private engine APIs or invented defaults.
+- Bare server trait-object convenience registration is removed; the builder
+  cannot infer preparation visibility, compiler identity, route footprint,
+  ingress policy, or cleanup behavior.
+- The target removes =BindingDrivingMode= and the undefined self-driving
+  =Dispatch= path. Host reactors are implementation details behind the
+  engine-owned progress contract.
+- The conformance suite includes a fake binding crate outside the workspace
+  member list.
+- Runtime binding replacement, dynamic loading, and hot unload require future
+  ADRs rather than accidental extension of the v1 SPI.
+
+* Rejected alternatives
+
+- Using =build.rs= to add arbitrary Rust dependencies was rejected because
+  Cargo resolves dependencies before executing build scripts and recursive
+  builds break type, feature, target, and lock coherence.
+- Passing =Arc<dyn Trait>= or Rust futures across =dylib= boundaries was
+  rejected because the Rust ABI, vtables, allocators, panic behavior, and type
+  identity are not stable across independently built modules.
+- Keeping both self-driving and engine-driven v1 modes was rejected because the
+  former lacked an implementable ownership and observability contract.

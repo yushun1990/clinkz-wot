@@ -1,5 +1,5 @@
 schema_version = 1
-design_revision = "4.8"
+design_revision = "4.9"
 generator = "clinkz-wot-fixture-generator-v2"
 
 [[fixture]]

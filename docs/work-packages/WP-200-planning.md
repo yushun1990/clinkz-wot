@@ -2,22 +2,23 @@
 
 Status: Planned
 
-Design revision: v4.8
+Design revision: v4.9
 
 Depends on: WP-100
 
 Required gates: GATE-1, GATE-2, GATE-3, GATE-4, GATE-5, GATE-6
 
-Owner packages: clinkz-wot-core, clinkz-wot-protocol-bindings, clinkz-wot-td
+Owner packages: clinkz-wot-core, clinkz-wot-planning, clinkz-wot-td
 
 ## Scope
 
 Implement the two-level logical/binding plan model and generation-bearing capability indexes
-across `clinkz-wot-core` and `clinkz-wot-protocol-bindings`. Move TD scanning, effective form
+across `clinkz-wot-core` and `clinkz-wot-planning`. Migrate the current
+`protocol-bindings/core` package to the target planning crate, then move TD scanning, effective form
 resolution, capability pruning, bounded candidate ordering, URI-template compilation, and
 lazy compiled-artifact coordination out of interaction hot paths.
 
-Core owns immutable protocol-neutral plan values. `clinkz-wot-protocol-bindings` owns shared
+Core owns immutable protocol-neutral plan values. `clinkz-wot-planning` owns shared
 compilers, capability indexes, form/operation/security resolution algorithms, and URI-template
 helpers. This package does not own binding execution traits, Servient registrations, route
 lifecycle, concrete protocols, or application handles.
@@ -66,10 +67,11 @@ by WP-300, WP-400, or WP-600. New planning code must not call `PushFn`, `Publish
 
 ## Crates and Feature Cells
 
-- Modify Cargo packages `clinkz-wot-core` and `clinkz-wot-protocol-bindings`.
+- Modify Cargo package `clinkz-wot-core` and migrate `protocol-bindings/core` to
+  the target `clinkz-wot-planning` package without preserving a second public compiler owner.
 - In `clinkz-wot-core`, the `no-default`, `async-no-std`, and `std` cells expose identical
   protocol-neutral plan values; representation may differ only behind private storage.
-- In `clinkz-wot-protocol-bindings`, all three cells expose compilers, capability indexes,
+- In `clinkz-wot-planning`, all three cells expose compilers, capability indexes,
   form/security/operation resolution, and URI-template helpers. The `async-no-std` cell may add
   adapters but no executor; `std` adds conveniences rather than a different plan contract.
 - Preserve `foundation + td + core <- protocol-bindings/core`; core must not depend on the
@@ -152,7 +154,7 @@ candidate vectors and retain enough source identity for strict selection and dia
 - Remove any full logical-plan copy stored per binding candidate and any invalidation path that
   synchronously scans all Things or plans.
 - Do not move `ClientBinding`, `ServerBinding`, or their registrations into
-  `clinkz-wot-protocol-bindings`; that ownership would violate the frozen dependency graph.
+  `clinkz-wot-planning`; that ownership would violate the frozen dependency graph.
 - Do not remove or extend the staged handler/emission compatibility bridge in this package.
   WP-300 owns `ProducerEmission` and its adapters, WP-400 owns host handler activation and the
   legacy handler-path removal, and WP-600 owns concrete-protocol `PublisherSink` removal.

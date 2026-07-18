@@ -1,7 +1,7 @@
 # WP-700 Umbrella API Migration and Final Conformance
 
 Status: Planned
-Design revision: v4.8
+Design revision: v4.9
 Depends on: `WP-400`, `WP-500`, `WP-600`
 Required gates: `GATE-1`, `GATE-2`, `GATE-3`, `GATE-4`, `GATE-5`, `GATE-6`
 Owner packages: `clinkz-wot`, workspace
@@ -57,7 +57,7 @@ evidence, but it cannot replace a focused package-level result with one broad in
 
 The workspace compile matrix covers the actual Cargo packages
 `clinkz-wot-foundation`, `clinkz-wot-td`, `clinkz-wot-core`,
-`clinkz-wot-protocol-bindings`, `clinkz-wot-discovery`, `clinkz-wot-servient`,
+`clinkz-wot-planning`, `clinkz-wot-discovery`, `clinkz-wot-servient`,
 `clinkz-wot-protocol-bindings-zenoh`, `clinkz-wot-codec-cbor`, and `clinkz-wot`.
 Zenoh-pico is a feature of `clinkz-wot-protocol-bindings-zenoh`, not a separate package in this
 revision.

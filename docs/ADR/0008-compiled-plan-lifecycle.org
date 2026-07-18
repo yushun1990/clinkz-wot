@@ -1,0 +1,91 @@
+#+title: ADR-0008: Compiled Plan-Set Lifecycle and Binding Artifact Ownership
+#+date: 2026-07-19
+#+status: Accepted
+
+* Context
+
+The v4.8 candidate required two-level logical and binding plans and prohibited
+TD scans on interaction hot paths, but it did not define the owner or lifecycle
+of a complete plan set. It froze compiler and plan names without an exact path
+for a concrete binding to contribute, install, execute, and release its opaque
+artifact.
+
+It also mixed two incompatible expectations: handles pin a registration
+snapshot, while some cache prose implied that a later registration generation
+invalidates an existing handle. Concrete bindings would still have to invent
+first-use caches, generation rules, and reclamation.
+
+The existing package name =clinkz-wot-protocol-bindings= further obscures that
+its target responsibility is shared planning rather than protocol execution.
+
+* Decision
+
+The engine has an explicit Servient-owned compiled-plan-set lifecycle:
+
+#+begin_example
+Building -> Frozen -> Published -> Draining -> Reclaimed
+    |          |
+    +-> Failed +-> Failed
+#+end_example
+
+Individual logical plans, binding candidates, binding artifacts, and plan
+references are immutable values. Plan lifecycle state, pin counts, lazy slots,
+and reclamation cursors live in the owning produced/consumed Servient record.
+
+The plan model has four layers:
+
+- core owns protocol-neutral immutable logical-plan and plan-reference values;
+- the shared planning crate owns W3C defaulting, form/security/target
+  resolution, capability indexes, logical-plan construction, and coordination
+  of compiler extensions;
+- a concrete binding compiler extension produces only its bounded
+  protocol-specific artifact for an already selected candidate; and
+- Servient owns admission, publication, pinning, draining, and reclamation of
+  the complete set.
+
+The target shared compiler crate is named =clinkz-wot-planning=. The current
+=protocol-bindings/core= crate migrates to that package in WP-200. This decision
+partially supersedes the =clinkz-wot-protocol-bindings= ownership row in
+ADR-0001; binding execution traits remain in core and concrete protocol crates
+remain separate.
+
+Each complete binding registration atomically associates its compiler
+extension, capabilities, configuration identity, and execution registrations
+with one binding id/generation. The compiler is deterministic, bounded, local,
+side-effect free, and never receives credentials or handler objects.
+
+Producer route and publication artifacts are eager and frozen before route
+preparation. Consumer artifacts may be lazy only through bounded single-flight
+slots with =Empty -> Compiling -> Ready | Negative= semantics. Lazy construction
+cannot start protocol work. Negative results are deterministic, bounded, and
+generation-scoped.
+
+V1 binding composition is startup-only. One handle pins the immutable
+registration and plan-set generation captured during its admission. A new
+binding configuration or binary creates a new Servient/process generation; it
+does not mutate or invalidate an existing handle in place.
+
+* Consequences
+
+- No interaction hot path rescans a TD, reruns W3C defaulting, probes every
+  binding, or creates an unbounded artifact.
+- Protocol session/connection caches remain binding runtime resources keyed by
+  admitted plan and binding generations; they are not a second planner.
+- API ownership gains compiled plan-set, binding artifact, compiler extension,
+  lazy slot, lease, and reclamation records with exact owners.
+- State artifacts gain plan-set and lazy-artifact machines orthogonal to route
+  lifecycle.
+- Resource and performance artifacts cover logical/artifact bytes, cold
+  compilation, hot selection, negative caching, generation drain, and complete
+  reclamation.
+- Runtime registration replacement is deferred until a separate decision
+  defines rebuild, cutover, old/new generation coexistence, and cleanup.
+
+* Rejected alternatives
+
+- Keeping plan state inside each binding was rejected because it duplicates TD
+  policy and prevents engine-wide admission and generation safety.
+- Making every immutable plan a mutable lifecycle object was rejected because
+  lifecycle belongs to the aggregate owner and would increase hot-path state.
+- Invalidating existing handles after a builder-level registration change was
+  rejected because v1 has no runtime registration-change transaction.
