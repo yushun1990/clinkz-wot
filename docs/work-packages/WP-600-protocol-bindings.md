@@ -9,11 +9,11 @@ Owner packages: `clinkz-wot-planning`, `clinkz-wot-protocol-bindings-zenoh`
 ## Scope
 
 Migrate the shared planning package and the first optional concrete binding to the frozen planning,
-complete-registration, compiler-extension, route-scoped lifecycle, request, response,
-subscription, emission, security, codec, memory, and cleanup contracts from `WP-200` and
-`WP-300`. The Rust zenoh backend is a host integration behind the `zenoh` feature. The constrained
-zenoh-pico backend is exposed by the mutually exclusive `zenoh-pico` feature and uses manually
-driven associated-state operation slots.
+complete-registration, compiler-extension, committed-route activation-permit lifecycle, request,
+response, subscription, emission, security, codec, memory, and cleanup contracts from `WP-200`
+and `WP-300`. The Rust zenoh backend is a host integration behind the `zenoh` feature. The
+constrained zenoh-pico backend is exposed by the mutually exclusive `zenoh-pico` feature and uses
+manually driven associated-state operation slots.
 
 Zenoh remains optional. Neither `clinkz-wot-td`, `clinkz-wot-core`,
 `clinkz-wot-discovery`, nor `clinkz-wot-servient` may acquire zenoh-specific behavior or a required
@@ -42,6 +42,8 @@ opaque numeric value.
 - `BIND-PROGRESS-001`
 - `BIND-CALL-CANCEL-001`
 - `BIND-HOST-CANCEL-001`
+- `LIFE-EXPOSE-002`
+- `LIFE-EXPOSE-003`
 - `SUB-STORAGE-001`
 - `SUB-DATA-001`
 - `API-PAYLOAD-001`
@@ -53,7 +55,7 @@ opaque numeric value.
 - `PERF-FANOUT-002`
 
 The package consumes `PLAN-INDEX-001`, `PLAN-REQUEST-001`, `STATE-BIND-001`,
-`STATE-SUB-001`, `LIFE-EXPOSE-003`, and `PRODUCER-EMIT-001` without changing their semantics.
+`STATE-SUB-001`, and `PRODUCER-EMIT-001` without changing their semantics.
 
 ## Crates and Feature Cells
 
@@ -83,10 +85,11 @@ The `no-default` cell is an independent baseline and is not implied by `async-no
   compilation consumes an already resolved candidate; it does not take ownership of the TD tree
   or redefine operation defaulting and security inheritance.
 - Migrate zenoh server integration to the server execution component, deterministic
-  `ServerFormContributor`, owned route guards/calls, and route-scoped readiness and accept event
-  contracts from `clinkz-wot-core`. Route guards contain protocol-local resources behind the
-  core's erased host wrappers, and every active route owns exactly one accept cursor and waker
-  lease.
+  `ServerFormContributor`, owned prepared, active, and committed-closed route guards/calls, and
+  route-scoped readiness and accept event contracts from `clinkz-wot-core`. Route guards contain
+  protocol-local resources behind the core's erased host wrappers. Every serving committed route
+  owns exactly one accept cursor and waker lease, and every `poll_accept` receives a fresh borrowed
+  `RouteActivationPermit<'_>` for that exact route.
 - Migrate zenoh client integration to the client execution component using an owned
   `OutboundRequest`. The binding must use the selected plan, route and binding generations,
   applied security, correlation id, and response validation contract without selecting another
@@ -96,7 +99,8 @@ The `no-default` cell is an independent baseline and is not implied by `async-no
   explicitly named component builder that cannot be installed. Every installable result includes
   the compiler, compatible execution halves, binding/configuration generations, capability and
   form contribution, readiness, reactor, ingress, footprint, status, overflow, and cleanup
-  metadata. No bare host component receives synthesized defaults at Servient registration time.
+  metadata, preparation visibility, and closed-ingress policy. No bare host component receives
+  synthesized defaults at Servient registration time.
 - Implement zenoh-pico through `PollClientBinding` and `PollServerBinding`, including
   associated `RequestState`, `SubscriptionState`, `RouteState`, `ReadinessState`,
   `ResponseState`, and `EmissionState` types plus the corresponding generic caller-owned slots.
@@ -121,28 +125,40 @@ The `no-default` cell is an independent baseline and is not implied by `async-no
 
 ## State and Ownership Migration
 
-- Key every prepared, active, subscription, request, response, and emission resource by
-  `BindingRouteKey` and binding generation. Late zenoh callbacks carry that generation and cannot
-  mutate a replacement route.
+- Key every prepared, active, committed-closed, subscription, request, response, and emission
+  resource by `BindingRouteKey` and binding generation. Late zenoh callbacks carry that generation
+  and cannot mutate a replacement route.
 - Replace listener declaration during a monolithic serve call with deterministic form
   contribution, local `prepare`, explicit readiness, `activate`, `commit`, and bounded
-  abort/shutdown. Acceptance is polled through the retained active route, never through one
-  registration-wide cursor. No lifecycle call waits on network or executor progress.
-- Keep prepared and active resources addressable until `CleanupOutcome` is terminal or ownership
-  transfers through a `CleanupRecord`. `PendingCleanup` never means that an untracked zenoh query,
-  subscription, listener, or lease remains.
-- Enforce the Servient activation gate before an inbound request reaches engine-owned admission
-  and dispatch. A bounded protocol reactor may advance protocol-local I/O and wake the route, but
-  it receives no application dispatch authority. Route-scoped polling reports requests,
-  operational errors, and one terminal event through the configured runtime event and durable
-  status paths.
+  abort/shutdown. Successful commit returns a retained committed-closed guard and does not open
+  admission. Acceptance is polled through that guard with a fresh route-scoped permit, never
+  through an active guard or one registration-wide cursor. No lifecycle call waits on network or
+  executor progress.
+- Keep prepared, active, and committed-closed resources addressable until `CleanupOutcome` is
+  terminal or the complete protocol work object transfers through an acknowledged cleanup
+  envelope. `PendingCleanup` never means that an untracked zenoh query, subscription, listener,
+  guard, driver, or lease remains. Shutdown accepts either the active or committed-closed guard,
+  including committed guards returned after cancellation.
+- Accept inbound work only while Servient supplies the permit obtained by consuming the
+  exclusive claim over that route driver's `RouteAcceptLease` and the one serving activation
+  authority for the exact Thing, produced generation, plan-set generation, and route.
+  The binding validates the permit against its route call and may not retain it in a guard,
+  associated-state slot, reactor queue, or detached task. A bounded protocol reactor may advance
+  protocol-local I/O and wake the route, but it receives no application dispatch authority.
+  Route-scoped polling reports requests, operational errors, and one terminal event through the
+  configured runtime event and durable status paths.
+- Enforce the declared preparation visibility and closed-ingress policy. An externally visible
+  prepared route uses exactly one of reject, backpressure, or buffer-within-admitted-limits. Before
+  publication it cannot emit an `InboundRequest`, create an engine response opportunity, or report
+  application acceptance; any admitted buffer remains route-owned through rollback or shutdown.
 - Move an accepted inbound transport buffer into an owned `InboundRequest`; responses retain the
   same route and correlation identities. Duplicate live correlations are rejected within one
   route, while unrelated route generations remain independent.
 - For zenoh-pico, retain progress cursors and owned buffers in caller-visible generation-bearing
   associated-state slots. Budget exhaustion returns pending work without restarting decode,
   remote fan-out, response, or cleanup from the beginning. State construction and destruction
-  follow the declared layout and happen only after terminal acknowledgement.
+  follow the declared layout and happen only after terminal acknowledgement. The route slot records
+  the `CommittedClosed` stage, but it never retains a `RouteActivationPermit<'_>` between polls.
 - Consume only WP-300 `ProducerEmission` and `BindingPublication` at the engine boundary. Host
   zenoh and zenoh-pico preserve emission target, route, subscription, binding generation, payload
   lease, overflow result, and retained cursor without re-entering a legacy `PublisherSink`.
@@ -155,10 +171,11 @@ The `no-default` cell is an independent baseline and is not implied by `async-no
   terminal result, late-result classification, acknowledged transfer of the complete call or
   slot, or durable residual state. A `CleanupRecord` without the protocol work object is not a
   transfer.
-- Declare immutable maximum lifetime footprints for compiler cursors/artifacts, prepared and
-  active route guards, calls, drivers, associated states, response/cancellation buffers, reactor
-  queues, and ingress buffers before side effects. Enforce ingress item and byte bounds per route,
-  per binding, per Thing where applicable, and globally without hiding a transport-runtime queue.
+- Declare immutable maximum lifetime footprints for compiler cursors/artifacts, prepared, active,
+  and committed-closed route guards, calls, drivers, associated states, response/cancellation
+  buffers, reactor queues, and closed-ingress buffers before side effects. Enforce ingress item and
+  byte bounds per route, per binding, per Thing where applicable, and globally without hiding a
+  transport-runtime queue.
 
 ## Old API Removal
 
@@ -180,6 +197,10 @@ The `no-default` cell is an independent baseline and is not implied by `async-no
   registration-wide acceptance, and concrete opaque core slots. Both backends enter Servient
   only through their complete startup bundle and progress through route-scoped or associated-state
   contracts.
+- Remove per-route `open_gate` or `release_gate` callbacks, `RouteCommitOutcome::Serving`,
+  `poll_accept` over an active guard or without a borrowed activation permit, and any binding view
+  of Servient registry state. A previously observed wake or protocol frame is not serving
+  authority.
 - Remove transport-specific security interpretation that bypasses `TransportAuthMaterial`,
   `SecurityProvider` probe/commit, or the shared response validation path.
 - Remove `PublisherSink` and the WP-300 protocol-side compatibility adapter after both zenoh and
@@ -199,8 +220,17 @@ No compatibility feature may reintroduce zenoh into a protocol-neutral crate.
   execution compatibility, all required policies and maxima, profile cells, startup-only
   publication, and absence of independently installable components.
 - `zenoh-route-scoped-progress`: prepare/readiness/activate/commit/accept/drain ownership, one
-  accept cursor and waker per route, reactor wake isolation, no direct handler dispatch, and
-  route-terminal isolation for the host backend.
+  accept cursor and waker per serving committed route, reactor wake isolation, no direct handler
+  dispatch, and route-terminal isolation for the host backend.
+- `zenoh-serving-activation`: host and constrained trace evidence that commit returns a complete
+  committed-closed guard, all-route publication is atomic, and each `poll_accept` consumes one
+  exclusive claim over its exact `RouteAcceptLease` into one fresh borrowed non-retained permit.
+  Failure injection covers pre-publication traffic, Nth-route commit failure, both
+  publication/cancellation orderings, stale and mismatched permits, duplicate concurrent claims,
+  unclaimed-permit attempts, both drain/accept-claim orderings, late committed guards, and reject,
+  backpressure, and bounded-buffer closed-ingress policies. The evidence records zero unclaimed
+  permits, duplicate claims, partial admissions, pre-publication requests or response opportunities,
+  post-drain claims, lost guards, or cleanup work objects.
 - `zenoh-associated-state-storage`: every zenoh-pico associated state at its declared size and
   alignment, typed slot construction/drop, zero-budget retention, stale generations, and reuse
   after terminal acknowledgement.
@@ -212,8 +242,8 @@ No compatibility feature may reintroduce zenoh into a protocol-neutral crate.
   handoff fallback, and residual commitment.
 - `zenoh-form-and-route-compilation`: multi-form, relative target, operation, media, extension,
   security, form-owner, collision, and deterministic contribution fixtures.
-- `zenoh-binding-lifecycle`: host prepare/readiness/activate/commit/serve/drain/cleanup failure
-  injection with activation-gate and durable-status evidence.
+- `zenoh-binding-lifecycle`: host prepare/readiness/activate/commit/permit-gated
+  accept/drain/cleanup failure injection with committed-guard and durable-status evidence.
 - `zenoh-pico-bounded-progress`: no-std compile fixtures plus request, response, subscription,
   emission, cancellation, cleanup, byte-budget, and work-budget resume tests.
 - `binding-generation-and-correlation`: stale callback, route replacement, duplicate correlation,
@@ -248,7 +278,10 @@ an expected compile failure when both concrete backend features are selected.
 - `PERF-GW-028`, `PERF-GW-029`, `PERF-GW-030`, `PERF-GW-031`, and `PERF-GW-032` cover owned-call
   cancellation, plan-set generations, route readiness, complete Zenoh registration, and bounded
   ingress. `PERF-CS-020`, `PERF-CS-021`, `PERF-CS-022`, and `PERF-CS-023` cover the corresponding
-  typed-slot, plan-set, route, and ingress behavior for zenoh-pico.
+  typed-slot, plan-set, route, and ingress behavior for zenoh-pico. `PERF-GW-030` and
+  `PERF-CS-022` additionally run the same serving-activation trace oracle and case ordering for
+  atomic publication, permit non-retention, stale/pre-publication/post-drain rejection, and all
+  three externally visible closed-ingress policies.
 
 Adapter results must identify the backend feature, target, toolchain, allocator, runner, manifest,
 fixture, and workload. Transport I/O is outside the two metadata workload boundaries unless the
@@ -267,6 +300,9 @@ manifest explicitly includes it; a host result cannot stand in for zenoh-pico ev
 - Route progress is engine-orchestrated and route-scoped in both backends; no protocol reactor has
   application dispatch authority, and one route cannot consume a sibling route's wake or terminal
   event.
+- Successful route commit remains closed until Servient's atomic publication. Every accept poll
+  uses a fresh exact-route borrowed permit, drain stops new permit issuance before it becomes
+  observable, and neither backend retains or reconstructs serving authority.
 - Every constrained protocol state uses its associated typed slot, every pre-acceptance delivery
   failure returns the complete input, and cleanup transfers the complete call/guard/driver/slot
   rather than status alone.

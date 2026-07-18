@@ -26,7 +26,7 @@ shared planner -----> logical plans -----> binding compiler extensions
           |                           prepare/readiness/activate/commit
           v                                    |
   selected OutboundRequest                     v
-          |                              active route generation
+          |                         committed route + serving permit
           v                                    |
  Client Binding                         inbound / emission SPI
           |                                    |
@@ -74,29 +74,40 @@ scan forms or compile an unbounded artifact during transport execution.
    cleanup capacity before the first binding side effect.
 5. The immutable Producer plan set is frozen before route preparation.
 6. Each selected server binding progresses a route-scoped
-   prepare/readiness/activate/commit transaction.
-7. The Servient publishes the registry entry as serving only after every route
-   is committed and locally gated.
+   prepare/readiness/activate/commit transaction. Successful commit returns a
+   distinct committed-closed guard and does not open request admission.
+7. After every route is committed-closed, the Servient performs one
+   generation-checked transition that publishes the plan set and produced
+   registry generation and makes their shared serving activation authority
+   available for route-admission claims.
 
-Failure before publication rolls back every prepared or active route. No
-partially serving Thing becomes visible through the local registry.
+Failure before publication rolls back every prepared, active, or
+committed-closed route. No partially serving Thing becomes visible through the
+local registry.
 
 ## Inbound request dispatch
 
-1. One active binding route produces an owned `InboundRequest` carrying the
-   route, plan, form, correlation, payload, and transport-auth identities.
-2. The Servient validates the route generation and admits an in-flight response
+1. The Servient validates the private serving record, moves the unique accept
+   lease for one committed route into the claimed-call owner, and consumes that
+   claim into a route-scoped activation permit.
+2. The binding may produce one owned `InboundRequest` only while
+   `poll_accept` holds that permit. The request carries the route, plan, form,
+   correlation, payload, and transport-auth identities.
+3. The Servient validates the route generation and admits an in-flight response
    opportunity before invoking application behavior.
-3. Shared security, codec, schema, URI-variable, and scope processing executes
+4. Shared security, codec, schema, URI-variable, and scope processing executes
    from the immutable inbound plan.
-4. The Servient invokes the selected handler outside registry locks.
-5. The result is validated and converted to one `InboundResponse` with the same
+5. The Servient invokes the selected handler outside registry locks.
+6. The result is validated and converted to one `InboundResponse` with the same
    route and correlation identities.
-6. The owning binding sends the response through bounded progress; retry never
+7. The owning binding sends the response through bounded progress; retry never
    reinvokes the application handler.
 
 The v1 binding model is engine-orchestrated. A binding does not receive a
 general-purpose `Dispatch` handle and does not call handlers from a hidden task.
+It also does not observe the Servient registry. A bounded host reactor may wake
+a route or retain admitted protocol-local ingress, but a wake or queued frame is
+not serving authority.
 
 ## Subscription flow
 

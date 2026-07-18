@@ -25,6 +25,7 @@ adrs=(
     "docs/ADR/0009-protocol-binding-integration-and-deployment.org"
     "docs/ADR/0010-server-route-lifecycle.org"
     "docs/ADR/0011-cleanup-reservation-and-transfer.org"
+    "docs/ADR/0012-serving-activation-permit.org"
 )
 
 if [[ ! -f "$root/docs/ADR/core.org" ]]; then
@@ -44,7 +45,7 @@ for relative in "${adrs[@]}"; do
     fi
 done
 
-for id in ADR-0001 ADR-0002 ADR-0003 ADR-0004 ADR-0005 ADR-0006 ADR-0007 ADR-0008 ADR-0009 ADR-0010 ADR-0011; do
+for id in ADR-0001 ADR-0002 ADR-0003 ADR-0004 ADR-0005 ADR-0006 ADR-0007 ADR-0008 ADR-0009 ADR-0010 ADR-0011 ADR-0012; do
     if ! grep -Fq "$id" "$root/docs/ADR/core.org"; then
         echo "architecture ADR check: decision index does not reference $id" >&2
         exit 1
@@ -90,7 +91,24 @@ expected_rows=(
     'OutboundRequest,type,clinkz-wot-core,public,clinkz_wot_core::OutboundRequest,frozen'
     'HostSubscriptionDriver,trait,clinkz-wot-core,public,clinkz_wot_core::HostSubscriptionDriver,frozen'
     'SubscriptionStopRequest,type,clinkz-wot-core,public,clinkz_wot_core::SubscriptionStopRequest,frozen'
+    'SubscriptionStopInput,type,clinkz-wot-core,public,clinkz_wot_core::SubscriptionStopInput,frozen'
     'SubscriptionDriverEvent,type,clinkz-wot-core,public,clinkz_wot_core::SubscriptionDriverEvent,frozen'
+    'SubscriptionDriverCleanupDisposition,type,clinkz-wot-core,public,clinkz_wot_core::SubscriptionDriverCleanupDisposition,frozen'
+    'CleanupTransferEnvelope,type,clinkz-wot-core,public,clinkz_wot_core::CleanupTransferEnvelope,frozen'
+    'CleanupTransferAcceptance,type,clinkz-wot-core,public,clinkz_wot_core::CleanupTransferAcceptance,frozen'
+    'CleanupTransferTarget,trait,clinkz-wot-core,public,clinkz_wot_core::CleanupTransferTarget,frozen'
+    'BindingCancellationDisposition,type,clinkz-wot-core,public,clinkz_wot_core::BindingCancellationDisposition,frozen'
+    'BindingCallSettlement,type,clinkz-wot-core,public,clinkz_wot_core::BindingCallSettlement,frozen'
+    'RouteCleanupSuccessor,type,clinkz-wot-core,public,clinkz_wot_core::RouteCleanupSuccessor,frozen'
+    'HostRouteCleanupSuccessor,type,clinkz-wot-core,public,clinkz_wot_core::HostRouteCleanupSuccessor,frozen'
+    'ServingActivationAuthority,type,clinkz-wot-core,public,clinkz_wot_core::ServingActivationAuthority,frozen'
+    'RouteAcceptLease,type,clinkz-wot-core,public,clinkz_wot_core::RouteAcceptLease,frozen'
+    'RouteAcceptClaim,type,clinkz-wot-core,public,clinkz_wot_core::RouteAcceptClaim,frozen'
+    'RouteAcceptClaimError,type,clinkz-wot-core,public,clinkz_wot_core::RouteAcceptClaimError,frozen'
+    'RouteActivationPermit,type,clinkz-wot-core,public,clinkz_wot_core::RouteActivationPermit,frozen'
+    'HostCommittedRouteGuard,type,clinkz-wot-core,public,clinkz_wot_core::HostCommittedRouteGuard,frozen'
+    'HostShutdownRouteGuard,type,clinkz-wot-core,public,clinkz_wot_core::HostShutdownRouteGuard,frozen'
+    'HostSubscriptionDriverBox,type,clinkz-wot-core,public,clinkz_wot_core::HostSubscriptionDriverBox,frozen'
     'BindingEmissionSlot,state_record,clinkz-wot-core,public,clinkz_wot_core::BindingEmissionSlot,frozen'
     'Subscription,type,clinkz-wot-servient,public,clinkz_wot_servient::Subscription,frozen'
     'StaticSubscription,type,clinkz-wot-servient,public,clinkz_wot_servient::StaticSubscription,frozen'
@@ -166,14 +184,132 @@ done
 for fragment in \
     'pub fn try_with_collection_subscription_capability(' \
     'pub enum SubscriptionDriverEvent' \
+    'pub enum SubscriptionDriverCleanupDisposition' \
+    'pub struct SubscriptionStopInput' \
+    'BindingInputRejection<SubscriptionStopInput>' \
+    'pub struct CleanupTransferEnvelope<T>' \
+    'pub enum CleanupTransferAcceptance<T>' \
+    'pub trait CleanupTransferTarget<T>' \
+    'fn try_accept(' \
+    'pub enum BindingCancellationDisposition<C>' \
+    'pub enum BindingCallSettlement<T, C = NoCleanupSuccessor>' \
+    'Returned(T)' \
+    'pub enum RouteCleanupSuccessor<P, A, C>' \
+    'ShutdownCommitted(C)' \
+    'ResidualRouteState { route: BindingRouteKey }' \
+    'pub type HostRouteCleanupSuccessor' \
+    'pub struct ServingActivationAuthority' \
+    'pub struct RouteAcceptLease' \
+    'pub struct RouteAcceptClaim' \
+    'pub enum RouteAcceptClaimError' \
+    'pub struct RouteActivationPermit' \
+    'pub fn claim_route' \
+    'pub fn into_permit' \
+    'pub enum HostShutdownRouteGuard' \
+    'RouteCommitOutcome<HostActiveRouteGuard, HostCommittedRouteGuard>' \
+    'route: Pin<&mut HostCommittedRouteGuard>' \
+    'permit: RouteActivationPermit' \
+    ') -> Poll<T>;' \
+    'HostBindingCallBox<CoreResult<InteractionOutput>>' \
+    'pub struct HostSubscriptionDriverBox(' \
+    'pub fn into_cleanup_transfer(' \
     'pub struct StaticSubscription' \
     'fn start_stop(' \
+    'fn poll_subscription_start(' \
     'fn start_subscription_stop('; do
     if ! contains_normative_fragment "$fragment"; then
         echo "architecture ADR check: implementable API schema is missing $fragment" >&2
         exit 1
     fi
 done
+
+for source in \
+    "$root/docs/ADR/0006-host-binding-call-cancellation.org" \
+    "$root/docs/spec/binding-spi.md"; do
+    for fragment in \
+        'pub enum BindingCancellationDisposition<C>' \
+        'pub enum BindingCallSettlement<T, C = NoCleanupSuccessor>' \
+        'Returned(T)' \
+        'TransferRequired(CleanupTransferRequest)' \
+        'retry_class: RetryClass'; do
+        if ! grep -Fq "$fragment" "$source"; then
+            echo "architecture ADR check: settlement schema mismatch in ${source#$root/}: $fragment" >&2
+            exit 1
+        fi
+    done
+done
+
+settlement_adr=$(awk '
+    /^pub enum BindingCancellationDisposition<C> \{/ { capture = 1 }
+    capture {
+        print
+        if ($0 == "}") {
+            closes++
+            if (closes == 2) exit
+        }
+    }
+' "$root/docs/ADR/0006-host-binding-call-cancellation.org")
+settlement_spec=$(awk '
+    /^pub enum BindingCancellationDisposition<C> \{/ { capture = 1 }
+    capture {
+        print
+        if ($0 == "}") {
+            closes++
+            if (closes == 2) exit
+        }
+    }
+' "$root/docs/spec/binding-spi.md")
+if [[ "$settlement_adr" != "$settlement_spec" ]]; then
+    echo "architecture ADR check: ADR-0006 and binding SPI freeze different settlement schemas" >&2
+    exit 1
+fi
+
+subscription_driver_adr=$(awk '
+    /^pub trait HostSubscriptionDriver:/ { capture = 1 }
+    capture {
+        print
+        if ($0 == "}") exit
+    }
+' "$root/docs/ADR/0003-subscription-driver-ownership.org")
+subscription_driver_spec=$(awk '
+    /^pub trait HostSubscriptionDriver:/ { capture = 1 }
+    capture {
+        print
+        if ($0 == "}") exit
+    }
+' "$root/docs/spec/binding-spi.md")
+if [[ "$subscription_driver_adr" != "$subscription_driver_spec" ]]; then
+    echo "architecture ADR check: ADR-0003 and binding SPI freeze different host driver signatures" >&2
+    exit 1
+fi
+
+if grep -REq \
+    '(BindingCallSettlement::(LateValue|TerminalValue)|TerminalValue\(T\),|CleanupComplete\(CleanupRecord\)|fn start_stop_subscription\(|fn poll_start_subscription\(|Arc<Self>|StartStatus<CleanupOutcome>|Poll<CoreResult<CleanupOutcome>>|RouteCommitOutcome<A>[[:space:]]*\{|Serving\(A\),|route: Pin<&mut HostActiveRouteGuard>)' \
+    "$root/docs/ADR/0003-subscription-driver-ownership.org" \
+    "$root/docs/ADR/0006-host-binding-call-cancellation.org" \
+    "$root/docs/spec/binding-spi.md"; then
+    echo "architecture ADR check: a superseded cancellation or subscription spelling remains" >&2
+    exit 1
+fi
+
+commit_outcome_adr=$(awk '
+    /^pub enum RouteCommitOutcome<A, C> \{/ { capture = 1 }
+    capture {
+        print
+        if ($0 == "}") exit
+    }
+' "$root/docs/ADR/0012-serving-activation-permit.org")
+commit_outcome_spec=$(awk '
+    /^pub enum RouteCommitOutcome<A, C> \{/ { capture = 1 }
+    capture {
+        print
+        if ($0 == "}") exit
+    }
+' "$root/docs/spec/binding-spi.md")
+if [[ -z "$commit_outcome_adr" || "$commit_outcome_adr" != "$commit_outcome_spec" ]]; then
+    echo "architecture ADR check: ADR-0012 and binding SPI freeze different commit outcomes" >&2
+    exit 1
+fi
 
 
 for fragment in \
@@ -187,4 +323,4 @@ for fragment in \
     fi
 done
 
-echo "architecture ADR check: eleven accepted decisions and the v4.9 backbone are registered"
+echo "architecture ADR check: twelve accepted decisions and the v4.9 backbone are registered"

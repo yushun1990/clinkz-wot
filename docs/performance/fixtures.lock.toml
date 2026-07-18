@@ -267,7 +267,7 @@ content_sha256 = "fb4a46a8f0a8ff62a610a0ec8cef5dc96431de0de902259d2b159789d52717
 id = "FX-GW-030"
 profile = "GatewayDefaultV1"
 harness_case = "route_guard_readiness_lifecycle"
-version = 1
+version = 2
 seed = 4601030
 recipe = "readiness_tokens=4096;routes=4096;slot_state_bytes=65536"
 content_sha256 = "efa4404893c69c8497a91e0ecbe4ac6dbeff988f070c2f4d24d403239894ad9d"
@@ -582,7 +582,7 @@ content_sha256 = "a2fe8810cb9721593e135d35db388bef714db022d1fd4d398c5676e07e1ae0
 id = "FX-CS-022"
 profile = "BenchmarkStaticReferenceV1"
 harness_case = "route_guard_readiness_lifecycle"
-version = 1
+version = 2
 seed = 4603022
 recipe = "readiness_tokens=256;routes=256;slot_state_bytes=4096"
 content_sha256 = "a82f0c187f01bc0d84e20e52b7ccf2d70f96842d81a776b4f5a4d9a9f21cc273"

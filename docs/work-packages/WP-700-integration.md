@@ -83,6 +83,10 @@ revision.
 - Re-export the core `BindingCompilerExtension` and immutable artifact envelope/reference SPI and
   the planning crate's compiler coordinator under their defining type identities. Do not recreate
   the former shared protocol-bindings planning namespace.
+- Preserve the defining type identities of `ServingActivationAuthority`,
+  `RouteActivationPermit<'_>`, `HostCommittedRouteGuard`, and `HostShutdownRouteGuard` in every
+  intended umbrella exposure. No umbrella wrapper may make the permit owned, cloneable, storable,
+  or independent of the authority borrow.
 - Replace broad accidental prelude exposure with a reviewed application-facing list covering
   documents, interaction values, handlers, Servient construction, produced/consumed handles,
   Discovery client values, resource policy, and selected optional bindings/codecs.
@@ -99,28 +103,40 @@ revision.
 
 ## State and Ownership Migration
 
-- Add no new lifecycle authority in the umbrella. `ExposeState`, subscription state,
-  `DiscoveryProcessState`, binding route state, and operation slots remain owned by their defining
-  packages and are only re-exported.
+- Add no new lifecycle authority in the umbrella. The Servient-owned serving activation authority,
+  `ExposeState`, subscription state, `DiscoveryProcessState`, binding route state, and operation
+  slots remain owned by their defining packages and are only re-exported.
 - Verify an end-to-end Producer lifecycle from form contribution through serving, emission,
-  draining, and retained cleanup without an ownership handoff that is absent from
-  `docs/state-machines.toml`.
+  draining, and retained cleanup. Every required route reaches committed-closed before one
+  generation-checked transition publishes the Producer plan set, produced registry generation,
+  complete route set, and serving activation authority. Later accept calls move a unique route
+  lease through claim and permit ownership; no handoff may be absent from `docs/state-machines.toml`.
 - Verify an end-to-end Consumer and Directory-client lifecycle from plan selection through request
   or subscription progress, terminal status, cancellation, and cleanup with stable binding and
   slot generations.
 - Verify each standard collection subscription selects one root form and starts one binding-owned
   driver. A missing native capability must remain a structured error; integration conveniences
   may not introduce implicit per-affordance fan-out.
-- Verify that a source document, compiled plan, registration, route guard, payload lease,
-  subscription guard, Directory slot, cleanup record, and performance result each have exactly one
-  live owner at every cross-crate handoff.
+- Verify that a source document, compiled plan, registration, serving activation authority, route
+  guard, payload lease, subscription guard, Directory slot, cleanup record, and performance result
+  each have exactly one live owner at every cross-crate handoff. A route activation permit remains
+  a non-retained borrow scoped to one accept call rather than becoming another owned record.
 - Verify the complete plan-set lifecycle from startup registration snapshot through
   `Building -> Frozen -> Published -> Draining -> Reclaimed`. Existing routes, calls,
   subscriptions, and artifacts keep their generation leases while draining; final composition has
   no runtime bundle replacement or generation invalidation shortcut.
-- Verify route-scoped readiness and acceptance fairness, one accept cursor/waker lease per route,
-  terminal isolation, and absence of a binding-visible application dispatch capability. Verify
-  associated-state static slots at their declared layouts and terminal-drop boundaries.
+- Verify route-scoped readiness and acceptance fairness, one accept cursor/waker lease per serving
+  committed route, terminal isolation, and absence of a binding-visible application dispatch
+  capability. Each host and constrained `poll_accept` receives a fresh exact-route borrowed permit
+  created only after the private serving record validates the generation, moves the unique route
+  accept lease into the claimed-call owner, and consumes the exclusive claim. Stale or mismatched permits are rejected before
+  binding mutation, and drain stops new permit issuance before `Draining` is observable. Verify
+  associated-state static slots at their declared layouts and terminal-drop boundaries, including
+  the `CommittedClosed` route stage and absence of retained permits.
+- Verify each externally visible prepared endpoint implements exactly one closed-ingress policy:
+  reject, backpressure, or buffer within admitted limits. Pre-publication traffic creates no
+  `InboundRequest`, response opportunity, or application acceptance, and admitted buffered input
+  remains owned through rollback and shutdown.
 - Verify typed response and publication rejection returns the complete input before acceptance.
   After acceptance, verify exactly-once settlement and transfer of the complete call, guard,
   driver, input, or typed slot to an acknowledged cleanup owner; a durable record alone cannot
@@ -159,6 +175,9 @@ revision.
   client and server registrations, registration-wide `poll_accept`, concrete opaque constrained
   slot payloads, and any runtime binding replacement API from every umbrella module and feature
   cell.
+- Remove `RouteCommitOutcome::Serving`, per-route `open_gate` or `release_gate` callbacks,
+  `poll_accept` over an active guard or without a borrowed activation permit, registry observation
+  from a binding context, and any owned, cloneable, or retained activation-permit adapter.
 
 The old-API compile-fail suite names every removed public path and proves that no default,
 no-default, async, or optional binding cell restores it.
@@ -176,8 +195,20 @@ no-default, async, or optional binding cell restores it.
   gate, and work-package checks pass in one revision.
 - `binding-spi-final-conformance`: type-identity and composed lifecycle evidence for complete
   startup bundles, core compiler-extension artifacts, immutable plan-set leases, route-scoped
-  fairness, associated-state slots, lifetime/ingress accounting, typed input rejection, and
-  acknowledged complete-work cleanup transfer across host and constrained feature cells.
+  fairness, committed-closed guards, borrowed activation permits, associated-state slots,
+  lifetime/ingress accounting, typed input rejection, and acknowledged complete-work cleanup
+  transfer across host and constrained feature cells.
+- `serving-activation-integration`: composed host and constrained evidence that all required route
+  commits precede one atomic serving publication and that each accept poll receives one fresh,
+  exact-route, non-retained borrowed permit produced only by consuming the exclusive claim over
+  its unique route lease. The shared trace oracle covers pre-publication input, Nth-route commit
+  failure and complete guard cleanup, both publication/cancellation orderings, stale and
+  mismatched permits, duplicate concurrent claims, unclaimed-permit attempts, both
+  drain/accept-claim orderings, late committed guards, and all three externally visible
+  closed-ingress policies. Source and negative compile checks prove there is no per-route gate
+  callback, binding registry view, active-guard accept path, permit storage, or permit constructor
+  outside the claim. Results show zero unclaimed permits, duplicate claims, partial admissions,
+  pre-publication admissions, post-drain claims, and lost cleanup ownership.
 - `end-to-end-response-boundary`: composed producer and consumer paths prove that a success owns
   only validated `InteractionOutput`, a failure owns only `CoreError`, and protocol response
   metadata retains its live identity and native provenance through shared validation.
@@ -209,7 +240,8 @@ profile, feature, target, toolchain, allocator, runner, and workload identities 
 the implementation-completion baselines required by `PERF-BENCH-002`; characterization workloads
 remain report-only. A result must satisfy both the absolute budget or structural invariant and the
 applicable regression gate. Mismatched identities form a separate series and cannot close the
-reference gate.
+reference gate. The Gateway `PERF-GW-030` and constrained `PERF-CS-022` results must also share the
+`serving-activation-v1` trace oracle, ordered activation cases, and coverage hash.
 
 ## Completion Conditions
 
@@ -227,13 +259,15 @@ reference gate.
 - Negative compile/source checks cover `BindingRequest`, `EventBroker`, `EventName`, `EventStream`,
   core `Subscription`, `SubscriptionGuard`, `SubscriptionSender`, `PublisherSink`, and
   `ServerEmissionSlot`; positive checks resolve `OutboundRequest`, `HostSubscriptionDriver`,
-  `SubscriptionStopRequest`, `BindingEmissionSlot`, and the Servient `Subscription` to one
+  `SubscriptionStopRequest`, `SubscriptionStopInput`, `BindingEmissionSlot`, and the Servient `Subscription` to one
   defining owner each.
 - Negative compile/source checks also cover split registration types, bare component builder
   methods, `RuntimeEventSinkConfig`, `BindingDrivingMode`, registration-wide acceptance, runtime
-  bundle mutation, and non-generic opaque constrained slots. Positive checks resolve the complete
-  host/static bundles, compiler SPI, generic associated-state slots, typed input rejection, and
-  complete cleanup task to one defining owner each.
+  bundle mutation, old per-route gate callbacks, active-guard or permit-free acceptance, retained
+  activation permits, binding registry observation, and non-generic opaque constrained slots.
+  Positive checks resolve the complete host/static bundles, compiler SPI, committed-closed guard,
+  borrowed route permit, generic associated-state slots, typed input rejection, and complete
+  cleanup task to one defining owner each.
 - Every applicable requirement has current focused evidence; no waiver, open design ambiguity,
   temporary nonconformance feature, or unrecorded old API remains.
 - All gating performance workloads have accepted numeric baselines and pass their absolute,

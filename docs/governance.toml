@@ -168,8 +168,11 @@ checks = [
 impact = "Architecture Review 02 rejected v4.8 and established the v4.9 architecture-closure work. GATE-1, GATE-2, GATE-4, GATE-5, and GATE-6 remain open until modular v4.9 artifacts pass a new independent same-revision review."
 
 # Architecture Review 03 audits the modular v4.9 projection. It is the current
-# blocking evidence for the affected gates, not closure evidence. Review 02 is
-# retained above as the historical rejected predecessor.
+# blocking evidence for the affected gates, not closure evidence. Corrective
+# artifacts created after this audit are intentionally not added to its
+# historical coverage; a later same-revision closure review must cover the
+# then-current gate artifact and check sets. Review 02 is retained above as the
+# historical rejected predecessor.
 
 [[review]]
 id = "architecture-review-03-v4.9-interim"

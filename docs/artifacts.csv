@@ -57,6 +57,7 @@ docs/ADR/0008-compiled-plan-lifecycle.org,compiled-plan-lifecycle-decision,norma
 docs/ADR/0009-protocol-binding-integration-and-deployment.org,protocol-binding-integration-and-deployment-decision,normative-decision,4.9,1,docs/design.md
 docs/ADR/0010-server-route-lifecycle.org,server-route-lifecycle-decision,normative-decision,4.9,1,docs/design.md
 docs/ADR/0011-cleanup-reservation-and-transfer.org,cleanup-reservation-and-transfer-decision,normative-decision,4.9,1,docs/design.md
+docs/ADR/0012-serving-activation-permit.org,serving-activation-permit-decision,normative-decision,4.9,1,docs/design.md
 tools/check-wp100-amendment.sh,wp-100-amendment-checker,non-normative-checker,4.9,1,docs/design.md
 tools/check-wp100-handler-amendment.sh,wp-100-handler-amendment-checker,non-normative-checker,4.9,1,docs/design.md
 tools/check-wp100-foundation-refresh.sh,wp-100-foundation-refresh-checker,non-normative-checker,4.9,1,docs/design.md

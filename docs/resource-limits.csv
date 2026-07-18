@@ -13,8 +13,8 @@ peak_live_bytes_per_admission_max,admission,bytes,per-operation,all,disabled,251
 admission_peak_live_bytes_global_max,admission,bytes,global,all,disabled,536870912,536870912,4194304,RES-LIMIT-001|PERF-PEAK-001
 engine_live_bytes_global_max,runtime,bytes,global,all,disabled,2147483648,1073741824,4194304,RES-LIMIT-001|PERF-PEAK-001
 largest_contiguous_allocation_bytes_max,runtime,bytes,per-allocation,all,disabled,8388608,8388608,262144,RES-LIMIT-001|PERF-PEAK-001
-compiled_runtime_bytes_per_thing_max,runtime,bytes,per-thing,producer|consumer,disabled,4194304,NA,1048576,RES-LIMIT-001
-compiled_runtime_bytes_global_max,runtime,bytes,global,all,disabled,1073741824,268435456,1048576,RES-LIMIT-001
+compiled_runtime_bytes_per_thing_max,runtime,bytes,per-thing,producer|consumer,disabled,4194304,NA,1048576,RES-LIMIT-001|PLAN-SET-001|BIND-ROUTE-001
+compiled_runtime_bytes_global_max,runtime,bytes,global,all,disabled,1073741824,268435456,1048576,RES-LIMIT-001|PLAN-SET-001|BIND-ROUTE-001
 validator_cache_bytes_per_owner_max,cache,bytes,per-owner,all,disabled,2097152,2097152,65536,RES-LIMIT-001|PLAN-CACHE-001
 validator_cache_bytes_global_max,cache,bytes,global,all,disabled,268435456,268435456,1048576,RES-LIMIT-001|PLAN-CACHE-001
 json_nesting_depth_max,document,depth,per-document,all,disabled,64,64,32,RES-LIMIT-001

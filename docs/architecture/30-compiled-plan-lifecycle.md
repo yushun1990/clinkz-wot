@@ -52,8 +52,9 @@ public states. A published plan value is never modified in place.
   Transport execution starts only from the published set.
 - Producer plans are built and frozen during `expose` before the first route
   side effect. Route preparation, readiness, activation, and commit bind that
-  frozen plan set to active route generations. The set becomes published only
-  with the serving registry transition.
+  frozen plan set to committed route generations. The set becomes published
+  only with the registry generation, complete committed route set, and shared
+  serving activation authority in one transition.
 
 The route lifecycle and plan-set lifecycle are orthogonal. A failed route
 transaction rolls back resources and leaves the unpublished plan set failed;

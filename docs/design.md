@@ -155,13 +155,16 @@ yet merged and requires an impact review for packages already completed.
 
 v4.9 supersedes the rejected v4.8 detailed-design candidate before runtime
 migration resumes. It introduces the modular architecture backbone and
-incorporates `ADR-0007`, `ADR-0008`, `ADR-0009`, `ADR-0010`, and `ADR-0011`:
+incorporates `ADR-0007`, `ADR-0008`, `ADR-0009`, `ADR-0010`, `ADR-0011`, and
+`ADR-0012`:
 a single-owner normative document
 hierarchy; an explicit Servient-owned compiled-plan-set lifecycle with the
 `clinkz-wot-planning` compiler boundary; Cargo-linked complete Protocol Binding
 registration; engine-orchestrated route-scoped progress; ownership-preserving
-route transitions; and phase-specific transfer of complete cleanup work. V1
-binding composition is startup-only; `build.rs` discovery, direct Rust
+route transitions; phase-specific transfer of complete cleanup work; and one
+Servient-owned immutable serving authority whose private record permits a
+unique route lease to be claimed only after atomic Producer publication; the
+claim is consumed into one borrowed route permit. V1 binding composition is startup-only; `build.rs` discovery, direct Rust
 dynamic-library trait ABI, runtime code unload, and self-driving handler
 dispatch are deferred. Unmigrated v4.8 detailed requirements remain migration
 inputs until they are reconciled into registered v4.9 domain specifications and
@@ -966,7 +969,7 @@ Key types:
   generation-bearing runtime slots protected by the caller's scoped
   critical-section boundary; the no-default surface does not make a lock
   cloneable by requiring `Arc` or atomics.
-- `SubscriptionId`, `SubscriptionStart`, `SubscriptionStopRequest`,
+- `SubscriptionId`, `SubscriptionStart`, `SubscriptionStopRequest`, `SubscriptionStopInput`,
   `SubscriptionItem`, `SubscriptionDriverEvent`, `SubscriptionState`,
   `HostSubscriptionDriver`, and constrained subscription
   slots define protocol-neutral subscription semantics and binding progress.
@@ -1381,8 +1384,9 @@ Target semantics are:
   consumed Thing. The Servient reserves it before binding start and keys the
   driver registry by it.
 - `Subscription::stop` is the explicit teardown API. Stop options are validated
-  and committed by the Servient record into one `SubscriptionStopRequest`
-  before the same registered driver and retained cleanup state are driven.
+  and committed by the Servient record into one `SubscriptionStopInput` that
+  owns the selected `SubscriptionStopRequest` plus its independent cleanup
+  phase before the same registered driver and retained cleanup state are driven.
   Calling stop after handle teardown is
   idempotent and returns the retained completion or structured closed outcome.
 - If an explicit TD teardown form is required, stop uses the compiled
@@ -2013,27 +2017,32 @@ Lifecycle:
    registration-provided route-readiness items for those prepared guards until
    they are ready or fail.
 5. After every required route-readiness item is ready, `expose()` calls
-   `ServerBinding::activate` with each prepared guard, stores the returned active
-   guards in the registry entry or equivalent handle-owned state, and keeps
-   activated bindings externally quiesced.
+   `ServerBinding::activate` with each prepared guard and stores the returned
+   active guards in handle-owned state. Activated routes remain externally
+   quiesced because they still have no serving permit.
 6. After every binding activates successfully, `expose()` calls
-   `ServerBinding::commit` on each active guard while the registry entry remains
-   not serving.
-7. After every binding commits successfully, `expose()` atomically marks the
-   registry entry serving. Bindings release any activation gates by observing
-   that final registry state through `BindingContext`.
+   `ServerBinding::commit` on each active guard, retains every returned
+   committed-closed guard, and keeps the registry entry not serving.
+7. After every binding commits successfully, `expose()` creates the one shared
+   `ServingActivationAuthority` and atomically publishes the plan set, produced
+   registry generation, complete committed route set, and authority as serving.
+   For each `poll_accept`, Servient moves the unique route accept lease into a
+   claimed-call owner and consumes that claim into a route-scoped
+   `RouteActivationPermit`; bindings neither observe registry state nor open a
+   route-local activation gate.
 8. If any prepare, readiness, activate, or commit step fails, successful
    bindings are aborted or shut down through the explicit cleanup surface.
    Guards remain retained until cleanup completes, becomes residual, or
    transfers to the reserved cleanup owner. The non-serving registry entry is
    removed while the retained cleanup/status record remains addressable.
-9. `destroy()` marks the registry entry draining before binding shutdown,
-   rejects new inbound requests, waits for already-dispatched handlers only up to
-   the configured drain policy, drives `ServerBinding::shutdown` within the
-   cleanup budget, and releases stored active route guards only after cleanup
-   completes or transfers to a retained cleanup owner. It removes the registry
-   entry after local dispatch ownership is closed while retaining any required
-   cleanup/status record.
+9. `destroy()` first moves the private serving activation record to draining,
+   which stops new route claims before binding shutdown. It then rejects new inbound
+   requests, waits for already-dispatched handlers only up to the configured
+   drain policy, drives `ServerBinding::shutdown` within the cleanup budget, and
+   releases stored committed route guards only after cleanup completes or
+   transfers to a retained cleanup owner. It removes the registry entry after
+   local dispatch ownership is closed while retaining any required cleanup/status
+   record.
 
 The destroy drain policy is part of the exposed handle configuration. The
 portable default is bounded draining: requests already dispatched before the
@@ -2241,10 +2250,11 @@ publication already accepted.
 Publication targets originate only from the frozen exposure plan: form
 contribution or application input creates a candidate, finalization selects one
 `BindingId`, plan compilation creates the publication target, and
-prepare/activate/commit binds it to an active route generation. The concrete
-binding implements publication for that target and may represent many remote
-protocol subscribers internally. A TD protocol label alone never creates a
-target, and a binding does not register a global sink by rescanning the TD.
+prepare/activate/commit binds it to a committed route generation in the same
+serving activation authority. The concrete binding implements publication for
+that target and may represent many remote protocol subscribers internally. A TD
+protocol label alone never creates a target, and a binding does not register a
+global sink by rescanning the TD.
 
 ### ConsumedThingHandle
 
@@ -3753,8 +3763,10 @@ Semantic verification must include:
   as a structured operation error, fail-fast extension helpers, and separately
   named structured partial-result extension helpers.
 - Lifecycle tests for expose rollback after prepare, route-readiness, activate,
-  or commit failure, activation gate release ordering, binding runtime error
-  reporting, runtime event sink overflow policy, response backpressure reporting,
+  or commit failure; atomic serving-authority publication; prepublication, stale,
+  and post-drain permit rejection; both publish/cancel and drain/claim orderings;
+  binding runtime error reporting, runtime event sink overflow policy, response
+  backpressure reporting,
   critical lifecycle event journal preservation, critical-event compaction or
   shutdown-on-overflow behavior, and destroy quiescing with bounded drain budgets
   and discarded-response status.

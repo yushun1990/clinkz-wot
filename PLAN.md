@@ -55,6 +55,8 @@ The immediate decisions are:
 - startup-only binding composition for one Servient instance;
 - engine-orchestrated, route-scoped binding progress with no hidden direct
   handler-dispatch path; and
+- atomic serving publication through one Servient-owned activation authority
+  and nonretained route-scoped accept permits; and
 - a modular normative-document hierarchy that keeps architecture visible.
 
 ## Implementation order after gate closure

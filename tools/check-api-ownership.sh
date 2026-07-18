@@ -114,6 +114,46 @@ while IFS=, read -r item current_path; do
     fi
 done
 
+required_binding_paths=(
+    'CleanupTransferEnvelope,clinkz_wot_core::CleanupTransferEnvelope,no-default|async-no-std|std'
+    'CleanupTransferAcceptance,clinkz_wot_core::CleanupTransferAcceptance,no-default|async-no-std|std'
+    'CleanupTransferTarget,clinkz_wot_core::CleanupTransferTarget,no-default|async-no-std|std'
+    'BindingCancellationDisposition,clinkz_wot_core::BindingCancellationDisposition,no-default|async-no-std|std'
+    'BindingCallSettlement,clinkz_wot_core::BindingCallSettlement,no-default|async-no-std|std'
+    'RouteCleanupSuccessor,clinkz_wot_core::RouteCleanupSuccessor,no-default|async-no-std|std'
+    'HostRouteCleanupSuccessor,clinkz_wot_core::HostRouteCleanupSuccessor,std'
+    'ServingActivationAuthority,clinkz_wot_core::ServingActivationAuthority,no-default|async-no-std|std'
+    'RouteAcceptLease,clinkz_wot_core::RouteAcceptLease,no-default|async-no-std|std'
+    'RouteAcceptClaim,clinkz_wot_core::RouteAcceptClaim,no-default|async-no-std|std'
+    'RouteAcceptClaimError,clinkz_wot_core::RouteAcceptClaimError,no-default|async-no-std|std'
+    'RouteActivationPermit,clinkz_wot_core::RouteActivationPermit,no-default|async-no-std|std'
+    'HostCommittedRouteGuard,clinkz_wot_core::HostCommittedRouteGuard,std'
+    'host_committed_route_guard_try_state_pin_mut,clinkz_wot_core::HostCommittedRouteGuard::try_state_pin_mut,std'
+    'HostShutdownRouteGuard,clinkz_wot_core::HostShutdownRouteGuard,std'
+    'host_binding_call_box_as_pin_mut,clinkz_wot_core::HostBindingCallBox::as_pin_mut,std'
+    'SubscriptionStopInput,clinkz_wot_core::SubscriptionStopInput,no-default|async-no-std|std'
+    'SubscriptionDriverCleanupDisposition,clinkz_wot_core::SubscriptionDriverCleanupDisposition,no-default|async-no-std|std'
+    'HostSubscriptionDriverBox,clinkz_wot_core::HostSubscriptionDriverBox,std'
+    'poll_client_poll_subscription_start,clinkz_wot_core::PollClientBinding::poll_subscription_start,no-default|async-no-std|std'
+    'poll_client_start_subscription_stop,clinkz_wot_core::PollClientBinding::start_subscription_stop,no-default|async-no-std|std'
+)
+
+for expected in "${required_binding_paths[@]}"; do
+    item=${expected%%,*}
+    actual=$(awk -F, -v item="$item" '$1 == item { print $1 "," $6 "," $7 }' "$matrix")
+    if [[ "$actual" != "$expected" ]]; then
+        echo "api ownership check: binding ownership projection mismatch for $item" >&2
+        echo "  expected: $expected" >&2
+        echo "  actual:   $actual" >&2
+        exit 1
+    fi
+done
+
+if awk -F, 'NR > 1 && ($1 ~ /start_stop_subscription|poll_start_subscription/ || $6 ~ /start_stop_subscription|poll_start_subscription/) { bad = 1 } END { exit !bad }' "$matrix"; then
+    echo "api ownership check: a superseded subscription method spelling remains" >&2
+    exit 1
+fi
+
 tail -n +2 "$root/docs/requirements.csv" | cut -d, -f1 | tr '|' '\n' \
     >"$tmp/requirement-expressions"
 : >"$tmp/requirements-unsorted"

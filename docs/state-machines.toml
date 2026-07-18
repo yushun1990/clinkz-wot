@@ -360,10 +360,12 @@ fallback_transitions = [
 terminal_transitions = [
     "cleanup-task:ExecutorPollClaimed|ManualPollClaimed:complete->CompleteRetained",
     "cleanup-task:ExecutorPollClaimed|ManualPollClaimed:residual->ResidualRetained",
+    "cleanup-task:ExecutorOwned|ExecutorPollClaimed:executor_drop->ResidualRetained",
     "binding-call:CleanupTransferred:complete->Cancelled",
     "binding-call:CleanupTransferred:residual->Residual",
+    "binding-call:CleanupTransferred:executor_drop->Residual",
 ]
-ownership = "TransferRequired leaves the complete call with BindingCallCancellationOwner; PendingCleanup becomes observable only after CleanupTaskOwner accepts the complete object, while rejection returns the object to the pre-reserved manual owner"
+ownership = "TransferRequired leaves the complete call with BindingCallCancellationOwner; PendingCleanup becomes observable only after CleanupTaskOwner accepts the complete envelope; rejection returns it to the pre-reserved manual owner; dropping an accepted task commits its durable residual fallback and never restores manual ownership"
 
 [[composition]]
 id = "binding-route-lifecycle"
@@ -384,7 +386,7 @@ success_transitions = [
     "route-lifecycle-call:InProgress:complete_success->Completed",
     "binding-route:Preparing:prepared->Prepared",
     "binding-route:Activating:activated->Active",
-    "binding-route:Committing:committed->Committed",
+    "binding-route:Committing:committed->CommittedClosed",
 ]
 failure_transitions = [
     "route-lifecycle-call:InProgress:complete_failure_predecessor->Completed",
@@ -395,13 +397,15 @@ late_transitions = [
     "route-lifecycle-call:CancelRequested:late_success->LateCompleted",
     "binding-route:PreparingCancelled:prepared_late->Prepared",
     "binding-route:ActivatingCancelled:active_late->Active",
-    "binding-route:CommittingCancelled:committed_late->Committed",
+    "binding-route:CommittingCancelled:committed_late->CommittedClosed",
 ]
 cleanup_transitions = [
     "binding-route:Prepared|Ready:begin_abort->Cleaning",
-    "binding-route:Active|Committed|Serving|Draining:begin_shutdown->Cleaning",
+    "binding-route:Active|CommittedClosed|Draining:begin_shutdown->Cleaning",
     "binding-route:Cleaning:transfer_required->TransferRequired",
     "binding-route:TransferRequired:transfer_committed->CleanupTransferred",
+    "cleanup-task:ExecutorOwned|ExecutorPollClaimed:executor_drop->ResidualRetained",
+    "route-lifecycle-call:CleanupTransferred:executor_drop_residual_successor->ResidualSuccessorRetained",
 ]
 ownership = "The route record retains the exact generation and stage guard while each call is outside locks; a late successor guard is classified by its actual stage before abort or shutdown begins"
 
@@ -435,21 +439,32 @@ cancel_transitions = [
     "route-readiness:Polling:cancel->Cancelling",
     "route-readiness:Cancelling:transfer_required|drain_expired->TransferRequired",
     "route-readiness:TransferRequired:transfer_committed->CleanupTransferred",
+    "route-readiness:Cancelling:cancel_complete_successor->CleanupSuccessorRetained",
+    "route-readiness:Cancelling:cancel_residual_successor->ResidualSuccessorRetained",
+    "cleanup-task:ExecutorOwned|ExecutorPollClaimed:executor_drop->ResidualRetained",
+    "route-readiness:CleanupTransferred:executor_drop_residual_successor->ResidualSuccessorRetained",
 ]
 ownership = "Readiness retains exactly one prepared guard, driver, callback lease, and wake lease; cancellation never loses the guard and a deadline wake is supplied independently of transport wakes"
 
 [[composition]]
 id = "active-route-acceptance"
 requirements = ["BIND-IO-001", "BIND-PROGRESS-001", "BIND-ROUTE-001"]
-participants = ["binding-route", "active-route-driver", "in-flight"]
-trigger = "a committed route is published for engine-orchestrated request acceptance"
-accept_policy = "one-poll-and-waker-lease-per-route"
+participants = [
+    "binding-route",
+    "serving-activation-authority",
+    "active-route-driver",
+    "in-flight",
+]
+trigger = "a committed-closed route and its Producer generation are atomically published for engine-orchestrated request acceptance"
+accept_policy = "one-generation-checked-route-claim-chain-and-one-poll-and-waker-lease-per-route"
 publish_transitions = [
-    "binding-route:Committed:publish->Serving",
+    "binding-route:CommittedClosed:publish->Serving",
+    "serving-activation-authority:Reserved:publish->Serving",
     "active-route-driver:Reserved:publish->Active",
 ]
 accept_transitions = [
     "active-route-driver:Active:claim_accept->AcceptClaimed",
+    "serving-activation-authority:Serving:claim_route->Serving",
     "active-route-driver:AcceptClaimed:request->Active",
     "in-flight:Vacant:admit->Admitted",
 ]
@@ -460,11 +475,25 @@ terminal_transitions = [
     "active-route-driver:AcceptClaimed|DrainingClaimed:terminal->TerminalRetained",
 ]
 drain_transitions = [
+    "serving-activation-authority:Serving:begin_drain->Draining",
     "binding-route:Serving:drain->Draining",
     "active-route-driver:Active:drain->Draining",
     "active-route-driver:AcceptClaimed:drain->DrainingClaimed",
 ]
-ownership = "Servient alone admits and dispatches accepted requests; route terminal closes only this generation, while a request returned from a poll claimed before drain retains its route and plan leases"
+claim_join_transitions = [
+    "active-route-driver:DrainingClaimed:pending_registered|request_late|operational_error->Draining",
+    "active-route-driver:DrainingClaimed:terminal->TerminalRetained",
+    "active-route-driver:Draining:release_to_shutdown->Released",
+    "active-route-driver:TerminalRetained:acknowledge->Released",
+]
+shutdown_preconditions = [
+    "serving-activation-authority-is-Draining",
+    "active-route-driver-is-Released",
+]
+shutdown_transitions = [
+    "binding-route:Draining:begin_shutdown->Cleaning",
+]
+ownership = "Servient verifies one serving authority and exact route generation, moves the unique RouteAcceptLease into the claimed call owner, exclusively borrows it through ServingActivationAuthority::claim_route, consumes the RouteAcceptClaim into one non-retainable permit, and calls the binding outside locks; drain stops new claim issuance, joins or releases the route driver, and only then allows the Draining route to begin shutdown, while a request returned from a poll claimed before drain retains its route and plan leases"
 
 [[composition]]
 id = "subscription-process-cleanup"
@@ -481,21 +510,25 @@ complete_transitions = [
     "subscription-driver-slot:ReceiveClaimed:terminal_complete->Closed",
 ]
 request_transitions = [
-    "subscription:Active:driver_terminal_cleanup_transfer->CleanupPending",
-    "subscription-driver-slot:ReceiveClaimed:terminal_cleanup_transfer->CleanupPending",
+    "subscription:Active:driver_terminal_transfer_required->TransferRequired",
+    "subscription-driver-slot:ReceiveClaimed:terminal_transfer_required->TransferRequired",
     "cleanup-task:Reserved:offer->Offered",
 ]
 commit_transitions = [
+    "subscription:TransferRequired:transfer_accepted->CleanupPending",
+    "subscription-driver-slot:TransferRequired:transfer_accepted->CleanupPending",
     "cleanup-task:Offered:accepted->ExecutorOwned",
 ]
 fallback_transitions = [
+    "subscription:TransferRequired:transfer_rejected_manual_accepted->CleanupPending",
+    "subscription-driver-slot:TransferRequired:transfer_rejected_manual_accepted->CleanupPending",
     "cleanup-task:Offered:executor_rejected->ManualOwned",
 ]
 residual_transitions = [
     "subscription:Active:driver_terminal_residual->Failed",
     "subscription-driver-slot:ReceiveClaimed:terminal_residual->Residual",
 ]
-ownership = "ProcessTerminal is immutable once claimed; the subscription enters CleanupPending only in the same boundary that accepts the complete driver into CleanupTaskOwner, while a rejected offer leaves the source state unchanged and selects manual fallback"
+ownership = "ProcessTerminal is immutable once claimed; TransferRequired retains the complete driver box at the source, executor acceptance moves its envelope to ExecutorCleanupOwner, and executor rejection returns the identical envelope for immediate installation in the pre-reserved ManualCleanupOwner before either path publishes CleanupPending"
 
 [[composition]]
 id = "response-delivery-ownership"
@@ -568,27 +601,60 @@ ownership = "Servient installs the complete immutable plan-set generation and it
 
 [[composition]]
 id = "producer-plan-serving-publication"
-requirements = ["PLAN-SET-001", "LIFE-EXPOSE-003", "STATE-BIND-001"]
-participants = ["compiled-plan-set", "expose", "binding-route"]
-trigger = "the expose serving-registry commit succeeds for every prepared route generation"
+requirements = [
+    "PLAN-SET-001",
+    "LIFE-EXPOSE-002",
+    "LIFE-EXPOSE-003",
+    "STATE-BIND-001",
+]
+participants = [
+    "compiled-plan-set",
+    "expose",
+    "binding-route",
+    "serving-activation-authority",
+]
+trigger = "the expose serving-registry commit succeeds after every required route reaches CommittedClosed"
 publication_policy = "atomic-with-serving-registry"
 atomic_transitions = [
     "compiled-plan-set:Frozen:publish_producer->Published",
     "expose:Committing:publish->Serving",
-    "binding-route:Committed:publish->Serving",
+    "binding-route:CommittedClosed:publish->Serving",
+    "serving-activation-authority:Reserved:publish->Serving",
 ]
-ownership = "Servient publishes the plan set, ExposedThing entry, and route activation gates as one generation-checked boundary after all binding callbacks have returned"
+ownership = "Servient publishes the plan set, ExposedThing entry, committed route set, and one shared activation authority as one generation-checked boundary after all binding callbacks have returned"
 
 [[composition]]
 id = "producer-plan-drain"
 requirements = ["PLAN-SET-001", "LIFE-EXPOSE-003", "STATE-BIND-001"]
-participants = ["compiled-plan-set", "expose", "binding-route"]
+participants = [
+    "compiled-plan-set",
+    "expose",
+    "binding-route",
+    "serving-activation-authority",
+    "active-route-driver",
+]
 trigger = "drop or destroy starts Producer drain"
 drain_policy = "close-ingress-before-reclamation"
 drain_transitions = [
+    "serving-activation-authority:Serving:begin_drain->Draining",
     "compiled-plan-set:Published:begin_drain->Draining",
     "expose:Serving:drop|destroy->Draining",
     "binding-route:Serving:drain->Draining",
+    "active-route-driver:Active:drain->Draining",
+    "active-route-driver:AcceptClaimed:drain->DrainingClaimed",
+]
+route_claim_join_transitions = [
+    "active-route-driver:DrainingClaimed:pending_registered|request_late|operational_error->Draining",
+    "active-route-driver:DrainingClaimed:terminal->TerminalRetained",
+    "active-route-driver:Draining:release_to_shutdown->Released",
+    "active-route-driver:TerminalRetained:acknowledge->Released",
+]
+route_shutdown_preconditions = [
+    "serving-activation-authority-is-Draining",
+    "active-route-driver-is-Released",
+]
+route_shutdown_transitions = [
+    "binding-route:Draining:begin_shutdown->Cleaning",
 ]
 reclaim_preconditions = [
     "all-plan-pins-and-operation-leases-released",
@@ -596,7 +662,101 @@ reclaim_preconditions = [
     "all-lazy-artifact-slots-empty",
     "all-cleanup-owners-terminal-or-durably-residual",
 ]
-ownership = "Servient closes plan pin acquisition and route ingress before Draining is observable; PlanSetReclaimOwner retains the generation until every listed owner and bounded reclaim cursor is terminal"
+ownership = "Servient stops new activation-permit and plan-pin claims before Draining is observable, joins every pre-drain accept claim, releases each active-route driver, and only then moves a Draining binding route into shutdown; PlanSetReclaimOwner retains the generation until every listed owner and bounded reclaim cursor is terminal"
+
+[[machine]]
+id = "serving-activation-authority"
+requirements = [
+    "BIND-PROGRESS-001",
+    "BIND-ROUTE-001",
+    "LIFE-EXPOSE-002",
+    "PLAN-SET-001",
+    "STATE-BIND-001",
+]
+visibility = "cross-crate-servient-contract"
+transition_contract = "exact"
+owner_record = "Servient ServingActivationRecord"
+scope = "Privately owns one immutable public ServingActivationAuthority identity value plus the mutable Reserved, Serving, or Draining publication state for its Thing, produced generation, and Producer plan-set generation; terminal Cancelled or Reclaimed state owns no permit-issuance capability"
+authority_contract = "ServingActivationAuthority contains only immutable public Thing, produced-generation, and plan-set-generation identity. claim_route exclusively borrows a matching RouteAcceptLease and returns a RouteAcceptClaim whose consuming into_permit operation is the only permit constructor; the private ServingActivationRecord owns all mutable publication and drain state and owns no binding state, route list, queue, or application dispatch capability."
+publication_contract = "Reserved is admitted but unavailable. publish is the same Servient transition that publishes the Producer plan set, produced registry generation, and complete committed route set."
+permit_contract = "claim_route is legal only after exact Thing, produced, plan-set, binding, and route generation validation plus transfer of that route's unique RouteAcceptLease to the claimed call owner. RouteAcceptClaim exclusively borrows that lease and authority; consuming the claim produces the non-Clone, non-Copy permit borrowed for one poll_accept call, and none can enter retained state."
+drain_contract = "begin_drain closes new route-claim issuance before Draining is observable. A previously claimed accept poll may finish under its retained route and plan leases; no later claim succeeds."
+resource_contract = "One authority is embedded in each admitted Producer plan-set runtime record and charged to plan_sets_* plus compiled_runtime_bytes_*. A permit retains zero bytes. Route claims use binding_routes_*, route_guard_bytes_*, and binding_wake_leases_global_max; closed ingress uses only binding_ingress_items_* and binding_ingress_bytes_*."
+initial = "Reserved"
+states = ["Reserved", "Serving", "Draining", "Cancelled", "Reclaimed"]
+terminal = ["Cancelled", "Reclaimed"]
+required_events = [
+    "Reserved:publish",
+    "Reserved:cancel",
+    "Serving:claim_route",
+    "Serving:reject_route_claim",
+    "Serving:begin_drain",
+    "Draining:release_claim",
+    "Draining:reclaim_complete",
+]
+
+[[machine.transition]]
+from = "Reserved"
+event = "publish"
+to = "Serving"
+owner = "ServientServingActivationOwner"
+linearization = "publish this authority with the immutable Producer plan set, produced registry generation, and every CommittedClosed route in one non-callback boundary"
+outcome = "Serving-permit-claims-enabled"
+retryability = "not-applicable"
+
+[[machine.transition]]
+from = "Reserved"
+event = "cancel"
+to = "Cancelled"
+owner = "ServientServingActivationOwner"
+linearization = "prevent publication and release the embedded authority only after unpublished route rollback ownership is retained"
+outcome = "Cancelled-never-serving"
+retryability = "terminal"
+
+[[machine.transition]]
+from = "Serving"
+event = "claim_route"
+to = "Serving"
+owner = "RouteAcceptOwner"
+linearization = "after the private record validates every generation and transfers the unique RouteAcceptLease to the claimed call owner, exclusively borrow that lease into RouteAcceptClaim and consume the claim into one scoped permit before invoking the binding"
+outcome = "Borrowed-route-permit-after-claim-consume"
+retryability = "retained-route-lease"
+
+[[machine.transition]]
+from = "Serving"
+event = "reject_route_claim"
+to = "Serving"
+owner = "ServientServingActivationOwner"
+linearization = "reject a stale, mismatched, duplicate, or unreserved claim without producing a RouteAcceptClaim, changing the exclusively borrowed RouteAcceptLease, constructing a permit, or changing binding state"
+outcome = "Route-claim-rejected"
+retryability = "caller-must-refresh"
+
+[[machine.transition]]
+from = "Serving"
+event = "begin_drain"
+to = "Draining"
+owner = "ServientServingActivationOwner"
+linearization = "close new permit issuance before the produced generation or any route becomes observably Draining"
+outcome = "Draining-existing-claims-retained"
+retryability = "join-existing"
+
+[[machine.transition]]
+from = "Draining"
+event = "release_claim"
+to = "Draining"
+owner = "RouteAcceptOwner"
+linearization = "release one generation-matching pre-drain accept lease after its poll returns without issuing a replacement permit"
+outcome = "Draining-claim-released"
+retryability = "join-existing"
+
+[[machine.transition]]
+from = "Draining"
+event = "reclaim_complete"
+to = "Reclaimed"
+owner = "PlanSetReclaimOwner"
+linearization = "verify every pre-drain accept claim and route/plan lease released before reclaiming the embedded authority with its plan-set runtime record"
+outcome = "Reclaimed-zero-authority-bytes"
+retryability = "terminal"
 
 [[machine]]
 id = "compiled-plan-set"
@@ -665,7 +825,7 @@ from = "Frozen"
 event = "publish_producer"
 to = "Published"
 owner = "Servient"
-linearization = "atomically install the serving generation with every route activation gate and open plan pin acquisition"
+linearization = "atomically install the serving generation, complete committed route set, and shared activation authority while opening plan pin acquisition"
 outcome = "Published-producer-serving"
 retryability = "idempotent-by-generation"
 
@@ -707,7 +867,14 @@ retryability = "terminal"
 
 [[machine]]
 id = "expose"
-requirements = ["STATE-EXPOSE-001", "HANDLE-DROP-001", "LIFE-EXPOSE-003"]
+requirements = [
+    "STATE-EXPOSE-001",
+    "HANDLE-DROP-001",
+    "LIFE-EXPOSE-002",
+    "LIFE-EXPOSE-003",
+]
+publication_contract = "Committing retains every required route as CommittedClosed. publish is one non-callback transition that makes the Producer plan set, produced registry generation, complete route set, and shared ServingActivationAuthority selectable."
+drain_contract = "Serving drop or destroy stops new activation-permit issuance before Draining is observable and before route shutdown begins."
 initial = "Draft"
 states = [
     "Draft",
@@ -800,8 +967,8 @@ from = "Committing"
 event = "publish"
 to = "Serving"
 owner = "Servient"
-linearization = "registry generation becomes serving"
-outcome = "published"
+linearization = "after every required route is CommittedClosed, atomically publish the Producer plan set, registry generation, route set, and shared activation authority"
+outcome = "published-permit-claims-enabled"
 retryability = "not-applicable"
 
 [[machine.transition]]
@@ -917,7 +1084,7 @@ from = "Serving"
 event = "destroy"
 to = "Draining"
 owner = "Servient"
-linearization = "registry generation becomes draining"
+linearization = "stop new activation-permit issuance before the registry generation becomes Draining"
 outcome = "cleanup-required"
 retryability = "join-existing"
 
@@ -926,7 +1093,7 @@ from = "Serving"
 event = "drop"
 to = "Draining"
 owner = "ServientCleanupOwner"
-linearization = "registry generation becomes draining"
+linearization = "stop new activation-permit issuance before the registry generation becomes Draining and transfer lifecycle ownership"
 outcome = "cleanup-required"
 retryability = "runtime-owned"
 
@@ -1057,17 +1224,17 @@ driver_contract = "The selected binding returns one HostSubscriptionDriver or fi
 source_contract = "Every SubscriptionItem carries the matching SubscriptionId and exact AffordanceTarget; collection start is rejected before side effects when the selected plan cannot guarantee exact source attribution"
 receive_contract = "Only the non-Clone Servient Subscription facade owns the receive lease. Control and status views cannot poll items and never create another receive cursor."
 installation_contract = "The driver moves BindingStartOwner -> SubscriptionInstallOwner -> SubscriptionDriverSlot exactly once. Active publication and driver-slot publication are one non-callback boundary."
-stop_contract = "Stop, drop, remote terminal, and Servient drain join one generation-checked stop owner. start_stop accepts one exact request before poll_stop progress; both execute outside engine locks or constrained critical sections and neither is concurrent with poll_item on the same driver."
-terminal_contract = "SubscriptionDriverEvent transfers the ProcessTerminal and CleanupOutcome together. SubscriptionState reports resource lifecycle independently from ProcessTerminal: Complete moves to Closed even when the retained terminal is Failed, PendingCleanup moves to CleanupPending after atomic transfer, and ResidualExternalState moves to Failed after durable recording. A no-driver start failure retains Failed plus Complete in its private record and closes without publishing a facade. Unrecorded cleanup remains pending."
+stop_contract = "Stop, drop, remote terminal, and Servient drain join one generation-checked stop owner. StopStarting owns the unchanged driver plus one complete SubscriptionStopInput containing the exact SubscriptionStopRequest and independent CleanupPhaseContext until start_stop accepts the full input; pre-acceptance rejection returns both unchanged. After acceptance the full input commits to the retained stop cursor before poll_stop progress. Both callbacks receive Context, execute outside engine locks or constrained critical sections, and are never concurrent with poll_item on the same driver."
+terminal_contract = "SubscriptionDriverEvent transfers the ProcessTerminal and SubscriptionDriverCleanupDisposition together. Complete moves to Closed even when the retained terminal is Failed. TransferRequired retains the complete HostSubscriptionDriverBox at the source until its CleanupTransferEnvelope is accepted by the executor or pre-reserved manual owner; only that acknowledgement moves to CleanupPending and publishes PendingCleanup. ResidualExternalState moves to Failed after durable recording. A no-driver start failure retains Failed plus Complete in its private record and closes without publishing a facade."
 process_terminal_axis = ["Completed", "Cancelled", "TimedOut", "Overflowed", "Domain", "Failed"]
 cleanup_state_projection = ["Complete->Closed", "PendingCleanup->CleanupPending", "ResidualExternalState->Failed"]
 failed_state_cause = "ResidualExternalState"
 terminal_retention = "immutable-after-commit"
 retryable_stop_origins = ["Active:stop"]
 terminal_stop_origins = ["Active:drop", "CancellingStart:start_ready_late", "Installing:cancel", "Installing:drop", "Installing:install_failure"]
-public_state_projection = ["Reserved|Starting|Installing->Starting", "CancellingStart->CancellingStart", "Active->Active", "StopStarting|Stopping->Stopping", "CleanupPending->CleanupPending", "Closed->Closed", "Failed->Failed", "Released->unobservable"]
+public_state_projection = ["Reserved|Starting|Installing->Starting", "CancellingStart->CancellingStart", "Active->Active", "StopStarting|Stopping|TransferRequired->Stopping", "CleanupPending->CleanupPending", "Closed->Closed", "Failed->Failed", "Released->unobservable"]
 stop_intent_contract = "Active:stop stages RetryableExplicit with Cancelled; Active:drop, CancellingStart:start_ready_late, Installing:cancel, and Installing:drop stage Terminal with Cancelled; Installing:install_failure stages Terminal with Failed(error). The candidate commits only after stop acceptance or terminal cleanup disposition. A claimed driver terminal wins and replaces an uncommitted candidate."
-drop_contract = "Drop never blocks. It transfers the driver and every remaining stop obligation to already reserved bounded cleanup capacity or records ResidualExternalState before releasing the application facade."
+drop_contract = "Drop never blocks. It offers the complete driver envelope to already reserved bounded cleanup capacity, publishes PendingCleanup only after acknowledgement, or records ResidualExternalState before releasing the application facade."
 resource_contract = "SubscriptionId, subscription slot, collection source count, binding-local storage allowance, engine item/byte accounting, and cleanup capacity are reserved before the binding start call"
 collection_source_limit = "collection_subscription_sources_per_subscription_max"
 initial = "Reserved"
@@ -1079,6 +1246,7 @@ states = [
     "Active",
     "StopStarting",
     "Stopping",
+    "TransferRequired",
     "CleanupPending",
     "Closed",
     "Failed",
@@ -1097,7 +1265,7 @@ required_events = [
     "CancellingStart:start_error_late",
     "CancellingStart:start_cancel_pending",
     "CancellingStart:start_cancel_complete",
-    "CancellingStart:start_cancel_cleanup_transfer",
+    "CancellingStart:start_cancel_transfer_required",
     "CancellingStart:start_cancel_residual",
     "Installing:install_driver",
     "Installing:cancel",
@@ -1105,24 +1273,26 @@ required_events = [
     "Installing:install_failure",
     "Active:poll_item",
     "Active:driver_terminal_complete",
-    "Active:driver_terminal_cleanup_transfer",
+    "Active:driver_terminal_transfer_required",
     "Active:driver_terminal_residual",
     "Active:stop",
     "Active:drop",
     "StopStarting:claimed_nonterminal",
     "StopStarting:claimed_terminal_complete",
-    "StopStarting:claimed_terminal_cleanup_transfer",
+    "StopStarting:claimed_terminal_transfer_required",
     "StopStarting:claimed_terminal_residual",
     "StopStarting:explicit_start_rejected",
     "StopStarting:implicit_start_invalid",
     "StopStarting:start_pending",
     "StopStarting:start_complete",
-    "StopStarting:cleanup_transfer",
+    "StopStarting:transfer_required",
     "StopStarting:residual",
     "Stopping:poll_stop_pending",
     "Stopping:stop_complete",
-    "Stopping:cleanup_transfer",
+    "Stopping:transfer_required",
     "Stopping:residual",
+    "TransferRequired:transfer_accepted",
+    "TransferRequired:transfer_rejected_manual_accepted",
     "CleanupPending:cleanup_progress",
     "CleanupPending:cleanup_complete",
     "CleanupPending:residual",
@@ -1231,12 +1401,12 @@ retryability = "terminal"
 
 [[machine.transition]]
 from = "CancellingStart"
-event = "start_cancel_cleanup_transfer"
-to = "CleanupPending"
-owner = "SubscriptionCleanupOwner"
-linearization = "retain the immutable cancellation or timeout terminal and atomically transfer the pending subscription-start cleanup record"
-outcome = "PendingCleanup"
-retryability = "recorded"
+event = "start_cancel_transfer_required"
+to = "TransferRequired"
+owner = "SubscriptionStartOwner"
+linearization = "retain the complete subscription-start call and immutable cancellation or timeout terminal while forming its CleanupTransferEnvelope; no PendingCleanup status is committed"
+outcome = "TransferRequired-source-owned"
+retryability = "handoff-required"
 
 [[machine.transition]]
 from = "CancellingStart"
@@ -1303,12 +1473,12 @@ retryability = "terminal"
 
 [[machine.transition]]
 from = "Active"
-event = "driver_terminal_cleanup_transfer"
-to = "CleanupPending"
-owner = "SubscriptionCleanupOwner"
-linearization = "retain the ProcessTerminal and atomically transferred PendingCleanup record before releasing the receive lease"
-outcome = "PendingCleanup"
-retryability = "recorded"
+event = "driver_terminal_transfer_required"
+to = "TransferRequired"
+owner = "SubscriptionReceiveOwner"
+linearization = "retain the ProcessTerminal and complete HostSubscriptionDriverBox after the borrowed terminal callback requests transfer; no PendingCleanup status is committed"
+outcome = "TransferRequired-source-owned"
+retryability = "handoff-required"
 
 [[machine.transition]]
 from = "Active"
@@ -1357,12 +1527,12 @@ retryability = "terminal"
 
 [[machine.transition]]
 from = "StopStarting"
-event = "claimed_terminal_cleanup_transfer"
-to = "CleanupPending"
-owner = "SubscriptionCleanupOwner"
-linearization = "discard the staged stop candidate and retain the callback ProcessTerminal plus atomically transferred PendingCleanup record without start_stop"
-outcome = "PendingCleanup"
-retryability = "recorded"
+event = "claimed_terminal_transfer_required"
+to = "TransferRequired"
+owner = "SubscriptionReceiveOwner"
+linearization = "discard the staged stop candidate and retain the callback ProcessTerminal plus complete driver box while preparing an acknowledged transfer without start_stop"
+outcome = "TransferRequired-source-owned"
+retryability = "handoff-required"
 
 [[machine.transition]]
 from = "StopStarting"
@@ -1378,7 +1548,7 @@ from = "StopStarting"
 event = "explicit_start_rejected"
 to = "Active"
 owner = "SubscriptionStopOwner"
-linearization = "for RetryableExplicit only, clear the uncommitted Cancelled candidate and restore the unchanged driver and receive lease"
+linearization = "for RetryableExplicit only, recover the unchanged complete SubscriptionStopInput and driver from pre-acceptance rejection, clear the uncommitted Cancelled candidate, and restore both with the receive lease"
 outcome = "invalid-call-active"
 retryability = "caller-may-correct"
 
@@ -1387,7 +1557,7 @@ from = "StopStarting"
 event = "implicit_start_invalid"
 to = "Failed"
 owner = "SubscriptionStopOwner"
-linearization = "preserve the terminal stop candidate, durably record the still-owned external resource, and retire local driver ownership without publishing Active"
+linearization = "retain the complete implicit SubscriptionStopInput and unchanged driver until durably recording its exact request, CleanupPhaseContext, and still-owned external resource, then preserve the terminal stop candidate and retire local ownership without publishing Active"
 outcome = "ResidualExternalState"
 retryability = "recorded"
 
@@ -1396,7 +1566,7 @@ from = "StopStarting"
 event = "start_pending"
 to = "Stopping"
 owner = "SubscriptionStopOwner"
-linearization = "commit acceptance of the exact request and its staged ProcessTerminal while retaining the driver cursor; CleanupOutcome remains unset"
+linearization = "commit acceptance of the full SubscriptionStopInput, including its exact request and CleanupPhaseContext, with the staged ProcessTerminal and retained driver cursor; CleanupOutcome remains unset"
 outcome = "pending"
 retryability = "retained-cursor"
 
@@ -1411,12 +1581,12 @@ retryability = "terminal"
 
 [[machine.transition]]
 from = "StopStarting"
-event = "cleanup_transfer"
-to = "CleanupPending"
-owner = "SubscriptionCleanupOwner"
-linearization = "atomically retain the staged ProcessTerminal and transfer driver and request under PendingCleanup"
-outcome = "PendingCleanup"
-retryability = "recorded"
+event = "transfer_required"
+to = "TransferRequired"
+owner = "SubscriptionStopOwner"
+linearization = "retain the staged ProcessTerminal and complete driver box after start_stop returns provisional TransferRequired; no PendingCleanup status is committed"
+outcome = "TransferRequired-source-owned"
+retryability = "handoff-required"
 
 [[machine.transition]]
 from = "StopStarting"
@@ -1447,12 +1617,12 @@ retryability = "terminal"
 
 [[machine.transition]]
 from = "Stopping"
-event = "cleanup_transfer"
-to = "CleanupPending"
-owner = "SubscriptionCleanupOwner"
-linearization = "move the driver and stop cursor into an already reserved bounded cleanup record while preserving the retained ProcessTerminal unchanged"
-outcome = "PendingCleanup"
-retryability = "recorded"
+event = "transfer_required"
+to = "TransferRequired"
+owner = "SubscriptionStopOwner"
+linearization = "retain the driver, stop cursor, and ProcessTerminal after poll_stop returns provisional TransferRequired; no PendingCleanup status is committed"
+outcome = "TransferRequired-source-owned"
+retryability = "handoff-required"
 
 [[machine.transition]]
 from = "Stopping"
@@ -1462,6 +1632,24 @@ owner = "SubscriptionStopOwner"
 linearization = "durably record the unmatched external resource, preserve the retained ProcessTerminal unchanged, and release the driver slot"
 outcome = "ResidualExternalState"
 retryability = "recorded"
+
+[[machine.transition]]
+from = "TransferRequired"
+event = "transfer_accepted"
+to = "CleanupPending"
+owner = "SubscriptionCleanupOwner"
+linearization = "atomically move the complete CleanupTransferEnvelope to the acknowledged executor owner and retain its CleanupRecord before publishing PendingCleanup"
+outcome = "TransferCommitted-PendingCleanup"
+retryability = "recorded"
+
+[[machine.transition]]
+from = "TransferRequired"
+event = "transfer_rejected_manual_accepted"
+to = "CleanupPending"
+owner = "SubscriptionManualCleanupOwner"
+linearization = "receive the identical rejected envelope and atomically install its complete driver or call in the pre-reserved manual slot before publishing PendingCleanup"
+outcome = "ManualFallback-complete-object-retained"
+retryability = "retained-cursor"
 
 [[machine.transition]]
 from = "CleanupPending"
@@ -1521,7 +1709,8 @@ transition_contract = "exact"
 scope = "Owns the unique receive/stop access lease for one binding-owned HostSubscriptionDriver or caller-owned constrained driver state"
 claim_contract = "Every receive and stop callback uses a fresh nonce. Callback completion commits only when SubscriptionId, subscription generation, binding generation, state, and nonce still match."
 critical_section_contract = "Driver callbacks and driver destruction execute outside engine locks and constrained critical sections"
-terminal_contract = "SubscriptionDriverEvent transfers terminal reason and cleanup disposition together. The slot classifies driver and cleanup ownership, not the ProcessTerminal cause: Complete retires the driver into Closed even when the retained terminal is Failed, PendingCleanup transfers it, ResidualExternalState records it, and unrecorded cleanup returns Pending."
+stop_input_contract = "StopStarting owns the unchanged driver or typed slot plus one complete SubscriptionStopInput until start_stop accepts its exact request and CleanupPhaseContext. Explicit pre-acceptance rejection returns both unchanged; implicit rejection retains both through durable residual recording; Pending commits the full input to StopClaimed."
+terminal_contract = "SubscriptionDriverEvent transfers terminal reason and SubscriptionDriverCleanupDisposition together. The slot classifies driver and cleanup ownership, not the ProcessTerminal cause: Complete retires the driver into Closed even when the retained terminal is Failed, TransferRequired retains the complete driver or typed slot until acknowledged transfer, and ResidualExternalState records it. A borrowed callback never returns PendingCleanup."
 cleanup_slot_projection = ["Complete->Closed", "PendingCleanup->CleanupPending", "ResidualExternalState->Residual"]
 callback_terminal_precedence = "claimed-driver-terminal-wins"
 retryable_rejection_intent = "RetryableExplicit"
@@ -1535,6 +1724,7 @@ states = [
     "StopRequested",
     "StopStarting",
     "StopClaimed",
+    "TransferRequired",
     "CleanupPending",
     "Closed",
     "Residual",
@@ -1551,24 +1741,26 @@ required_events = [
     "ReceiveClaimed:poll_pending",
     "ReceiveClaimed:item",
     "ReceiveClaimed:terminal_complete",
-    "ReceiveClaimed:terminal_cleanup_transfer",
+    "ReceiveClaimed:terminal_transfer_required",
     "ReceiveClaimed:terminal_residual",
     "ReceiveClaimed:request_stop",
     "ReceiveClaimed:drop",
     "StopRequested:callback_nonterminal",
     "StopRequested:callback_terminal_complete",
-    "StopRequested:callback_terminal_cleanup_transfer",
+    "StopRequested:callback_terminal_transfer_required",
     "StopRequested:callback_terminal_residual",
     "StopStarting:explicit_start_rejected",
     "StopStarting:implicit_start_invalid",
     "StopStarting:start_pending",
     "StopStarting:start_complete",
-    "StopStarting:cleanup_transfer",
+    "StopStarting:transfer_required",
     "StopStarting:residual",
     "StopClaimed:poll_pending",
     "StopClaimed:complete",
-    "StopClaimed:cleanup_transfer",
+    "StopClaimed:transfer_required",
     "StopClaimed:residual",
+    "TransferRequired:transfer_accepted",
+    "TransferRequired:transfer_rejected_manual_accepted",
     "CleanupPending:progress",
     "CleanupPending:complete",
     "CleanupPending:residual",
@@ -1659,12 +1851,12 @@ retryability = "terminal"
 
 [[machine.transition]]
 from = "ReceiveClaimed"
-event = "terminal_cleanup_transfer"
-to = "CleanupPending"
-owner = "SubscriptionCleanupOwner"
-linearization = "commit the terminal reason and atomically transfer the driver under its PendingCleanup record"
-outcome = "PendingCleanup"
-retryability = "recorded"
+event = "terminal_transfer_required"
+to = "TransferRequired"
+owner = "SubscriptionReceiveOwner"
+linearization = "commit the terminal reason while retaining the complete driver after its borrowed callback requests provisional transfer"
+outcome = "TransferRequired-source-owned"
+retryability = "handoff-required"
 
 [[machine.transition]]
 from = "ReceiveClaimed"
@@ -1713,12 +1905,12 @@ retryability = "terminal"
 
 [[machine.transition]]
 from = "StopRequested"
-event = "callback_terminal_cleanup_transfer"
-to = "CleanupPending"
-owner = "SubscriptionCleanupOwner"
-linearization = "commit the callback ProcessTerminal and atomically transfer the driver under PendingCleanup, discarding the staged stop intent without start_stop"
-outcome = "PendingCleanup"
-retryability = "recorded"
+event = "callback_terminal_transfer_required"
+to = "TransferRequired"
+owner = "SubscriptionReceiveOwner"
+linearization = "commit the callback ProcessTerminal and retain the complete driver for provisional transfer, discarding the staged stop intent without start_stop"
+outcome = "TransferRequired-source-owned"
+retryability = "handoff-required"
 
 [[machine.transition]]
 from = "StopRequested"
@@ -1734,7 +1926,7 @@ from = "StopStarting"
 event = "explicit_start_rejected"
 to = "Available"
 owner = "SubscriptionStopOwner"
-linearization = "for RetryableExplicit only, clear its uncommitted terminal candidate and return the unchanged driver to receive availability"
+linearization = "for RetryableExplicit only, recover the unchanged complete SubscriptionStopInput and driver or typed slot from pre-acceptance rejection, clear the uncommitted terminal candidate, and return both to receive availability"
 outcome = "invalid-call-active"
 retryability = "caller-may-correct"
 
@@ -1743,7 +1935,7 @@ from = "StopStarting"
 event = "implicit_start_invalid"
 to = "Residual"
 owner = "SubscriptionStopOwner"
-linearization = "durably record the still-owned external resource before retiring local driver ownership; an implicit or rollback request never returns to Available"
+linearization = "retain the complete implicit SubscriptionStopInput and unchanged driver or typed slot until durably recording its exact request, CleanupPhaseContext, and still-owned external resource; then retire local ownership, and never return an implicit or rollback request to Available"
 outcome = "ResidualExternalState"
 retryability = "recorded"
 
@@ -1752,7 +1944,7 @@ from = "StopStarting"
 event = "start_pending"
 to = "StopClaimed"
 owner = "SubscriptionStopOwner"
-linearization = "commit the accepted stop request and retained cursor for poll_stop"
+linearization = "commit the accepted full SubscriptionStopInput, including its exact request and CleanupPhaseContext, with the retained cursor for poll_stop"
 outcome = "pending"
 retryability = "retained-cursor"
 
@@ -1767,12 +1959,12 @@ retryability = "terminal"
 
 [[machine.transition]]
 from = "StopStarting"
-event = "cleanup_transfer"
-to = "CleanupPending"
-owner = "SubscriptionCleanupOwner"
-linearization = "start_stop atomically transfers the driver and request into already reserved cleanup ownership"
-outcome = "PendingCleanup"
-retryability = "recorded"
+event = "transfer_required"
+to = "TransferRequired"
+owner = "SubscriptionStopOwner"
+linearization = "start_stop returns provisional TransferRequired while the source retains the complete driver box or typed slot and request"
+outcome = "TransferRequired-source-owned"
+retryability = "handoff-required"
 
 [[machine.transition]]
 from = "StopStarting"
@@ -1803,12 +1995,12 @@ retryability = "terminal"
 
 [[machine.transition]]
 from = "StopClaimed"
-event = "cleanup_transfer"
-to = "CleanupPending"
-owner = "SubscriptionCleanupOwner"
-linearization = "move driver and cursor into an already reserved cleanup record"
-outcome = "PendingCleanup"
-retryability = "recorded"
+event = "transfer_required"
+to = "TransferRequired"
+owner = "SubscriptionStopOwner"
+linearization = "poll_stop returns provisional TransferRequired while the source retains the complete driver and stop cursor"
+outcome = "TransferRequired-source-owned"
+retryability = "handoff-required"
 
 [[machine.transition]]
 from = "StopClaimed"
@@ -1818,6 +2010,24 @@ owner = "SubscriptionStopOwner"
 linearization = "durably record unmatched external state before retiring the local driver"
 outcome = "ResidualExternalState"
 retryability = "recorded"
+
+[[machine.transition]]
+from = "TransferRequired"
+event = "transfer_accepted"
+to = "CleanupPending"
+owner = "SubscriptionCleanupOwner"
+linearization = "atomically move the complete driver-box or typed-slot envelope to the acknowledged executor owner before publishing PendingCleanup"
+outcome = "TransferCommitted-PendingCleanup"
+retryability = "recorded"
+
+[[machine.transition]]
+from = "TransferRequired"
+event = "transfer_rejected_manual_accepted"
+to = "CleanupPending"
+owner = "SubscriptionManualCleanupOwner"
+linearization = "move the identical rejected envelope into the pre-reserved manual cleanup slot before publishing PendingCleanup"
+outcome = "ManualFallback-complete-object-retained"
+retryability = "retained-cursor"
 
 [[machine.transition]]
 from = "CleanupPending"
@@ -2117,12 +2327,12 @@ scope = "Owns construction, complete input until acceptance, one result-poll lea
 construction_contract = "The host constructor or constrained start callback is nonblocking and runs outside engine locks with one nonce-bearing lease. It performs no protocol side effect before returning an owned call or accepting the caller-owned slot. BindingInputRejection returns the complete input before acceptance. Cancellation during construction is retained and a late call is cancelled before its first poll_result."
 first_cause_contract = "The first Manual, Deadline, Drop, Drain, or ParentCancellation cause committed against the call generation is immutable; later causes join and cannot replace retry or terminal classification"
 poll_race_contract = "If cancellation is recorded while poll_result is claimed, Ready commits late Returned and Pending transfers the call to CancelStarting; after Pending no later poll_result is legal"
-settlement_contract = "BindingCallSettlement distinguishes Returned or LateValue, verified Complete cleanup, TransferRequired while the source still owns the complete call, TransferCommitted only after a named owner acknowledges it, and durable ResidualExternalState. A record alone never commits transfer."
+settlement_contract = "BindingCallSettlement<T,C> has exactly Returned(T) and Cancelled { retry_class, disposition }. Consumer calls place CoreResult<U> inside T; route calls use only typed outcomes that retain predecessor or successor guards. Returned is the sole normal and late-value branch. BindingCancellationDisposition<C> returns C with Complete and ResidualExternalState, retains C inside the source-owned complete call for TransferRequired, and commits PendingCleanup only after acknowledged complete-envelope transfer."
 cleanup_state_projection = [
-    "Cancelled+Complete->Cancelled",
+    "Cancelled+Complete(successor)->Cancelled",
     "Cancelled+TransferRequired->TransferRequired",
     "Cancelled+TransferCommitted->CleanupTransferred",
-    "Cancelled+ResidualExternalState->Residual",
+    "Cancelled+ResidualExternalState(successor)->Residual",
 ]
 budget_contract = "Exhausted BindingPolls or cleanup work before a callback leaves the cursor unchanged and reports pending work; it never fabricates an atomic result Err or consumes the generation"
 wake_contract = "start_cancel and poll_cancel register wake interest before rechecking observable progress; zero work invokes no binding code, and Servient supplies cleanup-deadline progress when the transport never wakes"
@@ -2185,6 +2395,7 @@ required_events = [
     "CleanupTransferred:returned",
     "CleanupTransferred:complete",
     "CleanupTransferred:residual",
+    "CleanupTransferred:executor_drop",
     "Returned:release",
     "RejectedInput:acknowledge",
     "Cancelled:release",
@@ -2376,8 +2587,8 @@ from = "CancelStarting"
 event = "start_cancelled_complete"
 to = "Cancelled"
 owner = "BindingCallCancellationOwner"
-linearization = "validate the matching context and commit Cancelled with Complete cleanup"
-outcome = "Complete"
+linearization = "validate the matching context and move the typed cleanup successor out of the call before committing Cancelled"
+outcome = "Complete-successor-retained"
 retryability = "terminal"
 
 [[machine.transition]]
@@ -2403,8 +2614,8 @@ from = "CancelStarting"
 event = "start_residual"
 to = "Residual"
 owner = "BindingCallCancellationOwner"
-linearization = "validate and durably commit ResidualExternalState before destroying the call outside locks"
-outcome = "ResidualExternalState"
+linearization = "move the typed cleanup successor out of the call and durably commit ResidualExternalState before destroying the call outside locks"
+outcome = "ResidualExternalState-successor-retained"
 retryability = "recorded"
 
 [[machine.transition]]
@@ -2430,8 +2641,8 @@ from = "Cancelling"
 event = "poll_cancelled_complete"
 to = "Cancelled"
 owner = "BindingCallCancellationOwner"
-linearization = "validate the matching context and commit Cancelled with Complete cleanup"
-outcome = "Complete"
+linearization = "validate the matching context and move the typed cleanup successor out of the call before committing Cancelled"
+outcome = "Complete-successor-retained"
 retryability = "terminal"
 
 [[machine.transition]]
@@ -2457,8 +2668,8 @@ from = "Cancelling"
 event = "poll_residual"
 to = "Residual"
 owner = "BindingCallCancellationOwner"
-linearization = "validate and durably commit ResidualExternalState before destroying the call outside locks"
-outcome = "ResidualExternalState"
+linearization = "move the typed cleanup successor out of the call and durably commit ResidualExternalState before destroying the call outside locks"
+outcome = "ResidualExternalState-successor-retained"
 retryability = "recorded"
 
 [[machine.transition]]
@@ -2511,8 +2722,8 @@ from = "CleanupTransferred"
 event = "complete"
 to = "Cancelled"
 owner = "BindingCallCleanupOwner"
-linearization = "verify complete cleanup, retain the terminal cancellation result, and acknowledge the matching cleanup task before object destruction"
-outcome = "Complete"
+linearization = "move the typed cleanup successor to its operation owner, retain the terminal cancellation result, and acknowledge the matching cleanup task before object destruction"
+outcome = "Complete-successor-retained"
 retryability = "terminal"
 
 [[machine.transition]]
@@ -2520,8 +2731,17 @@ from = "CleanupTransferred"
 event = "residual"
 to = "Residual"
 owner = "BindingCallCleanupOwner"
-linearization = "durably commit the retained call as ResidualExternalState before acknowledging the cleanup task and destroying the object outside locks"
-outcome = "ResidualExternalState"
+linearization = "move the typed cleanup successor to its operation owner, durably commit ResidualExternalState, and acknowledge the cleanup task before destroying the object outside locks"
+outcome = "ResidualExternalState-successor-retained"
+retryability = "recorded"
+
+[[machine.transition]]
+from = "CleanupTransferred"
+event = "executor_drop"
+to = "Residual"
+owner = "BindingCallCleanupOwner"
+linearization = "commit the task's pre-reserved durable residual fallback and retain the operation-specific terminal successor before destroying the accepted call outside locks; manual ownership is not restored"
+outcome = "ResidualExternalState-successor-retained"
 retryability = "recorded"
 
 [[machine.transition]]
@@ -2951,9 +3171,10 @@ requirements = [
 visibility = "crate-private-servient-route-record"
 transition_contract = "exact"
 owner_record = "Servient BindingRouteRecord"
-scope = "Owns one binding and route generation, reservation identity, stage guard, lifecycle-call lease, readiness lease, acceptance lease, first expose cause, cleanup reservation, and retained terminal disposition"
-guard_contract = "Every pending, failed, cancelled, or late transition retains exactly one predecessor or successor guard. Preparation can certify no resource; activation failure returns the prepared guard; commit failure returns the active guard."
-publication_contract = "Commit retains serving ownership behind the activation gate. publish opens request admission only with the plan set and produced registry generation; drain closes admission before shutdown begins."
+scope = "Owns one binding and route generation, reservation identity, prepared/active/committed-closed stage guard, lifecycle-call lease, readiness lease, acceptance lease, first expose cause, cleanup reservation, and retained terminal disposition"
+guard_contract = "Every pending, failed, cancelled, or late transition retains exactly one predecessor or successor guard. Preparation can certify no resource; activation failure returns the prepared guard; commit failure returns the active guard; commit success returns a distinct committed-closed guard."
+publication_contract = "Commit retains a committed-closed guard and opens no admission. publish makes this route eligible for scoped permit claims only with the plan set, produced registry generation, and shared ServingActivationAuthority; drain stops new permit issuance before shutdown begins."
+shutdown_contract = "Serving has no direct transition to Cleaning. Servient first begins authority and route drain, joins or releases every ActiveRouteDriver claim, and may invoke Draining:begin_shutdown only after that route driver reaches Released."
 cleanup_contract = "Cleaning with Complete closes directly. TransferRequired remains source-owned, CleanupTransferred names an acknowledged owner of the complete object, and Residual retains durable external-state evidence until acknowledgement."
 initial = "Absent"
 states = [
@@ -2968,7 +3189,7 @@ states = [
     "Active",
     "Committing",
     "CommittingCancelled",
-    "Committed",
+    "CommittedClosed",
     "Serving",
     "Draining",
     "Cleaning",
@@ -3004,10 +3225,9 @@ required_events = [
     "Committing:cancel",
     "CommittingCancelled:committed_late",
     "CommittingCancelled:active_late",
-    "Committed:publish",
-    "Committed:begin_shutdown",
+    "CommittedClosed:publish",
+    "CommittedClosed:begin_shutdown",
     "Serving:drain",
-    "Serving:begin_shutdown",
     "Draining:begin_shutdown",
     "Cleaning:cleanup_complete",
     "Cleaning:transfer_required",
@@ -3124,7 +3344,7 @@ from = "Ready"
 event = "begin_activate"
 to = "Activating"
 owner = "BindingRouteOwner"
-linearization = "move the prepared guard into the unique activation call while the activation gate remains closed"
+linearization = "move the prepared guard into the unique activation call while request admission remains closed"
 outcome = "activation-call-owned"
 retryability = "not-applicable"
 
@@ -3187,7 +3407,7 @@ from = "Active"
 event = "begin_commit"
 to = "Committing"
 owner = "BindingRouteOwner"
-linearization = "move or lease the active guard into the commit call while the activation gate remains non-serving"
+linearization = "move or lease the active guard into the commit call while serving authority remains unavailable"
 outcome = "commit-call-owned"
 retryability = "not-applicable"
 
@@ -3203,10 +3423,10 @@ retryability = "not-applicable"
 [[machine.transition]]
 from = "Committing"
 event = "committed"
-to = "Committed"
+to = "CommittedClosed"
 owner = "BindingRouteOwner"
-linearization = "retain the committed serving guard behind its still-closed activation gate"
-outcome = "Committed-guard-retained-nonserving"
+linearization = "replace the consumed active guard with the returned committed-closed guard without creating serving authority"
+outcome = "CommittedClosed-guard-retained-nonserving"
 retryability = "not-applicable"
 
 [[machine.transition]]
@@ -3230,10 +3450,10 @@ retryability = "join-existing"
 [[machine.transition]]
 from = "CommittingCancelled"
 event = "committed_late"
-to = "Committed"
+to = "CommittedClosed"
 owner = "BindingRouteOwner"
-linearization = "retain the late committed guard behind the closed gate and classify it for shutdown"
-outcome = "CommittedLate-shutdown-required"
+linearization = "retain the late committed-closed guard without issuing a permit and classify it for shutdown"
+outcome = "CommittedClosedLate-shutdown-required"
 retryability = "not-applicable"
 
 [[machine.transition]]
@@ -3246,20 +3466,20 @@ outcome = "ActiveLate-shutdown-required"
 retryability = "not-applicable"
 
 [[machine.transition]]
-from = "Committed"
+from = "CommittedClosed"
 event = "publish"
 to = "Serving"
 owner = "Servient"
-linearization = "atomically publish the plan set and produced registry entry and open this route activation gate"
-outcome = "Serving-admission-open"
+linearization = "atomically publish the plan set, produced registry entry, complete committed route set, and shared activation authority without invoking the binding"
+outcome = "Serving-permit-eligible"
 retryability = "not-applicable"
 
 [[machine.transition]]
-from = "Committed"
+from = "CommittedClosed"
 event = "begin_shutdown"
 to = "Cleaning"
 owner = "BindingRouteCleanupSource"
-linearization = "keep the activation gate closed and move the complete committed guard into shutdown progress"
+linearization = "keep permit issuance unavailable and move the complete committed-closed guard into shutdown progress"
 outcome = "shutdown-call-owned"
 retryability = "not-applicable"
 
@@ -3273,20 +3493,11 @@ outcome = "Draining-existing-request-leases-retained"
 retryability = "join-existing"
 
 [[machine.transition]]
-from = "Serving"
-event = "begin_shutdown"
-to = "Cleaning"
-owner = "BindingRouteCleanupSource"
-linearization = "close request admission and move the complete serving guard into an active-route shutdown phase"
-outcome = "shutdown-call-owned"
-retryability = "not-applicable"
-
-[[machine.transition]]
 from = "Draining"
 event = "begin_shutdown"
 to = "Cleaning"
 owner = "BindingRouteCleanupSource"
-linearization = "after all claimed accept polls return, move the complete draining guard into shutdown progress"
+linearization = "after authority issuance stops and the active-route driver releases every claimed poll, move the complete committed-closed guard into shutdown progress"
 outcome = "shutdown-call-owned"
 retryability = "not-applicable"
 
@@ -3383,7 +3594,7 @@ visibility = "cross-crate-contract"
 transition_contract = "exact"
 owner_record = "Servient RouteLifecycleCallRecord"
 scope = "Owns one prepare, activate, commit, abort, or shutdown call with its complete input, predecessor-or-successor guard, immutable phase context, callback lease, and terminal acknowledgement"
-guard_contract = "Success retains the successor guard; operational failure retains the predecessor guard; certified rejection returns the original input; cancellation retains every late guard for stage-specific classification."
+guard_contract = "Success retains the successor guard; operational failure retains the predecessor guard; certified rejection returns the original input; Returned(T) retains every late typed guard; cancelled Complete and ResidualExternalState return a RouteCleanupSuccessor that is NoRouteResource, AbortPrepared, ShutdownActive, or ShutdownCommitted."
 transfer_contract = "TransferRequired remains source-owned until a named cleanup owner acknowledges the complete call and guard; rejection returns both to manual cleanup ownership."
 initial = "Reserved"
 states = [
@@ -3397,6 +3608,7 @@ states = [
     "RejectedInput",
     "CleanupComplete",
     "Residual",
+    "ResidualSuccessorRetained",
     "Released",
 ]
 terminal = ["Released"]
@@ -3407,30 +3619,31 @@ required_events = [
     "InProgress:complete_success",
     "InProgress:complete_failure_predecessor",
     "InProgress:cleanup_complete",
-    "InProgress:transfer_required",
     "InProgress:residual",
     "InProgress:cancel",
     "InProgress:drop",
     "CancelRequested:pending_registered",
     "CancelRequested:late_success",
     "CancelRequested:late_failure_predecessor",
-    "CancelRequested:cleanup_complete",
+    "CancelRequested:cancel_complete_successor",
     "CancelRequested:transfer_required",
     "CancelRequested:drain_expired",
-    "CancelRequested:residual",
+    "CancelRequested:cancel_residual_successor",
     "TransferRequired:transfer_committed",
     "TransferRequired:executor_rejected",
     "TransferRequired:drain_expired",
     "CleanupTransferred:progress_registered",
     "CleanupTransferred:late_success",
     "CleanupTransferred:late_failure_predecessor",
-    "CleanupTransferred:complete",
-    "CleanupTransferred:residual",
+    "CleanupTransferred:cancel_complete_successor",
+    "CleanupTransferred:cancel_residual_successor",
+    "CleanupTransferred:executor_drop_residual_successor",
     "Completed:acknowledge",
     "LateCompleted:acknowledge",
     "RejectedInput:acknowledge",
     "CleanupComplete:acknowledge",
     "Residual:acknowledge",
+    "ResidualSuccessorRetained:acknowledge",
 ]
 
 [[machine.transition]]
@@ -3489,15 +3702,6 @@ retryability = "terminal"
 
 [[machine.transition]]
 from = "InProgress"
-event = "transfer_required"
-to = "TransferRequired"
-owner = "RouteLifecycleCallOwner"
-linearization = "retain the complete call and guard while requesting acknowledged cleanup ownership"
-outcome = "TransferRequired-source-owned"
-retryability = "handoff-required"
-
-[[machine.transition]]
-from = "InProgress"
 event = "residual"
 to = "Residual"
 owner = "RouteLifecycleCallOwner"
@@ -3552,11 +3756,11 @@ retryability = "terminal"
 
 [[machine.transition]]
 from = "CancelRequested"
-event = "cleanup_complete"
-to = "CleanupComplete"
-owner = "RouteLifecycleCallOwner"
-linearization = "verify complete cleanup under the fixed phase context"
-outcome = "Complete"
+event = "cancel_complete_successor"
+to = "Completed"
+owner = "BindingRouteOwner"
+linearization = "move the exact RouteCleanupSuccessor out of the cancelled call before releasing the call lease"
+outcome = "Complete-cleanup-successor-retained"
 retryability = "terminal"
 
 [[machine.transition]]
@@ -3579,11 +3783,11 @@ retryability = "handoff-required"
 
 [[machine.transition]]
 from = "CancelRequested"
-event = "residual"
-to = "Residual"
-owner = "RouteLifecycleCallOwner"
-linearization = "commit durable residual status before destroying the complete call outside locks"
-outcome = "ResidualExternalState"
+event = "cancel_residual_successor"
+to = "ResidualSuccessorRetained"
+owner = "BindingRouteOwner"
+linearization = "move the exact RouteCleanupSuccessor out of the cancelled call and commit its durable residual record before destroying the call outside locks"
+outcome = "ResidualExternalState-cleanup-successor-retained"
 retryability = "recorded"
 
 [[machine.transition]]
@@ -3607,10 +3811,10 @@ retryability = "retained-cursor"
 [[machine.transition]]
 from = "TransferRequired"
 event = "drain_expired"
-to = "Residual"
-owner = "RouteLifecycleManualCleanupOwner"
-linearization = "commit durable residual status from reserved capacity before local destruction"
-outcome = "ResidualExternalState"
+to = "ResidualSuccessorRetained"
+owner = "BindingRouteOwner"
+linearization = "materialize the explicit ResidualRouteState successor from the pre-reserved route identity and commit durable residual status before destroying the opaque call outside locks"
+outcome = "ResidualExternalState-cleanup-successor-retained"
 retryability = "recorded"
 
 [[machine.transition]]
@@ -3642,20 +3846,29 @@ retryability = "terminal"
 
 [[machine.transition]]
 from = "CleanupTransferred"
-event = "complete"
-to = "CleanupComplete"
-owner = "RouteLifecycleCleanupOwner"
-linearization = "verify complete cleanup and acknowledge transferred responsibility"
-outcome = "Complete"
+event = "cancel_complete_successor"
+to = "Completed"
+owner = "BindingRouteOwner"
+linearization = "move the exact RouteCleanupSuccessor to route ownership before acknowledging transferred responsibility"
+outcome = "Complete-cleanup-successor-retained"
 retryability = "terminal"
 
 [[machine.transition]]
 from = "CleanupTransferred"
-event = "residual"
-to = "Residual"
-owner = "RouteLifecycleCleanupOwner"
-linearization = "commit durable residual status before transfer acknowledgement and object destruction"
-outcome = "ResidualExternalState"
+event = "cancel_residual_successor"
+to = "ResidualSuccessorRetained"
+owner = "BindingRouteOwner"
+linearization = "move the exact RouteCleanupSuccessor to route ownership and commit durable residual status before transfer acknowledgement and object destruction"
+outcome = "ResidualExternalState-cleanup-successor-retained"
+retryability = "recorded"
+
+[[machine.transition]]
+from = "CleanupTransferred"
+event = "executor_drop_residual_successor"
+to = "ResidualSuccessorRetained"
+owner = "BindingRouteOwner"
+linearization = "materialize ResidualRouteState from the transferred envelope identity and commit the task's pre-reserved durable fallback before destroying the opaque call outside locks"
+outcome = "ResidualExternalState-cleanup-successor-retained"
 retryability = "recorded"
 
 [[machine.transition]]
@@ -3703,6 +3916,15 @@ linearization = "verify durable residual ownership before releasing local call c
 outcome = "residual-acknowledged"
 retryability = "terminal"
 
+[[machine.transition]]
+from = "ResidualSuccessorRetained"
+event = "acknowledge"
+to = "Released"
+owner = "BindingRouteOwner"
+linearization = "verify durable residual ownership and installation of the retained cleanup successor before releasing local call capacity"
+outcome = "residual-successor-acknowledged"
+retryability = "terminal"
+
 [[machine]]
 id = "route-readiness"
 requirements = [
@@ -3716,7 +3938,7 @@ transition_contract = "exact"
 owner_record = "Servient RouteReadinessRecord"
 scope = "Owns one prepared route guard or exact lease, readiness driver, unique wake lease, bounded quantum, expose deadline, independent cleanup phase, and retained outcome"
 wake_contract = "Every Pending registers wake interest before rechecking readiness; Servient supplies deadline wakes and validates route generation before mutation."
-guard_contract = "Ready, failure, cancellation, and late results return the same complete prepared guard or transfer the complete readiness object to an acknowledged owner."
+guard_contract = "Ready and failure return the complete prepared guard in their typed outcome. Cancelled Complete and ResidualExternalState return a HostRouteCleanupSuccessor, normally AbortPrepared and, only for the durable fallback, ResidualRouteState. TransferRequired retains the guard inside the complete readiness call until acknowledged envelope transfer."
 initial = "Reserved"
 states = [
     "Reserved",
@@ -3726,8 +3948,8 @@ states = [
     "CleanupTransferred",
     "Ready",
     "FailedGuardRetained",
-    "CleanupComplete",
-    "Residual",
+    "CleanupSuccessorRetained",
+    "ResidualSuccessorRetained",
     "Released",
 ]
 terminal = ["Released"]
@@ -3741,22 +3963,23 @@ required_events = [
     "Cancelling:pending_registered",
     "Cancelling:ready_late",
     "Cancelling:failed_late",
-    "Cancelling:cleanup_complete",
+    "Cancelling:cancel_complete_successor",
     "Cancelling:transfer_required",
     "Cancelling:drain_expired",
-    "Cancelling:residual",
+    "Cancelling:cancel_residual_successor",
     "TransferRequired:transfer_committed",
     "TransferRequired:executor_rejected",
     "TransferRequired:drain_expired",
     "CleanupTransferred:progress_registered",
     "CleanupTransferred:ready_late",
     "CleanupTransferred:failed_late",
-    "CleanupTransferred:complete",
-    "CleanupTransferred:residual",
+    "CleanupTransferred:cancel_complete_successor",
+    "CleanupTransferred:cancel_residual_successor",
+    "CleanupTransferred:executor_drop_residual_successor",
     "Ready:acknowledge",
     "FailedGuardRetained:acknowledge",
-    "CleanupComplete:acknowledge",
-    "Residual:acknowledge",
+    "CleanupSuccessorRetained:acknowledge",
+    "ResidualSuccessorRetained:acknowledge",
 ]
 
 [[machine.transition]]
@@ -3842,11 +4065,11 @@ retryability = "terminal"
 
 [[machine.transition]]
 from = "Cancelling"
-event = "cleanup_complete"
-to = "CleanupComplete"
-owner = "RouteReadinessOwner"
-linearization = "verify readiness-only cleanup complete and return route guard ownership"
-outcome = "Complete"
+event = "cancel_complete_successor"
+to = "CleanupSuccessorRetained"
+owner = "BindingRouteOwner"
+linearization = "move the AbortPrepared cleanup successor and its complete prepared guard out of the cancelled readiness call"
+outcome = "Complete-cleanup-successor-retained"
 retryability = "terminal"
 
 [[machine.transition]]
@@ -3869,11 +4092,11 @@ retryability = "handoff-required"
 
 [[machine.transition]]
 from = "Cancelling"
-event = "residual"
-to = "Residual"
-owner = "RouteReadinessOwner"
-linearization = "durably record residual readiness state before object destruction"
-outcome = "ResidualExternalState"
+event = "cancel_residual_successor"
+to = "ResidualSuccessorRetained"
+owner = "BindingRouteOwner"
+linearization = "move the AbortPrepared or ResidualRouteState cleanup successor and durably record residual readiness state before call destruction"
+outcome = "ResidualExternalState-cleanup-successor-retained"
 retryability = "recorded"
 
 [[machine.transition]]
@@ -3897,10 +4120,10 @@ retryability = "retained-cursor"
 [[machine.transition]]
 from = "TransferRequired"
 event = "drain_expired"
-to = "Residual"
-owner = "RouteReadinessManualCleanupOwner"
-linearization = "commit durable residual readiness status from pre-reserved capacity"
-outcome = "ResidualExternalState"
+to = "ResidualSuccessorRetained"
+owner = "BindingRouteOwner"
+linearization = "materialize ResidualRouteState from the envelope identity and commit durable residual readiness status from pre-reserved capacity"
+outcome = "ResidualExternalState-cleanup-successor-retained"
 retryability = "recorded"
 
 [[machine.transition]]
@@ -3932,20 +4155,29 @@ retryability = "terminal"
 
 [[machine.transition]]
 from = "CleanupTransferred"
-event = "complete"
-to = "CleanupComplete"
-owner = "RouteReadinessCleanupOwner"
-linearization = "verify cleanup complete and acknowledge transferred responsibility"
-outcome = "Complete"
+event = "cancel_complete_successor"
+to = "CleanupSuccessorRetained"
+owner = "BindingRouteOwner"
+linearization = "move the AbortPrepared cleanup successor to route ownership before acknowledging transferred responsibility"
+outcome = "Complete-cleanup-successor-retained"
 retryability = "terminal"
 
 [[machine.transition]]
 from = "CleanupTransferred"
-event = "residual"
-to = "Residual"
-owner = "RouteReadinessCleanupOwner"
-linearization = "commit durable residual readiness state before task acknowledgement"
-outcome = "ResidualExternalState"
+event = "cancel_residual_successor"
+to = "ResidualSuccessorRetained"
+owner = "BindingRouteOwner"
+linearization = "move the AbortPrepared or ResidualRouteState cleanup successor to route ownership and commit durable residual readiness state before task acknowledgement"
+outcome = "ResidualExternalState-cleanup-successor-retained"
+retryability = "recorded"
+
+[[machine.transition]]
+from = "CleanupTransferred"
+event = "executor_drop_residual_successor"
+to = "ResidualSuccessorRetained"
+owner = "BindingRouteOwner"
+linearization = "materialize ResidualRouteState from the accepted task identity and commit its pre-reserved durable fallback before destroying the opaque readiness call outside locks"
+outcome = "ResidualExternalState-cleanup-successor-retained"
 retryability = "recorded"
 
 [[machine.transition]]
@@ -3967,21 +4199,21 @@ outcome = "failure-acknowledged"
 retryability = "terminal"
 
 [[machine.transition]]
-from = "CleanupComplete"
+from = "CleanupSuccessorRetained"
 event = "acknowledge"
 to = "Released"
-owner = "RouteReadinessOwner"
-linearization = "acknowledge complete readiness cleanup"
-outcome = "cleanup-complete-acknowledged"
+owner = "BindingRouteOwner"
+linearization = "acknowledge installation of the returned cleanup successor before releasing readiness-only capacity"
+outcome = "cleanup-successor-acknowledged"
 retryability = "terminal"
 
 [[machine.transition]]
-from = "Residual"
+from = "ResidualSuccessorRetained"
 event = "acknowledge"
 to = "Released"
-owner = "RouteReadinessOwner"
-linearization = "verify durable residual ownership before releasing the local readiness record"
-outcome = "residual-acknowledged"
+owner = "BindingRouteOwner"
+linearization = "verify durable residual ownership and installation of the retained cleanup successor before releasing the local readiness record"
+outcome = "residual-successor-acknowledged"
 retryability = "terminal"
 
 [[machine]]
@@ -3990,8 +4222,10 @@ requirements = ["BIND-IO-001", "BIND-PROGRESS-001", "BIND-ROUTE-001"]
 visibility = "crate-private-servient-route-driver"
 transition_contract = "exact"
 owner_record = "Servient ActiveRouteDriverRecord"
-scope = "Owns one active route guard's unique accept cursor and wake lease, generation validation, bounded operational status, drain boundary, and at-most-once terminal event"
-wake_contract = "A Pending accept poll registers the unique route wake lease before rechecking; a wake has no authority and stale generations cannot mutate the record."
+scope = "Owns one committed-closed route guard's unique RouteAcceptLease, accept cursor, and wake lease, generation validation, bounded operational status, drain boundary, and at-most-once terminal event"
+wake_contract = "A Pending accept poll registers the unique route wake lease before rechecking; a wake has no authority, every poll requires a fresh RouteAcceptLease -> RouteAcceptClaim -> RouteActivationPermit chain, and stale generations cannot mutate the record."
+permit_contract = "The claim boundary moves the unique RouteAcceptLease into the call owner and gives ServingActivationAuthority::claim_route an exclusive borrow after validating the committed-closed guard identity. The returned RouteAcceptClaim is consumed into one permit; only the nonce is retained after the callback, never the claim, permit, or borrow."
+shutdown_contract = "Drain closes new claims before either route becomes observably Draining. A claimed poll joins through DrainingClaimed, and the complete committed-closed guard transfers to route shutdown only after this driver reaches Released."
 terminal_contract = "OperationalError is nonterminal. RouteTerminal is retained at most once, closes later acceptance only for this route generation, and requires acknowledgement before release."
 initial = "Reserved"
 states = [
@@ -4045,8 +4279,8 @@ from = "Active"
 event = "claim_accept"
 to = "AcceptClaimed"
 owner = "RouteAcceptOwner"
-linearization = "move the active guard and unique accept cursor into one nonce-bearing poll lease"
-outcome = "accept-poll-owned"
+linearization = "move the committed-closed guard, cursor, and unique RouteAcceptLease into one nonce-bearing poll owner, then exclusively borrow that lease through the authority claim chain before invoking poll_accept"
+outcome = "accept-call-and-route-lease-owned"
 retryability = "not-applicable"
 
 [[machine.transition]]
@@ -4144,8 +4378,8 @@ from = "Draining"
 event = "release_to_shutdown"
 to = "Released"
 owner = "BindingRouteCleanupSource"
-linearization = "move the complete active guard to route shutdown after every claimed accept poll has returned"
-outcome = "active-guard-transferred-to-shutdown"
+linearization = "move the complete committed-closed guard to route shutdown after every claimed accept poll has returned"
+outcome = "committed-guard-transferred-to-shutdown"
 retryability = "terminal"
 
 [[machine.transition]]

@@ -14,7 +14,8 @@ Owner packages: clinkz-wot-core
 
 Replace the host-only binding shapes in `clinkz-wot-core` with the frozen complete-registration
 and constrained associated-state contracts. Implement the core compiler-extension envelope,
-route-scoped readiness and acceptance, request/response ownership, subscription start/stop,
+route-scoped readiness and permit-authorized acceptance, request/response ownership,
+subscription start/stop,
 Producer emission, runtime status, form contribution, generation-safe typed operation slots,
 binding-owned subscription progress, binding-local publication slots, and bounded cleanup
 progress without adding a concrete protocol or a Servient scheduler.
@@ -81,9 +82,10 @@ exist.
 - The `async-no-std` cell preserves the poll contract and may provide native async adapters
   without executor selection.
 - The `std` cell exposes object-safe server/client execution components and `HostBindingCall`,
-  owned call boxes, owned route guards, `HostSubscriptionDriver`, host subscription start, and
-  one complete `HostBindingRegistration`. Boxed futures are allowed only on these erased network
-  paths; status, overflow, reactor, and ingress policies are fields of the bundle rather than a
+  owned call boxes, prepared, active, committed-closed, and shutdown route guards,
+  `HostSubscriptionDriver`, host subscription start, and one complete
+  `HostBindingRegistration`. Boxed futures are allowed only on these erased network paths;
+  status, overflow, reactor, and ingress policies are fields of the bundle rather than a
   separately installable sink configuration.
 - Use fake bindings and caller-owned tables in core integration tests. Do not implement zenoh,
   sockets, spawned transport tasks, or Servient registries in this package.
@@ -93,10 +95,13 @@ exist.
 Implement the frozen shared binding surface:
 
 - values: `OutboundRequest`, `InboundRequest`, `InboundResponse`, `PrepareInput`,
-  `BindingRouteKey`, `BindingContext`, `ResponseDelivery`, `SubscriptionStart`,
-  `SubscriptionStopRequest`, `SubscriptionItem`, `SubscriptionDriverEvent`,
-  `BindingInputRejection<T>`, `CleanupReservation`, `CleanupPhaseContext`, and
-  `BindingCallSettlement<T>`;
+  `BindingRouteKey`, `BindingContext`, `SubscriptionStart`, `SubscriptionStopRequest`,
+  `SubscriptionStopInput`,
+  `SubscriptionItem`, `SubscriptionDriverEvent`, `SubscriptionDriverCleanupDisposition`,
+  `BindingInputRejection<T>`, `CleanupReservation`, `CleanupPhaseContext`,
+  `CleanupTransferRequest`, `CleanupTransferEnvelope<T>`,
+  `CleanupTransferAcceptance<T>`, `CleanupTransferTarget<T>`, `NoCleanupSuccessor`,
+  `BindingCancellationDisposition<C>`, and `BindingCallSettlement<T, C>`;
 - compiler-extension values: `BindingArtifactCompatibility`, `BindingArtifactFootprint`,
   `BindingArtifact`, `BindingArtifactEnvelope`, `BindingArtifactRef`, `BindingCompilerInput`,
   and `BindingCompilerExtension`; core owns this protocol-neutral SPI while WP-200 planning owns
@@ -107,11 +112,20 @@ Implement the frozen shared binding surface:
   `PollServerBinding`, and typed `ClientRequestSlot<B::RequestState>`,
   `ClientSubscriptionSlot<B::SubscriptionState>`, route/readiness slots over the server
   associated states, `ServerResponseSlot<B::ResponseState>`, and
-  `BindingEmissionSlot<B::EmissionState>`;
-- host execution components: `ServerBinding`, owned prepared/readiness/active route wrappers,
-  route-scoped `RouteAcceptEvent`, `BindingCallFootprint`, `HostBindingCall`,
-  `HostBindingCallBox`, `ClientBinding`, `HostSubscriptionDriver`, and
+  `BindingEmissionSlot<B::EmissionState>`; a committed route slot records
+  `CommittedClosed` and `poll_accept` requires a borrowed `RouteActivationPermit<'_>`;
+- host execution components: `ServerBinding`, `HostPreparedRouteGuard`,
+  `HostActiveRouteGuard`, `HostCommittedRouteGuard`, `HostShutdownRouteGuard`,
+  `RouteCommitOutcome<A, C>`, `RouteCleanupSuccessor<P, A, C>`,
+  `HostRouteCleanupSuccessor`, route-scoped `RouteAcceptEvent`, `BindingCallFootprint`,
+  `HostBindingCall`, `HostBindingCallBox`, `ClientBinding`, `HostSubscriptionDriver`, and
   `HostSubscriptionStart`;
+- serving authorization values: one non-`Clone`, non-`Copy`
+  `ServingActivationAuthority` per produced generation; one caller-owned
+  `RouteAcceptLease` per route driver; the exclusive `RouteAcceptClaim<'a>` plus
+  `RouteAcceptClaimError`; and the non-`Clone`, non-`Copy`, lifetime-bound
+  `RouteActivationPermit<'a>` created only by consuming that claim. None exposes
+  a registry view or application dispatch capability;
 - installable units: `HostBindingRegistration` and `StaticBindingRegistration<B>`, each carrying
   compiler, execution, contribution, footprint, ingress, status, overflow, readiness, reactor,
   cleanup, capability, and profile-cell metadata as one validated startup bundle.
@@ -129,20 +143,31 @@ Implement the frozen contribution and runtime surfaces:
 - `SubscriptionState`; the application `Subscription` facade and private `SubscriptionRecord`
   belong to WP-400 Servient;
 - Preserve the orthogonality of `SubscriptionDriverEvent` fields: driver-slot lifecycle follows
-  `CleanupOutcome`, while `ProcessTerminal` is retained unchanged for the parent facade. Complete
-  cleanup retires the driver even when the process terminal is `Failed`; it must not be recoded as
-  a driver residual.
+  `SubscriptionDriverCleanupDisposition`, while `ProcessTerminal` is retained unchanged for the
+  parent facade. A borrowed driver callback returns only `Complete`,
+  `TransferRequired(CleanupTransferRequest)`, or
+  `ResidualExternalState(CleanupRecord)`; it cannot return `PendingCleanup`. Complete cleanup
+  retires the driver even when the process terminal is `Failed`; it must not be recoded as a
+  driver residual.
 - Implement the exact `binding-call` machine for host call records and every constrained typed
   slot header. Host constructors are nonblocking and side-effect-free, declare and report their
   complete lifetime footprint, and return owned `HostBindingCallBox` values. Cancellation binds
   a pre-admitted `CleanupReservation` into a phase-specific `CleanupPhaseContext`, retains the
   first cause, routes late request/subscription/response/publication results, and never drops a
   live call as cleanup.
-- Make `poll_cancel_request`, `poll_cancel_subscription_start`, `poll_cancel_response`, and
-  `poll_cancel_emission` return the portable settlement type. A returned late value, verified
-  completion, transfer request, committed pending owner, and durable residual state are
-  generation-safe and retain the complete work object until terminal acknowledgement. A
-  `CleanupRecord` alone is never transferable work.
+- Make request, subscription-start, response, emission, and route cancellation return the
+  portable `BindingCallSettlement<T, C>` shape. `Returned(T)` is the only normal or late-value
+  branch. `Cancelled` retains `RetryClass` plus one
+  `BindingCancellationDisposition<C>`: verified `Complete`, provisional `TransferRequired`, or
+  `ResidualExternalState`. Route lifecycle calls fix `C` to
+  `HostRouteCleanupSuccessor`; consumer calls use `T = CoreResult<U>`. No outer error may discard
+  a typed successor. A `CleanupRecord` alone is status and is never transferable work.
+- Implement the exact transfer handshake. `TransferRequired` leaves the complete call, guard,
+  driver, input, or typed slot with the source. The source moves it into
+  `CleanupTransferEnvelope<T>` and publishes `CleanupOutcome::PendingCleanup` only after
+  `CleanupTransferTarget::try_accept` returns `CleanupTransferAcceptance::Accepted`. Rejection
+  returns the identical envelope to the pre-reserved manual owner. An accepted executor task
+  that cannot finish commits its pre-reserved durable residual before destruction.
 - `RuntimeEvent`, `BindingRuntimeEvent`, `BindingStatusRecord`, and `OverflowPolicy`;
 - `ProducerEmission`, `EmissionKind`, `BindingPublication`, `EmissionStatus`, and
   `BindingEmissionSlot`;
@@ -158,15 +183,32 @@ contributor metadata; a bare trait object is never the configuration contract.
 ## State and Ownership Migration
 
 - A prepared route remains caller-addressable through every fallible readiness and activation
-  outcome; commit failure returns an active guard suitable for shutdown. Readiness
-  failure/cancellation uses abort; active or committed cleanup uses shutdown. `PendingCleanup`
-  is returned only after the complete guard or call moves to and is acknowledged by the named
-  cleanup owner.
+  outcome. Commit consumes an active guard and returns either
+  `RouteCommitOutcome::Committed(HostCommittedRouteGuard)` or
+  `RouteCommitOutcome::NotCommitted { guard: HostActiveRouteGuard, error }`; neither branch opens
+  admission. Readiness failure or cancellation uses abort. Active and committed-closed cleanup
+  uses shutdown through `HostShutdownRouteGuard`. `PendingCleanup` is returned only after the
+  complete guard or call moves to and is acknowledged by the named cleanup owner.
 - `BindingRouteState` follows the frozen route machine and never uses guard drop as a
-  transition. Readiness, activation, commit, route-scoped acceptance, abort, shutdown, and retry
-  are idempotent for one route generation; late callbacks with stale generations are discarded
-  and recorded. There is one accept cursor and waker lease per active route, never one
-  registration-wide `poll_accept` cursor.
+  transition. Readiness, activation, commit to `CommittedClosed`, permit-authorized acceptance,
+  abort, shutdown, and retry are idempotent for one route generation; late callbacks with stale
+  generations are discarded and recorded. There is one accept cursor and waker lease per
+  committed-closed route, never one registration-wide `poll_accept` cursor.
+- Keep `ServingActivationAuthority` out of binding state. Servient owns one authority for the
+  complete produced generation and makes it selectable only with the Producer plan set and
+  serving registry generation in one atomic transition. Each host and constrained
+  `poll_accept` receives a fresh borrowed `RouteActivationPermit<'_>` only after Servient moves
+  the exact route accept lease into a claimed-call owner and consumes its exclusive
+  `RouteAcceptClaim`. The permit cannot be retained in a guard, associated state,
+  reactor queue, or detached task and no binding callback runs at publication.
+- A drain transition stops permit issuance before `Draining` becomes observable. A poll claimed
+  before the transition may return one request under its retained route and plan leases; later
+  claims, stale wakes, and mismatched permits are rejected before binding state changes.
+- Make preparation visibility and closed-ingress behavior part of the complete registration.
+  Externally visible preparation declares exactly one policy: reject, backpressure, or buffer
+  only within admitted binding ingress limits. Before publication no policy may create a response
+  opportunity, report application acceptance, or emit an `InboundRequest`; buffered input stays
+  route-owned through rollback and shutdown.
 - Admit an in-flight response opportunity only after the serving state and generation recheck.
   Host send consumes it in the call; constrained start consumes it only after the response is
   accepted into `ServerResponseSlot`.
@@ -204,6 +246,13 @@ contributor metadata; a bare trait object is never the configuration contract.
   route-scoped prepare/readiness/activate/commit/accept/abort/shutdown contract and the server
   component inside a complete registration bundle. Remove any registration-wide acceptance and
   any cleanup path whose only completion signal is guard drop or an unstructured outer error.
+- Remove any successful `RouteCommitOutcome::Serving` branch, any `poll_accept` overload that
+  accepts an active guard or omits `RouteActivationPermit<'_>`, every per-route `open_gate` or
+  `release_gate` callback, and every binding view of Servient registry state. Successful commit
+  produces a committed-closed guard; only Servient's current shared authority can lend admission.
+- Remove any preparation path with undeclared external visibility or an implicit closed-ingress
+  policy. A complete registration that cannot enforce hidden preparation or one bounded declared
+  reject, backpressure, or buffer policy is invalid.
 - Replace the current `core/src/outbound.rs::ClientBinding` request shape with the frozen owned
   `OutboundRequest`, validated output, owned `HostBindingCall`, `HostSubscriptionDriver`, and
   `HostSubscriptionStart` contracts. Remove `BindingRequest` and `BindingFuture`; no public
@@ -236,7 +285,12 @@ Produce these package evidence keys exactly as indexed by the work-package DAG:
 - `complete-binding-registration` for atomic compiler/execution/contributor/policy bundles,
   startup-only publication, rejection of incomplete bundles, and owned I/O values;
 - `route-scoped-binding-lifecycle` for ownership-preserving route transitions, one accept/waker
-  lease per route, terminal isolation, and absence of direct handler dispatch;
+  lease per committed-closed route, terminal isolation, and absence of direct handler dispatch;
+- `serving-activation-permit-contract` for distinct committed-closed guards, exactly one shared
+  authority per produced generation, atomic plan/registry/authority publication, fresh borrowed
+  per-route permits created only from an exclusive `RouteAcceptLease` claim, zero unclaimed
+  permits or duplicate concurrent claims, zero permit retention, drain-before-claim ordering,
+  stale-permit rejection, bounded closed-ingress policies, and host/constrained trace equivalence;
 - `typed-binding-state-storage` for associated-state layout limits, typed slots, generation-safe
   construction/destruction, and zero-budget retention;
 - `binding-lifetime-and-ingress-memory` for declared lifetime/transient footprints, per-route,
@@ -295,8 +349,14 @@ terminal or critical status is lost merely because a bounded queue is full.
   that a retained `BindingEmissionSlot` resumes within its work budget without restarting.
 - `PERF-GW-028` covers the owned host-call cancellation, late-result, transfer, and residual
   matrix; `PERF-CS-020` covers typed slots and complete pre-acceptance input rejection.
-- `PERF-GW-030` and `PERF-CS-022` cover route preparation, readiness fairness, activation gates,
-  guard retention, and route-scoped terminal isolation.
+- `PERF-GW-030` and `PERF-CS-022` cover pre-publication traffic, all-route commit, Nth-route
+  commit failure, publication/cancellation orderings, stale permits, duplicate concurrent claims,
+  attempts to create a permit without a claim, drain/claim orderings, all three externally visible
+  closed-ingress policies, committed-guard retention, and identical host/constrained activation
+  traces. They require one authority, atomic publication, an exclusive route-lease borrow, zero
+  unclaimed permits, zero duplicate claims, zero pre-publication or partial admissions, zero
+  post-drain claims, zero stale-permit mutations, zero lost committed guards, and zero retained
+  permit bytes.
 - `PERF-GW-031` validates a complete third-party registration and rejects every incomplete bundle.
 - `PERF-GW-032` and `PERF-CS-023` cover bounded ingress items/bytes, backpressure, and hidden
   buffer detection at route, binding, Thing, and global scopes.
@@ -313,6 +373,10 @@ terminal or critical status is lost merely because a bounded queue is full.
 - Exhaustive transition tests cover route readiness through cleanup, in-flight admission and
   response consumption, subscription start/cancel/stop, emission poll/cancel, stale
   generations, and retained terminal outcomes.
+- Activation tests prove that all required routes are committed-closed before the one serving
+  publication, every accept poll carries a fresh borrowed permit from the exact current
+  authority, drain stops new issuance, and visible pre-publication ingress follows its declared
+  bounded policy without admitting an engine request.
 - Slot/pool exhaustion returns backpressure before ownership transfer; accepted work reaches
   one terminal result without invoking the application handler again.
 - Runtime event and durable status behavior remains bounded and preserves critical details
@@ -320,7 +384,7 @@ terminal or critical status is lost merely because a bounded queue is full.
 - All listed workload adapters emit schema-valid, fixture-identified results for both poll and
   host-erased paths where applicable.
 - The obsolete transport, push, split-registration, bare-registration, registration-wide accept,
-  old-signature, opaque concrete-slot, and unbounded pending-work facades owned by WP-300 are
-  absent, and no concrete protocol logic has entered core. Only the explicitly named
-  WP-400/WP-600 compatibility adapter edges may remain, with compile and source evidence assigning
-  their removal to those packages.
+  active-guard accept, per-route activation-gate, registry-observation, old-signature, opaque
+  concrete-slot, and unbounded pending-work facades owned by WP-300 are absent, and no concrete
+  protocol logic has entered core. Only the explicitly named WP-400/WP-600 compatibility adapter
+  edges may remain, with compile and source evidence assigning their removal to those packages.

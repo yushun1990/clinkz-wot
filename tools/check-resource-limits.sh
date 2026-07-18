@@ -144,6 +144,28 @@ for field in "${v49_fields[@]}"; do
     fi
 done
 
+for field in compiled_runtime_bytes_per_thing_max compiled_runtime_bytes_global_max; do
+    if ! awk -F, -v field="$field" '
+        $1 == field && $10 ~ /(^|\|)PLAN-SET-001(\||$)/ \
+            && $10 ~ /(^|\|)BIND-ROUTE-001(\||$)/ { found = 1 }
+        END { exit !found }
+    ' "$schema"; then
+        echo "resource limit check: serving authority is not projected into $field" >&2
+        exit 1
+    fi
+done
+
+for fragment in \
+    'A permit is a temporary borrow and retains' \
+    'retained `RouteAcceptLease`, transient exclusive' \
+    '`binding_routes_*`,' \
+    '`binding_ingress_items_*` and `binding_ingress_bytes_*`'; do
+    if ! grep -Fq "$fragment" "$root/docs/spec/binding-spi.md"; then
+        echo "resource limit check: activation resource mapping is missing $fragment" >&2
+        exit 1
+    fi
+done
+
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
 tail -n +2 "$root/docs/requirements.csv" | cut -d, -f1 | tr '|' '\n' \

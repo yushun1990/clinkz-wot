@@ -36,14 +36,25 @@ inputs still held by a running callback. Late results remain owned:
 - a late commit result joins shutdown; and
 - a callback error returns or preserves every guard needed for cleanup.
 
-The registry becomes serving only after all routes are committed and their
-activation gates can enforce the same transition. A registration that cannot
-enforce the gate is rejected in v1; there is no undocumented post-publication
-advertise phase.
+Commit returns a distinct committed-closed route guard. The registry becomes
+serving only after every required route has reached that state. One
+generation-checked Servient transition publishes the immutable plan set and
+produced registry generation and makes their shared immutable serving
+activation authority selectable inside the private serving-activation record.
+No binding callback runs at that boundary, and there is no undocumented
+post-publication advertise phase.
 
-Destroy marks the registry draining before route shutdown. No new request is
-admitted after that transition. In-flight handlers may finish only within the
-selected bounded drain policy.
+Every `poll_accept` requires the private record to validate current serving
+state, move the route's unique accept lease into one claimed-call owner, and
+consume that claim into a non-cloneable route-scoped permit. The permit
+exclusively borrows the lease through the callback. A registration that cannot
+prevent request admission without the permit is rejected in v1. A binding
+neither opens its own gate nor observes registry state.
+
+Destroy stops new permit issuance and marks the registry draining before route
+shutdown. No new accept claim is admitted after that transition. A poll claimed
+before drain retains its route and plan leases; in-flight handlers may finish
+only within the selected bounded drain policy.
 
 ## Consumed Thing lifecycle
 
@@ -79,6 +90,12 @@ The runtime follows a two-phase rule:
 No callback receives a reference into mutable registry storage. Reentrant calls
 observe a well-defined public state and cannot deadlock on a lock retained by
 the original callback.
+
+For inbound acceptance, the claim phase also verifies the private serving
+record, immutable authority identity, route generation, committed guard, and
+unique accept lease. The callback phase receives only the resulting scoped
+route permit and immutable input. It receives no registry view, handler
+dispatcher, or capability that can be retained after the call.
 
 ## Cleanup ownership
 

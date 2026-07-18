@@ -66,7 +66,7 @@ emission_binding_bounded_progress = "fully admitted emission and caller-owned sl
 native_collection_subscription = "root collection plan, caller-owned driver slot, and reserved SubscriptionId ready -> one binding driver is installed or a terminal start error is retained"
 typed_binding_slots_and_input_rejection = "caller-owned typed binding slots and owned delivery input ready -> each operation retains generation-safe state or rejects before acceptance with the complete input returned"
 compiled_plan_set_lifecycle = "logical plans, binding compiler snapshot, caller-owned artifact slots, and reserved footprint ready -> bounded steps publish, pin, drain, and reclaim one immutable plan set"
-route_guard_readiness_lifecycle = "admitted route plans, typed route slots, and complete static registration ready -> bounded steps retain every guard through readiness, serving, or terminal cleanup"
+route_guard_readiness_lifecycle = "admitted route plans, typed route slots, complete static registration, and reserved activation authority ready -> bounded steps retain every guard through readiness, permit-gated serving, or terminal cleanup"
 bounded_binding_ingress = "caller-owned ingress capacity and route slot ready -> bounded steps commit item and byte saturation decisions while unrelated routes retain progress"
 
 [scales]
@@ -644,13 +644,15 @@ report = [
 
 [[workload]]
 id = "PERF-CS-022"
-version = 1
+version = 2
 requirements = [
     "BIND-MEM-001",
     "BIND-PROGRESS-001",
     "BIND-ROUTE-001",
     "CONSTRAINED-WORK-001",
+    "LIFE-EXPOSE-002",
     "LIFE-EXPOSE-003",
+    "PLAN-SET-001",
 ]
 fixture_id = "FX-CS-022"
 harness_case = "route_guard_readiness_lifecycle"
@@ -666,16 +668,48 @@ route_phases = [
     "shutdown",
 ]
 terminal_dispositions = ["direct-complete", "acknowledged-transfer", "durable-residual"]
-coverage_dimensions = ["route_phases", "terminal_dispositions"]
+activation_cases = [
+    "prepublication-traffic",
+    "all-routes-committed-publication",
+    "nth-route-commit-failure",
+    "publication-wins-cancel",
+    "cancel-wins-publication",
+    "stale-permit",
+    "duplicate-concurrent-claim",
+    "permit-without-claim",
+    "drain-wins-claim",
+    "claimed-before-drain",
+    "externally-visible-reject",
+    "externally-visible-backpressure",
+    "externally-visible-bounded-buffer",
+]
+coverage_dimensions = ["route_phases", "terminal_dispositions", "activation_cases"]
+activation_trace_oracle = "serving-activation-v1"
+activation_authorities_max = 1
 never_ready_routes = 1
 accept_wakers_per_route_max = 1
 lost_route_guards_max = 0
+lost_committed_route_guards_max = 0
 route_generation_mismatches_accepted_max = 0
+prepublication_requests_admitted_max = 0
+partial_route_admissions_max = 0
+nth_commit_failure_publications_max = 0
+stale_permits_mutating_state_max = 0
+duplicate_concurrent_accept_claims_max = 0
+permits_without_accept_claim_max = 0
+post_drain_accept_claims_max = 0
+retained_permit_bytes_max = 0
 critical_section_guards_held_during_route_poll_max = 0
 work_budget_overshoot_units_max = 0
 maximum_route_service_gap_steps_max = 64
 require_route_terminal_isolation = true
 require_complete_guard_transfer = true
+require_atomic_activation_publication = true
+require_exactly_one_activation_authority = true
+require_exclusive_accept_lease_borrow = true
+require_borrowed_permit_nonretention = true
+require_closed_ingress_policy_coverage = true
+require_serving_activation_trace_oracle = true
 require_complete_matrix_coverage = true
 report = [
     "cycles-per-step",
@@ -684,6 +718,12 @@ report = [
     "readiness-wakes",
     "guard-transfer-acks",
     "durable-residual-records",
+    "activation-authorities",
+    "activation-permit-claims",
+    "rejected-duplicate-accept-claims",
+    "permits-without-accept-claim",
+    "prepublication-requests-admitted",
+    "post-drain-accept-claims",
 ]
 
 [[workload]]

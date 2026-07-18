@@ -62,24 +62,28 @@ being cancelled. Deadline expiry fixes one first cause and moves every retained
 guard through its stage-appropriate cleanup path.
 
 Commit is the final route transition before request admission. A produced Thing
-is published as serving only after every required route has committed and its
-activation gate can enforce the same boundary. No request is accepted for an
-uncommitted or draining route.
+is published as serving only after every required route has committed. ADR-0012
+freezes the exact admission boundary: the complete committed route set is
+published with one shared serving activation authority, and each acceptance poll
+requires the private serving record to move the unique route lease through a
+claim into a route-scoped permit. No request is
+accepted for an uncommitted, unpublished, stale, or draining route.
 
-Acceptance has exactly one poll and waker lease per active route. Every accepted
-request, operational error, and terminal event carries the binding and route
-generation. Operational errors do not silently terminate the route. A route
-terminal event is emitted at most once, stops later acceptance for that route,
-and does not ambiguously terminate sibling routes or the whole registration.
-Stale wakeups and events are rejected by generation before they can mutate the
-route record.
+Acceptance has exactly one poll and waker lease per committed serving route.
+Every accepted request, operational error, and terminal event carries the
+binding and route generation. Operational errors do not silently terminate the
+route. A route terminal event is emitted at most once, stops later acceptance
+for that route, and does not ambiguously terminate sibling routes or the whole
+registration. Stale permits, wakeups, and events are rejected by generation
+before they can mutate the route record.
 
-Destroy first marks routes draining, which closes request admission. Servient
-then drives stage-appropriate abort or shutdown outside engine locks and commits
-the result under the route lease. Cleanup may complete synchronously, transfer
-pending work, or record bounded residual external state; all three dispositions
-are legal lifecycle outcomes. Terminal status is committed before the final
-guard is destroyed outside locks.
+Destroy first moves the private serving activation record to draining, which
+stops new route claims and closes request admission. Servient then drives
+stage-appropriate abort or shutdown outside engine locks and commits the result
+under the route lease. Cleanup may complete synchronously, transfer pending work,
+or record bounded residual external state; all three dispositions are legal
+lifecycle outcomes. Terminal status is committed before the final guard is
+destroyed outside locks.
 
 A binding never receives an application =Dispatch= capability and never calls
 handlers from a hidden self-driving task. A host binding may operate a bounded

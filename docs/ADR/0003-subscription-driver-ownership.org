@@ -26,10 +26,26 @@ Core owns subscription semantics, not a universal storage mechanism. It owns:
 source =AffordanceTarget=, and payload. A collection subscription cannot start
 unless the selected binding plan can provide exact source attribution.
 
-The host SPI has the following semantic shape:
+The host SPI has the following exact v4.9 shape. This amends the v4.8 shape
+that omitted wake registration from =start_stop=, reused =CleanupOutcome= at a
+borrowed-driver boundary, and could consume the stop request and cleanup context
+on a pre-acceptance error:
 
 #+begin_src rust
-pub trait HostSubscriptionDriver: Send {
+pub struct SubscriptionStopInput { /* private owned request and phase context */ }
+
+impl SubscriptionStopInput {
+    pub fn new(
+        request: SubscriptionStopRequest,
+        cleanup: CleanupPhaseContext,
+    ) -> Self;
+
+    pub fn into_parts(
+        self,
+    ) -> (SubscriptionStopRequest, CleanupPhaseContext);
+}
+
+pub trait HostSubscriptionDriver: Send + 'static {
     fn poll_item(
         self: Pin<&mut Self>,
         cx: &mut Context<'_>,
@@ -38,23 +54,44 @@ pub trait HostSubscriptionDriver: Send {
 
     fn start_stop(
         self: Pin<&mut Self>,
-        request: SubscriptionStopRequest,
+        cx: &mut Context<'_>,
+        input: SubscriptionStopInput,
         budget: &mut WorkBudget,
-    ) -> CoreResult<StartStatus<CleanupOutcome>>;
+    ) -> Result<
+        StartStatus<SubscriptionDriverCleanupDisposition>,
+        BindingInputRejection<SubscriptionStopInput>,
+    >;
 
     fn poll_stop(
         self: Pin<&mut Self>,
         cx: &mut Context<'_>,
         budget: &mut WorkBudget,
-    ) -> Poll<CoreResult<CleanupOutcome>>;
+    ) -> Poll<CoreResult<SubscriptionDriverCleanupDisposition>>;
+
+    fn next_deadline(&self) -> Option<Deadline>;
 }
 
 pub struct HostSubscriptionStart {
-    /* exact start metadata plus Pin<Box<dyn HostSubscriptionDriver>> */
+    /* exact start metadata plus HostSubscriptionDriverBox */
 }
 #+end_src
 
-The exact field and method schema is frozen in design revision v4.8 and its
+=SubscriptionDriverCleanupDisposition= has exactly =Complete=,
+=TransferRequired(CleanupTransferRequest)=, and
+=ResidualExternalState(CleanupRecord)=. It deliberately has no
+=PendingCleanup= variant. A result produced through =Pin<&mut Self>= cannot
+claim that the complete driver moved.
+
+On =TransferRequired=, the caller still owns the
+=HostSubscriptionDriverBox=. It moves that complete box into
+=CleanupTransferEnvelope<HostSubscriptionDriverBox>= and offers the envelope
+to the already reserved cleanup owner. =CleanupTransferAcceptance::Accepted=
+is the only boundary that may publish =CleanupOutcome::PendingCleanup=.
+=CleanupTransferAcceptance::Rejected= returns the identical envelope, which is
+moved into the pre-reserved manual cleanup slot. A cleanup record alone is not
+an ownership transfer.
+
+The exact field and method schema is frozen in design revision v4.9 and its
 ownership matrix. A binding returns the driver only after remote or local start
 succeeds. The Servient reserves the engine-scoped =SubscriptionId=,
 slot, item/byte budget, and cleanup capacity before the binding call; the
@@ -65,15 +102,20 @@ The application-facing non-=Clone= =Subscription= facade belongs to Servient.
 It yields =ProcessEvent<SubscriptionItem>=, owns one receive cursor, and reaches
 the handle-owned driver registry by =SubscriptionId=. =Subscription::stop=
 selects and validates one explicit teardown request when applicable, then
-drives =start_stop=/=poll_stop= on the same binding driver and retained cleanup
-state as handle drop. Drop uses an implicit stop request and records residual
+drives =start_stop=/=poll_stop= on the same binding driver and retained,
+independent =CleanupPhaseContext= as handle drop. Both methods receive a
+=Context= whenever they may return =Pending= and register wake interest before
+rechecking progress. =SubscriptionStopInput= owns both values until
+=start_stop= accepts them; pre-acceptance rejection returns the complete input.
+Drop uses an implicit stop request and records residual
 external state rather than inventing caller options. A cloneable control or
-receive view is not part of v4.8 and cannot create a competing cursor.
+receive view is not part of v1 and cannot create a competing cursor.
 
 =SubscriptionDriverEvent::Terminal= transfers the retained
-=ProcessTerminal= and =CleanupOutcome= together. Servient publishes the process
-terminal once while preserving complete, transferred, or residual cleanup
-status; the application-facing event never hides an unowned binding resource.
+=ProcessTerminal= and =SubscriptionDriverCleanupDisposition= together. Servient
+publishes the process terminal once while preserving complete, provisionally
+requested, acknowledged-transferred, or residual cleanup status; the
+application-facing event never hides an unowned binding resource.
 The public =SubscriptionState= describes resource lifecycle independently from
 the retained process terminal. Consequently, a failed process whose cleanup is
 complete is =Closed= with =terminal()= retaining the failure; =Failed= is
@@ -97,9 +139,10 @@ They require no =Arc=, boxed future, executor, OS thread, or allocation inside a
 critical section. A slot may contain a core control header plus binding-specific
 caller-provided state; core does not mandate a =VecDeque= layout.
 
-Drop never blocks and never creates an unbounded cleanup queue. It transfers the
-driver and remaining teardown work atomically to a reserved bounded cleanup
-owner or records a structured residual outcome.
+Drop never blocks and never creates an unbounded cleanup queue. It forms a
+complete-driver transfer envelope, commits pending cleanup only after a
+reserved bounded owner accepts that envelope, or records a structured residual
+outcome.
 
 * Consequences
 

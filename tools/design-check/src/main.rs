@@ -32,6 +32,7 @@ const REQUIRED_MACHINES: &[&str] = &[
     "producer-subscription",
     "route-lifecycle-call",
     "route-readiness",
+    "serving-activation-authority",
     "subscription",
     "subscription-driver-slot",
 ];
@@ -795,20 +796,19 @@ fn check_governance(root: &Path, require_ready: bool) -> Result<(), String> {
                 "review {review_id:?} does not declare its use by {gate}"
             ));
         }
-        if !artifacts.is_subset(&review.artifacts) {
-            let missing: Vec<_> = artifacts.difference(&review.artifacts).collect();
-            return Err(format!(
-                "review {review_id:?} does not cover {gate} artifacts {missing:?}"
-            ));
-        }
-        if !checks.is_subset(&review.checks) {
-            let missing: Vec<_> = checks.difference(&review.checks).collect();
-            return Err(format!(
-                "review {review_id:?} does not cover {gate} checks {missing:?}"
-            ));
-        }
-
         if status == "closed" {
+            if !artifacts.is_subset(&review.artifacts) {
+                let missing: Vec<_> = artifacts.difference(&review.artifacts).collect();
+                return Err(format!(
+                    "review {review_id:?} does not cover {gate} artifacts {missing:?}"
+                ));
+            }
+            if !checks.is_subset(&review.checks) {
+                let missing: Vec<_> = checks.difference(&review.checks).collect();
+                return Err(format!(
+                    "review {review_id:?} does not cover {gate} checks {missing:?}"
+                ));
+            }
             if review.design_revision != ACTIVE_DESIGN_REVISION || review.status != "passed" {
                 return Err(format!(
                     "{gate} closure requires a passed v{ACTIVE_DESIGN_REVISION} review; \
@@ -824,6 +824,9 @@ fn check_governance(root: &Path, require_ready: bool) -> Result<(), String> {
                 }
             }
         } else {
+            // A blocking audit remains the reason an open gate cannot close. Corrective
+            // artifacts added after that audit deliberately remain outside its historical
+            // coverage until a later same-revision closure review evaluates the current set.
             open_gates.push(gate.to_owned());
         }
 
@@ -911,6 +914,7 @@ fn expected_gate_contract(gate: &str) -> Option<GateContract> {
                 "PLAN-ARTIFACT-001",
                 "FORM-FINALIZE-001",
                 "FORM-OWNER-001",
+                "LIFE-EXPOSE-002",
                 "BIND-REG-001",
                 "BIND-ROUTE-001",
                 "BIND-STORAGE-001",
@@ -947,6 +951,7 @@ fn expected_gate_contract(gate: &str) -> Option<GateContract> {
                 "docs/ADR/0009-protocol-binding-integration-and-deployment.org",
                 "docs/ADR/0010-server-route-lifecycle.org",
                 "docs/ADR/0011-cleanup-reservation-and-transfer.org",
+                "docs/ADR/0012-serving-activation-permit.org",
             ]),
             owned_set(&[
                 "api-ownership-check",
@@ -957,6 +962,7 @@ fn expected_gate_contract(gate: &str) -> Option<GateContract> {
         ),
         "GATE-2" => (
             owned_set(&[
+                "LIFE-EXPOSE-002",
                 "LIFE-EXPOSE-003",
                 "BIND-PROGRESS-001",
                 "STATE-EXPOSE-001",
@@ -1011,6 +1017,7 @@ fn expected_gate_contract(gate: &str) -> Option<GateContract> {
                 "docs/ADR/0009-protocol-binding-integration-and-deployment.org",
                 "docs/ADR/0010-server-route-lifecycle.org",
                 "docs/ADR/0011-cleanup-reservation-and-transfer.org",
+                "docs/ADR/0012-serving-activation-permit.org",
             ]),
             owned_set(&[
                 "architecture-adr-check",
@@ -1049,6 +1056,7 @@ fn expected_gate_contract(gate: &str) -> Option<GateContract> {
                 "PLAN-ARTIFACT-001",
                 "HANDLER-STORAGE-001",
                 "HANDLER-CANCEL-002",
+                "LIFE-EXPOSE-002",
                 "BIND-REG-001",
                 "BIND-ROUTE-001",
                 "BIND-STORAGE-001",
@@ -1084,6 +1092,7 @@ fn expected_gate_contract(gate: &str) -> Option<GateContract> {
                 "docs/ADR/0009-protocol-binding-integration-and-deployment.org",
                 "docs/ADR/0010-server-route-lifecycle.org",
                 "docs/ADR/0011-cleanup-reservation-and-transfer.org",
+                "docs/ADR/0012-serving-activation-permit.org",
             ]),
             owned_set(&[
                 "architecture-adr-check",
@@ -1105,6 +1114,7 @@ fn expected_gate_contract(gate: &str) -> Option<GateContract> {
                 "PLAN-INDEX-001",
                 "PLAN-SET-001",
                 "PLAN-ARTIFACT-001",
+                "LIFE-EXPOSE-002",
                 "BIND-REG-001",
                 "BIND-ROUTE-001",
                 "BIND-STORAGE-001",
@@ -1148,6 +1158,7 @@ fn expected_gate_contract(gate: &str) -> Option<GateContract> {
                 "docs/ADR/0009-protocol-binding-integration-and-deployment.org",
                 "docs/ADR/0010-server-route-lifecycle.org",
                 "docs/ADR/0011-cleanup-reservation-and-transfer.org",
+                "docs/ADR/0012-serving-activation-permit.org",
             ]),
             owned_set(&[
                 "architecture-adr-check",
@@ -1165,6 +1176,7 @@ fn expected_gate_contract(gate: &str) -> Option<GateContract> {
                 "PLAN-SET-001",
                 "PLAN-ARTIFACT-001",
                 "FORM-OWNER-001",
+                "LIFE-EXPOSE-002",
                 "BIND-REG-001",
                 "BIND-ROUTE-001",
                 "BIND-STORAGE-001",
@@ -1207,6 +1219,7 @@ fn expected_gate_contract(gate: &str) -> Option<GateContract> {
                 "docs/ADR/0009-protocol-binding-integration-and-deployment.org",
                 "docs/ADR/0010-server-route-lifecycle.org",
                 "docs/ADR/0011-cleanup-reservation-and-transfer.org",
+                "docs/ADR/0012-serving-activation-permit.org",
             ]),
             owned_set(&[
                 "architecture-adr-check",
@@ -2626,7 +2639,9 @@ fn check_machine(
         "producer-subscription" => check_producer_subscription_contract(machine)?,
         "route-lifecycle-call" => check_route_lifecycle_call_contract(machine)?,
         "route-readiness" => check_route_readiness_contract(machine)?,
+        "serving-activation-authority" => check_serving_activation_authority_contract(machine)?,
         "subscription" => check_binding_subscription_contract(machine)?,
+        "subscription-driver-slot" => check_subscription_driver_slot_contract(machine)?,
         _ => {}
     }
     Ok((id, transitions))
@@ -2640,7 +2655,13 @@ fn check_active_route_driver_contract(machine: &Table) -> Result<(), String> {
         "Servient ActiveRouteDriverRecord",
         id,
     )?;
-    for field in ["scope", "wake_contract", "terminal_contract"] {
+    for field in [
+        "scope",
+        "wake_contract",
+        "permit_contract",
+        "shutdown_contract",
+        "terminal_contract",
+    ] {
         string_field(machine, field, id)?;
     }
     check_exact_machine_set(
@@ -2661,6 +2682,12 @@ fn check_active_route_driver_contract(machine: &Table) -> Result<(), String> {
         machine,
         id,
         &[
+            (
+                "Active",
+                "claim_accept",
+                "RouteAcceptOwner",
+                "accept-call-and-route-lease-owned",
+            ),
             (
                 "AcceptClaimed",
                 "pending_registered",
@@ -2686,10 +2713,28 @@ fn check_active_route_driver_contract(machine: &Table) -> Result<(), String> {
                 "draining-no-new-accept",
             ),
             (
+                "AcceptClaimed",
+                "drain",
+                "ActiveRouteDriverOwner",
+                "draining-await-claimed-poll",
+            ),
+            (
                 "DrainingClaimed",
                 "request_late",
                 "RouteAcceptOwner",
                 "pre-drain-request-owned-by-servient",
+            ),
+            (
+                "Draining",
+                "release_to_shutdown",
+                "BindingRouteCleanupSource",
+                "committed-guard-transferred-to-shutdown",
+            ),
+            (
+                "TerminalRetained",
+                "acknowledge",
+                "BindingRouteCleanupSource",
+                "route-terminal-acknowledged",
             ),
         ],
     )
@@ -2749,6 +2794,18 @@ fn check_binding_call_contract(machine: &Table) -> Result<(), String> {
                 "TransferRequired-source-owned",
             ),
             (
+                "CancelStarting",
+                "start_cancelled_complete",
+                "BindingCallCancellationOwner",
+                "Complete-successor-retained",
+            ),
+            (
+                "CancelStarting",
+                "start_residual",
+                "BindingCallCancellationOwner",
+                "ResidualExternalState-successor-retained",
+            ),
+            (
                 "TransferRequired",
                 "transfer_committed",
                 "BindingCallCleanupOwner",
@@ -2764,13 +2821,19 @@ fn check_binding_call_contract(machine: &Table) -> Result<(), String> {
                 "CleanupTransferred",
                 "complete",
                 "BindingCallCleanupOwner",
-                "Complete",
+                "Complete-successor-retained",
             ),
             (
                 "CleanupTransferred",
                 "residual",
                 "BindingCallCleanupOwner",
-                "ResidualExternalState",
+                "ResidualExternalState-successor-retained",
+            ),
+            (
+                "CleanupTransferred",
+                "executor_drop",
+                "BindingCallCleanupOwner",
+                "ResidualExternalState-successor-retained",
             ),
         ],
     )
@@ -2833,6 +2896,7 @@ fn check_binding_route_contract(machine: &Table) -> Result<(), String> {
         "scope",
         "guard_contract",
         "publication_contract",
+        "shutdown_contract",
         "cleanup_contract",
     ] {
         string_field(machine, field, id)?;
@@ -2841,6 +2905,30 @@ fn check_binding_route_contract(machine: &Table) -> Result<(), String> {
         machine,
         id,
         &[
+            (
+                "Committing",
+                "committed",
+                "BindingRouteOwner",
+                "CommittedClosed-guard-retained-nonserving",
+            ),
+            (
+                "CommittedClosed",
+                "publish",
+                "Servient",
+                "Serving-permit-eligible",
+            ),
+            (
+                "Serving",
+                "drain",
+                "Servient",
+                "Draining-existing-request-leases-retained",
+            ),
+            (
+                "Draining",
+                "begin_shutdown",
+                "BindingRouteCleanupSource",
+                "shutdown-call-owned",
+            ),
             (
                 "Activating",
                 "activation_failed_prepared_retained",
@@ -2882,6 +2970,100 @@ fn check_binding_route_contract(machine: &Table) -> Result<(), String> {
                 "executor_rejected",
                 "BindingRouteManualCleanupOwner",
                 "ManualFallback-complete-guard-retained",
+            ),
+        ],
+    )?;
+    let transitions = machine
+        .get("transition")
+        .and_then(Item::as_array_of_tables)
+        .ok_or_else(|| format!("machine {id:?} has no transitions"))?;
+    if transitions.iter().any(|transition| {
+        transition.get("from").and_then(Item::as_str) == Some("Serving")
+            && transition.get("event").and_then(Item::as_str) == Some("begin_shutdown")
+    }) {
+        return Err(
+            "machine \"binding-route\" permits Serving:begin_shutdown before route drain and \
+             active-route-driver release"
+                .to_owned(),
+        );
+    }
+    Ok(())
+}
+
+fn check_serving_activation_authority_contract(machine: &Table) -> Result<(), String> {
+    let id = "serving-activation-authority";
+    require_table_string(machine, "visibility", "cross-crate-servient-contract", id)?;
+    require_table_string(
+        machine,
+        "owner_record",
+        "Servient ServingActivationRecord",
+        id,
+    )?;
+    require_table_string(
+        machine,
+        "authority_contract",
+        "ServingActivationAuthority contains only immutable public Thing, produced-generation, \
+         and plan-set-generation identity. claim_route exclusively borrows a matching \
+         RouteAcceptLease and returns a RouteAcceptClaim whose consuming into_permit operation is \
+         the only permit constructor; the private ServingActivationRecord owns all mutable \
+         publication and drain state and owns no binding state, route list, queue, or application \
+         dispatch capability.",
+        id,
+    )?;
+    for field in [
+        "scope",
+        "publication_contract",
+        "permit_contract",
+        "drain_contract",
+        "resource_contract",
+    ] {
+        string_field(machine, field, id)?;
+    }
+    check_exact_machine_set(
+        machine,
+        id,
+        "states",
+        &["Cancelled", "Draining", "Reclaimed", "Reserved", "Serving"],
+    )?;
+    check_required_transition_owners_and_outcomes(
+        machine,
+        id,
+        &[
+            (
+                "Reserved",
+                "publish",
+                "ServientServingActivationOwner",
+                "Serving-permit-claims-enabled",
+            ),
+            (
+                "Reserved",
+                "cancel",
+                "ServientServingActivationOwner",
+                "Cancelled-never-serving",
+            ),
+            (
+                "Serving",
+                "claim_route",
+                "RouteAcceptOwner",
+                "Borrowed-route-permit-after-claim-consume",
+            ),
+            (
+                "Serving",
+                "reject_route_claim",
+                "ServientServingActivationOwner",
+                "Route-claim-rejected",
+            ),
+            (
+                "Serving",
+                "begin_drain",
+                "ServientServingActivationOwner",
+                "Draining-existing-claims-retained",
+            ),
+            (
+                "Draining",
+                "reclaim_complete",
+                "PlanSetReclaimOwner",
+                "Reclaimed-zero-authority-bytes",
             ),
         ],
     )
@@ -2933,6 +3115,12 @@ fn check_cleanup_task_contract(machine: &Table) -> Result<(), String> {
                 "ResidualExternalState",
             ),
             (
+                "ExecutorPollClaimed",
+                "executor_drop",
+                "CleanupTaskOwner",
+                "ResidualExternalState",
+            ),
+            (
                 "ManualOwned",
                 "drain_expired",
                 "ManualCleanupOwner",
@@ -2959,6 +3147,25 @@ fn check_route_lifecycle_call_contract(machine: &Table) -> Result<(), String> {
     for field in ["scope", "guard_contract", "transfer_contract"] {
         string_field(machine, field, id)?;
     }
+    check_exact_machine_set(
+        machine,
+        id,
+        "states",
+        &[
+            "CancelRequested",
+            "CleanupComplete",
+            "CleanupTransferred",
+            "Completed",
+            "InProgress",
+            "LateCompleted",
+            "RejectedInput",
+            "Released",
+            "Reserved",
+            "Residual",
+            "ResidualSuccessorRetained",
+            "TransferRequired",
+        ],
+    )?;
     check_required_transition_owners_and_outcomes(
         machine,
         id,
@@ -2988,10 +3195,28 @@ fn check_route_lifecycle_call_contract(machine: &Table) -> Result<(), String> {
                 "LateValue-successor-guard-retained",
             ),
             (
+                "CancelRequested",
+                "cancel_complete_successor",
+                "BindingRouteOwner",
+                "Complete-cleanup-successor-retained",
+            ),
+            (
+                "CancelRequested",
+                "cancel_residual_successor",
+                "BindingRouteOwner",
+                "ResidualExternalState-cleanup-successor-retained",
+            ),
+            (
                 "TransferRequired",
                 "transfer_committed",
                 "RouteLifecycleCleanupOwner",
                 "TransferCommitted-PendingCleanup",
+            ),
+            (
+                "CleanupTransferred",
+                "executor_drop_residual_successor",
+                "BindingRouteOwner",
+                "ResidualExternalState-cleanup-successor-retained",
             ),
         ],
     )
@@ -3003,6 +3228,23 @@ fn check_route_readiness_contract(machine: &Table) -> Result<(), String> {
     for field in ["scope", "wake_contract", "guard_contract"] {
         string_field(machine, field, id)?;
     }
+    check_exact_machine_set(
+        machine,
+        id,
+        "states",
+        &[
+            "Cancelling",
+            "CleanupSuccessorRetained",
+            "CleanupTransferred",
+            "FailedGuardRetained",
+            "Polling",
+            "Ready",
+            "Released",
+            "Reserved",
+            "ResidualSuccessorRetained",
+            "TransferRequired",
+        ],
+    )?;
     check_required_transition_owners_and_outcomes(
         machine,
         id,
@@ -3026,10 +3268,28 @@ fn check_route_readiness_contract(machine: &Table) -> Result<(), String> {
                 "TransferRequired-drain-expired-source-owned",
             ),
             (
+                "Cancelling",
+                "cancel_complete_successor",
+                "BindingRouteOwner",
+                "Complete-cleanup-successor-retained",
+            ),
+            (
+                "Cancelling",
+                "cancel_residual_successor",
+                "BindingRouteOwner",
+                "ResidualExternalState-cleanup-successor-retained",
+            ),
+            (
                 "TransferRequired",
                 "executor_rejected",
                 "RouteReadinessManualCleanupOwner",
                 "ManualFallback-complete-object-retained",
+            ),
+            (
+                "CleanupTransferred",
+                "executor_drop_residual_successor",
+                "BindingRouteOwner",
+                "ResidualExternalState-cleanup-successor-retained",
             ),
         ],
     )
@@ -3050,9 +3310,40 @@ fn check_binding_subscription_contract(machine: &Table) -> Result<(), String> {
             "TimedOut",
         ],
     )?;
-    for field in ["terminal_contract", "terminal_retention", "stop_contract"] {
+    for field in ["terminal_contract", "terminal_retention"] {
         string_field(machine, field, id)?;
     }
+    require_table_string(
+        machine,
+        "stop_contract",
+        "Stop, drop, remote terminal, and Servient drain join one generation-checked stop owner. \
+         StopStarting owns the unchanged driver plus one complete SubscriptionStopInput \
+         containing the exact SubscriptionStopRequest and independent CleanupPhaseContext until \
+         start_stop accepts the full input; pre-acceptance rejection returns both unchanged. \
+         After acceptance the full input commits to the retained stop cursor before poll_stop \
+         progress. Both callbacks receive Context, execute outside engine locks or constrained \
+         critical sections, and are never concurrent with poll_item on the same driver.",
+        id,
+    )?;
+    check_exact_machine_set(
+        machine,
+        id,
+        "states",
+        &[
+            "Active",
+            "CancellingStart",
+            "CleanupPending",
+            "Closed",
+            "Failed",
+            "Installing",
+            "Released",
+            "Reserved",
+            "Starting",
+            "StopStarting",
+            "Stopping",
+            "TransferRequired",
+        ],
+    )?;
     check_required_transition_owners_and_outcomes(
         machine,
         id,
@@ -3065,9 +3356,9 @@ fn check_binding_subscription_contract(machine: &Table) -> Result<(), String> {
             ),
             (
                 "Active",
-                "driver_terminal_cleanup_transfer",
-                "SubscriptionCleanupOwner",
-                "PendingCleanup",
+                "driver_terminal_transfer_required",
+                "SubscriptionReceiveOwner",
+                "TransferRequired-source-owned",
             ),
             (
                 "Active",
@@ -3075,8 +3366,172 @@ fn check_binding_subscription_contract(machine: &Table) -> Result<(), String> {
                 "SubscriptionDriverRegistry",
                 "ResidualExternalState",
             ),
+            (
+                "TransferRequired",
+                "transfer_accepted",
+                "SubscriptionCleanupOwner",
+                "TransferCommitted-PendingCleanup",
+            ),
+            (
+                "TransferRequired",
+                "transfer_rejected_manual_accepted",
+                "SubscriptionManualCleanupOwner",
+                "ManualFallback-complete-object-retained",
+            ),
         ],
-    )
+    )?;
+    require_transition_field_fragments(
+        machine,
+        id,
+        "StopStarting",
+        "explicit_start_rejected",
+        "linearization",
+        &[
+            "unchanged complete SubscriptionStopInput",
+            "driver",
+            "pre-acceptance rejection",
+        ],
+    )?;
+    require_transition_field_fragments(
+        machine,
+        id,
+        "StopStarting",
+        "implicit_start_invalid",
+        "linearization",
+        &[
+            "complete implicit SubscriptionStopInput",
+            "CleanupPhaseContext",
+            "durably recording",
+        ],
+    )?;
+    require_transition_field_fragments(
+        machine,
+        id,
+        "StopStarting",
+        "start_pending",
+        "linearization",
+        &[
+            "full SubscriptionStopInput",
+            "exact request",
+            "CleanupPhaseContext",
+        ],
+    )?;
+    Ok(())
+}
+
+fn check_subscription_driver_slot_contract(machine: &Table) -> Result<(), String> {
+    let id = "subscription-driver-slot";
+    for field in [
+        "scope",
+        "claim_contract",
+        "critical_section_contract",
+        "terminal_contract",
+    ] {
+        string_field(machine, field, id)?;
+    }
+    require_table_string(
+        machine,
+        "stop_input_contract",
+        "StopStarting owns the unchanged driver or typed slot plus one complete \
+         SubscriptionStopInput until start_stop accepts its exact request and \
+         CleanupPhaseContext. Explicit pre-acceptance rejection returns both unchanged; implicit \
+         rejection retains both through durable residual recording; Pending commits the full \
+         input to StopClaimed.",
+        id,
+    )?;
+    check_exact_machine_set(
+        machine,
+        id,
+        "states",
+        &[
+            "Available",
+            "CleanupPending",
+            "Closed",
+            "Installing",
+            "ReceiveClaimed",
+            "Released",
+            "Residual",
+            "StopClaimed",
+            "StopRequested",
+            "StopStarting",
+            "TransferRequired",
+            "Vacant",
+        ],
+    )?;
+    check_required_transition_owners_and_outcomes(
+        machine,
+        id,
+        &[
+            (
+                "ReceiveClaimed",
+                "terminal_transfer_required",
+                "SubscriptionReceiveOwner",
+                "TransferRequired-source-owned",
+            ),
+            (
+                "StopStarting",
+                "transfer_required",
+                "SubscriptionStopOwner",
+                "TransferRequired-source-owned",
+            ),
+            (
+                "StopClaimed",
+                "transfer_required",
+                "SubscriptionStopOwner",
+                "TransferRequired-source-owned",
+            ),
+            (
+                "TransferRequired",
+                "transfer_accepted",
+                "SubscriptionCleanupOwner",
+                "TransferCommitted-PendingCleanup",
+            ),
+            (
+                "TransferRequired",
+                "transfer_rejected_manual_accepted",
+                "SubscriptionManualCleanupOwner",
+                "ManualFallback-complete-object-retained",
+            ),
+        ],
+    )?;
+    require_transition_field_fragments(
+        machine,
+        id,
+        "StopStarting",
+        "explicit_start_rejected",
+        "linearization",
+        &[
+            "unchanged complete SubscriptionStopInput",
+            "driver or typed slot",
+            "pre-acceptance rejection",
+        ],
+    )?;
+    require_transition_field_fragments(
+        machine,
+        id,
+        "StopStarting",
+        "implicit_start_invalid",
+        "linearization",
+        &[
+            "complete implicit SubscriptionStopInput",
+            "driver or typed slot",
+            "CleanupPhaseContext",
+            "durably recording",
+        ],
+    )?;
+    require_transition_field_fragments(
+        machine,
+        id,
+        "StopStarting",
+        "start_pending",
+        "linearization",
+        &[
+            "full SubscriptionStopInput",
+            "exact request",
+            "CleanupPhaseContext",
+        ],
+    )?;
+    Ok(())
 }
 
 fn check_compiled_plan_set_contract(machine: &Table) -> Result<(), String> {
@@ -3328,6 +3783,39 @@ fn check_required_transition_owners_and_outcomes(
     Ok(())
 }
 
+fn require_transition_field_fragments(
+    machine: &Table,
+    id: &str,
+    from: &str,
+    event: &str,
+    field: &str,
+    expected_fragments: &[&str],
+) -> Result<(), String> {
+    let transitions = machine
+        .get("transition")
+        .and_then(Item::as_array_of_tables)
+        .ok_or_else(|| format!("machine {id:?} has no transitions"))?;
+    let transition = transitions
+        .iter()
+        .find(|transition| {
+            transition.get("from").and_then(Item::as_str) == Some(from)
+                && transition.get("event").and_then(Item::as_str) == Some(event)
+        })
+        .ok_or_else(|| format!("machine {id:?} has no transition {from:?}:{event:?}"))?;
+    let value = string_field(transition, field, id)?;
+    let missing: Vec<&&str> = expected_fragments
+        .iter()
+        .filter(|fragment| !value.contains(**fragment))
+        .collect();
+    if !missing.is_empty() {
+        return Err(format!(
+            "machine {id:?} transition {from:?}:{event:?} field {field:?} is missing required \
+             fragments {missing:?}"
+        ));
+    }
+    Ok(())
+}
+
 fn check_producer_subscription_contract(machine: &Table) -> Result<(), String> {
     for (field, expected) in [
         (
@@ -3482,6 +3970,9 @@ fn required_composition_fields(id: &str) -> Result<&'static [&'static str], Stri
             "status_transitions",
             "terminal_transitions",
             "drain_transitions",
+            "claim_join_transitions",
+            "shutdown_preconditions",
+            "shutdown_transitions",
             "ownership",
         ]),
         "binding-call-cleanup-transfer" => Ok(&[
@@ -3548,6 +4039,9 @@ fn required_composition_fields(id: &str) -> Result<&'static [&'static str], Stri
         "producer-plan-drain" => Ok(&[
             "drain_policy",
             "drain_transitions",
+            "route_claim_join_transitions",
+            "route_shutdown_preconditions",
+            "route_shutdown_transitions",
             "reclaim_preconditions",
             "ownership",
         ]),
@@ -3678,9 +4172,44 @@ fn require_nonempty_composition_field(
     ))
 }
 
+fn check_exact_composition_set(
+    composition: &Table,
+    id: &str,
+    field: &str,
+    expected: &[&str],
+) -> Result<(), String> {
+    let expected = owned_set(expected);
+    let actual = string_set(array_field(composition, field, id)?, id, field)?;
+    if actual != expected {
+        return Err(format!(
+            "composition {id:?} {field:?} mismatch; expected {expected:?}, found {actual:?}"
+        ));
+    }
+    Ok(())
+}
+
+fn check_exact_composition_sequence(
+    composition: &Table,
+    id: &str,
+    field: &str,
+    expected: &[&str],
+) -> Result<(), String> {
+    let actual = string_vec(array_field(composition, field, id)?, id, field)?;
+    if actual != expected {
+        return Err(format!(
+            "composition {id:?} {field:?} sequence mismatch; expected {expected:?}, found \
+             {actual:?}"
+        ));
+    }
+    Ok(())
+}
+
 fn check_composition_policy(composition: &Table, id: &str) -> Result<(), String> {
     let (field, expected) = match id {
-        "active-route-acceptance" => ("accept_policy", "one-poll-and-waker-lease-per-route"),
+        "active-route-acceptance" => (
+            "accept_policy",
+            "one-generation-checked-route-claim-chain-and-one-poll-and-waker-lease-per-route",
+        ),
         "binding-call-cleanup-transfer" => ("transfer_policy", "source-owned-until-acknowledged"),
         "binding-route-lifecycle" => ("guard_policy", "predecessor-or-successor-always-retained"),
         "binding-route-readiness" => ("wake_policy", "register-then-recheck-one-lease-per-route"),
@@ -3736,7 +4265,108 @@ fn check_composition_policy(composition: &Table, id: &str) -> Result<(), String>
         expected,
     )?;
 
-    if id == "producer-teardown-handoff" {
+    if id == "active-route-acceptance" {
+        check_exact_composition_sequence(
+            composition,
+            id,
+            "accept_transitions",
+            &[
+                "active-route-driver:Active:claim_accept->AcceptClaimed",
+                "serving-activation-authority:Serving:claim_route->Serving",
+                "active-route-driver:AcceptClaimed:request->Active",
+                "in-flight:Vacant:admit->Admitted",
+            ],
+        )?;
+        check_exact_composition_sequence(
+            composition,
+            id,
+            "drain_transitions",
+            &[
+                "serving-activation-authority:Serving:begin_drain->Draining",
+                "binding-route:Serving:drain->Draining",
+                "active-route-driver:Active:drain->Draining",
+                "active-route-driver:AcceptClaimed:drain->DrainingClaimed",
+            ],
+        )?;
+        check_exact_composition_sequence(
+            composition,
+            id,
+            "claim_join_transitions",
+            &[
+                "active-route-driver:DrainingClaimed:pending_registered|request_late|operational_error->Draining",
+                "active-route-driver:DrainingClaimed:terminal->TerminalRetained",
+                "active-route-driver:Draining:release_to_shutdown->Released",
+                "active-route-driver:TerminalRetained:acknowledge->Released",
+            ],
+        )?;
+        check_exact_composition_set(
+            composition,
+            id,
+            "shutdown_preconditions",
+            &[
+                "serving-activation-authority-is-Draining",
+                "active-route-driver-is-Released",
+            ],
+        )?;
+        check_exact_composition_sequence(
+            composition,
+            id,
+            "shutdown_transitions",
+            &["binding-route:Draining:begin_shutdown->Cleaning"],
+        )?;
+    } else if id == "producer-plan-serving-publication" {
+        check_exact_composition_set(
+            composition,
+            id,
+            "requirements",
+            &[
+                "PLAN-SET-001",
+                "LIFE-EXPOSE-002",
+                "LIFE-EXPOSE-003",
+                "STATE-BIND-001",
+            ],
+        )?;
+    } else if id == "producer-plan-drain" {
+        check_exact_composition_sequence(
+            composition,
+            id,
+            "drain_transitions",
+            &[
+                "serving-activation-authority:Serving:begin_drain->Draining",
+                "compiled-plan-set:Published:begin_drain->Draining",
+                "expose:Serving:drop|destroy->Draining",
+                "binding-route:Serving:drain->Draining",
+                "active-route-driver:Active:drain->Draining",
+                "active-route-driver:AcceptClaimed:drain->DrainingClaimed",
+            ],
+        )?;
+        check_exact_composition_sequence(
+            composition,
+            id,
+            "route_claim_join_transitions",
+            &[
+                "active-route-driver:DrainingClaimed:pending_registered|request_late|operational_error->Draining",
+                "active-route-driver:DrainingClaimed:terminal->TerminalRetained",
+                "active-route-driver:Draining:release_to_shutdown->Released",
+                "active-route-driver:TerminalRetained:acknowledge->Released",
+            ],
+        )?;
+        check_exact_composition_set(
+            composition,
+            id,
+            "route_shutdown_preconditions",
+            &[
+                "serving-activation-authority-is-Draining",
+                "active-route-driver-is-Released",
+            ],
+        )?;
+        check_exact_composition_sequence(
+            composition,
+            id,
+            "route_shutdown_transitions",
+            &["binding-route:Draining:begin_shutdown->Cleaning"],
+        )?;
+    } else if id == "producer-teardown-handoff" {
         require_string(
             composition.get("application_teardown_admission"),
             "producer teardown application admission",

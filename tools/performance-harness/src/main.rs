@@ -109,6 +109,8 @@ struct Case {
     gating: bool,
     expected_sample_count: u64,
     coverage: Option<CoverageSpec>,
+    activation_trace_oracle: Option<String>,
+    activation_cases: Option<Vec<String>>,
     gates: Vec<GateSpec>,
     report_metrics: BTreeSet<String>,
 }
@@ -280,7 +282,83 @@ fn load_contract(
             "fixture lock/reference mismatch; unused={unused:?}, missing={missing:?}"
         ));
     }
+    validate_serving_activation_contract(&manifests)?;
     Ok((fixtures, manifests))
+}
+
+fn validate_serving_activation_contract(manifests: &[Manifest]) -> Result<(), String> {
+    let find_case = |id: &str| {
+        manifests
+            .iter()
+            .flat_map(|manifest| &manifest.cases)
+            .find(|case| case.id == id)
+            .ok_or_else(|| format!("missing serving activation case {id}"))
+    };
+    let gateway = find_case("PERF-GW-030")?;
+    let constrained = find_case("PERF-CS-022")?;
+    for case in [gateway, constrained] {
+        if case.version != 2 {
+            return Err(format!(
+                "{} must use serving activation workload version 2",
+                case.id
+            ));
+        }
+        if case.activation_trace_oracle.as_deref() != Some("serving-activation-v1") {
+            return Err(format!(
+                "{} does not select the serving-activation-v1 trace oracle",
+                case.id
+            ));
+        }
+        let gate_fields: BTreeSet<&str> = case
+            .gates
+            .iter()
+            .map(|gate| gate.source_field.as_str())
+            .collect();
+        for field in [
+            "activation_authorities_max",
+            "duplicate_concurrent_accept_claims_max",
+            "lost_committed_route_guards_max",
+            "nth_commit_failure_publications_max",
+            "partial_route_admissions_max",
+            "post_drain_accept_claims_max",
+            "prepublication_requests_admitted_max",
+            "permits_without_accept_claim_max",
+            "require_atomic_activation_publication",
+            "require_exclusive_accept_lease_borrow",
+            "require_exactly_one_activation_authority",
+            "require_borrowed_permit_nonretention",
+            "require_closed_ingress_policy_coverage",
+            "require_serving_activation_trace_oracle",
+            "retained_permit_bytes_max",
+            "stale_permits_mutating_state_max",
+        ] {
+            if !gate_fields.contains(field) {
+                return Err(format!("{} is missing activation gate {field}", case.id));
+            }
+        }
+    }
+    if gateway.activation_cases != constrained.activation_cases {
+        return Err(
+            "Gateway and constrained activation cases do not share one ordered trace oracle"
+                .to_owned(),
+        );
+    }
+    let gateway_coverage = gateway
+        .coverage
+        .as_ref()
+        .ok_or_else(|| "PERF-GW-030 has no activation coverage matrix".to_owned())?;
+    let constrained_coverage = constrained
+        .coverage
+        .as_ref()
+        .ok_or_else(|| "PERF-CS-022 has no activation coverage matrix".to_owned())?;
+    if gateway_coverage.cell_count != constrained_coverage.cell_count
+        || gateway_coverage.sha256 != constrained_coverage.sha256
+    {
+        return Err(
+            "Gateway and constrained activation coverage matrices are not identical".to_owned(),
+        );
+    }
+    Ok(())
 }
 
 fn validate_json_schema(root: &Path, relative_path: &str, identity: &str) -> Result<(), String> {
@@ -704,6 +782,19 @@ fn load_manifest(
                 ));
             }
             let coverage = parse_coverage_spec(table, &id)?;
+            let activation_trace_oracle = table
+                .get("activation_trace_oracle")
+                .map(|_| string_field(table, "activation_trace_oracle", &id))
+                .transpose()?;
+            let activation_cases = table
+                .get("activation_cases")
+                .map(|_| string_array_field(table, "activation_cases", &id))
+                .transpose()?;
+            if activation_trace_oracle.is_some() != activation_cases.is_some() {
+                return Err(format!(
+                    "{id} must define activation_trace_oracle and activation_cases together"
+                ));
+            }
             let report_metrics = if require_report {
                 let metrics = string_array_field(table, "report", &id)?;
                 if metrics.is_empty() {
@@ -751,6 +842,8 @@ fn load_manifest(
                 gating,
                 expected_sample_count,
                 coverage,
+                activation_trace_oracle,
+                activation_cases,
                 gates,
                 report_metrics,
             });
@@ -1959,6 +2052,8 @@ mod tests {
             gating: true,
             expected_sample_count: 100,
             coverage: None,
+            activation_trace_oracle: None,
+            activation_cases: None,
             gates: vec![GateSpec {
                 source_field: "allocations_max".to_owned(),
                 metric: "allocations".to_owned(),

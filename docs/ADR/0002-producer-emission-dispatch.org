@@ -50,7 +50,8 @@ Publication targets originate from the frozen exposure plan:
 1. a form contributor or application form creates a candidate;
 2. form finalization assigns exactly one =BindingId= owner;
 3. the shared compiler creates an inbound plan and publication target;
-4. prepare/activate/commit binds that target to an active route generation;
+4. prepare/activate/commit binds that target to a committed route generation in
+   the same serving activation authority;
 5. emission uses that compiled target set directly.
 
 A TD protocol label alone never creates a target. A concrete binding never

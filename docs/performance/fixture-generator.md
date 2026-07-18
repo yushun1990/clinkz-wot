@@ -119,8 +119,21 @@ families:
 
 | Profile | Workloads | Contract covered |
 | --- | --- | --- |
-| Gateway | `PERF-GW-028` through `PERF-GW-032` | Owned host-call cancellation and complete transfer, compiled-plan-set publication/drain/reclaim, route guard/readiness ownership, external complete-bundle registration, and bounded ingress item/byte saturation. |
-| Constrained | `PERF-CS-020` through `PERF-CS-023` | Typed associated-state slots and pre-acceptance input return, bounded compiled-plan-set lifecycle, bounded route guard/readiness progress, and bounded ingress item/byte saturation. |
+| Gateway | `PERF-GW-028` through `PERF-GW-032` | Owned host-call cancellation and complete transfer, compiled-plan-set publication/drain/reclaim, route guard/readiness/permit-gated activation ownership, external complete-bundle registration, and bounded ingress item/byte saturation. |
+| Constrained | `PERF-CS-020` through `PERF-CS-023` | Typed associated-state slots and pre-acceptance input return, bounded compiled-plan-set lifecycle, bounded route guard/readiness/permit-gated activation progress, and bounded ingress item/byte saturation. |
+
+`PERF-GW-030` and `PERF-CS-022` version 2 share the ordered
+`serving-activation-v1` trace oracle. Their matrix covers pre-publication
+traffic, successful all-route publication, Nth-route commit failure, both
+publication/cancellation orderings, stale permits, duplicate concurrent claims,
+attempts to construct a permit without a claim, both drain/accept orderings, and
+every externally visible closed-ingress policy. The adapters must report zero
+pre-publication admissions, partial activation, stale-permit mutation,
+unclaimed permits, duplicate claims, post-drain claims, retained permit bytes,
+and lost committed guards. Each claim exclusively borrows one
+`RouteAcceptLease`. The same
+ordered trace and terminal oracle is required in host and constrained results;
+profile-specific scheduling and allocation measurements remain separate.
 
 `PERF-GW-012` version 3 is the startup registration-snapshot isolation case.
 It replaces the former runtime registration-invalidation interpretation: v1

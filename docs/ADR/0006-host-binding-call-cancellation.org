@@ -18,17 +18,70 @@ leave cancellation races and late results unspecified.
 
 * Decision
 
-Core defines portable =BindingCallSettlement<T>= with exactly two variants:
-=Returned(CoreResult<T>)= and =Cancelled { retry_class, cleanup }=. The first
-transfers a normal or error result without deciding which side won caller
-delivery. The second transfers complete, pending, or residual cleanup together
-with retry classification. An outer error is reserved for an invalid call that
-does not change state.
+Core defines one portable settlement schema. The v4.9 amendment adds an exact
+operation-specific cleanup successor type while retaining the two top-level
+variants accepted by this ADR:
 
-The std-only surface defines an owned =HostBindingCall= trait with
-=poll_result=, =start_cancel=, and =poll_cancel=, plus a boxed type-erased
-=HostBindingCallBox<T>=. The exact host binding methods consume a cloned
-=Arc<Self>= and construct one owned call before any protocol side effect:
+#+begin_src rust
+pub enum BindingCancellationDisposition<C> {
+    Complete { successor: C },
+    TransferRequired(CleanupTransferRequest),
+    ResidualExternalState {
+        successor: C,
+        record: CleanupRecord,
+    },
+}
+
+pub enum BindingCallSettlement<T, C = NoCleanupSuccessor> {
+    Returned(T),
+    Cancelled {
+        retry_class: RetryClass,
+        disposition: BindingCancellationDisposition<C>,
+    },
+}
+#+end_src
+
+=Returned= transfers the operation family's exact terminal value without
+deciding which side won caller delivery. Consumer calls instantiate =T= as
+=CoreResult<U>=, preserving normal =Returned(CoreResult<U>)= behavior. Route
+lifecycle calls instantiate =T= as a typed outcome that always returns a
+predecessor or successor guard; they have no outer late =CoreResult= branch
+that could discard that guard. =Returned= is also the sole late-value branch:
+after cancellation has linearized, it is retained for operation-specific
+cleanup and is not redelivered to the cancelled caller. =Cancelled= preserves
+retry classification and distinguishes verified completion, provisional
+transfer, and durable residual state. The outer =CoreResult= on cancellation
+progress is reserved for an invalid callback that does not change state and
+leaves the complete box owned by its caller.
+
+=TransferRequired= never means =PendingCleanup=. The source still owns the
+complete call. It must move =HostBindingCallBox<T, C>= into a
+=CleanupTransferEnvelope= and may commit pending cleanup only after
+=CleanupTransferAcceptance::Accepted=. Rejection returns the identical
+envelope to the pre-reserved manual cleanup owner.
+
+The portable route successor is
+=RouteCleanupSuccessor<PreparedGuard, ActiveGuard, CommittedGuard>=. A host
+route lifecycle call fixes =C= to =HostRouteCleanupSuccessor=, its alias over
+the three std-only host guard types. Its =NoRouteResource=, =AbortPrepared=,
+=ShutdownActive=, =ShutdownCommitted=, and =ResidualRouteState= variants make
+every completed or residual cancellation return either a certified no-resource
+state or the guard required by the independent abort or shutdown phase. A
+cleanup record cannot substitute for that successor. =ResidualRouteState= is the
+explicit terminal cleanup successor created from the pre-reserved route
+identity when an opaque call can no longer yield a guard; it installs the
+durable tombstone that prevents endpoint reuse. Non-route calls use
+=NoCleanupSuccessor= only when no operation-specific owned continuation exists.
+
+The std-only surface defines an owned =HostBindingCall<T, C>= trait with
+=poll_result=, =start_cancel=, and =poll_cancel=, plus the private-field boxed
+type-erased newtype =HostBindingCallBox<T, C>=. Its =new= constructor and
+=as_pin_mut= accessor make the frozen surface implementable without pretending
+that a type alias can own inherent methods. Exact binding constructors receive =&self= and
+return a =Send + 'static= call that does not borrow the receiver, input, plan,
+or stack. The complete registration owns the binding object; a call owns every
+value it needs after construction. Each method constructs that owned call
+before any protocol side effect:
 
 - =ClientBinding::invoke=;
 - =ClientBinding::subscribe=; and
@@ -43,7 +96,7 @@ is only a delivery view and never becomes the cleanup owner.
 
 Completion already committed at the call-record boundary wins a cancellation
 race. If cancellation is recorded while =poll_result= is claimed, a =Ready=
-return is handled as late =Returned=; a =Pending= return moves the call through
+return is retained as late =Returned=; a =Pending= return moves the call through
 =start_cancel= and then =poll_cancel=, and =poll_result= is never used again for
 that generation. A late invoke result is retained for side-effect and retry
 classification but is not delivered or retried. A late subscription start
@@ -74,16 +127,22 @@ expired interaction deadline does not erase this cleanup window. Exhaustion
 records =ResidualExternalState= durably before the call is destroyed.
 
 Dropped delivery views hand one =CleanupTask= to the public =CleanupExecutor=
-using a lossless =try_spawn= operation. Rejection returns the original task to
-the already reserved Servient manual cleanup slot. Acceptance requires the
-executor to poll the task to terminal; shutdown/drop commits the task's
-pre-reserved durable residual fallback before destroying the call.
+using a lossless =try_spawn= operation. Rejection returns the original task and
+its complete transfer envelope to the already reserved Servient manual cleanup
+slot. Acceptance requires the executor to poll the task to terminal. If an
+accepted task is dropped, including during executor shutdown, its destructor
+performs only the allocation-free commit of the pre-reserved durable
+=ResidualExternalState= fallback before destroying the call. It never recovers
+the task to manual ownership, reports completion, invokes binding or user code,
+blocks, allocates, or starts replacement work. Explicit executor and manual
+progress remain the cleanup mechanisms; the destructor is only the durable
+loss safeguard.
 
 * Consequences
 
-- The host traits have a complete object-safe =Send + Sync + 'static= shape and
-  return owned call objects that can move to cleanup ownership without a
-  self-referential borrow.
+- Host binding constructors are object-safe =Send + Sync + 'static= roles;
+  =HostBindingCall= is an object-safe =Send + 'static= owned progress object
+  that can move to cleanup ownership without a self-referential borrow.
 - =CancellationView= remains a portable snapshot and does not gain pointers,
   atomics, or waker behavior.
 - The async-no-std feature cell continues to use the frozen poll binding SPI;

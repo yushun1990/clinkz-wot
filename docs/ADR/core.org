@@ -19,10 +19,13 @@ they do not claim that the current implementation already conforms.
 - [[file:0009-protocol-binding-integration-and-deployment.org][ADR-0009: Protocol Binding integration, driving, and deployment]]
 - [[file:0010-server-route-lifecycle.org][ADR-0010: Engine-orchestrated server route lifecycle]]
 - [[file:0011-cleanup-reservation-and-transfer.org][ADR-0011: Cleanup reservation, transfer, and residual ownership]]
+- [[file:0012-serving-activation-permit.org][ADR-0012: Serving activation through borrowed route permits]]
 
 * Review record
 
 The original implementation deviations are recorded in
 [[file:../review/review-01.org][Architecture Review 01]]. The rejection of the
 v4.8 detailed candidate and the v4.9 architecture-closure requirements are
-recorded in [[file:../review/review-02.org][Architecture Review 02]].
+recorded in [[file:../review/review-02.org][Architecture Review 02]]. The
+remaining interim blockers are recorded in
+[[file:../review/review-03.org][Architecture Review 03]].

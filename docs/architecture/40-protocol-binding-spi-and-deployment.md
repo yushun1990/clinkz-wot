@@ -64,7 +64,12 @@ The v1 server SPI is engine-orchestrated and route-scoped:
 
 - prepare/readiness/activate/commit/shutdown operate on one generation-bearing
   route and preserve guard ownership on failure;
-- each active route has one poll/waker lease for inbound acceptance;
+- successful commit returns a distinct committed-closed guard and never opens
+  request admission;
+- each `poll_accept` consumes one claim that exclusively borrows the route's
+  unique accept lease into a non-cloneable, route-scoped permit for the
+  currently serving produced generation;
+- each serving route has one poll/waker lease for inbound acceptance;
 - request, operational-error, and terminal events identify their route;
 - route terminal state does not ambiguously terminate an entire registration;
 - response delivery is bounded and retains the response opportunity on
@@ -75,6 +80,21 @@ The v1 server SPI is engine-orchestrated and route-scoped:
 A binding does not receive an application `Dispatch` capability. A host binding
 may run a bounded protocol reactor that wakes route/call drivers, but it cannot
 detach ownership, bypass engine admission, or call handlers directly.
+
+The complete registration declares whether preparation is externally hidden or
+visible. A visible route declares how closed-gate input is rejected,
+backpressured, or buffered within admitted ingress limits. It cannot emit an
+inbound request or report application acceptance before publication. A binding
+that cannot enforce permit-gated acceptance is rejected.
+
+The plan set, produced registry generation, and immutable serving activation
+authority are published by one Servient transition after every required route
+is committed-closed. The authority remains inside a private mutable Servient
+record and is not passed to a binding. Servient validates that record, moves
+the unique route lease into one claimed-call owner, and consumes the claim into
+a short-lived permit for one generation-checked accept call. Drain stops new
+claims before route shutdown. There is no per-route gate-opening callback and
+no binding observation of registry state.
 
 ## Subscription and emission SPI
 
@@ -111,6 +131,12 @@ builds use associated state types, caller-owned slots, static tables, and
 manual progress. They share request, result, identity, cancellation, cleanup,
 and terminal semantics; they do not have to share allocation or executor
 representation.
+
+Both representations use the same permit-gated acceptance rule. A host runtime
+pins the immutable serving generation while calling outside locks. A
+constrained runtime claims a caller-owned route slot in a brief critical
+section and passes a scoped permit to manual progress afterward. The permit
+contract requires neither a shared atomic flag nor a host registry handle.
 
 ## Packaging and rollout
 

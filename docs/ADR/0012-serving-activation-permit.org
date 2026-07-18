@@ -1,0 +1,159 @@
+#+title: ADR-0012: Serving Activation Through Borrowed Route Permits
+#+date: 2026-07-19
+#+status: Accepted
+
+* Context
+
+ADR-0010 requires a produced Thing to become serving only after every required
+route commits. The plan set, produced registry generation, and all route
+admission eligibility must share one Servient-local publication boundary. The prior
+binding design did not provide an executable boundary: =commit= returned an
+active guard described as serving, while =poll_accept= could use that guard
+without evidence that publication had occurred.
+
+Opening each binding route through a callback after registry publication cannot
+repair the boundary. N callbacks are observably sequential, can fail, panic, or
+remain pending, and cannot run both outside engine locks and in the registry's
+single critical transition. Allowing a binding to observe registry state has
+the same ownership problem and would couple Protocol Bindings to Servient
+storage and host synchronization.
+
+Host protocol reactors need a way to keep protocol-local work bounded before
+publication without receiving application authority. Constrained manual-poll
+bindings need the same semantic boundary without requiring =Arc=, atomics,
+threads, or an executor.
+
+* Decision
+
+Route commit and serving admission are distinct transitions. A successful
+=commit= consumes an active guard and returns a distinct committed-closed guard.
+The semantic outcome shape is:
+
+#+begin_src rust
+pub enum RouteCommitOutcome<A, C> {
+    Committed(C),
+    NotCommitted {
+        guard: A,
+        error: BindingOperationalError,
+    },
+}
+#+end_src
+
+The host committed value is =HostCommittedRouteGuard=. The constrained route
+slot records an equivalent =CommittedClosed= stage. A commit failure returns the
+complete active guard. A successful or late commit returns the complete
+committed-closed guard. Neither outcome opens request admission.
+
+Servient owns one private generation-bearing serving activation record for the
+complete produced-Thing generation. The record retains an immutable public
+=ServingActivationAuthority= seed associated with the =ThingId=, exposed
+generation, and =PlanSetGeneration=; the existing route table owns the frozen
+route set. The record, not the public authority value, owns mutable
+reserved/serving/draining state. Neither is given to a binding or used as a
+mutable flag shared with one.
+
+After every required route has reached =CommittedClosed=, Servient performs one
+generation-checked registry transition. That transition simultaneously makes
+the immutable Producer plan set selectable, makes the produced registry
+generation serving, and makes its serving activation authority available for
+route-admission claims. These are projections of one Servient state transition,
+not N binding mutations. No binding callback runs at this boundary.
+
+Each call to =poll_accept= requires a route-scoped permit produced through the
+linear =RouteAcceptLease -> RouteAcceptClaim -> RouteActivationPermit= chain.
+The claim exclusively borrows the one route-driver lease, and consuming it
+constructs the opaque, non-=Clone=, non-=Copy= permit. The permit is therefore
+lifetime-bound to one claimed call and identifies the activation authority and
+exact =BindingRouteKey=. It cannot be retained in a host guard, constrained
+associated state, reactor queue, or detached task. The required host shape is:
+
+#+begin_src rust
+fn poll_accept(
+    &self,
+    route: Pin<&mut HostCommittedRouteGuard>,
+    permit: RouteActivationPermit<'_>,
+    cx: &mut Context<'_>,
+    budget: &mut WorkBudget,
+) -> Poll<CoreResult<RouteAcceptEvent>>;
+#+end_src
+
+The constrained =PollServerBinding::poll_accept= receives the same borrowed
+permit with its caller-owned route slot and =WorkBudget=. The static runtime
+moves the unique route lease into the claimed call owner inside its brief
+critical section, then constructs the scoped permit and invokes the binding
+afterward. No allocation, atomic primitive, executor, or host registry
+representation is required by this contract.
+
+Servient issues a permit only while the exact produced and route generations
+are serving. It first claims the route's unique accept lease, and the permit's
+exclusive borrow keeps that claim live while it calls the binding outside
+locks. A drain transition stops new permit issuance before
+=Draining= is observable. An accept poll already claimed before that transition
+may return one request and retains its route and plan leases; later claims are
+rejected. Stale route wakes and mismatched permits are rejected before binding
+state can change.
+
+A host reactor may perform bounded protocol-local work and wake the route
+lease. It may not turn a wake, queued frame, connection, or previously observed
+permit into lasting serving authority. Only a current =poll_accept= call with a
+valid permit may produce an =InboundRequest=. The binding still receives no
+application =Dispatch= capability and cannot invoke a handler directly.
+
+Preparation visibility and closed-gate ingress behavior are declared by the
+complete registration. A route is either externally hidden during preparation
+or externally visible with one explicit closed-ingress policy: reject,
+backpressure, or buffer only within the already admitted binding ingress
+limits. Before publication, a binding may not create an engine response
+opportunity, report application acceptance, or emit an inbound request.
+Buffered input remains route-owned and is included in rollback and shutdown.
+A registration is rejected if its protocol adapter cannot enforce this
+boundary.
+
+If preparation, readiness, activation, or commit fails, the serving authority
+never becomes available. Prepared guards are aborted, active guards are shut
+down, and committed-closed guards are shut down without ever becoming serving.
+A late committed guard after cancellation follows the same shutdown path. A
+race between cancellation and publication is decided by the one Servient
+registry transition: cancellation first prevents permit issuance; publication
+first is followed by the normal =Serving -> Draining= transaction. Permit
+state is not a substitute for guard cleanup ownership.
+
+* Consequences
+
+- The binding SPI must add a distinct committed route guard and the portable
+  accept-lease/claim/permit chain used by both host and constrained
+  =poll_accept=.
+- =RouteCommitOutcome= must no longer call its successful branch =Serving=.
+- Route shutdown must accept an active or committed-closed guard, while route
+  acceptance must accept only a committed guard plus a current permit.
+- The route, expose, plan-set, and private serving-activation-record state
+  projections must share one serving publication composition and one
+  drain-before-accept rule.
+- =BindingContext= must not expose a Servient registry view or a route-serving
+  observation API.
+- Resource projection accounts for the retained activation authority in the
+  compiled Producer runtime record, route accept claims in the existing route,
+  guard, and wake-lease limits, and closed-ingress storage in the existing
+  binding ingress item and byte limits. The SPI and resource schema freeze the
+  exact field mapping; this decision introduces no duplicate permit-storage
+  field because permits are borrowed and nonretained.
+- Performance evidence must cover pre-publication traffic, all-route commit,
+  an Nth-route commit failure, publication/cancellation races, stale permits,
+  drain/accept races, externally visible preparation, and host/constrained
+  equivalence. It must observe zero pre-publication admissions, zero partial
+  route activation, and zero post-drain accept claims.
+
+* Rejected alternatives
+
+- Sequential =open_gate= or =release_gate= callbacks were rejected because they
+  expose partial activation, add a fallible post-publication phase, and cannot
+  share the registry linearization while callbacks remain outside locks.
+- Binding observation of Servient registry state was rejected because it
+  reverses module ownership, leaks synchronization and generation policy, does
+  not have a portable constrained representation, and invites hidden dispatch.
+- A mutable atomic flag shared by Servient and every binding was rejected
+  because it imposes a host synchronization representation on constrained
+  profiles, does not itself claim a route accept lease, and cannot bind one
+  observation to one route generation or prevent retention after drain.
+- Treating successful =commit= as serving was rejected because an earlier route
+  could admit traffic before a later route commits or fails.
