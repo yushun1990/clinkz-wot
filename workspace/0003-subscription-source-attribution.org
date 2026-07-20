@@ -1,0 +1,48 @@
+#+TITLE: Subscription Source Attribution
+#+STATUS: OPEN
+
+* Context
+
+Subscription APIs may need to represent samples originating from multiple
+affordances or concrete protocol-side sources while preserving a
+protocol-neutral application-facing contract.
+
+* Observation
+
+A merged or multiplexed subscription needs a reliable way to identify which
+logical source produced each delivered item.
+
+The existing use of affordance-level identity may not be sufficient if one
+logical affordance can map to multiple concrete runtime sources.
+
+* Questions
+
+- What protocol-neutral identity should accompany each subscription item?
+- Is affordance identity sufficient?
+- Must attribution distinguish forms, compiled routes, or runtime source
+  instances?
+- Which attribution belongs in the compiled plan rather than the runtime
+  subscription API?
+- Can protocol bindings multiplex efficiently without forcing the core runtime
+  to model protocol-specific topics or resources?
+
+* Discussion
+
+Keep the application-facing contract protocol-neutral.
+
+Do not expose MQTT topics, Zenoh key expressions, WebSocket channels, or other
+protocol-specific source identifiers through the core API merely to support
+attribution.
+
+Prefer attribution derived from compiled protocol-neutral planning artifacts.
+
+Further discussion is required before choosing the exact identity type and its
+ownership boundary.
+
+* Decision
+
+Not yet decided.
+
+* Migration
+
+None.

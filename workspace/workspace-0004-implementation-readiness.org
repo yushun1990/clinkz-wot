@@ -1,0 +1,47 @@
+#+TITLE: Implementation Readiness vs Architecture Closure
+#+STATUS: OPEN
+
+* Problem
+
+The project intentionally delayed implementation until the architectural
+direction became clear. This successfully prevented large-scale refactors caused
+by AI implementing an incorrect architecture.
+
+However, the project is now reaching a point where the primary architecture is
+largely converged while implementation remains paused. There is a risk that the
+documentation system itself becomes the primary deliverable instead of the
+runtime.
+
+* Questions
+
+- When is architecture sufficiently complete for implementation?
+- Which decisions belong to the architecture backbone?
+- Which decisions may evolve during implementation?
+- Which gates should block implementation, and which should not?
+- Should implementation proceed work-package by work-package once the required
+  backbone decisions are stable?
+
+* Candidate Direction
+
+Instead of:
+
+Architecture Closure
+→ Implementation
+
+Consider:
+
+Architecture Backbone Ready
+→ Work Package Ready
+→ Implementation
+→ Reality Feedback
+→ Workspace Discussion
+→ Architecture Refinement
+
+Implementation becomes a source of architectural evidence rather than something
+that only starts after every document is complete.
+
+* Expected Outcome
+
+Produce a project policy describing when a work package is considered
+"implementation ready" without requiring every documentation artifact to be
+complete.

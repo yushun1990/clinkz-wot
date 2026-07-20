@@ -1,0 +1,50 @@
+#+TITLE: Planning Context
+#+STATUS: DECIDED
+
+* Context
+
+Planning consumes a TD or produced-Thing draft together with policy and
+protocol-binding capabilities.
+
+Earlier diagrams introduced a snapshot of policy and binding registration,
+which could be misread as support for dynamic protocol-binding hot loading.
+
+* Observation
+
+Planning still needs deterministic inputs even when protocol bindings are
+statically linked and registered only during application startup.
+
+A planning snapshot is therefore useful as an immutable compilation boundary,
+not as a mechanism for runtime plugin mutation.
+
+* Questions
+
+- What inputs must be frozen before a planning run starts?
+- Should policy and binding registration be captured together?
+- Does such a snapshot imply dynamic binding support?
+- What should the resulting abstraction expose to the planner?
+
+* Discussion
+
+A PlanningContext-style abstraction can capture the immutable inputs required
+by one planning operation.
+
+The context may include policy and the startup-composed binding registration
+view needed for deterministic compilation.
+
+This does not require or imply dynamic binding loading. For v1, protocol
+bindings remain Cargo-linked and application-registered, with composition
+fixed for a Servient instance at startup.
+
+* Decision
+
+Use an immutable planning-context boundary for deterministic planning.
+
+The abstraction represents a stable input snapshot for one planning operation.
+It must not be interpreted as a commitment to runtime protocol-binding hot
+loading.
+
+* Migration
+
+Pending explicit linkage to the authoritative ADR/design documents that encode
+the planning-context boundary.

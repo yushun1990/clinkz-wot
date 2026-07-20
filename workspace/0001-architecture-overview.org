@@ -1,0 +1,51 @@
+#+TITLE: Architecture Overview
+#+STATUS: DECIDED
+
+* Context
+
+The project needs a clear protocol-neutral architecture before implementation
+details continue to expand. Several earlier implementation paths blurred
+responsibilities between the Servient, planning layer, protocol bindings, and
+runtime dispatch.
+
+* Observation
+
+The architecture should be described in terms of stable ownership boundaries,
+data flow, planning, and protocol-binding responsibilities before lower-level
+implementation details are treated as normative.
+
+* Questions
+
+- Which responsibilities belong to the Servient?
+- Which responsibilities belong to the shared planner?
+- Which responsibilities belong to protocol bindings?
+- Where are protocol-neutral runtime contracts enforced?
+- Which existing implementation choices deviate from those boundaries?
+
+* Discussion
+
+The architectural model should remain protocol-neutral.
+
+Protocol bindings are responsible for protocol-side communication and for
+translating between protocol-specific representation and the protocol-neutral
+runtime contract.
+
+The Servient owns orchestration and runtime authority. Protocol bindings must
+not create hidden handler-dispatch paths that bypass Servient orchestration.
+
+Planning should produce immutable admitted artifacts consumed by runtime
+execution rather than repeatedly reinterpreting TD forms at request time.
+
+* Decision
+
+Treat the Servient, shared planning layer, and protocol bindings as explicit
+architectural boundaries.
+
+Use the architecture overview as the conceptual source for identifying
+implementation deviations, but migrate normative decisions into ADRs, design
+documents, and specifications.
+
+* Migration
+
+Pending explicit linkage to the authoritative ADR/design documents that encode
+these decisions.

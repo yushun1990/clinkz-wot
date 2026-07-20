@@ -1,0 +1,40 @@
+#+TITLE: Architecture Workspace
+
+* Purpose
+
+This workspace is dedicated exclusively to architectural reasoning and
+design convergence.
+
+It is not an implementation tracker. Do not use it for bugs, coding tasks,
+TODO lists, CI failures, refactoring chores, or implementation progress.
+
+Workspace discussions preserve how architectural decisions were reached.
+Stable decisions are migrated into authoritative ADRs, design documents,
+or specifications.
+
+* Lifecycle
+
+OPEN -> DISCUSSING -> DECIDED -> MIGRATED
+
+- OPEN: An architectural question has been identified.
+- DISCUSSING: Alternatives and trade-offs are under active discussion.
+- DECIDED: The architectural direction has converged.
+- MIGRATED: The stable decision has been incorporated into an authoritative
+  ADR, design document, or specification.
+
+Workspace files are retained after migration as design history.
+
+* Active Topics
+
+** OPEN
+- [[file:0003-subscription-source-attribution.org][0003 Subscription Source Attribution]]
+
+** DISCUSSING
+- None.
+
+** DECIDED
+- [[file:0001-architecture-overview.org][0001 Architecture Overview]]
+- [[file:0002-planning-context.org][0002 Planning Context]]
+
+** MIGRATED
+- None.
