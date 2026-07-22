@@ -6,7 +6,7 @@ Design revision: v4.9
 
 Depends on: None
 
-Required gates: GATE-1, GATE-2, GATE-3, GATE-4, GATE-5, GATE-6
+Global convergence gates: GATE-1, GATE-2, GATE-3, GATE-4, GATE-5, GATE-6
 
 Owner packages: clinkz-wot-foundation, workspace
 

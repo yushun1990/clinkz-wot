@@ -20,12 +20,17 @@ they do not claim that the current implementation already conforms.
 - [[file:0010-server-route-lifecycle.org][ADR-0010: Engine-orchestrated server route lifecycle]]
 - [[file:0011-cleanup-reservation-and-transfer.org][ADR-0011: Cleanup reservation, transfer, and residual ownership]]
 - [[file:0012-serving-activation-permit.org][ADR-0012: Serving activation through borrowed route permits]]
+- [[file:0013-work-package-scoped-implementation-admission.org][ADR-0013: Work-package tranche-scoped implementation admission]]
+- [[file:0014-transitional-normative-ownership.org][ADR-0014: Transitional normative ownership during domain decomposition]]
+- [[file:0015-borrowed-resource-profiles-and-linear-work-budgets.org][ADR-0015: Borrowed resource profiles and linear work budgets]]
 
 * Review record
 
 The original implementation deviations are recorded in
-[[file:../review/review-01.org][Architecture Review 01]]. The rejection of the
+[[file:../reviews/review-01.org][Architecture Review 01]]. The rejection of the
 v4.8 detailed candidate and the v4.9 architecture-closure requirements are
-recorded in [[file:../review/review-02.org][Architecture Review 02]]. The
+recorded in [[file:../reviews/review-02.org][Architecture Review 02]]. The
 remaining interim blockers are recorded in
-[[file:../review/review-03.org][Architecture Review 03]].
+[[file:../reviews/review-03.org][Architecture Review 03]]. The workspace-finding
+triage, current module-boundary assessment, and scoped-admission corrections are
+recorded in [[file:../reviews/review-04.org][Architecture Review 04]].

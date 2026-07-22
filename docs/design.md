@@ -1,8 +1,9 @@
 # clinkz-wot Design
 
-Status: v4.9 normative-source manifest with residual v4.8 migration material.
-Runtime migration remains blocked while the remaining material is decomposed
-and reconciled into the modular design revision.
+Status: v4.9 normative-source manifest with residual domain contracts and
+historical v4.8 migration material. Coordinated whole-revision migration and
+release convergence remain paused while the remaining material is decomposed.
+Only an explicitly admitted ADR-0013 tranche may change runtime or public API.
 
 The v4.9 authority entry points are `docs/architecture/README.md` and
 `docs/spec/README.md`. Planning and Protocol Binding behavior has moved to
@@ -72,7 +73,13 @@ registered files under `docs/spec/` define detailed behavior and public API
 contracts for one domain each. `docs/api-ownership.csv` is authoritative only
 for the defining crate, module, public path, feature cells, and migration
 disposition of frozen cross-crate items. `docs/artifacts.csv` enumerates the
-active artifact set and its revision/schema identities.
+active artifact set and its revision/schema identities. Under ADR-0014, this
+document remains the residual detailed owner only for requirements not assigned
+to a registered domain specification. A registered normative amendment is
+temporarily active only for its explicit affected requirements and refinement
+boundary; it cannot override the architecture or an existing domain owner. A
+bare historical revision record or unregistered amendment is not implementation
+authority.
 `docs/refactor-gates.csv` records implementation-admission status.
 `docs/requirements.csv` indexes requirement profile axes, package ownership,
 evidence, and registered requirement source. The versioned files under
@@ -83,13 +90,13 @@ orchestrates that contract. `docs/work-packages/index.toml` defines the
 implementation dependency DAG, and its package documents define migration and
 removal work without becoming a source of behavioral requirements. `PLAN.md`
 selects the active revision but does not redefine it. The accepted records under
-`docs/ADR/` record accepted architecture inputs, rationale, rejected
+`docs/ADRs/` record accepted architecture inputs, rationale, rejected
 alternatives, and explicit supersession. An accepted decision must be integrated
 into the architecture, domain specification, and machine artifacts in the same
 revision; it does not amend them implicitly. If an accepted ADR, this document,
 or another authoritative artifact disagrees,
 implementation MUST stop and all affected artifacts MUST be corrected in one
-reviewed revision. The review records under `docs/review/` provide evidence and
+reviewed revision. The review records under `docs/reviews/` provide evidence and
 rationale but are not an independent normative source. When active artifacts
 disagree, implementation MUST stop
 at the conflicting requirement; neither code, a benchmark result, a work
@@ -127,6 +134,14 @@ merged. Temporary nonconformance is allowed only on a private refactor branch or
 behind an unavailable-by-default feature and must have an owner and removal
 condition; it is not a releasable compatibility mode.
 
+Implementation admission is tranche-scoped as defined by ADR-0013. A package
+without a useful subdivision receives one tranche before admission. Each
+admission record MUST close its exact requirement and artifact scope, name
+dependency-complete predecessors, crates, feature cells, API/state/resource
+changes, removals, applicable workloads, executable pre-code checks,
+independent review evidence, and post-code completion evidence. Package status
+alone never authorizes implementation.
+
 The admitted dependency order is `WP-000 -> WP-100 -> WP-200 -> WP-300`, then
 `WP-400`, `WP-500`, and `WP-600` may proceed independently, and `WP-700`
 depends on all three. The machine-readable package set MUST cover every indexed
@@ -141,22 +156,38 @@ ids, compatibility and migration impact, and updated verification keys. Raising
 a resource or performance limit is not a performance fix. A budget waiver is
 time-bounded, names the affected profile and workload, includes measured cause
 and risk, and cannot establish a new baseline unless this design and its
-manifest are updated deliberately.
+manifest are updated deliberately. The change also maps its impact to pending,
+admitted, in-progress, and completed tranches. An affected tranche loses
+admission or re-enters impact review, and transitively dependent evidence is
+reaffirmed or invalidated explicitly. A disjointness claim requires a scoped
+review; it is not inferred from package names.
 
-`REFACTOR-GATE-001`: The coordinated implementation refactor MUST NOT begin a
-work package while any gate on which it depends is open. Gate closure requires
-the evidence named in `docs/refactor-gates.csv` to be present and passing in the
-same revision. Design-only edits, checkers, deterministic fixture generation,
-performance-harness construction, and work-package authoring MAY proceed while
-runtime migration is blocked. Reopening a gate blocks packages that have not
-yet merged and requires an impact review for packages already completed.
+`REFACTOR-GATE-001`: Global gates are the aggregate convergence and final
+integration/release decision. Gate closure requires the evidence named in
+`docs/refactor-gates.csv` to be present and passing in the same revision. An
+open global gate does not by itself block a recorded tranche whose independent
+admission review proves the finding scope disjoint. No runtime or public-API
+change MAY begin without an approved tranche admission record. An intersecting
+open workspace topic, review finding, requirement ambiguity, missing
+predecessor, placeholder check, or incomplete pre-code performance contract
+blocks that tranche. Implementation-produced measurements are completion
+evidence rather than a circular precondition for writing the measured code.
+Reopening a finding triggers the tranche impact rules in ADR-0013 and
+`CHANGE-CONTROL-001`; all global gates still MUST close before coordinated
+legacy removal, final integration, and release conformance are claimed.
 
 ### Revision Record
 
 v4.9 supersedes the rejected v4.8 detailed-design candidate before runtime
 migration resumes. It introduces the modular architecture backbone and
 incorporates `ADR-0007`, `ADR-0008`, `ADR-0009`, `ADR-0010`, `ADR-0011`, and
-`ADR-0012`:
+`ADR-0012`. ADR-0013 subsequently replaces blanket whole-revision
+implementation admission with independently reviewed tranche-scoped admission
+while retaining the six global gates for aggregate convergence and release.
+ADR-0014 makes the residual-design and registered-amendment ownership during
+domain decomposition explicit. ADR-0015 makes static resource profiles borrowed
+and work budgets nonduplicable before the 195-field foundation refresh. The
+revision therefore establishes:
 a single-owner normative document
 hierarchy; an explicit Servient-owned compiled-plan-set lifecycle with the
 `clinkz-wot-planning` compiler boundary; Cargo-linked complete Protocol Binding
@@ -2549,7 +2580,10 @@ step. A poll/step implementation MUST NOT decode an unbounded payload, walk an
 unbounded collection, expand an entire unbounded target, or complete unrelated
 queued work inside one charged unit. Non-incremental cryptography, codec calls,
 or application handlers declare their maximum admitted input and external
-worst-case execution responsibility.
+worst-case execution responsibility. `WorkBudget` is a unique consumable value:
+it implements neither `Copy` nor `Clone`, and all progress mutates it through
+`&mut WorkBudget`. Copying a remaining allowance to restart fallback, probing,
+cleanup, or another bounded step is nonconforming.
 
 `CONSTRAINED-SCHED-001`: Manual progress is fair across binding input, response
 delivery, outbound requests, subscription data, timers, and cleanup. The runtime
@@ -2617,6 +2651,11 @@ state and release the reservation idempotently during rollback or cleanup.
 Constrained construction MUST receive explicit limits or select a named static
 profile. A zero byte or count limit disables that resource unless the field is
 explicitly documented as rendezvous capacity. No zero value means unbounded.
+The complete profile is an immutable configuration snapshot. Runtime and hot
+interaction paths borrow that snapshot or a builder-validated immutable profile
+handle; a bare `ResourceProfileId` identifies a profile but does not prove its
+values. `ResourceLimits` MAY be cloned explicitly during construction but MUST
+NOT be `Copy`.
 
 The default gateway profile uses the following selected admission ceilings.
 This table is a readable summary; `docs/resource-limits.csv` is exhaustive and
@@ -2695,6 +2734,23 @@ stricter applicable parent or global ceiling at runtime, but every named-profile
 snapshot still contains a concrete value for every applicable field. A
 compile-time profile snapshot test MUST fail when a new `ResourceLimits` field
 lacks a value in any named profile.
+
+`StaticResourceProfile` exposes its snapshot without a by-value copy:
+
+```rust
+pub trait StaticResourceProfile {
+    const ID: ResourceProfileId;
+    const LIMITS: &'static ResourceLimits;
+
+    fn limits() -> &'static ResourceLimits {
+        Self::LIMITS
+    }
+}
+```
+
+Named and application-static implementations store the value for the program
+lifetime. Customization clones a snapshot explicitly at construction; no
+runtime operation materializes the complete array merely to read one limit.
 
 `DirectoryClientDefaultV1` is the engine-side remote Directory adapter profile.
 Its CSV snapshot repeats every applicable document and payload structural value
@@ -3220,7 +3276,9 @@ cleanup items; decrementing an exhausted counter returns `LimitExceeded` before
 the work begins. Codec byte counters are exact byte counts, not
 implementation-defined blocks: consuming `n` input bytes and producing `m`
 output bytes charges `n` and `m`, including bytes processed across incremental
-calls. `PendingWork` reports only work already known from maintained ready
+calls. The budget implements neither `Copy` nor `Clone`; every consumer shares
+the unique mutable value rather than duplicating an allowance. `PendingWork`
+reports only work already known from maintained ready
 queues, cursors, or slot state; constructing it MUST NOT scan every runtime
 table. It is nonempty whenever present and includes emission fan-out, binding
 publication, response delivery, subscription cancellation, route readiness,
@@ -3278,8 +3336,8 @@ stored in immutable plans. Providers that cannot implement probe/commit remain
 usable only through explicit branch selection.
 
 `API-CODEC-001`: `PayloadCodec` exposes bounded whole-value helpers plus an
-incremental decoder/encoder state API. Every call accepts `ResourceLimits` and
-`WorkBudget`, reports consumed input and produced output bytes, and can return a
+incremental decoder/encoder state API. Every call accepts `&ResourceLimits` and
+`&mut WorkBudget`, reports consumed input and produced output bytes, and can return a
 nonterminal need-input/need-output state. Validation operates on the one decoded
 typed representation owned by the interaction. Application-view validation,
 security-field injection, and wire-view validation share that representation or
@@ -3292,8 +3350,14 @@ committed into a published owner. `AdmissionLedger` has explicit source,
 temporary, persistent-document, persistent-runtime, diagnostic, and cleanup
 accounts plus `peak_live_bytes()` and `largest_contiguous_allocation()`.
 Admission, directory, runtime, binding, codec, and security entry points accept
-`&ResourceLimits` or a handle that identifies an immutable named profile; no
-entry point interprets a missing policy as unbounded.
+`&ResourceLimits` or a builder-validated handle that retains an immutable
+profile snapshot; a bare `ResourceProfileId` is not value authority, and no
+entry point interprets a missing policy as unbounded. `ResourceLimits` is
+explicitly cloneable for construction but not `Copy`. `ResourceAccount`,
+`ResourceReservation`, and `AdmissionLedger` are advanced runtime and Protocol
+Binding SPI building blocks; ordinary application interaction methods inherit
+their Servient profile and do not expose those accounting objects as call
+parameters.
 
 `API-DISCOVERY-EXEC-001`: Discovery always provides the owned value types and
 poll traits in `no_std + alloc`. The `async` feature provides async extension

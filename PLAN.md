@@ -2,15 +2,17 @@
 
 ## Active revision
 
-The active target is the v4.9 architecture-closure revision. Runtime migration
-is paused. The v4.8 detailed-design candidate did not pass Architecture Review
-02 and remains only a migration input until its valid contracts are moved into
-the v4.9 modular specification set.
+The active target is the v4.9 architecture-closure revision. Coordinated
+whole-revision migration and release convergence remain paused. Individual
+implementation tranches may proceed only through the scoped admission policy
+in ADR-0013 and `REFACTOR-GATE-001`. The v4.8 detailed-design candidate did not
+pass Architecture Review 02 and remains only a migration input until its valid
+contracts are moved into the v4.9 modular specification set.
 
 Read active material in this order:
 
 1. `docs/architecture/README.md` and the architecture backbone it indexes;
-2. accepted decisions under `docs/ADR/`;
+2. accepted decisions under `docs/ADRs/`;
 3. `docs/design.md` and registered domain specifications for detailed
    requirements that have already been reconciled with the backbone;
 4. the API, state, resource, performance, and requirement artifacts registered
@@ -29,9 +31,21 @@ public APIs, state transitions, limits, or implementation behavior.
 - GATE-5 executable performance contracts: open.
 - GATE-6 implementation work-package DAG: open.
 
-No runtime or public-API refactor may resume while a required gate is open.
-Documentation restructuring, ADRs, review evidence, checkers, fixtures, and
-work-package corrections may proceed.
+These are aggregate convergence gates; scoped admission does not close or
+waive them. No runtime or public-API change may begin without an approved
+tranche record and passing independent entry review. Documentation,
+governance, checkers, fixtures, and work-package preparation may proceed while
+no tranche is admitted.
+
+The currently admitted tranche is `WP-100-FOUNDATION-REFRESH`. Its exact v4.9
+scope is recorded in the work-package index and its independent entry review is
+recorded by `docs/audits/WP-100-foundation-refresh-entry.md`. No other runtime
+or public-API tranche is admitted.
+WP-200 remains blocked by AR-004's missing constructible candidate-fallback
+policy, health rule, and bounded diagnostics. WP-300 remains blocked by
+AR-002/AR-003's incomplete registration/compiler/constrained signatures and
+independent host/static authoring fixtures. The Servient/binding migrations
+remain blocked by those scope-specific predecessors.
 
 ## Current design milestone
 
@@ -59,9 +73,11 @@ The immediate decisions are:
   and nonretained route-scoped accept permits; and
 - a modular normative-document hierarchy that keeps architecture visible.
 
-## Implementation order after gate closure
+## Tranche order and final convergence
 
-Implementation follows `IMPL-CONFORM-001` and the machine-readable DAG:
+Admitted implementation follows `IMPL-CONFORM-001` and the machine-readable
+DAG. All six global gates must still close before final integration and release
+conformance:
 
 1. foundation resource, work, time, generation, and accounting refresh;
 2. core handler, security, codec, and lock-isolation contracts;

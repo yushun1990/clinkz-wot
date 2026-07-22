@@ -9,7 +9,8 @@ TD document or produced-Thing draft
 parse + preserve extensions + validate W3C structure
         |
         v
-capture immutable policy and binding-registration snapshot
+capture immutable planning context
+  (policy + startup registration view + dependency generations)
         |
         v
 shared planner -----> logical plans -----> binding compiler extensions

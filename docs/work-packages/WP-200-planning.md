@@ -6,7 +6,7 @@ Design revision: v4.9
 
 Depends on: WP-100
 
-Required gates: GATE-1, GATE-2, GATE-3, GATE-4, GATE-5, GATE-6
+Global convergence gates: GATE-1, GATE-2, GATE-3, GATE-4, GATE-5, GATE-6
 
 Owner packages: clinkz-wot-core, clinkz-wot-planning, clinkz-wot-td
 
@@ -39,6 +39,14 @@ WP-200 consumes the WP-100 handler context and operation identities only as immu
 facts. It neither activates host handler registrations nor removes a compatibility facade needed
 by WP-300, WP-400, or WP-600. New planning code must not call `PushFn`, `PublisherSink`,
 `SubscriptionSender`, a legacy raw handler lookup, or an old handler trait.
+
+Admission remains blocked until the AR-004 selection/fallback gap is closed in
+the planning specification: one constructible policy owner and default, exact
+pre-side-effect failures eligible for fallback, treatment of binding input
+rejection, a prohibition or bounded generation-safe contract for runtime-health
+selection, and deterministic bounded diagnostics for skipped candidates. The
+existing document/registration ordering rules remain frozen; this work does not
+return form selection to a Protocol Binding.
 
 ## Requirements
 
@@ -243,7 +251,10 @@ dependency.
   feature cells; core owns the portable compiler/artifact SPI, and the planning crate contains no
   binding execution trait or Servient registration.
 - Plan fixtures cover root and affordance forms, multiple forms, relative targets, strict form
-  selection, ordered fallback, inherited/form security, and structured selection errors.
+  selection, ordered fallback under the frozen typed policy, inherited/form
+  security, bounded skipped-candidate diagnostics, and structured selection
+  errors. No execution failure after binding acceptance triggers implicit
+  fallback.
 - Collection fixtures prove that each standard root operation creates one native plan and rejects
   missing or inexact collection capability instead of silently creating per-affordance plans.
 - Structural tests prove logical plans are shared rather than copied per binding pair and

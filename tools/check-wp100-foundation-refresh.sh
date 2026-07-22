@@ -2,6 +2,7 @@
 set -euo pipefail
 
 root=$(cd "$(dirname "$0")/.." && pwd)
+ownership_test="$root/foundation/tests/resource_policy_ownership.rs"
 
 v48_additive_fields=(
     handler_slots_per_thing_max
@@ -131,6 +132,58 @@ for budget_invariant in \
     'Self::HandlerSteps,'; do
     if ! grep -Fq "$budget_invariant" "$root/foundation/src/budget.rs"; then
         echo "WP-100 foundation refresh check: HandlerSteps is not appended" >&2
+        exit 1
+    fi
+done
+
+resource_limits_derive=$(grep -B1 -m1 '^pub struct ResourceLimits {' \
+    "$root/foundation/src/resource.rs" | head -n 1)
+if [[ "$resource_limits_derive" != *Clone* \
+    || "$resource_limits_derive" == *Copy* ]]; then
+    echo "WP-100 foundation refresh check: ResourceLimits must be Clone but not Copy" >&2
+    exit 1
+fi
+
+work_budget_derive=$(grep -B1 -m1 '^pub struct WorkBudget {' \
+    "$root/foundation/src/budget.rs" | head -n 1)
+if [[ "$work_budget_derive" == *Clone* || "$work_budget_derive" == *Copy* ]]; then
+    echo "WP-100 foundation refresh check: WorkBudget allowance remains duplicable" >&2
+    exit 1
+fi
+
+for profile_invariant in \
+    "const LIMITS: &'static ResourceLimits;" \
+    "fn limits() -> &'static ResourceLimits"; do
+    if ! grep -Fq "$profile_invariant" "$root/foundation/src/resource.rs"; then
+        echo "WP-100 foundation refresh check: static profile access is not borrowed" >&2
+        exit 1
+    fi
+done
+
+if ! grep -Fq \
+    "pub fn profiles() -> [(ResourceProfileId, &'static ResourceLimits); 3]" \
+    "$root/foundation/examples/no_std_surface.rs"; then
+    echo "WP-100 foundation refresh check: no_std fixture copies complete profiles" >&2
+    exit 1
+fi
+
+if [[ ! -f "$ownership_test" ]]; then
+    echo "WP-100 foundation refresh check: ownership compile test is missing" >&2
+    exit 1
+fi
+for test_invariant in \
+    'trait AmbiguousIfCopy' \
+    'trait AmbiguousIfClone' \
+    'fn resource_policy_and_budget_ownership_are_exact()' \
+    'fn assert_clone<T: Clone>()' \
+    'assert_clone::<ResourceLimits>();' \
+    '<ResourceLimits as AmbiguousIfCopy<_>>::marker' \
+    '<WorkBudget as AmbiguousIfCopy<_>>::marker' \
+    '<WorkBudget as AmbiguousIfClone<_>>::marker' \
+    "let _: &'static ResourceLimits = GatewayDefaultV1::LIMITS;" \
+    "let _: &'static ResourceLimits = GatewayDefaultV1::limits();"; do
+    if ! grep -Fq "$test_invariant" "$ownership_test"; then
+        echo "WP-100 foundation refresh check: ownership compile test misses $test_invariant" >&2
         exit 1
     fi
 done

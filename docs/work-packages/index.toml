@@ -1,8 +1,9 @@
-schema_version = 1
+schema_version = 2
 design_revision = "4.9"
 requirement = "IMPL-CONFORM-001"
 status = "in-progress"
-implementation_entry_gates = [
+admission_policy = "adr-0013-tranche-scoped"
+global_convergence_gates = [
     "GATE-1",
     "GATE-2",
     "GATE-3",
@@ -35,6 +36,7 @@ required_headings = [
 [[entrypoint]]
 id = "WP-100-HANDLER-ENTRY"
 work_package = "WP-100"
+admission_status = "blocked"
 depends_on_tranches = ["WP-100-FOUNDATION-REFRESH"]
 
 [[tranche]]
@@ -42,29 +44,53 @@ id = "WP-100-FOUNDATION-REFRESH"
 work_package = "WP-100"
 sequence = 110
 status = "pending"
+admission_status = "approved"
+impact_status = "current"
 depends_on = []
 blocks_entrypoints = ["WP-100-HANDLER-ENTRY"]
 requirements = [
     "API-RESOURCE-001",
     "API-SURFACE-001",
     "CONSTRAINED-PROGRESS-001",
+    "CONSTRAINED-STORAGE-002",
     "CONSTRAINED-WORK-001",
-    "CLEANUP-RECORD-001",
-    "HANDLER-CANCEL-002",
-    "HANDLER-STORAGE-001",
-    "HANDLER-SUB-001",
     "RES-LIMIT-001",
+    "RES-LIMIT-002",
     "RES-PROFILE-001",
-    "PLAN-SET-001",
-    "PLAN-ARTIFACT-001",
-    "BIND-ROUTE-001",
-    "BIND-STORAGE-001",
-    "BIND-MEM-001",
-    "BIND-DELIVERY-001",
-    "BIND-CALL-CANCEL-001",
 ]
 owner_packages = ["clinkz-wot-core", "clinkz-wot-foundation"]
 feature_cells = ["no-default", "async-no-std", "std"]
+authoritative_artifacts = [
+    "docs/ADRs/0013-work-package-scoped-implementation-admission.org",
+    "docs/ADRs/0014-transitional-normative-ownership.org",
+    "docs/ADRs/0015-borrowed-resource-profiles-and-linear-work-budgets.org",
+    "docs/amendments/WP-100-handler-api-v1.md",
+    "docs/api-ownership.csv",
+    "docs/design.md",
+    "docs/resource-limits.csv",
+    "docs/work-packages/WP-100-core.md",
+    "docs/work-packages/index.toml",
+]
+api_items = [
+    "PendingWorkClass",
+    "ResourceKind",
+    "ResourceLimits",
+    "StaticResourceProfile",
+    "WorkBudget",
+    "WorkClass",
+]
+state_machines = []
+old_api_removals = []
+performance_workloads = []
+pre_implementation_checks = [
+    "api-ownership-check",
+    "architecture-adr-check",
+    "resource-profile-check",
+    "work-package-dag-check",
+    "wp100-amendment-check",
+    "wp100-handler-amendment-check",
+]
+admission_review = "docs/audits/WP-100-foundation-refresh-entry.md"
 historical_resource_limit_prefix_count = 139
 expected_resource_limit_count = 195
 expected_additive_resource_fields = [
@@ -125,9 +151,9 @@ expected_additive_resource_fields = [
     "binding_reactor_queue_items_per_binding_max",
     "binding_reactor_queue_bytes_per_binding_max",
 ]
-evidence_key = "handler-foundation-refresh"
-evidence_path = "docs/evidence/WP-100-foundation-refresh.toml"
-verification_check = "wp100-foundation-refresh-check"
+completion_evidence_keys = ["handler-foundation-refresh"]
+completion_evidence_path = "docs/evidence/WP-100-foundation-refresh.toml"
+completion_check = "wp100-foundation-refresh-check"
 
 [[package]]
 id = "WP-000"

@@ -830,7 +830,10 @@ binding-local cleanup state. It is not a cloneable handle or universal queue.
 Its item event always contains the exact `SubscriptionId`, source
 `AffordanceTarget`, and payload. Collection subscription uses one selected
 Thing-root form and exact source attribution; remote fan-out or multiplexing
-stays inside the binding.
+stays inside the binding. Multiple protocol-side sources may map through the
+compiled artifact to the same logical target; protocol topics, key
+expressions, channels, and route-instance identities never replace the
+application-visible `AffordanceTarget`.
 
 Process termination and resource cleanup are orthogonal. A driver retains the
 first `ProcessTerminal`, then starts or joins one phase-specific cleanup

@@ -1,0 +1,105 @@
+#+title: ADR-0015: Borrowed Resource Profiles and Linear Work Budgets
+#+date: 2026-07-22
+#+status: Accepted
+
+* Context
+
+The exhaustive v4.9 resource schema grows from 118 fields in the currently
+generated implementation to 195 fields. With the existing
+=[Option<u64>; N]= representation on the reviewed x86-64 target,
+=ResourceLimits= grows from 1,888 to 3,120 bytes. The current type is =Copy=,
+and =StaticResourceProfile::LIMITS= and =limits()= expose the complete value by
+value. Optimized host builds may eliminate some copies, but =no_std= small-stack
+targets and cross-crate unoptimized paths cannot rely on that optimization.
+
+=WorkBudget= grows from 72 to 80 bytes when =HandlerSteps= is appended. Its
+size is modest, but its current =Copy= and =Clone= implementations are a
+semantic problem: duplicating a remaining-work counter can bypass a bound that
+is intended to be consumed once across a fallback or incremental operation.
+
+AR-006 in =workspace/0005-architecture-review-findings.md= also asks which
+resource concepts normal applications must see. The design requires explicit
+bounded configuration without making reservation machinery part of every
+ordinary interaction call.
+
+* Decision
+
+=ResourceLimits= is an immutable configuration snapshot. It MAY implement
+=Clone= for explicit startup-time duplication, but it MUST NOT implement
+=Copy=. Its concrete in-memory representation and size are not a stable ABI.
+Changing the number of schema fields remains a source-visible revision because
+the exhaustive application-defined constructor is intentionally checked at
+compile time.
+
+=StaticResourceProfile= exposes one statically stored snapshot by reference:
+
+#+begin_src rust
+pub trait StaticResourceProfile {
+    const ID: ResourceProfileId;
+    const LIMITS: &'static ResourceLimits;
+
+    fn limits() -> &'static ResourceLimits {
+        Self::LIMITS
+    }
+}
+#+end_src
+
+Named gateway, Directory-client, benchmark, and application-static profiles do
+not materialize a complete limits array on each access. Runtime construction,
+admission, codecs, planning, bindings, and interaction paths accept
+=&ResourceLimits= or a profile reference/handle whose immutable snapshot was
+validated by the owning builder. A bare =ResourceProfileId= is identity and
+diagnostic metadata, not authority for profile values. An admitted owner may
+retain one snapshot or reference at its configuration boundary; a hot-path
+operation does not copy the complete profile.
+
+=WorkBudget= is a uniquely mutated consumable value. It MUST implement neither
+=Copy= nor =Clone=. All bounded progress receives =&mut WorkBudget= and charges
+the applicable counter before work. Code cannot duplicate a budget to reset a
+shared probe, fallback, cleanup, or step limit. Any future operation that
+partitions a parent budget must be an explicit checked API that debits the
+parent; no such partition API is introduced by this decision.
+
+The common host application facade selects a named profile or supplies one
+explicit immutable configuration snapshot at construction. It does not expose
+=ResourceAccount=, =ResourceReservation=, cleanup slots, or work-budget
+bookkeeping as parameters of ordinary read/write/invoke/subscribe methods.
+Those public foundation values are advanced runtime and Protocol Binding SPI
+building blocks. Constrained applications select or define a static profile
+and drive bounded progress explicitly without changing interaction semantics.
+
+The =WP-100-FOUNDATION-REFRESH= tranche owns this source-breaking correction
+because it already changes the exhaustive resource schema and work-class set.
+Its checks must cover reference-returning named profiles, the absence of
+implicit =ResourceLimits= and =WorkBudget= copying, static/no_std construction,
+the exact 195-field snapshots, and the existing borrowed runtime call sites.
+
+No stable Rust dynamic-library ABI is promised. All v1 crates are rebuilt
+together through Cargo, and adding enum variants remains visible to exhaustive
+downstream matches.
+
+* Consequences
+
+- An application that customizes a named profile clones it explicitly before
+  applying =with_limit= or =set=; the potentially large copy is visible at the
+  construction boundary.
+- Existing code that copies a =WorkBudget= must instead share its unique
+  mutable budget, which preserves aggregate work accounting.
+- Profile fixtures and examples hold references rather than arrays of complete
+  by-value snapshots.
+- The current array representation may be replaced later if measurements show
+  that retained profile size is material, provided public semantics and
+  exhaustive schema validation remain intact.
+
+* Rejected alternatives
+
+- Relying on compiler copy elision was rejected because it is not a portable
+  correctness or small-stack guarantee.
+- Heap-allocating or atomically sharing every profile was rejected because the
+  foundation contract must support =no_std + alloc= without imposing one host
+  ownership mechanism.
+- Encoding =NotApplicable= with an undocumented integer sentinel was rejected
+  for this tranche because it changes representation invariants without
+  measured need and risks colliding with the full =u64= limit domain.
+- Keeping =WorkBudget= copyable for convenience was rejected because a copied
+  budget is a duplicated allowance, not merely a copied observation.

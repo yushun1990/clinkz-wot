@@ -62,6 +62,15 @@ The authority order is:
 `PLAN.md`, reviews, audits, and thinking notes are non-normative. A conflict
 between normative sources is a gate failure, not a precedence shortcut.
 
-The existing v4.8 `docs/design.md` and amendments remain migration inputs until
-their valid content is moved into single-owner v4.9 specifications. Runtime
-implementation remains paused during that migration.
+During decomposition, the v4.9 clauses in `docs/design.md` remain the residual
+detailed owner only for requirements that have not moved to a registered domain
+specification. An amendment registered as `normative-amendment` is temporarily
+active only for its explicit affected requirements and refinement boundary; it
+does not override this backbone or an already registered domain specification.
+ADR-0014 defines that transitional ownership and the atomic migration that
+retires an amendment.
+
+Coordinated whole-revision migration and release convergence remain paused
+until the modular authority graph closes. A bounded implementation tranche may
+proceed only through ADR-0013's explicit admission record and independent
+review; such admission does not make an unmigrated domain or global gate ready.

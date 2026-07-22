@@ -14,8 +14,9 @@ backbone.
 - An accepted ADR must be integrated into the owning specification in the same
   design revision.
 - Work packages describe migration and evidence only.
-- Temporary amendments are merged into the relevant specification and then
-  retained as historical evidence.
+- A registered normative amendment is active only for its explicit affected
+  requirements and refinement boundary. It is merged into the relevant
+  specification and then retained as historical evidence under ADR-0014.
 - A conflict blocks implementation; file order does not resolve it.
 
 ## Active v4.9 owners
@@ -26,10 +27,14 @@ backbone.
   routes, calls, subscriptions, responses, emissions, cancellation, and cleanup
   transfer.
 
-The remaining valid v4.8 material is still being migrated. Until a domain file
-is present and registered, `docs/design.md` remains its detailed migration
-source, subject to the v4.9 architecture and accepted ADRs. No unmigrated domain
-is implementation-ready merely because its old prose remains available.
+The remaining valid material is still being migrated. Until a domain file is
+present and registered, the applicable v4.9 clauses in `docs/design.md` remain
+the residual detailed owner identified by the requirement registry, subject to
+the architecture and accepted ADRs. Registered normative amendments may refine
+only their declared residual scope. Historical v4.8 text is migration input,
+not active authority. No unmigrated domain is implementation-ready merely
+because residual prose remains available; a bounded tranche still requires the
+ADR-0013 admission record and review.
 
 ## Planned ownership map
 

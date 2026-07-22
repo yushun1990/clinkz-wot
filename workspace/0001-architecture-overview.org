@@ -1,5 +1,5 @@
 #+TITLE: Architecture Overview
-#+STATUS: DECIDED
+#+STATUS: MIGRATED
 
 * Context
 
@@ -47,5 +47,13 @@ documents, and specifications.
 
 * Migration
 
-Pending explicit linkage to the authoritative ADR/design documents that encode
-these decisions.
+Migrated into:
+
+- =docs/architecture/10-primary-data-flows.md=;
+- =docs/architecture/20-module-boundaries.md=;
+- =docs/architecture/30-compiled-plan-lifecycle.md=;
+- =docs/architecture/40-protocol-binding-spi-and-deployment.md=; and
+- ADR-0001, ADR-0008, and ADR-0009 under =docs/ADRs/=.
+
+Current implementation deviations remain migration evidence for the work
+packages; they do not reopen this ownership decision.

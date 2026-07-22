@@ -1,0 +1,71 @@
+#+title: Architecture Notes for July 2026
+#+status: MIGRATED
+#+source: docs/thinking/2026-07.org at 169a0b3
+
+* Core event module <2026-07-14 Tue>
+** EventBroker
+*** The name is ambiguous
+The current type dispatches emissions to publication endpoints. The term
+"broker" incorrectly suggests that the type is a durable message broker or
+queue. A dispatcher-oriented name would describe the behavior more accurately.
+
+*** The implementation may contain hot spots
+- Every emission performs a Thing and affordance lookup.
+- Publication endpoints are invoked serially, so one slow endpoint may block
+  later endpoints.
+
+*** The concrete implementation should not live in core
+Different Servient runtime profiles need different dispatch policies. A host
+runtime may use sharded bounded lanes and concurrent progress to isolate slow
+bindings. A constrained runtime may use a bounded cursor or direct sequential
+publication. Core must not freeze one storage or scheduling strategy for both.
+
+*** Publication endpoint provenance is unclear
+The design must state whether a publication target comes from a TD protocol
+label, a selected form, a compiled binding plan, a binding registration, or a
+different source.
+
+** Subscription
+Core should not force every subscription to own the same queue implementation.
+A ClientBinding should provide an abstract, pull-driven subscription source or
+a portable poll slot. Applications can control flow by polling it. A binding or
+host runtime may also offer an optional bounded-buffer adapter for convenience,
+but that adapter must not become the universal core representation.
+
+* Binding request semantics <2026-07-15 Wed>
+Consider renaming =BindingRequest= to =OutboundRequest= so it is directionally
+paired with =InboundRequest=.
+
+* Collection subscriptions <2026-07-15 Wed>
+Core must not lower =subscribe_all_events= eagerly into one subscription per
+event plus local polling and merging. Protocols such as Zenoh and MQTT can
+multiplex natively. The standard collection operation should use its Thing-level
+form and selected binding plan. Any per-affordance fan-out must be an explicit,
+bounded fallback owned outside core.
+
+* PLAN and design contain too much detail and noise <2026-07-17 Fri>
+The documents mix architectural intent with detailed contract material, making
+the engine's primary logic difficult to follow. The architecture backbone must
+be decided and frozen before detailed APIs are expanded. At minimum, it must
+cover:
+
+1. the end-to-end system data-flow diagram;
+2. module responsibilities and the exact boundary between engine behavior and
+   Protocol Binding behavior;
+3. the TD precompiled-plan model, including whether plans have an explicit
+   lifecycle; and
+4. the Protocol Binding SPI and application integration model, including
+   whether bindings are statically linked crates, dynamically loaded modules,
+   or generated through a build step, and how a new binding is rolled out.
+
+The repository lacks a concise architecture-backbone document. =PLAN.md= and
+=docs/design.md= should be reorganized from core concepts to edge details and
+from abstract invariants to concrete contracts. The backbone must remain
+visible while detailed modules are designed. The misplaced core =EventBroker=
+and subscription-merge implementation are examples of errors caused by an
+unclear engine target and blurred module boundaries.
+
+The target must be derived from the WoT specifications and explicit goals for
+correctness, stable performance, reliability, and application usability. The
+current implementation and earlier design are migration inputs, not design
+authority.

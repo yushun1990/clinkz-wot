@@ -6,7 +6,7 @@ Design revision: v4.9
 
 Depends on: WP-200
 
-Required gates: GATE-1, GATE-2, GATE-3, GATE-4, GATE-5, GATE-6
+Global convergence gates: GATE-1, GATE-2, GATE-3, GATE-4, GATE-5, GATE-6
 
 Owner packages: clinkz-wot-core
 
@@ -36,6 +36,15 @@ remain constructible and independently testable, but a compiler, contributor, cl
 server half, status policy, or ingress policy cannot be installed separately. The bundle is
 immutable after `ServientBuilder` freezes its registration snapshot; v1 has no runtime binding
 add, replace, remove, or unload path.
+
+Admission remains blocked until AR-002 and AR-003 are closed by exact complete
+registration/compiler/contributor/constrained Rust signatures and independent
+authoring fixtures. The fixtures implement both a mostly synchronous binding
+and a binding with externally visible preparation/readiness in host-erased and
+application-static forms. They must prove that trivial phases use bounded
+helpers/default adapters without inventing protocol state; a result that needs
+to merge lifecycle ownership phases reopens ADR-0010/0012 instead of hiding the
+problem in an adapter.
 
 The final XOR-shaped `InboundResponse`, its producer-origin `try_success`
 validation, and the public shared consumer-origin
@@ -365,6 +374,11 @@ terminal or critical status is lost merely because a bounded queue is full.
 
 - Every WP-300 ownership item exists at its frozen path and applicable feature cells; the
   no-default poll surface is useful and the host traits are object-safe.
+- A third-party host fixture and a `no_std + alloc` static fixture compile using
+  only documented public registration, compiler, contributor, client/server,
+  slot, cancellation, and cleanup APIs. Both the mostly synchronous and
+  externally-ready lifecycle shapes are covered without consulting a concrete
+  protocol implementation.
 - Complete host and static startup bundles are the only installable binding units; their compiler
   and execution compatibility, resource maxima, ingress policy, status policy, and supported
   profile cells are validated before snapshot publication.

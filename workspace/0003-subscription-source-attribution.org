@@ -1,5 +1,5 @@
 #+TITLE: Subscription Source Attribution
-#+STATUS: OPEN
+#+STATUS: MIGRATED
 
 * Context
 
@@ -41,8 +41,21 @@ ownership boundary.
 
 * Decision
 
-Not yet decided.
+The application-visible source identity is the exact protocol-neutral
+=AffordanceTarget=. =CollectionSourceAttribution= is the planning capability
+proof and standard collection operations accept only
+=ExactAffordanceTarget=.
+
+A compiled binding artifact may map multiple protocol-side sources to the same
+logical target. Protocol topics, key expressions, channels, and route-instance
+identities remain inside the binding artifact or bounded diagnostic status;
+they do not enter =SubscriptionItem=. Observably different WoT semantics must
+be modeled as different logical targets or by an explicitly designed
+extension.
 
 * Migration
 
-None.
+Migrated into ADR-0003, ADR-0004, =docs/spec/planning.md=, and
+=docs/spec/binding-spi.md=. The current eager per-affordance merge code remains
+an implementation deviation assigned to later work packages, not an open
+identity decision.

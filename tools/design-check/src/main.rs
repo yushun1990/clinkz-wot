@@ -836,7 +836,7 @@ fn check_governance(root: &Path, require_ready: bool) -> Result<(), String> {
                 || review.review_type != "audit"
                 || review.design_revision != ACTIVE_DESIGN_REVISION
                 || review.status != "blocking"
-                || !review.artifacts.contains("docs/review/review-03.org"))
+                || !review.artifacts.contains("docs/reviews/review-03.org"))
         {
             return Err(format!(
                 "{gate} must remain open under the blocking v{ACTIVE_DESIGN_REVISION} \
@@ -939,19 +939,20 @@ fn expected_gate_contract(gate: &str) -> Option<GateContract> {
                 "docs/amendments/WP-100-error-disposition-v1.md",
                 "docs/amendments/WP-100-interaction-output-api-v1.md",
                 "docs/amendments/WP-100-handler-api-v1.md",
-                "docs/ADR/core.org",
-                "docs/ADR/0001-crate-and-module-boundaries.org",
-                "docs/ADR/0002-producer-emission-dispatch.org",
-                "docs/ADR/0003-subscription-driver-ownership.org",
-                "docs/ADR/0004-collection-subscriptions.org",
-                "docs/ADR/0005-outbound-request.org",
-                "docs/ADR/0006-host-binding-call-cancellation.org",
-                "docs/ADR/0007-normative-document-hierarchy.org",
-                "docs/ADR/0008-compiled-plan-lifecycle.org",
-                "docs/ADR/0009-protocol-binding-integration-and-deployment.org",
-                "docs/ADR/0010-server-route-lifecycle.org",
-                "docs/ADR/0011-cleanup-reservation-and-transfer.org",
-                "docs/ADR/0012-serving-activation-permit.org",
+                "docs/ADRs/core.org",
+                "docs/ADRs/0001-crate-and-module-boundaries.org",
+                "docs/ADRs/0002-producer-emission-dispatch.org",
+                "docs/ADRs/0003-subscription-driver-ownership.org",
+                "docs/ADRs/0004-collection-subscriptions.org",
+                "docs/ADRs/0005-outbound-request.org",
+                "docs/ADRs/0006-host-binding-call-cancellation.org",
+                "docs/ADRs/0007-normative-document-hierarchy.org",
+                "docs/ADRs/0008-compiled-plan-lifecycle.org",
+                "docs/ADRs/0009-protocol-binding-integration-and-deployment.org",
+                "docs/ADRs/0010-server-route-lifecycle.org",
+                "docs/ADRs/0011-cleanup-reservation-and-transfer.org",
+                "docs/ADRs/0012-serving-activation-permit.org",
+                "docs/ADRs/0015-borrowed-resource-profiles-and-linear-work-budgets.org",
             ]),
             owned_set(&[
                 "api-ownership-check",
@@ -1005,19 +1006,19 @@ fn expected_gate_contract(gate: &str) -> Option<GateContract> {
                 "docs/amendments/WP-100-error-disposition-v1.md",
                 "docs/amendments/WP-100-interaction-output-api-v1.md",
                 "docs/amendments/WP-100-handler-api-v1.md",
-                "docs/ADR/core.org",
-                "docs/ADR/0001-crate-and-module-boundaries.org",
-                "docs/ADR/0002-producer-emission-dispatch.org",
-                "docs/ADR/0003-subscription-driver-ownership.org",
-                "docs/ADR/0004-collection-subscriptions.org",
-                "docs/ADR/0005-outbound-request.org",
-                "docs/ADR/0006-host-binding-call-cancellation.org",
-                "docs/ADR/0007-normative-document-hierarchy.org",
-                "docs/ADR/0008-compiled-plan-lifecycle.org",
-                "docs/ADR/0009-protocol-binding-integration-and-deployment.org",
-                "docs/ADR/0010-server-route-lifecycle.org",
-                "docs/ADR/0011-cleanup-reservation-and-transfer.org",
-                "docs/ADR/0012-serving-activation-permit.org",
+                "docs/ADRs/core.org",
+                "docs/ADRs/0001-crate-and-module-boundaries.org",
+                "docs/ADRs/0002-producer-emission-dispatch.org",
+                "docs/ADRs/0003-subscription-driver-ownership.org",
+                "docs/ADRs/0004-collection-subscriptions.org",
+                "docs/ADRs/0005-outbound-request.org",
+                "docs/ADRs/0006-host-binding-call-cancellation.org",
+                "docs/ADRs/0007-normative-document-hierarchy.org",
+                "docs/ADRs/0008-compiled-plan-lifecycle.org",
+                "docs/ADRs/0009-protocol-binding-integration-and-deployment.org",
+                "docs/ADRs/0010-server-route-lifecycle.org",
+                "docs/ADRs/0011-cleanup-reservation-and-transfer.org",
+                "docs/ADRs/0012-serving-activation-permit.org",
             ]),
             owned_set(&[
                 "architecture-adr-check",
@@ -1039,9 +1040,9 @@ fn expected_gate_contract(gate: &str) -> Option<GateContract> {
                 "docs/architecture/00-system-goals-and-context.md",
                 "docs/architecture/20-module-boundaries.md",
                 "docs/future/directory-service.md",
-                "docs/ADR/0001-crate-and-module-boundaries.org",
-                "docs/ADR/0007-normative-document-hierarchy.org",
-                "docs/ADR/0009-protocol-binding-integration-and-deployment.org",
+                "docs/ADRs/0001-crate-and-module-boundaries.org",
+                "docs/ADRs/0007-normative-document-hierarchy.org",
+                "docs/ADRs/0009-protocol-binding-integration-and-deployment.org",
             ]),
             owned_set(&["directory-client-scope-check"]),
         ),
@@ -1080,19 +1081,20 @@ fn expected_gate_contract(gate: &str) -> Option<GateContract> {
                 "docs/amendments/WP-100-error-disposition-v1.md",
                 "docs/amendments/WP-100-interaction-output-api-v1.md",
                 "docs/amendments/WP-100-handler-api-v1.md",
-                "docs/ADR/core.org",
-                "docs/ADR/0001-crate-and-module-boundaries.org",
-                "docs/ADR/0002-producer-emission-dispatch.org",
-                "docs/ADR/0003-subscription-driver-ownership.org",
-                "docs/ADR/0004-collection-subscriptions.org",
-                "docs/ADR/0005-outbound-request.org",
-                "docs/ADR/0006-host-binding-call-cancellation.org",
-                "docs/ADR/0007-normative-document-hierarchy.org",
-                "docs/ADR/0008-compiled-plan-lifecycle.org",
-                "docs/ADR/0009-protocol-binding-integration-and-deployment.org",
-                "docs/ADR/0010-server-route-lifecycle.org",
-                "docs/ADR/0011-cleanup-reservation-and-transfer.org",
-                "docs/ADR/0012-serving-activation-permit.org",
+                "docs/ADRs/core.org",
+                "docs/ADRs/0001-crate-and-module-boundaries.org",
+                "docs/ADRs/0002-producer-emission-dispatch.org",
+                "docs/ADRs/0003-subscription-driver-ownership.org",
+                "docs/ADRs/0004-collection-subscriptions.org",
+                "docs/ADRs/0005-outbound-request.org",
+                "docs/ADRs/0006-host-binding-call-cancellation.org",
+                "docs/ADRs/0007-normative-document-hierarchy.org",
+                "docs/ADRs/0008-compiled-plan-lifecycle.org",
+                "docs/ADRs/0009-protocol-binding-integration-and-deployment.org",
+                "docs/ADRs/0010-server-route-lifecycle.org",
+                "docs/ADRs/0011-cleanup-reservation-and-transfer.org",
+                "docs/ADRs/0012-serving-activation-permit.org",
+                "docs/ADRs/0015-borrowed-resource-profiles-and-linear-work-budgets.org",
             ]),
             owned_set(&[
                 "architecture-adr-check",
@@ -1146,19 +1148,19 @@ fn expected_gate_contract(gate: &str) -> Option<GateContract> {
                 "docs/performance/directory.toml",
                 "tools/performance-harness",
                 "docs/amendments/WP-100-handler-api-v1.md",
-                "docs/ADR/core.org",
-                "docs/ADR/0001-crate-and-module-boundaries.org",
-                "docs/ADR/0002-producer-emission-dispatch.org",
-                "docs/ADR/0003-subscription-driver-ownership.org",
-                "docs/ADR/0004-collection-subscriptions.org",
-                "docs/ADR/0005-outbound-request.org",
-                "docs/ADR/0006-host-binding-call-cancellation.org",
-                "docs/ADR/0007-normative-document-hierarchy.org",
-                "docs/ADR/0008-compiled-plan-lifecycle.org",
-                "docs/ADR/0009-protocol-binding-integration-and-deployment.org",
-                "docs/ADR/0010-server-route-lifecycle.org",
-                "docs/ADR/0011-cleanup-reservation-and-transfer.org",
-                "docs/ADR/0012-serving-activation-permit.org",
+                "docs/ADRs/core.org",
+                "docs/ADRs/0001-crate-and-module-boundaries.org",
+                "docs/ADRs/0002-producer-emission-dispatch.org",
+                "docs/ADRs/0003-subscription-driver-ownership.org",
+                "docs/ADRs/0004-collection-subscriptions.org",
+                "docs/ADRs/0005-outbound-request.org",
+                "docs/ADRs/0006-host-binding-call-cancellation.org",
+                "docs/ADRs/0007-normative-document-hierarchy.org",
+                "docs/ADRs/0008-compiled-plan-lifecycle.org",
+                "docs/ADRs/0009-protocol-binding-integration-and-deployment.org",
+                "docs/ADRs/0010-server-route-lifecycle.org",
+                "docs/ADRs/0011-cleanup-reservation-and-transfer.org",
+                "docs/ADRs/0012-serving-activation-permit.org",
             ]),
             owned_set(&[
                 "architecture-adr-check",
@@ -1207,19 +1209,22 @@ fn expected_gate_contract(gate: &str) -> Option<GateContract> {
                 "docs/work-packages",
                 "docs/amendments/WP-100-interaction-output-api-v1.md",
                 "docs/amendments/WP-100-handler-api-v1.md",
-                "docs/ADR/core.org",
-                "docs/ADR/0001-crate-and-module-boundaries.org",
-                "docs/ADR/0002-producer-emission-dispatch.org",
-                "docs/ADR/0003-subscription-driver-ownership.org",
-                "docs/ADR/0004-collection-subscriptions.org",
-                "docs/ADR/0005-outbound-request.org",
-                "docs/ADR/0006-host-binding-call-cancellation.org",
-                "docs/ADR/0007-normative-document-hierarchy.org",
-                "docs/ADR/0008-compiled-plan-lifecycle.org",
-                "docs/ADR/0009-protocol-binding-integration-and-deployment.org",
-                "docs/ADR/0010-server-route-lifecycle.org",
-                "docs/ADR/0011-cleanup-reservation-and-transfer.org",
-                "docs/ADR/0012-serving-activation-permit.org",
+                "docs/ADRs/core.org",
+                "docs/ADRs/0001-crate-and-module-boundaries.org",
+                "docs/ADRs/0002-producer-emission-dispatch.org",
+                "docs/ADRs/0003-subscription-driver-ownership.org",
+                "docs/ADRs/0004-collection-subscriptions.org",
+                "docs/ADRs/0005-outbound-request.org",
+                "docs/ADRs/0006-host-binding-call-cancellation.org",
+                "docs/ADRs/0007-normative-document-hierarchy.org",
+                "docs/ADRs/0008-compiled-plan-lifecycle.org",
+                "docs/ADRs/0009-protocol-binding-integration-and-deployment.org",
+                "docs/ADRs/0010-server-route-lifecycle.org",
+                "docs/ADRs/0011-cleanup-reservation-and-transfer.org",
+                "docs/ADRs/0012-serving-activation-permit.org",
+                "docs/ADRs/0013-work-package-scoped-implementation-admission.org",
+                "docs/ADRs/0014-transitional-normative-ownership.org",
+                "docs/ADRs/0015-borrowed-resource-profiles-and-linear-work-budgets.org",
             ]),
             owned_set(&[
                 "architecture-adr-check",
@@ -1290,6 +1295,9 @@ fn load_artifact_registry(root: &Path) -> Result<BTreeSet<String>, String> {
             return Err(
                 "performance result schema registry row must declare schema version 2".to_owned(),
             );
+        }
+        if artifact == "docs/work-packages/index.toml" && schema_version != 2 {
+            return Err("work-package index registry row must declare schema version 2".to_owned());
         }
         if !known_requirement_sources.contains(fields[5]) {
             return Err(format!(
@@ -1533,7 +1541,7 @@ fn check_governance_reviews(
                 || basis_revision.is_some()
                 || gates != expected_gates
                 || checks != expected_checks
-                || !artifacts.contains("docs/review/review-02.org")
+                || !artifacts.contains("docs/reviews/review-02.org")
             {
                 return Err(format!(
                     "Architecture Review 02 does not match the rejected \
@@ -1574,10 +1582,10 @@ fn check_governance_reviews(
                 "tools/performance-harness",
                 "docs/work-packages/index.toml",
                 "docs/work-packages",
-                "docs/ADR/0010-server-route-lifecycle.org",
-                "docs/ADR/0011-cleanup-reservation-and-transfer.org",
+                "docs/ADRs/0010-server-route-lifecycle.org",
+                "docs/ADRs/0011-cleanup-reservation-and-transfer.org",
                 "docs/architecture/README.md",
-                "docs/review/review-03.org",
+                "docs/reviews/review-03.org",
             ]);
             if status != "blocking"
                 || review_type != "audit"
@@ -1643,7 +1651,7 @@ fn check_work_packages(root: &Path, require_handler_entry: bool) -> Result<(), S
     require_integer(
         document.get("schema_version"),
         "work-package schema_version",
-        1,
+        2,
     )?;
     require_string(
         document.get("design_revision"),
@@ -1660,11 +1668,17 @@ fn check_work_packages(root: &Path, require_handler_entry: bool) -> Result<(), S
         .and_then(Item::as_str)
         .ok_or_else(|| "work-package index has no string status".to_owned())?;
 
-    let entry_gates = root_string_set(&document, "implementation_entry_gates")?;
+    require_string(
+        document.get("admission_policy"),
+        "work-package admission_policy",
+        "adr-0013-tranche-scoped",
+    )?;
+
+    let entry_gates = root_string_set(&document, "global_convergence_gates")?;
     let known_gates = load_first_column(root, "docs/refactor-gates.csv")?;
     if entry_gates != known_gates {
         return Err(format!(
-            "implementation entry gates mismatch; expected {known_gates:?}, found {entry_gates:?}"
+            "global convergence gates mismatch; expected {known_gates:?}, found {entry_gates:?}"
         ));
     }
     let required_ids = root_string_set(&document, "required_package_ids")?;
@@ -1894,6 +1908,13 @@ fn check_work_package_tranches(
         .ok_or_else(|| "handler entrypoint record is missing".to_owned())?;
     require_table_string(entrypoint, "id", HANDLER_ENTRYPOINT, "handler entrypoint")?;
     require_table_string(entrypoint, "work_package", "WP-100", HANDLER_ENTRYPOINT)?;
+    let handler_admission_status =
+        string_field(entrypoint, "admission_status", HANDLER_ENTRYPOINT)?;
+    if !matches!(handler_admission_status.as_str(), "blocked" | "approved") {
+        return Err(format!(
+            "{HANDLER_ENTRYPOINT} has invalid admission status {handler_admission_status:?}"
+        ));
+    }
     let entry_dependencies =
         package_string_set(entrypoint, "depends_on_tranches", HANDLER_ENTRYPOINT)?;
     if entry_dependencies != owned_set(&[HANDLER_FOUNDATION_TRANCHE]) {
@@ -1936,6 +1957,21 @@ fn check_work_package_tranches(
             "{HANDLER_FOUNDATION_TRANCHE} has invalid status {status:?}"
         ));
     }
+    let admission_status = string_field(tranche, "admission_status", HANDLER_FOUNDATION_TRANCHE)?;
+    if !matches!(
+        admission_status.as_str(),
+        "review-pending" | "approved" | "revoked"
+    ) {
+        return Err(format!(
+            "{HANDLER_FOUNDATION_TRANCHE} has invalid admission status {admission_status:?}"
+        ));
+    }
+    require_table_string(
+        tranche,
+        "impact_status",
+        "current",
+        HANDLER_FOUNDATION_TRANCHE,
+    )?;
     let dependencies = string_set(
         array_field(tranche, "depends_on", HANDLER_FOUNDATION_TRANCHE)?,
         HANDLER_FOUNDATION_TRANCHE,
@@ -1956,20 +1992,11 @@ fn check_work_package_tranches(
         "API-RESOURCE-001",
         "API-SURFACE-001",
         "CONSTRAINED-PROGRESS-001",
+        "CONSTRAINED-STORAGE-002",
         "CONSTRAINED-WORK-001",
-        "CLEANUP-RECORD-001",
-        "HANDLER-CANCEL-002",
-        "HANDLER-STORAGE-001",
-        "HANDLER-SUB-001",
         "RES-LIMIT-001",
+        "RES-LIMIT-002",
         "RES-PROFILE-001",
-        "PLAN-SET-001",
-        "PLAN-ARTIFACT-001",
-        "BIND-ROUTE-001",
-        "BIND-STORAGE-001",
-        "BIND-MEM-001",
-        "BIND-DELIVERY-001",
-        "BIND-CALL-CANCEL-001",
     ]);
     let requirements = package_string_set(tranche, "requirements", HANDLER_FOUNDATION_TRANCHE)?;
     check_known_values(
@@ -2007,6 +2034,119 @@ fn check_work_package_tranches(
         return Err(format!(
             "{HANDLER_FOUNDATION_TRANCHE} feature-cell set is not frozen"
         ));
+    }
+    let registered_artifacts = load_artifact_registry(root)?;
+    let artifacts = package_string_set(
+        tranche,
+        "authoritative_artifacts",
+        HANDLER_FOUNDATION_TRANCHE,
+    )?;
+    let expected_artifacts = owned_set(&[
+        "docs/ADRs/0013-work-package-scoped-implementation-admission.org",
+        "docs/ADRs/0014-transitional-normative-ownership.org",
+        "docs/ADRs/0015-borrowed-resource-profiles-and-linear-work-budgets.org",
+        "docs/amendments/WP-100-handler-api-v1.md",
+        "docs/api-ownership.csv",
+        "docs/design.md",
+        "docs/resource-limits.csv",
+        "docs/work-packages/WP-100-core.md",
+        "docs/work-packages/index.toml",
+    ]);
+    if artifacts != expected_artifacts {
+        return Err(format!(
+            "{HANDLER_FOUNDATION_TRANCHE} authoritative artifact set mismatch; expected \
+             {expected_artifacts:?}, found {artifacts:?}"
+        ));
+    }
+    check_known_values(
+        HANDLER_FOUNDATION_TRANCHE,
+        "authoritative artifact",
+        &artifacts,
+        &registered_artifacts,
+    )?;
+
+    let api_items = package_string_set(tranche, "api_items", HANDLER_FOUNDATION_TRANCHE)?;
+    let expected_api_items = owned_set(&[
+        "PendingWorkClass",
+        "ResourceKind",
+        "ResourceLimits",
+        "StaticResourceProfile",
+        "WorkBudget",
+        "WorkClass",
+    ]);
+    if api_items != expected_api_items {
+        return Err(format!(
+            "{HANDLER_FOUNDATION_TRANCHE} API item set mismatch; expected \
+             {expected_api_items:?}, found {api_items:?}"
+        ));
+    }
+    let ownership_items = load_first_column(root, "docs/api-ownership.csv")?;
+    check_known_values(
+        HANDLER_FOUNDATION_TRANCHE,
+        "API item",
+        &api_items,
+        &ownership_items,
+    )?;
+
+    for empty_field in [
+        "state_machines",
+        "old_api_removals",
+        "performance_workloads",
+    ] {
+        let values = string_set(
+            array_field(tranche, empty_field, HANDLER_FOUNDATION_TRANCHE)?,
+            HANDLER_FOUNDATION_TRANCHE,
+            empty_field,
+        )?;
+        if !values.is_empty() {
+            return Err(format!(
+                "{HANDLER_FOUNDATION_TRANCHE} must have an empty {empty_field:?} scope"
+            ));
+        }
+    }
+
+    let pre_checks = package_string_set(
+        tranche,
+        "pre_implementation_checks",
+        HANDLER_FOUNDATION_TRANCHE,
+    )?;
+    let expected_pre_checks = owned_set(&[
+        "api-ownership-check",
+        "architecture-adr-check",
+        "resource-profile-check",
+        "work-package-dag-check",
+        "wp100-amendment-check",
+        "wp100-handler-amendment-check",
+    ]);
+    if pre_checks != expected_pre_checks {
+        return Err(format!(
+            "{HANDLER_FOUNDATION_TRANCHE} pre-implementation check set mismatch; expected \
+             {expected_pre_checks:?}, found {pre_checks:?}"
+        ));
+    }
+    let check_statuses = load_governance_check_statuses(root)?;
+    for check in &pre_checks {
+        if check_statuses.get(check).map(String::as_str) != Some("executable") {
+            return Err(format!(
+                "{HANDLER_FOUNDATION_TRANCHE} pre-implementation check {check:?} is not executable"
+            ));
+        }
+    }
+
+    let admission_review = string_field(tranche, "admission_review", HANDLER_FOUNDATION_TRANCHE)?;
+    if admission_review != "docs/audits/WP-100-foundation-refresh-entry.md" {
+        return Err(format!(
+            "{HANDLER_FOUNDATION_TRANCHE} admission review path is not frozen"
+        ));
+    }
+    validate_relative_path(&admission_review, "tranche admission review")?;
+    if admission_status == "approved" {
+        if !registered_artifacts.contains(&admission_review) {
+            return Err(format!(
+                "{HANDLER_FOUNDATION_TRANCHE} approved review {admission_review:?} is not registered"
+            ));
+        }
+        check_tranche_admission_review(root, &admission_review, &artifacts, &pre_checks)?;
     }
     let expected_resource_limit_count = integer_field(
         tranche,
@@ -2113,26 +2253,33 @@ fn check_work_package_tranches(
             "resource limit schema is missing additive fields {missing:?}"
         ));
     }
-    let evidence_key = string_field(tranche, "evidence_key", HANDLER_FOUNDATION_TRANCHE)?;
-    if evidence_key != "handler-foundation-refresh"
+    let completion_evidence = package_string_set(
+        tranche,
+        "completion_evidence_keys",
+        HANDLER_FOUNDATION_TRANCHE,
+    )?;
+    if completion_evidence != owned_set(&["handler-foundation-refresh"])
         || !package_evidence
             .get("WP-100")
-            .is_some_and(|keys| keys.contains(&evidence_key))
+            .is_some_and(|keys| completion_evidence.is_subset(keys))
     {
         return Err(format!(
-            "{HANDLER_FOUNDATION_TRANCHE} has an unregistered evidence key {evidence_key:?}"
+            "{HANDLER_FOUNDATION_TRANCHE} has unregistered completion evidence \
+             {completion_evidence:?}"
         ));
     }
-    let evidence_path = string_field(tranche, "evidence_path", HANDLER_FOUNDATION_TRANCHE)?;
+    let evidence_path = string_field(
+        tranche,
+        "completion_evidence_path",
+        HANDLER_FOUNDATION_TRANCHE,
+    )?;
     if evidence_path != "docs/evidence/WP-100-foundation-refresh.toml" {
         return Err(format!(
             "{HANDLER_FOUNDATION_TRANCHE} evidence path is not frozen"
         ));
     }
     validate_relative_path(&evidence_path, "tranche evidence")?;
-    let verification_check =
-        string_field(tranche, "verification_check", HANDLER_FOUNDATION_TRANCHE)?;
-    let check_statuses = load_governance_check_statuses(root)?;
+    let verification_check = string_field(tranche, "completion_check", HANDLER_FOUNDATION_TRANCHE)?;
     let check_status = check_statuses.get(&verification_check).ok_or_else(|| {
         format!("{HANDLER_FOUNDATION_TRANCHE} references unknown check {verification_check:?}")
     })?;
@@ -2144,7 +2291,17 @@ fn check_work_package_tranches(
                 "{HANDLER_FOUNDATION_TRANCHE} is complete but {evidence_path} is missing"
             ));
         }
-        check_tranche_evidence(root, &evidence_path, &evidence_key, &verification_check)?;
+        if admission_status != "approved" {
+            return Err(format!(
+                "{HANDLER_FOUNDATION_TRANCHE} is complete without approved admission"
+            ));
+        }
+        check_tranche_evidence(
+            root,
+            &evidence_path,
+            "handler-foundation-refresh",
+            &verification_check,
+        )?;
     } else if evidence_exists && tranche_evidence_is_passed(root, &evidence_path)? {
         return Err(format!(
             "{HANDLER_FOUNDATION_TRANCHE} remains pending while {evidence_path} claims passed"
@@ -2152,6 +2309,12 @@ fn check_work_package_tranches(
     }
 
     if require_handler_entry {
+        if handler_admission_status != "approved" {
+            return Err(format!(
+                "handler entry blocked: {HANDLER_ENTRYPOINT} admission is \
+                 {handler_admission_status:?}"
+            ));
+        }
         if status != "complete" {
             return Err(format!(
                 "handler entry blocked: {HANDLER_FOUNDATION_TRANCHE} is {status:?}"
@@ -2175,6 +2338,56 @@ fn check_work_package_tranches(
         if !status.success() {
             return Err(format!(
                 "handler entry blocked: foundation verification exited with {status}"
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn check_tranche_admission_review(
+    root: &Path,
+    relative_path: &str,
+    artifacts: &BTreeSet<String>,
+    checks: &BTreeSet<String>,
+) -> Result<(), String> {
+    let path = root.join(relative_path);
+    let source = fs::read_to_string(&path)
+        .map_err(|error| format!("cannot read {}: {error}", path.display()))?;
+    for required in [
+        "Status: Passed",
+        "Design revision: v4.9",
+        "Admission scope: `WP-100-FOUNDATION-REFRESH`",
+        "Verdict: Implementation-ready",
+        "ResourceKind` indices `0..=138`",
+        "indices `139..=194`",
+        "HandlerSteps = 9",
+        "`ResourceLimits` remains explicitly `Clone` but is no longer `Copy`",
+        "`&'static ResourceLimits`; a bare profile id is not value authority",
+        "`WorkBudget` implements neither `Clone` nor `Copy`",
+        "HandlerCall = 1 << 11",
+        "ProducerSubscriptionSetup = 1 << 12",
+        "ProducerSubscriptionTeardown = 1 << 13",
+        "No stable dynamic-library ABI is promised",
+    ] {
+        if !source.contains(required) {
+            return Err(format!(
+                "admission review {relative_path:?} misses required evidence {required:?}"
+            ));
+        }
+    }
+    for artifact in artifacts {
+        let reference = format!("`{artifact}`");
+        if !source.contains(&reference) {
+            return Err(format!(
+                "admission review {relative_path:?} does not cover artifact {artifact:?}"
+            ));
+        }
+    }
+    for check in checks {
+        let reference = format!("`{check}`");
+        if !source.contains(&reference) {
+            return Err(format!(
+                "admission review {relative_path:?} does not cover check {check:?}"
             ));
         }
     }
@@ -2432,7 +2645,7 @@ fn check_work_package_document(
         status_metadata,
         "Design revision: v4.9",
         "Depends on:",
-        "Required gates:",
+        "Global convergence gates:",
         "Owner packages:",
     ] {
         if !source.contains(metadata) {

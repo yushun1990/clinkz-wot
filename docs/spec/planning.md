@@ -298,6 +298,14 @@ in the immutable selected plan. `BindingCoalesced` certifies one physical
 subscription equivalent to the selected root operation; it does not authorize
 engine-side per-affordance fan-out.
 
+`ExactAffordanceTarget` is the application-visible semantic identity. A
+binding artifact may map several protocol-side topics, key expressions,
+channels, or route instances to that target, but those protocol identifiers do
+not enter `SubscriptionItem`. When physical-source provenance is useful for
+diagnostics, it remains bounded binding-local status metadata. If two sources
+have observably different WoT semantics, the TD or an explicitly designed
+extension must model them as distinct logical targets.
+
 ### Producer plan projections
 
 `InboundBindingPlan` is the Producer projection of one logical plan and its
@@ -317,7 +325,12 @@ The set does not contain mutable lifecycle fields. The associated
 Servient-owned plan-set record contains lifecycle state, pins, active-operation
 leases, lazy-slot state, build and reclaim cursors, and publication identity.
 
-## Planning input and snapshot identity
+## Planning input and context identity
+
+`PlanBuildInput` is the concrete planning-context boundary. It captures or
+pins immutable generation-qualified views for one build transaction; it does
+not require a deep copy of the startup registration set and does not imply
+runtime binding mutation.
 
 One build transaction captures all of the following before candidate planning:
 
@@ -337,10 +350,11 @@ not invalidate an existing plan. Security applicability that depends on current
 credentials is evaluated during selection from the precompiled effective
 security expression.
 
-V1 registration composition is startup-only. A handle pins the snapshot used
-by its build. A new registration, configuration, compiler version, policy, or
-schema snapshot affects new admissions in a new Servient instance or captured
-generation; it does not mutate or invalidate an existing handle in place.
+V1 registration composition is startup-only. A handle pins the context used by
+its build. A different registration or binding configuration requires a new
+Servient instance. A new policy, compiler, or schema dependency generation may
+affect a later build only through an explicitly captured immutable context; it
+does not mutate or invalidate an existing handle in place.
 
 Generation equality is part of every plan/artifact lookup. An entry from an
 incompatible document, plan-set, policy, dependency, binding, configuration, or

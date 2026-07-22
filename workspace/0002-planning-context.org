@@ -1,5 +1,5 @@
 #+TITLE: Planning Context
-#+STATUS: DECIDED
+#+STATUS: MIGRATED
 
 * Context
 
@@ -46,5 +46,8 @@ loading.
 
 * Migration
 
-Pending explicit linkage to the authoritative ADR/design documents that encode
-the planning-context boundary.
+Migrated into =docs/architecture/10-primary-data-flows.md= and the planning
+input/context contract in =docs/spec/planning.md=. The selected concrete public
+role remains =PlanBuildInput=; no duplicate =PlanningContext= public type is
+introduced. ADR-0008 and ADR-0009 retain the plan-lifecycle and startup-only
+composition decisions.

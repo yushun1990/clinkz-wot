@@ -1,0 +1,170 @@
+#+title: Architecture Review 04: Workspace Findings and Module-Boundary Re-review
+#+date: 2026-07-22
+#+review_id: architecture-review-04-v4.9-workspace-triage
+#+status: Complete; global gates remain open
+#+reviewed_design: v4.9 architecture-closure candidate
+
+* Executive verdict
+
+The v4.9 module direction remains coherent, but the review found two defects
+inside the proposed WP-100 foundation admission rather than treating all open
+findings as unrelated:
+
+- the architecture index, active artifact registry, and scoped-admission rule
+  described incompatible transitional authority; and
+- the public resource/profile implementation allowed implicit multi-kilobyte
+  copies, while =WorkBudget= could be copied to duplicate an allowance.
+
+ADR-0014 and ADR-0015 resolve those architecture decisions. Their projections,
+the corrected v4.9 handler amendment, and a new independent tranche review must
+pass before =WP-100-FOUNDATION-REFRESH= is approved. This review does not close
+or waive a global gate.
+
+The remaining Protocol Binding exact-signature, authoring-ergonomics, and
+candidate-fallback findings are real but disjoint from the corrected foundation
+scope. They are explicit admission blockers for WP-200 and WP-300 rather than
+implicit choices left to those implementations.
+
+* Scope and method
+
+The review triaged AR-001 through AR-008 from
+=workspace/0005-architecture-review-findings.md= against:
+
+- =AGENTS.md=, =PLAN.md=, and the workspace lifecycle;
+- the complete architecture backbone and ADR-0001 through ADR-0015;
+- the planning and Protocol Binding specifications;
+- the residual design, amendments, API ownership, resource schema, state,
+  performance, gate, governance, and work-package projections; and
+- relevant implementation paths in foundation, core, Servient, and the
+  existing bindings.
+
+Two independent reviews split AR-001..004 and AR-005..008. A separate scoped
+foundation review was then challenged adversarially against the open workspace
+findings. This exposed the authority and copy/linearity defects before code was
+changed.
+
+* Module-boundary conclusion
+
+| Layer | Owns | Boundary conclusion |
+|-
+| Foundation | immutable resource configuration, advanced reservation/accounting primitives, linear work budgets, time, and generations | Normal interactions inherit a profile. Static profiles are borrowed; complete profiles are not copied on entry; work allowances are not duplicable. |
+| TD/TM | lossless documents, validation, defaults, extensions, URI values | No plan selection, runtime cache, or protocol work. |
+| Core | protocol-neutral identities, interaction/handler/security/codec contracts, immutable plans, and binding SPI values/traits | No application facade, universal queues, Servient registry, or concrete I/O. Exact PB authoring signatures remain a WP-300 admission blocker. |
+| Planning | effective forms, deterministic candidate construction, capability indexes, compiler coordination, and immutable build output | No binding execution or Servient lifecycle. Ordering is frozen; exact fallback policy remains a WP-200 admission blocker. |
+| Servient | configuration snapshots, plan-set and Thing lifecycle, orchestration, scheduling, application facades, and cleanup ownership | It drives PB progress but neither reparses TDs on hot paths nor performs protocol I/O. |
+| Discovery | engine-side discovery and Directory client sessions/processes | No Directory service, server query/redaction, storage, or endpoint hosting. |
+| Concrete PB | compiler extension, protocol artifacts, I/O, native flow control/multiplexing, auth extraction, and local cleanup | No handler dispatch authority, TD reinterpretation, cross-binding scheduler, or hidden unbounded semantic task. |
+| Umbrella/codecs | deliberate composition/re-exports; bounded codec implementations | No duplicate semantic owner or runtime policy. |
+
+The dependency direction in =docs/architecture/20-module-boundaries.md= remains
+accepted. Current implementation violations are migration inputs and do not
+justify moving their behavior into the wrong target layer.
+
+* Finding dispositions
+
+** AR-001: Accept and migrate
+
+The finding was current. The architecture index still described the residual
+design and amendments as inactive v4.8 inputs and imposed a blanket pause,
+while the artifact registry treated amendments as normative and ADR-0013
+allowed scoped admission. The handler amendment also froze a stale 118-to-130
+resource checkpoint against the active 139-to-195 projection.
+
+ADR-0014 defines transitional ownership without a file-precedence shortcut.
+The architecture/specification indexes and =docs/design.md= now distinguish an
+active v4.9 residual owner, a registered bounded normative amendment, and
+historical migration text. The handler amendment is rebased to v4.9 and retains
+its exact 118..129 handler subset while recognizing the active 195-field
+schema.
+
+** AR-002: Plan as a blocking WP-300 design item
+
+The exact complete host/static registration constructors, compiler extension,
+form contributor, constrained traits, typed slots, and rejection/result bounds
+remain insufficient for an independent second PB. API paths in the ownership
+matrix do not substitute for Rust signatures.
+
+=docs/work-packages/WP-300-bindings.md= now requires complete exact contracts
+and independent host plus =no_std + alloc= authoring fixtures before admission.
+The issue remains a GATE-1/GATE-6 blocker and does not enter the foundation
+tranche's requirement set.
+
+** AR-003: Plan an authoring validation before WP-300
+
+The current distinct prepared, active, committed-closed, borrowed-permit, and
+shutdown ownership phases preserve real publication and cleanup invariants; no
+evidence yet proves that one can be removed safely. The same WP-300 fixtures
+must cover a mostly synchronous binding and one with external readiness. If
+helpers/default adapters are insufficient and semantic phases must merge,
+ADR-0010/0012 reopen before implementation.
+
+** AR-004: Plan the narrower fallback-policy defect before WP-200
+
+Document form order, captured registration order, strict narrowing, and the
+no-fallback-after-acceptance rule are already clear. The unresolved defect is
+the referenced but unconstructible fallback policy: its owner/default,
+eligible pre-side-effect failures, input-rejection rule, runtime-health rule,
+and bounded skipped-candidate diagnostics.
+
+=docs/work-packages/WP-200-planning.md= records those exact pre-admission design
+conditions. Selection remains planning-owned and deterministic.
+
+** AR-005: Reject as already resolved by the target design
+
+ADR-0003/0004, the canonical flow, and the planning/binding specifications
+already freeze one Thing-level plan and one native or binding-coalesced driver,
+with binding-local flow control and no implicit N-subscription core merge. The
+legacy queues and N-loop are explicitly nonconforming migration sources.
+
+** AR-006: Accept and migrate
+
+The profile/default direction was sound, but the public representation exposed
+a 3,120-byte =ResourceLimits= as =Copy= and returned complete static profiles by
+value. More importantly, =WorkBudget: Clone + Copy= allowed a remaining budget
+to be duplicated.
+
+ADR-0015 freezes =ResourceLimits: Clone + !Copy=, borrowed static profiles,
+validated immutable profile references/handles rather than bare-id authority,
+and =WorkBudget: !Clone + !Copy= consumed only through unique mutable access.
+Ordinary application interactions inherit the Servient profile; public account
+and reservation values remain advanced SPI. The foundation tranche owns these
+changes and their no-std/reference/noncopy tests. The reviewed 3,120/80-byte
+layouts are disclosed but not frozen as ABI.
+
+** AR-007: Reject as already prominent and enforceable
+
+=docs/architecture/10-primary-data-flows.md= is the second document in the
+backbone reading order and explicitly separates planning, consumer execution,
+producer execution, and lifecycle. Ownership and work-package evidence prohibit
+TD rescans, PB-to-handler dispatch, and hidden semantic paths. Current code
+violations are assigned migration work, not an architecture omission.
+
+** AR-008: Reject as resolved by project policy
+
+=AGENTS.md=, the workspace README/index, the finding template itself, and
+ADR-0013 now require OPEN -> DISCUSSING -> DECIDED -> MIGRATED progression,
+explicit Accept/Plan/Reject/Defer disposition, authoritative projection, and
+impact review. A review comment cannot silently become behavior or work.
+
+* Performance and admission implications
+
+The 195-field schema refresh is a cold configuration/schema change rather than
+a new execution algorithm, so it does not acquire an artificial hot-path
+workload. It must nevertheless prove borrowed profile access, no implicit
+complete-profile copy, unique budget consumption, all three feature cells,
+no-std static construction, exact prefix/suffix identity, and profile snapshot
+completeness.
+
+AR-002/003/004 remain global and later-tranche blockers. Their open status does
+not authorize assumptions in WP-200/WP-300, and their disjointness from the
+foundation tranche depends on the narrowed machine-readable requirement/API
+scope. Any discovered need for a PB signature, candidate policy, state change,
+or hot-path copy revokes foundation admission under ADR-0013.
+
+* Review verdict
+
+The workspace review is triaged and its stable conclusions are migrated. The
+architecture module boundaries remain accepted with the precise later-package
+blockers above. =WP-100-FOUNDATION-REFRESH= remains =review-pending= until all
+corrected projections and pre-implementation checks pass and an independent
+entry review reaffirms the exact revision.

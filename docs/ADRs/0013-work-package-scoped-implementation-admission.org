@@ -1,0 +1,153 @@
+#+title: ADR-0013: Work-Package Tranche-Scoped Implementation Admission
+#+date: 2026-07-22
+#+status: Accepted
+
+* Context
+
+The v4.9 process uses six global gates to prevent implementation from choosing
+between conflicting APIs, lifecycle rules, resource limits, performance
+contracts, or migration plans. That protection is necessary, but treating every
+open global finding as a prohibition on every runtime change makes the whole
+revision the smallest implementation unit. It also delays feedback from code
+whose dependencies and affected contracts are already stable.
+
+=workspace/0004-implementation-readiness.org= asks whether a stable
+architecture backbone and a ready work package can admit implementation before
+every documentation artifact is complete. The existing package DAG already
+contains a finer concept, the tranche, but does not define a reviewed admission
+decision for it or distinguish tranche readiness from global convergence.
+
+The process therefore needs two related but different conclusions: whether one
+bounded implementation change is safe to start, and whether the complete design
+revision has converged for coordinated integration and release.
+
+* Decision
+
+The tranche is the smallest implementation-admission unit. Every implementation
+change belongs to exactly one recorded tranche. A work package that does not
+need subdivision is represented by one tranche; admission is never inferred
+from the status of its parent work package.
+
+An implementation tranche may be admitted while a global gate remains open
+only when the open findings are demonstrably outside the tranche's dependency
+and change scope. Admission is an explicit, reviewed record, not an inference
+from apparent design maturity. The record identifies the design revision,
+tranche and work-package ids, predecessor tranches, affected requirements,
+authoritative artifacts, crates and feature cells, API/state/resource changes,
+old-API removals, applicable performance workloads, pre-implementation checks,
+independent review evidence, and completion-evidence keys.
+
+A tranche is admitted only when all of the following conditions hold in the
+recorded admission revision:
+
+1. The architecture backbone needed by the tranche has stable ownership,
+   dependency direction, primary flow, and lifecycle boundaries. No accepted
+   ADR, architecture document, or detailed specification conflicts within that
+   scope.
+2. Every predecessor tranche and implementation dependency is complete, with
+   its declared evidence present and passing. A tranche cannot use an
+   unimplemented predecessor contract as if it were complete.
+3. The tranche has a closed requirement and artifact scope. Every behavior it
+   may change is owned by an indexed requirement and authoritative artifact,
+   and the corresponding API, state, resource, performance, migration, and
+   removal projections are complete where applicable. Discovering an omitted
+   dependency or observable behavior stops implementation until the scope is
+   amended and reviewed.
+4. No unresolved workspace topic or review finding intersects the scope. An
+   =OPEN= or =DISCUSSING= topic blocks an intersecting tranche. A =DECIDED=
+   workspace conclusion that affects the contract must be migrated into an
+   authoritative artifact before admission; workspace text is not an
+   implementation authority.
+5. Every check that can run before the target implementation exists is
+   executable and passes. This includes document consistency, schema and
+   ownership validation, compile-contract fixtures, deterministic fixture
+   generation, and applicable state, resource, and performance-contract
+   validation. A named check that is a placeholder does not satisfy this
+   condition.
+6. An independent scoped review covers the exact admission revision and
+   records that all findings intersecting the tranche are closed or explicitly
+   non-blocking. A project-wide review is not required when its remaining
+   findings are disjoint, but self-asserted readiness is insufficient.
+7. Completion evidence is defined before implementation begins. Its stable
+   keys, acceptance criteria, feature cells, workloads, and output locations
+   are part of the admission record. The results that require the new code are
+   produced after implementation and must pass before the tranche becomes
+   complete.
+
+Global gates remain the aggregate convergence mechanism. An open gate means
+that the complete design revision has not yet satisfied that gate; a scoped
+admission does not partially close it, waive it, or remove its findings. All
+global gates required by final coordinated integration, legacy-surface removal,
+and release must close through their normal same-revision evidence and review.
+Gate findings and admission findings must be mapped to requirements, artifacts,
+and affected tranches so that disjointness is reviewable rather than assumed.
+If the impact cannot be bounded, the finding blocks every tranche that may
+depend on it.
+
+=GATE-5= has a deliberate contract-before-code and measurement-after-code
+split. Before admission, each applicable workload must have a schema-valid
+manifest, fixed workload and fixture identity, target profile, resource and
+work accounting, deterministic oracle, metric definition, budget, and an
+executable harness path. Target-implementation measurements cannot be a
+precondition for writing that implementation. They are mandatory completion
+evidence and must use the admitted identities and budgets. A failed result
+cannot be made conforming by silently changing a fixture, workload, or budget.
+
+Implementation feedback may refine private structure within the admitted
+contract. If it reveals an ambiguous or infeasible public API, lifecycle,
+resource bound, performance contract, or module boundary, work stops at the
+affected boundary and returns to the workspace and authoritative design flow.
+The tranche scope and admission review are updated before that work resumes;
+the implementation does not decide the architecture implicitly.
+
+A new or reopened finding triggers an explicit impact review:
+
+- an unaffected admitted tranche may continue when the review records a
+  disjoint requirement, artifact, and dependency scope;
+- an affected pending or admitted tranche loses admission, and an affected
+  in-progress tranche stops before merge until corrective artifacts, checks,
+  and review pass;
+- an affected completed tranche is marked for impact review. It is either
+  reaffirmed with evidence that its contract and results remain valid, or
+  reopened together with every transitively dependent tranche whose evidence
+  is invalidated; and
+- the corresponding global gate remains open or is reopened until the complete
+  revision again satisfies its aggregate closure conditions.
+
+No tranche is admitted merely by this ADR. The decision becomes operative only
+after its admission schema, authoritative requirements, package DAG, checks,
+and review records are projected consistently and a particular tranche has a
+passing admission record.
+
+* Consequences
+
+- =REFACTOR-GATE-001= changes from a blanket package-level pause to explicit
+  tranche-scoped admission while retaining global closure for final
+  convergence.
+- =IMPL-CONFORM-001= and the work-package index must define tranche admission
+  records, their exact scope, dependencies, checks, review evidence, completion
+  evidence, and impact states.
+- =CHANGE-CONTROL-001= must map semantic changes to admitted, in-progress, and
+  completed tranches and require transitive impact review.
+- =PLAN.md=, work-package documents, governance records, and gate checkers must
+  distinguish global gate status from tranche admission status.
+- Performance tooling must validate pre-code contracts separately from
+  post-code measurement evidence without weakening either requirement.
+- The implementation can now provide architecture feedback incrementally, but
+  only through dependency-complete, independently reviewed, recoverable
+  checkpoints.
+
+* Rejected alternatives
+
+- Pausing every implementation tranche until every global gate closes was
+  rejected because unrelated findings would block already stable,
+  dependency-complete work and postpone useful implementation evidence.
+- Allowing developers or agents to start coding whenever a design area appears
+  clear was rejected because readiness would be unreviewed, scope could expand
+  silently, and the original implementation divergence would recur.
+- Treating an open global gate as irrelevant after one tranche is admitted was
+  rejected because tranche admission proves only a bounded scope; it does not
+  establish whole-revision consistency or release readiness.
+- Defining scope or evidence retroactively after implementation was rejected
+  because it converts admission into documentation of an accomplished fact
+  rather than a control on architectural risk.

@@ -6,7 +6,7 @@ Design revision: v4.9
 
 Depends on: WP-000
 
-Required gates: GATE-1, GATE-2, GATE-3, GATE-4, GATE-5, GATE-6
+Global convergence gates: GATE-1, GATE-2, GATE-3, GATE-4, GATE-5, GATE-6
 
 Owner packages: clinkz-wot-core, clinkz-wot-foundation, clinkz-wot-td
 
@@ -29,15 +29,24 @@ appends the exact 56-field v4.9 planning and Protocol Binding resource
 projection, and regenerates the named profiles, generated schema, snapshots,
 and boundary tests. The resulting active schema has 195 fields. The previously
 assigned `WorkClass::HandlerSteps` and three core pending-work variants remain
-part of the same foundation checkpoint. This does not reopen the completed
-WP-000 package; new evidence is recorded against WP-100 before implementation
-continues.
+part of the same foundation checkpoint. ADR-0015 also removes implicit copying
+from `ResourceLimits`, changes `StaticResourceProfile` to expose a static
+reference, and makes `WorkBudget` nonduplicable. This does not reopen the
+completed WP-000 package; new evidence is recorded against WP-100 before
+implementation continues.
 
 The machine-readable tranche record in `docs/work-packages/index.toml` is the
 source of truth for this prerequisite. Ordinary design validation permits its
 `pending` state, but handler implementation entry requires
 `tools/check-design-artifacts.sh --handler-entry-ready` to verify that the
 tranche is complete and backed by same-revision evidence.
+
+The tranche's affected requirement set is exactly `API-RESOURCE-001`,
+`API-SURFACE-001`, `CONSTRAINED-PROGRESS-001`,
+`CONSTRAINED-STORAGE-002`, `CONSTRAINED-WORK-001`, `RES-LIMIT-001`,
+`RES-LIMIT-002`, and `RES-PROFILE-001`. Handler, planning, binding, and cleanup
+requirement ids in individual CSV resource rows are provenance for later
+consumers, not behavioral implementation scope for this tranche.
 
 ## Requirements
 
@@ -65,9 +74,10 @@ tranche is complete and backed by same-revision evidence.
 
 - Modify Cargo package `clinkz-wot-core`. Modify `clinkz-wot-foundation` only
   for the append-only resource schema, named-profile values, generated tests
-  and snapshots, and `WorkClass::HandlerSteps`; consume `clinkz-wot-td` only
-  in the allowed dependency direction. This tranche projects limits and does
-  not implement planning or binding runtime behavior.
+  and snapshots, `StaticResourceProfile` reference boundary, linear
+  `WorkBudget`, and `WorkClass::HandlerSteps`; consume `clinkz-wot-td` only in
+  the allowed dependency direction. This tranche projects limits and does not
+  implement planning or binding runtime behavior.
 - The `no-default` cell exposes interaction values, synchronous local dispatch roles,
   incremental codec/security roles, status values, and generation-bearing ids without
   requiring atomics, `Arc`, boxed futures, or an executor.
@@ -116,6 +126,18 @@ tests. Every bounded handler `start`, `step`, `cancel`, or constrained adapter
 poll charges its caller-supplied counter before work begins. The refresh must
 not create a duplicate Rust-side resource schema or change the downward
 dependency graph.
+
+`ResourceLimits` remains explicitly `Clone` for startup customization but is
+not `Copy`. `StaticResourceProfile::LIMITS` and `limits()` return
+`&'static ResourceLimits`; a bare `ResourceProfileId` never authorizes values.
+`WorkBudget` implements neither `Clone` nor `Copy`, and every progress API
+consumes one unique value through `&mut WorkBudget`. Update the no-std surface
+fixture so it retains references rather than returning three complete profile
+arrays by value. Do not freeze the 3,120-byte/80-byte reviewed layouts as ABI;
+test the ownership and reference contracts instead. A dependency-free
+compile-time ambiguity assertion must prove `ResourceLimits: Clone + !Copy`,
+`WorkBudget: !Clone + !Copy`, and the exact `&'static ResourceLimits` profile
+accessor types; checking only a derive line is insufficient.
 
 Preserve only `CoreResult`, `ThingId`, and `PrincipalId` in place as allowed by the ownership
 matrix. Preserve the public name and variants of `AffordanceTarget`, but replace its

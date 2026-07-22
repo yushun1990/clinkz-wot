@@ -3,7 +3,7 @@
 Status: Planned
 Design revision: v4.9
 Depends on: `WP-400`, `WP-500`, `WP-600`
-Required gates: `GATE-1`, `GATE-2`, `GATE-3`, `GATE-4`, `GATE-5`, `GATE-6`
+Global convergence gates: `GATE-1`, `GATE-2`, `GATE-3`, `GATE-4`, `GATE-5`, `GATE-6`
 Owner packages: `clinkz-wot`, workspace
 
 ## Scope

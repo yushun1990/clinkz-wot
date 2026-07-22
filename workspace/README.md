@@ -1,23 +1,17 @@
-# clinkz-wot Architecture Workspace Package
+# Project Workspace
 
-This package contains the latest proposed architecture-workspace files.
+`workspace/` preserves non-authoritative discussions that help the project
+converge. Topics may cover architecture, API design, implementation readiness,
+engineering trade-offs, workflow, reviews, experiments, or collaboration
+practice.
 
-Copy `workspace/` to the repository root.
+The authoritative contract remains under `docs/`. Implementation execution is
+tracked by `PLAN.md`, the work-package DAG, issues, and pull requests. A
+workspace topic cannot override those sources.
 
-Append `AGENTS-workspace-appendix.md` to the existing root `AGENTS.md`.
-Do not replace the existing repository guidance.
+Topics move through `OPEN -> DISCUSSING -> DECIDED -> MIGRATED` when a stable
+conclusion needs an authoritative projection. `MIGRATED` topics remain here as
+decision history. Historical source notes live under `workspace/history/`.
 
-The key boundary is:
-
-- `workspace/`: architectural reasoning and design convergence only.
-- ADR/design/specification: authoritative architecture.
-- `PLAN.md`, GitHub Issues, and PRs: implementation execution and tracking.
-
-Suggested flow:
-
-workspace topic
-    -> discussion
-    -> DECIDED
-    -> ADR / design / specification
-    -> MIGRATED
-    -> implementation planning
+Use `workspace/INDEX.org` as the topic index. Do not copy this directory into
+another location or treat it as a plugin/package installation payload.

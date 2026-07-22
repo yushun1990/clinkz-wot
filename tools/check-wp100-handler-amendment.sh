@@ -52,7 +52,7 @@ require_workload_text() {
 
 for metadata in \
     'Status: Frozen' \
-    'Base design revision: v4.7' \
+    'Base design revision: v4.9' \
     'Amendment id: WP-100-HANDLER-API-001'; do
     if ! grep -Fq "$metadata" "$amendment"; then
         echo "WP-100 handler amendment check: missing metadata: $metadata" >&2
@@ -299,9 +299,21 @@ fi
 for append_invariant in \
     'The 118 pre-v4.7 fields therefore retain indices `0..=117`' \
     '`118..=129`' \
-    'append after `producer_residual_bytes_global_max`'; do
+    'additional v4.8 fields occupy `130..=138`' \
+    'v4.9 planning/binding' \
+    '`139..=194`'; do
     if ! grep -Fq "$append_invariant" "$amendment"; then
         echo "WP-100 handler amendment check: missing append-only ABI rule: $append_invariant" >&2
+        exit 1
+    fi
+done
+
+for ownership_invariant in \
+    '`ResourceLimits` is explicitly cloneable but not `Copy`' \
+    "\`StaticResourceProfile\` exposes \`&'static ResourceLimits\`" \
+    'implements neither `Clone` nor `Copy`'; do
+    if ! grep -Fq "$ownership_invariant" "$amendment"; then
+        echo "WP-100 handler amendment check: missing ADR-0015 projection: $ownership_invariant" >&2
         exit 1
     fi
 done

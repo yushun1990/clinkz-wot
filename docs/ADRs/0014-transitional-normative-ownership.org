@@ -1,0 +1,88 @@
+#+title: ADR-0014: Transitional Normative Ownership During Domain Decomposition
+#+date: 2026-07-22
+#+status: Accepted
+
+* Context
+
+ADR-0007 replaced the v4.8 monolithic document model with a v4.9 architecture
+backbone and single-owner domain specifications. The migration is incomplete:
+some detailed requirements still live in =docs/design.md=, and four WP-100
+amendments remain registered as normative amendments.
+
+The architecture index nevertheless described the whole design document and
+all amendments as migration inputs and stated that runtime implementation was
+paused. That conflicts with the active artifact registry, with detailed clauses
+that explicitly depend on the amendments, and with ADR-0013's reviewed
+tranche-scoped admission policy. An implementer could not determine whether a
+registered amendment was active authority or merely historical input.
+
+* Decision
+
+The active normative set is explicit and revision-qualified. =docs/design.md=
+selects the revision, and =docs/artifacts.csv= registers every active normative
+artifact and its role. Registration does not create precedence between
+conflicting artifacts; it makes their consistency checkable.
+
+The v4.9 ownership chain is:
+
+1. the architecture backbone owns cross-domain invariants and dependency
+   direction;
+2. a registered domain specification owns the detailed behavior and public
+   contract for its declared domain;
+3. while a domain has not yet been migrated, the v4.9 clauses in
+   =docs/design.md= remain its residual detailed owner as identified by
+   =docs/requirements.csv=; and
+4. a file registered with the =normative-amendment= role is temporarily active
+   only for its explicit affected requirements and stated refinement boundary.
+
+An active amendment may close an alternative or supply an exact schema omitted
+by its residual =docs/design.md= owner. It does not override the architecture
+backbone, an accepted ADR, or an already registered domain specification by
+file order. Its header must identify the base revision, affected requirements,
+and exact refinement or supersession. Any contradiction inside that bounded
+scope is a gate and tranche-admission failure.
+
+The historical v4.8 revision record inside =docs/design.md= remains migration
+history. It does not make the entire current file a v4.8 input: the file is the
+active v4.9 manifest and residual owner for requirements not yet transferred.
+Text that is retained only as migration input must be marked or moved under a
+historical/deprecated owner and cannot be cited by a new admission record.
+
+When an amendment is merged into its final domain specification, the migration
+updates the specification, requirement source, artifact role, affected checks,
+and work-package inputs atomically. The amendment is then retained only as
+historical evidence. A requirement must never have two unqualified detailed
+owners after that migration.
+
+ADR-0013 applies during this decomposition. A tranche may cite a bounded set of
+active residual clauses and normative amendments when its review proves that
+the set has one owner per behavior and no conflict. This does not declare an
+unmigrated domain globally complete and does not close any aggregate gate.
+
+Reviews, audits, =PLAN.md=, and =workspace/= remain non-normative. They may
+identify a conflict or record evidence, but the correction is effective only
+after it is projected into the registered normative owner.
+
+* Consequences
+
+- The architecture and specification indexes must describe residual
+  =docs/design.md= clauses and registered amendments consistently.
+- Artifact and requirement registries become the executable inventory of the
+  transitional authority graph; their rows cannot be treated as a loose file
+  list.
+- Tranche reviews must name the exact residual clauses or amendments on which
+  they rely rather than citing the monolith as undifferentiated authority.
+- Coordinated convergence still requires completion of the domain
+  decomposition, but disjoint scoped implementation is governed by ADR-0013.
+
+* Rejected alternatives
+
+- Treating all of =docs/design.md= and every amendment as non-normative until
+  decomposition completes was rejected because currently registered domains
+  would have missing exact owners and no bounded tranche could be reviewed.
+- Giving amendments implicit precedence over every other file was rejected
+  because an amendment is intentionally narrow and cannot silently change an
+  architecture invariant or another domain.
+- Restoring a blanket implementation pause was rejected because it recreates
+  the whole revision as the smallest implementation unit and conflicts with
+  the reviewed scoped-admission policy.

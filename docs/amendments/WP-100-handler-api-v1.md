@@ -2,7 +2,7 @@
 
 Status: Frozen
 
-Base design revision: v4.7
+Base design revision: v4.9
 
 Amendment id: WP-100-HANDLER-API-001
 
@@ -1199,8 +1199,9 @@ Servient lifecycle wiring, and retained terminal replay. No interim
 
 ## Resource and Work-Budget Closure
 
-The nine handler limits and three independent Producer-residual limits appended
-to `docs/resource-limits.csv` are exhaustive for this revision:
+The nine handler limits and three independent Producer-residual limits first
+added by the v4.7 handler closure remain the exhaustive handler-owned subset of
+the active `docs/resource-limits.csv` schema:
 
 | Field | Gateway | Directory | Static reference |
 | --- | ---: | ---: | ---: |
@@ -1219,11 +1220,12 @@ to `docs/resource-limits.csv` are exhaustive for this revision:
 
 `ResourceKind` has a public zero-based representation/index generated in CSV
 data-row order. The 118 pre-v4.7 fields therefore retain indices `0..=117`, and
-the twelve fields in the table above append in that exact order at
-`118..=129`. A generator must not sort by field or resource kind. Future fields
-append after `producer_residual_bytes_global_max`; insertion, removal, or
-reordering of an existing row is an ABI break and is not permitted by this
-amendment.
+the twelve fields in the table above retain their exact order at `118..=129`.
+The additional v4.8 fields occupy `130..=138`, and the v4.9 planning/binding
+projection occupies `139..=194`; those fields are owned by the active resource
+schema rather than this handler amendment. A generator must not sort by field
+or resource kind. Insertion, removal, or reordering of any existing row is an
+ABI/source-identity break and requires reviewed impact handling.
 
 All use `zero_semantics=disabled`. For drain fields, zero selects only an
 explicit immediate-close policy; it never permits unlimited waiting.
@@ -1257,6 +1259,12 @@ Producer tombstone eviction.
 `ProducerSubscriptionTeardown`. A host synchronous callback currently executing
 on another thread is not ready local pending work; its completion becomes
 `HandlerCall` only when locally progressable.
+
+Under ADR-0015, `ResourceLimits` is explicitly cloneable but not `Copy`,
+`StaticResourceProfile` exposes `&'static ResourceLimits`, and `WorkBudget`
+implements neither `Clone` nor `Copy`. Handler, codec, and progress APIs borrow
+the limits snapshot and mutate one unique budget; they never duplicate an
+allowance or materialize a complete profile on entry.
 
 Each failed manual-poll teardown admission consumes one `HandlerSteps` unit and
 increments the transaction's cumulative wait through
@@ -1298,13 +1306,14 @@ After WP-300, WP-400, WP-500, and WP-600 are unordered sibling branches; WP-700
 joins all three branches. Numbering does not add an edge between the sibling
 branches:
 
-1. The WP-100 foundation-entry subtranche appends the twelve generated
-   `ResourceLimits` fields without changing the first 118 `ResourceKind`
-   indices, adds `WorkClass::HandlerSteps`, the three
-   `PendingWorkClass` values, profile snapshots, and boundary tests in the
-   foundation/core packages owned by WP-100. It lands before the handler-code
-   tranche and records `handler-foundation-refresh` without reopening the
-   historical WP-000 completion.
+1. The WP-100 foundation-entry subtranche preserves the first 139
+   `ResourceKind` indices and appends the exact 56-field v4.9 projection at
+   `139..=194`. It also adds `WorkClass::HandlerSteps`, the three
+   `PendingWorkClass` values, borrowed static profiles, nonduplicable budgets,
+   profile snapshots, and boundary tests in the foundation/core packages owned
+   by WP-100. It lands before the handler-code tranche and records
+   `handler-foundation-refresh` without reopening the historical WP-000
+   completion.
 2. WP-100 adds the frozen values, 54 traits, static-registration value,
    public-but-internal `HostHandlerRegistration` factories and sealed ingress,
    execution reducers, selected-call ownership, constrained/static paths, and

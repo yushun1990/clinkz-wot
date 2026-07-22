@@ -14,22 +14,25 @@ contains_normative_fragment() {
 }
 
 adrs=(
-    "docs/ADR/0001-crate-and-module-boundaries.org"
-    "docs/ADR/0002-producer-emission-dispatch.org"
-    "docs/ADR/0003-subscription-driver-ownership.org"
-    "docs/ADR/0004-collection-subscriptions.org"
-    "docs/ADR/0005-outbound-request.org"
-    "docs/ADR/0006-host-binding-call-cancellation.org"
-    "docs/ADR/0007-normative-document-hierarchy.org"
-    "docs/ADR/0008-compiled-plan-lifecycle.org"
-    "docs/ADR/0009-protocol-binding-integration-and-deployment.org"
-    "docs/ADR/0010-server-route-lifecycle.org"
-    "docs/ADR/0011-cleanup-reservation-and-transfer.org"
-    "docs/ADR/0012-serving-activation-permit.org"
+    "docs/ADRs/0001-crate-and-module-boundaries.org"
+    "docs/ADRs/0002-producer-emission-dispatch.org"
+    "docs/ADRs/0003-subscription-driver-ownership.org"
+    "docs/ADRs/0004-collection-subscriptions.org"
+    "docs/ADRs/0005-outbound-request.org"
+    "docs/ADRs/0006-host-binding-call-cancellation.org"
+    "docs/ADRs/0007-normative-document-hierarchy.org"
+    "docs/ADRs/0008-compiled-plan-lifecycle.org"
+    "docs/ADRs/0009-protocol-binding-integration-and-deployment.org"
+    "docs/ADRs/0010-server-route-lifecycle.org"
+    "docs/ADRs/0011-cleanup-reservation-and-transfer.org"
+    "docs/ADRs/0012-serving-activation-permit.org"
+    "docs/ADRs/0013-work-package-scoped-implementation-admission.org"
+    "docs/ADRs/0014-transitional-normative-ownership.org"
+    "docs/ADRs/0015-borrowed-resource-profiles-and-linear-work-budgets.org"
 )
 
-if [[ ! -f "$root/docs/ADR/core.org" ]]; then
-    echo "architecture ADR check: missing docs/ADR/core.org" >&2
+if [[ ! -f "$root/docs/ADRs/core.org" ]]; then
+    echo "architecture ADR check: missing docs/ADRs/core.org" >&2
     exit 1
 fi
 
@@ -45,13 +48,34 @@ for relative in "${adrs[@]}"; do
     fi
 done
 
-for id in ADR-0001 ADR-0002 ADR-0003 ADR-0004 ADR-0005 ADR-0006 ADR-0007 ADR-0008 ADR-0009 ADR-0010 ADR-0011 ADR-0012; do
-    if ! grep -Fq "$id" "$root/docs/ADR/core.org"; then
+for id in ADR-0001 ADR-0002 ADR-0003 ADR-0004 ADR-0005 ADR-0006 ADR-0007 ADR-0008 ADR-0009 ADR-0010 ADR-0011 ADR-0012 ADR-0013 ADR-0014 ADR-0015; do
+    if ! grep -Fq "$id" "$root/docs/ADRs/core.org"; then
         echo "architecture ADR check: decision index does not reference $id" >&2
         exit 1
     fi
     if ! grep -Fq "$id" "$root/docs/design.md"; then
         echo "architecture ADR check: active design does not reference $id" >&2
+        exit 1
+    fi
+done
+
+for fragment in \
+    'A registered normative amendment is' \
+    'a bare `ResourceProfileId` identifies a profile but does not prove its' \
+    'implements neither `Copy` nor `Clone`' \
+    "const LIMITS: &'static ResourceLimits;"; do
+    if ! contains_normative_fragment "$fragment"; then
+        echo "architecture ADR check: ADR-0014/0015 projection is missing $fragment" >&2
+        exit 1
+    fi
+done
+
+for fragment in \
+    'Implementation admission is tranche-scoped as defined by ADR-0013' \
+    'Global gates are the aggregate convergence and final' \
+    'Implementation-produced measurements are completion'; do
+    if ! contains_normative_fragment "$fragment"; then
+        echo "architecture ADR check: tranche-admission policy is missing $fragment" >&2
         exit 1
     fi
 done
@@ -224,7 +248,7 @@ for fragment in \
 done
 
 for source in \
-    "$root/docs/ADR/0006-host-binding-call-cancellation.org" \
+    "$root/docs/ADRs/0006-host-binding-call-cancellation.org" \
     "$root/docs/spec/binding-spi.md"; do
     for fragment in \
         'pub enum BindingCancellationDisposition<C>' \
@@ -248,7 +272,7 @@ settlement_adr=$(awk '
             if (closes == 2) exit
         }
     }
-' "$root/docs/ADR/0006-host-binding-call-cancellation.org")
+' "$root/docs/ADRs/0006-host-binding-call-cancellation.org")
 settlement_spec=$(awk '
     /^pub enum BindingCancellationDisposition<C> \{/ { capture = 1 }
     capture {
@@ -270,7 +294,7 @@ subscription_driver_adr=$(awk '
         print
         if ($0 == "}") exit
     }
-' "$root/docs/ADR/0003-subscription-driver-ownership.org")
+' "$root/docs/ADRs/0003-subscription-driver-ownership.org")
 subscription_driver_spec=$(awk '
     /^pub trait HostSubscriptionDriver:/ { capture = 1 }
     capture {
@@ -285,8 +309,8 @@ fi
 
 if grep -REq \
     '(BindingCallSettlement::(LateValue|TerminalValue)|TerminalValue\(T\),|CleanupComplete\(CleanupRecord\)|fn start_stop_subscription\(|fn poll_start_subscription\(|Arc<Self>|StartStatus<CleanupOutcome>|Poll<CoreResult<CleanupOutcome>>|RouteCommitOutcome<A>[[:space:]]*\{|Serving\(A\),|route: Pin<&mut HostActiveRouteGuard>)' \
-    "$root/docs/ADR/0003-subscription-driver-ownership.org" \
-    "$root/docs/ADR/0006-host-binding-call-cancellation.org" \
+    "$root/docs/ADRs/0003-subscription-driver-ownership.org" \
+    "$root/docs/ADRs/0006-host-binding-call-cancellation.org" \
     "$root/docs/spec/binding-spi.md"; then
     echo "architecture ADR check: a superseded cancellation or subscription spelling remains" >&2
     exit 1
@@ -298,7 +322,7 @@ commit_outcome_adr=$(awk '
         print
         if ($0 == "}") exit
     }
-' "$root/docs/ADR/0012-serving-activation-permit.org")
+' "$root/docs/ADRs/0012-serving-activation-permit.org")
 commit_outcome_spec=$(awk '
     /^pub enum RouteCommitOutcome<A, C> \{/ { capture = 1 }
     capture {
@@ -323,4 +347,4 @@ for fragment in \
     fi
 done
 
-echo "architecture ADR check: twelve accepted decisions and the v4.9 backbone are registered"
+echo "architecture ADR check: fifteen accepted decisions and the v4.9 backbone are registered"

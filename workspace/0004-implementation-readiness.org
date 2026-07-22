@@ -1,0 +1,67 @@
+#+TITLE: Implementation Readiness vs Architecture Closure
+#+STATUS: MIGRATED
+
+* Problem
+
+The project intentionally delayed implementation until the architectural
+direction became clear. This successfully prevented large-scale refactors caused
+by AI implementing an incorrect architecture.
+
+However, the project is now reaching a point where the primary architecture is
+largely converged while implementation remains paused. There is a risk that the
+documentation system itself becomes the primary deliverable instead of the
+runtime.
+
+* Questions
+
+- When is architecture sufficiently complete for implementation?
+- Which decisions belong to the architecture backbone?
+- Which decisions may evolve during implementation?
+- Which gates should block implementation, and which should not?
+- Should implementation proceed work-package by work-package once the required
+  backbone decisions are stable?
+
+* Candidate Direction
+
+Instead of:
+
+Architecture Closure
+-> Implementation
+
+Consider:
+
+Architecture Backbone Ready
+-> Work Package or Tranche Ready
+-> Implementation
+-> Reality Feedback
+-> Workspace Discussion
+-> Architecture Refinement
+
+Implementation becomes a source of architectural evidence rather than something
+that only starts after every document is complete.
+
+* Discussion
+
+The smallest admission unit should be a declared tranche; a whole work package
+is the default tranche when it has not been subdivided. Global gates should
+continue to protect coordinated convergence and release, while a scoped entry
+review proves that unrelated open findings do not affect the admitted tranche.
+
+The proposed policy must distinguish pre-implementation contract checks from
+post-implementation measurements, require an impact review after relevant
+design changes, and prevent downstream work from treating an unfinished
+surface as stable.
+
+* Expected Outcome
+
+Produce an accepted ADR and authoritative project policy describing when a
+tranche is implementation-ready without requiring every documentation artifact
+to be complete.
+
+* Migration
+
+The decision is migrated into
+=docs/ADRs/0013-work-package-scoped-implementation-admission.org=,
+=docs/design.md=, =docs/work-packages/index.toml=, and =PLAN.md=. The first
+application of the policy is independently recorded in
+=docs/audits/WP-100-foundation-refresh-entry.md=.
