@@ -328,6 +328,8 @@ dependencies = [
 name = "clinkz-wot-design-check"
 version = "0.1.0"
 dependencies = [
+ "quote",
+ "syn 2.0.117",
  "toml_edit",
 ]
 

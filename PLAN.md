@@ -41,7 +41,20 @@ The admitted `WP-100-FOUNDATION-REFRESH` tranche is complete. Its exact v4.9
 scope and completion evidence are recorded in the work-package index,
 `docs/audits/WP-100-foundation-refresh-entry.md`, and
 `docs/evidence/WP-100-foundation-refresh.toml`. No other runtime or public-API
-tranche is admitted; `WP-100-HANDLER-ENTRY` remains blocked.
+tranche is currently admitted. Review 05 keeps `WP-100-HANDLER-ENTRY` blocked
+and identifies `WP-100-HANDLER-VALUE-PRIMITIVES` as the next review-pending,
+purely additive five-value candidate. It excludes the open handler workload,
+binding SPI, no-atomic target, Producer, Servient integration, and `Deadline`.
+The five-value tranche depends only on the completed foundation refresh. Review
+06 records `Deadline` under the separate `TIME-DOMAIN-AND-DEADLINE` blocking
+scope because raw finite-width wrap is inconsistent with the current
+non-wrapping instant comparison and also impacts WP-000 time evidence and
+cleanup timing. That scope is an impact placeholder blocking the broad handler
+entry, not an admitted or fully defined corrective tranche; the future
+tranche's identity, ownership, dependencies, completion contract, and evidence
+disposition remain unfrozen. The clock-independent five values may proceed only
+after their strengthened contract fixture, governance, and exact-commit
+independent review pass.
 WP-200 remains blocked by AR-004's missing constructible candidate-fallback
 policy, health rule, and bounded diagnostics. WP-300 remains blocked by
 AR-002/AR-003's incomplete registration/compiler/constrained signatures and

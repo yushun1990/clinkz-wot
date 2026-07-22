@@ -9,12 +9,13 @@ Amendment id: WP-100-HANDLER-API-001
 Affected requirements: API-OWNERSHIP-001, API-PAYLOAD-001,
 API-RESOURCE-001, API-SURFACE-001, API-TYPES-001, API-HOT-ID-001,
 BIND-PROGRESS-001, CLEANUP-RECORD-001, HANDLE-DROP-001,
-HANDLER-API-001, HANDLER-SUB-001, HANDLER-CANCEL-001,
-HANDLER-CANCEL-002, HANDLER-STORAGE-001, HOST-ASYNC-001,
+HANDLER-API-001, HANDLER-SUB-001, HANDLER-VALUE-001,
+HANDLER-CANCEL-001, HANDLER-CANCEL-002, HANDLER-STORAGE-001, HOST-ASYNC-001,
 HOST-DEFAULT-001, CONCUR-LIN-001, CONCUR-USER-001,
 CONSTRAINED-OWN-001, CONSTRAINED-PROGRESS-001,
 CONSTRAINED-WORK-001, STATE-INFLIGHT-001, PRODUCER-EMIT-001,
-RES-LIMIT-001, RES-PROFILE-001, PERF-BENCH-001, IMPL-CONFORM-001
+RES-LIMIT-001, RES-PROFILE-001, TIME-001, PERF-BENCH-001,
+IMPL-CONFORM-001
 
 ## Purpose and Precedence
 
@@ -25,13 +26,19 @@ registration boundaries, cancellation ownership, Producer subscription
 transaction, resource limits, workload identities, and acyclic package
 staging.
 
+The amendment remains frozen for those non-time contracts. Its `Deadline`
+material is a deferred candidate projection, not implementation authorization
+and not a resolution of the open time-domain semantics. Any later clause that
+mentions deadline expiry is conditional on clearing the
+`TIME-DOMAIN-AND-DEADLINE` blocking scope.
+
 Where this amendment is more specific, it supersedes the open alternatives in
 `HANDLER-API-001`, `HANDLER-SUB-001`, `HANDLER-CANCEL-001`,
 `HANDLER-CANCEL-002`, and `HANDLER-STORAGE-001`. It does not move logical-plan
 construction from WP-200, binding-route construction from WP-300, or integrated
 Servient lifecycle coordination from WP-400.
 
-## Request, Deadline, and Cancellation Values
+## Request and Handler Values
 
 `InteractionInput` is the sole owner of application-visible request facts.
 `HandlerContext` does not duplicate payload, principal, URI variables, accept
@@ -99,7 +106,60 @@ does not add an Accept-specific resource row. Bindings must apply the same
 count-first rule while tokenizing a raw Accept representation and must not build
 an unbounded temporary preference vector before calling `try_new`.
 
-The exact deadline and cancellation schemas are:
+### Frozen passive handler-value domain
+
+`HANDLER-VALUE-001`: The handler value domain normatively freezes exactly five
+passive public Core
+schemas: `CancellationView`, `SubscriptionAcceptance`, `HandlerFootprint`,
+`HandlerStep<R>`, and `StaticHandlerRegistration<'h, H>`. It completely owns
+their schema attributes, derives, discriminants, variants, private fields,
+const API, move/borrow ownership, generic bounds, redacted Debug shape, and
+passive value semantics as specified in this amendment. The latter four
+declarations appear in their applicable result, bounded-step, and registration
+sections below.
+
+This requirement does not own cancellation state transitions, deadline
+comparison, time-domain behavior, handler execution, storage admission, or
+subscription processing, work-budget charging, ownership admission, or resource
+accounting. Those consumer behaviors retain their existing fine-grained
+requirements on the consuming traits, state records, and admission items; they
+are not assigned to the five passive API ownership rows. The five-value domain
+and the `TIME-DOMAIN-AND-DEADLINE` blocking scope share only the global
+`API-SURFACE-001` meta-requirement; their API-item and behavioral requirements
+are otherwise disjoint.
+
+The exact `CancellationView` schema is:
+
+```rust
+#[derive(Clone, Copy, Debug, Default, Eq, Hash, Ord, PartialEq, PartialOrd)]
+#[repr(u8)]
+pub enum CancellationView {
+    #[default]
+    Active,
+    Requested,
+}
+
+impl CancellationView {
+    pub const fn is_requested(self) -> bool;
+}
+```
+
+`CancellationView` is a copyable snapshot. It contains no pointer, atomic,
+waker registration, callback, executor dependency, or cancellation transition.
+It does not itself wake or cancel work. The authoritative execution record
+remains engine-owned under the cancellation requirements.
+
+### Deferred Deadline candidate
+
+The API ownership freeze for `Deadline` establishes only its Core owner,
+definition/public paths, and candidate value shape. It does not freeze the
+clock comparison domain, raw-wrap behavior, reset/clock-id lifetime, cleanup
+timing, dispatcher error disposition, or completion evidence. The following
+shape is retained for review traceability and must not be implemented until
+future corrective work is defined, independently admitted, and clears the
+`TIME-DOMAIN-AND-DEADLINE` blocking scope.
+
+The deferred `Deadline` candidate shape is:
 
 ```rust
 #[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
@@ -123,30 +183,25 @@ impl Deadline {
         now: clinkz_wot_foundation::MonotonicInstant,
     ) -> Option<bool>;
 }
-
-#[derive(Clone, Copy, Debug, Default, Eq, Hash, Ord, PartialEq, PartialOrd)]
-#[repr(u8)]
-pub enum CancellationView {
-    #[default]
-    Active,
-    Requested,
-}
-
-impl CancellationView {
-    pub const fn is_requested(self) -> bool;
-}
 ```
 
-`Deadline::NONE.checked_is_elapsed_at(now)` returns `Some(false)`. A finite
-deadline is elapsed when `now >= deadline`. A finite deadline and `now` with
-different clock identities return `None`; the `checked_` prefix is part of the
-public name because incomparability is not a Boolean result. The dispatcher
-treats an incomparable clock as a failed deadline check and does not enter
-application code.
+Under the preferred non-wrapping logical-time direction, the candidate behavior
+would make `Deadline::NONE.checked_is_elapsed_at(now)` return `Some(false)`, a
+finite deadline elapsed when `now >= deadline`, and different clock identities
+return `None`. The `checked_` name reflects that incomparability is not a
+Boolean result. These are deferred candidate semantics, not a current
+implementation contract. In particular, the exact dispatcher error category,
+phase, retry class, and behavior for incomparability remain unfrozen.
 
-`CancellationView` is a copyable snapshot. It contains no pointer, atomic,
-waker registration, callback, or executor dependency. It does not itself wake
-or cancel work. The authoritative execution record remains engine-owned.
+The preferred comparison direction requires same-clock `MonotonicInstant`
+values to be in one non-wrapping logical tick domain and never infers ordering
+from raw wrapping ticks or `RuntimeClock::wrap_period_ticks`. The
+`TIME-DOMAIN-AND-DEADLINE` record is only a blocking impact placeholder for the
+foundation clock-source contract, cleanup timing, prior time evidence, and
+error disposition. It does not define a corrective tranche. The identity,
+ownership, dependencies, completion contract, and evidence disposition of
+future corrective work remain unfrozen before `Deadline` can enter
+implementation.
 
 The final v1 request value has private fields and no `Default` implementation:
 
@@ -1381,9 +1436,9 @@ it does not reset the per-target invariant.
 
 The exact evidence keys are:
 
-- WP-100 `handler-foundation-refresh`, `handler-api-matrix`, `handler-storage-replacement`,
-  `handler-cancellation`, `affordance-target-no-atomics`, and
-  `callback-lock-isolation`;
+- WP-100 `handler-foundation-refresh`, `handler-value-primitives`,
+  `handler-api-matrix`, `handler-storage-replacement`, `handler-cancellation`,
+  `affordance-target-no-atomics`, and `callback-lock-isolation`;
 - WP-300 `producer-emission-migration`;
 - WP-400 `producer-subscription-transaction`;
 - WP-700 `legacy-handler-surface-removal`.
@@ -1400,22 +1455,27 @@ append-only `ResourceKind` indices, and atomic rollback. The no-atomic evidence
 includes a no-default core build for `thumbv6m-none-eabi` or an equivalently
 incapable target and an API/source rejection for `Arc` in `AffordanceTarget`.
 
-## Frozen Poll Signature
+## Binding Poll Signature Traceability
 
-The valid `PollClientBinding` signature contains exactly one receiver:
+`docs/spec/binding-spi.md` is the sole normative owner of the
+`PollClientBinding` contract. The following signature is a traceability copy of
+that domain specification; this handler amendment neither refines nor overrides
+it. At design revision v4.9 the canonical method name, associated-state slot,
+receiver, and parameter order are:
 
 ```rust
-fn poll_subscription(
+fn poll_subscription_start(
     &mut self,
     cx: &mut Context<'_>,
-    subscription: &mut ClientSubscriptionSlot,
+    subscription: &mut ClientSubscriptionSlot<Self::SubscriptionState>,
     budget: &mut WorkBudget,
 ) -> Poll<CoreResult<SubscriptionStart>>;
 ```
 
-The handler amendment checker rejects a duplicate receiver and checks this
-exact parameter order. Later binding packages must not copy an older malformed
-skeleton.
+The handler amendment checker requires this traceability copy to match the
+domain specification exactly and requires the API ownership row to name
+`PollClientBinding::poll_subscription_start`. Later binding packages must not
+copy an older malformed or nongeneric skeleton.
 
 ## Audit Closure
 
@@ -1430,7 +1490,7 @@ follows:
 - H-6: nine handler limits, three Producer residual limits, footprint
   declaration, admission, and drain policy;
 - H-7: six locked workloads and named evidence keys;
-- H-8: one valid frozen poll signature and executable rejection; and
+- H-8: one domain-owned poll-signature trace and executable rejection; and
 - H-9: owned-string target representation plus no-atomic evidence.
 
 Handler implementation may resume only after the amendment, ownership matrix,

@@ -27,6 +27,7 @@ docs/performance/gateway.toml,gateway-performance-budget,normative,4.9,5,docs/de
 docs/performance/directory.toml,directory-client-performance-budget,normative,4.9,5,docs/design.md
 tools/performance-harness/Cargo.toml,performance-contract-checker,non-normative-checker,4.9,1,docs/design.md
 tools/design-check/Cargo.toml,design-structure-checker,non-normative-checker,4.9,1,docs/design.md
+tools/design-check/src/main.rs,design-structure-checker-source,non-normative-checker-source,4.9,1,docs/design.md
 tools/check-design-artifacts.sh,design-admission-orchestrator,non-normative-checker,4.9,1,docs/design.md
 tools/check-design-requirements.sh,requirement-index-checker,non-normative-checker,4.9,1,docs/design.md
 tools/check-api-ownership.sh,api-ownership-checker,non-normative-checker,4.9,1,docs/design.md
@@ -45,10 +46,13 @@ docs/amendments/WP-100-interaction-output-api-v1.md,wp-100-interaction-output-ap
 docs/amendments/WP-100-handler-api-v1.md,wp-100-handler-api-execution-and-staging,normative-amendment,4.9,1,docs/design.md
 docs/audits/WP-100-handler-entry-audit.md,wp-100-handler-entry-audit,non-normative-review,4.9,1,docs/design.md
 docs/audits/WP-100-foundation-refresh-entry.md,wp-100-foundation-refresh-entry-review,non-normative-review,4.9,1,docs/design.md
+docs/audits/WP-100-handler-value-primitives-entry.md,wp-100-handler-value-primitives-entry-review,non-normative-review,4.9,1,docs/design.md
 docs/reviews/review-01.org,architecture-boundary-audit,historical-review,4.9,1,docs/design.md
 docs/reviews/review-02.org,architecture-design-follow-up,blocking-review,4.9,1,docs/design.md
 docs/reviews/review-03.org,architecture-v4.9-interim-audit,blocking-review,4.9,1,docs/design.md
 docs/reviews/review-04.org,architecture-v4.9-workspace-triage-review,non-normative-review,4.9,1,docs/design.md
+docs/reviews/review-05.org,architecture-v4.9-handler-entry-decomposition-review,non-normative-review,4.9,1,docs/design.md
+docs/reviews/review-06.org,architecture-v4.9-time-domain-deadline-impact-review,non-normative-review,4.9,1,docs/design.md
 docs/ADRs/core.org,architecture-decision-index,normative-decision-index,4.9,1,docs/design.md
 docs/ADRs/0001-crate-and-module-boundaries.org,crate-and-module-boundary-decision,normative-decision,4.9,1,docs/design.md
 docs/ADRs/0002-producer-emission-dispatch.org,producer-emission-decision,normative-decision,4.9,1,docs/design.md
@@ -68,3 +72,14 @@ docs/ADRs/0015-borrowed-resource-profiles-and-linear-work-budgets.org,borrowed-r
 tools/check-wp100-amendment.sh,wp-100-amendment-checker,non-normative-checker,4.9,1,docs/design.md
 tools/check-wp100-handler-amendment.sh,wp-100-handler-amendment-checker,non-normative-checker,4.9,1,docs/design.md
 tools/check-wp100-foundation-refresh.sh,wp-100-foundation-refresh-checker,non-normative-checker,4.9,1,docs/design.md
+tools/check-wp100-handler-value-primitives.sh,wp-100-handler-value-primitives-checker,non-normative-checker,4.9,1,docs/design.md
+tools/check-wp100-handler-value-primitives-entry.sh,wp-100-handler-value-primitives-entry-checker,non-normative-checker,4.9,1,docs/design.md
+tools/compile-contracts/wp100-handler-value-primitives/Cargo.toml,wp-100-handler-value-primitives-contract-manifest,non-normative-compile-fixture,4.9,1,docs/design.md
+tools/compile-contracts/wp100-handler-value-primitives/Cargo.lock,wp-100-handler-value-primitives-contract-lock,non-normative-compile-fixture,4.9,1,docs/design.md
+tools/compile-contracts/wp100-handler-value-primitives/src/lib.rs,wp-100-handler-value-primitives-root-contract,non-normative-compile-fixture,4.9,1,docs/design.md
+tools/compile-contracts/wp100-handler-value-primitives/tests/semantics.rs,wp-100-handler-value-primitives-semantics-contract,non-normative-compile-fixture,4.9,1,docs/design.md
+tools/compile-contracts/wp100-handler-value-primitives/ui/private-subscription-acceptance.rs,wp-100-handler-value-primitives-private-acceptance-contract,non-normative-compile-fixture,4.9,1,docs/design.md
+tools/compile-contracts/wp100-handler-value-primitives/ui/private-handler-footprint.rs,wp-100-handler-value-primitives-private-footprint-contract,non-normative-compile-fixture,4.9,1,docs/design.md
+tools/compile-contracts/wp100-handler-value-primitives/ui/private-static-handler-registration.rs,wp-100-handler-value-primitives-private-registration-contract,non-normative-compile-fixture,4.9,1,docs/design.md
+tools/compile-contracts/wp100-handler-value-primitives/ui/must-use-subscription-acceptance.rs,wp-100-handler-value-primitives-must-use-acceptance-contract,non-normative-compile-fixture,4.9,1,docs/design.md
+tools/compile-contracts/wp100-handler-value-primitives/ui/must-use-handler-step.rs,wp-100-handler-value-primitives-must-use-step-contract,non-normative-compile-fixture,4.9,1,docs/design.md

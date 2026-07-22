@@ -6,6 +6,9 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
+use quote::ToTokens;
+use syn::visit::{self, Visit};
+use syn::{Attribute, Fields, ImplItem, Item as SynItem, ItemImpl, Visibility};
 use toml_edit::{Array, ArrayOfTables, DocumentMut, Item, Table};
 
 const ACTIVE_DESIGN_REVISION: &str = "4.9";
@@ -76,6 +79,22 @@ const REQUIRED_REFACTOR_GATES: &[&str] =
     &["GATE-1", "GATE-2", "GATE-3", "GATE-4", "GATE-5", "GATE-6"];
 const HANDLER_ENTRYPOINT: &str = "WP-100-HANDLER-ENTRY";
 const HANDLER_FOUNDATION_TRANCHE: &str = "WP-100-FOUNDATION-REFRESH";
+const HANDLER_VALUE_PRIMITIVES_TRANCHE: &str = "WP-100-HANDLER-VALUE-PRIMITIVES";
+const HANDLER_TIME_BLOCKING_SCOPE: &str = "TIME-DOMAIN-AND-DEADLINE";
+const HANDLER_VALUE_ENTRY_CHECK: &str = "wp100-handler-value-primitives-entry-check";
+const HANDLER_VALUE_REVIEW_ATTESTATION: &str =
+    "docs/audits/WP-100-handler-value-primitives-review.toml";
+const HANDLER_VALUE_COMPLETION_EVIDENCE: &str =
+    "docs/evidence/WP-100-handler-value-primitives.toml";
+const HANDLER_VALUE_ADMISSION_REVIEW: &str = "docs/audits/WP-100-handler-value-primitives-entry.md";
+const HANDLER_VALUE_PRECHECKS: &[&str] = &[
+    "api-ownership-check",
+    "architecture-adr-check",
+    "resource-profile-check",
+    "work-package-dag-check",
+    "wp100-amendment-check",
+    "wp100-handler-amendment-check",
+];
 
 #[derive(Debug)]
 struct Transition {
@@ -236,6 +255,19 @@ fn run() -> Result<(), String> {
             check_handler_contract(&root)?;
             println!("design structure check: handler API matrix valid");
         }
+        "check-handler-value-primitives-source" => {
+            check_handler_value_primitives_source(&root)?;
+            println!("design structure check: handler value-primitives source valid");
+        }
+        "check-handler-value-primitives-entry-state" => {
+            let mode = env::args().nth(2).ok_or_else(|| {
+                "check-handler-value-primitives-entry-state requires candidate or \
+                 admission-ready"
+                    .to_owned()
+            })?;
+            check_handler_value_primitives_entry_state(&root, &mode)?;
+            println!("design structure check: handler value-primitives {mode} state valid");
+        }
         "check-governance" => {
             check_governance(&root, false)?;
             println!("design structure check: gate governance valid");
@@ -252,12 +284,374 @@ fn run() -> Result<(), String> {
         _ => {
             return Err(format!(
                 "unknown command {command:?}; expected check, check-state, check-handler, \
-                 check-work-packages, check-governance, check-refactor-ready, or \
-                 check-handler-entry"
+                 check-handler-value-primitives-source, \
+                 check-handler-value-primitives-entry-state, check-work-packages, \
+                 check-governance, check-refactor-ready, or check-handler-entry"
             ));
         }
     }
     Ok(())
+}
+
+const HANDLER_VALUE_PRIMITIVES_SOURCE_CONTRACT: &str = r#"
+#[derive(Clone, Copy, Debug, Default, Eq, Hash, Ord, PartialEq, PartialOrd)]
+#[repr(u8)]
+pub enum CancellationView {
+    #[default]
+    Active,
+    Requested,
+}
+
+impl CancellationView {
+    pub const fn is_requested(self) -> bool {
+        matches!(self, Self::Requested)
+    }
+}
+
+#[derive(Debug, Eq, PartialEq)]
+#[must_use = "a successful acceptance must be consumed by the subscription transaction"]
+pub struct SubscriptionAcceptance {
+    response: InteractionOutput,
+}
+
+impl SubscriptionAcceptance {
+    pub const fn new(response: InteractionOutput) -> Self {
+        Self { response }
+    }
+
+    pub const fn response(&self) -> &InteractionOutput {
+        &self.response
+    }
+
+    pub fn into_response(self) -> InteractionOutput {
+        self.response
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub struct HandlerFootprint {
+    retained_bytes: u64,
+    pending_call_bytes: u64,
+    subscription_bytes: u64,
+}
+
+impl HandlerFootprint {
+    pub const fn new(
+        retained_bytes: u64,
+        pending_call_bytes: u64,
+        subscription_bytes: u64,
+    ) -> Self {
+        Self {
+            retained_bytes,
+            pending_call_bytes,
+            subscription_bytes,
+        }
+    }
+
+    pub const fn retained_bytes(self) -> u64 {
+        self.retained_bytes
+    }
+
+    pub const fn pending_call_bytes(self) -> u64 {
+        self.pending_call_bytes
+    }
+
+    pub const fn subscription_bytes(self) -> u64 {
+        self.subscription_bytes
+    }
+}
+
+#[derive(Debug, Eq, PartialEq)]
+#[must_use]
+pub enum HandlerStep<R> {
+    Pending,
+    Ready(CoreResult<R>),
+}
+
+pub struct StaticHandlerRegistration<'h, H> {
+    slot_id: HandlerSlotId,
+    handler: &'h H,
+    footprint: HandlerFootprint,
+}
+
+impl<'h, H> StaticHandlerRegistration<'h, H> {
+    pub const fn new(
+        slot_id: HandlerSlotId,
+        handler: &'h H,
+        footprint: HandlerFootprint,
+    ) -> Self {
+        Self {
+            slot_id,
+            handler,
+            footprint,
+        }
+    }
+
+    pub const fn slot_id(&self) -> HandlerSlotId {
+        self.slot_id
+    }
+
+    pub const fn handler(&self) -> &'h H {
+        self.handler
+    }
+
+    pub const fn footprint(&self) -> HandlerFootprint {
+        self.footprint
+    }
+}
+
+impl<H> Copy for StaticHandlerRegistration<'_, H> {}
+
+impl<H> Clone for StaticHandlerRegistration<'_, H> {
+    fn clone(&self) -> Self {
+        *self
+    }
+}
+
+impl<H> core::fmt::Debug for StaticHandlerRegistration<'_, H> {
+    fn fmt(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        formatter
+            .debug_struct("StaticHandlerRegistration")
+            .field("slot_id", &self.slot_id)
+            .field("footprint", &self.footprint)
+            .finish_non_exhaustive()
+    }
+}
+"#;
+
+#[derive(Debug, Eq, Ord, PartialEq, PartialOrd)]
+struct HandlerValueSourceProjection {
+    values: Vec<HandlerValueTypeProjection>,
+    impls: Vec<HandlerValueImplProjection>,
+}
+
+#[derive(Debug, Eq, Ord, PartialEq, PartialOrd)]
+enum HandlerValueTypeProjection {
+    Struct {
+        name: String,
+        visibility: String,
+        attributes: Vec<String>,
+        generics: String,
+        fields: Vec<HandlerValueFieldProjection>,
+    },
+    Enum {
+        name: String,
+        visibility: String,
+        attributes: Vec<String>,
+        generics: String,
+        variants: Vec<HandlerValueVariantProjection>,
+    },
+}
+
+#[derive(Debug, Eq, Ord, PartialEq, PartialOrd)]
+struct HandlerValueFieldProjection {
+    name: Option<String>,
+    visibility: String,
+    attributes: Vec<String>,
+    ty: String,
+}
+
+#[derive(Debug, Eq, Ord, PartialEq, PartialOrd)]
+struct HandlerValueVariantProjection {
+    name: String,
+    attributes: Vec<String>,
+    fields: Vec<HandlerValueFieldProjection>,
+    discriminant: Option<String>,
+}
+
+#[derive(Debug, Eq, Ord, PartialEq, PartialOrd)]
+struct HandlerValueImplProjection {
+    attributes: Vec<String>,
+    defaultness: String,
+    unsafety: String,
+    generics: String,
+    trait_path: Option<String>,
+    negative: bool,
+    self_ty: String,
+    items: Vec<HandlerValueImplItemProjection>,
+}
+
+#[derive(Debug, Eq, Ord, PartialEq, PartialOrd)]
+struct HandlerValueImplItemProjection {
+    attributes: Vec<String>,
+    visibility: String,
+    defaultness: String,
+    signature: String,
+}
+
+fn check_handler_value_primitives_source(root: &Path) -> Result<(), String> {
+    let path = root.join("core/src/handler.rs");
+    let source = fs::read_to_string(&path)
+        .map_err(|error| format!("cannot read {}: {error}", path.display()))?;
+    validate_handler_value_primitives_source(&source)
+        .map_err(|error| format!("{}: {error}", path.display()))
+}
+
+fn validate_handler_value_primitives_source(source: &str) -> Result<(), String> {
+    let file = syn::parse_file(source).map_err(|error| format!("invalid Rust source: {error}"))?;
+    let mut forbidden = HandlerValueForbiddenIdentifier::default();
+    forbidden.visit_file(&file);
+    if !forbidden.identifiers.is_empty() {
+        return Err(format!(
+            "forbidden allocation/runtime/queue/callback identifiers: {:?}",
+            forbidden.identifiers
+        ));
+    }
+
+    let actual = project_handler_value_source(&file)?;
+    let expected_file = syn::parse_file(HANDLER_VALUE_PRIMITIVES_SOURCE_CONTRACT)
+        .map_err(|error| format!("internal handler contract does not parse: {error}"))?;
+    let expected = project_handler_value_source(&expected_file)?;
+    if actual != expected {
+        return Err(format!(
+            "five-value source projection mismatch\nexpected: {expected:#?}\nfound: {actual:#?}"
+        ));
+    }
+    Ok(())
+}
+
+fn project_handler_value_source(file: &syn::File) -> Result<HandlerValueSourceProjection, String> {
+    let mut values = Vec::new();
+    let mut impls = Vec::new();
+    for item in &file.items {
+        match item {
+            SynItem::Use(item) if matches!(item.vis, Visibility::Inherited) => {}
+            SynItem::Struct(item) => values.push(HandlerValueTypeProjection::Struct {
+                name: item.ident.to_string(),
+                visibility: token_string(&item.vis),
+                attributes: contract_attributes(&item.attrs),
+                generics: token_string(&item.generics),
+                fields: project_handler_fields(&item.fields),
+            }),
+            SynItem::Enum(item) => values.push(HandlerValueTypeProjection::Enum {
+                name: item.ident.to_string(),
+                visibility: token_string(&item.vis),
+                attributes: contract_attributes(&item.attrs),
+                generics: token_string(&item.generics),
+                variants: item
+                    .variants
+                    .iter()
+                    .map(|variant| HandlerValueVariantProjection {
+                        name: variant.ident.to_string(),
+                        attributes: contract_attributes(&variant.attrs),
+                        fields: project_handler_fields(&variant.fields),
+                        discriminant: variant
+                            .discriminant
+                            .as_ref()
+                            .map(|(_, expression)| token_string(expression)),
+                    })
+                    .collect(),
+            }),
+            SynItem::Impl(item) => impls.push(project_handler_impl(item)?),
+            other => {
+                return Err(format!(
+                    "handler value module contains prohibited top-level item {}",
+                    handler_syn_item_kind(other)
+                ));
+            }
+        }
+    }
+    values.sort();
+    impls.sort();
+    Ok(HandlerValueSourceProjection { values, impls })
+}
+
+fn project_handler_fields(fields: &Fields) -> Vec<HandlerValueFieldProjection> {
+    fields
+        .iter()
+        .map(|field| HandlerValueFieldProjection {
+            name: field.ident.as_ref().map(ToString::to_string),
+            visibility: token_string(&field.vis),
+            attributes: contract_attributes(&field.attrs),
+            ty: token_string(&field.ty),
+        })
+        .collect()
+}
+
+fn project_handler_impl(item: &ItemImpl) -> Result<HandlerValueImplProjection, String> {
+    let mut items = Vec::new();
+    for impl_item in &item.items {
+        match impl_item {
+            ImplItem::Fn(function) => items.push(HandlerValueImplItemProjection {
+                attributes: contract_attributes(&function.attrs),
+                visibility: token_string(&function.vis),
+                defaultness: token_string(&function.defaultness),
+                signature: token_string(&function.sig),
+            }),
+            _ => {
+                return Err(
+                    "handler value impl contains an extra associated const/type/macro".to_owned(),
+                );
+            }
+        }
+    }
+    let (trait_path, negative) = match &item.trait_ {
+        Some((negative, path, _)) => (Some(token_string(path)), negative.is_some()),
+        None => (None, false),
+    };
+    Ok(HandlerValueImplProjection {
+        attributes: contract_attributes(&item.attrs),
+        defaultness: token_string(&item.defaultness),
+        unsafety: token_string(&item.unsafety),
+        generics: token_string(&item.generics),
+        trait_path,
+        negative,
+        self_ty: token_string(item.self_ty.as_ref()),
+        items,
+    })
+}
+
+fn contract_attributes(attributes: &[Attribute]) -> Vec<String> {
+    attributes
+        .iter()
+        .filter(|attribute| !attribute.path().is_ident("doc"))
+        .map(|attribute| token_string(&attribute.meta))
+        .collect()
+}
+
+fn token_string(tokens: &impl ToTokens) -> String {
+    tokens.to_token_stream().to_string()
+}
+
+fn handler_syn_item_kind(item: &SynItem) -> &'static str {
+    match item {
+        SynItem::Const(_) => "const",
+        SynItem::ExternCrate(_) => "extern crate",
+        SynItem::Fn(_) => "function",
+        SynItem::ForeignMod(_) => "extern block",
+        SynItem::Macro(_) => "macro",
+        SynItem::Mod(_) => "module",
+        SynItem::Static(_) => "static",
+        SynItem::Trait(_) => "trait",
+        SynItem::TraitAlias(_) => "trait alias",
+        SynItem::Type(_) => "type alias",
+        SynItem::Union(_) => "union",
+        SynItem::Use(_) => "public use",
+        _ => "unsupported item",
+    }
+}
+
+#[derive(Default)]
+struct HandlerValueForbiddenIdentifier {
+    identifiers: BTreeSet<String>,
+}
+
+impl<'ast> Visit<'ast> for HandlerValueForbiddenIdentifier {
+    fn visit_ident(&mut self, ident: &'ast syn::Ident) {
+        let value = ident.to_string();
+        let lower = value.to_ascii_lowercase();
+        if matches!(
+            lower.as_str(),
+            "alloc" | "std" | "arc" | "box" | "vec" | "string" | "tokio" | "async_std" | "smol"
+        ) || lower.contains("runtime")
+            || lower.contains("executor")
+            || lower.contains("queue")
+            || lower.contains("callback")
+        {
+            self.identifiers.insert(value);
+        }
+        visit::visit_ident(self, ident);
+    }
 }
 
 fn check_handler_contract(root: &Path) -> Result<(), String> {
@@ -903,6 +1297,7 @@ fn expected_gate_contract(gate: &str) -> Option<GateContract> {
                 "API-PAYLOAD-001",
                 "HANDLER-API-001",
                 "HANDLER-SUB-001",
+                "HANDLER-VALUE-001",
                 "HANDLER-CANCEL-001",
                 "HANDLER-CANCEL-002",
                 "ERR-TAXONOMY-001",
@@ -1190,6 +1585,7 @@ fn expected_gate_contract(gate: &str) -> Option<GateContract> {
                 "BIND-HOST-CANCEL-001",
                 "HANDLER-API-001",
                 "HANDLER-SUB-001",
+                "HANDLER-VALUE-001",
                 "HANDLER-CANCEL-001",
                 "HANDLER-CANCEL-002",
                 "HANDLER-STORAGE-001",
@@ -1337,6 +1733,8 @@ fn check_governance_checks(
         "work-package-dag-check",
         "wp100-handler-amendment-check",
         "wp100-foundation-refresh-check",
+        "wp100-handler-value-primitives-check",
+        HANDLER_VALUE_ENTRY_CHECK,
     ]);
     let mut statuses = BTreeMap::new();
     for check in checks {
@@ -1465,6 +1863,19 @@ fn expected_check_mapping(id: &str) -> Option<CheckMapping> {
             "tools/check-wp100-foundation-refresh.sh",
             &["tools/check-wp100-foundation-refresh.sh"],
             &["pending", "executable"],
+        )),
+        "wp100-handler-value-primitives-check" => Some((
+            "tools/check-wp100-handler-value-primitives.sh",
+            &["tools/check-wp100-handler-value-primitives.sh"],
+            &["pending", "executable"],
+        )),
+        HANDLER_VALUE_ENTRY_CHECK => Some((
+            "tools/check-wp100-handler-value-primitives-entry.sh",
+            &[
+                "tools/check-wp100-handler-value-primitives-entry.sh",
+                "--admission-ready",
+            ],
+            &["executable"],
         )),
         _ => None,
     }
@@ -1882,6 +2293,23 @@ fn check_work_packages(root: &Path, require_handler_entry: bool) -> Result<(), S
     Ok(())
 }
 
+#[derive(Debug)]
+struct HandlerBlockingScope {
+    requirements: BTreeSet<String>,
+    shared_meta_requirements: BTreeSet<String>,
+    items: BTreeSet<String>,
+    is_blocking: bool,
+}
+
+#[derive(Debug)]
+struct HandlerValueTrancheState {
+    status: String,
+    verification_check: String,
+    check_status: String,
+    requirements: BTreeSet<String>,
+    api_items: BTreeSet<String>,
+}
+
 #[allow(clippy::too_many_arguments)]
 fn check_work_package_tranches(
     root: &Path,
@@ -1917,27 +2345,47 @@ fn check_work_package_tranches(
     }
     let entry_dependencies =
         package_string_set(entrypoint, "depends_on_tranches", HANDLER_ENTRYPOINT)?;
-    if entry_dependencies != owned_set(&[HANDLER_FOUNDATION_TRANCHE]) {
+    let expected_entry_dependencies =
+        owned_set(&[HANDLER_FOUNDATION_TRANCHE, HANDLER_VALUE_PRIMITIVES_TRANCHE]);
+    if entry_dependencies != expected_entry_dependencies {
         return Err(format!(
-            "{HANDLER_ENTRYPOINT} dependency mismatch; expected {HANDLER_FOUNDATION_TRANCHE:?}, \
-             found {entry_dependencies:?}"
+            "{HANDLER_ENTRYPOINT} dependency mismatch; expected \
+             {expected_entry_dependencies:?}, found {entry_dependencies:?}"
         ));
     }
+    let entry_blocking_scopes =
+        package_string_set(entrypoint, "blocking_scopes", HANDLER_ENTRYPOINT)?;
+    if entry_blocking_scopes != owned_set(&[HANDLER_TIME_BLOCKING_SCOPE]) {
+        return Err(format!(
+            "{HANDLER_ENTRYPOINT} blocking scope mismatch; expected only \
+             {HANDLER_TIME_BLOCKING_SCOPE:?}, found {entry_blocking_scopes:?}"
+        ));
+    }
+
+    let registered_artifacts = load_artifact_registry(root)?;
+    let blocking_scope = check_handler_blocking_scope(
+        root,
+        document,
+        known_requirements,
+        allowed_owners,
+        package_evidence,
+        &registered_artifacts,
+    )?;
 
     let tranches = document
         .get("tranche")
         .and_then(Item::as_array_of_tables)
         .ok_or_else(|| "work-package index has no [[tranche]] records".to_owned())?;
-    if tranches.len() != 1 {
+    if tranches.len() != 2 {
         return Err(format!(
-            "work-package index must define exactly one handler prerequisite tranche; found {}",
+            "work-package index must define exactly two handler prerequisite tranches; found {}",
             tranches.len()
         ));
     }
     let tranche = tranches
         .iter()
-        .next()
-        .ok_or_else(|| "handler prerequisite tranche record is missing".to_owned())?;
+        .find(|table| table.get("id").and_then(Item::as_str) == Some(HANDLER_FOUNDATION_TRANCHE))
+        .ok_or_else(|| format!("{HANDLER_FOUNDATION_TRANCHE} tranche record is missing"))?;
     require_table_string(tranche, "id", HANDLER_FOUNDATION_TRANCHE, "handler tranche")?;
     require_table_string(
         tranche,
@@ -1945,6 +2393,14 @@ fn check_work_package_tranches(
         "WP-100",
         HANDLER_FOUNDATION_TRANCHE,
     )?;
+    for forbidden_field in ["implementation_paths", "contract_artifacts", "entry_check"] {
+        if tranche.contains_key(forbidden_field) {
+            return Err(format!(
+                "{HANDLER_FOUNDATION_TRANCHE} must not define value-tranche field \
+                 {forbidden_field:?}"
+            ));
+        }
+    }
     let sequence = integer_field(tranche, "sequence", HANDLER_FOUNDATION_TRANCHE)?;
     if sequence != 110 {
         return Err(format!(
@@ -2035,7 +2491,6 @@ fn check_work_package_tranches(
             "{HANDLER_FOUNDATION_TRANCHE} feature-cell set is not frozen"
         ));
     }
-    let registered_artifacts = load_artifact_registry(root)?;
     let artifacts = package_string_set(
         tranche,
         "authoritative_artifacts",
@@ -2280,12 +2735,23 @@ fn check_work_package_tranches(
     }
     validate_relative_path(&evidence_path, "tranche evidence")?;
     let verification_check = string_field(tranche, "completion_check", HANDLER_FOUNDATION_TRANCHE)?;
+    if verification_check != "wp100-foundation-refresh-check" {
+        return Err(format!(
+            "{HANDLER_FOUNDATION_TRANCHE} completion check is not frozen"
+        ));
+    }
     let check_status = check_statuses.get(&verification_check).ok_or_else(|| {
         format!("{HANDLER_FOUNDATION_TRANCHE} references unknown check {verification_check:?}")
     })?;
 
     let evidence_exists = root.join(&evidence_path).is_file();
     if status == "complete" {
+        if check_status != "executable" {
+            return Err(format!(
+                "{HANDLER_FOUNDATION_TRANCHE} is complete while check \
+                 {verification_check:?} is {check_status:?}"
+            ));
+        }
         if !evidence_exists {
             return Err(format!(
                 "{HANDLER_FOUNDATION_TRANCHE} is complete but {evidence_path} is missing"
@@ -2299,6 +2765,7 @@ fn check_work_package_tranches(
         check_tranche_evidence(
             root,
             &evidence_path,
+            HANDLER_FOUNDATION_TRANCHE,
             "handler-foundation-refresh",
             &verification_check,
         )?;
@@ -2308,7 +2775,40 @@ fn check_work_package_tranches(
         ));
     }
 
+    let value_primitives_tranche = tranches
+        .iter()
+        .find(|table| {
+            table.get("id").and_then(Item::as_str) == Some(HANDLER_VALUE_PRIMITIVES_TRANCHE)
+        })
+        .ok_or_else(|| format!("{HANDLER_VALUE_PRIMITIVES_TRANCHE} tranche record is missing"))?;
+    let value_state = check_handler_value_primitives_tranche(
+        root,
+        value_primitives_tranche,
+        known_requirements,
+        allowed_owners,
+        allowed_cells,
+        package_evidence,
+        &registered_artifacts,
+        &check_statuses,
+        &status,
+        &admission_status,
+        check_status,
+    )?;
+
+    check_handler_scope_partition(
+        &value_state.requirements,
+        &value_state.api_items,
+        &blocking_scope.requirements,
+        &blocking_scope.shared_meta_requirements,
+        &blocking_scope.items,
+    )?;
+
     if require_handler_entry {
+        if blocking_scope.is_blocking {
+            return Err(format!(
+                "handler entry blocked: scope {HANDLER_TIME_BLOCKING_SCOPE} remains blocking"
+            ));
+        }
         if handler_admission_status != "approved" {
             return Err(format!(
                 "handler entry blocked: {HANDLER_ENTRYPOINT} admission is \
@@ -2340,8 +2840,1561 @@ fn check_work_package_tranches(
                 "handler entry blocked: foundation verification exited with {status}"
             ));
         }
+        if value_state.status != "complete" {
+            return Err(format!(
+                "handler entry blocked: {HANDLER_VALUE_PRIMITIVES_TRANCHE} is \
+                 {:?}",
+                value_state.status
+            ));
+        }
+        if value_state.check_status != "executable" {
+            return Err(format!(
+                "handler entry blocked: check {:?} is {:?}",
+                value_state.verification_check, value_state.check_status
+            ));
+        }
+        let checker = root.join("tools/check-wp100-handler-value-primitives.sh");
+        let status = Command::new(&checker)
+            .current_dir(root)
+            .status()
+            .map_err(|error| {
+                format!(
+                    "cannot execute handler value-primitives verification {}: {error}",
+                    checker.display()
+                )
+            })?;
+        if !status.success() {
+            return Err(format!(
+                "handler entry blocked: value-primitives verification exited with {status}"
+            ));
+        }
     }
     Ok(())
+}
+
+#[allow(clippy::too_many_arguments)]
+fn check_handler_blocking_scope(
+    root: &Path,
+    document: &DocumentMut,
+    known_requirements: &BTreeSet<String>,
+    allowed_owners: &BTreeSet<String>,
+    package_evidence: &BTreeMap<String, BTreeSet<String>>,
+    registered_artifacts: &BTreeSet<String>,
+) -> Result<HandlerBlockingScope, String> {
+    let scopes = document
+        .get("blocking_scope")
+        .and_then(Item::as_array_of_tables)
+        .ok_or_else(|| "work-package index has no [[blocking_scope]] record".to_owned())?;
+    if scopes.len() != 1 {
+        return Err(format!(
+            "work-package index must define exactly one handler blocking scope; found {}",
+            scopes.len()
+        ));
+    }
+    let scope = scopes
+        .iter()
+        .next()
+        .ok_or_else(|| "handler blocking scope record is missing".to_owned())?;
+    require_exact_table_fields(
+        scope,
+        HANDLER_TIME_BLOCKING_SCOPE,
+        &[
+            "id",
+            "work_package",
+            "status",
+            "record_kind",
+            "impact_status",
+            "blocks_entrypoints",
+            "affected_requirements",
+            "shared_meta_requirements",
+            "affected_owner_packages",
+            "affected_items",
+            "blocking_topic",
+            "impact_review",
+            "impacted_evidence_path",
+            "impacted_evidence_key",
+            "future_tranche_identity",
+            "future_tranche_ownership",
+            "future_tranche_dependencies",
+            "future_tranche_completion_contract",
+            "evidence_disposition",
+        ],
+    )?;
+    require_table_string(
+        scope,
+        "id",
+        HANDLER_TIME_BLOCKING_SCOPE,
+        "handler blocking scope",
+    )?;
+    require_table_string(scope, "work_package", "WP-100", HANDLER_TIME_BLOCKING_SCOPE)?;
+    require_table_string(scope, "status", "discussing", HANDLER_TIME_BLOCKING_SCOPE)?;
+    require_table_string(
+        scope,
+        "record_kind",
+        "impact-placeholder",
+        HANDLER_TIME_BLOCKING_SCOPE,
+    )?;
+    require_table_string(
+        scope,
+        "impact_status",
+        "blocking",
+        HANDLER_TIME_BLOCKING_SCOPE,
+    )?;
+
+    let entrypoints = package_string_set(scope, "blocks_entrypoints", HANDLER_TIME_BLOCKING_SCOPE)?;
+    if entrypoints != owned_set(&[HANDLER_ENTRYPOINT]) {
+        return Err(format!(
+            "{HANDLER_TIME_BLOCKING_SCOPE} must block only {HANDLER_ENTRYPOINT}"
+        ));
+    }
+
+    let requirements =
+        package_string_set(scope, "affected_requirements", HANDLER_TIME_BLOCKING_SCOPE)?;
+    check_known_values(
+        HANDLER_TIME_BLOCKING_SCOPE,
+        "affected requirement",
+        &requirements,
+        known_requirements,
+    )?;
+    let expected_requirements = owned_set(&[
+        "API-SOURCE-TIME-001",
+        "API-SURFACE-001",
+        "CLEANUP-RECORD-001",
+        "HANDLER-CANCEL-001",
+        "HANDLER-CANCEL-002",
+        "TIME-001",
+    ]);
+    if requirements != expected_requirements {
+        return Err(format!(
+            "{HANDLER_TIME_BLOCKING_SCOPE} affected requirement set mismatch; expected \
+             {expected_requirements:?}, found {requirements:?}"
+        ));
+    }
+    let shared_meta_requirements = package_string_set(
+        scope,
+        "shared_meta_requirements",
+        HANDLER_TIME_BLOCKING_SCOPE,
+    )?;
+    if shared_meta_requirements != owned_set(&["API-SURFACE-001"])
+        || !shared_meta_requirements.is_subset(&requirements)
+    {
+        return Err(format!(
+            "{HANDLER_TIME_BLOCKING_SCOPE} shared meta requirements must be exactly \
+             API-SURFACE-001"
+        ));
+    }
+
+    let owners = package_string_set(
+        scope,
+        "affected_owner_packages",
+        HANDLER_TIME_BLOCKING_SCOPE,
+    )?;
+    check_known_values(
+        HANDLER_TIME_BLOCKING_SCOPE,
+        "affected owner package",
+        &owners,
+        allowed_owners,
+    )?;
+    if owners != owned_set(&["clinkz-wot-core", "clinkz-wot-foundation"]) {
+        return Err(format!(
+            "{HANDLER_TIME_BLOCKING_SCOPE} affected owner package set is not frozen"
+        ));
+    }
+
+    let items = package_string_set(scope, "affected_items", HANDLER_TIME_BLOCKING_SCOPE)?;
+    let expected_items = owned_set(&[
+        "ClockId",
+        "MonotonicInstant",
+        "RuntimeClock",
+        "SourceTimestamp",
+        "Deadline",
+        "CleanupRecord timing validation",
+    ]);
+    if items != expected_items {
+        return Err(format!(
+            "{HANDLER_TIME_BLOCKING_SCOPE} affected item set mismatch; expected \
+             {expected_items:?}, found {items:?}"
+        ));
+    }
+    let ownership_items = load_first_column(root, "docs/api-ownership.csv")?;
+    let ownership_backed_items = owned_set(&[
+        "ClockId",
+        "MonotonicInstant",
+        "RuntimeClock",
+        "SourceTimestamp",
+        "Deadline",
+    ]);
+    check_known_values(
+        HANDLER_TIME_BLOCKING_SCOPE,
+        "affected API item",
+        &ownership_backed_items,
+        &ownership_items,
+    )?;
+
+    for (field, expected) in [
+        (
+            "blocking_topic",
+            "workspace/0007-time-domain-and-deadline.md",
+        ),
+        ("impact_review", "docs/reviews/review-06.org"),
+        ("impacted_evidence_path", "docs/evidence/WP-000.toml"),
+    ] {
+        let value = string_field(scope, field, HANDLER_TIME_BLOCKING_SCOPE)?;
+        if value != expected {
+            return Err(format!(
+                "{HANDLER_TIME_BLOCKING_SCOPE} {field:?} mismatch; expected {expected:?}, \
+                 found {value:?}"
+            ));
+        }
+        validate_relative_path(&value, HANDLER_TIME_BLOCKING_SCOPE)?;
+        if !registered_artifacts.contains(&value) || !root.join(&value).is_file() {
+            return Err(format!(
+                "{HANDLER_TIME_BLOCKING_SCOPE} {field:?} is not registered and present: \
+                 {value:?}"
+            ));
+        }
+    }
+
+    let evidence_key = string_field(scope, "impacted_evidence_key", HANDLER_TIME_BLOCKING_SCOPE)?;
+    if evidence_key != "time-and-generation-api"
+        || !package_evidence
+            .get("WP-000")
+            .is_some_and(|keys| keys.contains(&evidence_key))
+    {
+        return Err(format!(
+            "{HANDLER_TIME_BLOCKING_SCOPE} impacted evidence key is unknown: {evidence_key:?}"
+        ));
+    }
+    check_work_package_evidence_key(root, "docs/evidence/WP-000.toml", &evidence_key)?;
+
+    for field in [
+        "future_tranche_identity",
+        "future_tranche_ownership",
+        "future_tranche_dependencies",
+        "future_tranche_completion_contract",
+        "evidence_disposition",
+    ] {
+        require_table_string(scope, field, "not-frozen", HANDLER_TIME_BLOCKING_SCOPE)?;
+    }
+
+    Ok(HandlerBlockingScope {
+        requirements,
+        shared_meta_requirements,
+        items,
+        is_blocking: true,
+    })
+}
+
+fn check_handler_scope_partition(
+    value_requirements: &BTreeSet<String>,
+    value_api_items: &BTreeSet<String>,
+    blocking_requirements: &BTreeSet<String>,
+    shared_meta_requirements: &BTreeSet<String>,
+    blocking_items: &BTreeSet<String>,
+) -> Result<(), String> {
+    let requirement_overlap: BTreeSet<String> = value_requirements
+        .intersection(blocking_requirements)
+        .cloned()
+        .collect();
+    if &requirement_overlap != shared_meta_requirements {
+        return Err(format!(
+            "handler value/time requirement intersection must equal declared shared meta \
+             requirements {shared_meta_requirements:?}; found {requirement_overlap:?}"
+        ));
+    }
+    let item_overlap: BTreeSet<String> = value_api_items
+        .intersection(blocking_items)
+        .cloned()
+        .collect();
+    if !item_overlap.is_empty() {
+        return Err(format!(
+            "handler value and time blocking API scopes overlap at {item_overlap:?}"
+        ));
+    }
+    Ok(())
+}
+
+fn check_work_package_evidence_key(
+    root: &Path,
+    relative_path: &str,
+    expected_key: &str,
+) -> Result<(), String> {
+    let path = root.join(relative_path);
+    let source = fs::read_to_string(&path)
+        .map_err(|error| format!("cannot read {}: {error}", path.display()))?;
+    let document = source
+        .parse::<DocumentMut>()
+        .map_err(|error| format!("invalid {}: {error}", path.display()))?;
+    let records = document
+        .get("evidence")
+        .and_then(Item::as_array_of_tables)
+        .ok_or_else(|| format!("{relative_path} has no [[evidence]] records"))?;
+    let matches = records
+        .iter()
+        .filter(|record| record.get("key").and_then(Item::as_str) == Some(expected_key))
+        .count();
+    if matches != 1 {
+        return Err(format!(
+            "{relative_path} must contain exactly one evidence key {expected_key:?}; found \
+             {matches}"
+        ));
+    }
+    Ok(())
+}
+
+#[allow(clippy::too_many_arguments)]
+fn check_handler_value_primitives_tranche(
+    root: &Path,
+    tranche: &Table,
+    known_requirements: &BTreeSet<String>,
+    allowed_owners: &BTreeSet<String>,
+    allowed_cells: &BTreeSet<String>,
+    package_evidence: &BTreeMap<String, BTreeSet<String>>,
+    registered_artifacts: &BTreeSet<String>,
+    check_statuses: &BTreeMap<String, String>,
+    foundation_status: &str,
+    foundation_admission_status: &str,
+    foundation_check_status: &str,
+) -> Result<HandlerValueTrancheState, String> {
+    require_table_string(
+        tranche,
+        "id",
+        HANDLER_VALUE_PRIMITIVES_TRANCHE,
+        "handler value-primitives tranche",
+    )?;
+    require_table_string(
+        tranche,
+        "work_package",
+        "WP-100",
+        HANDLER_VALUE_PRIMITIVES_TRANCHE,
+    )?;
+
+    let sequence = integer_field(tranche, "sequence", HANDLER_VALUE_PRIMITIVES_TRANCHE)?;
+    if sequence != 120 {
+        return Err(format!(
+            "{HANDLER_VALUE_PRIMITIVES_TRANCHE} sequence mismatch; expected 120, found \
+             {sequence}"
+        ));
+    }
+    let status = string_field(tranche, "status", HANDLER_VALUE_PRIMITIVES_TRANCHE)?;
+    let admission_status = string_field(
+        tranche,
+        "admission_status",
+        HANDLER_VALUE_PRIMITIVES_TRANCHE,
+    )?;
+    if !handler_value_status_pair_is_valid(&status, &admission_status) {
+        return Err(format!(
+            "{HANDLER_VALUE_PRIMITIVES_TRANCHE} has invalid status/admission pair \
+             {status:?}/{admission_status:?}"
+        ));
+    }
+    require_table_string(
+        tranche,
+        "impact_status",
+        "current",
+        HANDLER_VALUE_PRIMITIVES_TRANCHE,
+    )?;
+
+    let dependencies = package_string_set(tranche, "depends_on", HANDLER_VALUE_PRIMITIVES_TRANCHE)?;
+    if dependencies != owned_set(&[HANDLER_FOUNDATION_TRANCHE]) {
+        return Err(format!(
+            "{HANDLER_VALUE_PRIMITIVES_TRANCHE} must depend only on \
+             {HANDLER_FOUNDATION_TRANCHE}"
+        ));
+    }
+    let blocked = package_string_set(
+        tranche,
+        "blocks_entrypoints",
+        HANDLER_VALUE_PRIMITIVES_TRANCHE,
+    )?;
+    if blocked != owned_set(&[HANDLER_ENTRYPOINT]) {
+        return Err(format!(
+            "{HANDLER_VALUE_PRIMITIVES_TRANCHE} must block only {HANDLER_ENTRYPOINT}"
+        ));
+    }
+
+    let expected_requirements = owned_set(&["API-SURFACE-001", "HANDLER-VALUE-001"]);
+    let requirements =
+        package_string_set(tranche, "requirements", HANDLER_VALUE_PRIMITIVES_TRANCHE)?;
+    check_known_values(
+        HANDLER_VALUE_PRIMITIVES_TRANCHE,
+        "requirement",
+        &requirements,
+        known_requirements,
+    )?;
+    if requirements != expected_requirements {
+        return Err(format!(
+            "{HANDLER_VALUE_PRIMITIVES_TRANCHE} requirement set mismatch; expected \
+             {expected_requirements:?}, found {requirements:?}"
+        ));
+    }
+
+    let owners = package_string_set(tranche, "owner_packages", HANDLER_VALUE_PRIMITIVES_TRANCHE)?;
+    check_known_values(
+        HANDLER_VALUE_PRIMITIVES_TRANCHE,
+        "owner package",
+        &owners,
+        allowed_owners,
+    )?;
+    if owners != owned_set(&["clinkz-wot-core"]) {
+        return Err(format!(
+            "{HANDLER_VALUE_PRIMITIVES_TRANCHE} owner package set is not frozen"
+        ));
+    }
+
+    let cells = package_string_set(tranche, "feature_cells", HANDLER_VALUE_PRIMITIVES_TRANCHE)?;
+    check_known_values(
+        HANDLER_VALUE_PRIMITIVES_TRANCHE,
+        "feature cell",
+        &cells,
+        allowed_cells,
+    )?;
+    if cells != owned_set(&["no-default", "async-no-std", "std"]) {
+        return Err(format!(
+            "{HANDLER_VALUE_PRIMITIVES_TRANCHE} feature-cell set is not frozen"
+        ));
+    }
+
+    let artifacts = package_string_set(
+        tranche,
+        "authoritative_artifacts",
+        HANDLER_VALUE_PRIMITIVES_TRANCHE,
+    )?;
+    let expected_artifacts = owned_set(&[
+        "docs/ADRs/0013-work-package-scoped-implementation-admission.org",
+        "docs/ADRs/0014-transitional-normative-ownership.org",
+        "docs/amendments/WP-100-handler-api-v1.md",
+        "docs/api-ownership.csv",
+        "docs/design.md",
+        "docs/requirements.csv",
+        "docs/work-packages/WP-100-core.md",
+        "docs/work-packages/index.toml",
+    ]);
+    if artifacts != expected_artifacts {
+        return Err(format!(
+            "{HANDLER_VALUE_PRIMITIVES_TRANCHE} authoritative artifact set mismatch; expected \
+             {expected_artifacts:?}, found {artifacts:?}"
+        ));
+    }
+    check_known_values(
+        HANDLER_VALUE_PRIMITIVES_TRANCHE,
+        "authoritative artifact",
+        &artifacts,
+        registered_artifacts,
+    )?;
+
+    let api_items = package_string_set(tranche, "api_items", HANDLER_VALUE_PRIMITIVES_TRANCHE)?;
+    let expected_api_items = owned_set(&[
+        "CancellationView",
+        "HandlerFootprint",
+        "HandlerStep",
+        "StaticHandlerRegistration",
+        "SubscriptionAcceptance",
+    ]);
+    if api_items != expected_api_items {
+        return Err(format!(
+            "{HANDLER_VALUE_PRIMITIVES_TRANCHE} API item set mismatch; expected \
+             {expected_api_items:?}, found {api_items:?}"
+        ));
+    }
+    let ownership_items = load_first_column(root, "docs/api-ownership.csv")?;
+    check_known_values(
+        HANDLER_VALUE_PRIMITIVES_TRANCHE,
+        "API item",
+        &api_items,
+        &ownership_items,
+    )?;
+
+    let implementation_paths = package_string_set(
+        tranche,
+        "implementation_paths",
+        HANDLER_VALUE_PRIMITIVES_TRANCHE,
+    )?;
+    let expected_implementation_paths = owned_set(&["core/src/handler.rs", "core/src/lib.rs"]);
+    if implementation_paths != expected_implementation_paths {
+        return Err(format!(
+            "{HANDLER_VALUE_PRIMITIVES_TRANCHE} implementation path set mismatch; expected \
+             {expected_implementation_paths:?}, found {implementation_paths:?}"
+        ));
+    }
+    for path in &implementation_paths {
+        validate_relative_path(path, "handler value implementation path")?;
+    }
+
+    let contract_artifacts = package_string_set(
+        tranche,
+        "contract_artifacts",
+        HANDLER_VALUE_PRIMITIVES_TRANCHE,
+    )?;
+    let expected_contract_artifacts = owned_set(&[
+        "tools/check-wp100-handler-value-primitives-entry.sh",
+        "tools/check-wp100-handler-value-primitives.sh",
+        "tools/design-check/Cargo.toml",
+        "tools/design-check/src/main.rs",
+        "tools/compile-contracts/wp100-handler-value-primitives/Cargo.toml",
+        "tools/compile-contracts/wp100-handler-value-primitives/Cargo.lock",
+        "tools/compile-contracts/wp100-handler-value-primitives/src/lib.rs",
+        "tools/compile-contracts/wp100-handler-value-primitives/tests/semantics.rs",
+        "tools/compile-contracts/wp100-handler-value-primitives/ui/private-subscription-acceptance.rs",
+        "tools/compile-contracts/wp100-handler-value-primitives/ui/private-handler-footprint.rs",
+        "tools/compile-contracts/wp100-handler-value-primitives/ui/private-static-handler-registration.rs",
+        "tools/compile-contracts/wp100-handler-value-primitives/ui/must-use-subscription-acceptance.rs",
+        "tools/compile-contracts/wp100-handler-value-primitives/ui/must-use-handler-step.rs",
+    ]);
+    if contract_artifacts != expected_contract_artifacts {
+        return Err(format!(
+            "{HANDLER_VALUE_PRIMITIVES_TRANCHE} contract artifact set mismatch; expected \
+             {expected_contract_artifacts:?}, found {contract_artifacts:?}"
+        ));
+    }
+    check_known_values(
+        HANDLER_VALUE_PRIMITIVES_TRANCHE,
+        "contract artifact",
+        &contract_artifacts,
+        registered_artifacts,
+    )?;
+    for artifact in &contract_artifacts {
+        if !root.join(artifact).is_file() {
+            return Err(format!(
+                "{HANDLER_VALUE_PRIMITIVES_TRANCHE} contract artifact is missing: {artifact:?}"
+            ));
+        }
+    }
+
+    let candidate_base_ref = string_field(
+        tranche,
+        "candidate_base_ref",
+        HANDLER_VALUE_PRIMITIVES_TRANCHE,
+    )?;
+    if candidate_base_ref != "8c89e9346f424923ef3247dd1c402d5ab141c203" {
+        return Err(format!(
+            "{HANDLER_VALUE_PRIMITIVES_TRANCHE} candidate base ref is not frozen"
+        ));
+    }
+    check_git_commit_is_ancestor(root, &candidate_base_ref, "candidate base ref")?;
+    let candidate_paths =
+        package_string_set(tranche, "candidate_paths", HANDLER_VALUE_PRIMITIVES_TRANCHE)?;
+    check_handler_candidate_paths(
+        root,
+        &candidate_paths,
+        &implementation_paths,
+        registered_artifacts,
+    )?;
+
+    for empty_field in [
+        "state_machines",
+        "old_api_removals",
+        "performance_workloads",
+    ] {
+        let values = string_set(
+            array_field(tranche, empty_field, HANDLER_VALUE_PRIMITIVES_TRANCHE)?,
+            HANDLER_VALUE_PRIMITIVES_TRANCHE,
+            empty_field,
+        )?;
+        if !values.is_empty() {
+            return Err(format!(
+                "{HANDLER_VALUE_PRIMITIVES_TRANCHE} must have an empty {empty_field:?} scope"
+            ));
+        }
+    }
+
+    let pre_checks = package_string_set(
+        tranche,
+        "pre_implementation_checks",
+        HANDLER_VALUE_PRIMITIVES_TRANCHE,
+    )?;
+    let expected_pre_checks = owned_set(HANDLER_VALUE_PRECHECKS);
+    if pre_checks != expected_pre_checks {
+        return Err(format!(
+            "{HANDLER_VALUE_PRIMITIVES_TRANCHE} pre-implementation check set mismatch; \
+             expected {expected_pre_checks:?}, found {pre_checks:?}"
+        ));
+    }
+    for check in &pre_checks {
+        if check_statuses.get(check).map(String::as_str) != Some("executable") {
+            return Err(format!(
+                "{HANDLER_VALUE_PRIMITIVES_TRANCHE} pre-implementation check {check:?} is not \
+                 executable"
+            ));
+        }
+    }
+
+    let entry_check = string_field(tranche, "entry_check", HANDLER_VALUE_PRIMITIVES_TRANCHE)?;
+    if entry_check != HANDLER_VALUE_ENTRY_CHECK
+        || check_statuses.get(&entry_check).map(String::as_str) != Some("executable")
+    {
+        return Err(format!(
+            "{HANDLER_VALUE_PRIMITIVES_TRANCHE} entry check must be the executable \
+             {HANDLER_VALUE_ENTRY_CHECK:?}"
+        ));
+    }
+
+    let admission_review = string_field(
+        tranche,
+        "admission_review",
+        HANDLER_VALUE_PRIMITIVES_TRANCHE,
+    )?;
+    if admission_review != HANDLER_VALUE_ADMISSION_REVIEW {
+        return Err(format!(
+            "{HANDLER_VALUE_PRIMITIVES_TRANCHE} admission review path is not frozen"
+        ));
+    }
+    validate_relative_path(&admission_review, "tranche admission review")?;
+    if !registered_artifacts.contains(&admission_review) || !root.join(&admission_review).is_file()
+    {
+        return Err(format!(
+            "{HANDLER_VALUE_PRIMITIVES_TRANCHE} admission review is not registered and \
+             present: {admission_review:?}"
+        ));
+    }
+    check_handler_value_audit_state(root, &admission_review, &admission_status)?;
+    let attestation_ref = if admission_status == "approved" {
+        if foundation_status != "complete"
+            || foundation_admission_status != "approved"
+            || foundation_check_status != "executable"
+        {
+            return Err(format!(
+                "{HANDLER_VALUE_PRIMITIVES_TRANCHE} approval requires a complete, approved, \
+                 current foundation predecessor with executable evidence check"
+            ));
+        }
+        check_handler_value_primitives_admission_review(
+            root,
+            &admission_review,
+            &artifacts,
+            &pre_checks,
+        )?;
+        let attestation_path = string_field(
+            tranche,
+            "review_attestation",
+            HANDLER_VALUE_PRIMITIVES_TRANCHE,
+        )?;
+        if attestation_path != HANDLER_VALUE_REVIEW_ATTESTATION
+            || !registered_artifacts.contains(&attestation_path)
+            || !root.join(&attestation_path).is_file()
+        {
+            return Err(format!(
+                "{HANDLER_VALUE_PRIMITIVES_TRANCHE} review attestation must be registered at \
+                 {HANDLER_VALUE_REVIEW_ATTESTATION:?}"
+            ));
+        }
+        let attestation_ref = string_field(
+            tranche,
+            "review_attestation_ref",
+            HANDLER_VALUE_PRIMITIVES_TRANCHE,
+        )?;
+        check_handler_review_attestation(
+            root,
+            &attestation_path,
+            &attestation_ref,
+            &candidate_base_ref,
+            &candidate_paths,
+        )?;
+        Some(attestation_ref)
+    } else {
+        for forbidden_field in ["review_attestation", "review_attestation_ref"] {
+            if tranche.contains_key(forbidden_field) {
+                return Err(format!(
+                    "{HANDLER_VALUE_PRIMITIVES_TRANCHE} review-pending state must not define \
+                     {forbidden_field:?}"
+                ));
+            }
+        }
+        None
+    };
+
+    let admission_ref = if status == "pending" {
+        if tranche.contains_key("admission_ref") {
+            return Err(format!(
+                "{HANDLER_VALUE_PRIMITIVES_TRANCHE} pending state must not define \
+                 admission_ref"
+            ));
+        }
+        None
+    } else {
+        let admission_ref = string_field(
+            tranche,
+            "admission_ref",
+            HANDLER_VALUE_PRIMITIVES_TRANCHE,
+        )?;
+        let attestation_ref = attestation_ref.as_deref().ok_or_else(|| {
+            format!(
+                "{HANDLER_VALUE_PRIMITIVES_TRANCHE} non-pending state has no review \
+                 attestation ref"
+            )
+        })?;
+        check_handler_admission_commit(root, &admission_ref, attestation_ref)?;
+        if status == "in-progress" {
+            check_handler_progress_checkpoint_state(root, &admission_ref, &implementation_paths)?;
+        }
+        Some(admission_ref)
+    };
+
+    let completion_evidence = package_string_set(
+        tranche,
+        "completion_evidence_keys",
+        HANDLER_VALUE_PRIMITIVES_TRANCHE,
+    )?;
+    if completion_evidence != owned_set(&["handler-value-primitives"])
+        || !package_evidence
+            .get("WP-100")
+            .is_some_and(|keys| completion_evidence.is_subset(keys))
+    {
+        return Err(format!(
+            "{HANDLER_VALUE_PRIMITIVES_TRANCHE} has unregistered completion evidence \
+             {completion_evidence:?}"
+        ));
+    }
+    let evidence_path = string_field(
+        tranche,
+        "completion_evidence_path",
+        HANDLER_VALUE_PRIMITIVES_TRANCHE,
+    )?;
+    if evidence_path != HANDLER_VALUE_COMPLETION_EVIDENCE {
+        return Err(format!(
+            "{HANDLER_VALUE_PRIMITIVES_TRANCHE} evidence path is not frozen"
+        ));
+    }
+    validate_relative_path(&evidence_path, "tranche evidence")?;
+
+    let verification_check = string_field(
+        tranche,
+        "completion_check",
+        HANDLER_VALUE_PRIMITIVES_TRANCHE,
+    )?;
+    if verification_check != "wp100-handler-value-primitives-check" {
+        return Err(format!(
+            "{HANDLER_VALUE_PRIMITIVES_TRANCHE} completion check is not frozen"
+        ));
+    }
+    let check_status = check_statuses
+        .get(&verification_check)
+        .ok_or_else(|| {
+            format!(
+                "{HANDLER_VALUE_PRIMITIVES_TRANCHE} references unknown check \
+                 {verification_check:?}"
+            )
+        })?
+        .clone();
+
+    let evidence_exists = root.join(&evidence_path).is_file();
+    if status == "complete" {
+        if check_status != "executable" {
+            return Err(format!(
+                "{HANDLER_VALUE_PRIMITIVES_TRANCHE} is complete while check \
+                 {verification_check:?} is {check_status:?}"
+            ));
+        }
+        if !evidence_exists {
+            return Err(format!(
+                "{HANDLER_VALUE_PRIMITIVES_TRANCHE} is complete but {evidence_path} is missing"
+            ));
+        }
+        if admission_status != "approved" {
+            return Err(format!(
+                "{HANDLER_VALUE_PRIMITIVES_TRANCHE} is complete without approved admission"
+            ));
+        }
+        if !registered_artifacts.contains(&evidence_path) {
+            return Err(format!(
+                "{HANDLER_VALUE_PRIMITIVES_TRANCHE} completion evidence is not registered: \
+                 {evidence_path:?}"
+            ));
+        }
+        check_handler_value_completion_evidence(
+            root,
+            &evidence_path,
+            &verification_check,
+            admission_ref.as_deref().ok_or_else(|| {
+                format!(
+                    "{HANDLER_VALUE_PRIMITIVES_TRANCHE} complete state has no admission_ref"
+                )
+            })?,
+        )?;
+    } else if evidence_exists && tranche_evidence_is_passed(root, &evidence_path)? {
+        return Err(format!(
+            "{HANDLER_VALUE_PRIMITIVES_TRANCHE} is not complete while {evidence_path} claims \
+             passed"
+        ));
+    }
+
+    Ok(HandlerValueTrancheState {
+        status,
+        verification_check,
+        check_status,
+        requirements,
+        api_items,
+    })
+}
+
+fn handler_value_status_pair_is_valid(status: &str, admission_status: &str) -> bool {
+    matches!(
+        (status, admission_status),
+        ("pending", "review-pending")
+            | ("pending", "approved")
+            | ("in-progress", "approved")
+            | ("complete", "approved")
+    )
+}
+
+fn check_handler_candidate_paths(
+    root: &Path,
+    candidate_paths: &BTreeSet<String>,
+    implementation_paths: &BTreeSet<String>,
+    registered_artifacts: &BTreeSet<String>,
+) -> Result<(), String> {
+    if candidate_paths.is_empty() {
+        return Err(format!(
+            "{HANDLER_VALUE_PRIMITIVES_TRANCHE} candidate path set must not be empty"
+        ));
+    }
+    let design_checker_source_is_registered = registered_artifacts
+        .contains("tools/design-check/src/main.rs")
+        || registered_artifacts.contains("tools/design-check/Cargo.toml");
+    for path in candidate_paths {
+        validate_relative_path(path, "handler value candidate path")?;
+        if implementation_paths.contains(path) {
+            return Err(format!(
+                "{HANDLER_VALUE_PRIMITIVES_TRANCHE} candidate path enters implementation scope: \
+                 {path:?}"
+            ));
+        }
+        let explicitly_governed = path.starts_with("docs/")
+            || path.starts_with("workspace/")
+            || matches!(
+                path.as_str(),
+                "AGENTS.md" | "PLAN.md" | "Cargo.toml" | "Cargo.lock"
+            )
+            || (path == "tools/design-check/src/main.rs" && design_checker_source_is_registered);
+        if !registered_artifacts.contains(path) && !explicitly_governed {
+            return Err(format!(
+                "{HANDLER_VALUE_PRIMITIVES_TRANCHE} candidate path is outside registered \
+                 contract/governance scope: {path:?}"
+            ));
+        }
+        if !root.join(path).is_file() {
+            return Err(format!(
+                "{HANDLER_VALUE_PRIMITIVES_TRANCHE} candidate path is missing: {path:?}"
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn check_handler_value_audit_state(
+    root: &Path,
+    relative_path: &str,
+    admission_status: &str,
+) -> Result<(), String> {
+    let path = root.join(relative_path);
+    let source = fs::read_to_string(&path)
+        .map_err(|error| format!("cannot read {}: {error}", path.display()))?;
+    validate_handler_value_audit_source(&source, admission_status)
+        .map_err(|error| format!("{relative_path}: {error}"))
+}
+
+fn validate_handler_value_audit_source(source: &str, admission_status: &str) -> Result<(), String> {
+    let (expected_status, expected_verdict, forbidden_status, forbidden_verdict) =
+        match admission_status {
+            "review-pending" => (
+                "Status: Pending",
+                "Verdict: Independent re-review pending",
+                "Status: Passed",
+                "Verdict: Implementation-ready",
+            ),
+            "approved" => (
+                "Status: Passed",
+                "Verdict: Implementation-ready",
+                "Status: Pending",
+                "Verdict: Independent re-review pending",
+            ),
+            other => {
+                return Err(format!(
+                    "unsupported handler value admission state {other:?}"
+                ));
+            }
+        };
+    for marker in [expected_status, expected_verdict] {
+        if source.lines().filter(|line| *line == marker).count() != 1 {
+            return Err(format!("audit must contain exactly one {marker:?}"));
+        }
+    }
+    for marker in [forbidden_status, forbidden_verdict] {
+        if source.lines().any(|line| line == marker) {
+            return Err(format!("audit contains contradictory marker {marker:?}"));
+        }
+    }
+    Ok(())
+}
+
+#[derive(Debug, Eq, PartialEq)]
+struct HandlerReviewAttestationProjection {
+    reviewed_ref: String,
+}
+
+fn parse_handler_review_attestation(
+    source: &str,
+) -> Result<HandlerReviewAttestationProjection, String> {
+    let document = source
+        .parse::<DocumentMut>()
+        .map_err(|error| format!("invalid handler review attestation: {error}"))?;
+    require_exact_table_fields(
+        document.as_table(),
+        "handler review attestation",
+        &[
+            "schema_version",
+            "design_revision",
+            "tranche",
+            "status",
+            "reviewer_attestation_kind",
+            "reviewer_id",
+            "reviewed_ref",
+            "precheck",
+        ],
+    )?;
+    require_integer(
+        document.get("schema_version"),
+        "handler review attestation schema_version",
+        1,
+    )?;
+    require_string(
+        document.get("design_revision"),
+        "handler review attestation design_revision",
+        ACTIVE_DESIGN_REVISION,
+    )?;
+    require_string(
+        document.get("tranche"),
+        "handler review attestation tranche",
+        HANDLER_VALUE_PRIMITIVES_TRANCHE,
+    )?;
+    require_string(
+        document.get("status"),
+        "handler review attestation status",
+        "passed",
+    )?;
+    require_string(
+        document.get("reviewer_attestation_kind"),
+        "handler review attestation kind",
+        "separate-agent-task",
+    )?;
+    let reviewer_id = document
+        .get("reviewer_id")
+        .and_then(Item::as_str)
+        .ok_or_else(|| "handler review attestation has no reviewer_id".to_owned())?;
+    if !reviewer_id.starts_with("codex-agent:/root/")
+        || reviewer_id == "codex-agent:/root/"
+        || reviewer_id == "codex-agent:/root"
+    {
+        return Err(format!(
+            "handler review attestation reviewer is not a child task: {reviewer_id:?}"
+        ));
+    }
+    let reviewed_ref = document
+        .get("reviewed_ref")
+        .and_then(Item::as_str)
+        .ok_or_else(|| "handler review attestation has no reviewed_ref".to_owned())?
+        .to_owned();
+    require_full_commit_id(&reviewed_ref, "reviewed_ref")?;
+
+    let checks = document
+        .get("precheck")
+        .and_then(Item::as_array_of_tables)
+        .ok_or_else(|| "handler review attestation has no [[precheck]] records".to_owned())?;
+    if checks.len() != HANDLER_VALUE_PRECHECKS.len() {
+        return Err(format!(
+            "handler review attestation must record exactly {} prechecks; found {}",
+            HANDLER_VALUE_PRECHECKS.len(),
+            checks.len()
+        ));
+    }
+    let mut ids = BTreeSet::new();
+    for check in checks {
+        require_exact_table_fields(check, "handler review precheck", &["id", "result"])?;
+        let id = string_field(check, "id", "handler review precheck")?;
+        require_table_string(check, "result", "passed", &id)?;
+        if !ids.insert(id.clone()) {
+            return Err(format!(
+                "handler review attestation duplicates precheck {id:?}"
+            ));
+        }
+    }
+    let expected_ids = owned_set(HANDLER_VALUE_PRECHECKS);
+    if ids != expected_ids {
+        return Err(format!(
+            "handler review attestation precheck set mismatch; expected {expected_ids:?}, \
+             found {ids:?}"
+        ));
+    }
+    Ok(HandlerReviewAttestationProjection { reviewed_ref })
+}
+
+fn check_handler_review_attestation(
+    root: &Path,
+    relative_path: &str,
+    attestation_ref: &str,
+    candidate_base_ref: &str,
+    candidate_paths: &BTreeSet<String>,
+) -> Result<(), String> {
+    require_full_commit_id(attestation_ref, "review_attestation_ref")?;
+    check_git_commit_is_ancestor(root, attestation_ref, "review_attestation_ref")?;
+    let path = root.join(relative_path);
+    let source = fs::read_to_string(&path)
+        .map_err(|error| format!("cannot read {}: {error}", path.display()))?;
+    let projection = parse_handler_review_attestation(&source)?;
+    check_git_commit_is_ancestor(root, &projection.reviewed_ref, "reviewed_ref")?;
+
+    require_git_single_parent(
+        root,
+        &projection.reviewed_ref,
+        candidate_base_ref,
+        "reviewed candidate commit",
+    )?;
+    let reviewed_paths = git_changed_paths_between(
+        root,
+        candidate_base_ref,
+        &projection.reviewed_ref,
+        "reviewed candidate diff",
+    )?;
+    if &reviewed_paths != candidate_paths {
+        return Err(format!(
+            "reviewed candidate diff mismatch; expected {candidate_paths:?}, found \
+             {reviewed_paths:?}"
+        ));
+    }
+
+    require_git_single_parent(
+        root,
+        attestation_ref,
+        &projection.reviewed_ref,
+        "review attestation commit",
+    )?;
+    let review_paths = git_changed_paths_between(
+        root,
+        &projection.reviewed_ref,
+        attestation_ref,
+        "review attestation diff",
+    )?;
+    let expected_review_paths = owned_set(&["docs/artifacts.csv", relative_path]);
+    if review_paths != expected_review_paths {
+        return Err(format!(
+            "review attestation commit changed files outside its boundary; expected \
+             {expected_review_paths:?}, found {review_paths:?}"
+        ));
+    }
+
+    let object = format!("{attestation_ref}:{relative_path}");
+    let committed_source = git_output_bytes(
+        root,
+        &["show", &object],
+        "read committed review attestation",
+    )?;
+    let worktree_source =
+        fs::read(&path).map_err(|error| format!("cannot read {}: {error}", path.display()))?;
+    if committed_source != worktree_source {
+        return Err(format!(
+            "worktree review attestation {relative_path:?} differs from \
+             review_attestation_ref"
+        ));
+    }
+    Ok(())
+}
+
+fn check_handler_value_completion_evidence(
+    root: &Path,
+    relative_path: &str,
+    verification_check: &str,
+    admission_ref: &str,
+) -> Result<(), String> {
+    check_tranche_evidence(
+        root,
+        relative_path,
+        HANDLER_VALUE_PRIMITIVES_TRANCHE,
+        "handler-value-primitives",
+        verification_check,
+    )?;
+    let path = root.join(relative_path);
+    let source = fs::read_to_string(&path)
+        .map_err(|error| format!("cannot read {}: {error}", path.display()))?;
+    let document = source
+        .parse::<DocumentMut>()
+        .map_err(|error| format!("invalid {}: {error}", path.display()))?;
+    require_string(
+        document.get("verification_command"),
+        "handler value evidence verification_command",
+        "tools/check-wp100-handler-value-primitives.sh",
+    )?;
+    let implementation_ref = document
+        .get("implementation_ref")
+        .and_then(Item::as_str)
+        .ok_or_else(|| format!("{relative_path} has no implementation_ref"))?;
+    require_full_commit_id(implementation_ref, "handler value implementation_ref")?;
+    check_git_commit_is_ancestor(root, implementation_ref, "handler value implementation_ref")?;
+    let progress_ref = git_single_parent(
+        root,
+        implementation_ref,
+        "handler value implementation commit",
+    )?;
+    require_git_single_parent(
+        root,
+        &progress_ref,
+        admission_ref,
+        "handler value progress checkpoint",
+    )?;
+    let progress_paths = git_changed_paths_between(
+        root,
+        admission_ref,
+        &progress_ref,
+        "handler value progress checkpoint diff",
+    )?;
+    let expected_progress_paths =
+        owned_set(&["PLAN.md", "docs/work-packages/index.toml"]);
+    if progress_paths != expected_progress_paths {
+        return Err(format!(
+            "handler value progress checkpoint path mismatch; expected \
+             {expected_progress_paths:?}, found {progress_paths:?}"
+        ));
+    }
+    let implementation_paths = git_commit_changed_paths(
+        root,
+        implementation_ref,
+        "handler value implementation commit",
+    )?;
+    let expected_paths = owned_set(&["core/src/handler.rs", "core/src/lib.rs"]);
+    if implementation_paths != expected_paths {
+        return Err(format!(
+            "handler value implementation commit path mismatch; expected {expected_paths:?}, \
+             found {implementation_paths:?}"
+        ));
+    }
+
+    let checker = root.join("tools/check-wp100-handler-value-primitives.sh");
+    let status = Command::new(&checker)
+        .current_dir(root)
+        .status()
+        .map_err(|error| {
+            format!(
+                "cannot execute handler value completion checker {}: {error}",
+                checker.display()
+            )
+        })?;
+    if !status.success() {
+        return Err(format!(
+            "handler value completion checker exited with {status}"
+        ));
+    }
+    Ok(())
+}
+
+fn check_handler_admission_commit(
+    root: &Path,
+    admission_ref: &str,
+    attestation_ref: &str,
+) -> Result<(), String> {
+    require_full_commit_id(admission_ref, "admission_ref")?;
+    check_git_commit_is_ancestor(root, admission_ref, "admission_ref")?;
+    require_git_single_parent(
+        root,
+        admission_ref,
+        attestation_ref,
+        "handler value admission commit",
+    )?;
+    let admission_paths = git_changed_paths_between(
+        root,
+        attestation_ref,
+        admission_ref,
+        "handler value admission diff",
+    )?;
+    let expected_paths = owned_set(&[
+        "PLAN.md",
+        HANDLER_VALUE_ADMISSION_REVIEW,
+        "docs/work-packages/index.toml",
+    ]);
+    if admission_paths != expected_paths {
+        return Err(format!(
+            "handler value admission commit path mismatch; expected {expected_paths:?}, \
+             found {admission_paths:?}"
+        ));
+    }
+    Ok(())
+}
+
+fn check_handler_progress_checkpoint_state(
+    root: &Path,
+    admission_ref: &str,
+    implementation_paths: &BTreeSet<String>,
+) -> Result<(), String> {
+    let head = git_text(root, &["rev-parse", "HEAD"], "resolve progress checkpoint HEAD")?;
+    let head = head.trim();
+    let expected_progress_paths =
+        owned_set(&["PLAN.md", "docs/work-packages/index.toml"]);
+    if head == admission_ref {
+        let changed = git_worktree_paths(root, "pre-progress-checkpoint worktree")?;
+        if changed != expected_progress_paths {
+            return Err(format!(
+                "pre-progress-checkpoint worktree path mismatch; expected \
+                 {expected_progress_paths:?}, found {changed:?}"
+            ));
+        }
+        return Ok(());
+    }
+
+    require_git_single_parent(
+        root,
+        head,
+        admission_ref,
+        "handler value progress checkpoint",
+    )?;
+    let progress_paths = git_changed_paths_between(
+        root,
+        admission_ref,
+        head,
+        "handler value progress checkpoint diff",
+    )?;
+    if progress_paths != expected_progress_paths {
+        return Err(format!(
+            "handler value progress checkpoint path mismatch; expected \
+             {expected_progress_paths:?}, found {progress_paths:?}"
+        ));
+    }
+    let worktree_paths = git_worktree_paths(root, "handler implementation worktree")?;
+    if !worktree_paths.is_subset(implementation_paths) {
+        let out_of_scope: Vec<&String> = worktree_paths.difference(implementation_paths).collect();
+        return Err(format!(
+            "handler implementation worktree has out-of-scope paths {out_of_scope:?}"
+        ));
+    }
+    Ok(())
+}
+
+fn check_handler_value_primitives_entry_state(root: &Path, mode: &str) -> Result<(), String> {
+    if !matches!(mode, "candidate" | "admission-ready") {
+        return Err(format!(
+            "invalid handler value entry-state mode {mode:?}; expected candidate or \
+             admission-ready"
+        ));
+    }
+    let path = root.join("docs/work-packages/index.toml");
+    let source = fs::read_to_string(&path)
+        .map_err(|error| format!("cannot read {}: {error}", path.display()))?;
+    let document = source
+        .parse::<DocumentMut>()
+        .map_err(|error| format!("invalid {}: {error}", path.display()))?;
+    let tranches = document
+        .get("tranche")
+        .and_then(Item::as_array_of_tables)
+        .ok_or_else(|| "work-package index has no [[tranche]] records".to_owned())?;
+    let matching: Vec<&Table> = tranches
+        .iter()
+        .filter(|table| {
+            table.get("id").and_then(Item::as_str) == Some(HANDLER_VALUE_PRIMITIVES_TRANCHE)
+        })
+        .collect();
+    if matching.len() != 1 {
+        return Err(format!(
+            "work-package index must contain exactly one {HANDLER_VALUE_PRIMITIVES_TRANCHE}; \
+             found {}",
+            matching.len()
+        ));
+    }
+    let tranche = matching[0];
+    let status = string_field(tranche, "status", HANDLER_VALUE_PRIMITIVES_TRANCHE)?;
+    let admission_status = string_field(
+        tranche,
+        "admission_status",
+        HANDLER_VALUE_PRIMITIVES_TRANCHE,
+    )?;
+    let expected_pair = match mode {
+        "candidate" => ("pending", "review-pending"),
+        "admission-ready" => ("pending", "approved"),
+        _ => unreachable!("mode checked above"),
+    };
+    if (status.as_str(), admission_status.as_str()) != expected_pair {
+        return Err(format!(
+            "handler value {mode} state must be {:?}/{:?}; found {status:?}/{admission_status:?}",
+            expected_pair.0, expected_pair.1
+        ));
+    }
+    if tranche.contains_key("admission_ref") {
+        return Err(format!(
+            "handler value {mode} pending state must not define admission_ref"
+        ));
+    }
+
+    let audit_path = string_field(
+        tranche,
+        "admission_review",
+        HANDLER_VALUE_PRIMITIVES_TRANCHE,
+    )?;
+    if audit_path != HANDLER_VALUE_ADMISSION_REVIEW {
+        return Err("handler value admission review path drifted".to_owned());
+    }
+    let registered_artifacts = load_artifact_registry(root)?;
+    if !registered_artifacts.contains(&audit_path) || !root.join(&audit_path).is_file() {
+        return Err("handler value admission review is not registered and present".to_owned());
+    }
+    check_handler_value_audit_state(root, &audit_path, &admission_status)?;
+
+    let implementation_paths = package_string_set(
+        tranche,
+        "implementation_paths",
+        HANDLER_VALUE_PRIMITIVES_TRANCHE,
+    )?;
+    if implementation_paths != owned_set(&["core/src/handler.rs", "core/src/lib.rs"]) {
+        return Err("handler value implementation path projection drifted".to_owned());
+    }
+    let candidate_base_ref = string_field(
+        tranche,
+        "candidate_base_ref",
+        HANDLER_VALUE_PRIMITIVES_TRANCHE,
+    )?;
+    if candidate_base_ref != "8c89e9346f424923ef3247dd1c402d5ab141c203" {
+        return Err("handler value candidate base ref drifted".to_owned());
+    }
+    check_git_commit_is_ancestor(root, &candidate_base_ref, "candidate base ref")?;
+    let candidate_paths =
+        package_string_set(tranche, "candidate_paths", HANDLER_VALUE_PRIMITIVES_TRANCHE)?;
+    check_handler_candidate_paths(
+        root,
+        &candidate_paths,
+        &implementation_paths,
+        &registered_artifacts,
+    )?;
+
+    if mode == "candidate" {
+        for forbidden_field in ["review_attestation", "review_attestation_ref"] {
+            if tranche.contains_key(forbidden_field) {
+                return Err(format!(
+                    "candidate state must not define {forbidden_field:?}"
+                ));
+            }
+        }
+        if root.join(HANDLER_VALUE_REVIEW_ATTESTATION).exists() {
+            return Err("candidate state has a premature review attestation".to_owned());
+        }
+        check_handler_candidate_repository_state(root, &candidate_base_ref, &candidate_paths)?;
+    } else {
+        let attestation_path = string_field(
+            tranche,
+            "review_attestation",
+            HANDLER_VALUE_PRIMITIVES_TRANCHE,
+        )?;
+        let attestation_ref = string_field(
+            tranche,
+            "review_attestation_ref",
+            HANDLER_VALUE_PRIMITIVES_TRANCHE,
+        )?;
+        if attestation_path != HANDLER_VALUE_REVIEW_ATTESTATION
+            || !registered_artifacts.contains(&attestation_path)
+        {
+            return Err("admission-ready review attestation path is not frozen".to_owned());
+        }
+        check_handler_review_attestation(
+            root,
+            &attestation_path,
+            &attestation_ref,
+            &candidate_base_ref,
+            &candidate_paths,
+        )?;
+        let head = git_text(root, &["rev-parse", "HEAD"], "resolve HEAD")?;
+        if head.trim() != attestation_ref {
+            return Err(format!(
+                "admission-ready state requires HEAD at review_attestation_ref \
+                 {attestation_ref:?}; found {:?}",
+                head.trim()
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn check_handler_candidate_repository_state(
+    root: &Path,
+    candidate_base_ref: &str,
+    candidate_paths: &BTreeSet<String>,
+) -> Result<(), String> {
+    let head = git_text(root, &["rev-parse", "HEAD"], "resolve candidate HEAD")?;
+    let head = head.trim();
+    if head == candidate_base_ref {
+        let mut changed = git_path_set(
+            &git_text(
+                root,
+                &["diff", "--name-only", "HEAD"],
+                "read candidate tracked worktree diff",
+            )?,
+            "candidate tracked worktree diff",
+        )?;
+        changed.extend(git_path_set(
+            &git_text(
+                root,
+                &["ls-files", "--others", "--exclude-standard"],
+                "read candidate untracked paths",
+            )?,
+            "candidate untracked paths",
+        )?);
+        if &changed != candidate_paths {
+            return Err(format!(
+                "candidate worktree path mismatch; expected {candidate_paths:?}, found \
+                 {changed:?}"
+            ));
+        }
+        return Ok(());
+    }
+
+    require_git_single_parent(root, head, candidate_base_ref, "candidate commit")?;
+    let changed =
+        git_changed_paths_between(root, candidate_base_ref, head, "candidate commit diff")?;
+    if &changed != candidate_paths {
+        return Err(format!(
+            "candidate commit path mismatch; expected {candidate_paths:?}, found {changed:?}"
+        ));
+    }
+    let worktree = git_text(
+        root,
+        &["status", "--porcelain=v1", "--untracked-files=all"],
+        "read candidate worktree status",
+    )?;
+    if !worktree.is_empty() {
+        return Err("candidate commit state requires a clean worktree".to_owned());
+    }
+    Ok(())
+}
+
+fn require_full_commit_id(reference: &str, context: &str) -> Result<(), String> {
+    if reference.len() != 40
+        || !reference
+            .bytes()
+            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+    {
+        return Err(format!(
+            "{context} must be a full lowercase 40-hex commit id; found {reference:?}"
+        ));
+    }
+    Ok(())
+}
+
+fn check_git_commit_is_ancestor(root: &Path, reference: &str, context: &str) -> Result<(), String> {
+    require_full_commit_id(reference, context)?;
+    let object = format!("{reference}^{{commit}}");
+    git_output_bytes(root, &["cat-file", "-e", &object], context)?;
+    git_output_bytes(
+        root,
+        &["merge-base", "--is-ancestor", reference, "HEAD"],
+        context,
+    )?;
+    Ok(())
+}
+
+fn require_git_single_parent(
+    root: &Path,
+    reference: &str,
+    expected_parent: &str,
+    context: &str,
+) -> Result<(), String> {
+    require_full_commit_id(expected_parent, &format!("{context} parent"))?;
+    let parent = git_single_parent(root, reference, context)?;
+    if parent != expected_parent {
+        return Err(format!(
+            "{context} must have parent {expected_parent:?}; found {parent:?}"
+        ));
+    }
+    Ok(())
+}
+
+fn git_single_parent(root: &Path, reference: &str, context: &str) -> Result<String, String> {
+    require_full_commit_id(reference, context)?;
+    let record = git_text(
+        root,
+        &["rev-list", "--parents", "-n", "1", reference],
+        context,
+    )?;
+    let fields: Vec<&str> = record.split_whitespace().collect();
+    if fields.len() != 2 || fields[0] != reference {
+        return Err(format!(
+            "{context} must have exactly one parent; found {fields:?}"
+        ));
+    }
+    require_full_commit_id(fields[1], &format!("{context} parent"))?;
+    Ok(fields[1].to_owned())
+}
+
+fn git_changed_paths_between(
+    root: &Path,
+    from: &str,
+    to: &str,
+    context: &str,
+) -> Result<BTreeSet<String>, String> {
+    let output = git_text(root, &["diff", "--name-only", from, to], context)?;
+    git_path_set(&output, context)
+}
+
+fn git_commit_changed_paths(
+    root: &Path,
+    reference: &str,
+    context: &str,
+) -> Result<BTreeSet<String>, String> {
+    let output = git_text(
+        root,
+        &[
+            "diff-tree",
+            "--root",
+            "--no-commit-id",
+            "--name-only",
+            "-r",
+            reference,
+        ],
+        context,
+    )?;
+    git_path_set(&output, context)
+}
+
+fn git_path_set(output: &str, context: &str) -> Result<BTreeSet<String>, String> {
+    let mut paths = BTreeSet::new();
+    for path in output.lines() {
+        validate_relative_path(path, context)?;
+        if !paths.insert(path.to_owned()) {
+            return Err(format!("{context} duplicates path {path:?}"));
+        }
+    }
+    Ok(paths)
+}
+
+fn git_worktree_paths(root: &Path, context: &str) -> Result<BTreeSet<String>, String> {
+    let mut paths = git_path_set(
+        &git_text(root, &["diff", "--name-only", "HEAD"], context)?,
+        context,
+    )?;
+    paths.extend(git_path_set(
+        &git_text(
+            root,
+            &["ls-files", "--others", "--exclude-standard"],
+            context,
+        )?,
+        context,
+    )?);
+    Ok(paths)
+}
+
+fn git_text(root: &Path, args: &[&str], context: &str) -> Result<String, String> {
+    let output = git_output_bytes(root, args, context)?;
+    String::from_utf8(output)
+        .map_err(|error| format!("{context} produced non-UTF-8 output: {error}"))
+}
+
+fn git_output_bytes(root: &Path, args: &[&str], context: &str) -> Result<Vec<u8>, String> {
+    let output = Command::new("git")
+        .current_dir(root)
+        .args(args)
+        .output()
+        .map_err(|error| format!("cannot run git for {context}: {error}"))?;
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(format!(
+            "git failed for {context} with {}: {}",
+            output.status,
+            stderr.trim()
+        ));
+    }
+    Ok(output.stdout)
 }
 
 fn check_tranche_admission_review(
@@ -2394,9 +4447,55 @@ fn check_tranche_admission_review(
     Ok(())
 }
 
+fn check_handler_value_primitives_admission_review(
+    root: &Path,
+    relative_path: &str,
+    artifacts: &BTreeSet<String>,
+    checks: &BTreeSet<String>,
+) -> Result<(), String> {
+    let path = root.join(relative_path);
+    let source = fs::read_to_string(&path)
+        .map_err(|error| format!("cannot read {}: {error}", path.display()))?;
+    for required in [
+        "Status: Passed",
+        "Design revision: v4.9",
+        "Admission scope: `WP-100-HANDLER-VALUE-PRIMITIVES`",
+        "Verdict: Implementation-ready",
+        "`CancellationView` is `#[repr(u8)]`",
+        "`SubscriptionAcceptance` owns one `InteractionOutput`",
+        "`HandlerFootprint` is the exact three-`u64`",
+        "`HandlerStep<R>` has exactly `Pending` and `Ready(CoreResult<R>)`",
+        "`StaticHandlerRegistration<'h, H>` borrows `H`",
+    ] {
+        if !source.contains(required) {
+            return Err(format!(
+                "admission review {relative_path:?} misses required value contract {required:?}"
+            ));
+        }
+    }
+    for artifact in artifacts {
+        let reference = format!("`{artifact}`");
+        if !source.contains(&reference) {
+            return Err(format!(
+                "admission review {relative_path:?} does not cover artifact {artifact:?}"
+            ));
+        }
+    }
+    for check in checks {
+        let reference = format!("`{check}`");
+        if !source.contains(&reference) {
+            return Err(format!(
+                "admission review {relative_path:?} does not cover check {check:?}"
+            ));
+        }
+    }
+    Ok(())
+}
+
 fn check_tranche_evidence(
     root: &Path,
     relative_path: &str,
+    tranche: &str,
     evidence_key: &str,
     verification_check: &str,
 ) -> Result<(), String> {
@@ -2421,11 +4520,7 @@ fn check_tranche_evidence(
         "tranche evidence work_package",
         "WP-100",
     )?;
-    require_string(
-        document.get("tranche"),
-        "tranche evidence tranche",
-        HANDLER_FOUNDATION_TRANCHE,
-    )?;
+    require_string(document.get("tranche"), "tranche evidence tranche", tranche)?;
     require_string(document.get("status"), "tranche evidence status", "passed")?;
     require_string(
         document.get("evidence_key"),
@@ -4901,6 +6996,21 @@ fn string_field(table: &Table, field: &str, context: &str) -> Result<String, Str
     Ok(value.to_owned())
 }
 
+fn require_exact_table_fields(
+    table: &Table,
+    context: &str,
+    expected_fields: &[&str],
+) -> Result<(), String> {
+    let actual: BTreeSet<String> = table.iter().map(|(key, _)| key.to_owned()).collect();
+    let expected = owned_set(expected_fields);
+    if actual != expected {
+        return Err(format!(
+            "{context} field set mismatch; expected {expected:?}, found {actual:?}"
+        ));
+    }
+    Ok(())
+}
+
 fn string_set(array: &Array, context: &str, field: &str) -> Result<BTreeSet<String>, String> {
     let mut values = BTreeSet::new();
     for value in array {
@@ -4956,8 +7066,11 @@ mod tests {
     use toml_edit::DocumentMut;
 
     use super::{
+        HANDLER_VALUE_PRIMITIVES_SOURCE_CONTRACT, check_handler_scope_partition,
         check_producer_subscription_contract, expand_expressions,
-        expected_work_package_dependencies, parse_transitions,
+        expected_work_package_dependencies, handler_value_status_pair_is_valid,
+        parse_handler_review_attestation, parse_transitions, validate_handler_value_audit_source,
+        validate_handler_value_primitives_source,
     };
 
     fn producer_contract(obligation_bits: &str) -> DocumentMut {
@@ -5063,5 +7176,200 @@ retryability = "not-applicable"
         let error = parse_transitions("reusable", transitions, &states, &terminals, &unmatched)
             .expect_err("the declaration and transition must match exactly");
         assert!(error.contains("terminal state"));
+    }
+
+    #[test]
+    fn handler_value_status_pairs_are_exact() {
+        let allowed = BTreeSet::from([
+            ("pending", "review-pending"),
+            ("pending", "approved"),
+            ("in-progress", "approved"),
+            ("complete", "approved"),
+        ]);
+        for status in ["pending", "in-progress", "complete", "revoked"] {
+            for admission in ["review-pending", "approved", "revoked"] {
+                assert_eq!(
+                    handler_value_status_pair_is_valid(status, admission),
+                    allowed.contains(&(status, admission)),
+                    "unexpected decision for {status}/{admission}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn handler_value_and_time_scope_projection_allows_only_the_declared_meta_overlap() {
+        let values = BTreeSet::from([
+            "API-SURFACE-001".to_owned(),
+            "HANDLER-VALUE-001".to_owned(),
+        ]);
+        let value_items = BTreeSet::from(["HandlerStep".to_owned()]);
+        let blocking = BTreeSet::from([
+            "API-SURFACE-001".to_owned(),
+            "TIME-001".to_owned(),
+        ]);
+        let shared = BTreeSet::from(["API-SURFACE-001".to_owned()]);
+        let blocking_items = BTreeSet::from(["Deadline".to_owned()]);
+        assert!(
+            check_handler_scope_partition(
+                &values,
+                &value_items,
+                &blocking,
+                &shared,
+                &blocking_items,
+            )
+            .is_ok()
+        );
+
+        let overlapping_items = BTreeSet::from(["HandlerStep".to_owned()]);
+        assert!(
+            check_handler_scope_partition(
+                &values,
+                &value_items,
+                &blocking,
+                &shared,
+                &overlapping_items,
+            )
+            .is_err()
+        );
+
+        let undeclared_overlap = BTreeSet::from([
+            "API-SURFACE-001".to_owned(),
+            "HANDLER-VALUE-001".to_owned(),
+            "TIME-001".to_owned(),
+        ]);
+        assert!(
+            check_handler_scope_partition(
+                &values,
+                &value_items,
+                &undeclared_overlap,
+                &shared,
+                &blocking_items,
+            )
+            .is_err()
+        );
+    }
+
+    #[test]
+    fn handler_review_attestation_projection_requires_six_exact_passes() {
+        let source = r#"
+schema_version = 1
+design_revision = "4.9"
+tranche = "WP-100-HANDLER-VALUE-PRIMITIVES"
+status = "passed"
+reviewer_attestation_kind = "separate-agent-task"
+reviewer_id = "codex-agent:/root/independent_review"
+reviewed_ref = "0123456789abcdef0123456789abcdef01234567"
+
+[[precheck]]
+id = "api-ownership-check"
+result = "passed"
+
+[[precheck]]
+id = "architecture-adr-check"
+result = "passed"
+
+[[precheck]]
+id = "resource-profile-check"
+result = "passed"
+
+[[precheck]]
+id = "work-package-dag-check"
+result = "passed"
+
+[[precheck]]
+id = "wp100-amendment-check"
+result = "passed"
+
+[[precheck]]
+id = "wp100-handler-amendment-check"
+result = "passed"
+"#;
+        let projection = parse_handler_review_attestation(source)
+            .expect("the exact review projection must validate");
+        assert_eq!(
+            projection.reviewed_ref,
+            "0123456789abcdef0123456789abcdef01234567"
+        );
+
+        let failed = source.replacen("result = \"passed\"", "result = \"failed\"", 1);
+        assert!(parse_handler_review_attestation(&failed).is_err());
+        let root_reviewer = source.replace(
+            "codex-agent:/root/independent_review",
+            "codex-agent:/root",
+        );
+        assert!(parse_handler_review_attestation(&root_reviewer).is_err());
+    }
+
+    #[test]
+    fn handler_value_audit_state_rejects_crossed_markers() {
+        let pending = "Status: Pending\nVerdict: Independent re-review pending\n";
+        assert!(validate_handler_value_audit_source(pending, "review-pending").is_ok());
+        assert!(validate_handler_value_audit_source(pending, "approved").is_err());
+
+        let passed = "Status: Passed\nVerdict: Implementation-ready\n";
+        assert!(validate_handler_value_audit_source(passed, "approved").is_ok());
+        assert!(validate_handler_value_audit_source(passed, "review-pending").is_err());
+    }
+
+    #[test]
+    fn exact_handler_value_source_projection_is_accepted() {
+        validate_handler_value_primitives_source(HANDLER_VALUE_PRIMITIVES_SOURCE_CONTRACT)
+            .expect("the frozen five-value source must validate");
+    }
+
+    #[test]
+    fn handler_value_source_rejects_forbidden_dependencies() {
+        let source = format!("use alloc::vec::Vec;\n{HANDLER_VALUE_PRIMITIVES_SOURCE_CONTRACT}");
+        let error = validate_handler_value_primitives_source(&source)
+            .expect_err("allocation paths must be rejected");
+        assert!(error.contains("forbidden"));
+    }
+
+    #[test]
+    fn handler_value_source_rejects_bounds_traits_and_public_items() {
+        let bounded = HANDLER_VALUE_PRIMITIVES_SOURCE_CONTRACT.replacen(
+            "impl<H> Copy for StaticHandlerRegistration",
+            "impl<H: Copy> Copy for StaticHandlerRegistration",
+            1,
+        );
+        assert!(validate_handler_value_primitives_source(&bounded).is_err());
+
+        let defaulted = format!(
+            "{HANDLER_VALUE_PRIMITIVES_SOURCE_CONTRACT}\nimpl Default for HandlerFootprint {{\n    fn default() -> Self {{ Self::new(0, 0, 0) }}\n}}"
+        );
+        assert!(validate_handler_value_primitives_source(&defaulted).is_err());
+
+        for prohibited_impl in [
+            "impl Copy for SubscriptionAcceptance {}",
+            "impl Clone for SubscriptionAcceptance { fn clone(&self) -> Self { panic!() } }",
+            "impl Default for SubscriptionAcceptance { fn default() -> Self { panic!() } }",
+            "impl<R> Copy for HandlerStep<R> {}",
+            "impl<R> Clone for HandlerStep<R> { fn clone(&self) -> Self { panic!() } }",
+            "impl<R> Default for HandlerStep<R> { fn default() -> Self { Self::Pending } }",
+        ] {
+            let source = format!("{HANDLER_VALUE_PRIMITIVES_SOURCE_CONTRACT}\n{prohibited_impl}");
+            assert!(
+                validate_handler_value_primitives_source(&source).is_err(),
+                "prohibited trait impl was accepted: {prohibited_impl}"
+            );
+        }
+
+        let extra_method = HANDLER_VALUE_PRIMITIVES_SOURCE_CONTRACT.replacen(
+            "impl HandlerFootprint {",
+            "impl HandlerFootprint {\n    pub const fn unexpected(self) -> u64 { 0 }",
+            1,
+        );
+        assert!(validate_handler_value_primitives_source(&extra_method).is_err());
+    }
+
+    #[test]
+    fn handler_value_source_rejects_extra_derives() {
+        let cloneable_step = HANDLER_VALUE_PRIMITIVES_SOURCE_CONTRACT.replacen(
+            "#[derive(Debug, Eq, PartialEq)]\n#[must_use]\npub enum HandlerStep",
+            "#[derive(Clone, Debug, Eq, PartialEq)]\n#[must_use]\npub enum HandlerStep",
+            1,
+        );
+        assert!(validate_handler_value_primitives_source(&cloneable_step).is_err());
     }
 }

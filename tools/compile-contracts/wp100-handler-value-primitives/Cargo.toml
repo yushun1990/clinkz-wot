@@ -1,0 +1,71 @@
+[package]
+name = "clinkz-wot-wp100-handler-value-primitives-contract"
+version = "0.0.0"
+edition = "2024"
+publish = false
+autobins = false
+autotests = false
+autoexamples = false
+autobenches = false
+
+# Keep this compile contract outside the repository's root workspace. The
+# contract is driven explicitly after the implementation exists, so normal
+# workspace builds remain green while the admitted API is still absent.
+[workspace]
+resolver = "3"
+
+[dependencies]
+clinkz-wot-core = { path = "../../../core", default-features = false }
+clinkz-wot-foundation = { path = "../../../foundation", default-features = false }
+
+[features]
+default = []
+async = ["clinkz-wot-core/async", "clinkz-wot-foundation/async"]
+std = ["clinkz-wot-core/std", "clinkz-wot-foundation/std"]
+ui-private-subscription-acceptance = []
+ui-private-handler-footprint = []
+ui-private-static-handler-registration = []
+ui-must-use-subscription-acceptance = []
+ui-must-use-handler-step = []
+
+[lib]
+path = "src/lib.rs"
+
+[[test]]
+name = "semantics"
+path = "tests/semantics.rs"
+
+[[bin]]
+name = "ui-private-subscription-acceptance"
+path = "ui/private-subscription-acceptance.rs"
+required-features = ["ui-private-subscription-acceptance"]
+test = false
+bench = false
+
+[[bin]]
+name = "ui-private-handler-footprint"
+path = "ui/private-handler-footprint.rs"
+required-features = ["ui-private-handler-footprint"]
+test = false
+bench = false
+
+[[bin]]
+name = "ui-private-static-handler-registration"
+path = "ui/private-static-handler-registration.rs"
+required-features = ["ui-private-static-handler-registration"]
+test = false
+bench = false
+
+[[bin]]
+name = "ui-must-use-subscription-acceptance"
+path = "ui/must-use-subscription-acceptance.rs"
+required-features = ["ui-must-use-subscription-acceptance"]
+test = false
+bench = false
+
+[[bin]]
+name = "ui-must-use-handler-step"
+path = "ui/must-use-handler-step.rs"
+required-features = ["ui-must-use-handler-step"]
+test = false
+bench = false

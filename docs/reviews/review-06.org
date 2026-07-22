@@ -1,0 +1,162 @@
+#+title: Architecture Review 06: Time-Domain and Deadline Impact
+#+date: 2026-07-22
+#+review_id: architecture-review-06-time-domain-deadline-impact
+#+status: Blocking Deadline and broad handler entry; five-value scope disjoint
+#+reviewed_design: v4.9 time, handler, cleanup, and WP-000 evidence contracts
+
+* Review status and authority
+
+This is a non-normative blocking impact review. It records a conflict and its
+admission consequences; it does not revise the time API, amend a requirement,
+invalidate evidence by itself, or authorize implementation. The active design,
+registered amendments, work-package DAG, admission audit, and evidence records
+must be updated and independently reviewed before the affected work proceeds.
+
+* Executive verdict
+
+The proposed =clinkz_wot_core::Deadline= is not implementation-ready. The
+design describes modular comparison for finite clocks, while the implemented
+foundation instant supports only non-wrapping checked comparison and the
+proposed Deadline carries no wrap policy. The conflict also reaches existing
+=CleanupRecord= timing validation and the completed WP-000
+=time-and-generation-api= evidence.
+
+=Deadline= and =WP-100-HANDLER-ENTRY= are blocked by the registered
+=TIME-DOMAIN-AND-DEADLINE= impact scope. That record is a structured placeholder,
+not an admitted or fully defined corrective tranche: the future tranche's
+identity, ownership, dependencies, completion contract, and evidence disposition
+remain unfrozen. The other five passive values from the candidate are disjoint
+from this finding and may be reviewed as a separately projected five-value
+scope. This review alone does not admit that scope.
+
+* Evidence reviewed
+
+- the time-domain and =TIME-001= text in =docs/design.md=;
+- =docs/work-packages/WP-000-foundation.md= and
+  =docs/evidence/WP-000.toml=;
+- =foundation/src/time.rs= and its no-std surface fixture;
+- the Deadline schema in =docs/amendments/WP-100-handler-api-v1.md=;
+- cleanup timing in =docs/amendments/WP-100-error-cleanup-v1.md= and
+  =core/src/status.rs=;
+- the =Deadline= and time rows in =docs/api-ownership.csv=;
+- future binding =next_deadline= contracts in =docs/spec/binding-spi.md=; and
+- =docs/reviews/review-05.org= and the proposed value-primitives admission
+  material.
+
+* Blocking conflict
+
+For one clock with raw period 256, a deadline stored at tick 250 and a later
+observation at tick 3 cross a hardware wrap. =MonotonicInstant::checked_cmp=
+performs ordinary =u64= ordering and documents that it applies to non-wrapping
+instants. =Deadline::checked_is_elapsed_at= receives only the stored instant and
+the current instant, so it has no period or epoch with which to recover the
+ordering.
+
+The half-period duration rule does not close the issue. A constrained caller
+may delay manual progress for more than half a period after expiry. A stateless
+modular comparison then cannot distinguish an observation before the deadline
+from a late observation after one or more wraps.
+
+The existing cleanup path has the same exposure: =CleanupRecord::try_with_timing=
+checks clock identities and then compares =retry_not_before.ticks()= directly
+with =deadline.ticks()=. Its ordering is correct only if equal-clock tick values
+belong to a non-wrapping logical domain.
+
+* Evidence impact
+
+The completed WP-000 =time-and-generation-api= record covers =TIME-001= and
+claims finite-clock wrap declaration. It demonstrates that a clock can report a
+period, but it does not demonstrate correct cross-wrap ordering, delayed polling,
+deadline expiry, source freshness, or cleanup retry ordering.
+
+That evidence's time claim requires explicit impact disposition and replacement
+or reaffirmation after the clock model is frozen. Review 05's statement that
+completed foundation evidence need not be reopened remains valid for the
+disjoint resource/profile and linear-budget refresh, but not for this newly
+identified WP-000 time evidence gap.
+
+Existing cleanup timing evidence is also impacted to the extent that it assumes
+raw equal-clock tick comparison. Cleanup identity, retry-count limits,
+redaction, and bounded-record evidence are otherwise outside this finding.
+
+* Scope disposition
+
+| Item or scope | Impact | Admission consequence |
+|-
+| =Deadline= | Directly affected | Blocked until the time-domain contract and evidence are corrected. |
+| WP-000 =time-and-generation-api= | Evidence claim incomplete | Requires explicit impact review and replacement or reaffirmation. |
+| =CleanupRecord= deadline/retry timing | Directly affected | Timing comparison and cross-wrap tests belong to the corrective scope. |
+| Future dispatcher and binding deadlines | Transitively affected | Cannot implement timeout scheduling or =next_deadline= consumption on an unresolved clock model. |
+| =WP-100-HANDLER-ENTRY= | Depends on Deadline and dispatcher semantics | Remains blocked. |
+| Remaining five value primitives | No time-domain state or behavior | Disjoint candidate; requires updated authoritative scope and independent admission. |
+
+* Five-value disjointness
+
+The clock-independent candidate consists exactly of:
+
+- =CancellationView=;
+- =SubscriptionAcceptance=;
+- =HandlerFootprint=;
+- =HandlerStep<R>=; and
+- =StaticHandlerRegistration<'h, H>=.
+
+None contains a =ClockId=, =MonotonicInstant=, duration, deadline, source
+timestamp, wrap policy, timeout transition, or clock-driven state. =HandlerStep=
+uses a work budget rather than elapsed time, and =CancellationView= is a passive
+snapshot rather than the authoritative cancellation/deadline owner. Their
+derive, ownership, const-construction, resource-declaration, and redacted-Debug
+contracts can therefore be reviewed without choosing a clock model.
+
+This disjointness requires =Deadline= and =TIME-001= to remain absent from the
+candidate's authoritative tranche, audit, checker, implementation paths, and
+completion evidence. Any reintroduction reopens this finding and revokes that
+candidate's admission.
+
+* Recommended disposition
+
+Apply two separate actions:
+
+1. isolate =Deadline= immediately and re-review the other five values as an
+   exact, independently admitted tranche; and
+2. retain a structured blocking-scope record spanning the known foundation and
+   Core impacts, then define and independently admit corrective work only after
+   its identity, ownership, dependencies, completion contract, and evidence
+   disposition are frozen.
+
+The preferred long-term direction is for =RuntimeClock::now()= to return
+extended, non-wrapping logical ticks for one stable =ClockId=. The clock adapter,
+not each Deadline or consumer, owns raw-counter epoch extension. A reset or lost
+epoch must not reuse the old clock id. =SourceTimestamp::Monotonic= follows the
+same rule. =wrap_period_ticks= is then deprecated or retained only as raw-source
+diagnostic metadata and never participates in instant ordering.
+
+Carrying a modular policy in each Deadline is not recommended. It duplicates
+clock metadata across consumers, expands SourceTimestamp and cleanup contracts,
+and remains ambiguous after an unobserved half period unless epoch state is
+introduced anyway.
+
+* Conditions to clear the finding
+
+The blocking finding remains open until:
+
+- the authoritative time model selects and freezes one comparison domain;
+- =TIME-001= and the handler amendment have consistent ownership and affected-
+  requirement projections;
+- the =None= result of an incomparable deadline has an exact error category,
+  phase, retry class, and dispatcher behavior;
+- a future corrective tranche or other authorized work record freezes its
+  identity, ownership, dependencies, affected prior-evidence disposition,
+  checks, and completion keys;
+- no-std fixtures prove raw-wrap extension and delayed-poll behavior;
+- SourceTimestamp and CleanupRecord tests prove the selected semantics; and
+- WP-000 time evidence is explicitly replaced or reaffirmed.
+
+* Verdict
+
+WP-000 time evidence: IMPACTED; disposition required.
+
+Deadline value: FAIL; blocked.
+
+Broad handler entry: FAIL; blocked.
+
+Clock-independent five-value scope: DISJOINT, but not admitted by this review.

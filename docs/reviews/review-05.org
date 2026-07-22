@@ -1,0 +1,123 @@
+#+title: Architecture Review 05: WP-100 Handler Entry Decomposition
+#+date: 2026-07-22
+#+review_id: architecture-review-05-handler-entry-decomposition
+#+status: Blocking broad entry; scoped candidate identified
+#+reviewed_design: v4.9 handler amendment and current implementation
+
+* Executive verdict
+
+The broad =WP-100-HANDLER-ENTRY= remains blocked. The v4.9 handler amendment
+closes most alternatives found by the historical handler audit, but it is not a
+safe instruction to migrate the whole handler subsystem in one step.
+
+The completed foundation refresh remains valid for its resource, profile, and
+work-budget scope. Review 06 separately marks the older WP-000 time evidence for
+impact review. The next independently reviewable unit is the purely additive
+=WP-100-HANDLER-VALUE-PRIMITIVES= tranche. It contains five passive Core values,
+changes no current signature or state machine, and excludes both =Deadline= and
+the open time-domain correction, as well as planning, binding-authoring,
+Producer-integration, and fallback-policy findings.
+
+* Evidence reviewed
+
+- =docs/audits/WP-100-handler-entry-audit.md=;
+- =docs/amendments/WP-100-handler-api-v1.md=;
+- =docs/spec/binding-spi.md=;
+- =docs/api-ownership.csv= and =docs/state-machines.toml=;
+- the Gateway and constrained performance manifests and locked fixtures;
+- =docs/work-packages/index.toml= and =docs/work-packages/WP-100-core.md=;
+- the current Core, Servient, and protocol-binding implementation; and
+- the executable design, resource, handler-amendment, and foundation checks.
+
+* Historical finding dispositions
+
+| Finding | v4.9 disposition | Consequence |
+|-
+| H-1 handler ownership matrix | Closed in documentation | 54 traits, host factories, Servient methods, and internal owners are enumerated. |
+| H-2 observable ABI alternatives | Closed in documentation | The operation/result matrix and sync/GAT-async/step templates are exact, but the current self-contained mirror is not implementation evidence. |
+| H-3 cancellation ownership | Closed in specification | Exact sync, async, and step machines retain late-call ownership; implementation remains future work. |
+| H-4 Producer subscription setup | State contract closed; integration deferred | Binding guard/install primitives belong to WP-300 and Servient coordination belongs to WP-400. |
+| H-5 push-removal DAG cycle | Closed | Add replacement surfaces before the WP-400/WP-600/WP-700 removal checkpoints. |
+| H-6 handler resource admission | Closed in specification | Handler and Producer-residual limits, rollback, drain, and footprint semantics are frozen. |
+| H-7 executable evidence | Open for broad Core handler work | GW020/GW021/CS015/CS016 do not yet prove complete declared matrix coverage. |
+| H-8 poll signature | Authority conflict; corrected by this revision | The binding domain's =poll_subscription_start= signature is canonical; the handler amendment must not define a second variant. |
+| H-9 no-atomic target | Open for portable handler surface | The target document says =String=, while the current Core still implements =Arc<str>= and lacks incapable-target evidence. |
+| H-10 finite clock ordering | Open; isolated by Review 06 | Raw wrapping ticks cannot support arbitrary-gap deadline and cleanup ordering; =Deadline= is removed from this candidate pending a clock-source-owned logical-time correction. |
+
+* Boundary assessment
+
+The handler domain separates into four implementation boundaries:
+
+1. passive portable values;
+2. portable handler traits and request/context contracts;
+3. Core host erasure, registration, sparse storage, and execution owners; and
+4. Servient/binding integration.
+
+Only the five-value subset of the first boundary is currently free of
+unresolved semantic and evidence dependencies. =Deadline= is part of the
+blocked time-domain correction. Combining the subset with the second boundary
+would pull in =AcceptHint= failure ordering, =InteractionInput= ownership
+migration, =AffordanceTarget= no-atomic evidence, and the real 54-trait compile
+matrix. Combining it with the third or fourth would pull in the incomplete
+workload oracle and downstream owners.
+
+The =TIME-DOMAIN-AND-DEADLINE= record is only a structured blocking-scope
+placeholder for that impact. It is not a dependency of the five-value tranche
+and does not freeze the identity, ownership, dependencies, completion contract,
+or evidence disposition of a future corrective tranche. It separately keeps
+the broad handler entry blocked.
+
+* Scoped candidate
+
+=WP-100-HANDLER-VALUE-PRIMITIVES= owns exactly these public items:
+
+- =clinkz_wot_core::CancellationView=;
+- =clinkz_wot_core::SubscriptionAcceptance=;
+- =clinkz_wot_core::HandlerFootprint=;
+- =clinkz_wot_core::HandlerStep=; and
+- =clinkz_wot_core::StaticHandlerRegistration=.
+
+The implementation paths are limited to a new =core/src/handler.rs= module and
+the Core root re-export. The independently versioned compile-contract fixture,
+source validator, and completion checker are frozen before implementation and
+are not implementation paths. No Servient or protocol binding path is
+permitted.
+
+The affected requirements are exactly =API-SURFACE-001= and
+=HANDLER-VALUE-001=. The latter completely owns the five schemas' attributes,
+ownership, and passive value semantics. Subscription, storage, cancellation,
+work-budget, ownership-admission, and resource-limit requirements belong to the
+later traits, state records, and admission items that consume these values. The
+candidate and the =TIME-DOMAIN-AND-DEADLINE= blocking scope share only the
+global =API-SURFACE-001= meta-requirement; their API-item and behavioral
+requirements are otherwise disjoint.
+
+State-machine scope, old-API removal, and performance-workload scope are empty.
+The values add no independent loop, queue, allocator, reservation, callback, or
+scheduling algorithm. Derived comparison and formatting may delegate to their
+contained result/output values; that does not create a new workload contract.
+Completion must compile the real public surface in all three Core feature cells
+and test its exact attributes, derives, discriminants, const API, ownership,
+static borrowing, and handler-redacted Debug behavior.
+
+* Broad-entry blockers retained
+
+This review does not approve =WP-100-HANDLER-ENTRY=. Before a larger Core
+handler tranche can enter implementation:
+
+- the four Core handler workloads need executable complete-matrix oracles;
+- the request/target/context migration needs its own impact review;
+- the no-atomic target must compile the real public boundary;
+- the time-domain correction must replace raw finite-wrap ambiguity and
+  revalidate the impacted WP-000 time evidence before =Deadline= is admitted;
+- actual Core APIs, rather than a self-contained mirror, must satisfy the
+  54-trait/factory/setter contract; and
+- Producer and Servient work must remain assigned to WP-300/WP-400.
+
+* Verdict
+
+Broad handler entry: FAIL.
+
+Handler value-primitives candidate: eligible for an ADR-0013 entry audit and
+independent same-revision re-review after its exact DAG record and completion
+checker are registered. No implementation is authorized by this review alone.

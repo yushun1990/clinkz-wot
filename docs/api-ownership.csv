@@ -80,11 +80,11 @@ BindingResponseMetadata,type,clinkz-wot-core,interaction,public,clinkz_wot_core:
 InteractionOutputMetadata,type,clinkz-wot-core,interaction,public,clinkz_wot_core::InteractionOutputMetadata,no-default|async-no-std|std,all,all,producer|consumer,API-PAYLOAD-001,absent,add,frozen
 validate_untrusted_binding_output,function,clinkz-wot-planning,response,public,clinkz_wot_planning::validate_untrusted_binding_output,no-default|async-no-std|std,all,all,consumer,API-PAYLOAD-001|BIND-OUT-001,absent,add,frozen
 HandlerContext,type,clinkz-wot-core,handler,public,clinkz_wot_core::HandlerContext,no-default|async-no-std|std,all,all,producer,HANDLER-API-001,absent,add,frozen
-CancellationView,type,clinkz-wot-core,handler,public,clinkz_wot_core::CancellationView,no-default|async-no-std|std,all,all,all,HANDLER-CANCEL-001|HANDLER-CANCEL-002,absent,add,frozen
+CancellationView,type,clinkz-wot-core,handler,public,clinkz_wot_core::CancellationView,no-default|async-no-std|std,all,all,all,HANDLER-VALUE-001,absent,add,frozen
 Deadline,type,clinkz-wot-core,handler,public,clinkz_wot_core::Deadline,no-default|async-no-std|std,all,all,all,TIME-001|HANDLER-CANCEL-001|HANDLER-CANCEL-002,absent,add,frozen
-SubscriptionAcceptance,type,clinkz-wot-core,handler,public,clinkz_wot_core::SubscriptionAcceptance,no-default|async-no-std|std,all,all,producer,HANDLER-API-001|HANDLER-SUB-001,absent,add,frozen
-HandlerFootprint,type,clinkz-wot-core,handler,public,clinkz_wot_core::HandlerFootprint,no-default|async-no-std|std,all,all,producer,HANDLER-STORAGE-001|RES-LIMIT-001,absent,add,frozen
-HandlerStep,type,clinkz-wot-core,handler,public,clinkz_wot_core::HandlerStep,no-default|async-no-std|std,manual-poll,application-static,producer,HANDLER-API-001|HANDLER-CANCEL-002|CONSTRAINED-WORK-001,absent,add,frozen
+SubscriptionAcceptance,type,clinkz-wot-core,handler,public,clinkz_wot_core::SubscriptionAcceptance,no-default|async-no-std|std,all,all,producer,HANDLER-VALUE-001,absent,add,frozen
+HandlerFootprint,type,clinkz-wot-core,handler,public,clinkz_wot_core::HandlerFootprint,no-default|async-no-std|std,all,all,producer,HANDLER-VALUE-001,absent,add,frozen
+HandlerStep,type,clinkz-wot-core,handler,public,clinkz_wot_core::HandlerStep,no-default|async-no-std|std,manual-poll,application-static,producer,HANDLER-VALUE-001,absent,add,frozen
 HostHandlerFuture,type,clinkz-wot-core,handler,crate,-,std-async,host-async,gateway-default-v1,producer,HANDLER-API-001|HANDLER-CANCEL-001|HOST-ASYNC-001,absent,add,frozen
 HostAsyncAdapter,state_record,clinkz-wot-core,handler,crate,-,std-async,host-async,gateway-default-v1,producer,HANDLER-API-001|HANDLER-CANCEL-001|HOST-ASYNC-001,absent,add,frozen
 HostHandlerRegistration,registration,clinkz-wot-core,handler,public,clinkz_wot_core::handler::HostHandlerRegistration,std,host-async,gateway-default-v1,producer,HANDLER-API-001|HANDLER-STORAGE-001|HOST-ASYNC-001,absent,add,frozen
@@ -147,7 +147,7 @@ install_host_handler,function,clinkz-wot-core,handler,public,clinkz_wot_core::ha
 clear_host_handler,function,clinkz-wot-core,handler,public,clinkz_wot_core::handler::HostHandlerRegistrationIngress::clear_host_handler,std,host-async,gateway-default-v1,producer,HANDLER-API-001|HANDLER-STORAGE-001|CONCUR-LIN-001,absent,add,frozen
 clear_all_host_handlers,function,clinkz-wot-core,handler,public,clinkz_wot_core::handler::HostHandlerRegistrationIngress::clear_all_host_handlers,std,host-async,gateway-default-v1,producer,HANDLER-API-001|HANDLER-STORAGE-001|CONCUR-LIN-001,absent,add,frozen
 ExposedThing,type,clinkz-wot-core,thing,public,clinkz_wot_core::ExposedThing,no-default|async-no-std|std,all,all,producer,HANDLER-API-001|HANDLER-STORAGE-001,core/src/thing.rs,replace,frozen
-StaticHandlerRegistration,registration,clinkz-wot-core,handler,public,clinkz_wot_core::StaticHandlerRegistration,no-default|async-no-std|std,manual-poll,application-static,producer,HANDLER-API-001|HANDLER-STORAGE-001|CONSTRAINED-OWN-001,absent,add,frozen
+StaticHandlerRegistration,registration,clinkz-wot-core,handler,public,clinkz_wot_core::StaticHandlerRegistration,no-default|async-no-std|std,manual-poll,application-static,producer,HANDLER-VALUE-001,absent,add,frozen
 ReadPropertyHandler,trait,clinkz-wot-core,handler,public,clinkz_wot_core::ReadPropertyHandler,no-default|async-no-std|std,all,all,producer,HANDLER-API-001,absent,add,frozen
 WritePropertyHandler,trait,clinkz-wot-core,handler,public,clinkz_wot_core::WritePropertyHandler,no-default|async-no-std|std,all,all,producer,HANDLER-API-001,absent,add,frozen
 ObservePropertyHandler,trait,clinkz-wot-core,handler,public,clinkz_wot_core::ObservePropertyHandler,no-default|async-no-std|std,all,all,producer,HANDLER-API-001|HANDLER-SUB-001,absent,add,frozen

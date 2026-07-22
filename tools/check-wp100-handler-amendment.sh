@@ -60,8 +60,34 @@ for metadata in \
     fi
 done
 
+affected_requirements=$(awk '
+    /^Affected requirements:/ { capture = 1 }
+    capture { print }
+    capture && /^$/ { exit }
+' "$amendment")
+if ! grep -Fq 'TIME-001' <<<"$affected_requirements"; then
+    echo "WP-100 handler amendment check: Deadline authority omits TIME-001" >&2
+    exit 1
+fi
+if ! grep -Fq 'HANDLER-VALUE-001' <<<"$affected_requirements"; then
+    echo "WP-100 handler amendment check: passive value authority omits HANDLER-VALUE-001" >&2
+    exit 1
+fi
+
+for deferred_deadline_contract in \
+    '### Deferred Deadline candidate' \
+    'must not be implemented until' \
+    'does not define a corrective tranche' \
+    'pub struct Deadline {'; do
+    if ! grep -Fq "$deferred_deadline_contract" "$amendment"; then
+        echo \
+            "WP-100 handler amendment check: deferred Deadline boundary misses: $deferred_deadline_contract" \
+            >&2
+        exit 1
+    fi
+done
+
 for signature in \
-    'pub struct Deadline {' \
     'pub enum CancellationView {' \
     'pub struct InteractionInput {' \
     'pub struct HandlerContext' \
@@ -78,7 +104,7 @@ for signature in \
     'fn step(' \
     'fn cancel('; do
     if ! grep -Fq "$signature" "$amendment"; then
-        echo "WP-100 handler amendment check: missing frozen signature: $signature" >&2
+        echo "WP-100 handler amendment check: missing frozen non-time signature: $signature" >&2
         exit 1
     fi
 done
@@ -162,6 +188,22 @@ for operation in "${operations[@]}"; do
             exit 1
         fi
     done
+done
+
+for item in CancellationView SubscriptionAcceptance HandlerFootprint HandlerStep \
+    StaticHandlerRegistration; do
+    if ! awk -F, -v item="$item" '
+        NR > 1 && $1 == item && $3 == "clinkz-wot-core" \
+            && $11 == "HANDLER-VALUE-001" && $14 == "frozen" {
+                found = 1
+            }
+        END { exit !found }
+    ' "$ownership"; then
+        echo \
+            "WP-100 handler amendment check: passive value requirement ownership drifted: $item" \
+            >&2
+        exit 1
+    fi
 done
 
 for item in Deadline CancellationView HandlerContext SubscriptionAcceptance \
@@ -559,11 +601,13 @@ if ! grep -Fq \
     exit 1
 fi
 
-for evidence in handler-api-matrix handler-storage-replacement \
+for evidence in handler-foundation-refresh handler-value-primitives \
+    handler-api-matrix handler-storage-replacement \
     handler-cancellation affordance-target-no-atomics callback-lock-isolation \
     producer-emission-migration producer-subscription-transaction \
     legacy-handler-surface-removal; do
-    if ! grep -Fq "\"$evidence\"" "$dag"; then
+    if ! grep -Fq "\"$evidence\"" "$dag" \
+        || ! grep -Fq "\`$evidence\`" "$amendment"; then
         echo "WP-100 handler amendment check: unstaged evidence: $evidence" >&2
         exit 1
     fi
@@ -606,26 +650,57 @@ for invariant in \
     fi
 done
 
-poll_block=$(awk '
-    /fn poll_subscription\(/ { capture = 1 }
-    capture { print }
-    capture && /Poll<CoreResult<SubscriptionStart>>;/ { exit }
-' "$amendment")
-if [[ $(grep -Fc '&mut self' <<<"$poll_block") -ne 1 ]] \
-    || ! grep -Fq "cx: &mut Context<'_>" <<<"$poll_block" \
-    || ! grep -Fq 'subscription: &mut ClientSubscriptionSlot' <<<"$poll_block" \
-    || ! grep -Fq 'budget: &mut WorkBudget' <<<"$poll_block"; then
-    echo "WP-100 handler amendment check: poll_subscription signature is invalid" >&2
-    exit 1
-fi
+binding_spec="$root/docs/spec/binding-spi.md"
+canonical_poll_signature="fnpoll_subscription_start(&mutself,cx:&mutContext<'_>,subscription:&mutClientSubscriptionSlot<Self::SubscriptionState>,budget:&mutWorkBudget,)->Poll<CoreResult<SubscriptionStart>>;"
 
-design_poll_block=$(awk '
-    /fn poll_subscription_start\(/ { capture = 1 }
-    capture { print }
-    capture && /Poll<CoreResult<SubscriptionStart>>;/ { exit }
-' "$root/docs/spec/binding-spi.md")
-if [[ $(grep -Fc '&mut self' <<<"$design_poll_block") -ne 1 ]]; then
-    echo "WP-100 handler amendment check: binding SPI poll_subscription_start has an invalid receiver" >&2
+extract_poll_subscription_start() {
+    local file=$1
+    awk '
+        /fn poll_subscription_start\(/ { capture = 1 }
+        capture { print }
+        capture && /Poll<CoreResult<SubscriptionStart>>;/ { exit }
+    ' "$file"
+}
+
+for poll_owner in "$amendment" "$binding_spec"; do
+    if [[ $(grep -Fc 'fn poll_subscription_start(' "$poll_owner") -ne 1 ]] \
+        || grep -Fq 'fn poll_subscription(' "$poll_owner"; then
+        echo \
+            "WP-100 handler amendment check: $poll_owner must name exactly one poll_subscription_start and no poll_subscription" \
+            >&2
+        exit 1
+    fi
+
+    poll_block=$(extract_poll_subscription_start "$poll_owner")
+    normalized_poll_block=$(tr -d '[:space:]' <<<"$poll_block")
+    if [[ $(grep -Fc '&mut self' <<<"$poll_block") -ne 1 ]] \
+        || [[ "$normalized_poll_block" != "$canonical_poll_signature" ]]; then
+        echo \
+            "WP-100 handler amendment check: $poll_owner poll_subscription_start signature drifted" \
+            >&2
+        exit 1
+    fi
+done
+
+if ! awk -F, '
+    NR > 1 && $1 == "poll_client_poll_subscription_start" \
+        && $2 == "function" \
+        && $3 == "clinkz-wot-core" \
+        && $4 == "binding" \
+        && $5 == "public" \
+        && $6 == "clinkz_wot_core::PollClientBinding::poll_subscription_start" \
+        && $7 == "no-default|async-no-std|std" \
+        && $14 == "frozen" { found = 1 }
+    END { exit !found }
+' "$ownership" \
+    || awk -F, '
+        NR > 1 && ($1 == "poll_client_poll_subscription" \
+            || $6 == "clinkz_wot_core::PollClientBinding::poll_subscription") { found = 1 }
+        END { exit !found }
+    ' "$ownership"; then
+    echo \
+        "WP-100 handler amendment check: API ownership must freeze only PollClientBinding::poll_subscription_start" \
+        >&2
     exit 1
 fi
 

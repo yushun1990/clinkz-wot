@@ -30,7 +30,7 @@ Topics are retained after migration as decision history.
 
 ** DISCUSSING
 
-- None.
+- [[file:0007-time-domain-and-deadline.md][0007 Time Domain and Deadline]]
 
 ** DECIDED
 
@@ -43,6 +43,7 @@ Topics are retained after migration as decision history.
 - [[file:0003-subscription-source-attribution.org][0003 Subscription Source Attribution]]
 - [[file:0004-implementation-readiness.org][0004 Implementation Readiness]]
 - [[file:0005-architecture-review-findings.md][0005 Architecture Review Findings]]
+- [[file:0006-handler-entry-decomposition.md][0006 Handler Entry Decomposition]]
 
 * History
 

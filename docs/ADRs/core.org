@@ -33,4 +33,8 @@ recorded in [[file:../reviews/review-02.org][Architecture Review 02]]. The
 remaining interim blockers are recorded in
 [[file:../reviews/review-03.org][Architecture Review 03]]. The workspace-finding
 triage, current module-boundary assessment, and scoped-admission corrections are
-recorded in [[file:../reviews/review-04.org][Architecture Review 04]].
+recorded in [[file:../reviews/review-04.org][Architecture Review 04]]. The
+handler-entry re-audit and next scoped Core boundary are recorded in
+[[file:../reviews/review-05.org][Architecture Review 05]]. The time-domain,
+Deadline, cleanup-timing, and prior-evidence impact found during that scoped
+review is recorded in [[file:../reviews/review-06.org][Architecture Review 06]].

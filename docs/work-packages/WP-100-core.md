@@ -10,7 +10,10 @@ Global convergence gates: GATE-1, GATE-2, GATE-3, GATE-4, GATE-5, GATE-6
 
 Owner packages: clinkz-wot-core, clinkz-wot-foundation, clinkz-wot-td
 
-Handler entry prerequisite: WP-100-FOUNDATION-REFRESH -> WP-100-HANDLER-ENTRY
+Handler entry tranche prerequisites: WP-100-FOUNDATION-REFRESH ->
+WP-100-HANDLER-VALUE-PRIMITIVES -> WP-100-HANDLER-ENTRY
+
+Unresolved handler-entry blocking scope: TIME-DOMAIN-AND-DEADLINE
 
 ## Scope
 
@@ -35,18 +38,45 @@ reference, and makes `WorkBudget` nonduplicable. This does not reopen the
 completed WP-000 package; new evidence is recorded against WP-100 before
 implementation continues.
 
-The machine-readable tranche record in `docs/work-packages/index.toml` is the
-source of truth for this prerequisite. Ordinary design validation permits its
-`pending` state, but handler implementation entry requires
-`tools/check-design-artifacts.sh --handler-entry-ready` to verify that the
-tranche is complete and backed by same-revision evidence.
+The machine-readable tranche and blocking-scope records in
+`docs/work-packages/index.toml` are the source of truth for these prerequisites
+and unresolved impacts. The broad handler implementation entry continues to
+require `tools/check-design-artifacts.sh --handler-entry-ready`. Smaller
+disjoint tranches use their own ADR-0013 admission and completion checks; they
+do not weaken or bypass that broad command.
 
-The tranche's affected requirement set is exactly `API-RESOURCE-001`,
-`API-SURFACE-001`, `CONSTRAINED-PROGRESS-001`,
-`CONSTRAINED-STORAGE-002`, `CONSTRAINED-WORK-001`, `RES-LIMIT-001`,
-`RES-LIMIT-002`, and `RES-PROFILE-001`. Handler, planning, binding, and cleanup
-requirement ids in individual CSV resource rows are provenance for later
-consumers, not behavioral implementation scope for this tranche.
+After the completed foundation refresh, the next candidate contains only five
+passive, additive Core values: `CancellationView`, `SubscriptionAcceptance`,
+`HandlerFootprint`, `HandlerStep`, and `StaticHandlerRegistration`. It
+deliberately excludes `Deadline`, request/context/target migration, handler
+traits, storage, execution, Producer integration, Servient setters, old API
+removal, state machines, and performance workloads. Its exact entry boundary is
+recorded by
+`docs/audits/WP-100-handler-value-primitives-entry.md`.
+
+The value-primitives tranche's affected requirement set is exactly
+`API-SURFACE-001` and `HANDLER-VALUE-001`. `HANDLER-VALUE-001` completely owns
+the five schemas' attributes, ownership, and passive value semantics. Handler,
+subscription, storage, cancellation, work-budget, ownership-admission, and
+resource-limit behavior belongs to the later traits, state records, and
+admission items that consume these values, not to this tranche. The candidate
+shares only the global `API-SURFACE-001` meta-requirement with the
+`TIME-DOMAIN-AND-DEADLINE` blocking scope. Their API-item and behavioral
+requirements are otherwise disjoint.
+
+`Deadline` is excluded from the value-primitives tranche and recorded under the
+`TIME-DOMAIN-AND-DEADLINE` blocking scope. This record is a structured impact
+placeholder, not an admitted corrective tranche and not a tranche dependency
+of the five-value candidate. It tracks the affected `ClockId`,
+`MonotonicInstant`, `RuntimeClock`, `SourceTimestamp`, `CleanupRecord` timing,
+and completed WP-000 `time-and-generation-api` evidence. Raw finite-width tick
+wrap cannot be made correct by a stateless half-period comparison after an
+arbitrarily long manual-poll gap. Clock-source-owned extension to non-wrapping
+logical ticks is the current design direction, but the future corrective
+tranche's identity, ownership, dependencies, completion contract, evidence
+disposition, exact time contract, and error disposition remain unfrozen under
+`workspace/0007-time-domain-and-deadline.md` and
+`docs/reviews/review-06.org`.
 
 ## Requirements
 
@@ -54,6 +84,11 @@ consumers, not behavioral implementation scope for this tranche.
   order, reentrancy, publication, and bounded critical sections.
 - `HANDLER-API-001`, `HANDLER-SUB-001`, `HANDLER-CANCEL-001`, `HANDLER-CANCEL-002`, and
   `HANDLER-STORAGE-001` govern operation-specific handlers and sparse storage.
+- `HANDLER-VALUE-001` governs the exact five passive handler-value schemas,
+  including attributes, ownership, const APIs, generic bounds, and redacted
+  diagnostics. Consumption by cancellation, subscription, storage, admission,
+  and budget mechanisms remains governed by requirements on those consuming
+  traits, state records, and admission items.
 - `API-TYPES-001`, `API-PAYLOAD-001`, `API-OPTIONS-001`, `API-SURFACE-001`,
   `API-SECURITY-001`, `API-CODEC-001`, and `API-HOT-ID-001` freeze public values and traits.
 - `SEC-PERF-001`, `VALIDATE-COMPILE-001`, and `VALIDATE-REUSE-001` require side-effect-free
@@ -254,6 +289,9 @@ Produce these package evidence keys exactly as indexed by the work-package DAG:
   56-field v4.9 suffix, all named-profile values including `NA`,
   `WorkClass::HandlerSteps`, generated snapshots, boundaries, and three feature
   cells;
+- `handler-value-primitives` for the five admitted passive portable values, exact derive
+  and ownership contracts, three Core feature cells, dependency-free negative
+  trait assertions, and handler-redacted static-registration diagnostics;
 - `core-public-surface` for paths, feature cells, owned values, and trait shapes;
 - `handler-api-matrix` for every one of the 18 operation results, three handler flavors, and
   applicable compilation cells;
