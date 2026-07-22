@@ -1,107 +1,135 @@
-# clinkz-wot Documentation and Refactor Plan
+# clinkz-wot Execution Plan
 
-## Active revision
+## Purpose
 
-The active target is the v4.9 architecture-closure revision. Coordinated
-whole-revision migration and release convergence remain paused. Individual
-implementation tranches may proceed only through the scoped admission policy
-in ADR-0013 and `REFACTOR-GATE-001`. The v4.8 detailed-design candidate did not
-pass Architecture Review 02 and remains only a migration input until its valid
-contracts are moved into the v4.9 modular specification set.
+This file defines the stable execution direction for the active refactor.
 
-Read active material in this order:
+It provides:
 
-1. `docs/architecture/README.md` and the architecture backbone it indexes;
+- the active target;
+- durable execution and admission rules;
+- high-level milestone ordering;
+- navigation to authoritative planning artifacts.
+
+It does not record live session state.
+
+The following belong in `PROJECT_STATE.md` instead:
+
+- the currently active work item;
+- temporary blockers and uncertainties;
+- recent progress;
+- exact stopping points;
+- unverified changes;
+- next-session actions;
+- the agent's current compact project understanding.
+
+This file does not define architecture, public APIs, state transitions,
+resource limits, or implementation behavior.
+
+## Active Target
+
+The active target is the v4.9 architecture-closure revision.
+
+The v4.8 detailed-design candidate is migration input only. Valid contracts
+must be reconciled into the v4.9 modular specification set before they are
+treated as active requirements.
+
+The architecture-closure effort exists to produce one coherent, reviewable,
+executable target across architecture, APIs, state, resources, performance,
+requirements, work packages, implementation, and evidence.
+
+## Authority and Navigation
+
+Read authoritative material through its registered indexes rather than treating
+this plan as a specification.
+
+Primary navigation:
+
+1. `docs/architecture/README.md` for the architecture backbone;
 2. accepted decisions under `docs/ADRs/`;
-3. `docs/design.md` and registered domain specifications for detailed
-   requirements that have already been reconciled with the backbone;
-4. the API, state, resource, performance, and requirement artifacts registered
-   by `docs/artifacts.csv`; and
-5. `docs/work-packages/index.toml` for implementation order.
+3. registered domain specifications and reconciled detailed requirements;
+4. `docs/artifacts.csv` for API, state, resource, performance, requirement, and
+   evidence artifacts;
+5. `docs/work-packages/index.toml` for authoritative work-package identities,
+   dependencies, admission, completion contracts, removals, and evidence keys;
+6. implementation, tests, audits, and evidence for conformance.
 
-`PLAN.md` is navigation and status only. It does not define architecture,
-public APIs, state transitions, limits, or implementation behavior.
+Historical plans and completed checkpoints belong under `docs/deprecated/` and
+`docs/evidence/` as appropriate.
 
-## Current admission status
+## Execution Rules
 
-- GATE-1 API ownership: open.
-- GATE-2 lifecycle and cleanup: open.
-- GATE-3 Directory client boundary: closed by reviewed carry-forward evidence.
-- GATE-4 resource limits: open.
-- GATE-5 executable performance contracts: open.
-- GATE-6 implementation work-package DAG: open.
+Runtime and public-API changes may proceed only through the scoped admission
+policy defined by the accepted governance artifacts, including ADR-0013 and
+`REFACTOR-GATE-001`.
 
-These are aggregate convergence gates; scoped admission does not close or
-waive them. No runtime or public-API change may begin without an approved
-tranche record and passing independent entry review. Documentation,
-governance, checkers, fixtures, and work-package preparation may proceed while
-no tranche is admitted.
+A scoped admission does not close or waive global convergence gates.
 
-The admitted `WP-100-FOUNDATION-REFRESH` tranche is complete. Its exact v4.9
-scope and completion evidence are recorded in the work-package index,
-`docs/audits/WP-100-foundation-refresh-entry.md`, and
-`docs/evidence/WP-100-foundation-refresh.toml`. No other runtime or public-API
-tranche is currently admitted. Review 05 keeps `WP-100-HANDLER-ENTRY` blocked
-and identifies `WP-100-HANDLER-VALUE-PRIMITIVES` as the next review-pending,
-purely additive five-value candidate. It excludes the open handler workload,
-binding SPI, no-atomic target, Producer, Servient integration, and `Deadline`.
-The five-value tranche depends only on the completed foundation refresh. Review
-06 records `Deadline` under the separate `TIME-DOMAIN-AND-DEADLINE` blocking
-scope because raw finite-width wrap is inconsistent with the current
-non-wrapping instant comparison and also impacts WP-000 time evidence and
-cleanup timing. That scope is an impact placeholder blocking the broad handler
-entry, not an admitted or fully defined corrective tranche; the future
-tranche's identity, ownership, dependencies, completion contract, and evidence
-disposition remain unfrozen. The clock-independent five values may proceed only
-after their strengthened contract fixture, governance, and exact-commit
-independent review pass.
-WP-200 remains blocked by AR-004's missing constructible candidate-fallback
-policy, health rule, and bounded diagnostics. WP-300 remains blocked by
-AR-002/AR-003's incomplete registration/compiler/constrained signatures and
-independent host/static authoring fixtures. The Servient/binding migrations
-remain blocked by those scope-specific predecessors.
+Documentation, governance, checkers, fixtures, reviews, evidence preparation,
+and work-package definition may proceed without runtime admission when their
+own rules permit it.
 
-## Current design milestone
+Do not infer admission, completion, or readiness from prose in this file.
+Consult the authoritative work-package index, package documents, audits,
+reviews, and exact evidence.
 
-The architecture-closure milestone is complete only when:
+## Architecture-Closure Completion
+
+The v4.9 architecture-closure milestone is complete only when:
 
 1. the architecture backbone freezes primary flows, module boundaries,
    compiled-plan lifecycle, Servient orchestration, and Protocol Binding
-   integration/deployment;
-2. every accepted ADR is reflected in one non-conflicting domain specification;
+   integration and deployment;
+2. every accepted ADR is reflected in one non-conflicting authoritative domain
+   specification;
 3. the v4.8 monolith and temporary amendments are decomposed into registered
    single-owner specifications;
 4. the API matrix, exact state models, resource schema, performance manifests,
-   requirement index, and work-package DAG all identify the same v4.9 target;
+   requirement index, and work-package DAG identify the same v4.9 target;
 5. executable checks pass; and
-6. an independent same-revision review closes each affected gate.
+6. independent same-revision review closes every affected gate.
 
-The immediate decisions are:
+## Frozen Direction for v1
+
+The active architecture direction includes:
 
 - an explicit compiled-plan-set lifecycle and binding-artifact boundary;
-- Cargo-linked, application-registered Protocol Binding crates for v1;
+- Cargo-linked, application-registered Protocol Binding crates;
 - startup-only binding composition for one Servient instance;
 - engine-orchestrated, route-scoped binding progress with no hidden direct
-  handler-dispatch path; and
+  handler-dispatch path;
 - atomic serving publication through one Servient-owned activation authority
-  and nonretained route-scoped accept permits; and
-- a modular normative-document hierarchy that keeps architecture visible.
+  and nonretained route-scoped accept permits;
+- a modular normative-document hierarchy that keeps the architecture visible.
 
-## Tranche order and final convergence
+The authoritative definitions and exact contracts live in the registered
+architecture, ADR, API, state, SPI, resource, performance, and requirement
+artifacts.
 
-Admitted implementation follows `IMPL-CONFORM-001` and the machine-readable
-DAG. All six global gates must still close before final integration and release
-conformance:
+## High-Level Work Order
+
+Subject to the authoritative machine-readable DAG and scoped admission rules,
+the intended convergence order is:
 
 1. foundation resource, work, time, generation, and accounting refresh;
 2. core handler, security, codec, and lock-isolation contracts;
-3. immutable logical/binding plans, capability indexes, and compiler migration;
-4. client/server binding SPI, routes, subscriptions, responses, and emissions;
+3. immutable logical and binding plans, capability indexes, and compiler
+   migration;
+4. client and server binding SPI, routes, subscriptions, responses, and
+   emissions;
 5. Servient lifecycle, cleanup, application facades, and scheduling policy;
 6. Discovery client cleanup;
-7. Zenoh and zenoh-pico binding migration; and
-8. umbrella composition, obsolete API removal, and final evidence.
+7. Zenoh and zenoh-pico binding migration;
+8. umbrella composition, obsolete API removal, and final conformance evidence.
 
-The authoritative package dependencies, removals, and evidence keys live in
-`docs/work-packages/index.toml` and its package documents. Historical plans and
-completed checkpoints remain under `docs/deprecated/` and `docs/evidence/`.
+This list communicates durable direction only. It is not a substitute for
+package-level dependencies, admission state, or current execution context.
+
+## Project Continuation
+
+The current project phase, active work, blockers, progress, stopping point, and
+next safe actions are maintained by AI agents in `PROJECT_STATE.md`.
+
+Agents must update that file continuously according to `AGENTS.md`, so a new
+conversation can resume from the repository without reconstructing the entire
+project.
