@@ -1,412 +1,328 @@
 # clinkz-wot
 
-A protocol-neutral Rust Web of Things engine targeting **W3C WoT Scripting API
-conformance** (Consumer, Producer, Discovery), running on both `std` and
-`no_std + alloc`.
+`clinkz-wot` is a protocol-neutral Rust Web of Things engine targeting the
+W3C WoT Scripting API across both host and constrained environments.
 
-The engine uses W3C WoT Thing Descriptions (TD 1.1) as the semantic contract.
-Protocol bindings are pluggable; **Zenoh** is the first concrete binding.
+The engine uses W3C WoT Thing Descriptions as semantic contracts and separates
+protocol-neutral interaction behavior from protocol-specific transport code.
+Zenoh is the first concrete Protocol Binding.
 
-## v4.1 Architecture
+## Project status
 
-The v4.1 baseline amends v4.0's binding ownership, lifecycle, and registration
-model (AD55–AD58):
+The active target is the **v4.9 architecture-closure revision**.
 
-1. **Full WoT Scripting API alignment** — the engine surfaces (`produce`/
-   `consume`/`discover`/`fetch_td`, `set_*_handler`/`set_async_*_handler`,
-   `read_property`/`write_property`/`invoke_action`/`observe_property`/
-   `subscribe_event`/`subscribe_all_events`/`read_all_properties`/
-   `write_multiple_properties`, `expose`/`destroy`) follow the Scripting API
-   method catalogue.
-2. **Frozen TD at expose** — no dynamic affordance add/remove after `expose()`;
-   handlers may be replaced throughout the exposed lifetime.
-3. **Sync-primary handlers, binding-owned driving** — inbound handlers are
-   synchronous (zero-allocation hot path); each binding owns its driving model
-   (`serve()` spawns a draining task on std; `no_std` super-loops poll
-   `try_accept`).
-4. **Direct binding registration** (v4.1) — `ProtocolBinding` facade removed;
-   `ServerBinding` and `ClientBinding` are registered directly via
-   `ServientBuilder::with_server_binding` / `with_client_binding`. Bindings
-   are owned by handles, not the Servient.
+The repository still contains implementation surfaces from earlier revisions.
+Those surfaces are migration inputs and must not be treated as the target
+architecture when they conflict with the registered v4.9 architecture,
+specifications, ADRs, or work-package records.
 
-### Key Types
+The completed v4.9 implementation work currently consists primarily of the
+admitted foundation refresh. Handler, Planning, Binding SPI, Servient, and
+Zenoh migrations proceed only through independently reviewed implementation
+tranches.
 
-| Type | Crate | Role |
-| --- | --- | --- |
-| `WotLock<T>` | `core` | Arc-backed `Clone`-able lock (`std::sync::RwLock` / `critical_section::Mutex`). |
-| `ExposedThing` | `core` | Produced Thing + per-affordance handler sets (9 sync + 9 async traits). |
-| `ConsumedThing` | `core` | Consumed Thing + shared `Arc<dyn ClientBinding>` list. |
-| `ServerBinding` | `core` | **Binding extension trait**: `serve(thing_id, td, ctx)` / `shutdown(thing_id)` lifecycle + `try_accept` / `send_response`. |
-| `ClientBinding` | `core` | **Binding extension trait**: async `invoke` / `subscribe` outbound. Shared `Arc` across all consumed Things. |
-| `ConsumedThingHandle` / `ExposedThingHandle` | `servient` | **App-facing** interaction surfaces (Scripting API §6/§7). Own their binding `Arc` references. |
-| `Servient` | `servient` | Non-generic composition root: dispatch engine + discovery facade. Holds default bindings cloned into handles. |
-| `ServientBuilder` | `servient` | Consuming fluent builder: `with_server_binding` + `with_client_binding`. |
-| `InMemoryDirectory` | `discovery` | Reference directory backend (all 4 capability traits). |
+The project is under active architectural and implementation refactoring. It is
+not yet a stable production release.
 
-## Workspace Crates
+## Architectural direction
 
-| Crate | Role | `no_std` |
-| --- | --- | --- |
-| [`clinkz-wot-td`](td) | TD/TM data models, builders, serde, validation, URI helpers. | ✅ root |
-| [`clinkz-wot-core`](core) | Interaction core: handler traits, `ExposedThing`/`ConsumedThing`, `WotLock`, `EventBroker`, `ServerBinding`/`ClientBinding` (binding extension traits), `PushFn`. | ✅ root |
-| [`clinkz-wot-discovery`](discovery) | Introduction→Exploration sessions, `DirectoryReader`/`Publisher`/`Watch`, `Discoverer`, `InMemoryDirectory`. | ✅ root |
-| [`clinkz-wot-protocol-bindings`](protocol-bindings/core) | Shared form selection, op resolution, `error_status`, URI-template expansion. | ✅ root |
-| [`clinkz-wot-protocol-bindings-zenoh`](protocol-bindings/protocols/zenoh) | Zenoh planning + async runtime + `shared()`/`client()`/`server()` constructors (`zenoh` feature). | ✅ planning layer |
-| [`clinkz-wot-servient`](servient) | `Servient` + `ServientBuilder` + `ConsumedThingHandle`/`ExposedThingHandle`. Dispatch is binding-owned; the Servient exposes `Dispatch::serve_request` for bindings to call. | ✅ root |
+The v4.9 target follows these primary rules:
 
-## Quick Start
+* W3C WoT TD 1.1 is the default compatibility target.
+* TD and TM documents are lossless semantic data contracts, not runtime state.
+* Interaction hot paths execute immutable admitted plans.
+* TD parsing, defaulting, form selection, and capability matching happen before
+  interaction execution.
+* Servient owns application orchestration, plan-set lifetime, lifecycle
+  transactions, scheduling policy, activation, and cleanup ownership.
+* Protocol Bindings own protocol syntax, transport I/O, correlation,
+  protocol-local flow control, and binding-local state.
+* A Protocol Binding does not invoke application handlers directly and does not
+  reinterpret a TD during the interaction hot path.
+* Protocol Binding crates are linked through ordinary Cargo composition and
+  explicitly registered by the application.
+* Binding composition for one Servient instance is startup-only in v1.
+* Runtime loading and unloading of Protocol Binding code is not a v1 feature.
+* Every queue, cache, cursor set, retained operation, type-erased object, and
+  external-input buffer has an explicit admitted bound.
+* `no_std + alloc` uses caller-driven progress and bounded storage while
+  preserving the same protocol-neutral semantics as host builds.
+* Every operation that can outlive its caller has one generation-bearing owner,
+  an explicit cancellation path, a bounded retained footprint, and a terminal
+  cleanup disposition.
+* User, provider, codec, and binding callbacks execute outside engine locks and
+  constrained critical sections.
+
+## Primary runtime model
+
+```text
+Thing Description or produced-Thing draft
+                    |
+                    v
+       parse, preserve, and validate
+                    |
+                    v
+        capture planning inputs
+                    |
+                    v
+           shared logical planner
+                    |
+                    v
+        immutable logical plan set
+                    |
+                    v
+       Protocol Binding compilation
+                    |
+                    v
+       immutable binding artifacts
+                    |
+                    v
+      Servient preparation and activation
+                    |
+                    v
+       engine-orchestrated progress
+                    |
+          +---------+---------+
+          |                   |
+          v                   v
+ application handler     Protocol Binding I/O
+          |                   |
+          +---------+---------+
+                    |
+                    v
+        completion and cleanup
+```
+
+A Protocol Binding translates between protocol-specific traffic and the
+protocol-neutral runtime contract. Servient remains the orchestration authority
+for route resolution, handler execution, activation, operation lifetime, and
+cleanup.
+
+## Documentation authority
+
+Read active project material in this order:
+
+1. [`docs/design.md`](docs/design.md) selects the active revision and indexes
+   the normative sources.
+2. [`docs/architecture/README.md`](docs/architecture/README.md) introduces the
+   architecture backbone and its reading order.
+3. Accepted decisions under [`docs/ADRs/`](docs/ADRs/) record architectural
+   choices and rejected alternatives.
+4. Registered domain specifications under [`docs/spec/`](docs/spec/) own
+   detailed behavior and public contracts.
+5. Machine-readable API, state, resource, requirement, performance, and
+   work-package artifacts own their exact projections.
+6. [`PLAN.md`](PLAN.md) reports navigation, admission status, and implementation
+   progress.
+
+Reviews, audits, evidence records, deprecated documents, and files under
+[`workspace/`](workspace/) provide history and convergence support. They are not
+architecture authorities unless their conclusions have been migrated into the
+registered normative owners.
+
+A conflict between normative sources is a gate failure. It must not be resolved
+by selecting whichever document appears newer or more detailed.
+
+## Architecture backbone
+
+The concise architecture backbone is organized as:
+
+1. [System goals and context](docs/architecture/00-system-goals-and-context.md)
+2. [Primary data flows](docs/architecture/10-primary-data-flows.md)
+3. [Module boundaries](docs/architecture/20-module-boundaries.md)
+4. [Compiled-plan lifecycle](docs/architecture/30-compiled-plan-lifecycle.md)
+5. [Protocol Binding SPI and deployment](docs/architecture/40-protocol-binding-spi-and-deployment.md)
+6. [Servient runtime lifecycle](docs/architecture/50-servient-runtime-lifecycle.md)
+
+Detailed specifications must project this backbone without silently redefining
+its cross-module invariants.
+
+## Workspace crates
+
+The repository is organized as a Rust workspace. Important areas include:
+
+| Area                                 | Role                                                                                                                       |
+| ------------------------------------ | -------------------------------------------------------------------------------------------------------------------------- |
+| `foundation/`                        | Bounded resources, profiles, work budgets, time and generation foundations, and shared low-level contracts.                |
+| `td/`                                | Thing Description and Thing Model data structures, parsing, serialization, validation, and extension preservation.         |
+| `core/`                              | Protocol-neutral interaction values, handler contracts, operation state, status, errors, and runtime-facing SPI semantics. |
+| `planning/`                          | Logical planning, capability matching, immutable plan construction, and validation of untrusted binding outputs.           |
+| `protocol-bindings/core/`            | Protocol Binding authoring contracts and shared protocol-binding support.                                                  |
+| `protocol-bindings/protocols/zenoh/` | Zenoh-specific planning, transport, and runtime integration.                                                               |
+| `servient/`                          | Application orchestration, plan-set ownership, lifecycle coordination, scheduling, activation, and cleanup.                |
+| `discovery/`                         | WoT discovery and Directory-related client and provider capabilities.                                                      |
+| `tools/`                             | Executable design checks, governance checks, fixtures, and conformance support.                                            |
+| `docs/`                              | Architecture, specifications, ADRs, requirements, work packages, reviews, audits, and evidence.                            |
+| `workspace/`                         | Non-authoritative design discussions and proposals awaiting decision or migration.                                         |
+
+Some crate and API boundaries are still being migrated. The architecture
+backbone, registered specifications, and work-package DAG define the target
+ownership when current source layout differs from the v4.9 target.
+
+## Implementation admission
+
+The project does not migrate the entire runtime in one coordinated edit.
+
+Implementation proceeds through scoped tranches:
+
+```text
+architecture backbone
+        |
+        v
+exact tranche contract
+        |
+        v
+independent entry review
+        |
+        v
+implementation
+        |
+        v
+completion evidence
+        |
+        v
+downstream admission
+```
+
+A tranche must identify:
+
+* its exact API and implementation paths;
+* affected requirements and state machines;
+* resource and workload impact;
+* dependencies and downstream removals;
+* pre-implementation contract checks;
+* post-implementation completion evidence;
+* treatment of relevant prior evidence.
+
+Scoped admission does not close the global architecture or release gates.
+Conversely, an unrelated open global finding does not automatically block a
+tranche that has been proven disjoint.
+
+See:
+
+* [`docs/ADRs/0013-work-package-scoped-implementation-admission.org`](docs/ADRs/0013-work-package-scoped-implementation-admission.org)
+* [`docs/work-packages/index.toml`](docs/work-packages/index.toml)
+* [`PLAN.md`](PLAN.md)
+
+## Current implementation sequence
+
+The current high-level migration order is:
+
+1. foundation resource, work, time, generation, and accounting contracts;
+2. Core handler, security, codec, and lock-isolation contracts;
+3. immutable logical and binding plans, capability indexes, and compiler
+   migration;
+4. client and server Binding SPI, routes, subscriptions, responses, and
+   emissions;
+5. Servient lifecycle, cleanup, application facades, and scheduling policy;
+6. Discovery client cleanup;
+7. Zenoh and zenoh-pico migration;
+8. umbrella composition, obsolete API removal, and final convergence evidence.
+
+The authoritative dependency graph and evidence keys are maintained in the
+work-package index rather than in this README.
+
+## Build and checks
+
+Clone the repository and run the baseline workspace checks:
 
 ```sh
-git clone git@github.com:yushun1990/clinkz-wot.git
+git clone https://github.com/yushun1990/clinkz-wot.git
 cd clinkz-wot
-cargo test --workspace          # all suites
-cargo clippy --workspace --all-targets  # 0 warnings
-scripts/check-baseline.sh       # fmt + test + clippy + no_std + feature-matrix
+
+cargo fmt --all --check
+cargo test --workspace
+cargo clippy --workspace --all-targets --all-features -- -D warnings
 ```
 
-## Engine Usage
+The repository also contains project-specific scripts and executable design
+checks. Consult `PLAN.md`, the active work-package record, and `tools/` before
+assuming that the generic Cargo commands constitute complete tranche or release
+evidence.
 
-### Architecture: who does what
-
-```
-┌─────────────────────────────────────────────────────┐
-│                    Servient                          │
-│  produce / consume / discover / fetch_td             │
-│  expose / destroy (lifecycle)                        │
-│  dispatch(req) → handler → response    ← 唯一入口    │
-│  (不关心谁来调、怎么调)                                │
-└───────────────────┬─────────────────────────────────┘
-                    │ Dispatch::serve_request(req).await
-                    │
-     ┌──────────────┼──────────────────┐
-     │              │                  │
- zenoh binding   HTTP/CoAP binding   no_std binding
-     │              │                  │
- 自己跑 draining  route handler       super-loop
- task 从 channel  里直接调             poll try_accept
- drain → dispatch  serve_request       → dispatch
- → send_response                      → send_response
-```
-
-### 1. (Binding authors only) Implement ServerBinding / ClientBinding
-
-> Application developers register bindings via `ServientBuilder`. This section
-> is for binding authors adding a new protocol (HTTP, CoAP, MQTT, ...).
-
-`ServerBinding` has explicit lifecycle: `serve()` declares routes AND starts
-the driving model; `shutdown()` tears them down.
-
-```rust
-use clinkz_wot_core::{
-    BindingContext, CoreResult, Dispatch, InboundRequest, InboundResponse,
-    ServerBinding, ThingId,
-};
-use clinkz_wot_td::thing::Thing;
-use alloc::sync::Arc;
-
-struct MyServerBinding;
-
-impl ServerBinding for MyServerBinding {
-    fn serve(
-        &self,
-        thing_id: &ThingId,
-        td: &Thing,
-        ctx: &BindingContext,
-    ) -> CoreResult<()> {
-        // 1. Declare transport routes for this Thing based on td.
-        // 2. On std: spawn a draining task that calls
-        //    ctx.dispatch.serve_request(req).await then self.send_response(resp).
-        // 3. On no_std: configure poll state; the super-loop calls try_accept().
-        Ok(())
-    }
-
-    fn shutdown(&self, _thing_id: &ThingId) {
-        // Undeclare routes, cancel background tasks.
-    }
-
-    fn try_accept(&self) -> Option<InboundRequest> {
-        None // default; no_std bindings override for super-loop polling.
-    }
-
-    fn send_response(&self, _response: InboundResponse) {
-        // Map InboundResponse back to the protocol reply.
-    }
-}
-```
-
-`ClientBinding` is stateless — all per-Thing context is in `BindingRequest`:
-
-```rust
-use clinkz_wot_core::{ClientBinding, BindingRequest, CoreResult, InteractionOutput};
-
-#[async_trait::async_trait]
-impl ClientBinding for MyClientBinding {
-    fn supports(&self, form: &clinkz_wot_td::form::Form, op: clinkz_wot_td::data_type::Operation) -> bool {
-        // Return true if this binding can drive the form's protocol scheme.
-        todo!()
-    }
-    async fn invoke(&self, request: BindingRequest) -> CoreResult<InteractionOutput> {
-        // Drive the real protocol (zenoh get/put, HTTP fetch, ...).
-        todo!()
-    }
-}
-```
-
-### 2. Build a Servient (application entry point)
-
-Application code registers `ServerBinding` and `ClientBinding` directly.
-A two-direction binding (the common case) registers both from one shared
-session:
-
-```rust
-use clinkz_wot_servient::ServientBuilder;
-use clinkz_wot_protocol_bindings_zenoh as zenoh;
-use std::sync::Arc;
-
-let session = zenoh::open(config).await.unwrap();
-let (server, client) = zenoh::shared(session);
-
-let servient = ServientBuilder::new()
-    .with_server_binding(server)       // Arc<dyn ServerBinding>
-    .with_client_binding(client)       // Arc<dyn ClientBinding>
-    // .with_discoverer(custom)        // optional; defaults to LocalDiscoverer
-    .build()
-    .expect("build servient");
-```
-
-For pure-consumer / pure-exposer use cases, register only the needed side.
-The `ClientBinding` is a shared `Arc` — one instance per protocol serves all
-consumed Things (v4.1 AD57).
-
-### 3. Produce + Expose a Thing (Producer)
-
-```rust
-use clinkz_wot_core::{InteractionInput, InteractionOutput, CoreError, PropertyReadHandler};
-
-struct StatusRead;
-impl PropertyReadHandler for StatusRead {
-    fn read(&self, _input: &InteractionInput) -> Result<InteractionOutput, CoreError> {
-        Ok(InteractionOutput::with_data(
-            clinkz_wot_core::Payload::new(b"on".to_vec(), "text/plain"),
-        ))
-    }
-}
-
-// produce() 创建 draft handle（尚未可远程访问）。
-let handle = servient.produce(lamp_td()).expect("produce");
-
-// 挂载 handler（生命周期内可随时替换 — AD14）。
-// sync handler（零分配热路径）：
-handle.set_property_read_handler("status", StatusRead);
-
-// 或 async handler（I/O 密集型，feature = "async"）：
-// handle.set_async_property_read_handler("status", MyAsyncRead);
-
-// expose() 在所有 server binding 上注册路由 + 插入 servable 注册表。
-// TD 在此后冻结。
-handle.expose().await.expect("expose");
-
-// 本地服务端交互 — sync 派发调 sync handler；async 派发（*_async）调任一种。
-let value = handle.read_property("status", &InteractionInput::empty())?;
-let _     = handle.read_property_async("status", &InteractionInput::empty()).await?;
-handle.emit_event("overheat", payload)?;
-handle.emit_property_change("temperature", temp_payload)?;
-```
-
-Local dispatch surface on `ExposedThingHandle` (Scripting API §7):
-
-| Op | Sync method | Async method |
-| --- | --- | --- |
-| read property | `read_property` | `read_property_async` |
-| write property | `write_property` | `write_property_async` |
-| invoke action | `invoke_action` | `invoke_action_async` |
-| query action | `query_action` | `query_action_async` |
-| cancel action | `cancel_action` | `cancel_action_async` |
-| observe property | `observe_property` | `observe_property_async` |
-| unobserve property | `unobserve_property` | `unobserve_property_async` |
-| subscribe event | `subscribe_event` | `subscribe_event_async` |
-| unsubscribe event | `unsubscribe_event` | `unsubscribe_event_async` |
-
-> Sync dispatch refuses async handlers (returns structured
-> `UnsupportedOperation` with handler-phase context). Use the `*_async`
-> variant when an async handler is registered. See
-> `docs/design.md` for the current Scripting API posture.
-
-### 4. Dispatch — binding-owned driving (v4.1 AD56)
-
-**Servient 不跑循环。** 它只暴露 `Dispatch::serve_request(req).await`。
-每个 binding 的 `serve()` 启动自己的驱动模型：
-
-**zenoh binding（sync 回调）** — `serve()` 声明路由 + spawns draining task：
-
-```rust
-fn serve(&self, thing_id: &ThingId, td: &Thing, ctx: &BindingContext) -> CoreResult<()> {
-    // 1. Declare zenoh queryables/subscribers from td routes.
-    // 2. Spawn draining task (first serve only):
-    if let Some(dispatch) = &ctx.dispatch {
-        self.spawn_draining_task(dispatch.clone());
-    }
-    Ok(())
-}
-// zenoh sync callback: try_send(req) → binding's internal channel
-// draining task: recv().await → dispatch.serve_request(req).await → send_response(resp)
-```
-
-**HTTP/CoAP binding（async handler）** — `serve()` 注册路由，handler 里直接调：
-
-```rust
-// HTTP route handler (registered in serve()):
-async fn handle_read(req: Request) -> Response {
-    let inbound = build_inbound_request(req);
-    let resp = self.dispatch.serve_request(inbound).await;
-    resp.into_http()
-}
-// hyper 连接池提供 backpressure，不需要 channel
-```
-
-**bare no_std（无 executor）** — super-loop 轮询：
-
-```rust
-loop {
-    if let Some(req) = binding.try_accept() {
-        let resp = dispatch.serve_request(req).await;  // 或 sync dispatch
-        binding.send_response(resp);
-    }
-    // ... 其他 super-loop 工作
-}
-```
-
-### 5. Consume a Remote Thing (Consumer)
-
-```rust
-let consumed = servient.consume(remote_td()).expect("consume");
-
-// One-shot ops — all async (drive real ClientBinding):
-let _ = consumed
-    .read_property("status", InteractionOptions::new())
-    .await?;
-let _ = consumed
-    .invoke_action("toggle", InteractionOptions::new())
-    .await?;
-
-// Bulk property ops (Scripting API §6.5):
-let all = consumed
-    .read_all_properties(InteractionOptions::new())
-    .await?; // aggregated JSON InteractionOutput
-let _ = consumed
-    .write_multiple_properties(
-        &[
-            ("brightness", Payload::new(b"75".to_vec(), "text/plain")),
-        ].into_iter().collect(),
-        InteractionOptions::new(),
-    )
-    .await?;
-
-// Streaming ops (Scripting API §6.6/§6.7) — pull-queue deviation:
-let mut temp = consumed
-    .observe_property("temperature", InteractionOptions::new())
-    .await?;
-while let Some(sample) = temp.next().await {
-    println!("temp={:?}", sample.body);
-}
-// Optional explicit cleanup; dropping the handle also releases the guard:
-consumed
-    .unobserve_property("temperature", InteractionOptions::new())
-    .await?;
-
-// Subscribe to a single event:
-let mut motion = consumed
-    .subscribe_event("motion", InteractionOptions::new())
-    .await?;
-
-// Or fan out across every declared event in one call:
-let mut events = consumed
-    .subscribe_all_events(InteractionOptions::new())
-    .await?;
-while let Some((event_name, payload)) = events.next().await {
-    println!("{}: {:?}", event_name.as_str(), payload.body);
-}
-```
-
-`observe_property` / `subscribe_event` / `subscribe_all_events` return a
-`Subscription` / `EventStream` implementing `futures_core::Stream`. The
-wire-side `SubscriptionGuard` for each open subscription is owned by the
-handle; dropping the handle releases every still-active guard. See
-`docs/design.md` for the current subscription model.
-
-### 6. Discover Things
-
-```rust
-use clinkz_wot_discovery::DiscoveryFilter;
-
-// discover() 同步返回一个惰性 process（AD10）。
-let mut process = servient.discover(DiscoveryFilter::all());
-
-// 真正的目录工作发生在第一次 next() 里。
-while let Some(thing) = process.next().await? {
-    println!("found: {:?}", thing.id);
-}
-```
-
-> `InteractionOptions` accepts bare field access or two builder
-> conveniences: `InteractionOptions::with_data(payload)` and
-> `.with_uri_variable("k", "v")` (chainable).
-
-### 7. Destroy (Quiescing Teardown)
-
-```rust
-// destroy() 幂等（AD27）。注销路由、drain 在途、移除注册表条目。
-handle.destroy().await.expect("destroy");
-```
-
-## Feature Flags
-
-| Feature | Effect |
-| --- | --- |
-| `default = ["std"]` | std runtime + tokio. `std` implies `async`. |
-| `alloc` | Dynamic data on `no_std`. |
-| `std` | Networking, filesystem, async runtime, host conveniences. Implies `alloc` + `async`. |
-| `async` | Native-async Servient surface (`consume`/`produce` handles, async handler setters, async local dispatch, streaming subscriptions). On `no_std` requires an executor (embassy). |
-| `zenoh` | Rust `zenoh` std backend (real async consume + inbound). |
-| `zenoh-pico` | Constrained `no_std+alloc` platform-hook backend (mutually exclusive with `zenoh`). |
-| `td2-preview` | Experimental TD 2.0 fields. |
-
-## Architecture Principles
-
-- **Layering is non-negotiable.** Data contract (TD/TM) → interaction core →
-  bindings → servient. Core knows nothing of concrete protocols.
-- **`no_std + alloc` is the baseline contract.** Every crate whose
-  responsibility permits it compiles `no_std + alloc`.
-- **Stable unknown-field round-trip fidelity.** TD/TM documents are preserved
-  verbatim through serde.
-- **Sync-primary handlers** = zero-allocation inbound hot path. Async twins are
-  opt-in for I/O-bound cloud handlers.
-- **One lock primitive** — `WotLock<T>` (always thread-safe, `Clone`-able).
-- **Scripting API alignment** — method catalogue + semantics, in Rust idiom;
-  engineering concerns (performance, extensibility, code reasonableness) take
-  priority over verbatim JS naming where they conflict.
-
-## Verification
+Examples of additional checks may include:
 
 ```sh
-scripts/check-baseline.sh     # aggregate: fmt + test + clippy + no_std + feature-matrix
-scripts/check-no-std.sh       # 7 crates bare no_std + 2 async no_std flavors
-scripts/check-feature-matrix.sh  # 21 feature combinations
+scripts/check-baseline.sh
+tools/check-design-requirements.sh
 ```
 
-Zenoh runtime smoke tests are opt-in:
+The exact required commands are owned by the applicable work package and
+evidence record.
 
-```sh
-CLINKZ_WOT_RUN_ZENOH_RUNTIME_TESTS=1 \
-  cargo test -p clinkz-wot-protocol-bindings-zenoh --features zenoh
-```
+## Feature and platform posture
 
-## Documentation
+The target runtime supports:
 
-- [Current design](docs/design.md) — authoritative architecture, API, feature, and verification reference.
-- [Current documentation plan](PLAN.md) — session entry point for documentation.
-- [Deprecated archive](docs/deprecated/README.md) — historical baselines, plans, target notes, and audit context.
+* standard host environments;
+* async host integration where admitted;
+* `no_std + alloc`;
+* caller-driven constrained progress;
+* bounded static or application-provided storage profiles;
+* Cargo-linked Protocol Binding crates.
+
+Host and constrained implementations may use different scheduling and storage
+strategies, but they must preserve the same protocol-neutral semantics and
+ownership rules.
+
+A successful host build is not sufficient evidence for the constrained target.
+Affected tranches must provide the feature-cell, source, compile, resource, and
+workload evidence required by their registered contracts.
+
+## Protocol Bindings
+
+A Protocol Binding is responsible for:
+
+* recognizing and compiling supported protocol forms;
+* protocol-specific addressing and representation conversion;
+* transport session and connection handling;
+* inbound and outbound protocol I/O;
+* correlation and protocol-local flow control;
+* converting protocol results into bounded protocol-neutral outputs;
+* advancing binding-local operations when the engine grants progress.
+
+A Protocol Binding is not responsible for:
+
+* choosing a different TD form during the interaction hot path;
+* directly invoking application handlers;
+* owning application lifecycle;
+* publishing serving state independently of Servient;
+* hiding an unbounded worker or queue behind the SPI;
+* redefining protocol-neutral cancellation, generation, cleanup, or resource
+  semantics.
+
+The detailed target contract is maintained in
+[`docs/spec/binding-spi.md`](docs/spec/binding-spi.md).
+
+## Development guidance
+
+Before changing public APIs or runtime behavior:
+
+1. identify the active work package or tranche;
+2. read the architecture backbone and accepted ADRs affecting that scope;
+3. locate the authoritative domain specification and machine-readable
+   projections;
+4. confirm that the tranche is admitted;
+5. run its pre-implementation checks;
+6. keep the change inside its declared paths and dependencies;
+7. produce the registered completion evidence;
+8. request an independent same-revision review.
+
+For unresolved design questions, add a non-authoritative topic under
+[`workspace/`](workspace/) and migrate the stable conclusion into its proper
+owner after the discussion converges.
+
+## Stability
+
+No public API compatibility guarantee is currently provided.
+
+Until the v4.9 migration and final convergence gates close, public types,
+module ownership, feature combinations, crate boundaries, and integration
+surfaces may change through admitted work packages.
+
+Do not build a long-lived external integration against undocumented or legacy
+runtime surfaces without pinning an exact commit and accepting migration work.
 
 ## License
 
-MIT. Portions derived from `wot-td`. See [LICENSES/MIT.txt](LICENSES/MIT.txt).
+See the repository license files for licensing terms.

@@ -26,7 +26,8 @@ Topics are retained after migration as decision history.
 
 ** OPEN
 
-- None.
+- [[file:0008-implementation-governance-overhead.md][0008 Implementation Governance Overhead]]
+- [[file:0009-minimal-end-to-end-architecture-validation.md][0009 Minimal End-to-End Architecture Validation]]
 
 ** DISCUSSING
 
