@@ -37,10 +37,11 @@ tranche record and passing independent entry review. Documentation,
 governance, checkers, fixtures, and work-package preparation may proceed while
 no tranche is admitted.
 
-The currently admitted tranche is `WP-100-FOUNDATION-REFRESH`. Its exact v4.9
-scope is recorded in the work-package index and its independent entry review is
-recorded by `docs/audits/WP-100-foundation-refresh-entry.md`. No other runtime
-or public-API tranche is admitted.
+The admitted `WP-100-FOUNDATION-REFRESH` tranche is complete. Its exact v4.9
+scope and completion evidence are recorded in the work-package index,
+`docs/audits/WP-100-foundation-refresh-entry.md`, and
+`docs/evidence/WP-100-foundation-refresh.toml`. No other runtime or public-API
+tranche is admitted; `WP-100-HANDLER-ENTRY` remains blocked.
 WP-200 remains blocked by AR-004's missing constructible candidate-fallback
 policy, health rule, and bounded diagnostics. WP-300 remains blocked by
 AR-002/AR-003's incomplete registration/compiler/constrained signatures and

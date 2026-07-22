@@ -102,7 +102,7 @@ command = ["tools/check-wp100-handler-amendment.sh"]
 
 [[check]]
 id = "wp100-foundation-refresh-check"
-status = "pending"
+status = "executable"
 artifact = "tools/check-wp100-foundation-refresh.sh"
 command = ["tools/check-wp100-foundation-refresh.sh"]
 

@@ -1,0 +1,38 @@
+schema_version = 1
+design_revision = "4.9"
+work_package = "WP-100"
+tranche = "WP-100-FOUNDATION-REFRESH"
+implementation_ref = "3604069"
+recorded_on = "2026-07-22"
+verification_command = "tools/check-wp100-foundation-refresh.sh"
+verification_check = "wp100-foundation-refresh-check"
+status = "passed"
+evidence_key = "handler-foundation-refresh"
+
+requirement_ids = [
+    "API-RESOURCE-001",
+    "API-SURFACE-001",
+    "CONSTRAINED-PROGRESS-001",
+    "CONSTRAINED-STORAGE-002",
+    "CONSTRAINED-WORK-001",
+    "RES-LIMIT-001",
+    "RES-LIMIT-002",
+    "RES-PROFILE-001",
+]
+compilation_cells = ["no-default", "async-no-std", "std"]
+resource_profiles = [
+    "application-static",
+    "gateway-default-v1",
+    "directory-client-default-v1",
+]
+coverage = [
+    "immutable v4.8 139-field ResourceKind prefix",
+    "exact v4.9 56-field suffix and 195-field generated schema",
+    "three exhaustive named-profile snapshots and configured boundaries",
+    "WorkClass::HandlerSteps discriminant and independent counter",
+    "PendingWorkClass handler and producer-subscription bit discriminants",
+    "ResourceLimits Clone plus negative Copy assertion",
+    "borrowed static profile constants and accessors",
+    "WorkBudget negative Clone and Copy assertions",
+    "WP-000 feature, dependency, test, and documentation regression suite",
+]

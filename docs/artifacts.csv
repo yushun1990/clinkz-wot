@@ -38,6 +38,7 @@ docs/work-packages/index.toml,implementation-work-package-dag,normative-migratio
 docs/work-packages,implementation-work-package-set,normative-migration-plan,4.9,1,docs/design.md
 docs/work-packages/WP-100-core.md,wp-100-core-work-package,normative-migration-plan,4.9,1,docs/design.md
 docs/evidence/WP-000.toml,wp-000-historical-completion-evidence,historical-evidence,4.6,1,docs/design.md
+docs/evidence/WP-100-foundation-refresh.toml,wp-100-foundation-refresh-completion-evidence,non-normative,4.9,1,docs/design.md
 docs/amendments/WP-100-error-cleanup-v1.md,wp-100-error-and-cleanup-schema,normative-amendment,4.9,1,docs/design.md
 docs/amendments/WP-100-error-disposition-v1.md,wp-100-error-disposition,normative-amendment,4.9,1,docs/design.md
 docs/amendments/WP-100-interaction-output-api-v1.md,wp-100-interaction-output-api-and-staging,normative-amendment,4.9,1,docs/design.md
