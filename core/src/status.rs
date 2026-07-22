@@ -37,6 +37,12 @@ pub enum PendingWorkClass {
     RouteReadiness = 1 << 9,
     /// Prepared or active route cleanup awaiting progress.
     RouteCleanup = 1 << 10,
+    /// A handler completion or continuation ready for local progress.
+    HandlerCall = 1 << 11,
+    /// A Producer subscription setup transaction ready for local progress.
+    ProducerSubscriptionSetup = 1 << 12,
+    /// A Producer subscription teardown transaction ready for local progress.
+    ProducerSubscriptionTeardown = 1 << 13,
 }
 
 /// A bounded, nonempty summary of maintained ready work.
@@ -497,6 +503,27 @@ mod tests {
         assert!(pending.contains(PendingWorkClass::RouteCleanup));
         assert!(!pending.contains(PendingWorkClass::Timer));
         assert_ne!(pending.bits().get(), 0);
+    }
+
+    #[test]
+    fn pending_work_class_discriminants_are_exact() {
+        assert_eq!(PendingWorkClass::BindingInput as u16, 1 << 0);
+        assert_eq!(PendingWorkClass::ResponseDelivery as u16, 1 << 1);
+        assert_eq!(PendingWorkClass::OutboundRequest as u16, 1 << 2);
+        assert_eq!(PendingWorkClass::SubscriptionData as u16, 1 << 3);
+        assert_eq!(PendingWorkClass::Timer as u16, 1 << 4);
+        assert_eq!(PendingWorkClass::Cleanup as u16, 1 << 5);
+        assert_eq!(PendingWorkClass::EmissionFanOut as u16, 1 << 6);
+        assert_eq!(PendingWorkClass::BindingPublication as u16, 1 << 7);
+        assert_eq!(PendingWorkClass::SubscriptionCancellation as u16, 1 << 8);
+        assert_eq!(PendingWorkClass::RouteReadiness as u16, 1 << 9);
+        assert_eq!(PendingWorkClass::RouteCleanup as u16, 1 << 10);
+        assert_eq!(PendingWorkClass::HandlerCall as u16, 1 << 11);
+        assert_eq!(PendingWorkClass::ProducerSubscriptionSetup as u16, 1 << 12);
+        assert_eq!(
+            PendingWorkClass::ProducerSubscriptionTeardown as u16,
+            1 << 13
+        );
     }
 
     #[test]

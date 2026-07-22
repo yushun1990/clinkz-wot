@@ -20,6 +20,7 @@ fn action_invocation() -> ActionInvocationRef {
 
 fn limits_with_additional_max(limit: Option<u64>) -> ResourceLimits {
     GatewayDefaultV1::LIMITS
+        .clone()
         .try_with_limit(ResourceKind::AdditionalResponsesPerFormMax, limit)
         .expect("test limits satisfy the frozen resource schema")
 }

@@ -49,8 +49,8 @@ pub fn ledger() -> AdmissionLedger {
     AdmissionLedger::new(SlotIndex::new(0), Generation::INITIAL, 1, 1, 1, 1, 1, 1)
 }
 
-/// Returns all three named profile snapshots and their identities.
-pub fn profiles() -> [(ResourceProfileId, ResourceLimits); 3] {
+/// Returns references to all three named profile snapshots and their identities.
+pub fn profiles() -> [(ResourceProfileId, &'static ResourceLimits); 3] {
     [
         (GatewayDefaultV1::ID, GatewayDefaultV1::LIMITS),
         (

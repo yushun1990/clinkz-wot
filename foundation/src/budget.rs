@@ -2,7 +2,7 @@
 
 use core::fmt;
 
-const WORK_CLASS_COUNT: usize = 9;
+const WORK_CLASS_COUNT: usize = 10;
 
 /// A class of incremental engine work with its own counter.
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
@@ -26,6 +26,8 @@ pub enum WorkClass {
     BindingPolls,
     /// Cleanup records or cleanup targets processed.
     CleanupItems,
+    /// Bounded handler start, step, cancel, or adapter-poll work.
+    HandlerSteps = 9,
 }
 
 impl WorkClass {
@@ -40,6 +42,7 @@ impl WorkClass {
         Self::QueueOperations,
         Self::BindingPolls,
         Self::CleanupItems,
+        Self::HandlerSteps,
     ];
 
     const fn index(self) -> usize {
@@ -52,7 +55,7 @@ impl WorkClass {
 /// A newly constructed budget is exhausted in every class. Callers must set
 /// each permitted counter explicitly; no constructor interprets omission as
 /// unbounded work.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Debug, Eq, PartialEq)]
 pub struct WorkBudget {
     remaining: [u64; WORK_CLASS_COUNT],
 }
@@ -169,5 +172,17 @@ mod tests {
         let mut budget = WorkBudget::new();
         assert_eq!(budget.consume(WorkClass::CleanupItems, 0), Ok(()));
         assert!(budget.is_exhausted());
+    }
+
+    #[test]
+    fn handler_steps_are_appended_and_independently_budgeted() {
+        assert_eq!(WorkClass::HandlerSteps as u8, 9);
+        assert_eq!(WorkClass::ALL.len(), 10);
+        assert_eq!(WorkClass::ALL[9], WorkClass::HandlerSteps);
+
+        let mut budget = WorkBudget::new().with_remaining(WorkClass::HandlerSteps, 2);
+        assert_eq!(budget.consume(WorkClass::HandlerSteps, 1), Ok(()));
+        assert_eq!(budget.remaining(WorkClass::HandlerSteps), 1);
+        assert_eq!(budget.remaining(WorkClass::CleanupItems), 0);
     }
 }

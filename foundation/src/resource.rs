@@ -56,7 +56,7 @@ impl fmt::Display for ResourceProfileId {
 /// `Some(0)` is an explicit disabled or rendezvous limit according to the
 /// corresponding [`ResourceKind::zero_semantics`]. `None` means that the field
 /// is not applicable to this profile; it never means unbounded.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ResourceLimits {
     values: [Option<u64>; RESOURCE_LIMIT_COUNT],
 }
@@ -104,7 +104,7 @@ impl ResourceLimits {
         true
     }
 
-    /// Returns a copy with one ceiling replaced explicitly.
+    /// Returns this owned limit set with one ceiling replaced explicitly.
     ///
     /// # Panics
     ///
@@ -121,7 +121,7 @@ impl ResourceLimits {
         self
     }
 
-    /// Returns a copy with one valid ceiling replaced explicitly.
+    /// Returns this owned limit set with one valid ceiling replaced explicitly.
     pub const fn try_with_limit(mut self, kind: ResourceKind, limit: Option<u64>) -> Option<Self> {
         if kind.index() == ResourceKind::AdditionalResponsesPerFormMax.index()
             && !additional_response_limit_is_valid(limit)
@@ -149,14 +149,20 @@ const fn additional_response_limit_is_valid(limit: Option<u64>) -> bool {
 pub trait StaticResourceProfile {
     /// Stable identity of this profile.
     const ID: ResourceProfileId;
-    /// Complete profile values.
-    const LIMITS: ResourceLimits;
+    /// Statically stored complete profile values.
+    const LIMITS: &'static ResourceLimits;
 
-    /// Returns the complete profile value.
-    fn limits() -> ResourceLimits {
+    /// Returns the statically stored complete profile values.
+    fn limits() -> &'static ResourceLimits {
         Self::LIMITS
     }
 }
+
+static GATEWAY_DEFAULT_LIMITS: ResourceLimits = ResourceLimits::new(GATEWAY_DEFAULT_VALUES);
+static DIRECTORY_CLIENT_DEFAULT_LIMITS: ResourceLimits =
+    ResourceLimits::new(DIRECTORY_CLIENT_DEFAULT_VALUES);
+static BENCHMARK_STATIC_REFERENCE_LIMITS: ResourceLimits =
+    ResourceLimits::new(BENCHMARK_STATIC_REFERENCE_VALUES);
 
 /// Versioned default limits for a host gateway.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
@@ -164,7 +170,7 @@ pub struct GatewayDefaultV1;
 
 impl StaticResourceProfile for GatewayDefaultV1 {
     const ID: ResourceProfileId = ResourceProfileId::GATEWAY_DEFAULT_V1;
-    const LIMITS: ResourceLimits = ResourceLimits::new(GATEWAY_DEFAULT_VALUES);
+    const LIMITS: &'static ResourceLimits = &GATEWAY_DEFAULT_LIMITS;
 }
 
 /// Versioned default limits for the engine-side Directory client.
@@ -173,7 +179,7 @@ pub struct DirectoryClientDefaultV1;
 
 impl StaticResourceProfile for DirectoryClientDefaultV1 {
     const ID: ResourceProfileId = ResourceProfileId::DIRECTORY_CLIENT_DEFAULT_V1;
-    const LIMITS: ResourceLimits = ResourceLimits::new(DIRECTORY_CLIENT_DEFAULT_VALUES);
+    const LIMITS: &'static ResourceLimits = &DIRECTORY_CLIENT_DEFAULT_LIMITS;
 }
 
 /// Versioned static limits for the constrained benchmark reference target.
@@ -182,7 +188,7 @@ pub struct BenchmarkStaticReferenceV1;
 
 impl StaticResourceProfile for BenchmarkStaticReferenceV1 {
     const ID: ResourceProfileId = ResourceProfileId::BENCHMARK_STATIC_REFERENCE_V1;
-    const LIMITS: ResourceLimits = ResourceLimits::new(BENCHMARK_STATIC_REFERENCE_VALUES);
+    const LIMITS: &'static ResourceLimits = &BENCHMARK_STATIC_REFERENCE_LIMITS;
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -593,6 +599,7 @@ mod tests {
 
     #[test]
     fn generated_profiles_cover_every_schema_field() {
+        assert_eq!(RESOURCE_LIMIT_COUNT, 195);
         assert_eq!(ResourceKind::ALL.len(), RESOURCE_LIMIT_COUNT);
         assert_eq!(GatewayDefaultV1::ID, ResourceProfileId::GATEWAY_DEFAULT_V1);
         assert_eq!(
@@ -653,10 +660,10 @@ mod tests {
         values[kind.index()] = Some(65_537);
         assert!(super::ResourceLimits::try_new(values).is_none());
 
-        assert!(base.try_with_limit(kind, Some(65_536)).is_some());
-        assert!(base.try_with_limit(kind, Some(65_537)).is_none());
+        assert!(base.clone().try_with_limit(kind, Some(65_536)).is_some());
+        assert!(base.clone().try_with_limit(kind, Some(65_537)).is_none());
 
-        let mut limits = base;
+        let mut limits = base.clone();
         assert!(!limits.set(kind, Some(65_537)));
         assert_eq!(limits.get(kind), Some(32));
         assert!(limits.set(kind, Some(65_536)));

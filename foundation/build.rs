@@ -4,7 +4,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 const EXPECTED_HEADER: &str = "field,resource_kind,unit,scope,capability_roles,zero_semantics,gateway_default_v1,directory_client_default_v1,benchmark_static_reference_v1,requirements";
-const EXPECTED_RESOURCE_LIMIT_COUNT: usize = 118;
+const EXPECTED_RESOURCE_LIMIT_COUNT: usize = 195;
 
 #[derive(Debug)]
 struct LimitRow {
@@ -40,7 +40,7 @@ fn generate() -> Result<(), String> {
         .next()
         .ok_or_else(|| "resource limit schema is empty".to_owned())?;
     if header != EXPECTED_HEADER {
-        return Err("resource limit schema header does not match revision v4.6".to_owned());
+        return Err("resource limit schema header does not match revision v4.9".to_owned());
     }
 
     let mut rows = Vec::new();
@@ -78,7 +78,7 @@ fn generate() -> Result<(), String> {
     }
     if rows.len() != EXPECTED_RESOURCE_LIMIT_COUNT {
         return Err(format!(
-            "revision v4.6 requires {EXPECTED_RESOURCE_LIMIT_COUNT} resource fields; found {}",
+            "revision v4.9 requires {EXPECTED_RESOURCE_LIMIT_COUNT} resource fields; found {}",
             rows.len()
         ));
     }
@@ -93,7 +93,7 @@ fn render(rows: &[LimitRow]) -> Result<String, String> {
     let mut output = String::new();
     writeln!(
         output,
-        "/// Number of fields in the revision v4.6 resource-limit schema.\npub const RESOURCE_LIMIT_COUNT: usize = {};",
+        "/// Number of fields in the revision v4.9 resource-limit schema.\npub const RESOURCE_LIMIT_COUNT: usize = {};",
         rows.len()
     )
     .map_err(|error| error.to_string())?;
