@@ -29,6 +29,7 @@ Topics are retained after migration as decision history.
 - [[file:0008-implementation-governance-overhead.md][0008 Implementation Governance Overhead]]
 - [[file:0009-minimal-end-to-end-architecture-validation.md][0009 Minimal End-to-End Architecture Validation]]
 - [[file:0010-complete-design-decomposition.md][0010 Complete the docs/design.md Decomposition]]
+- [[file:0011-subscription-receiver-ownership.md][0011 Subscription receiver ownership]]
 
 ** DISCUSSING
 
