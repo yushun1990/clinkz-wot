@@ -172,6 +172,15 @@ architecture questions, process improvements, implementation strategy,
 engineering trade-offs, design reviews, experiments, or other material that
 helps the project converge.
 
+The distinction is:
+
+- `workspace/` contains unresolved questions, proposals, investigations, alternatives, and reasoning history.
+- `docs/` contains accepted knowledge, stable decisions, formal reviews, specifications, and project records.
+
+A workspace artifact exists because the project is still deciding something.
+
+A documentation artifact exists because the project already knows something.
+
 Workspace topics should progress through:
 
 `OPEN -> DISCUSSING -> DECIDED -> MIGRATED`
