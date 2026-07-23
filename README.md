@@ -1,106 +1,75 @@
 # clinkz-wot
 
-<div align="center">
+> A protocol-neutral Rust Web of Things runtime based on the W3C WoT programming model.
 
-## A protocol-neutral Rust Web of Things runtime
-
-**Simple Links. Infinite Possibilities.**
-
-A Rust implementation of the W3C WoT programming model with semantic interaction contracts and pluggable Protocol Bindings.
+`clinkz-wot` is a Rust implementation of Web of Things concepts with semantic interaction contracts and pluggable Protocol Bindings.
 
 [![Rust](https://img.shields.io/badge/language-Rust-orange)](https://www.rust-lang.org/)
 [![WoT](https://img.shields.io/badge/model-W3C%20WoT-blue)](https://www.w3.org/WoT/)
 [![License](https://img.shields.io/badge/license-Apache--2.0-green)](LICENSE)
 
-</div>
-
 ---
 
 ## Overview
 
-`clinkz-wot` is a **protocol-neutral Web of Things runtime** built in Rust.
+`clinkz-wot` provides a **protocol-neutral runtime layer** for building interoperable IoT systems.
 
-It implements the W3C WoT programming model by separating:
+The runtime separates:
 
-* **Thing semantics** — what a Thing provides
-* **Runtime execution** — how interactions are managed
-* **Protocol bindings** — how messages are transported
+- **Thing semantics**
+- **interaction execution**
+- **protocol communication**
 
-The runtime works with **Things, not protocols**.
+A Thing Description (TD) defines **what a Thing provides**.
 
-A Thing Description (TD) defines the semantic contract, while Protocol Bindings provide communication capabilities.
+Protocol Bindings define **how communication happens**.
 
-```
-Thing Description
-        |
-        v
-+----------------+
-|    Planner     |
-+----------------+
-        |
-        v
-+----------------+
-| Compiled Plans |
-+----------------+
-        |
-        v
-+----------------+
-|   Servient     |
-|    Runtime     |
-+----------------+
-        |
-        v
- Application
+Applications interact with Things instead of depending on specific transports.
 
-        ^
-        |
- Protocol Binding SPI
-        |
-        v
- Zenoh / MQTT / HTTP ...
+```text
+             Thing Description
+                    |
+                    v
+          +-------------------+
+          |  Planning Layer   |
+          +-------------------+
+                    |
+                    v
+          +-------------------+
+          | Servient Runtime  |
+          +-------------------+
+                    |
+                    v
+              Application
+
+
+          Protocol Binding SPI
+
+                    |
+                    v
+
+          Zenoh / MQTT / HTTP
 ```
 
 ---
 
-## Core Architecture
+# Architecture
 
-```mermaid
-flowchart TB
-    TD[Thing Description]
-        --> Planner[Logical Planner]
-        --> Plans[Immutable Plan Set]
-        --> Servient[Servient Runtime]
+## Servient-Orchestrated Runtime
 
-    Servient --> App[Application Handler]
+The Servient is the runtime authority.
 
-    PB[Protocol Binding SPI]
-        --> Servient
+It owns:
 
-    PB --> Transport[Zenoh / MQTT / HTTP]
-```
+- interaction routing
+- lifecycle management
+- handler execution
+- activation and cleanup
+- runtime state
 
-### Runtime ownership model
+Protocol Bindings provide communication capabilities only.
 
-The **Servient owns execution**.
-
-Protocol Bindings only handle protocol-specific concerns:
-
-* message receiving and sending
-* serialization
-* addressing
-* transport sessions
-* protocol-level flow control
-
-They do **not** own:
-
-* application lifecycle
-* interaction routing
-* handler dispatch
-* runtime state management
-
-Message flow:
-
-```
+```text
 Protocol Message
         |
         v
@@ -113,125 +82,100 @@ Servient Runtime
 Application Handler
 ```
 
+Protocol Bindings do **not** directly dispatch application handlers.
+
 ---
 
 # Design Principles
 
-## Semantic Contract First
+## Semantic First
 
-The runtime is built around W3C Thing Description.
+The runtime is built around the W3C Thing Description model.
 
-TD defines:
+A TD describes:
 
-* Properties
-* Actions
-* Events
-* Data schemas
-* Interaction forms
+- Properties
+- Actions
+- Events
+- Data schemas
+- Interaction forms
 
-The runtime operates on semantic interactions instead of protocol messages.
-
----
+The runtime operates on semantic interactions rather than protocol messages.
 
 ## Protocol Neutrality
 
-The core runtime has no dependency on any transport.
+The core runtime does not depend on any transport protocol.
 
-Supported or planned bindings can include:
+Protocol Bindings are responsible for:
 
-* Zenoh
-* MQTT
-* HTTP
-* WebSocket
-* other future protocols
-
-Adding a protocol should extend the runtime, not change the runtime model.
-
----
+- protocol addressing
+- serialization and deserialization
+- transport sessions
+- message exchange
+- protocol-specific flow control
 
 ## Compiled Execution Model
 
 Interaction decisions are prepared before runtime execution.
 
-```
-TD
- |
- v
+```text
+Thing Description
+        |
+        v
 Parse & Validate
- |
- v
+        |
+        v
 Logical Planning
- |
- v
+        |
+        v
 Binding Compilation
- |
- v
+        |
+        v
 Runtime Execution
 ```
-
-The runtime executes admitted immutable plans instead of repeatedly discovering capabilities during operation.
-
-Benefits:
-
-* predictable behavior
-* lower runtime overhead
-* clearer lifecycle management
-* easier verification
 
 ---
 
 # Protocol Binding SPI
 
-Protocol Bindings are extensions of the runtime.
-
-A binding provides:
+Protocol Bindings extend the runtime with protocol capabilities.
 
 ```
-Protocol
-   |
-   v
-Binding Adapter
-   |
-   v
+Protocol Payload
+
+        |
+
+Protocol Binding
+
+        |
+
 Protocol-neutral Interaction
-   |
-   v
+
+        |
+
 Servient Runtime
 ```
 
-The SPI boundary keeps transport details isolated from WoT semantics.
-
 Current implementation:
 
-* Zenoh binding
-
-Future possibilities:
-
-* MQTT
-* HTTP
-* WebSocket
-* custom transports
+- Zenoh Binding
 
 ---
 
 # Platform Targets
 
-`clinkz-wot` is designed for both host systems and constrained environments.
-
-| Target                         | Status         |
-| ------------------------------ | -------------- |
-| Standard Rust environments     | Supported      |
-| Async runtime integration      | Supported      |
-| `no_std + alloc`               | Supported      |
-| Embedded constrained execution | In development |
-
-The semantic model remains identical across platforms.
+| Target | Status |
+| --- | --- |
+| Standard Rust environments | Supported |
+| Async runtime integration | Supported |
+| `no_std + alloc` | Supported |
+| Embedded execution model | In development |
 
 ---
 
 # Workspace Structure
 
-```
+```text
 foundation/
     Ownership and resource foundations
 
@@ -245,13 +189,10 @@ planning/
     Logical planner and capability matching
 
 protocol-bindings/
-    Communication integrations
+    Protocol integration layer
 
 servient/
     Runtime orchestration engine
-
-discovery/
-    WoT discovery support
 
 docs/
     Architecture and specifications
@@ -265,37 +206,10 @@ docs/
 
 Current focus:
 
-* Servient lifecycle refinement
-* Protocol Binding SPI stabilization
-* Immutable plan execution model
-* Zenoh integration
-* architecture documentation
-
-The project is not yet a production release.
-
-Public APIs and module boundaries may continue to evolve.
-
----
-
-# Documentation
-
-Architecture:
-
-```
-docs/architecture/
-```
-
-Design specification:
-
-```
-docs/design.md
-```
-
-Architecture decisions:
-
-```
-docs/ADRs/
-```
+- Servient lifecycle refinement
+- Protocol Binding SPI stabilization
+- Immutable plan execution model
+- Zenoh integration
 
 ---
 
@@ -303,14 +217,8 @@ docs/ADRs/
 
 ```bash
 git clone https://github.com/yushun1990/clinkz-wot.git
-
 cd clinkz-wot
-
-cargo fmt --all --check
-
 cargo test --workspace
-
-cargo clippy --workspace --all-targets --all-features -- -D warnings
 ```
 
 ---
