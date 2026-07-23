@@ -1,12 +1,21 @@
+<div align="center">
 # clinkz-wot
 
-> A protocol-neutral Rust Web of Things runtime based on the W3C WoT programming model.
+**A protocol-neutral Rust Web of Things runtime based on the W3C WoT programming model.**
 
-`clinkz-wot` is a Rust implementation of Web of Things concepts with semantic interaction contracts and pluggable Protocol Bindings.
+[![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
+[![W3C WoT](https://img.shields.io/badge/W3C-Web%20of%20Things-005A9C)](https://www.w3.org/WoT/)
+[![Project Status](https://img.shields.io/badge/status-early%20development-yellow)](#project-status)
 
-[![Rust](https://img.shields.io/badge/language-Rust-orange)](https://www.rust-lang.org/)
-[![WoT](https://img.shields.io/badge/model-W3C%20WoT-blue)](https://www.w3.org/WoT/)
-[![License](https://img.shields.io/badge/license-Apache--2.0-green)](LICENSE)
+[Vision](#vision) ·
+[Architecture](#architecture) ·
+[Repository](#repository-structure) ·
+[Development Method](#development-method) ·
+[Status](#project-status) ·
+[Contributing](#contributing)
+
+
+</div>
 
 ---
 
@@ -28,10 +37,10 @@ Applications interact with Things instead of depending on specific transports.
 
 ```text
              Thing Description
-                    |
-                    v
-          +-------------------+
-          |  Planning Layer   |
+                    |                              Protocol Binding SPI
+                    v                                        |
+          +-------------------+                              v
+          |  Planning Layer   |                     Zenoh / MQTT / HTTP
           +-------------------+
                     |
                     v
@@ -42,13 +51,6 @@ Applications interact with Things instead of depending on specific transports.
                     v
               Application
 
-
-          Protocol Binding SPI
-
-                    |
-                    v
-
-          Zenoh / MQTT / HTTP
 ```
 
 ---
@@ -70,16 +72,16 @@ It owns:
 Protocol Bindings provide communication capabilities only.
 
 ```text
-Protocol Message
-        |
-        v
-Protocol Binding
-        |
-        v
-Servient Runtime
-        |
-        v
-Application Handler
+            Protocol Message
+                    |
+                    v
+            Protocol Binding
+                    |
+                    v
+            Servient Runtime
+                    |
+                    v
+            Application Handler
 ```
 
 Protocol Bindings do **not** directly dispatch application handlers.
@@ -119,19 +121,19 @@ Protocol Bindings are responsible for:
 Interaction decisions are prepared before runtime execution.
 
 ```text
-Thing Description
-        |
-        v
-Parse & Validate
-        |
-        v
-Logical Planning
-        |
-        v
-Binding Compilation
-        |
-        v
-Runtime Execution
+            Thing Description
+                    |
+                    v
+            Parse & Validate
+                    |
+                    v
+            Logical Planning
+                    |
+                    v
+            Binding Compilation
+                    |
+                    v
+            Runtime Execution
 ```
 
 ---
@@ -140,20 +142,14 @@ Runtime Execution
 
 Protocol Bindings extend the runtime with protocol capabilities.
 
-```
-Protocol Payload
-
-        |
-
-Protocol Binding
-
-        |
-
-Protocol-neutral Interaction
-
-        |
-
-Servient Runtime
+``` text
+            Protocol Payload
+                    |
+            Protocol Binding
+                    |
+            Protocol-neutral Interaction
+                    |
+            Servient Runtime
 ```
 
 Current implementation:
@@ -170,33 +166,6 @@ Current implementation:
 | Async runtime integration | Supported |
 | `no_std + alloc` | Supported |
 | Embedded execution model | In development |
-
----
-
-# Workspace Structure
-
-```text
-foundation/
-    Ownership and resource foundations
-
-td/
-    W3C Thing Description model
-
-core/
-    Protocol-neutral runtime contracts
-
-planning/
-    Logical planner and capability matching
-
-protocol-bindings/
-    Protocol integration layer
-
-servient/
-    Runtime orchestration engine
-
-docs/
-    Architecture and specifications
-```
 
 ---
 
