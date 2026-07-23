@@ -1,6 +1,6 @@
 <div align="center">
 
-# clinkz-wot
+# ClinkZ-WOT
 
 **A protocol-neutral Rust Web of Things runtime based on the W3C WoT programming model.**
 
