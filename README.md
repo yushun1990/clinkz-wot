@@ -325,4 +325,4 @@ runtime surfaces without pinning an exact commit and accepting migration work.
 
 ## License
 
-See the repository license files for licensing terms.
+Licensed under the [Apache License 2.0](LICENSE).
