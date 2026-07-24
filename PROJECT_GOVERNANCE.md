@@ -1,135 +1,106 @@
-# clinkz-wot Execution Plan
+# Project Governance
 
-## Purpose
+This document defines how the ClinkZ-WoT project is planned, reviewed,
+and progressed.
 
-This file defines the stable execution direction for the active refactor.
+It does not define technical architecture decisions. Technical
+convergence rules are maintained in `ARCHITECTURE_GOVERNANCE.md`.
 
-It provides:
+## Governance Principles
 
-- the active target;
-- durable execution and admission rules;
-- high-level milestone ordering;
-- navigation to authoritative planning artifacts.
+ClinkZ-WoT separates:
 
-It does not record live session state.
+  Concern                            Artifact
+  ---------------------------------- ------------------------------
+  AI operating behavior              `AGENTS.md`
+  Project execution governance       `PROJECT_GOVERNANCE.md`
+  Technical convergence governance   `ARCHITECTURE_GOVERNANCE.md`
+  Project roadmap                    `PLAN.md`
+  Current execution context          `PROJECT_STATE.md`
 
-The following belong in `PROJECT_STATE.md` instead:
+## Roles and Responsibilities
 
-- the currently active work item;
-- temporary blockers and uncertainties;
-- recent progress;
-- exact stopping points;
-- unverified changes;
-- next-session actions;
-- the agent's current compact project understanding.
+### AI Agent
 
-This file does not define architecture, public APIs, state transitions,
-resource limits, or implementation behavior.
+Responsible for: - maintaining `PROJECT_STATE.md`; - keeping milestone
+progress current; - identifying blockers; - proposing technical
+analysis; - recording execution context.
 
-## Active Target
+AI agents must not silently change project direction.
 
-The active target is the v4.9 architecture-closure revision.
+### Project Owner
 
-The v4.8 detailed-design candidate is migration input only. Valid contracts
-must be reconciled into the v4.9 modular specification set before they are
-treated as active requirements.
+Responsible for: - approving significant direction changes; - validating
+milestone completion; - resolving strategic conflicts; - confirming
+release readiness.
 
-The architecture-closure effort exists to produce one coherent, reviewable,
-executable target across architecture, APIs, state, resources, performance,
-requirements, work packages, implementation, and evidence.
+## Milestone Lifecycle
 
-## Authority and Navigation
+Milestones are defined in `PLAN.md`.
 
-Read authoritative material through its registered indexes rather than treating
-this plan as a specification.
+    OPEN
+     |
+    IN_PROGRESS
+     |
+    REVIEW
+     |
+    CLOSED
 
-Primary navigation:
+Additional states:
 
-1. `docs/architecture/README.md` for the architecture backbone;
-2. accepted decisions under `docs/ADRs/`;
-3. registered domain specifications and reconciled detailed requirements;
-4. `docs/artifacts.csv` for API, state, resource, performance, requirement, and
-   evidence artifacts;
-5. `docs/work-packages/index.toml` for authoritative work-package identities,
-   dependencies, admission, completion contracts, removals, and evidence keys;
-6. implementation, tests, audits, and evidence for conformance.
+    IN_PROGRESS -> BLOCKED
+    REVIEW -> REOPEN
 
-Historical plans and completed checkpoints belong under `docs/deprecated/` and
-`docs/evidence/` as appropriate.
+## Milestone Update Rules
 
-## Execution Rules
+Milestone status must reflect repository evidence.
 
-Runtime and public-API changes may proceed only through the scoped admission
-policy defined by the accepted governance artifacts, including ADR-0013 and
-`REFACTOR-GATE-001`.
+Evidence may include: - implementation; - documentation; - tests; -
+validation results.
 
-A scoped admission does not close or waive global convergence gates.
+Do not use percentage completion as the primary progress indicator.
 
-Documentation, governance, checkers, fixtures, reviews, evidence preparation,
-and work-package definition may proceed without runtime admission when their
-own rules permit it.
+## PLAN.md Maintenance Rules
 
-Do not infer admission, completion, or readiness from prose in this file.
-Consult the authoritative work-package index, package documents, audits,
-reviews, and exact evidence.
+PLAN.md contains: - objectives; - release targets; - milestones; -
+dependencies; - milestone status; - acceptance objectives.
 
-## Architecture-Closure Completion
+PLAN.md does not contain: - session logs; - temporary debugging
+information; - detailed design discussions; - architecture decisions; -
+governance policies.
 
-The v4.9 architecture-closure milestone is complete only when:
+## Review Requirements
 
-1. the architecture backbone freezes primary flows, module boundaries,
-   compiled-plan lifecycle, Servient orchestration, and Protocol Binding
-   integration and deployment;
-2. every accepted ADR is reflected in one non-conflicting authoritative domain
-   specification;
-3. the v4.8 monolith and temporary amendments are decomposed into registered
-   single-owner specifications;
-4. the API matrix, exact state models, resource schema, performance manifests,
-   requirement index, and work-package DAG identify the same v4.9 target;
-5. executable checks pass; and
-6. independent same-revision review closes every affected gate.
+A milestone entering REVIEW should provide evidence.
 
-## Frozen Direction for v1
+Review verifies: - intended goal achieved; - acceptance criteria
+satisfied; - implementation matches specifications; - no known
+architectural conflict remains.
 
-The active architecture direction includes:
+## Change Management
 
-- an explicit compiled-plan-set lifecycle and binding-artifact boundary;
-- Cargo-linked, application-registered Protocol Binding crates;
-- startup-only binding composition for one Servient instance;
-- engine-orchestrated, route-scoped binding progress with no hidden direct
-  handler-dispatch path;
-- atomic serving publication through one Servient-owned activation authority
-  and nonretained route-scoped accept permits;
-- a modular normative-document hierarchy that keeps the architecture visible.
+Changes affecting: - project direction; - milestone objectives; -
+ownership boundaries; - release goals;
 
-The authoritative definitions and exact contracts live in the registered
-architecture, ADR, API, state, SPI, resource, performance, and requirement
-artifacts.
+require explicit review.
 
-## High-Level Work Order
+Changes affecting technical architecture must follow
+`ARCHITECTURE_GOVERNANCE.md`.
 
-Subject to the authoritative machine-readable DAG and scoped admission rules,
-the intended convergence order is:
+## Workspace Transition
 
-1. foundation resource, work, time, generation, and accounting refresh;
-2. core handler, security, codec, and lock-isolation contracts;
-3. immutable logical and binding plans, capability indexes, and compiler
-   migration;
-4. client and server binding SPI, routes, subscriptions, responses, and
-   emissions;
-5. Servient lifecycle, cleanup, application facades, and scheduling policy;
-6. Discovery client cleanup;
-7. Zenoh and zenoh-pico binding migration;
-8. umbrella composition, obsolete API removal, and final conformance evidence.
+Unresolved topics belong in `workspace/`.
 
-This list communicates durable direction only. It is not a substitute for
-package-level dependencies, admission state, or current execution context.
+Lifecycle:
 
-## Project Continuation
+    OPEN -> DISCUSSING -> DECIDED -> MIGRATED
 
-The current project phase, active work, blockers, progress, stopping point, and
-next safe actions are maintained by AI agents in `PROJECT_STATE.md`.
+Stable conclusions must be migrated to authoritative documents.
 
-Agents must update that file continuously according to `AGENTS.md`, so a new
-conversation can resume from the repository without reconstructing the entire
-project.
+## AI Session Continuity
+
+Before ending substantial work: - update `PROJECT_STATE.md`; - record
+blockers; - record next actions; - ensure milestone status is accurate.
+
+The repository must remain understandable without previous conversation
+history.
