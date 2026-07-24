@@ -1,135 +1,274 @@
-# clinkz-wot Execution Plan
+# ClinkZ-WoT Development Plan
 
-## Purpose
+## Current Goal
 
-This file defines the stable execution direction for the active refactor.
+Deliver ClinkZ-WoT v1:
+A protocol-neutral W3C WoT runtime with stable Servient architecture
+and Zenoh binding support.
 
-It provides:
+---
 
-- the active target;
-- durable execution and admission rules;
-- high-level milestone ordering;
-- navigation to authoritative planning artifacts.
+# Milestone Overview
 
-It does not record live session state.
 
-The following belong in `PROJECT_STATE.md` instead:
+| ID | Milestone | Status |
+|----|-----------|--------|
+| M1 | Architecture Closure | IN_PROGRESS |
+| M2 | Core Contract Stabilization | OPEN |
+| M3 | Planning and Compilation Pipeline | OPEN |
+| M4 | Protocol Binding SPI | OPEN |
+| M5 | Servient Runtime Lifecycle | OPEN |
+| M6 | Zenoh Binding MVP | OPEN |
+| M7 | v1 Release Hardening | OPEN |
 
-- the currently active work item;
-- temporary blockers and uncertainties;
-- recent progress;
-- exact stopping points;
-- unverified changes;
-- next-session actions;
-- the agent's current compact project understanding.
 
-This file does not define architecture, public APIs, state transitions,
-resource limits, or implementation behavior.
+---
 
-## Active Target
+# M1 Architecture Closure
 
-The active target is the v4.9 architecture-closure revision.
+Status:
 
-The v4.8 detailed-design candidate is migration input only. Valid contracts
-must be reconciled into the v4.9 modular specification set before they are
-treated as active requirements.
+IN_PROGRESS
 
-The architecture-closure effort exists to produce one coherent, reviewable,
-executable target across architecture, APIs, state, resources, performance,
-requirements, work packages, implementation, and evidence.
 
-## Authority and Navigation
+Objective:
 
-Read authoritative material through its registered indexes rather than treating
-this plan as a specification.
+Freeze the fundamental architecture boundaries before
+large-scale implementation.
 
-Primary navigation:
 
-1. `docs/architecture/README.md` for the architecture backbone;
-2. accepted decisions under `docs/ADRs/`;
-3. registered domain specifications and reconciled detailed requirements;
-4. `docs/artifacts.csv` for API, state, resource, performance, requirement, and
-   evidence artifacts;
-5. `docs/work-packages/index.toml` for authoritative work-package identities,
-   dependencies, admission, completion contracts, removals, and evidence keys;
-6. implementation, tests, audits, and evidence for conformance.
+Scope:
 
-Historical plans and completed checkpoints belong under `docs/deprecated/` and
-`docs/evidence/` as appropriate.
+- Servient ownership model
+- Protocol Binding responsibility boundary
+- Request/event data flow
+- Compiled plan lifecycle
+- Runtime ownership
+- Module responsibilities
 
-## Execution Rules
 
-Runtime and public-API changes may proceed only through the scoped admission
-policy defined by the accepted governance artifacts, including ADR-0013 and
-`REFACTOR-GATE-001`.
+Current understanding:
 
-A scoped admission does not close or waive global convergence gates.
+Completed:
 
-Documentation, governance, checkers, fixtures, reviews, evidence preparation,
-and work-package definition may proceed without runtime admission when their
-own rules permit it.
+- PB no longer owns handler dispatch
+- Servient orchestrates request routing
+- Binding handles protocol conversion only
+- Startup-only binding composition selected for v1
 
-Do not infer admission, completion, or readiness from prose in this file.
-Consult the authoritative work-package index, package documents, audits,
-reviews, and exact evidence.
 
-## Architecture-Closure Completion
+Remaining:
 
-The v4.9 architecture-closure milestone is complete only when:
+- finalize architecture documents
+- reconcile ADRs
+- remove conflicting legacy concepts
 
-1. the architecture backbone freezes primary flows, module boundaries,
-   compiled-plan lifecycle, Servient orchestration, and Protocol Binding
-   integration and deployment;
-2. every accepted ADR is reflected in one non-conflicting authoritative domain
-   specification;
-3. the v4.8 monolith and temporary amendments are decomposed into registered
-   single-owner specifications;
-4. the API matrix, exact state models, resource schema, performance manifests,
-   requirement index, and work-package DAG identify the same v4.9 target;
-5. executable checks pass; and
-6. independent same-revision review closes every affected gate.
 
-## Frozen Direction for v1
+Exit Criteria:
 
-The active architecture direction includes:
+- architecture overview approved
+- ownership boundaries frozen
+- no conflicting runtime flow exists
 
-- an explicit compiled-plan-set lifecycle and binding-artifact boundary;
-- Cargo-linked, application-registered Protocol Binding crates;
-- startup-only binding composition for one Servient instance;
-- engine-orchestrated, route-scoped binding progress with no hidden direct
-  handler-dispatch path;
-- atomic serving publication through one Servient-owned activation authority
-  and nonretained route-scoped accept permits;
-- a modular normative-document hierarchy that keeps the architecture visible.
 
-The authoritative definitions and exact contracts live in the registered
-architecture, ADR, API, state, SPI, resource, performance, and requirement
-artifacts.
 
-## High-Level Work Order
+---
 
-Subject to the authoritative machine-readable DAG and scoped admission rules,
-the intended convergence order is:
+# M2 Core Contract Stabilization
 
-1. foundation resource, work, time, generation, and accounting refresh;
-2. core handler, security, codec, and lock-isolation contracts;
-3. immutable logical and binding plans, capability indexes, and compiler
-   migration;
-4. client and server binding SPI, routes, subscriptions, responses, and
-   emissions;
-5. Servient lifecycle, cleanup, application facades, and scheduling policy;
-6. Discovery client cleanup;
-7. Zenoh and zenoh-pico binding migration;
-8. umbrella composition, obsolete API removal, and final conformance evidence.
+Status:
 
-This list communicates durable direction only. It is not a substitute for
-package-level dependencies, admission state, or current execution context.
+OPEN
 
-## Project Continuation
 
-The current project phase, active work, blockers, progress, stopping point, and
-next safe actions are maintained by AI agents in `PROJECT_STATE.md`.
+Objective:
 
-Agents must update that file continuously according to `AGENTS.md`, so a new
-conversation can resume from the repository without reconstructing the entire
-project.
+Freeze protocol-neutral core contracts.
+
+
+Scope:
+
+- Handler contract
+- Interaction model
+- Resource ownership
+- Generation model
+- Error handling
+- Lifecycle primitives
+
+
+Dependency:
+
+M1
+
+
+Exit Criteria:
+
+Core APIs are stable and do not contain
+protocol-specific assumptions.
+
+
+
+---
+
+# M3 Planning and Compilation Pipeline
+
+Status:
+
+OPEN
+
+
+Objective:
+
+Establish deterministic execution planning.
+
+
+Scope:
+
+- TD parsing
+- capability discovery
+- logical plan
+- binding plan
+- compiled plan lifecycle
+
+
+Dependency:
+
+M2
+
+
+Exit Criteria:
+
+A TD can produce an immutable execution plan.
+
+
+
+---
+
+# M4 Protocol Binding SPI
+
+Status:
+
+OPEN
+
+
+Objective:
+
+Define stable binding integration.
+
+
+Scope:
+
+Client Binding:
+
+- outbound requests
+- subscription handling
+- response conversion
+
+
+Server Binding:
+
+- inbound requests
+- transport acceptance
+- event/property emission
+
+
+Dependency:
+
+M3
+
+
+Exit Criteria:
+
+A binding can be implemented without knowing
+handler internals.
+
+
+
+---
+
+# M5 Servient Runtime Lifecycle
+
+Status:
+
+OPEN
+
+
+Objective:
+
+Complete runtime orchestration.
+
+
+Scope:
+
+- startup composition
+- activation authority
+- cleanup
+- scheduling
+- application facade
+
+
+Dependency:
+
+M4
+
+
+Exit Criteria:
+
+One Servient instance can manage complete lifecycle.
+
+
+
+---
+
+# M6 Zenoh Binding MVP
+
+Status:
+
+OPEN
+
+
+Objective:
+
+Provide first usable binding implementation.
+
+
+Scope:
+
+- zenoh transport
+- request routing
+- property interaction
+- event emission
+
+
+Dependency:
+
+M5
+
+
+Exit Criteria:
+
+Real Thing interaction works through Zenoh.
+
+
+
+---
+
+# M7 v1 Release Hardening
+
+Status:
+
+OPEN
+
+
+Scope:
+
+- test coverage
+- documentation
+- examples
+- API cleanup
+- obsolete removal
+
+
+Exit Criteria:
+
+v1 release candidate.
