@@ -179,6 +179,76 @@ for expected in "${expected_cells[@]}"; do
     fi
 done
 
+if ! grep -Fq \
+    'Both facades are non-`Clone`.' \
+    "$root/docs/architecture/10-primary-data-flows.md"; then
+    echo "architecture ADR check: subscription flow does not freeze linear non-Clone facades" >&2
+    exit 1
+fi
+
+if ! grep -Fq \
+    'There is no separately cloneable public receive view or per-subscription' \
+    "$root/docs/architecture/10-primary-data-flows.md"; then
+    echo "architecture ADR check: subscription flow does not reject split cloneable authority" >&2
+    exit 1
+fi
+
+if ! grep -Fq \
+    'Multiple application consumers require separately' \
+    "$root/docs/architecture/10-primary-data-flows.md"; then
+    echo "architecture ADR check: subscription flow does not freeze multi-consumer semantics" >&2
+    exit 1
+fi
+
+if ! grep -Fq \
+    'admitted subscriptions with distinct `SubscriptionId`s.' \
+    "$root/docs/architecture/10-primary-data-flows.md"; then
+    echo "architecture ADR check: subscription flow does not require distinct subscription ids" >&2
+    exit 1
+fi
+
+if ! grep -Fq \
+    'external state rather than inventing caller options. A cloneable control or' \
+    "$root/docs/ADRs/0003-subscription-driver-ownership.org"; then
+    echo "architecture ADR check: ADR-0003 does not freeze clone semantics" >&2
+    exit 1
+fi
+
+if ! grep -Fq \
+    'receive view is not part of v1 and cannot create a competing cursor.' \
+    "$root/docs/ADRs/0003-subscription-driver-ownership.org"; then
+    echo "architecture ADR check: ADR-0003 does not reject competing cloned cursors" >&2
+    exit 1
+fi
+
+if ! grep -Fq \
+    'The public, non-`Clone` `Subscription` facade is defined by' \
+    "$root/docs/design.md"; then
+    echo "architecture ADR check: residual subscription contract permits Clone" >&2
+    exit 1
+fi
+
+if ! grep -Fq \
+    '`StaticSubscription` is non-`Clone`, owns no binding storage' \
+    "$root/docs/design.md"; then
+    echo "architecture ADR check: residual static subscription contract permits Clone" >&2
+    exit 1
+fi
+
+if ! grep -Fq \
+    'There is no separately cloneable public receiver or per-subscription control' \
+    "$root/docs/design.md"; then
+    echo "architecture ADR check: residual subscription contract permits split authority" >&2
+    exit 1
+fi
+
+if ! grep -Fq \
+    'negative compile fixtures proving that both `Subscription` and `StaticSubscription` do not' \
+    "$root/docs/work-packages/WP-400-servient.md"; then
+    echo "architecture ADR check: WP-400 lacks non-Clone facade evidence" >&2
+    exit 1
+fi
+
 for removed in BindingRequest BindingDrivingMode EventBroker EventName EventStream PublisherSink RuntimeEventSinkConfig SubscriptionSender; do
     status=$(awk -F, -v item="$removed" '$1 == item { print $14 }' "$matrix")
     if [[ "$status" != "removed" ]]; then

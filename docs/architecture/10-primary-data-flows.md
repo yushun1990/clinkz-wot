@@ -117,12 +117,21 @@ not serving authority.
 2. The binding start operation returns one pull-capable driver or activates one
    caller-owned slot.
 3. The Servient installs the driver before publishing the application facade.
-4. The application facade owns one receive cursor; cloning does not create
-   competing consumers.
+4. The application subscription capability is linear. The host `Subscription`
+   facade owns exclusive access to one registry driver cursor; the manual
+   `StaticSubscription` token owns one generation-bearing caller slot identity.
+   Both facades are non-`Clone`.
 5. Binding-local flow control or an explicitly selected bounded adapter owns
    pre-delivery buffering. Core does not impose one queue implementation.
 6. Explicit stop, remote terminal, deadline, handle drop, and Servient drain
    converge on the same generation-safe teardown path.
+
+There is no separately cloneable public receive view or per-subscription
+control handle in v1. Multiple application consumers require separately
+admitted subscriptions with distinct `SubscriptionId`s. Moving or externally
+serializing one facade still polls one cursor; it does not create independent,
+competing-consumer, or broadcast semantics. Application-local fan-out after
+receipt is outside the subscription abstraction and owns its own bounds.
 
 `observe_all_properties` and `subscribe_all_events` execute one selected
 Thing-level plan and one native/coalesced driver. They are not silently lowered

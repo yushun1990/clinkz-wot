@@ -129,6 +129,11 @@ integration remains behind an explicit test feature.
   selected request and independent cleanup phase, and drives the binding driver's start/poll
   teardown. Pre-acceptance rejection returns that complete input. Drop uses the implicit form and retained cleanup state;
   neither path merely stops a local queue or fabricates caller input.
+- Add no separately cloneable public receiver or per-subscription control handle. The consumed
+  handle may coordinate drain through the private registry, but application-visible multiple
+  consumers require separately admitted subscriptions with distinct ids; moving or externally
+  serializing one facade still drives one cursor and has no competing-consumer or broadcast
+  contract.
 - Translate `SubscriptionDriverEvent::Terminal` into one public `ProcessEvent::Terminal` only
   after retaining its paired `SubscriptionDriverCleanupDisposition`. A borrowed driver callback
   cannot publish `PendingCleanup`; Servient must move the complete driver box through the transfer
@@ -347,7 +352,9 @@ No compatibility facade may keep the removed lifecycle callable on a releasable 
   evidence covers the complete sync/async/step setup-by-teardown matrix; constrained evidence
   covers the complete sync/step setup-by-teardown matrix.
 - `binding-owned-subscription-driver`: single and native collection starts, exact source items,
-  one receive cursor, binding backpressure, stop/drop, cleanup transfer, and no core queue.
+  one receive cursor, binding backpressure, stop/drop, cleanup transfer, no core queue, and
+  negative compile fixtures proving that both `Subscription` and `StaticSubscription` do not
+  implement `Clone`.
 - `emission-coordinator`: full-target identity, pre-admission, per-affordance order, retained
   cursors, payload sharing, partial outcomes, slow-lane isolation, and host/constrained policies.
 - `native-collection-subscriptions`: one root-form request and one driver for each standard

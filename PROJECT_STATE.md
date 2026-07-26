@@ -8,7 +8,8 @@ Repository basis: corrected handler-context candidate registration checkpoint
 `c42abcbc339167183c8c4bf9bd3bf584540073b4`, retains the exact 17-path
 non-implementation boundary, and is an ancestor of the registration
 checkpoint. The D3 design-authority completion strategy is migrated at
-`78b3a45fa521cfe97d49d6ae3907760bcca7a041`.
+`78b3a45fa521cfe97d49d6ae3907760bcca7a041`; D4 subscription receiver/control
+ownership is migrated by this file's containing checkpoint.
 
 ## Current Objective
 
@@ -17,7 +18,8 @@ Independently review replacement `WP-100-HANDLER-CONTEXT` candidate
 Preserve the completed handler-value and time tranches, keep the remaining
 target/no-atomic and request-storage migrations separate, and do not fold
 Producer or Servient integration into WP-100. Continue M1 authority convergence
-through the exact target-domain graph fixed by D3.
+through the exact target-domain graph fixed by D3 and the linear subscription
+facade decision fixed by D4.
 
 Active milestones:
 
@@ -95,6 +97,20 @@ D3 now fixes the authority-completion model:
   target-domain migrations, with security and codecs separated because their
   ownership, side effects, resources, and evidence differ.
 
+D4 fixes subscription application authority:
+
+- one binding driver owns one protocol resource and receive cursor;
+- Servient's private `SubscriptionRecord` owns installed-driver lifecycle;
+- host `Subscription` and manual `StaticSubscription` are linear,
+  non-`Clone` application capabilities;
+- v1 exposes no separately cloneable receiver or per-subscription control
+  handle;
+- independent logical consumers require separately admitted
+  `SubscriptionId`s; one facade provides neither competing-consumer
+  distribution nor per-clone broadcast; and
+- application-local fan-out after receipt is outside the subscription contract
+  and owns its own bounds.
+
 The architecture direction already accepted by the registered sources is:
 
 - immutable admitted plan sets separate logical plans from binding-owned
@@ -149,6 +165,9 @@ Work packages and tranches:
   across 14 final target domains: 34 are already at their final target, 84
   remain residual in `docs/design.md`, and three remain under registered
   amendments;
+- D4 is migrated into the canonical subscription flow, residual subscription
+  contract, WP-400 evidence boundary, architecture checker, plan, and workspace
+  decision record; it changes no runtime or public API;
 - WP-000 is recorded complete; its historical `time-and-generation-api` file
   remains immutable;
 - D2 is migrated through ADR-0016 and
@@ -213,7 +232,6 @@ passed without expanding the tranche.
 
 AI-led open decisions:
 
-- D4: freeze subscription receiver/control ownership and clone semantics;
 - D5: decide whether and how to add the minimal mock-binding property-read
   integration gate.
 
@@ -232,6 +250,25 @@ D3 migration facts:
   projections, and evidence move atomically; and
 - one monolithic move, placeholder target files, and overloading
   `docs/requirements.csv` with future ownership were rejected.
+
+D4 migration facts:
+
+- Core owns subscription values and SPI semantics, a binding owns protocol and
+  cursor state, Servient owns the driver registry/lifecycle, and the
+  application owns one linear facade or static slot token;
+- passive metadata cloning conveys no receive, stop, or cleanup authority, and
+  internal shared registry state creates no second public cursor;
+- moving or externally serializing a `Send` facade still uses one cursor and
+  defines no competing-consumer scheduling contract;
+- a cloneable combined facade, a split cloneable control handle, per-clone
+  broadcast, and competing-consumer semantics were rejected because they add
+  observable teardown, retention, delivery, and fairness contracts without a
+  demonstrated v1 requirement;
+- current `core::Subscription` clone/share/merge behavior is nonconforming
+  migration source already scheduled for WP-400 removal; and
+- D4 does not close the remaining AR3 stop/cleanup signatures, constrained slot
+  implementation, storage, performance, lifecycle evidence, or WP-300/WP-400
+  admission.
 
 Broad handler blockers:
 
@@ -469,6 +506,20 @@ D3 authority-decomposition verification on 2026-07-26:
   specification indexes, artifact registry, checker, plan, and continuation
   state.
 
+D4 subscription-ownership verification on 2026-07-26:
+
+- ADR-0003, `docs/spec/binding-spi.md`, `docs/design.md`, API ownership, and the
+  WP-300/WP-400 split agree on one driver and one Servient-owned linear facade;
+- repository inspection confirms the current Core `Clone`/shared-queue/merge
+  behavior is the explicitly removed legacy path rather than target authority;
+- `tools/check-architecture-adrs.sh` now requires non-`Clone` host/manual
+  facades, absence of split cloneable authority, distinct ids for multiple
+  consumers, and WP-400 negative compile evidence; and
+- an isolated architecture mutation that removed the non-`Clone` facade rule
+  was rejected by that checker; and
+- `workspace/0011-subscription-receiver-ownership.md` is `MIGRATED` while
+  explicitly preserving unrelated AR3 and implementation gates.
+
 `cargo test --workspace --all-features --locked` is not a valid project
 baseline because it intentionally enables mutually exclusive `zenoh` and
 `zenoh-pico` backends. Use the valid feature-matrix script instead.
@@ -493,8 +544,9 @@ Next safe actions, in order:
 3. create the exact two-file progress checkpoint, then implement and evidence
    `HandlerContext` only within the admitted scope;
 4. continue M1 with the next dependency-ready D3 target-domain migration and
-   decide D4 and D5 from repository evidence, asking the Owner only for
-   project-goal, constraint, or external-commitment clarification.
+   decide D5 from repository evidence while carrying the migrated D4 contract
+   into future subscription work; ask the Owner only for project-goal,
+   constraint, or external-commitment clarification.
 
 Important references:
 

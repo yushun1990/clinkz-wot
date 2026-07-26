@@ -1321,7 +1321,7 @@ validated for that source. Validation occurs before the item becomes visible.
 
 The public, non-`Clone` `Subscription` facade is defined by
 `clinkz-wot-servient`. It owns one receive cursor, immutable start metadata, and
-a capability into the Servient-owned driver registry. Its v4.8 host API is:
+a capability into the Servient-owned driver registry. Its v1/v4.9 host API is:
 
 ```rust
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
@@ -1381,9 +1381,19 @@ before `HostSubscriptionDriver::start_stop`; rejection leaves the facade active
 and retryable. `Pending` leaves the facade `Stopping`; `poll_stop` advances that
 same request, and a later `stop` call joins it rather than starting another
 teardown. A cloneable receive/control facade and a default-budget `Stream`
-adapter are not part of v4.8. Applications may build an async adapter by polling
+adapter are not part of v1. Applications may build an async adapter by polling
 with their own replenished budgets. Direct `poll_event` after terminal emission
 returns the documented invalid-call error without changing retained status.
+
+There is no separately cloneable public receiver or per-subscription control
+handle. The Servient registry may share lifecycle state internally, and the
+owning consumed handle may initiate drain, but neither exposes a second
+application receive cursor or independently cloneable stop authority. Multiple
+application consumers use separately admitted subscriptions with distinct
+`SubscriptionId`s. Moving or externally serializing one facade preserves a
+single cursor and defines neither competing-consumer distribution nor
+broadcast. An application may explicitly fan out items after receipt under its
+own resource contract.
 
 The manual/static Servient surface exposes a separately named token in every
 feature cell. It is the required subscription facade for the no-default and
@@ -1433,7 +1443,7 @@ Target semantics are:
   `unobserveproperty`, `unobserveallproperties`, `unsubscribeevent`, or
   `unsubscribeallevents` plan associated with the original subscription and
   respects supplied teardown form index and URI variables. Any required
-  teardown payload must already be fixed by the immutable start plan; v4.8 stop
+  teardown payload must already be fixed by the immutable start plan; v1 stop
   does not accept a new application payload.
   Implicit binding teardown may close the protocol resource directly.
 - Dropping the facade never blocks. It atomically transfers the one driver and
