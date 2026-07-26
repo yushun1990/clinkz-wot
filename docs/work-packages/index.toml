@@ -449,7 +449,7 @@ id = "WP-100-HANDLER-CONTEXT"
 work_package = "WP-100"
 sequence = 150
 status = "pending"
-admission_status = "review-pending"
+admission_status = "approved"
 impact_status = "current"
 depends_on = ["WP-100-FOUNDATION-REFRESH"]
 blocks_entrypoints = ["WP-100-HANDLER-ENTRY"]
@@ -525,6 +525,8 @@ pre_implementation_checks = [
     "wp100-deadline-cleanup-timing-check",
 ]
 admission_review = "docs/audits/WP-100-handler-context-entry.md"
+review_attestation = "docs/audits/WP-100-handler-context-review.toml"
+review_attestation_ref = "3007a88b93155d063ed0d08c69dc3520defebee5"
 entry_check = "wp100-handler-context-entry-check"
 completion_evidence_keys = ["handler-context"]
 completion_evidence_path = "docs/evidence/WP-100-handler-context.toml"

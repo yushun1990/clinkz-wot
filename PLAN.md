@@ -43,9 +43,9 @@ The repository evidence establishes the following starting point:
   for the extended logical-time domain;
 - `WP-100-DEADLINE-CLEANUP-TIMING` is implemented and has completion evidence
   for the Core Deadline, cleanup ordering, and incomparable-clock disposition;
-- `WP-100-HANDLER-CONTEXT` has an exact Category B admission candidate for the
-  borrowed dispatch-identity view and remains review-pending; its Core source
-  implementation is not admitted;
+- `WP-100-HANDLER-CONTEXT` has an exact independently reviewed and approved
+  Category B admission candidate for the borrowed dispatch-identity view;
+  source implementation has not begun;
 - broad handler entry remains blocked by incomplete workload oracles,
   the remaining request/target migration, portable-trait admission, and
   no-atomic public-boundary evidence;
@@ -219,8 +219,7 @@ Completed evidence:
 
 Next execution order:
 
-1. independently review and, if the exact candidate passes, admit and complete
-   `WP-100-HANDLER-CONTEXT`;
+1. implement and complete the admitted `WP-100-HANDLER-CONTEXT` tranche;
 2. prepare the exact `WP-100-PROPERTY-READ-HANDLER-SLICE` candidate and
    independent admission only after HandlerContext completes; this slice is
    the first integration-gate dependency, not broad handler entry;
