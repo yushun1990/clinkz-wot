@@ -26,7 +26,7 @@ impl fmt::Display for ClockId {
     }
 }
 
-/// A tick value that is comparable only within one [`ClockId`].
+/// An extended logical tick value that is comparable only within one [`ClockId`].
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub struct MonotonicInstant {
     clock_id: ClockId,
@@ -44,7 +44,7 @@ impl MonotonicInstant {
         self.clock_id
     }
 
-    /// Returns the raw tick value.
+    /// Returns the extended logical tick value.
     pub const fn ticks(self) -> u64 {
         self.ticks
     }
@@ -89,7 +89,8 @@ impl MonotonicInstant {
     }
 }
 
-/// Supplies monotonic time without imposing a host clock or executor.
+/// Supplies non-wrapping logical monotonic time without imposing a host clock
+/// or executor.
 pub trait RuntimeClock {
     /// Returns the current instant.
     fn now(&self) -> MonotonicInstant;
@@ -97,10 +98,11 @@ pub trait RuntimeClock {
     /// Returns the immutable number of ticks per second for this clock id.
     fn ticks_per_second(&self) -> NonZeroU64;
 
-    /// Returns the finite wrap period when the clock wraps.
+    /// Returns diagnostic metadata for the finite period of the underlying raw source.
     ///
-    /// `None` means that admitted operation lifetimes can treat the exposed
-    /// `u64` tick domain as non-wrapping.
+    /// This does not select a comparison algorithm, describe the exposed
+    /// logical domain, or bound admitted operation lifetimes.
+    /// `None` means that no raw-source period is reported.
     fn wrap_period_ticks(&self) -> Option<NonZeroU64> {
         None
     }
@@ -113,7 +115,7 @@ pub enum SourceTimestamp {
     Monotonic {
         /// Identity of the source clock.
         clock_id: ClockId,
-        /// Source clock ticks.
+        /// Extended logical source clock ticks.
         ticks: u64,
         /// Immutable ticks per second for `clock_id`.
         ticks_per_second: NonZeroU64,
@@ -125,6 +127,32 @@ pub enum SourceTimestamp {
 }
 
 impl SourceTimestamp {
+    /// Compares two timestamps when their kinds and clock domains match.
+    ///
+    /// Monotonic values require equal clock identities and tick scales. Unix
+    /// millisecond values compare directly. Unknown values, mixed kinds, and
+    /// conflicting monotonic domains are incomparable.
+    pub fn checked_cmp(self, other: Self) -> Option<Ordering> {
+        match (self, other) {
+            (
+                Self::Monotonic {
+                    clock_id: left_id,
+                    ticks: left_ticks,
+                    ticks_per_second: left_scale,
+                },
+                Self::Monotonic {
+                    clock_id: right_id,
+                    ticks: right_ticks,
+                    ticks_per_second: right_scale,
+                },
+            ) if left_id == right_id && left_scale == right_scale => {
+                Some(left_ticks.cmp(&right_ticks))
+            }
+            (Self::UnixMillis(left), Self::UnixMillis(right)) => Some(left.cmp(&right)),
+            _ => None,
+        }
+    }
+
     /// Returns the timestamp as a qualified monotonic instant when applicable.
     pub const fn monotonic_instant(self) -> Option<MonotonicInstant> {
         match self {
@@ -143,11 +171,11 @@ mod tests {
 
     use super::{ClockId, MonotonicInstant, RuntimeClock, SourceTimestamp};
 
-    struct WrappingClock;
+    struct DiagnosticRawPeriodClock;
 
-    impl RuntimeClock for WrappingClock {
+    impl RuntimeClock for DiagnosticRawPeriodClock {
         fn now(&self) -> MonotonicInstant {
-            MonotonicInstant::new(ClockId::new(7), 3)
+            MonotonicInstant::new(ClockId::new(7), 771)
         }
 
         fn ticks_per_second(&self) -> NonZeroU64 {
@@ -168,6 +196,13 @@ mod tests {
     }
 
     #[test]
+    fn logical_tick_addition_fails_before_exhaustion() {
+        let maximum = MonotonicInstant::new(ClockId::new(3), u64::MAX);
+        assert_eq!(maximum.checked_add_ticks(0), Some(maximum));
+        assert_eq!(maximum.checked_add_ticks(1), None);
+    }
+
+    #[test]
     fn duration_conversion_uses_documented_rounding() {
         let scale = NonZeroU64::new(3).expect("three is nonzero");
         let start = MonotonicInstant::new(ClockId::new(1), 10);
@@ -179,6 +214,65 @@ mod tests {
         assert_eq!(
             deadline.checked_nanos_since(start, scale),
             Some(666_666_666)
+        );
+    }
+
+    #[test]
+    fn source_timestamps_compare_only_in_one_kind_and_domain() {
+        let scale = NonZeroU64::new(1_000).expect("the scale is nonzero");
+        let clock_id = ClockId::new(9);
+        let before = SourceTimestamp::Monotonic {
+            clock_id,
+            ticks: 41,
+            ticks_per_second: scale,
+        };
+        let equal = SourceTimestamp::Monotonic {
+            clock_id,
+            ticks: 41,
+            ticks_per_second: scale,
+        };
+        let after = SourceTimestamp::Monotonic {
+            clock_id,
+            ticks: 42,
+            ticks_per_second: scale,
+        };
+        let other_clock = SourceTimestamp::Monotonic {
+            clock_id: ClockId::new(10),
+            ticks: 42,
+            ticks_per_second: scale,
+        };
+        let other_scale = SourceTimestamp::Monotonic {
+            clock_id,
+            ticks: 42,
+            ticks_per_second: NonZeroU64::new(2_000).expect("the scale is nonzero"),
+        };
+
+        assert_eq!(before.checked_cmp(equal), Some(Ordering::Equal));
+        assert_eq!(before.checked_cmp(after), Some(Ordering::Less));
+        assert_eq!(after.checked_cmp(before), Some(Ordering::Greater));
+        assert_eq!(before.checked_cmp(other_clock), None);
+        assert_eq!(before.checked_cmp(other_scale), None);
+        assert_eq!(
+            SourceTimestamp::UnixMillis(-1).checked_cmp(SourceTimestamp::UnixMillis(-1)),
+            Some(Ordering::Equal)
+        );
+        assert_eq!(
+            SourceTimestamp::UnixMillis(-1).checked_cmp(SourceTimestamp::UnixMillis(2)),
+            Some(Ordering::Less)
+        );
+        assert_eq!(
+            SourceTimestamp::UnixMillis(2).checked_cmp(SourceTimestamp::UnixMillis(-1)),
+            Some(Ordering::Greater)
+        );
+        assert_eq!(
+            SourceTimestamp::Unknown.checked_cmp(SourceTimestamp::Unknown),
+            None
+        );
+        assert_eq!(before.checked_cmp(SourceTimestamp::UnixMillis(41)), None);
+        assert_eq!(SourceTimestamp::UnixMillis(41).checked_cmp(before), None);
+        assert_eq!(
+            after.monotonic_instant(),
+            Some(MonotonicInstant::new(clock_id, 42))
         );
     }
 
@@ -197,9 +291,10 @@ mod tests {
     }
 
     #[test]
-    fn finite_clock_exposes_its_wrap_policy() {
-        let clock = WrappingClock;
+    fn raw_period_is_diagnostic_not_the_logical_domain() {
+        let clock = DiagnosticRawPeriodClock;
         assert_eq!(clock.now().clock_id(), ClockId::new(7));
+        assert_eq!(clock.now().ticks(), 771);
         assert_eq!(clock.ticks_per_second().get(), 1_000);
         assert_eq!(clock.wrap_period_ticks().map(NonZeroU64::get), Some(256));
     }
