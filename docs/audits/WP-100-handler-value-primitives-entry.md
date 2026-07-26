@@ -1,17 +1,18 @@
 # WP-100 Handler Value Primitives Entry Audit
 
-Status: Pending
+Status: Passed
 
 Design revision: v4.9
 
 Admission scope: `WP-100-HANDLER-VALUE-PRIMITIVES`
 
-Verdict: Independent re-review pending
+Verdict: Implementation-ready
 
 Review 05 rejected the broad handler entry and identified a smaller additive
-boundary. This record remains pending until an independent reviewer confirms
-the exact registered revision, scope, exclusions, and pre-implementation
-checks.
+boundary. The independent root continuation review recorded at
+`db09e5f1635f9544af7d996919600c4b377875ff` confirmed the exact registered
+candidate revision, scope, exclusions, predecessor, current authoritative
+contracts, and all six pre-implementation checks.
 
 ## Scope
 
@@ -87,29 +88,30 @@ does not move either downstream responsibility into Core.
 
 ## API and ownership contract
 
-- `CancellationView` derives exactly `Clone`, `Copy`, `Debug`, `Default`, `Eq`,
-  `Hash`, `Ord`, `PartialEq`, and `PartialOrd`; it is `#[repr(u8)]`, defaults to
-  `Active`, has exact discriminants `Active = 0` and `Requested = 1`, and its
-  sole `is_requested(self)` method is `const`.
-- `SubscriptionAcceptance` owns one private `InteractionOutput`, derives only
-  `Debug`, `Eq`, and `PartialEq`, carries the exact successful-acceptance
-  `must_use` message, and implements none of `Clone`, `Copy`, or `Default`.
+- `CancellationView` is `#[repr(u8)]` and derives exactly `Clone`, `Copy`,
+  `Debug`, `Default`, `Eq`, `Hash`, `Ord`, `PartialEq`, and `PartialOrd`; it
+  defaults to `Active`, has exact discriminants `Active = 0` and
+  `Requested = 1`, and its sole `is_requested(self)` method is `const`.
+- `SubscriptionAcceptance` owns one `InteractionOutput` in a private field,
+  derives only `Debug`, `Eq`, and `PartialEq`, carries the exact
+  successful-acceptance `must_use` message, and implements none of `Clone`,
+  `Copy`, or `Default`.
   `new` and `response` are `const`; `into_response(self)` is the non-const
   linear extraction path.
-- `HandlerFootprint` derives exactly `Clone`, `Copy`, `Debug`, `Eq`, `Hash`,
-  `Ord`, `PartialEq`, and `PartialOrd`, and does not implement `Default`. It is
-  the exact private three-`u64` record in retained/pending-call/subscription
-  order; `new` and all three by-value getters are `const` and preserve every
-  input, including zero and `u64::MAX`.
+- `HandlerFootprint` is the exact three-`u64` private record in
+  retained/pending-call/subscription order. It derives exactly `Clone`, `Copy`,
+  `Debug`, `Eq`, `Hash`, `Ord`, `PartialEq`, and `PartialOrd`, does not
+  implement `Default`, and its `new` plus all three by-value getters are
+  `const` and preserve every input, including zero and `u64::MAX`.
 - `HandlerStep<R>` has no bound on `R`, derives only `Debug`, `Eq`, and
-  `PartialEq`, carries bare `#[must_use]`, and has exactly the exhaustive
-  variants `Pending` and `Ready(CoreResult<R>)`. It is not `Clone`, `Copy`,
-  `Default`, or `non_exhaustive`.
-- `StaticHandlerRegistration<'h, H>` has no bound on `H`, contains exactly the
-  private slot, borrowed handler, and footprint fields, and exposes only the
+  `PartialEq`, and carries bare `#[must_use]`; it is exhaustive and is not
+  `Clone`, `Copy`, `Default`, or `non_exhaustive`.
+  `HandlerStep<R>` has exactly `Pending` and `Ready(CoreResult<R>)`.
+- `StaticHandlerRegistration<'h, H>` borrows `H`, has no bound on `H`, contains
+  exactly the private slot, handler, and footprint fields, and exposes only the
   `const` constructor and three `const` getters. Manual `Copy`, `Clone`, and
-  `Debug` work when `H` implements none of those traits; Debug includes slot and
-  footprint, omits the handler entirely, and finishes non-exhaustively.
+  `Debug` work when `H` implements none of those traits; Debug includes slot
+  and footprint, omits the handler entirely, and finishes non-exhaustively.
 
 The handler module may not introduce `Arc`, `Box`, `std`, an executor, a
 runtime dependency, a queue, or a callback. This tranche does not claim the
@@ -191,12 +193,12 @@ The exact prechecks are:
 - `wp100-handler-amendment-check`.
 
 `tools/check-wp100-handler-value-primitives-entry.sh --candidate` executes the
-six leaf checks, validates this review-pending state and the registered
-candidate commit, and proves that the completion checker stops only at the
-absent implementation boundary. After an independent exact-commit attestation
-is committed, the `--admission-ready` mode requires the completed predecessor,
-validates the candidate/review ancestry and bounded approval diff, reruns every
-precheck, and rejects an implementation that started before approval.
+six leaf checks, validates the review candidate and its registered commit, and
+proves that the completion checker stops only at the absent implementation
+boundary. The committed independent exact-ref attestation lets the
+`--admission-ready` mode require the completed predecessor, validate the
+candidate/review ancestry and bounded approval diff, rerun every precheck, and
+reject an implementation that started before approval.
 
 `wp100-handler-value-primitives-check` is an executable, pre-frozen post-code
 completion check. Before implementation it is expected to fail only because

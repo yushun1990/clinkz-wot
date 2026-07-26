@@ -164,7 +164,7 @@ id = "WP-100-HANDLER-VALUE-PRIMITIVES"
 work_package = "WP-100"
 sequence = 120
 status = "pending"
-admission_status = "review-pending"
+admission_status = "approved"
 impact_status = "current"
 depends_on = ["WP-100-FOUNDATION-REFRESH"]
 blocks_entrypoints = ["WP-100-HANDLER-ENTRY"]
@@ -255,6 +255,8 @@ pre_implementation_checks = [
     "wp100-handler-amendment-check",
 ]
 admission_review = "docs/audits/WP-100-handler-value-primitives-entry.md"
+review_attestation = "docs/audits/WP-100-handler-value-primitives-review.toml"
+review_attestation_ref = "db09e5f1635f9544af7d996919600c4b377875ff"
 entry_check = "wp100-handler-value-primitives-entry-check"
 completion_evidence_keys = ["handler-value-primitives"]
 completion_evidence_path = "docs/evidence/WP-100-handler-value-primitives.toml"
