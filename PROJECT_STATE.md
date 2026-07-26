@@ -9,7 +9,8 @@ evidence/state `021f3c18d3ee8c31debfc7dd4b0171a42e56f3f9`. The exact property-re
 non-implementation candidate is
 `a8af29b29e41efb537ae8d6971edf79c42255b65`, the single child of
 `2d7087d100d4a0d72cabb77476175bf60b0a7925`; its immutable SHA is registered
-in the property-read architecture-gate manifest. The completed HandlerContext candidate
+in the property-read architecture-gate manifest by checkpoint
+`0406692e3b7b1f3c3f9c02240b44c761dea5065c`. The completed HandlerContext candidate
 `27c8dc974fd1b337de4671c81719f9fa32410c56` is the single child of frozen base
 `c42abcbc339167183c8c4bf9bd3bf584540073b4`; its independent attestation is
 `3007a88b93155d063ed0d08c69dc3520defebee5`, its admission checkpoint is
@@ -24,8 +25,9 @@ gate migration is recorded at
 
 ## Current Objective
 
-Validate the exact registered `WP-100-PROPERTY-READ-HANDLER-SLICE`
-non-implementation candidate, then stop at the independent-review boundary
+In a later independent root continuation, review the exact registered
+`WP-100-PROPERTY-READ-HANDLER-SLICE` non-implementation candidate before any
+attestation or admission. The authoring session has stopped at that boundary
 without self-attesting. The slice adds only the synchronous
 `ReadPropertyHandler` trait in
 `core/src/handler.rs` and `core/src/lib.rs`; it reuses the completed
@@ -655,6 +657,29 @@ D5 property-read architecture-gate verification on 2026-07-26:
 - `workspace/0009-minimal-end-to-end-architecture-validation.md` is
   `MIGRATED`; no runtime or public API changed.
 
+Property-read handler candidate verification on 2026-07-26:
+
+- candidate `a8af29b29e41efb537ae8d6971edf79c42255b65` is the single child of
+  frozen base `2d7087d100d4a0d72cabb77476175bf60b0a7925` and changes exactly the
+  16 registered non-implementation paths;
+- registration checkpoint
+  `0406692e3b7b1f3c3f9c02240b44c761dea5065c` changes only the gate manifest
+  and continuation state and records the full candidate ref;
+- `tools/check-wp100-property-read-handler-slice-entry.sh --candidate` passed
+  all 12 predecessor/pre-implementation checks and stopped the completion
+  checker only at the expected absent Core trait boundary;
+- the design checker passed 19 unit tests and four handler-schema integration
+  tests, and `tools/check-design-artifacts.sh` passed all governance and six
+  refactor gates;
+- an isolated conforming two-file implementation passed the exact source
+  projections, no-default/async-no-std/std fixture cells, two semantic tests,
+  unresolved async/step negative fixtures, Core tests, downstream Servient and
+  Protocol Bindings compilation, and the HandlerContext predecessor suite;
+- isolated mutations adding a Core-side `ReadPropertyHandler` implementation
+  or a `Send` supertrait were both rejected at the exact source boundary; and
+- the isolated worktree was removed. The primary worktree has no Core source
+  change, no review attestation, and no planned architecture fixture root.
+
 `cargo test --workspace --all-features --locked` is not a valid project
 baseline because it intentionally enables mutually exclusive `zenoh` and
 `zenoh-pico` backends. Use the valid feature-matrix script instead.
@@ -665,18 +690,21 @@ baseline because it intentionally enables mutually exclusive `zenoh` and
 no-atomic/broad-entry cycle without changing runtime code. The exact
 property-read non-implementation candidate is now frozen as one additive
 synchronous trait in the same two Core paths, with reused values and excluded
-broad claims machine-checked. Its immutable ref is registered; candidate-level
-verification and later independent review remain. Broad handler entry remains blocked by the separate
+broad claims machine-checked. Its immutable ref is registered and author-side
+candidate verification passes; independent review remains. Broad handler
+entry remains blocked by the separate
 target/no-atomic, request/storage, remaining portable-trait, workload,
 resource, and performance boundaries.
 
 Next safe actions, in order:
 
-1. run the exact candidate entry check and isolated positive/negative contract
-   validation, then checkpoint the results without creating a review
-   attestation;
-2. in a later independent root continuation, inspect and mutation-test the
-   registered candidate before deciding whether to attest it;
+1. in a later independent root continuation, inspect and independently
+   mutation-test candidate
+   `a8af29b29e41efb537ae8d6971edf79c42255b65` before deciding whether to
+   attest it;
+2. only after a passing attestation, prepare and validate the exact three-file
+   admission checkpoint, then create the two-file progress checkpoint before
+   touching Core source;
 3. continue M1 with the next dependency-ready D3 target-domain migration and
    carry the migrated D4 and D5 contracts into future subscription and
    property-read slice work;
