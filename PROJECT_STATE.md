@@ -2,14 +2,14 @@
 
 Last updated: 2026-07-26
 
-Repository basis: the current D2 migration checkpoint, following handler-value
-completion checkpoint `3e66076`.
+Repository basis: D2 migration checkpoint `0092e9c` plus the current
+review-pending logical-time correction admission candidate.
 
 ## Current Objective
 
-Author and admit the Foundation-owned `WP-100-LOGICAL-TIME-CORRECTION` tranche
-under the migrated ADR-0016 contract. Do not begin source implementation until
-its exact ADR-0013 admission review and executable entry check pass.
+Complete the independent review of the registered Foundation-owned
+`WP-100-LOGICAL-TIME-CORRECTION` candidate. Do not begin source implementation
+until the exact ADR-0013 attestation and approval checkpoint pass.
 
 Active milestones:
 
@@ -140,7 +140,11 @@ Work packages and tranches:
   `b5cb1a5392ab2ef35a9f23185731012f71e4ea05`;
 - `WP-100-LOGICAL-TIME-CORRECTION` and
   `WP-100-DEADLINE-CLEANUP-TIMING` have frozen identities, ordering,
-  ownership, and completion keys, but neither tranche is admitted;
+  ownership, and completion keys;
+- the logical-time tranche now has a review-pending candidate, one permitted
+  implementation path (`foundation/src/time.rs`), an independent nested
+  contract fixture, and executable entry/completion checks, but is not
+  admitted;
 - `WP-100-HANDLER-ENTRY` remains blocked;
 - WP-100 is in progress; WP-200 through WP-700 are planned.
 
@@ -209,6 +213,19 @@ Migrated D2 facts:
   `WP-100-DEADLINE-CLEANUP-TIMING`;
 - broad handler entry remains blocked until both completion keys pass.
 
+Logical-time admission facts:
+
+- the implementation preserves the four public time value/trait
+  representations and the `RuntimeClock` method set;
+- the only new public method is
+  `SourceTimestamp::checked_cmp(self, other) -> Option<Ordering>`;
+- the candidate changes no implementation path and its completion checker must
+  stop at the missing-method boundary before approval;
+- the historical WP-000 evidence blob is frozen and the completion contract
+  reruns `tools/check-wp-000.sh` while leaving generation source unchanged;
+- the current root session authored the candidate and cannot provide its
+  independent review attestation.
+
 Downstream admission blockers:
 
 - WP-200: constructible candidate-fallback policy, health rule,
@@ -246,16 +263,15 @@ baseline because it intentionally enables mutually exclusive `zenoh` and
 
 ## Stopping Point and Next Safe Actions
 
-D2 is technically decided and projected into its ADR, normative amendment,
-active design, requirements, work packages, machine-readable corrective plan,
-workspace lifecycle, and planning state. The historical WP-000 evidence file
-was not rewritten.
+D2 is migrated. The exact logical-time correction admission package is authored
+without modifying `foundation/src/time.rs`; its independent review remains
+pending. The historical WP-000 evidence file was not rewritten.
 
 Next safe actions, in order:
 
-1. author the exact admission contract, fixtures, audit, and entry checker for
-   `WP-100-LOGICAL-TIME-CORRECTION`;
-2. admit and implement that tranche only after independent review evidence;
+1. independently review the exact registered logical-time candidate and record
+   either findings or the bounded attestation;
+2. admit and implement the tranche only after that review evidence;
 3. then admit `WP-100-DEADLINE-CLEANUP-TIMING`;
 4. continue D3, D4, and D5 as AI-led technical decisions, asking the Owner only
    for project-goal, constraint, or external-commitment clarification.
@@ -273,6 +289,7 @@ Important references:
 - `docs/evidence/WP-100-handler-value-primitives.toml`;
 - `docs/ADRs/0016-extended-logical-monotonic-time.org`;
 - `docs/amendments/WP-100-time-domain-v1.md`;
+- `docs/audits/WP-100-logical-time-correction-entry.md`;
 - `workspace/0007-time-domain-and-deadline.md`;
 - `workspace/0008-implementation-governance-overhead.md`;
 - `workspace/0009-minimal-end-to-end-architecture-validation.md`;

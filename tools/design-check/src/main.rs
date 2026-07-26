@@ -89,9 +89,25 @@ const HANDLER_VALUE_COMPLETION_EVIDENCE: &str =
 const HANDLER_VALUE_ADMISSION_REVIEW: &str = "docs/audits/WP-100-handler-value-primitives-entry.md";
 const HANDLER_VALUE_CANDIDATE_BASE_REF: &str = "8c89e9346f424923ef3247dd1c402d5ab141c203";
 const HANDLER_VALUE_CANDIDATE_REF: &str = "778c2b60eebc18895604485c4e546cad5bd5e101";
+const LOGICAL_TIME_TRANCHE: &str = "WP-100-LOGICAL-TIME-CORRECTION";
+const LOGICAL_TIME_ENTRY_CHECK: &str = "wp100-logical-time-correction-entry-check";
+const LOGICAL_TIME_REVIEW_ATTESTATION: &str =
+    "docs/audits/WP-100-logical-time-correction-review.toml";
+const LOGICAL_TIME_COMPLETION_EVIDENCE: &str = "docs/evidence/WP-100-logical-time-correction.toml";
+const LOGICAL_TIME_ADMISSION_REVIEW: &str = "docs/audits/WP-100-logical-time-correction-entry.md";
+const LOGICAL_TIME_CANDIDATE_BASE_REF: &str = "0092e9c5f3c7e041ec979d18d462fd0e74ae2e0a";
 const HANDLER_VALUE_PRECHECKS: &[&str] = &[
     "api-ownership-check",
     "architecture-adr-check",
+    "resource-profile-check",
+    "work-package-dag-check",
+    "wp100-amendment-check",
+    "wp100-handler-amendment-check",
+];
+const LOGICAL_TIME_PRECHECKS: &[&str] = &[
+    "api-ownership-check",
+    "architecture-adr-check",
+    "design-requirement-check",
     "resource-profile-check",
     "work-package-dag-check",
     "wp100-amendment-check",
@@ -270,6 +286,15 @@ fn run() -> Result<(), String> {
             check_handler_value_primitives_entry_state(&root, &mode)?;
             println!("design structure check: handler value-primitives {mode} state valid");
         }
+        "check-logical-time-correction-entry-state" => {
+            let mode = env::args().nth(2).ok_or_else(|| {
+                "check-logical-time-correction-entry-state requires candidate or \
+                 admission-ready"
+                    .to_owned()
+            })?;
+            check_logical_time_correction_entry_state(&root, &mode)?;
+            println!("design structure check: logical time correction {mode} state valid");
+        }
         "check-governance" => {
             check_governance(&root, false)?;
             println!("design structure check: gate governance valid");
@@ -287,7 +312,8 @@ fn run() -> Result<(), String> {
             return Err(format!(
                 "unknown command {command:?}; expected check, check-state, check-handler, \
                  check-handler-value-primitives-source, \
-                 check-handler-value-primitives-entry-state, check-work-packages, \
+                 check-handler-value-primitives-entry-state, \
+                 check-logical-time-correction-entry-state, check-work-packages, \
                  check-governance, check-refactor-ready, or check-handler-entry"
             ));
         }
@@ -1726,6 +1752,7 @@ fn check_governance_checks(
         .ok_or_else(|| "governance artifact has no [[check]] records".to_owned())?;
     let expected_ids = owned_set(&[
         "api-ownership-check",
+        "design-requirement-check",
         "architecture-adr-check",
         "wp100-amendment-check",
         "state-machine-check",
@@ -1737,6 +1764,8 @@ fn check_governance_checks(
         "wp100-foundation-refresh-check",
         "wp100-handler-value-primitives-check",
         HANDLER_VALUE_ENTRY_CHECK,
+        "wp100-logical-time-correction-check",
+        LOGICAL_TIME_ENTRY_CHECK,
     ]);
     let mut statuses = BTreeMap::new();
     for check in checks {
@@ -1792,6 +1821,11 @@ fn expected_check_mapping(id: &str) -> Option<CheckMapping> {
         "api-ownership-check" => Some((
             "tools/check-api-ownership.sh",
             &["tools/check-api-ownership.sh"],
+            &["executable"],
+        )),
+        "design-requirement-check" => Some((
+            "tools/check-design-requirements.sh",
+            &["tools/check-design-requirements.sh"],
             &["executable"],
         )),
         "architecture-adr-check" => Some((
@@ -1875,6 +1909,19 @@ fn expected_check_mapping(id: &str) -> Option<CheckMapping> {
             "tools/check-wp100-handler-value-primitives-entry.sh",
             &[
                 "tools/check-wp100-handler-value-primitives-entry.sh",
+                "--admission-ready",
+            ],
+            &["executable"],
+        )),
+        "wp100-logical-time-correction-check" => Some((
+            "tools/check-wp100-logical-time-correction.sh",
+            &["tools/check-wp100-logical-time-correction.sh"],
+            &["executable"],
+        )),
+        LOGICAL_TIME_ENTRY_CHECK => Some((
+            "tools/check-wp100-logical-time-correction-entry.sh",
+            &[
+                "tools/check-wp100-logical-time-correction-entry.sh",
                 "--admission-ready",
             ],
             &["executable"],
@@ -2312,6 +2359,13 @@ struct HandlerValueTrancheState {
     api_items: BTreeSet<String>,
 }
 
+#[derive(Debug)]
+struct LogicalTimeTrancheState {
+    status: String,
+    verification_check: String,
+    check_status: String,
+}
+
 #[allow(clippy::too_many_arguments)]
 fn check_work_package_tranches(
     root: &Path,
@@ -2347,8 +2401,11 @@ fn check_work_package_tranches(
     }
     let entry_dependencies =
         package_string_set(entrypoint, "depends_on_tranches", HANDLER_ENTRYPOINT)?;
-    let expected_entry_dependencies =
-        owned_set(&[HANDLER_FOUNDATION_TRANCHE, HANDLER_VALUE_PRIMITIVES_TRANCHE]);
+    let expected_entry_dependencies = owned_set(&[
+        HANDLER_FOUNDATION_TRANCHE,
+        HANDLER_VALUE_PRIMITIVES_TRANCHE,
+        LOGICAL_TIME_TRANCHE,
+    ]);
     if entry_dependencies != expected_entry_dependencies {
         return Err(format!(
             "{HANDLER_ENTRYPOINT} dependency mismatch; expected \
@@ -2378,9 +2435,9 @@ fn check_work_package_tranches(
         .get("tranche")
         .and_then(Item::as_array_of_tables)
         .ok_or_else(|| "work-package index has no [[tranche]] records".to_owned())?;
-    if tranches.len() != 2 {
+    if tranches.len() != 3 {
         return Err(format!(
-            "work-package index must define exactly two handler prerequisite tranches; found {}",
+            "work-package index must define exactly three handler prerequisite tranches; found {}",
             tranches.len()
         ));
     }
@@ -2796,6 +2853,22 @@ fn check_work_package_tranches(
         &admission_status,
         check_status,
     )?;
+    let logical_time_tranche = tranches
+        .iter()
+        .find(|table| table.get("id").and_then(Item::as_str) == Some(LOGICAL_TIME_TRANCHE))
+        .ok_or_else(|| format!("{LOGICAL_TIME_TRANCHE} tranche record is missing"))?;
+    let logical_time_state = check_logical_time_tranche(
+        root,
+        logical_time_tranche,
+        known_requirements,
+        allowed_owners,
+        allowed_cells,
+        package_evidence,
+        &registered_artifacts,
+        &check_statuses,
+        &status,
+        &admission_status,
+    )?;
 
     check_handler_scope_partition(
         &value_state.requirements,
@@ -2868,6 +2941,33 @@ fn check_work_package_tranches(
         if !status.success() {
             return Err(format!(
                 "handler entry blocked: value-primitives verification exited with {status}"
+            ));
+        }
+        if logical_time_state.status != "complete" {
+            return Err(format!(
+                "handler entry blocked: {LOGICAL_TIME_TRANCHE} is {:?}",
+                logical_time_state.status
+            ));
+        }
+        if logical_time_state.check_status != "executable" {
+            return Err(format!(
+                "handler entry blocked: check {:?} is {:?}",
+                logical_time_state.verification_check, logical_time_state.check_status
+            ));
+        }
+        let checker = root.join("tools/check-wp100-logical-time-correction.sh");
+        let status = Command::new(&checker)
+            .current_dir(root)
+            .status()
+            .map_err(|error| {
+                format!(
+                    "cannot execute logical time verification {}: {error}",
+                    checker.display()
+                )
+            })?;
+        if !status.success() {
+            return Err(format!(
+                "handler entry blocked: logical time verification exited with {status}"
             ));
         }
     }
@@ -3398,13 +3498,20 @@ fn check_handler_value_primitives_tranche(
     }
     let candidate_paths =
         package_string_set(tranche, "candidate_paths", HANDLER_VALUE_PRIMITIVES_TRANCHE)?;
-    check_handler_candidate_paths(
+    check_candidate_paths(
+        HANDLER_VALUE_PRIMITIVES_TRANCHE,
         root,
         &candidate_paths,
         &implementation_paths,
         registered_artifacts,
     )?;
-    check_handler_candidate_commit(root, &candidate_base_ref, &candidate_ref, &candidate_paths)?;
+    check_candidate_commit(
+        HANDLER_VALUE_PRIMITIVES_TRANCHE,
+        root,
+        &candidate_base_ref,
+        &candidate_ref,
+        &candidate_paths,
+    )?;
 
     for empty_field in [
         "state_machines",
@@ -3648,6 +3755,393 @@ fn check_handler_value_primitives_tranche(
     })
 }
 
+#[allow(clippy::too_many_arguments)]
+fn check_logical_time_tranche(
+    root: &Path,
+    tranche: &Table,
+    known_requirements: &BTreeSet<String>,
+    allowed_owners: &BTreeSet<String>,
+    allowed_cells: &BTreeSet<String>,
+    package_evidence: &BTreeMap<String, BTreeSet<String>>,
+    registered_artifacts: &BTreeSet<String>,
+    check_statuses: &BTreeMap<String, String>,
+    foundation_status: &str,
+    foundation_admission_status: &str,
+) -> Result<LogicalTimeTrancheState, String> {
+    require_table_string(tranche, "id", LOGICAL_TIME_TRANCHE, "logical time tranche")?;
+    require_table_string(tranche, "work_package", "WP-100", LOGICAL_TIME_TRANCHE)?;
+
+    let sequence = integer_field(tranche, "sequence", LOGICAL_TIME_TRANCHE)?;
+    if sequence != 130 {
+        return Err(format!(
+            "{LOGICAL_TIME_TRANCHE} sequence mismatch; expected 130, found {sequence}"
+        ));
+    }
+    let status = string_field(tranche, "status", LOGICAL_TIME_TRANCHE)?;
+    let admission_status = string_field(tranche, "admission_status", LOGICAL_TIME_TRANCHE)?;
+    if !handler_value_status_pair_is_valid(&status, &admission_status) {
+        return Err(format!(
+            "{LOGICAL_TIME_TRANCHE} has invalid status/admission pair \
+             {status:?}/{admission_status:?}"
+        ));
+    }
+    require_table_string(tranche, "impact_status", "current", LOGICAL_TIME_TRANCHE)?;
+
+    let dependencies = package_string_set(tranche, "depends_on", LOGICAL_TIME_TRANCHE)?;
+    if dependencies != owned_set(&[HANDLER_FOUNDATION_TRANCHE]) {
+        return Err(format!(
+            "{LOGICAL_TIME_TRANCHE} must depend only on {HANDLER_FOUNDATION_TRANCHE}"
+        ));
+    }
+    let blocked = package_string_set(tranche, "blocks_entrypoints", LOGICAL_TIME_TRANCHE)?;
+    if blocked != owned_set(&[HANDLER_ENTRYPOINT]) {
+        return Err(format!(
+            "{LOGICAL_TIME_TRANCHE} must block only {HANDLER_ENTRYPOINT}"
+        ));
+    }
+
+    let requirements = package_string_set(tranche, "requirements", LOGICAL_TIME_TRANCHE)?;
+    check_known_values(
+        LOGICAL_TIME_TRANCHE,
+        "requirement",
+        &requirements,
+        known_requirements,
+    )?;
+    let expected_requirements = owned_set(&["API-SOURCE-TIME-001", "API-SURFACE-001", "TIME-001"]);
+    if requirements != expected_requirements {
+        return Err(format!(
+            "{LOGICAL_TIME_TRANCHE} requirement set mismatch; expected \
+             {expected_requirements:?}, found {requirements:?}"
+        ));
+    }
+
+    let owners = package_string_set(tranche, "owner_packages", LOGICAL_TIME_TRANCHE)?;
+    check_known_values(
+        LOGICAL_TIME_TRANCHE,
+        "owner package",
+        &owners,
+        allowed_owners,
+    )?;
+    if owners != owned_set(&["clinkz-wot-foundation"]) {
+        return Err(format!(
+            "{LOGICAL_TIME_TRANCHE} owner package set is not frozen"
+        ));
+    }
+
+    let cells = package_string_set(tranche, "feature_cells", LOGICAL_TIME_TRANCHE)?;
+    check_known_values(LOGICAL_TIME_TRANCHE, "feature cell", &cells, allowed_cells)?;
+    if cells != owned_set(&["no-default", "async-no-std", "std"]) {
+        return Err(format!(
+            "{LOGICAL_TIME_TRANCHE} feature-cell set is not frozen"
+        ));
+    }
+
+    let artifacts = package_string_set(tranche, "authoritative_artifacts", LOGICAL_TIME_TRANCHE)?;
+    let expected_artifacts = owned_set(&[
+        "docs/ADRs/0013-work-package-scoped-implementation-admission.org",
+        "docs/ADRs/0014-transitional-normative-ownership.org",
+        "docs/ADRs/0016-extended-logical-monotonic-time.org",
+        "docs/amendments/WP-100-time-domain-v1.md",
+        "docs/api-ownership.csv",
+        "docs/design.md",
+        "docs/requirements.csv",
+        "docs/work-packages/WP-000-foundation.md",
+        "docs/work-packages/WP-100-core.md",
+        "docs/work-packages/index.toml",
+    ]);
+    if artifacts != expected_artifacts {
+        return Err(format!(
+            "{LOGICAL_TIME_TRANCHE} authoritative artifact set mismatch; expected \
+             {expected_artifacts:?}, found {artifacts:?}"
+        ));
+    }
+    check_known_values(
+        LOGICAL_TIME_TRANCHE,
+        "authoritative artifact",
+        &artifacts,
+        registered_artifacts,
+    )?;
+
+    let api_items = package_string_set(tranche, "api_items", LOGICAL_TIME_TRANCHE)?;
+    let expected_api_items = owned_set(&[
+        "ClockId",
+        "MonotonicInstant",
+        "RuntimeClock",
+        "SourceTimestamp",
+    ]);
+    if api_items != expected_api_items {
+        return Err(format!(
+            "{LOGICAL_TIME_TRANCHE} API item set mismatch; expected \
+             {expected_api_items:?}, found {api_items:?}"
+        ));
+    }
+    let ownership_items = load_first_column(root, "docs/api-ownership.csv")?;
+    check_known_values(
+        LOGICAL_TIME_TRANCHE,
+        "API item",
+        &api_items,
+        &ownership_items,
+    )?;
+
+    for field in [
+        "state_machines",
+        "old_api_removals",
+        "performance_workloads",
+    ] {
+        let values = string_set(
+            array_field(tranche, field, LOGICAL_TIME_TRANCHE)?,
+            LOGICAL_TIME_TRANCHE,
+            field,
+        )?;
+        if !values.is_empty() {
+            return Err(format!(
+                "{LOGICAL_TIME_TRANCHE} must have an empty {field} set"
+            ));
+        }
+    }
+
+    let implementation_paths =
+        package_string_set(tranche, "implementation_paths", LOGICAL_TIME_TRANCHE)?;
+    if implementation_paths != owned_set(&["foundation/src/time.rs"]) {
+        return Err(format!(
+            "{LOGICAL_TIME_TRANCHE} implementation path must be exactly \
+             foundation/src/time.rs"
+        ));
+    }
+    for path in &implementation_paths {
+        validate_relative_path(path, "logical time implementation path")?;
+        if !root.join(path).is_file() {
+            return Err(format!(
+                "{LOGICAL_TIME_TRANCHE} implementation path is missing: {path:?}"
+            ));
+        }
+    }
+
+    let contract_artifacts =
+        package_string_set(tranche, "contract_artifacts", LOGICAL_TIME_TRANCHE)?;
+    let expected_contract_artifacts = owned_set(&[
+        "tools/check-wp100-logical-time-correction-entry.sh",
+        "tools/check-wp100-logical-time-correction.sh",
+        "tools/compile-contracts/wp100-logical-time-correction/Cargo.toml",
+        "tools/compile-contracts/wp100-logical-time-correction/Cargo.lock",
+        "tools/compile-contracts/wp100-logical-time-correction/src/lib.rs",
+        "tools/compile-contracts/wp100-logical-time-correction/tests/semantics.rs",
+        "tools/design-check/Cargo.toml",
+        "tools/design-check/src/main.rs",
+    ]);
+    if contract_artifacts != expected_contract_artifacts {
+        return Err(format!(
+            "{LOGICAL_TIME_TRANCHE} contract artifact set mismatch; expected \
+             {expected_contract_artifacts:?}, found {contract_artifacts:?}"
+        ));
+    }
+    check_known_values(
+        LOGICAL_TIME_TRANCHE,
+        "contract artifact",
+        &contract_artifacts,
+        registered_artifacts,
+    )?;
+    for artifact in &contract_artifacts {
+        if !root.join(artifact).is_file() {
+            return Err(format!(
+                "{LOGICAL_TIME_TRANCHE} contract artifact is missing: {artifact:?}"
+            ));
+        }
+    }
+
+    let candidate_base_ref = string_field(tranche, "candidate_base_ref", LOGICAL_TIME_TRANCHE)?;
+    if candidate_base_ref != LOGICAL_TIME_CANDIDATE_BASE_REF {
+        return Err(format!(
+            "{LOGICAL_TIME_TRANCHE} candidate base ref is not frozen"
+        ));
+    }
+    check_git_commit_is_ancestor(root, &candidate_base_ref, "logical time candidate base ref")?;
+    let candidate_ref = string_field(tranche, "candidate_ref", LOGICAL_TIME_TRANCHE)?;
+    require_full_commit_id(&candidate_ref, "logical time candidate_ref")?;
+    let candidate_paths = package_string_set(tranche, "candidate_paths", LOGICAL_TIME_TRANCHE)?;
+    check_candidate_paths(
+        LOGICAL_TIME_TRANCHE,
+        root,
+        &candidate_paths,
+        &implementation_paths,
+        registered_artifacts,
+    )?;
+    check_candidate_commit(
+        LOGICAL_TIME_TRANCHE,
+        root,
+        &candidate_base_ref,
+        &candidate_ref,
+        &candidate_paths,
+    )?;
+
+    let prechecks = package_string_set(tranche, "pre_implementation_checks", LOGICAL_TIME_TRANCHE)?;
+    let expected_prechecks = owned_set(LOGICAL_TIME_PRECHECKS);
+    if prechecks != expected_prechecks {
+        return Err(format!(
+            "{LOGICAL_TIME_TRANCHE} precheck set mismatch; expected \
+             {expected_prechecks:?}, found {prechecks:?}"
+        ));
+    }
+    for check in &prechecks {
+        if check_statuses.get(check).map(String::as_str) != Some("executable") {
+            return Err(format!(
+                "{LOGICAL_TIME_TRANCHE} precheck {check:?} is not executable"
+            ));
+        }
+    }
+
+    let admission_review = string_field(tranche, "admission_review", LOGICAL_TIME_TRANCHE)?;
+    if admission_review != LOGICAL_TIME_ADMISSION_REVIEW
+        || !registered_artifacts.contains(&admission_review)
+        || !root.join(&admission_review).is_file()
+    {
+        return Err(format!(
+            "{LOGICAL_TIME_TRANCHE} admission review is not registered and present"
+        ));
+    }
+    check_handler_value_audit_state(root, &admission_review, &admission_status)?;
+
+    let entry_check = string_field(tranche, "entry_check", LOGICAL_TIME_TRANCHE)?;
+    if entry_check != LOGICAL_TIME_ENTRY_CHECK
+        || check_statuses.get(&entry_check).map(String::as_str) != Some("executable")
+    {
+        return Err(format!(
+            "{LOGICAL_TIME_TRANCHE} entry check is not executable"
+        ));
+    }
+
+    let completion_evidence =
+        package_string_set(tranche, "completion_evidence_keys", LOGICAL_TIME_TRANCHE)?;
+    if completion_evidence != owned_set(&["logical-time-domain-correction"])
+        || !completion_evidence.is_subset(
+            package_evidence
+                .get("WP-100")
+                .ok_or_else(|| "WP-100 has no evidence key set".to_owned())?,
+        )
+    {
+        return Err(format!(
+            "{LOGICAL_TIME_TRANCHE} completion evidence key is not frozen"
+        ));
+    }
+    let evidence_path = string_field(tranche, "completion_evidence_path", LOGICAL_TIME_TRANCHE)?;
+    if evidence_path != LOGICAL_TIME_COMPLETION_EVIDENCE {
+        return Err(format!(
+            "{LOGICAL_TIME_TRANCHE} completion evidence path is not frozen"
+        ));
+    }
+    let verification_check = string_field(tranche, "completion_check", LOGICAL_TIME_TRANCHE)?;
+    if verification_check != "wp100-logical-time-correction-check" {
+        return Err(format!(
+            "{LOGICAL_TIME_TRANCHE} completion check is not frozen"
+        ));
+    }
+    let check_status = check_statuses
+        .get(&verification_check)
+        .cloned()
+        .ok_or_else(|| format!("{verification_check:?} is not registered"))?;
+    if check_status != "executable" {
+        return Err(format!(
+            "{LOGICAL_TIME_TRANCHE} completion check is {check_status:?}"
+        ));
+    }
+
+    if foundation_status != "complete"
+        || foundation_admission_status != "approved"
+        || check_statuses
+            .get("wp100-foundation-refresh-check")
+            .map(String::as_str)
+            != Some("executable")
+    {
+        return Err(format!(
+            "{LOGICAL_TIME_TRANCHE} requires a complete, approved, executable \
+             {HANDLER_FOUNDATION_TRANCHE}"
+        ));
+    }
+
+    let evidence_exists = root.join(&evidence_path).is_file();
+    if admission_status == "review-pending" {
+        for forbidden_field in [
+            "review_attestation",
+            "review_attestation_ref",
+            "admission_ref",
+        ] {
+            if tranche.contains_key(forbidden_field) {
+                return Err(format!(
+                    "{LOGICAL_TIME_TRANCHE} review-pending state must not define \
+                     {forbidden_field:?}"
+                ));
+            }
+        }
+        if root.join(LOGICAL_TIME_REVIEW_ATTESTATION).exists() {
+            return Err(format!(
+                "{LOGICAL_TIME_TRANCHE} has a premature review attestation"
+            ));
+        }
+    } else {
+        let attestation_path = string_field(tranche, "review_attestation", LOGICAL_TIME_TRANCHE)?;
+        let attestation_ref =
+            string_field(tranche, "review_attestation_ref", LOGICAL_TIME_TRANCHE)?;
+        if attestation_path != LOGICAL_TIME_REVIEW_ATTESTATION
+            || !registered_artifacts.contains(&attestation_path)
+        {
+            return Err(format!(
+                "{LOGICAL_TIME_TRANCHE} review attestation path is not frozen"
+            ));
+        }
+        check_logical_time_review_attestation(
+            root,
+            &attestation_path,
+            &attestation_ref,
+            &candidate_base_ref,
+            &candidate_ref,
+            &candidate_paths,
+        )?;
+
+        if status == "pending" {
+            if tranche.contains_key("admission_ref") {
+                return Err(format!(
+                    "{LOGICAL_TIME_TRANCHE} pending state must not define admission_ref"
+                ));
+            }
+        } else {
+            let admission_ref = string_field(tranche, "admission_ref", LOGICAL_TIME_TRANCHE)?;
+            check_logical_time_admission_commit(root, &admission_ref, &attestation_ref)?;
+            if status == "in-progress" {
+                check_logical_time_progress_checkpoint_state(
+                    root,
+                    &admission_ref,
+                    &implementation_paths,
+                )?;
+            }
+        }
+    }
+
+    if status == "complete" {
+        if !evidence_exists || admission_status != "approved" {
+            return Err(format!(
+                "{LOGICAL_TIME_TRANCHE} complete state lacks approved evidence"
+            ));
+        }
+        let admission_ref = string_field(tranche, "admission_ref", LOGICAL_TIME_TRANCHE)?;
+        check_logical_time_completion_evidence(
+            root,
+            &evidence_path,
+            &verification_check,
+            &admission_ref,
+        )?;
+    } else if evidence_exists && tranche_evidence_is_passed(root, &evidence_path)? {
+        return Err(format!(
+            "{LOGICAL_TIME_TRANCHE} is not complete while {evidence_path} claims passed"
+        ));
+    }
+
+    Ok(LogicalTimeTrancheState {
+        status,
+        verification_check,
+        check_status,
+    })
+}
+
 fn handler_value_status_pair_is_valid(status: &str, admission_status: &str) -> bool {
     matches!(
         (status, admission_status),
@@ -3658,16 +4152,15 @@ fn handler_value_status_pair_is_valid(status: &str, admission_status: &str) -> b
     )
 }
 
-fn check_handler_candidate_paths(
+fn check_candidate_paths(
+    context: &str,
     root: &Path,
     candidate_paths: &BTreeSet<String>,
     implementation_paths: &BTreeSet<String>,
     registered_artifacts: &BTreeSet<String>,
 ) -> Result<(), String> {
     if candidate_paths.is_empty() {
-        return Err(format!(
-            "{HANDLER_VALUE_PRIMITIVES_TRANCHE} candidate path set must not be empty"
-        ));
+        return Err(format!("{context} candidate path set must not be empty"));
     }
     let design_checker_source_is_registered = registered_artifacts
         .contains("tools/design-check/src/main.rs")
@@ -3676,27 +4169,24 @@ fn check_handler_candidate_paths(
         validate_relative_path(path, "handler value candidate path")?;
         if implementation_paths.contains(path) {
             return Err(format!(
-                "{HANDLER_VALUE_PRIMITIVES_TRANCHE} candidate path enters implementation scope: \
-                 {path:?}"
+                "{context} candidate path enters implementation scope: {path:?}"
             ));
         }
         let explicitly_governed = path.starts_with("docs/")
             || path.starts_with("workspace/")
             || matches!(
                 path.as_str(),
-                "AGENTS.md" | "PLAN.md" | "Cargo.toml" | "Cargo.lock"
+                "AGENTS.md" | "PLAN.md" | "PROJECT_STATE.md" | "Cargo.toml" | "Cargo.lock"
             )
             || (path == "tools/design-check/src/main.rs" && design_checker_source_is_registered);
         if !registered_artifacts.contains(path) && !explicitly_governed {
             return Err(format!(
-                "{HANDLER_VALUE_PRIMITIVES_TRANCHE} candidate path is outside registered \
-                 contract/governance scope: {path:?}"
+                "{context} candidate path is outside registered contract/governance scope: \
+                 {path:?}"
             ));
         }
         if !root.join(path).is_file() {
-            return Err(format!(
-                "{HANDLER_VALUE_PRIMITIVES_TRANCHE} candidate path is missing: {path:?}"
-            ));
+            return Err(format!("{context} candidate path is missing: {path:?}"));
         }
     }
     Ok(())
@@ -4105,6 +4595,495 @@ fn check_handler_progress_checkpoint_state(
     Ok(())
 }
 
+#[derive(Debug, Eq, PartialEq)]
+struct LogicalTimeReviewAttestationProjection {
+    reviewed_ref: String,
+}
+
+fn parse_logical_time_review_attestation(
+    source: &str,
+) -> Result<LogicalTimeReviewAttestationProjection, String> {
+    let document = source
+        .parse::<DocumentMut>()
+        .map_err(|error| format!("invalid logical time review attestation: {error}"))?;
+    require_exact_table_fields(
+        document.as_table(),
+        "logical time review attestation",
+        &[
+            "schema_version",
+            "design_revision",
+            "tranche",
+            "status",
+            "reviewer_attestation_kind",
+            "reviewer_id",
+            "reviewed_ref",
+            "precheck",
+        ],
+    )?;
+    require_integer(
+        document.get("schema_version"),
+        "logical time review attestation schema_version",
+        1,
+    )?;
+    require_string(
+        document.get("design_revision"),
+        "logical time review attestation design_revision",
+        ACTIVE_DESIGN_REVISION,
+    )?;
+    require_string(
+        document.get("tranche"),
+        "logical time review attestation tranche",
+        LOGICAL_TIME_TRANCHE,
+    )?;
+    require_string(
+        document.get("status"),
+        "logical time review attestation status",
+        "passed",
+    )?;
+    let reviewer_kind = document
+        .get("reviewer_attestation_kind")
+        .and_then(Item::as_str)
+        .ok_or_else(|| "logical time review attestation has no reviewer kind".to_owned())?;
+    let reviewer_id = document
+        .get("reviewer_id")
+        .and_then(Item::as_str)
+        .ok_or_else(|| "logical time review attestation has no reviewer_id".to_owned())?;
+    match reviewer_kind {
+        "separate-agent-task"
+            if reviewer_id.starts_with("codex-agent:/root/")
+                && reviewer_id != "codex-agent:/root/" => {}
+        "independent-root-session" if reviewer_id == "codex-agent:/root" => {}
+        "separate-agent-task" => {
+            return Err(format!(
+                "logical time reviewer is not a child task: {reviewer_id:?}"
+            ));
+        }
+        "independent-root-session" => {
+            return Err(format!(
+                "logical time root-session attestation has invalid reviewer: {reviewer_id:?}"
+            ));
+        }
+        other => {
+            return Err(format!(
+                "unsupported logical time review attestation kind: {other:?}"
+            ));
+        }
+    }
+    let reviewed_ref = document
+        .get("reviewed_ref")
+        .and_then(Item::as_str)
+        .ok_or_else(|| "logical time review attestation has no reviewed_ref".to_owned())?
+        .to_owned();
+    require_full_commit_id(&reviewed_ref, "logical time reviewed_ref")?;
+
+    let checks = document
+        .get("precheck")
+        .and_then(Item::as_array_of_tables)
+        .ok_or_else(|| "logical time review attestation has no [[precheck]] records".to_owned())?;
+    if checks.len() != LOGICAL_TIME_PRECHECKS.len() {
+        return Err(format!(
+            "logical time review attestation must record exactly {} prechecks; found {}",
+            LOGICAL_TIME_PRECHECKS.len(),
+            checks.len()
+        ));
+    }
+    let mut ids = BTreeSet::new();
+    for check in checks {
+        require_exact_table_fields(check, "logical time review precheck", &["id", "result"])?;
+        let id = string_field(check, "id", "logical time review precheck")?;
+        require_table_string(check, "result", "passed", &id)?;
+        if !ids.insert(id.clone()) {
+            return Err(format!(
+                "logical time review attestation duplicates precheck {id:?}"
+            ));
+        }
+    }
+    let expected_ids = owned_set(LOGICAL_TIME_PRECHECKS);
+    if ids != expected_ids {
+        return Err(format!(
+            "logical time review attestation precheck set mismatch; expected \
+             {expected_ids:?}, found {ids:?}"
+        ));
+    }
+    Ok(LogicalTimeReviewAttestationProjection { reviewed_ref })
+}
+
+fn check_logical_time_review_attestation(
+    root: &Path,
+    relative_path: &str,
+    attestation_ref: &str,
+    candidate_base_ref: &str,
+    candidate_ref: &str,
+    candidate_paths: &BTreeSet<String>,
+) -> Result<(), String> {
+    require_full_commit_id(attestation_ref, "logical time review_attestation_ref")?;
+    check_git_commit_is_ancestor(root, attestation_ref, "logical time review_attestation_ref")?;
+    let path = root.join(relative_path);
+    let source = fs::read_to_string(&path)
+        .map_err(|error| format!("cannot read {}: {error}", path.display()))?;
+    let projection = parse_logical_time_review_attestation(&source)?;
+    check_git_commit_is_ancestor(root, &projection.reviewed_ref, "logical time reviewed_ref")?;
+    if projection.reviewed_ref != candidate_ref {
+        return Err(format!(
+            "logical time reviewed_ref must identify candidate {candidate_ref:?}; found {:?}",
+            projection.reviewed_ref
+        ));
+    }
+
+    require_git_single_parent(
+        root,
+        &projection.reviewed_ref,
+        candidate_base_ref,
+        "logical time reviewed candidate commit",
+    )?;
+    let reviewed_paths = git_changed_paths_between(
+        root,
+        candidate_base_ref,
+        &projection.reviewed_ref,
+        "logical time reviewed candidate diff",
+    )?;
+    if &reviewed_paths != candidate_paths {
+        return Err(format!(
+            "logical time reviewed candidate diff mismatch; expected {candidate_paths:?}, \
+             found {reviewed_paths:?}"
+        ));
+    }
+
+    let attestation_parent = git_single_parent(
+        root,
+        attestation_ref,
+        "logical time review attestation commit",
+    )?;
+    require_git_ancestor(
+        root,
+        &projection.reviewed_ref,
+        &attestation_parent,
+        "logical time review attestation ancestry",
+    )?;
+    let review_paths = git_commit_changed_paths(
+        root,
+        attestation_ref,
+        "logical time review attestation diff",
+    )?;
+    let expected_review_paths = owned_set(&["docs/artifacts.csv", relative_path]);
+    if review_paths != expected_review_paths {
+        return Err(format!(
+            "logical time review commit path mismatch; expected {expected_review_paths:?}, \
+             found {review_paths:?}"
+        ));
+    }
+
+    let object = format!("{attestation_ref}:{relative_path}");
+    let committed_source = git_output_bytes(
+        root,
+        &["show", &object],
+        "read committed logical time review attestation",
+    )?;
+    let worktree_source =
+        fs::read(&path).map_err(|error| format!("cannot read {}: {error}", path.display()))?;
+    if committed_source != worktree_source {
+        return Err(format!(
+            "worktree logical time review attestation {relative_path:?} differs from \
+             review_attestation_ref"
+        ));
+    }
+    Ok(())
+}
+
+fn check_logical_time_admission_commit(
+    root: &Path,
+    admission_ref: &str,
+    attestation_ref: &str,
+) -> Result<(), String> {
+    require_full_commit_id(admission_ref, "logical time admission_ref")?;
+    check_git_commit_is_ancestor(root, admission_ref, "logical time admission_ref")?;
+    require_git_single_parent(
+        root,
+        admission_ref,
+        attestation_ref,
+        "logical time admission commit",
+    )?;
+    let admission_paths = git_changed_paths_between(
+        root,
+        attestation_ref,
+        admission_ref,
+        "logical time admission diff",
+    )?;
+    let expected_paths = owned_set(&[
+        "PLAN.md",
+        LOGICAL_TIME_ADMISSION_REVIEW,
+        "docs/work-packages/index.toml",
+    ]);
+    if admission_paths != expected_paths {
+        return Err(format!(
+            "logical time admission path mismatch; expected {expected_paths:?}, found \
+             {admission_paths:?}"
+        ));
+    }
+    Ok(())
+}
+
+fn check_logical_time_progress_checkpoint_state(
+    root: &Path,
+    admission_ref: &str,
+    implementation_paths: &BTreeSet<String>,
+) -> Result<(), String> {
+    let head = git_text(
+        root,
+        &["rev-parse", "HEAD"],
+        "resolve logical time progress HEAD",
+    )?;
+    let head = head.trim();
+    let expected_progress_paths = owned_set(&["PLAN.md", "docs/work-packages/index.toml"]);
+    if head == admission_ref {
+        let changed = git_worktree_paths(root, "pre-logical-time-progress worktree")?;
+        if changed != expected_progress_paths {
+            return Err(format!(
+                "pre-logical-time-progress path mismatch; expected \
+                 {expected_progress_paths:?}, found {changed:?}"
+            ));
+        }
+        return Ok(());
+    }
+
+    require_git_single_parent(
+        root,
+        head,
+        admission_ref,
+        "logical time progress checkpoint",
+    )?;
+    let progress_paths = git_changed_paths_between(
+        root,
+        admission_ref,
+        head,
+        "logical time progress checkpoint diff",
+    )?;
+    if progress_paths != expected_progress_paths {
+        return Err(format!(
+            "logical time progress path mismatch; expected {expected_progress_paths:?}, found \
+             {progress_paths:?}"
+        ));
+    }
+    let worktree_paths = git_worktree_paths(root, "logical time implementation worktree")?;
+    if !worktree_paths.is_subset(implementation_paths) {
+        let out_of_scope: Vec<&String> = worktree_paths.difference(implementation_paths).collect();
+        return Err(format!(
+            "logical time implementation worktree has out-of-scope paths {out_of_scope:?}"
+        ));
+    }
+    Ok(())
+}
+
+fn check_logical_time_completion_evidence(
+    root: &Path,
+    relative_path: &str,
+    verification_check: &str,
+    admission_ref: &str,
+) -> Result<(), String> {
+    check_tranche_evidence(
+        root,
+        relative_path,
+        LOGICAL_TIME_TRANCHE,
+        "logical-time-domain-correction",
+        verification_check,
+    )?;
+    let path = root.join(relative_path);
+    let source = fs::read_to_string(&path)
+        .map_err(|error| format!("cannot read {}: {error}", path.display()))?;
+    let document = source
+        .parse::<DocumentMut>()
+        .map_err(|error| format!("invalid {}: {error}", path.display()))?;
+    require_string(
+        document.get("verification_command"),
+        "logical time evidence verification_command",
+        "tools/check-wp100-logical-time-correction.sh",
+    )?;
+    let implementation_ref = document
+        .get("implementation_ref")
+        .and_then(Item::as_str)
+        .ok_or_else(|| format!("{relative_path} has no implementation_ref"))?;
+    require_full_commit_id(implementation_ref, "logical time implementation_ref")?;
+    check_git_commit_is_ancestor(root, implementation_ref, "logical time implementation_ref")?;
+    let progress_ref = git_single_parent(
+        root,
+        implementation_ref,
+        "logical time implementation commit",
+    )?;
+    require_git_single_parent(
+        root,
+        &progress_ref,
+        admission_ref,
+        "logical time progress checkpoint",
+    )?;
+    let progress_paths = git_changed_paths_between(
+        root,
+        admission_ref,
+        &progress_ref,
+        "logical time progress checkpoint diff",
+    )?;
+    let expected_progress_paths = owned_set(&["PLAN.md", "docs/work-packages/index.toml"]);
+    if progress_paths != expected_progress_paths {
+        return Err(format!(
+            "logical time progress checkpoint path mismatch; expected \
+             {expected_progress_paths:?}, found {progress_paths:?}"
+        ));
+    }
+    let implementation_paths = git_commit_changed_paths(
+        root,
+        implementation_ref,
+        "logical time implementation commit",
+    )?;
+    let expected_paths = owned_set(&["foundation/src/time.rs"]);
+    if implementation_paths != expected_paths {
+        return Err(format!(
+            "logical time implementation path mismatch; expected {expected_paths:?}, found \
+             {implementation_paths:?}"
+        ));
+    }
+
+    let checker = root.join("tools/check-wp100-logical-time-correction.sh");
+    let status = Command::new(&checker)
+        .current_dir(root)
+        .status()
+        .map_err(|error| {
+            format!(
+                "cannot execute logical time completion checker {}: {error}",
+                checker.display()
+            )
+        })?;
+    if !status.success() {
+        return Err(format!(
+            "logical time completion checker exited with {status}"
+        ));
+    }
+    Ok(())
+}
+
+fn check_logical_time_correction_entry_state(root: &Path, mode: &str) -> Result<(), String> {
+    if !matches!(mode, "candidate" | "admission-ready") {
+        return Err(format!(
+            "invalid logical time entry mode {mode:?}; expected candidate or admission-ready"
+        ));
+    }
+    let path = root.join("docs/work-packages/index.toml");
+    let source = fs::read_to_string(&path)
+        .map_err(|error| format!("cannot read {}: {error}", path.display()))?;
+    let document = source
+        .parse::<DocumentMut>()
+        .map_err(|error| format!("invalid {}: {error}", path.display()))?;
+    let tranches = document
+        .get("tranche")
+        .and_then(Item::as_array_of_tables)
+        .ok_or_else(|| "work-package index has no [[tranche]] records".to_owned())?;
+    let matching: Vec<&Table> = tranches
+        .iter()
+        .filter(|table| table.get("id").and_then(Item::as_str) == Some(LOGICAL_TIME_TRANCHE))
+        .collect();
+    if matching.len() != 1 {
+        return Err(format!(
+            "work-package index must contain exactly one {LOGICAL_TIME_TRANCHE}; found {}",
+            matching.len()
+        ));
+    }
+    let tranche = matching[0];
+    let status = string_field(tranche, "status", LOGICAL_TIME_TRANCHE)?;
+    let admission_status = string_field(tranche, "admission_status", LOGICAL_TIME_TRANCHE)?;
+    let expected_pair = match mode {
+        "candidate" => ("pending", "review-pending"),
+        "admission-ready" => ("pending", "approved"),
+        _ => unreachable!("mode checked above"),
+    };
+    if (status.as_str(), admission_status.as_str()) != expected_pair {
+        return Err(format!(
+            "logical time {mode} state must be {:?}/{:?}; found \
+             {status:?}/{admission_status:?}",
+            expected_pair.0, expected_pair.1
+        ));
+    }
+    if tranche.contains_key("admission_ref") {
+        return Err(format!(
+            "logical time {mode} pending state must not define admission_ref"
+        ));
+    }
+
+    let audit_path = string_field(tranche, "admission_review", LOGICAL_TIME_TRANCHE)?;
+    if audit_path != LOGICAL_TIME_ADMISSION_REVIEW {
+        return Err("logical time admission review path drifted".to_owned());
+    }
+    let registered_artifacts = load_artifact_registry(root)?;
+    if !registered_artifacts.contains(&audit_path) || !root.join(&audit_path).is_file() {
+        return Err("logical time admission review is not registered and present".to_owned());
+    }
+    check_handler_value_audit_state(root, &audit_path, &admission_status)?;
+
+    let implementation_paths =
+        package_string_set(tranche, "implementation_paths", LOGICAL_TIME_TRANCHE)?;
+    if implementation_paths != owned_set(&["foundation/src/time.rs"]) {
+        return Err("logical time implementation path projection drifted".to_owned());
+    }
+    let candidate_base_ref = string_field(tranche, "candidate_base_ref", LOGICAL_TIME_TRANCHE)?;
+    if candidate_base_ref != LOGICAL_TIME_CANDIDATE_BASE_REF {
+        return Err("logical time candidate base ref drifted".to_owned());
+    }
+    check_git_commit_is_ancestor(root, &candidate_base_ref, "logical time candidate base ref")?;
+    let candidate_ref = string_field(tranche, "candidate_ref", LOGICAL_TIME_TRANCHE)?;
+    require_full_commit_id(&candidate_ref, "logical time candidate_ref")?;
+    let candidate_paths = package_string_set(tranche, "candidate_paths", LOGICAL_TIME_TRANCHE)?;
+    check_candidate_paths(
+        LOGICAL_TIME_TRANCHE,
+        root,
+        &candidate_paths,
+        &implementation_paths,
+        &registered_artifacts,
+    )?;
+    check_candidate_commit(
+        LOGICAL_TIME_TRANCHE,
+        root,
+        &candidate_base_ref,
+        &candidate_ref,
+        &candidate_paths,
+    )?;
+
+    if mode == "candidate" {
+        for forbidden_field in ["review_attestation", "review_attestation_ref"] {
+            if tranche.contains_key(forbidden_field) {
+                return Err(format!(
+                    "logical time candidate state must not define {forbidden_field:?}"
+                ));
+            }
+        }
+        if root.join(LOGICAL_TIME_REVIEW_ATTESTATION).exists() {
+            return Err("logical time candidate has a premature review attestation".to_owned());
+        }
+    } else {
+        let attestation_path = string_field(tranche, "review_attestation", LOGICAL_TIME_TRANCHE)?;
+        let attestation_ref =
+            string_field(tranche, "review_attestation_ref", LOGICAL_TIME_TRANCHE)?;
+        if attestation_path != LOGICAL_TIME_REVIEW_ATTESTATION
+            || !registered_artifacts.contains(&attestation_path)
+        {
+            return Err("logical time review attestation path is not frozen".to_owned());
+        }
+        check_logical_time_review_attestation(
+            root,
+            &attestation_path,
+            &attestation_ref,
+            &candidate_base_ref,
+            &candidate_ref,
+            &candidate_paths,
+        )?;
+        let head = git_text(root, &["rev-parse", "HEAD"], "resolve HEAD")?;
+        if head.trim() != attestation_ref {
+            return Err(format!(
+                "logical time admission-ready state requires HEAD at \
+                 review_attestation_ref {attestation_ref:?}; found {:?}",
+                head.trim()
+            ));
+        }
+    }
+    Ok(())
+}
+
 fn check_handler_value_primitives_entry_state(root: &Path, mode: &str) -> Result<(), String> {
     if !matches!(mode, "candidate" | "admission-ready") {
         return Err(format!(
@@ -4196,13 +5175,20 @@ fn check_handler_value_primitives_entry_state(root: &Path, mode: &str) -> Result
     }
     let candidate_paths =
         package_string_set(tranche, "candidate_paths", HANDLER_VALUE_PRIMITIVES_TRANCHE)?;
-    check_handler_candidate_paths(
+    check_candidate_paths(
+        HANDLER_VALUE_PRIMITIVES_TRANCHE,
         root,
         &candidate_paths,
         &implementation_paths,
         &registered_artifacts,
     )?;
-    check_handler_candidate_commit(root, &candidate_base_ref, &candidate_ref, &candidate_paths)?;
+    check_candidate_commit(
+        HANDLER_VALUE_PRIMITIVES_TRANCHE,
+        root,
+        &candidate_base_ref,
+        &candidate_ref,
+        &candidate_paths,
+    )?;
 
     if mode == "candidate" {
         for forbidden_field in ["review_attestation", "review_attestation_ref"] {
@@ -4251,19 +5237,25 @@ fn check_handler_value_primitives_entry_state(root: &Path, mode: &str) -> Result
     Ok(())
 }
 
-fn check_handler_candidate_commit(
+fn check_candidate_commit(
+    context: &str,
     root: &Path,
     candidate_base_ref: &str,
     candidate_ref: &str,
     candidate_paths: &BTreeSet<String>,
 ) -> Result<(), String> {
-    check_git_commit_is_ancestor(root, candidate_ref, "candidate ref")?;
-    require_git_single_parent(root, candidate_ref, candidate_base_ref, "candidate commit")?;
+    check_git_commit_is_ancestor(root, candidate_ref, &format!("{context} candidate ref"))?;
+    require_git_single_parent(
+        root,
+        candidate_ref,
+        candidate_base_ref,
+        &format!("{context} candidate commit"),
+    )?;
     let changed = git_changed_paths_between(
         root,
         candidate_base_ref,
         candidate_ref,
-        "candidate commit diff",
+        &format!("{context} candidate commit diff"),
     )?;
     if &changed != candidate_paths {
         return Err(format!(
@@ -7099,8 +8091,8 @@ mod tests {
         HANDLER_VALUE_PRIMITIVES_SOURCE_CONTRACT, check_handler_scope_partition,
         check_producer_subscription_contract, expand_expressions,
         expected_work_package_dependencies, handler_value_status_pair_is_valid,
-        parse_handler_review_attestation, parse_transitions, validate_handler_value_audit_source,
-        validate_handler_value_primitives_source,
+        parse_handler_review_attestation, parse_logical_time_review_attestation, parse_transitions,
+        validate_handler_value_audit_source, validate_handler_value_primitives_source,
     };
 
     fn producer_contract(obligation_bits: &str) -> DocumentMut {
@@ -7331,6 +8323,67 @@ result = "passed"
         let false_child =
             root_session.replace("codex-agent:/root", "codex-agent:/root/independent_review");
         assert!(parse_handler_review_attestation(&false_child).is_err());
+    }
+
+    #[test]
+    fn logical_time_review_attestation_requires_seven_exact_passes() {
+        let source = r#"
+schema_version = 1
+design_revision = "4.9"
+tranche = "WP-100-LOGICAL-TIME-CORRECTION"
+status = "passed"
+reviewer_attestation_kind = "independent-root-session"
+reviewer_id = "codex-agent:/root"
+reviewed_ref = "0123456789abcdef0123456789abcdef01234567"
+
+[[precheck]]
+id = "api-ownership-check"
+result = "passed"
+
+[[precheck]]
+id = "architecture-adr-check"
+result = "passed"
+
+[[precheck]]
+id = "design-requirement-check"
+result = "passed"
+
+[[precheck]]
+id = "resource-profile-check"
+result = "passed"
+
+[[precheck]]
+id = "work-package-dag-check"
+result = "passed"
+
+[[precheck]]
+id = "wp100-amendment-check"
+result = "passed"
+
+[[precheck]]
+id = "wp100-handler-amendment-check"
+result = "passed"
+"#;
+        let projection = parse_logical_time_review_attestation(source)
+            .expect("the exact logical time review projection must validate");
+        assert_eq!(
+            projection.reviewed_ref,
+            "0123456789abcdef0123456789abcdef01234567"
+        );
+
+        let failed = source.replacen("result = \"passed\"", "result = \"failed\"", 1);
+        assert!(parse_logical_time_review_attestation(&failed).is_err());
+        let missing = source.replacen(
+            "\n[[precheck]]\nid = \"design-requirement-check\"\nresult = \"passed\"\n",
+            "",
+            1,
+        );
+        assert!(parse_logical_time_review_attestation(&missing).is_err());
+        let false_child = source.replace(
+            "reviewer_attestation_kind = \"independent-root-session\"",
+            "reviewer_attestation_kind = \"separate-agent-task\"",
+        );
+        assert!(parse_logical_time_review_attestation(&false_child).is_err());
     }
 
     #[test]

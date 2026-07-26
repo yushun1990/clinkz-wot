@@ -38,6 +38,8 @@ The repository evidence establishes the following starting point:
 - the admitted `WP-100-FOUNDATION-REFRESH` tranche is complete;
 - `WP-100-HANDLER-VALUE-PRIMITIVES` is implemented and has completion evidence
   for the exact five-value scope;
+- `WP-100-LOGICAL-TIME-CORRECTION` has an exact Foundation-only admission
+  candidate and remains review-pending; source implementation is not admitted;
 - broad handler entry is blocked until the decided logical-time and
   Deadline/cleanup correction tranches complete, and by incomplete workload
   oracles, request/context migration review, and no-atomic public-boundary
@@ -205,9 +207,9 @@ Completed evidence:
 
 Next execution order:
 
-1. author and admit `WP-100-LOGICAL-TIME-CORRECTION`, then replace the
-   impacted WP-000 time claims and reaffirm its generation claims with new
-   completion evidence;
+1. independently review and, if the exact candidate passes, admit
+   `WP-100-LOGICAL-TIME-CORRECTION`; then replace the impacted WP-000 time
+   claims and reaffirm its generation claims with new completion evidence;
 2. admit and complete `WP-100-DEADLINE-CLEANUP-TIMING`;
 3. define and admit the next bounded handler tranches for request/context
    values, portable traits, host erasure/storage, security, codecs, errors, and

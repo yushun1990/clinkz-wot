@@ -86,6 +86,17 @@ admission: each tranche still requires its own ADR-0013 admission record and
 completion evidence. The broad handler entry remains blocked until both
 complete.
 
+`WP-100-LOGICAL-TIME-CORRECTION` is registered as a review-pending tranche
+whose only implementation path is `foundation/src/time.rs`. It retains every
+public time representation and the `RuntimeClock` method set, adds the frozen
+`SourceTimestamp::checked_cmp` behavior, corrects raw-wrap documentation and
+tests to the extended logical domain, and uses an independent nested fixture
+for raw overflow-epoch, delayed-observation, reset, scale, and exhaustion
+semantics. Its exact entry boundary is recorded by
+`docs/audits/WP-100-logical-time-correction-entry.md`. Registration and
+candidate checks do not authorize source changes; independent review and the
+separate approval checkpoint remain required.
+
 ## Requirements
 
 - `CONCUR-LOCK-001`, `CONCUR-USER-001`, `CONCUR-LIN-001`, and `CONCUR-CRIT-001` govern lock

@@ -26,6 +26,12 @@ artifact = "tools/check-api-ownership.sh"
 command = ["tools/check-api-ownership.sh"]
 
 [[check]]
+id = "design-requirement-check"
+status = "executable"
+artifact = "tools/check-design-requirements.sh"
+command = ["tools/check-design-requirements.sh"]
+
+[[check]]
 id = "architecture-adr-check"
 status = "executable"
 artifact = "tools/check-architecture-adrs.sh"
@@ -118,6 +124,21 @@ status = "executable"
 artifact = "tools/check-wp100-handler-value-primitives-entry.sh"
 command = [
     "tools/check-wp100-handler-value-primitives-entry.sh",
+    "--admission-ready",
+]
+
+[[check]]
+id = "wp100-logical-time-correction-check"
+status = "executable"
+artifact = "tools/check-wp100-logical-time-correction.sh"
+command = ["tools/check-wp100-logical-time-correction.sh"]
+
+[[check]]
+id = "wp100-logical-time-correction-entry-check"
+status = "executable"
+artifact = "tools/check-wp100-logical-time-correction-entry.sh"
+command = [
+    "tools/check-wp100-logical-time-correction-entry.sh",
     "--admission-ready",
 ]
 
