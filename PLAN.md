@@ -2,7 +2,7 @@
 
 ## Plan Status
 
-Plan revision: AI-led governance baseline
+Plan revision: AI-led governance and architecture-authority baseline
 
 Active design revision: v4.9 architecture-closure candidate
 
@@ -18,6 +18,12 @@ The plan is executed under AI-led development. AI owns technical decisions,
 milestone technical status, evidence sufficiency, and migration of stable
 conclusions. Owner feedback is visibility, constraint, question, and
 counterexample input; it is not a routine technical approval gate.
+
+Owner visibility is continuous and non-blocking. AI must keep decisions,
+evidence, and next safe actions visible, but must not pause solely to obtain
+routine Owner acknowledgment. Owner feedback changes execution only when it
+introduces a project-goal conflict, omitted real-world constraint, unacceptable
+direction, credible counterexample, or irreversible external commitment.
 
 ## Planning Baseline
 
@@ -52,7 +58,7 @@ still close before final integration and release conformance.
 
 ## AI-led Open Decision Queue
 
-These decisions are not yet accepted project direction. For each item, AI
+These technical directions remain unresolved or not yet fully migrated. For each item, AI
 investigates the workspace topic and repository evidence, chooses a technical
 direction when evidence is sufficient, records alternatives and rejected
 approaches, then migrates the stable conclusion to its authoritative owner.
@@ -67,7 +73,7 @@ answer and does not automatically block unrelated admitted work.
 | D2 | OPEN | Freeze the time domain and Deadline direction from `workspace/0007-time-domain-and-deadline.md` | Unblocks corrective foundation/Core work and broad handler entry | M2 exit |
 | D3 | OPEN | Select the completion strategy for decomposing residual `docs/design.md` ownership from `workspace/0010-complete-design-decomposition.md` | Determines the remaining v4.9 authority-closure work | M1 exit |
 | D4 | OPEN | Freeze subscription receiver/control ownership and clone semantics from `workspace/0011-subscription-receiver-ownership.md` | Unblocks affected WP-300/WP-400 contracts | M4 entry |
-| D5 | OPEN | Decide whether and how to add the mock-binding property-read architecture gate from `workspace/0009-minimal-end-to-end-architecture-validation.md` | If accepted by AI evidence review, PLAN and the authoritative work-package DAG must gain reviewed narrow tranches and an integration gate before broad expansion | Before broad WP-200/WP-300/WP-400 expansion |
+| D5 | OPEN | Decide whether and how to add the mock-binding property-read architecture gate from `workspace/0009-minimal-end-to-end-architecture-validation.md` | If adopted after AI evidence review, PLAN and the authoritative work-package DAG must gain reviewed narrow tranches and an integration gate before broad expansion | Before broad WP-200/WP-300/WP-400 expansion |
 
 D5 does not currently alter milestone dependencies. Until AI decides it and
 the decision is migrated, the registered work-package DAG remains the execution
@@ -106,8 +112,9 @@ Scope:
 - resolve the current artifact-registry/checker inconsistency;
 - keep D1 migrated as the risk-proportional admission authoring policy in
   `PROJECT_GOVERNANCE.md`, `AGENTS.md`, and the workspace lifecycle records;
-- remove or explicitly assign duplicated execution-planning responsibility in
-  the root governance documents without changing accepted architecture;
+- keep root artifact responsibilities distinct, with
+  `ARCHITECTURE_GOVERNANCE.md` limited to architecture authority,
+  convergence, and design-change control;
 - record the baseline verification commands that future milestones must
   preserve.
 
@@ -118,7 +125,7 @@ AI deliverable:
 - passing baseline governance checks or an explicit visible blocker;
 - exact evidence links and next safe action after every substantial change.
 
-Owner visibility/feedback point:
+Owner feedback focus (non-blocking):
 
 - flag any project-goal conflict, missing constraint, unacceptable direction,
   or credible counterexample in the plan or collaboration model.
@@ -162,7 +169,7 @@ AI deliverable:
 - updated checkers, registries, and review evidence;
 - a closure evidence index with no unresolved conflict hidden by precedence.
 
-Owner visibility/feedback point:
+Owner feedback focus (non-blocking):
 
 - flag any project-goal conflict, omitted real-world constraint,
   unacceptable direction, or credible counterexample in the v4.9 closure
@@ -194,19 +201,18 @@ Completed evidence:
 
 Next execution order:
 
-1. repair the current artifact/check registration defect;
-2. complete independent entry re-review of
+1. complete independent entry re-review of
    `WP-100-HANDLER-VALUE-PRIMITIVES`;
-3. if admitted under the registered tranche checks, implement and verify
+2. if admitted under the registered tranche checks, implement and verify
    exactly the five passive values;
-4. decide D2, define a corrective time-domain tranche, and replace or reaffirm
+3. decide D2, define a corrective time-domain tranche, and replace or reaffirm
    impacted WP-000 time evidence;
-5. define and admit the next bounded handler tranches for request/context
+4. define and admit the next bounded handler tranches for request/context
    values, portable traits, host erasure/storage, security, codecs, errors, and
    callback isolation;
-6. complete the real handler matrix, no-atomic boundary, cancellation,
+5. complete the real handler matrix, no-atomic boundary, cancellation,
    storage/replacement, resource, and performance evidence;
-7. retain Producer and Servient integration in WP-300 and WP-400.
+6. retain Producer and Servient integration in WP-300 and WP-400.
 
 AI deliverable:
 
@@ -217,7 +223,7 @@ AI deliverable:
   goals, product trade-offs, real-world constraints, unacceptable directions,
   or irreversible external commitments.
 
-Owner visibility/feedback point:
+Owner feedback focus (non-blocking):
 
 - flag project-goal conflicts, omitted constraints, unacceptable directions, or
   credible counterexamples in D2, WP-100 scope, or completion evidence.
@@ -260,7 +266,7 @@ AI deliverable:
 - admission rollback, bound, generation, and complexity evidence;
 - no hidden binding execution or Servient lifecycle ownership in planning.
 
-Owner visibility/feedback point:
+Owner feedback focus (non-blocking):
 
 - flag project-goal conflicts, omitted constraints, unacceptable directions, or
   credible counterexamples in selection policy, public semantics, or WP-200
@@ -304,7 +310,7 @@ AI deliverable:
   evidence;
 - removal staging that does not create a migration cycle.
 
-Owner visibility/feedback point:
+Owner feedback focus (non-blocking):
 
 - flag project-goal conflicts, omitted constraints, unacceptable directions, or
   credible counterexamples in subscription ownership, SPI usability, or WP-300
@@ -343,7 +349,7 @@ Exit criteria:
   ownership and semantics;
 - WP-400 is complete and independently reviewed.
 
-Owner visibility/feedback point: flag project-goal conflicts, omitted
+Owner feedback focus (non-blocking): flag project-goal conflicts, omitted
 constraints, unacceptable directions, or credible counterexamples in the
 application lifecycle or WP-400 completion evidence.
 
@@ -365,7 +371,7 @@ Exit criteria:
 - no Directory service scope enters the active v1 target;
 - WP-500 is complete and independently reviewed.
 
-Owner visibility/feedback point: flag project-goal conflicts, omitted
+Owner feedback focus (non-blocking): flag project-goal conflicts, omitted
 constraints, unacceptable directions, or credible counterexamples in
 Directory/Discovery scope or WP-500 completion evidence.
 
@@ -390,7 +396,7 @@ Exit criteria:
 - realistic end-to-end Thing interaction works through Zenoh;
 - WP-600 is complete and independently reviewed.
 
-Owner visibility/feedback point: flag project-goal conflicts, omitted
+Owner feedback focus (non-blocking): flag project-goal conflicts, omitted
 constraints, unacceptable directions, or credible counterexamples in
 production-binding usability or WP-600 completion evidence.
 
@@ -417,7 +423,7 @@ Exit criteria:
 - an independent release-candidate review is complete and ready for release
   readiness assessment.
 
-Owner visibility/feedback point: flag project-goal conflicts, omitted
+Owner feedback focus (non-blocking): flag project-goal conflicts, omitted
 constraints, unacceptable directions, or credible counterexamples in umbrella
 integration or release-candidate evidence.
 
@@ -455,4 +461,5 @@ Milestone status changes only from repository evidence and follows
 and release-readiness judgments, and updates this plan and `PROJECT_STATE.md`.
 Owner feedback can reopen a milestone or decision when it identifies a
 project-goal conflict, omitted constraint, unacceptable direction, or credible
-counterexample. The Owner decides actual public release execution.
+counterexample. AI does not pause for routine acknowledgment. The Owner
+decides actual public release execution.
