@@ -10,9 +10,9 @@ non-implementation boundary, and is an ancestor of the registration
 checkpoint. The D3 design-authority completion strategy is migrated at
 `78b3a45fa521cfe97d49d6ae3907760bcca7a041`; D4 subscription receiver/control
 ownership is migrated at
-`e07ba5f796c7613e28da08b34903a77c00b5a2d8`. D5 is migrated into the
-property-read architecture-gate DAG; its exact Git checkpoint is recorded
-after this state update.
+`e07ba5f796c7613e28da08b34903a77c00b5a2d8`. D5 property-read architecture
+gate migration is recorded at
+`d4800bff41442768d62c6531e5adee52a39b2a74`.
 
 ## Current Objective
 
