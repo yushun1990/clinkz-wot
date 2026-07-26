@@ -7,7 +7,8 @@ Repository basis: corrected handler-context candidate registration checkpoint
 `27c8dc974fd1b337de4671c81719f9fa32410c56` is a single child of frozen base
 `c42abcbc339167183c8c4bf9bd3bf584540073b4`, retains the exact 17-path
 non-implementation boundary, and is an ancestor of the registration
-checkpoint.
+checkpoint. The D3 design-authority completion strategy is migrated by this
+file's containing checkpoint.
 
 ## Current Objective
 
@@ -15,7 +16,8 @@ Independently review replacement `WP-100-HANDLER-CONTEXT` candidate
 `27c8dc974fd1b337de4671c81719f9fa32410c56` before changing Core source.
 Preserve the completed handler-value and time tranches, keep the remaining
 target/no-atomic and request-storage migrations separate, and do not fold
-Producer or Servient integration into WP-100.
+Producer or Servient integration into WP-100. Continue M1 authority convergence
+through the exact target-domain graph fixed by D3.
 
 Active milestones:
 
@@ -80,6 +82,19 @@ Workspace lifecycle:
 The active target is the v4.9 architecture-closure candidate. v4.8 is migration
 input, not active implementation authority.
 
+D3 now fixes the authority-completion model:
+
+- `docs/requirements.csv::source_path` is the current normative owner;
+- `docs/spec/decomposition.csv::target_path` is the final owner and its
+  `depends_on` field is the target-domain migration DAG;
+- every stable requirement occurs exactly once in each index;
+- a target mapping never activates a planned or partial file;
+- `docs/design.md` ultimately retains only revision, language, authority,
+  change control, standards, source-manifest, and revision-record duties; and
+- completion proceeds through several independently reviewed atomic
+  target-domain migrations, with security and codecs separated because their
+  ownership, side effects, resources, and evidence differ.
+
 The architecture direction already accepted by the registered sources is:
 
 - immutable admitted plan sets separate logical plans from binding-owned
@@ -130,6 +145,10 @@ Global gates:
 
 Work packages and tranches:
 
+- D3 is migrated. The checked completion index maps all 121 stable requirements
+  across 14 final target domains: 34 are already at their final target, 84
+  remain residual in `docs/design.md`, and three remain under registered
+  amendments;
 - WP-000 is recorded complete; its historical `time-and-generation-api` file
   remains immutable;
 - D2 is migrated through ADR-0016 and
@@ -194,10 +213,25 @@ passed without expanding the tranche.
 
 AI-led open decisions:
 
-- D3: decide the residual `docs/design.md` decomposition strategy;
 - D4: freeze subscription receiver/control ownership and clone semantics;
 - D5: decide whether and how to add the minimal mock-binding property-read
   integration gate.
+
+D3 migration facts:
+
+- the migration boundary is stable requirement identity, not Markdown headings
+  or source modules;
+- architecture module-boundary and execution-invariant requirements migrate
+  first, followed by foundation, documents, interaction core, planning/codecs,
+  security/binding/discovery, subscriptions, Servient, and cross-domain
+  profiles/verification;
+- existing planning and binding clauses remain active while their later
+  reconciliation and remaining residual requirements follow the same DAG;
+- current authority changes only when definitions, requirement source rows,
+  artifact registration, prior detailed prose, amendments, affected
+  projections, and evidence move atomically; and
+- one monolithic move, placeholder target files, and overloading
+  `docs/requirements.csv` with future ownership were rejected.
 
 Broad handler blockers:
 
@@ -416,6 +450,25 @@ Handler-context candidate verification on 2026-07-26:
 - no independent-review attestation, approval, progress checkpoint, or Core
   implementation exists.
 
+D3 authority-decomposition verification on 2026-07-26:
+
+- `docs/spec/decomposition.csv` expands to all 121 registered requirements
+  exactly once across 14 unique target domains;
+- its strictly increasing dependency phases make the target graph acyclic;
+- `tools/check-design-requirements.sh` joins current and final ownership and
+  reports 34 requirements at final targets, 84 residual in `docs/design.md`,
+  and three in registered amendments; and
+- isolated checker mutations were rejected for duplicate/missing requirement
+  ownership, a backward dependency phase, and changing an active specification
+  away from its current final target;
+- `tools/check-design-artifacts.sh` passes with the new normative migration
+  index, including all registered design checks and the design checker's 16
+  unit and four integration tests; and
+- `workspace/0010-complete-design-decomposition.md` is `MIGRATED`, with the
+  stable conclusion projected into the design manifest, architecture and
+  specification indexes, artifact registry, checker, plan, and continuation
+  state.
+
 `cargo test --workspace --all-features --locked` is not a valid project
 baseline because it intentionally enables mutually exclusive `zenoh` and
 `zenoh-pico` backends. Use the valid feature-matrix script instead.
@@ -439,8 +492,9 @@ Next safe actions, in order:
    three-file admission checkpoint before either Core source path changes;
 3. create the exact two-file progress checkpoint, then implement and evidence
    `HandlerContext` only within the admitted scope;
-4. continue D3, D4, and D5 as AI-led technical decisions, asking the Owner only
-   for project-goal, constraint, or external-commitment clarification.
+4. continue M1 with the next dependency-ready D3 target-domain migration and
+   decide D4 and D5 from repository evidence, asking the Owner only for
+   project-goal, constraint, or external-commitment clarification.
 
 Important references:
 

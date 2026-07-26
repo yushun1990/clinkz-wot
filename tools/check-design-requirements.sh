@@ -3,7 +3,9 @@ set -euo pipefail
 
 root=$(cd "$(dirname "$0")/.." && pwd)
 index="$root/docs/requirements.csv"
+decomposition="$root/docs/spec/decomposition.csv"
 expected_header='requirement,compilation_cells,execution_models,resource_profiles,capability_roles,owner_packages,evidence_kinds,evidence_key,source_path'
+expected_decomposition_header='domain,target_path,sequence,depends_on,requirements'
 expected_requirement_count=121
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
@@ -40,9 +42,13 @@ validate_list() {
 }
 
 [[ -f "$index" ]] || fail "missing docs/requirements.csv"
+[[ -f "$decomposition" ]] || fail "missing docs/spec/decomposition.csv"
 
 header=$(head -n 1 "$index")
 [[ "$header" == "$expected_header" ]] || fail "unexpected CSV header"
+decomposition_header=$(head -n 1 "$decomposition")
+[[ "$decomposition_header" == "$expected_decomposition_header" ]] \
+    || fail "unexpected decomposition CSV header"
 
 awk -F, '
     NR > 1 && NF != 9 {
@@ -51,6 +57,14 @@ awk -F, '
     }
     END { exit failed }
 ' "$index"
+
+awk -F, '
+    NR > 1 && NF != 5 {
+        printf "design requirement check: decomposition CSV line %d has %d columns; expected 5\n", NR, NF > "/dev/stderr"
+        failed = 1
+    }
+    END { exit failed }
+' "$decomposition"
 
 : >"$tmp/indexed-unsorted"
 : >"$tmp/indexed-source-unsorted"
@@ -178,4 +192,144 @@ if [[ -s "$tmp/misplaced-missing" || -s "$tmp/misplaced-extra" ]]; then
 fi
 ((failed == 0)) || exit 1
 
-echo "design requirement check: $defined_count requirements indexed across registered sources"
+: >"$tmp/decomposition-unsorted"
+: >"$tmp/decomposition-target-unsorted"
+: >"$tmp/decomposition-dependencies"
+declare -A decomposition_sequences=()
+declare -A target_domains=()
+
+line_number=1
+while IFS=, read -r domain target_path sequence depends_on requirements; do
+    line_number=$((line_number + 1))
+
+    [[ "$domain" =~ ^[a-z0-9]+(-[a-z0-9]+)*$ ]] \
+        || fail "invalid decomposition domain '$domain' on CSV line $line_number"
+    [[ -z "${decomposition_sequences[$domain]+registered}" ]] \
+        || fail "duplicate decomposition domain '$domain' on CSV line $line_number"
+    [[ "$target_path" != /* && "$target_path" != *..* ]] \
+        || fail "decomposition target_path must be repository-relative on CSV line $line_number"
+    case "$target_path" in
+        docs/design.md|docs/architecture/*.md|docs/spec/*.md) ;;
+        *) fail "invalid decomposition target_path '$target_path' on CSV line $line_number" ;;
+    esac
+    [[ -z "${target_domains[$target_path]+registered}" ]] \
+        || fail "decomposition target_path '$target_path' is shared by domains \
+'${target_domains[$target_path]}' and '$domain'"
+    [[ "$sequence" =~ ^(0|[1-9][0-9]*)$ ]] \
+        || fail "invalid decomposition sequence '$sequence' on CSV line $line_number"
+    [[ -n "$depends_on" ]] \
+        || fail "empty decomposition depends_on on CSV line $line_number"
+    [[ -n "$requirements" ]] \
+        || fail "empty decomposition requirements on CSV line $line_number"
+
+    decomposition_sequences["$domain"]=$sequence
+    target_domains["$target_path"]=$domain
+    printf '%s,%s\n' "$domain" "$depends_on" >>"$tmp/decomposition-dependencies"
+
+    IFS='|' read -r -a expressions <<<"$requirements"
+    [[ ${#expressions[@]} -gt 0 ]] \
+        || fail "empty decomposition requirement expression on CSV line $line_number"
+    for expression in "${expressions[@]}"; do
+        if [[ "$expression" =~ ^([A-Z][A-Z0-9-]*-)([0-9]{3})\.\.([0-9]{3})$ ]]; then
+            prefix=${BASH_REMATCH[1]}
+            first=$((10#${BASH_REMATCH[2]}))
+            last=$((10#${BASH_REMATCH[3]}))
+            ((first <= last)) \
+                || fail "descending decomposition requirement range '$expression' \
+on CSV line $line_number"
+            for ((i = first; i <= last; i++)); do
+                id=$(printf '%s%03d' "$prefix" "$i")
+                printf '%s\n' "$id" >>"$tmp/decomposition-unsorted"
+                printf '%s,%s\n' "$id" "$target_path" \
+                    >>"$tmp/decomposition-target-unsorted"
+            done
+        elif [[ "$expression" =~ ^[A-Z][A-Z0-9-]*-[0-9]{3}$ ]]; then
+            printf '%s\n' "$expression" >>"$tmp/decomposition-unsorted"
+            printf '%s,%s\n' "$expression" "$target_path" \
+                >>"$tmp/decomposition-target-unsorted"
+        else
+            fail "invalid decomposition requirement expression '$expression' \
+on CSV line $line_number"
+        fi
+    done
+done < <(tail -n +2 "$decomposition")
+
+[[ ${#decomposition_sequences[@]} -gt 0 ]] \
+    || fail "docs/spec/decomposition.csv has no data rows"
+
+while IFS=, read -r domain depends_on; do
+    [[ "$depends_on" == "-" ]] && continue
+
+    IFS='|' read -r -a dependencies <<<"$depends_on"
+    seen='|'
+    for dependency in "${dependencies[@]}"; do
+        [[ "$dependency" =~ ^[a-z0-9]+(-[a-z0-9]+)*$ ]] \
+            || fail "invalid dependency '$dependency' for decomposition domain '$domain'"
+        case "$seen" in
+            *"|$dependency|"*) fail "duplicate dependency '$dependency' for domain '$domain'" ;;
+            *) seen+="$dependency|" ;;
+        esac
+        [[ -n "${decomposition_sequences[$dependency]+registered}" ]] \
+            || fail "unknown dependency '$dependency' for decomposition domain '$domain'"
+        [[ "$dependency" != "$domain" ]] \
+            || fail "decomposition domain '$domain' depends on itself"
+        dependency_sequence=${decomposition_sequences[$dependency]}
+        domain_sequence=${decomposition_sequences[$domain]}
+        ((dependency_sequence < domain_sequence)) \
+            || fail "dependency '$dependency' must precede decomposition domain '$domain'"
+    done
+done <"$tmp/decomposition-dependencies"
+
+sort "$tmp/decomposition-unsorted" >"$tmp/decomposition-index"
+sort "$tmp/decomposition-target-unsorted" >"$tmp/decomposition-target"
+sort "$tmp/decomposition-unsorted" | uniq -d >"$tmp/duplicate-decomposition-entries"
+comm -23 "$tmp/indexed" "$tmp/decomposition-index" >"$tmp/decomposition-missing"
+comm -13 "$tmp/indexed" "$tmp/decomposition-index" >"$tmp/decomposition-unknown"
+
+failed=0
+if [[ -s "$tmp/duplicate-decomposition-entries" ]]; then
+    echo "duplicate decomposition entries:" >&2
+    sed 's/^/  /' "$tmp/duplicate-decomposition-entries" >&2
+    failed=1
+fi
+if [[ -s "$tmp/decomposition-missing" ]]; then
+    echo "requirements missing from decomposition index:" >&2
+    sed 's/^/  /' "$tmp/decomposition-missing" >&2
+    failed=1
+fi
+if [[ -s "$tmp/decomposition-unknown" ]]; then
+    echo "unknown requirements in decomposition index:" >&2
+    sed 's/^/  /' "$tmp/decomposition-unknown" >&2
+    failed=1
+fi
+((failed == 0)) || exit 1
+
+join -t, "$tmp/indexed-source" "$tmp/decomposition-target" \
+    >"$tmp/requirement-authority-map"
+
+final_target_count=0
+residual_count=0
+amendment_count=0
+while IFS=, read -r requirement source_path target_path; do
+    if [[ "$source_path" == "$target_path" ]]; then
+        [[ -f "$root/$target_path" ]] \
+            || fail "final target '$target_path' for '$requirement' does not exist"
+        final_target_count=$((final_target_count + 1))
+    elif [[ "$source_path" == "docs/design.md" ]]; then
+        residual_count=$((residual_count + 1))
+    elif [[ "$source_path" == docs/amendments/*.md ]]; then
+        amendment_count=$((amendment_count + 1))
+    else
+        fail "requirement '$requirement' has current source '$source_path' but final \
+target '$target_path'; expected an existing final target, docs/design.md, or a \
+registered amendment"
+    fi
+done <"$tmp/requirement-authority-map"
+
+mapped_count=$((final_target_count + residual_count + amendment_count))
+[[ "$mapped_count" -eq "$indexed_count" ]] \
+    || fail "authority map classified $mapped_count requirements; expected $indexed_count"
+
+echo "design requirement check: $defined_count requirements indexed; \
+$final_target_count at final targets, $residual_count residual in docs/design.md, \
+$amendment_count in registered amendments across ${#decomposition_sequences[@]} target domains"

@@ -67,8 +67,11 @@ detailed owner only for requirements that have not moved to a registered domain
 specification. An amendment registered as `normative-amendment` is temporarily
 active only for its explicit affected requirements and refinement boundary; it
 does not override this backbone or an already registered domain specification.
-ADR-0014 defines that transitional ownership and the atomic migration that
-retires an amendment.
+`docs/spec/decomposition.csv` records the final owner and dependency phase for
+every stable requirement but does not change current authority.
+`docs/requirements.csv::source_path` remains the current-owner projection.
+ADR-0014 and `docs/spec/README.md` define the atomic migration that changes that
+projection and retires an amendment.
 
 Coordinated whole-revision migration and release convergence remain paused
 until the modular authority graph closes. A bounded implementation tranche may

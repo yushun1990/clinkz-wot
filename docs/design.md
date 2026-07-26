@@ -9,8 +9,10 @@ The v4.9 authority entry points are `docs/architecture/README.md` and
 `docs/spec/README.md`. Planning and Protocol Binding behavior has moved to
 `docs/spec/planning.md` and `docs/spec/binding-spi.md`. This file remains a
 normative migration source only for requirements that have not yet moved to
-their single-owner domain specifications; it is no longer sufficient by itself
-to authorize implementation. When this file conflicts with the v4.9
+their single-owner domain specifications. `docs/spec/decomposition.csv` fixes
+the final target and migration dependencies for every stable requirement
+without changing its current owner; this file is no longer sufficient by
+itself to authorize implementation. When this file conflicts with the v4.9
 architecture backbone or an accepted v4.9 ADR, the conflict opens the affected
 gate and implementation stops until all registered artifacts are corrected in
 one revision. Previous architecture baselines, plans, audits, and target notes
@@ -82,7 +84,12 @@ bare historical revision record or unregistered amendment is not implementation
 authority.
 `docs/refactor-gates.csv` records implementation-admission status.
 `docs/requirements.csv` indexes requirement profile axes, package ownership,
-evidence, and registered requirement source. The versioned files under
+evidence, and current registered requirement source.
+`docs/spec/decomposition.csv` maps every stable requirement exactly once to its
+final architecture, specification, or manifest target and records the
+target-domain migration DAG. A target mapping is a migration plan, not active
+normative ownership; authority changes only through the atomic source migration
+defined by `docs/spec/README.md`. The versioned files under
 `docs/performance/`, their schemas, and the fixture lock define profile-specific
 performance budgets and
 stable measurement identities; `tools/performance-harness` checks and
@@ -3920,6 +3927,14 @@ CSV id missing from its registered `source_path`. Each `evidence_key` becomes a 
 compile fixture, model, inspection, or benchmark result key; implementation
 completion requires at least one current evidence record for every applicable
 expanded row.
+
+The machine-readable authority-completion index is
+`docs/spec/decomposition.csv`. It assigns every expanded stable requirement to
+one final target and orders target domains by explicit dependencies.
+`tools/check-design-requirements.sh` joins the two indexes and reports which
+requirements are already at their final target, remain residual here, or remain
+under a registered amendment. Missing, duplicate, unknown, backward-dependent,
+or otherwise unclassified mappings fail the design gate.
 
 | Requirement id or family | Profiles | Required verification |
 | --- | --- | --- |

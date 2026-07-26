@@ -1,0 +1,15 @@
+domain,target_path,sequence,depends_on,requirements
+design-manifest,docs/design.md,0,-,DOC-GOV-001|ARTIFACT-AUTH-001|API-OWNERSHIP-001|IMPL-CONFORM-001|CHANGE-CONTROL-001|REFACTOR-GATE-001|STD-BASELINE-001
+architecture-module-boundaries,docs/architecture/20-module-boundaries.md,100,design-manifest,CRATE-DEPS-001
+architecture-execution-invariants,docs/architecture/10-primary-data-flows.md,100,design-manifest,CONCUR-LOCK-001|CONCUR-USER-001|CONCUR-CRIT-001|CONCUR-LIN-001
+foundation,docs/spec/foundation.md,200,architecture-module-boundaries|architecture-execution-invariants,API-RESOURCE-001|API-SOURCE-TIME-001|TIME-001|CONSTRAINED-STORAGE-001..002|CONSTRAINED-WORK-001|RES-LIMIT-001..003|ADMIT-MEM-001
+documents,docs/spec/documents.md,300,foundation,DOC-RUNTIME-001..003|JSONLD-PREFIX-001|TD-MEM-001..002
+interaction-core,docs/spec/interaction-core.md,400,documents|foundation,HANDLER-API-001|HANDLER-SUB-001|HANDLER-CANCEL-001..002|HANDLER-STORAGE-001|HANDLER-VALUE-001|API-TYPES-001|API-HOT-ID-001|API-PAYLOAD-001|API-OPTIONS-001|ERR-TAXONOMY-001|ERR-RETRY-001|CLEANUP-RECORD-001|STATE-INFLIGHT-001
+planning,docs/spec/planning.md,500,documents|foundation|interaction-core,PLAN-COST-001..003|PLAN-INDEX-001|PLAN-LAZY-001|PLAN-REQUEST-001|PLAN-CACHE-001|PLAN-BOUND-001|PLAN-SET-001|PLAN-ARTIFACT-001|FORM-FINALIZE-001..002|FORM-OWNER-001|FORM-COVERAGE-001
+codecs,docs/spec/codecs.md,500,documents|interaction-core,VALIDATE-COMPILE-001|VALIDATE-REUSE-001|API-CODEC-001
+security,docs/spec/security.md,600,documents|interaction-core|planning,SEC-PERF-001|API-SECURITY-001
+binding-spi,docs/spec/binding-spi.md,600,interaction-core|planning,LIFE-EXPOSE-001..003|BIND-REG-001|BIND-ROUTE-001|BIND-STORAGE-001|BIND-MEM-001|BIND-DELIVERY-001|BIND-IO-001|BIND-OUT-001|BIND-PROGRESS-001|BIND-CALL-CANCEL-001|BIND-HOST-CANCEL-001|STATE-BIND-001|HOST-ASYNC-001
+discovery-client,docs/spec/discovery-client.md,600,codecs|documents|foundation,DIR-SCOPE-001|DIR-CONTRACT-001|DIR-AUTH-001|DIR-SNAPSHOT-001|DIR-WATCH-001|DIR-STREAM-001|API-DIRECTORY-POLL-001|API-DISCOVERY-EXEC-001|STATE-DISC-001
+subscriptions-and-emissions,docs/spec/subscriptions-and-emissions.md,700,binding-spi|interaction-core,SUB-STORAGE-001|SUB-DATA-001|PRODUCER-EMIT-001|STATE-SUB-001
+servient,docs/spec/servient.md,800,binding-spi|discovery-client|interaction-core|planning|security|subscriptions-and-emissions,CONSTRAINED-PROGRESS-001|CONSTRAINED-SCHED-001|STATE-EXPOSE-001|HANDLE-DROP-001|HOST-SHARD-001..002|ADMIT-TXN-001
+profiles-and-verification,docs/spec/profiles-and-verification.md,900,binding-spi|codecs|discovery-client|documents|foundation|interaction-core|planning|security|servient|subscriptions-and-emissions,PROFILE-AXIS-001|FEATURE-MATRIX-001|CONSTRAINED-OWN-001|RES-LIMIT-004|RES-PROFILE-001|PERF-ALLOC-001|PERF-BENCH-001..003|PERF-BUDGET-001|PERF-SCALE-001|PERF-ADMISSION-001|PERF-PEAK-001|PERF-CALL-001|PERF-ACCOUNT-001|PERF-FANOUT-001..002|PERF-COMPLEXITY-001|PERF-INDEX-001|CAP-OVERFLOW-001|CAP-STATUS-001|OBS-PROFILE-001|API-SURFACE-001|HOST-DEFAULT-001..002

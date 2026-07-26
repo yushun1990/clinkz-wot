@@ -18,6 +18,7 @@ docs/refactor-gates.csv,implementation-admission,normative,4.9,1,docs/design.md
 docs/resource-limits.csv,resource-limit-schema-and-profiles,normative,4.9,1,docs/design.md
 docs/state-machines.toml,lifecycle-state-model,normative,4.9,1,docs/design.md
 docs/requirements.csv,requirement-profile-ownership-and-evidence-index,normative-index,4.9,3,docs/design.md
+docs/spec/decomposition.csv,requirement-authority-migration-index,normative-migration-plan,4.9,1,docs/design.md
 docs/performance/manifest.schema.json,performance-manifest-schema,normative,4.9,5,docs/design.md
 docs/performance/result.schema.json,performance-result-schema,normative,4.9,2,docs/design.md
 docs/performance/fixtures.lock.toml,performance-fixture-lock,normative,4.9,1,docs/design.md

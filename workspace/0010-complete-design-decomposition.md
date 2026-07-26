@@ -1,6 +1,6 @@
 # 0010 Complete the `docs/design.md` Decomposition
 
-Status: OPEN
+Status: MIGRATED
 Kind: documentation-architecture improvement
 Target revision: v4.9 normative-authority convergence
 
@@ -138,7 +138,93 @@ This workspace topic should move to `DECIDED` after that direction converges.
 It should move to `MIGRATED` only after the agreed policy and ownership changes
 have been reflected in their authoritative repository artifacts.
 
-## Open question
+## Decision
 
-Should this work be handled as one documentation-convergence effort, or as
-several independently reviewed domain migrations?
+Complete the decomposition through several independently reviewed,
+requirement-owned target-domain migrations. Do not perform one monolithic
+Markdown move.
+
+`docs/design.md` will ultimately own only the active revision,
+normative-language and requirement-identity rules, authority/change control,
+the normative-source manifest, the standards baseline, and a concise revision
+record. It will cease to own detailed domain behavior.
+
+The exact completion map is `docs/spec/decomposition.csv`. It assigns every
+stable requirement exactly once to a final target and records the migration
+dependency graph. `docs/requirements.csv::source_path` continues to identify
+current authority. A final target does not become active merely because it is
+listed or because an empty file exists.
+
+The reviewed target set is:
+
+- the design manifest;
+- architecture module-boundary and execution-invariant owners;
+- foundation;
+- documents;
+- interaction core;
+- planning;
+- codecs;
+- security;
+- Protocol Binding SPI;
+- discovery client;
+- subscriptions and emissions;
+- Servient; and
+- profiles and verification.
+
+The former planned `security-and-codecs.md` target is split into `security.md`
+and `codecs.md`. Trust/credential and probe/commit lifecycle behavior has
+different ownership, side effects, resources, and evidence from codec and
+compiled-validation behavior. `profiles-and-verification.md` remains combined
+because it owns cross-domain closure matrices and gates rather than a runtime
+execution path.
+
+## Migration conditions
+
+A requirement leaves its current owner only in an atomic reviewed migration
+that:
+
+1. reconciles its complete target-domain contract against architecture, ADRs,
+   amendments, machine-readable projections, implementation, and tests;
+2. moves the stable definition without renaming the id, duplicating normative
+   prose, or losing required semantics;
+3. changes the matching `docs/requirements.csv::source_path`, registers the
+   complete target, and removes the prior detailed owner in the same commit;
+4. integrates and retires affected amendments as historical evidence;
+5. updates affected work packages, checkers, fixtures, audits, reviews, and
+   evidence truth; and
+6. passes requirement, aggregate-design, domain-specific, and independent
+   review gates.
+
+A target domain is split into smaller migrations only when blockers,
+ownership, lifecycle, contracts, validation independence, rollback boundaries,
+or evidence truth differ. File or type count alone is not a reason to split.
+
+## Rationale and rejected alternatives
+
+Requirement identity is the only stable join key across the residual monolith,
+domain specifications, amendments, machine-readable contracts, work packages,
+and evidence. Markdown headings and source-code modules are therefore
+insufficient migration boundaries.
+
+One whole-document migration was rejected because unrelated domains have
+different dependencies, blockers, reviewers, and evidence truth, which would
+make rollback and completion claims inseparable. Creating all planned files
+up-front was rejected because file existence would be mistaken for complete
+authority. Adding target columns to `docs/requirements.csv` was rejected
+because that file owns current source/profile/evidence truth; a separate
+completion index keeps present authority distinct from future intent while the
+existing checker joins both.
+
+## Migration projection
+
+The decision is migrated into:
+
+- `docs/design.md` for final manifest responsibility and change control;
+- `docs/architecture/README.md` for transitional hierarchy;
+- `docs/spec/README.md` for the reviewed target graph and atomic protocol;
+- `docs/spec/decomposition.csv` for exact requirement targets and dependencies;
+- `docs/artifacts.csv` for active registration;
+- `tools/check-design-requirements.sh` for totality, uniqueness, ordering, and
+  residual-authority verification;
+- `PLAN.md` for D3 status and M1 execution direction; and
+- `PROJECT_STATE.md` for durable continuation.

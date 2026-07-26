@@ -80,7 +80,7 @@ answer and does not automatically block unrelated admitted work.
 |---|---|---|---|---|
 | D1 | MIGRATED | Adopt risk-proportional implementation admission from `workspace/0008-implementation-governance-overhead.md` as an authoring/review-depth policy, without weakening ADR-0013 tranche admission | Category A work receives narrow evidence and review; Category B/C retain stricter controls | M0 exit |
 | D2 | MIGRATED | Use clock-source-owned non-wrapping extended logical ticks; retain raw wrap metadata as diagnostics; fail incomparable clock domains explicitly; correct Foundation before Core Deadline/cleanup timing | Completed `WP-100-LOGICAL-TIME-CORRECTION -> WP-100-DEADLINE-CLEANUP-TIMING`; the time blocker is resolved while independent broad-handler blockers remain | M2 exit |
-| D3 | OPEN | Select the completion strategy for decomposing residual `docs/design.md` ownership from `workspace/0010-complete-design-decomposition.md` | Determines the remaining v4.9 authority-closure work | M1 exit |
+| D3 | MIGRATED | Complete residual `docs/design.md` ownership through the requirement-indexed target DAG in `docs/spec/decomposition.csv` and several independently reviewed atomic domain migrations | 34 requirements are at final targets, 84 remain residual, and three remain in registered amendments; the checker now exposes exact remaining ownership | M1 exit |
 | D4 | OPEN | Freeze subscription receiver/control ownership and clone semantics from `workspace/0011-subscription-receiver-ownership.md` | Unblocks affected WP-300/WP-400 contracts | M4 entry |
 | D5 | OPEN | Decide whether and how to add the mock-binding property-read architecture gate from `workspace/0009-minimal-end-to-end-architecture-validation.md` | If adopted after AI evidence review, PLAN and the authoritative work-package DAG must gain reviewed narrow tranches and an integration gate before broad expansion | Before broad WP-200/WP-300/WP-400 expansion |
 
@@ -161,7 +161,8 @@ single-owner, independently reviewed design revision.
 Scope:
 
 - close or supersede every remaining Architecture Review 03 finding;
-- decide D2, D3, and D4 where their cross-domain consequences affect closure;
+- apply the migrated D2 and D3 directions and decide D4 where its cross-domain
+  consequences affect closure;
 - complete the requirement-owned decomposition of residual
   `docs/design.md` contracts;
 - reconcile accepted ADRs, architecture, domain specifications, API ownership,
