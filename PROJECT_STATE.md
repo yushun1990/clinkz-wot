@@ -7,8 +7,8 @@ Repository basis: corrected handler-context candidate registration checkpoint
 `27c8dc974fd1b337de4671c81719f9fa32410c56` is a single child of frozen base
 `c42abcbc339167183c8c4bf9bd3bf584540073b4`, retains the exact 17-path
 non-implementation boundary, and is an ancestor of the registration
-checkpoint. The D3 design-authority completion strategy is migrated by this
-file's containing checkpoint.
+checkpoint. The D3 design-authority completion strategy is migrated at
+`78b3a45fa521cfe97d49d6ae3907760bcca7a041`.
 
 ## Current Objective
 
