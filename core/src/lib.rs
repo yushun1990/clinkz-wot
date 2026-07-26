@@ -32,7 +32,7 @@ pub use event::{
     SubscriptionSender,
 };
 pub use handler::{
-    CancellationView, HandlerFootprint, HandlerStep, StaticHandlerRegistration,
+    CancellationView, HandlerContext, HandlerFootprint, HandlerStep, StaticHandlerRegistration,
     SubscriptionAcceptance,
 };
 pub use identity::{

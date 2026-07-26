@@ -1,4 +1,9 @@
-use crate::{CoreResult, HandlerSlotId, InteractionOutput};
+use clinkz_wot_td::data_type::Operation;
+
+use crate::{
+    AffordanceTarget, BindingGeneration, BindingId, CoreError, CoreResult, ErrorContext,
+    ErrorPhase, HandlerSlotId, InteractionOutput, PlanId, RetryClass, ThingId, ThingSlotId,
+};
 
 /// A copyable snapshot of whether cancellation has been requested.
 #[derive(Clone, Copy, Debug, Default, Eq, Hash, Ord, PartialEq, PartialOrd)]
@@ -142,5 +147,108 @@ impl<H> core::fmt::Debug for StaticHandlerRegistration<'_, H> {
             .field("slot_id", &self.slot_id)
             .field("footprint", &self.footprint)
             .finish_non_exhaustive()
+    }
+}
+
+/// Call-lifetime dispatch identity supplied to an operation handler.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct HandlerContext<'a> {
+    thing_id: &'a ThingId,
+    thing_slot: ThingSlotId,
+    target: &'a AffordanceTarget,
+    operation: clinkz_wot_td::data_type::Operation,
+    plan_id: PlanId,
+    binding: Option<(BindingId, BindingGeneration)>,
+}
+
+impl<'a> HandlerContext<'a> {
+    /// Creates a context after validating the operation/target-kind pairing.
+    pub fn try_new(
+        thing_id: &'a ThingId,
+        thing_slot: ThingSlotId,
+        target: &'a AffordanceTarget,
+        operation: clinkz_wot_td::data_type::Operation,
+        plan_id: PlanId,
+        binding: Option<(BindingId, BindingGeneration)>,
+    ) -> CoreResult<Self> {
+        let compatible = match target {
+            AffordanceTarget::Property(_) => matches!(
+                operation,
+                Operation::ReadProperty
+                    | Operation::WriteProperty
+                    | Operation::ObserveProperty
+                    | Operation::UnobserveProperty
+            ),
+            AffordanceTarget::Action(_) => matches!(
+                operation,
+                Operation::InvokeAction | Operation::QueryAction | Operation::CancelAction
+            ),
+            AffordanceTarget::Event(_) => matches!(
+                operation,
+                Operation::SubscribeEvent | Operation::UnsubscribeEvent
+            ),
+            AffordanceTarget::Thing => matches!(
+                operation,
+                Operation::ReadAllProperties
+                    | Operation::WriteAllProperties
+                    | Operation::ReadMultipleProperties
+                    | Operation::WriteMultipleProperties
+                    | Operation::ObserveAllProperties
+                    | Operation::UnobserveAllProperties
+                    | Operation::QueryAllActions
+                    | Operation::SubscribeAllEvents
+                    | Operation::UnsubscribeAllEvents
+            ),
+        };
+
+        if !compatible {
+            let mut context = ErrorContext::new(ErrorPhase::Validate, RetryClass::Never)
+                .with_thing(thing_slot)
+                .with_operation(operation)
+                .with_plan(plan_id);
+            if let Some((binding_id, generation)) = binding {
+                context = context.with_binding(binding_id, generation);
+            }
+            return Err(CoreError::Validation(context));
+        }
+
+        Ok(Self {
+            thing_id,
+            thing_slot,
+            target,
+            operation,
+            plan_id,
+            binding,
+        })
+    }
+
+    /// Returns the borrowed human-readable Thing identity.
+    pub const fn thing_id(self) -> &'a ThingId {
+        self.thing_id
+    }
+
+    /// Returns the generation-bearing Thing slot.
+    pub const fn thing_slot(self) -> ThingSlotId {
+        self.thing_slot
+    }
+
+    /// Returns the borrowed Thing or affordance target.
+    pub const fn target(self) -> &'a AffordanceTarget {
+        self.target
+    }
+
+    /// Returns the operation selected by the compiled plan.
+    pub const fn operation(self) -> clinkz_wot_td::data_type::Operation {
+        self.operation
+    }
+
+    /// Returns the immutable plan identity.
+    pub const fn plan_id(self) -> PlanId {
+        self.plan_id
+    }
+
+    /// Returns the optional binding identity and generation.
+    pub const fn binding(self) -> Option<(BindingId, BindingGeneration)> {
+        self.binding
     }
 }
