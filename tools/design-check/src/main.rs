@@ -2624,8 +2624,7 @@ fn property_read_slice_spec(id: &str) -> Option<PropertyReadSliceSpec> {
             evidence_key: "property-read-handler-slice",
             blockers: &[
                 "handler-context-complete",
-                "property-read-input-trait-and-registration-candidate-reviewed",
-                "real-no-atomic-boundary-proven",
+                "property-read-sync-trait-and-static-registration-candidate-reviewed",
             ],
         },
         PROPERTY_READ_PLAN_SLICE => PropertyReadSliceSpec {
@@ -2985,24 +2984,29 @@ fn check_property_read_integration_gate(
         if !slice_ids.insert(id.clone()) {
             return Err(format!("{PROPERTY_READ_GATE} duplicates slice {id:?}"));
         }
-        require_exact_table_fields(
-            tranche,
-            &id,
-            &[
-                "id",
-                "work_package",
-                "sequence",
-                "status",
-                "admission_status",
-                "depends_on",
-                "requirements",
-                "owner_packages",
-                "feature_cells",
-                "authoritative_artifacts",
-                "completion_evidence_keys",
-                "blocking_conditions",
-            ],
-        )?;
+        let mut exact_fields = vec![
+            "id",
+            "work_package",
+            "sequence",
+            "status",
+            "admission_status",
+            "depends_on",
+            "requirements",
+            "owner_packages",
+            "feature_cells",
+            "authoritative_artifacts",
+            "completion_evidence_keys",
+            "blocking_conditions",
+        ];
+        if id == PROPERTY_READ_HANDLER_SLICE {
+            exact_fields.extend([
+                "api_items",
+                "reused_api_items",
+                "implementation_paths",
+                "excluded_claims",
+            ]);
+        }
+        require_exact_table_fields(tranche, &id, &exact_fields)?;
 
         let expected = property_read_slice_spec(&id)
             .ok_or_else(|| format!("{PROPERTY_READ_GATE} has unknown slice {id:?}"))?;
@@ -3094,6 +3098,57 @@ fn check_property_read_integration_gate(
                 "{id} blocker mismatch; expected {:?}, found {blockers:?}",
                 owned_set(expected.blockers)
             ));
+        }
+        if id == PROPERTY_READ_HANDLER_SLICE {
+            let api_items = package_string_set(tranche, "api_items", &id)?;
+            if api_items != owned_set(&["ReadPropertyHandler"]) {
+                return Err(format!(
+                    "{id} API-item scope must be exactly ReadPropertyHandler; \
+                     found {api_items:?}"
+                ));
+            }
+            let reused_api_items = package_string_set(tranche, "reused_api_items", &id)?;
+            let expected_reused_api_items = owned_set(&[
+                "HandlerContext",
+                "InteractionInput",
+                "InteractionOutput",
+                "StaticHandlerRegistration",
+            ]);
+            if reused_api_items != expected_reused_api_items {
+                return Err(format!(
+                    "{id} reused API-item scope mismatch; expected \
+                     {expected_reused_api_items:?}, found {reused_api_items:?}"
+                ));
+            }
+            let implementation_paths = package_string_set(tranche, "implementation_paths", &id)?;
+            let expected_implementation_paths =
+                owned_set(&["core/src/handler.rs", "core/src/lib.rs"]);
+            if implementation_paths != expected_implementation_paths {
+                return Err(format!(
+                    "{id} implementation-path scope mismatch; expected \
+                     {expected_implementation_paths:?}, found {implementation_paths:?}"
+                ));
+            }
+            for path in &implementation_paths {
+                validate_relative_path(path, &id)?;
+                if !root.join(path).is_file() {
+                    return Err(format!("{id} implementation path {path:?} is not a file"));
+                }
+            }
+            let excluded_claims = package_string_set(tranche, "excluded_claims", &id)?;
+            let expected_excluded_claims = owned_set(&[
+                "accept-hint-resource-admission",
+                "affordance-target-no-atomics",
+                "async-and-step-handler-traits",
+                "host-erasure-storage-and-execution",
+                "interaction-input-storage-migration",
+            ]);
+            if excluded_claims != expected_excluded_claims {
+                return Err(format!(
+                    "{id} excluded-claim scope mismatch; expected \
+                     {expected_excluded_claims:?}, found {excluded_claims:?}"
+                ));
+            }
         }
     }
     if slice_ids != expected_slice_ids {
@@ -3218,6 +3273,7 @@ fn check_property_read_integration_gate(
         "async-no-std",
         "property-read-binding",
         "property-read-runner",
+        "does not claim the incapable-target build",
         "grants no source-edit authority",
     ] {
         if !gate_document.contains(marker) {

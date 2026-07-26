@@ -21,6 +21,13 @@ for package-local completion. The package order remains
 slice tranches in the manifest to cross incomplete package boundaries after
 their own admission reviews. No manifest record is implementation admission.
 
+The WP-100 slice is one deliberately narrow synchronous seam. It adds only the
+root-re-exported `ReadPropertyHandler` trait in `core/src/handler.rs` and
+`core/src/lib.rs`, and composes it with the already implemented
+`HandlerContext` and `StaticHandlerRegistration` plus the existing production
+`InteractionInput` and `InteractionOutput` values. It does not replace those
+reused values or add async/step traits, host erasure, storage, or execution.
+
 ## Tranche DAG and entry points
 
 ```text
@@ -68,8 +75,18 @@ TD fixture
 The `no-default-manual` cell uses caller-owned slots and explicit
 `WorkBudget`. The `std-host` cell uses the public object-safe registration and
 call boundaries. The `async-no-std` cell is a compile-only projection because
-the portable poll surface remains authoritative and the gate does not select an
-executor.
+the gate does not select an executor; for the WP-100 slice it proves that the
+synchronous trait and borrowed static registration remain available when the
+portable async feature is enabled, not that this slice adds the separate
+`AsyncReadPropertyHandler` or `StepReadPropertyHandler` contracts.
+
+This gate does not claim the incapable-target build required by the broad
+`affordance-target-no-atomics` evidence. Requiring that full-Core proof here
+would make the only broad-entry exemption depend on legacy `Arc` migrations
+that broad entry itself blocks. The no-atomic proof, `AcceptHint` admission,
+and final `InteractionInput` storage migration remain broad WP-100 work and
+completion claims. Any later change to a production boundary reused by this
+gate triggers the normal change-control impact review and reruns this evidence.
 
 ## Fixture topology
 
@@ -138,6 +155,13 @@ Every slice is Category B or C according to its actual candidate impact and
 requires its own exact paths, contract fixtures, impact analysis, independent
 review, and ADR-0013 admission. The manifest intentionally records all four as
 `planned` and `blocked`; it grants no source-edit authority.
+
+For `WP-100-PROPERTY-READ-HANDLER-SLICE`, the candidate and completion record
+must claim only `ReadPropertyHandler` and its composition with the four reused
+values named above. The property-read slice cannot claim the final
+`InteractionInput` schema, `AcceptHint` resource admission,
+`AffordanceTarget` relocation/no-atomic evidence, async/step handler traits,
+host registration, sparse storage, or dispatch ownership.
 
 The integration gate becomes `ready` only after all four slice completion
 records pass. It becomes `passed` only when the planned completion check is

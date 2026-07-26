@@ -59,6 +59,17 @@ own independent ADR-0013 review so the cross-package boundary can be proven.
 The integration-gate manifest is planning authority only and grants no
 implementation admission.
 
+That slice's candidate boundary is exactly the additive synchronous
+`ReadPropertyHandler` trait in `core/src/handler.rs` and its Core-root
+re-export. It reuses the completed `HandlerContext` and
+`StaticHandlerRegistration` plus the existing production `InteractionInput`
+and `InteractionOutput`; it does not replace them. The slice excludes
+`AcceptHint` admission, final `InteractionInput` storage migration,
+`AffordanceTarget` relocation and no-atomic evidence, async/step traits, host
+erasure, sparse storage, and execution. Those exclusions avoid a cycle in
+which the only broad-entry exemption would require migrations that broad entry
+itself blocks.
+
 After the completed foundation refresh, the next candidate contains only five
 passive, additive Core values: `CancellationView`, `SubscriptionAcceptance`,
 `HandlerFootprint`, `HandlerStep`, and `StaticHandlerRegistration`. It

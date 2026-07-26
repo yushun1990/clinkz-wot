@@ -20,13 +20,13 @@ gate migration is recorded at
 ## Current Objective
 
 Prepare the exact `WP-100-PROPERTY-READ-HANDLER-SLICE` candidate without
-self-admitting it or creating planned fixture roots before candidate review.
-Preserve the completed HandlerContext, handler-value, and time tranches; keep
-the remaining target/no-atomic and request-storage migrations separate; and do
-not fold Producer or Servient integration into WP-100. Continue M1 authority
-convergence through the exact target-domain graph fixed by D3, while carrying
-the migrated D4 and D5 contracts into future subscription and property-read
-slice work.
+self-admitting it or creating either architecture fixture root before candidate
+review. The slice adds only the synchronous `ReadPropertyHandler` trait in
+`core/src/handler.rs` and `core/src/lib.rs`; it reuses the completed
+HandlerContext/static registration and existing production input/output.
+Preserve the completed handler-value and time tranches, keep target/no-atomic
+and request-storage migrations separate, and do not fold async/step traits,
+host storage/execution, Producer, or Servient integration into the slice.
 
 Active milestones:
 
@@ -289,8 +289,9 @@ D5 migration facts:
   WP-300-PROPERTY-READ-BINDING-SLICE ->
   WP-400-PROPERTY-READ-SERVIENT-SLICE`;
 - all four slices remain `planned` and `blocked`; each needs its own exact
-  candidate and independent ADR-0013 admission before any source or fixture
-  path is created;
+  candidate and independent ADR-0013 admission before implementation source or
+  a planned architecture fixture root is created; candidate contract fixtures
+  remain pre-implementation admission material;
 - broad `WP-100-HANDLER-ENTRY`, `WP-300-BROAD-ENTRY`, and
   `WP-400-BROAD-ENTRY` depend on the gate, with only their named property-read
   slices exempt from broad entry;
@@ -307,7 +308,21 @@ D5 migration facts:
   capabilities, and portable compilation; and
 - package-local-only validation, Zenoh as the first architecture proof, one
   opaque cross-package tranche, placeholder crates, and ownership-boundary
-  adapters were rejected.
+  adapters were rejected;
+- `workspace/0012-property-read-handler-slice-boundary.md` resolves a cycle in
+  the first WP-100 slice: requiring the broad atomic-incapable Core proof before
+  the only broad-entry exemption could proceed would depend on legacy `Arc`
+  migrations that broad entry itself blocks;
+- the corrected slice adds only `ReadPropertyHandler`, reuses
+  `HandlerContext`, `StaticHandlerRegistration`, `InteractionInput`, and
+  `InteractionOutput`, and permits implementation changes only in
+  `core/src/handler.rs` and `core/src/lib.rs`;
+- its `async-no-std` cell checks availability of that synchronous/static seam
+  with the async feature enabled; it does not add async or step handler traits;
+  and
+- broad `AffordanceTarget` no-atomic evidence, `AcceptHint` admission, final
+  `InteractionInput` storage migration, host erasure/storage/execution, and
+  downstream ownership remain excluded and separately blocking.
 
 Broad handler blockers:
 
@@ -594,8 +609,9 @@ D5 property-read architecture-gate verification on 2026-07-26:
   keys to WP-100 through WP-400 and the gate evidence key to WP-700;
 - the work-package checker validates the manifest path, registered artifacts,
   exact slice dependencies and sequence, package evidence ownership, broad
-  entry dependencies/exemptions, absence of admission-only fields and fixture
-  placeholders, and the human gate document;
+  entry dependencies/exemptions, the exact one-item/two-path WP-100 slice,
+  reused API values, excluded claims, absence of fixture placeholders, and the
+  human gate document;
 - the design-checker unit/integration suite and the positive work-package DAG
   check pass with the new schema; isolated mutations that reversed the binding
   slice dependency and removed `cleanup-owner` from the forbidden fixture
@@ -609,18 +625,20 @@ baseline because it intentionally enables mutually exclusive `zenoh` and
 
 ## Stopping Point and Next Safe Actions
 
-`WP-100-HANDLER-CONTEXT` is independently reviewed, admitted, implemented, and
-complete. The implementation changes only the two registered Core paths and
-the completion evidence preserves the completed time and handler-value
-tranches. Broad handler entry remains blocked by the separately registered
-target/no-atomic, request/storage, portable-trait, workload, resource, and
-performance boundaries.
+`WP-100-HANDLER-CONTEXT` is complete. Impact inspection of the next property
+slice exposed and corrected the D5 no-atomic/broad-entry cycle without changing
+runtime code. The exact candidate boundary is now one additive synchronous
+trait in the same two Core paths; its reused values and excluded broad claims
+are machine-checked. Broad handler entry remains blocked by the separate
+target/no-atomic, request/storage, remaining portable-trait, workload,
+resource, and performance boundaries.
 
 Next safe actions, in order:
 
 1. prepare—but do not self-admit—the exact
-   `WP-100-PROPERTY-READ-HANDLER-SLICE` candidate. Do not create either planned
-   fixture root until its owning slice has an independently reviewed candidate;
+   `WP-100-PROPERTY-READ-HANDLER-SLICE` candidate for only
+   `ReadPropertyHandler`, its two Core paths, and its external contract
+   fixture. Do not create either planned architecture fixture root;
 2. continue M1 with the next dependency-ready D3 target-domain migration and
    carry the migrated D4 and D5 contracts into future subscription and
    property-read slice work;
@@ -660,4 +678,5 @@ Important references:
 - `workspace/0008-implementation-governance-overhead.md`;
 - `workspace/0009-minimal-end-to-end-architecture-validation.md`;
 - `workspace/0010-complete-design-decomposition.md`;
-- `workspace/0011-subscription-receiver-ownership.md`.
+- `workspace/0011-subscription-receiver-ownership.md`;
+- `workspace/0012-property-read-handler-slice-boundary.md`.

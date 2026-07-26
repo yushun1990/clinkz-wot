@@ -116,8 +116,25 @@ authoritative_artifacts = [
 completion_evidence_keys = ["property-read-handler-slice"]
 blocking_conditions = [
     "handler-context-complete",
-    "property-read-input-trait-and-registration-candidate-reviewed",
-    "real-no-atomic-boundary-proven",
+    "property-read-sync-trait-and-static-registration-candidate-reviewed",
+]
+api_items = ["ReadPropertyHandler"]
+reused_api_items = [
+    "HandlerContext",
+    "InteractionInput",
+    "InteractionOutput",
+    "StaticHandlerRegistration",
+]
+implementation_paths = [
+    "core/src/handler.rs",
+    "core/src/lib.rs",
+]
+excluded_claims = [
+    "accept-hint-resource-admission",
+    "affordance-target-no-atomics",
+    "async-and-step-handler-traits",
+    "host-erasure-storage-and-execution",
+    "interaction-input-storage-migration",
 ]
 
 [[tranche]]
