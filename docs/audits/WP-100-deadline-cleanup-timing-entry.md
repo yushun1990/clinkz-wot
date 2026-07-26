@@ -1,17 +1,19 @@
 # WP-100 Deadline and Cleanup Timing Entry Audit
 
-Status: Pending
+Status: Passed
 
 Design revision: v4.9
 
 Admission scope: `WP-100-DEADLINE-CLEANUP-TIMING`
 
-Verdict: Independent re-review pending
+Verdict: Implementation-ready
 
 ADR-0016 and `docs/amendments/WP-100-time-domain-v1.md` freeze the logical
 clock domain and Core timing behavior, but that migration is not source
-implementation admission. This audit freezes the exact Core-owned correction
-candidate for independent review.
+implementation admission. The independent root review recorded at
+`e37224fc9978ad16c0d76639bac58f0e221d824d` confirmed the exact registered
+candidate, scope, exclusions, predecessor, fixture, and all eight
+pre-implementation checks.
 
 ## Scope
 

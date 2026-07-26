@@ -354,7 +354,7 @@ id = "WP-100-DEADLINE-CLEANUP-TIMING"
 work_package = "WP-100"
 sequence = 140
 status = "pending"
-admission_status = "review-pending"
+admission_status = "approved"
 impact_status = "current"
 depends_on = ["WP-100-LOGICAL-TIME-CORRECTION"]
 blocks_entrypoints = ["WP-100-HANDLER-ENTRY"]
@@ -433,6 +433,8 @@ pre_implementation_checks = [
     "wp100-logical-time-correction-check",
 ]
 admission_review = "docs/audits/WP-100-deadline-cleanup-timing-entry.md"
+review_attestation = "docs/audits/WP-100-deadline-cleanup-timing-review.toml"
+review_attestation_ref = "e37224fc9978ad16c0d76639bac58f0e221d824d"
 entry_check = "wp100-deadline-cleanup-timing-entry-check"
 completion_evidence_keys = ["deadline-cleanup-timing"]
 completion_evidence_path = "docs/evidence/WP-100-deadline-cleanup-timing.toml"
