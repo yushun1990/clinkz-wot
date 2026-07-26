@@ -8,6 +8,7 @@ extern crate alloc;
 pub mod outbound;
 pub mod error;
 pub mod event;
+pub mod handler;
 pub mod identity;
 pub mod inbound;
 pub mod interaction;
@@ -30,6 +31,10 @@ pub use event::EventStream;
 pub use event::{
     DEFAULT_SUBSCRIPTION_CAPACITY, EventBroker, EventName, PublisherSink, Subscription,
     SubscriptionSender,
+};
+pub use handler::{
+    CancellationView, HandlerFootprint, HandlerStep, StaticHandlerRegistration,
+    SubscriptionAcceptance,
 };
 pub use identity::{
     ActionInvocationRef, ActiveRouteId, AffordanceSlotId, BindingGeneration, BindingId,
