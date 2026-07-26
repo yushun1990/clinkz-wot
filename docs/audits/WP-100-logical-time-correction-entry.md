@@ -1,16 +1,19 @@
 # WP-100 Logical Time Correction Entry Audit
 
-Status: Pending
+Status: Passed
 
 Design revision: v4.9
 
 Admission scope: `WP-100-LOGICAL-TIME-CORRECTION`
 
-Verdict: Independent re-review pending
+Verdict: Implementation-ready
 
 ADR-0016 and `docs/amendments/WP-100-time-domain-v1.md` resolve D2, but
-architecture migration is not source implementation admission. This audit
-freezes the exact Foundation correction candidate for independent review.
+architecture migration is not source implementation admission. The independent
+root continuation review recorded at
+`8180e1916606b80518a0d975a8ce2fa2c2e93953` confirmed the exact registered
+candidate, scope, exclusions, predecessor, evidence disposition, contract
+fixture, and all seven pre-implementation checks.
 
 ## Scope
 
@@ -126,11 +129,11 @@ check, and completion key. The registered candidate commit must be the single
 child of the D2 migration checkpoint and must not change
 `foundation/src/time.rs`.
 
-The reviewer must inspect the registered candidate rather than an uncommitted
-worktree. A later root continuation session that did not author the candidate
-may attest with `reviewer_attestation_kind = "independent-root-session"` and
-`reviewer_id = "codex-agent:/root"`. A separately spawned reviewer uses its
-real canonical child task id. The attestation commit is limited to its TOML
+The independent review inspected the registered candidate rather than an
+uncommitted worktree and recorded
+`reviewer_attestation_kind = "independent-root-session"` with
+`reviewer_id = "codex-agent:/root"`. A separately spawned reviewer would use
+its real canonical child task id. The attestation commit is limited to its TOML
 record and artifact-registry row.
 
 ## Pre-implementation checks
