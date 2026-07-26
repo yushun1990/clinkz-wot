@@ -42,7 +42,7 @@ The repository evidence establishes the following starting point:
 - `WP-100-LOGICAL-TIME-CORRECTION` is implemented and has completion evidence
   for the extended logical-time domain;
 - `WP-100-DEADLINE-CLEANUP-TIMING` has an exact independently reviewed and
-  approved Core-only admission candidate; source implementation has not begun;
+  approved Core-only admission candidate and is in implementation;
 - broad handler entry is blocked until the decided Deadline/cleanup correction
   tranche completes, and by incomplete workload oracles, request/context
   migration review, and no-atomic public-boundary evidence;
@@ -210,7 +210,7 @@ Completed evidence:
 
 Next execution order:
 
-1. implement and complete the admitted
+1. complete the in-progress
    `WP-100-DEADLINE-CLEANUP-TIMING` tranche;
 2. define and admit the next bounded handler tranches for request/context
    values, portable traits, host erasure/storage, security, codecs, errors, and
