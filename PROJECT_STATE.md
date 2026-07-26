@@ -196,6 +196,19 @@ Resolved handler-value admission checkpoint drift:
 - `tools/check-wp100-handler-value-primitives-entry.sh --candidate` now passes
   and reaches the expected absent-implementation boundary.
 
+Independent handler-value review facts:
+
+- the registered candidate was authored before this root continuation session;
+- the exact candidate diff, five semantic schemas, current authoritative
+  owners, predecessor evidence, time-scope partition, empty state/performance
+  scope, compile contract, source validator, and six prechecks were re-reviewed;
+- the five semantic authoritative artifacts have not changed since the
+  candidate commit;
+- no intersecting finding or out-of-scope implementation need was found;
+- reviewer identity encoding now accepts either a real child task or an
+  independent later root session and rejects a root session that falsely claims
+  child-task identity.
+
 Downstream admission blockers:
 
 - WP-200: constructible candidate-fallback policy, health rule,

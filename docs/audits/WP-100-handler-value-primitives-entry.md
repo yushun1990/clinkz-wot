@@ -65,6 +65,14 @@ invalidate that recoverable candidate or need to leave it checked out as
 and its own commit remains restricted to the attestation plus artifact-registry
 projection.
 
+The reviewer identity must be recorded honestly. A separately spawned reviewer
+uses `reviewer_attestation_kind = "separate-agent-task"` and its canonical child
+task id. A later root continuation session that did not author the registered
+candidate uses `reviewer_attestation_kind = "independent-root-session"` and
+`reviewer_id = "codex-agent:/root"`. A root session may not invent a child task
+identity. Both modes remain bound to the same exact candidate ref, six passed
+prechecks, and attestation-only commit boundary.
+
 ## Dependency and module-boundary verdict
 
 `WP-100-FOUNDATION-REFRESH` is complete under

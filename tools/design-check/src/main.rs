@@ -3782,22 +3782,34 @@ fn parse_handler_review_attestation(
         "handler review attestation status",
         "passed",
     )?;
-    require_string(
-        document.get("reviewer_attestation_kind"),
-        "handler review attestation kind",
-        "separate-agent-task",
-    )?;
+    let reviewer_kind = document
+        .get("reviewer_attestation_kind")
+        .and_then(Item::as_str)
+        .ok_or_else(|| "handler review attestation has no reviewer kind".to_owned())?;
     let reviewer_id = document
         .get("reviewer_id")
         .and_then(Item::as_str)
         .ok_or_else(|| "handler review attestation has no reviewer_id".to_owned())?;
-    if !reviewer_id.starts_with("codex-agent:/root/")
-        || reviewer_id == "codex-agent:/root/"
-        || reviewer_id == "codex-agent:/root"
-    {
-        return Err(format!(
-            "handler review attestation reviewer is not a child task: {reviewer_id:?}"
-        ));
+    match reviewer_kind {
+        "separate-agent-task"
+            if reviewer_id.starts_with("codex-agent:/root/")
+                && reviewer_id != "codex-agent:/root/" => {}
+        "independent-root-session" if reviewer_id == "codex-agent:/root" => {}
+        "separate-agent-task" => {
+            return Err(format!(
+                "handler review attestation reviewer is not a child task: {reviewer_id:?}"
+            ));
+        }
+        "independent-root-session" => {
+            return Err(format!(
+                "independent root-session attestation has invalid reviewer: {reviewer_id:?}"
+            ));
+        }
+        other => {
+            return Err(format!(
+                "unsupported handler review attestation kind: {other:?}"
+            ));
+        }
     }
     let reviewed_ref = document
         .get("reviewed_ref")
@@ -7304,6 +7316,18 @@ result = "passed"
             "codex-agent:/root",
         );
         assert!(parse_handler_review_attestation(&root_reviewer).is_err());
+
+        let root_session = root_reviewer.replace(
+            "reviewer_attestation_kind = \"separate-agent-task\"",
+            "reviewer_attestation_kind = \"independent-root-session\"",
+        );
+        assert!(parse_handler_review_attestation(&root_session).is_ok());
+
+        let false_child = root_session.replace(
+            "codex-agent:/root",
+            "codex-agent:/root/independent_review",
+        );
+        assert!(parse_handler_review_attestation(&false_child).is_err());
     }
 
     #[test]
