@@ -36,7 +36,7 @@ The repository evidence establishes the following starting point:
   impacted by the unresolved finite-clock ordering conflict;
 - the admitted `WP-100-FOUNDATION-REFRESH` tranche is complete;
 - `WP-100-HANDLER-VALUE-PRIMITIVES` is independently reviewed and approved for
-  the exact five-value implementation scope;
+  the exact five-value implementation scope, and implementation is in progress;
 - broad handler entry is blocked by time-domain semantics, incomplete workload
   oracles, request/context migration review, and no-atomic public-boundary
   evidence;
