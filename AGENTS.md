@@ -45,6 +45,48 @@ Use each repository artifact for its intended purpose:
 When sources conflict, identify the conflict and resolve it according to
 artifact ownership.
 
+## AI-led Development Model
+
+ClinkZ-WoT uses AI-led development.
+
+AI agents hold primary technical decision responsibility for:
+
+-   technical architecture;
+-   public and internal API shape;
+-   work-package decomposition;
+-   implementation order;
+-   technical risk assessment;
+-   evidence sufficiency;
+-   technical milestone status.
+
+The Project Owner maintains project vision, goals, real-world constraints,
+unacceptable directions, and product or usage feedback.
+
+Owner feedback may appear as questions, counterexamples, concerns, or usage
+experience reports in `workspace/`. Such feedback is input for AI
+investigation. It is not a preset technical answer, not an implementation
+instruction by itself, and not an automatic blocker for unrelated work.
+
+AI agents must investigate Owner-raised topics against repository evidence:
+architecture, code, tests, specifications, work packages, audits, and review
+records. AI agents are responsible for deciding the technical direction,
+recording the rationale, migrating stable conclusions to the proper
+authoritative owner, and validating the result.
+
+AI agents must not shift technical judgment that can be resolved from project
+evidence onto the Project Owner. Ask the Owner for clarification only when a
+choice depends on project goals, product trade-offs, real-world constraints,
+unacceptable directions, or irreversible external commitments rather than
+technical evidence.
+
+Technical milestones are closed by AI from registered exit criteria and
+repository evidence. A later Owner-provided goal conflict, missing constraint,
+or credible counterexample may reopen a milestone or decision.
+
+AI determines technical release readiness from evidence. The Project Owner
+decides whether and when to execute an actual public release or other
+irreversible external commitment.
+
 ## Session Entry
 
 Before substantial work:
@@ -169,6 +211,17 @@ Workspace topics progress through:
 
     OPEN -> DISCUSSING -> DECIDED -> MIGRATED
 
+Either the Owner or AI may open a workspace topic. AI is responsible for
+investigation and for moving the topic to `DECIDED` when repository evidence
+supports a conclusion. When the conclusion is projected into the proper
+authoritative document, work package, code, or test, the topic becomes
+`MIGRATED`.
+
+Workspace topics must not be treated as Owner instructions or predetermined
+technical conclusions. If the Owner later provides a new project constraint,
+goal conflict, or credible counterexample, AI should reopen the topic or create
+a new linked topic and re-evaluate the migrated conclusion.
+
 ## Implementation Judgment
 
 -   Implement for realistic usage.
@@ -177,6 +230,13 @@ Workspace topics progress through:
 -   Surface architectural problems.
 -   Preserve unrelated changes.
 -   Inspect code and tests before asserting behavior.
+-   Apply risk-proportional implementation admission. Keep strict controls for
+    ownership, lifecycle, resource, time, protocol-boundary, and cross-module
+    changes; keep local additive work narrow when its authoritative contract,
+    dependencies, disjointness, and local evidence are already clear.
+-   Split a tranche only when blockers, ownership, lifecycle, contracts,
+    validation independence, rollback boundaries, or evidence truth differ.
+    Do not split work merely because each type or file can be named.
 
 ## Git Checkpoints
 

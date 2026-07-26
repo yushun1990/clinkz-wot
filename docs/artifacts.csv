@@ -53,6 +53,7 @@ docs/reviews/review-03.org,architecture-v4.9-interim-audit,blocking-review,4.9,1
 docs/reviews/review-04.org,architecture-v4.9-workspace-triage-review,non-normative-review,4.9,1,docs/design.md
 docs/reviews/review-05.org,architecture-v4.9-handler-entry-decomposition-review,non-normative-review,4.9,1,docs/design.md
 docs/reviews/review-06.org,architecture-v4.9-time-domain-deadline-impact-review,non-normative-review,4.9,1,docs/design.md
+workspace/0007-time-domain-and-deadline.md,time-domain-deadline-workspace-topic,non-normative-workspace-topic,4.9,1,docs/design.md
 docs/ADRs/core.org,architecture-decision-index,normative-decision-index,4.9,1,docs/design.md
 docs/ADRs/0001-crate-and-module-boundaries.org,crate-and-module-boundary-decision,normative-decision,4.9,1,docs/design.md
 docs/ADRs/0002-producer-emission-dispatch.org,producer-emission-decision,normative-decision,4.9,1,docs/design.md

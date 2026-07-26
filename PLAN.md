@@ -2,7 +2,7 @@
 
 ## Plan Status
 
-Plan revision: Owner review
+Plan revision: AI-led governance baseline
 
 Active design revision: v4.9 architecture-closure candidate
 
@@ -14,9 +14,10 @@ objectives. It does not define architecture or implementation admission.
 Authoritative behavior and package-level execution contracts remain in the
 registered specifications and `docs/work-packages/index.toml`.
 
-The Owner must approve this revised milestone structure before M0 closes.
-Until then, already accepted architecture decisions and the current
-work-package DAG remain authoritative.
+The plan is executed under AI-led development. AI owns technical decisions,
+milestone technical status, evidence sufficiency, and migration of stable
+conclusions. Owner feedback is visibility, constraint, question, and
+counterexample input; it is not a routine technical approval gate.
 
 ## Planning Baseline
 
@@ -40,34 +41,37 @@ The repository evidence establishes the following starting point:
   ownership;
 - WP-400, WP-500, and WP-600 remain downstream of WP-300, and WP-700 joins
   those three branches;
-- default workspace tests and the valid feature matrix pass;
-- the aggregate design-artifact check currently fails because
-  `workspace/0007-time-domain-and-deadline.md` is referenced by the
-  work-package index but is not registered by the artifact registry.
+- default workspace tests, the valid feature matrix, and the aggregate
+  design-artifact check pass after registering the time-domain workspace topic
+  as a non-normative artifact.
 
 Global closure and scoped implementation are intentionally not a single serial
 track. ADR-0013 permits an independently reviewed, dependency-complete tranche
 to proceed when it is disjoint from open global findings. All global gates must
 still close before final integration and release conformance.
 
-## Owner Decision Queue
+## AI-led Open Decision Queue
 
 These decisions are not yet accepted project direction. For each item, AI
-prepares a bounded decision package with alternatives, recommendation, affected
-requirements and packages, evidence impact, and the exact repository changes.
-The Owner approves, rejects, or requests revision.
+investigates the workspace topic and repository evidence, chooses a technical
+direction when evidence is sufficient, records alternatives and rejected
+approaches, then migrates the stable conclusion to its authoritative owner.
 
-| ID | Decision | Planning consequence | Required by |
-|---|---|---|---|
-| D1 | Accept, revise, or reject risk-proportional implementation admission from `workspace/0008-implementation-governance-overhead.md` | Changes implementation governance and possibly tranche authoring, but not architecture | M0 exit |
-| D2 | Freeze the time domain and Deadline direction from `workspace/0007-time-domain-and-deadline.md` | Unblocks corrective foundation/Core work and broad handler entry | M2 exit |
-| D3 | Select the completion strategy for decomposing residual `docs/design.md` ownership from `workspace/0010-complete-design-decomposition.md` | Determines the remaining v4.9 authority-closure work | M1 exit |
-| D4 | Freeze subscription receiver/control ownership and clone semantics from `workspace/0011-subscription-receiver-ownership.md` | Unblocks affected WP-300/WP-400 contracts | M4 entry |
-| D5 | Accept, revise, or reject the mock-binding property-read architecture gate from `workspace/0009-minimal-end-to-end-architecture-validation.md` | If accepted, PLAN and the authoritative work-package DAG must gain reviewed narrow tranches and an integration gate before broad expansion | Before broad WP-200/WP-300/WP-400 expansion |
+Owner input may add project constraints, target conflicts, unacceptable
+directions, or credible counterexamples. It does not preselect the technical
+answer and does not automatically block unrelated admitted work.
 
-D5 does not currently alter milestone dependencies. Until the Owner accepts it
-and the decision is migrated, the registered work-package DAG remains the
-execution authority.
+| ID | Status | AI decision to resolve | Planning consequence | Required by |
+|---|---|---|---|---|
+| D1 | MIGRATED | Adopt risk-proportional implementation admission from `workspace/0008-implementation-governance-overhead.md` as an authoring/review-depth policy, without weakening ADR-0013 tranche admission | Category A work receives narrow evidence and review; Category B/C retain stricter controls | M0 exit |
+| D2 | OPEN | Freeze the time domain and Deadline direction from `workspace/0007-time-domain-and-deadline.md` | Unblocks corrective foundation/Core work and broad handler entry | M2 exit |
+| D3 | OPEN | Select the completion strategy for decomposing residual `docs/design.md` ownership from `workspace/0010-complete-design-decomposition.md` | Determines the remaining v4.9 authority-closure work | M1 exit |
+| D4 | OPEN | Freeze subscription receiver/control ownership and clone semantics from `workspace/0011-subscription-receiver-ownership.md` | Unblocks affected WP-300/WP-400 contracts | M4 entry |
+| D5 | OPEN | Decide whether and how to add the mock-binding property-read architecture gate from `workspace/0009-minimal-end-to-end-architecture-validation.md` | If accepted by AI evidence review, PLAN and the authoritative work-package DAG must gain reviewed narrow tranches and an integration gate before broad expansion | Before broad WP-200/WP-300/WP-400 expansion |
+
+D5 does not currently alter milestone dependencies. Until AI decides it and
+the decision is migrated, the registered work-package DAG remains the execution
+authority.
 
 ## Milestone Overview
 
@@ -91,17 +95,17 @@ progress independently after their shared WP-300 dependency is complete.
 
 Status: IN_PROGRESS
 
-Objective: establish one trusted execution baseline and an explicit
-Owner/AI review loop before further substantial implementation.
+Objective: establish one trusted execution baseline and an explicit AI-led
+collaboration loop before further substantial implementation.
 
 Scope:
 
-- obtain Owner review of this plan, its release target, milestone ordering, and
-  decision queue;
+- publish this plan, its release target, milestone ordering, and AI-owned open
+  decision queue for Owner visibility and feedback;
 - initialize and maintain `PROJECT_STATE.md` as the continuation checkpoint;
 - resolve the current artifact-registry/checker inconsistency;
-- decide D1 and, if accepted, migrate the risk-proportional admission policy
-  into its proper governance and authoring owners;
+- keep D1 migrated as the risk-proportional admission authoring policy in
+  `PROJECT_GOVERNANCE.md`, `AGENTS.md`, and the workspace lifecycle records;
 - remove or explicitly assign duplicated execution-planning responsibility in
   the root governance documents without changing accepted architecture;
 - record the baseline verification commands that future milestones must
@@ -110,25 +114,25 @@ Scope:
 AI deliverable:
 
 - a review-ready plan and state checkpoint;
-- a focused D1 decision package;
-- passing baseline governance checks or an explicit, Owner-visible blocker;
+- a migrated D1 decision record;
+- passing baseline governance checks or an explicit visible blocker;
 - exact evidence links and next safe action after every substantial change.
 
-Owner checkpoint:
+Owner visibility/feedback point:
 
-- approve or revise the plan;
-- decide D1;
-- confirm that the collaboration mechanism is sufficient for routine
-  execution and milestone review.
+- flag any project-goal conflict, missing constraint, unacceptable direction,
+  or credible counterexample in the plan or collaboration model.
 
 Exit criteria:
 
-- the Owner has approved the active plan;
+- `AGENTS.md`, `PROJECT_GOVERNANCE.md`, `PLAN.md`, and `PROJECT_STATE.md`
+  consistently describe the AI-led collaboration model;
 - root artifact responsibilities no longer conflict or duplicate execution
   authority ambiguously;
 - `PROJECT_STATE.md` is current and sufficient for a fresh session;
 - the default workspace tests, valid feature matrix, and aggregate
   design-artifact check pass;
+- D1 is decided and migrated;
 - the next implementation candidate and its admission state are unambiguous.
 
 ## M1 — v4.9 Architecture and Authority Closure
@@ -154,15 +158,15 @@ Scope:
 AI deliverable:
 
 - decision packages with concrete alternatives and repository impact;
-- migrated authoritative specifications after Owner decisions;
+- migrated authoritative specifications after AI decisions;
 - updated checkers, registries, and review evidence;
 - a closure evidence index with no unresolved conflict hidden by precedence.
 
-Owner checkpoint:
+Owner visibility/feedback point:
 
-- approve significant architecture and normative-ownership decisions;
-- validate the independent closure review;
-- confirm transition from REVIEW to CLOSED.
+- flag any project-goal conflict, omitted real-world constraint,
+  unacceptable direction, or credible counterexample in the v4.9 closure
+  evidence.
 
 Exit criteria:
 
@@ -172,7 +176,7 @@ Exit criteria:
   identify the same v4.9 revision;
 - GATE-1 through GATE-6 are closed with same-revision evidence;
 - an independent review finds no remaining architecture conflict;
-- the Owner closes the milestone.
+- AI closes the milestone from registered evidence.
 
 ## M2 — Foundation and Core Contract Stabilization
 
@@ -193,7 +197,8 @@ Next execution order:
 1. repair the current artifact/check registration defect;
 2. complete independent entry re-review of
    `WP-100-HANDLER-VALUE-PRIMITIVES`;
-3. if approved, implement and verify exactly the five admitted passive values;
+3. if admitted under the registered tranche checks, implement and verify
+   exactly the five passive values;
 4. decide D2, define a corrective time-domain tranche, and replace or reaffirm
    impacted WP-000 time evidence;
 5. define and admit the next bounded handler tranches for request/context
@@ -208,14 +213,14 @@ AI deliverable:
 - exact tranche admission material before code;
 - implementation constrained to admitted paths;
 - completion evidence and updated `PROJECT_STATE.md`;
-- immediate escalation when an ambiguity changes semantics, ownership,
-  lifecycle, resources, or evidence truth.
+- immediate Owner clarification only when an ambiguity depends on project
+  goals, product trade-offs, real-world constraints, unacceptable directions,
+  or irreversible external commitments.
 
-Owner checkpoint:
+Owner visibility/feedback point:
 
-- approve D2 and any resulting architecture change;
-- review any proposed expansion or reordering of WP-100 scope;
-- validate WP-100 completion evidence.
+- flag project-goal conflicts, omitted constraints, unacceptable directions, or
+  credible counterexamples in D2, WP-100 scope, or completion evidence.
 
 Exit criteria:
 
@@ -227,7 +232,7 @@ Exit criteria:
 - required Core workloads and feature/no-atomic fixtures pass;
 - obsolete Core surfaces assigned to WP-100 are removed;
 - WP-100 completion evidence is complete and independently reviewable;
-- the Owner closes the milestone.
+- AI closes the milestone from registered evidence.
 
 ## M3 — Planning and Compilation Pipeline
 
@@ -245,8 +250,8 @@ Entry conditions:
 - WP-100 dependencies required by the proposed tranche are complete;
 - the AR-004 candidate-fallback policy, health rule, pre-side-effect failure
   set, and bounded diagnostics are constructible and independently reviewed;
-- D5 has been decided; if accepted, its narrow planner tranche and integration
-  dependency are present in the authoritative DAG;
+- D5 has been decided; if adopted by AI evidence review, its narrow planner
+  tranche and integration dependency are present in the authoritative DAG;
 - the exact tranche is admitted under the active governance policy.
 
 AI deliverable:
@@ -255,11 +260,11 @@ AI deliverable:
 - admission rollback, bound, generation, and complexity evidence;
 - no hidden binding execution or Servient lifecycle ownership in planning.
 
-Owner checkpoint:
+Owner visibility/feedback point:
 
-- approve any selection-policy change that alters project direction or public
-  semantics;
-- validate WP-200 completion.
+- flag project-goal conflicts, omitted constraints, unacceptable directions, or
+  credible counterexamples in selection policy, public semantics, or WP-200
+  completion evidence.
 
 Exit criteria:
 
@@ -284,11 +289,11 @@ with route-scoped progress, explicit ownership, and bounded cleanup.
 Entry conditions:
 
 - WP-200 is complete;
-- D4 is accepted and migrated into authoritative subscription contracts;
+- D4 is decided and migrated into authoritative subscription contracts;
 - exact complete-registration, compiler, route, cancellation, response,
   subscription, emission, and constrained-progress signatures are frozen;
 - independent host and `no_std + alloc` binding-authoring fixtures pass;
-- D5 has been reflected if accepted;
+- D5 has been reflected if adopted;
 - the exact tranche is admitted.
 
 AI deliverable:
@@ -299,11 +304,11 @@ AI deliverable:
   evidence;
 - removal staging that does not create a migration cycle.
 
-Owner checkpoint:
+Owner visibility/feedback point:
 
-- approve subscription ownership and any SPI direction change;
-- validate that the SPI is usable by realistic host and constrained bindings;
-- validate WP-300 completion.
+- flag project-goal conflicts, omitted constraints, unacceptable directions, or
+  credible counterexamples in subscription ownership, SPI usability, or WP-300
+  completion evidence.
 
 Exit criteria:
 
@@ -338,8 +343,9 @@ Exit criteria:
   ownership and semantics;
 - WP-400 is complete and independently reviewed.
 
-Owner checkpoint: validate the usable application lifecycle and WP-400
-completion.
+Owner visibility/feedback point: flag project-goal conflicts, omitted
+constraints, unacceptable directions, or credible counterexamples in the
+application lifecycle or WP-400 completion evidence.
 
 ## M5B — Directory and Discovery Client Runtime
 
@@ -359,7 +365,9 @@ Exit criteria:
 - no Directory service scope enters the active v1 target;
 - WP-500 is complete and independently reviewed.
 
-Owner checkpoint: validate Directory/Discovery scope and WP-500 completion.
+Owner visibility/feedback point: flag project-goal conflicts, omitted
+constraints, unacceptable directions, or credible counterexamples in
+Directory/Discovery scope or WP-500 completion evidence.
 
 ## M5C — Zenoh and zenoh-pico Binding Migration
 
@@ -382,7 +390,9 @@ Exit criteria:
 - realistic end-to-end Thing interaction works through Zenoh;
 - WP-600 is complete and independently reviewed.
 
-Owner checkpoint: validate production-binding usability and WP-600 completion.
+Owner visibility/feedback point: flag project-goal conflicts, omitted
+constraints, unacceptable directions, or credible counterexamples in
+production-binding usability or WP-600 completion evidence.
 
 ## M6 — Umbrella Integration and Final Conformance
 
@@ -402,12 +412,14 @@ Exit criteria:
 - workspace feature, `no_std + alloc`, TD compatibility, integration,
   architecture-boundary, resource, and performance checks pass;
 - requirement-to-evidence coverage is complete;
-- the accepted D5 integration gate passes if adopted;
+- the D5 integration gate passes if adopted;
 - WP-700 and all global conformance evidence are complete;
-- an independent release-candidate review is ready for the Owner.
+- an independent release-candidate review is complete and ready for release
+  readiness assessment.
 
-Owner checkpoint: validate integration completeness and admit the release
-candidate to M7.
+Owner visibility/feedback point: flag project-goal conflicts, omitted
+constraints, unacceptable directions, or credible counterexamples in umbrella
+integration or release-candidate evidence.
 
 ## M7 — v1 Release Review
 
@@ -415,8 +427,9 @@ Status: OPEN
 
 Dependency: M6.
 
-Objective: make the final release decision from reproducible evidence rather
-than milestone labels.
+Objective: determine technical v1 release readiness from reproducible evidence
+and separate that evidence judgment from the Owner's actual public release
+decision.
 
 Scope:
 
@@ -432,11 +445,14 @@ Exit criteria:
 - no open blocker intersects the v1 release scope;
 - release checks and examples pass from a clean checkout;
 - deferred items are explicit and do not contradict v1 claims;
-- the Owner confirms release readiness and closes v1.
+- AI determines technical release readiness from registered evidence;
+- the Owner decides whether and when to execute the actual public release.
 
 ## Progress Update Rule
 
 Milestone status changes only from repository evidence and follows
-`PROJECT_GOVERNANCE.md`. AI prepares the evidence and updates this plan and
-`PROJECT_STATE.md`; the Owner validates significant direction changes,
-milestone completion, and release readiness.
+`PROJECT_GOVERNANCE.md`. AI prepares the evidence, makes technical milestone
+and release-readiness judgments, and updates this plan and `PROJECT_STATE.md`.
+Owner feedback can reopen a milestone or decision when it identifies a
+project-goal conflict, omitted constraint, unacceptable direction, or credible
+counterexample. The Owner decides actual public release execution.

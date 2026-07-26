@@ -1,6 +1,6 @@
 # 0008 Implementation Governance Overhead
 
-Status: OPEN
+Status: MIGRATED
 Kind: development-process improvement
 Target revision: v4.9 implementation convergence
 
@@ -243,24 +243,59 @@ small additive implementation to proceed with narrow evidence.
 
 Recommended.
 
-## Open decisions
+## AI decision
 
-1. Which existing work-package fields are mandatory for Category A work?
-2. Can Category A work be recorded as a tranche inside a parent package rather
-   than as a new top-level package?
-3. Which artifact owns the risk-category classification?
-4. What evidence is sufficient to prove that a discovered issue is disjoint
-   from a tranche?
-5. Which existing closure checks must be changed to support the policy without
-   weakening architecture enforcement?
+Decision: adopt risk-proportional implementation admission as an
+authoring/review-depth policy.
+
+This decision does not weaken ADR-0013. Runtime or public-API changes still
+require a recorded admitted tranche when the authoritative design requires one.
+The change is that admission records and review packages should be sized to
+the semantic risk of the work:
+
+- Category A covers local additive implementation with an existing
+  authoritative contract, exact scope, satisfied dependencies, disjointness
+  from unresolved findings, local compile/test evidence, completion evidence,
+  and a recoverable checkpoint.
+- Category B covers cross-module contract implementation and keeps explicit
+  work-package/tranche records, ownership and dependency review, conformance
+  fixtures, audit or review projection, and impact analysis.
+- Category C covers architecture or invariant changes and requires workspace
+  investigation, authoritative design or ADR migration, work-package revision,
+  evidence invalidation or reaffirmation, and architecture review where
+  required.
+
+The five-value handler primitives candidate is Category A in implementation
+risk because it is passive, additive, and disjoint from the time-domain
+blocking scope. Its existing registered tranche still remains
+`pending/review-pending` until the registered admission evidence is completed.
+This decision therefore removes Owner approval as a gate, but it does not
+authorize implementation before the tranche itself is admitted.
+
+## Resolved decisions
+
+1. Category A work requires an existing authoritative contract, exact scope,
+   satisfied dependencies, disjointness from unresolved findings, local
+   compile/test evidence, completion evidence, and a recoverable checkpoint.
+2. Category A work should be recorded as a tranche inside the parent work
+   package when a tranche record is already the active admission unit.
+3. `PROJECT_GOVERNANCE.md` owns the risk-category policy; the specific tranche
+   record owns the classification rationale for that tranche.
+4. Disjointness requires a scoped requirement, artifact, dependency, and
+   behavior comparison. Package names alone are not evidence.
+5. No existing closure checker needs to be weakened. Checkers may add focused
+   Category A validations, but global gate closure and ADR-0013 admission
+   checks remain intact.
 
 ## Migration
 
-If accepted, migrate the stable policy into:
+The stable policy is migrated into:
 
 - `AGENTS.md` implementation workflow;
-- the work-package authoring guidance;
-- relevant machine-readable governance rules;
-- `PLAN.md` only where current tranche boundaries change.
+- `PROJECT_GOVERNANCE.md` risk-proportional admission rules;
+- `PLAN.md` D1 status and M0 scope;
+- `workspace/INDEX.org` lifecycle index.
 
-This topic should then be marked MIGRATED.
+No machine-readable work-package schema change is required for this migration:
+ADR-0013 and `docs/work-packages/index.toml` already support scoped tranches,
+and no current tranche boundary changes solely because D1 is adopted.

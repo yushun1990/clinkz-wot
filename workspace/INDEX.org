@@ -26,7 +26,6 @@ Topics are retained after migration as decision history.
 
 ** OPEN
 
-- [[file:0008-implementation-governance-overhead.md][0008 Implementation Governance Overhead]]
 - [[file:0009-minimal-end-to-end-architecture-validation.md][0009 Minimal End-to-End Architecture Validation]]
 - [[file:0010-complete-design-decomposition.md][0010 Complete the docs/design.md Decomposition]]
 - [[file:0011-subscription-receiver-ownership.md][0011 Subscription receiver ownership]]
@@ -47,6 +46,7 @@ Topics are retained after migration as decision history.
 - [[file:0004-implementation-readiness.org][0004 Implementation Readiness]]
 - [[file:0005-architecture-review-findings.md][0005 Architecture Review Findings]]
 - [[file:0006-handler-entry-decomposition.md][0006 Handler Entry Decomposition]]
+- [[file:0008-implementation-governance-overhead.md][0008 Implementation Governance Overhead]]
 
 * History
 
