@@ -2,8 +2,9 @@
 
 Last updated: 2026-07-26
 
-Repository basis: clean session-entry commit
-`18d85fefec6beba2a027315e7a684e05df6e0e61`.
+Repository basis: M0 closure checkpoint
+`c555be9259f4e4da19de654aa679f7f5a407e78b` plus the current bounded
+handler-value admission-checkpoint repair.
 
 ## Current Objective
 
@@ -130,8 +131,8 @@ Work packages and tranches:
   independent re-review pending;
 - the registered handler-value candidate is commit
   `778c2b60eebc18895604485c4e546cad5bd5e101`, the single child of its frozen
-  base, but the entry checker incorrectly requires that historical candidate
-  to remain `HEAD`; at current `HEAD` it fails before the six prechecks;
+  base; the corrected entry checker validates that historical commit and exact
+  path set without requiring it to remain `HEAD`;
 - `WP-100-HANDLER-ENTRY` remains blocked;
 - WP-100 is in progress; WP-200 through WP-700 are planned.
 
@@ -180,17 +181,20 @@ Broad handler blockers:
 - the real no-atomic public boundary is not proven;
 - Producer and Servient integration remain assigned to WP-300/WP-400.
 
-Handler-value admission checkpoint drift:
+Resolved handler-value admission checkpoint drift:
 
-- `tools/check-wp100-handler-value-primitives-entry.sh --candidate` fails with
-  `candidate commit must have parent ...` because the checker compares the
-  current `HEAD` to the historical candidate base;
-- the reviewed candidate commit and exact path set remain recoverable in Git,
-  but the direct-child/HEAD coupling cannot survive later governance commits;
-- do not rewrite published history to recreate the old checkout shape;
-- refresh or supersede the admission checkpoint mechanics while preserving the
-  exact five-value scope, exclusions, predecessor, executable contract, and
-  honest independent-review requirement.
+- the old checker compared current `HEAD` to the historical candidate base and
+  therefore failed before executing the six registered prechecks;
+- `candidate_ref` now explicitly identifies the recoverable historical
+  candidate, whose parent and exact frozen path set remain checked;
+- later governance commits no longer require published-history rewriting;
+- an attestation commit may follow intervening descendant commits, but the
+  reviewed ref remains exact and the attestation commit itself remains limited
+  to the attestation and artifact registry;
+- the five-value scope, exclusions, predecessor, executable contract, and
+  independent-review requirement are unchanged;
+- `tools/check-wp100-handler-value-primitives-entry.sh --candidate` now passes
+  and reaches the expected absent-implementation boundary.
 
 Downstream admission blockers:
 
@@ -209,6 +213,7 @@ Verified on 2026-07-26 against `18d85fe` plus the M0 state/plan closure update:
 - `tools/check-design-requirements.sh` - passed;
 - `tools/check-api-ownership.sh` - passed;
 - `cargo run --locked --quiet --manifest-path tools/design-check/Cargo.toml -- check-work-packages` - passed;
+- `tools/check-wp100-handler-value-primitives-entry.sh --candidate` - passed;
 - `git diff --check` - passed;
 - `cargo test --workspace --locked` - passed;
 - `sh scripts/check-feature-matrix.sh` - 21 valid feature combinations passed.
@@ -224,17 +229,15 @@ checkpoint.
 
 Next safe actions, in order:
 
-1. repair the stale, history-coupled candidate checkpoint without weakening
-   the tranche's semantic admission controls or rewriting published history;
-2. complete the AI-led technical admission review for
+1. complete the AI-led technical admission review for
    `WP-100-HANDLER-VALUE-PRIMITIVES` and produce the registered attestation or
    record why the tranche remains pending;
-3. if the tranche becomes admitted, implement exactly the five values in
+2. if the tranche becomes admitted, implement exactly the five values in
    `core/src/handler.rs` and `core/src/lib.rs`, then run the registered
    completion evidence;
-4. independently process D2 time-domain/Deadline and replace or reaffirm
+3. independently process D2 time-domain/Deadline and replace or reaffirm
    impacted WP-000 time evidence;
-5. continue D3, D4, and D5 as AI-led technical decisions, asking the Owner only
+4. continue D3, D4, and D5 as AI-led technical decisions, asking the Owner only
    for project-goal, constraint, or external-commitment clarification.
 
 Important references:

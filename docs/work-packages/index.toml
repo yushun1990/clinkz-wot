@@ -211,6 +211,7 @@ contract_artifacts = [
     "tools/compile-contracts/wp100-handler-value-primitives/ui/must-use-handler-step.rs",
 ]
 candidate_base_ref = "8c89e9346f424923ef3247dd1c402d5ab141c203"
+candidate_ref = "778c2b60eebc18895604485c4e546cad5bd5e101"
 candidate_paths = [
     "Cargo.lock",
     "PLAN.md",

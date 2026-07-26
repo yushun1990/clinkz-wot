@@ -87,6 +87,8 @@ const HANDLER_VALUE_REVIEW_ATTESTATION: &str =
 const HANDLER_VALUE_COMPLETION_EVIDENCE: &str =
     "docs/evidence/WP-100-handler-value-primitives.toml";
 const HANDLER_VALUE_ADMISSION_REVIEW: &str = "docs/audits/WP-100-handler-value-primitives-entry.md";
+const HANDLER_VALUE_CANDIDATE_BASE_REF: &str = "8c89e9346f424923ef3247dd1c402d5ab141c203";
+const HANDLER_VALUE_CANDIDATE_REF: &str = "778c2b60eebc18895604485c4e546cad5bd5e101";
 const HANDLER_VALUE_PRECHECKS: &[&str] = &[
     "api-ownership-check",
     "architecture-adr-check",
@@ -3366,12 +3368,18 @@ fn check_handler_value_primitives_tranche(
         "candidate_base_ref",
         HANDLER_VALUE_PRIMITIVES_TRANCHE,
     )?;
-    if candidate_base_ref != "8c89e9346f424923ef3247dd1c402d5ab141c203" {
+    if candidate_base_ref != HANDLER_VALUE_CANDIDATE_BASE_REF {
         return Err(format!(
             "{HANDLER_VALUE_PRIMITIVES_TRANCHE} candidate base ref is not frozen"
         ));
     }
     check_git_commit_is_ancestor(root, &candidate_base_ref, "candidate base ref")?;
+    let candidate_ref = string_field(tranche, "candidate_ref", HANDLER_VALUE_PRIMITIVES_TRANCHE)?;
+    if candidate_ref != HANDLER_VALUE_CANDIDATE_REF {
+        return Err(format!(
+            "{HANDLER_VALUE_PRIMITIVES_TRANCHE} candidate ref is not frozen"
+        ));
+    }
     let candidate_paths =
         package_string_set(tranche, "candidate_paths", HANDLER_VALUE_PRIMITIVES_TRANCHE)?;
     check_handler_candidate_paths(
@@ -3380,6 +3388,7 @@ fn check_handler_value_primitives_tranche(
         &implementation_paths,
         registered_artifacts,
     )?;
+    check_handler_candidate_commit(root, &candidate_base_ref, &candidate_ref, &candidate_paths)?;
 
     for empty_field in [
         "state_machines",
@@ -3488,6 +3497,7 @@ fn check_handler_value_primitives_tranche(
             &attestation_path,
             &attestation_ref,
             &candidate_base_ref,
+            &candidate_ref,
             &candidate_paths,
         )?;
         Some(attestation_ref)
@@ -3833,6 +3843,7 @@ fn check_handler_review_attestation(
     relative_path: &str,
     attestation_ref: &str,
     candidate_base_ref: &str,
+    candidate_ref: &str,
     candidate_paths: &BTreeSet<String>,
 ) -> Result<(), String> {
     require_full_commit_id(attestation_ref, "review_attestation_ref")?;
@@ -3842,6 +3853,13 @@ fn check_handler_review_attestation(
         .map_err(|error| format!("cannot read {}: {error}", path.display()))?;
     let projection = parse_handler_review_attestation(&source)?;
     check_git_commit_is_ancestor(root, &projection.reviewed_ref, "reviewed_ref")?;
+    if projection.reviewed_ref != candidate_ref {
+        return Err(format!(
+            "reviewed_ref must identify the registered candidate commit {candidate_ref:?}; \
+             found {:?}",
+            projection.reviewed_ref
+        ));
+    }
 
     require_git_single_parent(
         root,
@@ -3862,18 +3880,14 @@ fn check_handler_review_attestation(
         ));
     }
 
-    require_git_single_parent(
-        root,
-        attestation_ref,
-        &projection.reviewed_ref,
-        "review attestation commit",
-    )?;
-    let review_paths = git_changed_paths_between(
+    let attestation_parent = git_single_parent(root, attestation_ref, "review attestation commit")?;
+    require_git_ancestor(
         root,
         &projection.reviewed_ref,
-        attestation_ref,
-        "review attestation diff",
+        &attestation_parent,
+        "review attestation ancestry",
     )?;
+    let review_paths = git_commit_changed_paths(root, attestation_ref, "review attestation diff")?;
     let expected_review_paths = owned_set(&["docs/artifacts.csv", relative_path]);
     if review_paths != expected_review_paths {
         return Err(format!(
@@ -4147,10 +4161,14 @@ fn check_handler_value_primitives_entry_state(root: &Path, mode: &str) -> Result
         "candidate_base_ref",
         HANDLER_VALUE_PRIMITIVES_TRANCHE,
     )?;
-    if candidate_base_ref != "8c89e9346f424923ef3247dd1c402d5ab141c203" {
+    if candidate_base_ref != HANDLER_VALUE_CANDIDATE_BASE_REF {
         return Err("handler value candidate base ref drifted".to_owned());
     }
     check_git_commit_is_ancestor(root, &candidate_base_ref, "candidate base ref")?;
+    let candidate_ref = string_field(tranche, "candidate_ref", HANDLER_VALUE_PRIMITIVES_TRANCHE)?;
+    if candidate_ref != HANDLER_VALUE_CANDIDATE_REF {
+        return Err("handler value candidate ref drifted".to_owned());
+    }
     let candidate_paths =
         package_string_set(tranche, "candidate_paths", HANDLER_VALUE_PRIMITIVES_TRANCHE)?;
     check_handler_candidate_paths(
@@ -4159,6 +4177,7 @@ fn check_handler_value_primitives_entry_state(root: &Path, mode: &str) -> Result
         &implementation_paths,
         &registered_artifacts,
     )?;
+    check_handler_candidate_commit(root, &candidate_base_ref, &candidate_ref, &candidate_paths)?;
 
     if mode == "candidate" {
         for forbidden_field in ["review_attestation", "review_attestation_ref"] {
@@ -4171,7 +4190,6 @@ fn check_handler_value_primitives_entry_state(root: &Path, mode: &str) -> Result
         if root.join(HANDLER_VALUE_REVIEW_ATTESTATION).exists() {
             return Err("candidate state has a premature review attestation".to_owned());
         }
-        check_handler_candidate_repository_state(root, &candidate_base_ref, &candidate_paths)?;
     } else {
         let attestation_path = string_field(
             tranche,
@@ -4193,6 +4211,7 @@ fn check_handler_value_primitives_entry_state(root: &Path, mode: &str) -> Result
             &attestation_path,
             &attestation_ref,
             &candidate_base_ref,
+            &candidate_ref,
             &candidate_paths,
         )?;
         let head = git_text(root, &["rev-parse", "HEAD"], "resolve HEAD")?;
@@ -4207,54 +4226,24 @@ fn check_handler_value_primitives_entry_state(root: &Path, mode: &str) -> Result
     Ok(())
 }
 
-fn check_handler_candidate_repository_state(
+fn check_handler_candidate_commit(
     root: &Path,
     candidate_base_ref: &str,
+    candidate_ref: &str,
     candidate_paths: &BTreeSet<String>,
 ) -> Result<(), String> {
-    let head = git_text(root, &["rev-parse", "HEAD"], "resolve candidate HEAD")?;
-    let head = head.trim();
-    if head == candidate_base_ref {
-        let mut changed = git_path_set(
-            &git_text(
-                root,
-                &["diff", "--name-only", "HEAD"],
-                "read candidate tracked worktree diff",
-            )?,
-            "candidate tracked worktree diff",
-        )?;
-        changed.extend(git_path_set(
-            &git_text(
-                root,
-                &["ls-files", "--others", "--exclude-standard"],
-                "read candidate untracked paths",
-            )?,
-            "candidate untracked paths",
-        )?);
-        if &changed != candidate_paths {
-            return Err(format!(
-                "candidate worktree path mismatch; expected {candidate_paths:?}, found \
-                 {changed:?}"
-            ));
-        }
-        return Ok(());
-    }
-
-    require_git_single_parent(root, head, candidate_base_ref, "candidate commit")?;
-    let changed =
-        git_changed_paths_between(root, candidate_base_ref, head, "candidate commit diff")?;
+    check_git_commit_is_ancestor(root, candidate_ref, "candidate ref")?;
+    require_git_single_parent(root, candidate_ref, candidate_base_ref, "candidate commit")?;
+    let changed = git_changed_paths_between(
+        root,
+        candidate_base_ref,
+        candidate_ref,
+        "candidate commit diff",
+    )?;
     if &changed != candidate_paths {
         return Err(format!(
             "candidate commit path mismatch; expected {candidate_paths:?}, found {changed:?}"
         ));
-    }
-    let worktree = git_text(
-        root,
-        &["status", "--porcelain=v1", "--untracked-files=all"],
-        "read candidate worktree status",
-    )?;
-    if !worktree.is_empty() {
-        return Err("candidate commit state requires a clean worktree".to_owned());
     }
     Ok(())
 }
@@ -4279,6 +4268,22 @@ fn check_git_commit_is_ancestor(root: &Path, reference: &str, context: &str) -> 
     git_output_bytes(
         root,
         &["merge-base", "--is-ancestor", reference, "HEAD"],
+        context,
+    )?;
+    Ok(())
+}
+
+fn require_git_ancestor(
+    root: &Path,
+    ancestor: &str,
+    descendant: &str,
+    context: &str,
+) -> Result<(), String> {
+    require_full_commit_id(ancestor, &format!("{context} ancestor"))?;
+    require_full_commit_id(descendant, &format!("{context} descendant"))?;
+    git_output_bytes(
+        root,
+        &["merge-base", "--is-ancestor", ancestor, descendant],
         context,
     )?;
     Ok(())

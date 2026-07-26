@@ -55,11 +55,15 @@ The tranche does not implement or change:
 Discovering a required change outside the two implementation paths or these
 five API items revokes admission pending impact review.
 
-The design/tooling candidate is based on full commit
-`8c89e9346f424923ef3247dd1c402d5ab141c203`. Its exact non-implementation
-diff path set is frozen as `candidate_paths` in the work-package index. The
-independent attestation must review the candidate's single child commit of that
-base; neither implementation path may appear in that commit.
+The design/tooling candidate is full commit
+`778c2b60eebc18895604485c4e546cad5bd5e101`, whose sole parent is
+`8c89e9346f424923ef3247dd1c402d5ab141c203`. Its exact non-implementation diff
+path set is frozen as `candidate_paths` in the work-package index; neither
+implementation path appears in that commit. Later governance commits do not
+invalidate that recoverable candidate or need to leave it checked out as
+`HEAD`. The independent attestation must name the registered candidate commit,
+and its own commit remains restricted to the attestation plus artifact-registry
+projection.
 
 ## Dependency and module-boundary verdict
 
@@ -179,12 +183,12 @@ The exact prechecks are:
 - `wp100-handler-amendment-check`.
 
 `tools/check-wp100-handler-value-primitives-entry.sh --candidate` executes the
-six leaf checks, validates this review-pending state, and proves that the
-completion checker stops only at the absent implementation boundary. After an
-independent exact-commit attestation is committed, the `--admission-ready` mode
-requires the completed predecessor, validates the candidate/review checkpoint
-chain and bounded approval diff, reruns every precheck, and rejects an
-implementation that started before approval.
+six leaf checks, validates this review-pending state and the registered
+candidate commit, and proves that the completion checker stops only at the
+absent implementation boundary. After an independent exact-commit attestation
+is committed, the `--admission-ready` mode requires the completed predecessor,
+validates the candidate/review ancestry and bounded approval diff, reruns every
+precheck, and rejects an implementation that started before approval.
 
 `wp100-handler-value-primitives-check` is an executable, pre-frozen post-code
 completion check. Before implementation it is expected to fail only because
