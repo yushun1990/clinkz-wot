@@ -10,10 +10,14 @@ Global convergence gates: GATE-1, GATE-2, GATE-3, GATE-4, GATE-5, GATE-6
 
 Owner packages: clinkz-wot-core, clinkz-wot-foundation, clinkz-wot-td
 
-Handler entry tranche prerequisites: WP-100-FOUNDATION-REFRESH ->
-WP-100-HANDLER-VALUE-PRIMITIVES -> WP-100-HANDLER-ENTRY
+Handler entry tranche prerequisite paths:
 
-Unresolved handler-entry blocking scope: TIME-DOMAIN-AND-DEADLINE
+- WP-100-FOUNDATION-REFRESH -> WP-100-HANDLER-VALUE-PRIMITIVES;
+- WP-100-FOUNDATION-REFRESH -> WP-100-LOGICAL-TIME-CORRECTION ->
+  WP-100-DEADLINE-CLEANUP-TIMING; and
+- both paths -> WP-100-HANDLER-ENTRY.
+
+Decided handler-entry blocking scope: TIME-DOMAIN-AND-DEADLINE
 
 ## Scope
 
@@ -64,19 +68,23 @@ shares only the global `API-SURFACE-001` meta-requirement with the
 `TIME-DOMAIN-AND-DEADLINE` blocking scope. Their API-item and behavioral
 requirements are otherwise disjoint.
 
-`Deadline` is excluded from the value-primitives tranche and recorded under the
-`TIME-DOMAIN-AND-DEADLINE` blocking scope. This record is a structured impact
-placeholder, not an admitted corrective tranche and not a tranche dependency
-of the five-value candidate. It tracks the affected `ClockId`,
-`MonotonicInstant`, `RuntimeClock`, `SourceTimestamp`, `CleanupRecord` timing,
-and completed WP-000 `time-and-generation-api` evidence. Raw finite-width tick
-wrap cannot be made correct by a stateless half-period comparison after an
-arbitrarily long manual-poll gap. Clock-source-owned extension to non-wrapping
-logical ticks is the current design direction, but the future corrective
-tranche's identity, ownership, dependencies, completion contract, evidence
-disposition, exact time contract, and error disposition remain unfrozen under
-`workspace/0007-time-domain-and-deadline.md` and
-`docs/reviews/review-06.org`.
+`Deadline` is excluded from the completed value-primitives tranche and remains
+under the `TIME-DOMAIN-AND-DEADLINE` blocking scope. ADR-0016 and
+`docs/amendments/WP-100-time-domain-v1.md` resolve that scope with
+clock-source-owned, non-wrapping extended logical ticks. Raw wrap metadata is
+diagnostic only; different clock ids are incomparable and receive the frozen
+admission or owning-phase error disposition.
+
+The corrective order is
+`WP-100-FOUNDATION-REFRESH -> WP-100-LOGICAL-TIME-CORRECTION ->
+WP-100-DEADLINE-CLEANUP-TIMING`. The first tranche is Foundation-owned and
+replaces the time claims in historical WP-000 `time-and-generation-api`
+evidence while reaffirming its disjoint generation claims. The second is
+Core-owned and implements Deadline, CleanupRecord logical ordering, and
+incomparable-clock disposition. This decided plan is not implementation
+admission: each tranche still requires its own ADR-0013 admission record and
+completion evidence. The broad handler entry remains blocked until both
+complete.
 
 ## Requirements
 
@@ -292,6 +300,13 @@ Produce these package evidence keys exactly as indexed by the work-package DAG:
 - `handler-value-primitives` for the five admitted passive portable values, exact derive
   and ownership contracts, three Core feature cells, dependency-free negative
   trait assertions, and handler-redacted static-registration diagnostics;
+- `logical-time-domain-correction` for extended Foundation ticks, raw counter
+  extension, reset/exhaustion, source timestamp comparability, and the explicit
+  replacement/reaffirmation disposition of historical WP-000 time/generation
+  evidence;
+- `deadline-cleanup-timing` for the Core Deadline value, CleanupRecord checked
+  logical ordering, incomparable-clock error mapping, delayed polling, and
+  timeout linearization;
 - `core-public-surface` for paths, feature cells, owned values, and trait shapes;
 - `handler-api-matrix` for every one of the 18 operation results, three handler flavors, and
   applicable compilation cells;

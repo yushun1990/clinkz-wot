@@ -32,12 +32,14 @@ The repository evidence establishes the following starting point:
 - the v4.9 architecture backbone exists but is still a closure candidate;
 - GATE-3, the Directory client boundary, is closed; GATE-1, GATE-2, GATE-4,
   GATE-5, and GATE-6 remain open;
-- WP-000 is recorded complete, but its `time-and-generation-api` evidence is
-  impacted by the unresolved finite-clock ordering conflict;
+- WP-000 is recorded complete; ADR-0016 preserves its historical
+  `time-and-generation-api` record while requiring WP-100 to replace the time
+  claims and reaffirm the disjoint generation claims;
 - the admitted `WP-100-FOUNDATION-REFRESH` tranche is complete;
 - `WP-100-HANDLER-VALUE-PRIMITIVES` is implemented and has completion evidence
   for the exact five-value scope;
-- broad handler entry is blocked by time-domain semantics, incomplete workload
+- broad handler entry is blocked until the decided logical-time and
+  Deadline/cleanup correction tranches complete, and by incomplete workload
   oracles, request/context migration review, and no-atomic public-boundary
   evidence;
 - WP-200 is blocked before admission by the unresolved constructible
@@ -70,7 +72,7 @@ answer and does not automatically block unrelated admitted work.
 | ID | Status | AI decision to resolve | Planning consequence | Required by |
 |---|---|---|---|---|
 | D1 | MIGRATED | Adopt risk-proportional implementation admission from `workspace/0008-implementation-governance-overhead.md` as an authoring/review-depth policy, without weakening ADR-0013 tranche admission | Category A work receives narrow evidence and review; Category B/C retain stricter controls | M0 exit |
-| D2 | OPEN | Freeze the time domain and Deadline direction from `workspace/0007-time-domain-and-deadline.md` | Unblocks corrective foundation/Core work and broad handler entry | M2 exit |
+| D2 | MIGRATED | Use clock-source-owned non-wrapping extended logical ticks; retain raw wrap metadata as diagnostics; fail incomparable clock domains explicitly; correct Foundation before Core Deadline/cleanup timing | Defines `WP-100-LOGICAL-TIME-CORRECTION -> WP-100-DEADLINE-CLEANUP-TIMING`; broad handler entry remains blocked until both complete | M2 exit |
 | D3 | OPEN | Select the completion strategy for decomposing residual `docs/design.md` ownership from `workspace/0010-complete-design-decomposition.md` | Determines the remaining v4.9 authority-closure work | M1 exit |
 | D4 | OPEN | Freeze subscription receiver/control ownership and clone semantics from `workspace/0011-subscription-receiver-ownership.md` | Unblocks affected WP-300/WP-400 contracts | M4 entry |
 | D5 | OPEN | Decide whether and how to add the mock-binding property-read architecture gate from `workspace/0009-minimal-end-to-end-architecture-validation.md` | If adopted after AI evidence review, PLAN and the authoritative work-package DAG must gain reviewed narrow tranches and an integration gate before broad expansion | Before broad WP-200/WP-300/WP-400 expansion |
@@ -203,14 +205,16 @@ Completed evidence:
 
 Next execution order:
 
-1. decide D2, define a corrective time-domain tranche, and replace or reaffirm
-   impacted WP-000 time evidence;
-2. define and admit the next bounded handler tranches for request/context
+1. author and admit `WP-100-LOGICAL-TIME-CORRECTION`, then replace the
+   impacted WP-000 time claims and reaffirm its generation claims with new
+   completion evidence;
+2. admit and complete `WP-100-DEADLINE-CLEANUP-TIMING`;
+3. define and admit the next bounded handler tranches for request/context
    values, portable traits, host erasure/storage, security, codecs, errors, and
    callback isolation;
-3. complete the real handler matrix, no-atomic boundary, cancellation,
+4. complete the real handler matrix, no-atomic boundary, cancellation,
    storage/replacement, resource, and performance evidence;
-4. retain Producer and Servient integration in WP-300 and WP-400.
+5. retain Producer and Servient integration in WP-300 and WP-400.
 
 AI deliverable:
 

@@ -2,15 +2,14 @@
 
 Last updated: 2026-07-26
 
-Repository basis: handler-value implementation commit
-`b5cb1a5392ab2ef35a9f23185731012f71e4ea05` plus the current completion
-evidence and continuation-state update.
+Repository basis: the current D2 migration checkpoint, following handler-value
+completion checkpoint `3e66076`.
 
 ## Current Objective
 
-Resolve D2 from repository evidence, define the corrective time-domain tranche,
-and replace or reaffirm the impacted WP-000 time evidence without waiting for
-Owner technical approvals.
+Author and admit the Foundation-owned `WP-100-LOGICAL-TIME-CORRECTION` tranche
+under the migrated ADR-0016 contract. Do not begin source implementation until
+its exact ADR-0013 admission review and executable entry check pass.
 
 Active milestones:
 
@@ -88,7 +87,9 @@ The architecture direction already accepted by the registered sources is:
 - every retained operation has generation ownership, bounds, cancellation, and
   terminal cleanup;
 - host and `no_std + alloc` profiles preserve protocol-neutral semantics with
-  different progress mechanisms.
+  different progress mechanisms;
+- one live `ClockId` exposes non-wrapping extended logical ticks; raw wrap
+  metadata is diagnostic only, and incomparable clock domains fail explicitly.
 
 Authoritative implementation order remains:
 
@@ -123,9 +124,11 @@ Global gates:
 
 Work packages and tranches:
 
-- WP-000 is recorded complete;
-- its `time-and-generation-api` evidence is impacted and needs explicit
-  replacement or reaffirmation after the time model is frozen;
+- WP-000 is recorded complete; its historical `time-and-generation-api` file
+  remains immutable;
+- D2 is migrated through ADR-0016 and
+  `docs/amendments/WP-100-time-domain-v1.md`; new WP-100 evidence must replace
+  the historical time claims and reaffirm the generation claims;
 - `WP-100-FOUNDATION-REFRESH` is approved, implemented, and complete;
 - `WP-100-HANDLER-VALUE-PRIMITIVES` is approved, implemented, and complete
   under `docs/evidence/WP-100-handler-value-primitives.toml`;
@@ -135,6 +138,9 @@ Work packages and tranches:
   `db09e5f1635f9544af7d996919600c4b377875ff`, its admission checkpoint is
   `e009c760f915569186136b1f6541784a2fbde3b9`, and its implementation is
   `b5cb1a5392ab2ef35a9f23185731012f71e4ea05`;
+- `WP-100-LOGICAL-TIME-CORRECTION` and
+  `WP-100-DEADLINE-CLEANUP-TIMING` have frozen identities, ordering,
+  ownership, and completion keys, but neither tranche is admitted;
 - `WP-100-HANDLER-ENTRY` remains blocked;
 - WP-100 is in progress; WP-200 through WP-700 are planned.
 
@@ -157,17 +163,8 @@ passed without expanding the tranche.
 
 ## Current Blockers and Open Technical Decisions
 
-Immediate baseline defect:
-
-- resolved. `docs/artifacts.csv` now registers
-  `workspace/0007-time-domain-and-deadline.md` as a non-normative workspace
-  artifact so the `TIME-DOMAIN-AND-DEADLINE` blocking topic is registered and
-  present.
-
 AI-led open decisions:
 
-- D2: freeze the time-domain/Deadline direction and decide the corrective
-  tranche/evidence disposition;
 - D3: decide the residual `docs/design.md` decomposition strategy;
 - D4: freeze subscription receiver/control ownership and clone semantics;
 - D5: decide whether and how to add the minimal mock-binding property-read
@@ -175,9 +172,8 @@ AI-led open decisions:
 
 Broad handler blockers:
 
-- finite raw clock wrap, Deadline ordering, SourceTimestamp, and CleanupRecord
-  timing do not share one coherent comparison domain;
-- the impacted WP-000 time evidence has no disposition;
+- the decided logical-time correction and dependent Deadline/cleanup tranche
+  are not yet admitted or complete;
 - four handler workloads lack complete executable matrix oracles;
 - request/target/context migration needs a scoped impact review;
 - the real no-atomic public boundary is not proven;
@@ -197,6 +193,22 @@ Completed handler-value tranche facts:
   and downstream Servient/Protocol Binding compilation;
 - no intersecting finding or out-of-scope implementation need was found.
 
+Migrated D2 facts:
+
+- raw finite counters are extended inside the clock adapter; Core never
+  reconstructs wrap epochs;
+- reset, lost epoch state, scale change, or adapter restart retires the old
+  non-reused clock id;
+- positive-duration admission fails before logical `u64` overflow, while
+  already admitted work may expire and drain at saturation;
+- monotonic source timestamps compare only when clock id and scale match;
+- caller-provided incomparability maps to
+  `Validation/Admission/Never`; post-admission clock-domain loss maps to
+  `InternalInvariant/Never` in the owning Handler, Binding, or Cleanup phase;
+- `WP-100-LOGICAL-TIME-CORRECTION` precedes and is evidence-distinct from
+  `WP-100-DEADLINE-CLEANUP-TIMING`;
+- broad handler entry remains blocked until both completion keys pass.
+
 Downstream admission blockers:
 
 - WP-200: constructible candidate-fallback policy, health rule,
@@ -208,17 +220,22 @@ Downstream admission blockers:
 
 ## Verification Baseline
 
-Verified on 2026-07-26 through the handler-value implementation and completion
-state:
+Verified on 2026-07-26 through the D2 authority migration:
 
 - `tools/check-design-artifacts.sh` - passed;
 - `tools/check-design-requirements.sh` - passed;
 - `tools/check-api-ownership.sh` - passed;
+- `tools/check-architecture-adrs.sh` - sixteen accepted decisions passed;
+- `tools/check-wp100-handler-amendment.sh` - passed with the frozen Deadline
+  projection;
 - `cargo run --locked --quiet --manifest-path tools/design-check/Cargo.toml -- check-work-packages` - passed;
 - `tools/check-wp100-handler-value-primitives-entry.sh --candidate` - passed;
 - `tools/check-wp100-handler-value-primitives-entry.sh --admission-ready` -
   passed before implementation;
 - `tools/check-wp100-handler-value-primitives.sh` - passed;
+- `cargo fmt --manifest-path tools/design-check/Cargo.toml -- --check` - passed;
+- `bash -n tools/check-architecture-adrs.sh` and
+  `bash -n tools/check-wp100-handler-amendment.sh` - passed;
 - `git diff --check` - passed;
 - `cargo test --workspace --locked` - passed;
 - `sh scripts/check-feature-matrix.sh` - 21 valid feature combinations passed.
@@ -229,15 +246,18 @@ baseline because it intentionally enables mutually exclusive `zenoh` and
 
 ## Stopping Point and Next Safe Actions
 
-The five admitted handler value primitives and Core root exports are
-implemented and committed.
+D2 is technically decided and projected into its ADR, normative amendment,
+active design, requirements, work packages, machine-readable corrective plan,
+workspace lifecycle, and planning state. The historical WP-000 evidence file
+was not rewritten.
 
 Next safe actions, in order:
 
-1. independently process D2 time-domain/Deadline and replace or reaffirm
-   impacted WP-000 time evidence;
-2. define the next bounded WP-100 handler tranche after D2 has a disposition;
-3. continue D3, D4, and D5 as AI-led technical decisions, asking the Owner only
+1. author the exact admission contract, fixtures, audit, and entry checker for
+   `WP-100-LOGICAL-TIME-CORRECTION`;
+2. admit and implement that tranche only after independent review evidence;
+3. then admit `WP-100-DEADLINE-CLEANUP-TIMING`;
+4. continue D3, D4, and D5 as AI-led technical decisions, asking the Owner only
    for project-goal, constraint, or external-commitment clarification.
 
 Important references:
@@ -251,6 +271,8 @@ Important references:
 - `docs/audits/WP-100-handler-value-primitives-entry.md`;
 - `docs/audits/WP-100-handler-value-primitives-review.toml`;
 - `docs/evidence/WP-100-handler-value-primitives.toml`;
+- `docs/ADRs/0016-extended-logical-monotonic-time.org`;
+- `docs/amendments/WP-100-time-domain-v1.md`;
 - `workspace/0007-time-domain-and-deadline.md`;
 - `workspace/0008-implementation-governance-overhead.md`;
 - `workspace/0009-minimal-end-to-end-architecture-validation.md`;

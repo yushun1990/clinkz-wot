@@ -3,6 +3,7 @@ set -euo pipefail
 
 root=$(cd "$(dirname "$0")/.." && pwd)
 amendment="$root/docs/amendments/WP-100-handler-api-v1.md"
+time_amendment="$root/docs/amendments/WP-100-time-domain-v1.md"
 ownership="$root/docs/api-ownership.csv"
 states="$root/docs/state-machines.toml"
 limits="$root/docs/resource-limits.csv"
@@ -74,18 +75,26 @@ if ! grep -Fq 'HANDLER-VALUE-001' <<<"$affected_requirements"; then
     exit 1
 fi
 
-for deferred_deadline_contract in \
-    '### Deferred Deadline candidate' \
-    'must not be implemented until' \
-    'does not define a corrective tranche' \
+for deadline_contract in \
+    '### Frozen Deadline value' \
+    'WP-100-TIME-DOMAIN-001' \
+    'WP-100-DEADLINE-CLEANUP-TIMING' \
     'pub struct Deadline {'; do
-    if ! grep -Fq "$deferred_deadline_contract" "$amendment"; then
+    if ! grep -Fq "$deadline_contract" "$amendment" "$time_amendment"; then
         echo \
-            "WP-100 handler amendment check: deferred Deadline boundary misses: $deferred_deadline_contract" \
+            "WP-100 handler amendment check: frozen Deadline boundary misses: $deadline_contract" \
             >&2
         exit 1
     fi
 done
+
+if ! awk -F, -v path="docs/amendments/WP-100-time-domain-v1.md" '
+    NR > 1 && $1 == path && $3 == "normative-amendment" { found = 1 }
+    END { exit !found }
+' "$artifacts"; then
+    echo "WP-100 handler amendment check: time-domain amendment is not registered" >&2
+    exit 1
+fi
 
 for signature in \
     'pub enum CancellationView {' \

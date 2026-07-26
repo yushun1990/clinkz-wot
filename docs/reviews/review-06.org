@@ -1,7 +1,7 @@
 #+title: Architecture Review 06: Time-Domain and Deadline Impact
 #+date: 2026-07-22
 #+review_id: architecture-review-06-time-domain-deadline-impact
-#+status: Blocking Deadline and broad handler entry; five-value scope disjoint
+#+status: Design finding migrated; corrective implementation and broad handler entry blocked
 #+reviewed_design: v4.9 time, handler, cleanup, and WP-000 evidence contracts
 
 * Review status and authority
@@ -12,6 +12,10 @@ invalidate evidence by itself, or authorize implementation. The active design,
 registered amendments, work-package DAG, admission audit, and evidence records
 must be updated and independently reviewed before the affected work proceeds.
 
+ADR-0016 and =docs/amendments/WP-100-time-domain-v1.md= subsequently migrated
+the design disposition. The historical evidence gap remains open until the
+registered Foundation and Core corrective tranches complete.
+
 * Executive verdict
 
 The proposed =clinkz_wot_core::Deadline= is not implementation-ready. The
@@ -21,13 +25,11 @@ proposed Deadline carries no wrap policy. The conflict also reaches existing
 =CleanupRecord= timing validation and the completed WP-000
 =time-and-generation-api= evidence.
 
-=Deadline= and =WP-100-HANDLER-ENTRY= are blocked by the registered
-=TIME-DOMAIN-AND-DEADLINE= impact scope. That record is a structured placeholder,
-not an admitted or fully defined corrective tranche: the future tranche's
-identity, ownership, dependencies, completion contract, and evidence disposition
-remain unfrozen. The other five passive values from the candidate are disjoint
-from this finding and may be reviewed as a separately projected five-value
-scope. This review alone does not admit that scope.
+=Deadline= and =WP-100-HANDLER-ENTRY= were blocked by the registered
+=TIME-DOMAIN-AND-DEADLINE= impact placeholder. The other five passive values
+were disjoint from this finding and were later completed as their own admitted
+tranche. The time scope is now a decided two-tranche corrective plan, but this
+review alone does not admit either corrective tranche.
 
 * Evidence reviewed
 
@@ -137,7 +139,7 @@ introduced anyway.
 
 * Conditions to clear the finding
 
-The blocking finding remains open until:
+The design-disposition conditions are complete:
 
 - the authoritative time model selects and freezes one comparison domain;
 - =TIME-001= and the handler amendment have consistent ownership and affected-
@@ -145,18 +147,23 @@ The blocking finding remains open until:
 - the =None= result of an incomparable deadline has an exact error category,
   phase, retry class, and dispatcher behavior;
 - a future corrective tranche or other authorized work record freezes its
-  identity, ownership, dependencies, affected prior-evidence disposition,
-  checks, and completion keys;
+  identity, ownership, dependencies, affected prior-evidence disposition, and
+  completion keys.
+
+The implementation/evidence finding remains open until:
+
 - no-std fixtures prove raw-wrap extension and delayed-poll behavior;
 - SourceTimestamp and CleanupRecord tests prove the selected semantics; and
 - WP-000 time evidence is explicitly replaced or reaffirmed.
 
 * Verdict
 
-WP-000 time evidence: IMPACTED; disposition required.
+WP-000 time evidence: IMPACTED; replacement/reaffirmation disposition frozen,
+completion evidence pending.
 
-Deadline value: FAIL; blocked.
+Deadline value: BLOCKED pending Foundation correction and its Core admission.
 
-Broad handler entry: FAIL; blocked.
+Broad handler entry: BLOCKED.
 
-Clock-independent five-value scope: DISJOINT, but not admitted by this review.
+Clock-independent five-value scope: DISJOINT; subsequently completed under
+separate admission evidence.

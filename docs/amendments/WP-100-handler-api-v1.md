@@ -149,17 +149,12 @@ waker registration, callback, executor dependency, or cancellation transition.
 It does not itself wake or cancel work. The authoritative execution record
 remains engine-owned under the cancellation requirements.
 
-### Deferred Deadline candidate
+### Frozen Deadline value
 
-The API ownership freeze for `Deadline` establishes only its Core owner,
-definition/public paths, and candidate value shape. It does not freeze the
-clock comparison domain, raw-wrap behavior, reset/clock-id lifetime, cleanup
-timing, dispatcher error disposition, or completion evidence. The following
-shape is retained for review traceability and must not be implemented until
-future corrective work is defined, independently admitted, and clears the
-`TIME-DOMAIN-AND-DEADLINE` blocking scope.
-
-The deferred `Deadline` candidate shape is:
+ADR-0016 and `docs/amendments/WP-100-time-domain-v1.md` freeze the logical
+clock domain, reset/exhaustion rules, cleanup ordering, error disposition, and
+corrective work split. This amendment retains the exact Core-owned Deadline
+shape:
 
 ```rust
 #[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
@@ -185,23 +180,18 @@ impl Deadline {
 }
 ```
 
-Under the preferred non-wrapping logical-time direction, the candidate behavior
-would make `Deadline::NONE.checked_is_elapsed_at(now)` return `Some(false)`, a
-finite deadline elapsed when `now >= deadline`, and different clock identities
-return `None`. The `checked_` name reflects that incomparability is not a
-Boolean result. These are deferred candidate semantics, not a current
-implementation contract. In particular, the exact dispatcher error category,
-phase, retry class, and behavior for incomparability remain unfrozen.
+`Deadline::NONE.checked_is_elapsed_at(now)` returns `Some(false)`. A finite
+same-clock deadline returns `Some(now >= instant)`, and different clock
+identities return `None`. The `checked_` name reflects that incomparability is
+not a Boolean result. Same-clock `MonotonicInstant` values use the non-wrapping
+extended logical tick domain and never infer ordering from raw wrapping ticks
+or `RuntimeClock::wrap_period_ticks`.
 
-The preferred comparison direction requires same-clock `MonotonicInstant`
-values to be in one non-wrapping logical tick domain and never infers ordering
-from raw wrapping ticks or `RuntimeClock::wrap_period_ticks`. The
-`TIME-DOMAIN-AND-DEADLINE` record is only a blocking impact placeholder for the
-foundation clock-source contract, cleanup timing, prior time evidence, and
-error disposition. It does not define a corrective tranche. The identity,
-ownership, dependencies, completion contract, and evidence disposition of
-future corrective work remain unfrozen before `Deadline` can enter
-implementation.
+The value is not implementation-authorized by this frozen contract alone.
+`WP-100-DEADLINE-CLEANUP-TIMING` depends on the Foundation logical-time
+correction and owns Deadline implementation, CleanupRecord comparison, error
+disposition, and completion evidence. Broad handler entry remains blocked until
+both corrective tranches complete.
 
 The final v1 request value has private fields and no `Default` implementation:
 

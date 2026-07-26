@@ -1,0 +1,122 @@
+#+title: ADR-0016: Extended Logical Monotonic Time
+#+date: 2026-07-26
+#+status: Accepted
+
+* Context
+
+The v4.9 residual design combined two incompatible time models. It allowed a
+finite-width runtime clock to expose raw wrapping ticks and proposed a
+half-period modular-comparison rule, while =MonotonicInstant= and
+=CleanupRecord= used ordinary checked =u64= ordering. The proposed =Deadline=
+stored only a =MonotonicInstant= and therefore had neither the raw wrap period
+nor clock-source epoch state needed to order observations across a wrap.
+
+A stateless modular comparison is not sufficient for constrained manual-poll
+execution. If the runtime is not driven for half a raw period or longer, the
+same raw sample can describe an observation before a deadline or one or more
+wraps after it. Copying wrap policy into every Deadline, timestamp, and cleanup
+record would still not recover a missed epoch.
+
+The historical WP-000 =time-and-generation-api= evidence proves clock-id
+mismatch, checked scaling, and declaration of a finite raw wrap period. It does
+not prove deadline, freshness, or cleanup ordering across raw wraps. Its time
+claim requires replacement; its independent generation claim remains
+reaffirmable.
+
+* Decision
+
+=MonotonicInstant::ticks= is an extended logical tick value. For one live
+=ClockId=:
+
+- the tick scale is immutable;
+- observations are monotonic nondecreasing;
+- exposed ticks never wrap or decrease;
+- checked addition fails before =u64= overflow; and
+- every comparison or subtraction rejects a different =ClockId=.
+
+A clock adapter owns raw-counter extension before constructing a
+=MonotonicInstant=. It may use a hardware overflow epoch, caller-owned state, a
+critical section, or a host-native wide clock. Merely comparing successive raw
+samples is conforming only when the adapter enforces a sampling interval that
+makes a missed wrap impossible. Core consumers never infer an epoch from raw
+ticks.
+
+=RuntimeClock::wrap_period_ticks()= remains in the v1 trait as optional
+diagnostic metadata for the underlying raw source. It does not describe the
+exposed logical domain, does not authorize modular comparison, and does not
+bound admitted operation lifetimes. =None= means that no raw-source period is
+reported.
+
+A raw counter reset, lost extension epoch, scale change, or adapter restart
+retires the old =ClockId=. The replacement id must not be reused while any
+timestamp, deadline, cleanup record, or operation from the old domain can
+remain. Such values are incomparable and fail closed; they are never
+reinterpreted in the new domain.
+
+Before logical =u64= exhaustion, positive-duration admission fails when checked
+addition cannot represent its deadline. The clock may remain saturated at
+=u64::MAX= while already admitted work expires and drains. A runtime changes to
+a new =ClockId= only after no live time-bearing state from the old domain
+remains. It never wraps or resets ticks under the same id.
+
+=SourceTimestamp::Monotonic= carries the same extended logical ticks and an
+immutable scale. Two monotonic source timestamps are comparable only when both
+their =ClockId= and =ticks_per_second= match. Two =UnixMillis= values are
+comparable with each other. Unknown timestamps, mixed timestamp kinds,
+different clock ids, and conflicting scales are incomparable.
+
+=Deadline= retains the frozen optional-instant value shape. =Deadline::NONE=
+is never elapsed. A finite same-clock deadline is elapsed exactly when
+=now >= instant=. Different clock ids return =None= from
+=checked_is_elapsed_at=.
+
+An incomparable caller-supplied deadline is rejected at admission as
+=CoreError::Validation= with =ErrorPhase::Admission= and =RetryClass::Never=.
+If an admitted operation later observes a different runtime clock id, that is
+=CoreError::InternalInvariant= with =RetryClass::Never= and the owning phase:
+=Handler= for interaction dispatch, =Binding= for binding progress, and
+=Cleanup= for cleanup progress. It is not reported as =TimedOut=. The owner
+begins cancellation or cleanup and discards any later value under the existing
+late-result rules.
+
+=CleanupRecord= timing values must use the runtime clock id. When both a retry
+instant and terminal deadline exist, their order is validated through
+=MonotonicInstant::checked_cmp= in the logical domain. Raw wrap metadata never
+participates.
+
+The correction is implemented in two evidence-distinct tranches:
+
+1. =WP-100-LOGICAL-TIME-CORRECTION= freezes Foundation logical time,
+   source-timestamp comparability, raw-wrap extension fixtures, reset and
+   exhaustion behavior, and replaces the time portion of historical WP-000
+   evidence while reaffirming its generation portion.
+2. =WP-100-DEADLINE-CLEANUP-TIMING= depends on the first tranche and implements
+   the Core Deadline value, CleanupRecord logical ordering, incomparable-clock
+   disposition fixtures, and delayed-poll timeout evidence.
+
+The broad handler entry remains blocked until both tranches complete.
+
+* Consequences
+
+- Existing public time value layouts and the RuntimeClock method set remain
+  unchanged.
+- A RuntimeClock implementation that exposes a raw wrapping counter directly is
+  nonconforming even if it reports =wrap_period_ticks()=.
+- Constrained adapters need reliable epoch state or a proven sampling bound.
+- Delayed polling does not create comparison ambiguity because the adapter,
+  rather than the poll consumer, retains the epoch.
+- Historical WP-000 evidence remains immutable history; new v4.9 evidence
+  explicitly replaces its time claims and reaffirms disjoint generation
+  claims.
+
+* Rejected alternatives
+
+- Stateless half-period modular comparison was rejected because no current
+  profile guarantees a sufficiently frequent poll or sample.
+- Carrying the wrap period in every Deadline and cleanup record was rejected
+  because it duplicates source metadata and still cannot recover missed wraps.
+- Using wall-clock or =std::time::Instant= in Core was rejected because the
+  protocol-neutral and constrained profiles require the same semantics.
+- Silently rotating ClockId while old operations remain was rejected because it
+  converts an explicit incomparable-domain failure into nondeterministic
+  timeout behavior.

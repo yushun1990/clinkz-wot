@@ -266,8 +266,8 @@ completion_check = "wp100-handler-value-primitives-check"
 [[blocking_scope]]
 id = "TIME-DOMAIN-AND-DEADLINE"
 work_package = "WP-100"
-status = "discussing"
-record_kind = "impact-placeholder"
+status = "decided"
+record_kind = "corrective-plan"
 impact_status = "blocking"
 blocks_entrypoints = ["WP-100-HANDLER-ENTRY"]
 affected_requirements = [
@@ -292,11 +292,11 @@ blocking_topic = "workspace/0007-time-domain-and-deadline.md"
 impact_review = "docs/reviews/review-06.org"
 impacted_evidence_path = "docs/evidence/WP-000.toml"
 impacted_evidence_key = "time-and-generation-api"
-future_tranche_identity = "not-frozen"
-future_tranche_ownership = "not-frozen"
-future_tranche_dependencies = "not-frozen"
-future_tranche_completion_contract = "not-frozen"
-evidence_disposition = "not-frozen"
+future_tranche_identity = "WP-100-LOGICAL-TIME-CORRECTION -> WP-100-DEADLINE-CLEANUP-TIMING"
+future_tranche_ownership = "clinkz-wot-foundation -> clinkz-wot-core"
+future_tranche_dependencies = "WP-100-FOUNDATION-REFRESH -> WP-100-LOGICAL-TIME-CORRECTION -> WP-100-DEADLINE-CLEANUP-TIMING"
+future_tranche_completion_contract = "logical-time-domain-correction + deadline-cleanup-timing"
+evidence_disposition = "replace WP-000 time claims; reaffirm generation claims"
 
 [[package]]
 id = "WP-000"
@@ -386,6 +386,8 @@ feature_cells = ["no-default", "async-no-std", "std"]
 evidence_keys = [
     "handler-foundation-refresh",
     "handler-value-primitives",
+    "logical-time-domain-correction",
+    "deadline-cleanup-timing",
     "core-public-surface",
     "handler-api-matrix",
     "handler-cancellation",

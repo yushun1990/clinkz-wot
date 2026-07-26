@@ -186,8 +186,10 @@ implementation admission with independently reviewed tranche-scoped admission
 while retaining the six global gates for aggregate convergence and release.
 ADR-0014 makes the residual-design and registered-amendment ownership during
 domain decomposition explicit. ADR-0015 makes static resource profiles borrowed
-and work budgets nonduplicable before the 195-field foundation refresh. The
-revision therefore establishes:
+and work budgets nonduplicable before the 195-field foundation refresh.
+ADR-0016 replaces raw-wrap/half-period time comparison with clock-source-owned
+extended logical ticks and exact incomparable-clock behavior. The revision
+therefore establishes:
 a single-owner normative document
 hierarchy; an explicit Servient-owned compiled-plan-set lifecycle with the
 `clinkz-wot-planning` compiler boundary; Cargo-linked complete Protocol Binding
@@ -3290,13 +3292,18 @@ but no maintained queue, cursor, or slot reports remaining work; even
 `Progress { value: None, pending: None }` is therefore distinct from `Idle`.
 `Terminal` is used only when the driven facade itself has a terminal state; an
 ordinary quiescent `StaticServient` returns `Idle`.
-`MonotonicInstant` contains an opaque `ClockId` and an unsigned tick value.
-Values are ordered or subtracted only when their clock ids match. The associated
-`RuntimeClock::ticks_per_second()` is immutable for that clock id and defines
-checked conversion between ticks and durations. A finite-width clock declares
-its wrap period; the admitted maximum deadline and lease duration MUST be less
-than half that period so modular comparisons are unambiguous. Core types never
-depend on `std::time::Instant` or wall-clock time.
+`MonotonicInstant` contains an opaque `ClockId` and an extended logical unsigned
+tick value. Values are ordered or subtracted only when their clock ids match.
+For one live clock id, `RuntimeClock::ticks_per_second()` is immutable and
+successive logical ticks are monotonic nondecreasing and never wrap. A
+finite-width hardware counter is extended by its clock adapter before it enters
+the public time domain. `RuntimeClock::wrap_period_ticks()` is optional
+raw-source diagnostic metadata only; it never selects a comparison algorithm or
+bounds an admitted duration. Reset, lost epoch state, or scale change retires
+the old clock id. Checked addition fails before logical `u64` overflow. Exact
+source-time, deadline, cleanup, exhaustion, and incomparable-clock rules are
+owned by `docs/amendments/WP-100-time-domain-v1.md` under ADR-0016. Core types
+never depend on `std::time::Instant` or wall-clock time.
 
 `API-SECURITY-001`: Security selection uses the following mandatory separation:
 
@@ -3368,7 +3375,8 @@ independent sync/async semantics. This resolves the “sync, async, or poll” c
 `DIR-CONTRACT-001`; poll is the portable contract, async is the preferred host
 contract, and blocking sync is only a convenience adapter.
 
-`API-SOURCE-TIME-001`: Source retrieval and lease times use
+The `API-SOURCE-TIME-001` projection is refined by the registered time-domain
+amendment. Source retrieval and lease times use
 `SourceTimestamp::{Monotonic { clock_id, ticks, ticks_per_second },
 UnixMillis(i64), Unknown}`. `ticks_per_second` is nonzero and immutable for one
 `clock_id`; conflicting scales for the same id are invalid source metadata.
@@ -3377,7 +3385,9 @@ UnixMillis(i64), Unknown}`. `ticks_per_second` is nonzero and immutable for one
 freshness policy MUST reject or explicitly accept incomparable timestamps.
 Duration arithmetic uses checked integer scaling with a documented rounding
 direction: expiry rounds toward earlier expiry and remaining-lifetime reporting
-rounds toward zero.
+rounds toward zero. Monotonic source ticks are extended logical ticks under
+ADR-0016. Exact checked comparison, raw-wrap extension, reset, and exhaustion
+semantics are refined by `docs/amendments/WP-100-time-domain-v1.md`.
 
 ### Common Value and Error Types
 
@@ -3652,12 +3662,19 @@ specified. It defines no Directory service default. Host defaults are versioned
 names; changing a numeric value requires a new profile name or a documented
 breaking configuration change.
 
-`TIME-001`: Timeout races use the operation's linearization point. If terminal
+The `TIME-001` projection is refined by the registered time-domain amendment.
+Timeout races use the operation's linearization point. If terminal
 success is published before timeout cancellation, success wins; otherwise the
 caller receives `TimedOut` and any later success is treated as a late result.
 Durations use a monotonic clock supplied by the host runtime. Constrained
 profiles receive caller clock/tick values and explicit step budgets; no core
-crate reads a wall clock.
+crate reads a wall clock. Runtime clocks expose non-wrapping extended logical
+ticks under ADR-0016. An incomparable caller value is rejected at admission;
+an admitted operation that later observes another clock id reports an internal
+invariant failure in the owning phase, begins cancellation or cleanup, and is
+not reported as timed out. Exact category, phase, retry, Deadline, and
+CleanupRecord rules are owned by
+`docs/amendments/WP-100-time-domain-v1.md`.
 
 ## Validation and Verification
 

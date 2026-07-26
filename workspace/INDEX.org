@@ -32,7 +32,7 @@ Topics are retained after migration as decision history.
 
 ** DISCUSSING
 
-- [[file:0007-time-domain-and-deadline.md][0007 Time Domain and Deadline]]
+- None.
 
 ** DECIDED
 
@@ -46,6 +46,7 @@ Topics are retained after migration as decision history.
 - [[file:0004-implementation-readiness.org][0004 Implementation Readiness]]
 - [[file:0005-architecture-review-findings.md][0005 Architecture Review Findings]]
 - [[file:0006-handler-entry-decomposition.md][0006 Handler Entry Decomposition]]
+- [[file:0007-time-domain-and-deadline.md][0007 Time Domain and Deadline]]
 - [[file:0008-implementation-governance-overhead.md][0008 Implementation Governance Overhead]]
 
 * History

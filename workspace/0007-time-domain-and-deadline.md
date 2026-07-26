@@ -1,19 +1,19 @@
 # 0007 Time Domain and Deadline
 
-Status: DISCUSSING
+Status: MIGRATED
 
 ## Scope and authority
 
-This topic records an unresolved cross-cutting time-domain problem discovered
-while reviewing the proposed `WP-100-HANDLER-VALUE-PRIMITIVES` tranche. It is a
-workspace discussion, not an authoritative API amendment, work-package
-admission, or implementation authorization.
+This topic records the cross-cutting time-domain problem discovered while
+reviewing the proposed `WP-100-HANDLER-VALUE-PRIMITIVES` tranche and the
+reasoning that resolved it. It is decision history, not an implementation
+authorization.
 
-`docs/work-packages/index.toml` projects this topic only as the structured
-`TIME-DOMAIN-AND-DEADLINE` blocking scope. That record identifies known impact
-and keeps the broad handler entry blocked; it is not a tranche, does not admit
-work, and intentionally does not freeze a future tranche identity, ownership,
-dependency graph, completion contract, or evidence disposition.
+ADR-0016 and `docs/amendments/WP-100-time-domain-v1.md` own the accepted
+technical contract. `docs/work-packages/index.toml` projects its exact
+two-tranche correction as the structured `TIME-DOMAIN-AND-DEADLINE` blocking
+scope. That record keeps broad handler entry blocked; it does not itself admit
+either corrective tranche.
 
 The affected surface is wider than the proposed Core `Deadline` value. It
 includes the foundation clock domain, retained source timestamps, existing
@@ -50,13 +50,15 @@ The completed WP-000 evidence record `time-and-generation-api` claims
 `TIME-001` and includes finite-clock wrap declaration coverage. That evidence
 proves that a wrap period can be reported; it does not prove that deadlines,
 duration ordering, source freshness, or cleanup timing remain correct across a
-raw wrap. Its time portion therefore requires impact review and replacement or
-reaffirmation under a coherent clock model. This does not by itself invalidate
-the disjoint WP-100 resource-schema and linear-budget evidence.
+raw wrap. The accepted disposition preserves the historical record, replaces
+its time portion with new WP-100 logical-time evidence, and reaffirms its
+disjoint generation portion. This does not invalidate the WP-000 completion
+checkpoint or the disjoint WP-100 resource-schema and linear-budget evidence.
 
-`Deadline` cannot enter implementation while the conflict remains. Because it
-is a prerequisite of request admission and future binding/Servient scheduling,
-`WP-100-HANDLER-ENTRY` also remains blocked.
+`Deadline` cannot enter implementation until the predecessor logical-time
+correction is complete and its own Core tranche is admitted. Because it is a
+prerequisite of request admission and future binding/Servient scheduling,
+`WP-100-HANDLER-ENTRY` remains blocked until both time tranches complete.
 
 The other five proposed passive values are disjoint from the clock model:
 
@@ -67,15 +69,11 @@ The other five proposed passive values are disjoint from the clock model:
 - `StaticHandlerRegistration<'h, H>`.
 
 They contain no instant, clock id, duration, wrap policy, timeout transition,
-or source timestamp. The immediate containment direction is therefore to
-remove `Deadline` and `TIME-001` from their value-primitives candidate, subject
-the exact five-value scope to its own updated admission review, and move all
-time impact into a separate blocking-scope placeholder. The five-value tranche
-depends only on the completed foundation refresh; the time scope separately
-blocks the broad handler entry. This containment is projected into the
-work-package, review, audit, and governance artifacts, but it does not define or
-admit future corrective work. This discussion remains active for the unresolved
-time design and work-package decisions.
+or source timestamp. The completed containment removed `Deadline` and
+`TIME-001` from their value-primitives candidate and moved all time impact into
+the separate blocking scope. The five-value tranche depends only on the
+completed foundation refresh; the time scope separately blocks broad handler
+entry.
 
 ## Alternatives considered
 
@@ -124,20 +122,22 @@ as diagnostic metadata for the underlying raw source. It would not participate
 in `MonotonicInstant`, deadline, cleanup, or freshness ordering. The current
 half-period modular-comparison statement would be removed.
 
-## Working direction
+## Decision
 
-The current recommendation is A followed by C:
+AI selected A followed by C:
 
-1. isolate `Deadline` immediately so the five clock-independent values can be
-   reviewed without hiding the time defect;
-2. keep the foundation/Core impact explicit while the corrective design and
-   work packaging are independently reviewed;
-3. freeze extended logical ticks, clock-id lifetime, reset behavior, source
-   timestamp rules, and conformance fixtures;
-4. update or replace affected WP-000 time evidence and existing cleanup timing
-   evidence; and
-5. only then define and admit corrective work, re-admit `Deadline`, and allow
-   dependent dispatcher and binding work to proceed.
+1. isolate `Deadline` so the five clock-independent values remain disjoint;
+2. expose non-wrapping extended logical `u64` ticks for each live `ClockId`;
+3. retain `wrap_period_ticks()` in v1 as raw-source diagnostics only;
+4. retire a clock id on reset, lost epoch state, scale change, or adapter
+   restart, without reusing it while old time-bearing state can remain;
+5. fail positive-duration admission before logical `u64` overflow and drain
+   already admitted work before moving to a new clock id;
+6. compare monotonic source timestamps only when id and scale both match;
+7. map caller-provided incomparability to `Validation/Admission/Never`, and
+   post-admission clock-domain loss to `InternalInvariant/Never` in the owning
+   Handler, Binding, or Cleanup phase; and
+8. implement Foundation logical time before Core Deadline and cleanup timing.
 
 Alternative B is not recommended because its correctness depends on a polling
 interval guarantee that the constrained profile does not provide, while its
@@ -173,20 +173,21 @@ Under that contract, `Deadline::NONE` returns `Some(false)` for every `now`;
 finite before/equal/after observations return `Some(false)`, `Some(true)`, and
 `Some(true)` respectively; and a different clock id returns `None`.
 
-## Open decisions
+## Migration
 
-This topic remains DISCUSSING until all of the following are frozen:
+The decision is migrated into:
 
-1. the exact `CoreError` category, phase, and retry class when a deadline and
-   runtime clock are incomparable;
-2. the identity, ownership, dependency, completion evidence, and invalidation
-   rules of any future corrective tranche or other authorized work record;
-3. whether `wrap_period_ticks` is deprecated immediately, retained as raw-source
-   diagnostics for v1, or replaced by a more accurately named diagnostic API;
-4. the exact reset/clock-id rollover rule and the required behavior before
-   logical `u64` exhaustion;
-5. `no_std` raw-wrap extension fixtures, delayed-poll tests, SourceTimestamp
-   comparability tests, CleanupRecord timing tests, and dispatcher timeout-race
-   evidence; and
-6. the authoritative projection into the active design, amendment, ownership,
-   work-package, audit, and evidence records.
+- `docs/ADRs/0016-extended-logical-monotonic-time.org`;
+- `docs/amendments/WP-100-time-domain-v1.md`;
+- the `API-SOURCE-TIME-001` and `TIME-001` projections in
+  `docs/design.md` and `docs/requirements.csv`;
+- `docs/amendments/WP-100-handler-api-v1.md`;
+- `docs/work-packages/WP-000-foundation.md`;
+- `docs/work-packages/WP-100-core.md`; and
+- the `TIME-DOMAIN-AND-DEADLINE` corrective plan in
+  `docs/work-packages/index.toml`.
+
+The corrective identities are `WP-100-LOGICAL-TIME-CORRECTION` followed by
+`WP-100-DEADLINE-CLEANUP-TIMING`, with completion keys
+`logical-time-domain-correction` and `deadline-cleanup-timing`. Neither is
+admitted merely by this migration.

@@ -2929,11 +2929,11 @@ fn check_handler_blocking_scope(
         "handler blocking scope",
     )?;
     require_table_string(scope, "work_package", "WP-100", HANDLER_TIME_BLOCKING_SCOPE)?;
-    require_table_string(scope, "status", "discussing", HANDLER_TIME_BLOCKING_SCOPE)?;
+    require_table_string(scope, "status", "decided", HANDLER_TIME_BLOCKING_SCOPE)?;
     require_table_string(
         scope,
         "record_kind",
-        "impact-placeholder",
+        "corrective-plan",
         HANDLER_TIME_BLOCKING_SCOPE,
     )?;
     require_table_string(
@@ -3069,14 +3069,30 @@ fn check_handler_blocking_scope(
     }
     check_work_package_evidence_key(root, "docs/evidence/WP-000.toml", &evidence_key)?;
 
-    for field in [
-        "future_tranche_identity",
-        "future_tranche_ownership",
-        "future_tranche_dependencies",
-        "future_tranche_completion_contract",
-        "evidence_disposition",
+    for (field, expected) in [
+        (
+            "future_tranche_identity",
+            "WP-100-LOGICAL-TIME-CORRECTION -> WP-100-DEADLINE-CLEANUP-TIMING",
+        ),
+        (
+            "future_tranche_ownership",
+            "clinkz-wot-foundation -> clinkz-wot-core",
+        ),
+        (
+            "future_tranche_dependencies",
+            "WP-100-FOUNDATION-REFRESH -> WP-100-LOGICAL-TIME-CORRECTION -> \
+             WP-100-DEADLINE-CLEANUP-TIMING",
+        ),
+        (
+            "future_tranche_completion_contract",
+            "logical-time-domain-correction + deadline-cleanup-timing",
+        ),
+        (
+            "evidence_disposition",
+            "replace WP-000 time claims; reaffirm generation claims",
+        ),
     ] {
-        require_table_string(scope, field, "not-frozen", HANDLER_TIME_BLOCKING_SCOPE)?;
+        require_table_string(scope, field, expected, HANDLER_TIME_BLOCKING_SCOPE)?;
     }
 
     Ok(HandlerBlockingScope {
@@ -3522,11 +3538,8 @@ fn check_handler_value_primitives_tranche(
         }
         None
     } else {
-        let admission_ref = string_field(
-            tranche,
-            "admission_ref",
-            HANDLER_VALUE_PRIMITIVES_TRANCHE,
-        )?;
+        let admission_ref =
+            string_field(tranche, "admission_ref", HANDLER_VALUE_PRIMITIVES_TRANCHE)?;
         let attestation_ref = attestation_ref.as_deref().ok_or_else(|| {
             format!(
                 "{HANDLER_VALUE_PRIMITIVES_TRANCHE} non-pending state has no review \
@@ -3616,9 +3629,7 @@ fn check_handler_value_primitives_tranche(
             &evidence_path,
             &verification_check,
             admission_ref.as_deref().ok_or_else(|| {
-                format!(
-                    "{HANDLER_VALUE_PRIMITIVES_TRANCHE} complete state has no admission_ref"
-                )
+                format!("{HANDLER_VALUE_PRIMITIVES_TRANCHE} complete state has no admission_ref")
             })?,
         )?;
     } else if evidence_exists && tranche_evidence_is_passed(root, &evidence_path)? {
@@ -3972,8 +3983,7 @@ fn check_handler_value_completion_evidence(
         &progress_ref,
         "handler value progress checkpoint diff",
     )?;
-    let expected_progress_paths =
-        owned_set(&["PLAN.md", "docs/work-packages/index.toml"]);
+    let expected_progress_paths = owned_set(&["PLAN.md", "docs/work-packages/index.toml"]);
     if progress_paths != expected_progress_paths {
         return Err(format!(
             "handler value progress checkpoint path mismatch; expected \
@@ -4049,10 +4059,13 @@ fn check_handler_progress_checkpoint_state(
     admission_ref: &str,
     implementation_paths: &BTreeSet<String>,
 ) -> Result<(), String> {
-    let head = git_text(root, &["rev-parse", "HEAD"], "resolve progress checkpoint HEAD")?;
+    let head = git_text(
+        root,
+        &["rev-parse", "HEAD"],
+        "resolve progress checkpoint HEAD",
+    )?;
     let head = head.trim();
-    let expected_progress_paths =
-        owned_set(&["PLAN.md", "docs/work-packages/index.toml"]);
+    let expected_progress_paths = owned_set(&["PLAN.md", "docs/work-packages/index.toml"]);
     if head == admission_ref {
         let changed = git_worktree_paths(root, "pre-progress-checkpoint worktree")?;
         if changed != expected_progress_paths {
@@ -7216,15 +7229,9 @@ retryability = "not-applicable"
 
     #[test]
     fn handler_value_and_time_scope_projection_allows_only_the_declared_meta_overlap() {
-        let values = BTreeSet::from([
-            "API-SURFACE-001".to_owned(),
-            "HANDLER-VALUE-001".to_owned(),
-        ]);
+        let values = BTreeSet::from(["API-SURFACE-001".to_owned(), "HANDLER-VALUE-001".to_owned()]);
         let value_items = BTreeSet::from(["HandlerStep".to_owned()]);
-        let blocking = BTreeSet::from([
-            "API-SURFACE-001".to_owned(),
-            "TIME-001".to_owned(),
-        ]);
+        let blocking = BTreeSet::from(["API-SURFACE-001".to_owned(), "TIME-001".to_owned()]);
         let shared = BTreeSet::from(["API-SURFACE-001".to_owned()]);
         let blocking_items = BTreeSet::from(["Deadline".to_owned()]);
         assert!(
@@ -7311,10 +7318,8 @@ result = "passed"
 
         let failed = source.replacen("result = \"passed\"", "result = \"failed\"", 1);
         assert!(parse_handler_review_attestation(&failed).is_err());
-        let root_reviewer = source.replace(
-            "codex-agent:/root/independent_review",
-            "codex-agent:/root",
-        );
+        let root_reviewer =
+            source.replace("codex-agent:/root/independent_review", "codex-agent:/root");
         assert!(parse_handler_review_attestation(&root_reviewer).is_err());
 
         let root_session = root_reviewer.replace(
@@ -7323,10 +7328,8 @@ result = "passed"
         );
         assert!(parse_handler_review_attestation(&root_session).is_ok());
 
-        let false_child = root_session.replace(
-            "codex-agent:/root",
-            "codex-agent:/root/independent_review",
-        );
+        let false_child =
+            root_session.replace("codex-agent:/root", "codex-agent:/root/independent_review");
         assert!(parse_handler_review_attestation(&false_child).is_err());
     }
 

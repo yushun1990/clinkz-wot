@@ -33,6 +33,13 @@ completion claim. The nine additive handler fields and `HandlerSteps` work
 classes are a foundation-owned surface change performed and evidenced by the
 active WP-100 foundation-entry subtranche.
 
+ADR-0016 later identified that the checkpoint's finite raw-wrap declaration
+does not prove deadline, freshness, or cleanup ordering across wraps. The
+historical evidence remains immutable and WP-000 remains complete. The
+Foundation-owned `WP-100-LOGICAL-TIME-CORRECTION` tranche must replace its time
+claims under the extended logical tick model and reaffirm the disjoint
+generation claims before dependent Core timing work proceeds.
+
 ## Requirements
 
 - `PROFILE-AXIS-001`, `FEATURE-MATRIX-001`, and `CRATE-DEPS-001` define the portable build
@@ -140,7 +147,10 @@ These records satisfy the corresponding requirement-index evidence families:
 Each evidence record names WP-000, its requirement ids, the compilation cell,
 the selected resource profile, and its v4.6 completion revision. Evidence from
 a later work package supplements rather than rewrites that checkpoint when the
-foundation owner adds a consumer-driven field or counter.
+foundation owner adds a consumer-driven field or counter. For ADR-0016, the
+later WP-100 record explicitly replaces the time portion of
+`time-and-generation-api` and reaffirms its unchanged generation portion; it
+does not mutate or silently reinterpret the historical file.
 
 ## Performance Workloads
 
