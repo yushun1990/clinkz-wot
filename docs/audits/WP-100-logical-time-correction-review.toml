@@ -1,0 +1,35 @@
+schema_version = 1
+design_revision = "4.9"
+tranche = "WP-100-LOGICAL-TIME-CORRECTION"
+status = "passed"
+reviewer_attestation_kind = "independent-root-session"
+reviewer_id = "codex-agent:/root"
+reviewed_ref = "88eebbba04d070fb423a9c2ec227ddc470790769"
+
+[[precheck]]
+id = "api-ownership-check"
+result = "passed"
+
+[[precheck]]
+id = "architecture-adr-check"
+result = "passed"
+
+[[precheck]]
+id = "design-requirement-check"
+result = "passed"
+
+[[precheck]]
+id = "resource-profile-check"
+result = "passed"
+
+[[precheck]]
+id = "work-package-dag-check"
+result = "passed"
+
+[[precheck]]
+id = "wp100-amendment-check"
+result = "passed"
+
+[[precheck]]
+id = "wp100-handler-amendment-check"
+result = "passed"

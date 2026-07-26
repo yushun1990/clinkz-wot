@@ -52,6 +52,7 @@ docs/audits/WP-100-foundation-refresh-entry.md,wp-100-foundation-refresh-entry-r
 docs/audits/WP-100-handler-value-primitives-entry.md,wp-100-handler-value-primitives-entry-review,non-normative-review,4.9,1,docs/design.md
 docs/audits/WP-100-handler-value-primitives-review.toml,wp-100-handler-value-primitives-review-attestation,non-normative-review,4.9,1,docs/design.md
 docs/audits/WP-100-logical-time-correction-entry.md,wp-100-logical-time-correction-entry-review,non-normative-review,4.9,1,docs/amendments/WP-100-time-domain-v1.md
+docs/audits/WP-100-logical-time-correction-review.toml,wp-100-logical-time-correction-review-attestation,non-normative-review,4.9,1,docs/amendments/WP-100-time-domain-v1.md
 docs/reviews/review-01.org,architecture-boundary-audit,historical-review,4.9,1,docs/design.md
 docs/reviews/review-02.org,architecture-design-follow-up,blocking-review,4.9,1,docs/design.md
 docs/reviews/review-03.org,architecture-v4.9-interim-audit,blocking-review,4.9,1,docs/design.md
