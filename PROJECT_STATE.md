@@ -2,16 +2,17 @@
 
 Last updated: 2026-07-26
 
-Repository basis: deadline/cleanup implementation commit
-`92d10f38065397222646ac9e36df256467a7f514` plus current completion evidence
-and continuation-state update.
+Repository basis: deadline/cleanup completion checkpoint
+`c42abcbc339167183c8c4bf9bd3bf584540073b4` plus the current
+`WP-100-HANDLER-CONTEXT` candidate definition. The exact candidate ref is
+registered immediately after its single-child candidate commit.
 
 ## Current Objective
 
-Define and admit the next bounded WP-100 handler tranche from the frozen
-request/context, portable-trait, host-erasure/storage, security, codec, error,
-and callback-isolation scope. Preserve the completed time correction and do not
-fold Producer or Servient integration into WP-100.
+Register and independently review the exact `WP-100-HANDLER-CONTEXT` candidate
+before changing Core source. Preserve the completed handler-value and time
+tranches, keep the remaining target/no-atomic and request-storage migrations
+separate, and do not fold Producer or Servient integration into WP-100.
 
 Active milestones:
 
@@ -157,6 +158,10 @@ Work packages and tranches:
   `a53b0fe07be1402c568808133a8289dfa6b04281`, its progress checkpoint is
   `9f3c354f4d743e1ce481d181b234e91883fb04fd`, and its implementation is
   `961fe9b22f241459ff374897d98d805e79af3f71`;
+- `WP-100-HANDLER-CONTEXT` is pending independent review. Its Category B
+  candidate adds only the borrowed `HandlerContext<'a>` contract, permits
+  implementation changes only in `core/src/handler.rs` and `core/src/lib.rs`,
+  and has completion key `handler-context`;
 - `WP-100-HANDLER-ENTRY` remains blocked;
 - WP-100 is in progress; WP-200 through WP-700 are planned.
 
@@ -189,9 +194,31 @@ AI-led open decisions:
 Broad handler blockers:
 
 - four handler workloads lack complete executable matrix oracles;
-- request/target/context migration needs a scoped impact review;
+- the remaining `AffordanceTarget` relocation and replacement still needs its
+  real incapable-target/no-atomic evidence boundary;
+- `AcceptHint` resource admission and `InteractionInput` private request
+  storage require a coordinated downstream construction-site migration;
+- the 54 portable traits remain unadmitted until their exact dependency and
+  external matrix boundary is frozen;
 - the real no-atomic public boundary is not proven;
 - Producer and Servient integration remain assigned to WP-300/WP-400.
+
+Handler-context candidate facts:
+
+- impact inspection separated three validation truths: additive dispatch
+  identity, target/no-atomic replacement, and request/resource migration;
+- `HandlerContext` is independently dependency-complete because it borrows the
+  existing target and composes already implemented generation-bearing ids;
+- the tranche validates exactly the 18 operation/target pairings and maps an
+  incompatible pair to `Validation/Validate/Never` with fixed-size Thing slot,
+  operation, plan, and optional binding context;
+- it excludes `AffordanceTarget`, `AcceptHint`, `InteractionInput`, all 54
+  traits, host erasure/storage, runtime callbacks, state machines, resources,
+  performance workloads, Producer, Servient, and Protocol Bindings;
+- its external fixture freezes private fields, absence of `Hash` and
+  `Default`, three Core feature cells, and downstream compilation;
+- the handler-value source checker remains exact for its five owned values and
+  explicitly permits only the separately validated `HandlerContext` addition.
 
 Completed handler-value tranche facts:
 
@@ -347,20 +374,19 @@ baseline because it intentionally enables mutually exclusive `zenoh` and
 
 ## Stopping Point and Next Safe Actions
 
-The logical-time and deadline/cleanup corrections are independently reviewed,
-admitted, implemented, and evidenced. The historical WP-000 evidence file was
-not rewritten; its time claims are replaced by the current WP-100 records and
-its generation claims are reaffirmed. The time-domain blocker on broad handler
-entry is resolved; the remaining handler admission and evidence gaps are
-independent.
+The next handler boundary has been decomposed into an exact
+`WP-100-HANDLER-CONTEXT` candidate without changing Core implementation. Its
+scope is independent of the unresolved target/no-atomic and request-storage
+migrations. The completed time and handler-value evidence remains in force.
 
 Next safe actions, in order:
 
-1. decompose the next bounded handler tranche from the still-frozen WP-100
-   contract, starting with the smallest dependency-complete request/context or
-   portable-trait boundary rather than broad handler entry;
-2. independently admit that exact tranche before its source changes;
-3. continue D3, D4, and D5 as AI-led technical decisions, asking the Owner only
+1. commit the exact candidate as the single child of its registered base,
+   register that immutable candidate ref, and run the candidate entry check;
+2. obtain an honest independent review attestation, then approve the exact
+   three-file admission checkpoint before either Core source path changes;
+3. implement and evidence `HandlerContext` only after admission;
+4. continue D3, D4, and D5 as AI-led technical decisions, asking the Owner only
    for project-goal, constraint, or external-commitment clarification.
 
 Important references:
@@ -382,6 +408,9 @@ Important references:
 - `docs/audits/WP-100-deadline-cleanup-timing-entry.md`;
 - `docs/audits/WP-100-deadline-cleanup-timing-review.toml`;
 - `docs/evidence/WP-100-deadline-cleanup-timing.toml`;
+- `docs/audits/WP-100-handler-context-entry.md`;
+- `tools/check-wp100-handler-context-entry.sh`;
+- `tools/check-wp100-handler-context.sh`;
 - `workspace/0007-time-domain-and-deadline.md`;
 - `workspace/0008-implementation-governance-overhead.md`;
 - `workspace/0009-minimal-end-to-end-architecture-validation.md`;

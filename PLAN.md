@@ -43,8 +43,12 @@ The repository evidence establishes the following starting point:
   for the extended logical-time domain;
 - `WP-100-DEADLINE-CLEANUP-TIMING` is implemented and has completion evidence
   for the Core Deadline, cleanup ordering, and incomparable-clock disposition;
+- `WP-100-HANDLER-CONTEXT` has an exact Category B admission candidate for the
+  borrowed dispatch-identity view and remains review-pending; its Core source
+  implementation is not admitted;
 - broad handler entry remains blocked by incomplete workload oracles,
-  request/context migration review, and no-atomic public-boundary evidence;
+  the remaining request/target migration, portable-trait admission, and
+  no-atomic public-boundary evidence;
 - WP-200 is blocked before admission by the unresolved constructible
   candidate-fallback policy and bounded diagnostics;
 - WP-300 is blocked before admission by incomplete exact binding contracts,
@@ -210,12 +214,14 @@ Completed evidence:
 
 Next execution order:
 
-1. define and admit the next bounded handler tranches for request/context
-   values, portable traits, host erasure/storage, security, codecs, errors, and
-   callback isolation;
-2. complete the real handler matrix, no-atomic boundary, cancellation,
+1. independently review and, if the exact candidate passes, admit and complete
+   `WP-100-HANDLER-CONTEXT`;
+2. decompose the next dependency-complete portable-trait or remaining
+   request/target tranche, keeping `AcceptHint` resource admission and
+   `InteractionInput` downstream migration explicit;
+3. complete the real handler matrix, no-atomic boundary, cancellation,
    storage/replacement, resource, and performance evidence;
-3. retain Producer and Servient integration in WP-300 and WP-400.
+4. retain Producer and Servient integration in WP-300 and WP-400.
 
 AI deliverable:
 

@@ -325,6 +325,9 @@ Produce these package evidence keys exactly as indexed by the work-package DAG:
 - `deadline-cleanup-timing` for the Core Deadline value, CleanupRecord checked
   logical ordering, incomparable-clock error mapping, delayed polling, and
   timeout linearization;
+- `handler-context` for the borrowed dispatch-identity view, exact
+  operation/target compatibility matrix, private fields, negative `Hash` and
+  `Default` contracts, and fixed-size validation context;
 - `core-public-surface` for paths, feature cells, owned values, and trait shapes;
 - `handler-api-matrix` for every one of the 18 operation results, three handler flavors, and
   applicable compilation cells;

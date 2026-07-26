@@ -157,6 +157,21 @@ command = [
     "--admission-ready",
 ]
 
+[[check]]
+id = "wp100-handler-context-check"
+status = "executable"
+artifact = "tools/check-wp100-handler-context.sh"
+command = ["tools/check-wp100-handler-context.sh"]
+
+[[check]]
+id = "wp100-handler-context-entry-check"
+status = "executable"
+artifact = "tools/check-wp100-handler-context-entry.sh"
+command = [
+    "tools/check-wp100-handler-context-entry.sh",
+    "--admission-ready",
+]
+
 # Architecture Review 02 rejected the v4.8 detailed-design candidate. It is a
 # blocking predecessor, not passing v4.9 same-revision evidence. A later
 # independent v4.9 review is required before affected gates can close.
