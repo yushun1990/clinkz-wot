@@ -2,13 +2,13 @@
 
 Last updated: 2026-07-26
 
-Repository basis: logical-time completion checkpoint
-`093d15a70319475ce05c651233de803aa563e095` plus the current review-pending
-deadline/cleanup admission candidate.
+Repository basis: registered deadline/cleanup candidate
+`0fc9c6eee2a37cd420d9cd8beae537f3ed54c369` plus its candidate-registration
+and independent root review checkpoint.
 
 ## Current Objective
 
-Complete independent review of the registered Core-owned
+Record the passed independent review and approve the registered Core-owned
 `WP-100-DEADLINE-CLEANUP-TIMING` candidate. Do not modify its source paths
 until the exact ADR-0013 attestation and approval checkpoint pass.
 
@@ -143,7 +143,10 @@ Work packages and tranches:
   under `docs/evidence/WP-100-logical-time-correction.toml`;
 - `WP-100-DEADLINE-CLEANUP-TIMING` has an exact review-pending candidate with
   three Core implementation paths, a nested contract fixture, an entry checker,
-  and the frozen `deadline-cleanup-timing` completion key;
+  and the frozen `deadline-cleanup-timing` completion key; the candidate is
+  `0fc9c6eee2a37cd420d9cd8beae537f3ed54c369`, the single child of logical-time
+  completion base `093d15a70319475ce05c651233de803aa563e095`, and changes
+  exactly the 15 registered non-implementation paths;
 - the completed logical-time tranche's exact registered candidate is
   `88eebbba04d070fb423a9c2ec227ddc470790769`; the candidate is the single child
   of D2 base `0092e9c5f3c7e041ec979d18d462fd0e74ae2e0a`, changes exactly the
@@ -239,6 +242,24 @@ Completed logical-time tranche facts:
   `API-TYPES-001` plus `CONSTRAINED-STORAGE-001` with unchanged generation
   source and a passing `tools/check-wp-000.sh`.
 
+Reviewed deadline/cleanup candidate facts:
+
+- the exact committed candidate contains no Core or Foundation implementation
+  change;
+- its direct predecessor is the complete logical-time tranche, whose checker
+  passes from the candidate revision;
+- the requirement, owner, feature-cell, API-item, implementation-path,
+  contract-artifact, state/resource/performance/removal, and completion-key
+  sets match the frozen time amendment;
+- the nested fixture covers Deadline NONE/finite/delayed/incomparable results,
+  CleanupRecord checked ordering, all four incomparable-clock dispositions,
+  timeout linearization, and private Deadline storage;
+- `tools/check-wp100-deadline-cleanup-timing-entry.sh --candidate` and the
+  aggregate design-artifact check pass; the completion checker fails only at
+  the expected absent-Deadline boundary; and
+- the independent root review found no intersecting open finding or
+  out-of-scope implementation need.
+
 Downstream admission blockers:
 
 - WP-200: constructible candidate-fallback policy, health rule,
@@ -301,8 +322,9 @@ reaffirmed.
 
 Next safe actions, in order:
 
-1. register the exact candidate commit and run its candidate entry check;
-2. independently review and admit the candidate before changing Core source;
+1. commit the independent review attestation for exact candidate
+   `0fc9c6eee2a37cd420d9cd8beae537f3ed54c369`;
+2. run the admission-ready check and commit the exact approval checkpoint;
 3. implement and evidence the frozen Deadline, CleanupRecord timing, and
    incomparable-clock disposition scope;
 4. continue D3, D4, and D5 as AI-led technical decisions, asking the Owner only
