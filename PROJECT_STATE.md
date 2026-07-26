@@ -2,18 +2,19 @@
 
 Last updated: 2026-07-26
 
-Repository basis: handler-context candidate registration checkpoint
-`5c2aa7fafe383f044bfbd4780077b7aa3eeb3aaf`. The exact candidate is
-`5b1feb64ffde42ac9104540b851cb72360f91426`, a single child of base
-`c42abcbc339167183c8c4bf9bd3bf584540073b4`; the registration checkpoint
-changes only `docs/work-packages/index.toml`.
+Repository basis: handler-context review checkpoint
+`10888815563f9d524cbea80a55677a401bf42d74`. Candidate
+`5b1feb64ffde42ac9104540b851cb72360f91426` is the registered single child of
+base `c42abcbc339167183c8c4bf9bd3bf584540073b4`, but it failed independent
+review because its executable negative compatibility matrix is incomplete.
 
 ## Current Objective
 
-Obtain an honest independent review of the exact
-`WP-100-HANDLER-CONTEXT` candidate before changing Core source. Preserve the
-completed handler-value and time tranches, keep the remaining target/no-atomic
-and request-storage migrations separate, and do not fold Producer or Servient
+Replace the failed `WP-100-HANDLER-CONTEXT` candidate with an exact candidate
+whose executable fixture covers every operation/target-kind pairing, then
+independently review it before changing Core source. Preserve the completed
+handler-value and time tranches, keep the remaining target/no-atomic and
+request-storage migrations separate, and do not fold Producer or Servient
 integration into WP-100.
 
 Active milestones:
@@ -160,14 +161,14 @@ Work packages and tranches:
   `a53b0fe07be1402c568808133a8289dfa6b04281`, its progress checkpoint is
   `9f3c354f4d743e1ce481d181b234e91883fb04fd`, and its implementation is
   `961fe9b22f241459ff374897d98d805e79af3f71`;
-- `WP-100-HANDLER-CONTEXT` is pending independent review. Its Category B
-  candidate adds only the borrowed `HandlerContext<'a>` contract, permits
-  implementation changes only in `core/src/handler.rs` and `core/src/lib.rs`,
-  and has completion key `handler-context`. Candidate
+- `WP-100-HANDLER-CONTEXT` remains review-pending. Its Category B scope adds
+  only the borrowed `HandlerContext<'a>` contract, permits implementation
+  changes only in `core/src/handler.rs` and `core/src/lib.rs`, and has
+  completion key `handler-context`. Candidate
   `5b1feb64ffde42ac9104540b851cb72360f91426` is the single child of base
   `c42abcbc339167183c8c4bf9bd3bf584540073b4`, changes exactly the 17
   registered non-implementation paths, and passed its candidate entry check
-  after registration;
+  after registration, but failed independent evidence-sufficiency review;
 - `WP-100-HANDLER-ENTRY` remains blocked;
 - WP-100 is in progress; WP-200 through WP-700 are planned.
 
@@ -224,7 +225,15 @@ Handler-context candidate facts:
 - its external fixture freezes private fields, absence of `Hash` and
   `Default`, three Core feature cells, and downstream compilation;
 - the handler-value source checker remains exact for its five owned values and
-  explicitly permits only the separately validated `HandlerContext` addition.
+  explicitly permits only the separately validated `HandlerContext` addition;
+- candidate `5b1feb64ffde42ac9104540b851cb72360f91426` tests all 18 valid pairings but
+  only four of the 54 invalid pairings, while its source checker deliberately
+  ignores method bodies;
+- an isolated mutation that additionally accepted
+  `ReadProperty + AffordanceTarget::Action` passed the complete
+  `tools/check-wp100-handler-context.sh`, proving that the candidate cannot yet
+  support its exact compatibility-matrix completion claim; and
+- no review attestation or approval may be recorded for the failed candidate.
 
 Completed handler-value tranche facts:
 
@@ -388,8 +397,11 @@ Handler-context candidate verification on 2026-07-26:
   stop only because the Core `HandlerContext` implementation is absent;
 - `tools/check-design-artifacts.sh` passed in registered-candidate state,
   validating governance and all six refactor gates; and
+- isolated negative mutation verification proved that an unregistered invalid
+  pairing can pass the current completion checker;
+- the independent review verdict is failed for evidence sufficiency; and
 - no independent-review attestation, approval, progress checkpoint, or Core
-  implementation exists yet.
+  implementation exists.
 
 `cargo test --workspace --all-features --locked` is not a valid project
 baseline because it intentionally enables mutually exclusive `zenoh` and
@@ -397,23 +409,25 @@ baseline because it intentionally enables mutually exclusive `zenoh` and
 
 ## Stopping Point and Next Safe Actions
 
-The exact `WP-100-HANDLER-CONTEXT` candidate is committed, registered, and
-candidate-checked without changing Core implementation. Its scope is
-independent of the unresolved target/no-atomic and request-storage migrations.
-The completed time and handler-value evidence remains in force.
+The registered `WP-100-HANDLER-CONTEXT` candidate passed its structural and
+predecessor checks but failed independent review. Its sampled negative fixture
+allows a known incompatible operation/target pair to pass the completion
+checker. Core implementation remains unchanged, and the completed time and
+handler-value evidence remains in force.
 
 Next safe actions, in order:
 
-1. independently review candidate
-   `5b1feb64ffde42ac9104540b851cb72360f91426` against base
-   `c42abcbc339167183c8c4bf9bd3bf584540073b4`; the authoring root session must
-   not self-attest;
-2. if the review passes, record the attestation-only commit and approve the
-   exact three-file admission checkpoint before either Core source path
-   changes;
-3. create the exact two-file progress checkpoint, then implement and evidence
+1. replace the failed exact candidate while retaining base
+   `c42abcbc339167183c8c4bf9bd3bf584540073b4` and the registered 17-path
+   non-implementation boundary;
+2. make the semantic fixture check all 72 operation/target-kind combinations,
+   including both present and absent optional binding error context;
+3. register and independently review the replacement candidate;
+4. only if that review passes, record the attestation-only commit and exact
+   three-file admission checkpoint before either Core source path changes;
+5. create the exact two-file progress checkpoint, then implement and evidence
    `HandlerContext` only within the admitted scope;
-4. continue D3, D4, and D5 as AI-led technical decisions, asking the Owner only
+6. continue D3, D4, and D5 as AI-led technical decisions, asking the Owner only
    for project-goal, constraint, or external-commitment clarification.
 
 Important references:
