@@ -6,10 +6,10 @@ Repository basis: property-read slice-boundary correction commit
 `2d7087d100d4a0d72cabb77476175bf60b0a7925`, atop completed handler-context
 implementation `ae51858d82e8c1b9f621798674155015820c0535` and completion
 evidence/state `021f3c18d3ee8c31debfc7dd4b0171a42e56f3f9`. The exact property-read
-non-implementation candidate is the single child of
-`2d7087d100d4a0d72cabb77476175bf60b0a7925`; its immutable SHA is recorded by
-the immediately following registration checkpoint because a commit cannot
-self-record its own identity. The completed HandlerContext candidate
+non-implementation candidate is
+`a8af29b29e41efb537ae8d6971edf79c42255b65`, the single child of
+`2d7087d100d4a0d72cabb77476175bf60b0a7925`; its immutable SHA is registered
+in the property-read architecture-gate manifest. The completed HandlerContext candidate
 `27c8dc974fd1b337de4671c81719f9fa32410c56` is the single child of frozen base
 `c42abcbc339167183c8c4bf9bd3bf584540073b4`; its independent attestation is
 `3007a88b93155d063ed0d08c69dc3520defebee5`, its admission checkpoint is
@@ -24,9 +24,10 @@ gate migration is recorded at
 
 ## Current Objective
 
-Register the exact `WP-100-PROPERTY-READ-HANDLER-SLICE` non-implementation
-candidate, then stop at the independent-review boundary without self-attesting.
-The slice adds only the synchronous `ReadPropertyHandler` trait in
+Validate the exact registered `WP-100-PROPERTY-READ-HANDLER-SLICE`
+non-implementation candidate, then stop at the independent-review boundary
+without self-attesting. The slice adds only the synchronous
+`ReadPropertyHandler` trait in
 `core/src/handler.rs` and `core/src/lib.rs`; it reuses the completed
 HandlerContext/static registration and existing production input/output. Keep
 target/no-atomic and request-storage migrations separate, do not fold
@@ -334,7 +335,8 @@ D5 migration facts:
 Property-read handler candidate facts:
 
 - the candidate is the single child of frozen base
-  `2d7087d100d4a0d72cabb77476175bf60b0a7925` and changes exactly the 16
+  `2d7087d100d4a0d72cabb77476175bf60b0a7925`; its registered ref is
+  `a8af29b29e41efb537ae8d6971edf79c42255b65` and it changes exactly the 16
   registered non-implementation paths;
 - the audit freezes one object-safe synchronous trait with no supertrait,
   associated item, default body, allocation, executor, runtime, or thread
@@ -663,16 +665,16 @@ baseline because it intentionally enables mutually exclusive `zenoh` and
 no-atomic/broad-entry cycle without changing runtime code. The exact
 property-read non-implementation candidate is now frozen as one additive
 synchronous trait in the same two Core paths, with reused values and excluded
-broad claims machine-checked. It still requires immutable-ref registration and
-later independent review. Broad handler entry remains blocked by the separate
+broad claims machine-checked. Its immutable ref is registered; candidate-level
+verification and later independent review remain. Broad handler entry remains blocked by the separate
 target/no-atomic, request/storage, remaining portable-trait, workload,
 resource, and performance boundaries.
 
 Next safe actions, in order:
 
-1. commit the exact non-implementation candidate as the single child of its
-   frozen base, register its immutable SHA, run the candidate entry check, and
-   stop without creating a review attestation;
+1. run the exact candidate entry check and isolated positive/negative contract
+   validation, then checkpoint the results without creating a review
+   attestation;
 2. in a later independent root continuation, inspect and mutation-test the
    registered candidate before deciding whether to attest it;
 3. continue M1 with the next dependency-ready D3 target-domain migration and

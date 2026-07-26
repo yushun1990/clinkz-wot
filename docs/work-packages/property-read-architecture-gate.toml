@@ -154,7 +154,7 @@ contract_artifacts = [
     "tools/design-check/src/main.rs",
 ]
 candidate_base_ref = "2d7087d100d4a0d72cabb77476175bf60b0a7925"
-candidate_ref = "register-after-candidate-commit"
+candidate_ref = "a8af29b29e41efb537ae8d6971edf79c42255b65"
 candidate_paths = [
     "PLAN.md",
     "PROJECT_STATE.md",
