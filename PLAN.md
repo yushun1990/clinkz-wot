@@ -40,7 +40,7 @@ The repository evidence establishes the following starting point:
   for the exact five-value scope;
 - `WP-100-LOGICAL-TIME-CORRECTION` passed independent exact-candidate review
   and is approved for its Foundation-only implementation scope; source
-  implementation has not started;
+  implementation is in progress;
 - broad handler entry is blocked until the decided logical-time and
   Deadline/cleanup correction tranches complete, and by incomplete workload
   oracles, request/context migration review, and no-atomic public-boundary
