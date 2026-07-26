@@ -43,9 +43,8 @@ The repository evidence establishes the following starting point:
   for the extended logical-time domain;
 - `WP-100-DEADLINE-CLEANUP-TIMING` is implemented and has completion evidence
   for the Core Deadline, cleanup ordering, and incomparable-clock disposition;
-- `WP-100-HANDLER-CONTEXT` has an exact independently reviewed and approved
-  Category B admission candidate for the borrowed dispatch-identity view and
-  is in implementation;
+- `WP-100-HANDLER-CONTEXT` is implemented and has completion evidence for the
+  borrowed dispatch-identity view and exact compatibility matrix;
 - broad handler entry remains blocked by incomplete workload oracles,
   the remaining request/target migration, portable-trait admission, and
   no-atomic public-boundary evidence;
@@ -216,19 +215,19 @@ Completed evidence:
   evidence.
 - `WP-100-LOGICAL-TIME-CORRECTION` is implemented and has completion evidence.
 - `WP-100-DEADLINE-CLEANUP-TIMING` is implemented and has completion evidence.
+- `WP-100-HANDLER-CONTEXT` is implemented and has completion evidence.
 
 Next execution order:
 
-1. complete the in-progress `WP-100-HANDLER-CONTEXT` tranche;
-2. prepare the exact `WP-100-PROPERTY-READ-HANDLER-SLICE` candidate and
+1. prepare the exact `WP-100-PROPERTY-READ-HANDLER-SLICE` candidate and
    independent admission only after HandlerContext completes; this slice is
    the first integration-gate dependency, not broad handler entry;
-3. decompose the next dependency-complete portable-trait or remaining
+2. decompose the next dependency-complete portable-trait or remaining
    request/target tranche, keeping `AcceptHint` resource admission and
    `InteractionInput` downstream migration explicit;
-4. complete the real handler matrix, no-atomic boundary, cancellation,
+3. complete the real handler matrix, no-atomic boundary, cancellation,
    storage/replacement, resource, and performance evidence;
-5. retain Producer and Servient integration in WP-300 and WP-400.
+4. retain Producer and Servient integration in WP-300 and WP-400.
 
 AI deliverable:
 

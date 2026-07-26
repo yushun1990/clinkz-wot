@@ -2,12 +2,15 @@
 
 Last updated: 2026-07-26
 
-Repository basis: corrected handler-context candidate registration checkpoint
-`0378b6072e07f98c3f25d0f6f4063e79eeb028f3`. Replacement candidate
-`27c8dc974fd1b337de4671c81719f9fa32410c56` is a single child of frozen base
-`c42abcbc339167183c8c4bf9bd3bf584540073b4`, retains the exact 17-path
-non-implementation boundary, and is an ancestor of the registration
-checkpoint. The D3 design-authority completion strategy is migrated at
+Repository basis: handler-context implementation commit
+`ae51858d82e8c1b9f621798674155015820c0535` plus the current completion
+evidence and continuation-state update. Exact candidate
+`27c8dc974fd1b337de4671c81719f9fa32410c56` is the single child of frozen base
+`c42abcbc339167183c8c4bf9bd3bf584540073b4`; its independent attestation is
+`3007a88b93155d063ed0d08c69dc3520defebee5`, its admission checkpoint is
+`8c5693da3a3c18c81dceef1ae8620b2502817ac4`, and its progress checkpoint is
+`0357271c9afe3f1cce338da934e33e02d732330d`. The D3 design-authority
+completion strategy is migrated at
 `78b3a45fa521cfe97d49d6ae3907760bcca7a041`; D4 subscription receiver/control
 ownership is migrated at
 `e07ba5f796c7613e28da08b34903a77c00b5a2d8`. D5 property-read architecture
@@ -16,14 +19,14 @@ gate migration is recorded at
 
 ## Current Objective
 
-Independently review replacement `WP-100-HANDLER-CONTEXT` candidate
-`27c8dc974fd1b337de4671c81719f9fa32410c56` before changing Core source.
-Preserve the completed handler-value and time tranches, keep the remaining
-target/no-atomic and request-storage migrations separate, and do not fold
-Producer or Servient integration into WP-100. Continue M1 authority convergence
-through the exact target-domain graph fixed by D3 and the linear subscription
-facade decision fixed by D4. Preserve D5's blocked cross-package property-read
-gate: it is execution planning, not implementation admission.
+Prepare the exact `WP-100-PROPERTY-READ-HANDLER-SLICE` candidate without
+self-admitting it or creating planned fixture roots before candidate review.
+Preserve the completed HandlerContext, handler-value, and time tranches; keep
+the remaining target/no-atomic and request-storage migrations separate; and do
+not fold Producer or Servient integration into WP-100. Continue M1 authority
+convergence through the exact target-domain graph fixed by D3, while carrying
+the migrated D4 and D5 contracts into future subscription and property-read
+slice work.
 
 Active milestones:
 
@@ -207,15 +210,13 @@ Work packages and tranches:
   `a53b0fe07be1402c568808133a8289dfa6b04281`, its progress checkpoint is
   `9f3c354f4d743e1ce481d181b234e91883fb04fd`, and its implementation is
   `961fe9b22f241459ff374897d98d805e79af3f71`;
-- `WP-100-HANDLER-CONTEXT` remains review-pending. Its Category B scope adds
-  only the borrowed `HandlerContext<'a>` contract, permits implementation
-  changes only in `core/src/handler.rs` and `core/src/lib.rs`, and has
-  completion key `handler-context`. Replacement candidate
-  `27c8dc974fd1b337de4671c81719f9fa32410c56` is the single child of base
-  `c42abcbc339167183c8c4bf9bd3bf584540073b4`, changes exactly the 17
-  registered non-implementation paths, and replaces the failed sampled
-  compatibility fixture with an exhaustive 72-pairing matrix. Its registered
-  candidate entry check passes;
+- `WP-100-HANDLER-CONTEXT` is approved, implemented, and complete under
+  `docs/evidence/WP-100-handler-context.toml`; its exact candidate is
+  `27c8dc974fd1b337de4671c81719f9fa32410c56`, its independent attestation is
+  `3007a88b93155d063ed0d08c69dc3520defebee5`, its admission checkpoint is
+  `8c5693da3a3c18c81dceef1ae8620b2502817ac4`, its progress checkpoint is
+  `0357271c9afe3f1cce338da934e33e02d732330d`, and its implementation is
+  `ae51858d82e8c1b9f621798674155015820c0535`;
 - `WP-100-HANDLER-ENTRY` remains blocked;
 - WP-100 is in progress; WP-200 through WP-700 are planned.
 
@@ -320,7 +321,7 @@ Broad handler blockers:
 - the real no-atomic public boundary is not proven;
 - Producer and Servient integration remain assigned to WP-300/WP-400.
 
-Handler-context candidate facts:
+Completed handler-context tranche facts:
 
 - impact inspection separated three validation truths: additive dispatch
   identity, target/no-atomic replacement, and request/resource migration;
@@ -348,8 +349,17 @@ Handler-context candidate facts:
   both present and absent optional binding error context;
 - the replacement fixture passed against a conforming isolated implementation
   and rejected the known incompatible-pair mutation; and
-- no review attestation or approval exists for either candidate. The current
-  root session authored the replacement and must not self-attest it.
+- a later independent root continuation review rechecked the exact candidate,
+  authority, scope, dependency, ownership, fixtures, all eleven prechecks, and
+  the known incompatible-pair mutation before attesting it;
+- the attestation, exact three-file approval, and exact two-file progress
+  checkpoints all precede the exact two-file Core implementation commit;
+- the implementation is allocation-free, validates compatibility only, retains
+  no lifecycle or resource ownership, and preserves optional binding identity
+  in its fixed-size validation error; and
+- the completion checker proves exact source shape, all three Core feature
+  cells, the exhaustive compatibility/error matrix, private fields, negative
+  traits, Core unit tests, downstream compilation, and handler-value regression.
 
 Completed handler-value tranche facts:
 
@@ -438,7 +448,7 @@ Downstream admission blockers:
 
 ## Verification Baseline
 
-Verified on 2026-07-26 through the deadline/cleanup implementation and
+Verified on 2026-07-26 through the handler-context implementation and
 completion state:
 
 - `tools/check-design-artifacts.sh` - passed;
@@ -499,7 +509,7 @@ Deadline/cleanup admission and completion verification on 2026-07-26:
 - the historical WP-000 evidence and both predecessor implementation commits
   are unchanged.
 
-Handler-context candidate verification on 2026-07-26:
+Handler-context admission and completion verification on 2026-07-26:
 
 - `tools/check-wp100-handler-context-entry.sh --candidate` - passed after the
   exact candidate ref was registered;
@@ -510,7 +520,7 @@ Handler-context candidate verification on 2026-07-26:
   completed handler-value checker remained green after its source projection
   was extended to permit only the separately validated `HandlerContext`;
 - `tools/check-wp100-handler-context.sh` reached its intended pre-admission
-  stop only because the Core `HandlerContext` implementation is absent;
+  stop only because the Core `HandlerContext` implementation was absent;
 - `tools/check-design-artifacts.sh` passed in registered-candidate state,
   validating governance and all six refactor gates; and
 - isolated negative mutation verification proved that an unregistered invalid
@@ -520,10 +530,26 @@ Handler-context candidate verification on 2026-07-26:
 - `tools/check-wp100-handler-context-entry.sh --candidate` passed after
   replacement registration, including the exact candidate ancestry/path check
   and all eleven predecessor/pre-implementation checks;
-- the superseded candidate's independent review verdict is failed for evidence
-  sufficiency; and
-- no independent-review attestation, approval, progress checkpoint, or Core
-  implementation exists.
+- `tools/check-wp100-handler-context-entry.sh --admission-ready` passed before
+  implementation;
+- the independent review attestation, three-file approval checkpoint, and
+  two-file progress checkpoint precede the exact two-file implementation
+  commit;
+- `tools/check-wp100-handler-context.sh` passed after implementation across all
+  three Core feature cells, all 72 operation/target pairings, negative trait
+  and private-field fixtures, the Core unit suite, downstream Servient and
+  Protocol Binding compilation, and the handler-value predecessor suite;
+- `cargo clippy --locked -p clinkz-wot-core --all-targets --all-features -- -A clippy::large_enum_variant -D warnings` -
+  passed with only the established scoped allow for the pre-existing frozen
+  `HandlerStep<R>` representation;
+- `tools/check-design-artifacts.sh`,
+  `cargo run --locked --quiet --manifest-path tools/design-check/Cargo.toml -- check-work-packages`,
+  `cargo test --workspace --locked`, and the 21-cell valid feature matrix all
+  passed in completion state;
+- the implementation commit changes only `core/src/handler.rs` and
+  `core/src/lib.rs`; and
+- the superseded candidate remains failed historical evidence and was not
+  attested or admitted.
 
 D3 authority-decomposition verification on 2026-07-26:
 
@@ -583,30 +609,25 @@ baseline because it intentionally enables mutually exclusive `zenoh` and
 
 ## Stopping Point and Next Safe Actions
 
-The failed `WP-100-HANDLER-CONTEXT` candidate has been superseded by exact
-candidate `27c8dc974fd1b337de4671c81719f9fa32410c56`, which preserves the frozen
-base and path boundary while closing the executable compatibility-matrix gap.
-Its candidate entry check passes. Core implementation remains unchanged, the
-completed time and handler-value evidence remains in force, and this authoring
-root session must not self-attest the replacement.
+`WP-100-HANDLER-CONTEXT` is independently reviewed, admitted, implemented, and
+complete. The implementation changes only the two registered Core paths and
+the completion evidence preserves the completed time and handler-value
+tranches. Broad handler entry remains blocked by the separately registered
+target/no-atomic, request/storage, portable-trait, workload, resource, and
+performance boundaries.
 
 Next safe actions, in order:
 
-1. a later root continuation session that did not author the replacement must
-   independently review candidate
-   `27c8dc974fd1b337de4671c81719f9fa32410c56` against base
-   `c42abcbc339167183c8c4bf9bd3bf584540073b4`;
-2. only if that review passes, record the attestation-only commit and exact
-   three-file admission checkpoint before either Core source path changes;
-3. create the exact two-file progress checkpoint, then implement and evidence
-   `HandlerContext` only within the admitted scope;
-4. continue M1 with the next dependency-ready D3 target-domain migration and
+1. prepare—but do not self-admit—the exact
+   `WP-100-PROPERTY-READ-HANDLER-SLICE` candidate. Do not create either planned
+   fixture root until its owning slice has an independently reviewed candidate;
+2. continue M1 with the next dependency-ready D3 target-domain migration and
    carry the migrated D4 and D5 contracts into future subscription and
    property-read slice work;
-5. after HandlerContext completes, prepare—but do not self-admit—the exact
-   `WP-100-PROPERTY-READ-HANDLER-SLICE` candidate. Do not create either planned
-   fixture root until its owning slice has an independently reviewed candidate.
-   Ask the Owner only for project-goal, constraint, or external-commitment
+3. decompose the next dependency-complete portable-trait or remaining
+   request/target tranche without merging its evidence boundary into the
+   property-read slice; and
+4. ask the Owner only for project-goal, constraint, or external-commitment
    clarification.
 
 Important references:
@@ -631,6 +652,8 @@ Important references:
 - `docs/audits/WP-100-deadline-cleanup-timing-review.toml`;
 - `docs/evidence/WP-100-deadline-cleanup-timing.toml`;
 - `docs/audits/WP-100-handler-context-entry.md`;
+- `docs/audits/WP-100-handler-context-review.toml`;
+- `docs/evidence/WP-100-handler-context.toml`;
 - `tools/check-wp100-handler-context-entry.sh`;
 - `tools/check-wp100-handler-context.sh`;
 - `workspace/0007-time-domain-and-deadline.md`;
