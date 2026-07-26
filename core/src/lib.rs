@@ -5,13 +5,14 @@ extern crate std;
 
 extern crate alloc;
 
-pub mod outbound;
+pub mod deadline;
 pub mod error;
 pub mod event;
 pub mod handler;
 pub mod identity;
 pub mod inbound;
 pub mod interaction;
+pub mod outbound;
 pub mod payload;
 pub mod security;
 pub mod status;
@@ -19,9 +20,7 @@ pub mod sync;
 pub mod thing;
 pub mod transport;
 
-pub use outbound::SubscriptionGuard;
-#[cfg(feature = "async")]
-pub use outbound::{BindingRequest, ClientBinding};
+pub use deadline::Deadline;
 pub use error::{
     CoreError, CoreResult, ErrorContext, ErrorPhase, RetryClass, SecurityFailureReason,
     SelectionFailureReason,
@@ -51,6 +50,9 @@ pub use interaction::{
     InteractionOutputMetadata, InteractionStatus, MediaType, ResponsePayloadRole,
     ResponseSelection,
 };
+pub use outbound::SubscriptionGuard;
+#[cfg(feature = "async")]
+pub use outbound::{BindingRequest, ClientBinding};
 pub use payload::{CodecInput, Payload, PayloadCodec};
 pub use security::{
     AuthMaterial, BasicSecurityProvider, BearerSecurityProvider, CredentialStore, Credentials,

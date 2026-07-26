@@ -1,5 +1,6 @@
 //! Bounded progress, cleanup, and terminal status values shared by portable drivers.
 
+use core::cmp::Ordering;
 use core::fmt;
 use core::num::NonZeroU16;
 
@@ -317,10 +318,11 @@ impl CleanupRecord {
             return None;
         }
 
-        if let (Some(deadline), Some(retry_not_before)) = (deadline, retry_not_before)
-            && retry_not_before.ticks() > deadline.ticks()
-        {
-            return None;
+        if let (Some(deadline), Some(retry_not_before)) = (deadline, retry_not_before) {
+            match retry_not_before.checked_cmp(deadline) {
+                Some(Ordering::Less | Ordering::Equal) => {}
+                Some(Ordering::Greater) | None => return None,
+            }
         }
 
         self.deadline = deadline;
