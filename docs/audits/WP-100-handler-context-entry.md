@@ -152,8 +152,8 @@ The nested fixture under
 Foundation, and TD surfaces. It freezes:
 
 - the root public path and the exact borrowed/copyable method signatures;
-- all 18 valid operation/target pairings and representative invalid
-  cross-kind pairings;
+- all 72 operation/target-kind pairings, accepting exactly 18 and rejecting
+  the remaining 54 with both present and absent optional binding context;
 - the exact validation category, phase, retry class, and fixed-size context;
 - private fields;
 - absence of `Hash` and `Default`;
