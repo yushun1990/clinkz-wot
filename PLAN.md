@@ -33,18 +33,17 @@ The repository evidence establishes the following starting point:
 - GATE-3, the Directory client boundary, is closed; GATE-1, GATE-2, GATE-4,
   GATE-5, and GATE-6 remain open;
 - WP-000 is recorded complete; ADR-0016 preserves its historical
-  `time-and-generation-api` record while requiring WP-100 to replace the time
-  claims and reaffirm the disjoint generation claims;
+  `time-and-generation-api` record, while completed WP-100 logical-time
+  evidence replaces its time claims and reaffirms the disjoint generation
+  claims;
 - the admitted `WP-100-FOUNDATION-REFRESH` tranche is complete;
 - `WP-100-HANDLER-VALUE-PRIMITIVES` is implemented and has completion evidence
   for the exact five-value scope;
-- `WP-100-LOGICAL-TIME-CORRECTION` passed independent exact-candidate review
-  and is approved for its Foundation-only implementation scope; source
-  implementation is in progress;
-- broad handler entry is blocked until the decided logical-time and
-  Deadline/cleanup correction tranches complete, and by incomplete workload
-  oracles, request/context migration review, and no-atomic public-boundary
-  evidence;
+- `WP-100-LOGICAL-TIME-CORRECTION` is implemented and has completion evidence
+  for the extended logical-time domain;
+- broad handler entry is blocked until the decided Deadline/cleanup correction
+  tranche completes, and by incomplete workload oracles, request/context
+  migration review, and no-atomic public-boundary evidence;
 - WP-200 is blocked before admission by the unresolved constructible
   candidate-fallback policy and bounded diagnostics;
 - WP-300 is blocked before admission by incomplete exact binding contracts,
@@ -205,19 +204,17 @@ Completed evidence:
 - `WP-100-FOUNDATION-REFRESH` is implemented and has completion evidence.
 - `WP-100-HANDLER-VALUE-PRIMITIVES` is implemented and has completion
   evidence.
+- `WP-100-LOGICAL-TIME-CORRECTION` is implemented and has completion evidence.
 
 Next execution order:
 
-1. implement and verify the admitted `WP-100-LOGICAL-TIME-CORRECTION`, then
-   replace the impacted WP-000 time claims and reaffirm its generation claims
-   with new completion evidence;
-2. admit and complete `WP-100-DEADLINE-CLEANUP-TIMING`;
-3. define and admit the next bounded handler tranches for request/context
+1. admit and complete `WP-100-DEADLINE-CLEANUP-TIMING`;
+2. define and admit the next bounded handler tranches for request/context
    values, portable traits, host erasure/storage, security, codecs, errors, and
    callback isolation;
-4. complete the real handler matrix, no-atomic boundary, cancellation,
+3. complete the real handler matrix, no-atomic boundary, cancellation,
    storage/replacement, resource, and performance evidence;
-5. retain Producer and Servient integration in WP-300 and WP-400.
+4. retain Producer and Servient integration in WP-300 and WP-400.
 
 AI deliverable:
 
