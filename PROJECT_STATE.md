@@ -2,14 +2,15 @@
 
 Last updated: 2026-07-26
 
-Repository basis: M0 closure checkpoint
-`c555be9259f4e4da19de654aa679f7f5a407e78b` plus the current bounded
-handler-value admission-checkpoint repair.
+Repository basis: handler-value implementation commit
+`b5cb1a5392ab2ef35a9f23185731012f71e4ea05` plus the current completion
+evidence and continuation-state update.
 
 ## Current Objective
 
-Proceed with the smallest evidence-admissible v4.9 implementation work without
-waiting for Owner technical approvals.
+Resolve D2 from repository evidence, define the corrective time-domain tranche,
+and replace or reaffirm the impacted WP-000 time evidence without waiting for
+Owner technical approvals.
 
 Active milestones:
 
@@ -30,8 +31,8 @@ M0 is closed from current repository evidence:
 - default tests, all 21 valid feature combinations, and the aggregate
   design-artifact checks pass against `18d85fe` plus the state/plan closure
   update;
-- the next implementation candidate and its `review-pending` admission state
-  are unambiguous.
+- the first scoped Category A implementation tranche is now admitted,
+  implemented, and independently evidenced.
 
 ## AI-led Collaboration Model
 
@@ -126,17 +127,18 @@ Work packages and tranches:
 - its `time-and-generation-api` evidence is impacted and needs explicit
   replacement or reaffirmation after the time model is frozen;
 - `WP-100-FOUNDATION-REFRESH` is approved, implemented, and complete;
-- `WP-100-HANDLER-VALUE-PRIMITIVES` is pending with
-  `admission_status = "review-pending"` and an entry audit whose verdict is
-  independent re-review pending;
+- `WP-100-HANDLER-VALUE-PRIMITIVES` is approved, implemented, and complete
+  under `docs/evidence/WP-100-handler-value-primitives.toml`;
 - the registered handler-value candidate is commit
   `778c2b60eebc18895604485c4e546cad5bd5e101`, the single child of its frozen
-  base; the corrected entry checker validates that historical commit and exact
-  path set without requiring it to remain `HEAD`;
+  base, its independent review attestation is
+  `db09e5f1635f9544af7d996919600c4b377875ff`, its admission checkpoint is
+  `e009c760f915569186136b1f6541784a2fbde3b9`, and its implementation is
+  `b5cb1a5392ab2ef35a9f23185731012f71e4ea05`;
 - `WP-100-HANDLER-ENTRY` remains blocked;
 - WP-100 is in progress; WP-200 through WP-700 are planned.
 
-The five-value candidate is exactly:
+The completed five-value tranche is exactly:
 
 - `CancellationView`;
 - `SubscriptionAcceptance`;
@@ -145,13 +147,13 @@ The five-value candidate is exactly:
 - `StaticHandlerRegistration`.
 
 It excludes `Deadline`, time semantics, state machines, Servient, Protocol
-Bindings, and performance workloads. Its intended implementation paths are
-`core/src/handler.rs` and the Core root re-export only.
+Bindings, and performance workloads. Its implementation paths are exactly
+`core/src/handler.rs` and the Core root re-export.
 
-Risk classification: Category A implementation risk, because the five values
-are passive, additive, locally owned, and disjoint from the time-domain
-blocking scope. The tranche still cannot be implemented until its registered
-admission state changes from `review-pending` to `approved`.
+Risk classification: Category A implementation risk. The five values are
+passive, additive, locally owned, and disjoint from the time-domain blocking
+scope. Independent admission, implementation, and completion evidence all
+passed without expanding the tranche.
 
 ## Current Blockers and Open Technical Decisions
 
@@ -181,33 +183,19 @@ Broad handler blockers:
 - the real no-atomic public boundary is not proven;
 - Producer and Servient integration remain assigned to WP-300/WP-400.
 
-Resolved handler-value admission checkpoint drift:
+Completed handler-value tranche facts:
 
-- the old checker compared current `HEAD` to the historical candidate base and
-  therefore failed before executing the six registered prechecks;
-- `candidate_ref` now explicitly identifies the recoverable historical
-  candidate, whose parent and exact frozen path set remain checked;
-- later governance commits no longer require published-history rewriting;
-- an attestation commit may follow intervening descendant commits, but the
-  reviewed ref remains exact and the attestation commit itself remains limited
-  to the attestation and artifact registry;
-- the five-value scope, exclusions, predecessor, executable contract, and
-  independent-review requirement are unchanged;
-- `tools/check-wp100-handler-value-primitives-entry.sh --candidate` now passes
-  and reaches the expected absent-implementation boundary.
-
-Independent handler-value review facts:
-
-- the registered candidate was authored before this root continuation session;
-- the exact candidate diff, five semantic schemas, current authoritative
-  owners, predecessor evidence, time-scope partition, empty state/performance
-  scope, compile contract, source validator, and six prechecks were re-reviewed;
-- the five semantic authoritative artifacts have not changed since the
-  candidate commit;
-- no intersecting finding or out-of-scope implementation need was found;
-- reviewer identity encoding now accepts either a real child task or an
-  independent later root session and rejects a root session that falsely claims
-  child-task identity.
+- the stale current-`HEAD` candidate coupling was corrected without rewriting
+  published history or weakening the exact candidate/path checks;
+- an independent root continuation review rechecked the candidate diff,
+  schemas, authoritative owners, predecessor, time-scope partition, empty
+  state/performance scope, compile contract, source validator, and prechecks;
+- the approval and progress checkpoints preceded the exact two-file
+  implementation commit;
+- the completion checker proves the actual source projection, three required
+  feature cells, semantic and negative UI contracts, redacted Debug behavior,
+  and downstream Servient/Protocol Binding compilation;
+- no intersecting finding or out-of-scope implementation need was found.
 
 Downstream admission blockers:
 
@@ -220,13 +208,17 @@ Downstream admission blockers:
 
 ## Verification Baseline
 
-Verified on 2026-07-26 against `18d85fe` plus the M0 state/plan closure update:
+Verified on 2026-07-26 through the handler-value implementation and completion
+state:
 
 - `tools/check-design-artifacts.sh` - passed;
 - `tools/check-design-requirements.sh` - passed;
 - `tools/check-api-ownership.sh` - passed;
 - `cargo run --locked --quiet --manifest-path tools/design-check/Cargo.toml -- check-work-packages` - passed;
 - `tools/check-wp100-handler-value-primitives-entry.sh --candidate` - passed;
+- `tools/check-wp100-handler-value-primitives-entry.sh --admission-ready` -
+  passed before implementation;
+- `tools/check-wp100-handler-value-primitives.sh` - passed;
 - `git diff --check` - passed;
 - `cargo test --workspace --locked` - passed;
 - `sh scripts/check-feature-matrix.sh` - 21 valid feature combinations passed.
@@ -237,20 +229,15 @@ baseline because it intentionally enables mutually exclusive `zenoh` and
 
 ## Stopping Point and Next Safe Actions
 
-No source implementation has been changed since the latest governance
-checkpoint.
+The five admitted handler value primitives and Core root exports are
+implemented and committed.
 
 Next safe actions, in order:
 
-1. complete the AI-led technical admission review for
-   `WP-100-HANDLER-VALUE-PRIMITIVES` and produce the registered attestation or
-   record why the tranche remains pending;
-2. if the tranche becomes admitted, implement exactly the five values in
-   `core/src/handler.rs` and `core/src/lib.rs`, then run the registered
-   completion evidence;
-3. independently process D2 time-domain/Deadline and replace or reaffirm
+1. independently process D2 time-domain/Deadline and replace or reaffirm
    impacted WP-000 time evidence;
-4. continue D3, D4, and D5 as AI-led technical decisions, asking the Owner only
+2. define the next bounded WP-100 handler tranche after D2 has a disposition;
+3. continue D3, D4, and D5 as AI-led technical decisions, asking the Owner only
    for project-goal, constraint, or external-commitment clarification.
 
 Important references:
@@ -262,6 +249,8 @@ Important references:
 - `docs/architecture/README.md`;
 - `docs/work-packages/index.toml`;
 - `docs/audits/WP-100-handler-value-primitives-entry.md`;
+- `docs/audits/WP-100-handler-value-primitives-review.toml`;
+- `docs/evidence/WP-100-handler-value-primitives.toml`;
 - `workspace/0007-time-domain-and-deadline.md`;
 - `workspace/0008-implementation-governance-overhead.md`;
 - `workspace/0009-minimal-end-to-end-architecture-validation.md`;

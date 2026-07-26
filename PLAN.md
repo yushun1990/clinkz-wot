@@ -35,8 +35,8 @@ The repository evidence establishes the following starting point:
 - WP-000 is recorded complete, but its `time-and-generation-api` evidence is
   impacted by the unresolved finite-clock ordering conflict;
 - the admitted `WP-100-FOUNDATION-REFRESH` tranche is complete;
-- `WP-100-HANDLER-VALUE-PRIMITIVES` is independently reviewed and approved for
-  the exact five-value implementation scope, and implementation is in progress;
+- `WP-100-HANDLER-VALUE-PRIMITIVES` is implemented and has completion evidence
+  for the exact five-value scope;
 - broad handler entry is blocked by time-domain semantics, incomplete workload
   oracles, request/context migration review, and no-atomic public-boundary
   evidence;
@@ -198,19 +198,19 @@ Completed evidence:
 
 - WP-000 is recorded complete;
 - `WP-100-FOUNDATION-REFRESH` is implemented and has completion evidence.
+- `WP-100-HANDLER-VALUE-PRIMITIVES` is implemented and has completion
+  evidence.
 
 Next execution order:
 
-1. implement and verify exactly the five admitted passive values in
-   `WP-100-HANDLER-VALUE-PRIMITIVES`;
-2. decide D2, define a corrective time-domain tranche, and replace or reaffirm
+1. decide D2, define a corrective time-domain tranche, and replace or reaffirm
    impacted WP-000 time evidence;
-3. define and admit the next bounded handler tranches for request/context
+2. define and admit the next bounded handler tranches for request/context
    values, portable traits, host erasure/storage, security, codecs, errors, and
    callback isolation;
-4. complete the real handler matrix, no-atomic boundary, cancellation,
+3. complete the real handler matrix, no-atomic boundary, cancellation,
    storage/replacement, resource, and performance evidence;
-5. retain Producer and Servient integration in WP-300 and WP-400.
+4. retain Producer and Servient integration in WP-300 and WP-400.
 
 AI deliverable:
 

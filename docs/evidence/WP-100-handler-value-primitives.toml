@@ -1,0 +1,27 @@
+schema_version = 1
+design_revision = "4.9"
+work_package = "WP-100"
+tranche = "WP-100-HANDLER-VALUE-PRIMITIVES"
+implementation_ref = "b5cb1a5392ab2ef35a9f23185731012f71e4ea05"
+recorded_on = "2026-07-26"
+verification_command = "tools/check-wp100-handler-value-primitives.sh"
+verification_check = "wp100-handler-value-primitives-check"
+status = "passed"
+evidence_key = "handler-value-primitives"
+
+requirement_ids = [
+    "API-SURFACE-001",
+    "HANDLER-VALUE-001",
+]
+compilation_cells = ["no-default", "async-no-std", "std"]
+coverage = [
+    "exact actual-source AST projection for five public values",
+    "Core root exports in every registered feature cell",
+    "derive and negative-trait contracts",
+    "private field and must-use compile-fail contracts",
+    "const constructors, getters, discriminants, and boundary values",
+    "linear SubscriptionAcceptance response extraction",
+    "generic-bound-free borrowed static registration",
+    "handler-redacted StaticHandlerRegistration Debug output",
+    "Servient and Protocol Binding downstream compilation",
+]
