@@ -86,14 +86,22 @@ admission: each tranche still requires its own ADR-0013 admission record and
 completion evidence. The broad handler entry remains blocked until both
 complete.
 
-`WP-100-LOGICAL-TIME-CORRECTION` is registered as a review-pending tranche
-whose only implementation path is `foundation/src/time.rs`. It retains every
-public time representation and the `RuntimeClock` method set, adds the frozen
-`SourceTimestamp::checked_cmp` behavior, corrects raw-wrap documentation and
-tests to the extended logical domain, and uses an independent nested fixture
-for raw overflow-epoch, delayed-observation, reset, scale, and exhaustion
-semantics. Its exact entry boundary is recorded by
-`docs/audits/WP-100-logical-time-correction-entry.md`. Registration and
+`WP-100-LOGICAL-TIME-CORRECTION` is complete. Its exact one-file Foundation
+implementation preserves all public time representations and the
+`RuntimeClock` method set, adds the frozen `SourceTimestamp::checked_cmp`
+behavior, and proves raw overflow-epoch, delayed-observation, reset, scale, and
+exhaustion semantics.
+
+`WP-100-DEADLINE-CLEANUP-TIMING` now has an exact review-pending admission
+candidate. Its only implementation paths are `core/src/deadline.rs`,
+`core/src/status.rs`, and the Core root module/export in `core/src/lib.rs`.
+The candidate freezes Deadline NONE/finite/incomparable behavior,
+`CleanupRecord::try_with_timing` checked logical ordering, the four error
+dispositions, delayed polling, and the timeout linearization oracle across all
+three Core feature cells. It changes no handler, dispatcher, binding, Servient,
+scheduler, state-machine, resource, removal, or performance scope. Its exact
+entry boundary is recorded by
+`docs/audits/WP-100-deadline-cleanup-timing-entry.md`. Registration and
 candidate checks do not authorize source changes; independent review and the
 separate approval checkpoint remain required.
 

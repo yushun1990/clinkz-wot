@@ -96,6 +96,15 @@ const LOGICAL_TIME_REVIEW_ATTESTATION: &str =
 const LOGICAL_TIME_COMPLETION_EVIDENCE: &str = "docs/evidence/WP-100-logical-time-correction.toml";
 const LOGICAL_TIME_ADMISSION_REVIEW: &str = "docs/audits/WP-100-logical-time-correction-entry.md";
 const LOGICAL_TIME_CANDIDATE_BASE_REF: &str = "0092e9c5f3c7e041ec979d18d462fd0e74ae2e0a";
+const DEADLINE_CLEANUP_TRANCHE: &str = "WP-100-DEADLINE-CLEANUP-TIMING";
+const DEADLINE_CLEANUP_ENTRY_CHECK: &str = "wp100-deadline-cleanup-timing-entry-check";
+const DEADLINE_CLEANUP_REVIEW_ATTESTATION: &str =
+    "docs/audits/WP-100-deadline-cleanup-timing-review.toml";
+const DEADLINE_CLEANUP_COMPLETION_EVIDENCE: &str =
+    "docs/evidence/WP-100-deadline-cleanup-timing.toml";
+const DEADLINE_CLEANUP_ADMISSION_REVIEW: &str =
+    "docs/audits/WP-100-deadline-cleanup-timing-entry.md";
+const DEADLINE_CLEANUP_CANDIDATE_BASE_REF: &str = "093d15a70319475ce05c651233de803aa563e095";
 const HANDLER_VALUE_PRECHECKS: &[&str] = &[
     "api-ownership-check",
     "architecture-adr-check",
@@ -112,6 +121,16 @@ const LOGICAL_TIME_PRECHECKS: &[&str] = &[
     "work-package-dag-check",
     "wp100-amendment-check",
     "wp100-handler-amendment-check",
+];
+const DEADLINE_CLEANUP_PRECHECKS: &[&str] = &[
+    "api-ownership-check",
+    "architecture-adr-check",
+    "design-requirement-check",
+    "resource-profile-check",
+    "work-package-dag-check",
+    "wp100-amendment-check",
+    "wp100-handler-amendment-check",
+    "wp100-logical-time-correction-check",
 ];
 
 #[derive(Debug)]
@@ -295,6 +314,15 @@ fn run() -> Result<(), String> {
             check_logical_time_correction_entry_state(&root, &mode)?;
             println!("design structure check: logical time correction {mode} state valid");
         }
+        "check-deadline-cleanup-timing-entry-state" => {
+            let mode = env::args().nth(2).ok_or_else(|| {
+                "check-deadline-cleanup-timing-entry-state requires candidate or \
+                 admission-ready"
+                    .to_owned()
+            })?;
+            check_deadline_cleanup_timing_entry_state(&root, &mode)?;
+            println!("design structure check: deadline cleanup timing {mode} state valid");
+        }
         "check-governance" => {
             check_governance(&root, false)?;
             println!("design structure check: gate governance valid");
@@ -313,7 +341,8 @@ fn run() -> Result<(), String> {
                 "unknown command {command:?}; expected check, check-state, check-handler, \
                  check-handler-value-primitives-source, \
                  check-handler-value-primitives-entry-state, \
-                 check-logical-time-correction-entry-state, check-work-packages, \
+                 check-logical-time-correction-entry-state, \
+                 check-deadline-cleanup-timing-entry-state, check-work-packages, \
                  check-governance, check-refactor-ready, or check-handler-entry"
             ));
         }
@@ -1766,6 +1795,8 @@ fn check_governance_checks(
         HANDLER_VALUE_ENTRY_CHECK,
         "wp100-logical-time-correction-check",
         LOGICAL_TIME_ENTRY_CHECK,
+        "wp100-deadline-cleanup-timing-check",
+        DEADLINE_CLEANUP_ENTRY_CHECK,
     ]);
     let mut statuses = BTreeMap::new();
     for check in checks {
@@ -1922,6 +1953,19 @@ fn expected_check_mapping(id: &str) -> Option<CheckMapping> {
             "tools/check-wp100-logical-time-correction-entry.sh",
             &[
                 "tools/check-wp100-logical-time-correction-entry.sh",
+                "--admission-ready",
+            ],
+            &["executable"],
+        )),
+        "wp100-deadline-cleanup-timing-check" => Some((
+            "tools/check-wp100-deadline-cleanup-timing.sh",
+            &["tools/check-wp100-deadline-cleanup-timing.sh"],
+            &["executable"],
+        )),
+        DEADLINE_CLEANUP_ENTRY_CHECK => Some((
+            "tools/check-wp100-deadline-cleanup-timing-entry.sh",
+            &[
+                "tools/check-wp100-deadline-cleanup-timing-entry.sh",
                 "--admission-ready",
             ],
             &["executable"],
@@ -2366,6 +2410,13 @@ struct LogicalTimeTrancheState {
     check_status: String,
 }
 
+#[derive(Debug)]
+struct DeadlineCleanupTrancheState {
+    status: String,
+    verification_check: String,
+    check_status: String,
+}
+
 #[allow(clippy::too_many_arguments)]
 fn check_work_package_tranches(
     root: &Path,
@@ -2405,6 +2456,7 @@ fn check_work_package_tranches(
         HANDLER_FOUNDATION_TRANCHE,
         HANDLER_VALUE_PRIMITIVES_TRANCHE,
         LOGICAL_TIME_TRANCHE,
+        DEADLINE_CLEANUP_TRANCHE,
     ]);
     if entry_dependencies != expected_entry_dependencies {
         return Err(format!(
@@ -2435,9 +2487,9 @@ fn check_work_package_tranches(
         .get("tranche")
         .and_then(Item::as_array_of_tables)
         .ok_or_else(|| "work-package index has no [[tranche]] records".to_owned())?;
-    if tranches.len() != 3 {
+    if tranches.len() != 4 {
         return Err(format!(
-            "work-package index must define exactly three handler prerequisite tranches; found {}",
+            "work-package index must define exactly four handler prerequisite tranches; found {}",
             tranches.len()
         ));
     }
@@ -2869,6 +2921,27 @@ fn check_work_package_tranches(
         &status,
         &admission_status,
     )?;
+    let deadline_cleanup_tranche = tranches
+        .iter()
+        .find(|table| table.get("id").and_then(Item::as_str) == Some(DEADLINE_CLEANUP_TRANCHE))
+        .ok_or_else(|| format!("{DEADLINE_CLEANUP_TRANCHE} tranche record is missing"))?;
+    let deadline_cleanup_state = check_deadline_cleanup_tranche(
+        root,
+        deadline_cleanup_tranche,
+        known_requirements,
+        allowed_owners,
+        allowed_cells,
+        package_evidence,
+        &registered_artifacts,
+        &check_statuses,
+        &logical_time_state,
+    )?;
+    if blocking_scope.is_blocking != (deadline_cleanup_state.status != "complete") {
+        return Err(format!(
+            "{HANDLER_TIME_BLOCKING_SCOPE} impact state and \
+             {DEADLINE_CLEANUP_TRANCHE} completion state disagree"
+        ));
+    }
 
     check_handler_scope_partition(
         &value_state.requirements,
@@ -2970,6 +3043,33 @@ fn check_work_package_tranches(
                 "handler entry blocked: logical time verification exited with {status}"
             ));
         }
+        if deadline_cleanup_state.status != "complete" {
+            return Err(format!(
+                "handler entry blocked: {DEADLINE_CLEANUP_TRANCHE} is {:?}",
+                deadline_cleanup_state.status
+            ));
+        }
+        if deadline_cleanup_state.check_status != "executable" {
+            return Err(format!(
+                "handler entry blocked: check {:?} is {:?}",
+                deadline_cleanup_state.verification_check, deadline_cleanup_state.check_status
+            ));
+        }
+        let checker = root.join("tools/check-wp100-deadline-cleanup-timing.sh");
+        let status = Command::new(&checker)
+            .current_dir(root)
+            .status()
+            .map_err(|error| {
+                format!(
+                    "cannot execute deadline cleanup timing verification {}: {error}",
+                    checker.display()
+                )
+            })?;
+        if !status.success() {
+            return Err(format!(
+                "handler entry blocked: deadline cleanup timing verification exited with {status}"
+            ));
+        }
     }
     Ok(())
 }
@@ -3036,12 +3136,12 @@ fn check_handler_blocking_scope(
         "corrective-plan",
         HANDLER_TIME_BLOCKING_SCOPE,
     )?;
-    require_table_string(
-        scope,
-        "impact_status",
-        "blocking",
-        HANDLER_TIME_BLOCKING_SCOPE,
-    )?;
+    let impact_status = string_field(scope, "impact_status", HANDLER_TIME_BLOCKING_SCOPE)?;
+    if !matches!(impact_status.as_str(), "blocking" | "resolved") {
+        return Err(format!(
+            "{HANDLER_TIME_BLOCKING_SCOPE} has invalid impact status {impact_status:?}"
+        ));
+    }
 
     let entrypoints = package_string_set(scope, "blocks_entrypoints", HANDLER_TIME_BLOCKING_SCOPE)?;
     if entrypoints != owned_set(&[HANDLER_ENTRYPOINT]) {
@@ -3199,7 +3299,7 @@ fn check_handler_blocking_scope(
         requirements,
         shared_meta_requirements,
         items,
-        is_blocking: true,
+        is_blocking: impact_status == "blocking",
     })
 }
 
@@ -4142,6 +4242,442 @@ fn check_logical_time_tranche(
     })
 }
 
+#[allow(clippy::too_many_arguments)]
+fn check_deadline_cleanup_tranche(
+    root: &Path,
+    tranche: &Table,
+    known_requirements: &BTreeSet<String>,
+    allowed_owners: &BTreeSet<String>,
+    allowed_cells: &BTreeSet<String>,
+    package_evidence: &BTreeMap<String, BTreeSet<String>>,
+    registered_artifacts: &BTreeSet<String>,
+    check_statuses: &BTreeMap<String, String>,
+    logical_time_state: &LogicalTimeTrancheState,
+) -> Result<DeadlineCleanupTrancheState, String> {
+    require_table_string(
+        tranche,
+        "id",
+        DEADLINE_CLEANUP_TRANCHE,
+        "deadline cleanup tranche",
+    )?;
+    require_table_string(tranche, "work_package", "WP-100", DEADLINE_CLEANUP_TRANCHE)?;
+
+    let sequence = integer_field(tranche, "sequence", DEADLINE_CLEANUP_TRANCHE)?;
+    if sequence != 140 {
+        return Err(format!(
+            "{DEADLINE_CLEANUP_TRANCHE} sequence mismatch; expected 140, found {sequence}"
+        ));
+    }
+    let status = string_field(tranche, "status", DEADLINE_CLEANUP_TRANCHE)?;
+    let admission_status = string_field(tranche, "admission_status", DEADLINE_CLEANUP_TRANCHE)?;
+    if !handler_value_status_pair_is_valid(&status, &admission_status) {
+        return Err(format!(
+            "{DEADLINE_CLEANUP_TRANCHE} has invalid status/admission pair \
+             {status:?}/{admission_status:?}"
+        ));
+    }
+    require_table_string(
+        tranche,
+        "impact_status",
+        "current",
+        DEADLINE_CLEANUP_TRANCHE,
+    )?;
+
+    let dependencies = package_string_set(tranche, "depends_on", DEADLINE_CLEANUP_TRANCHE)?;
+    if dependencies != owned_set(&[LOGICAL_TIME_TRANCHE]) {
+        return Err(format!(
+            "{DEADLINE_CLEANUP_TRANCHE} must depend only on {LOGICAL_TIME_TRANCHE}"
+        ));
+    }
+    let blocked = package_string_set(tranche, "blocks_entrypoints", DEADLINE_CLEANUP_TRANCHE)?;
+    if blocked != owned_set(&[HANDLER_ENTRYPOINT]) {
+        return Err(format!(
+            "{DEADLINE_CLEANUP_TRANCHE} must block only {HANDLER_ENTRYPOINT}"
+        ));
+    }
+
+    let requirements = package_string_set(tranche, "requirements", DEADLINE_CLEANUP_TRANCHE)?;
+    check_known_values(
+        DEADLINE_CLEANUP_TRANCHE,
+        "requirement",
+        &requirements,
+        known_requirements,
+    )?;
+    let expected_requirements = owned_set(&[
+        "API-SURFACE-001",
+        "CLEANUP-RECORD-001",
+        "HANDLER-CANCEL-001",
+        "HANDLER-CANCEL-002",
+        "TIME-001",
+    ]);
+    if requirements != expected_requirements {
+        return Err(format!(
+            "{DEADLINE_CLEANUP_TRANCHE} requirement set mismatch; expected \
+             {expected_requirements:?}, found {requirements:?}"
+        ));
+    }
+
+    let owners = package_string_set(tranche, "owner_packages", DEADLINE_CLEANUP_TRANCHE)?;
+    check_known_values(
+        DEADLINE_CLEANUP_TRANCHE,
+        "owner package",
+        &owners,
+        allowed_owners,
+    )?;
+    if owners != owned_set(&["clinkz-wot-core"]) {
+        return Err(format!(
+            "{DEADLINE_CLEANUP_TRANCHE} owner package set is not frozen"
+        ));
+    }
+
+    let cells = package_string_set(tranche, "feature_cells", DEADLINE_CLEANUP_TRANCHE)?;
+    check_known_values(
+        DEADLINE_CLEANUP_TRANCHE,
+        "feature cell",
+        &cells,
+        allowed_cells,
+    )?;
+    if cells != owned_set(&["no-default", "async-no-std", "std"]) {
+        return Err(format!(
+            "{DEADLINE_CLEANUP_TRANCHE} feature-cell set is not frozen"
+        ));
+    }
+
+    let artifacts =
+        package_string_set(tranche, "authoritative_artifacts", DEADLINE_CLEANUP_TRANCHE)?;
+    let expected_artifacts = owned_set(&[
+        "docs/ADRs/0013-work-package-scoped-implementation-admission.org",
+        "docs/ADRs/0014-transitional-normative-ownership.org",
+        "docs/ADRs/0016-extended-logical-monotonic-time.org",
+        "docs/amendments/WP-100-error-cleanup-v1.md",
+        "docs/amendments/WP-100-handler-api-v1.md",
+        "docs/amendments/WP-100-time-domain-v1.md",
+        "docs/api-ownership.csv",
+        "docs/design.md",
+        "docs/requirements.csv",
+        "docs/work-packages/WP-100-core.md",
+        "docs/work-packages/index.toml",
+    ]);
+    if artifacts != expected_artifacts {
+        return Err(format!(
+            "{DEADLINE_CLEANUP_TRANCHE} authoritative artifact set mismatch; expected \
+             {expected_artifacts:?}, found {artifacts:?}"
+        ));
+    }
+    check_known_values(
+        DEADLINE_CLEANUP_TRANCHE,
+        "authoritative artifact",
+        &artifacts,
+        registered_artifacts,
+    )?;
+
+    let api_items = package_string_set(tranche, "api_items", DEADLINE_CLEANUP_TRANCHE)?;
+    let expected_api_items = owned_set(&["CleanupRecord", "Deadline"]);
+    if api_items != expected_api_items {
+        return Err(format!(
+            "{DEADLINE_CLEANUP_TRANCHE} API item set mismatch; expected \
+             {expected_api_items:?}, found {api_items:?}"
+        ));
+    }
+    let ownership_items = load_first_column(root, "docs/api-ownership.csv")?;
+    check_known_values(
+        DEADLINE_CLEANUP_TRANCHE,
+        "API item",
+        &api_items,
+        &ownership_items,
+    )?;
+
+    for field in [
+        "state_machines",
+        "old_api_removals",
+        "performance_workloads",
+    ] {
+        let values = string_set(
+            array_field(tranche, field, DEADLINE_CLEANUP_TRANCHE)?,
+            DEADLINE_CLEANUP_TRANCHE,
+            field,
+        )?;
+        if !values.is_empty() {
+            return Err(format!(
+                "{DEADLINE_CLEANUP_TRANCHE} must have an empty {field} set"
+            ));
+        }
+    }
+
+    let implementation_paths =
+        package_string_set(tranche, "implementation_paths", DEADLINE_CLEANUP_TRANCHE)?;
+    let expected_implementation_paths = owned_set(&[
+        "core/src/deadline.rs",
+        "core/src/lib.rs",
+        "core/src/status.rs",
+    ]);
+    if implementation_paths != expected_implementation_paths {
+        return Err(format!(
+            "{DEADLINE_CLEANUP_TRANCHE} implementation path set mismatch; expected \
+             {expected_implementation_paths:?}, found {implementation_paths:?}"
+        ));
+    }
+    for path in &implementation_paths {
+        validate_relative_path(path, "deadline cleanup implementation path")?;
+    }
+    let deadline_source = root.join("core/src/deadline.rs");
+    if status == "pending" && deadline_source.exists() {
+        return Err(format!(
+            "{DEADLINE_CLEANUP_TRANCHE} pending state has a premature Deadline source"
+        ));
+    }
+    if status != "pending" && !deadline_source.is_file() {
+        return Err(format!(
+            "{DEADLINE_CLEANUP_TRANCHE} {status} state lacks core/src/deadline.rs"
+        ));
+    }
+    for path in ["core/src/lib.rs", "core/src/status.rs"] {
+        if !root.join(path).is_file() {
+            return Err(format!(
+                "{DEADLINE_CLEANUP_TRANCHE} implementation path is missing: {path:?}"
+            ));
+        }
+    }
+
+    let contract_artifacts =
+        package_string_set(tranche, "contract_artifacts", DEADLINE_CLEANUP_TRANCHE)?;
+    let expected_contract_artifacts = owned_set(&[
+        "tools/check-wp100-deadline-cleanup-timing-entry.sh",
+        "tools/check-wp100-deadline-cleanup-timing.sh",
+        "tools/compile-contracts/wp100-deadline-cleanup-timing/Cargo.toml",
+        "tools/compile-contracts/wp100-deadline-cleanup-timing/Cargo.lock",
+        "tools/compile-contracts/wp100-deadline-cleanup-timing/src/lib.rs",
+        "tools/compile-contracts/wp100-deadline-cleanup-timing/tests/semantics.rs",
+        "tools/compile-contracts/wp100-deadline-cleanup-timing/ui/private-deadline-instant.rs",
+        "tools/design-check/Cargo.toml",
+        "tools/design-check/src/main.rs",
+    ]);
+    if contract_artifacts != expected_contract_artifacts {
+        return Err(format!(
+            "{DEADLINE_CLEANUP_TRANCHE} contract artifact set mismatch; expected \
+             {expected_contract_artifacts:?}, found {contract_artifacts:?}"
+        ));
+    }
+    check_known_values(
+        DEADLINE_CLEANUP_TRANCHE,
+        "contract artifact",
+        &contract_artifacts,
+        registered_artifacts,
+    )?;
+    for artifact in &contract_artifacts {
+        if !root.join(artifact).is_file() {
+            return Err(format!(
+                "{DEADLINE_CLEANUP_TRANCHE} contract artifact is missing: {artifact:?}"
+            ));
+        }
+    }
+
+    let candidate_base_ref = string_field(tranche, "candidate_base_ref", DEADLINE_CLEANUP_TRANCHE)?;
+    if candidate_base_ref != DEADLINE_CLEANUP_CANDIDATE_BASE_REF {
+        return Err(format!(
+            "{DEADLINE_CLEANUP_TRANCHE} candidate base ref is not frozen"
+        ));
+    }
+    check_git_commit_is_ancestor(
+        root,
+        &candidate_base_ref,
+        "deadline cleanup candidate base ref",
+    )?;
+    let candidate_ref = string_field(tranche, "candidate_ref", DEADLINE_CLEANUP_TRANCHE)?;
+    require_full_commit_id(&candidate_ref, "deadline cleanup candidate_ref")?;
+    let candidate_paths = package_string_set(tranche, "candidate_paths", DEADLINE_CLEANUP_TRANCHE)?;
+    check_candidate_paths(
+        DEADLINE_CLEANUP_TRANCHE,
+        root,
+        &candidate_paths,
+        &implementation_paths,
+        registered_artifacts,
+    )?;
+    check_candidate_commit(
+        DEADLINE_CLEANUP_TRANCHE,
+        root,
+        &candidate_base_ref,
+        &candidate_ref,
+        &candidate_paths,
+    )?;
+
+    let prechecks = package_string_set(
+        tranche,
+        "pre_implementation_checks",
+        DEADLINE_CLEANUP_TRANCHE,
+    )?;
+    let expected_prechecks = owned_set(DEADLINE_CLEANUP_PRECHECKS);
+    if prechecks != expected_prechecks {
+        return Err(format!(
+            "{DEADLINE_CLEANUP_TRANCHE} precheck set mismatch; expected \
+             {expected_prechecks:?}, found {prechecks:?}"
+        ));
+    }
+    for check in &prechecks {
+        if check_statuses.get(check).map(String::as_str) != Some("executable") {
+            return Err(format!(
+                "{DEADLINE_CLEANUP_TRANCHE} precheck {check:?} is not executable"
+            ));
+        }
+    }
+
+    let admission_review = string_field(tranche, "admission_review", DEADLINE_CLEANUP_TRANCHE)?;
+    if admission_review != DEADLINE_CLEANUP_ADMISSION_REVIEW
+        || !registered_artifacts.contains(&admission_review)
+        || !root.join(&admission_review).is_file()
+    {
+        return Err(format!(
+            "{DEADLINE_CLEANUP_TRANCHE} admission review is not registered and present"
+        ));
+    }
+    check_handler_value_audit_state(root, &admission_review, &admission_status)?;
+
+    let entry_check = string_field(tranche, "entry_check", DEADLINE_CLEANUP_TRANCHE)?;
+    if entry_check != DEADLINE_CLEANUP_ENTRY_CHECK
+        || check_statuses.get(&entry_check).map(String::as_str) != Some("executable")
+    {
+        return Err(format!(
+            "{DEADLINE_CLEANUP_TRANCHE} entry check is not executable"
+        ));
+    }
+
+    let completion_evidence = package_string_set(
+        tranche,
+        "completion_evidence_keys",
+        DEADLINE_CLEANUP_TRANCHE,
+    )?;
+    if completion_evidence != owned_set(&["deadline-cleanup-timing"])
+        || !completion_evidence.is_subset(
+            package_evidence
+                .get("WP-100")
+                .ok_or_else(|| "WP-100 has no evidence key set".to_owned())?,
+        )
+    {
+        return Err(format!(
+            "{DEADLINE_CLEANUP_TRANCHE} completion evidence key is not frozen"
+        ));
+    }
+    let evidence_path = string_field(
+        tranche,
+        "completion_evidence_path",
+        DEADLINE_CLEANUP_TRANCHE,
+    )?;
+    if evidence_path != DEADLINE_CLEANUP_COMPLETION_EVIDENCE {
+        return Err(format!(
+            "{DEADLINE_CLEANUP_TRANCHE} completion evidence path is not frozen"
+        ));
+    }
+    let verification_check = string_field(tranche, "completion_check", DEADLINE_CLEANUP_TRANCHE)?;
+    if verification_check != "wp100-deadline-cleanup-timing-check" {
+        return Err(format!(
+            "{DEADLINE_CLEANUP_TRANCHE} completion check is not frozen"
+        ));
+    }
+    let check_status = check_statuses
+        .get(&verification_check)
+        .cloned()
+        .ok_or_else(|| format!("{verification_check:?} is not registered"))?;
+    if check_status != "executable" {
+        return Err(format!(
+            "{DEADLINE_CLEANUP_TRANCHE} completion check is {check_status:?}"
+        ));
+    }
+
+    if logical_time_state.status != "complete"
+        || logical_time_state.check_status != "executable"
+        || logical_time_state.verification_check != "wp100-logical-time-correction-check"
+    {
+        return Err(format!(
+            "{DEADLINE_CLEANUP_TRANCHE} requires a complete and executable \
+             {LOGICAL_TIME_TRANCHE}"
+        ));
+    }
+
+    let evidence_exists = root.join(&evidence_path).is_file();
+    if admission_status == "review-pending" {
+        for forbidden_field in [
+            "review_attestation",
+            "review_attestation_ref",
+            "admission_ref",
+        ] {
+            if tranche.contains_key(forbidden_field) {
+                return Err(format!(
+                    "{DEADLINE_CLEANUP_TRANCHE} review-pending state must not define \
+                     {forbidden_field:?}"
+                ));
+            }
+        }
+        if root.join(DEADLINE_CLEANUP_REVIEW_ATTESTATION).exists() {
+            return Err(format!(
+                "{DEADLINE_CLEANUP_TRANCHE} has a premature review attestation"
+            ));
+        }
+    } else {
+        let attestation_path =
+            string_field(tranche, "review_attestation", DEADLINE_CLEANUP_TRANCHE)?;
+        let attestation_ref =
+            string_field(tranche, "review_attestation_ref", DEADLINE_CLEANUP_TRANCHE)?;
+        if attestation_path != DEADLINE_CLEANUP_REVIEW_ATTESTATION
+            || !registered_artifacts.contains(&attestation_path)
+        {
+            return Err(format!(
+                "{DEADLINE_CLEANUP_TRANCHE} review attestation path is not frozen"
+            ));
+        }
+        check_deadline_cleanup_review_attestation(
+            root,
+            &attestation_path,
+            &attestation_ref,
+            &candidate_base_ref,
+            &candidate_ref,
+            &candidate_paths,
+        )?;
+
+        if status == "pending" {
+            if tranche.contains_key("admission_ref") {
+                return Err(format!(
+                    "{DEADLINE_CLEANUP_TRANCHE} pending state must not define admission_ref"
+                ));
+            }
+        } else {
+            let admission_ref = string_field(tranche, "admission_ref", DEADLINE_CLEANUP_TRANCHE)?;
+            check_deadline_cleanup_admission_commit(root, &admission_ref, &attestation_ref)?;
+            if status == "in-progress" {
+                check_deadline_cleanup_progress_checkpoint_state(
+                    root,
+                    &admission_ref,
+                    &implementation_paths,
+                )?;
+            }
+        }
+    }
+
+    if status == "complete" {
+        if !evidence_exists || admission_status != "approved" {
+            return Err(format!(
+                "{DEADLINE_CLEANUP_TRANCHE} complete state lacks approved evidence"
+            ));
+        }
+        let admission_ref = string_field(tranche, "admission_ref", DEADLINE_CLEANUP_TRANCHE)?;
+        check_deadline_cleanup_completion_evidence(
+            root,
+            &evidence_path,
+            &verification_check,
+            &admission_ref,
+        )?;
+    } else if evidence_exists && tranche_evidence_is_passed(root, &evidence_path)? {
+        return Err(format!(
+            "{DEADLINE_CLEANUP_TRANCHE} is not complete while {evidence_path} claims passed"
+        ));
+    }
+
+    Ok(DeadlineCleanupTrancheState {
+        status,
+        verification_check,
+        check_status,
+    })
+}
+
 fn handler_value_status_pair_is_valid(status: &str, admission_status: &str) -> bool {
     matches!(
         (status, admission_status),
@@ -4874,6 +5410,296 @@ fn check_logical_time_progress_checkpoint_state(
     Ok(())
 }
 
+#[derive(Debug, Eq, PartialEq)]
+struct DeadlineCleanupReviewAttestationProjection {
+    reviewed_ref: String,
+}
+
+fn parse_deadline_cleanup_review_attestation(
+    source: &str,
+) -> Result<DeadlineCleanupReviewAttestationProjection, String> {
+    let document = source
+        .parse::<DocumentMut>()
+        .map_err(|error| format!("invalid deadline cleanup review attestation: {error}"))?;
+    require_exact_table_fields(
+        document.as_table(),
+        "deadline cleanup review attestation",
+        &[
+            "schema_version",
+            "design_revision",
+            "tranche",
+            "status",
+            "reviewer_attestation_kind",
+            "reviewer_id",
+            "reviewed_ref",
+            "precheck",
+        ],
+    )?;
+    require_integer(
+        document.get("schema_version"),
+        "deadline cleanup review attestation schema_version",
+        1,
+    )?;
+    require_string(
+        document.get("design_revision"),
+        "deadline cleanup review attestation design_revision",
+        ACTIVE_DESIGN_REVISION,
+    )?;
+    require_string(
+        document.get("tranche"),
+        "deadline cleanup review attestation tranche",
+        DEADLINE_CLEANUP_TRANCHE,
+    )?;
+    require_string(
+        document.get("status"),
+        "deadline cleanup review attestation status",
+        "passed",
+    )?;
+    let reviewer_kind = document
+        .get("reviewer_attestation_kind")
+        .and_then(Item::as_str)
+        .ok_or_else(|| "deadline cleanup review attestation has no reviewer kind".to_owned())?;
+    let reviewer_id = document
+        .get("reviewer_id")
+        .and_then(Item::as_str)
+        .ok_or_else(|| "deadline cleanup review attestation has no reviewer_id".to_owned())?;
+    match reviewer_kind {
+        "separate-agent-task"
+            if reviewer_id.starts_with("codex-agent:/root/")
+                && reviewer_id != "codex-agent:/root/" => {}
+        "independent-root-session" if reviewer_id == "codex-agent:/root" => {}
+        "separate-agent-task" => {
+            return Err(format!(
+                "deadline cleanup reviewer is not a child task: {reviewer_id:?}"
+            ));
+        }
+        "independent-root-session" => {
+            return Err(format!(
+                "deadline cleanup root-session attestation has invalid reviewer: \
+                 {reviewer_id:?}"
+            ));
+        }
+        other => {
+            return Err(format!(
+                "unsupported deadline cleanup review attestation kind: {other:?}"
+            ));
+        }
+    }
+    let reviewed_ref = document
+        .get("reviewed_ref")
+        .and_then(Item::as_str)
+        .ok_or_else(|| "deadline cleanup review attestation has no reviewed_ref".to_owned())?
+        .to_owned();
+    require_full_commit_id(&reviewed_ref, "deadline cleanup reviewed_ref")?;
+
+    let checks = document
+        .get("precheck")
+        .and_then(Item::as_array_of_tables)
+        .ok_or_else(|| {
+            "deadline cleanup review attestation has no [[precheck]] records".to_owned()
+        })?;
+    if checks.len() != DEADLINE_CLEANUP_PRECHECKS.len() {
+        return Err(format!(
+            "deadline cleanup review attestation must record exactly {} prechecks; found {}",
+            DEADLINE_CLEANUP_PRECHECKS.len(),
+            checks.len()
+        ));
+    }
+    let mut ids = BTreeSet::new();
+    for check in checks {
+        require_exact_table_fields(check, "deadline cleanup review precheck", &["id", "result"])?;
+        let id = string_field(check, "id", "deadline cleanup review precheck")?;
+        require_table_string(check, "result", "passed", &id)?;
+        if !ids.insert(id.clone()) {
+            return Err(format!(
+                "deadline cleanup review attestation duplicates precheck {id:?}"
+            ));
+        }
+    }
+    let expected_ids = owned_set(DEADLINE_CLEANUP_PRECHECKS);
+    if ids != expected_ids {
+        return Err(format!(
+            "deadline cleanup review attestation precheck set mismatch; expected \
+             {expected_ids:?}, found {ids:?}"
+        ));
+    }
+    Ok(DeadlineCleanupReviewAttestationProjection { reviewed_ref })
+}
+
+fn check_deadline_cleanup_review_attestation(
+    root: &Path,
+    relative_path: &str,
+    attestation_ref: &str,
+    candidate_base_ref: &str,
+    candidate_ref: &str,
+    candidate_paths: &BTreeSet<String>,
+) -> Result<(), String> {
+    require_full_commit_id(attestation_ref, "deadline cleanup review_attestation_ref")?;
+    check_git_commit_is_ancestor(
+        root,
+        attestation_ref,
+        "deadline cleanup review_attestation_ref",
+    )?;
+    let path = root.join(relative_path);
+    let source = fs::read_to_string(&path)
+        .map_err(|error| format!("cannot read {}: {error}", path.display()))?;
+    let projection = parse_deadline_cleanup_review_attestation(&source)?;
+    check_git_commit_is_ancestor(
+        root,
+        &projection.reviewed_ref,
+        "deadline cleanup reviewed_ref",
+    )?;
+    if projection.reviewed_ref != candidate_ref {
+        return Err(format!(
+            "deadline cleanup reviewed_ref must identify candidate {candidate_ref:?}; found {:?}",
+            projection.reviewed_ref
+        ));
+    }
+
+    require_git_single_parent(
+        root,
+        &projection.reviewed_ref,
+        candidate_base_ref,
+        "deadline cleanup reviewed candidate commit",
+    )?;
+    let reviewed_paths = git_changed_paths_between(
+        root,
+        candidate_base_ref,
+        &projection.reviewed_ref,
+        "deadline cleanup reviewed candidate diff",
+    )?;
+    if &reviewed_paths != candidate_paths {
+        return Err(format!(
+            "deadline cleanup reviewed candidate diff mismatch; expected \
+             {candidate_paths:?}, found {reviewed_paths:?}"
+        ));
+    }
+
+    let attestation_parent = git_single_parent(
+        root,
+        attestation_ref,
+        "deadline cleanup review attestation commit",
+    )?;
+    require_git_ancestor(
+        root,
+        &projection.reviewed_ref,
+        &attestation_parent,
+        "deadline cleanup review attestation ancestry",
+    )?;
+    let review_paths = git_commit_changed_paths(
+        root,
+        attestation_ref,
+        "deadline cleanup review attestation diff",
+    )?;
+    let expected_review_paths = owned_set(&["docs/artifacts.csv", relative_path]);
+    if review_paths != expected_review_paths {
+        return Err(format!(
+            "deadline cleanup review commit path mismatch; expected \
+             {expected_review_paths:?}, found {review_paths:?}"
+        ));
+    }
+
+    let object = format!("{attestation_ref}:{relative_path}");
+    let committed_source = git_output_bytes(
+        root,
+        &["show", &object],
+        "read committed deadline cleanup review attestation",
+    )?;
+    let worktree_source =
+        fs::read(&path).map_err(|error| format!("cannot read {}: {error}", path.display()))?;
+    if committed_source != worktree_source {
+        return Err(format!(
+            "worktree deadline cleanup review attestation {relative_path:?} differs from \
+             review_attestation_ref"
+        ));
+    }
+    Ok(())
+}
+
+fn check_deadline_cleanup_admission_commit(
+    root: &Path,
+    admission_ref: &str,
+    attestation_ref: &str,
+) -> Result<(), String> {
+    require_full_commit_id(admission_ref, "deadline cleanup admission_ref")?;
+    check_git_commit_is_ancestor(root, admission_ref, "deadline cleanup admission_ref")?;
+    require_git_single_parent(
+        root,
+        admission_ref,
+        attestation_ref,
+        "deadline cleanup admission commit",
+    )?;
+    let admission_paths = git_changed_paths_between(
+        root,
+        attestation_ref,
+        admission_ref,
+        "deadline cleanup admission diff",
+    )?;
+    let expected_paths = owned_set(&[
+        "PLAN.md",
+        DEADLINE_CLEANUP_ADMISSION_REVIEW,
+        "docs/work-packages/index.toml",
+    ]);
+    if admission_paths != expected_paths {
+        return Err(format!(
+            "deadline cleanup admission path mismatch; expected {expected_paths:?}, found \
+             {admission_paths:?}"
+        ));
+    }
+    Ok(())
+}
+
+fn check_deadline_cleanup_progress_checkpoint_state(
+    root: &Path,
+    admission_ref: &str,
+    implementation_paths: &BTreeSet<String>,
+) -> Result<(), String> {
+    let head = git_text(
+        root,
+        &["rev-parse", "HEAD"],
+        "resolve deadline cleanup progress HEAD",
+    )?;
+    let head = head.trim();
+    let expected_progress_paths = owned_set(&["PLAN.md", "docs/work-packages/index.toml"]);
+    if head == admission_ref {
+        let changed = git_worktree_paths(root, "pre-deadline-cleanup-progress worktree")?;
+        if changed != expected_progress_paths {
+            return Err(format!(
+                "pre-deadline-cleanup-progress path mismatch; expected \
+                 {expected_progress_paths:?}, found {changed:?}"
+            ));
+        }
+        return Ok(());
+    }
+
+    require_git_single_parent(
+        root,
+        head,
+        admission_ref,
+        "deadline cleanup progress checkpoint",
+    )?;
+    let progress_paths = git_changed_paths_between(
+        root,
+        admission_ref,
+        head,
+        "deadline cleanup progress checkpoint diff",
+    )?;
+    if progress_paths != expected_progress_paths {
+        return Err(format!(
+            "deadline cleanup progress path mismatch; expected \
+             {expected_progress_paths:?}, found {progress_paths:?}"
+        ));
+    }
+    let worktree_paths = git_worktree_paths(root, "deadline cleanup implementation worktree")?;
+    if !worktree_paths.is_subset(implementation_paths) {
+        let out_of_scope: Vec<&String> = worktree_paths.difference(implementation_paths).collect();
+        return Err(format!(
+            "deadline cleanup implementation worktree has out-of-scope paths {out_of_scope:?}"
+        ));
+    }
+    Ok(())
+}
+
 fn check_logical_time_completion_evidence(
     root: &Path,
     relative_path: &str,
@@ -4955,6 +5781,238 @@ fn check_logical_time_completion_evidence(
         return Err(format!(
             "logical time completion checker exited with {status}"
         ));
+    }
+    Ok(())
+}
+
+fn check_deadline_cleanup_completion_evidence(
+    root: &Path,
+    relative_path: &str,
+    verification_check: &str,
+    admission_ref: &str,
+) -> Result<(), String> {
+    check_tranche_evidence(
+        root,
+        relative_path,
+        DEADLINE_CLEANUP_TRANCHE,
+        "deadline-cleanup-timing",
+        verification_check,
+    )?;
+    let path = root.join(relative_path);
+    let source = fs::read_to_string(&path)
+        .map_err(|error| format!("cannot read {}: {error}", path.display()))?;
+    let document = source
+        .parse::<DocumentMut>()
+        .map_err(|error| format!("invalid {}: {error}", path.display()))?;
+    require_string(
+        document.get("verification_command"),
+        "deadline cleanup evidence verification_command",
+        "tools/check-wp100-deadline-cleanup-timing.sh",
+    )?;
+    let implementation_ref = document
+        .get("implementation_ref")
+        .and_then(Item::as_str)
+        .ok_or_else(|| format!("{relative_path} has no implementation_ref"))?;
+    require_full_commit_id(implementation_ref, "deadline cleanup implementation_ref")?;
+    check_git_commit_is_ancestor(
+        root,
+        implementation_ref,
+        "deadline cleanup implementation_ref",
+    )?;
+    let progress_ref = git_single_parent(
+        root,
+        implementation_ref,
+        "deadline cleanup implementation commit",
+    )?;
+    require_git_single_parent(
+        root,
+        &progress_ref,
+        admission_ref,
+        "deadline cleanup progress checkpoint",
+    )?;
+    let progress_paths = git_changed_paths_between(
+        root,
+        admission_ref,
+        &progress_ref,
+        "deadline cleanup progress checkpoint diff",
+    )?;
+    let expected_progress_paths = owned_set(&["PLAN.md", "docs/work-packages/index.toml"]);
+    if progress_paths != expected_progress_paths {
+        return Err(format!(
+            "deadline cleanup progress checkpoint path mismatch; expected \
+             {expected_progress_paths:?}, found {progress_paths:?}"
+        ));
+    }
+    let implementation_paths = git_commit_changed_paths(
+        root,
+        implementation_ref,
+        "deadline cleanup implementation commit",
+    )?;
+    let expected_paths = owned_set(&[
+        "core/src/deadline.rs",
+        "core/src/lib.rs",
+        "core/src/status.rs",
+    ]);
+    if implementation_paths != expected_paths {
+        return Err(format!(
+            "deadline cleanup implementation path mismatch; expected \
+             {expected_paths:?}, found {implementation_paths:?}"
+        ));
+    }
+
+    let checker = root.join("tools/check-wp100-deadline-cleanup-timing.sh");
+    let status = Command::new(&checker)
+        .current_dir(root)
+        .status()
+        .map_err(|error| {
+            format!(
+                "cannot execute deadline cleanup completion checker {}: {error}",
+                checker.display()
+            )
+        })?;
+    if !status.success() {
+        return Err(format!(
+            "deadline cleanup completion checker exited with {status}"
+        ));
+    }
+    Ok(())
+}
+
+fn check_deadline_cleanup_timing_entry_state(root: &Path, mode: &str) -> Result<(), String> {
+    if !matches!(mode, "candidate" | "admission-ready") {
+        return Err(format!(
+            "invalid deadline cleanup entry mode {mode:?}; expected candidate or admission-ready"
+        ));
+    }
+    let path = root.join("docs/work-packages/index.toml");
+    let source = fs::read_to_string(&path)
+        .map_err(|error| format!("cannot read {}: {error}", path.display()))?;
+    let document = source
+        .parse::<DocumentMut>()
+        .map_err(|error| format!("invalid {}: {error}", path.display()))?;
+    let tranches = document
+        .get("tranche")
+        .and_then(Item::as_array_of_tables)
+        .ok_or_else(|| "work-package index has no [[tranche]] records".to_owned())?;
+    let matching: Vec<&Table> = tranches
+        .iter()
+        .filter(|table| table.get("id").and_then(Item::as_str) == Some(DEADLINE_CLEANUP_TRANCHE))
+        .collect();
+    if matching.len() != 1 {
+        return Err(format!(
+            "work-package index must contain exactly one {DEADLINE_CLEANUP_TRANCHE}; found {}",
+            matching.len()
+        ));
+    }
+    let tranche = matching[0];
+    let status = string_field(tranche, "status", DEADLINE_CLEANUP_TRANCHE)?;
+    let admission_status = string_field(tranche, "admission_status", DEADLINE_CLEANUP_TRANCHE)?;
+    let expected_pair = match mode {
+        "candidate" => ("pending", "review-pending"),
+        "admission-ready" => ("pending", "approved"),
+        _ => unreachable!("mode checked above"),
+    };
+    if (status.as_str(), admission_status.as_str()) != expected_pair {
+        return Err(format!(
+            "deadline cleanup {mode} state must be {:?}/{:?}; found \
+             {status:?}/{admission_status:?}",
+            expected_pair.0, expected_pair.1
+        ));
+    }
+    if tranche.contains_key("admission_ref") {
+        return Err(format!(
+            "deadline cleanup {mode} pending state must not define admission_ref"
+        ));
+    }
+
+    let audit_path = string_field(tranche, "admission_review", DEADLINE_CLEANUP_TRANCHE)?;
+    if audit_path != DEADLINE_CLEANUP_ADMISSION_REVIEW {
+        return Err("deadline cleanup admission review path drifted".to_owned());
+    }
+    let registered_artifacts = load_artifact_registry(root)?;
+    if !registered_artifacts.contains(&audit_path) || !root.join(&audit_path).is_file() {
+        return Err("deadline cleanup admission review is not registered and present".to_owned());
+    }
+    check_handler_value_audit_state(root, &audit_path, &admission_status)?;
+
+    let implementation_paths =
+        package_string_set(tranche, "implementation_paths", DEADLINE_CLEANUP_TRANCHE)?;
+    if implementation_paths
+        != owned_set(&[
+            "core/src/deadline.rs",
+            "core/src/lib.rs",
+            "core/src/status.rs",
+        ])
+    {
+        return Err("deadline cleanup implementation path projection drifted".to_owned());
+    }
+    if root.join("core/src/deadline.rs").exists() {
+        return Err("deadline cleanup pending state has premature Deadline source".to_owned());
+    }
+    let candidate_base_ref = string_field(tranche, "candidate_base_ref", DEADLINE_CLEANUP_TRANCHE)?;
+    if candidate_base_ref != DEADLINE_CLEANUP_CANDIDATE_BASE_REF {
+        return Err("deadline cleanup candidate base ref drifted".to_owned());
+    }
+    check_git_commit_is_ancestor(
+        root,
+        &candidate_base_ref,
+        "deadline cleanup candidate base ref",
+    )?;
+    let candidate_ref = string_field(tranche, "candidate_ref", DEADLINE_CLEANUP_TRANCHE)?;
+    require_full_commit_id(&candidate_ref, "deadline cleanup candidate_ref")?;
+    let candidate_paths = package_string_set(tranche, "candidate_paths", DEADLINE_CLEANUP_TRANCHE)?;
+    check_candidate_paths(
+        DEADLINE_CLEANUP_TRANCHE,
+        root,
+        &candidate_paths,
+        &implementation_paths,
+        &registered_artifacts,
+    )?;
+    check_candidate_commit(
+        DEADLINE_CLEANUP_TRANCHE,
+        root,
+        &candidate_base_ref,
+        &candidate_ref,
+        &candidate_paths,
+    )?;
+
+    if mode == "candidate" {
+        for forbidden_field in ["review_attestation", "review_attestation_ref"] {
+            if tranche.contains_key(forbidden_field) {
+                return Err(format!(
+                    "deadline cleanup candidate state must not define {forbidden_field:?}"
+                ));
+            }
+        }
+        if root.join(DEADLINE_CLEANUP_REVIEW_ATTESTATION).exists() {
+            return Err("deadline cleanup candidate has a premature review attestation".to_owned());
+        }
+    } else {
+        let attestation_path =
+            string_field(tranche, "review_attestation", DEADLINE_CLEANUP_TRANCHE)?;
+        let attestation_ref =
+            string_field(tranche, "review_attestation_ref", DEADLINE_CLEANUP_TRANCHE)?;
+        if attestation_path != DEADLINE_CLEANUP_REVIEW_ATTESTATION
+            || !registered_artifacts.contains(&attestation_path)
+        {
+            return Err("deadline cleanup review attestation path is not frozen".to_owned());
+        }
+        check_deadline_cleanup_review_attestation(
+            root,
+            &attestation_path,
+            &attestation_ref,
+            &candidate_base_ref,
+            &candidate_ref,
+            &candidate_paths,
+        )?;
+        let head = git_text(root, &["rev-parse", "HEAD"], "resolve HEAD")?;
+        if head.trim() != attestation_ref {
+            return Err(format!(
+                "deadline cleanup admission-ready state requires HEAD at \
+                 review_attestation_ref {attestation_ref:?}; found {:?}",
+                head.trim()
+            ));
+        }
     }
     Ok(())
 }
@@ -8091,7 +9149,8 @@ mod tests {
         HANDLER_VALUE_PRIMITIVES_SOURCE_CONTRACT, check_handler_scope_partition,
         check_producer_subscription_contract, expand_expressions,
         expected_work_package_dependencies, handler_value_status_pair_is_valid,
-        parse_handler_review_attestation, parse_logical_time_review_attestation, parse_transitions,
+        parse_deadline_cleanup_review_attestation, parse_handler_review_attestation,
+        parse_logical_time_review_attestation, parse_transitions,
         validate_handler_value_audit_source, validate_handler_value_primitives_source,
     };
 
@@ -8384,6 +9443,71 @@ result = "passed"
             "reviewer_attestation_kind = \"separate-agent-task\"",
         );
         assert!(parse_logical_time_review_attestation(&false_child).is_err());
+    }
+
+    #[test]
+    fn deadline_cleanup_review_attestation_requires_eight_exact_passes() {
+        let source = r#"
+schema_version = 1
+design_revision = "4.9"
+tranche = "WP-100-DEADLINE-CLEANUP-TIMING"
+status = "passed"
+reviewer_attestation_kind = "independent-root-session"
+reviewer_id = "codex-agent:/root"
+reviewed_ref = "0123456789abcdef0123456789abcdef01234567"
+
+[[precheck]]
+id = "api-ownership-check"
+result = "passed"
+
+[[precheck]]
+id = "architecture-adr-check"
+result = "passed"
+
+[[precheck]]
+id = "design-requirement-check"
+result = "passed"
+
+[[precheck]]
+id = "resource-profile-check"
+result = "passed"
+
+[[precheck]]
+id = "work-package-dag-check"
+result = "passed"
+
+[[precheck]]
+id = "wp100-amendment-check"
+result = "passed"
+
+[[precheck]]
+id = "wp100-handler-amendment-check"
+result = "passed"
+
+[[precheck]]
+id = "wp100-logical-time-correction-check"
+result = "passed"
+"#;
+        let projection = parse_deadline_cleanup_review_attestation(source)
+            .expect("the exact deadline cleanup review projection must validate");
+        assert_eq!(
+            projection.reviewed_ref,
+            "0123456789abcdef0123456789abcdef01234567"
+        );
+
+        let failed = source.replacen("result = \"passed\"", "result = \"failed\"", 1);
+        assert!(parse_deadline_cleanup_review_attestation(&failed).is_err());
+        let missing = source.replacen(
+            "\n[[precheck]]\nid = \"wp100-logical-time-correction-check\"\nresult = \"passed\"\n",
+            "",
+            1,
+        );
+        assert!(parse_deadline_cleanup_review_attestation(&missing).is_err());
+        let false_child = source.replace(
+            "reviewer_attestation_kind = \"independent-root-session\"",
+            "reviewer_attestation_kind = \"separate-agent-task\"",
+        );
+        assert!(parse_deadline_cleanup_review_attestation(&false_child).is_err());
     }
 
     #[test]

@@ -54,6 +54,7 @@ docs/audits/WP-100-handler-value-primitives-entry.md,wp-100-handler-value-primit
 docs/audits/WP-100-handler-value-primitives-review.toml,wp-100-handler-value-primitives-review-attestation,non-normative-review,4.9,1,docs/design.md
 docs/audits/WP-100-logical-time-correction-entry.md,wp-100-logical-time-correction-entry-review,non-normative-review,4.9,1,docs/amendments/WP-100-time-domain-v1.md
 docs/audits/WP-100-logical-time-correction-review.toml,wp-100-logical-time-correction-review-attestation,non-normative-review,4.9,1,docs/amendments/WP-100-time-domain-v1.md
+docs/audits/WP-100-deadline-cleanup-timing-entry.md,wp-100-deadline-cleanup-timing-entry-review,non-normative-review,4.9,1,docs/amendments/WP-100-time-domain-v1.md
 docs/reviews/review-01.org,architecture-boundary-audit,historical-review,4.9,1,docs/design.md
 docs/reviews/review-02.org,architecture-design-follow-up,blocking-review,4.9,1,docs/design.md
 docs/reviews/review-03.org,architecture-v4.9-interim-audit,blocking-review,4.9,1,docs/design.md
@@ -85,6 +86,8 @@ tools/check-wp100-handler-value-primitives.sh,wp-100-handler-value-primitives-ch
 tools/check-wp100-handler-value-primitives-entry.sh,wp-100-handler-value-primitives-entry-checker,non-normative-checker,4.9,1,docs/design.md
 tools/check-wp100-logical-time-correction.sh,wp-100-logical-time-correction-checker,non-normative-checker,4.9,1,docs/amendments/WP-100-time-domain-v1.md
 tools/check-wp100-logical-time-correction-entry.sh,wp-100-logical-time-correction-entry-checker,non-normative-checker,4.9,1,docs/amendments/WP-100-time-domain-v1.md
+tools/check-wp100-deadline-cleanup-timing.sh,wp-100-deadline-cleanup-timing-checker,non-normative-checker,4.9,1,docs/amendments/WP-100-time-domain-v1.md
+tools/check-wp100-deadline-cleanup-timing-entry.sh,wp-100-deadline-cleanup-timing-entry-checker,non-normative-checker,4.9,1,docs/amendments/WP-100-time-domain-v1.md
 tools/compile-contracts/wp100-handler-value-primitives/Cargo.toml,wp-100-handler-value-primitives-contract-manifest,non-normative-compile-fixture,4.9,1,docs/design.md
 tools/compile-contracts/wp100-handler-value-primitives/Cargo.lock,wp-100-handler-value-primitives-contract-lock,non-normative-compile-fixture,4.9,1,docs/design.md
 tools/compile-contracts/wp100-handler-value-primitives/src/lib.rs,wp-100-handler-value-primitives-root-contract,non-normative-compile-fixture,4.9,1,docs/design.md
@@ -98,3 +101,8 @@ tools/compile-contracts/wp100-logical-time-correction/Cargo.toml,wp-100-logical-
 tools/compile-contracts/wp100-logical-time-correction/Cargo.lock,wp-100-logical-time-correction-contract-lock,non-normative-compile-fixture,4.9,1,docs/amendments/WP-100-time-domain-v1.md
 tools/compile-contracts/wp100-logical-time-correction/src/lib.rs,wp-100-logical-time-correction-root-contract,non-normative-compile-fixture,4.9,1,docs/amendments/WP-100-time-domain-v1.md
 tools/compile-contracts/wp100-logical-time-correction/tests/semantics.rs,wp-100-logical-time-correction-semantics-contract,non-normative-compile-fixture,4.9,1,docs/amendments/WP-100-time-domain-v1.md
+tools/compile-contracts/wp100-deadline-cleanup-timing/Cargo.toml,wp-100-deadline-cleanup-timing-contract-manifest,non-normative-compile-fixture,4.9,1,docs/amendments/WP-100-time-domain-v1.md
+tools/compile-contracts/wp100-deadline-cleanup-timing/Cargo.lock,wp-100-deadline-cleanup-timing-contract-lock,non-normative-compile-fixture,4.9,1,docs/amendments/WP-100-time-domain-v1.md
+tools/compile-contracts/wp100-deadline-cleanup-timing/src/lib.rs,wp-100-deadline-cleanup-timing-root-contract,non-normative-compile-fixture,4.9,1,docs/amendments/WP-100-time-domain-v1.md
+tools/compile-contracts/wp100-deadline-cleanup-timing/tests/semantics.rs,wp-100-deadline-cleanup-timing-semantics-contract,non-normative-compile-fixture,4.9,1,docs/amendments/WP-100-time-domain-v1.md
+tools/compile-contracts/wp100-deadline-cleanup-timing/ui/private-deadline-instant.rs,wp-100-deadline-cleanup-timing-private-deadline-contract,non-normative-compile-fixture,4.9,1,docs/amendments/WP-100-time-domain-v1.md

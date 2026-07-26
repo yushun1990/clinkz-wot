@@ -2,15 +2,15 @@
 
 Last updated: 2026-07-26
 
-Repository basis: logical-time implementation commit
-`961fe9b22f241459ff374897d98d805e79af3f71` plus the current completion
-evidence and continuation-state update.
+Repository basis: logical-time completion checkpoint
+`093d15a70319475ce05c651233de803aa563e095` plus the current review-pending
+deadline/cleanup admission candidate.
 
 ## Current Objective
 
-Author and independently admit the Core-owned
-`WP-100-DEADLINE-CLEANUP-TIMING` tranche. Do not modify its source paths until
-the exact ADR-0013 candidate, review attestation, and approval checkpoint pass.
+Complete independent review of the registered Core-owned
+`WP-100-DEADLINE-CLEANUP-TIMING` candidate. Do not modify its source paths
+until the exact ADR-0013 attestation and approval checkpoint pass.
 
 Active milestones:
 
@@ -141,9 +141,9 @@ Work packages and tranches:
   `b5cb1a5392ab2ef35a9f23185731012f71e4ea05`;
 - `WP-100-LOGICAL-TIME-CORRECTION` is approved, implemented, and complete
   under `docs/evidence/WP-100-logical-time-correction.toml`;
-- `WP-100-DEADLINE-CLEANUP-TIMING` has frozen identity, Core ownership,
-  predecessor, and completion key, but does not yet have an admission
-  candidate;
+- `WP-100-DEADLINE-CLEANUP-TIMING` has an exact review-pending candidate with
+  three Core implementation paths, a nested contract fixture, an entry checker,
+  and the frozen `deadline-cleanup-timing` completion key;
 - the completed logical-time tranche's exact registered candidate is
   `88eebbba04d070fb423a9c2ec227ddc470790769`; the candidate is the single child
   of D2 base `0092e9c5f3c7e041ec979d18d462fd0e74ae2e0a`, changes exactly the
@@ -301,9 +301,8 @@ reaffirmed.
 
 Next safe actions, in order:
 
-1. author the exact admission contract, fixture, audit, and entry checker for
-   `WP-100-DEADLINE-CLEANUP-TIMING`;
-2. independently review and admit that candidate before changing Core source;
+1. register the exact candidate commit and run its candidate entry check;
+2. independently review and admit the candidate before changing Core source;
 3. implement and evidence the frozen Deadline, CleanupRecord timing, and
    incomparable-clock disposition scope;
 4. continue D3, D4, and D5 as AI-led technical decisions, asking the Owner only
