@@ -47,6 +47,7 @@ docs/amendments/WP-100-handler-api-v1.md,wp-100-handler-api-execution-and-stagin
 docs/audits/WP-100-handler-entry-audit.md,wp-100-handler-entry-audit,non-normative-review,4.9,1,docs/design.md
 docs/audits/WP-100-foundation-refresh-entry.md,wp-100-foundation-refresh-entry-review,non-normative-review,4.9,1,docs/design.md
 docs/audits/WP-100-handler-value-primitives-entry.md,wp-100-handler-value-primitives-entry-review,non-normative-review,4.9,1,docs/design.md
+docs/audits/WP-100-handler-value-primitives-review.toml,wp-100-handler-value-primitives-review-attestation,non-normative-review,4.9,1,docs/design.md
 docs/reviews/review-01.org,architecture-boundary-audit,historical-review,4.9,1,docs/design.md
 docs/reviews/review-02.org,architecture-design-follow-up,blocking-review,4.9,1,docs/design.md
 docs/reviews/review-03.org,architecture-v4.9-interim-audit,blocking-review,4.9,1,docs/design.md
