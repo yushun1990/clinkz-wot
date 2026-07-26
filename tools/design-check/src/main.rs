@@ -105,6 +105,12 @@ const DEADLINE_CLEANUP_COMPLETION_EVIDENCE: &str =
 const DEADLINE_CLEANUP_ADMISSION_REVIEW: &str =
     "docs/audits/WP-100-deadline-cleanup-timing-entry.md";
 const DEADLINE_CLEANUP_CANDIDATE_BASE_REF: &str = "093d15a70319475ce05c651233de803aa563e095";
+const HANDLER_CONTEXT_TRANCHE: &str = "WP-100-HANDLER-CONTEXT";
+const HANDLER_CONTEXT_ENTRY_CHECK: &str = "wp100-handler-context-entry-check";
+const HANDLER_CONTEXT_REVIEW_ATTESTATION: &str = "docs/audits/WP-100-handler-context-review.toml";
+const HANDLER_CONTEXT_COMPLETION_EVIDENCE: &str = "docs/evidence/WP-100-handler-context.toml";
+const HANDLER_CONTEXT_ADMISSION_REVIEW: &str = "docs/audits/WP-100-handler-context-entry.md";
+const HANDLER_CONTEXT_CANDIDATE_BASE_REF: &str = "c42abcbc339167183c8c4bf9bd3bf584540073b4";
 const HANDLER_VALUE_PRECHECKS: &[&str] = &[
     "api-ownership-check",
     "architecture-adr-check",
@@ -131,6 +137,19 @@ const DEADLINE_CLEANUP_PRECHECKS: &[&str] = &[
     "wp100-amendment-check",
     "wp100-handler-amendment-check",
     "wp100-logical-time-correction-check",
+];
+const HANDLER_CONTEXT_PRECHECKS: &[&str] = &[
+    "api-ownership-check",
+    "architecture-adr-check",
+    "design-requirement-check",
+    "resource-profile-check",
+    "work-package-dag-check",
+    "wp100-amendment-check",
+    "wp100-handler-amendment-check",
+    "wp100-foundation-refresh-check",
+    "wp100-handler-value-primitives-check",
+    "wp100-logical-time-correction-check",
+    "wp100-deadline-cleanup-timing-check",
 ];
 
 #[derive(Debug)]
@@ -296,6 +315,10 @@ fn run() -> Result<(), String> {
             check_handler_value_primitives_source(&root)?;
             println!("design structure check: handler value-primitives source valid");
         }
+        "check-handler-context-source" => {
+            check_handler_context_source(&root)?;
+            println!("design structure check: handler context source valid");
+        }
         "check-handler-value-primitives-entry-state" => {
             let mode = env::args().nth(2).ok_or_else(|| {
                 "check-handler-value-primitives-entry-state requires candidate or \
@@ -323,6 +346,13 @@ fn run() -> Result<(), String> {
             check_deadline_cleanup_timing_entry_state(&root, &mode)?;
             println!("design structure check: deadline cleanup timing {mode} state valid");
         }
+        "check-handler-context-entry-state" => {
+            let mode = env::args().nth(2).ok_or_else(|| {
+                "check-handler-context-entry-state requires candidate or admission-ready".to_owned()
+            })?;
+            check_handler_context_entry_state(&root, &mode)?;
+            println!("design structure check: handler context {mode} state valid");
+        }
         "check-governance" => {
             check_governance(&root, false)?;
             println!("design structure check: gate governance valid");
@@ -340,9 +370,11 @@ fn run() -> Result<(), String> {
             return Err(format!(
                 "unknown command {command:?}; expected check, check-state, check-handler, \
                  check-handler-value-primitives-source, \
+                 check-handler-context-source, \
                  check-handler-value-primitives-entry-state, \
                  check-logical-time-correction-entry-state, \
-                 check-deadline-cleanup-timing-entry-state, check-work-packages, \
+                 check-deadline-cleanup-timing-entry-state, \
+                 check-handler-context-entry-state, check-work-packages, \
                  check-governance, check-refactor-ready, or check-handler-entry"
             ));
         }
@@ -476,6 +508,55 @@ impl<H> core::fmt::Debug for StaticHandlerRegistration<'_, H> {
 }
 "#;
 
+const HANDLER_CONTEXT_SOURCE_CONTRACT: &str = r#"
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct HandlerContext<'a> {
+    thing_id: &'a ThingId,
+    thing_slot: ThingSlotId,
+    target: &'a AffordanceTarget,
+    operation: clinkz_wot_td::data_type::Operation,
+    plan_id: PlanId,
+    binding: Option<(BindingId, BindingGeneration)>,
+}
+
+impl<'a> HandlerContext<'a> {
+    pub fn try_new(
+        thing_id: &'a ThingId,
+        thing_slot: ThingSlotId,
+        target: &'a AffordanceTarget,
+        operation: clinkz_wot_td::data_type::Operation,
+        plan_id: PlanId,
+        binding: Option<(BindingId, BindingGeneration)>,
+    ) -> CoreResult<Self> {
+        unimplemented!()
+    }
+
+    pub const fn thing_id(self) -> &'a ThingId {
+        unimplemented!()
+    }
+
+    pub const fn thing_slot(self) -> ThingSlotId {
+        unimplemented!()
+    }
+
+    pub const fn target(self) -> &'a AffordanceTarget {
+        unimplemented!()
+    }
+
+    pub const fn operation(self) -> clinkz_wot_td::data_type::Operation {
+        unimplemented!()
+    }
+
+    pub const fn plan_id(self) -> PlanId {
+        unimplemented!()
+    }
+
+    pub const fn binding(self) -> Option<(BindingId, BindingGeneration)> {
+        unimplemented!()
+    }
+}
+"#;
+
 #[derive(Debug, Eq, Ord, PartialEq, PartialOrd)]
 struct HandlerValueSourceProjection {
     values: Vec<HandlerValueTypeProjection>,
@@ -568,41 +649,121 @@ fn validate_handler_value_primitives_source(source: &str) -> Result<(), String> 
 }
 
 fn project_handler_value_source(file: &syn::File) -> Result<HandlerValueSourceProjection, String> {
+    project_named_handler_source(
+        file,
+        &owned_set(&[
+            "CancellationView",
+            "HandlerFootprint",
+            "HandlerStep",
+            "StaticHandlerRegistration",
+            "SubscriptionAcceptance",
+        ]),
+        &owned_set(&["HandlerContext"]),
+    )
+}
+
+fn check_handler_context_source(root: &Path) -> Result<(), String> {
+    let path = root.join("core/src/handler.rs");
+    let source = fs::read_to_string(&path)
+        .map_err(|error| format!("cannot read {}: {error}", path.display()))?;
+    validate_handler_context_source(&source).map_err(|error| format!("{}: {error}", path.display()))
+}
+
+fn validate_handler_context_source(source: &str) -> Result<(), String> {
+    let file = syn::parse_file(source).map_err(|error| format!("invalid Rust source: {error}"))?;
+    let mut forbidden = HandlerValueForbiddenIdentifier::default();
+    forbidden.visit_file(&file);
+    if !forbidden.identifiers.is_empty() {
+        return Err(format!(
+            "forbidden allocation/runtime/queue/callback identifiers: {:?}",
+            forbidden.identifiers
+        ));
+    }
+
+    let value_names = owned_set(&[
+        "CancellationView",
+        "HandlerFootprint",
+        "HandlerStep",
+        "StaticHandlerRegistration",
+        "SubscriptionAcceptance",
+    ]);
+    let actual =
+        project_named_handler_source(&file, &owned_set(&["HandlerContext"]), &value_names)?;
+    let expected_file = syn::parse_file(HANDLER_CONTEXT_SOURCE_CONTRACT)
+        .map_err(|error| format!("internal handler context contract does not parse: {error}"))?;
+    let expected = project_named_handler_source(
+        &expected_file,
+        &owned_set(&["HandlerContext"]),
+        &BTreeSet::new(),
+    )?;
+    if actual != expected {
+        return Err(format!(
+            "handler context source projection mismatch\nexpected: {expected:#?}\nfound: \
+             {actual:#?}"
+        ));
+    }
+    Ok(())
+}
+
+fn project_named_handler_source(
+    file: &syn::File,
+    owned_names: &BTreeSet<String>,
+    allowed_other_names: &BTreeSet<String>,
+) -> Result<HandlerValueSourceProjection, String> {
     let mut values = Vec::new();
     let mut impls = Vec::new();
     for item in &file.items {
         match item {
             SynItem::Use(item) if matches!(item.vis, Visibility::Inherited) => {}
-            SynItem::Struct(item) => values.push(HandlerValueTypeProjection::Struct {
-                name: item.ident.to_string(),
-                visibility: token_string(&item.vis),
-                attributes: contract_attributes(&item.attrs),
-                generics: token_string(&item.generics),
-                fields: project_handler_fields(&item.fields),
-            }),
-            SynItem::Enum(item) => values.push(HandlerValueTypeProjection::Enum {
-                name: item.ident.to_string(),
-                visibility: token_string(&item.vis),
-                attributes: contract_attributes(&item.attrs),
-                generics: token_string(&item.generics),
-                variants: item
-                    .variants
-                    .iter()
-                    .map(|variant| HandlerValueVariantProjection {
-                        name: variant.ident.to_string(),
-                        attributes: contract_attributes(&variant.attrs),
-                        fields: project_handler_fields(&variant.fields),
-                        discriminant: variant
-                            .discriminant
-                            .as_ref()
-                            .map(|(_, expression)| token_string(expression)),
-                    })
-                    .collect(),
-            }),
-            SynItem::Impl(item) => impls.push(project_handler_impl(item)?),
+            SynItem::Struct(item) if owned_names.contains(item.ident.to_string().as_str()) => {
+                values.push(HandlerValueTypeProjection::Struct {
+                    name: item.ident.to_string(),
+                    visibility: token_string(&item.vis),
+                    attributes: contract_attributes(&item.attrs),
+                    generics: token_string(&item.generics),
+                    fields: project_handler_fields(&item.fields),
+                });
+            }
+            SynItem::Enum(item) if owned_names.contains(item.ident.to_string().as_str()) => {
+                values.push(HandlerValueTypeProjection::Enum {
+                    name: item.ident.to_string(),
+                    visibility: token_string(&item.vis),
+                    attributes: contract_attributes(&item.attrs),
+                    generics: token_string(&item.generics),
+                    variants: item
+                        .variants
+                        .iter()
+                        .map(|variant| HandlerValueVariantProjection {
+                            name: variant.ident.to_string(),
+                            attributes: contract_attributes(&variant.attrs),
+                            fields: project_handler_fields(&variant.fields),
+                            discriminant: variant
+                                .discriminant
+                                .as_ref()
+                                .map(|(_, expression)| token_string(expression)),
+                        })
+                        .collect(),
+                });
+            }
+            SynItem::Struct(item)
+                if allowed_other_names.contains(item.ident.to_string().as_str()) => {}
+            SynItem::Enum(item)
+                if allowed_other_names.contains(item.ident.to_string().as_str()) => {}
+            SynItem::Impl(item) => {
+                let Some(name) = handler_impl_type_name(item) else {
+                    return Err("handler module impl has an unsupported self type".to_owned());
+                };
+                if owned_names.contains(name.as_str()) {
+                    impls.push(project_handler_impl(item)?);
+                } else if !allowed_other_names.contains(name.as_str()) {
+                    return Err(format!(
+                        "handler module contains an impl for unregistered type {name:?}"
+                    ));
+                }
+            }
             other => {
                 return Err(format!(
-                    "handler value module contains prohibited top-level item {}",
+                    "handler module contains prohibited top-level item {}",
                     handler_syn_item_kind(other)
                 ));
             }
@@ -611,6 +772,19 @@ fn project_handler_value_source(file: &syn::File) -> Result<HandlerValueSourcePr
     values.sort();
     impls.sort();
     Ok(HandlerValueSourceProjection { values, impls })
+}
+
+fn handler_impl_type_name(item: &ItemImpl) -> Option<String> {
+    let syn::Type::Path(path) = item.self_ty.as_ref() else {
+        return None;
+    };
+    if path.qself.is_some() {
+        return None;
+    }
+    path.path
+        .segments
+        .last()
+        .map(|segment| segment.ident.to_string())
 }
 
 fn project_handler_fields(fields: &Fields) -> Vec<HandlerValueFieldProjection> {
@@ -1797,6 +1971,8 @@ fn check_governance_checks(
         LOGICAL_TIME_ENTRY_CHECK,
         "wp100-deadline-cleanup-timing-check",
         DEADLINE_CLEANUP_ENTRY_CHECK,
+        "wp100-handler-context-check",
+        HANDLER_CONTEXT_ENTRY_CHECK,
     ]);
     let mut statuses = BTreeMap::new();
     for check in checks {
@@ -1966,6 +2142,19 @@ fn expected_check_mapping(id: &str) -> Option<CheckMapping> {
             "tools/check-wp100-deadline-cleanup-timing-entry.sh",
             &[
                 "tools/check-wp100-deadline-cleanup-timing-entry.sh",
+                "--admission-ready",
+            ],
+            &["executable"],
+        )),
+        "wp100-handler-context-check" => Some((
+            "tools/check-wp100-handler-context.sh",
+            &["tools/check-wp100-handler-context.sh"],
+            &["executable"],
+        )),
+        HANDLER_CONTEXT_ENTRY_CHECK => Some((
+            "tools/check-wp100-handler-context-entry.sh",
+            &[
+                "tools/check-wp100-handler-context-entry.sh",
                 "--admission-ready",
             ],
             &["executable"],
@@ -2417,6 +2606,13 @@ struct DeadlineCleanupTrancheState {
     check_status: String,
 }
 
+#[derive(Debug)]
+struct HandlerContextTrancheState {
+    status: String,
+    verification_check: String,
+    check_status: String,
+}
+
 #[allow(clippy::too_many_arguments)]
 fn check_work_package_tranches(
     root: &Path,
@@ -2457,6 +2653,7 @@ fn check_work_package_tranches(
         HANDLER_VALUE_PRIMITIVES_TRANCHE,
         LOGICAL_TIME_TRANCHE,
         DEADLINE_CLEANUP_TRANCHE,
+        HANDLER_CONTEXT_TRANCHE,
     ]);
     if entry_dependencies != expected_entry_dependencies {
         return Err(format!(
@@ -2487,9 +2684,9 @@ fn check_work_package_tranches(
         .get("tranche")
         .and_then(Item::as_array_of_tables)
         .ok_or_else(|| "work-package index has no [[tranche]] records".to_owned())?;
-    if tranches.len() != 4 {
+    if tranches.len() != 5 {
         return Err(format!(
-            "work-package index must define exactly four handler prerequisite tranches; found {}",
+            "work-package index must define exactly five handler prerequisite tranches; found {}",
             tranches.len()
         ));
     }
@@ -2936,6 +3133,23 @@ fn check_work_package_tranches(
         &check_statuses,
         &logical_time_state,
     )?;
+    let handler_context_tranche = tranches
+        .iter()
+        .find(|table| table.get("id").and_then(Item::as_str) == Some(HANDLER_CONTEXT_TRANCHE))
+        .ok_or_else(|| format!("{HANDLER_CONTEXT_TRANCHE} tranche record is missing"))?;
+    let handler_context_state = check_handler_context_tranche(
+        root,
+        handler_context_tranche,
+        known_requirements,
+        allowed_owners,
+        allowed_cells,
+        package_evidence,
+        &registered_artifacts,
+        &check_statuses,
+        &status,
+        &admission_status,
+        check_status,
+    )?;
     if blocking_scope.is_blocking != (deadline_cleanup_state.status != "complete") {
         return Err(format!(
             "{HANDLER_TIME_BLOCKING_SCOPE} impact state and \
@@ -3068,6 +3282,33 @@ fn check_work_package_tranches(
         if !status.success() {
             return Err(format!(
                 "handler entry blocked: deadline cleanup timing verification exited with {status}"
+            ));
+        }
+        if handler_context_state.status != "complete" {
+            return Err(format!(
+                "handler entry blocked: {HANDLER_CONTEXT_TRANCHE} is {:?}",
+                handler_context_state.status
+            ));
+        }
+        if handler_context_state.check_status != "executable" {
+            return Err(format!(
+                "handler entry blocked: check {:?} is {:?}",
+                handler_context_state.verification_check, handler_context_state.check_status
+            ));
+        }
+        let checker = root.join("tools/check-wp100-handler-context.sh");
+        let status = Command::new(&checker)
+            .current_dir(root)
+            .status()
+            .map_err(|error| {
+                format!(
+                    "cannot execute handler context verification {}: {error}",
+                    checker.display()
+                )
+            })?;
+        if !status.success() {
+            return Err(format!(
+                "handler entry blocked: handler context verification exited with {status}"
             ));
         }
     }
@@ -4678,6 +4919,428 @@ fn check_deadline_cleanup_tranche(
     })
 }
 
+#[allow(clippy::too_many_arguments)]
+fn check_handler_context_tranche(
+    root: &Path,
+    tranche: &Table,
+    known_requirements: &BTreeSet<String>,
+    allowed_owners: &BTreeSet<String>,
+    allowed_cells: &BTreeSet<String>,
+    package_evidence: &BTreeMap<String, BTreeSet<String>>,
+    registered_artifacts: &BTreeSet<String>,
+    check_statuses: &BTreeMap<String, String>,
+    foundation_status: &str,
+    foundation_admission_status: &str,
+    foundation_check_status: &str,
+) -> Result<HandlerContextTrancheState, String> {
+    require_table_string(
+        tranche,
+        "id",
+        HANDLER_CONTEXT_TRANCHE,
+        "handler context tranche",
+    )?;
+    require_table_string(tranche, "work_package", "WP-100", HANDLER_CONTEXT_TRANCHE)?;
+
+    let sequence = integer_field(tranche, "sequence", HANDLER_CONTEXT_TRANCHE)?;
+    if sequence != 150 {
+        return Err(format!(
+            "{HANDLER_CONTEXT_TRANCHE} sequence mismatch; expected 150, found {sequence}"
+        ));
+    }
+    let status = string_field(tranche, "status", HANDLER_CONTEXT_TRANCHE)?;
+    let admission_status = string_field(tranche, "admission_status", HANDLER_CONTEXT_TRANCHE)?;
+    if !handler_value_status_pair_is_valid(&status, &admission_status) {
+        return Err(format!(
+            "{HANDLER_CONTEXT_TRANCHE} has invalid status/admission pair \
+             {status:?}/{admission_status:?}"
+        ));
+    }
+    require_table_string(tranche, "impact_status", "current", HANDLER_CONTEXT_TRANCHE)?;
+
+    let dependencies = package_string_set(tranche, "depends_on", HANDLER_CONTEXT_TRANCHE)?;
+    if dependencies != owned_set(&[HANDLER_FOUNDATION_TRANCHE]) {
+        return Err(format!(
+            "{HANDLER_CONTEXT_TRANCHE} must depend only on {HANDLER_FOUNDATION_TRANCHE}"
+        ));
+    }
+    let blocked = package_string_set(tranche, "blocks_entrypoints", HANDLER_CONTEXT_TRANCHE)?;
+    if blocked != owned_set(&[HANDLER_ENTRYPOINT]) {
+        return Err(format!(
+            "{HANDLER_CONTEXT_TRANCHE} must block only {HANDLER_ENTRYPOINT}"
+        ));
+    }
+
+    let requirements = package_string_set(tranche, "requirements", HANDLER_CONTEXT_TRANCHE)?;
+    check_known_values(
+        HANDLER_CONTEXT_TRANCHE,
+        "requirement",
+        &requirements,
+        known_requirements,
+    )?;
+    let expected_requirements = owned_set(&["API-SURFACE-001", "HANDLER-API-001"]);
+    if requirements != expected_requirements {
+        return Err(format!(
+            "{HANDLER_CONTEXT_TRANCHE} requirement set mismatch; expected \
+             {expected_requirements:?}, found {requirements:?}"
+        ));
+    }
+
+    let owners = package_string_set(tranche, "owner_packages", HANDLER_CONTEXT_TRANCHE)?;
+    check_known_values(
+        HANDLER_CONTEXT_TRANCHE,
+        "owner package",
+        &owners,
+        allowed_owners,
+    )?;
+    if owners != owned_set(&["clinkz-wot-core"]) {
+        return Err(format!(
+            "{HANDLER_CONTEXT_TRANCHE} owner package set is not frozen"
+        ));
+    }
+
+    let cells = package_string_set(tranche, "feature_cells", HANDLER_CONTEXT_TRANCHE)?;
+    check_known_values(
+        HANDLER_CONTEXT_TRANCHE,
+        "feature cell",
+        &cells,
+        allowed_cells,
+    )?;
+    if cells != owned_set(&["no-default", "async-no-std", "std"]) {
+        return Err(format!(
+            "{HANDLER_CONTEXT_TRANCHE} feature-cell set is not frozen"
+        ));
+    }
+
+    let artifacts =
+        package_string_set(tranche, "authoritative_artifacts", HANDLER_CONTEXT_TRANCHE)?;
+    let expected_artifacts = owned_set(&[
+        "docs/ADRs/0013-work-package-scoped-implementation-admission.org",
+        "docs/ADRs/0014-transitional-normative-ownership.org",
+        "docs/amendments/WP-100-handler-api-v1.md",
+        "docs/api-ownership.csv",
+        "docs/design.md",
+        "docs/requirements.csv",
+        "docs/work-packages/WP-100-core.md",
+        "docs/work-packages/index.toml",
+    ]);
+    if artifacts != expected_artifacts {
+        return Err(format!(
+            "{HANDLER_CONTEXT_TRANCHE} authoritative artifact set mismatch; expected \
+             {expected_artifacts:?}, found {artifacts:?}"
+        ));
+    }
+    check_known_values(
+        HANDLER_CONTEXT_TRANCHE,
+        "authoritative artifact",
+        &artifacts,
+        registered_artifacts,
+    )?;
+
+    let api_items = package_string_set(tranche, "api_items", HANDLER_CONTEXT_TRANCHE)?;
+    if api_items != owned_set(&["HandlerContext"]) {
+        return Err(format!(
+            "{HANDLER_CONTEXT_TRANCHE} must own exactly HandlerContext"
+        ));
+    }
+    let ownership_items = load_first_column(root, "docs/api-ownership.csv")?;
+    check_known_values(
+        HANDLER_CONTEXT_TRANCHE,
+        "API item",
+        &api_items,
+        &ownership_items,
+    )?;
+
+    for field in [
+        "state_machines",
+        "old_api_removals",
+        "performance_workloads",
+    ] {
+        let values = string_set(
+            array_field(tranche, field, HANDLER_CONTEXT_TRANCHE)?,
+            HANDLER_CONTEXT_TRANCHE,
+            field,
+        )?;
+        if !values.is_empty() {
+            return Err(format!(
+                "{HANDLER_CONTEXT_TRANCHE} must have an empty {field} set"
+            ));
+        }
+    }
+
+    let implementation_paths =
+        package_string_set(tranche, "implementation_paths", HANDLER_CONTEXT_TRANCHE)?;
+    let expected_implementation_paths = owned_set(&["core/src/handler.rs", "core/src/lib.rs"]);
+    if implementation_paths != expected_implementation_paths {
+        return Err(format!(
+            "{HANDLER_CONTEXT_TRANCHE} implementation path set mismatch; expected \
+             {expected_implementation_paths:?}, found {implementation_paths:?}"
+        ));
+    }
+    for path in &implementation_paths {
+        if !root.join(path).is_file() {
+            return Err(format!(
+                "{HANDLER_CONTEXT_TRANCHE} implementation path is missing: {path:?}"
+            ));
+        }
+    }
+    let handler_source = fs::read_to_string(root.join("core/src/handler.rs"))
+        .map_err(|error| format!("cannot read core/src/handler.rs: {error}"))?;
+    let context_exists = handler_source.contains("pub struct HandlerContext");
+    if status == "pending" && context_exists {
+        return Err(format!(
+            "{HANDLER_CONTEXT_TRANCHE} pending state has premature HandlerContext source"
+        ));
+    }
+    if status != "pending" && !context_exists {
+        return Err(format!(
+            "{HANDLER_CONTEXT_TRANCHE} {status} state lacks HandlerContext source"
+        ));
+    }
+
+    let contract_artifacts =
+        package_string_set(tranche, "contract_artifacts", HANDLER_CONTEXT_TRANCHE)?;
+    let expected_contract_artifacts = owned_set(&[
+        "tools/check-wp100-handler-context-entry.sh",
+        "tools/check-wp100-handler-context.sh",
+        "tools/compile-contracts/wp100-handler-context/Cargo.toml",
+        "tools/compile-contracts/wp100-handler-context/Cargo.lock",
+        "tools/compile-contracts/wp100-handler-context/src/lib.rs",
+        "tools/compile-contracts/wp100-handler-context/tests/semantics.rs",
+        "tools/compile-contracts/wp100-handler-context/ui/handler-context-not-default.rs",
+        "tools/compile-contracts/wp100-handler-context/ui/handler-context-not-hash.rs",
+        "tools/compile-contracts/wp100-handler-context/ui/private-handler-context.rs",
+        "tools/design-check/Cargo.toml",
+        "tools/design-check/src/main.rs",
+    ]);
+    if contract_artifacts != expected_contract_artifacts {
+        return Err(format!(
+            "{HANDLER_CONTEXT_TRANCHE} contract artifact set mismatch; expected \
+             {expected_contract_artifacts:?}, found {contract_artifacts:?}"
+        ));
+    }
+    check_known_values(
+        HANDLER_CONTEXT_TRANCHE,
+        "contract artifact",
+        &contract_artifacts,
+        registered_artifacts,
+    )?;
+    for artifact in &contract_artifacts {
+        if !root.join(artifact).is_file() {
+            return Err(format!(
+                "{HANDLER_CONTEXT_TRANCHE} contract artifact is missing: {artifact:?}"
+            ));
+        }
+    }
+
+    let candidate_base_ref = string_field(tranche, "candidate_base_ref", HANDLER_CONTEXT_TRANCHE)?;
+    if candidate_base_ref != HANDLER_CONTEXT_CANDIDATE_BASE_REF {
+        return Err(format!(
+            "{HANDLER_CONTEXT_TRANCHE} candidate base ref is not frozen"
+        ));
+    }
+    check_git_commit_is_ancestor(
+        root,
+        &candidate_base_ref,
+        "handler context candidate base ref",
+    )?;
+    let candidate_ref = string_field(tranche, "candidate_ref", HANDLER_CONTEXT_TRANCHE)?;
+    require_full_commit_id(&candidate_ref, "handler context candidate_ref")?;
+    let candidate_paths = package_string_set(tranche, "candidate_paths", HANDLER_CONTEXT_TRANCHE)?;
+    check_candidate_paths(
+        HANDLER_CONTEXT_TRANCHE,
+        root,
+        &candidate_paths,
+        &implementation_paths,
+        registered_artifacts,
+    )?;
+    check_candidate_commit(
+        HANDLER_CONTEXT_TRANCHE,
+        root,
+        &candidate_base_ref,
+        &candidate_ref,
+        &candidate_paths,
+    )?;
+
+    let prechecks = package_string_set(
+        tranche,
+        "pre_implementation_checks",
+        HANDLER_CONTEXT_TRANCHE,
+    )?;
+    let expected_prechecks = owned_set(HANDLER_CONTEXT_PRECHECKS);
+    if prechecks != expected_prechecks {
+        return Err(format!(
+            "{HANDLER_CONTEXT_TRANCHE} precheck set mismatch; expected \
+             {expected_prechecks:?}, found {prechecks:?}"
+        ));
+    }
+    for check in &prechecks {
+        if check_statuses.get(check).map(String::as_str) != Some("executable") {
+            return Err(format!(
+                "{HANDLER_CONTEXT_TRANCHE} precheck {check:?} is not executable"
+            ));
+        }
+    }
+
+    let admission_review = string_field(tranche, "admission_review", HANDLER_CONTEXT_TRANCHE)?;
+    if admission_review != HANDLER_CONTEXT_ADMISSION_REVIEW
+        || !registered_artifacts.contains(&admission_review)
+        || !root.join(&admission_review).is_file()
+    {
+        return Err(format!(
+            "{HANDLER_CONTEXT_TRANCHE} admission review is not registered and present"
+        ));
+    }
+    check_handler_value_audit_state(root, &admission_review, &admission_status)?;
+
+    let entry_check = string_field(tranche, "entry_check", HANDLER_CONTEXT_TRANCHE)?;
+    if entry_check != HANDLER_CONTEXT_ENTRY_CHECK
+        || check_statuses.get(&entry_check).map(String::as_str) != Some("executable")
+    {
+        return Err(format!(
+            "{HANDLER_CONTEXT_TRANCHE} entry check is not executable"
+        ));
+    }
+
+    let completion_evidence =
+        package_string_set(tranche, "completion_evidence_keys", HANDLER_CONTEXT_TRANCHE)?;
+    if completion_evidence != owned_set(&["handler-context"])
+        || !completion_evidence.is_subset(
+            package_evidence
+                .get("WP-100")
+                .ok_or_else(|| "WP-100 has no evidence key set".to_owned())?,
+        )
+    {
+        return Err(format!(
+            "{HANDLER_CONTEXT_TRANCHE} completion evidence key is not frozen"
+        ));
+    }
+    let evidence_path = string_field(tranche, "completion_evidence_path", HANDLER_CONTEXT_TRANCHE)?;
+    if evidence_path != HANDLER_CONTEXT_COMPLETION_EVIDENCE {
+        return Err(format!(
+            "{HANDLER_CONTEXT_TRANCHE} completion evidence path is not frozen"
+        ));
+    }
+    let verification_check = string_field(tranche, "completion_check", HANDLER_CONTEXT_TRANCHE)?;
+    if verification_check != "wp100-handler-context-check" {
+        return Err(format!(
+            "{HANDLER_CONTEXT_TRANCHE} completion check is not frozen"
+        ));
+    }
+    let check_status = check_statuses
+        .get(&verification_check)
+        .cloned()
+        .ok_or_else(|| format!("{verification_check:?} is not registered"))?;
+    if check_status != "executable" {
+        return Err(format!(
+            "{HANDLER_CONTEXT_TRANCHE} completion check is {check_status:?}"
+        ));
+    }
+
+    if foundation_status != "complete"
+        || foundation_admission_status != "approved"
+        || foundation_check_status != "executable"
+    {
+        return Err(format!(
+            "{HANDLER_CONTEXT_TRANCHE} requires a complete, approved, executable \
+             {HANDLER_FOUNDATION_TRANCHE}"
+        ));
+    }
+
+    let evidence_exists = root.join(&evidence_path).is_file();
+    if admission_status == "review-pending" {
+        for forbidden_field in [
+            "review_attestation",
+            "review_attestation_ref",
+            "admission_ref",
+        ] {
+            if tranche.contains_key(forbidden_field) {
+                return Err(format!(
+                    "{HANDLER_CONTEXT_TRANCHE} review-pending state must not define \
+                     {forbidden_field:?}"
+                ));
+            }
+        }
+        if root.join(HANDLER_CONTEXT_REVIEW_ATTESTATION).exists() {
+            return Err(format!(
+                "{HANDLER_CONTEXT_TRANCHE} has a premature review attestation"
+            ));
+        }
+    } else {
+        let attestation_path =
+            string_field(tranche, "review_attestation", HANDLER_CONTEXT_TRANCHE)?;
+        let attestation_ref =
+            string_field(tranche, "review_attestation_ref", HANDLER_CONTEXT_TRANCHE)?;
+        if attestation_path != HANDLER_CONTEXT_REVIEW_ATTESTATION
+            || !registered_artifacts.contains(&attestation_path)
+        {
+            return Err(format!(
+                "{HANDLER_CONTEXT_TRANCHE} review attestation path is not frozen"
+            ));
+        }
+        check_scoped_review_attestation(
+            root,
+            &attestation_path,
+            &attestation_ref,
+            HANDLER_CONTEXT_TRANCHE,
+            HANDLER_CONTEXT_PRECHECKS,
+            &candidate_base_ref,
+            &candidate_ref,
+            &candidate_paths,
+            "handler context",
+        )?;
+
+        if status == "pending" {
+            if tranche.contains_key("admission_ref") {
+                return Err(format!(
+                    "{HANDLER_CONTEXT_TRANCHE} pending state must not define admission_ref"
+                ));
+            }
+        } else {
+            let admission_ref = string_field(tranche, "admission_ref", HANDLER_CONTEXT_TRANCHE)?;
+            check_scoped_admission_commit(
+                root,
+                &admission_ref,
+                &attestation_ref,
+                HANDLER_CONTEXT_ADMISSION_REVIEW,
+                "handler context",
+            )?;
+            if status == "in-progress" {
+                check_scoped_progress_checkpoint_state(
+                    root,
+                    &admission_ref,
+                    &implementation_paths,
+                    "handler context",
+                )?;
+            }
+        }
+    }
+
+    if status == "complete" {
+        if !evidence_exists || admission_status != "approved" {
+            return Err(format!(
+                "{HANDLER_CONTEXT_TRANCHE} complete state lacks approved evidence"
+            ));
+        }
+        let admission_ref = string_field(tranche, "admission_ref", HANDLER_CONTEXT_TRANCHE)?;
+        check_handler_context_completion_evidence(
+            root,
+            &evidence_path,
+            &verification_check,
+            &admission_ref,
+        )?;
+    } else if evidence_exists && tranche_evidence_is_passed(root, &evidence_path)? {
+        return Err(format!(
+            "{HANDLER_CONTEXT_TRANCHE} is not complete while {evidence_path} claims passed"
+        ));
+    }
+
+    Ok(HandlerContextTrancheState {
+        status,
+        verification_check,
+        check_status,
+    })
+}
+
 fn handler_value_status_pair_is_valid(status: &str, admission_status: &str) -> bool {
     matches!(
         (status, admission_status),
@@ -5616,6 +6279,308 @@ fn check_deadline_cleanup_review_attestation(
     Ok(())
 }
 
+#[derive(Debug, Eq, PartialEq)]
+struct ScopedReviewAttestationProjection {
+    reviewed_ref: String,
+}
+
+fn parse_scoped_review_attestation(
+    source: &str,
+    tranche: &str,
+    prechecks: &[&str],
+    context: &str,
+) -> Result<ScopedReviewAttestationProjection, String> {
+    let document = source
+        .parse::<DocumentMut>()
+        .map_err(|error| format!("invalid {context} review attestation: {error}"))?;
+    require_exact_table_fields(
+        document.as_table(),
+        &format!("{context} review attestation"),
+        &[
+            "schema_version",
+            "design_revision",
+            "tranche",
+            "status",
+            "reviewer_attestation_kind",
+            "reviewer_id",
+            "reviewed_ref",
+            "precheck",
+        ],
+    )?;
+    require_integer(
+        document.get("schema_version"),
+        &format!("{context} review attestation schema_version"),
+        1,
+    )?;
+    require_string(
+        document.get("design_revision"),
+        &format!("{context} review attestation design_revision"),
+        ACTIVE_DESIGN_REVISION,
+    )?;
+    require_string(
+        document.get("tranche"),
+        &format!("{context} review attestation tranche"),
+        tranche,
+    )?;
+    require_string(
+        document.get("status"),
+        &format!("{context} review attestation status"),
+        "passed",
+    )?;
+    let reviewer_kind = document
+        .get("reviewer_attestation_kind")
+        .and_then(Item::as_str)
+        .ok_or_else(|| format!("{context} review attestation has no reviewer kind"))?;
+    let reviewer_id = document
+        .get("reviewer_id")
+        .and_then(Item::as_str)
+        .ok_or_else(|| format!("{context} review attestation has no reviewer_id"))?;
+    match reviewer_kind {
+        "separate-agent-task"
+            if reviewer_id.starts_with("codex-agent:/root/")
+                && reviewer_id != "codex-agent:/root/" => {}
+        "independent-root-session" if reviewer_id == "codex-agent:/root" => {}
+        "separate-agent-task" => {
+            return Err(format!(
+                "{context} review attestation reviewer is not a child task: {reviewer_id:?}"
+            ));
+        }
+        "independent-root-session" => {
+            return Err(format!(
+                "{context} independent root-session attestation has invalid reviewer: \
+                 {reviewer_id:?}"
+            ));
+        }
+        other => {
+            return Err(format!(
+                "unsupported {context} review attestation kind: {other:?}"
+            ));
+        }
+    }
+
+    let reviewed_ref = document
+        .get("reviewed_ref")
+        .and_then(Item::as_str)
+        .ok_or_else(|| format!("{context} review attestation has no reviewed_ref"))?
+        .to_owned();
+    require_full_commit_id(&reviewed_ref, &format!("{context} reviewed_ref"))?;
+
+    let checks = document
+        .get("precheck")
+        .and_then(Item::as_array_of_tables)
+        .ok_or_else(|| format!("{context} review attestation has no [[precheck]] records"))?;
+    if checks.len() != prechecks.len() {
+        return Err(format!(
+            "{context} review attestation must record exactly {} prechecks; found {}",
+            prechecks.len(),
+            checks.len()
+        ));
+    }
+    let mut ids = BTreeSet::new();
+    for check in checks {
+        require_exact_table_fields(
+            check,
+            &format!("{context} review precheck"),
+            &["id", "result"],
+        )?;
+        let id = string_field(check, "id", &format!("{context} review precheck"))?;
+        require_table_string(check, "result", "passed", &id)?;
+        if !ids.insert(id.clone()) {
+            return Err(format!(
+                "{context} review attestation duplicates precheck {id:?}"
+            ));
+        }
+    }
+    let expected_ids = owned_set(prechecks);
+    if ids != expected_ids {
+        return Err(format!(
+            "{context} review attestation precheck set mismatch; expected \
+             {expected_ids:?}, found {ids:?}"
+        ));
+    }
+    Ok(ScopedReviewAttestationProjection { reviewed_ref })
+}
+
+#[allow(clippy::too_many_arguments)]
+fn check_scoped_review_attestation(
+    root: &Path,
+    relative_path: &str,
+    attestation_ref: &str,
+    tranche: &str,
+    prechecks: &[&str],
+    candidate_base_ref: &str,
+    candidate_ref: &str,
+    candidate_paths: &BTreeSet<String>,
+    context: &str,
+) -> Result<(), String> {
+    require_full_commit_id(
+        attestation_ref,
+        &format!("{context} review_attestation_ref"),
+    )?;
+    check_git_commit_is_ancestor(
+        root,
+        attestation_ref,
+        &format!("{context} review_attestation_ref"),
+    )?;
+    let path = root.join(relative_path);
+    let source = fs::read_to_string(&path)
+        .map_err(|error| format!("cannot read {}: {error}", path.display()))?;
+    let projection = parse_scoped_review_attestation(&source, tranche, prechecks, context)?;
+    check_git_commit_is_ancestor(
+        root,
+        &projection.reviewed_ref,
+        &format!("{context} reviewed_ref"),
+    )?;
+    if projection.reviewed_ref != candidate_ref {
+        return Err(format!(
+            "{context} reviewed_ref must identify candidate {candidate_ref:?}; found {:?}",
+            projection.reviewed_ref
+        ));
+    }
+
+    require_git_single_parent(
+        root,
+        &projection.reviewed_ref,
+        candidate_base_ref,
+        &format!("{context} reviewed candidate commit"),
+    )?;
+    let reviewed_paths = git_changed_paths_between(
+        root,
+        candidate_base_ref,
+        &projection.reviewed_ref,
+        &format!("{context} reviewed candidate diff"),
+    )?;
+    if &reviewed_paths != candidate_paths {
+        return Err(format!(
+            "{context} reviewed candidate diff mismatch; expected \
+             {candidate_paths:?}, found {reviewed_paths:?}"
+        ));
+    }
+
+    let attestation_parent = git_single_parent(
+        root,
+        attestation_ref,
+        &format!("{context} review attestation commit"),
+    )?;
+    require_git_ancestor(
+        root,
+        &projection.reviewed_ref,
+        &attestation_parent,
+        &format!("{context} review attestation ancestry"),
+    )?;
+    let review_paths = git_commit_changed_paths(
+        root,
+        attestation_ref,
+        &format!("{context} review attestation diff"),
+    )?;
+    let expected_review_paths = owned_set(&["docs/artifacts.csv", relative_path]);
+    if review_paths != expected_review_paths {
+        return Err(format!(
+            "{context} review commit path mismatch; expected \
+             {expected_review_paths:?}, found {review_paths:?}"
+        ));
+    }
+
+    let object = format!("{attestation_ref}:{relative_path}");
+    let committed_source = git_output_bytes(
+        root,
+        &["show", &object],
+        &format!("read committed {context} review attestation"),
+    )?;
+    let worktree_source =
+        fs::read(&path).map_err(|error| format!("cannot read {}: {error}", path.display()))?;
+    if committed_source != worktree_source {
+        return Err(format!(
+            "worktree {context} review attestation {relative_path:?} differs from \
+             review_attestation_ref"
+        ));
+    }
+    Ok(())
+}
+
+fn check_scoped_admission_commit(
+    root: &Path,
+    admission_ref: &str,
+    attestation_ref: &str,
+    admission_review: &str,
+    context: &str,
+) -> Result<(), String> {
+    require_full_commit_id(admission_ref, &format!("{context} admission_ref"))?;
+    check_git_commit_is_ancestor(root, admission_ref, &format!("{context} admission_ref"))?;
+    require_git_single_parent(
+        root,
+        admission_ref,
+        attestation_ref,
+        &format!("{context} admission commit"),
+    )?;
+    let admission_paths = git_changed_paths_between(
+        root,
+        attestation_ref,
+        admission_ref,
+        &format!("{context} admission diff"),
+    )?;
+    let expected_paths = owned_set(&["PLAN.md", admission_review, "docs/work-packages/index.toml"]);
+    if admission_paths != expected_paths {
+        return Err(format!(
+            "{context} admission path mismatch; expected {expected_paths:?}, found \
+             {admission_paths:?}"
+        ));
+    }
+    Ok(())
+}
+
+fn check_scoped_progress_checkpoint_state(
+    root: &Path,
+    admission_ref: &str,
+    implementation_paths: &BTreeSet<String>,
+    context: &str,
+) -> Result<(), String> {
+    let head = git_text(
+        root,
+        &["rev-parse", "HEAD"],
+        &format!("resolve {context} progress HEAD"),
+    )?;
+    let head = head.trim();
+    let expected_progress_paths = owned_set(&["PLAN.md", "docs/work-packages/index.toml"]);
+    if head == admission_ref {
+        let changed = git_worktree_paths(root, &format!("pre-{context}-progress worktree"))?;
+        if changed != expected_progress_paths {
+            return Err(format!(
+                "pre-{context}-progress path mismatch; expected \
+                 {expected_progress_paths:?}, found {changed:?}"
+            ));
+        }
+        return Ok(());
+    }
+
+    require_git_single_parent(
+        root,
+        head,
+        admission_ref,
+        &format!("{context} progress checkpoint"),
+    )?;
+    let progress_paths = git_changed_paths_between(
+        root,
+        admission_ref,
+        head,
+        &format!("{context} progress checkpoint diff"),
+    )?;
+    if progress_paths != expected_progress_paths {
+        return Err(format!(
+            "{context} progress path mismatch; expected \
+             {expected_progress_paths:?}, found {progress_paths:?}"
+        ));
+    }
+    let worktree_paths = git_worktree_paths(root, &format!("{context} implementation worktree"))?;
+    if !worktree_paths.is_subset(implementation_paths) {
+        let out_of_scope: Vec<&String> = worktree_paths.difference(implementation_paths).collect();
+        return Err(format!(
+            "{context} implementation worktree has out-of-scope paths {out_of_scope:?}"
+        ));
+    }
+    Ok(())
+}
+
 fn check_deadline_cleanup_admission_commit(
     root: &Path,
     admission_ref: &str,
@@ -5874,6 +6839,234 @@ fn check_deadline_cleanup_completion_evidence(
         return Err(format!(
             "deadline cleanup completion checker exited with {status}"
         ));
+    }
+    Ok(())
+}
+
+fn check_handler_context_completion_evidence(
+    root: &Path,
+    relative_path: &str,
+    verification_check: &str,
+    admission_ref: &str,
+) -> Result<(), String> {
+    check_tranche_evidence(
+        root,
+        relative_path,
+        HANDLER_CONTEXT_TRANCHE,
+        "handler-context",
+        verification_check,
+    )?;
+    let path = root.join(relative_path);
+    let source = fs::read_to_string(&path)
+        .map_err(|error| format!("cannot read {}: {error}", path.display()))?;
+    let document = source
+        .parse::<DocumentMut>()
+        .map_err(|error| format!("invalid {}: {error}", path.display()))?;
+    require_string(
+        document.get("verification_command"),
+        "handler context evidence verification_command",
+        "tools/check-wp100-handler-context.sh",
+    )?;
+    let implementation_ref = document
+        .get("implementation_ref")
+        .and_then(Item::as_str)
+        .ok_or_else(|| format!("{relative_path} has no implementation_ref"))?;
+    require_full_commit_id(implementation_ref, "handler context implementation_ref")?;
+    check_git_commit_is_ancestor(
+        root,
+        implementation_ref,
+        "handler context implementation_ref",
+    )?;
+    let progress_ref = git_single_parent(
+        root,
+        implementation_ref,
+        "handler context implementation commit",
+    )?;
+    require_git_single_parent(
+        root,
+        &progress_ref,
+        admission_ref,
+        "handler context progress checkpoint",
+    )?;
+    let progress_paths = git_changed_paths_between(
+        root,
+        admission_ref,
+        &progress_ref,
+        "handler context progress checkpoint diff",
+    )?;
+    let expected_progress_paths = owned_set(&["PLAN.md", "docs/work-packages/index.toml"]);
+    if progress_paths != expected_progress_paths {
+        return Err(format!(
+            "handler context progress checkpoint path mismatch; expected \
+             {expected_progress_paths:?}, found {progress_paths:?}"
+        ));
+    }
+    let implementation_paths = git_commit_changed_paths(
+        root,
+        implementation_ref,
+        "handler context implementation commit",
+    )?;
+    let expected_paths = owned_set(&["core/src/handler.rs", "core/src/lib.rs"]);
+    if implementation_paths != expected_paths {
+        return Err(format!(
+            "handler context implementation path mismatch; expected \
+             {expected_paths:?}, found {implementation_paths:?}"
+        ));
+    }
+
+    let checker = root.join("tools/check-wp100-handler-context.sh");
+    let status = Command::new(&checker)
+        .current_dir(root)
+        .status()
+        .map_err(|error| {
+            format!(
+                "cannot execute handler context completion checker {}: {error}",
+                checker.display()
+            )
+        })?;
+    if !status.success() {
+        return Err(format!(
+            "handler context completion checker exited with {status}"
+        ));
+    }
+    Ok(())
+}
+
+fn check_handler_context_entry_state(root: &Path, mode: &str) -> Result<(), String> {
+    if !matches!(mode, "candidate" | "admission-ready") {
+        return Err(format!(
+            "invalid handler context entry mode {mode:?}; expected candidate or admission-ready"
+        ));
+    }
+    let path = root.join("docs/work-packages/index.toml");
+    let source = fs::read_to_string(&path)
+        .map_err(|error| format!("cannot read {}: {error}", path.display()))?;
+    let document = source
+        .parse::<DocumentMut>()
+        .map_err(|error| format!("invalid {}: {error}", path.display()))?;
+    let tranches = document
+        .get("tranche")
+        .and_then(Item::as_array_of_tables)
+        .ok_or_else(|| "work-package index has no [[tranche]] records".to_owned())?;
+    let matching: Vec<&Table> = tranches
+        .iter()
+        .filter(|table| table.get("id").and_then(Item::as_str) == Some(HANDLER_CONTEXT_TRANCHE))
+        .collect();
+    if matching.len() != 1 {
+        return Err(format!(
+            "work-package index must contain exactly one {HANDLER_CONTEXT_TRANCHE}; found {}",
+            matching.len()
+        ));
+    }
+    let tranche = matching[0];
+    let status = string_field(tranche, "status", HANDLER_CONTEXT_TRANCHE)?;
+    let admission_status = string_field(tranche, "admission_status", HANDLER_CONTEXT_TRANCHE)?;
+    let expected_pair = match mode {
+        "candidate" => ("pending", "review-pending"),
+        "admission-ready" => ("pending", "approved"),
+        _ => unreachable!("mode checked above"),
+    };
+    if (status.as_str(), admission_status.as_str()) != expected_pair {
+        return Err(format!(
+            "handler context {mode} state must be {:?}/{:?}; found \
+             {status:?}/{admission_status:?}",
+            expected_pair.0, expected_pair.1
+        ));
+    }
+    if tranche.contains_key("admission_ref") {
+        return Err(format!(
+            "handler context {mode} pending state must not define admission_ref"
+        ));
+    }
+
+    let audit_path = string_field(tranche, "admission_review", HANDLER_CONTEXT_TRANCHE)?;
+    if audit_path != HANDLER_CONTEXT_ADMISSION_REVIEW {
+        return Err("handler context admission review path drifted".to_owned());
+    }
+    let registered_artifacts = load_artifact_registry(root)?;
+    if !registered_artifacts.contains(&audit_path) || !root.join(&audit_path).is_file() {
+        return Err("handler context admission review is not registered and present".to_owned());
+    }
+    check_handler_value_audit_state(root, &audit_path, &admission_status)?;
+
+    let implementation_paths =
+        package_string_set(tranche, "implementation_paths", HANDLER_CONTEXT_TRANCHE)?;
+    if implementation_paths != owned_set(&["core/src/handler.rs", "core/src/lib.rs"]) {
+        return Err("handler context implementation path projection drifted".to_owned());
+    }
+    let handler_source = fs::read_to_string(root.join("core/src/handler.rs"))
+        .map_err(|error| format!("cannot read core/src/handler.rs: {error}"))?;
+    if handler_source.contains("pub struct HandlerContext") {
+        return Err("handler context pending state has premature implementation".to_owned());
+    }
+
+    let candidate_base_ref = string_field(tranche, "candidate_base_ref", HANDLER_CONTEXT_TRANCHE)?;
+    if candidate_base_ref != HANDLER_CONTEXT_CANDIDATE_BASE_REF {
+        return Err("handler context candidate base ref drifted".to_owned());
+    }
+    check_git_commit_is_ancestor(
+        root,
+        &candidate_base_ref,
+        "handler context candidate base ref",
+    )?;
+    let candidate_ref = string_field(tranche, "candidate_ref", HANDLER_CONTEXT_TRANCHE)?;
+    require_full_commit_id(&candidate_ref, "handler context candidate_ref")?;
+    let candidate_paths = package_string_set(tranche, "candidate_paths", HANDLER_CONTEXT_TRANCHE)?;
+    check_candidate_paths(
+        HANDLER_CONTEXT_TRANCHE,
+        root,
+        &candidate_paths,
+        &implementation_paths,
+        &registered_artifacts,
+    )?;
+    check_candidate_commit(
+        HANDLER_CONTEXT_TRANCHE,
+        root,
+        &candidate_base_ref,
+        &candidate_ref,
+        &candidate_paths,
+    )?;
+
+    if mode == "candidate" {
+        for forbidden_field in ["review_attestation", "review_attestation_ref"] {
+            if tranche.contains_key(forbidden_field) {
+                return Err(format!(
+                    "handler context candidate state must not define {forbidden_field:?}"
+                ));
+            }
+        }
+        if root.join(HANDLER_CONTEXT_REVIEW_ATTESTATION).exists() {
+            return Err("handler context candidate has a premature review attestation".to_owned());
+        }
+    } else {
+        let attestation_path =
+            string_field(tranche, "review_attestation", HANDLER_CONTEXT_TRANCHE)?;
+        let attestation_ref =
+            string_field(tranche, "review_attestation_ref", HANDLER_CONTEXT_TRANCHE)?;
+        if attestation_path != HANDLER_CONTEXT_REVIEW_ATTESTATION
+            || !registered_artifacts.contains(&attestation_path)
+        {
+            return Err("handler context review attestation path is not frozen".to_owned());
+        }
+        check_scoped_review_attestation(
+            root,
+            &attestation_path,
+            &attestation_ref,
+            HANDLER_CONTEXT_TRANCHE,
+            HANDLER_CONTEXT_PRECHECKS,
+            &candidate_base_ref,
+            &candidate_ref,
+            &candidate_paths,
+            "handler context",
+        )?;
+        let head = git_text(root, &["rev-parse", "HEAD"], "resolve HEAD")?;
+        if head.trim() != attestation_ref {
+            return Err(format!(
+                "handler context admission-ready state requires HEAD at \
+                 review_attestation_ref {attestation_ref:?}; found {:?}",
+                head.trim()
+            ));
+        }
     }
     Ok(())
 }
@@ -9146,12 +10339,14 @@ mod tests {
     use toml_edit::DocumentMut;
 
     use super::{
+        HANDLER_CONTEXT_PRECHECKS, HANDLER_CONTEXT_SOURCE_CONTRACT, HANDLER_CONTEXT_TRANCHE,
         HANDLER_VALUE_PRIMITIVES_SOURCE_CONTRACT, check_handler_scope_partition,
         check_producer_subscription_contract, expand_expressions,
         expected_work_package_dependencies, handler_value_status_pair_is_valid,
         parse_deadline_cleanup_review_attestation, parse_handler_review_attestation,
-        parse_logical_time_review_attestation, parse_transitions,
-        validate_handler_value_audit_source, validate_handler_value_primitives_source,
+        parse_logical_time_review_attestation, parse_scoped_review_attestation, parse_transitions,
+        validate_handler_context_source, validate_handler_value_audit_source,
+        validate_handler_value_primitives_source,
     };
 
     fn producer_contract(obligation_bits: &str) -> DocumentMut {
@@ -9525,6 +10720,83 @@ result = "passed"
     fn exact_handler_value_source_projection_is_accepted() {
         validate_handler_value_primitives_source(HANDLER_VALUE_PRIMITIVES_SOURCE_CONTRACT)
             .expect("the frozen five-value source must validate");
+    }
+
+    #[test]
+    fn handler_context_projection_composes_without_weakening_value_projection() {
+        let combined = format!(
+            "{HANDLER_VALUE_PRIMITIVES_SOURCE_CONTRACT}\n{HANDLER_CONTEXT_SOURCE_CONTRACT}"
+        );
+        validate_handler_value_primitives_source(&combined)
+            .expect("the five-value projection must permit the registered context");
+        validate_handler_context_source(&combined)
+            .expect("the exact handler context projection must validate");
+
+        let unknown = format!("{combined}\npub struct UnregisteredHandlerValue;");
+        assert!(validate_handler_value_primitives_source(&unknown).is_err());
+        assert!(validate_handler_context_source(&unknown).is_err());
+
+        let hashed = combined.replacen(
+            "#[derive(Clone, Copy, Debug, Eq, PartialEq)]\npub struct HandlerContext",
+            "#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]\npub struct HandlerContext",
+            1,
+        );
+        assert!(validate_handler_context_source(&hashed).is_err());
+    }
+
+    #[test]
+    fn scoped_handler_context_attestation_requires_exact_passes_and_identity() {
+        let mut source = String::from(
+            r#"
+schema_version = 1
+design_revision = "4.9"
+tranche = "WP-100-HANDLER-CONTEXT"
+status = "passed"
+reviewer_attestation_kind = "independent-root-session"
+reviewer_id = "codex-agent:/root"
+reviewed_ref = "0123456789abcdef0123456789abcdef01234567"
+"#,
+        );
+        for check in HANDLER_CONTEXT_PRECHECKS {
+            source.push_str(&format!(
+                "\n[[precheck]]\nid = \"{check}\"\nresult = \"passed\"\n"
+            ));
+        }
+        let projection = parse_scoped_review_attestation(
+            &source,
+            HANDLER_CONTEXT_TRANCHE,
+            HANDLER_CONTEXT_PRECHECKS,
+            "handler context",
+        )
+        .expect("the exact handler context attestation must validate");
+        assert_eq!(
+            projection.reviewed_ref,
+            "0123456789abcdef0123456789abcdef01234567"
+        );
+
+        let failed = source.replacen("result = \"passed\"", "result = \"failed\"", 1);
+        assert!(
+            parse_scoped_review_attestation(
+                &failed,
+                HANDLER_CONTEXT_TRANCHE,
+                HANDLER_CONTEXT_PRECHECKS,
+                "handler context",
+            )
+            .is_err()
+        );
+        let false_child = source.replace(
+            "reviewer_attestation_kind = \"independent-root-session\"",
+            "reviewer_attestation_kind = \"separate-agent-task\"",
+        );
+        assert!(
+            parse_scoped_review_attestation(
+                &false_child,
+                HANDLER_CONTEXT_TRANCHE,
+                HANDLER_CONTEXT_PRECHECKS,
+                "handler context",
+            )
+            .is_err()
+        );
     }
 
     #[test]
