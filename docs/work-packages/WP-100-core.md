@@ -70,6 +70,15 @@ erasure, sparse storage, and execution. Those exclusions avoid a cycle in
 which the only broad-entry exemption would require migrations that broad entry
 itself blocks.
 
+The exact non-implementation candidate is review-pending. It freezes the trait
+source projection, an external three-cell compile contract, negative async/step
+scope checks, every completed predecessor regression, and the exact two-file
+implementation boundary. The candidate does not change either Core path or
+create either planned architecture fixture root. Its immutable commit is the
+single child of frozen base
+`2d7087d100d4a0d72cabb77476175bf60b0a7925`; the immediately following
+registration checkpoint records that commit before any independent review.
+
 After the completed foundation refresh, the next candidate contains only five
 passive, additive Core values: `CancellationView`, `SubscriptionAcceptance`,
 `HandlerFootprint`, `HandlerStep`, and `StaticHandlerRegistration`. It

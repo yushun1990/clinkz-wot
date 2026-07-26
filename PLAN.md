@@ -45,6 +45,9 @@ The repository evidence establishes the following starting point:
   for the Core Deadline, cleanup ordering, and incomparable-clock disposition;
 - `WP-100-HANDLER-CONTEXT` is implemented and has completion evidence for the
   borrowed dispatch-identity view and exact compatibility matrix;
+- the exact non-implementation
+  `WP-100-PROPERTY-READ-HANDLER-SLICE` candidate is review-pending and remains
+  unadmitted; it adds no runtime source or architecture fixture root;
 - broad handler entry remains blocked by incomplete workload oracles,
   the remaining request/target migration, portable-trait admission, and
   no-atomic public-boundary evidence;
@@ -85,9 +88,10 @@ answer and does not automatically block unrelated admitted work.
 
 D5 preserves package completion order but adds a cross-package integration
 dependency in the registered work-package DAG. The gate does not itself admit
-source edits: each named slice remains planned and blocked until its exact
-candidate receives independent ADR-0013 review. WP-200 planning work and the
-exact synchronous property-read candidate may continue, while broad
+source edits: the WP-100 slice is pending independent review of its exact
+non-implementation candidate, while the other three named slices remain
+planned and blocked until their own exact candidates receive independent
+ADR-0013 review. WP-200 planning work may continue, while broad
 `WP-100-HANDLER-ENTRY`, `WP-300-BROAD-ENTRY`, and `WP-400-BROAD-ENTRY` remain
 blocked until the gate passes. The gate exception does not claim final
 `InteractionInput` storage, `AcceptHint` resource admission,
@@ -222,10 +226,9 @@ Completed evidence:
 
 Next execution order:
 
-1. prepare the exact `WP-100-PROPERTY-READ-HANDLER-SLICE` candidate and
-   independent admission after HandlerContext completes; this slice adds only
-   `ReadPropertyHandler` in the two Core implementation paths and reuses the
-   completed context/static registration plus existing production input/output;
+1. independently review the exact registered
+   `WP-100-PROPERTY-READ-HANDLER-SLICE` candidate; only a later attestation and
+   exact admission checkpoint may permit its two Core implementation paths;
 2. decompose the next dependency-complete portable-trait or remaining
    request/target tranche, keeping `AcceptHint` resource admission and
    `InteractionInput` downstream migration explicit;

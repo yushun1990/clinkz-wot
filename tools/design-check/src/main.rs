@@ -8,7 +8,7 @@ use std::process::Command;
 
 use quote::ToTokens;
 use syn::visit::{self, Visit};
-use syn::{Attribute, Fields, ImplItem, Item as SynItem, ItemImpl, Visibility};
+use syn::{Attribute, Fields, ImplItem, Item as SynItem, ItemImpl, TraitItem, Visibility};
 use toml_edit::{Array, ArrayOfTables, DocumentMut, Item, Table};
 
 const ACTIVE_DESIGN_REVISION: &str = "4.9";
@@ -115,6 +115,45 @@ const PROPERTY_READ_GATE: &str = "PROPERTY-READ-ARCHITECTURE";
 const PROPERTY_READ_GATE_MANIFEST: &str = "docs/work-packages/property-read-architecture-gate.toml";
 const PROPERTY_READ_GATE_DOCUMENT: &str = "docs/work-packages/PROPERTY-READ-ARCHITECTURE.md";
 const PROPERTY_READ_HANDLER_SLICE: &str = "WP-100-PROPERTY-READ-HANDLER-SLICE";
+const PROPERTY_READ_HANDLER_ENTRY_CHECK: &str = "wp100-property-read-handler-slice-entry-check";
+const PROPERTY_READ_HANDLER_COMPLETION_CHECK: &str = "wp100-property-read-handler-slice-check";
+const PROPERTY_READ_HANDLER_REVIEW_ATTESTATION: &str =
+    "docs/audits/WP-100-property-read-handler-slice-review.toml";
+const PROPERTY_READ_HANDLER_COMPLETION_EVIDENCE: &str =
+    "docs/evidence/WP-100-property-read-handler-slice.toml";
+const PROPERTY_READ_HANDLER_ADMISSION_REVIEW: &str =
+    "docs/audits/WP-100-property-read-handler-slice-entry.md";
+const PROPERTY_READ_HANDLER_CANDIDATE_BASE_REF: &str = "2d7087d100d4a0d72cabb77476175bf60b0a7925";
+const PROPERTY_READ_HANDLER_CONTRACT_ARTIFACTS: &[&str] = &[
+    "tools/check-wp100-property-read-handler-slice-entry.sh",
+    "tools/check-wp100-property-read-handler-slice.sh",
+    "tools/compile-contracts/wp100-property-read-handler-slice/Cargo.lock",
+    "tools/compile-contracts/wp100-property-read-handler-slice/Cargo.toml",
+    "tools/compile-contracts/wp100-property-read-handler-slice/src/lib.rs",
+    "tools/compile-contracts/wp100-property-read-handler-slice/tests/semantics.rs",
+    "tools/compile-contracts/wp100-property-read-handler-slice/ui/unscoped-async-read-property.rs",
+    "tools/compile-contracts/wp100-property-read-handler-slice/ui/unscoped-step-read-property.rs",
+    "tools/design-check/Cargo.toml",
+    "tools/design-check/src/main.rs",
+];
+const PROPERTY_READ_HANDLER_CANDIDATE_PATHS: &[&str] = &[
+    "PLAN.md",
+    "PROJECT_STATE.md",
+    "docs/artifacts.csv",
+    "docs/audits/WP-100-property-read-handler-slice-entry.md",
+    "docs/governance.toml",
+    "docs/work-packages/WP-100-core.md",
+    "docs/work-packages/property-read-architecture-gate.toml",
+    "tools/check-wp100-property-read-handler-slice-entry.sh",
+    "tools/check-wp100-property-read-handler-slice.sh",
+    "tools/compile-contracts/wp100-property-read-handler-slice/Cargo.lock",
+    "tools/compile-contracts/wp100-property-read-handler-slice/Cargo.toml",
+    "tools/compile-contracts/wp100-property-read-handler-slice/src/lib.rs",
+    "tools/compile-contracts/wp100-property-read-handler-slice/tests/semantics.rs",
+    "tools/compile-contracts/wp100-property-read-handler-slice/ui/unscoped-async-read-property.rs",
+    "tools/compile-contracts/wp100-property-read-handler-slice/ui/unscoped-step-read-property.rs",
+    "tools/design-check/src/main.rs",
+];
 const PROPERTY_READ_PLAN_SLICE: &str = "WP-200-PROPERTY-READ-PLAN-SLICE";
 const PROPERTY_READ_BINDING_SLICE: &str = "WP-300-PROPERTY-READ-BINDING-SLICE";
 const PROPERTY_READ_SERVIENT_SLICE: &str = "WP-400-PROPERTY-READ-SERVIENT-SLICE";
@@ -159,6 +198,20 @@ const HANDLER_CONTEXT_PRECHECKS: &[&str] = &[
     "wp100-handler-value-primitives-check",
     "wp100-logical-time-correction-check",
     "wp100-deadline-cleanup-timing-check",
+];
+const PROPERTY_READ_HANDLER_PRECHECKS: &[&str] = &[
+    "api-ownership-check",
+    "architecture-adr-check",
+    "design-requirement-check",
+    "resource-profile-check",
+    "work-package-dag-check",
+    "wp100-amendment-check",
+    "wp100-handler-amendment-check",
+    "wp100-foundation-refresh-check",
+    "wp100-handler-value-primitives-check",
+    "wp100-logical-time-correction-check",
+    "wp100-deadline-cleanup-timing-check",
+    "wp100-handler-context-check",
 ];
 
 #[derive(Debug)]
@@ -328,6 +381,10 @@ fn run() -> Result<(), String> {
             check_handler_context_source(&root)?;
             println!("design structure check: handler context source valid");
         }
+        "check-property-read-handler-source" => {
+            check_property_read_handler_source(&root)?;
+            println!("design structure check: property-read handler source valid");
+        }
         "check-handler-value-primitives-entry-state" => {
             let mode = env::args().nth(2).ok_or_else(|| {
                 "check-handler-value-primitives-entry-state requires candidate or \
@@ -380,6 +437,7 @@ fn run() -> Result<(), String> {
                 "unknown command {command:?}; expected check, check-state, check-handler, \
                  check-handler-value-primitives-source, \
                  check-handler-context-source, \
+                 check-property-read-handler-source, \
                  check-handler-value-primitives-entry-state, \
                  check-logical-time-correction-entry-state, \
                  check-deadline-cleanup-timing-entry-state, \
@@ -566,6 +624,16 @@ impl<'a> HandlerContext<'a> {
 }
 "#;
 
+const PROPERTY_READ_HANDLER_SOURCE_CONTRACT: &str = r#"
+pub trait ReadPropertyHandler {
+    fn handle(
+        &self,
+        context: HandlerContext<'_>,
+        input: &InteractionInput,
+    ) -> CoreResult<InteractionOutput>;
+}
+"#;
+
 #[derive(Debug, Eq, Ord, PartialEq, PartialOrd)]
 struct HandlerValueSourceProjection {
     values: Vec<HandlerValueTypeProjection>,
@@ -668,6 +736,7 @@ fn project_handler_value_source(file: &syn::File) -> Result<HandlerValueSourcePr
             "SubscriptionAcceptance",
         ]),
         &owned_set(&["HandlerContext"]),
+        &owned_set(&["ReadPropertyHandler"]),
     )
 }
 
@@ -696,13 +765,18 @@ fn validate_handler_context_source(source: &str) -> Result<(), String> {
         "StaticHandlerRegistration",
         "SubscriptionAcceptance",
     ]);
-    let actual =
-        project_named_handler_source(&file, &owned_set(&["HandlerContext"]), &value_names)?;
+    let actual = project_named_handler_source(
+        &file,
+        &owned_set(&["HandlerContext"]),
+        &value_names,
+        &owned_set(&["ReadPropertyHandler"]),
+    )?;
     let expected_file = syn::parse_file(HANDLER_CONTEXT_SOURCE_CONTRACT)
         .map_err(|error| format!("internal handler context contract does not parse: {error}"))?;
     let expected = project_named_handler_source(
         &expected_file,
         &owned_set(&["HandlerContext"]),
+        &BTreeSet::new(),
         &BTreeSet::new(),
     )?;
     if actual != expected {
@@ -714,10 +788,115 @@ fn validate_handler_context_source(source: &str) -> Result<(), String> {
     Ok(())
 }
 
+#[derive(Debug, Eq, PartialEq)]
+struct HandlerTraitProjection {
+    name: String,
+    visibility: String,
+    attributes: Vec<String>,
+    unsafety: String,
+    auto_token: String,
+    generics: String,
+    supertraits: String,
+    items: Vec<HandlerTraitItemProjection>,
+}
+
+#[derive(Debug, Eq, PartialEq)]
+struct HandlerTraitItemProjection {
+    attributes: Vec<String>,
+    signature: String,
+    has_default_body: bool,
+    has_semicolon: bool,
+}
+
+fn check_property_read_handler_source(root: &Path) -> Result<(), String> {
+    let path = root.join("core/src/handler.rs");
+    let source = fs::read_to_string(&path)
+        .map_err(|error| format!("cannot read {}: {error}", path.display()))?;
+    validate_property_read_handler_source(&source)
+        .map_err(|error| format!("{}: {error}", path.display()))
+}
+
+fn validate_property_read_handler_source(source: &str) -> Result<(), String> {
+    let file = syn::parse_file(source).map_err(|error| format!("invalid Rust source: {error}"))?;
+    let actual = project_handler_trait(&file, "ReadPropertyHandler")?;
+    let expected_file =
+        syn::parse_file(PROPERTY_READ_HANDLER_SOURCE_CONTRACT).map_err(|error| {
+            format!("internal property-read handler contract does not parse: {error}")
+        })?;
+    let expected = project_handler_trait(&expected_file, "ReadPropertyHandler")?;
+    if actual != expected {
+        return Err(format!(
+            "property-read handler source projection mismatch\nexpected: \
+             {expected:#?}\nfound: {actual:#?}"
+        ));
+    }
+    Ok(())
+}
+
+fn project_handler_trait(file: &syn::File, name: &str) -> Result<HandlerTraitProjection, String> {
+    for item in &file.items {
+        let SynItem::Impl(item) = item else {
+            continue;
+        };
+        let Some((_, trait_path, _)) = &item.trait_ else {
+            continue;
+        };
+        if trait_path
+            .segments
+            .last()
+            .is_some_and(|segment| segment.ident == name)
+        {
+            return Err(format!(
+                "handler module contains an implementation of trait {name:?}"
+            ));
+        }
+    }
+
+    let mut matches = file.items.iter().filter_map(|item| match item {
+        SynItem::Trait(item) if item.ident == name => Some(item),
+        _ => None,
+    });
+    let item = matches
+        .next()
+        .ok_or_else(|| format!("handler module lacks trait {name:?}"))?;
+    if matches.next().is_some() {
+        return Err(format!("handler module duplicates trait {name:?}"));
+    }
+
+    let mut items = Vec::new();
+    for trait_item in &item.items {
+        match trait_item {
+            TraitItem::Fn(function) => items.push(HandlerTraitItemProjection {
+                attributes: contract_attributes(&function.attrs),
+                signature: token_string(&function.sig),
+                has_default_body: function.default.is_some(),
+                has_semicolon: function.semi_token.is_some(),
+            }),
+            _ => {
+                return Err(format!(
+                    "{name} contains an associated const, type, macro, or unsupported item"
+                ));
+            }
+        }
+    }
+
+    Ok(HandlerTraitProjection {
+        name: item.ident.to_string(),
+        visibility: token_string(&item.vis),
+        attributes: contract_attributes(&item.attrs),
+        unsafety: token_string(&item.unsafety),
+        auto_token: token_string(&item.auto_token),
+        generics: token_string(&item.generics),
+        supertraits: token_string(&item.supertraits),
+        items,
+    })
+}
+
 fn project_named_handler_source(
     file: &syn::File,
     owned_names: &BTreeSet<String>,
     allowed_other_names: &BTreeSet<String>,
+    allowed_trait_names: &BTreeSet<String>,
 ) -> Result<HandlerValueSourceProjection, String> {
     let mut values = Vec::new();
     let mut impls = Vec::new();
@@ -758,6 +937,8 @@ fn project_named_handler_source(
                 if allowed_other_names.contains(item.ident.to_string().as_str()) => {}
             SynItem::Enum(item)
                 if allowed_other_names.contains(item.ident.to_string().as_str()) => {}
+            SynItem::Trait(item)
+                if allowed_trait_names.contains(item.ident.to_string().as_str()) => {}
             SynItem::Impl(item) => {
                 let Some(name) = handler_impl_type_name(item) else {
                     return Err("handler module impl has an unsupported self type".to_owned());
@@ -1982,6 +2163,8 @@ fn check_governance_checks(
         DEADLINE_CLEANUP_ENTRY_CHECK,
         "wp100-handler-context-check",
         HANDLER_CONTEXT_ENTRY_CHECK,
+        PROPERTY_READ_HANDLER_COMPLETION_CHECK,
+        PROPERTY_READ_HANDLER_ENTRY_CHECK,
     ]);
     let mut statuses = BTreeMap::new();
     for check in checks {
@@ -2164,6 +2347,19 @@ fn expected_check_mapping(id: &str) -> Option<CheckMapping> {
             "tools/check-wp100-handler-context-entry.sh",
             &[
                 "tools/check-wp100-handler-context-entry.sh",
+                "--admission-ready",
+            ],
+            &["executable"],
+        )),
+        PROPERTY_READ_HANDLER_COMPLETION_CHECK => Some((
+            "tools/check-wp100-property-read-handler-slice.sh",
+            &["tools/check-wp100-property-read-handler-slice.sh"],
+            &["executable"],
+        )),
+        PROPERTY_READ_HANDLER_ENTRY_CHECK => Some((
+            "tools/check-wp100-property-read-handler-slice-entry.sh",
+            &[
+                "tools/check-wp100-property-read-handler-slice-entry.sh",
                 "--admission-ready",
             ],
             &["executable"],
@@ -3004,7 +3200,28 @@ fn check_property_read_integration_gate(
                 "reused_api_items",
                 "implementation_paths",
                 "excluded_claims",
+                "risk_category",
+                "impact_status",
+                "state_machines",
+                "old_api_removals",
+                "performance_workloads",
+                "contract_artifacts",
+                "candidate_base_ref",
+                "candidate_ref",
+                "candidate_paths",
+                "pre_implementation_checks",
+                "admission_review",
+                "entry_check",
+                "completion_evidence_path",
+                "completion_check",
             ]);
+            let admission_status = string_field(tranche, "admission_status", &id)?;
+            if admission_status == "approved" {
+                exact_fields.extend(["review_attestation", "review_attestation_ref"]);
+                if string_field(tranche, "status", &id)? != "pending" {
+                    exact_fields.push("admission_ref");
+                }
+            }
         }
         require_exact_table_fields(tranche, &id, &exact_fields)?;
 
@@ -3019,8 +3236,21 @@ fn check_property_read_integration_gate(
                 expected.sequence
             ));
         }
-        require_table_string(tranche, "status", "planned", &id)?;
-        require_table_string(tranche, "admission_status", "blocked", &id)?;
+        let status = string_field(tranche, "status", &id)?;
+        let admission_status = string_field(tranche, "admission_status", &id)?;
+        if id == PROPERTY_READ_HANDLER_SLICE {
+            if !handler_value_status_pair_is_valid(&status, &admission_status) {
+                return Err(format!(
+                    "{id} has invalid status/admission pair \
+                     {status:?}/{admission_status:?}"
+                ));
+            }
+        } else if status != "planned" || admission_status != "blocked" {
+            return Err(format!(
+                "{id} must remain planned/blocked; found \
+                 {status:?}/{admission_status:?}"
+            ));
+        }
 
         let dependencies = package_string_set(tranche, "depends_on", &id)?;
         if dependencies != owned_set(expected.dependencies) {
@@ -3147,6 +3377,204 @@ fn check_property_read_integration_gate(
                 return Err(format!(
                     "{id} excluded-claim scope mismatch; expected \
                      {expected_excluded_claims:?}, found {excluded_claims:?}"
+                ));
+            }
+            require_table_string(tranche, "risk_category", "B", &id)?;
+            require_table_string(tranche, "impact_status", "current", &id)?;
+            for field in [
+                "state_machines",
+                "old_api_removals",
+                "performance_workloads",
+            ] {
+                let values = string_set(array_field(tranche, field, &id)?, &id, field)?;
+                if !values.is_empty() {
+                    return Err(format!("{id} must have an empty {field} set"));
+                }
+            }
+
+            let contract_artifacts = package_string_set(tranche, "contract_artifacts", &id)?;
+            let expected_contract_artifacts = owned_set(PROPERTY_READ_HANDLER_CONTRACT_ARTIFACTS);
+            if contract_artifacts != expected_contract_artifacts {
+                return Err(format!(
+                    "{id} contract-artifact scope mismatch; expected \
+                     {expected_contract_artifacts:?}, found {contract_artifacts:?}"
+                ));
+            }
+            for artifact in &contract_artifacts {
+                validate_relative_path(artifact, &id)?;
+                if !root.join(artifact).is_file() {
+                    return Err(format!("{id} contract artifact {artifact:?} is not a file"));
+                }
+                let design_checker_source_is_registered = artifact
+                    == "tools/design-check/src/main.rs"
+                    && registered_artifacts.contains("tools/design-check/Cargo.toml");
+                if !registered_artifacts.contains(artifact) && !design_checker_source_is_registered
+                {
+                    return Err(format!(
+                        "{id} contract artifact {artifact:?} is not registered"
+                    ));
+                }
+            }
+
+            let candidate_base_ref = string_field(tranche, "candidate_base_ref", &id)?;
+            if candidate_base_ref != PROPERTY_READ_HANDLER_CANDIDATE_BASE_REF {
+                return Err(format!("{id} candidate base ref is not frozen"));
+            }
+            let candidate_ref = string_field(tranche, "candidate_ref", &id)?;
+            let candidate_paths = package_string_set(tranche, "candidate_paths", &id)?;
+            let expected_candidate_paths = owned_set(PROPERTY_READ_HANDLER_CANDIDATE_PATHS);
+            if candidate_paths != expected_candidate_paths {
+                return Err(format!(
+                    "{id} candidate-path scope mismatch; expected \
+                     {expected_candidate_paths:?}, found {candidate_paths:?}"
+                ));
+            }
+            check_candidate_paths(
+                &id,
+                root,
+                &candidate_paths,
+                &implementation_paths,
+                &registered_artifacts,
+            )?;
+            let effective_candidate_ref = if candidate_ref == "register-after-candidate-commit" {
+                git_text(
+                    root,
+                    &["rev-parse", "HEAD"],
+                    &format!("{id} candidate HEAD"),
+                )?
+                .trim()
+                .to_owned()
+            } else {
+                candidate_ref.clone()
+            };
+            check_candidate_commit(
+                &id,
+                root,
+                &candidate_base_ref,
+                &effective_candidate_ref,
+                &candidate_paths,
+            )?;
+
+            let governance_statuses = load_governance_check_statuses(root)?;
+            let prechecks = package_string_set(tranche, "pre_implementation_checks", &id)?;
+            let expected_prechecks = owned_set(PROPERTY_READ_HANDLER_PRECHECKS);
+            if prechecks != expected_prechecks {
+                return Err(format!(
+                    "{id} precheck set mismatch; expected \
+                     {expected_prechecks:?}, found {prechecks:?}"
+                ));
+            }
+            for check in &prechecks {
+                if governance_statuses.get(check).map(String::as_str) != Some("executable") {
+                    return Err(format!("{id} precheck {check:?} is not executable"));
+                }
+            }
+
+            let admission_review = string_field(tranche, "admission_review", &id)?;
+            if admission_review != PROPERTY_READ_HANDLER_ADMISSION_REVIEW
+                || !registered_artifacts.contains(&admission_review)
+                || !root.join(&admission_review).is_file()
+            {
+                return Err(format!(
+                    "{id} admission review is not registered and present"
+                ));
+            }
+            check_property_read_handler_audit_state(root, &admission_review, &admission_status)?;
+            let entry_check = string_field(tranche, "entry_check", &id)?;
+            if entry_check != PROPERTY_READ_HANDLER_ENTRY_CHECK
+                || governance_statuses.get(&entry_check).map(String::as_str) != Some("executable")
+            {
+                return Err(format!("{id} entry check is not executable"));
+            }
+            let evidence_path = string_field(tranche, "completion_evidence_path", &id)?;
+            if evidence_path != PROPERTY_READ_HANDLER_COMPLETION_EVIDENCE {
+                return Err(format!("{id} completion evidence path is not frozen"));
+            }
+            let completion_check = string_field(tranche, "completion_check", &id)?;
+            if completion_check != PROPERTY_READ_HANDLER_COMPLETION_CHECK
+                || governance_statuses
+                    .get(&completion_check)
+                    .map(String::as_str)
+                    != Some("executable")
+            {
+                return Err(format!("{id} completion check is not executable"));
+            }
+
+            let handler_source = fs::read_to_string(root.join("core/src/handler.rs"))
+                .map_err(|error| format!("cannot read Core handler source: {error}"))?;
+            let trait_exists = handler_source.contains("pub trait ReadPropertyHandler");
+            if status == "pending" && trait_exists {
+                return Err(format!("{id} pending state has premature trait source"));
+            }
+            if matches!(status.as_str(), "in-progress" | "complete") {
+                if !trait_exists {
+                    return Err(format!("{id} {status} state lacks trait source"));
+                }
+                validate_property_read_handler_source(&handler_source)?;
+            }
+
+            if admission_status == "review-pending" {
+                if root.join(PROPERTY_READ_HANDLER_REVIEW_ATTESTATION).exists() {
+                    return Err(format!("{id} has a premature review attestation"));
+                }
+            } else {
+                let attestation_path = string_field(tranche, "review_attestation", &id)?;
+                let attestation_ref = string_field(tranche, "review_attestation_ref", &id)?;
+                if attestation_path != PROPERTY_READ_HANDLER_REVIEW_ATTESTATION
+                    || !registered_artifacts.contains(&attestation_path)
+                    || !root.join(&attestation_path).is_file()
+                {
+                    return Err(format!("{id} review attestation path is not frozen"));
+                }
+                check_scoped_review_attestation(
+                    root,
+                    &attestation_path,
+                    &attestation_ref,
+                    &id,
+                    PROPERTY_READ_HANDLER_PRECHECKS,
+                    &candidate_base_ref,
+                    &candidate_ref,
+                    &candidate_paths,
+                    "property-read handler slice",
+                )?;
+                if status == "pending" {
+                    if tranche.contains_key("admission_ref") {
+                        return Err(format!("{id} pending state must not define admission_ref"));
+                    }
+                } else {
+                    let admission_ref = string_field(tranche, "admission_ref", &id)?;
+                    check_property_read_handler_admission_commit(
+                        root,
+                        &admission_ref,
+                        &attestation_ref,
+                    )?;
+                    if status == "in-progress" {
+                        check_property_read_handler_progress_checkpoint_state(
+                            root,
+                            &admission_ref,
+                            &implementation_paths,
+                        )?;
+                    }
+                }
+            }
+
+            let evidence_exists = root.join(&evidence_path).is_file();
+            if status == "complete" {
+                if !evidence_exists || !registered_artifacts.contains(&evidence_path) {
+                    return Err(format!(
+                        "{id} complete state lacks registered completion evidence"
+                    ));
+                }
+                let admission_ref = string_field(tranche, "admission_ref", &id)?;
+                check_property_read_handler_completion_evidence(
+                    root,
+                    &evidence_path,
+                    &completion_check,
+                    &admission_ref,
+                )?;
+            } else if evidence_exists && tranche_evidence_is_passed(root, &evidence_path)? {
+                return Err(format!(
+                    "{id} is not complete while {evidence_path} claims passed"
                 ));
             }
         }
@@ -6174,6 +6602,55 @@ fn validate_handler_value_audit_source(source: &str, admission_status: &str) -> 
     Ok(())
 }
 
+fn check_property_read_handler_audit_state(
+    root: &Path,
+    relative_path: &str,
+    admission_status: &str,
+) -> Result<(), String> {
+    let path = root.join(relative_path);
+    let source = fs::read_to_string(&path)
+        .map_err(|error| format!("cannot read {}: {error}", path.display()))?;
+    validate_property_read_handler_audit_source(&source, admission_status)
+        .map_err(|error| format!("{relative_path}: {error}"))
+}
+
+fn validate_property_read_handler_audit_source(
+    source: &str,
+    admission_status: &str,
+) -> Result<(), String> {
+    let (expected_status, expected_verdict, forbidden_status, forbidden_verdict) =
+        match admission_status {
+            "review-pending" => (
+                "Status: Review pending",
+                "Verdict: Candidate ready for independent review",
+                "Status: Passed",
+                "Verdict: Implementation-ready",
+            ),
+            "approved" => (
+                "Status: Passed",
+                "Verdict: Implementation-ready",
+                "Status: Review pending",
+                "Verdict: Candidate ready for independent review",
+            ),
+            other => {
+                return Err(format!(
+                    "unsupported property-read handler audit admission state {other:?}"
+                ));
+            }
+        };
+    for marker in [expected_status, expected_verdict] {
+        if source.lines().filter(|line| *line == marker).count() != 1 {
+            return Err(format!("audit must contain exactly one {marker:?}"));
+        }
+    }
+    for marker in [forbidden_status, forbidden_verdict] {
+        if source.lines().any(|line| line == marker) {
+            return Err(format!("audit contains contradictory marker {marker:?}"));
+        }
+    }
+    Ok(())
+}
+
 #[derive(Debug, Eq, PartialEq)]
 struct HandlerReviewAttestationProjection {
     reviewed_ref: String,
@@ -7266,6 +7743,92 @@ fn check_scoped_admission_commit(
     Ok(())
 }
 
+fn check_property_read_handler_admission_commit(
+    root: &Path,
+    admission_ref: &str,
+    attestation_ref: &str,
+) -> Result<(), String> {
+    let context = "property-read handler slice";
+    require_full_commit_id(admission_ref, &format!("{context} admission_ref"))?;
+    check_git_commit_is_ancestor(root, admission_ref, &format!("{context} admission_ref"))?;
+    require_git_single_parent(
+        root,
+        admission_ref,
+        attestation_ref,
+        &format!("{context} admission commit"),
+    )?;
+    let admission_paths = git_changed_paths_between(
+        root,
+        attestation_ref,
+        admission_ref,
+        &format!("{context} admission diff"),
+    )?;
+    let expected_paths = owned_set(&[
+        "PLAN.md",
+        PROPERTY_READ_HANDLER_ADMISSION_REVIEW,
+        PROPERTY_READ_GATE_MANIFEST,
+    ]);
+    if admission_paths != expected_paths {
+        return Err(format!(
+            "{context} admission path mismatch; expected \
+             {expected_paths:?}, found {admission_paths:?}"
+        ));
+    }
+    Ok(())
+}
+
+fn check_property_read_handler_progress_checkpoint_state(
+    root: &Path,
+    admission_ref: &str,
+    implementation_paths: &BTreeSet<String>,
+) -> Result<(), String> {
+    let context = "property-read handler slice";
+    let head = git_text(
+        root,
+        &["rev-parse", "HEAD"],
+        "resolve property-read handler progress HEAD",
+    )?;
+    let head = head.trim();
+    let expected_progress_paths = owned_set(&["PLAN.md", PROPERTY_READ_GATE_MANIFEST]);
+    if head == admission_ref {
+        let changed = git_worktree_paths(root, "pre-property-read handler progress worktree")?;
+        if changed != expected_progress_paths {
+            return Err(format!(
+                "pre-{context}-progress path mismatch; expected \
+                 {expected_progress_paths:?}, found {changed:?}"
+            ));
+        }
+        return Ok(());
+    }
+
+    require_git_single_parent(
+        root,
+        head,
+        admission_ref,
+        "property-read handler progress checkpoint",
+    )?;
+    let progress_paths = git_changed_paths_between(
+        root,
+        admission_ref,
+        head,
+        "property-read handler progress checkpoint diff",
+    )?;
+    if progress_paths != expected_progress_paths {
+        return Err(format!(
+            "{context} progress path mismatch; expected \
+             {expected_progress_paths:?}, found {progress_paths:?}"
+        ));
+    }
+    let worktree_paths = git_worktree_paths(root, "property-read handler implementation worktree")?;
+    if !worktree_paths.is_subset(implementation_paths) {
+        let out_of_scope: Vec<&String> = worktree_paths.difference(implementation_paths).collect();
+        return Err(format!(
+            "{context} implementation worktree has out-of-scope paths {out_of_scope:?}"
+        ));
+    }
+    Ok(())
+}
+
 fn check_scoped_progress_checkpoint_state(
     root: &Path,
     admission_ref: &str,
@@ -7665,6 +8228,97 @@ fn check_handler_context_completion_evidence(
         return Err(format!(
             "handler context completion checker exited with {status}"
         ));
+    }
+    Ok(())
+}
+
+fn check_property_read_handler_completion_evidence(
+    root: &Path,
+    relative_path: &str,
+    verification_check: &str,
+    admission_ref: &str,
+) -> Result<(), String> {
+    let context = "property-read handler slice";
+    check_tranche_evidence(
+        root,
+        relative_path,
+        PROPERTY_READ_HANDLER_SLICE,
+        "property-read-handler-slice",
+        verification_check,
+    )?;
+    let path = root.join(relative_path);
+    let source = fs::read_to_string(&path)
+        .map_err(|error| format!("cannot read {}: {error}", path.display()))?;
+    let document = source
+        .parse::<DocumentMut>()
+        .map_err(|error| format!("invalid {}: {error}", path.display()))?;
+    require_string(
+        document.get("verification_command"),
+        "property-read handler evidence verification_command",
+        "tools/check-wp100-property-read-handler-slice.sh",
+    )?;
+    let implementation_ref = document
+        .get("implementation_ref")
+        .and_then(Item::as_str)
+        .ok_or_else(|| format!("{relative_path} has no implementation_ref"))?;
+    require_full_commit_id(
+        implementation_ref,
+        "property-read handler implementation_ref",
+    )?;
+    check_git_commit_is_ancestor(
+        root,
+        implementation_ref,
+        "property-read handler implementation_ref",
+    )?;
+    let progress_ref = git_single_parent(
+        root,
+        implementation_ref,
+        "property-read handler implementation commit",
+    )?;
+    require_git_single_parent(
+        root,
+        &progress_ref,
+        admission_ref,
+        "property-read handler progress checkpoint",
+    )?;
+    let progress_paths = git_changed_paths_between(
+        root,
+        admission_ref,
+        &progress_ref,
+        "property-read handler progress checkpoint diff",
+    )?;
+    let expected_progress_paths = owned_set(&["PLAN.md", PROPERTY_READ_GATE_MANIFEST]);
+    if progress_paths != expected_progress_paths {
+        return Err(format!(
+            "{context} progress checkpoint path mismatch; expected \
+             {expected_progress_paths:?}, found {progress_paths:?}"
+        ));
+    }
+    let implementation_paths = git_commit_changed_paths(
+        root,
+        implementation_ref,
+        "property-read handler implementation commit",
+    )?;
+    let expected_implementation_paths = owned_set(&["core/src/handler.rs", "core/src/lib.rs"]);
+    if implementation_paths != expected_implementation_paths {
+        return Err(format!(
+            "{context} implementation path mismatch; expected \
+             {expected_implementation_paths:?}, found {implementation_paths:?}"
+        ));
+    }
+
+    let checker = root.join("tools/check-wp100-property-read-handler-slice.sh");
+    let status = Command::new(&checker)
+        .current_dir(root)
+        .status()
+        .map_err(|error| {
+            format!(
+                "cannot execute {context} completion checker {}: {error}",
+                checker.display()
+            )
+        })?;
+    if !status.success() {
+        return Err(format!("{context} completion checker exited with {status}"));
     }
     Ok(())
 }
@@ -11077,13 +11731,14 @@ mod tests {
 
     use super::{
         HANDLER_CONTEXT_PRECHECKS, HANDLER_CONTEXT_SOURCE_CONTRACT, HANDLER_CONTEXT_TRANCHE,
-        HANDLER_VALUE_PRIMITIVES_SOURCE_CONTRACT, check_handler_scope_partition,
-        check_producer_subscription_contract, expand_expressions,
+        HANDLER_VALUE_PRIMITIVES_SOURCE_CONTRACT, PROPERTY_READ_HANDLER_SOURCE_CONTRACT,
+        check_handler_scope_partition, check_producer_subscription_contract, expand_expressions,
         expected_work_package_dependencies, handler_value_status_pair_is_valid,
         parse_deadline_cleanup_review_attestation, parse_handler_review_attestation,
         parse_logical_time_review_attestation, parse_scoped_review_attestation, parse_transitions,
         validate_handler_context_source, validate_handler_value_audit_source,
-        validate_handler_value_primitives_source,
+        validate_handler_value_primitives_source, validate_property_read_handler_audit_source,
+        validate_property_read_handler_source,
     };
 
     fn producer_contract(obligation_bits: &str) -> DocumentMut {
@@ -11454,6 +12109,17 @@ result = "passed"
     }
 
     #[test]
+    fn property_read_handler_audit_state_rejects_crossed_markers() {
+        let pending = "Status: Review pending\nVerdict: Candidate ready for independent review\n";
+        assert!(validate_property_read_handler_audit_source(pending, "review-pending").is_ok());
+        assert!(validate_property_read_handler_audit_source(pending, "approved").is_err());
+
+        let passed = "Status: Passed\nVerdict: Implementation-ready\n";
+        assert!(validate_property_read_handler_audit_source(passed, "approved").is_ok());
+        assert!(validate_property_read_handler_audit_source(passed, "review-pending").is_err());
+    }
+
+    #[test]
     fn exact_handler_value_source_projection_is_accepted() {
         validate_handler_value_primitives_source(HANDLER_VALUE_PRIMITIVES_SOURCE_CONTRACT)
             .expect("the frozen five-value source must validate");
@@ -11479,6 +12145,56 @@ result = "passed"
             1,
         );
         assert!(validate_handler_context_source(&hashed).is_err());
+    }
+
+    #[test]
+    fn property_read_trait_projection_composes_with_completed_handler_values() {
+        let combined = format!(
+            "{HANDLER_VALUE_PRIMITIVES_SOURCE_CONTRACT}\n{HANDLER_CONTEXT_SOURCE_CONTRACT}\n\
+             {PROPERTY_READ_HANDLER_SOURCE_CONTRACT}"
+        );
+        validate_handler_value_primitives_source(&combined)
+            .expect("the value projection must permit only the scoped property-read trait");
+        validate_handler_context_source(&combined)
+            .expect("the context projection must permit only the scoped property-read trait");
+        validate_property_read_handler_source(&combined)
+            .expect("the exact property-read trait projection must validate");
+    }
+
+    #[test]
+    fn property_read_trait_projection_rejects_wider_handler_scope() {
+        let bounded = PROPERTY_READ_HANDLER_SOURCE_CONTRACT.replacen(
+            "pub trait ReadPropertyHandler {",
+            "pub trait ReadPropertyHandler: Send + Sync {",
+            1,
+        );
+        assert!(validate_property_read_handler_source(&bounded).is_err());
+
+        let extra_method = PROPERTY_READ_HANDLER_SOURCE_CONTRACT.replacen(
+            "    fn handle(",
+            "    fn unexpected(&self);\n\n    fn handle(",
+            1,
+        );
+        assert!(validate_property_read_handler_source(&extra_method).is_err());
+
+        let default_body = PROPERTY_READ_HANDLER_SOURCE_CONTRACT.replacen(
+            "    ) -> CoreResult<InteractionOutput>;",
+            "    ) -> CoreResult<InteractionOutput> { unimplemented!() }",
+            1,
+        );
+        assert!(validate_property_read_handler_source(&default_body).is_err());
+
+        let implementation = format!(
+            "{PROPERTY_READ_HANDLER_SOURCE_CONTRACT}\n\
+             impl ReadPropertyHandler for ExistingHandler {{\n\
+                 fn handle(\n\
+                     &self,\n\
+                     context: HandlerContext<'_>,\n\
+                     input: &InteractionInput,\n\
+                 ) -> CoreResult<InteractionOutput> {{ unimplemented!() }}\n\
+             }}"
+        );
+        assert!(validate_property_read_handler_source(&implementation).is_err());
     }
 
     #[test]

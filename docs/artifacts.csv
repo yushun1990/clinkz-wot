@@ -63,6 +63,7 @@ docs/audits/WP-100-deadline-cleanup-timing-entry.md,wp-100-deadline-cleanup-timi
 docs/audits/WP-100-deadline-cleanup-timing-review.toml,wp-100-deadline-cleanup-timing-review-attestation,non-normative-review,4.9,1,docs/amendments/WP-100-time-domain-v1.md
 docs/audits/WP-100-handler-context-entry.md,wp-100-handler-context-entry-review,non-normative-review,4.9,1,docs/amendments/WP-100-handler-api-v1.md
 docs/audits/WP-100-handler-context-review.toml,wp-100-handler-context-review-attestation,non-normative-review,4.9,1,docs/amendments/WP-100-handler-api-v1.md
+docs/audits/WP-100-property-read-handler-slice-entry.md,wp-100-property-read-handler-slice-entry-review,non-normative-review,4.9,1,docs/amendments/WP-100-handler-api-v1.md
 docs/reviews/review-01.org,architecture-boundary-audit,historical-review,4.9,1,docs/design.md
 docs/reviews/review-02.org,architecture-design-follow-up,blocking-review,4.9,1,docs/design.md
 docs/reviews/review-03.org,architecture-v4.9-interim-audit,blocking-review,4.9,1,docs/design.md
@@ -98,6 +99,8 @@ tools/check-wp100-deadline-cleanup-timing.sh,wp-100-deadline-cleanup-timing-chec
 tools/check-wp100-deadline-cleanup-timing-entry.sh,wp-100-deadline-cleanup-timing-entry-checker,non-normative-checker,4.9,1,docs/amendments/WP-100-time-domain-v1.md
 tools/check-wp100-handler-context.sh,wp-100-handler-context-checker,non-normative-checker,4.9,1,docs/amendments/WP-100-handler-api-v1.md
 tools/check-wp100-handler-context-entry.sh,wp-100-handler-context-entry-checker,non-normative-checker,4.9,1,docs/amendments/WP-100-handler-api-v1.md
+tools/check-wp100-property-read-handler-slice.sh,wp-100-property-read-handler-slice-checker,non-normative-checker,4.9,1,docs/amendments/WP-100-handler-api-v1.md
+tools/check-wp100-property-read-handler-slice-entry.sh,wp-100-property-read-handler-slice-entry-checker,non-normative-checker,4.9,1,docs/amendments/WP-100-handler-api-v1.md
 tools/compile-contracts/wp100-handler-value-primitives/Cargo.toml,wp-100-handler-value-primitives-contract-manifest,non-normative-compile-fixture,4.9,1,docs/design.md
 tools/compile-contracts/wp100-handler-value-primitives/Cargo.lock,wp-100-handler-value-primitives-contract-lock,non-normative-compile-fixture,4.9,1,docs/design.md
 tools/compile-contracts/wp100-handler-value-primitives/src/lib.rs,wp-100-handler-value-primitives-root-contract,non-normative-compile-fixture,4.9,1,docs/design.md
@@ -123,3 +126,9 @@ tools/compile-contracts/wp100-handler-context/tests/semantics.rs,wp-100-handler-
 tools/compile-contracts/wp100-handler-context/ui/private-handler-context.rs,wp-100-handler-context-private-fields-contract,non-normative-compile-fixture,4.9,1,docs/amendments/WP-100-handler-api-v1.md
 tools/compile-contracts/wp100-handler-context/ui/handler-context-not-hash.rs,wp-100-handler-context-negative-hash-contract,non-normative-compile-fixture,4.9,1,docs/amendments/WP-100-handler-api-v1.md
 tools/compile-contracts/wp100-handler-context/ui/handler-context-not-default.rs,wp-100-handler-context-negative-default-contract,non-normative-compile-fixture,4.9,1,docs/amendments/WP-100-handler-api-v1.md
+tools/compile-contracts/wp100-property-read-handler-slice/Cargo.toml,wp-100-property-read-handler-slice-contract-manifest,non-normative-compile-fixture,4.9,1,docs/amendments/WP-100-handler-api-v1.md
+tools/compile-contracts/wp100-property-read-handler-slice/Cargo.lock,wp-100-property-read-handler-slice-contract-lock,non-normative-compile-fixture,4.9,1,docs/amendments/WP-100-handler-api-v1.md
+tools/compile-contracts/wp100-property-read-handler-slice/src/lib.rs,wp-100-property-read-handler-slice-root-contract,non-normative-compile-fixture,4.9,1,docs/amendments/WP-100-handler-api-v1.md
+tools/compile-contracts/wp100-property-read-handler-slice/tests/semantics.rs,wp-100-property-read-handler-slice-semantics-contract,non-normative-compile-fixture,4.9,1,docs/amendments/WP-100-handler-api-v1.md
+tools/compile-contracts/wp100-property-read-handler-slice/ui/unscoped-async-read-property.rs,wp-100-property-read-handler-slice-negative-async-contract,non-normative-compile-fixture,4.9,1,docs/amendments/WP-100-handler-api-v1.md
+tools/compile-contracts/wp100-property-read-handler-slice/ui/unscoped-step-read-property.rs,wp-100-property-read-handler-slice-negative-step-contract,non-normative-compile-fixture,4.9,1,docs/amendments/WP-100-handler-api-v1.md

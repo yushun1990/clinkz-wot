@@ -2,14 +2,19 @@
 
 Last updated: 2026-07-26
 
-Repository basis: handler-context implementation commit
-`ae51858d82e8c1b9f621798674155015820c0535` plus the current completion
-evidence and continuation-state update. Exact candidate
+Repository basis: property-read slice-boundary correction commit
+`2d7087d100d4a0d72cabb77476175bf60b0a7925`, atop completed handler-context
+implementation `ae51858d82e8c1b9f621798674155015820c0535` and completion
+evidence/state `021f3c18d3ee8c31debfc7dd4b0171a42e56f3f9`. The exact property-read
+non-implementation candidate is the single child of
+`2d7087d100d4a0d72cabb77476175bf60b0a7925`; its immutable SHA is recorded by
+the immediately following registration checkpoint because a commit cannot
+self-record its own identity. The completed HandlerContext candidate
 `27c8dc974fd1b337de4671c81719f9fa32410c56` is the single child of frozen base
 `c42abcbc339167183c8c4bf9bd3bf584540073b4`; its independent attestation is
 `3007a88b93155d063ed0d08c69dc3520defebee5`, its admission checkpoint is
 `8c5693da3a3c18c81dceef1ae8620b2502817ac4`, and its progress checkpoint is
-`0357271c9afe3f1cce338da934e33e02d732330d`. The D3 design-authority
+`0357271f0971d10c79d6d757edc573d454fe4acd`. The D3 design-authority
 completion strategy is migrated at
 `78b3a45fa521cfe97d49d6ae3907760bcca7a041`; D4 subscription receiver/control
 ownership is migrated at
@@ -19,14 +24,14 @@ gate migration is recorded at
 
 ## Current Objective
 
-Prepare the exact `WP-100-PROPERTY-READ-HANDLER-SLICE` candidate without
-self-admitting it or creating either architecture fixture root before candidate
-review. The slice adds only the synchronous `ReadPropertyHandler` trait in
+Register the exact `WP-100-PROPERTY-READ-HANDLER-SLICE` non-implementation
+candidate, then stop at the independent-review boundary without self-attesting.
+The slice adds only the synchronous `ReadPropertyHandler` trait in
 `core/src/handler.rs` and `core/src/lib.rs`; it reuses the completed
-HandlerContext/static registration and existing production input/output.
-Preserve the completed handler-value and time tranches, keep target/no-atomic
-and request-storage migrations separate, and do not fold async/step traits,
-host storage/execution, Producer, or Servient integration into the slice.
+HandlerContext/static registration and existing production input/output. Keep
+target/no-atomic and request-storage migrations separate, do not fold
+async/step traits, host storage/execution, Producer, or Servient integration
+into the slice, and do not create either architecture fixture root.
 
 Active milestones:
 
@@ -288,10 +293,12 @@ D5 migration facts:
   WP-200-PROPERTY-READ-PLAN-SLICE ->
   WP-300-PROPERTY-READ-BINDING-SLICE ->
   WP-400-PROPERTY-READ-SERVIENT-SLICE`;
-- all four slices remain `planned` and `blocked`; each needs its own exact
-  candidate and independent ADR-0013 admission before implementation source or
-  a planned architecture fixture root is created; candidate contract fixtures
-  remain pre-implementation admission material;
+- the WP-100 slice is `pending` and `review-pending` with an exact
+  non-implementation candidate; the remaining three slices remain `planned`
+  and `blocked`. Every slice needs its own independent ADR-0013 admission
+  before implementation source or its planned architecture fixture root is
+  created; candidate contract fixtures remain pre-implementation admission
+  material;
 - broad `WP-100-HANDLER-ENTRY`, `WP-300-BROAD-ENTRY`, and
   `WP-400-BROAD-ENTRY` depend on the gate, with only their named property-read
   slices exempt from broad entry;
@@ -323,6 +330,33 @@ D5 migration facts:
 - broad `AffordanceTarget` no-atomic evidence, `AcceptHint` admission, final
   `InteractionInput` storage migration, host erasure/storage/execution, and
   downstream ownership remain excluded and separately blocking.
+
+Property-read handler candidate facts:
+
+- the candidate is the single child of frozen base
+  `2d7087d100d4a0d72cabb77476175bf60b0a7925` and changes exactly the 16
+  registered non-implementation paths;
+- the audit freezes one object-safe synchronous trait with no supertrait,
+  associated item, default body, allocation, executor, runtime, or thread
+  bound;
+- the external contract composes both public trait paths with borrowed
+  `HandlerContext`, `InteractionInput`, and `StaticHandlerRegistration`, uses
+  a deliberately non-`Send`/non-`Sync` implementation, and records exactly one
+  call;
+- three feature cells prove the synchronous/static seam under no-default,
+  async-enabled no-std, and std configurations, while negative fixtures reject
+  unscoped async and step traits;
+- the fixture does not inspect `InteractionInput` storage and therefore does
+  not freeze the separately excluded final request-storage migration;
+- the exact source validator rejects widened traits or unregistered handler
+  traits and composes with the completed handler-value and HandlerContext
+  projections; and
+- the gate checker permits pending approval without inventing a future
+  admission SHA, then requires an exact three-file admission commit, exact
+  two-file progress checkpoint, exact two-file implementation commit, and
+  registered completion evidence with verified ancestry; and
+- neither Core implementation path nor either planned architecture fixture
+  root is present in the candidate diff.
 
 Broad handler blockers:
 
@@ -625,27 +659,29 @@ baseline because it intentionally enables mutually exclusive `zenoh` and
 
 ## Stopping Point and Next Safe Actions
 
-`WP-100-HANDLER-CONTEXT` is complete. Impact inspection of the next property
-slice exposed and corrected the D5 no-atomic/broad-entry cycle without changing
-runtime code. The exact candidate boundary is now one additive synchronous
-trait in the same two Core paths; its reused values and excluded broad claims
-are machine-checked. Broad handler entry remains blocked by the separate
+`WP-100-HANDLER-CONTEXT` is complete. Impact inspection corrected the D5
+no-atomic/broad-entry cycle without changing runtime code. The exact
+property-read non-implementation candidate is now frozen as one additive
+synchronous trait in the same two Core paths, with reused values and excluded
+broad claims machine-checked. It still requires immutable-ref registration and
+later independent review. Broad handler entry remains blocked by the separate
 target/no-atomic, request/storage, remaining portable-trait, workload,
 resource, and performance boundaries.
 
 Next safe actions, in order:
 
-1. prepare—but do not self-admit—the exact
-   `WP-100-PROPERTY-READ-HANDLER-SLICE` candidate for only
-   `ReadPropertyHandler`, its two Core paths, and its external contract
-   fixture. Do not create either planned architecture fixture root;
-2. continue M1 with the next dependency-ready D3 target-domain migration and
+1. commit the exact non-implementation candidate as the single child of its
+   frozen base, register its immutable SHA, run the candidate entry check, and
+   stop without creating a review attestation;
+2. in a later independent root continuation, inspect and mutation-test the
+   registered candidate before deciding whether to attest it;
+3. continue M1 with the next dependency-ready D3 target-domain migration and
    carry the migrated D4 and D5 contracts into future subscription and
    property-read slice work;
-3. decompose the next dependency-complete portable-trait or remaining
+4. decompose the next dependency-complete portable-trait or remaining
    request/target tranche without merging its evidence boundary into the
    property-read slice; and
-4. ask the Owner only for project-goal, constraint, or external-commitment
+5. ask the Owner only for project-goal, constraint, or external-commitment
    clarification.
 
 Important references:
@@ -674,6 +710,9 @@ Important references:
 - `docs/evidence/WP-100-handler-context.toml`;
 - `tools/check-wp100-handler-context-entry.sh`;
 - `tools/check-wp100-handler-context.sh`;
+- `docs/audits/WP-100-property-read-handler-slice-entry.md`;
+- `tools/check-wp100-property-read-handler-slice-entry.sh`;
+- `tools/check-wp100-property-read-handler-slice.sh`;
 - `workspace/0007-time-domain-and-deadline.md`;
 - `workspace/0008-implementation-governance-overhead.md`;
 - `workspace/0009-minimal-end-to-end-architecture-validation.md`;
