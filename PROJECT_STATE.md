@@ -2,11 +2,12 @@
 
 Last updated: 2026-07-26
 
-Repository basis: handler-context review-failure checkpoint
-`64d3b79e39f3a922f090c14319718a1684f8dca4` plus replacement candidate
-`27c8dc974fd1b337de4671c81719f9fa32410c56`. The replacement remains a single
-child of frozen base `c42abcbc339167183c8c4bf9bd3bf584540073b4` and retains
-the exact 17-path non-implementation boundary.
+Repository basis: corrected handler-context candidate registration checkpoint
+`0378b6072e07f98c3f25d0f6f4063e79eeb028f3`. Replacement candidate
+`27c8dc974fd1b337de4671c81719f9fa32410c56` is a single child of frozen base
+`c42abcbc339167183c8c4bf9bd3bf584540073b4`, retains the exact 17-path
+non-implementation boundary, and is an ancestor of the registration
+checkpoint.
 
 ## Current Objective
 
@@ -167,7 +168,8 @@ Work packages and tranches:
   `27c8dc974fd1b337de4671c81719f9fa32410c56` is the single child of base
   `c42abcbc339167183c8c4bf9bd3bf584540073b4`, changes exactly the 17
   registered non-implementation paths, and replaces the failed sampled
-  compatibility fixture with an exhaustive 72-pairing matrix;
+  compatibility fixture with an exhaustive 72-pairing matrix. Its registered
+  candidate entry check passes;
 - `WP-100-HANDLER-ENTRY` remains blocked;
 - WP-100 is in progress; WP-200 through WP-700 are planned.
 
@@ -237,7 +239,8 @@ Handler-context candidate facts:
   both present and absent optional binding error context;
 - the replacement fixture passed against a conforming isolated implementation
   and rejected the known incompatible-pair mutation; and
-- no review attestation or approval exists for either candidate.
+- no review attestation or approval exists for either candidate. The current
+  root session authored the replacement and must not self-attest it.
 
 Completed handler-value tranche facts:
 
@@ -405,6 +408,9 @@ Handler-context candidate verification on 2026-07-26:
   pairing could pass the superseded completion fixture;
 - the replacement fixture passed against a conforming isolated implementation
   and rejected that mutation;
+- `tools/check-wp100-handler-context-entry.sh --candidate` passed after
+  replacement registration, including the exact candidate ancestry/path check
+  and all eleven predecessor/pre-implementation checks;
 - the superseded candidate's independent review verdict is failed for evidence
   sufficiency; and
 - no independent-review attestation, approval, progress checkpoint, or Core
@@ -419,20 +425,21 @@ baseline because it intentionally enables mutually exclusive `zenoh` and
 The failed `WP-100-HANDLER-CONTEXT` candidate has been superseded by exact
 candidate `27c8dc974fd1b337de4671c81719f9fa32410c56`, which preserves the frozen
 base and path boundary while closing the executable compatibility-matrix gap.
-Core implementation remains unchanged, and the completed time and
-handler-value evidence remains in force.
+Its candidate entry check passes. Core implementation remains unchanged, the
+completed time and handler-value evidence remains in force, and this authoring
+root session must not self-attest the replacement.
 
 Next safe actions, in order:
 
-1. run the registered candidate entry check for replacement
-   `27c8dc974fd1b337de4671c81719f9fa32410c56`;
-2. independently review the replacement candidate against base
+1. a later root continuation session that did not author the replacement must
+   independently review candidate
+   `27c8dc974fd1b337de4671c81719f9fa32410c56` against base
    `c42abcbc339167183c8c4bf9bd3bf584540073b4`;
-3. only if that review passes, record the attestation-only commit and exact
+2. only if that review passes, record the attestation-only commit and exact
    three-file admission checkpoint before either Core source path changes;
-4. create the exact two-file progress checkpoint, then implement and evidence
+3. create the exact two-file progress checkpoint, then implement and evidence
    `HandlerContext` only within the admitted scope;
-5. continue D3, D4, and D5 as AI-led technical decisions, asking the Owner only
+4. continue D3, D4, and D5 as AI-led technical decisions, asking the Owner only
    for project-goal, constraint, or external-commitment clarification.
 
 Important references:
