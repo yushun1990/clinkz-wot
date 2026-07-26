@@ -2,8 +2,10 @@
 
 Last updated: 2026-07-26
 
-Repository basis: D2 migration checkpoint `0092e9c` plus the current
-review-pending logical-time correction admission candidate.
+Repository basis: logical-time candidate registration checkpoint `d5b59a9`,
+which registers candidate
+`88eebbba04d070fb423a9c2ec227ddc470790769` over D2 migration base
+`0092e9c5f3c7e041ec979d18d462fd0e74ae2e0a`.
 
 ## Current Objective
 
@@ -145,6 +147,11 @@ Work packages and tranches:
   implementation path (`foundation/src/time.rs`), an independent nested
   contract fixture, and executable entry/completion checks, but is not
   admitted;
+- its exact registered candidate is
+  `88eebbba04d070fb423a9c2ec227ddc470790769`; the candidate is the single child
+  of D2 base `0092e9c5f3c7e041ec979d18d462fd0e74ae2e0a`, changes exactly the
+  14 registered non-implementation paths, and is bound by registration
+  checkpoint `d5b59a9`;
 - `WP-100-HANDLER-ENTRY` remains blocked;
 - WP-100 is in progress; WP-200 through WP-700 are planned.
 
@@ -257,6 +264,19 @@ Verified on 2026-07-26 through the D2 authority migration:
 - `cargo test --workspace --locked` - passed;
 - `sh scripts/check-feature-matrix.sh` - 21 valid feature combinations passed.
 
+Logical-time admission verification on 2026-07-26:
+
+- `tools/check-wp100-logical-time-correction-entry.sh --candidate` - passed;
+- `tools/check-design-artifacts.sh` - passed with the registered third WP-100
+  prerequisite tranche and 13 design-check unit tests;
+- `tools/check-wp100-logical-time-correction.sh` - failed at the required
+  pre-implementation boundary:
+  `Foundation SourceTimestamp::checked_cmp is missing`;
+- nested fixture metadata and lockfile validation - passed offline;
+- the candidate/base diff contains the exact registered 14 paths and no
+  `foundation/src/time.rs` change;
+- `git diff --check` - passed before both candidate and registration commits.
+
 `cargo test --workspace --all-features --locked` is not a valid project
 baseline because it intentionally enables mutually exclusive `zenoh` and
 `zenoh-pico` backends. Use the valid feature-matrix script instead.
@@ -265,7 +285,9 @@ baseline because it intentionally enables mutually exclusive `zenoh` and
 
 D2 is migrated. The exact logical-time correction admission package is authored
 without modifying `foundation/src/time.rs`; its independent review remains
-pending. The historical WP-000 evidence file was not rewritten.
+pending at registered candidate
+`88eebbba04d070fb423a9c2ec227ddc470790769`. The historical WP-000 evidence
+file was not rewritten.
 
 Next safe actions, in order:
 
