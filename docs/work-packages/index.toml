@@ -353,7 +353,7 @@ completion_check = "wp100-logical-time-correction-check"
 id = "WP-100-DEADLINE-CLEANUP-TIMING"
 work_package = "WP-100"
 sequence = 140
-status = "in-progress"
+status = "complete"
 admission_status = "approved"
 impact_status = "current"
 depends_on = ["WP-100-LOGICAL-TIME-CORRECTION"]
@@ -446,7 +446,7 @@ id = "TIME-DOMAIN-AND-DEADLINE"
 work_package = "WP-100"
 status = "decided"
 record_kind = "corrective-plan"
-impact_status = "blocking"
+impact_status = "resolved"
 blocks_entrypoints = ["WP-100-HANDLER-ENTRY"]
 affected_requirements = [
     "API-SOURCE-TIME-001",

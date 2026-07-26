@@ -2,15 +2,16 @@
 
 Last updated: 2026-07-26
 
-Repository basis: registered deadline/cleanup candidate
-`0fc9c6eee2a37cd420d9cd8beae537f3ed54c369` plus its candidate-registration
-and independent root review checkpoint.
+Repository basis: deadline/cleanup implementation commit
+`92d10f38065397222646ac9e36df256467a7f514` plus current completion evidence
+and continuation-state update.
 
 ## Current Objective
 
-Record the passed independent review and approve the registered Core-owned
-`WP-100-DEADLINE-CLEANUP-TIMING` candidate. Do not modify its source paths
-until the exact ADR-0013 attestation and approval checkpoint pass.
+Define and admit the next bounded WP-100 handler tranche from the frozen
+request/context, portable-trait, host-erasure/storage, security, codec, error,
+and callback-isolation scope. Preserve the completed time correction and do not
+fold Producer or Servient integration into WP-100.
 
 Active milestones:
 
@@ -141,12 +142,13 @@ Work packages and tranches:
   `b5cb1a5392ab2ef35a9f23185731012f71e4ea05`;
 - `WP-100-LOGICAL-TIME-CORRECTION` is approved, implemented, and complete
   under `docs/evidence/WP-100-logical-time-correction.toml`;
-- `WP-100-DEADLINE-CLEANUP-TIMING` has an exact review-pending candidate with
-  three Core implementation paths, a nested contract fixture, an entry checker,
-  and the frozen `deadline-cleanup-timing` completion key; the candidate is
-  `0fc9c6eee2a37cd420d9cd8beae537f3ed54c369`, the single child of logical-time
-  completion base `093d15a70319475ce05c651233de803aa563e095`, and changes
-  exactly the 15 registered non-implementation paths;
+- `WP-100-DEADLINE-CLEANUP-TIMING` is approved, implemented, and complete
+  under `docs/evidence/WP-100-deadline-cleanup-timing.toml`; its candidate is
+  `0fc9c6eee2a37cd420d9cd8beae537f3ed54c369`, its independent attestation is
+  `e37224fc9978ad16c0d76639bac58f0e221d824d`, its admission checkpoint is
+  `1d85953d6c473006dee53ea1691702dd25c70f20`, its progress checkpoint is
+  `65b8bdcc7182a6b65188e29a3cb99b04fd1c6d09`, and its implementation is
+  `92d10f38065397222646ac9e36df256467a7f514`;
 - the completed logical-time tranche's exact registered candidate is
   `88eebbba04d070fb423a9c2ec227ddc470790769`; the candidate is the single child
   of D2 base `0092e9c5f3c7e041ec979d18d462fd0e74ae2e0a`, changes exactly the
@@ -186,7 +188,6 @@ AI-led open decisions:
 
 Broad handler blockers:
 
-- the dependent Deadline/cleanup tranche is not yet admitted or complete;
 - four handler workloads lack complete executable matrix oracles;
 - request/target/context migration needs a scoped impact review;
 - the real no-atomic public boundary is not proven;
@@ -220,9 +221,9 @@ Migrated D2 facts:
   `InternalInvariant/Never` in the owning Handler, Binding, or Cleanup phase;
 - `WP-100-LOGICAL-TIME-CORRECTION` precedes and is evidence-distinct from
   `WP-100-DEADLINE-CLEANUP-TIMING`;
-- broad handler entry remains blocked until the dependent
-  `deadline-cleanup-timing` completion key joins the completed logical-time
-  key.
+- the completed logical-time and deadline/cleanup keys resolve the former
+  time-domain blocker; broad handler entry remains blocked by its non-time
+  admission and evidence gaps.
 
 Completed logical-time tranche facts:
 
@@ -242,7 +243,7 @@ Completed logical-time tranche facts:
   `API-TYPES-001` plus `CONSTRAINED-STORAGE-001` with unchanged generation
   source and a passing `tools/check-wp-000.sh`.
 
-Reviewed deadline/cleanup candidate facts:
+Completed deadline/cleanup tranche facts:
 
 - the exact committed candidate contains no Core or Foundation implementation
   change;
@@ -255,10 +256,18 @@ Reviewed deadline/cleanup candidate facts:
   CleanupRecord checked ordering, all four incomparable-clock dispositions,
   timeout linearization, and private Deadline storage;
 - `tools/check-wp100-deadline-cleanup-timing-entry.sh --candidate` and the
-  aggregate design-artifact check pass; the completion checker fails only at
-  the expected absent-Deadline boundary; and
+  admission-ready mode both passed before implementation;
 - the independent root review found no intersecting open finding or
-  out-of-scope implementation need.
+  out-of-scope implementation need;
+- the approval and exact two-file progress checkpoints precede the exact
+  three-file Core implementation commit;
+- `Deadline::NONE` never elapses, finite deadlines use checked extended logical
+  ordering, and different clock ids return `None`;
+- `CleanupRecord::try_with_timing` rejects clock mismatch, incomparable
+  ordering, and retry instants after the terminal deadline; and
+- the completion checker proves three Core feature cells, semantic and privacy
+  fixtures, all four incomparable-clock dispositions, timeout linearization,
+  Core unit tests, and the logical-time predecessor regression suite.
 
 Downstream admission blockers:
 
@@ -271,8 +280,8 @@ Downstream admission blockers:
 
 ## Verification Baseline
 
-Verified on 2026-07-26 through the logical-time implementation and completion
-state:
+Verified on 2026-07-26 through the deadline/cleanup implementation and
+completion state:
 
 - `tools/check-design-artifacts.sh` - passed;
 - `tools/check-design-requirements.sh` - passed;
@@ -309,25 +318,49 @@ Logical-time admission and completion verification on 2026-07-26:
 - the implementation commit changes only `foundation/src/time.rs`;
 - the historical WP-000 evidence and generation source blobs are unchanged.
 
+Deadline/cleanup admission and completion verification on 2026-07-26:
+
+- `tools/check-wp100-deadline-cleanup-timing-entry.sh --candidate` - passed;
+- `tools/check-wp100-deadline-cleanup-timing-entry.sh --admission-ready` -
+  passed before implementation;
+- `tools/check-wp100-deadline-cleanup-timing.sh` - passed after implementation
+  across all three Core feature cells, the independent semantic and privacy
+  fixtures, all 59 no-std Core tests, and the logical-time predecessor
+  regression suite;
+- `cargo clippy --locked -p clinkz-wot-core --all-targets --all-features -- -A clippy::large_enum_variant -D warnings` -
+  passed; the scoped allow is for the pre-existing frozen `HandlerStep<R>`
+  representation and the admitted implementation added no lint finding;
+- the candidate/base diff contains the exact registered 15 non-implementation
+  paths;
+- the implementation commit changes only `core/src/deadline.rs`,
+  `core/src/lib.rs`, and `core/src/status.rs`;
+- `tools/check-design-artifacts.sh`,
+  `cargo run --quiet --manifest-path tools/design-check/Cargo.toml -- check-work-packages`,
+  `cargo test --workspace --locked`, and the 21-cell valid feature matrix all
+  passed in completion state; and
+- the historical WP-000 evidence and both predecessor implementation commits
+  are unchanged.
+
 `cargo test --workspace --all-features --locked` is not a valid project
 baseline because it intentionally enables mutually exclusive `zenoh` and
 `zenoh-pico` backends. Use the valid feature-matrix script instead.
 
 ## Stopping Point and Next Safe Actions
 
-The logical-time correction is independently reviewed, admitted, implemented,
-and evidenced. The historical WP-000 evidence file was not rewritten; its time
-claims are replaced by the new WP-100 record and its generation claims are
-reaffirmed.
+The logical-time and deadline/cleanup corrections are independently reviewed,
+admitted, implemented, and evidenced. The historical WP-000 evidence file was
+not rewritten; its time claims are replaced by the current WP-100 records and
+its generation claims are reaffirmed. The time-domain blocker on broad handler
+entry is resolved; the remaining handler admission and evidence gaps are
+independent.
 
 Next safe actions, in order:
 
-1. commit the independent review attestation for exact candidate
-   `0fc9c6eee2a37cd420d9cd8beae537f3ed54c369`;
-2. run the admission-ready check and commit the exact approval checkpoint;
-3. implement and evidence the frozen Deadline, CleanupRecord timing, and
-   incomparable-clock disposition scope;
-4. continue D3, D4, and D5 as AI-led technical decisions, asking the Owner only
+1. decompose the next bounded handler tranche from the still-frozen WP-100
+   contract, starting with the smallest dependency-complete request/context or
+   portable-trait boundary rather than broad handler entry;
+2. independently admit that exact tranche before its source changes;
+3. continue D3, D4, and D5 as AI-led technical decisions, asking the Owner only
    for project-goal, constraint, or external-commitment clarification.
 
 Important references:
@@ -346,6 +379,9 @@ Important references:
 - `docs/audits/WP-100-logical-time-correction-entry.md`;
 - `docs/audits/WP-100-logical-time-correction-review.toml`;
 - `docs/evidence/WP-100-logical-time-correction.toml`;
+- `docs/audits/WP-100-deadline-cleanup-timing-entry.md`;
+- `docs/audits/WP-100-deadline-cleanup-timing-review.toml`;
+- `docs/evidence/WP-100-deadline-cleanup-timing.toml`;
 - `workspace/0007-time-domain-and-deadline.md`;
 - `workspace/0008-implementation-governance-overhead.md`;
 - `workspace/0009-minimal-end-to-end-architecture-validation.md`;

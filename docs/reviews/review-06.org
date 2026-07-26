@@ -1,7 +1,7 @@
 #+title: Architecture Review 06: Time-Domain and Deadline Impact
 #+date: 2026-07-22
 #+review_id: architecture-review-06-time-domain-deadline-impact
-#+status: Design finding migrated; corrective implementation and broad handler entry blocked
+#+status: Corrective implementation complete; broad handler entry separately blocked
 #+reviewed_design: v4.9 time, handler, cleanup, and WP-000 evidence contracts
 
 * Review status and authority
@@ -13,12 +13,13 @@ registered amendments, work-package DAG, admission audit, and evidence records
 must be updated and independently reviewed before the affected work proceeds.
 
 ADR-0016 and =docs/amendments/WP-100-time-domain-v1.md= subsequently migrated
-the design disposition. The historical evidence gap remains open until the
-registered Foundation and Core corrective tranches complete.
+the design disposition. The registered Foundation and Core corrective tranches
+subsequently completed and closed this time-specific evidence gap.
 
 * Executive verdict
 
-The proposed =clinkz_wot_core::Deadline= is not implementation-ready. The
+At this review revision, the proposed =clinkz_wot_core::Deadline= was not
+implementation-ready. The
 design describes modular comparison for finite clocks, while the implemented
 foundation instant supports only non-wrapping checked comparison and the
 proposed Deadline carries no wrap policy. The conflict also reaches existing
@@ -150,20 +151,37 @@ The design-disposition conditions are complete:
   identity, ownership, dependencies, affected prior-evidence disposition, and
   completion keys.
 
-The implementation/evidence finding remains open until:
+The implementation/evidence finding required:
 
 - no-std fixtures prove raw-wrap extension and delayed-poll behavior;
 - SourceTimestamp and CleanupRecord tests prove the selected semantics; and
 - WP-000 time evidence is explicitly replaced or reaffirmed.
 
+* Completion update
+
+The time-specific finding is closed by the independently admitted corrective
+sequence:
+
+- =WP-100-LOGICAL-TIME-CORRECTION= completed under
+  =docs/evidence/WP-100-logical-time-correction.toml=; and
+- =WP-100-DEADLINE-CLEANUP-TIMING= completed under
+  =docs/evidence/WP-100-deadline-cleanup-timing.toml=.
+
+The historical WP-000 record remains immutable. The first record replaces its
+time claims and reaffirms its generation claims; the second proves Core
+Deadline, CleanupRecord checked ordering, incomparable-clock disposition, and
+timeout linearization. The registered =TIME-DOMAIN-AND-DEADLINE= impact is
+therefore resolved.
+
 * Verdict
 
-WP-000 time evidence: IMPACTED; replacement/reaffirmation disposition frozen,
-completion evidence pending.
+WP-000 time evidence: REPLACED by current WP-100 evidence; disjoint generation
+claims reaffirmed.
 
-Deadline value: BLOCKED pending Foundation correction and its Core admission.
+Deadline value: COMPLETE under exact Core completion evidence.
 
-Broad handler entry: BLOCKED.
+Broad handler entry: BLOCKED by its remaining non-time admission and evidence
+conditions.
 
-Clock-independent five-value scope: DISJOINT; subsequently completed under
-separate admission evidence.
+Clock-independent five-value scope: DISJOINT; completed under separate
+admission evidence.

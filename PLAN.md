@@ -41,11 +41,10 @@ The repository evidence establishes the following starting point:
   for the exact five-value scope;
 - `WP-100-LOGICAL-TIME-CORRECTION` is implemented and has completion evidence
   for the extended logical-time domain;
-- `WP-100-DEADLINE-CLEANUP-TIMING` has an exact independently reviewed and
-  approved Core-only admission candidate and is in implementation;
-- broad handler entry is blocked until the decided Deadline/cleanup correction
-  tranche completes, and by incomplete workload oracles, request/context
-  migration review, and no-atomic public-boundary evidence;
+- `WP-100-DEADLINE-CLEANUP-TIMING` is implemented and has completion evidence
+  for the Core Deadline, cleanup ordering, and incomparable-clock disposition;
+- broad handler entry remains blocked by incomplete workload oracles,
+  request/context migration review, and no-atomic public-boundary evidence;
 - WP-200 is blocked before admission by the unresolved constructible
   candidate-fallback policy and bounded diagnostics;
 - WP-300 is blocked before admission by incomplete exact binding contracts,
@@ -76,7 +75,7 @@ answer and does not automatically block unrelated admitted work.
 | ID | Status | AI decision to resolve | Planning consequence | Required by |
 |---|---|---|---|---|
 | D1 | MIGRATED | Adopt risk-proportional implementation admission from `workspace/0008-implementation-governance-overhead.md` as an authoring/review-depth policy, without weakening ADR-0013 tranche admission | Category A work receives narrow evidence and review; Category B/C retain stricter controls | M0 exit |
-| D2 | MIGRATED | Use clock-source-owned non-wrapping extended logical ticks; retain raw wrap metadata as diagnostics; fail incomparable clock domains explicitly; correct Foundation before Core Deadline/cleanup timing | Defines `WP-100-LOGICAL-TIME-CORRECTION -> WP-100-DEADLINE-CLEANUP-TIMING`; broad handler entry remains blocked until both complete | M2 exit |
+| D2 | MIGRATED | Use clock-source-owned non-wrapping extended logical ticks; retain raw wrap metadata as diagnostics; fail incomparable clock domains explicitly; correct Foundation before Core Deadline/cleanup timing | Completed `WP-100-LOGICAL-TIME-CORRECTION -> WP-100-DEADLINE-CLEANUP-TIMING`; the time blocker is resolved while independent broad-handler blockers remain | M2 exit |
 | D3 | OPEN | Select the completion strategy for decomposing residual `docs/design.md` ownership from `workspace/0010-complete-design-decomposition.md` | Determines the remaining v4.9 authority-closure work | M1 exit |
 | D4 | OPEN | Freeze subscription receiver/control ownership and clone semantics from `workspace/0011-subscription-receiver-ownership.md` | Unblocks affected WP-300/WP-400 contracts | M4 entry |
 | D5 | OPEN | Decide whether and how to add the mock-binding property-read architecture gate from `workspace/0009-minimal-end-to-end-architecture-validation.md` | If adopted after AI evidence review, PLAN and the authoritative work-package DAG must gain reviewed narrow tranches and an integration gate before broad expansion | Before broad WP-200/WP-300/WP-400 expansion |
@@ -207,17 +206,16 @@ Completed evidence:
 - `WP-100-HANDLER-VALUE-PRIMITIVES` is implemented and has completion
   evidence.
 - `WP-100-LOGICAL-TIME-CORRECTION` is implemented and has completion evidence.
+- `WP-100-DEADLINE-CLEANUP-TIMING` is implemented and has completion evidence.
 
 Next execution order:
 
-1. complete the in-progress
-   `WP-100-DEADLINE-CLEANUP-TIMING` tranche;
-2. define and admit the next bounded handler tranches for request/context
+1. define and admit the next bounded handler tranches for request/context
    values, portable traits, host erasure/storage, security, codecs, errors, and
    callback isolation;
-3. complete the real handler matrix, no-atomic boundary, cancellation,
+2. complete the real handler matrix, no-atomic boundary, cancellation,
    storage/replacement, resource, and performance evidence;
-4. retain Producer and Servient integration in WP-300 and WP-400.
+3. retain Producer and Servient integration in WP-300 and WP-400.
 
 AI deliverable:
 

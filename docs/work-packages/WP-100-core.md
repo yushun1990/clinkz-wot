@@ -92,18 +92,17 @@ implementation preserves all public time representations and the
 behavior, and proves raw overflow-epoch, delayed-observation, reset, scale, and
 exhaustion semantics.
 
-`WP-100-DEADLINE-CLEANUP-TIMING` now has an exact review-pending admission
-candidate. Its only implementation paths are `core/src/deadline.rs`,
-`core/src/status.rs`, and the Core root module/export in `core/src/lib.rs`.
-The candidate freezes Deadline NONE/finite/incomparable behavior,
+`WP-100-DEADLINE-CLEANUP-TIMING` is complete. Its only implementation paths
+are `core/src/deadline.rs`, `core/src/status.rs`, and the Core root
+module/export in `core/src/lib.rs`. Completion evidence proves Deadline
+NONE/finite/incomparable behavior,
 `CleanupRecord::try_with_timing` checked logical ordering, the four error
 dispositions, delayed polling, and the timeout linearization oracle across all
 three Core feature cells. It changes no handler, dispatcher, binding, Servient,
 scheduler, state-machine, resource, removal, or performance scope. Its exact
-entry boundary is recorded by
-`docs/audits/WP-100-deadline-cleanup-timing-entry.md`. Registration and
-candidate checks do not authorize source changes; independent review and the
-separate approval checkpoint remain required.
+entry and completion records are
+`docs/audits/WP-100-deadline-cleanup-timing-entry.md` and
+`docs/evidence/WP-100-deadline-cleanup-timing.toml`.
 
 ## Requirements
 
