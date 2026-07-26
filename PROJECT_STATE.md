@@ -2,35 +2,35 @@
 
 Last updated: 2026-07-26
 
-Repository basis: commit `ca00d3b12ef7bd0f797739b8755b2fc3ce7c91ec` plus
-the current uncommitted governance, plan, artifact-registry, and workspace
-updates.
+Repository basis: clean session-entry commit
+`18d85fefec6beba2a027315e7a684e05df6e0e61`.
 
 ## Current Objective
 
-Continue M0 under the AI-led development model, then proceed with the smallest
-evidence-admissible v4.9 implementation work without waiting for Owner
-technical approvals.
+Proceed with the smallest evidence-admissible v4.9 implementation work without
+waiting for Owner technical approvals.
 
 Active milestones:
 
-- M0 Execution Baseline and Collaboration Reset - IN_PROGRESS;
+- M0 Execution Baseline and Collaboration Reset - CLOSED;
 - M1 v4.9 Architecture and Authority Closure - IN_PROGRESS;
 - M2 Foundation and Core Contract Stabilization - IN_PROGRESS.
 
-M0 has made material progress:
+M0 is closed from current repository evidence:
 
 - the Owner/AI decision model is corrected in `AGENTS.md`,
   `PROJECT_GOVERNANCE.md`, and `PLAN.md`;
 - the baseline artifact-registry defect for
   `workspace/0007-time-domain-and-deadline.md` is fixed;
 - D1 risk-proportional implementation admission is decided and migrated;
-- default tests, valid feature matrix, and aggregate design-artifact checks
-  pass.
-
-M0 is not closed yet because `ARCHITECTURE_GOVERNANCE.md` is still titled and
-framed as an execution plan, and the next implementation candidate still has a
-registered technical admission requirement pending.
+- `ARCHITECTURE_GOVERNANCE.md` now owns only technical convergence,
+  architecture authority, and design-change control rather than duplicating
+  execution planning;
+- default tests, all 21 valid feature combinations, and the aggregate
+  design-artifact checks pass against `18d85fe` plus the state/plan closure
+  update;
+- the next implementation candidate and its `review-pending` admission state
+  are unambiguous.
 
 ## AI-led Collaboration Model
 
@@ -128,6 +128,10 @@ Work packages and tranches:
 - `WP-100-HANDLER-VALUE-PRIMITIVES` is pending with
   `admission_status = "review-pending"` and an entry audit whose verdict is
   independent re-review pending;
+- the registered handler-value candidate is commit
+  `778c2b60eebc18895604485c4e546cad5bd5e101`, the single child of its frozen
+  base, but the entry checker incorrectly requires that historical candidate
+  to remain `HEAD`; at current `HEAD` it fails before the six prechecks;
 - `WP-100-HANDLER-ENTRY` remains blocked;
 - WP-100 is in progress; WP-200 through WP-700 are planned.
 
@@ -157,12 +161,6 @@ Immediate baseline defect:
   artifact so the `TIME-DOMAIN-AND-DEADLINE` blocking topic is registered and
   present.
 
-M0 remaining:
-
-- `ARCHITECTURE_GOVERNANCE.md` is still titled and framed as an execution plan,
-  although `AGENTS.md` assigns it technical-convergence governance. Clean this
-  up without changing accepted architecture.
-
 AI-led open decisions:
 
 - D2: freeze the time-domain/Deadline direction and decide the corrective
@@ -182,6 +180,18 @@ Broad handler blockers:
 - the real no-atomic public boundary is not proven;
 - Producer and Servient integration remain assigned to WP-300/WP-400.
 
+Handler-value admission checkpoint drift:
+
+- `tools/check-wp100-handler-value-primitives-entry.sh --candidate` fails with
+  `candidate commit must have parent ...` because the checker compares the
+  current `HEAD` to the historical candidate base;
+- the reviewed candidate commit and exact path set remain recoverable in Git,
+  but the direct-child/HEAD coupling cannot survive later governance commits;
+- do not rewrite published history to recreate the old checkout shape;
+- refresh or supersede the admission checkpoint mechanics while preserving the
+  exact five-value scope, exclusions, predecessor, executable contract, and
+  honest independent-review requirement.
+
 Downstream admission blockers:
 
 - WP-200: constructible candidate-fallback policy, health rule,
@@ -193,7 +203,7 @@ Downstream admission blockers:
 
 ## Verification Baseline
 
-Verified on 2026-07-26 after the governance/model update:
+Verified on 2026-07-26 against `18d85fe` plus the M0 state/plan closure update:
 
 - `tools/check-design-artifacts.sh` - passed;
 - `tools/check-design-requirements.sh` - passed;
@@ -209,12 +219,13 @@ baseline because it intentionally enables mutually exclusive `zenoh` and
 
 ## Stopping Point and Next Safe Actions
 
-No source implementation was changed in this governance session.
+No source implementation has been changed since the latest governance
+checkpoint.
 
 Next safe actions, in order:
 
-1. clean up `ARCHITECTURE_GOVERNANCE.md` so it no longer duplicates execution
-   planning responsibility while preserving accepted architecture governance;
+1. repair the stale, history-coupled candidate checkpoint without weakening
+   the tranche's semantic admission controls or rewriting published history;
 2. complete the AI-led technical admission review for
    `WP-100-HANDLER-VALUE-PRIMITIVES` and produce the registered attestation or
    record why the tranche remains pending;

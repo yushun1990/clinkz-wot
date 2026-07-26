@@ -83,7 +83,7 @@ authority.
 
 | ID | Milestone | Status | Dependency |
 |---|---|---|---|
-| M0 | Execution Baseline and Collaboration Reset | IN_PROGRESS | None |
+| M0 | Execution Baseline and Collaboration Reset | CLOSED | None |
 | M1 | v4.9 Architecture and Authority Closure | IN_PROGRESS | M0 for closure |
 | M2 | Foundation and Core Contract Stabilization | IN_PROGRESS | WP-000; scoped admission may run alongside M1 |
 | M3 | Planning and Compilation Pipeline | OPEN | WP-100 |
@@ -99,7 +99,7 @@ progress independently after their shared WP-300 dependency is complete.
 
 ## M0 — Execution Baseline and Collaboration Reset
 
-Status: IN_PROGRESS
+Status: CLOSED
 
 Objective: establish one trusted execution baseline and an explicit AI-led
 collaboration loop before further substantial implementation.
