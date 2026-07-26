@@ -10,6 +10,9 @@ Global convergence gates: GATE-1, GATE-2, GATE-3, GATE-4, GATE-5, GATE-6
 
 Owner packages: clinkz-wot-core
 
+Broad entry point: `WP-300-BROAD-ENTRY` (blocked by
+`PROPERTY-READ-ARCHITECTURE`)
+
 ## Scope
 
 Replace the host-only binding shapes in `clinkz-wot-core` with the frozen complete-registration
@@ -23,6 +26,11 @@ progress without adding a concrete protocol or a Servient scheduler.
 This package defines and tests the execution SPI consumed by Servient and protocol packages.
 WP-400 owns expose/destroy orchestration and registries; WP-600 owns zenoh and zenoh-pico
 implementations. No protocol-specific route, transport, or authentication semantics enter core.
+
+The named `WP-300-PROPERTY-READ-BINDING-SLICE` may be reviewed after its
+planner-slice dependency completes. It is the only WP-300 exception to the
+blocked broad entry point and must use the exact mock-binding boundary in the
+integration-gate manifest. The manifest grants no source-edit authority.
 
 This is the only package that introduces `ProducerEmission`. Core defines the immutable emission
 values and a `BindingEmissionSlot` for exactly one selected binding generation; it does not own
@@ -291,6 +299,10 @@ contributor metadata; a bare trait object is never the configuration contract.
 
 Produce these package evidence keys exactly as indexed by the work-package DAG:
 
+- `property-read-binding-slice` for one complete mock registration, immutable
+  property-read artifact, committed-closed route, permit-authorized accepted
+  request, exactly-once response opportunity, cleanup, and proof that the mock
+  has no Servient or application-handler dependency;
 - `complete-binding-registration` for atomic compiler/execution/contributor/policy bundles,
   startup-only publication, rejection of incomplete bundles, and owned I/O values;
 - `route-scoped-binding-lifecycle` for ownership-preserving route transitions, one accept/waker

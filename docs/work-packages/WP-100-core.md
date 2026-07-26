@@ -19,6 +19,8 @@ Handler entry tranche prerequisite paths:
 
 Decided handler-entry blocking scope: TIME-DOMAIN-AND-DEADLINE
 
+Cross-package integration gate: `PROPERTY-READ-ARCHITECTURE`
+
 ## Scope
 
 Refactor `clinkz-wot-core` around the frozen interaction, handler, error, codec, security,
@@ -48,6 +50,14 @@ and unresolved impacts. The broad handler implementation entry continues to
 require `tools/check-design-artifacts.sh --handler-entry-ready`. Smaller
 disjoint tranches use their own ADR-0013 admission and completion checks; they
 do not weaken or bypass that broad command.
+
+The broad `WP-100-HANDLER-ENTRY` is also blocked by
+`PROPERTY-READ-ARCHITECTURE`. Its exact
+`WP-100-PROPERTY-READ-HANDLER-SLICE` is the only gate-specific exception:
+after the five prerequisite tranches are complete, that slice may receive its
+own independent ADR-0013 review so the cross-package boundary can be proven.
+The integration-gate manifest is planning authority only and grants no
+implementation admission.
 
 After the completed foundation refresh, the next candidate contains only five
 passive, additive Core values: `CancellationView`, `SubscriptionAcceptance`,
@@ -328,6 +338,9 @@ Produce these package evidence keys exactly as indexed by the work-package DAG:
 - `handler-context` for the borrowed dispatch-identity view, exact
   operation/target compatibility matrix, private fields, negative `Hash` and
   `Default` contracts, and fixed-size validation context;
+- `property-read-handler-slice` for the exact static property-read input,
+  handler registration, protocol-neutral result, one-call accounting, and
+  cleanup-facing boundary consumed by the cross-package architecture gate;
 - `core-public-surface` for paths, feature cells, owned values, and trait shapes;
 - `handler-api-matrix` for every one of the 18 operation results, three handler flavors, and
   applicable compilation cells;

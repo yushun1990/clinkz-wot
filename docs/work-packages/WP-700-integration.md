@@ -24,6 +24,12 @@ defined by `docs/amendments/WP-100-interaction-output-api-v1.md` close here;
 earlier value, planning, binding, Servient, and protocol packages provide their
 package-scoped evidence without claiming end-to-end completion.
 
+`mock-property-read-architecture` carries forward the passed
+`PROPERTY-READ-ARCHITECTURE` record, its exact fixture revision, runtime cells,
+compile-only portable projection, mandatory assertion coverage, and
+independent cross-package attestation. WP-700 consumes that proof; it does not
+replace it with a broader opaque integration test.
+
 ## Requirements
 
 - `DOC-GOV-001`

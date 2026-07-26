@@ -1,8 +1,9 @@
-schema_version = 2
+schema_version = 3
 design_revision = "4.9"
 requirement = "IMPL-CONFORM-001"
 status = "in-progress"
 admission_policy = "adr-0013-tranche-scoped"
+integration_gate_manifest = "docs/work-packages/property-read-architecture-gate.toml"
 global_convergence_gates = [
     "GATE-1",
     "GATE-2",
@@ -45,6 +46,7 @@ depends_on_tranches = [
     "WP-100-HANDLER-CONTEXT",
 ]
 blocking_scopes = ["TIME-DOMAIN-AND-DEADLINE"]
+depends_on_integration_gates = ["PROPERTY-READ-ARCHITECTURE"]
 
 [[tranche]]
 id = "WP-100-FOUNDATION-REFRESH"
@@ -654,6 +656,7 @@ evidence_keys = [
     "logical-time-domain-correction",
     "deadline-cleanup-timing",
     "handler-context",
+    "property-read-handler-slice",
     "core-public-surface",
     "handler-api-matrix",
     "handler-cancellation",
@@ -719,6 +722,7 @@ owner_packages = [
 ]
 feature_cells = ["no-default", "async-no-std", "std"]
 evidence_keys = [
+    "property-read-plan-slice",
     "logical-plan-footprint",
     "capability-index-pruning",
     "bounded-candidate-selection",
@@ -759,6 +763,7 @@ title = "Binding registrations, lifecycle slots, and binding-local publication"
 document = "docs/work-packages/WP-300-bindings.md"
 status = "planned"
 depends_on = ["WP-200"]
+broad_entrypoint = "WP-300-BROAD-ENTRY"
 requirements = [
     "FORM-FINALIZE-001",
     "FORM-FINALIZE-002",
@@ -792,6 +797,7 @@ requirements = [
 owner_packages = ["clinkz-wot-core"]
 feature_cells = ["no-default", "async-no-std", "std"]
 evidence_keys = [
+    "property-read-binding-slice",
     "complete-binding-registration",
     "route-scoped-binding-lifecycle",
     "serving-activation-permit-contract",
@@ -836,6 +842,7 @@ title = "Servient lifecycle and host runtime"
 document = "docs/work-packages/WP-400-servient.md"
 status = "planned"
 depends_on = ["WP-300"]
+broad_entrypoint = "WP-400-BROAD-ENTRY"
 requirements = [
     "LIFE-EXPOSE-001",
     "LIFE-EXPOSE-002",
@@ -875,6 +882,7 @@ requirements = [
 owner_packages = ["clinkz-wot-servient", "clinkz-wot-core"]
 feature_cells = ["no-default", "async-no-std", "std"]
 evidence_keys = [
+    "property-read-servient-slice",
     "servient-expose-failure-injection",
     "servient-cleanup-outcomes",
     "servient-registration-snapshot",
@@ -1075,6 +1083,7 @@ requirements = [
 owner_packages = ["clinkz-wot", "workspace"]
 feature_cells = ["no-default", "async-no-std", "std"]
 evidence_keys = [
+    "mock-property-read-architecture",
     "umbrella-public-surface",
     "old-api-removal",
     "workspace-feature-matrix",

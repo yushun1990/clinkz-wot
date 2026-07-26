@@ -184,6 +184,10 @@ candidate vectors and retain enough source identity for strict selection and dia
 
 Produce these package evidence keys exactly as indexed by the work-package DAG:
 
+- `property-read-plan-slice` for one immutable property-read logical plan,
+  bounded construction from a read-only TD, a binding artifact sufficient
+  without runtime TD access, and the exact identities consumed by the
+  cross-package architecture gate;
 - `logical-plan-footprint` for two-level sharing, compact binding references, and immutable
   primary/additional response-classification facts;
 - `capability-index-pruning` for keyed probes and admitted wildcard work;

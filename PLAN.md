@@ -52,8 +52,8 @@ The repository evidence establishes the following starting point:
 - WP-200 is blocked before admission by the unresolved constructible
   candidate-fallback policy and bounded diagnostics;
 - WP-300 is blocked before admission by incomplete exact binding contracts,
-  host/constrained authoring fixtures, and unresolved subscription receiver
-  ownership;
+  host/constrained authoring fixtures, and the blocked property-read
+  architecture gate; D4 has resolved subscription receiver ownership;
 - WP-400, WP-500, and WP-600 remain downstream of WP-300, and WP-700 joins
   those three branches;
 - default workspace tests, the valid feature matrix, and the aggregate
@@ -82,11 +82,15 @@ answer and does not automatically block unrelated admitted work.
 | D2 | MIGRATED | Use clock-source-owned non-wrapping extended logical ticks; retain raw wrap metadata as diagnostics; fail incomparable clock domains explicitly; correct Foundation before Core Deadline/cleanup timing | Completed `WP-100-LOGICAL-TIME-CORRECTION -> WP-100-DEADLINE-CLEANUP-TIMING`; the time blocker is resolved while independent broad-handler blockers remain | M2 exit |
 | D3 | MIGRATED | Complete residual `docs/design.md` ownership through the requirement-indexed target DAG in `docs/spec/decomposition.csv` and several independently reviewed atomic domain migrations | 34 requirements are at final targets, 84 remain residual, and three remain in registered amendments; the checker now exposes exact remaining ownership | M1 exit |
 | D4 | MIGRATED | Use one non-`Clone` linear `Subscription`/`StaticSubscription` receive capability; expose no cloneable receiver/control split, competing-consumer contract, or per-clone broadcast | WP-300 owns one binding driver/cursor; WP-400 owns the Servient record/facade and must provide negative `Clone` compile fixtures | M4 entry |
-| D5 | OPEN | Decide whether and how to add the mock-binding property-read architecture gate from `workspace/0009-minimal-end-to-end-architecture-validation.md` | If adopted after AI evidence review, PLAN and the authoritative work-package DAG must gain reviewed narrow tranches and an integration gate before broad expansion | Before broad WP-200/WP-300/WP-400 expansion |
+| D5 | MIGRATED | Adopt `PROPERTY-READ-ARCHITECTURE` as the first executable cross-package composition proof, using one property read in host and manual runtime cells plus an async/no-std compile projection | Four exact blocked tranches form `WP-100 -> WP-200 -> WP-300 -> WP-400`; the gate blocks broad handler, binding, and Servient entry while permitting only the named slices to seek independent ADR-0013 admission | Before broad WP-100/WP-300/WP-400 expansion |
 
-D5 does not currently alter milestone dependencies. Until AI decides it and
-the decision is migrated, the registered work-package DAG remains the execution
-authority.
+D5 preserves package completion order but adds a cross-package integration
+dependency in the registered work-package DAG. The gate does not itself admit
+source edits: each named slice remains planned and blocked until its exact
+candidate receives independent ADR-0013 review. WP-200 planning work and the
+current HandlerContext lifecycle may continue, while broad
+`WP-100-HANDLER-ENTRY`, `WP-300-BROAD-ENTRY`, and `WP-400-BROAD-ENTRY` remain
+blocked until the gate passes.
 
 ## Milestone Overview
 
@@ -217,12 +221,15 @@ Next execution order:
 
 1. independently review and, if the exact candidate passes, admit and complete
    `WP-100-HANDLER-CONTEXT`;
-2. decompose the next dependency-complete portable-trait or remaining
+2. prepare the exact `WP-100-PROPERTY-READ-HANDLER-SLICE` candidate and
+   independent admission only after HandlerContext completes; this slice is
+   the first integration-gate dependency, not broad handler entry;
+3. decompose the next dependency-complete portable-trait or remaining
    request/target tranche, keeping `AcceptHint` resource admission and
    `InteractionInput` downstream migration explicit;
-3. complete the real handler matrix, no-atomic boundary, cancellation,
+4. complete the real handler matrix, no-atomic boundary, cancellation,
    storage/replacement, resource, and performance evidence;
-4. retain Producer and Servient integration in WP-300 and WP-400.
+5. retain Producer and Servient integration in WP-300 and WP-400.
 
 AI deliverable:
 
@@ -266,8 +273,9 @@ Entry conditions:
 - WP-100 dependencies required by the proposed tranche are complete;
 - the AR-004 candidate-fallback policy, health rule, pre-side-effect failure
   set, and bounded diagnostics are constructible and independently reviewed;
-- D5 has been decided; if adopted by AI evidence review, its narrow planner
-  tranche and integration dependency are present in the authoritative DAG;
+- D5 is migrated; the exact `WP-200-PROPERTY-READ-PLAN-SLICE` and its
+  dependency on the completed handler slice are present in the authoritative
+  DAG;
 - the exact tranche is admitted under the active governance policy.
 
 AI deliverable:
@@ -304,12 +312,16 @@ with route-scoped progress, explicit ownership, and bounded cleanup.
 
 Entry conditions:
 
-- WP-200 is complete;
+- broad package entry requires WP-200 to be complete;
 - D4 is decided and migrated into authoritative subscription contracts;
+- the broad `WP-300-BROAD-ENTRY` remains blocked until
+  `PROPERTY-READ-ARCHITECTURE` passes; only
+  `WP-300-PROPERTY-READ-BINDING-SLICE` may seek independent admission after
+  its exact planner-slice dependency completes even while the remaining WP-200
+  package is incomplete;
 - exact complete-registration, compiler, route, cancellation, response,
   subscription, emission, and constrained-progress signatures are frozen;
 - independent host and `no_std + alloc` binding-authoring fixtures pass;
-- D5 has been reflected if adopted;
 - the exact tranche is admitted.
 
 AI deliverable:
@@ -346,6 +358,14 @@ Dependency: WP-300.
 
 Objective: complete Servient-owned startup composition, activation,
 orchestration, scheduling, application facades, and cleanup.
+
+Entry conditions:
+
+- broad `WP-400-BROAD-ENTRY` remains blocked until
+  `PROPERTY-READ-ARCHITECTURE` passes;
+- only `WP-400-PROPERTY-READ-SERVIENT-SLICE` may seek independent admission
+  after its exact binding-slice dependency completes; and
+- package completion order and all ordinary WP-400 evidence remain unchanged.
 
 Exit criteria:
 
@@ -428,7 +448,7 @@ Exit criteria:
 - workspace feature, `no_std + alloc`, TD compatibility, integration,
   architecture-boundary, resource, and performance checks pass;
 - requirement-to-evidence coverage is complete;
-- the D5 integration gate passes if adopted;
+- `PROPERTY-READ-ARCHITECTURE` passes and its evidence remains current;
 - WP-700 and all global conformance evidence are complete;
 - an independent release-candidate review is complete and ready for release
   readiness assessment.

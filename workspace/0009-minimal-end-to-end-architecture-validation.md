@@ -1,6 +1,6 @@
 # 0009 Minimal End-to-End Architecture Validation
 
-Status: OPEN
+Status: MIGRATED
 Kind: implementation-readiness proposal
 Target revision: v4.9 implementation convergence
 
@@ -357,3 +357,57 @@ If accepted:
 
 This topic should be marked MIGRATED after the gate is represented in the
 authoritative execution artifacts.
+
+## Decision
+
+AI adopted alternative C as an early integration/conformance gate. The stable
+decision is:
+
+- `PROPERTY-READ-ARCHITECTURE` proves one semantic property-read scenario
+  across planning, Core handler, Protocol Binding, and Servient boundaries;
+- the same scenario runs in `no-default-manual` and `std-host`; the
+  `async-no-std` surface receives a compile-only projection because the
+  portable contract does not select an executor;
+- the dependency chain consists of exactly
+  `WP-100-PROPERTY-READ-HANDLER-SLICE`,
+  `WP-200-PROPERTY-READ-PLAN-SLICE`,
+  `WP-300-PROPERTY-READ-BINDING-SLICE`, and
+  `WP-400-PROPERTY-READ-SERVIENT-SLICE`;
+- all four slices are planned and blocked. Each requires its own exact
+  candidate, contract fixtures, impact review, and independent ADR-0013
+  admission; the integration manifest grants no implementation authority;
+- the gate blocks broad `WP-100-HANDLER-ENTRY`, `WP-300-BROAD-ENTRY`, and
+  `WP-400-BROAD-ENTRY`. Only the named property-read slice at each affected
+  package is exempt from its broad entry point;
+- two future fixture roots separate the mock binding from the composing runner.
+  The mock-binding root may not depend on Servient or application handler
+  modules;
+- fixture adapters are limited to protocol frames, deterministic I/O state,
+  and instrumentation probes. Logical plans, binding artifacts, route
+  guards/permits, accepted requests, handler context/input/output, response
+  opportunities, and cleanup owners must be real production boundaries; and
+- completion requires publication-before-acceptance, Servient-only
+  route/handler selection, exactly one handler call and response opportunity,
+  immutable plan and no runtime TD read, generation consistency, deactivation
+  rejection, zero retained ownership, dependency-direction checks, public API
+  construction, capability-absence checks, and the portable compile cell.
+
+The package completion order remains unchanged. The gate is not a new product
+crate, does not introduce Zenoh, and does not authorize placeholder fixture
+directories before an owning slice has a reviewed candidate.
+
+Rejected alternatives were package-local evidence alone, which cannot prove
+composition; Zenoh as the first architecture test, which confounds protocol
+and architecture failures; a single opaque cross-package implementation
+tranche, which hides independent admission and rollback truth; and fixture
+adapters for ownership boundaries, which would make a missing production
+contract appear constructible.
+
+The decision is migrated into:
+
+- `docs/work-packages/property-read-architecture-gate.toml`;
+- `docs/work-packages/PROPERTY-READ-ARCHITECTURE.md`;
+- schema v3 of `docs/work-packages/index.toml`;
+- the WP-100, WP-200, WP-300, WP-400, and WP-700 package records;
+- the artifact registry and machine work-package checker; and
+- `PLAN.md` and `PROJECT_STATE.md`.

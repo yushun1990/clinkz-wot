@@ -36,7 +36,9 @@ tools/check-architecture-adrs.sh,architecture-decision-checker,non-normative-che
 tools/check-directory-client-scope.sh,directory-client-boundary-checker,non-normative-checker,4.9,1,docs/design.md
 tools/check-resource-limits.sh,resource-profile-checker,non-normative-checker,4.9,1,docs/design.md
 tools/check-wp-000.sh,foundation-evidence-checker,non-normative-checker,4.9,1,docs/design.md
-docs/work-packages/index.toml,implementation-work-package-dag,normative-migration-plan,4.9,2,docs/design.md
+docs/work-packages/index.toml,implementation-work-package-dag,normative-migration-plan,4.9,3,docs/design.md
+docs/work-packages/property-read-architecture-gate.toml,property-read-architecture-integration-dag,normative-migration-plan,4.9,1,docs/design.md
+docs/work-packages/PROPERTY-READ-ARCHITECTURE.md,property-read-architecture-gate,normative-migration-plan,4.9,1,docs/design.md
 docs/work-packages,implementation-work-package-set,normative-migration-plan,4.9,1,docs/design.md
 docs/work-packages/WP-000-foundation.md,wp-000-foundation-work-package,normative-migration-plan,4.9,1,docs/design.md
 docs/work-packages/WP-100-core.md,wp-100-core-work-package,normative-migration-plan,4.9,1,docs/design.md

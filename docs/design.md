@@ -95,7 +95,11 @@ performance budgets and
 stable measurement identities; `tools/performance-harness` checks and
 orchestrates that contract. `docs/work-packages/index.toml` defines the
 implementation dependency DAG, and its package documents define migration and
-removal work without becoming a source of behavioral requirements. `PLAN.md`
+removal work without becoming a source of behavioral requirements. An
+integration-gate manifest named by that index is part of the same execution
+DAG: it may block broad entry points and name independently reviewable exact
+tranches, but it never grants source-edit authority or replaces package-local
+completion evidence. `PLAN.md`
 selects the active revision but does not redefine it. The accepted records under
 `docs/ADRs/` record accepted architecture inputs, rationale, rejected
 alternatives, and explicit supersession. An accepted decision must be integrated
@@ -155,6 +159,14 @@ depends on all three. The machine-readable package set MUST cover every indexed
 requirement and performance workload, use actual or explicitly target Cargo
 package names and feature cells, record old API removal and stable evidence
 keys, and contain no dependency cycle or undeclared predecessor.
+
+Before broad handler, Protocol Binding, or Servient expansion, the
+`PROPERTY-READ-ARCHITECTURE` integration gate MUST pass one real
+planning-to-response property-read composition in the registered host/manual
+runtime cells and portable compile cell. Only its four named slices may cross
+otherwise incomplete package boundaries, and each still requires independent
+ADR-0013 admission. A fixture adapter MUST NOT replace a production ownership
+boundary merely to make the composition executable.
 
 `CHANGE-CONTROL-001`: A semantic change to a frozen public API, lifecycle
 transition, error category, resource default, complexity bound, or performance

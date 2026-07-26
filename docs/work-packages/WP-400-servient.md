@@ -6,6 +6,9 @@ Depends on: `WP-300`
 Global convergence gates: `GATE-1`, `GATE-2`, `GATE-3`, `GATE-4`, `GATE-5`, `GATE-6`
 Owner packages: `clinkz-wot-servient`, `clinkz-wot-core`
 
+Broad entry point: `WP-400-BROAD-ENTRY` (blocked by
+`PROPERTY-READ-ARCHITECTURE`)
+
 ## Scope
 
 Implement the Servient composition and lifecycle layer after the complete binding bundles,
@@ -21,6 +24,11 @@ route and operation leases, but it does not own a protocol-local reactor/I/O loo
 transport, or a Directory service. `clinkz-wot-servient` composes frozen lower-layer contracts; it
 does not reinterpret forms, security expressions, Directory requests, or binding-specific state.
 Work may begin only after `WP-300` is complete and every entry gate above is closed.
+
+The exact `WP-400-PROPERTY-READ-SERVIENT-SLICE` is the sole exception: after
+its binding-slice dependency completes, it may receive an independent ADR-0013
+review to compose the architecture-gate scenario. This exception neither opens
+the broad entry point nor changes package completion order.
 
 Handler-origin response validation follows
 `docs/amendments/WP-100-interaction-output-api-v1.md`: every producer response
@@ -307,6 +315,10 @@ No compatibility facade may keep the removed lifecycle callable on a releasable 
 
 ## Evidence
 
+- `property-read-servient-slice`: atomic publication before mock acceptance,
+  Servient-only route/handler selection, one handler call and response,
+  deactivation rejection, generation consistency, and zero retained
+  route/request/handler/cleanup ownership in both runtime profiles.
 - `servient-expose-failure-injection`: exhaustive prepare, readiness, activate, Nth-route commit,
   cancellation/publication ordering, timeout, and rollback failure injection with retained active
   or committed-closed guards plus primary and cleanup results.

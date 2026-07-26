@@ -1,0 +1,239 @@
+schema_version = 1
+design_revision = "4.9"
+id = "PROPERTY-READ-ARCHITECTURE"
+status = "blocked"
+admission_policy = "adr-0013-tranche-scoped"
+document = "docs/work-packages/PROPERTY-READ-ARCHITECTURE.md"
+work_package_index = "docs/work-packages/index.toml"
+planned_fixture_roots = [
+    "tools/architecture-fixtures/property-read-binding",
+    "tools/architecture-fixtures/property-read-runner",
+]
+planned_completion_check = "property-read-architecture-check"
+required_runtime_cells = ["no-default-manual", "std-host"]
+required_compile_cells = ["async-no-std"]
+depends_on_tranches = [
+    "WP-100-PROPERTY-READ-HANDLER-SLICE",
+    "WP-200-PROPERTY-READ-PLAN-SLICE",
+    "WP-300-PROPERTY-READ-BINDING-SLICE",
+    "WP-400-PROPERTY-READ-SERVIENT-SLICE",
+]
+blocks_entrypoints = [
+    "WP-100-HANDLER-ENTRY",
+    "WP-300-BROAD-ENTRY",
+    "WP-400-BROAD-ENTRY",
+]
+requirements = [
+    "IMPL-CONFORM-001",
+    "DOC-RUNTIME-001",
+    "PLAN-COST-001",
+    "PLAN-SET-001",
+    "PLAN-ARTIFACT-001",
+    "FORM-FINALIZE-001",
+    "FORM-OWNER-001",
+    "HANDLER-API-001",
+    "HANDLER-VALUE-001",
+    "API-PAYLOAD-001",
+    "BIND-REG-001",
+    "BIND-ROUTE-001",
+    "BIND-DELIVERY-001",
+    "BIND-IO-001",
+    "BIND-MEM-001",
+    "LIFE-EXPOSE-002",
+    "STATE-EXPOSE-001",
+    "STATE-BIND-001",
+    "STATE-INFLIGHT-001",
+    "CLEANUP-RECORD-001",
+    "API-RESOURCE-001",
+]
+completion_evidence_keys = ["mock-property-read-architecture"]
+allowed_fixture_adapters = [
+    "protocol-frame",
+    "deterministic-io-state",
+    "instrumentation-probe",
+]
+forbidden_fixture_adapters = [
+    "logical-plan",
+    "binding-artifact",
+    "route-guard-or-permit",
+    "accepted-request",
+    "handler-context-input-or-output",
+    "response-opportunity",
+    "cleanup-owner",
+]
+mandatory_runtime_assertions = [
+    "td-read-only-during-planning",
+    "logical-plan-immutable-after-admission",
+    "binding-artifact-sufficient-without-td",
+    "no-accept-before-servient-publication",
+    "servient-selects-route-and-handler",
+    "handler-called-exactly-once",
+    "protocol-neutral-input-and-output",
+    "response-opportunity-consumed-once",
+    "deactivation-rejects-new-acceptance",
+    "route-request-cleanup-counts-return-to-zero",
+    "generation-identities-remain-consistent",
+    "no-hidden-handler-or-request-retention",
+]
+mandatory_compile_assertions = [
+    "mock-binding-has-no-servient-dependency",
+    "registration-constructible-from-public-api",
+    "binding-api-exposes-no-handler-or-dispatch-capability",
+    "activation-permit-not-constructible-cloneable-or-storable",
+    "fixture-uses-production-boundary-types",
+    "async-no-std-portable-surface-compiles",
+]
+
+[[tranche]]
+id = "WP-100-PROPERTY-READ-HANDLER-SLICE"
+work_package = "WP-100"
+sequence = 160
+status = "planned"
+admission_status = "blocked"
+depends_on = [
+    "WP-100-FOUNDATION-REFRESH",
+    "WP-100-HANDLER-VALUE-PRIMITIVES",
+    "WP-100-LOGICAL-TIME-CORRECTION",
+    "WP-100-DEADLINE-CLEANUP-TIMING",
+    "WP-100-HANDLER-CONTEXT",
+]
+requirements = [
+    "HANDLER-API-001",
+    "HANDLER-VALUE-001",
+    "API-PAYLOAD-001",
+    "CLEANUP-RECORD-001",
+]
+owner_packages = ["clinkz-wot-core"]
+feature_cells = ["no-default", "async-no-std", "std"]
+authoritative_artifacts = [
+    "docs/amendments/WP-100-handler-api-v1.md",
+    "docs/api-ownership.csv",
+    "docs/design.md",
+    "docs/work-packages/WP-100-core.md",
+    "docs/work-packages/index.toml",
+    "docs/work-packages/property-read-architecture-gate.toml",
+]
+completion_evidence_keys = ["property-read-handler-slice"]
+blocking_conditions = [
+    "handler-context-complete",
+    "property-read-input-trait-and-registration-candidate-reviewed",
+    "real-no-atomic-boundary-proven",
+]
+
+[[tranche]]
+id = "WP-200-PROPERTY-READ-PLAN-SLICE"
+work_package = "WP-200"
+sequence = 210
+status = "planned"
+admission_status = "blocked"
+depends_on = ["WP-100-PROPERTY-READ-HANDLER-SLICE"]
+requirements = [
+    "DOC-RUNTIME-001",
+    "PLAN-COST-001",
+    "PLAN-SET-001",
+    "PLAN-ARTIFACT-001",
+    "FORM-FINALIZE-001",
+    "FORM-OWNER-001",
+]
+owner_packages = ["clinkz-wot-core", "clinkz-wot-planning", "clinkz-wot-td"]
+feature_cells = ["no-default", "async-no-std", "std"]
+authoritative_artifacts = [
+    "docs/architecture/30-compiled-plan-lifecycle.md",
+    "docs/spec/planning.md",
+    "docs/work-packages/WP-200-planning.md",
+    "docs/work-packages/index.toml",
+    "docs/work-packages/property-read-architecture-gate.toml",
+]
+completion_evidence_keys = ["property-read-plan-slice"]
+blocking_conditions = [
+    "handler-slice-complete",
+    "property-read-logical-plan-and-binding-artifact-candidate-reviewed",
+    "bounded-planning-input-and-no-runtime-td-read-proven",
+]
+
+[[tranche]]
+id = "WP-300-PROPERTY-READ-BINDING-SLICE"
+work_package = "WP-300"
+sequence = 310
+status = "planned"
+admission_status = "blocked"
+depends_on = ["WP-200-PROPERTY-READ-PLAN-SLICE"]
+requirements = [
+    "API-PAYLOAD-001",
+    "BIND-REG-001",
+    "BIND-ROUTE-001",
+    "BIND-DELIVERY-001",
+    "BIND-IO-001",
+    "BIND-MEM-001",
+    "STATE-BIND-001",
+    "STATE-INFLIGHT-001",
+    "CLEANUP-RECORD-001",
+    "API-RESOURCE-001",
+]
+owner_packages = ["clinkz-wot-core", "workspace"]
+feature_cells = ["no-default", "async-no-std", "std"]
+authoritative_artifacts = [
+    "docs/architecture/40-protocol-binding-spi-and-deployment.md",
+    "docs/spec/binding-spi.md",
+    "docs/work-packages/WP-300-bindings.md",
+    "docs/work-packages/index.toml",
+    "docs/work-packages/property-read-architecture-gate.toml",
+]
+completion_evidence_keys = ["property-read-binding-slice"]
+blocking_conditions = [
+    "plan-slice-complete",
+    "registration-route-accept-response-and-cleanup-signatures-reviewed",
+    "host-and-manual-mock-binding-authoring-fixtures-defined",
+]
+
+[[tranche]]
+id = "WP-400-PROPERTY-READ-SERVIENT-SLICE"
+work_package = "WP-400"
+sequence = 410
+status = "planned"
+admission_status = "blocked"
+depends_on = ["WP-300-PROPERTY-READ-BINDING-SLICE"]
+requirements = [
+    "IMPL-CONFORM-001",
+    "PLAN-SET-001",
+    "PLAN-ARTIFACT-001",
+    "HANDLER-API-001",
+    "BIND-ROUTE-001",
+    "BIND-DELIVERY-001",
+    "LIFE-EXPOSE-002",
+    "STATE-EXPOSE-001",
+    "STATE-BIND-001",
+    "STATE-INFLIGHT-001",
+    "CLEANUP-RECORD-001",
+    "API-RESOURCE-001",
+]
+owner_packages = ["clinkz-wot-servient", "workspace"]
+feature_cells = ["no-default", "async-no-std", "std"]
+authoritative_artifacts = [
+    "docs/architecture/10-primary-data-flows.md",
+    "docs/architecture/50-servient-runtime-lifecycle.md",
+    "docs/design.md",
+    "docs/work-packages/WP-400-servient.md",
+    "docs/work-packages/index.toml",
+    "docs/work-packages/property-read-architecture-gate.toml",
+]
+completion_evidence_keys = ["property-read-servient-slice"]
+blocking_conditions = [
+    "binding-slice-complete",
+    "serving-activation-route-selection-response-and-cleanup-candidate-reviewed",
+    "host-and-manual-runner-fixtures-defined",
+]
+
+[[expansion_entrypoint]]
+id = "WP-300-BROAD-ENTRY"
+work_package = "WP-300"
+admission_status = "blocked"
+depends_on_integration_gates = ["PROPERTY-READ-ARCHITECTURE"]
+exempt_tranches = ["WP-300-PROPERTY-READ-BINDING-SLICE"]
+
+[[expansion_entrypoint]]
+id = "WP-400-BROAD-ENTRY"
+work_package = "WP-400"
+admission_status = "blocked"
+depends_on_integration_gates = ["PROPERTY-READ-ARCHITECTURE"]
+exempt_tranches = ["WP-400-PROPERTY-READ-SERVIENT-SLICE"]

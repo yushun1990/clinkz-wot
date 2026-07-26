@@ -77,3 +77,12 @@ Coordinated whole-revision migration and release convergence remain paused
 until the modular authority graph closes. A bounded implementation tranche may
 proceed only through ADR-0013's explicit admission record and independent
 review; such admission does not make an unmigrated domain or global gate ready.
+
+The first executable composition proof is
+`PROPERTY-READ-ARCHITECTURE`, defined by the registered work-package gate
+manifest. It exercises one property read through real planner, binding,
+Servient, handler, response, generation, and cleanup boundaries in host and
+manual profiles, with an async/no-std compile projection. It blocks broad
+handler, binding, and Servient entry but grants no implementation admission;
+fixture code may adapt protocol frames and instrumentation, not replace an
+ownership boundary.

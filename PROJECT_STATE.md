@@ -10,7 +10,9 @@ non-implementation boundary, and is an ancestor of the registration
 checkpoint. The D3 design-authority completion strategy is migrated at
 `78b3a45fa521cfe97d49d6ae3907760bcca7a041`; D4 subscription receiver/control
 ownership is migrated at
-`e07ba5f796c7613e28da08b34903a77c00b5a2d8`.
+`e07ba5f796c7613e28da08b34903a77c00b5a2d8`. D5 is migrated into the
+property-read architecture-gate DAG; its exact Git checkpoint is recorded
+after this state update.
 
 ## Current Objective
 
@@ -20,7 +22,8 @@ Preserve the completed handler-value and time tranches, keep the remaining
 target/no-atomic and request-storage migrations separate, and do not fold
 Producer or Servient integration into WP-100. Continue M1 authority convergence
 through the exact target-domain graph fixed by D3 and the linear subscription
-facade decision fixed by D4.
+facade decision fixed by D4. Preserve D5's blocked cross-package property-read
+gate: it is execution planning, not implementation admission.
 
 Active milestones:
 
@@ -169,6 +172,10 @@ Work packages and tranches:
 - D4 is migrated into the canonical subscription flow, residual subscription
   contract, WP-400 evidence boundary, architecture checker, plan, and workspace
   decision record; it changes no runtime or public API;
+- D5 is migrated into schema v3 of the work-package DAG. Its four exact
+  property-read slices are planned and blocked, and the integration gate blocks
+  broad handler, binding, and Servient entry without admitting source edits or
+  creating fixture placeholders;
 - WP-000 is recorded complete; its historical `time-and-generation-api` file
   remains immutable;
 - D2 is migrated through ADR-0016 and
@@ -233,8 +240,8 @@ passed without expanding the tranche.
 
 AI-led open decisions:
 
-- D5: decide whether and how to add the minimal mock-binding property-read
-  integration gate.
+- None. Newly discovered technical questions enter `workspace/` and are
+  resolved from repository evidence under the normal lifecycle.
 
 D3 migration facts:
 
@@ -270,6 +277,36 @@ D4 migration facts:
 - D4 does not close the remaining AR3 stop/cleanup signatures, constrained slot
   implementation, storage, performance, lifecycle evidence, or WP-300/WP-400
   admission.
+
+D5 migration facts:
+
+- `PROPERTY-READ-ARCHITECTURE` is a cross-package work-package gate rather than
+  a product package, example, or replacement for package completion;
+- its exact dependency chain is
+  `WP-100-PROPERTY-READ-HANDLER-SLICE ->
+  WP-200-PROPERTY-READ-PLAN-SLICE ->
+  WP-300-PROPERTY-READ-BINDING-SLICE ->
+  WP-400-PROPERTY-READ-SERVIENT-SLICE`;
+- all four slices remain `planned` and `blocked`; each needs its own exact
+  candidate and independent ADR-0013 admission before any source or fixture
+  path is created;
+- broad `WP-100-HANDLER-ENTRY`, `WP-300-BROAD-ENTRY`, and
+  `WP-400-BROAD-ENTRY` depend on the gate, with only their named property-read
+  slices exempt from broad entry;
+- one semantic scenario runs in `no-default-manual` and `std-host`, while
+  `async-no-std` is compile-only and selects no executor;
+- only protocol frames, deterministic I/O state, and instrumentation probes may
+  be fixture adapters. Plans, artifacts, permits/guards, accepted requests,
+  handler boundaries, response opportunities, and cleanup owners must be
+  production types;
+- mandatory evidence proves immutable planning with no runtime TD read,
+  publication-before-acceptance, Servient-only selection, one handler call and
+  response opportunity, deactivation rejection, generation consistency, zero
+  retained ownership, dependency direction, public construction, forbidden
+  capabilities, and portable compilation; and
+- package-local-only validation, Zenoh as the first architecture proof, one
+  opaque cross-package tranche, placeholder crates, and ownership-boundary
+  adapters were rejected.
 
 Broad handler blockers:
 
@@ -521,6 +558,25 @@ D4 subscription-ownership verification on 2026-07-26:
 - `workspace/0011-subscription-receiver-ownership.md` is `MIGRATED` while
   explicitly preserving unrelated AR3 and implementation gates.
 
+D5 property-read architecture-gate verification on 2026-07-26:
+
+- `docs/work-packages/property-read-architecture-gate.toml` records exactly
+  four ordered slices, two broad expansion entry points, three profile cells,
+  allowed and forbidden fixture adapters, 21 affected requirements, and the
+  mandatory runtime/compile assertions;
+- schema v3 of `docs/work-packages/index.toml` assigns the four slice evidence
+  keys to WP-100 through WP-400 and the gate evidence key to WP-700;
+- the work-package checker validates the manifest path, registered artifacts,
+  exact slice dependencies and sequence, package evidence ownership, broad
+  entry dependencies/exemptions, absence of admission-only fields and fixture
+  placeholders, and the human gate document;
+- the design-checker unit/integration suite and the positive work-package DAG
+  check pass with the new schema; isolated mutations that reversed the binding
+  slice dependency and removed `cleanup-owner` from the forbidden fixture
+  adapters were both rejected; and
+- `workspace/0009-minimal-end-to-end-architecture-validation.md` is
+  `MIGRATED`; no runtime or public API changed.
+
 `cargo test --workspace --all-features --locked` is not a valid project
 baseline because it intentionally enables mutually exclusive `zenoh` and
 `zenoh-pico` backends. Use the valid feature-matrix script instead.
@@ -545,9 +601,13 @@ Next safe actions, in order:
 3. create the exact two-file progress checkpoint, then implement and evidence
    `HandlerContext` only within the admitted scope;
 4. continue M1 with the next dependency-ready D3 target-domain migration and
-   decide D5 from repository evidence while carrying the migrated D4 contract
-   into future subscription work; ask the Owner only for project-goal,
-   constraint, or external-commitment clarification.
+   carry the migrated D4 and D5 contracts into future subscription and
+   property-read slice work;
+5. after HandlerContext completes, prepare—but do not self-admit—the exact
+   `WP-100-PROPERTY-READ-HANDLER-SLICE` candidate. Do not create either planned
+   fixture root until its owning slice has an independently reviewed candidate.
+   Ask the Owner only for project-goal, constraint, or external-commitment
+   clarification.
 
 Important references:
 
@@ -557,6 +617,8 @@ Important references:
 - `ARCHITECTURE_GOVERNANCE.md`;
 - `docs/architecture/README.md`;
 - `docs/work-packages/index.toml`;
+- `docs/work-packages/property-read-architecture-gate.toml`;
+- `docs/work-packages/PROPERTY-READ-ARCHITECTURE.md`;
 - `docs/audits/WP-100-handler-value-primitives-entry.md`;
 - `docs/audits/WP-100-handler-value-primitives-review.toml`;
 - `docs/evidence/WP-100-handler-value-primitives.toml`;

@@ -111,6 +111,15 @@ const HANDLER_CONTEXT_REVIEW_ATTESTATION: &str = "docs/audits/WP-100-handler-con
 const HANDLER_CONTEXT_COMPLETION_EVIDENCE: &str = "docs/evidence/WP-100-handler-context.toml";
 const HANDLER_CONTEXT_ADMISSION_REVIEW: &str = "docs/audits/WP-100-handler-context-entry.md";
 const HANDLER_CONTEXT_CANDIDATE_BASE_REF: &str = "c42abcbc339167183c8c4bf9bd3bf584540073b4";
+const PROPERTY_READ_GATE: &str = "PROPERTY-READ-ARCHITECTURE";
+const PROPERTY_READ_GATE_MANIFEST: &str = "docs/work-packages/property-read-architecture-gate.toml";
+const PROPERTY_READ_GATE_DOCUMENT: &str = "docs/work-packages/PROPERTY-READ-ARCHITECTURE.md";
+const PROPERTY_READ_HANDLER_SLICE: &str = "WP-100-PROPERTY-READ-HANDLER-SLICE";
+const PROPERTY_READ_PLAN_SLICE: &str = "WP-200-PROPERTY-READ-PLAN-SLICE";
+const PROPERTY_READ_BINDING_SLICE: &str = "WP-300-PROPERTY-READ-BINDING-SLICE";
+const PROPERTY_READ_SERVIENT_SLICE: &str = "WP-400-PROPERTY-READ-SERVIENT-SLICE";
+const WP300_BROAD_ENTRYPOINT: &str = "WP-300-BROAD-ENTRY";
+const WP400_BROAD_ENTRYPOINT: &str = "WP-400-BROAD-ENTRY";
 const HANDLER_VALUE_PRECHECKS: &[&str] = &[
     "api-ownership-check",
     "architecture-adr-check",
@@ -1923,8 +1932,8 @@ fn load_artifact_registry(root: &Path) -> Result<BTreeSet<String>, String> {
                 "performance result schema registry row must declare schema version 2".to_owned(),
             );
         }
-        if artifact == "docs/work-packages/index.toml" && schema_version != 2 {
-            return Err("work-package index registry row must declare schema version 2".to_owned());
+        if artifact == "docs/work-packages/index.toml" && schema_version != 3 {
+            return Err("work-package index registry row must declare schema version 3".to_owned());
         }
         if !known_requirement_sources.contains(fields[5]) {
             return Err(format!(
@@ -2344,7 +2353,7 @@ fn check_work_packages(root: &Path, require_handler_entry: bool) -> Result<(), S
     require_integer(
         document.get("schema_version"),
         "work-package schema_version",
-        2,
+        3,
     )?;
     require_string(
         document.get("design_revision"),
@@ -2572,6 +2581,652 @@ fn check_work_packages(root: &Path, require_handler_entry: bool) -> Result<(), S
         &package_evidence,
         require_handler_entry,
     )?;
+    check_property_read_integration_gate(
+        root,
+        &document,
+        &known_requirements,
+        &allowed_owners,
+        &allowed_cells,
+        &package_evidence,
+    )?;
+    Ok(())
+}
+
+struct PropertyReadSliceSpec {
+    work_package: &'static str,
+    sequence: i64,
+    dependencies: &'static [&'static str],
+    requirements: &'static [&'static str],
+    owners: &'static [&'static str],
+    evidence_key: &'static str,
+    blockers: &'static [&'static str],
+}
+
+fn property_read_slice_spec(id: &str) -> Option<PropertyReadSliceSpec> {
+    let spec = match id {
+        PROPERTY_READ_HANDLER_SLICE => PropertyReadSliceSpec {
+            work_package: "WP-100",
+            sequence: 160,
+            dependencies: &[
+                HANDLER_FOUNDATION_TRANCHE,
+                HANDLER_VALUE_PRIMITIVES_TRANCHE,
+                LOGICAL_TIME_TRANCHE,
+                DEADLINE_CLEANUP_TRANCHE,
+                HANDLER_CONTEXT_TRANCHE,
+            ],
+            requirements: &[
+                "HANDLER-API-001",
+                "HANDLER-VALUE-001",
+                "API-PAYLOAD-001",
+                "CLEANUP-RECORD-001",
+            ],
+            owners: &["clinkz-wot-core"],
+            evidence_key: "property-read-handler-slice",
+            blockers: &[
+                "handler-context-complete",
+                "property-read-input-trait-and-registration-candidate-reviewed",
+                "real-no-atomic-boundary-proven",
+            ],
+        },
+        PROPERTY_READ_PLAN_SLICE => PropertyReadSliceSpec {
+            work_package: "WP-200",
+            sequence: 210,
+            dependencies: &[PROPERTY_READ_HANDLER_SLICE],
+            requirements: &[
+                "DOC-RUNTIME-001",
+                "PLAN-COST-001",
+                "PLAN-SET-001",
+                "PLAN-ARTIFACT-001",
+                "FORM-FINALIZE-001",
+                "FORM-OWNER-001",
+            ],
+            owners: &["clinkz-wot-core", "clinkz-wot-planning", "clinkz-wot-td"],
+            evidence_key: "property-read-plan-slice",
+            blockers: &[
+                "handler-slice-complete",
+                "property-read-logical-plan-and-binding-artifact-candidate-reviewed",
+                "bounded-planning-input-and-no-runtime-td-read-proven",
+            ],
+        },
+        PROPERTY_READ_BINDING_SLICE => PropertyReadSliceSpec {
+            work_package: "WP-300",
+            sequence: 310,
+            dependencies: &[PROPERTY_READ_PLAN_SLICE],
+            requirements: &[
+                "API-PAYLOAD-001",
+                "BIND-REG-001",
+                "BIND-ROUTE-001",
+                "BIND-DELIVERY-001",
+                "BIND-IO-001",
+                "BIND-MEM-001",
+                "STATE-BIND-001",
+                "STATE-INFLIGHT-001",
+                "CLEANUP-RECORD-001",
+                "API-RESOURCE-001",
+            ],
+            owners: &["clinkz-wot-core", "workspace"],
+            evidence_key: "property-read-binding-slice",
+            blockers: &[
+                "plan-slice-complete",
+                "registration-route-accept-response-and-cleanup-signatures-reviewed",
+                "host-and-manual-mock-binding-authoring-fixtures-defined",
+            ],
+        },
+        PROPERTY_READ_SERVIENT_SLICE => PropertyReadSliceSpec {
+            work_package: "WP-400",
+            sequence: 410,
+            dependencies: &[PROPERTY_READ_BINDING_SLICE],
+            requirements: &[
+                "IMPL-CONFORM-001",
+                "PLAN-SET-001",
+                "PLAN-ARTIFACT-001",
+                "HANDLER-API-001",
+                "BIND-ROUTE-001",
+                "BIND-DELIVERY-001",
+                "LIFE-EXPOSE-002",
+                "STATE-EXPOSE-001",
+                "STATE-BIND-001",
+                "STATE-INFLIGHT-001",
+                "CLEANUP-RECORD-001",
+                "API-RESOURCE-001",
+            ],
+            owners: &["clinkz-wot-servient", "workspace"],
+            evidence_key: "property-read-servient-slice",
+            blockers: &[
+                "binding-slice-complete",
+                "serving-activation-route-selection-response-and-cleanup-candidate-reviewed",
+                "host-and-manual-runner-fixtures-defined",
+            ],
+        },
+        _ => return None,
+    };
+    Some(spec)
+}
+
+#[allow(clippy::too_many_arguments)]
+fn check_property_read_integration_gate(
+    root: &Path,
+    work_packages: &DocumentMut,
+    known_requirements: &BTreeSet<String>,
+    allowed_owners: &BTreeSet<String>,
+    allowed_cells: &BTreeSet<String>,
+    package_evidence: &BTreeMap<String, BTreeSet<String>>,
+) -> Result<(), String> {
+    require_string(
+        work_packages.get("integration_gate_manifest"),
+        "work-package integration_gate_manifest",
+        PROPERTY_READ_GATE_MANIFEST,
+    )?;
+
+    let registered_artifacts = load_artifact_registry(root)?;
+    for artifact in [PROPERTY_READ_GATE_MANIFEST, PROPERTY_READ_GATE_DOCUMENT] {
+        if !registered_artifacts.contains(artifact) {
+            return Err(format!(
+                "property-read architecture artifact {artifact:?} is not registered"
+            ));
+        }
+    }
+
+    let manifest_path = root.join(PROPERTY_READ_GATE_MANIFEST);
+    let manifest_source = fs::read_to_string(&manifest_path)
+        .map_err(|error| format!("cannot read {}: {error}", manifest_path.display()))?;
+    let manifest = manifest_source
+        .parse::<DocumentMut>()
+        .map_err(|error| format!("invalid {}: {error}", manifest_path.display()))?;
+    require_integer(
+        manifest.get("schema_version"),
+        "property-read gate schema_version",
+        1,
+    )?;
+    require_string(
+        manifest.get("design_revision"),
+        "property-read gate design_revision",
+        ACTIVE_DESIGN_REVISION,
+    )?;
+    require_string(
+        manifest.get("id"),
+        "property-read gate id",
+        PROPERTY_READ_GATE,
+    )?;
+    require_string(
+        manifest.get("status"),
+        "property-read gate status",
+        "blocked",
+    )?;
+    require_string(
+        manifest.get("admission_policy"),
+        "property-read gate admission_policy",
+        "adr-0013-tranche-scoped",
+    )?;
+    require_string(
+        manifest.get("document"),
+        "property-read gate document",
+        PROPERTY_READ_GATE_DOCUMENT,
+    )?;
+    require_string(
+        manifest.get("work_package_index"),
+        "property-read gate work_package_index",
+        "docs/work-packages/index.toml",
+    )?;
+    require_string(
+        manifest.get("planned_completion_check"),
+        "property-read gate planned_completion_check",
+        "property-read-architecture-check",
+    )?;
+
+    let expected_fixture_roots = owned_set(&[
+        "tools/architecture-fixtures/property-read-binding",
+        "tools/architecture-fixtures/property-read-runner",
+    ]);
+    let fixture_roots = root_string_set(&manifest, "planned_fixture_roots")?;
+    if fixture_roots != expected_fixture_roots {
+        return Err(format!(
+            "{PROPERTY_READ_GATE} fixture roots mismatch; expected \
+             {expected_fixture_roots:?}, found {fixture_roots:?}"
+        ));
+    }
+    for fixture_root in &fixture_roots {
+        validate_relative_path(fixture_root, PROPERTY_READ_GATE)?;
+        if root.join(fixture_root).exists() {
+            return Err(format!(
+                "{PROPERTY_READ_GATE} blocked manifest must not pre-create fixture root \
+                 {fixture_root:?}"
+            ));
+        }
+    }
+
+    let runtime_cells = root_string_set(&manifest, "required_runtime_cells")?;
+    let expected_runtime_cells = owned_set(&["no-default-manual", "std-host"]);
+    if runtime_cells != expected_runtime_cells {
+        return Err(format!(
+            "{PROPERTY_READ_GATE} runtime-cell mismatch; expected \
+             {expected_runtime_cells:?}, found {runtime_cells:?}"
+        ));
+    }
+    let compile_cells = root_string_set(&manifest, "required_compile_cells")?;
+    let expected_compile_cells = owned_set(&["async-no-std"]);
+    if compile_cells != expected_compile_cells {
+        return Err(format!(
+            "{PROPERTY_READ_GATE} compile-cell mismatch; expected \
+             {expected_compile_cells:?}, found {compile_cells:?}"
+        ));
+    }
+
+    let expected_slice_ids = owned_set(&[
+        PROPERTY_READ_HANDLER_SLICE,
+        PROPERTY_READ_PLAN_SLICE,
+        PROPERTY_READ_BINDING_SLICE,
+        PROPERTY_READ_SERVIENT_SLICE,
+    ]);
+    let gate_dependencies = root_string_set(&manifest, "depends_on_tranches")?;
+    if gate_dependencies != expected_slice_ids {
+        return Err(format!(
+            "{PROPERTY_READ_GATE} tranche set mismatch; expected \
+             {expected_slice_ids:?}, found {gate_dependencies:?}"
+        ));
+    }
+    let expected_blocked_entrypoints = owned_set(&[
+        HANDLER_ENTRYPOINT,
+        WP300_BROAD_ENTRYPOINT,
+        WP400_BROAD_ENTRYPOINT,
+    ]);
+    let blocked_entrypoints = root_string_set(&manifest, "blocks_entrypoints")?;
+    if blocked_entrypoints != expected_blocked_entrypoints {
+        return Err(format!(
+            "{PROPERTY_READ_GATE} blocked-entrypoint mismatch; expected \
+             {expected_blocked_entrypoints:?}, found {blocked_entrypoints:?}"
+        ));
+    }
+
+    let expected_gate_requirements = owned_set(&[
+        "IMPL-CONFORM-001",
+        "DOC-RUNTIME-001",
+        "PLAN-COST-001",
+        "PLAN-SET-001",
+        "PLAN-ARTIFACT-001",
+        "FORM-FINALIZE-001",
+        "FORM-OWNER-001",
+        "HANDLER-API-001",
+        "HANDLER-VALUE-001",
+        "API-PAYLOAD-001",
+        "BIND-REG-001",
+        "BIND-ROUTE-001",
+        "BIND-DELIVERY-001",
+        "BIND-IO-001",
+        "BIND-MEM-001",
+        "LIFE-EXPOSE-002",
+        "STATE-EXPOSE-001",
+        "STATE-BIND-001",
+        "STATE-INFLIGHT-001",
+        "CLEANUP-RECORD-001",
+        "API-RESOURCE-001",
+    ]);
+    let gate_requirements = root_string_set(&manifest, "requirements")?;
+    check_known_values(
+        PROPERTY_READ_GATE,
+        "requirement",
+        &gate_requirements,
+        known_requirements,
+    )?;
+    if gate_requirements != expected_gate_requirements {
+        return Err(format!(
+            "{PROPERTY_READ_GATE} requirement mismatch; expected \
+             {expected_gate_requirements:?}, found {gate_requirements:?}"
+        ));
+    }
+
+    let completion_keys = root_string_set(&manifest, "completion_evidence_keys")?;
+    if completion_keys != owned_set(&["mock-property-read-architecture"]) {
+        return Err(format!(
+            "{PROPERTY_READ_GATE} completion evidence must be exactly \
+             \"mock-property-read-architecture\"; found {completion_keys:?}"
+        ));
+    }
+    if !package_evidence
+        .get("WP-700")
+        .is_some_and(|keys| completion_keys.is_subset(keys))
+    {
+        return Err(format!(
+            "WP-700 does not carry {PROPERTY_READ_GATE} completion evidence"
+        ));
+    }
+
+    let allowed_adapters = root_string_set(&manifest, "allowed_fixture_adapters")?;
+    let expected_allowed_adapters = owned_set(&[
+        "protocol-frame",
+        "deterministic-io-state",
+        "instrumentation-probe",
+    ]);
+    if allowed_adapters != expected_allowed_adapters {
+        return Err(format!(
+            "{PROPERTY_READ_GATE} allowed fixture adapters mismatch; expected \
+             {expected_allowed_adapters:?}, found {allowed_adapters:?}"
+        ));
+    }
+    let forbidden_adapters = root_string_set(&manifest, "forbidden_fixture_adapters")?;
+    let expected_forbidden_adapters = owned_set(&[
+        "logical-plan",
+        "binding-artifact",
+        "route-guard-or-permit",
+        "accepted-request",
+        "handler-context-input-or-output",
+        "response-opportunity",
+        "cleanup-owner",
+    ]);
+    if forbidden_adapters != expected_forbidden_adapters {
+        return Err(format!(
+            "{PROPERTY_READ_GATE} forbidden fixture adapters mismatch; expected \
+             {expected_forbidden_adapters:?}, found {forbidden_adapters:?}"
+        ));
+    }
+
+    let runtime_assertions = root_string_set(&manifest, "mandatory_runtime_assertions")?;
+    let expected_runtime_assertions = owned_set(&[
+        "td-read-only-during-planning",
+        "logical-plan-immutable-after-admission",
+        "binding-artifact-sufficient-without-td",
+        "no-accept-before-servient-publication",
+        "servient-selects-route-and-handler",
+        "handler-called-exactly-once",
+        "protocol-neutral-input-and-output",
+        "response-opportunity-consumed-once",
+        "deactivation-rejects-new-acceptance",
+        "route-request-cleanup-counts-return-to-zero",
+        "generation-identities-remain-consistent",
+        "no-hidden-handler-or-request-retention",
+    ]);
+    if runtime_assertions != expected_runtime_assertions {
+        return Err(format!(
+            "{PROPERTY_READ_GATE} runtime assertions mismatch; expected \
+             {expected_runtime_assertions:?}, found {runtime_assertions:?}"
+        ));
+    }
+    let compile_assertions = root_string_set(&manifest, "mandatory_compile_assertions")?;
+    let expected_compile_assertions = owned_set(&[
+        "mock-binding-has-no-servient-dependency",
+        "registration-constructible-from-public-api",
+        "binding-api-exposes-no-handler-or-dispatch-capability",
+        "activation-permit-not-constructible-cloneable-or-storable",
+        "fixture-uses-production-boundary-types",
+        "async-no-std-portable-surface-compiles",
+    ]);
+    if compile_assertions != expected_compile_assertions {
+        return Err(format!(
+            "{PROPERTY_READ_GATE} compile assertions mismatch; expected \
+             {expected_compile_assertions:?}, found {compile_assertions:?}"
+        ));
+    }
+
+    let tranches = manifest
+        .get("tranche")
+        .and_then(Item::as_array_of_tables)
+        .ok_or_else(|| format!("{PROPERTY_READ_GATE} has no [[tranche]] records"))?;
+    if tranches.len() != 4 {
+        return Err(format!(
+            "{PROPERTY_READ_GATE} must define exactly four slices; found {}",
+            tranches.len()
+        ));
+    }
+
+    let mut slice_ids = BTreeSet::new();
+    let mut slice_sequences: BTreeMap<String, i64> = [
+        (HANDLER_FOUNDATION_TRANCHE.to_owned(), 110),
+        (HANDLER_VALUE_PRIMITIVES_TRANCHE.to_owned(), 120),
+        (LOGICAL_TIME_TRANCHE.to_owned(), 130),
+        (DEADLINE_CLEANUP_TRANCHE.to_owned(), 140),
+        (HANDLER_CONTEXT_TRANCHE.to_owned(), 150),
+    ]
+    .into_iter()
+    .collect();
+    let mut slice_dependencies = BTreeMap::new();
+
+    for tranche in tranches {
+        let id = string_field(tranche, "id", "property-read tranche")?;
+        if !slice_ids.insert(id.clone()) {
+            return Err(format!("{PROPERTY_READ_GATE} duplicates slice {id:?}"));
+        }
+        require_exact_table_fields(
+            tranche,
+            &id,
+            &[
+                "id",
+                "work_package",
+                "sequence",
+                "status",
+                "admission_status",
+                "depends_on",
+                "requirements",
+                "owner_packages",
+                "feature_cells",
+                "authoritative_artifacts",
+                "completion_evidence_keys",
+                "blocking_conditions",
+            ],
+        )?;
+
+        let expected = property_read_slice_spec(&id)
+            .ok_or_else(|| format!("{PROPERTY_READ_GATE} has unknown slice {id:?}"))?;
+
+        require_table_string(tranche, "work_package", expected.work_package, &id)?;
+        let sequence = integer_field(tranche, "sequence", &id)?;
+        if sequence != expected.sequence {
+            return Err(format!(
+                "{id} sequence mismatch; expected {}, found {sequence}",
+                expected.sequence
+            ));
+        }
+        require_table_string(tranche, "status", "planned", &id)?;
+        require_table_string(tranche, "admission_status", "blocked", &id)?;
+
+        let dependencies = package_string_set(tranche, "depends_on", &id)?;
+        if dependencies != owned_set(expected.dependencies) {
+            return Err(format!(
+                "{id} dependency mismatch; expected {:?}, found {dependencies:?}",
+                owned_set(expected.dependencies)
+            ));
+        }
+        slice_dependencies.insert(id.clone(), dependencies);
+        slice_sequences.insert(id.clone(), sequence);
+
+        let requirements = package_string_set(tranche, "requirements", &id)?;
+        check_known_values(&id, "requirement", &requirements, known_requirements)?;
+        if requirements != owned_set(expected.requirements) {
+            return Err(format!(
+                "{id} requirement mismatch; expected {:?}, found {requirements:?}",
+                owned_set(expected.requirements)
+            ));
+        }
+        let owners = package_string_set(tranche, "owner_packages", &id)?;
+        check_known_values(&id, "owner package", &owners, allowed_owners)?;
+        if owners != owned_set(expected.owners) {
+            return Err(format!(
+                "{id} owner mismatch; expected {:?}, found {owners:?}",
+                owned_set(expected.owners)
+            ));
+        }
+        let cells = package_string_set(tranche, "feature_cells", &id)?;
+        if cells != *allowed_cells {
+            return Err(format!(
+                "{id} feature cells must be exactly {allowed_cells:?}; found {cells:?}"
+            ));
+        }
+
+        let artifacts = package_string_set(tranche, "authoritative_artifacts", &id)?;
+        for artifact in &artifacts {
+            validate_relative_path(artifact, &id)?;
+            if !root.join(artifact).exists() {
+                return Err(format!("{id} artifact {artifact:?} does not exist"));
+            }
+            let covered_by_work_package_set = artifact.starts_with("docs/work-packages/")
+                && registered_artifacts.contains("docs/work-packages");
+            if !registered_artifacts.contains(artifact) && !covered_by_work_package_set {
+                return Err(format!("{id} artifact {artifact:?} is not registered"));
+            }
+        }
+        if !artifacts.contains(PROPERTY_READ_GATE_MANIFEST)
+            || !artifacts.contains("docs/work-packages/index.toml")
+        {
+            return Err(format!(
+                "{id} must identify the gate manifest and work-package index as authoritative"
+            ));
+        }
+
+        let evidence = package_string_set(tranche, "completion_evidence_keys", &id)?;
+        if evidence != owned_set(&[expected.evidence_key]) {
+            return Err(format!(
+                "{id} completion evidence mismatch; expected {:?}, \
+                 found {evidence:?}",
+                expected.evidence_key
+            ));
+        }
+        if !package_evidence
+            .get(expected.work_package)
+            .is_some_and(|keys| evidence.is_subset(keys))
+        {
+            return Err(format!(
+                "{id} evidence {evidence:?} is not assigned to {}",
+                expected.work_package
+            ));
+        }
+        let blockers = package_string_set(tranche, "blocking_conditions", &id)?;
+        if blockers != owned_set(expected.blockers) {
+            return Err(format!(
+                "{id} blocker mismatch; expected {:?}, found {blockers:?}",
+                owned_set(expected.blockers)
+            ));
+        }
+    }
+    if slice_ids != expected_slice_ids {
+        return Err(format!(
+            "{PROPERTY_READ_GATE} slice mismatch; expected {expected_slice_ids:?}, \
+             found {slice_ids:?}"
+        ));
+    }
+    for (id, dependencies) in &slice_dependencies {
+        let sequence = slice_sequences
+            .get(id)
+            .ok_or_else(|| format!("{id} has no registered sequence"))?;
+        for dependency in dependencies {
+            let dependency_sequence = slice_sequences
+                .get(dependency)
+                .ok_or_else(|| format!("{id} has unknown dependency {dependency:?}"))?;
+            if dependency_sequence >= sequence {
+                return Err(format!(
+                    "{id} dependency {dependency:?} is not earlier in the integration DAG"
+                ));
+            }
+        }
+    }
+
+    let expansion_entrypoints = manifest
+        .get("expansion_entrypoint")
+        .and_then(Item::as_array_of_tables)
+        .ok_or_else(|| format!("{PROPERTY_READ_GATE} has no [[expansion_entrypoint]] records"))?;
+    if expansion_entrypoints.len() != 2 {
+        return Err(format!(
+            "{PROPERTY_READ_GATE} must define exactly two broad expansion entrypoints; found {}",
+            expansion_entrypoints.len()
+        ));
+    }
+    let expected_expansion_entrypoints =
+        owned_set(&[WP300_BROAD_ENTRYPOINT, WP400_BROAD_ENTRYPOINT]);
+    let mut expansion_ids = BTreeSet::new();
+    for entrypoint in expansion_entrypoints {
+        let id = string_field(entrypoint, "id", "property-read expansion entrypoint")?;
+        if !expansion_ids.insert(id.clone()) {
+            return Err(format!("{PROPERTY_READ_GATE} duplicates entrypoint {id:?}"));
+        }
+        require_exact_table_fields(
+            entrypoint,
+            &id,
+            &[
+                "id",
+                "work_package",
+                "admission_status",
+                "depends_on_integration_gates",
+                "exempt_tranches",
+            ],
+        )?;
+        let (expected_package, expected_exemption) = match id.as_str() {
+            WP300_BROAD_ENTRYPOINT => ("WP-300", PROPERTY_READ_BINDING_SLICE),
+            WP400_BROAD_ENTRYPOINT => ("WP-400", PROPERTY_READ_SERVIENT_SLICE),
+            _ => {
+                return Err(format!(
+                    "{PROPERTY_READ_GATE} has unknown broad entrypoint {id:?}"
+                ));
+            }
+        };
+        require_table_string(entrypoint, "work_package", expected_package, &id)?;
+        require_table_string(entrypoint, "admission_status", "blocked", &id)?;
+        let dependencies = package_string_set(entrypoint, "depends_on_integration_gates", &id)?;
+        if dependencies != owned_set(&[PROPERTY_READ_GATE]) {
+            return Err(format!(
+                "{id} integration-gate dependency mismatch; found {dependencies:?}"
+            ));
+        }
+        let exemptions = package_string_set(entrypoint, "exempt_tranches", &id)?;
+        if exemptions != owned_set(&[expected_exemption]) {
+            return Err(format!(
+                "{id} exemption mismatch; expected {expected_exemption:?}, \
+                 found {exemptions:?}"
+            ));
+        }
+    }
+    if expansion_ids != expected_expansion_entrypoints {
+        return Err(format!(
+            "{PROPERTY_READ_GATE} broad-entrypoint mismatch; expected \
+             {expected_expansion_entrypoints:?}, found {expansion_ids:?}"
+        ));
+    }
+
+    let packages = work_packages
+        .get("package")
+        .and_then(Item::as_array_of_tables)
+        .ok_or_else(|| "work-package index has no [[package]] entries".to_owned())?;
+    for package in packages {
+        let id = string_field(package, "id", "work package")?;
+        match id.as_str() {
+            "WP-300" => {
+                require_table_string(package, "broad_entrypoint", WP300_BROAD_ENTRYPOINT, &id)?;
+            }
+            "WP-400" => {
+                require_table_string(package, "broad_entrypoint", WP400_BROAD_ENTRYPOINT, &id)?;
+            }
+            _ if package.contains_key("broad_entrypoint") => {
+                return Err(format!(
+                    "{id} must not define a property-read broad entrypoint"
+                ));
+            }
+            _ => {}
+        }
+    }
+
+    let gate_document_path = root.join(PROPERTY_READ_GATE_DOCUMENT);
+    let gate_document = fs::read_to_string(&gate_document_path)
+        .map_err(|error| format!("cannot read {}: {error}", gate_document_path.display()))?;
+    for marker in [
+        PROPERTY_READ_GATE,
+        PROPERTY_READ_HANDLER_SLICE,
+        PROPERTY_READ_PLAN_SLICE,
+        PROPERTY_READ_BINDING_SLICE,
+        PROPERTY_READ_SERVIENT_SLICE,
+        HANDLER_ENTRYPOINT,
+        WP300_BROAD_ENTRYPOINT,
+        WP400_BROAD_ENTRYPOINT,
+        "no-default-manual",
+        "std-host",
+        "async-no-std",
+        "property-read-binding",
+        "property-read-runner",
+        "grants no source-edit authority",
+    ] {
+        if !gate_document.contains(marker) {
+            return Err(format!(
+                "{PROPERTY_READ_GATE_DOCUMENT} does not identify {marker:?}"
+            ));
+        }
+    }
+
     Ok(())
 }
 
@@ -2667,6 +3322,17 @@ fn check_work_package_tranches(
         return Err(format!(
             "{HANDLER_ENTRYPOINT} blocking scope mismatch; expected only \
              {HANDLER_TIME_BLOCKING_SCOPE:?}, found {entry_blocking_scopes:?}"
+        ));
+    }
+    let integration_gates = package_string_set(
+        entrypoint,
+        "depends_on_integration_gates",
+        HANDLER_ENTRYPOINT,
+    )?;
+    if integration_gates != owned_set(&[PROPERTY_READ_GATE]) {
+        return Err(format!(
+            "{HANDLER_ENTRYPOINT} integration-gate mismatch; expected only \
+             {PROPERTY_READ_GATE:?}, found {integration_gates:?}"
         ));
     }
 
@@ -3166,6 +3832,21 @@ fn check_work_package_tranches(
     )?;
 
     if require_handler_entry {
+        let gate_path = root.join(PROPERTY_READ_GATE_MANIFEST);
+        let gate_source = fs::read_to_string(&gate_path)
+            .map_err(|error| format!("cannot read {}: {error}", gate_path.display()))?;
+        let gate = gate_source
+            .parse::<DocumentMut>()
+            .map_err(|error| format!("invalid {}: {error}", gate_path.display()))?;
+        let gate_status = gate
+            .get("status")
+            .and_then(Item::as_str)
+            .ok_or_else(|| format!("{PROPERTY_READ_GATE} has no string status"))?;
+        if gate_status != "passed" {
+            return Err(format!(
+                "handler entry blocked: {PROPERTY_READ_GATE} is {gate_status:?}"
+            ));
+        }
         if blocking_scope.is_blocking {
             return Err(format!(
                 "handler entry blocked: scope {HANDLER_TIME_BLOCKING_SCOPE} remains blocking"
