@@ -2,17 +2,19 @@
 
 Last updated: 2026-07-26
 
-Repository basis: deadline/cleanup completion checkpoint
-`c42abcbc339167183c8c4bf9bd3bf584540073b4` plus the current
-`WP-100-HANDLER-CONTEXT` candidate definition. The exact candidate ref is
-registered immediately after its single-child candidate commit.
+Repository basis: handler-context candidate registration checkpoint
+`5c2aa7fafe383f044bfbd4780077b7aa3eeb3aaf`. The exact candidate is
+`5b1feb64ffde42ac9104540b851cb72360f91426`, a single child of base
+`c42abcbc339167183c8c4bf9bd3bf584540073b4`; the registration checkpoint
+changes only `docs/work-packages/index.toml`.
 
 ## Current Objective
 
-Register and independently review the exact `WP-100-HANDLER-CONTEXT` candidate
-before changing Core source. Preserve the completed handler-value and time
-tranches, keep the remaining target/no-atomic and request-storage migrations
-separate, and do not fold Producer or Servient integration into WP-100.
+Obtain an honest independent review of the exact
+`WP-100-HANDLER-CONTEXT` candidate before changing Core source. Preserve the
+completed handler-value and time tranches, keep the remaining target/no-atomic
+and request-storage migrations separate, and do not fold Producer or Servient
+integration into WP-100.
 
 Active milestones:
 
@@ -161,7 +163,11 @@ Work packages and tranches:
 - `WP-100-HANDLER-CONTEXT` is pending independent review. Its Category B
   candidate adds only the borrowed `HandlerContext<'a>` contract, permits
   implementation changes only in `core/src/handler.rs` and `core/src/lib.rs`,
-  and has completion key `handler-context`;
+  and has completion key `handler-context`. Candidate
+  `5b1feb64ffde42ac9104540b851cb72360f91426` is the single child of base
+  `c42abcbc339167183c8c4bf9bd3bf584540073b4`, changes exactly the 17
+  registered non-implementation paths, and passed its candidate entry check
+  after registration;
 - `WP-100-HANDLER-ENTRY` remains blocked;
 - WP-100 is in progress; WP-200 through WP-700 are planned.
 
@@ -368,24 +374,45 @@ Deadline/cleanup admission and completion verification on 2026-07-26:
 - the historical WP-000 evidence and both predecessor implementation commits
   are unchanged.
 
+Handler-context candidate verification on 2026-07-26:
+
+- `tools/check-wp100-handler-context-entry.sh --candidate` - passed after the
+  exact candidate ref was registered;
+- the candidate/base diff contains exactly the 17 registered
+  non-implementation paths, and neither permitted Core implementation path
+  changed;
+- the design checker passed its 16 unit and four integration tests, while the
+  completed handler-value checker remained green after its source projection
+  was extended to permit only the separately validated `HandlerContext`;
+- `tools/check-wp100-handler-context.sh` reached its intended pre-admission
+  stop only because the Core `HandlerContext` implementation is absent;
+- `tools/check-design-artifacts.sh` passed in registered-candidate state,
+  validating governance and all six refactor gates; and
+- no independent-review attestation, approval, progress checkpoint, or Core
+  implementation exists yet.
+
 `cargo test --workspace --all-features --locked` is not a valid project
 baseline because it intentionally enables mutually exclusive `zenoh` and
 `zenoh-pico` backends. Use the valid feature-matrix script instead.
 
 ## Stopping Point and Next Safe Actions
 
-The next handler boundary has been decomposed into an exact
-`WP-100-HANDLER-CONTEXT` candidate without changing Core implementation. Its
-scope is independent of the unresolved target/no-atomic and request-storage
-migrations. The completed time and handler-value evidence remains in force.
+The exact `WP-100-HANDLER-CONTEXT` candidate is committed, registered, and
+candidate-checked without changing Core implementation. Its scope is
+independent of the unresolved target/no-atomic and request-storage migrations.
+The completed time and handler-value evidence remains in force.
 
 Next safe actions, in order:
 
-1. commit the exact candidate as the single child of its registered base,
-   register that immutable candidate ref, and run the candidate entry check;
-2. obtain an honest independent review attestation, then approve the exact
-   three-file admission checkpoint before either Core source path changes;
-3. implement and evidence `HandlerContext` only after admission;
+1. independently review candidate
+   `5b1feb64ffde42ac9104540b851cb72360f91426` against base
+   `c42abcbc339167183c8c4bf9bd3bf584540073b4`; the authoring root session must
+   not self-attest;
+2. if the review passes, record the attestation-only commit and approve the
+   exact three-file admission checkpoint before either Core source path
+   changes;
+3. create the exact two-file progress checkpoint, then implement and evidence
+   `HandlerContext` only within the admitted scope;
 4. continue D3, D4, and D5 as AI-led technical decisions, asking the Owner only
    for project-goal, constraint, or external-commitment clarification.
 
