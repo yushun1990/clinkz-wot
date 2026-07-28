@@ -9,7 +9,10 @@ evidence and continuation-state update. Its exact non-implementation candidate
 `2d7087d100d4a0d72cabb77476175bf60b0a7925`; its independent attestation is
 `5bd9687507c790583452e16526a8842fe7560f67`, its admission checkpoint is
 `5fdd4566b4fddf007945a1f26fd2eeb0de74ac12`, and its progress checkpoint is
-`76ac45aff4070cccf17b72d8a750e2d478c6a93e`. The completed HandlerContext candidate
+`76ac45aff4070cccf17b72d8a750e2d478c6a93e`. Validation-hygiene checkpoint
+`aea1677a8a02e2e2aea184ba87c1424814e1a073` routes the slice fixture into a
+root target subdirectory so targeted and aggregate checks are order-independent.
+The completed HandlerContext candidate
 `27c8dc974fd1b337de4671c81719f9fa32410c56` is the single child of frozen base
 `c42abcbc339167183c8c4bf9bd3bf584540073b4`; its independent attestation is
 `3007a88b93155d063ed0d08c69dc3520defebee5`, its admission checkpoint is
@@ -711,7 +714,12 @@ Property-read handler admission and completion verification on 2026-07-28:
   `core/src/handler.rs` and `core/src/lib.rs`; neither planned architecture
   fixture root exists; and
 - `tools/check-design-artifacts.sh`, `cargo test --workspace --locked`, and
-  all 21 valid feature combinations pass in completion state.
+  all 21 valid feature combinations pass in completion state; and
+- after validation-hygiene checkpoint
+  `aea1677a8a02e2e2aea184ba87c1424814e1a073`,
+  `tools/check-wp100-property-read-handler-slice.sh` followed immediately by
+  `tools/check-design-artifacts.sh` passes without cleanup and creates no
+  nested fixture `target/`.
 
 `cargo test --workspace --all-features --locked` is not a valid project
 baseline because it intentionally enables mutually exclusive `zenoh` and
