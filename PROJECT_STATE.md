@@ -190,6 +190,20 @@ D1 adds risk-proportional admission authoring and review depth:
 D1 does not weaken ADR-0013 or authorize runtime/public API work before the
 specific tranche is admitted.
 
+D9 adds a bounded design-to-implementation conversion rule:
+
+- the active critical path names one executable objective, a finite blocker
+  set, one observable design-closure event, and the next source-changing event;
+- one technical decision, authoritative migration, authoring-fixture set, and
+  admission record share one conversion packet and review boundary when their
+  contract, rollback, and validation truth are the same;
+- further refinement after closure requires an explicit intersecting semantic,
+  ownership, lifecycle, resource, dependency, or evidence-truth finding;
+- continuity, registry, audit, and checker updates travel with the checkpoint
+  whose truth they record rather than becoming new serial prerequisites; and
+- architecture closure, package-local completion, and executable vertical
+  integration are reported separately.
+
 ## Evidence and Status
 
 Global gates:
@@ -288,8 +302,14 @@ passed without expanding the tranche.
 
 AI-led open decisions:
 
-- None. Newly discovered technical questions enter `workspace/` and are
-  resolved from repository evidence under the normal lifecycle.
+- `workspace/0014-property-read-plan-artifact-boundary.md` is `OPEN`. It is the
+  sole design blocker on the post-reset WP-200 Property Read critical path.
+  Its finite closure event is one exact host-erased/static compiler-artifact
+  representation, one Core SPI implementation owner, paired independent
+  authoring fixtures, and the exact WP-200 plan-slice admission candidate.
+  Under D9 these outputs form one conversion packet and one scoped review
+  boundary unless the investigation proves distinct rollback or validation
+  truth.
 
 D7 authority-reset facts:
 
@@ -573,9 +593,9 @@ Downstream admission blockers:
 
 - WP-200: one exact host-erased/static binding-artifact and compiler-extension
   Rust representation, single WP-200/WP-300 implementation owner, paired
-  authoring fixtures, then the property-read logical-plan/build-input
-  candidate, no-runtime-TD-read proof, and independent tranche review;
-  ADR-0017 has closed the fallback/health/diagnostic design gap;
+  authoring fixtures, property-read logical-plan/build-input candidate,
+  no-runtime-TD-read proof, and independent tranche review in one D9 conversion
+  packet; ADR-0017 has closed the fallback/health/diagnostic design gap;
 - WP-300: exact registration/compiler/constrained signatures, independent
   host/static authoring fixtures, and subscription receiver ownership;
 - WP-400/WP-500/WP-600: their registered WP-300 predecessor;
@@ -878,6 +898,24 @@ D7 candidate construction and registration verification on 2026-07-28:
   contain the candidate, so this construction record is not self-attestation
   or activation.
 
+D9 throughput decision verification on 2026-07-28:
+
+- the history and source inspection found no product Rust/Cargo change after
+  the Property Read handler implementation through v5 candidate registration,
+  while D6 removed one real WP-200 blocker and D7 removed the future D3
+  authority-only chain;
+- current source contains none of the ten production planning, compiler,
+  artifact, or complete-registration types required by the next vertical
+  boundary, confirming that executable composition remains absent;
+- `PROJECT_GOVERNANCE.md` now bounds one design/admission conversion packet and
+  defines the refinement cutoff without weakening ADR-0013 or independent
+  review;
+- `workspace/INDEX.org`, `PLAN.md`, and this state now consistently expose
+  issue 0014 as the sole open post-reset WP-200 design decision; and
+- `tools/check-design-artifacts.sh` and `git diff --check` passed with no
+  runtime/public API, work-package DAG, admission-status, or planned
+  architecture-fixture change.
+
 `cargo test --workspace --all-features --locked` is not a valid project
 baseline because it intentionally enables mutually exclusive `zenoh` and
 `zenoh-pico` backends. Use the valid feature-matrix script instead.
@@ -905,10 +943,11 @@ Next safe actions, in order:
    attestation without changing it;
 2. after independent review, activate only the exact candidate in a separate
    integration checkpoint;
-3. resolve `workspace/0014-property-read-plan-artifact-boundary.md` with one
-   exact host/static representation, a single Core SPI implementation owner,
-   and paired authoring fixtures before preparing the WP-200 property-read plan
-   candidate;
+3. resolve `workspace/0014-property-read-plan-artifact-boundary.md` through one
+   bounded D9 conversion packet containing the exact host/static
+   representation, single Core SPI implementation owner, authoritative
+   migration, paired authoring fixtures, and WP-200 property-read plan
+   admission material;
 4. independently admit every later property-read slice before its source or
    planned architecture fixture root is created;
 5. carry the migrated D4, D5, D6, and D7 contracts into future subscription and

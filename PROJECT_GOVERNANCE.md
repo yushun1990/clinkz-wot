@@ -181,6 +181,63 @@ lifecycle effects, authoritative contracts, validation independence,
 rollback/failure boundaries, or evidence truth. A tranche is not split merely
 because each type, trait, or file can be named separately.
 
+## Executable Critical-Path Conversion
+
+The active executable critical path must have a bounded conversion from design
+uncertainty to implementation. `PROJECT_STATE.md` must name:
+
+- one next executable objective;
+- the finite set of blockers that prevent its exact implementation candidate;
+- the observable design-closure event after which candidate preparation may
+  begin; and
+- the next source-changing event expected after review and admission.
+
+A blocking workspace investigation must define a finite closure boundary:
+questions to answer, affected authoritative owners, required authoring
+fixtures, and the candidate or evidence output that consumes the decision.
+Newly discovered detail remains inside that boundary when it affects the same
+ownership, lifecycle, resource, public-contract, rollback, or evidence truth.
+It becomes a separate blocking topic only when the tranche-sizing rule above
+proves a distinct boundary. Disjoint detail is deferred and cannot extend the
+active critical path.
+
+When one technical decision, its authoritative migration, and implementation
+admission have the same affected contract, rollback boundary, and independent
+validation truth, they form one conversion packet and one exact scoped review
+boundary. They must not be serialized into separate candidate/review cycles
+merely because workspace, specification, work-package, fixture, audit, and
+registry artifacts are different files. A separate ADR or review remains
+required when architecture governance identifies durable cross-domain
+rationale, a different reversal cost, or independently falsifiable evidence.
+
+Preparation ends when the recorded closure boundary is satisfied and the exact
+candidate's pre-implementation checks pass. Further non-implementation work may
+block that candidate only when an explicit impact record shows a newly
+discovered change to semantics, ownership, lifecycle, resources, dependency
+truth, or completion-evidence truth. Otherwise the next actions are independent
+review, one recorded admission checkpoint, and implementation. Separate
+approval and in-progress checkpoints are not required when one recoverable
+pre-source admission checkpoint records both truths.
+
+Continuity updates, registries, audits, and checkers travel with the decision,
+admission, implementation, or completion checkpoint whose truth they record.
+They are not independent critical-path prerequisites. Add a checker only when
+it protects a stable invariant that implementation or a later authority change
+could violate and that existing executable checks do not already prove.
+
+Independent review, pre-source admission, risk-proportional evidence, and
+architecture change control remain mandatory. This rule bounds their
+composition; it does not waive them.
+
+Project progress is reported on three distinct tracks:
+
+- architecture/authority closure;
+- package-local contract completion; and
+- executable vertical integration, identified by the highest completed tranche
+  in the active integration gate.
+
+One track must not be presented as executable progress on another.
+
 ## Review Requirements
 
 A milestone entering `REVIEW` should provide evidence.

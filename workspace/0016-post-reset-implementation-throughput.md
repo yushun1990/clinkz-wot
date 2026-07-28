@@ -1,6 +1,6 @@
 # 0016 Post-Reset Implementation Throughput and Executable Progress
 
-Status: OPEN
+Status: MIGRATED
 
 Kind: implementation-throughput and governance-risk proposal
 
@@ -128,3 +128,206 @@ The AI should determine:
 8. the conditions under which this topic can move from `OPEN` to `DECIDED`, and from `DECIDED` to `MIGRATED` if a repository change is required.
 
 This topic deliberately provides no preferred solution, alternative set, target process, artifact limit, review threshold, or implementation schedule. The decision belongs to the AI after repository-grounded investigation.
+
+## Investigation result
+
+The concern is supported, with a narrower cause than raw documentation volume.
+The v5.0 reset removes the repeated D3 residual-authority migrations, but it
+does not by itself shorten the immediate executable path from the reset to
+WP-200. The repository had no enforceable cutoff that converted a satisfied
+design closure into implementation admission, and it allowed artifacts that
+describe one semantic boundary to become multiple serial candidate and status
+cycles.
+
+The investigation inspected:
+
+- `PLAN.md`, `PROJECT_STATE.md`, the exact work-package DAG, ADR-0013,
+  ADR-0018, D1, and the Property Read gate;
+- the complete `workspace/0014` closure statement and the planning/binding
+  owners it cites;
+- the exact commit and path interval from implementation
+  `830f47ebe044b953a3c0c3214345968f0fb5e571` through candidate registration
+  `8cc74ff64eced7d2000283203268516e2507cd6f`, plus exact candidate
+  `b1916250a28ee133e8d0b12225c5b6311c975247`;
+- the current Core, legacy planning helper, Protocol Binding, Servient, TD, and
+  tests; and
+- the pre-code and completion checker shape used by the completed
+  `WP-100-PROPERTY-READ-HANDLER-SLICE`.
+
+No current Rust source defines `LogicalInteractionPlan`, `BindingArtifact`,
+`BindingArtifactEnvelope`, `BindingArtifactRef`, `BindingCompilerInput`,
+`BindingCompilerExtension`, `PlanBuildInput`, `PlanCompiler`,
+`HostBindingRegistration`, or `StaticBindingRegistration`. Current execution
+still stores `Arc<dyn ClientBinding>`/`Arc<dyn ServerBinding>`, performs TD/form
+selection in the legacy `protocol-bindings/core` helper, and lets bindings call
+Servient dispatch directly. The missing vertical slice is therefore real
+implementation and contract work, not a reporting artifact.
+
+## Critical-path findings
+
+After v5.0 activation, the mandatory dependency chain before the first WP-200
+source change is:
+
+1. decide one constructible host-erased/static compiler and artifact
+   representation;
+2. assign Core SPI implementation to WP-200 once and retain WP-300 as the
+   complete-registration consumer;
+3. migrate the exact public/ownership contract and provide independent `std`
+   host-erased and `no_std + alloc` static third-party authoring fixtures;
+4. define the exact Property Read logical-plan/build-input, immutable
+   planning-input, bounded footprint, and no-runtime-TD-read candidate;
+5. run the candidate's pre-implementation checks and obtain one independent
+   ADR-0013 scoped review;
+6. record one pre-source admission checkpoint; and
+7. implement and later produce completion evidence.
+
+Steps 1 through 4 are one technical conversion boundary. Exact ownership,
+host/static constructibility, bounded progress and memory, payload access,
+identity checks, failure ownership, immutable plans, and absence of runtime TD
+reads are mandatory consequences of the architecture and safety contracts.
+One independent review, pre-source admission, and predefined completion
+evidence are mandatory consequences of ADR-0013.
+
+Separate workspace, ADR, specification, work-package, fixture, audit, registry,
+candidate-registration, approval, and in-progress cycles are not independently
+mandatory merely because each artifact exists. They are governance
+implementation choices. A separate ADR remains justified only if the technical
+investigation finds new durable cross-domain rationale or reversal cost.
+Separate reviews remain justified only for distinct rollback or independently
+falsifiable evidence boundaries.
+
+`workspace/0014` is technically bounded: it names four closure outputs and the
+Property Read gate forbids hiding any missing production boundary behind a
+fixture adapter. It can expose implementation feedback, but a newly noticed
+detail does not create another serial blocker unless it changes semantics,
+ownership, lifecycle, resources, dependency truth, rollback, or evidence
+truth. The former repository rules did not enforce that stopping condition.
+
+ADR-0013 defines sufficient conditions for admission after a tranche has
+converged. It does not say when decomposition must stop or require several
+artifacts with the same truth to share one candidate/review boundary. D1 and
+the repository tranche-sizing rule correctly discourage needless splitting,
+and completed Category A work shows that narrow evidence can be proportionate,
+but D1 does not by itself bound a Category B design-to-admission sequence.
+
+## History and progress classification
+
+The mainline interval after the Property Read handler implementation through
+v5 candidate registration contains eleven commits and a cumulative 29-path
+diff. It adds no Rust source, Cargo manifest, product runtime behavior, or
+planned Property Read architecture fixture. The only executable change outside
+design checkers is a two-line validation-target isolation fix.
+
+That fact is relevant because the changes had different critical-path effects:
+
+- the handler completion record closed the first Property Read tranche;
+- ADR-0017/D6 removed the candidate-fallback design blocker needed by WP-200;
+- issue 0014 identified and bounded the remaining constructibility blocker but
+  did not remove it;
+- ADR-0018/D7 removed the future D3 authority-only migration chain, but its
+  unactivated candidate did not yet change executable authority;
+- the abandoned Foundation candidate, repeated continuation updates, and
+  candidate-registration bookkeeping did not advance the Property Read
+  executable boundary; and
+- authority and carry-forward checkers protect real safety/evidence invariants,
+  while registry/status consistency checks alone do not justify another
+  implementation-preparation cycle.
+
+The exact v5 candidate changes 27 non-implementation paths. Candidate
+registration and later mainline bookkeeping also changed six of those paths:
+`ARCHITECTURE_GOVERNANCE.md`, `PLAN.md`, `PROJECT_STATE.md`,
+`docs/artifacts.csv`, `docs/spec/v5-authority-reset.toml`, and
+`tools/check-v5-authority-reset-decision.sh`. This overlap means candidate
+registration itself creates integration reconciliation work. It is concrete
+evidence that traceability artifacts must travel with one owning checkpoint
+and that future candidate paths should remain frozen until review/integration.
+
+M1 and M2 can progress in parallel in the broad roadmap, but the Property Read
+vertical path is serial in practice:
+
+```text
+v5 review/activation
+  -> 0014/WP-200 conversion packet
+  -> WP-200 review/admission/implementation
+  -> WP-300 slice
+  -> WP-400 slice
+  -> Property Read gate
+```
+
+Unrelated local M2 completion is useful but does not shorten this chain. The
+repository previously obscured that distinction: `PROJECT_STATE.md` claimed no
+open technical decisions while issue 0014 remained `OPEN`, and
+`workspace/INDEX.org` incorrectly listed 0014 under `MIGRATED`.
+
+## Decision
+
+Adopt a bounded executable-critical-path conversion rule in
+`PROJECT_GOVERNANCE.md`.
+
+For the active executable objective, `PROJECT_STATE.md` must name the finite
+blocker set, the observable design-closure event, and the next source-changing
+event. A blocking workspace topic must declare its affected owners, fixtures,
+and consuming candidate/evidence output.
+
+When a technical decision, authoritative migration, authoring fixtures, and
+implementation admission have the same contract, rollback boundary, and
+validation truth, they form one conversion packet and one exact independent
+review boundary. Further non-implementation refinement after its closure event
+may block implementation only through an explicit intersecting impact finding.
+Otherwise the required sequence is review, one pre-source admission checkpoint,
+implementation, and completion evidence. Separate approval and in-progress
+checkpoints are optional when one recoverable checkpoint records both.
+
+Continuity, registry, audit, and checker updates remain necessary where they
+record real truth, but they travel with the decision, admission,
+implementation, or completion checkpoint they describe. A new checker must
+protect a stable implementation- or authority-relevant invariant not already
+proved by an existing executable check.
+
+For the immediate path, the technical answer to issue 0014 remains open and is
+not preselected here. Its decision, exact authoritative projection, paired
+third-party authoring fixtures, and WP-200 Property Read admission material
+must form one D8 conversion packet after v5 activation. The packet receives one
+independent scoped review. The reset activation remains a proportionate
+Category C review because it atomically changes normative authority and
+completed-evidence truth despite changing no runtime API.
+
+Project progress is reported on three separate tracks:
+
+1. architecture/authority closure;
+2. package-local contract completion; and
+3. executable vertical integration, measured by the highest completed tranche
+   in the active integration gate.
+
+Checker or registry completeness cannot be reported as progress on the third
+track.
+
+## Rejected alternatives
+
+- Preserve the process unchanged: rejected because D1 has no explicit
+  Category B convergence cutoff and the repository already hid one open
+  critical-path decision.
+- Remove tranche admission or independent review: rejected because the missing
+  boundary changes public cross-module ownership, host/static portability,
+  bounded resources, and later execution safety.
+- Set document, line, commit, or elapsed-time quotas: rejected because those
+  measures do not distinguish safety evidence from duplicated process state.
+- Pre-decide issue 0014 or start WP-200 source now: rejected because the public
+  compiler/artifact representation and third-party constructibility are still
+  unresolved.
+- Treat all M1/M2 work as equivalent progress: rejected because local contract
+  and authority closure do not prove executable cross-package composition.
+
+## Migration
+
+The decision is migrated into:
+
+- `PROJECT_GOVERNANCE.md` executable critical-path conversion rules;
+- D8/D9 and the finite post-reset chain in `PLAN.md`;
+- the corrected open-decision and next-action state in `PROJECT_STATE.md`;
+- the workspace lifecycle index; and
+- the artifact registry.
+
+No architecture invariant, work-package DAG edge, runtime/public API,
+implementation source, admission status, or planned architecture fixture is
+changed by this decision. The topic is `MIGRATED`.
