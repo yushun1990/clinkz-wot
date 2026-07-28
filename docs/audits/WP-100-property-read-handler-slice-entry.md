@@ -1,12 +1,19 @@
 # WP-100 Property-Read Handler Slice Entry Audit
 
-Status: Review pending
+Status: Passed
 
 Design revision: v4.9
 
 Admission scope: `WP-100-PROPERTY-READ-HANDLER-SLICE`
 
-Verdict: Candidate ready for independent review
+Verdict: Implementation-ready
+
+Independent root review at
+`5bd9687507c790583452e16526a8842fe7560f67` confirmed the exact candidate,
+scope, exclusions, predecessor set, public contract fixture, all twelve
+pre-implementation checks, the conforming isolated implementation, and
+rejection of both a thread-bound supertrait and a Core-side trait
+implementation.
 
 ## Scope
 
