@@ -88,7 +88,7 @@ mandatory_compile_assertions = [
 id = "WP-100-PROPERTY-READ-HANDLER-SLICE"
 work_package = "WP-100"
 sequence = 160
-status = "pending"
+status = "in-progress"
 admission_status = "approved"
 depends_on = [
     "WP-100-FOUNDATION-REFRESH",
@@ -190,6 +190,7 @@ pre_implementation_checks = [
 admission_review = "docs/audits/WP-100-property-read-handler-slice-entry.md"
 review_attestation = "docs/audits/WP-100-property-read-handler-slice-review.toml"
 review_attestation_ref = "5bd9687507c790583452e16526a8842fe7560f67"
+admission_ref = "5fdd4566b4fddf007945a1f26fd2eeb0de74ac12"
 entry_check = "wp100-property-read-handler-slice-entry-check"
 completion_evidence_path = "docs/evidence/WP-100-property-read-handler-slice.toml"
 completion_check = "wp100-property-read-handler-slice-check"

@@ -47,8 +47,8 @@ The repository evidence establishes the following starting point:
   borrowed dispatch-identity view and exact compatibility matrix;
 - the exact non-implementation
   `WP-100-PROPERTY-READ-HANDLER-SLICE` candidate has passed independent review
-  and is approved; source implementation has not begun and no architecture
-  fixture root exists;
+  and is approved; its two-path Core implementation is in progress and no
+  architecture fixture root exists;
 - broad handler entry remains blocked by incomplete workload oracles,
   the remaining request/target migration, portable-trait admission, and
   no-atomic public-boundary evidence;
@@ -227,8 +227,8 @@ Completed evidence:
 
 Next execution order:
 
-1. implement and complete the admitted
-   `WP-100-PROPERTY-READ-HANDLER-SLICE` within its two Core paths;
+1. complete the in-progress `WP-100-PROPERTY-READ-HANDLER-SLICE` within its two
+   Core paths;
 2. decompose the next dependency-complete portable-trait or remaining
    request/target tranche, keeping `AcceptHint` resource admission and
    `InteractionInput` downstream migration explicit;
