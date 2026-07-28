@@ -144,3 +144,4 @@ tools/compile-contracts/wp100-property-read-handler-slice/ui/unscoped-async-read
 tools/compile-contracts/wp100-property-read-handler-slice/ui/unscoped-step-read-property.rs,wp-100-property-read-handler-slice-negative-step-contract,non-normative-compile-fixture,4.9,1,docs/amendments/WP-100-handler-api-v1.md
 docs/audits/D3-foundation-authority-candidate.toml,d3-foundation-authority-candidate-registration,non-normative-review,4.9,1,docs/design.md
 docs/audits/D7-v5-authority-reset-candidate.toml,d7-v5-authority-reset-candidate-registration,non-normative-review,4.9,1,docs/design.md
+docs/audits/D7-v5-authority-reset-review.toml,d7-v5-authority-reset-review-attestation,non-normative-review,4.9,1,docs/design.md
