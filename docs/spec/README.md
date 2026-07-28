@@ -1,7 +1,6 @@
 # v5.0 Authority-Reset Specifications
 
-Status: exact activation candidate; not active on mainline until independent
-review and separate integration.
+Status: active v5.0 authority, independently reviewed and integrated.
 
 ADR-0018 replaces the v4.9 residual-decomposition program with one bounded
 authority set. `v5-authority-reset.toml` classifies all 121 inherited identities

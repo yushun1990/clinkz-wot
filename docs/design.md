@@ -1,8 +1,7 @@
 # clinkz-wot v5.0 Authority Manifest
 
-Status: exact v5.0 activation candidate; authority remains withheld until this
-candidate is independently reviewed and integrated through a separate
-mainline checkpoint.
+Status: active v5.0 authority, independently reviewed and integrated through
+the exact ADR-0018 activation checkpoint.
 
 This document is intentionally a small revision and source manifest. It does
 not retain the v4.9 residual-domain monolith. The immutable historical basis is
@@ -121,9 +120,10 @@ The package order is
 `WP-000 -> WP-100 -> WP-200 -> WP-300 -> {WP-400, WP-500, WP-600} -> WP-700`.
 ADR-0013 permits only an exact independently reviewed tranche to proceed while
 broader gates remain open. The Property Read integration gate remains the first
-cross-package composition proof. WP-200 implementation stays blocked until the
-v5.0 authority reset is activated and workspace issue 0014 closes its exact
-binding-artifact representation and fixture boundary.
+cross-package composition proof. The v5.0 reset is active; WP-200
+implementation remains blocked only until workspace issue 0014 closes its exact
+binding-artifact representation and fixture boundary and the resulting
+conversion packet receives independent admission.
 
 ## Revision and rollback
 
@@ -131,12 +131,15 @@ v5.0 replaces the v4.9 residual-decomposition strategy with 62 active
 requirements and explicit dispositions for the other 59 identities. ADR-0014
 and the D3 decomposition target are superseded for new authority construction.
 Existing implementation and completion evidence are not changed by this
-candidate; their exact dispositions are checked before activation.
+revision switch; their exact dispositions were checked before activation.
 
-The candidate changes no Rust source, Cargo manifest, public API, or runtime
-behavior. Independent review must attest the immutable commit and exact path
-boundary. A later mainline checkpoint may activate only that reviewed commit.
-Before activation, rollback is simply omission of the candidate. After
-activation, rollback returns the authority selector to
-`6c01e07a446f51d413618474554b5eedcf5de23e` and invalidates any tranche admitted
-solely by v5.0.
+Candidate `b1916250a28ee133e8d0b12225c5b6311c975247` changed no Rust source,
+Cargo manifest, public API, or runtime behavior. Independent attestation
+`6d483a598e654f5c7043efb887074aba3a605f7a` reviewed its immutable 27-path
+boundary; integration checkpoint
+`30b845a4b17dd3eb56670da48c939b72daea7d59` has that candidate as its exact
+second parent. Rollback returns mainline atomically to the pre-activation
+checkpoint `6d483a598e654f5c7043efb887074aba3a605f7a` and invalidates any tranche
+admitted solely by v5.0. Reset basis
+`6c01e07a446f51d413618474554b5eedcf5de23e` remains the historical source for
+the 121 inherited identities.

@@ -1,6 +1,6 @@
 # Planning and Compiled Plan Sets
 
-Status: v5.0 activation candidate. Only the eight requirement definitions
+Status: active v5.0 authority. Only the eight requirement definitions
 registered below are active; retained v4.9 deferred clauses are entry-review
 input and carry no implementation authority.
 

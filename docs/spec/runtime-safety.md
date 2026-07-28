@@ -1,6 +1,6 @@
 # Runtime Safety and Admission Specification
 
-Status: v5.0 activation candidate.
+Status: active v5.0 authority.
 
 This specification owns ten active cross-domain safety requirements:
 `DOC-RUNTIME-001`, `API-SECURITY-001`, `CONSTRAINED-PROGRESS-001`,

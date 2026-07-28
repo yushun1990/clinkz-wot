@@ -1,6 +1,6 @@
 # Interaction Core Specification
 
-Status: v5.0 activation candidate.
+Status: active v5.0 authority.
 
 This specification owns ten active requirements: `HANDLER-API-001`,
 `HANDLER-CANCEL-001`, `HANDLER-CANCEL-002`, `API-TYPES-001`,

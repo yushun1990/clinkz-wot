@@ -1,6 +1,6 @@
 schema_version = 1
 target_design_revision = "5.0"
-status = "candidate-unreviewed"
+status = "active-reviewed"
 decision = "docs/ADRs/0018-bounded-v5-normative-authority-reset.org"
 rule = "Only active_claim_ids may satisfy v5 gates; inactive_claim_ids remain historical implementation facts."
 

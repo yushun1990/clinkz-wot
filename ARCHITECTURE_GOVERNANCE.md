@@ -47,16 +47,18 @@ irreversible external commitment that repository evidence cannot resolve.
 
 ## Active Architecture Target
 
-The currently authoritative mainline revision remains v4.9 until the exact
-candidate on `candidate/v5-authority-reset` is independently reviewed and
-integrated. The candidate implements ADR-0018's v5.0 bounded-core target but is
-not self-attesting and grants no implementation admission by its existence.
+The authoritative revision is v5.0 bounded-core authority. Exact candidate
+`b1916250a28ee133e8d0b12225c5b6311c975247` passed independent review at
+`6d483a598e654f5c7043efb887074aba3a605f7a` and was integrated without
+candidate-path changes at
+`30b845a4b17dd3eb56670da48c939b72daea7d59`.
 
-No partial v5.0 artifact grants authority or implementation admission. The
-activation candidate must switch the design manifest, active requirement
-ownership, registered specifications, machine-readable projections, evidence
-dispositions, and checkers atomically. Its frozen v4.9 parent is the rollback
-point.
+The integration checkpoint atomically switched the design manifest, active
+requirement ownership, registered specifications, machine-readable
+projections, evidence dispositions, and checkers. No individual v5.0 artifact
+grants implementation admission outside that active set. The exact
+pre-activation mainline commit
+`6d483a598e654f5c7043efb887074aba3a605f7a` is the rollback point.
 
 The v4.8 detailed-design candidate is migration input only. A v4.8 contract is
 not active merely because it still exists in a historical or residual document.
@@ -93,12 +95,12 @@ Primary architecture sources are:
    completion, removal, and evidence contracts; and
 6. source code and tests for implementation truth and executable conformance.
 
-Under current v4.9 authority, `docs/design.md` remains the revision entry point,
-normative-source manifest, and temporary residual owner identified by the
-current registry. It must not override a more specific registered owner.
-ADR-0018 supersedes the D3 completion direction: the v5.0 activation candidate
-replaces residual ownership with an exact 62-requirement active set and checked
-inactive dispositions rather than continuing lossless domain migrations.
+Under active v5.0 authority, `docs/design.md` is the concise revision entry
+point and normative-source manifest. It must not override a more specific
+registered owner. ADR-0018 supersedes the D3 completion direction: the active
+revision replaces residual ownership with an exact 62-requirement set and
+checked inactive dispositions rather than continuing lossless domain
+migrations.
 
 `workspace/` is non-authoritative. It records questions, proposals,
 investigations, alternatives, and reasoning history. A workspace topic becomes
@@ -107,8 +109,7 @@ proper registered authority.
 
 ## Frozen Direction for v1
 
-The accepted v1 architecture direction carried into the v5.0 candidate
-currently includes:
+The accepted v1 architecture direction active in v5.0 includes:
 
 - an explicit compiled-plan-set lifecycle and binding-artifact boundary;
 - immutable admitted plan sets separating protocol-neutral logical plans from

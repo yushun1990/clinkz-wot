@@ -20,11 +20,11 @@ case "$mode" in
         ;;
 esac
 
-if grep -Fqx 'status = "exact-candidate-constructed-unreviewed"' \
+if grep -Fqx 'status = "active"' \
     "$root/docs/spec/v5-authority-reset.toml"; then
     if [[ -n "$readiness_command" ]]; then
-        echo "design artifact check: v5 candidate cannot grant implementation readiness before review/integration" >&2
-        exit 1
+        cargo run --locked --quiet --manifest-path "$root/tools/design-check/Cargo.toml" -- \
+            "$readiness_command"
     fi
 
     "$root/tools/check-v5-authority-reset-candidate.sh"
@@ -46,7 +46,7 @@ if grep -Fqx 'status = "exact-candidate-constructed-unreviewed"' \
     "$root/tools/check-wp100-deadline-cleanup-timing.sh"
     "$root/tools/check-wp100-handler-context.sh"
     "$root/tools/check-wp100-property-read-handler-slice.sh"
-    echo "design artifact check: exact v5 candidate and all completed implementation evidence validated"
+    echo "design artifact check: active v5 authority and all completed implementation evidence validated"
     exit 0
 fi
 

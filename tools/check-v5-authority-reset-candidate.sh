@@ -9,16 +9,18 @@ tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
 
 fail() {
-    echo "v5 authority reset candidate check: $*" >&2
+    echo "v5 authority reset activation check: $*" >&2
     exit 1
 }
 
 "$root/tools/check-v5-authority-reset-decision.sh" >/dev/null
 
-grep -Fqx 'status = "exact-candidate-constructed-unreviewed"' "$manifest" \
-    || fail "transition manifest does not identify the constructed candidate"
-grep -Fqx 'status = "constructed-unreviewed"' "$manifest" \
-    || fail "candidate is not in constructed-unreviewed state"
+grep -Fqx 'status = "active"' "$manifest" \
+    || fail "transition manifest does not identify active v5 authority"
+grep -Fqx 'status = "independently-reviewed-and-integrated"' "$manifest" \
+    || fail "candidate review/integration state is incomplete"
+grep -Fqx 'authority_activation = "active"' "$manifest" \
+    || fail "candidate authority is not active"
 grep -Fqx 'runtime_or_public_api_changes_allowed = false' "$manifest" \
     || fail "candidate does not prohibit runtime/public API changes"
 grep -Fqx 'independent_review_required = true' "$manifest" \
@@ -241,13 +243,28 @@ while IFS=, read -r family path expected_digest; do
 done <"$tmp/carried-artifacts"
 
 base=$(sed -nE 's/^candidate_base_ref = "([0-9a-f]{40})"$/\1/p' "$manifest")
-[[ -n "$base" ]] || fail "candidate base ref is missing"
-git -C "$root" cat-file -e "$base^{commit}" \
-    || fail "candidate base ref does not resolve"
-git -C "$root" diff --name-only "$base" >"$tmp/changed"
-git -C "$root" ls-files --others --exclude-standard >>"$tmp/changed"
-sort -u "$tmp/changed" -o "$tmp/changed"
-[[ -s "$tmp/changed" ]] || fail "candidate has no changes"
+candidate=$(sed -nE 's/^candidate_ref = "([0-9a-f]{40})"$/\1/p' "$manifest")
+attestation=$(sed -nE 's/^review_attestation_ref = "([0-9a-f]{40})"$/\1/p' \
+    "$manifest")
+integration=$(sed -nE 's/^integration_ref = "([0-9a-f]{40})"$/\1/p' "$manifest")
+rollback=$(sed -nE 's/^activation_rollback_ref = "([0-9a-f]{40})"$/\1/p' \
+    "$manifest")
+for ref in "$base" "$candidate" "$attestation" "$integration" "$rollback"; do
+    [[ -n "$ref" ]] || fail "activation history ref is missing"
+    git -C "$root" cat-file -e "$ref^{commit}" \
+        || fail "activation history ref $ref does not resolve"
+done
+[[ "$rollback" == "$attestation" ]] \
+    || fail "activation rollback is not the exact pre-integration mainline"
+[[ $(git -C "$root" rev-list --parents -n 1 "$candidate") \
+    == "$candidate $base" ]] \
+    || fail "candidate is not the single child of its frozen base"
+[[ $(git -C "$root" rev-list --parents -n 1 "$integration") \
+    == "$integration $attestation $candidate" ]] \
+    || fail "activation checkpoint does not have exact attestation/candidate parents"
+git -C "$root" merge-base --is-ancestor "$integration" HEAD \
+    || fail "activation checkpoint is not an ancestor of HEAD"
+
 awk '
     /^expected_changed_paths = \[/ { active = 1; next }
     active && /^\]/ { exit }
@@ -256,16 +273,58 @@ awk '
         if (match(value, /"[^"]+"/)) print substr(value, RSTART + 1, RLENGTH - 2)
     }
 ' "$manifest" | sort >"$tmp/expected-changed"
+git -C "$root" diff --name-only "$base..$candidate" | sort >"$tmp/changed"
 cmp -s "$tmp/changed" "$tmp/expected-changed" \
     || fail "candidate changed paths differ from the exact registered boundary"
 if grep -E '(^|/)(Cargo\.(toml|lock)|[^/]+\.rs)$|^(foundation|core|td|servient|discovery|protocol-bindings|codecs)/' \
     "$tmp/changed" >"$tmp/runtime-paths"; then
     fail "candidate changes runtime or Cargo paths: $(tr '\n' ' ' <"$tmp/runtime-paths")"
 fi
+git -C "$root" diff --check "$base..$candidate" \
+    || fail "candidate fails diff hygiene"
+while IFS= read -r path; do
+    git -C "$root" diff --quiet "$candidate" "$integration" -- "$path" \
+        || fail "activation altered reviewed candidate path '$path'"
+done <"$tmp/expected-changed"
+
+git -C "$root" diff-tree --no-commit-id --name-only -r "$attestation" \
+    | sort >"$tmp/attestation-paths"
+printf '%s\n' \
+    'docs/artifacts.csv' \
+    'docs/audits/D7-v5-authority-reset-review.toml' \
+    | sort >"$tmp/expected-attestation-paths"
+cmp -s "$tmp/attestation-paths" "$tmp/expected-attestation-paths" \
+    || fail "review attestation commit changed paths outside its exact record"
+review_object="$attestation:docs/audits/D7-v5-authority-reset-review.toml"
+git -C "$root" show "$review_object" >"$tmp/review"
+for field in \
+    'status = "passed"' \
+    'reviewer_attestation_kind = "independent-root-session"' \
+    'reviewer_id = "codex-agent:/root"' \
+    "reviewed_ref = \"$candidate\"" \
+    'reviewed_path_count = 27' \
+    'runtime_or_public_api_changes = false'; do
+    grep -Fqx "$field" "$tmp/review" \
+        || fail "review attestation is missing exact field: $field"
+done
+
+candidate_audit="$root/docs/audits/D7-v5-authority-reset-candidate.toml"
+for field in \
+    'status = "passed-and-activated"' \
+    'authority_activation = "active"' \
+    "candidate_ref = \"$candidate\"" \
+    "activation_rollback_ref = \"$rollback\"" \
+    "integration_ref = \"$integration\"" \
+    'status = "passed"' \
+    "attestation_ref = \"$attestation\"" \
+    'reviewer = "codex-agent:/root"'; do
+    grep -Fqx "$field" "$candidate_audit" \
+        || fail "candidate audit is missing exact activated field: $field"
+done
 
 grep -Fq 'workspace issue 0014' "$root/docs/design.md" \
     || fail "WP-200 representation blocker is not retained"
 grep -Fq 'issue 0014' "$root/PROJECT_STATE.md" \
     || fail "continuation state does not retain the WP-200 blocker"
 
-echo "v5 authority reset candidate check: 62 active owners exact, 59 inactive, evidence disposition complete, no runtime/API paths"
+echo "v5 authority reset activation check: exact reviewed candidate integrated; 62 active owners and 59 inactive dispositions valid"

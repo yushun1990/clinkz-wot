@@ -1,6 +1,6 @@
 # Primary Data Flows
 
-Status: v5.0 activation candidate.
+Status: active v5.0 authority.
 
 ## Canonical flow
 

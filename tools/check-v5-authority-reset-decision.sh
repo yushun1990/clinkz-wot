@@ -15,6 +15,13 @@ fail() {
 
 [[ -f "$manifest" ]] || fail "missing transition manifest"
 [[ -f "$index" ]] || fail "missing current requirement registry"
+grep -Fqx 'current_design_revision = "5.0"' "$manifest" \
+    || fail "v5.0 is not the current design revision"
+grep -Fqx 'status = "active"' "$manifest" \
+    || fail "v5.0 authority is not active"
+grep -Fqx 'activation = "independently-reviewed-exact-candidate-integrated"' \
+    "$manifest" \
+    || fail "v5.0 activation status is incomplete"
 
 expand_expression() {
     local expression=$1
@@ -120,4 +127,4 @@ grep -Fq 'is abandoned as an activation' \
     "$root/docs/ADRs/0018-bounded-v5-normative-authority-reset.org" \
     || fail "Foundation D3 candidate disposition is missing"
 
-echo "v5 authority reset decision check: 121 classified, 62 active, activation withheld"
+echo "v5 authority reset decision check: 121 classified, 62 active, reviewed activation recorded"

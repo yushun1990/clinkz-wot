@@ -1,6 +1,6 @@
 schema_version = 1
 target_design_revision = "5.0"
-status = "candidate-unreviewed"
+status = "active-reviewed"
 basis_revision = "4.9"
 decision = "docs/ADRs/0018-bounded-v5-normative-authority-reset.org"
 rule = "A carried artifact projects active requirements only where ADR-0018 classifies the identity active; all other rows remain implementation inventory or domain-entry input."

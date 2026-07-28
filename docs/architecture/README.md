@@ -1,6 +1,6 @@
 # clinkz-wot Architecture Backbone
 
-Status: v5.0 activation candidate.
+Status: active v5.0 authority.
 
 This directory defines the concise architecture backbone for `clinkz-wot`.
 It explains the engine from core invariants to edge integration. Detailed API

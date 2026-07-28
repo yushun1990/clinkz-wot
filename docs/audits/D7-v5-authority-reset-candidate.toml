@@ -1,18 +1,20 @@
 schema_version = 1
-current_design_revision = "4.9"
+current_design_revision = "5.0"
 target_design_revision = "5.0"
-status = "review-pending"
+status = "passed-and-activated"
 decision_checkpoint = "eb145c5e86ec9e9db0a09194bd4e2868784a927f"
 candidate_branch = "candidate/v5-authority-reset"
 candidate_base_ref = "eb145c5e86ec9e9db0a09194bd4e2868784a927f"
 candidate_ref = "b1916250a28ee133e8d0b12225c5b6311c975247"
 candidate_manifest = "docs/spec/v5-authority-reset.toml"
 candidate_checker = "tools/check-v5-authority-reset-candidate.sh"
-authority_activation = "withheld"
+authority_activation = "active"
 runtime_or_public_api_changes = false
 reviewer_attestation_kind = "independent-root-session"
 integration_rule = "Integrate only the exact reviewed candidate in a separate mainline checkpoint; any content or path change creates a new candidate and requires a new review."
-rollback_ref = "6c01e07a446f51d413618474554b5eedcf5de23e"
+candidate_rollback_ref = "6c01e07a446f51d413618474554b5eedcf5de23e"
+activation_rollback_ref = "6d483a598e654f5c7043efb887074aba3a605f7a"
+integration_ref = "30b845a4b17dd3eb56670da48c939b72daea7d59"
 
 [authority]
 classified_requirements = 121
@@ -22,9 +24,9 @@ active_source_count = 10
 changed_path_count = 27
 
 [independent_review]
-status = "pending"
-attestation_ref = ""
-reviewer = ""
+status = "passed"
+attestation_ref = "6d483a598e654f5c7043efb887074aba3a605f7a"
+reviewer = "codex-agent:/root"
 
 candidate_paths = [
   "ARCHITECTURE_GOVERNANCE.md",

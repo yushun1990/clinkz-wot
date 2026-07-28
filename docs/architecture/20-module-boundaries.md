@@ -1,6 +1,6 @@
 # Module Boundaries
 
-Status: v5.0 activation candidate.
+Status: active v5.0 authority.
 
 ## Target dependency direction
 

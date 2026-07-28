@@ -8,7 +8,7 @@ normative_sources=(
     "$root/docs/spec"
 )
 v5_candidate=false
-if grep -Fqx 'status = "exact-candidate-constructed-unreviewed"' \
+if grep -Fqx 'status = "active"' \
     "$root/docs/spec/v5-authority-reset.toml"; then
     v5_candidate=true
 fi
@@ -94,7 +94,7 @@ if [[ "$v5_candidate" == true ]]; then
     grep -Fq 'ADR-0014' \
         "$root/docs/ADRs/0018-bounded-v5-normative-authority-reset.org" \
         || { echo "architecture ADR check: ADR-0014 supersession is not recorded" >&2; exit 1; }
-    echo "architecture ADR check: eighteen accepted decisions and exact v5 candidate projections are registered"
+    echo "architecture ADR check: eighteen accepted decisions and active v5 projections are registered"
     exit 0
 fi
 

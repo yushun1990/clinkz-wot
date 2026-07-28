@@ -1,6 +1,6 @@
 # Foundation Domain Specification
 
-Status: v5.0 activation candidate.
+Status: active v5.0 authority.
 
 This specification owns exactly eight active requirements:
 `API-RESOURCE-001`, `CONSTRAINED-STORAGE-001`,

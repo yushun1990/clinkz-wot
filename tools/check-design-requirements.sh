@@ -15,10 +15,10 @@ fail() {
     exit 1
 }
 
-if grep -Fqx 'status = "exact-candidate-constructed-unreviewed"' \
+if grep -Fqx 'status = "active"' \
     "$root/docs/spec/v5-authority-reset.toml"; then
     "$root/tools/check-v5-authority-reset-candidate.sh" >/dev/null
-    echo "design requirement check: v5 candidate has 62 exact active owners and 59 explicit inactive dispositions"
+    echo "design requirement check: active v5 authority has 62 exact owners and 59 explicit inactive dispositions"
     exit 0
 fi
 
