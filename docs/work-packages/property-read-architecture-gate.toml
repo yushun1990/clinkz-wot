@@ -88,7 +88,7 @@ mandatory_compile_assertions = [
 id = "WP-100-PROPERTY-READ-HANDLER-SLICE"
 work_package = "WP-100"
 sequence = 160
-status = "in-progress"
+status = "complete"
 admission_status = "approved"
 depends_on = [
     "WP-100-FOUNDATION-REFRESH",

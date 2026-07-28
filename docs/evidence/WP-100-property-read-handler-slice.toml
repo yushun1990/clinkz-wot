@@ -1,0 +1,29 @@
+schema_version = 1
+design_revision = "4.9"
+work_package = "WP-100"
+tranche = "WP-100-PROPERTY-READ-HANDLER-SLICE"
+implementation_ref = "830f47ebe044b953a3c0c3214345968f0fb5e571"
+recorded_on = "2026-07-28"
+verification_command = "tools/check-wp100-property-read-handler-slice.sh"
+verification_check = "wp100-property-read-handler-slice-check"
+status = "passed"
+evidence_key = "property-read-handler-slice"
+
+requirement_ids = [
+    "API-PAYLOAD-001",
+    "CLEANUP-RECORD-001",
+    "HANDLER-API-001",
+    "HANDLER-VALUE-001",
+]
+compilation_cells = ["no-default", "async-no-std", "std"]
+coverage = [
+    "exact actual-source AST projection for ReadPropertyHandler",
+    "Core root and handler-module exports in every registered feature cell",
+    "object-safe borrowed synchronous call returning CoreResult<InteractionOutput>",
+    "implementation by a deliberately non-Send and non-Sync handler",
+    "borrowed StaticHandlerRegistration and exactly one invocation",
+    "unscoped async and bounded-step handler traits remain absent",
+    "Core unit and downstream Servient and Protocol Binding compilation",
+    "handler-value-primitives and HandlerContext predecessor regression suites",
+    "no property-read architecture fixture root created",
+]

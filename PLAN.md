@@ -45,10 +45,9 @@ The repository evidence establishes the following starting point:
   for the Core Deadline, cleanup ordering, and incomparable-clock disposition;
 - `WP-100-HANDLER-CONTEXT` is implemented and has completion evidence for the
   borrowed dispatch-identity view and exact compatibility matrix;
-- the exact non-implementation
-  `WP-100-PROPERTY-READ-HANDLER-SLICE` candidate has passed independent review
-  and is approved; its two-path Core implementation is in progress and no
-  architecture fixture root exists;
+- `WP-100-PROPERTY-READ-HANDLER-SLICE` is implemented and has completion
+  evidence for the synchronous static property-read handler seam; no
+  architecture fixture root was created;
 - broad handler entry remains blocked by incomplete workload oracles,
   the remaining request/target migration, portable-trait admission, and
   no-atomic public-boundary evidence;
@@ -85,14 +84,14 @@ answer and does not automatically block unrelated admitted work.
 | D2 | MIGRATED | Use clock-source-owned non-wrapping extended logical ticks; retain raw wrap metadata as diagnostics; fail incomparable clock domains explicitly; correct Foundation before Core Deadline/cleanup timing | Completed `WP-100-LOGICAL-TIME-CORRECTION -> WP-100-DEADLINE-CLEANUP-TIMING`; the time blocker is resolved while independent broad-handler blockers remain | M2 exit |
 | D3 | MIGRATED | Complete residual `docs/design.md` ownership through the requirement-indexed target DAG in `docs/spec/decomposition.csv` and several independently reviewed atomic domain migrations | 34 requirements are at final targets, 84 remain residual, and three remain in registered amendments; the checker now exposes exact remaining ownership | M1 exit |
 | D4 | MIGRATED | Use one non-`Clone` linear `Subscription`/`StaticSubscription` receive capability; expose no cloneable receiver/control split, competing-consumer contract, or per-clone broadcast | WP-300 owns one binding driver/cursor; WP-400 owns the Servient record/facade and must provide negative `Clone` compile fixtures | M4 entry |
-| D5 | MIGRATED | Adopt `PROPERTY-READ-ARCHITECTURE` as the first executable cross-package composition proof, using one property read in host and manual runtime cells plus an async/no-std compile projection | Four exact blocked tranches form `WP-100 -> WP-200 -> WP-300 -> WP-400`; the WP-100 slice adds only the synchronous `ReadPropertyHandler` seam, while broad no-atomic and request-storage evidence remains outside the gate exception | Before broad WP-100/WP-300/WP-400 expansion |
+| D5 | MIGRATED | Adopt `PROPERTY-READ-ARCHITECTURE` as the first executable cross-package composition proof, using one property read in host and manual runtime cells plus an async/no-std compile projection | Four exact ordered tranches form `WP-100 -> WP-200 -> WP-300 -> WP-400`; the WP-100 handler slice is complete, while the downstream slices remain blocked and broad no-atomic/request-storage evidence remains outside the gate exception | Before broad WP-100/WP-300/WP-400 expansion |
 
 D5 preserves package completion order but adds a cross-package integration
-dependency in the registered work-package DAG. The gate does not itself admit
-source edits: the WP-100 slice is pending independent review of its exact
-non-implementation candidate, while the other three named slices remain
-planned and blocked until their own exact candidates receive independent
-ADR-0013 review. WP-200 planning work may continue, while broad
+dependency in the registered work-package DAG. The completed WP-100 handler
+slice was independently admitted and changes only its two registered Core
+paths; the other three named slices remain planned and blocked until their own
+exact candidates receive independent ADR-0013 review. WP-200 planning work may
+continue, while broad
 `WP-100-HANDLER-ENTRY`, `WP-300-BROAD-ENTRY`, and `WP-400-BROAD-ENTRY` remain
 blocked until the gate passes. The gate exception does not claim final
 `InteractionInput` storage, `AcceptHint` resource admission,
@@ -224,17 +223,17 @@ Completed evidence:
 - `WP-100-LOGICAL-TIME-CORRECTION` is implemented and has completion evidence.
 - `WP-100-DEADLINE-CLEANUP-TIMING` is implemented and has completion evidence.
 - `WP-100-HANDLER-CONTEXT` is implemented and has completion evidence.
+- `WP-100-PROPERTY-READ-HANDLER-SLICE` is implemented and has completion
+  evidence.
 
 Next execution order:
 
-1. complete the in-progress `WP-100-PROPERTY-READ-HANDLER-SLICE` within its two
-   Core paths;
-2. decompose the next dependency-complete portable-trait or remaining
+1. decompose the next dependency-complete portable-trait or remaining
    request/target tranche, keeping `AcceptHint` resource admission and
    `InteractionInput` downstream migration explicit;
-3. complete the real handler matrix, no-atomic boundary, cancellation,
+2. complete the real handler matrix, no-atomic boundary, cancellation,
    storage/replacement, resource, and performance evidence;
-4. retain Producer and Servient integration in WP-300 and WP-400.
+3. retain Producer and Servient integration in WP-300 and WP-400.
 
 AI deliverable:
 
