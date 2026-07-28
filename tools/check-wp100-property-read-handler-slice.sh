@@ -45,6 +45,8 @@ cargo run --locked --quiet \
     --manifest-path "$root/tools/design-check/Cargo.toml" -- \
     check-handler-context-source
 
+export CARGO_TARGET_DIR="$root/target/wp100-property-read-handler-slice"
+
 cargo check --locked --quiet --manifest-path "$manifest" --no-default-features
 cargo check --locked --quiet --manifest-path "$manifest" --features async
 cargo check --locked --quiet --manifest-path "$manifest" --features std
