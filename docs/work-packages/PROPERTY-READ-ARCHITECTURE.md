@@ -107,7 +107,8 @@ slice remains blocked and the difficulty becomes design feedback.
 
 The fixture directories are not created until their owning tranche has an exact
 reviewed candidate. Placeholder crates would falsely imply a constructible
-boundary.
+boundary. The WP-200 compiler authoring contract is a package-local external
+compile fixture, not either cross-package architecture fixture root.
 
 ## Mandatory runtime evidence
 
@@ -153,8 +154,11 @@ owns crate direction and the absence of hidden dispatch imports.
 
 Every slice is Category B or C according to its actual candidate impact and
 requires its own exact paths, contract fixtures, impact analysis, independent
-review, and ADR-0013 admission. The manifest intentionally records all four as
-`planned` and `blocked`; it grants no source-edit authority.
+review, and ADR-0013 admission. The handler slice is complete, the WP-200 plan
+slice is `pending`/`review-pending`, and the WP-300/WP-400 slices remain
+`planned`/`blocked`. Each status record grants no source-edit authority
+without its approved pre-source checkpoint; approval and in-progress truth may
+share that one recoverable checkpoint under D9.
 
 For `WP-100-PROPERTY-READ-HANDLER-SLICE`, the candidate and completion record
 must claim only `ReadPropertyHandler` and its composition with the four reused

@@ -128,6 +128,27 @@ All binding, provider, codec, contributor, and application callbacks run outside
 engine locks and constrained critical sections. Returning `Pending` never gives
 permission to detach semantic ownership into an unregistered task.
 
+## Constructible compiler components
+
+The compiler/artifact SPI is implemented once by WP-200 at the Core owner
+specified in `docs/spec/planning.md`. This specification consumes, but does not
+redefine, that contract.
+
+Before the complete execution bundle exists, a third-party binding can
+construct and test one of these public component values:
+
+- `HostBindingCompilerRegistration` under `std`, using Core-provided safe
+  erasure; or
+- `StaticBindingCompilerRegistration<C>` in every cell, where `C` is the
+  application's closed compiler enum and its associated cursor/artifact types
+  are matching closed enums.
+
+These values contain no binding id, execution component, route authority,
+Servient access, installation hook, or external resource. They are not accepted
+by `ServientBuilder`. Their only purpose is to carry the exact compiler
+contract into the later complete bundle and to make independent third-party
+authoring compile-testable without waiting for the WP-300 execution API.
+
 ## Complete registration
 
 The installable units are `HostBindingRegistration` for erased host execution
@@ -135,8 +156,9 @@ and `StaticBindingRegistration<B>` for a constrained binding implementation.
 Each bundle contains one immutable registration identity with:
 
 - `BindingId`, `BindingGeneration`, and `BindingConfigurationDigest`;
-- one deterministic capability declaration and one
-  `BindingCompilerExtension` with a matching compatibility identity;
+- one deterministic capability declaration and exactly one consumed
+  `HostBindingCompilerRegistration` or matching
+  `StaticBindingCompilerRegistration<B::Compiler>`;
 - optional deterministic `ServerFormContributor` metadata;
 - optional client and server execution components;
 - supported compilation, execution, resource-profile, and capability-role
@@ -154,6 +176,11 @@ execution compatibility. No public API independently installs a compiler,
 client half, server half, form contributor, or runtime trait object. Component
 values may remain public for downstream construction and testing, but only the
 complete bundle is accepted by `ServientBuilder`.
+
+WP-300 owns the exact complete-bundle constructor, optional execution
+components, validation errors, and `B::Compiler` association. It must consume
+the WP-200 compiler component unchanged; it must not implement a second
+compiler trait, erasure layer, artifact envelope, or payload-access rule.
 
 Both complete registration representations expose the same keyed capability
 operations:

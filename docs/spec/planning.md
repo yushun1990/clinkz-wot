@@ -206,6 +206,38 @@ operation. An implementation must not duplicate its target strings, schemas,
 security trees, response metadata, URI-template program, or extension maps for
 each binding.
 
+The first Property Read tranche freezes this additive constructible projection:
+
+```rust
+impl LogicalInteractionPlan {
+    pub fn try_property_read(
+        plan_id: PlanId,
+        thing_id: ThingId,
+        property_name: Box<str>,
+        form_index: u32,
+        resolved_target: Box<str>,
+        content_type: Option<Box<str>>,
+        subprotocol: Option<Box<str>>,
+    ) -> CoreResult<Self>;
+
+    pub const fn plan_id(&self) -> PlanId;
+    pub fn thing_id(&self) -> &ThingId;
+    pub const fn operation(&self) -> Operation;
+    pub fn property_name(&self) -> &str;
+    pub const fn form_index(&self) -> u32;
+    pub fn resolved_target(&self) -> &str;
+    pub fn content_type(&self) -> Option<&str>;
+    pub fn subprotocol(&self) -> Option<&str>;
+}
+```
+
+`operation()` is exactly `Operation::ReadProperty` for a value returned by
+`try_property_read`. The constructor rejects an empty property name or target.
+The value owns every string above and contains no TD, form, source envelope, or
+borrow from the build input. Its private representation may later add the
+already-required security, schema, response, extension, and diagnostic
+projections without changing this Property Read constructor.
+
 ### Binding candidate
 
 `BindingCandidate` joins one logical plan to one candidate from the captured
@@ -217,6 +249,31 @@ state.
 A candidate exists only after the applicable capability index returned the
 registration and its side-effect-free support operation accepted the resolved
 candidate. A compiler extension cannot manufacture an unindexed candidate.
+
+The Property Read compiler input uses this exact constructible subset:
+
+```rust
+impl BindingCandidate {
+    pub const fn new(
+        binding_id: BindingId,
+        binding_generation: BindingGeneration,
+        configuration: BindingConfigurationDigest,
+        compatibility: BindingArtifactCompatibility,
+        registration_ordinal: u32,
+        candidate_order: u32,
+    ) -> Self;
+
+    pub const fn binding_id(&self) -> BindingId;
+    pub const fn binding_generation(&self) -> BindingGeneration;
+    pub const fn configuration(&self) -> BindingConfigurationDigest;
+    pub const fn compatibility(&self) -> BindingArtifactCompatibility;
+    pub const fn registration_ordinal(&self) -> u32;
+    pub const fn candidate_order(&self) -> u32;
+}
+```
+
+Later capability-index work may add private proof material, but cannot permit a
+caller to change these captured identities after construction.
 
 ### Binding artifact and binding plan reference
 
@@ -517,25 +574,262 @@ and no handle, route, or binding side effect becomes visible.
 
 ## Binding compiler extension contract
 
-The compiler extension and artifact obligation above is implemented through the
-following exact semantic contract.
+The compiler extension and artifact obligation above is implemented through
+one exact portable Rust contract owned by Core.
 
-Every complete binding registration associates exactly one compiler extension
-with its capabilities, binding id and generation, bounded configuration
-identity, and client/server execution registrations. The planning-facing SPI is
-portable and has four semantic operations:
+The fixed-width identities and passive accounting values are:
 
-1. report a deterministic compatibility identity and supported artifact roles;
-2. return a conservative bound for final artifact bytes, compiler-cursor bytes,
-   temporary bytes, and work for one resolved input;
-3. start and incrementally step compilation within an admitted reservation and
-   `WorkBudget`; and
-4. release or abort pure compiler state without an external cleanup obligation.
+```rust
+#[repr(transparent)]
+pub struct BindingConfigurationDigest([u8; 32]);
 
-The exact representation may use an erased host payload or a registered static
-artifact slot. Both representations have the same identity checks, footprint
-accounting, and outcomes. The portable API cannot require `Arc`, a boxed future,
-an async runtime, a thread, or an OS service.
+#[repr(transparent)]
+pub struct BindingArtifactCompatibility([u8; 16]);
+
+pub enum BindingArtifactRole {
+    ConsumerCall,
+    ConsumerSubscription,
+    ProducerRoute,
+    ProducerPublication,
+}
+
+pub struct BindingArtifactFootprint {
+    retained_items: u32,
+    retained_bytes: u64,
+}
+
+pub struct BindingCompilerBounds {
+    artifact: BindingArtifactFootprint,
+    cursor_bytes: u64,
+    temporary_bytes: u64,
+    work: WorkBudget,
+}
+
+pub struct BindingArtifactIdentity {
+    plan_set_generation: PlanSetGeneration,
+    plan_id: PlanId,
+    binding_id: BindingId,
+    binding_generation: BindingGeneration,
+    configuration: BindingConfigurationDigest,
+    compatibility: BindingArtifactCompatibility,
+    role: BindingArtifactRole,
+}
+```
+
+The digest and compatibility wrappers provide `const new` and `as_bytes`
+operations. `BindingArtifactFootprint` provides `const new`, field accessors,
+and `fits_within`. `BindingCompilerBounds` provides `new`, immutable accessors,
+and `into_work`. `BindingArtifactIdentity` provides `const new` plus one
+accessor per field. `PlanSetGeneration` is a non-wrapping semantic wrapper over
+Foundation `Generation`; it is not interchangeable with a binding generation.
+
+The compiler input and ownership-bearing outcomes are exactly:
+
+```rust
+pub struct BindingCompilerInput<'a> {
+    logical_plan: &'a LogicalInteractionPlan,
+    candidate: BindingCandidate,
+    role: BindingArtifactRole,
+}
+
+pub struct BindingArtifact<A> {
+    compatibility: BindingArtifactCompatibility,
+    footprint: BindingArtifactFootprint,
+    payload: A,
+}
+
+pub struct BindingCompilerOutput<A> {
+    artifact: BindingArtifact<A>,
+}
+
+pub struct BindingCompilerFailure<C> {
+    error: CoreError,
+    cursor: C,
+}
+
+#[must_use]
+pub enum BindingCompilerStep<C, A> {
+    Pending(C),
+    Complete(BindingCompilerOutput<A>),
+    Failed(BindingCompilerFailure<C>),
+}
+
+pub trait BindingCompilerExtension {
+    type Cursor;
+    type Artifact;
+
+    fn compatibility(&self) -> BindingArtifactCompatibility;
+    fn bounds(
+        &self,
+        input: &BindingCompilerInput<'_>,
+    ) -> CoreResult<BindingCompilerBounds>;
+    fn start(
+        &self,
+        input: &BindingCompilerInput<'_>,
+    ) -> CoreResult<Self::Cursor>;
+    fn step(
+        &self,
+        input: &BindingCompilerInput<'_>,
+        cursor: Self::Cursor,
+        budget: &mut WorkBudget,
+    ) -> BindingCompilerStep<Self::Cursor, Self::Artifact>;
+    fn abort(&self, cursor: Self::Cursor);
+}
+```
+
+`BindingCompilerInput::new` and its accessors expose exactly the three fields
+shown. `BindingArtifact::new`, `compatibility`, `footprint`, `payload`,
+`into_payload`, and `into_parts` preserve typed access. The output and failure
+wrappers provide immutable accessors and consuming `into_*` operations so no
+cursor or artifact is hidden on any branch.
+
+`start` creates only a pure caller-owned cursor; externally chargeable progress
+occurs in `step`. `step` consumes the cursor and returns it in both `Pending`
+and `Failed`. `abort` consumes pure in-memory state and creates no cleanup
+obligation. The bound's work budget has a nonzero allowance only for
+`WorkClass::BindingPolls`, and compiler progress charges only that class. With
+no remaining `BindingPolls` unit, `step` returns `Pending(cursor)` without
+changing it or any externally observable state.
+
+Artifact admission is exact and ownership-preserving:
+
+```rust
+pub enum BindingArtifactRejectionReason {
+    CompatibilityMismatch,
+    FootprintExceeded,
+}
+
+pub struct BindingArtifactRejection<A> {
+    reason: BindingArtifactRejectionReason,
+    artifact: BindingArtifact<A>,
+}
+
+impl<A> BindingArtifactEnvelope<A> {
+    pub fn try_new(
+        identity: BindingArtifactIdentity,
+        admitted: BindingArtifactFootprint,
+        artifact: BindingArtifact<A>,
+    ) -> Result<Self, BindingArtifactRejection<A>>;
+
+    pub const fn identity(&self) -> BindingArtifactIdentity;
+    pub const fn admitted(&self) -> BindingArtifactFootprint;
+    pub fn artifact(&self) -> &BindingArtifact<A>;
+    pub fn into_artifact(self) -> BindingArtifact<A>;
+}
+
+impl BindingArtifactRef {
+    pub const fn new(
+        identity: BindingArtifactIdentity,
+        artifact_slot: SlotIndex,
+    ) -> Self;
+
+    pub const fn identity(&self) -> BindingArtifactIdentity;
+    pub const fn artifact_slot(&self) -> SlotIndex;
+}
+```
+
+Envelope construction compares the artifact compatibility with the complete
+identity and compares the measured footprint with the admitted bound. A
+rejection returns the original typed artifact. The compact reference is scoped
+by the identity's plan-set generation and can address only its immutable
+artifact slot.
+
+### Static compiler representation
+
+The portable trait above is also the static representation. A constrained
+third-party binding implements it with concrete cursor and artifact types. An
+application that registers heterogeneous bindings defines one closed compiler
+enum and matching closed cursor/artifact enums, then implements the trait by
+variant dispatch:
+
+```rust
+pub struct StaticBindingCompilerRegistration<C> {
+    compiler: C,
+}
+
+impl<C> StaticBindingCompilerRegistration<C> {
+    pub const fn new(compiler: C) -> Self;
+    pub const fn compiler(&self) -> &C;
+    pub fn into_compiler(self) -> C;
+}
+```
+
+Every entry in one application-static table therefore has the same application
+enum type `C`, while each third-party compiler remains independently authored.
+The representation requires no trait object, `Any`, `Arc`, allocation-backed
+erasure, atomics, executor, or unsafe binding-authored cast. The artifact stays
+typed through `BindingArtifactEnvelope<AppArtifact>`.
+
+### Host compiler representation
+
+Under `std`, Core alone provides safe cursor and artifact erasure:
+
+```rust
+pub struct HostBindingCompilerCursor { /* Core-private erasure */ }
+pub struct HostBindingArtifact { /* Core-private erasure */ }
+pub struct HostBindingCompilerRegistration { /* Core-private erasure */ }
+
+impl HostBindingCompilerRegistration {
+    pub fn new<C>(compiler: C) -> Self
+    where
+        C: BindingCompilerExtension + Send + Sync + 'static,
+        C::Cursor: Send + 'static,
+        C::Artifact: Send + Sync + 'static;
+
+    pub fn compatibility(&self) -> BindingArtifactCompatibility;
+    pub fn bounds(
+        &self,
+        input: &BindingCompilerInput<'_>,
+    ) -> CoreResult<BindingCompilerBounds>;
+    pub fn start(
+        &self,
+        input: &BindingCompilerInput<'_>,
+    ) -> CoreResult<HostBindingCompilerCursor>;
+    pub fn step(
+        &self,
+        input: &BindingCompilerInput<'_>,
+        cursor: HostBindingCompilerCursor,
+        budget: &mut WorkBudget,
+    ) -> BindingCompilerStep<HostBindingCompilerCursor, HostBindingArtifact>;
+    pub fn abort(
+        &self,
+        cursor: HostBindingCompilerCursor,
+    ) -> Result<(), HostBindingCompilerCursor>;
+}
+
+impl BindingArtifact<HostBindingArtifact> {
+    pub fn try_payload<T>(
+        &self,
+        expected: BindingArtifactCompatibility,
+    ) -> Option<&T>
+    where
+        T: Send + Sync + 'static;
+
+    pub fn try_into_payload<T>(
+        self,
+        expected: BindingArtifactCompatibility,
+    ) -> Result<T, Self>
+    where
+        T: Send + Sync + 'static;
+}
+```
+
+Core implements erasure with safe standard-library type inspection. A cursor
+type mismatch makes `step` return `Failed` with the original erased cursor;
+`abort` returns `Err(original_cursor)`. Compatibility or payload-type mismatch
+returns `None` for borrowed access and `Err(original_artifact)` for consuming
+access. Binding crates neither implement nor invoke an unsafe erasure hook.
+
+### Complete-registration relationship
+
+`HostBindingCompilerRegistration` and
+`StaticBindingCompilerRegistration<C>` are constructible component values, not
+Servient installation units. WP-200 implements them and the contract above.
+WP-300 later consumes exactly one matching component into each complete
+`HostBindingRegistration` or `StaticBindingRegistration<B>`. Only that complete
+bundle can enter `ServientBuilder`, preserving atomic identity, capability,
+compiler, artifact, and execution validation without making WP-200 wait for
+the WP-300 execution API.
 
 Compiler input is a read-only view containing only:
 
@@ -543,8 +837,7 @@ Compiler input is a read-only view containing only:
 - the candidate binding, generation, configuration, and capability proof;
 - the artifact role, such as Consumer call, Consumer subscription, Producer
   route, or Producer publication;
-- preserved binding-relevant extension members; and
-- the admitted reservation and work context.
+- preserved binding-relevant extension members.
 
 It never contains credentials, application handlers, a Servient handle, a
 socket, an executor, mutable TD storage, unrelated forms, or authority to change
@@ -564,6 +857,78 @@ plan/candidate source without exposing credentials or secret configuration.
 Compiler work does not include protocol connection/session establishment.
 Protocol-native caches are runtime binding resources keyed by admitted plan and
 binding generations and remain outside the planning cache.
+
+## Constructible Property Read build boundary
+
+The first WP-200 slice uses one generic registration-snapshot parameter so the
+same Planning contract accepts a host slice or one application-static compiler
+table:
+
+```rust
+pub struct PlanBuildInput<'a, R: ?Sized> {
+    validated_td: &'a Thing,
+    registrations: &'a R,
+    plan_set_generation: PlanSetGeneration,
+}
+
+impl<'a, R: ?Sized> PlanBuildInput<'a, R> {
+    pub const fn new(
+        validated_td: &'a Thing,
+        registrations: &'a R,
+        plan_set_generation: PlanSetGeneration,
+    ) -> Self;
+
+    pub const fn validated_td(&self) -> &'a Thing;
+    pub const fn registrations(&self) -> &'a R;
+    pub const fn plan_set_generation(&self) -> PlanSetGeneration;
+}
+
+pub struct PlanBuildOutput<A> {
+    /* owned logical plans, envelopes, and references */
+}
+
+pub struct PlanBuildFailure<C> {
+    error: CoreError,
+    cursor: C,
+}
+
+#[must_use]
+pub enum PlanBuildStep<C, A> {
+    Pending(C),
+    Complete(PlanBuildOutput<A>),
+    Failed(PlanBuildFailure<C>),
+}
+
+pub trait PlanCompiler<R: ?Sized> {
+    type Cursor;
+    type Artifact;
+
+    fn start(
+        &self,
+        input: &PlanBuildInput<'_, R>,
+    ) -> CoreResult<Self::Cursor>;
+    fn step(
+        &self,
+        input: &PlanBuildInput<'_, R>,
+        cursor: Self::Cursor,
+        budget: &mut WorkBudget,
+    ) -> PlanBuildStep<Self::Cursor, Self::Artifact>;
+    fn abort(&self, cursor: Self::Cursor);
+}
+```
+
+`PlanBuildOutput<A>` owns a bounded collection of
+`LogicalInteractionPlan`, `BindingArtifactEnvelope<A>`, and
+`BindingArtifactRef` values and provides slice accessors plus consuming
+`into_parts`. It has no lifetime parameter and cannot contain a TD, form,
+source envelope, registration, compiler cursor, handler, credential, Servient,
+or execution trait object.
+
+The Property Read completion fixture builds from a borrowed validated TD,
+drops that TD and every registration/compiler input, and then uses only the
+owned logical plan, envelope, reference, and typed or safely erased artifact
+payload. That is the executable `DOC-RUNTIME-001` boundary for this tranche;
+it does not claim the later full plan-set lifecycle or architecture gate.
 
 ## Producer form finalization
 

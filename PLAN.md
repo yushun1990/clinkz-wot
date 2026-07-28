@@ -104,7 +104,7 @@ answer and does not automatically block unrelated admitted work.
 | D5 | MIGRATED | Adopt `PROPERTY-READ-ARCHITECTURE` as the first executable cross-package composition proof, using one property read in host and manual runtime cells plus an async/no-std compile projection | Four exact ordered tranches form `WP-100 -> WP-200 -> WP-300 -> WP-400`; the WP-100 handler slice is complete, while the downstream slices remain blocked and broad no-atomic/request-storage evidence remains outside the gate exception | Before broad WP-100/WP-300/WP-400 expansion |
 | D6 | MIGRATED | Use `CandidateFallbackPolicy::PreExecution` by default; permit only side-effect-free security inapplicability and exact deterministic lazy-artifact negatives to skip candidates; prohibit binding-input, health, transient, security-commit, and post-acceptance fallback | ADR-0017 makes the policy constructible and bounds one fixed-width diagnostic per eligible skip; the WP-200 slice still needs an exact candidate and independent admission | M3 entry |
 | D7 | MIGRATED | Adopt ADR-0018's bounded v5.0 authority reset: 62 active requirements, explicit inactive classifications for the other 59, and domain-entry re-adoption for later v1 obligations | Exact candidate `b1916250a28ee133e8d0b12225c5b6311c975247` was independently attested and integrated as the unchanged second parent of activation checkpoint `30b845a4b17dd3eb56670da48c939b72daea7d59`; v5.0 authority is active | M1 exit and WP-200 resume |
-| D8 | OPEN | Freeze the constructible host-erased/static binding-artifact and compiler-extension Rust boundary from `workspace/0014-property-read-plan-artifact-boundary.md` | One bounded decision/admission conversion packet must assign the Core SPI once, migrate the exact contract, provide paired third-party authoring fixtures, and prepare the WP-200 Property Read plan candidate for one independent review | M3 entry |
+| D8 | MIGRATED | Use one associated-type portable compiler contract, an application-closed static compiler/cursor/artifact enum, and Core-owned safe host erasure; WP-200 solely implements the compiler/artifact components and WP-300 consumes them only inside a complete installable bundle | The exact Rust contract, paired third-party authoring fixtures, no-runtime-TD output boundary, and `WP-200-PROPERTY-READ-PLAN-SLICE` review-pending candidate travel as one bounded decision/admission packet | M3 entry |
 | D9 | MIGRATED | Adopt bounded design-to-implementation conversion from `workspace/0016-post-reset-implementation-throughput.md` | Once D8's declared closure boundary is satisfied, refuse unrelated refinement and proceed through one exact review, one pre-source admission checkpoint, implementation, and completion evidence; track authority, local contracts, and vertical integration separately | Continuous execution |
 
 The former D3 Foundation candidate is the exact single child of
@@ -115,18 +115,19 @@ content remains v5.0 migration input and Git history; its 44/76/1 authority
 transition must not be integrated.
 
 D7 keeps the Property Read critical path explicit. The v5.0 reset is active.
-`workspace/0014-property-read-plan-artifact-boundary.md` must still freeze one
-constructible host-erased/static representation, one implementation owner, and
-paired authoring fixtures. The reset grants no source or architecture-fixture
-admission by itself.
+`workspace/0014-property-read-plan-artifact-boundary.md` is migrated. Its
+associated-type compiler contract, closed static representation, Core-owned
+host erasure, single WP-200 implementation ownership, and paired authoring
+fixtures form the exact review-pending Property Read plan candidate. The
+decision grants no source or cross-package architecture-fixture admission by
+itself.
 
-D9 makes the remaining conversion finite. D8 is the sole design blocker on the
-first executable WP-200 slice. Its technical decision, authoritative
-migration, paired authoring fixtures, and exact tranche-admission material
-share one conversion packet and one scoped independent review unless the
-investigation proves a distinct rollback or evidence boundary. Continuation,
-registry, audit, and checker maintenance travel with the owning checkpoint and
-do not add another serial prerequisite.
+D9 makes the remaining conversion finite. D8 no longer blocks design
+convergence: its technical decision, authoritative migration, paired authoring
+fixtures, and exact tranche-admission material share one conversion packet and
+one scoped independent review. Continuation, registry, audit, and checker
+maintenance travel with the owning checkpoint and do not add another serial
+prerequisite.
 
 D5 preserves package completion order but adds a cross-package integration
 dependency in the registered work-package DAG. The completed WP-100 handler
@@ -316,7 +317,7 @@ Exit criteria:
 
 ## M3 — Planning and Compilation Pipeline
 
-Status: OPEN
+Status: OPEN; exact entry candidate review pending.
 
 Authoritative package scope: WP-200.
 
@@ -331,9 +332,9 @@ Entry conditions:
 - ADR-0017's candidate-fallback policy, health rule, pre-side-effect failure
   set, and bounded diagnostics are constructible and reaffirmed by the exact
   tranche's independent review;
-- the host-erased and static binding-artifact/compiler representation has one
-  implementation owner, exact Rust contracts, and independent authoring
-  fixtures, resolving `workspace/0014-property-read-plan-artifact-boundary.md`;
+- the migrated host-erased and static binding-artifact/compiler representation
+  has one implementation owner, exact Rust contracts, and paired independent
+  authoring fixtures; and
 - D5 is migrated; the exact `WP-200-PROPERTY-READ-PLAN-SLICE` and its
   dependency on the completed handler slice are present in the authoritative
   DAG;

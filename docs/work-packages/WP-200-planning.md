@@ -49,22 +49,19 @@ commit, and all post-acceptance outcomes never trigger automatic fallback.
 Every eligible skip has one pre-reserved, fixed-width diagnostic bounded by the
 admitted candidate count.
 
-Implementation admission remains blocked until the exact property-read logical
-plan/binding-artifact candidate proves its bounded immutable planning input,
-absence of runtime TD reads, feature cells, source boundary, and independent
-ADR-0013 review. The existing document/registration ordering rules remain
-frozen.
+The exact `WP-200-PROPERTY-READ-PLAN-SLICE` is review pending under ADR-0013.
+It freezes its bounded immutable planning input, absence of runtime TD reads,
+feature cells, source boundary, exclusions, paired authoring fixtures, and
+completion key before any product source is changed.
 
-The candidate cannot yet be constructed truthfully. Planning authority leaves
-the host-erased versus static artifact representation open, the complete
-registration authority does not freeze the compiler/component Rust schemas,
-and review AR3-02/AR3-06 confirms that a third-party host or constrained
-binding cannot author the boundary from public contracts. The package index
-assigns `PLAN-ARTIFACT-001` and `binding-compiler-extension` evidence to
-WP-200, while the WP-300 document currently also says to implement the same
-Core values. `workspace/0014-property-read-plan-artifact-boundary.md` records
-the required single-owner reconciliation and paired authoring fixtures. No
-property-read plan candidate or fixture root is admitted before that closure.
+Workspace decision 0014 resolves the former compiler-representation blocker.
+One associated-type Core contract serves both forms: an application-closed
+compiler/cursor/artifact enum keeps constrained storage typed, while Core owns
+safe host erasure and returns the complete erased cursor or artifact unchanged
+on mismatch. WP-200 is the sole implementation owner of those Core components
+and Planning coordination. WP-300 consumes one component only when it later
+builds the complete installable registration; it does not implement a second
+compiler/artifact SPI. No package-DAG revision is required.
 
 ## Requirements
 
@@ -112,17 +109,26 @@ Implement the frozen core-owned values:
   `BindingCapability`;
 - `clinkz_wot_core::CollectionSubscriptionCapability` for the protocol-neutral topology,
   exact-source, target-bound, start, and teardown facts used by root collection plans;
-- `clinkz_wot_core::BindingArtifactCompatibility`, `BindingArtifactFootprint`,
-  `BindingArtifact`, `BindingArtifactEnvelope`, `BindingArtifactRef`, `BindingCompilerInput`, and
-  `BindingCompilerExtension` for the portable, side-effect-free compiler and opaque artifact
-  contract;
+- `clinkz_wot_core::BindingArtifactCompatibility`,
+  `BindingArtifactFootprint`, `BindingArtifactRole`,
+  `BindingCompilerBounds`, `BindingArtifactIdentity`, `BindingArtifact`,
+  `BindingArtifactEnvelope`, `BindingArtifactRef`,
+  `BindingArtifactRejection`, `BindingCompilerInput`,
+  `BindingCompilerOutput`, `BindingCompilerFailure`, `BindingCompilerStep`,
+  and `BindingCompilerExtension` for the portable, side-effect-free compiler
+  and opaque artifact contract;
+- `clinkz_wot_core::StaticBindingCompilerRegistration<C>` in every feature
+  cell and `HostBindingCompilerRegistration`, `HostBindingCompilerCursor`, and
+  `HostBindingArtifact` under `std`; these are constructible compiler
+  components but are never independently installable;
 - use WP-100 `PlanId`, `BindingId`, `BindingGeneration`, slot ids, `EffectiveSecurityPlan`,
   and compact metadata references rather than cloning static request data.
 
 Implement the frozen compiler-owned surface:
 
-- `clinkz_wot_planning::CapabilityIndex`, `PlanCompiler`, `PlanBuildIdentity`, `PlanBuildInput`,
-  `PlanBuildCursor`, `PlanBuildOutput`, `PlanFootprint`, `CompiledUriTemplate`,
+- `clinkz_wot_planning::CapabilityIndex`, `PlanCompiler`, `PlanBuildIdentity`,
+  `PlanBuildInput`, `PlanBuildCursor`, `PlanBuildOutput`,
+  `PlanBuildFailure`, `PlanBuildStep`, `PlanFootprint`, `CompiledUriTemplate`,
   `ResolvedFormTarget`, `CandidateFallbackPolicy`, `CandidateSkipReason`,
   `CandidateSkipDiagnostic`, and `CandidateSelectionDiagnostics`.
 
@@ -139,6 +145,25 @@ pure artifacts. `PlanBuildOutput` returns the complete immutable material and ex
 one unpublished Frozen plan-set draft, including shared logical plans, compact binding references,
 artifact envelopes, lazy descriptors, and structured failures without embedding execution trait
 objects or Servient lifecycle state.
+
+The Property Read slice implements only the exact additive surface registered
+in its gate record:
+
+- one Core-owned Property Read `LogicalInteractionPlan` constructor and compact
+  `BindingCandidate`;
+- the complete portable compiler/artifact values and host/static component
+  registrations;
+- generic `PlanBuildInput<'a, R>`, `PlanBuildOutput<A>`, `PlanBuildStep`, and
+  `PlanCompiler<R>`;
+- one bounded Property Read builder that reads a validated TD only while the
+  build input is borrowed; and
+- owned output that remains usable after the TD, registration snapshot, and
+  compiler input are dropped.
+
+It does not implement broad capability indexes, fallback/lazy caching,
+collection operations, Producer form contribution, plan-set lifecycle,
+binding execution, Servient publication, or either cross-package architecture
+fixture root.
 
 Resolve effective operation, root-versus-affordance form context, original form index, `base`
 plus relative `href`, media defaults, response metadata, URI variables, security inheritance,

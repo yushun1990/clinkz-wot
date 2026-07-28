@@ -150,3 +150,11 @@ tools/compile-contracts/wp100-property-read-handler-slice/ui/unscoped-step-read-
 docs/audits/D3-foundation-authority-candidate.toml,d3-foundation-authority-candidate-registration,non-normative-review,4.9,1,docs/design.md
 docs/audits/D7-v5-authority-reset-candidate.toml,d7-v5-authority-reset-candidate-registration,non-normative-review,5.0,1,docs/design.md
 docs/audits/D7-v5-authority-reset-review.toml,d7-v5-authority-reset-review-attestation,non-normative-review,5.0,1,docs/design.md
+docs/audits/WP-200-property-read-plan-slice-entry.md,wp-200-property-read-plan-slice-entry-review,non-normative-review,5.0,1,docs/spec/planning.md
+tools/check-wp200-property-read-plan-slice-entry.sh,wp-200-property-read-plan-slice-entry-checker,non-normative-checker,5.0,1,docs/spec/planning.md
+tools/check-wp200-property-read-plan-slice.sh,wp-200-property-read-plan-slice-checker,non-normative-checker,5.0,1,docs/spec/planning.md
+tools/compile-contracts/wp200-property-read-plan-slice/Cargo.toml,wp-200-property-read-plan-slice-contract-manifest,non-normative-compile-fixture,5.0,1,docs/spec/planning.md
+tools/compile-contracts/wp200-property-read-plan-slice/Cargo.lock,wp-200-property-read-plan-slice-contract-lock,non-normative-compile-fixture,5.0,1,docs/spec/planning.md
+tools/compile-contracts/wp200-property-read-plan-slice/src/lib.rs,wp-200-property-read-plan-slice-static-contract,non-normative-compile-fixture,5.0,1,docs/spec/planning.md
+tools/compile-contracts/wp200-property-read-plan-slice/tests/host.rs,wp-200-property-read-plan-slice-host-contract,non-normative-compile-fixture,5.0,1,docs/spec/planning.md
+tools/design-check/tests/wp200_binding_artifact_schema.rs,wp-200-binding-artifact-executable-schema,non-normative-compile-fixture,5.0,1,docs/spec/planning.md

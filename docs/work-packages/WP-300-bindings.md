@@ -15,9 +15,11 @@ Broad entry point: `WP-300-BROAD-ENTRY` (blocked by
 
 ## Scope
 
-Replace the host-only binding shapes in `clinkz-wot-core` with the frozen complete-registration
-and constrained associated-state contracts. Implement the core compiler-extension envelope,
-route-scoped readiness and permit-authorized acceptance, request/response ownership,
+Replace the host-only binding shapes in `clinkz-wot-core` with the frozen
+complete-registration and constrained associated-state contracts. Consume the
+WP-200 compiler component unchanged when constructing each complete
+registration; implement route-scoped readiness and permit-authorized
+acceptance, request/response ownership,
 subscription start/stop,
 Producer emission, runtime status, form contribution, generation-safe typed operation slots,
 binding-owned subscription progress, binding-local publication slots, and bounded cleanup
@@ -119,10 +121,12 @@ Implement the frozen shared binding surface:
   `CleanupTransferRequest`, `CleanupTransferEnvelope<T>`,
   `CleanupTransferAcceptance<T>`, `CleanupTransferTarget<T>`, `NoCleanupSuccessor`,
   `BindingCancellationDisposition<C>`, and `BindingCallSettlement<T, C>`;
-- compiler-extension values: `BindingArtifactCompatibility`, `BindingArtifactFootprint`,
-  `BindingArtifact`, `BindingArtifactEnvelope`, `BindingArtifactRef`, `BindingCompilerInput`,
-  and `BindingCompilerExtension`; core owns this protocol-neutral SPI while WP-200 planning owns
-  compiler coordination and plan-set construction;
+- compiler-extension components from WP-200:
+  `HostBindingCompilerRegistration` or
+  `StaticBindingCompilerRegistration<B::Compiler>`, together with their
+  Core-owned artifact and compiler values; WP-300 consumes exactly one in a
+  complete bundle and must not redefine, erase, wrap, or separately implement
+  the compiler/artifact SPI;
 - consume the WP-200 `CollectionSubscriptionCapability` unchanged when starting a root collection
   request; the SPI may not infer capability from protocol text or synthesize affordance fan-out;
 - constrained traits and storage: `BindingStateLayout`, `PollClientBinding`,
@@ -143,9 +147,12 @@ Implement the frozen shared binding surface:
   `RouteAcceptClaimError`; and the non-`Clone`, non-`Copy`, lifetime-bound
   `RouteActivationPermit<'a>` created only by consuming that claim. None exposes
   a registry view or application dispatch capability;
-- installable units: `HostBindingRegistration` and `StaticBindingRegistration<B>`, each carrying
-  compiler, execution, contribution, footprint, ingress, status, overflow, readiness, reactor,
-  cleanup, capability, and profile-cell metadata as one validated startup bundle.
+- installable units: `HostBindingRegistration` and
+  `StaticBindingRegistration<B>`, each carrying compiler, execution,
+  contribution, footprint, ingress, status, overflow, readiness, reactor,
+  cleanup, capability, and profile-cell metadata as one validated startup
+  bundle. Their constructors consume the matching WP-200 compiler component;
+  no API installs that component by itself.
 - Host and static complete registrations expose the same exact
   `try_with_collection_subscription_capability` and
   `collection_subscription_capability` methods, keyed only by

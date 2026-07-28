@@ -1,0 +1,38 @@
+[package]
+name = "clinkz-wot-wp200-property-read-plan-slice-contract"
+version = "0.0.0"
+edition = "2024"
+publish = false
+autobins = false
+autotests = false
+autoexamples = false
+autobenches = false
+
+# This external authoring contract is intentionally outside the root workspace.
+# The candidate validates its exact source before product APIs exist; the
+# completion checker compiles it after the reviewed WP-200 implementation.
+[workspace]
+resolver = "3"
+
+[dependencies]
+clinkz-wot-core = { path = "../../../core", default-features = false }
+clinkz-wot-foundation = { path = "../../../foundation", default-features = false }
+
+[features]
+default = []
+async = [
+    "clinkz-wot-core/async",
+    "clinkz-wot-foundation/async",
+]
+std = [
+    "clinkz-wot-core/std",
+    "clinkz-wot-foundation/std",
+]
+
+[lib]
+path = "src/lib.rs"
+
+[[test]]
+name = "host"
+path = "tests/host.rs"
+required-features = ["std"]

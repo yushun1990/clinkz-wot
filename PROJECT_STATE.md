@@ -30,39 +30,40 @@ default workspace tests, diff hygiene, and the 21-cell valid feature matrix.
 
 ## Current Objective
 
-Resolve workspace issue 0014 as D8 and convert the result directly into one
-exact `WP-200-PROPERTY-READ-PLAN-SLICE` decision/admission packet.
+Freeze and validate the exact non-implementation
+`WP-200-PROPERTY-READ-PLAN-SLICE` candidate, register its immutable commit, and
+stop at the independent-review boundary without self-attesting.
 
-The finite blocker set is:
+D8 is migrated. Its one conversion packet contains:
 
-1. one constructible Core-owned portable binding compiler/artifact SPI;
-2. one host-erased representation and one allocation-free static
-   representation of that same semantic contract;
-3. one implementation owner for each Core SPI and Planning compiler value,
-   eliminating the WP-200/WP-300 duplication;
-4. paired third-party host and constrained authoring fixtures using only
-   public contracts;
-5. an immutable Property Read planning input and artifact proving no runtime
-   TD read; and
-6. one exact tranche candidate with source boundary, feature cells,
-   dependencies, exclusions, prechecks, audit, and completion key.
+1. one associated-type portable Core compiler/artifact contract;
+2. an application-closed, typed static compiler/cursor/artifact enum;
+3. Core-owned safe host erasure that returns original owned values on mismatch;
+4. sole WP-200 implementation ownership, with WP-300 consuming the component
+   only inside a complete installable registration;
+5. paired external host and constrained third-party authoring fixtures;
+6. an owned Property Read plan output with no TD lifetime; and
+7. one exact Category C tranche candidate with nine implementation paths,
+   seven prechecks, audit, exclusions, and completion key.
 
-Design closure occurs when those six outputs coexist in the authoritative
-planning/binding/work-package projections and their pre-implementation checks
-pass. Under D9 they share one conversion packet and one scoped independent
-review unless investigation proves a distinct rollback or evidence boundary.
+The candidate commit is the single child of
+`525bb31b42efe299ed36d46acea1a1c4286e8bde`. Before review, that exact
+single-child/path boundary identifies the candidate without a self-referential
+hash-registration commit. The independent attestation records its immutable
+hash.
 
-The next source-changing event is the independently admitted WP-200 Property
-Read planning slice: creation of the exact Core SPI and Planning compiler
-implementation paths named by that packet. No Planning, Core, TD, Binding,
-Servient, or architecture-fixture source is admitted before that checkpoint.
+The next source-changing event remains the independently reviewed and admitted
+WP-200 slice. No registered Core/Planning implementation path or either
+cross-package Property Read architecture fixture root is admitted before that
+checkpoint.
 
 ## Active Milestones
 
 - M0 Execution Baseline and Collaboration Reset — CLOSED.
 - M1 v5.0 Authority Reset and Architecture Closure — IN_PROGRESS.
 - M2 Foundation and Core Contract Stabilization — IN_PROGRESS.
-- M3 Planning and Compilation Pipeline — OPEN; D8 is its entry blocker.
+- M3 Planning and Compilation Pipeline — OPEN; exact entry candidate review
+  pending.
 
 The v5 authority switch is complete, but M1 remains open because GATE-1,
 GATE-2, GATE-4, GATE-5, and GATE-6 still require their registered closure
@@ -103,6 +104,21 @@ D9 adds these execution rules:
 - authority closure, package-local completion, and executable vertical
   integration are reported separately.
 
+D8 selects this exact representation:
+
+- `BindingCompilerExtension` owns associated `Cursor` and `Artifact` types;
+- `step` consumes the cursor and returns it on pending or failure;
+- constrained applications compose heterogeneous third-party compilers with
+  one closed application enum and matching cursor/artifact enums;
+- `HostBindingCompilerRegistration` is a Core-erased `std` component with safe
+  borrowed and consuming payload access;
+- `StaticBindingCompilerRegistration<C>` is typed in every feature cell;
+- neither compiler component is independently installable;
+- `BindingArtifactEnvelope<A>` checks full generation/configuration/
+  compatibility/role identity and measured footprint; and
+- `PlanBuildOutput<A>` owns logical plans, envelopes, and compact references
+  without retaining the borrowed TD or registration snapshot.
+
 ## Implementation Truth
 
 Completed and independently evidenced WP-100 work includes:
@@ -134,8 +150,8 @@ legacy boundary.
 
 ### D8 / workspace issue 0014
 
-Status: OPEN and the sole design blocker on the executable WP-200 critical
-path.
+Status: MIGRATED. No technical representation or package-ownership decision
+remains open.
 
 Required authoritative consumers:
 
@@ -151,8 +167,9 @@ Required authoritative consumers:
 - the tranche audit/checker; and
 - PLAN, workspace lifecycle, artifact registry, and this state checkpoint.
 
-The investigation must select a constructible public Rust representation. It
-must not merely rename the existing open prose.
+The exact candidate still requires immutable-ref registration and independent
+review. Independent review, admission, implementation, and completion evidence
+are execution states, not reopened design questions.
 
 ### Disjoint downstream blockers
 
@@ -179,6 +196,10 @@ contract, rollback, or validation intersection.
   Servient orchestration remains outside the frozen direction.
 - A representation that works only through in-repository private types, or
   only for `std` trait objects, cannot close issue 0014.
+- Binding-authored unsafe erasure, a heap-erased representation in every
+  feature cell, separate host/static public compiler traits, independently
+  installable compiler halves, and a WP-300 duplicate implementation owner are
+  rejected by D8.
 
 ## Verification Baseline
 
@@ -205,18 +226,41 @@ Post-activation status reconciliation passed:
 These checks preserve the active-owner, carry-forward, completed-evidence,
 workspace-test, and feature-matrix baselines.
 
+Author-side D8 schema validation on 2026-07-28 passed:
+
+- the 19 design-check unit tests;
+- four existing handler API schema tests; and
+- four new WP-200 compiler/artifact schema tests covering closed static
+  dispatch, zero-budget cursor preservation, safe host mismatch recovery,
+  artifact footprint rejection, and TD-lifetime-free owned output.
+
+Author-side exact candidate validation also passed:
+
+- `tools/check-wp200-property-read-plan-slice-entry.sh --candidate`, including
+  the exact base/parent/path gate and the expected absent-implementation-source
+  boundary;
+- `tools/check-design-artifacts.sh`;
+- `cargo test --workspace --locked`;
+- the supported feature matrix, 21 passed and 0 failed; and
+- staged/committed diff hygiene and the exact 25-path candidate comparison.
+
+The candidate is ready for independent review. Its independent attestation,
+not an intermediate metadata checkpoint, records the immutable candidate ref.
+
 The intentionally invalid all-features combination enables mutually exclusive
 Zenoh backends. Use `scripts/check-feature-matrix.sh`, not
 `cargo test --all-features`, as the supported feature baseline.
 
 ## Next Safe Actions
 
-1. Decide issue 0014 from repository evidence.
-2. Migrate D8 and construct its paired authoring fixtures, exact tranche
-   candidate, audit, and checker in one conversion packet.
-3. Obtain independent review of that exact packet.
-4. Record one pre-source admission checkpoint, then implement only the named
-   WP-200 source paths and produce completion evidence.
+1. Commit the exact D8/WP-200 non-implementation packet as the single child of
+   its frozen base, run candidate and aggregate checks, and stop without
+   creating a review attestation or hash-registration checkpoint.
+2. In a later independent root continuation, review and mutation-test that
+   exact commit; the attestation records its immutable hash.
+3. Only after a passing attestation, record one combined, recoverable
+   pre-source approval/in-progress checkpoint, implement exactly the nine named
+   paths, and produce completion evidence.
 
 Ask the Project Owner only if the investigation reaches a product-goal,
 real-world constraint, unacceptable direction, or irreversible external
@@ -240,4 +284,6 @@ commitment that repository evidence cannot resolve.
 - `docs/spec/binding-spi.md`
 - `docs/work-packages/property-read-architecture-gate.toml`
 - `docs/work-packages/WP-200-planning.md`
-- `docs/work-packages/WP-300-protocol-binding-spi.md`
+- `docs/work-packages/WP-300-bindings.md`
+- `docs/audits/WP-200-property-read-plan-slice-entry.md`
+- `tools/design-check/tests/wp200_binding_artifact_schema.rs`

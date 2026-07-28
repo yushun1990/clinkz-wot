@@ -47,6 +47,13 @@ or executor.
 Compiler artifacts are scoped to the complete bundle generation. An execution
 half rejects a plan reference from another generation or configuration.
 
+WP-200 supplies constructible compiler components before the complete bundle:
+Core safely erases the host form, while an application-closed enum keeps the
+static form typed. These components are independently authorable and testable
+but have no builder installation operation. WP-300 consumes one component into
+the complete bundle and does not redefine its compiler, cursor, artifact,
+identity, footprint, or payload-access semantics.
+
 ## Client execution SPI
 
 The engine supplies one owned `OutboundRequest` and an admitted call/slot owner.

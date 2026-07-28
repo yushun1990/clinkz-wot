@@ -62,9 +62,17 @@ it does not mutate individual plans.
 
 ## Binding compiler extension
 
-Every complete binding registration contains one compiler extension tied to the
-same binding id, generation, capability declaration, configuration digest, and
-execution registrations.
+WP-200 defines one portable associated-type compiler and artifact contract.
+Before WP-300 constructs the complete bundle, a third-party binding may package
+that compiler in a constructible, non-installable host or static compiler
+registration. WP-300 later consumes exactly one such component into a complete
+registration tied to the same binding id, generation, capability declaration,
+configuration digest, and execution registrations.
+
+A constrained application uses one closed compiler enum and matching closed
+cursor/artifact enums. A `std` host uses Core-provided safe erasure. Both forms
+return their owned cursor on pending or failure and produce the same identity
+and footprint envelope; no binding-authored unsafe cast is part of the SPI.
 
 The compiler extension:
 
@@ -74,6 +82,11 @@ The compiler extension:
 - returns a bounded artifact plus its immutable lifetime footprint;
 - never receives credentials or application handler objects; and
 - never selects a different form, operation, security branch, or binding.
+
+Compiler cursors and provisional artifacts are pure in-memory planning state.
+Aborting them has no protocol cleanup obligation. The complete bundle remains
+the only installable unit, so constructibility does not permit compiler and
+execution generations to drift.
 
 Server route and publication artifacts required for exposure are eager.
 Consumer artifacts may be lazy only when construction is pure, bounded, and

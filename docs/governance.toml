@@ -193,6 +193,21 @@ command = [
     "--admission-ready",
 ]
 
+[[check]]
+id = "wp200-property-read-plan-slice-check"
+status = "executable"
+artifact = "tools/check-wp200-property-read-plan-slice.sh"
+command = ["tools/check-wp200-property-read-plan-slice.sh"]
+
+[[check]]
+id = "wp200-property-read-plan-slice-entry-check"
+status = "executable"
+artifact = "tools/check-wp200-property-read-plan-slice-entry.sh"
+command = [
+    "tools/check-wp200-property-read-plan-slice-entry.sh",
+    "--admission-ready",
+]
+
 # Architecture Review 02 rejected the v4.8 detailed-design candidate. It is a
 # blocking predecessor, not passing v4.9 same-revision evidence. A later
 # independent v4.9 review is required before affected gates can close.

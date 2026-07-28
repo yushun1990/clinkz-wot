@@ -8,8 +8,8 @@ rule = "A carried artifact projects active requirements only where ADR-0018 clas
 [[artifact]]
 family = "api-ownership"
 path = "docs/api-ownership.csv"
-sha256 = "2b03034c9d439fe4a6e6aff64cab7f51aaf6abecd0e1c9bead0786570730278b"
-disposition = "carried-forward-unchanged"
+sha256 = "b44e7d7eef53c190eecd315e2d71efa330665b0b539da8bd762f914fad3752bc"
+disposition = "revalidated and extended by migrated D8 with the exact WP-200 compiler/artifact and Property Read planning surface"
 revalidation = "tools/check-api-ownership.sh"
 
 [[artifact]]
@@ -43,8 +43,8 @@ revalidation = "tools/check-v5-authority-reset-candidate.sh"
 [[artifact]]
 family = "governance"
 path = "docs/governance.toml"
-sha256 = "3db9b25eb5bb9b7a3f33ff208691deaa96225a4b0102de492187e884c7cc9c4a"
-disposition = "carried forward with the v5 candidate checker registered; v4.9 reviews remain historical gate evidence"
+sha256 = "6f46c3ec3b3cca4d1cb8a2a78dee30fdff235d91a607dc4140242b57127f6080"
+disposition = "carried forward with the v5 checker and exact WP-200 Property Read entry/completion checks registered; v4.9 reviews remain historical gate evidence"
 revalidation = "tools/check-v5-authority-reset-candidate.sh"
 
 [[artifact]]
@@ -106,13 +106,13 @@ revalidation = "cargo run --locked --quiet --manifest-path tools/design-check/Ca
 [[artifact]]
 family = "property-read-integration-gate"
 path = "docs/work-packages/property-read-architecture-gate.toml"
-sha256 = "dc3bf695eb89499a700aa581133424ccc269813cff7bf5679ba572407215882a"
-disposition = "carried-forward-unchanged; its 21 requirements exactly equal the v5 Property Read class"
+sha256 = "1865dbc481064ecfb00040fec379db03c8392ce39bd89b7c167ac63c11be29da"
+disposition = "revalidated after D8 migration; its 21 requirements still exactly equal the v5 Property Read class and the WP-200 slice is review-pending"
 revalidation = "tools/check-v5-authority-reset-decision.sh"
 
 [[artifact]]
 family = "property-read-integration-gate"
 path = "docs/work-packages/PROPERTY-READ-ARCHITECTURE.md"
-sha256 = "e68b91177eecd11e1b75fc130cf18906d3266a8abd32847ae97f9fe01bd9bafe"
-disposition = "carried-forward-unchanged narrative boundary"
+sha256 = "075c1e87e48aa8eb74cfbcd582e20190f65ab8f8b6b578278b4628a06b1fb3e4"
+disposition = "revalidated narrative boundary with completed WP-100, review-pending WP-200, and blocked downstream slice status"
 revalidation = "tools/check-v5-authority-reset-decision.sh"

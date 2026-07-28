@@ -199,8 +199,8 @@ completion_check = "wp100-property-read-handler-slice-check"
 id = "WP-200-PROPERTY-READ-PLAN-SLICE"
 work_package = "WP-200"
 sequence = 210
-status = "planned"
-admission_status = "blocked"
+status = "pending"
+admission_status = "review-pending"
 depends_on = ["WP-100-PROPERTY-READ-HANDLER-SLICE"]
 requirements = [
     "DOC-RUNTIME-001",
@@ -222,10 +222,132 @@ authoritative_artifacts = [
 completion_evidence_keys = ["property-read-plan-slice"]
 blocking_conditions = [
     "handler-slice-complete",
-    "host-erased-and-static-binding-artifact-representation-reconciled",
     "property-read-logical-plan-and-binding-artifact-candidate-reviewed",
     "bounded-planning-input-and-no-runtime-td-read-proven",
 ]
+api_items = [
+    "BindingArtifact",
+    "BindingArtifactCompatibility",
+    "BindingArtifactEnvelope",
+    "BindingArtifactFootprint",
+    "BindingArtifactIdentity",
+    "BindingArtifactRef",
+    "BindingArtifactRejection",
+    "BindingArtifactRejectionReason",
+    "BindingArtifactRole",
+    "BindingCandidate",
+    "BindingCompilerBounds",
+    "BindingCompilerExtension",
+    "BindingCompilerFailure",
+    "BindingCompilerInput",
+    "BindingCompilerOutput",
+    "BindingCompilerStep",
+    "BindingConfigurationDigest",
+    "HostBindingArtifact",
+    "HostBindingCompilerCursor",
+    "HostBindingCompilerRegistration",
+    "LogicalInteractionPlan",
+    "PlanBuildFailure",
+    "PlanBuildInput",
+    "PlanBuildOutput",
+    "PlanBuildStep",
+    "PlanCompiler",
+    "PlanSetGeneration",
+    "StaticBindingCompilerRegistration",
+]
+reused_api_items = [
+    "BindingGeneration",
+    "BindingId",
+    "CoreError",
+    "CoreResult",
+    "Generation",
+    "Operation",
+    "PlanId",
+    "SlotIndex",
+    "Thing",
+    "ThingId",
+    "WorkBudget",
+    "WorkClass",
+]
+implementation_paths = [
+    "Cargo.lock",
+    "Cargo.toml",
+    "core/src/binding_compiler.rs",
+    "core/src/identity.rs",
+    "core/src/lib.rs",
+    "core/src/plan.rs",
+    "planning/Cargo.toml",
+    "planning/src/lib.rs",
+    "planning/src/property_read.rs",
+]
+excluded_claims = [
+    "binding-execution-spi",
+    "broad-capability-index",
+    "candidate-fallback-and-lazy-cache",
+    "collection-and-producer-planning",
+    "complete-binding-registration",
+    "cross-package-property-read-architecture",
+    "servient-plan-set-lifecycle",
+    "td-document-envelope-migration",
+]
+risk_category = "C"
+impact_status = "current"
+state_machines = []
+old_api_removals = []
+performance_workloads = []
+contract_artifacts = [
+    "tools/check-wp200-property-read-plan-slice-entry.sh",
+    "tools/check-wp200-property-read-plan-slice.sh",
+    "tools/compile-contracts/wp200-property-read-plan-slice/Cargo.lock",
+    "tools/compile-contracts/wp200-property-read-plan-slice/Cargo.toml",
+    "tools/compile-contracts/wp200-property-read-plan-slice/src/lib.rs",
+    "tools/compile-contracts/wp200-property-read-plan-slice/tests/host.rs",
+    "tools/design-check/Cargo.toml",
+    "tools/design-check/src/main.rs",
+    "tools/design-check/tests/wp200_binding_artifact_schema.rs",
+]
+candidate_base_ref = "525bb31b42efe299ed36d46acea1a1c4286e8bde"
+candidate_ref = "resolved-by-review-attestation"
+candidate_paths = [
+    "PLAN.md",
+    "PROJECT_STATE.md",
+    "docs/api-ownership.csv",
+    "docs/architecture/30-compiled-plan-lifecycle.md",
+    "docs/architecture/40-protocol-binding-spi-and-deployment.md",
+    "docs/artifacts.csv",
+    "docs/audits/WP-200-property-read-plan-slice-entry.md",
+    "docs/governance.toml",
+    "docs/spec/binding-spi.md",
+    "docs/spec/planning.md",
+    "docs/spec/v5-artifact-carry-forward.toml",
+    "docs/work-packages/PROPERTY-READ-ARCHITECTURE.md",
+    "docs/work-packages/WP-200-planning.md",
+    "docs/work-packages/WP-300-bindings.md",
+    "docs/work-packages/property-read-architecture-gate.toml",
+    "tools/check-wp200-property-read-plan-slice-entry.sh",
+    "tools/check-wp200-property-read-plan-slice.sh",
+    "tools/compile-contracts/wp200-property-read-plan-slice/Cargo.lock",
+    "tools/compile-contracts/wp200-property-read-plan-slice/Cargo.toml",
+    "tools/compile-contracts/wp200-property-read-plan-slice/src/lib.rs",
+    "tools/compile-contracts/wp200-property-read-plan-slice/tests/host.rs",
+    "tools/design-check/src/main.rs",
+    "tools/design-check/tests/wp200_binding_artifact_schema.rs",
+    "workspace/0014-property-read-plan-artifact-boundary.md",
+    "workspace/INDEX.org",
+]
+pre_implementation_checks = [
+    "api-ownership-check",
+    "architecture-adr-check",
+    "design-requirement-check",
+    "resource-profile-check",
+    "v5-authority-reset-candidate-check",
+    "work-package-dag-check",
+    "wp100-property-read-handler-slice-check",
+]
+admission_review = "docs/audits/WP-200-property-read-plan-slice-entry.md"
+entry_check = "wp200-property-read-plan-slice-entry-check"
+completion_evidence_path = "docs/evidence/WP-200-property-read-plan-slice.toml"
+completion_check = "wp200-property-read-plan-slice-check"
 
 [[tranche]]
 id = "WP-300-PROPERTY-READ-BINDING-SLICE"
