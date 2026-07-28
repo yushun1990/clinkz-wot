@@ -97,7 +97,6 @@ docs/ADRs/0018-bounded-v5-normative-authority-reset.org,bounded-v5-authority-res
 workspace/0013-candidate-fallback-policy.md,candidate-fallback-policy-workspace-topic,non-normative-workspace-topic,4.9,1,docs/spec/planning.md
 workspace/0014-property-read-plan-artifact-boundary.md,property-read-plan-artifact-boundary-topic,non-normative-workspace-topic,4.9,1,docs/spec/planning.md
 workspace/0015-normative-authority-reset.md,normative-authority-reset-workspace-topic,non-normative-workspace-topic,4.9,1,docs/design.md
-workspace/0016-post-reset-implementation-throughput.md,post-reset-implementation-throughput-topic,non-normative-workspace-topic,4.9,1,docs/design.md
 tools/check-wp100-amendment.sh,wp-100-amendment-checker,non-normative-checker,4.9,1,docs/design.md
 tools/check-wp100-handler-amendment.sh,wp-100-handler-amendment-checker,non-normative-checker,4.9,1,docs/design.md
 tools/check-wp100-foundation-refresh.sh,wp-100-foundation-refresh-checker,non-normative-checker,4.9,1,docs/design.md

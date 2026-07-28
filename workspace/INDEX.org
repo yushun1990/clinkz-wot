@@ -26,7 +26,7 @@ Topics are retained after migration as decision history.
 
 ** OPEN
 
-- None.
+- [[file:0016-post-reset-implementation-throughput.md][0016 Post-Reset Implementation Throughput and Executable Progress]]
 
 ** DISCUSSING
 
