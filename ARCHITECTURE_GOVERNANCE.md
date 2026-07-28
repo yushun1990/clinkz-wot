@@ -47,9 +47,10 @@ irreversible external commitment that repository evidence cannot resolve.
 
 ## Active Architecture Target
 
-The currently authoritative revision remains v4.9 until an exact activation
-candidate is independently reviewed and integrated. The convergence target is
-the ADR-0018 v5.0 bounded-core authority reset.
+The currently authoritative mainline revision remains v4.9 until the exact
+candidate on `candidate/v5-authority-reset` is independently reviewed and
+integrated. The candidate implements ADR-0018's v5.0 bounded-core target but is
+not self-attesting and grants no implementation admission by its existence.
 
 No partial v5.0 artifact grants authority or implementation admission. The
 activation candidate must switch the design manifest, active requirement

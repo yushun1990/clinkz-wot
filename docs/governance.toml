@@ -32,6 +32,12 @@ artifact = "tools/check-design-requirements.sh"
 command = ["tools/check-design-requirements.sh"]
 
 [[check]]
+id = "v5-authority-reset-candidate-check"
+status = "executable"
+artifact = "tools/check-v5-authority-reset-candidate.sh"
+command = ["tools/check-v5-authority-reset-candidate.sh"]
+
+[[check]]
 id = "architecture-adr-check"
 status = "executable"
 artifact = "tools/check-architecture-adrs.sh"

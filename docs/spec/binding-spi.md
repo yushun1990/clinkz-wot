@@ -1,6 +1,8 @@
 # Protocol Binding SPI
 
-Status: v4.9 architecture-closure candidate.
+Status: v5.0 activation candidate. Only the eleven requirement definitions
+registered below are active; retained v4.9 deferred clauses are entry-review
+input and carry no implementation authority.
 
 This specification is the single normative owner of Protocol Binding
 registration and execution behavior. It refines the Protocol Binding boundary
@@ -10,7 +12,14 @@ ADR-0006, ADR-0009, ADR-0010, ADR-0011, and ADR-0012. Planning and compiled-plan
 construction are owned by `docs/spec/planning.md`. Concrete protocol syntax and
 I/O remain private to each binding crate.
 
-## Stable requirements
+This specification owns exactly `LIFE-EXPOSE-001` through
+`LIFE-EXPOSE-003`, `BIND-REG-001`, `BIND-ROUTE-001`,
+`BIND-STORAGE-001`, `BIND-MEM-001`, `BIND-DELIVERY-001`, `BIND-IO-001`,
+`BIND-CALL-CANCEL-001`, and `BIND-HOST-CANCEL-001`. The retained
+`BIND-OUT-001` and `BIND-PROGRESS-001` clauses are inactive until a binding
+domain-entry review re-adopts or replaces them.
+
+## Active requirements
 
 `BIND-REG-001`: A Protocol Binding MUST enter one Servient through one complete,
 generation-bearing registration bundle that atomically associates its identity,
@@ -67,13 +76,13 @@ call. A live correlation id is unique within one route generation. A binding
 MUST validate route identity against its prepared route table and MUST NOT
 borrow request or response data from a transport buffer after a call returns.
 
-`BIND-OUT-001`: `OutboundRequest` MUST own only the selected binding and plan
+Historical v4.9 clause (`BIND-OUT-001`, inactive): `OutboundRequest` MUST own only the selected binding and plan
 identity plus per-call varying data. It MUST NOT contain a TD, raw form,
 credential provider, mutable application options, or authority to select a
 different candidate. A binding MUST NOT rescan the TD, reinterpret application
 payload fields as credentials, weaken security, or perform implicit fallback.
 
-`BIND-PROGRESS-001`: Pending client, server, subscription, response, emission,
+Historical v4.9 clause (`BIND-PROGRESS-001`, inactive): Pending client, server, subscription, response, emission,
 readiness, and cleanup operations MUST retain one generation-bearing owner,
 consume explicit work, use register-then-recheck wake semantics, make no
 observable progress with a zero budget, and retain a terminal result until one

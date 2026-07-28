@@ -7,6 +7,11 @@ normative_sources=(
     "$root/docs/architecture"
     "$root/docs/spec"
 )
+v5_candidate=false
+if grep -Fqx 'status = "exact-candidate-constructed-unreviewed"' \
+    "$root/docs/spec/v5-authority-reset.toml"; then
+    v5_candidate=true
+fi
 
 contains_normative_fragment() {
     local fragment=$1
@@ -56,11 +61,42 @@ for id in ADR-0001 ADR-0002 ADR-0003 ADR-0004 ADR-0005 ADR-0006 ADR-0007 ADR-000
         echo "architecture ADR check: decision index does not reference $id" >&2
         exit 1
     fi
-    if ! grep -Fq "$id" "$root/docs/design.md"; then
+    if [[ "$v5_candidate" == false ]] && ! grep -Fq "$id" "$root/docs/design.md"; then
         echo "architecture ADR check: active design does not reference $id" >&2
         exit 1
     fi
 done
+
+if [[ "$v5_candidate" == true ]]; then
+    "$root/tools/check-v5-authority-reset-candidate.sh" >/dev/null
+    for projection in \
+        'docs/design.md|ADR-0018' \
+        'docs/design.md|ADR-0013' \
+        'docs/design.md|ADR-0014' \
+        'docs/spec/foundation.md|ADR-0015' \
+        'docs/amendments/WP-100-time-domain-v1.md|ADR-0016' \
+        'docs/spec/planning.md|ADR-0017' \
+        'docs/spec/binding-spi.md|ADR-0006' \
+        'docs/spec/binding-spi.md|ADR-0009' \
+        'docs/spec/binding-spi.md|ADR-0010' \
+        'docs/spec/binding-spi.md|ADR-0011' \
+        'docs/spec/binding-spi.md|ADR-0012'; do
+        path=${projection%%|*}
+        id=${projection#*|}
+        if ! grep -Fq "$id" "$root/$path"; then
+            echo "architecture ADR check: $path does not project $id" >&2
+            exit 1
+        fi
+    done
+    grep -Fq '`CRATE-DEPS-001`:' \
+        "$root/docs/architecture/20-module-boundaries.md" \
+        || { echo "architecture ADR check: ADR-0001 boundary projection is missing" >&2; exit 1; }
+    grep -Fq 'ADR-0014' \
+        "$root/docs/ADRs/0018-bounded-v5-normative-authority-reset.org" \
+        || { echo "architecture ADR check: ADR-0014 supersession is not recorded" >&2; exit 1; }
+    echo "architecture ADR check: eighteen accepted decisions and exact v5 candidate projections are registered"
+    exit 0
+fi
 
 for fragment in \
     'bounded-core authority reset' \

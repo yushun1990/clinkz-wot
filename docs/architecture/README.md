@@ -1,6 +1,6 @@
 # clinkz-wot Architecture Backbone
 
-Status: v4.9 architecture-closure candidate.
+Status: v5.0 activation candidate.
 
 This directory defines the concise architecture backbone for `clinkz-wot`.
 It explains the engine from core invariants to edge integration. Detailed API
@@ -49,34 +49,27 @@ The following rules apply to every profile and implementation strategy:
 
 The authority order is:
 
-1. `docs/design.md` selects the active revision and indexes normative sources.
-2. This architecture backbone owns cross-module invariants and primary flows.
-3. Registered files under `docs/spec/` own detailed behavior and public API
-   contracts for one domain each.
-4. API ownership, state-machine, resource, requirement, and performance
-   artifacts own their exact machine-readable projections.
-5. Accepted ADRs record decisions and rejected alternatives; their decision
-   must be integrated into the sources above in the same revision.
-6. Work packages own migration order and evidence, not behavior.
+1. `ARCHITECTURE_GOVERNANCE.md` controls technical convergence and change.
+2. Accepted ADRs control decisions and explicit supersession.
+3. `docs/design.md`, this backbone, and the exact sources registered by
+   `docs/spec/v5-authority-reset.toml` own the 62 active requirements.
+4. API ownership, state, resource, requirement metadata, gate, performance,
+   and evidence artifacts own their exact machine-readable projections.
+5. Work packages own migration order, admission, and evidence, not behavior.
 
 `PLAN.md`, reviews, audits, and thinking notes are non-normative. A conflict
 between normative sources is a gate failure, not a precedence shortcut.
 
-During decomposition, the v4.9 clauses in `docs/design.md` remain the residual
-detailed owner only for requirements that have not moved to a registered domain
-specification. An amendment registered as `normative-amendment` is temporarily
-active only for its explicit affected requirements and refinement boundary; it
-does not override this backbone or an already registered domain specification.
-`docs/spec/decomposition.csv` records the final owner and dependency phase for
-every stable requirement but does not change current authority.
-`docs/requirements.csv::source_path` remains the current-owner projection.
-ADR-0014 and `docs/spec/README.md` define the atomic migration that changes that
-projection and retires an amendment.
+ADR-0018 supersedes residual decomposition and ADR-0014's D3 target DAG.
+`docs/requirements.csv` retains metadata and historical source pointers but no
+longer selects v5 authority. The transition manifest gives all 121 inherited
+identities one disposition and registers the ten owners of the 62 active
+definitions. An amendment is active only for an identity assigned to its exact
+path; other mentions are refinement or evidence history.
 
-Coordinated whole-revision migration and release convergence remain paused
-until the modular authority graph closes. A bounded implementation tranche may
-proceed only through ADR-0013's explicit admission record and independent
-review; such admission does not make an unmigrated domain or global gate ready.
+This candidate grants no authority until independent review and separate
+mainline integration. A bounded implementation tranche may proceed only through
+ADR-0013 admission; the reset itself creates no source-edit permission.
 
 The first executable composition proof is
 `PROPERTY-READ-ARCHITECTURE`, defined by the registered work-package gate

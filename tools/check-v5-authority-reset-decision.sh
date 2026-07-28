@@ -40,8 +40,13 @@ tail -n +2 "$index" | while IFS=, read -r expressions _; do
     done
 done >"$tmp/current"
 
-sed -nE 's/^[[:space:]]+"([A-Z][A-Z0-9-]*-[0-9]{3})",?$/\1/p' \
-    "$manifest" >"$tmp/classified"
+awk '
+    /^\[classification\./ { active = 1 }
+    /^\[candidate\]/ { active = 0 }
+    active { print }
+' "$manifest" \
+    | sed -nE 's/^[[:space:]]+"([A-Z][A-Z0-9-]*-[0-9]{3})",?$/\1/p' \
+    >"$tmp/classified"
 
 section_ids() {
     local section=$1

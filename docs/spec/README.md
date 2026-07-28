@@ -1,130 +1,79 @@
-# v4.9 Domain Specifications
+# v5.0 Authority-Reset Specifications
 
-This directory contains the single-owner detailed behavioral and public API
-specifications selected by `docs/design.md` and constrained by the architecture
-backbone. `decomposition.csv` is the authoritative completion map from every
-stable requirement to its final detailed owner.
+Status: exact activation candidate; not active on mainline until independent
+review and separate integration.
 
-Current authority remains v4.9 while ADR-0018's successor transition is being
-prepared. `v5-authority-reset.toml` registers the exact 121-way classification,
-62-requirement target active set, abandoned D3 Foundation candidate, and
-withheld activation state. It does not partially activate v5.0 or change the
-current-owner projection. After independent candidate review and separate
-integration, the v5.0 index will replace this residual-decomposition model
-atomically.
+ADR-0018 replaces the v4.9 residual-decomposition program with one bounded
+authority set. `v5-authority-reset.toml` classifies all 121 inherited identities
+and registers the only sources allowed to define the 62 active requirements.
+The deleted `decomposition.csv` remains recoverable from Git history as D3
+migration input; it is not a v5 authority or roadmap.
+
+## Active candidate owners
+
+| Owner | Active responsibility | Count |
+| --- | --- | ---: |
+| `docs/design.md` | revision, authority, admission, API ownership, profiles, standards | 6 |
+| `docs/architecture/10-primary-data-flows.md` | concurrency, callbacks, linearization, Directory scope | 5 |
+| `docs/architecture/20-module-boundaries.md` | dependency direction | 1 |
+| `foundation.md` | resource policy, admission memory, constrained storage/work | 8 |
+| `docs/amendments/WP-100-time-domain-v1.md` | logical source time and deadline semantics | 2 |
+| `interaction-core.md` | handler, value, error, cleanup, in-flight contracts | 10 |
+| `docs/amendments/WP-100-handler-api-v1.md` | exact completed handler values | 1 |
+| `runtime-safety.md` | representation, security, progress, lifecycle safety | 10 |
+| `planning.md` | Property Read planning and immutable-plan core | 8 |
+| `binding-spi.md` | registration, routes, delivery, I/O, cancellation, exposure | 11 |
+
+Total: 62. The machine manifest is authoritative for the exact identities;
+this table is navigation.
 
 ## Rules
 
-- One observable behavior has one domain-specification owner.
-- Architecture files define cross-domain invariants; domain specifications
-  define exact behavior and API roles without changing those invariants.
-- Machine-readable API, state, resource, requirement, and performance artifacts
-  are exact projections of a domain specification, not parallel prose owners.
-- `docs/requirements.csv` records current requirement authority;
-  `decomposition.csv` records final target authority and migration dependencies.
-  A target does not become current authority until the requirement source is
-  moved atomically.
-- An accepted ADR must be integrated into the owning specification in the same
-  design revision.
-- Work packages describe migration and evidence only.
-- A registered normative amendment is active only for its explicit affected
-  requirements and refinement boundary. It is merged into the relevant
-  specification and then retained as historical evidence under ADR-0014.
-- A conflict blocks implementation; file order does not resolve it.
+- One active requirement has exactly one registered definition.
+- Architecture sources own cross-domain invariants; specifications own their
+  exact detailed contracts without overriding architecture.
+- Machine artifacts project named fields and evidence; they are not parallel
+  prose owners.
+- `docs/requirements.csv` retains profile/package/evidence metadata for all 121
+  stable identities. Under v5 it is not an authority selector; classification
+  and active ownership come only from `v5-authority-reset.toml`.
+- Historical text retained inside `planning.md` or `binding-spi.md` is visibly
+  labelled inactive and cannot authorize work.
+- A narrow completed amendment remains an active owner only for an identity
+  registered to its path. Other affected-id mentions are history or refinement
+  context.
+- Work packages describe migration and evidence. An inactive requirement may
+  trigger domain-entry review but cannot satisfy admission or close a gate.
+- A conflict blocks the affected implementation; file order does not resolve
+  it.
 
-## Active v4.9 owners
+## Inactive dispositions
 
-- `planning.md`: effective-form planning, compiled plan sets, compiler
-  extensions, plan publication, lazy artifacts, and reclamation.
-- `binding-spi.md`: complete binding registration, client/server execution,
-  routes, calls, subscriptions, responses, emissions, cancellation, and cleanup
-  transfer.
+The 34 domain-entry identities must be reconsidered when subscriptions,
+Directory client execution, codecs/validation, discovery, emissions, advanced
+planning, observability, scheduling, or profile defaults enter implementation.
+That review may re-adopt, replace, split, or retire them in a new revision.
 
-The remaining valid material is still being migrated. Until a domain file is
-present and registered, the applicable v4.9 clauses in `docs/design.md` remain
-the residual detailed owner identified by the requirement registry, subject to
-the architecture and accepted ADRs. Registered normative amendments may refine
-only their declared residual scope. Historical v4.8 text is migration input,
-not active authority. No unmigrated domain is implementation-ready merely
-because residual prose remains available; a bounded tranche still requires the
-ADR-0013 admission record and review.
+The 15 historical design inputs retain useful constraints or measurements but
+do not freeze an implementation. The four premature/superseded identities are
+retired. The six redundant identities defer to stronger governance, authority,
+or executable evidence owners. All 59 remain searchable in the transition
+manifest and at the immutable v4.9 reset base.
 
-## Final responsibility and authority state
+## Activation protocol
 
-After decomposition, `docs/design.md` retains only the active revision,
-normative-language and requirement-identity rules, authority and change
-control, the normative-source manifest, the standards baseline, and a concise
-revision record. It will not own detailed domain behavior.
+The exact candidate must:
 
-The two requirement indexes have deliberately different jobs:
+1. contain only documentation and checker changes;
+2. define the 62 active identities exactly once in the registered sources;
+3. prove all 59 other identities inactive and absent from active ownership;
+4. disposition every completed evidence claim without treating an inactive id
+   as v5 gate evidence;
+5. preserve the WP-200 representation/fixture blocker from issue 0014;
+6. pass the aggregate candidate checks and implementation regressions; and
+7. receive an independent immutable-commit attestation.
 
-- `docs/requirements.csv::source_path` names the current normative owner;
-- `decomposition.csv::target_path` names the final owner and `depends_on`
-  records the target-domain migration DAG.
-
-`tools/check-design-requirements.sh` expands both indexes, requires every one of
-the 121 stable requirements exactly once in each, rejects unknown or duplicate
-ownership, validates dependency ordering, and classifies requirements as
-already at their final target, residual in `docs/design.md`, or temporarily
-owned by a registered amendment. The target index never grants implementation
-authority by itself.
-
-## Reviewed target graph
-
-The sequence is a dependency phase, not a promise to create placeholders.
-Domains in the same phase may be reviewed independently. Existing
-`planning.md` and `binding-spi.md` clauses remain active; their later
-reconciliation or remaining residual requirements still follows this graph.
-
-| Phase | Final target | Detailed responsibility | Direct prerequisites |
-| --- | --- | --- | --- |
-| 0 | `docs/design.md` | Revision, language, authority, change control, standards, and source manifest | None |
-| 100 | `docs/architecture/20-module-boundaries.md` | Crate and dependency-direction invariants | Design manifest |
-| 100 | `docs/architecture/10-primary-data-flows.md` | Lock, callback, critical-section, and linearization invariants | Design manifest |
-| 200 | `foundation.md` | Resource, work, time, generation, reservation, and memory-admission primitives | Architecture invariants |
-| 300 | `documents.md` | TD/TM runtime representation, retention, JSON-LD prefixes, and memory ownership | Foundation |
-| 400 | `interaction-core.md` | Handler values and semantics, interaction types, errors, cancellation, cleanup, and in-flight state | Documents, foundation |
-| 500 | `planning.md` | Logical and binding-plan compilation, form finalization, publication, and lifecycle | Documents, foundation, interaction core |
-| 500 | `codecs.md` | Compiled validation and bounded codec API contracts | Documents, interaction core |
-| 600 | `security.md` | Security planning, application, and probe/commit behavior | Documents, interaction core, planning |
-| 600 | `binding-spi.md` | Binding registration, route/call/driver execution, delivery, cancellation, host adaptation, and binding state | Interaction core, planning |
-| 600 | `discovery-client.md` | Discovery and Directory client values, authority, paging, watch, streaming, and progress | Codecs, documents, foundation |
-| 700 | `subscriptions-and-emissions.md` | Subscription storage/data and Producer emission transactions | Binding SPI, interaction core |
-| 800 | `servient.md` | Expose/drop lifecycle, scheduling, sharding, admission transactions, and orchestration | Binding, discovery, interaction, planning, security, subscription domains |
-| 900 | `profiles-and-verification.md` | Feature/profile matrices, resource defaults, reliability, observability, performance, complexity, capacity, and conformance | All behavioral domains |
-
-Security and codecs are separate targets. Security owns trust, credential, and
-probe/commit lifecycle behavior; codecs own document/value transformation and
-compiled validation. Their crates, failure effects, resource boundaries, and
-verification evidence differ, so a combined `security-and-codecs.md` owner
-would hide a real review boundary. Profiles and verification remain combined
-because their requirements are cross-domain closure rules rather than another
-runtime execution owner.
-
-## Atomic migration protocol
-
-One exact target-domain migration candidate must atomically:
-
-1. reconcile the complete admitted requirement set against architecture,
-   accepted ADRs, active amendments, machine-readable projections, code, and
-   tests;
-2. move stable requirement definitions into the target without renaming ids
-   or leaving normative duplicates;
-3. update the matching `docs/requirements.csv::source_path` rows, register
-   the complete target, and remove the migrated detailed clauses from the
-   previous owner;
-4. merge any affected amendment into the target and retain that amendment
-   only as historical evidence;
-5. update affected work packages, checkers, fixtures, audits, reviews, and
-   evidence truth; and
-6. pass the requirement checker, aggregate design checks, and relevant
-   domain-specific verification.
-
-Current authority changes only when that exact candidate passes independent
-review and is integrated without changing its reviewed migration boundary.
-
-The project will therefore finish decomposition through several independently
-reviewed target-domain migrations, not one monolithic document move. A domain
-is split further only when blockers, ownership, lifecycle, contracts,
-validation independence, rollback boundaries, or evidence truth actually
-differ. A file is never registered merely to represent future intent.
+Only a separate mainline checkpoint may activate the reviewed commit. That
+checkpoint updates the revision selector and continuation state; it does not
+rewrite the reviewed owner boundary. Rollback restores the registered v4.9
+reset basis and invalidates v5-only admissions.
