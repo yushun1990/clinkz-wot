@@ -168,9 +168,13 @@ requirements = [
 ]
 
 [candidate]
-status = "not-constructed"
+status = "registered-review-pending"
 authority_activation = "withheld"
 runtime_or_public_api_changes_allowed = false
 independent_review_required = true
 separate_integration_required = true
 rollback_ref = "6c01e07a446f51d413618474554b5eedcf5de23e"
+candidate_branch = "candidate/v5-authority-reset"
+candidate_base_ref = "eb145c5e86ec9e9db0a09194bd4e2868784a927f"
+candidate_ref = "b1916250a28ee133e8d0b12225c5b6311c975247"
+candidate_registration = "docs/audits/D7-v5-authority-reset-candidate.toml"

@@ -27,7 +27,11 @@ gate migration is recorded at
 migration close the AR-004 pre-execution candidate-fallback design gap at
 `7f2869ff03ceb8659ba01e69ba97d9882e944df3`. ADR-0018 selects a v5.0
 bounded-core authority reset with 62 active requirements and explicit
-dispositions for the other 59 v4.9 identities. The former D3 Foundation
+dispositions for the other 59 v4.9 identities. Its decision checkpoint is
+`eb145c5e86ec9e9db0a09194bd4e2868784a927f`; exact single-child candidate
+`b1916250a28ee133e8d0b12225c5b6311c975247` is registered review-pending on
+`candidate/v5-authority-reset` and changes exactly 27 non-implementation paths.
+The former D3 Foundation
 authority candidate
 `2494f33fdfe49ec3c7ae850d20990e446e628865` is the single child of frozen base
 `56fea9813df80fe29527755fcb2ce91d43cc5086` on
@@ -38,11 +42,11 @@ activation candidate and retained only as v5.0 migration/audit input.
 
 ## Current Objective
 
-Construct one exact non-implementation v5.0 authority-reset candidate from the
-ADR-0018 classification, validate its complete revision-switch boundary, and
-leave it for independent review. Active v4.9 authority remains unchanged until
-that immutable candidate passes review and a separate integration checkpoint
-activates it atomically.
+Obtain an independent review of exact v5.0 authority-reset candidate
+`b1916250a28ee133e8d0b12225c5b6311c975247`, then activate only that attested
+commit through a separate integration checkpoint. Active v4.9 authority remains
+unchanged. Do not self-attest the candidate or resume WP-200 implementation
+from the reset alone.
 
 The preceding WP-200 inspection found that a property-read plan candidate is
 not yet constructible: planning leaves the host-erased/static binding-artifact
@@ -202,7 +206,9 @@ Work packages and tranches:
 - D7 is migrated through ADR-0018, the exact 121-way classification manifest
   `docs/spec/v5-authority-reset.toml`, PLAN, architecture governance, the
   artifact and ADR indexes, the workspace decision, and this continuation
-  state. The v5.0 activation candidate is not yet constructed or active;
+  state. Exact candidate `b1916250a28ee133e8d0b12225c5b6311c975247` is
+  registered review-pending under
+  `docs/audits/D7-v5-authority-reset-candidate.toml`; it is not active;
 - D3 is superseded. Active v4.9 authority remains 34 final, 84 residual, and
   three amendment requirements only until the reset activates. Foundation
   candidate `2494f33fdfe49ec3c7ae850d20990e446e628865` must not be integrated;
@@ -299,6 +305,11 @@ D7 authority-reset facts:
   reaffirmation/supersession/history, and retirement of the D3 migration DAG;
 - no partial candidate file grants v5.0 authority; current v4.9 remains active
   until independent review and separate exact integration complete;
+- the exact candidate uses ten active owners for 62 definitions, deletes the
+  D3 decomposition index, filters every global gate to active requirements,
+  and explicitly carries or downgrades machine artifacts and completed
+  evidence; its immutable identity and 27 paths are registered under the D7
+  candidate audit;
 - the abandoned D3 Foundation candidate may supply prose input but its 21-path
   activation boundary and 44/76/1 transition must not be integrated; and
 - rollback before activation is refusal to integrate; after activation the
@@ -846,6 +857,27 @@ D7 bounded-authority decision verification on 2026-07-28:
   Cargo manifest, completion evidence blob, or planned Property Read
   architecture fixture root.
 
+D7 candidate construction and registration verification on 2026-07-28:
+
+- candidate `b1916250a28ee133e8d0b12225c5b6311c975247` is the single child of
+  decision checkpoint `eb145c5e86ec9e9db0a09194bd4e2868784a927f` and changes
+  exactly the 27 paths registered in
+  `docs/audits/D7-v5-authority-reset-candidate.toml`;
+- its candidate checker passed with 62 exact active owners, 59 inactive
+  dispositions, six active-only gate sets, 16 exact machine-artifact
+  dispositions, and all 45 claims in seven completed evidence sources
+  classified without changing their historical records;
+- the candidate aggregate passed API, ADR, state, resource, performance,
+  work-package carry-forward, and all completed WP-000/WP-100 evidence checks;
+- `cargo test --workspace --locked` passed and
+  `sh scripts/check-feature-matrix.sh` reported 21 passed, 0 failed;
+- `git diff --check` passed, and the candidate contains no Rust, Cargo,
+  runtime/public API, work-package DAG, completion-evidence source, or planned
+  Property Read fixture change; and
+- the independent review fields remain empty/pending and mainline does not
+  contain the candidate, so this construction record is not self-attestation
+  or activation.
+
 `cargo test --workspace --all-features --locked` is not a valid project
 baseline because it intentionally enables mutually exclusive `zenoh` and
 `zenoh-pico` backends. Use the valid feature-matrix script instead.
@@ -853,11 +885,11 @@ baseline because it intentionally enables mutually exclusive `zenoh` and
 ## Stopping Point and Next Safe Actions
 
 Issue 0015 is decided and migrated. ADR-0018 supersedes continued lossless D3
-decomposition with a v5.0 bounded-core authority reset. Active mainline
-authority remains v4.9 until an exact reset candidate is constructed,
-independently reviewed, and activated in a separate integration checkpoint.
-The D3 Foundation candidate remains isolated history and must not be reviewed
-or integrated as the next project action.
+decomposition with a v5.0 bounded-core authority reset. Exact 27-path candidate
+`b1916250a28ee133e8d0b12225c5b6311c975247` is constructed, validated, and
+registered review-pending. Active mainline authority remains v4.9 until that
+immutable candidate is independently attested and activated through a separate
+integration checkpoint. The D3 Foundation candidate remains isolated history.
 
 `WP-100-PROPERTY-READ-HANDLER-SLICE` remains independently reviewed, admitted,
 implemented, and complete. Neither planned architecture fixture root exists,
@@ -867,28 +899,24 @@ boundaries.
 
 Next safe actions, in order:
 
-1. freeze the exact v4.9 decision checkpoint and construct one v5.0
-   non-implementation activation candidate containing the concise design
-   manifest, 121-way classification, 62 active owners, D3-check retirement,
-   revision projections, and explicit completed-evidence dispositions;
-2. validate its exact path boundary plus requirement, ADR, API, state,
-   resource, work-package, completed-tranche, aggregate design, workspace, and
-   valid feature checks, then leave the immutable candidate for independent
-   review rather than self-attesting it;
-3. after independent review, activate only the exact candidate in a separate
+1. independently review exact candidate
+   `b1916250a28ee133e8d0b12225c5b6311c975247`, rerun its candidate aggregate,
+   default workspace tests, and 21-cell feature matrix, and record an
+   attestation without changing it;
+2. after independent review, activate only the exact candidate in a separate
    integration checkpoint;
-4. resolve `workspace/0014-property-read-plan-artifact-boundary.md` with one
+3. resolve `workspace/0014-property-read-plan-artifact-boundary.md` with one
    exact host/static representation, a single Core SPI implementation owner,
    and paired authoring fixtures before preparing the WP-200 property-read plan
    candidate;
-5. independently admit every later property-read slice before its source or
+4. independently admit every later property-read slice before its source or
    planned architecture fixture root is created;
-6. carry the migrated D4, D5, D6, and D7 contracts into future subscription and
+5. carry the migrated D4, D5, D6, and D7 contracts into future subscription and
    property-read slice work;
-7. after v5.0 activation, re-evaluate the next dependency-complete portable
+6. after v5.0 activation, re-evaluate the next dependency-complete portable
    trait or remaining request/target tranche against the smaller active set;
    and
-8. ask the Owner only for project-goal, constraint, or external-commitment
+7. ask the Owner only for project-goal, constraint, or external-commitment
    clarification.
 
 Important references:
@@ -899,6 +927,7 @@ Important references:
 - `ARCHITECTURE_GOVERNANCE.md`;
 - `docs/ADRs/0018-bounded-v5-normative-authority-reset.org`;
 - `docs/spec/v5-authority-reset.toml`;
+- `docs/audits/D7-v5-authority-reset-candidate.toml`;
 - `workspace/0015-normative-authority-reset.md`;
 - `docs/audits/D3-foundation-authority-candidate.toml`;
 - candidate
