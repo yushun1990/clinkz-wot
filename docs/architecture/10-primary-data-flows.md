@@ -60,8 +60,14 @@ in the plan.
 8. Shared response validation maps transport metadata and payload into the WoT
    result or a structured error before application delivery.
 
-Fallback selects another already compiled candidate. It never asks a binding to
-scan forms or compile an unbounded artifact during transport execution.
+ADR-0017 permits fallback only before security commit and binding input:
+side-effect-free security inapplicability or an exact deterministic lazy
+compiler negative may skip one already admitted candidate in frozen order.
+Binding input rejection, mutable health, transient failures, and every
+post-acceptance result never trigger automatic fallback. Each eligible skip has
+one fixed-width diagnostic bounded by the admitted candidate count. Fallback
+never asks a binding to scan forms or compile an unbounded artifact during
+transport execution.
 
 ## Producer finalization and exposure
 

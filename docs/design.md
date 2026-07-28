@@ -207,8 +207,10 @@ ADR-0014 makes the residual-design and registered-amendment ownership during
 domain decomposition explicit. ADR-0015 makes static resource profiles borrowed
 and work budgets nonduplicable before the 195-field foundation refresh.
 ADR-0016 replaces raw-wrap/half-period time comparison with clock-source-owned
-extended logical ticks and exact incomparable-clock behavior. The revision
-therefore establishes:
+extended logical ticks and exact incomparable-clock behavior. ADR-0017 freezes
+Consumer fallback before security commit and binding input, with no
+health-driven or post-input-rejection reselection. The revision therefore
+establishes:
 a single-owner normative document
 hierarchy; an explicit Servient-owned compiled-plan-set lifecycle with the
 `clinkz-wot-planning` compiler boundary; Cargo-linked complete Protocol Binding

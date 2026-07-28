@@ -30,6 +30,7 @@ adrs=(
     "docs/ADRs/0014-transitional-normative-ownership.org"
     "docs/ADRs/0015-borrowed-resource-profiles-and-linear-work-budgets.org"
     "docs/ADRs/0016-extended-logical-monotonic-time.org"
+    "docs/ADRs/0017-pre-execution-candidate-fallback.org"
 )
 
 if [[ ! -f "$root/docs/ADRs/core.org" ]]; then
@@ -49,7 +50,7 @@ for relative in "${adrs[@]}"; do
     fi
 done
 
-for id in ADR-0001 ADR-0002 ADR-0003 ADR-0004 ADR-0005 ADR-0006 ADR-0007 ADR-0008 ADR-0009 ADR-0010 ADR-0011 ADR-0012 ADR-0013 ADR-0014 ADR-0015 ADR-0016; do
+for id in ADR-0001 ADR-0002 ADR-0003 ADR-0004 ADR-0005 ADR-0006 ADR-0007 ADR-0008 ADR-0009 ADR-0010 ADR-0011 ADR-0012 ADR-0013 ADR-0014 ADR-0015 ADR-0016 ADR-0017; do
     if ! grep -Fq "$id" "$root/docs/ADRs/core.org"; then
         echo "architecture ADR check: decision index does not reference $id" >&2
         exit 1
@@ -80,6 +81,20 @@ for fragment in \
     'Implementation-produced measurements are completion'; do
     if ! contains_normative_fragment "$fragment"; then
         echo "architecture ADR check: tranche-admission policy is missing $fragment" >&2
+        exit 1
+    fi
+done
+
+for fragment in \
+    'pub enum CandidateFallbackPolicy' \
+    'SecurityInapplicable' \
+    'DeterministicLazyArtifactFailure' \
+    '`BindingInputRejection<OutboundRequest>` is also not a planning negative' \
+    'Mutable runtime health is diagnostic-only in v1' \
+    'Capacity equal to the target-operation plan' \
+    'Neither allowance restarts after a'; do
+    if ! contains_normative_fragment "$fragment"; then
+        echo "architecture ADR check: ADR-0017 projection is missing $fragment" >&2
         exit 1
     fi
 done
@@ -147,6 +162,10 @@ expected_rows=(
     'PlanCompiler,trait,clinkz-wot-planning,public,clinkz_wot_planning::PlanCompiler,frozen'
     'PlanBuildInput,type,clinkz-wot-planning,public,clinkz_wot_planning::PlanBuildInput,frozen'
     'PlanBuildOutput,type,clinkz-wot-planning,public,clinkz_wot_planning::PlanBuildOutput,frozen'
+    'CandidateFallbackPolicy,type,clinkz-wot-planning,public,clinkz_wot_planning::CandidateFallbackPolicy,frozen'
+    'CandidateSkipReason,type,clinkz-wot-planning,public,clinkz_wot_planning::CandidateSkipReason,frozen'
+    'CandidateSkipDiagnostic,type,clinkz-wot-planning,public,clinkz_wot_planning::CandidateSkipDiagnostic,frozen'
+    'CandidateSelectionDiagnostics,type,clinkz-wot-planning,public,clinkz_wot_planning::CandidateSelectionDiagnostics,frozen'
 )
 
 for expected in "${expected_rows[@]}"; do
@@ -421,4 +440,4 @@ for fragment in \
     fi
 done
 
-echo "architecture ADR check: sixteen accepted decisions and the v4.9 backbone are registered"
+echo "architecture ADR check: seventeen accepted decisions and the v4.9 backbone are registered"

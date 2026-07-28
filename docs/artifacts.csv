@@ -90,6 +90,8 @@ docs/ADRs/0013-work-package-scoped-implementation-admission.org,tranche-scoped-i
 docs/ADRs/0014-transitional-normative-ownership.org,transitional-normative-ownership-decision,normative-decision,4.9,1,docs/design.md
 docs/ADRs/0015-borrowed-resource-profiles-and-linear-work-budgets.org,borrowed-resource-profile-and-linear-budget-decision,normative-decision,4.9,1,docs/design.md
 docs/ADRs/0016-extended-logical-monotonic-time.org,extended-logical-monotonic-time-decision,normative-decision,4.9,1,docs/design.md
+docs/ADRs/0017-pre-execution-candidate-fallback.org,pre-execution-candidate-fallback-decision,normative-decision,4.9,1,docs/spec/planning.md
+workspace/0013-candidate-fallback-policy.md,candidate-fallback-policy-workspace-topic,non-normative-workspace-topic,4.9,1,docs/spec/planning.md
 tools/check-wp100-amendment.sh,wp-100-amendment-checker,non-normative-checker,4.9,1,docs/design.md
 tools/check-wp100-handler-amendment.sh,wp-100-handler-amendment-checker,non-normative-checker,4.9,1,docs/design.md
 tools/check-wp100-foundation-refresh.sh,wp-100-foundation-refresh-checker,non-normative-checker,4.9,1,docs/design.md

@@ -212,6 +212,14 @@ extension maps, and URI-template programs remain behind the pinned plan
 reference. The binding checks every generation and artifact compatibility
 before protocol work starts.
 
+Under ADR-0017, returning `BindingInputRejection<OutboundRequest>` never
+authorizes automatic candidate fallback. The binding has not accepted protocol
+work, but planning has already selected one candidate and security application
+has committed. The caller retains the exact request and structured rejection
+for explicit disposition; it does not re-enter candidate selection. Binding
+operational health is likewise diagnostic-only and cannot reorder or skip
+immutable plan candidates.
+
 `InboundRequest` owns one `BindingRouteKey`, exact `InboundRouteMatch`, binding
 and route generations, plan-set and plan ids, correlation id, wire payload,
 media metadata, URI-variable values, and `TransportAuthMaterial`. URI matching

@@ -1,0 +1,122 @@
+#+title: ADR-0017: Pre-Execution Candidate Fallback
+#+date: 2026-07-28
+#+status: Accepted
+
+* Context
+
+The v4.9 planning contract already fixes document form order, captured binding
+registration order, strict narrowing, one examination per retained candidate,
+and no fallback after a binding accepts an =OutboundRequest=. It nevertheless
+referred to "a policy that already permits fallback" without defining a
+constructible policy value, default, eligible failures, runtime-health rule, or
+bounded skipped-candidate diagnostics.
+
+This gap is observable. A fallback triggered after credential commit or by a
+mutable health bit can consume one-time security material, reorder otherwise
+identical calls, bypass the immutable plan generation, or turn transport
+backpressure into an implicit retry. Conversely, rejecting every candidate
+after the first side-effect-free security mismatch or deterministic lazy
+compiler negative would make the retained ordered candidate set ineffective.
+
+=BindingInputRejection<OutboundRequest>= returns the complete request and
+certifies that the binding did not accept protocol work. It occurs only after
+planning selected one candidate, security application committed, and the
+request was constructed. The lack of a binding side effect therefore does not
+prove that re-running security selection or committing another candidate is
+side-effect free.
+
+* Decision
+
+=clinkz_wot_planning::CandidateFallbackPolicy= is the immutable Consumer
+selection-policy value captured by =PlanBuildInput= and retained by one
+compiled-plan-set generation. It has exactly two v1 variants:
+
+- =Disabled= examines only the first candidate remaining after strict
+  narrowing and returns its first selection-stage failure; and
+- =PreExecution= examines ordered admitted candidates until one can commit or
+  the candidate bound is exhausted.
+
+=PreExecution= is the Scripting-compatible and =GatewayDefaultV1= default. An
+application may select =Disabled= when constructing the consumed-handle
+generation. Per-call strict form, binding, or security selection narrows the
+candidate set and disables automatic fallback for that call; a per-call option
+cannot widen the immutable plan or override a handle built with =Disabled=.
+Producer owner selection does not use this policy.
+
+Only these two planning-owned, side-effect-free outcomes are eligible to skip
+one candidate under =PreExecution=:
+
+1. the candidate's precompiled security expression has no currently applicable
+   branch after bounded side-effect-free availability probes; or
+2. the candidate's exact lazy-artifact slot generation contains, or completes
+   with, a deterministic cacheable compiler negative.
+
+A provider-probe error, provider-probe budget exhaustion, cancellation,
+deadline exhaustion, backpressure, transient resource failure, non-cacheable
+compiler failure, stale plan or binding generation, draining publication,
+security commit failure, request-construction failure, or
+=BindingInputRejection<OutboundRequest>= is terminal for that interaction.
+None triggers automatic candidate fallback. After a binding accepts the
+request, every operational result remains an execution outcome and never
+selects another candidate. Explicit caller retry remains governed by the
+structured =RetryClass=; =GatewayDefaultV1= performs no automatic interaction
+retry.
+
+Mutable runtime health is diagnostic input only in v1. It cannot reorder,
+remove, or skip an admitted candidate. A stale, unavailable, or draining
+generation fails through the generation/lifecycle contract rather than being
+interpreted as candidate health. A future health-aware policy requires a
+separately admitted generation snapshot, bounds, fairness rule, diagnostics,
+and evidence before it can affect selection.
+
+Every eligible skip produces exactly one
+=clinkz_wot_planning::CandidateSkipDiagnostic= with the candidate position,
+plan id, original form index, binding id and generation, and one
+=CandidateSkipReason=:
+
+- =SecurityInapplicable=; or
+- =DeterministicLazyArtifactFailure=.
+
+=CandidateSelectionDiagnostics= is an immutable ordered sequence of those
+fixed-width, secret-free records. Its capacity is reserved before the first
+probe and equals the target-operation plan's admitted candidate count. Its
+length can therefore never exceed
+=form_binding_candidates_per_operation_max=, and it cannot truncate an
+eligible skip. Failure to reserve the diagnostic sequence fails before any
+probe or security commit. Diagnostics preserve candidate order, add no
+unbounded string or provider cause, and never change selection outcome.
+
+All examined candidates share the one
+=provider_probes_per_interaction_max= allowance and the caller's unique mutable
+=WorkBudget=. Neither allowance is reset when a candidate is skipped.
+
+* Consequences
+
+- Ordered fallback is deterministic for one plan generation, policy,
+  application option set, security-availability snapshot, and lazy-slot
+  outcomes.
+- A returned binding input remains available for explicit error handling, but
+  cannot silently cause another security commit or protocol attempt.
+- Binding operational status remains observable without becoming a second
+  mutable planning system.
+- The diagnostic bound follows the already admitted candidate bound and uses
+  fixed-width identities rather than a new unbounded journal.
+- The property-read planning slice may omit a multi-candidate runtime scenario,
+  but its candidate and source checks must use the frozen policy/input/plan
+  boundary and must not invent a different fallback rule.
+
+* Rejected alternatives
+
+- Falling back after any pre-acceptance =BindingInputRejection= was rejected
+  because security commit already occurred and the rejection may report stale
+  generation, capacity, backpressure, or contract failure rather than
+  candidate inapplicability.
+- Health-based reordering was rejected because no immutable health generation,
+  fairness rule, retention bound, or invalidation contract exists in v1.
+- Falling back on cancellation, deadlines, budgets, or transient resource
+  failures was rejected because it resets caller intent or turns bounded
+  progress failure into implicit retry.
+- Recording free-form provider or compiler strings was rejected because it can
+  leak secrets and violates deterministic byte bounds.
+- Disabling all fallback was rejected because it would make the admitted
+  ordered candidate set and =PLAN-BOUND-001= fallback evidence misleading.

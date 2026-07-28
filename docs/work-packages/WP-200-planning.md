@@ -40,13 +40,20 @@ facts. It neither activates host handler registrations nor removes a compatibili
 by WP-300, WP-400, or WP-600. New planning code must not call `PushFn`, `PublisherSink`,
 `SubscriptionSender`, a legacy raw handler lookup, or an old handler trait.
 
-Admission remains blocked until the AR-004 selection/fallback gap is closed in
-the planning specification: one constructible policy owner and default, exact
-pre-side-effect failures eligible for fallback, treatment of binding input
-rejection, a prohibition or bounded generation-safe contract for runtime-health
-selection, and deterministic bounded diagnostics for skipped candidates. The
-existing document/registration ordering rules remain frozen; this work does not
-return form selection to a Protocol Binding.
+ADR-0017 closes the AR-004 selection/fallback design gap without returning form
+selection to a Protocol Binding. `CandidateFallbackPolicy::PreExecution` is the
+Consumer default; only side-effect-free security inapplicability and an exact
+deterministic lazy-artifact negative may skip a candidate. Binding input
+rejection, mutable health, transient or bounded-progress failure, security
+commit, and all post-acceptance outcomes never trigger automatic fallback.
+Every eligible skip has one pre-reserved, fixed-width diagnostic bounded by the
+admitted candidate count.
+
+Implementation admission remains blocked until the exact property-read logical
+plan/binding-artifact candidate proves its bounded immutable planning input,
+absence of runtime TD reads, feature cells, source boundary, and independent
+ADR-0013 review. The existing document/registration ordering rules remain
+frozen.
 
 ## Requirements
 
@@ -104,8 +111,9 @@ Implement the frozen core-owned values:
 Implement the frozen compiler-owned surface:
 
 - `clinkz_wot_planning::CapabilityIndex`, `PlanCompiler`, `PlanBuildIdentity`, `PlanBuildInput`,
-  `PlanBuildCursor`, `PlanBuildOutput`, `PlanFootprint`, `CompiledUriTemplate`, and
-  `ResolvedFormTarget`.
+  `PlanBuildCursor`, `PlanBuildOutput`, `PlanFootprint`, `CompiledUriTemplate`,
+  `ResolvedFormTarget`, `CandidateFallbackPolicy`, `CandidateSkipReason`,
+  `CandidateSkipDiagnostic`, and `CandidateSelectionDiagnostics`.
 
 Compile `CollectionSubscriptionCapability` so it records topology, exact source
 attribution, maximum target count, start semantics, and teardown semantics. A standard collection

@@ -51,8 +51,10 @@ The repository evidence establishes the following starting point:
 - broad handler entry remains blocked by incomplete workload oracles,
   the remaining request/target migration, portable-trait admission, and
   no-atomic public-boundary evidence;
-- WP-200 is blocked before admission by the unresolved constructible
-  candidate-fallback policy and bounded diagnostics;
+- ADR-0017 closes the WP-200 candidate-fallback design gap with a constructible
+  pre-execution-only policy and bounded typed diagnostics. The exact
+  property-read plan slice remains blocked pending its immutable planning-input
+  and no-runtime-TD-read candidate plus independent ADR-0013 review;
 - WP-300 is blocked before admission by incomplete exact binding contracts,
   host/constrained authoring fixtures, and the blocked property-read
   architecture gate; D4 has resolved subscription receiver ownership;
@@ -85,6 +87,7 @@ answer and does not automatically block unrelated admitted work.
 | D3 | MIGRATED | Complete residual `docs/design.md` ownership through the requirement-indexed target DAG in `docs/spec/decomposition.csv` and several independently reviewed atomic domain migrations | 34 requirements are at final targets, 84 remain residual, and three remain in registered amendments; the checker now exposes exact remaining ownership | M1 exit |
 | D4 | MIGRATED | Use one non-`Clone` linear `Subscription`/`StaticSubscription` receive capability; expose no cloneable receiver/control split, competing-consumer contract, or per-clone broadcast | WP-300 owns one binding driver/cursor; WP-400 owns the Servient record/facade and must provide negative `Clone` compile fixtures | M4 entry |
 | D5 | MIGRATED | Adopt `PROPERTY-READ-ARCHITECTURE` as the first executable cross-package composition proof, using one property read in host and manual runtime cells plus an async/no-std compile projection | Four exact ordered tranches form `WP-100 -> WP-200 -> WP-300 -> WP-400`; the WP-100 handler slice is complete, while the downstream slices remain blocked and broad no-atomic/request-storage evidence remains outside the gate exception | Before broad WP-100/WP-300/WP-400 expansion |
+| D6 | MIGRATED | Use `CandidateFallbackPolicy::PreExecution` by default; permit only side-effect-free security inapplicability and exact deterministic lazy-artifact negatives to skip candidates; prohibit binding-input, health, transient, security-commit, and post-acceptance fallback | ADR-0017 makes the policy constructible and bounds one fixed-width diagnostic per eligible skip; the WP-200 slice still needs an exact candidate and independent admission | M3 entry |
 
 D5 preserves package completion order but adds a cross-package integration
 dependency in the registered work-package DAG. The completed WP-100 handler
@@ -275,8 +278,9 @@ indexes, and compiled-plan sets without runtime TD rescanning.
 Entry conditions:
 
 - WP-100 dependencies required by the proposed tranche are complete;
-- the AR-004 candidate-fallback policy, health rule, pre-side-effect failure
-  set, and bounded diagnostics are constructible and independently reviewed;
+- ADR-0017's candidate-fallback policy, health rule, pre-side-effect failure
+  set, and bounded diagnostics are constructible and reaffirmed by the exact
+  tranche's independent review;
 - D5 is migrated; the exact `WP-200-PROPERTY-READ-PLAN-SLICE` and its
   dependency on the completed handler slice are present in the authoritative
   DAG;

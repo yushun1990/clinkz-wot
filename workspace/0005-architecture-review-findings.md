@@ -138,7 +138,7 @@ recorded in `docs/work-packages/WP-300-bindings.md`.
 
 ## AR-004 — Candidate/form selection policy may be less explicit than ownership
 
-**Status:** Resolved — Plan
+**Status:** Resolved — Migrated
 
 ### Observation
 
@@ -163,10 +163,14 @@ If ownership is already correct, avoid reopening PB responsibilities. Clarify pl
 
 ### Disposition
 
-**Plan.** Ordering is already deterministic; the narrower missing contract is
-the constructible fallback policy, eligible pre-side-effect failures,
-runtime-health rule, and bounded skipped-candidate diagnostics. These are
-explicit WP-200 pre-admission design conditions.
+**Migrated.** ADR-0017 and `docs/spec/planning.md` now define the constructible
+`CandidateFallbackPolicy::{Disabled, PreExecution}` contract. Only
+side-effect-free security inapplicability and an exact deterministic lazy
+compiler negative may skip a candidate. Binding input rejection, mutable
+health, transient or bounded-progress failures, security commit, and
+post-acceptance outcomes do not trigger fallback. Every eligible skip has one
+pre-reserved fixed-width diagnostic bounded by the admitted candidate count.
+WP-200 still requires its exact tranche candidate and independent admission.
 
 ---
 

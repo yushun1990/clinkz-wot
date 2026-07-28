@@ -50,6 +50,7 @@ Topics are retained after migration as decision history.
 - [[file:0010-complete-design-decomposition.md][0010 Complete the docs/design.md Decomposition]]
 - [[file:0011-subscription-receiver-ownership.md][0011 Subscription receiver ownership]]
 - [[file:0012-property-read-handler-slice-boundary.md][0012 Property-read handler slice boundary]]
+- [[file:0013-candidate-fallback-policy.md][0013 Candidate fallback policy]]
 
 * History
 

@@ -23,20 +23,23 @@ completion strategy is migrated at
 ownership is migrated at
 `e07ba5f796c7613e28da08b34903a77c00b5a2d8`. D5 property-read architecture
 gate migration is recorded at
-`d4800bff41442768d62c6531e5adee52a39b2a74`.
+`d4800bff41442768d62c6531e5adee52a39b2a74`. ADR-0017 and the current D6
+migration close the AR-004 pre-execution candidate-fallback design gap; their
+recoverable checkpoint is pending the current validation and commit.
 
 ## Current Objective
 
 Use the completed `WP-100-PROPERTY-READ-HANDLER-SLICE` as the frozen
 predecessor for the next dependency-ready work. First inspect the exact
-`WP-200-PROPERTY-READ-PLAN-SLICE` blockers against current planning authority:
-constructible candidate fallback, bounded diagnostics, immutable planning
-input, and no runtime TD read. Prepare only a non-implementation candidate if
-those contracts are constructible from repository evidence; otherwise record
-the exact blocker and continue the next dependency-ready D3 target-domain
-migration. Keep target/no-atomic, request/storage, async/step handler traits,
-host execution, and both planned architecture fixture roots outside this
-completed slice.
+`WP-200-PROPERTY-READ-PLAN-SLICE` boundary against current planning and document
+authority. ADR-0017 now makes fallback and bounded diagnostics constructible;
+next prove whether the exact property-read logical plan, binding artifact,
+immutable planning input, and no-runtime-TD-read contract can form a truthful
+non-implementation candidate. If the remaining boundary is not constructible,
+record the exact blocker and continue the next dependency-ready D3
+target-domain migration. Keep target/no-atomic, request/storage, async/step
+handler traits, host execution, and both planned architecture fixture roots
+outside this work.
 
 Active milestones:
 
@@ -342,6 +345,27 @@ D5 migration facts:
   `InteractionInput` storage migration, host erasure/storage/execution, and
   downstream ownership remain excluded and separately blocking.
 
+D6 candidate-fallback facts:
+
+- ADR-0017 makes `clinkz_wot_planning::CandidateFallbackPolicy` the immutable
+  Consumer policy captured by `PlanBuildInput`; `PreExecution` is the default
+  and applications may select `Disabled` for a consumed-handle generation;
+- strict per-call form, binding, or security selection disables automatic
+  fallback and cannot widen the immutable plan or override `Disabled`;
+- only side-effect-free security inapplicability and the exact lazy-slot
+  generation's deterministic cacheable compiler negative may skip a candidate;
+- provider errors or budget exhaustion, cancellation, deadlines, backpressure,
+  transient or non-cacheable compiler failure, stale/draining generations,
+  security commit, request construction, `BindingInputRejection`, and every
+  post-acceptance outcome terminate that interaction without reselection;
+- mutable runtime health is diagnostic-only in v1 and cannot reorder or skip an
+  admitted candidate;
+- every eligible skip has one ordered, fixed-width, secret-free diagnostic,
+  with full capacity reserved to the target plan's admitted candidate count
+  before the first probe; and
+- all candidates share one provider-probe allowance and one unique mutable
+  `WorkBudget`; neither restarts after a skip.
+
 Completed property-read handler slice facts:
 
 - the candidate is the single child of frozen base
@@ -511,8 +535,9 @@ Completed deadline/cleanup tranche facts:
 
 Downstream admission blockers:
 
-- WP-200: constructible candidate-fallback policy, health rule,
-  pre-side-effect failure set, and bounded diagnostics;
+- WP-200: exact property-read logical-plan/binding-artifact candidate, bounded
+  immutable planning input, no-runtime-TD-read proof, and independent tranche
+  review; ADR-0017 has closed the fallback/health/diagnostic design gap;
 - WP-300: exact registration/compiler/constrained signatures, independent
   host/static authoring fixtures, and subscription receiver ownership;
 - WP-400/WP-500/WP-600: their registered WP-300 predecessor;
@@ -721,6 +746,25 @@ Property-read handler admission and completion verification on 2026-07-28:
   `tools/check-design-artifacts.sh` passes without cleanup and creates no
   nested fixture `target/`.
 
+D6 candidate-fallback migration verification on 2026-07-28:
+
+- `tools/check-api-ownership.sh` passed with 690 frozen items, including the
+  four planning-owned fallback and diagnostic values;
+- `tools/check-design-requirements.sh` passed with all 121 requirements
+  indexed exactly once: 34 at final targets, 84 residual, and three in
+  registered amendments;
+- `tools/check-architecture-adrs.sh` passed with all seventeen accepted
+  decisions and the v4.9 backbone registered;
+- `cargo run --locked --quiet --manifest-path tools/design-check/Cargo.toml --
+  check-work-packages` passed the predecessor suites and authoritative
+  work-package DAG;
+- `tools/check-design-artifacts.sh` passed all governance and six refactor
+  gates after the ADR, API ownership, planning, binding, plan, workspace, and
+  continuation projections; and
+- no implementation source or planned property-read architecture fixture root
+  changed; `WP-200-PROPERTY-READ-PLAN-SLICE` remains blocked until its exact
+  candidate and independent review exist.
+
 `cargo test --workspace --all-features --locked` is not a valid project
 baseline because it intentionally enables mutually exclusive `zenoh` and
 `zenoh-pico` backends. Use the valid feature-matrix script instead.
@@ -737,11 +781,13 @@ remaining portable-trait, workload, resource, and performance boundaries.
 
 Next safe actions, in order:
 
-1. inspect the exact `WP-200-PROPERTY-READ-PLAN-SLICE` blockers and current
-   planning contracts; prepare a non-implementation candidate only if bounded,
-   immutable planning input and no-runtime-TD-read behavior are constructible;
-2. if that planning boundary remains blocked, record the exact evidence and
-   continue M1 with the next dependency-ready D3 target-domain migration;
+1. use ADR-0017's migrated fallback contract while inspecting the exact
+   `WP-200-PROPERTY-READ-PLAN-SLICE` logical-plan, binding-artifact,
+   `PlanBuildInput`, and document ownership closure;
+2. prepare a non-implementation candidate only if bounded immutable planning
+   input and no-runtime-TD-read behavior are constructible; otherwise record
+   the exact evidence and continue M1 with the next dependency-ready D3
+   target-domain migration;
 3. independently admit every later property-read slice before its source or
    planned architecture fixture root is created;
 4. carry the migrated D4 and D5 contracts into future subscription and
@@ -766,6 +812,7 @@ Important references:
 - `docs/audits/WP-100-handler-value-primitives-review.toml`;
 - `docs/evidence/WP-100-handler-value-primitives.toml`;
 - `docs/ADRs/0016-extended-logical-monotonic-time.org`;
+- `docs/ADRs/0017-pre-execution-candidate-fallback.org`;
 - `docs/amendments/WP-100-time-domain-v1.md`;
 - `docs/audits/WP-100-logical-time-correction-entry.md`;
 - `docs/audits/WP-100-logical-time-correction-review.toml`;
@@ -788,4 +835,5 @@ Important references:
 - `workspace/0009-minimal-end-to-end-architecture-validation.md`;
 - `workspace/0010-complete-design-decomposition.md`;
 - `workspace/0011-subscription-receiver-ownership.md`;
-- `workspace/0012-property-read-handler-slice-boundary.md`.
+- `workspace/0012-property-read-handler-slice-boundary.md`;
+- `workspace/0013-candidate-fallback-policy.md`.

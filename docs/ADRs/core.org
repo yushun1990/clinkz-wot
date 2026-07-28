@@ -24,6 +24,7 @@ they do not claim that the current implementation already conforms.
 - [[file:0014-transitional-normative-ownership.org][ADR-0014: Transitional normative ownership during domain decomposition]]
 - [[file:0015-borrowed-resource-profiles-and-linear-work-budgets.org][ADR-0015: Borrowed resource profiles and linear work budgets]]
 - [[file:0016-extended-logical-monotonic-time.org][ADR-0016: Extended logical monotonic time]]
+- [[file:0017-pre-execution-candidate-fallback.org][ADR-0017: Pre-execution candidate fallback]]
 
 * Review record
 

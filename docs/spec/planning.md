@@ -341,9 +341,10 @@ One build transaction captures all of the following before candidate planning:
 - each binding id, generation, configuration identity, capability declaration,
   compiler compatibility identity, and execution compatibility identity;
 - schema, codec, and other immutable dependency generations used by planning;
-  and
 - deterministic application options that affect form ownership or candidate
-  filtering.
+  filtering; and
+- the Consumer `CandidateFallbackPolicy`; Producer builds require
+  `CandidateFallbackPolicy::Disabled`.
 
 Credentials and per-call credential generations are not planning inputs and do
 not invalidate an existing plan. Security applicability that depends on current
@@ -361,6 +362,88 @@ incompatible document, plan-set, policy, dependency, binding, configuration, or
 compiler generation is a miss or stale-reference error, never a reusable cache
 hit. Detecting a new generation is O(1) and must not scan or rewrite existing
 plan sets.
+
+## Candidate fallback policy and diagnostics
+
+ADR-0017 fixes the only automatic Consumer fallback boundary. Planning owns
+these exact public semantic values:
+
+```rust
+#[derive(Clone, Copy, Debug, Default, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub enum CandidateFallbackPolicy {
+    Disabled,
+    #[default]
+    PreExecution,
+}
+
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub enum CandidateSkipReason {
+    SecurityInapplicable,
+    DeterministicLazyArtifactFailure,
+}
+
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub struct CandidateSkipDiagnostic { /* private fixed-width fields */ }
+
+impl CandidateSkipDiagnostic {
+    pub const fn candidate_position(&self) -> u32;
+    pub const fn plan_id(&self) -> PlanId;
+    pub const fn form_index(&self) -> u32;
+    pub const fn binding_id(&self) -> BindingId;
+    pub const fn binding_generation(&self) -> BindingGeneration;
+    pub const fn reason(&self) -> CandidateSkipReason;
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct CandidateSelectionDiagnostics { /* private bounded sequence */ }
+
+impl CandidateSelectionDiagnostics {
+    pub const fn len(&self) -> usize;
+    pub const fn is_empty(&self) -> bool;
+    pub fn get(&self, index: usize) -> Option<&CandidateSkipDiagnostic>;
+}
+```
+
+`PlanBuildInput` captures one immutable policy for the Consumer plan-set
+generation. `PreExecution` is the Scripting-compatible and
+`GatewayDefaultV1` default. An application may select `Disabled` when building
+the consumed handle. A strict per-call form, binding, or security selection
+narrows the immutable candidate set and disables automatic fallback for that
+call; it cannot widen the plan or override a handle built with `Disabled`.
+Producer owner selection never uses Consumer fallback and requires `Disabled`.
+
+Under `PreExecution`, exactly two outcomes may skip one ordered candidate:
+
+1. bounded, side-effect-free security-availability probes establish that the
+   candidate's precompiled security expression is currently inapplicable; or
+2. the exact lazy-artifact slot generation contains, or completes with, a
+   deterministic cacheable compiler negative.
+
+Provider-probe errors or budget exhaustion, cancellation, deadline exhaustion,
+backpressure, transient resource failure, non-cacheable compiler failure,
+stale or draining generations, security commit failure, request-construction
+failure, and `BindingInputRejection<OutboundRequest>` are not eligible. They
+terminate that interaction with their structured outcome. After a binding
+accepts the request, no result can select another candidate.
+
+Mutable runtime health is diagnostic-only in v1. It never reorders, removes, or
+skips an admitted candidate. Stale, unavailable, or draining generations fail
+through the generation and lifecycle contracts. A future health-aware policy
+requires a separately admitted immutable health generation, bounds, fairness,
+diagnostics, and evidence.
+
+Every eligible skip appends exactly one `CandidateSkipDiagnostic` in candidate
+order. The sequence is secret-free and fixed-width: it contains only candidate
+position, plan id, original form index, binding id/generation, and the typed
+reason. Capacity equal to the target-operation plan's admitted candidate count
+is reserved before the first probe. Reservation failure therefore precedes all
+probe and security-commit work; a completed sequence never truncates a skip and
+its length cannot exceed `form_binding_candidates_per_operation_max`.
+
+All candidates share one `provider_probes_per_interaction_max` allowance and
+the caller's unique mutable `WorkBudget`. Neither allowance restarts after a
+skip. Diagnostics are selection evidence, not free-form logging, and do not
+change the chosen candidate or error.
 
 ## Capability indexes
 
@@ -597,11 +680,12 @@ artifact.
 
 Each candidate is examined at most once per interaction. The first applicable
 candidate is selected unless a strict option requires a particular form or
-binding. A deterministic lazy-compilation failure is a distinct planning-stage
-candidate failure. A policy that already permits fallback may continue to the
-next admitted candidate; strict selection returns the failure. Once a binding
-execution operation accepts a request, its execution failure never triggers
-implicit fallback that could duplicate a side effect.
+binding. `CandidateFallbackPolicy::PreExecution` may continue only for the two
+eligible planning-owned outcomes defined above and records every skip in the
+pre-reserved diagnostics. `Disabled` and every strict selection return the
+first failure. Once security commit or binding input construction fails, or a
+binding execution operation accepts or rejects a request, that interaction
+never triggers implicit fallback that could repeat a side effect.
 
 Selection errors remain distinct from execution errors. They identify missing
 targets or operations, absent compatible forms, target-resolution failures,
@@ -859,6 +943,11 @@ lazy slot generation. Transport, authentication-attempt, cancellation,
 deadline, and runtime resource failures are execution outcomes and are never
 turned into permanent planning negatives.
 
+`BindingInputRejection<OutboundRequest>` is also not a planning negative. It
+returns the exact post-security-commit request before binding acceptance, but it
+does not prove that choosing and committing another candidate would be
+side-effect free.
+
 ## API roles
 
 The API ownership matrix freezes public paths and exact Rust schemas. It must
@@ -870,6 +959,7 @@ project these roles without moving their behavior to another crate:
 | Semantic plan, source, target, binding, artifact, and plan-set generation ids | `clinkz-wot-core` | Static distinctions and stale-reference rejection; they may contain the foundation-owned generic `Generation` primitive without exposing it as an interchangeable semantic id |
 | Binding compiler input, artifact envelope/ref, compatibility identity, footprint, outcome, and compiler-extension trait | `clinkz-wot-core` binding SPI | Portable contract between shared planning and one complete registration |
 | `CapabilityIndex`, `PlanCompiler`, `PlanBuildInput`, `PlanBuildOutput`, build cursor, `CompiledUriTemplate`, and `ResolvedFormTarget` | `clinkz-wot-planning` | Shared deterministic planning algorithms and resumable build surface |
+| `CandidateFallbackPolicy`, `CandidateSkipReason`, `CandidateSkipDiagnostic`, and `CandidateSelectionDiagnostics` | `clinkz-wot-planning` | Immutable Consumer fallback policy plus bounded, typed pre-execution selection diagnostics |
 | `ServerFormContributor` and form-contribution values | `clinkz-wot-core` binding SPI | Side-effect-free Producer form finalization input/output |
 | Compiled plan-set record, plan-set lease, lazy-artifact slot, compiler lease, and reclaim cursor | `clinkz-wot-servient` | Aggregate lifecycle and mutable runtime ownership; these records are not binding APIs |
 | Concrete artifact payload and compiler-extension implementation | Concrete binding crate | Protocol-specific immutable planning data |
@@ -891,7 +981,7 @@ or benchmark without those identities does not close a gate.
 | `plan-cost-and-limits` | One shared logical plan for multiple bindings; measured footprint ledger; eager/lazy equivalence; one-over form, candidate, schema, security, artifact, cursor, and byte failures; no silent omission |
 | `index-lazy-request-size` | Indexed probes only; explicit wildcard bound; stable ordering; no hot TD/all-binding scan; no static target/schema/security/extension clone in `OutboundRequest`; Producer artifacts eager and unused eligible Consumer artifacts lazy |
 | `lazy-cache-single-flight-generation` | One compiler lease under concurrent first use; bounded waiters/backpressure; deterministic Negative classification; non-cacheable cancellation/resource/deadline results; generation isolation; eviction with a referenced result; incremental zero-byte reclamation |
-| `per-operation-candidate-bound` | Admission at limit and rejection at limit plus one; 1/8/32 candidate selection scaling; each candidate examined once; one shared provider-probe budget; strict lookup does not bypass limits |
+| `per-operation-candidate-bound` | Admission at limit and rejection at limit plus one; 1/8/32 candidate selection scaling; exact `Disabled`/`PreExecution` outcomes; only the two eligible skip reasons; complete ordered fixed-width diagnostics; binding-input, health, transient, security-commit, and post-acceptance non-fallback; each candidate examined once; one shared provider-probe budget; strict lookup does not bypass limits |
 | `form-finalization` | Contributor capability pruning, deterministic stable output, side-effect detector, exact merge/freeze order, generated and supplied owner resolution, explicit ambiguity, behavior coverage and late-handler diagnostics, collision across generations, immutable post-freeze TD, and rollback with no external contribution state |
 | `compiled-plan-lifecycle` | Consumer atomic publication, Producer freeze-before-side-effect and publication-with-serving, cancellation in every build phase, pin/drain races, late route rollback pinning, lazy-work drain, and zero retained plan/artifact bytes after terminal reclamation |
 | `binding-compiler-extension` | Third-party compiler implementation, compatibility mismatch, deterministic output across step sizes, zero-budget no-progress, declared-versus-actual footprint violation, callback outside locks, no credentials/handlers, and no protocol side effect during compile |
