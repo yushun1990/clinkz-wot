@@ -53,8 +53,11 @@ The repository evidence establishes the following starting point:
   no-atomic public-boundary evidence;
 - ADR-0017 closes the WP-200 candidate-fallback design gap with a constructible
   pre-execution-only policy and bounded typed diagnostics. The exact
-  property-read plan slice remains blocked pending its immutable planning-input
-  and no-runtime-TD-read candidate plus independent ADR-0013 review;
+  property-read plan slice remains blocked because the host-erased/static
+  binding-artifact and compiler-extension Rust representation is not frozen,
+  WP-200/WP-300 text duplicates its implementation ownership, and the
+  immutable planning-input/no-runtime-TD-read candidate therefore cannot yet
+  receive independent ADR-0013 review;
 - WP-300 is blocked before admission by incomplete exact binding contracts,
   host/constrained authoring fixtures, and the blocked property-read
   architecture gate; D4 has resolved subscription receiver ownership;
@@ -281,6 +284,9 @@ Entry conditions:
 - ADR-0017's candidate-fallback policy, health rule, pre-side-effect failure
   set, and bounded diagnostics are constructible and reaffirmed by the exact
   tranche's independent review;
+- the host-erased and static binding-artifact/compiler representation has one
+  implementation owner, exact Rust contracts, and independent authoring
+  fixtures, resolving `workspace/0014-property-read-plan-artifact-boundary.md`;
 - D5 is migrated; the exact `WP-200-PROPERTY-READ-PLAN-SLICE` and its
   dependency on the completed handler slice are present in the authoritative
   DAG;

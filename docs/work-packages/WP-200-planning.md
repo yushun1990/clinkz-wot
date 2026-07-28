@@ -55,6 +55,17 @@ absence of runtime TD reads, feature cells, source boundary, and independent
 ADR-0013 review. The existing document/registration ordering rules remain
 frozen.
 
+The candidate cannot yet be constructed truthfully. Planning authority leaves
+the host-erased versus static artifact representation open, the complete
+registration authority does not freeze the compiler/component Rust schemas,
+and review AR3-02/AR3-06 confirms that a third-party host or constrained
+binding cannot author the boundary from public contracts. The package index
+assigns `PLAN-ARTIFACT-001` and `binding-compiler-extension` evidence to
+WP-200, while the WP-300 document currently also says to implement the same
+Core values. `workspace/0014-property-read-plan-artifact-boundary.md` records
+the required single-owner reconciliation and paired authoring fixtures. No
+property-read plan candidate or fixture root is admitted before that closure.
+
 ## Requirements
 
 The package index assigns this exact requirement set:

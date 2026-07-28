@@ -222,6 +222,7 @@ authoritative_artifacts = [
 completion_evidence_keys = ["property-read-plan-slice"]
 blocking_conditions = [
     "handler-slice-complete",
+    "host-erased-and-static-binding-artifact-representation-reconciled",
     "property-read-logical-plan-and-binding-artifact-candidate-reviewed",
     "bounded-planning-input-and-no-runtime-td-read-proven",
 ]

@@ -2839,6 +2839,7 @@ fn property_read_slice_spec(id: &str) -> Option<PropertyReadSliceSpec> {
             evidence_key: "property-read-plan-slice",
             blockers: &[
                 "handler-slice-complete",
+                "host-erased-and-static-binding-artifact-representation-reconciled",
                 "property-read-logical-plan-and-binding-artifact-candidate-reviewed",
                 "bounded-planning-input-and-no-runtime-td-read-proven",
             ],

@@ -29,17 +29,16 @@ migration close the AR-004 pre-execution candidate-fallback design gap at
 
 ## Current Objective
 
-Use the completed `WP-100-PROPERTY-READ-HANDLER-SLICE` as the frozen
-predecessor for the next dependency-ready work. First inspect the exact
-`WP-200-PROPERTY-READ-PLAN-SLICE` boundary against current planning and document
-authority. ADR-0017 now makes fallback and bounded diagnostics constructible;
-next prove whether the exact property-read logical plan, binding artifact,
-immutable planning input, and no-runtime-TD-read contract can form a truthful
-non-implementation candidate. If the remaining boundary is not constructible,
-record the exact blocker and continue the next dependency-ready D3
-target-domain migration. Keep target/no-atomic, request/storage, async/step
-handler traits, host execution, and both planned architecture fixture roots
-outside this work.
+Prepare the dependency-ready D3 `docs/spec/foundation.md` authority-migration
+candidate without activating it before independent review. The preceding
+WP-200 inspection found that a property-read plan candidate is not yet
+constructible: planning leaves the host-erased/static binding-artifact
+representation open, binding registration lacks exact compiler/component Rust
+schemas, and WP-200/WP-300 text duplicates implementation ownership despite the
+package dependency order. Keep planning/Core/TD implementation, target/no-
+atomic, request/storage, async/step handler traits, host execution, a WP-200
+compile-contract root, and both planned architecture fixture roots outside this
+work.
 
 Active milestones:
 
@@ -535,9 +534,11 @@ Completed deadline/cleanup tranche facts:
 
 Downstream admission blockers:
 
-- WP-200: exact property-read logical-plan/binding-artifact candidate, bounded
-  immutable planning input, no-runtime-TD-read proof, and independent tranche
-  review; ADR-0017 has closed the fallback/health/diagnostic design gap;
+- WP-200: one exact host-erased/static binding-artifact and compiler-extension
+  Rust representation, single WP-200/WP-300 implementation owner, paired
+  authoring fixtures, then the property-read logical-plan/build-input
+  candidate, no-runtime-TD-read proof, and independent tranche review;
+  ADR-0017 has closed the fallback/health/diagnostic design gap;
 - WP-300: exact registration/compiler/constrained signatures, independent
   host/static authoring fixtures, and subscription receiver ownership;
 - WP-400/WP-500/WP-600: their registered WP-300 predecessor;
@@ -783,21 +784,23 @@ remaining portable-trait, workload, resource, and performance boundaries.
 
 Next safe actions, in order:
 
-1. use ADR-0017's migrated fallback contract while inspecting the exact
-   `WP-200-PROPERTY-READ-PLAN-SLICE` logical-plan, binding-artifact,
-   `PlanBuildInput`, and document ownership closure;
-2. prepare a non-implementation candidate only if bounded immutable planning
-   input and no-runtime-TD-read behavior are constructible; otherwise record
-   the exact evidence and continue M1 with the next dependency-ready D3
-   target-domain migration;
-3. independently admit every later property-read slice before its source or
+1. prepare the exact D3 `foundation.md` target-domain migration candidate,
+   atomically reconciling its ten requirements, relevant time amendment
+   clauses, requirement/artifact indexes, residual design text, and checkers;
+2. stop that authority switch at its independent-review boundary and do not
+   self-attest;
+3. later resolve
+   `workspace/0014-property-read-plan-artifact-boundary.md` with one exact
+   host/static representation and paired authoring fixtures before preparing
+   the WP-200 property-read plan candidate;
+4. independently admit every later property-read slice before its source or
    planned architecture fixture root is created;
-4. carry the migrated D4 and D5 contracts into future subscription and
+5. carry the migrated D4, D5, and D6 contracts into future subscription and
    property-read slice work;
-5. decompose the next dependency-complete portable-trait or remaining
+6. decompose the next dependency-complete portable-trait or remaining
    request/target tranche without merging its evidence boundary into the
    property-read slice; and
-6. ask the Owner only for project-goal, constraint, or external-commitment
+7. ask the Owner only for project-goal, constraint, or external-commitment
    clarification.
 
 Important references:
@@ -838,4 +841,5 @@ Important references:
 - `workspace/0010-complete-design-decomposition.md`;
 - `workspace/0011-subscription-receiver-ownership.md`;
 - `workspace/0012-property-read-handler-slice-boundary.md`;
-- `workspace/0013-candidate-fallback-policy.md`.
+- `workspace/0013-candidate-fallback-policy.md`;
+- `workspace/0014-property-read-plan-artifact-boundary.md`.
