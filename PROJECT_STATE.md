@@ -24,8 +24,8 @@ ownership is migrated at
 `e07ba5f796c7613e28da08b34903a77c00b5a2d8`. D5 property-read architecture
 gate migration is recorded at
 `d4800bff41442768d62c6531e5adee52a39b2a74`. ADR-0017 and the current D6
-migration close the AR-004 pre-execution candidate-fallback design gap; their
-recoverable checkpoint is pending the current validation and commit.
+migration close the AR-004 pre-execution candidate-fallback design gap at
+`7f2869ff03ceb8659ba01e69ba97d9882e944df3`.
 
 ## Current Objective
 
@@ -748,6 +748,8 @@ Property-read handler admission and completion verification on 2026-07-28:
 
 D6 candidate-fallback migration verification on 2026-07-28:
 
+- migration checkpoint `7f2869ff03ceb8659ba01e69ba97d9882e944df3`
+  contains the accepted ADR and all authoritative projections;
 - `tools/check-api-ownership.sh` passed with 690 frozen items, including the
   four planning-owned fallback and diagnostic values;
 - `tools/check-design-requirements.sh` passed with all 121 requirements
