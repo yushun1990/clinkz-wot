@@ -1,5 +1,7 @@
 # Module Boundaries
 
+Status: v5.0 activation candidate.
+
 ## Target dependency direction
 
 ```text
@@ -12,11 +14,21 @@ core <- codec crates
 selected public crates <- clinkz-wot umbrella
 ```
 
-The v4.9 target renames the current shared
+The v5.0 target carries forward the planned rename of the current shared
 `clinkz-wot-protocol-bindings` compiler crate to `clinkz-wot-planning`.
 Planning is not a protocol implementation, and its crate name must not suggest
 that it owns binding execution. Concrete Protocol Binding crates remain
 separate dependencies of the application or umbrella crate, never of Servient.
+
+`CRATE-DEPS-001`: The dependency graph MUST remain acyclic and directed from
+Foundation to TD/Core, from TD/Core to Planning and Discovery, and from those
+protocol-neutral layers to Servient composition. Codec crates depend on Core;
+concrete Protocol Bindings depend on Planning/Core contracts but MUST NOT
+become Servient dependencies merely to implement an SPI. Lower layers MUST NOT
+gain an optional higher-layer policy through feature unification. Foundation
+owns no TD/runtime/protocol vocabulary; Core owns no Servient, Discovery, or
+concrete protocol; Discovery owns no Directory service or storage backend; and
+only the umbrella is expected to compose every selected public crate.
 
 ## Responsibility map
 

@@ -167,8 +167,8 @@ if grep -Eq 'handler-missing|unsupported-operation or handler-missing' "$root/do
     exit 1
 fi
 
-if ! grep -Fq '`query_action` and `cancel_action` return a validated' \
-    "$root/docs/design.md"; then
+if ! grep -Fq '`query_action` and `cancel_action` return a' "$disposition" \
+    || ! grep -Fq 'validated `InteractionOutput`' "$disposition"; then
     echo "WP-100 disposition check: action success boundary is not frozen" >&2
     exit 1
 fi

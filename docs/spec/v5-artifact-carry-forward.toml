@@ -1,0 +1,118 @@
+schema_version = 1
+target_design_revision = "5.0"
+status = "candidate-unreviewed"
+basis_revision = "4.9"
+decision = "docs/ADRs/0018-bounded-v5-normative-authority-reset.org"
+rule = "A carried artifact projects active requirements only where ADR-0018 classifies the identity active; all other rows remain implementation inventory or domain-entry input."
+
+[[artifact]]
+family = "api-ownership"
+path = "docs/api-ownership.csv"
+sha256 = "2b03034c9d439fe4a6e6aff64cab7f51aaf6abecd0e1c9bead0786570730278b"
+disposition = "carried-forward-unchanged"
+revalidation = "tools/check-api-ownership.sh"
+
+[[artifact]]
+family = "state-model"
+path = "docs/state-machines.toml"
+sha256 = "bfe06b1fa4bba7027d1f57c104a54a188fbbe8ce4a5717e6fdf9081279502b1c"
+disposition = "active-state-expose-bind-inflight-projections-carried; other machines are domain-entry input"
+revalidation = "cargo run --locked --quiet --manifest-path tools/design-check/Cargo.toml -- check-state"
+
+[[artifact]]
+family = "resource-policy"
+path = "docs/resource-limits.csv"
+sha256 = "65e3edbcfbbc38b8fe16b4efd5db92d7964fc653ad71cc8e747ff056fe3b519e"
+disposition = "carried-forward-unchanged as the exhaustive RES-LIMIT-001 field schema"
+revalidation = "tools/check-resource-limits.sh"
+
+[[artifact]]
+family = "requirement-metadata"
+path = "docs/requirements.csv"
+sha256 = "fdf52fb5210d615d754408070e96ccbefa5d28ba1e0ef4139a52456f6dc4b86c"
+disposition = "carried-forward-unchanged for profile, package, evidence, and historical-source metadata; no longer selects authority"
+revalidation = "tools/check-design-requirements.sh"
+
+[[artifact]]
+family = "implementation-gates"
+path = "docs/refactor-gates.csv"
+sha256 = "88cb8a96b887f2051c37cb9c4a11ee62dddabf825468978b6ee9374f2ce941ac"
+disposition = "reconciled so every gate references active v5 requirements only; open gates still require independent v5 review"
+revalidation = "tools/check-v5-authority-reset-candidate.sh"
+
+[[artifact]]
+family = "governance"
+path = "docs/governance.toml"
+sha256 = "3db9b25eb5bb9b7a3f33ff208691deaa96225a4b0102de492187e884c7cc9c4a"
+disposition = "carried forward with the v5 candidate checker registered; v4.9 reviews remain historical gate evidence"
+revalidation = "tools/check-v5-authority-reset-candidate.sh"
+
+[[artifact]]
+family = "performance-input"
+path = "docs/performance/manifest.schema.json"
+sha256 = "e472e68f4e8a508a040b1ad2bd907cb2fd346359d7e49faf79c326d32c442209"
+disposition = "carried-forward-unchanged regression input; inactive performance identities grant no authority"
+revalidation = "cargo run --locked --quiet --manifest-path tools/performance-harness/Cargo.toml -- verify"
+
+[[artifact]]
+family = "performance-input"
+path = "docs/performance/result.schema.json"
+sha256 = "ebb97d711fd0e1e23b31f28f3a4832dc132f0dbb40891b0b0d7c079a9e25da3e"
+disposition = "carried-forward-unchanged regression input"
+revalidation = "cargo run --locked --quiet --manifest-path tools/performance-harness/Cargo.toml -- verify"
+
+[[artifact]]
+family = "performance-input"
+path = "docs/performance/fixtures.lock.toml"
+sha256 = "f839d142839b1b20a8b73c0f86e548a765dad6ea6744f52b5bd2b6b73292478d"
+disposition = "carried-forward-unchanged regression input"
+revalidation = "cargo run --locked --quiet --manifest-path tools/performance-harness/Cargo.toml -- verify"
+
+[[artifact]]
+family = "performance-input"
+path = "docs/performance/fixture-generator.md"
+sha256 = "16ba6aa1e711d1fbf3115b1fc0f21860850e51f0b8f3bb440f8736aec2bb2b6d"
+disposition = "carried-forward-unchanged regression input"
+revalidation = "cargo run --locked --quiet --manifest-path tools/performance-harness/Cargo.toml -- verify"
+
+[[artifact]]
+family = "performance-input"
+path = "docs/performance/constrained.toml"
+sha256 = "89bac9266dfc9740f8499e4987bce171d5d6e10985562dcafade57060d4f687d"
+disposition = "carried-forward-unchanged regression input"
+revalidation = "cargo run --locked --quiet --manifest-path tools/performance-harness/Cargo.toml -- verify"
+
+[[artifact]]
+family = "performance-input"
+path = "docs/performance/gateway.toml"
+sha256 = "fb94c24c8d33a1effc8e7081a8d53dbe8f8b2bd95cb4714afb48369f1e3aabb3"
+disposition = "carried-forward-unchanged regression input"
+revalidation = "cargo run --locked --quiet --manifest-path tools/performance-harness/Cargo.toml -- verify"
+
+[[artifact]]
+family = "performance-input"
+path = "docs/performance/directory.toml"
+sha256 = "c0201e5f3dc49787e8dffe2d0cd777d3996aeedc6bfb709e62dc4f2dc90622f1"
+disposition = "carried-forward-unchanged regression input"
+revalidation = "cargo run --locked --quiet --manifest-path tools/performance-harness/Cargo.toml -- verify"
+
+[[artifact]]
+family = "work-package-dag"
+path = "docs/work-packages/index.toml"
+sha256 = "8aa248a72be203e2216f03b09b214da43e3e500bd44734a13b87296da66caa8f"
+disposition = "carried-forward-unchanged; package order and completed/admitted states remain implementation truth"
+revalidation = "cargo run --locked --quiet --manifest-path tools/design-check/Cargo.toml -- check-work-packages"
+
+[[artifact]]
+family = "property-read-integration-gate"
+path = "docs/work-packages/property-read-architecture-gate.toml"
+sha256 = "dc3bf695eb89499a700aa581133424ccc269813cff7bf5679ba572407215882a"
+disposition = "carried-forward-unchanged; its 21 requirements exactly equal the v5 Property Read class"
+revalidation = "tools/check-v5-authority-reset-decision.sh"
+
+[[artifact]]
+family = "property-read-integration-gate"
+path = "docs/work-packages/PROPERTY-READ-ARCHITECTURE.md"
+sha256 = "e68b91177eecd11e1b75fc130cf18906d3266a8abd32847ae97f9fe01bd9bafe"
+disposition = "carried-forward-unchanged narrative boundary"
+revalidation = "tools/check-v5-authority-reset-decision.sh"

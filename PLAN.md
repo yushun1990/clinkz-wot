@@ -38,10 +38,9 @@ The repository evidence establishes the following starting point:
   defers 34 declared-v1 requirements to their domain entry, preserves 15 as
   design input, retires four premature freezes, and discharges six duplicate
   requirement ids through stronger owners. v4.9 remains active until the
-  exact reset candidate
-  `b1916250a28ee133e8d0b12225c5b6311c975247` passes independent review and
-  activates atomically. The candidate is registered review-pending and changes
-  no runtime or public API;
+  exact reset candidate on `candidate/v5-authority-reset` passes independent
+  review and activates atomically. The candidate is constructed but
+  unreviewed and changes no runtime or public API;
 - GATE-3, the Directory client boundary, is closed; GATE-1, GATE-2, GATE-4,
   GATE-5, and GATE-6 remain open;
 - WP-000 is recorded complete; ADR-0016 preserves its historical
@@ -103,9 +102,7 @@ answer and does not automatically block unrelated admitted work.
 | D4 | MIGRATED | Use one non-`Clone` linear `Subscription`/`StaticSubscription` receive capability; expose no cloneable receiver/control split, competing-consumer contract, or per-clone broadcast | WP-300 owns one binding driver/cursor; WP-400 owns the Servient record/facade and must provide negative `Clone` compile fixtures | M4 entry |
 | D5 | MIGRATED | Adopt `PROPERTY-READ-ARCHITECTURE` as the first executable cross-package composition proof, using one property read in host and manual runtime cells plus an async/no-std compile projection | Four exact ordered tranches form `WP-100 -> WP-200 -> WP-300 -> WP-400`; the WP-100 handler slice is complete, while the downstream slices remain blocked and broad no-atomic/request-storage evidence remains outside the gate exception | Before broad WP-100/WP-300/WP-400 expansion |
 | D6 | MIGRATED | Use `CandidateFallbackPolicy::PreExecution` by default; permit only side-effect-free security inapplicability and exact deterministic lazy-artifact negatives to skip candidates; prohibit binding-input, health, transient, security-commit, and post-acceptance fallback | ADR-0017 makes the policy constructible and bounds one fixed-width diagnostic per eligible skip; the WP-200 slice still needs an exact candidate and independent admission | M3 entry |
-| D7 | MIGRATED | Adopt ADR-0018's bounded v5.0 authority reset: 62 active requirements, explicit inactive classifications for the other 59, and domain-entry re-adoption for later v1 obligations | Exact non-implementation candidate `b1916250a28ee133e8d0b12225c5b6311c975247` is registered review-pending; independently attest it, then activate it in a separate checkpoint. Current v4.9 authority remains unchanged until then | M1 exit and WP-200 resume |
-| D8 | OPEN | Freeze the constructible host-erased/static binding-artifact and compiler-extension Rust boundary from `workspace/0014-property-read-plan-artifact-boundary.md` | One bounded decision/admission conversion packet must assign the Core SPI once, migrate the exact contract, provide paired third-party authoring fixtures, and prepare the WP-200 Property Read plan candidate for one independent review | M3 entry |
-| D9 | MIGRATED | Adopt bounded design-to-implementation conversion from `workspace/0016-post-reset-implementation-throughput.md` | Once D8's declared closure boundary is satisfied, refuse unrelated refinement and proceed through one exact review, one pre-source admission checkpoint, implementation, and completion evidence; track authority, local contracts, and vertical integration separately | Continuous execution |
+| D7 | MIGRATED | Adopt ADR-0018's bounded v5.0 authority reset: 62 active requirements, explicit inactive classifications for the other 59, and domain-entry re-adoption for later v1 obligations | The exact non-implementation candidate is constructed on `candidate/v5-authority-reset`; independently review its immutable commit, then activate it in a separate checkpoint. Current v4.9 authority remains unchanged until then | M1 exit and WP-200 resume |
 
 The former D3 Foundation candidate is the exact single child of
 `56fea9813df80fe29527755fcb2ce91d43cc5086`, changes only its registered
@@ -120,16 +117,6 @@ before WP-200 implementation admission, and
 constructible host-erased/static representation, one implementation owner, and
 paired authoring fixtures. The reset grants no source or architecture-fixture
 admission by itself.
-
-D9 makes the post-reset conversion finite. After activation, D8 is the sole
-design blocker on the first executable WP-200 slice. Its technical decision,
-authoritative migration, paired authoring fixtures, and exact tranche
-admission material share one conversion packet and one scoped independent
-review unless the investigation proves a distinct rollback or evidence
-boundary. `PLAN.md`, `PROJECT_STATE.md`, registry, audit, or checker maintenance
-does not create another serial prerequisite. After that candidate passes its
-pre-implementation checks, only review, one pre-source admission checkpoint,
-implementation, and completion evidence remain on the WP-200 slice path.
 
 D5 preserves package completion order but adds a cross-package integration
 dependency in the registered work-package DAG. The completed WP-100 handler
@@ -229,6 +216,11 @@ Scope:
   as migration input only;
 - run all registered checks and obtain an independent same-revision closure
   review.
+
+Current progress: the activation candidate now has 62 exact single owners,
+59 inactive dispositions, explicit machine-artifact and completed-evidence
+carry-forward manifests, active-only gate requirement sets, and no runtime/API
+path. Independent candidate review and separate activation remain outstanding.
 
 AI deliverable:
 

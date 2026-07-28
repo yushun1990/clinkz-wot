@@ -20,6 +20,36 @@ case "$mode" in
         ;;
 esac
 
+if grep -Fqx 'status = "exact-candidate-constructed-unreviewed"' \
+    "$root/docs/spec/v5-authority-reset.toml"; then
+    if [[ -n "$readiness_command" ]]; then
+        echo "design artifact check: v5 candidate cannot grant implementation readiness before review/integration" >&2
+        exit 1
+    fi
+
+    "$root/tools/check-v5-authority-reset-candidate.sh"
+    "$root/tools/check-design-requirements.sh"
+    "$root/tools/check-api-ownership.sh"
+    "$root/tools/check-architecture-adrs.sh"
+    "$root/tools/check-directory-client-scope.sh"
+    "$root/tools/check-resource-limits.sh"
+    "$root/tools/check-wp100-amendment.sh"
+    "$root/tools/check-wp100-handler-amendment.sh"
+    cargo run --locked --quiet --manifest-path "$root/tools/design-check/Cargo.toml" -- \
+        check-state
+    cargo run --locked --quiet --manifest-path "$root/tools/performance-harness/Cargo.toml" -- \
+        verify
+    "$root/tools/check-wp-000.sh"
+    "$root/tools/check-wp100-foundation-refresh.sh"
+    "$root/tools/check-wp100-handler-value-primitives.sh"
+    "$root/tools/check-wp100-logical-time-correction.sh"
+    "$root/tools/check-wp100-deadline-cleanup-timing.sh"
+    "$root/tools/check-wp100-handler-context.sh"
+    "$root/tools/check-wp100-property-read-handler-slice.sh"
+    echo "design artifact check: exact v5 candidate and all completed implementation evidence validated"
+    exit 0
+fi
+
 if [[ -n "$readiness_command" ]]; then
     cargo run --locked --quiet --manifest-path "$root/tools/design-check/Cargo.toml" -- \
         "$readiness_command"

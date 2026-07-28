@@ -5,7 +5,6 @@ root=$(cd "$(dirname "$0")/.." && pwd)
 manifest="$root/docs/spec/v5-authority-reset.toml"
 index="$root/docs/requirements.csv"
 gate="$root/docs/work-packages/property-read-architecture-gate.toml"
-candidate_audit="$root/docs/audits/D7-v5-authority-reset-candidate.toml"
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
 
@@ -41,8 +40,13 @@ tail -n +2 "$index" | while IFS=, read -r expressions _; do
     done
 done >"$tmp/current"
 
-sed -nE 's/^[[:space:]]+"([A-Z][A-Z0-9-]*-[0-9]{3})",?$/\1/p' \
-    "$manifest" >"$tmp/classified"
+awk '
+    /^\[classification\./ { active = 1 }
+    /^\[candidate\]/ { active = 0 }
+    active { print }
+' "$manifest" \
+    | sed -nE 's/^[[:space:]]+"([A-Z][A-Z0-9-]*-[0-9]{3})",?$/\1/p' \
+    >"$tmp/classified"
 
 section_ids() {
     local section=$1
@@ -116,49 +120,4 @@ grep -Fq 'is abandoned as an activation' \
     "$root/docs/ADRs/0018-bounded-v5-normative-authority-reset.org" \
     || fail "Foundation D3 candidate disposition is missing"
 
-[[ -f "$candidate_audit" ]] || fail "missing registered v5 candidate audit"
-for field in \
-    'status = "review-pending"' \
-    'candidate_branch = "candidate/v5-authority-reset"' \
-    'candidate_base_ref = "eb145c5e86ec9e9db0a09194bd4e2868784a927f"' \
-    'candidate_ref = "b1916250a28ee133e8d0b12225c5b6311c975247"' \
-    'authority_activation = "withheld"' \
-    'runtime_or_public_api_changes = false' \
-    'status = "pending"'; do
-    grep -Fqx "$field" "$candidate_audit" \
-        || fail "candidate audit is missing exact field: $field"
-done
-
-candidate_base=$(sed -nE 's/^candidate_base_ref = "([0-9a-f]{40})"$/\1/p' \
-    "$candidate_audit")
-candidate_ref=$(sed -nE 's/^candidate_ref = "([0-9a-f]{40})"$/\1/p' \
-    "$candidate_audit")
-[[ $(git -C "$root" rev-list --parents -n 1 "$candidate_ref") \
-    == "$candidate_ref $candidate_base" ]] \
-    || fail "registered candidate is not the single child of its frozen base"
-
-git -C "$root" diff --name-only "$candidate_base..$candidate_ref" \
-    | sort >"$tmp/candidate-diff-paths"
-awk '
-    /^candidate_paths = \[/ { active = 1; next }
-    active && /^\]/ { exit }
-    active {
-        value = $0
-        if (match(value, /"[^"]+"/)) print substr(value, RSTART + 1, RLENGTH - 2)
-    }
-' "$candidate_audit" | sort >"$tmp/candidate-audit-paths"
-[[ $(wc -l <"$tmp/candidate-audit-paths") -eq 27 ]] \
-    || fail "candidate audit does not register exactly 27 paths"
-cmp -s "$tmp/candidate-diff-paths" "$tmp/candidate-audit-paths" \
-    || fail "registered candidate paths differ from the immutable diff"
-if grep -E '(^|/)(Cargo\.(toml|lock)|[^/]+\.rs)$|^(foundation|core|td|servient|discovery|protocol-bindings|codecs)/' \
-    "$tmp/candidate-diff-paths" >"$tmp/candidate-runtime-paths"; then
-    fail "registered candidate changes runtime or Cargo paths"
-fi
-git -C "$root" diff --check "$candidate_base..$candidate_ref" \
-    || fail "registered candidate fails diff hygiene"
-if git -C "$root" merge-base --is-ancestor "$candidate_ref" HEAD; then
-    fail "unreviewed v5 candidate is already integrated"
-fi
-
-echo "v5 authority reset decision check: 121 classified, 62 active, exact 27-path candidate registered review-pending, activation withheld"
+echo "v5 authority reset decision check: 121 classified, 62 active, activation withheld"

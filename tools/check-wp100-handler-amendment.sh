@@ -89,7 +89,8 @@ for deadline_contract in \
 done
 
 if ! awk -F, -v path="docs/amendments/WP-100-time-domain-v1.md" '
-    NR > 1 && $1 == path && $3 == "normative-amendment" { found = 1 }
+    NR > 1 && $1 == path && ($3 == "normative-amendment" || \
+        $3 == "candidate-normative-amendment") { found = 1 }
     END { exit !found }
 ' "$artifacts"; then
     echo "WP-100 handler amendment check: time-domain amendment is not registered" >&2

@@ -1,6 +1,8 @@
 # Planning and Compiled Plan Sets
 
-Status: v4.9 architecture-closure candidate.
+Status: v5.0 activation candidate. Only the eight requirement definitions
+registered below are active; retained v4.9 deferred clauses are entry-review
+input and carry no implementation authority.
 
 This specification is the single normative owner of effective-form planning,
 capability indexing, logical-plan construction, binding-compiler coordination,
@@ -10,11 +12,12 @@ Binding SPI specification owns transport execution, route progress, calls,
 subscriptions, responses, and publication progress; this specification only
 defines the immutable values that those operations consume.
 
-The requirements carried into this specification are `PLAN-REQUEST-001`,
-`PLAN-COST-001` through `PLAN-COST-003`, `PLAN-INDEX-001`, `PLAN-LAZY-001`,
-`PLAN-CACHE-001`, `PLAN-BOUND-001`, `PLAN-SET-001`,
-`PLAN-ARTIFACT-001`, `FORM-FINALIZE-001`, `FORM-FINALIZE-002`,
-`FORM-OWNER-001`, and `FORM-COVERAGE-001`.
+This specification owns exactly `PLAN-COST-001`, `PLAN-COST-003`,
+`PLAN-BOUND-001`, `PLAN-SET-001`, `PLAN-ARTIFACT-001`,
+`FORM-FINALIZE-001`, `FORM-OWNER-001`, and `FORM-COVERAGE-001` in v5.0.
+The retained clauses for `PLAN-COST-002`, `PLAN-INDEX-001`, `PLAN-LAZY-001`,
+`PLAN-CACHE-001`, `PLAN-REQUEST-001`, and `FORM-FINALIZE-002` are explicitly
+inactive until a planning-domain entry review re-adopts or replaces them.
 
 ## Normative requirements
 
@@ -25,7 +28,7 @@ only binding identity, static capability results, an artifact reference, and
 binding-specific data that cannot be shared, never a duplicate full logical
 plan.
 
-`PLAN-COST-002`: A profile MAY choose eager, lazy, or hybrid compilation only
+Historical v4.9 clause (`PLAN-COST-002`, inactive): A profile MAY choose eager, lazy, or hybrid compilation only
 for eligible binding artifacts; the choice MUST preserve candidate order,
 selection and failure semantics, active resource and work bounds, and a visible
 distinction between admission-time and first-use compilation failure.
@@ -35,25 +38,25 @@ exceeds an admitted form, candidate, probe, schema, security, logical-byte,
 artifact-byte, compiler-cursor, temporary-byte, or work bound with a structured
 limit error; it MUST NOT silently omit or truncate required planning data.
 
-`PLAN-INDEX-001`: Planning MUST build separate generation-bearing client and
+Historical v4.9 clause (`PLAN-INDEX-001`, inactive): Planning MUST build separate generation-bearing client and
 server capability indexes from the captured registration snapshot, probe only
 the indexed registrations and explicit admitted wildcards for each candidate,
 reject declaration/support inconsistencies, and preserve O(`f + p + c`) normal
 candidate construction rather than an implicit O(`f * b`) registration scan.
 
-`PLAN-LAZY-001`: Admission MUST eagerly compile all protocol-neutral metadata
+Historical v4.9 clause (`PLAN-LAZY-001`, inactive): Admission MUST eagerly compile all protocol-neutral metadata
 required for safe selection and every Producer route/publication artifact; an
 eligible Consumer artifact MAY be lazy only through a pre-reserved bounded slot
 whose compiler is pure, deterministic, resumable, and unable to start protocol
 work.
 
-`PLAN-CACHE-001`: Concurrent first use of one lazy artifact key and complete
+Historical v4.9 clause (`PLAN-CACHE-001`, inactive): Concurrent first use of one lazy artifact key and complete
 dependency generation MUST be single flight, with one compiler lease, bounded
 waiters or explicit backpressure, immutable Ready or deterministic Negative
 publication, no callback under registry-wide or eviction locks, generation-
 isolated reuse, and incremental reference-safe reclamation.
 
-`PLAN-REQUEST-001`: Per-call requests MUST reference immutable static target,
+Historical v4.9 clause (`PLAN-REQUEST-001`, inactive): Per-call requests MUST reference immutable static target,
 form, URI-template, schema, security, response, extension, and artifact data by
 generation-bearing plan slots and MUST own only varying payload, URI-variable,
 cancellation, deadline, correlation, committed-security, and protocol-status
@@ -86,7 +89,7 @@ output to expose admission, and reject output that cannot locally and fully
 describe generated forms, security/context additions, and endpoint reservation
 identities without credentials or external-resource creation.
 
-`FORM-FINALIZE-002`: `expose` MUST transactionally validate the draft, collect
+Historical v4.9 clause (`FORM-FINALIZE-002`, inactive): `expose` MUST transactionally validate the draft, collect
 and merge contributions in captured order, validate effective forms, resolve
 owners and collisions, freeze the effective TD, and eagerly compile all
 Producer plans before the first binding side effect; after freeze, no form,

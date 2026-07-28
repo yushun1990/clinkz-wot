@@ -27,11 +27,11 @@ gate migration is recorded at
 migration close the AR-004 pre-execution candidate-fallback design gap at
 `7f2869ff03ceb8659ba01e69ba97d9882e944df3`. ADR-0018 selects a v5.0
 bounded-core authority reset with 62 active requirements and explicit
-dispositions for the other 59 v4.9 identities. Its decision checkpoint is
-`eb145c5e86ec9e9db0a09194bd4e2868784a927f`; exact single-child candidate
-`b1916250a28ee133e8d0b12225c5b6311c975247` is registered review-pending on
-`candidate/v5-authority-reset` and changes exactly 27 non-implementation paths.
-The former D3 Foundation
+dispositions for the other 59 v4.9 identities; its decision migration
+checkpoint is `eb145c5e86ec9e9db0a09194bd4e2868784a927f`. The exact
+non-implementation activation candidate is constructed from that checkpoint on
+`candidate/v5-authority-reset`; this checkpoint freezes its exact boundary for
+independent review. The former D3 Foundation
 authority candidate
 `2494f33fdfe49ec3c7ae850d20990e446e628865` is the single child of frozen base
 `56fea9813df80fe29527755fcb2ce91d43cc5086` on
@@ -42,11 +42,11 @@ activation candidate and retained only as v5.0 migration/audit input.
 
 ## Current Objective
 
-Obtain an independent review of exact v5.0 authority-reset candidate
-`b1916250a28ee133e8d0b12225c5b6311c975247`, then activate only that attested
-commit through a separate integration checkpoint. Active v4.9 authority remains
-unchanged. Do not self-attest the candidate or resume WP-200 implementation
-from the reset alone.
+Freeze and independently review the exact non-implementation v5.0
+authority-reset candidate on `candidate/v5-authority-reset`, then activate only
+that reviewed commit through a separate mainline checkpoint. Active v4.9
+authority remains unchanged until integration. Do not self-attest the
+candidate and do not resume WP-200 implementation from the reset alone.
 
 The preceding WP-200 inspection found that a property-read plan candidate is
 not yet constructible: planning leaves the host-erased/static binding-artifact
@@ -190,20 +190,6 @@ D1 adds risk-proportional admission authoring and review depth:
 D1 does not weaken ADR-0013 or authorize runtime/public API work before the
 specific tranche is admitted.
 
-D9 adds a bounded design-to-implementation conversion rule:
-
-- the active critical path names one executable objective, a finite blocker
-  set, one observable design-closure event, and the next source-changing event;
-- one technical decision, authoritative migration, authoring-fixture set, and
-  admission record share one conversion packet and review boundary when their
-  contract, rollback, and validation truth are the same;
-- further refinement after closure requires an explicit intersecting semantic,
-  ownership, lifecycle, resource, dependency, or evidence-truth finding;
-- continuity, registry, audit, and checker updates travel with the checkpoint
-  whose truth they record rather than becoming new serial prerequisites; and
-- architecture closure, package-local completion, and executable vertical
-  integration are reported separately.
-
 ## Evidence and Status
 
 Global gates:
@@ -220,9 +206,8 @@ Work packages and tranches:
 - D7 is migrated through ADR-0018, the exact 121-way classification manifest
   `docs/spec/v5-authority-reset.toml`, PLAN, architecture governance, the
   artifact and ADR indexes, the workspace decision, and this continuation
-  state. Exact candidate `b1916250a28ee133e8d0b12225c5b6311c975247` is
-  registered review-pending under
-  `docs/audits/D7-v5-authority-reset-candidate.toml`; it is not active;
+  state. The v5.0 activation candidate is constructed and locally validated on
+  `candidate/v5-authority-reset`, but is not independently reviewed or active;
 - D3 is superseded. Active v4.9 authority remains 34 final, 84 residual, and
   three amendment requirements only until the reset activates. Foundation
   candidate `2494f33fdfe49ec3c7ae850d20990e446e628865` must not be integrated;
@@ -302,14 +287,8 @@ passed without expanding the tranche.
 
 AI-led open decisions:
 
-- `workspace/0014-property-read-plan-artifact-boundary.md` is `OPEN`. It is the
-  sole design blocker on the post-reset WP-200 Property Read critical path.
-  Its finite closure event is one exact host-erased/static compiler-artifact
-  representation, one Core SPI implementation owner, paired independent
-  authoring fixtures, and the exact WP-200 plan-slice admission candidate.
-  Under D9 these outputs form one conversion packet and one scoped review
-  boundary unless the investigation proves distinct rollback or validation
-  truth.
+- None. Newly discovered technical questions enter `workspace/` and are
+  resolved from repository evidence under the normal lifecycle.
 
 D7 authority-reset facts:
 
@@ -325,11 +304,14 @@ D7 authority-reset facts:
   reaffirmation/supersession/history, and retirement of the D3 migration DAG;
 - no partial candidate file grants v5.0 authority; current v4.9 remains active
   until independent review and separate exact integration complete;
-- the exact candidate uses ten active owners for 62 definitions, deletes the
-  D3 decomposition index, filters every global gate to active requirements,
-  and explicitly carries or downgrades machine artifacts and completed
-  evidence; its immutable identity and 27 paths are registered under the D7
-  candidate audit;
+- the constructed candidate replaces the 4,110-line residual design with a
+  concise manifest, deletes the D3 decomposition index, assigns all 62 active
+  definitions exactly once across ten registered sources, filters all six
+  global gates to active requirements, and carries machine artifacts plus every
+  completed evidence claim through exact checked dispositions;
+- its changed paths are restricted to documentation and shell checkers; it
+  changes no Rust source, Cargo manifest, public API, runtime behavior, planned
+  Property Read fixture root, or work-package implementation state;
 - the abandoned D3 Foundation candidate may supply prose input but its 21-path
   activation boundary and 44/76/1 transition must not be integrated; and
 - rollback before activation is refusal to integrate; after activation the
@@ -593,9 +575,9 @@ Downstream admission blockers:
 
 - WP-200: one exact host-erased/static binding-artifact and compiler-extension
   Rust representation, single WP-200/WP-300 implementation owner, paired
-  authoring fixtures, property-read logical-plan/build-input candidate,
-  no-runtime-TD-read proof, and independent tranche review in one D9 conversion
-  packet; ADR-0017 has closed the fallback/health/diagnostic design gap;
+  authoring fixtures, then the property-read logical-plan/build-input
+  candidate, no-runtime-TD-read proof, and independent tranche review;
+  ADR-0017 has closed the fallback/health/diagnostic design gap;
 - WP-300: exact registration/compiler/constrained signatures, independent
   host/static authoring fixtures, and subscription receiver ownership;
 - WP-400/WP-500/WP-600: their registered WP-300 predecessor;
@@ -877,44 +859,26 @@ D7 bounded-authority decision verification on 2026-07-28:
   Cargo manifest, completion evidence blob, or planned Property Read
   architecture fixture root.
 
-D7 candidate construction and registration verification on 2026-07-28:
+D7 exact-candidate verification on 2026-07-28:
 
-- candidate `b1916250a28ee133e8d0b12225c5b6311c975247` is the single child of
-  decision checkpoint `eb145c5e86ec9e9db0a09194bd4e2868784a927f` and changes
-  exactly the 27 paths registered in
-  `docs/audits/D7-v5-authority-reset-candidate.toml`;
-- its candidate checker passed with 62 exact active owners, 59 inactive
-  dispositions, six active-only gate sets, 16 exact machine-artifact
-  dispositions, and all 45 claims in seven completed evidence sources
-  classified without changing their historical records;
-- the candidate aggregate passed API, ADR, state, resource, performance,
-  work-package carry-forward, and all completed WP-000/WP-100 evidence checks;
-- `cargo test --workspace --locked` passed and
-  `sh scripts/check-feature-matrix.sh` reported 21 passed, 0 failed;
-- `git diff --check` passed, and the candidate contains no Rust, Cargo,
-  runtime/public API, work-package DAG, completion-evidence source, or planned
-  Property Read fixture change; and
-- the independent review fields remain empty/pending and mainline does not
-  contain the candidate, so this construction record is not self-attestation
-  or activation.
-
-D9 throughput decision verification on 2026-07-28:
-
-- the history and source inspection found no product Rust/Cargo change after
-  the Property Read handler implementation through v5 candidate registration,
-  while D6 removed one real WP-200 blocker and D7 removed the future D3
-  authority-only chain;
-- current source contains none of the ten production planning, compiler,
-  artifact, or complete-registration types required by the next vertical
-  boundary, confirming that executable composition remains absent;
-- `PROJECT_GOVERNANCE.md` now bounds one design/admission conversion packet and
-  defines the refinement cutoff without weakening ADR-0013 or independent
-  review;
-- `workspace/INDEX.org`, `PLAN.md`, and this state now consistently expose
-  issue 0014 as the sole open post-reset WP-200 design decision; and
-- `tools/check-design-artifacts.sh` and `git diff --check` passed with no
-  runtime/public API, work-package DAG, admission-status, or planned
-  architecture-fixture change.
+- `tools/check-v5-authority-reset-candidate.sh` passed: 27 changed paths match
+  the registered boundary, all 62 active ids have exactly one of ten owners,
+  all 59 other ids are inactive, all six global gates cite active ids only,
+  16 machine artifacts match their carried/reconciled digests, and all 45
+  claims across seven completed evidence records have active or inactive
+  dispositions;
+- `tools/check-design-artifacts.sh` passed the candidate aggregate, including
+  API ownership, all eighteen ADR registrations/projections, Directory scope,
+  195 resource fields and three profiles, state models, 66 performance
+  fixtures/cases, both WP-100 amendment contracts, WP-000, and every completed
+  WP-100 implementation tranche;
+- `cargo test --workspace --locked` passed the default workspace test and
+  doctest baseline;
+- `sh scripts/check-feature-matrix.sh` passed all 21 valid feature
+  combinations; and
+- `git diff --check` passed. The exact boundary contains no Rust source, Cargo
+  manifest, public API, runtime, work-package DAG, completed evidence source,
+  or planned Property Read fixture change.
 
 `cargo test --workspace --all-features --locked` is not a valid project
 baseline because it intentionally enables mutually exclusive `zenoh` and
@@ -923,11 +887,12 @@ baseline because it intentionally enables mutually exclusive `zenoh` and
 ## Stopping Point and Next Safe Actions
 
 Issue 0015 is decided and migrated. ADR-0018 supersedes continued lossless D3
-decomposition with a v5.0 bounded-core authority reset. Exact 27-path candidate
-`b1916250a28ee133e8d0b12225c5b6311c975247` is constructed, validated, and
-registered review-pending. Active mainline authority remains v4.9 until that
-immutable candidate is independently attested and activated through a separate
-integration checkpoint. The D3 Foundation candidate remains isolated history.
+decomposition with a v5.0 bounded-core authority reset. The exact 27-path
+non-implementation candidate is constructed and locally validated on
+`candidate/v5-authority-reset`; this checkpoint freezes it for independent
+review. Active mainline authority remains v4.9 until that immutable candidate
+is independently attested and activated through a separate integration
+checkpoint. The D3 Foundation candidate remains isolated history.
 
 `WP-100-PROPERTY-READ-HANDLER-SLICE` remains independently reviewed, admitted,
 implemented, and complete. Neither planned architecture fixture root exists,
@@ -937,17 +902,16 @@ boundaries.
 
 Next safe actions, in order:
 
-1. independently review exact candidate
-   `b1916250a28ee133e8d0b12225c5b6311c975247`, rerun its candidate aggregate,
-   default workspace tests, and 21-cell feature matrix, and record an
-   attestation without changing it;
+1. independently review the immutable candidate commit, rerun
+   `tools/check-design-artifacts.sh`, `cargo test --workspace --locked`, and
+   `sh scripts/check-feature-matrix.sh`, and record an attestation without
+   changing the candidate;
 2. after independent review, activate only the exact candidate in a separate
    integration checkpoint;
-3. resolve `workspace/0014-property-read-plan-artifact-boundary.md` through one
-   bounded D9 conversion packet containing the exact host/static
-   representation, single Core SPI implementation owner, authoritative
-   migration, paired authoring fixtures, and WP-200 property-read plan
-   admission material;
+3. resolve `workspace/0014-property-read-plan-artifact-boundary.md` with one
+   exact host/static representation, a single Core SPI implementation owner,
+   and paired authoring fixtures before preparing the WP-200 property-read plan
+   candidate;
 4. independently admit every later property-read slice before its source or
    planned architecture fixture root is created;
 5. carry the migrated D4, D5, D6, and D7 contracts into future subscription and
@@ -966,7 +930,9 @@ Important references:
 - `ARCHITECTURE_GOVERNANCE.md`;
 - `docs/ADRs/0018-bounded-v5-normative-authority-reset.org`;
 - `docs/spec/v5-authority-reset.toml`;
-- `docs/audits/D7-v5-authority-reset-candidate.toml`;
+- `docs/spec/v5-artifact-carry-forward.toml`;
+- `docs/evidence/v5-authority-carry-forward.toml`;
+- `tools/check-v5-authority-reset-candidate.sh`;
 - `workspace/0015-normative-authority-reset.md`;
 - `docs/audits/D3-foundation-authority-candidate.toml`;
 - candidate

@@ -1,7 +1,7 @@
 schema_version = 1
 current_design_revision = "4.9"
 target_design_revision = "5.0"
-status = "decision-migrated-candidate-pending"
+status = "exact-candidate-constructed-unreviewed"
 decision = "docs/ADRs/0018-bounded-v5-normative-authority-reset.org"
 workspace_basis = "workspace/0015-normative-authority-reset.md"
 reset_base_ref = "6c01e07a446f51d413618474554b5eedcf5de23e"
@@ -168,13 +168,161 @@ requirements = [
 ]
 
 [candidate]
-status = "registered-review-pending"
-authority_activation = "withheld"
+status = "constructed-unreviewed"
+authority_activation = "withheld-pending-independent-review-and-mainline-integration"
 runtime_or_public_api_changes_allowed = false
 independent_review_required = true
 separate_integration_required = true
 rollback_ref = "6c01e07a446f51d413618474554b5eedcf5de23e"
-candidate_branch = "candidate/v5-authority-reset"
 candidate_base_ref = "eb145c5e86ec9e9db0a09194bd4e2868784a927f"
-candidate_ref = "b1916250a28ee133e8d0b12225c5b6311c975247"
-candidate_registration = "docs/audits/D7-v5-authority-reset-candidate.toml"
+expected_changed_paths = [
+  "ARCHITECTURE_GOVERNANCE.md",
+  "PLAN.md",
+  "PROJECT_STATE.md",
+  "docs/architecture/README.md",
+  "docs/architecture/10-primary-data-flows.md",
+  "docs/architecture/20-module-boundaries.md",
+  "docs/artifacts.csv",
+  "docs/design.md",
+  "docs/evidence/v5-authority-carry-forward.toml",
+  "docs/governance.toml",
+  "docs/refactor-gates.csv",
+  "docs/spec/README.md",
+  "docs/spec/binding-spi.md",
+  "docs/spec/decomposition.csv",
+  "docs/spec/foundation.md",
+  "docs/spec/interaction-core.md",
+  "docs/spec/planning.md",
+  "docs/spec/runtime-safety.md",
+  "docs/spec/v5-artifact-carry-forward.toml",
+  "docs/spec/v5-authority-reset.toml",
+  "tools/check-architecture-adrs.sh",
+  "tools/check-design-artifacts.sh",
+  "tools/check-design-requirements.sh",
+  "tools/check-v5-authority-reset-candidate.sh",
+  "tools/check-v5-authority-reset-decision.sh",
+  "tools/check-wp100-amendment.sh",
+  "tools/check-wp100-handler-amendment.sh",
+]
+
+[[active_source]]
+path = "docs/design.md"
+expected_count = 6
+requirements = [
+  "ARTIFACT-AUTH-001",
+  "IMPL-CONFORM-001",
+  "API-OWNERSHIP-001",
+  "STD-BASELINE-001",
+  "PROFILE-AXIS-001",
+  "FEATURE-MATRIX-001",
+]
+
+[[active_source]]
+path = "docs/architecture/10-primary-data-flows.md"
+expected_count = 5
+requirements = [
+  "CONCUR-LOCK-001",
+  "CONCUR-USER-001",
+  "CONCUR-CRIT-001",
+  "CONCUR-LIN-001",
+  "DIR-SCOPE-001",
+]
+
+[[active_source]]
+path = "docs/architecture/20-module-boundaries.md"
+expected_count = 1
+requirements = [
+  "CRATE-DEPS-001",
+]
+
+[[active_source]]
+path = "docs/spec/foundation.md"
+expected_count = 8
+requirements = [
+  "API-RESOURCE-001",
+  "CONSTRAINED-STORAGE-001",
+  "CONSTRAINED-STORAGE-002",
+  "CONSTRAINED-WORK-001",
+  "RES-LIMIT-001",
+  "RES-LIMIT-002",
+  "RES-LIMIT-003",
+  "ADMIT-MEM-001",
+]
+
+[[active_source]]
+path = "docs/amendments/WP-100-time-domain-v1.md"
+expected_count = 2
+requirements = [
+  "API-SOURCE-TIME-001",
+  "TIME-001",
+]
+
+[[active_source]]
+path = "docs/spec/interaction-core.md"
+expected_count = 10
+requirements = [
+  "HANDLER-API-001",
+  "HANDLER-CANCEL-001",
+  "HANDLER-CANCEL-002",
+  "API-TYPES-001",
+  "API-HOT-ID-001",
+  "API-PAYLOAD-001",
+  "CLEANUP-RECORD-001",
+  "ERR-TAXONOMY-001",
+  "ERR-RETRY-001",
+  "STATE-INFLIGHT-001",
+]
+
+[[active_source]]
+path = "docs/amendments/WP-100-handler-api-v1.md"
+expected_count = 1
+requirements = [
+  "HANDLER-VALUE-001",
+]
+
+[[active_source]]
+path = "docs/spec/runtime-safety.md"
+expected_count = 10
+requirements = [
+  "DOC-RUNTIME-001",
+  "API-SECURITY-001",
+  "CONSTRAINED-PROGRESS-001",
+  "CONSTRAINED-OWN-001",
+  "CAP-OVERFLOW-001",
+  "ADMIT-TXN-001",
+  "HANDLE-DROP-001",
+  "HOST-ASYNC-001",
+  "STATE-EXPOSE-001",
+  "STATE-BIND-001",
+]
+
+[[active_source]]
+path = "docs/spec/planning.md"
+expected_count = 8
+requirements = [
+  "PLAN-COST-001",
+  "PLAN-COST-003",
+  "PLAN-BOUND-001",
+  "PLAN-SET-001",
+  "PLAN-ARTIFACT-001",
+  "FORM-FINALIZE-001",
+  "FORM-OWNER-001",
+  "FORM-COVERAGE-001",
+]
+
+[[active_source]]
+path = "docs/spec/binding-spi.md"
+expected_count = 11
+requirements = [
+  "LIFE-EXPOSE-001",
+  "LIFE-EXPOSE-002",
+  "LIFE-EXPOSE-003",
+  "BIND-REG-001",
+  "BIND-ROUTE-001",
+  "BIND-STORAGE-001",
+  "BIND-MEM-001",
+  "BIND-DELIVERY-001",
+  "BIND-IO-001",
+  "BIND-CALL-CANCEL-001",
+  "BIND-HOST-CANCEL-001",
+]

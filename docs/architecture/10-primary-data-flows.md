@@ -1,5 +1,7 @@
 # Primary Data Flows
 
+Status: v5.0 activation candidate.
+
 ## Canonical flow
 
 ```text
@@ -40,6 +42,32 @@ shared planner -----> logical plans -----> binding compiler extensions
 Every downward transition moves an owned, generation-bearing value or lease.
 No stage reaches back into the full TD to rediscover a decision already present
 in the plan.
+
+## Cross-flow execution invariants
+
+`CONCUR-LOCK-001`: Engine lock ordering is registry, Thing or handle state,
+operation slot, binding-local state, then diagnostic/status state. Code MUST
+NOT acquire an earlier class while holding a later class. Binding-internal
+locks follow binding-local state and have a documented order. User callbacks
+are not a lock class.
+
+`CONCUR-USER-001`: Before calling a handler, provider, codec extension,
+readiness driver, transport callback, or status sink, the engine MUST own the
+minimum dispatch state and release every engine lock and critical-section
+guard. Reentrancy observes the same published state as a new concurrent call
+and cannot depend on recursive lock acquisition.
+
+`CONCUR-CRIT-001`: A constrained critical section performs only bounded table,
+slot, counter, or state transitions. It MUST NOT parse, allocate, validate,
+expand a URI, call user code, poll transport work, or iterate a collection
+whose maximum work is not fixed by the selected static profile.
+
+`CONCUR-LIN-001`: Every public lifecycle or replacement operation documents one
+linearization point. Replacement affects only dispatches selecting after
+publication. Exposure publishes serving authority once; destroy closes new
+admission once; subscription stop closes sample admission once; and every race
+is classified on one side of its applicable point while retaining the old
+owner for already admitted work.
 
 ## Consumer admission and interaction
 
@@ -167,6 +195,14 @@ does not host an implicit Directory service. A selected discovery result enters
 the same consume admission path as an application-supplied document; source,
 freshness, trust, and redaction evidence is preserved through validation and
 plan construction.
+
+`DIR-SCOPE-001`: The engine contains only the remote Directory client
+boundary: owned request/result values, sessions, watches, cancellation,
+pagination, revision/lease identities, trust metadata, and portable progress
+adapters. Constructing a Servient MUST NOT create an in-process Directory, and
+Servient and Discovery MUST NOT depend on Directory service composition,
+storage, server query planning, replication, redaction orchestration, or
+endpoint-hosting crates. Those concerns require a later domain-entry review.
 
 ## Ownership checkpoints
 
