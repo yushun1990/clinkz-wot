@@ -26,7 +26,7 @@ Topics are retained after migration as decision history.
 
 ** OPEN
 
-- None.
+- [[file:0015-normative-authority-reset.md][0015 Normative Authority Reset Versus Continued Design Decomposition]]
 
 ** DISCUSSING
 
