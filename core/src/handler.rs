@@ -2,7 +2,8 @@ use clinkz_wot_td::data_type::Operation;
 
 use crate::{
     AffordanceTarget, BindingGeneration, BindingId, CoreError, CoreResult, ErrorContext,
-    ErrorPhase, HandlerSlotId, InteractionOutput, PlanId, RetryClass, ThingId, ThingSlotId,
+    ErrorPhase, HandlerSlotId, InteractionInput, InteractionOutput, PlanId, RetryClass, ThingId,
+    ThingSlotId,
 };
 
 /// A copyable snapshot of whether cancellation has been requested.
@@ -251,4 +252,13 @@ impl<'a> HandlerContext<'a> {
     pub const fn binding(self) -> Option<(BindingId, BindingGeneration)> {
         self.binding
     }
+}
+
+/// Handles one synchronous property-read interaction.
+pub trait ReadPropertyHandler {
+    fn handle(
+        &self,
+        context: HandlerContext<'_>,
+        input: &InteractionInput,
+    ) -> CoreResult<InteractionOutput>;
 }

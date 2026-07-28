@@ -32,8 +32,8 @@ pub use event::{
     SubscriptionSender,
 };
 pub use handler::{
-    CancellationView, HandlerContext, HandlerFootprint, HandlerStep, StaticHandlerRegistration,
-    SubscriptionAcceptance,
+    CancellationView, HandlerContext, HandlerFootprint, HandlerStep, ReadPropertyHandler,
+    StaticHandlerRegistration, SubscriptionAcceptance,
 };
 pub use identity::{
     ActionInvocationRef, ActiveRouteId, AffordanceSlotId, BindingGeneration, BindingId,
