@@ -1,0 +1,176 @@
+schema_version = 1
+current_design_revision = "4.9"
+target_design_revision = "5.0"
+status = "decision-migrated-candidate-pending"
+decision = "docs/ADRs/0018-bounded-v5-normative-authority-reset.org"
+workspace_basis = "workspace/0015-normative-authority-reset.md"
+reset_base_ref = "6c01e07a446f51d413618474554b5eedcf5de23e"
+abandoned_foundation_candidate_ref = "2494f33fdfe49ec3c7ae850d20990e446e628865"
+active_requirement_count = 62
+classified_requirement_count = 121
+activation = "withheld-pending-exact-candidate-independent-review-and-separate-integration"
+
+[classification.indispensable]
+authority_status = "active"
+expected_count = 41
+requirements = [
+  "ARTIFACT-AUTH-001",
+  "API-OWNERSHIP-001",
+  "STD-BASELINE-001",
+  "PROFILE-AXIS-001",
+  "FEATURE-MATRIX-001",
+  "CRATE-DEPS-001",
+  "CONCUR-LOCK-001",
+  "CONCUR-USER-001",
+  "CONCUR-CRIT-001",
+  "CONCUR-LIN-001",
+  "HANDLER-CANCEL-001",
+  "HANDLER-CANCEL-002",
+  "PLAN-COST-003",
+  "PLAN-BOUND-001",
+  "FORM-COVERAGE-001",
+  "LIFE-EXPOSE-001",
+  "LIFE-EXPOSE-003",
+  "BIND-STORAGE-001",
+  "BIND-CALL-CANCEL-001",
+  "BIND-HOST-CANCEL-001",
+  "DIR-SCOPE-001",
+  "API-SECURITY-001",
+  "CONSTRAINED-STORAGE-001",
+  "CONSTRAINED-STORAGE-002",
+  "CONSTRAINED-PROGRESS-001",
+  "CONSTRAINED-WORK-001",
+  "CONSTRAINED-OWN-001",
+  "RES-LIMIT-001",
+  "RES-LIMIT-002",
+  "RES-LIMIT-003",
+  "CAP-OVERFLOW-001",
+  "API-SOURCE-TIME-001",
+  "API-TYPES-001",
+  "API-HOT-ID-001",
+  "ERR-TAXONOMY-001",
+  "ERR-RETRY-001",
+  "ADMIT-TXN-001",
+  "ADMIT-MEM-001",
+  "HANDLE-DROP-001",
+  "HOST-ASYNC-001",
+  "TIME-001",
+]
+
+[classification.property_read]
+authority_status = "active"
+expected_count = 21
+requirements = [
+  "IMPL-CONFORM-001",
+  "DOC-RUNTIME-001",
+  "PLAN-COST-001",
+  "PLAN-SET-001",
+  "PLAN-ARTIFACT-001",
+  "FORM-FINALIZE-001",
+  "FORM-OWNER-001",
+  "HANDLER-API-001",
+  "HANDLER-VALUE-001",
+  "API-PAYLOAD-001",
+  "BIND-REG-001",
+  "BIND-ROUTE-001",
+  "BIND-DELIVERY-001",
+  "BIND-IO-001",
+  "BIND-MEM-001",
+  "LIFE-EXPOSE-002",
+  "STATE-EXPOSE-001",
+  "STATE-BIND-001",
+  "STATE-INFLIGHT-001",
+  "CLEANUP-RECORD-001",
+  "API-RESOURCE-001",
+]
+
+[classification.v1_deferred]
+authority_status = "inactive-domain-entry-review-required"
+expected_count = 34
+requirements = [
+  "DOC-RUNTIME-003",
+  "HANDLER-SUB-001",
+  "PLAN-COST-002",
+  "PLAN-INDEX-001",
+  "PLAN-LAZY-001",
+  "PLAN-REQUEST-001",
+  "PLAN-CACHE-001",
+  "FORM-FINALIZE-002",
+  "BIND-OUT-001",
+  "BIND-PROGRESS-001",
+  "SUB-STORAGE-001",
+  "SUB-DATA-001",
+  "DIR-CONTRACT-001",
+  "DIR-AUTH-001",
+  "DIR-SNAPSHOT-001",
+  "DIR-WATCH-001",
+  "API-DIRECTORY-POLL-001",
+  "DIR-STREAM-001",
+  "SEC-PERF-001",
+  "VALIDATE-COMPILE-001",
+  "VALIDATE-REUSE-001",
+  "API-CODEC-001",
+  "CONSTRAINED-SCHED-001",
+  "RES-LIMIT-004",
+  "RES-PROFILE-001",
+  "CAP-STATUS-001",
+  "OBS-PROFILE-001",
+  "API-DISCOVERY-EXEC-001",
+  "API-OPTIONS-001",
+  "STATE-SUB-001",
+  "STATE-DISC-001",
+  "PRODUCER-EMIT-001",
+  "HOST-SHARD-001",
+  "HOST-SHARD-002",
+]
+
+[classification.design_input]
+authority_status = "inactive-historical-input"
+expected_count = 15
+requirements = [
+  "DOC-RUNTIME-002",
+  "JSONLD-PREFIX-001",
+  "HANDLER-STORAGE-001",
+  "TD-MEM-001",
+  "TD-MEM-002",
+  "PERF-BENCH-003",
+  "PERF-SCALE-001",
+  "PERF-ADMISSION-001",
+  "PERF-PEAK-001",
+  "PERF-CALL-001",
+  "PERF-ACCOUNT-001",
+  "PERF-FANOUT-001",
+  "PERF-FANOUT-002",
+  "PERF-COMPLEXITY-001",
+  "PERF-INDEX-001",
+]
+
+[classification.retired]
+authority_status = "inactive-premature-or-superseded"
+expected_count = 4
+requirements = [
+  "PERF-ALLOC-001",
+  "API-SURFACE-001",
+  "HOST-DEFAULT-001",
+  "HOST-DEFAULT-002",
+]
+
+[classification.redundant]
+authority_status = "inactive-stronger-owner"
+expected_count = 6
+requirements = [
+  "DOC-GOV-001",
+  "CHANGE-CONTROL-001",
+  "REFACTOR-GATE-001",
+  "PERF-BENCH-001",
+  "PERF-BENCH-002",
+  "PERF-BUDGET-001",
+]
+
+[candidate]
+status = "not-constructed"
+authority_activation = "withheld"
+runtime_or_public_api_changes_allowed = false
+independent_review_required = true
+separate_integration_required = true
+rollback_ref = "6c01e07a446f51d413618474554b5eedcf5de23e"

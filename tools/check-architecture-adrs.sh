@@ -31,6 +31,7 @@ adrs=(
     "docs/ADRs/0015-borrowed-resource-profiles-and-linear-work-budgets.org"
     "docs/ADRs/0016-extended-logical-monotonic-time.org"
     "docs/ADRs/0017-pre-execution-candidate-fallback.org"
+    "docs/ADRs/0018-bounded-v5-normative-authority-reset.org"
 )
 
 if [[ ! -f "$root/docs/ADRs/core.org" ]]; then
@@ -50,13 +51,25 @@ for relative in "${adrs[@]}"; do
     fi
 done
 
-for id in ADR-0001 ADR-0002 ADR-0003 ADR-0004 ADR-0005 ADR-0006 ADR-0007 ADR-0008 ADR-0009 ADR-0010 ADR-0011 ADR-0012 ADR-0013 ADR-0014 ADR-0015 ADR-0016 ADR-0017; do
+for id in ADR-0001 ADR-0002 ADR-0003 ADR-0004 ADR-0005 ADR-0006 ADR-0007 ADR-0008 ADR-0009 ADR-0010 ADR-0011 ADR-0012 ADR-0013 ADR-0014 ADR-0015 ADR-0016 ADR-0017 ADR-0018; do
     if ! grep -Fq "$id" "$root/docs/ADRs/core.org"; then
         echo "architecture ADR check: decision index does not reference $id" >&2
         exit 1
     fi
     if ! grep -Fq "$id" "$root/docs/design.md"; then
         echo "architecture ADR check: active design does not reference $id" >&2
+        exit 1
+    fi
+done
+
+for fragment in \
+    'bounded-core authority reset' \
+    'contains exactly the 62 requirements' \
+    'Foundation authority candidate' \
+    'WP-200 design work may resume only'; do
+    if ! grep -Fq "$fragment" \
+        "$root/docs/ADRs/0018-bounded-v5-normative-authority-reset.org"; then
+        echo "architecture ADR check: ADR-0018 decision is missing $fragment" >&2
         exit 1
     fi
 done
@@ -440,4 +453,4 @@ for fragment in \
     fi
 done
 
-echo "architecture ADR check: seventeen accepted decisions and the v4.9 backbone are registered"
+echo "architecture ADR check: eighteen accepted decisions and the v4.9 backbone are registered"

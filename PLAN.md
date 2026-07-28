@@ -2,9 +2,12 @@
 
 ## Plan Status
 
-Plan revision: AI-led governance and architecture-authority baseline
+Plan revision: bounded v5 authority-reset transition
 
-Active design revision: v4.9 architecture-closure candidate
+Active design revision: v4.9 until an exact independently reviewed v5.0
+authority-reset candidate is integrated atomically
+
+Convergence target: v5.0 bounded-core authority
 
 Release target: ClinkZ-WoT v1, a protocol-neutral W3C WoT runtime with a
 stable Servient architecture and Zenoh binding support.
@@ -30,6 +33,12 @@ direction, credible counterexample, or irreversible external commitment.
 The repository evidence establishes the following starting point:
 
 - the v4.9 architecture backbone exists but is still a closure candidate;
+- ADR-0018 supersedes lossless D3 residual decomposition as the convergence
+  direction. The classified v5.0 target retains 62 active requirements,
+  defers 34 declared-v1 requirements to their domain entry, preserves 15 as
+  design input, retires four premature freezes, and discharges six duplicate
+  requirement ids through stronger owners. v4.9 remains active until the
+  exact reset candidate passes independent review and activates atomically;
 - GATE-3, the Directory client boundary, is closed; GATE-1, GATE-2, GATE-4,
   GATE-5, and GATE-6 remain open;
 - WP-000 is recorded complete; ADR-0016 preserves its historical
@@ -87,17 +96,25 @@ answer and does not automatically block unrelated admitted work.
 |---|---|---|---|---|
 | D1 | MIGRATED | Adopt risk-proportional implementation admission from `workspace/0008-implementation-governance-overhead.md` as an authoring/review-depth policy, without weakening ADR-0013 tranche admission | Category A work receives narrow evidence and review; Category B/C retain stricter controls | M0 exit |
 | D2 | MIGRATED | Use clock-source-owned non-wrapping extended logical ticks; retain raw wrap metadata as diagnostics; fail incomparable clock domains explicitly; correct Foundation before Core Deadline/cleanup timing | Completed `WP-100-LOGICAL-TIME-CORRECTION -> WP-100-DEADLINE-CLEANUP-TIMING`; the time blocker is resolved while independent broad-handler blockers remain | M2 exit |
-| D3 | MIGRATED | Complete residual `docs/design.md` ownership through the requirement-indexed target DAG in `docs/spec/decomposition.csv` and several independently reviewed atomic domain migrations | Active authority remains 34 final, 84 residual, and three amendment requirements; exact Foundation candidate `2494f33fdfe49ec3c7ae850d20990e446e628865` is review-pending and would yield 44/76/1 only after independent review and integration | M1 exit |
+| D3 | SUPERSEDED | The former lossless residual-decomposition direction remains historical decision input | Do not integrate Foundation candidate `2494f33fdfe49ec3c7ae850d20990e446e628865` or open another D3 domain migration; ADR-0018/D7 replace its activation path | Superseded by D7 |
 | D4 | MIGRATED | Use one non-`Clone` linear `Subscription`/`StaticSubscription` receive capability; expose no cloneable receiver/control split, competing-consumer contract, or per-clone broadcast | WP-300 owns one binding driver/cursor; WP-400 owns the Servient record/facade and must provide negative `Clone` compile fixtures | M4 entry |
 | D5 | MIGRATED | Adopt `PROPERTY-READ-ARCHITECTURE` as the first executable cross-package composition proof, using one property read in host and manual runtime cells plus an async/no-std compile projection | Four exact ordered tranches form `WP-100 -> WP-200 -> WP-300 -> WP-400`; the WP-100 handler slice is complete, while the downstream slices remain blocked and broad no-atomic/request-storage evidence remains outside the gate exception | Before broad WP-100/WP-300/WP-400 expansion |
 | D6 | MIGRATED | Use `CandidateFallbackPolicy::PreExecution` by default; permit only side-effect-free security inapplicability and exact deterministic lazy-artifact negatives to skip candidates; prohibit binding-input, health, transient, security-commit, and post-acceptance fallback | ADR-0017 makes the policy constructible and bounds one fixed-width diagnostic per eligible skip; the WP-200 slice still needs an exact candidate and independent admission | M3 entry |
+| D7 | MIGRATED | Adopt ADR-0018's bounded v5.0 authority reset: 62 active requirements, explicit inactive classifications for the other 59, and domain-entry re-adoption for later v1 obligations | Construct one exact non-implementation activation candidate, independently review it, then activate it in a separate checkpoint; current v4.9 authority remains unchanged until then | M1 exit and WP-200 resume |
 
-The D3 Foundation candidate is the exact single child of
+The former D3 Foundation candidate is the exact single child of
 `56fea9813df80fe29527755fcb2ce91d43cc5086`, changes only its registered
 21-path documentation/checker boundary, and changes no implementation or
-historical evidence file. Its master-side candidate registration deliberately
-withholds authority activation and requires an independent root-session review
-of the immutable commit before integration.
+historical evidence file. ADR-0018 abandons it as an activation candidate. Its
+content remains v5.0 migration input and Git history; its 44/76/1 authority
+transition must not be integrated.
+
+D7 keeps the Property Read critical path explicit. The v5.0 reset must activate
+before WP-200 implementation admission, and
+`workspace/0014-property-read-plan-artifact-boundary.md` must still freeze one
+constructible host-erased/static representation, one implementation owner, and
+paired authoring fixtures. The reset grants no source or architecture-fixture
+admission by itself.
 
 D5 preserves package completion order but adds a cross-package integration
 dependency in the registered work-package DAG. The completed WP-100 handler
@@ -116,7 +133,7 @@ or execution.
 | ID | Milestone | Status | Dependency |
 |---|---|---|---|
 | M0 | Execution Baseline and Collaboration Reset | CLOSED | None |
-| M1 | v4.9 Architecture and Authority Closure | IN_PROGRESS | M0 for closure |
+| M1 | v5.0 Authority Reset and Architecture Closure | IN_PROGRESS | M0 for closure |
 | M2 | Foundation and Core Contract Stabilization | IN_PROGRESS | WP-000; scoped admission may run alongside M1 |
 | M3 | Planning and Compilation Pipeline | OPEN | WP-100 |
 | M4 | Protocol Binding SPI and Lifecycle | OPEN | WP-200 |
@@ -174,24 +191,27 @@ Exit criteria:
 - D1 is decided and migrated;
 - the next implementation candidate and its admission state are unambiguous.
 
-## M1 — v4.9 Architecture and Authority Closure
+## M1 — v5.0 Authority Reset and Architecture Closure
 
 Status: IN_PROGRESS
 
-Objective: turn the v4.9 architecture-closure candidate into one coherent,
-single-owner, independently reviewed design revision.
+Objective: replace the disproportional v4.9 residual-decomposition model with
+one coherent, bounded, independently reviewed v5.0 authority revision while
+preserving current safety, Property Read, and completed-evidence truth.
 
 Scope:
 
 - close or supersede every remaining Architecture Review 03 finding;
-- apply the migrated D2, D3, and D4 directions where their cross-domain
+- apply migrated D2, D4, D5, D6, and D7 directions where their cross-domain
   consequences affect closure;
-- complete the requirement-owned decomposition of residual
-  `docs/design.md` contracts;
+- activate the ADR-0018 62-requirement core and classify all 59 inactive v4.9
+  identities without residual authority;
+- retire ADR-0014/D3 migration machinery without destroying its Git history;
 - reconcile accepted ADRs, architecture, domain specifications, API ownership,
   state machines, resources, performance contracts, requirements, and the
   work-package DAG;
-- keep historical v4.8 material as migration input only;
+- keep historical v4.8/v4.9 material and the abandoned Foundation candidate
+  as migration input only;
 - run all registered checks and obtain an independent same-revision closure
   review.
 
@@ -205,15 +225,16 @@ AI deliverable:
 Owner feedback focus (non-blocking):
 
 - flag any project-goal conflict, omitted real-world constraint,
-  unacceptable direction, or credible counterexample in the v4.9 closure
+  unacceptable direction, or credible counterexample in the v5.0 closure
   evidence.
 
 Exit criteria:
 
 - every accepted ADR has one non-conflicting authoritative projection;
-- every active detailed requirement has one registered normative owner;
+- exactly 62 active detailed requirements have one registered normative owner,
+  and all other v4.9 identities have one checked inactive disposition;
 - API, state, resource, performance, requirement, and work-package artifacts
-  identify the same v4.9 revision;
+  identify or explicitly carry forward into the same v5.0 revision;
 - GATE-1 through GATE-6 are closed with same-revision evidence;
 - an independent review finds no remaining architecture conflict;
 - AI closes the milestone from registered evidence.

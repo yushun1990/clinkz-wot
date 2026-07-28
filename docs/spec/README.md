@@ -5,6 +5,14 @@ specifications selected by `docs/design.md` and constrained by the architecture
 backbone. `decomposition.csv` is the authoritative completion map from every
 stable requirement to its final detailed owner.
 
+Current authority remains v4.9 while ADR-0018's successor transition is being
+prepared. `v5-authority-reset.toml` registers the exact 121-way classification,
+62-requirement target active set, abandoned D3 Foundation candidate, and
+withheld activation state. It does not partially activate v5.0 or change the
+current-owner projection. After independent candidate review and separate
+integration, the v5.0 index will replace this residual-decomposition model
+atomically.
+
 ## Rules
 
 - One observable behavior has one domain-specification owner.

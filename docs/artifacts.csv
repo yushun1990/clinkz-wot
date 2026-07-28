@@ -11,6 +11,7 @@ docs/architecture/50-servient-runtime-lifecycle.md,servient-runtime-lifecycle,no
 docs/spec/README.md,domain-specification-index,normative-specification-index,4.9,1,docs/design.md
 docs/spec/planning.md,planning-and-compiled-plan-set-specification,normative-specification,4.9,1,docs/spec/planning.md
 docs/spec/binding-spi.md,protocol-binding-spi-specification,normative-specification,4.9,1,docs/spec/binding-spi.md
+docs/spec/v5-authority-reset.toml,v5-authority-reset-transition-manifest,normative-migration-plan,4.9,1,docs/design.md
 docs/artifacts.csv,artifact-registry,normative,4.9,1,docs/design.md
 docs/governance.toml,gate-evidence-check-and-alias-registry,normative,4.9,1,docs/design.md
 docs/api-ownership.csv,public-api-ownership,normative,4.9,1,docs/design.md
@@ -31,6 +32,7 @@ tools/design-check/Cargo.toml,design-structure-checker,non-normative-checker,4.9
 tools/design-check/src/main.rs,design-structure-checker-source,non-normative-checker-source,4.9,1,docs/design.md
 tools/check-design-artifacts.sh,design-admission-orchestrator,non-normative-checker,4.9,1,docs/design.md
 tools/check-design-requirements.sh,requirement-index-checker,non-normative-checker,4.9,1,docs/design.md
+tools/check-v5-authority-reset-decision.sh,v5-authority-reset-decision-checker,non-normative-checker,4.9,1,docs/design.md
 tools/check-api-ownership.sh,api-ownership-checker,non-normative-checker,4.9,1,docs/design.md
 tools/check-architecture-adrs.sh,architecture-decision-checker,non-normative-checker,4.9,1,docs/design.md
 tools/check-directory-client-scope.sh,directory-client-boundary-checker,non-normative-checker,4.9,1,docs/design.md
@@ -91,8 +93,10 @@ docs/ADRs/0014-transitional-normative-ownership.org,transitional-normative-owner
 docs/ADRs/0015-borrowed-resource-profiles-and-linear-work-budgets.org,borrowed-resource-profile-and-linear-budget-decision,normative-decision,4.9,1,docs/design.md
 docs/ADRs/0016-extended-logical-monotonic-time.org,extended-logical-monotonic-time-decision,normative-decision,4.9,1,docs/design.md
 docs/ADRs/0017-pre-execution-candidate-fallback.org,pre-execution-candidate-fallback-decision,normative-decision,4.9,1,docs/spec/planning.md
+docs/ADRs/0018-bounded-v5-normative-authority-reset.org,bounded-v5-authority-reset-decision,normative-decision,4.9,1,docs/design.md
 workspace/0013-candidate-fallback-policy.md,candidate-fallback-policy-workspace-topic,non-normative-workspace-topic,4.9,1,docs/spec/planning.md
 workspace/0014-property-read-plan-artifact-boundary.md,property-read-plan-artifact-boundary-topic,non-normative-workspace-topic,4.9,1,docs/spec/planning.md
+workspace/0015-normative-authority-reset.md,normative-authority-reset-workspace-topic,non-normative-workspace-topic,4.9,1,docs/design.md
 tools/check-wp100-amendment.sh,wp-100-amendment-checker,non-normative-checker,4.9,1,docs/design.md
 tools/check-wp100-handler-amendment.sh,wp-100-handler-amendment-checker,non-normative-checker,4.9,1,docs/design.md
 tools/check-wp100-foundation-refresh.sh,wp-100-foundation-refresh-checker,non-normative-checker,4.9,1,docs/design.md

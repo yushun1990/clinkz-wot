@@ -26,6 +26,7 @@ if [[ -n "$readiness_command" ]]; then
 fi
 
 "$root/tools/check-design-requirements.sh"
+"$root/tools/check-v5-authority-reset-decision.sh"
 "$root/tools/check-api-ownership.sh"
 "$root/tools/check-architecture-adrs.sh"
 "$root/tools/check-directory-client-scope.sh"

@@ -1,0 +1,179 @@
+#+title: ADR-0018: Bounded v5 Normative Authority Reset
+#+date: 2026-07-28
+#+status: Accepted
+
+* Context
+
+ADR-0014 and the D3 completion plan preserve continuous normative ownership
+for all 121 v4.9 requirement identities while =docs/design.md= is decomposed
+one domain at a time.  That model prevents duplicate or missing owners, but it
+also assumes that every residual v4.9 clause remains a justified v1 obligation
+until migrated.
+
+Repository evidence no longer supports that assumption.  Only 34 requirements
+are already at their final owners, three are owned by registered amendments,
+and 84 remain in the 4,105-line monolith.  The first ten-requirement Foundation
+candidate alone changes 21 paths, adds roughly 1,186 lines, and deletes or
+rewrites roughly 453 lines without changing implementation.  Repeating that
+protocol across the remaining target domains would consume review capacity
+while the first production-boundary Property Read composition is still blocked
+at the host-erased/static compiler-artifact boundary.
+
+The opposite extreme is also unsafe.  Treating all residual text as irrelevant
+would silently discard lifecycle, cleanup, generation, resource, portability,
+security, and protocol-neutrality constraints on which completed evidence and
+the Property Read gate depend.
+
+=workspace/0015-normative-authority-reset.md= therefore classifies every v4.9
+requirement using repository architecture, accepted ADRs, completed evidence,
+the Property Read gate, work-package entry conditions, machine-readable
+contracts, and current implementation.  The classification is exact and
+expands to all 121 identities once:
+
+- 41 indispensable current architecture or safety invariants;
+- 21 requirements directly required by the Property Read composition;
+- 34 declared-v1 requirements that are not needed by the current vertical
+  slice;
+- 15 useful deferred design inputs;
+- four premature or superseded freezes; and
+- six requirements made redundant by stronger governance or executable
+  owners.
+
+The exact membership, counts, inactive dispositions, reset basis, and withheld
+activation state are registered in =docs/spec/v5-authority-reset.toml=. That
+manifest, not the summary counts alone, is the transition projection consumed
+by the candidate review.
+
+* Decision
+
+The project will supersede the v4.9 residual-decomposition model with a v5.0
+bounded-core authority reset.
+
+The v5.0 active requirement set contains exactly the 62 requirements in the
+first two classes above.  A requirement is active only when it satisfies at
+least one of these objective rules:
+
+1. removing it would reopen a current ownership, lifecycle, cleanup,
+   generation, resource, security, portability, protocol-neutrality, or
+   external-standard invariant; or
+2. the registered Property Read integration gate or completed implementation
+   evidence directly depends on it.
+
+The 34 declared-v1 requirements remain release obligations but are inactive
+until their owning domain approaches implementation.  Each affected
+work-package entry must re-evaluate and either re-adopt, replace, or explicitly
+retire the relevant requirements before implementation admission.  They do not
+silently regain authority because a historical clause or work-package list
+mentions them.
+
+The 15 useful deferred inputs remain searchable historical design material.
+The four premature or superseded freezes are not v1 commitments.  The six
+redundant requirements are discharged by their stronger governance,
+architecture, manifest, checker, or machine-readable owners rather than copied
+into another prose specification.
+
+The authority reset is a new design revision.  It MUST NOT masquerade as an
+ordinary v4.9 D3 domain migration.  Until one exact v5.0 activation candidate
+passes independent review and is integrated atomically, v4.9 remains the
+active authority and no partial v5.0 file grants implementation admission.
+
+The activated v5.0 hierarchy is:
+
+1. =docs/design.md= selects v5.0 and lists the complete active normative set;
+2. the architecture backbone owns cross-domain flows, boundaries, and
+   invariants;
+3. accepted ADRs own durable decisions and rationale;
+4. registered domain specifications and still-needed narrow amendments own
+   exact behavior and public/internal contracts;
+5. API ownership, state, resource, requirement, performance, and work-package
+   registries own their machine-readable projections; and
+6. source and tests remain implementation truth and executable conformance.
+
+The activated requirement registry MUST distinguish active requirements from
+declared-v1 deferred, design-input, retired, and redundant identities.  The
+v4.9 source location and reset-base Git reference remain recorded for every
+inactive identity.  The D3 final-target DAG and its migration-only activation
+checks are retired; they are not replaced by another lossless-decomposition
+DAG.
+
+Completed WP-000 and WP-100 evidence is neither rewritten nor silently carried
+forward.  The v5.0 activation review must check each completed evidence record
+against the 62-requirement set and record one of =reaffirmed=, =superseded=, or
+=historical=.  Existing implementation remains current only where the review
+finds its exact public and semantic contract unchanged.
+
+The Foundation authority candidate
+=2494f33fdfe49ec3c7ae850d20990e446e628865= is abandoned as an activation
+candidate.  Its Foundation specification and reasoning may be reused as v5.0
+migration input, but its 21-path D3 boundary, 44/76/1 count transition, and
+independent-D3 integration protocol MUST NOT be activated.  The candidate and
+base hashes remain historical rollback and audit references.
+
+WP-200 design work may resume only after both of these conditions hold:
+
+1. the exact v5.0 authority-reset candidate has passed independent review and
+   activated atomically; and
+2. =workspace/0014-property-read-plan-artifact-boundary.md= has frozen one
+   constructible host-erased/static compiler and artifact representation,
+   single implementation ownership, and paired third-party authoring fixtures.
+
+No planning, Core, TD, binding, Servient, or Property Read architecture-fixture
+implementation is admitted by this ADR.
+
+* Activation and rollback
+
+One immutable activation candidate must contain the complete revision switch:
+
+- concise v5.0 design and specification indexes;
+- the classified requirement registry and exact 62 active definitions;
+- removal of residual authority from =docs/design.md=;
+- retirement of the D3 decomposition index and migration-only checks;
+- v5.0 projections in architecture, ADR, artifact, governance, work-package,
+  gate, plan, and continuation records;
+- explicit completed-evidence dispositions;
+- a checker proving the 121-way classification, 62-way active ownership, no
+  duplicate active definitions, no inactive implementation admission, and the
+  exact candidate boundary; and
+- passing aggregate design, work-package, completed-tranche, workspace, and
+  feature checks required by the candidate review.
+
+The candidate changes no runtime or public API.  Independent review compares
+the candidate to its frozen mainline parent.  Activation is a separate
+integration checkpoint and may not add or alter candidate paths.
+
+Rollback before activation is simply refusal to integrate the candidate;
+v4.9 remains active.  After activation, the exact pre-activation mainline
+commit is the rollback point.  Rollback is an explicit revision change and
+must also restore the v4.9 registry/checker set atomically; individual v5.0
+files may not be reverted piecemeal.
+
+* Consequences
+
+- Current active requirement count falls from 121 to 62 without losing the
+  exact history or the v1-deferred queue.
+- Review effort is concentrated on contracts that protect current code and the
+  first executable cross-package composition.
+- Later domains cannot inherit speculative v4.9 detail accidentally; their
+  entry review must justify the contract that becomes active.
+- The Property Read path remains protected by lifecycle, cleanup, resource,
+  generation, no-runtime-TD-read, host/static, and protocol-neutral
+  requirements.
+- Existing machine-readable resource and performance artifacts may remain
+  stronger owners without duplicating their policy as requirement prose.
+- v5.0 activation itself remains a Category C architecture change requiring an
+  exact candidate, independent review, and recoverable checkpoint.
+
+* Rejected alternatives
+
+- Continuing D3 unchanged was rejected because its repeated authority-only
+  migration and review cost is not bounded by implementation risk and does not
+  shorten the Property Read critical path.
+- A full reset with no selective carry-forward was rejected because it would
+  silently invalidate completed evidence and remove indispensable safety and
+  ownership constraints.
+- Calling the reset another v4.9 migration was rejected because it changes the
+  meaning of active requirement identity, supersedes ADR-0014's transition
+  model, and invalidates the D3 completion DAG.
+- Retaining a requirement merely because a checker, work package, or old
+  identifier mentions it was rejected; active authority requires one of the
+  two objective carry-forward rules above.

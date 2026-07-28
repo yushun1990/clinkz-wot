@@ -224,6 +224,11 @@ dispatch are deferred. Unmigrated v4.8 detailed requirements remain migration
 inputs until they are reconciled into registered v4.9 domain specifications and
 same-revision gates close.
 
+ADR-0018 selects a bounded v5.0 authority reset as the successor direction to
+this v4.9 residual-decomposition model. It does not partially activate v5.0:
+this document and the v4.9 requirement registry remain current until one exact
+reset candidate passes independent review and is integrated atomically.
+
 v4.8 supersedes the v4.7 candidate before runtime migration resumes. It
 incorporates `ADR-0001`, `ADR-0002`, `ADR-0003`, `ADR-0004`, `ADR-0005`, and
 `ADR-0006`

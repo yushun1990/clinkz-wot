@@ -47,14 +47,22 @@ irreversible external commitment that repository evidence cannot resolve.
 
 ## Active Architecture Target
 
-The active target is the v4.9 architecture-closure revision.
+The currently authoritative revision remains v4.9 until an exact activation
+candidate is independently reviewed and integrated. The convergence target is
+the ADR-0018 v5.0 bounded-core authority reset.
+
+No partial v5.0 artifact grants authority or implementation admission. The
+activation candidate must switch the design manifest, active requirement
+ownership, registered specifications, machine-readable projections, evidence
+dispositions, and checkers atomically. Its frozen v4.9 parent is the rollback
+point.
 
 The v4.8 detailed-design candidate is migration input only. A v4.8 contract is
 not active merely because it still exists in a historical or residual document.
 It becomes active only after reconciliation into the registered v4.9 authority
 set.
 
-The v4.9 closure effort must produce one coherent and executable target across:
+The v5.0 closure effort must produce one coherent and executable target across:
 
 - architecture flows and module boundaries;
 - accepted ADRs;
@@ -84,10 +92,12 @@ Primary architecture sources are:
    completion, removal, and evidence contracts; and
 6. source code and tests for implementation truth and executable conformance.
 
-`docs/design.md` is the active revision entry point, normative-source manifest,
-and temporary residual owner for contracts not yet migrated. It must not be
-used to override a more specific registered v4.9 owner. Its residual detailed
-ownership must continue to shrink until D3 is decided and migrated.
+Under current v4.9 authority, `docs/design.md` remains the revision entry point,
+normative-source manifest, and temporary residual owner identified by the
+current registry. It must not override a more specific registered owner.
+ADR-0018 supersedes the D3 completion direction: the v5.0 activation candidate
+replaces residual ownership with an exact 62-requirement active set and checked
+inactive dispositions rather than continuing lossless domain migrations.
 
 `workspace/` is non-authoritative. It records questions, proposals,
 investigations, alternatives, and reasoning history. A workspace topic becomes
@@ -96,7 +106,8 @@ proper registered authority.
 
 ## Frozen Direction for v1
 
-The accepted v1 architecture direction currently includes:
+The accepted v1 architecture direction carried into the v5.0 candidate
+currently includes:
 
 - an explicit compiled-plan-set lifecycle and binding-artifact boundary;
 - immutable admitted plan sets separating protocol-neutral logical plans from
@@ -195,15 +206,16 @@ No architecture conflict is resolved merely by adding another summary document.
 
 ## Architecture Closure
 
-The v4.9 architecture-closure milestone is technically complete only when:
+The v5.0 architecture-closure milestone is technically complete only when:
 
 1. the architecture backbone freezes primary flows, module boundaries,
    compiled-plan lifecycle, Servient orchestration, and Protocol Binding
    integration and deployment;
 2. every accepted ADR has one non-conflicting authoritative projection;
 3. every active detailed requirement has one registered normative owner;
-4. residual v4.8 and `docs/design.md` ownership has been reconciled into the
-   modular v4.9 specification set;
+4. residual v4.8/v4.9 ownership is historical rather than active, all 121 v4.9
+   identities have one checked ADR-0018 disposition, and exactly 62 active
+   requirements have one registered normative owner;
 5. API, state, resource, performance, requirement, and work-package artifacts
    identify the same revision and contracts;
 6. architecture-boundary and registered executable checks pass;

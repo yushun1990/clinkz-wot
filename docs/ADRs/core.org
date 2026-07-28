@@ -25,6 +25,7 @@ they do not claim that the current implementation already conforms.
 - [[file:0015-borrowed-resource-profiles-and-linear-work-budgets.org][ADR-0015: Borrowed resource profiles and linear work budgets]]
 - [[file:0016-extended-logical-monotonic-time.org][ADR-0016: Extended logical monotonic time]]
 - [[file:0017-pre-execution-candidate-fallback.org][ADR-0017: Pre-execution candidate fallback]]
+- [[file:0018-bounded-v5-normative-authority-reset.org][ADR-0018: Bounded v5 normative authority reset]]
 
 * Review record
 
@@ -40,3 +41,6 @@ handler-entry re-audit and next scoped Core boundary are recorded in
 [[file:../reviews/review-05.org][Architecture Review 05]]. The time-domain,
 Deadline, cleanup-timing, and prior-evidence impact found during that scoped
 review is recorded in [[file:../reviews/review-06.org][Architecture Review 06]].
+The decision to supersede lossless v4.9 residual decomposition with a bounded
+v5.0 active authority set is recorded in
+[[file:0018-bounded-v5-normative-authority-reset.org][ADR-0018]].

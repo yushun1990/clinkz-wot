@@ -26,7 +26,7 @@ Topics are retained after migration as decision history.
 
 ** OPEN
 
-- [[file:0015-normative-authority-reset.md][0015 Normative Authority Reset Versus Continued Design Decomposition]]
+- None.
 
 ** DISCUSSING
 
@@ -52,6 +52,7 @@ Topics are retained after migration as decision history.
 - [[file:0012-property-read-handler-slice-boundary.md][0012 Property-read handler slice boundary]]
 - [[file:0013-candidate-fallback-policy.md][0013 Candidate fallback policy]]
 - [[file:0014-property-read-plan-artifact-boundary.md][0014 Property-read plan artifact boundary]]
+- [[file:0015-normative-authority-reset.md][0015 Normative Authority Reset Versus Continued Design Decomposition]]
 
 * History
 
