@@ -1,0 +1,100 @@
+schema_version = 1
+design_revision = "4.9"
+domain = "foundation"
+status = "review-pending"
+candidate_branch = "candidate/d3-foundation-authority"
+candidate_base_ref = "56fea9813df80fe29527755fcb2ce91d43cc5086"
+candidate_ref = "2494f33fdfe49ec3c7ae850d20990e446e628865"
+candidate_audit_path = "docs/audits/D3-foundation-authority-entry.md"
+candidate_checker_path = "tools/check-d3-foundation-authority.sh"
+authority_activation = "withheld"
+reviewer_attestation_kind = "independent-root-session"
+integration_rule = "Integrate only this exact single-child candidate after an independent review passes; any candidate-path change requires a new candidate and review."
+format_scope = "Changed Rust and shell paths pass their scoped format/syntax checks; the full workspace format baseline has unrelated existing Core and Zenoh differences."
+
+requirements = [
+  "API-RESOURCE-001",
+  "API-SOURCE-TIME-001",
+  "TIME-001",
+  "CONSTRAINED-STORAGE-001",
+  "CONSTRAINED-STORAGE-002",
+  "CONSTRAINED-WORK-001",
+  "RES-LIMIT-001",
+  "RES-LIMIT-002",
+  "RES-LIMIT-003",
+  "ADMIT-MEM-001",
+]
+
+candidate_paths = [
+  "docs/amendments/WP-100-error-cleanup-v1.md",
+  "docs/amendments/WP-100-error-disposition-v1.md",
+  "docs/amendments/WP-100-handler-api-v1.md",
+  "docs/amendments/WP-100-interaction-output-api-v1.md",
+  "docs/amendments/WP-100-time-domain-v1.md",
+  "docs/architecture/README.md",
+  "docs/artifacts.csv",
+  "docs/audits/D3-foundation-authority-entry.md",
+  "docs/design.md",
+  "docs/governance.toml",
+  "docs/refactor-gates.csv",
+  "docs/requirements.csv",
+  "docs/spec/README.md",
+  "docs/spec/foundation.md",
+  "docs/work-packages/WP-000-foundation.md",
+  "docs/work-packages/WP-100-core.md",
+  "tools/check-d3-foundation-authority.sh",
+  "tools/check-design-artifacts.sh",
+  "tools/check-wp100-amendment.sh",
+  "tools/check-wp100-handler-amendment.sh",
+  "tools/design-check/src/main.rs",
+]
+
+[active_authority]
+final_target_requirements = 34
+residual_design_requirements = 84
+registered_amendment_requirements = 3
+
+[candidate_authority]
+final_target_requirements = 44
+residual_design_requirements = 76
+registered_amendment_requirements = 1
+
+[[validation]]
+id = "candidate-boundary"
+result = "passed"
+
+[[validation]]
+id = "design-requirements"
+result = "passed"
+
+[[validation]]
+id = "api-ownership"
+result = "passed"
+
+[[validation]]
+id = "resource-limits"
+result = "passed"
+
+[[validation]]
+id = "architecture-adrs"
+result = "passed"
+
+[[validation]]
+id = "wp100-amendments"
+result = "passed"
+
+[[validation]]
+id = "foundation-and-time-predecessors"
+result = "passed"
+
+[[validation]]
+id = "design-check-tests"
+result = "passed"
+
+[[validation]]
+id = "aggregate-design-artifacts"
+result = "passed"
+
+[[validation]]
+id = "changed-path-format-and-syntax"
+result = "passed"

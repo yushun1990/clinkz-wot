@@ -87,10 +87,17 @@ answer and does not automatically block unrelated admitted work.
 |---|---|---|---|---|
 | D1 | MIGRATED | Adopt risk-proportional implementation admission from `workspace/0008-implementation-governance-overhead.md` as an authoring/review-depth policy, without weakening ADR-0013 tranche admission | Category A work receives narrow evidence and review; Category B/C retain stricter controls | M0 exit |
 | D2 | MIGRATED | Use clock-source-owned non-wrapping extended logical ticks; retain raw wrap metadata as diagnostics; fail incomparable clock domains explicitly; correct Foundation before Core Deadline/cleanup timing | Completed `WP-100-LOGICAL-TIME-CORRECTION -> WP-100-DEADLINE-CLEANUP-TIMING`; the time blocker is resolved while independent broad-handler blockers remain | M2 exit |
-| D3 | MIGRATED | Complete residual `docs/design.md` ownership through the requirement-indexed target DAG in `docs/spec/decomposition.csv` and several independently reviewed atomic domain migrations | 34 requirements are at final targets, 84 remain residual, and three remain in registered amendments; the checker now exposes exact remaining ownership | M1 exit |
+| D3 | MIGRATED | Complete residual `docs/design.md` ownership through the requirement-indexed target DAG in `docs/spec/decomposition.csv` and several independently reviewed atomic domain migrations | Active authority remains 34 final, 84 residual, and three amendment requirements; exact Foundation candidate `2494f33fdfe49ec3c7ae850d20990e446e628865` is review-pending and would yield 44/76/1 only after independent review and integration | M1 exit |
 | D4 | MIGRATED | Use one non-`Clone` linear `Subscription`/`StaticSubscription` receive capability; expose no cloneable receiver/control split, competing-consumer contract, or per-clone broadcast | WP-300 owns one binding driver/cursor; WP-400 owns the Servient record/facade and must provide negative `Clone` compile fixtures | M4 entry |
 | D5 | MIGRATED | Adopt `PROPERTY-READ-ARCHITECTURE` as the first executable cross-package composition proof, using one property read in host and manual runtime cells plus an async/no-std compile projection | Four exact ordered tranches form `WP-100 -> WP-200 -> WP-300 -> WP-400`; the WP-100 handler slice is complete, while the downstream slices remain blocked and broad no-atomic/request-storage evidence remains outside the gate exception | Before broad WP-100/WP-300/WP-400 expansion |
 | D6 | MIGRATED | Use `CandidateFallbackPolicy::PreExecution` by default; permit only side-effect-free security inapplicability and exact deterministic lazy-artifact negatives to skip candidates; prohibit binding-input, health, transient, security-commit, and post-acceptance fallback | ADR-0017 makes the policy constructible and bounds one fixed-width diagnostic per eligible skip; the WP-200 slice still needs an exact candidate and independent admission | M3 entry |
+
+The D3 Foundation candidate is the exact single child of
+`56fea9813df80fe29527755fcb2ce91d43cc5086`, changes only its registered
+21-path documentation/checker boundary, and changes no implementation or
+historical evidence file. Its master-side candidate registration deliberately
+withholds authority activation and requires an independent root-session review
+of the immutable commit before integration.
 
 D5 preserves package completion order but adds a cross-package integration
 dependency in the registered work-package DAG. The completed WP-100 handler

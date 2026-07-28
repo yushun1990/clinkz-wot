@@ -25,20 +25,30 @@ ownership is migrated at
 gate migration is recorded at
 `d4800bff41442768d62c6531e5adee52a39b2a74`. ADR-0017 and the current D6
 migration close the AR-004 pre-execution candidate-fallback design gap at
-`7f2869ff03ceb8659ba01e69ba97d9882e944df3`.
+`7f2869ff03ceb8659ba01e69ba97d9882e944df3`. The dependency-ready D3
+Foundation authority candidate
+`2494f33fdfe49ec3c7ae850d20990e446e628865` is the single child of frozen base
+`56fea9813df80fe29527755fcb2ce91d43cc5086` on
+`candidate/d3-foundation-authority`; its exact scope and withheld activation
+are registered in
+`docs/audits/D3-foundation-authority-candidate.toml`.
 
 ## Current Objective
 
-Prepare the dependency-ready D3 `docs/spec/foundation.md` authority-migration
-candidate without activating it before independent review. The preceding
-WP-200 inspection found that a property-read plan candidate is not yet
-constructible: planning leaves the host-erased/static binding-artifact
+Obtain an independent review of the exact D3 Foundation authority candidate
+`2494f33fdfe49ec3c7ae850d20990e446e628865` without changing its 21-path
+boundary, integrating it, or self-attesting it in the candidate-building
+session. Active authority remains unchanged until that review passes and a
+separate integration checkpoint activates the candidate.
+
+The preceding WP-200 inspection found that a property-read plan candidate is
+not yet constructible: planning leaves the host-erased/static binding-artifact
 representation open, binding registration lacks exact compiler/component Rust
 schemas, and WP-200/WP-300 text duplicates implementation ownership despite the
 package dependency order. Keep planning/Core/TD implementation, target/no-
 atomic, request/storage, async/step handler traits, host execution, a WP-200
-compile-contract root, and both planned architecture fixture roots outside this
-work.
+compile-contract root, and both planned architecture fixture roots outside
+this review.
 
 Active milestones:
 
@@ -180,10 +190,12 @@ Global gates:
 
 Work packages and tranches:
 
-- D3 is migrated. The checked completion index maps all 121 stable requirements
-  across 14 final target domains: 34 are already at their final target, 84
-  remain residual in `docs/design.md`, and three remain under registered
-  amendments;
+- D3 is migrated. The active checked completion index maps all 121 stable
+  requirements across 14 final target domains: 34 are already at their final
+  target, 84 remain residual in `docs/design.md`, and three remain under
+  registered amendments. Exact Foundation candidate
+  `2494f33fdfe49ec3c7ae850d20990e446e628865` is review-pending; its prospective
+  44/76/1 map is not active authority;
 - D4 is migrated into the canonical subscription flow, residual subscription
   contract, WP-400 evidence boundary, architecture checker, plan, and workspace
   decision record; it changes no runtime or public API;
@@ -668,6 +680,40 @@ D3 authority-decomposition verification on 2026-07-26:
   specification indexes, artifact registry, checker, plan, and continuation
   state.
 
+D3 Foundation authority candidate verification on 2026-07-28:
+
+- candidate `2494f33fdfe49ec3c7ae850d20990e446e628865` is the single child of
+  frozen base `56fea9813df80fe29527755fcb2ce91d43cc5086` on durable local branch
+  `candidate/d3-foundation-authority`;
+- it changes exactly the 21 documentation and checker paths registered in
+  `docs/audits/D3-foundation-authority-candidate.toml`, with no source, Cargo,
+  compile-fixture, resource-schema, API-ownership, state-machine, performance,
+  or evidence-file change;
+- new final owner `docs/spec/foundation.md` defines exactly
+  `API-RESOURCE-001`, `API-SOURCE-TIME-001`, `TIME-001`,
+  `CONSTRAINED-STORAGE-001`, `CONSTRAINED-STORAGE-002`,
+  `CONSTRAINED-WORK-001`, `RES-LIMIT-001`, `RES-LIMIT-002`,
+  `RES-LIMIT-003`, and `ADMIT-MEM-001`;
+- the candidate removes duplicate definitions and affected-requirement claims
+  from `docs/design.md` and five active WP-100 amendments while preserving
+  their residual Core and handler scope and historical corrective provenance;
+- the candidate map is 44 final, 76 residual, and one amendment requirement,
+  while the active mainline map remains 34/84/3 until integration;
+- completed historical tranche authoritative sets were intentionally left
+  unchanged because their admission reviews predate `foundation.md`; the new
+  D3 entry audit owns this later authority migration;
+- candidate-mode boundary validation, requirement ownership, API ownership,
+  resource limits, all seventeen ADRs, amendment checks, Foundation/time
+  predecessor checks, the design-check suite, and
+  `tools/check-design-artifacts.sh` all passed against the immutable candidate;
+- changed shell paths pass `bash -n`, and changed Rust path
+  `tools/design-check/src/main.rs` passes
+  `rustfmt --edition 2024 --check`; full-workspace formatting still reports
+  unrelated existing differences in Core and Zenoh paths; and
+- authority activation is withheld. A different root session must inspect and
+  rerun the exact candidate, then record independent attestation before a
+  separate integration checkpoint may activate it.
+
 D4 subscription-ownership verification on 2026-07-26:
 
 - ADR-0003, `docs/spec/binding-spi.md`, `docs/design.md`, API ownership, and the
@@ -774,21 +820,29 @@ baseline because it intentionally enables mutually exclusive `zenoh` and
 
 ## Stopping Point and Next Safe Actions
 
-`WP-100-PROPERTY-READ-HANDLER-SLICE` is independently reviewed, admitted,
-implemented, and complete. The implementation changes only the two registered
-Core paths and adds one allocation-free, object-safe synchronous trait plus its
-root re-export. The completed handler-value and HandlerContext evidence remains
-in force, neither planned architecture fixture root exists, and broad handler
-entry remains blocked by the separate target/no-atomic, request/storage,
-remaining portable-trait, workload, resource, and performance boundaries.
+The exact D3 Foundation authority candidate is constructed, committed,
+machine-validated, and registered at
+`2494f33fdfe49ec3c7ae850d20990e446e628865`. It remains isolated on
+`candidate/d3-foundation-authority`; active mainline authority has not switched,
+and this candidate-building session must not independently attest or integrate
+it.
+
+`WP-100-PROPERTY-READ-HANDLER-SLICE` remains independently reviewed, admitted,
+implemented, and complete. Neither planned architecture fixture root exists,
+and broad handler entry remains blocked by the separate target/no-atomic,
+request/storage, remaining portable-trait, workload, resource, and performance
+boundaries.
 
 Next safe actions, in order:
 
-1. prepare the exact D3 `foundation.md` target-domain migration candidate,
-   atomically reconciling its ten requirements, relevant time amendment
-   clauses, requirement/artifact indexes, residual design text, and checkers;
-2. stop that authority switch at its independent-review boundary and do not
-   self-attest;
+1. in a different root session, review exact candidate
+   `2494f33fdfe49ec3c7ae850d20990e446e628865`, rerun its registered checks and
+   candidate-boundary mode against base
+   `56fea9813df80fe29527755fcb2ce91d43cc5086`, and record a real independent
+   attestation only if every result passes;
+2. only after that attestation, create a separate integration checkpoint that
+   activates the exact candidate without changing its 21-path boundary, then
+   update active authority counts from 34/84/3 to 44/76/1;
 3. later resolve
    `workspace/0014-property-read-plan-artifact-boundary.md` with one exact
    host/static representation and paired authoring fixtures before preparing
@@ -809,6 +863,12 @@ Important references:
 - `PROJECT_GOVERNANCE.md`;
 - `PLAN.md`;
 - `ARCHITECTURE_GOVERNANCE.md`;
+- `docs/audits/D3-foundation-authority-candidate.toml`;
+- candidate
+  `2494f33fdfe49ec3c7ae850d20990e446e628865`:
+  `docs/audits/D3-foundation-authority-entry.md`,
+  `docs/spec/foundation.md`, and
+  `tools/check-d3-foundation-authority.sh`;
 - `docs/architecture/README.md`;
 - `docs/work-packages/index.toml`;
 - `docs/work-packages/property-read-architecture-gate.toml`;

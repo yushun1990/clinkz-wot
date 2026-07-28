@@ -137,3 +137,4 @@ tools/compile-contracts/wp100-property-read-handler-slice/src/lib.rs,wp-100-prop
 tools/compile-contracts/wp100-property-read-handler-slice/tests/semantics.rs,wp-100-property-read-handler-slice-semantics-contract,non-normative-compile-fixture,4.9,1,docs/amendments/WP-100-handler-api-v1.md
 tools/compile-contracts/wp100-property-read-handler-slice/ui/unscoped-async-read-property.rs,wp-100-property-read-handler-slice-negative-async-contract,non-normative-compile-fixture,4.9,1,docs/amendments/WP-100-handler-api-v1.md
 tools/compile-contracts/wp100-property-read-handler-slice/ui/unscoped-step-read-property.rs,wp-100-property-read-handler-slice-negative-step-contract,non-normative-compile-fixture,4.9,1,docs/amendments/WP-100-handler-api-v1.md
+docs/audits/D3-foundation-authority-candidate.toml,d3-foundation-authority-candidate-registration,non-normative-review,4.9,1,docs/design.md
