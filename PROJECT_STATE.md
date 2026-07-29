@@ -44,6 +44,8 @@ The active design revision is v5.0 bounded-core authority.
 - Exact WP-200 implementation:
   `b889ae1dafa65ee66bfb331bebf9d537e1c29eee`, the nine-file child of that
   pre-source checkpoint.
+- Design-check runtime-root correction:
+  `eacaaf1242a41861758ebc78a40ada2d88d15bba`.
 
 The activation candidate changed exactly 27 documentation/checker paths and no
 Rust source, Cargo manifest, public API, or runtime behavior. Its independent
@@ -52,9 +54,9 @@ default workspace tests, diff hygiene, and the 21-cell valid feature matrix.
 
 ## Current Objective
 
-Stabilize aggregate validation across shared Cargo targets, then prepare the
-exact `WP-300-PROPERTY-READ-BINDING-SLICE` admission candidate without editing
-WP-300 product source.
+Prepare the exact `WP-300-PROPERTY-READ-BINDING-SLICE` admission candidate and
+public host/constrained authoring fixtures without editing WP-300 product
+source.
 
 The narrow WP-200 plan slice is complete. Its handoff to WP-300 contains:
 
@@ -67,10 +69,10 @@ The narrow WP-200 plan slice is complete. Its handoff to WP-300 contains:
    a complete installable registration.
 
 No WP-300 implementation path or cross-package Property Read architecture
-fixture root is admitted. Before using another temporary review worktree, the
-design checker must stop embedding a build-worktree root through
-`env!("CARGO_MANIFEST_DIR")`; a shared target can otherwise reuse a binary
-that points at a deleted worktree.
+fixture root is admitted. The validation prerequisite is resolved:
+`tools/design-check` now selects an explicit runtime worktree root from its
+callers, falls back only to runtime ancestor discovery, and rejects an invalid
+explicit root instead of silently checking another worktree.
 
 ## Active Milestones
 
@@ -245,17 +247,17 @@ WP-300 and WP-400 planned/blocked and remains globally `blocked`.
 
 ### Aggregate design-check worktree-root defect
 
-Status: OPEN SUPPORT DEFECT; CURRENT MITIGATION VERIFIED.
+Status: RESOLVED.
 
-`tools/design-check` derives the repository root with the compile-time
-`env!("CARGO_MANIFEST_DIR")`. When multiple Git worktrees share one Cargo
-target directory, Cargo can reuse a design-check binary built from a later
-deleted worktree. The binary then reads a nonexistent repository root and
-produces false aggregate-validation failures. Cleaning only the
-`clinkz-wot-design-check` target artifact and rebuilding from the intended
-worktree restores the passing result. This does not invalidate the immutable
-WP-200 product implementation or its rerun evidence, but it must be corrected
-before the next candidate-review cycle.
+Commit `eacaaf1242a41861758ebc78a40ada2d88d15bba` removes the compile-time
+repository root. Design-check callers export
+`CLINKZ_WOT_REPOSITORY_ROOT`; direct runs may discover the nearest runtime
+ancestor; explicit invalid roots fail closed. Three unit tests own precedence,
+ancestor discovery, and invalid-root rejection. A real shared-target
+regression built the checker in a detached temporary worktree, removed that
+worktree, and then executed the cached binary from `/tmp` against the current
+root successfully. The temporary worktree and 160.9 MiB test target were
+removed.
 
 ### Disjoint downstream blockers
 
@@ -421,8 +423,9 @@ Exact implementation `b889ae1dafa65ee66bfb331bebf9d537e1c29eee` passed on
 
 The shared-target root defect described above caused one false aggregate-check
 failure before the design-check package artifact was rebuilt from the current
-worktree. The clean rebuild and rerun passed; no product source changed during
-that diagnosis.
+worktree. The clean rebuild, runtime-root correction, 22 design-check unit
+tests, deleted-build-worktree cache regression, and aggregate rerun pass; no
+product source changed during that diagnosis.
 
 The intentionally invalid all-features combination enables mutually exclusive
 Zenoh backends. Use `scripts/check-feature-matrix.sh`, not
@@ -430,12 +433,10 @@ Zenoh backends. Use `scripts/check-feature-matrix.sh`, not
 
 ## Next Safe Actions
 
-1. Correct `tools/design-check` repository-root resolution at runtime and prove
-   one shared target cannot bind validation to a deleted review worktree.
-2. Inspect the exact WP-300 Property Read binding-slice contract, then prepare
+1. Inspect the exact WP-300 Property Read binding-slice contract, then prepare
    its non-implementation candidate and public authoring fixtures under
    ADR-0013. Do not edit WP-300 product source before admission.
-3. Before any remote source integration, obtain a successful
+2. Before any remote source integration, obtain a successful
    `mainline / validation` workflow result. Requiring that status through
    GitHub branch protection remains the sole unmigrated part of issue 0023.
 
