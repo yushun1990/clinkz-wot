@@ -5,6 +5,7 @@ extern crate std;
 
 extern crate alloc;
 
+pub mod binding_compiler;
 pub mod deadline;
 pub mod error;
 pub mod event;
@@ -14,12 +15,24 @@ pub mod inbound;
 pub mod interaction;
 pub mod outbound;
 pub mod payload;
+pub mod plan;
 pub mod security;
 pub mod status;
 pub mod sync;
 pub mod thing;
 pub mod transport;
 
+pub use binding_compiler::{
+    BindingArtifact, BindingArtifactCompatibility, BindingArtifactEnvelope,
+    BindingArtifactFootprint, BindingArtifactIdentity, BindingArtifactRef,
+    BindingArtifactRejection, BindingArtifactRejectionReason, BindingArtifactRole,
+    BindingCompilerBounds, BindingCompilerExtension, BindingCompilerFailure, BindingCompilerInput,
+    BindingCompilerOutput, BindingCompilerStep, StaticBindingCompilerRegistration,
+};
+#[cfg(feature = "std")]
+pub use binding_compiler::{
+    HostBindingArtifact, HostBindingCompilerCursor, HostBindingCompilerRegistration,
+};
 pub use deadline::Deadline;
 pub use error::{
     CoreError, CoreResult, ErrorContext, ErrorPhase, RetryClass, SecurityFailureReason,
@@ -36,9 +49,10 @@ pub use handler::{
     StaticHandlerRegistration, SubscriptionAcceptance,
 };
 pub use identity::{
-    ActionInvocationRef, ActiveRouteId, AffordanceSlotId, BindingGeneration, BindingId,
-    BindingSlotId, CleanupSlotId, CorrelationId, HandlerSlotId, PlanId, PlanSlotId,
-    PreparedRouteId, PreparedRouteKey, SubscriptionId, SubscriptionSlotId, ThingId, ThingSlotId,
+    ActionInvocationRef, ActiveRouteId, AffordanceSlotId, BindingConfigurationDigest,
+    BindingGeneration, BindingId, BindingSlotId, CleanupSlotId, CorrelationId, HandlerSlotId,
+    PlanId, PlanSetGeneration, PlanSlotId, PreparedRouteId, PreparedRouteKey, SubscriptionId,
+    SubscriptionSlotId, ThingId, ThingSlotId,
 };
 #[cfg(feature = "async")]
 pub use inbound::Dispatch;
@@ -54,6 +68,7 @@ pub use outbound::SubscriptionGuard;
 #[cfg(feature = "async")]
 pub use outbound::{BindingRequest, ClientBinding};
 pub use payload::{CodecInput, Payload, PayloadCodec};
+pub use plan::{BindingCandidate, LogicalInteractionPlan};
 pub use security::{
     AuthMaterial, BasicSecurityProvider, BearerSecurityProvider, CredentialStore, Credentials,
     InMemoryCredentialStore, NoSecurityProvider, Principal, PrincipalId, SecurityContext,

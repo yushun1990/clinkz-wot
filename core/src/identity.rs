@@ -10,6 +10,23 @@ use core::fmt;
 
 use clinkz_wot_foundation::{Generation, SlotIndex};
 
+/// Stable digest of the configuration captured for one binding generation.
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+#[repr(transparent)]
+pub struct BindingConfigurationDigest([u8; 32]);
+
+impl BindingConfigurationDigest {
+    /// Creates a digest from its complete fixed-width representation.
+    pub const fn new(bytes: [u8; 32]) -> Self {
+        Self(bytes)
+    }
+
+    /// Returns the complete fixed-width representation.
+    pub const fn as_bytes(&self) -> &[u8; 32] {
+        &self.0
+    }
+}
+
 macro_rules! numeric_id {
     ($(#[$meta:meta])* $name:ident) => {
         $(#[$meta])*
@@ -121,6 +138,48 @@ impl Default for BindingGeneration {
 }
 
 impl fmt::Display for BindingGeneration {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.0.fmt(formatter)
+    }
+}
+
+/// Generation of one immutable published plan set.
+///
+/// This wrapper is intentionally distinct from [`BindingGeneration`] so the
+/// two lifecycle domains cannot be interchanged accidentally.
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub struct PlanSetGeneration(Generation);
+
+impl PlanSetGeneration {
+    /// The first valid plan-set generation.
+    pub const INITIAL: Self = Self(Generation::INITIAL);
+
+    /// Creates a plan-set generation from a nonzero foundation generation.
+    pub const fn new(generation: Generation) -> Self {
+        Self(generation)
+    }
+
+    /// Returns the nonzero foundation generation.
+    pub const fn get(self) -> Generation {
+        self.0
+    }
+
+    /// Advances without wrapping.
+    pub const fn checked_next(self) -> Option<Self> {
+        match self.0.checked_next() {
+            Some(generation) => Some(Self(generation)),
+            None => None,
+        }
+    }
+}
+
+impl Default for PlanSetGeneration {
+    fn default() -> Self {
+        Self::INITIAL
+    }
+}
+
+impl fmt::Display for PlanSetGeneration {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         self.0.fmt(formatter)
     }
@@ -354,5 +413,25 @@ mod tests {
         );
         let maximum = Generation::new(u32::MAX).expect("the maximum is nonzero");
         assert_eq!(BindingGeneration::new(maximum).checked_next(), None);
+    }
+
+    #[test]
+    fn plan_set_generations_are_distinct_and_non_wrapping() {
+        assert_eq!(PlanSetGeneration::INITIAL.get(), Generation::INITIAL);
+        assert_eq!(
+            PlanSetGeneration::INITIAL
+                .checked_next()
+                .map(PlanSetGeneration::get)
+                .map(Generation::get),
+            Some(2)
+        );
+        let maximum = Generation::new(u32::MAX).expect("the maximum is nonzero");
+        assert_eq!(PlanSetGeneration::new(maximum).checked_next(), None);
+    }
+
+    #[test]
+    fn binding_configuration_digest_preserves_all_bytes() {
+        let digest = BindingConfigurationDigest::new([0x5a; 32]);
+        assert_eq!(digest.as_bytes(), &[0x5a; 32]);
     }
 }
