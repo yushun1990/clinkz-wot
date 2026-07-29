@@ -31,9 +31,12 @@ The active design revision is v5.0 bounded-core authority.
   `f453f165c2ea775e5f0d10c36f1e419fcc1d79f3`, the exact seven-path
   single child of the v1 attestation. Independent review rejected its
   pre-source state projection.
-- Second WP-200 admission-evidence correction base:
-  `f453f165c2ea775e5f0d10c36f1e419fcc1d79f3`; the exact six-path
-  single-child candidate is resolved by its future v2 attestation.
+- Exact second WP-200 admission-evidence correction candidate:
+  `d2dcf2e9d2e19c7c2dfa234f96c5303cc3aee24a`, the exact six-path
+  single child of `f453f165c2ea775e5f0d10c36f1e419fcc1d79f3`.
+- Independent WP-200 v2 review passed for that immutable candidate. This
+  checkpoint carries its three-path attestation; the next pre-source
+  checkpoint records this commit's exact identity.
 
 The activation candidate changed exactly 27 documentation/checker paths and no
 Rust source, Cargo manifest, public API, or runtime behavior. Its independent
@@ -42,10 +45,10 @@ default workspace tests, diff hygiene, and the 21-cell valid feature matrix.
 
 ## Current Objective
 
-Obtain independent v2 review for the exact six-path second
-`WP-200-PROPERTY-READ-PLAN-SLICE` admission-evidence correction. Do not change
-product source before that review and the corrected five-file pre-source
-checkpoint both pass.
+Create the exact five-file `WP-200-PROPERTY-READ-PLAN-SLICE` pre-source
+checkpoint from this v2 attestation, record its commit identity in the gate,
+and pass `--admission-ready`. Do not change product source before that
+checkpoint passes.
 
 D8 is migrated. Its one conversion packet contains:
 
@@ -94,8 +97,8 @@ architecture fixture root is admitted.
 - M0 Execution Baseline and Collaboration Reset — CLOSED.
 - M1 v5.0 Authority Reset and Architecture Closure — IN_PROGRESS.
 - M2 Foundation and Core Contract Stabilization — IN_PROGRESS.
-- M3 Planning and Compilation Pipeline — OPEN; exact second
-  admission-evidence correction candidate review pending.
+- M3 Planning and Compilation Pipeline — OPEN; v2 review passed and exact
+  five-file source admission checkpoint pending.
 
 The v5 authority switch is complete, but M1 remains open because GATE-1,
 GATE-2, GATE-4, GATE-5, and GATE-6 still require their registered closure
@@ -233,14 +236,14 @@ Required authoritative consumers:
 - the tranche audit/checker; and
 - PLAN, workspace lifecycle, artifact registry, and this state checkpoint.
 
-The semantic candidate passed independent v1 review. Admission remains blocked
-only by independent v2 review of the exact second evidence-boundary correction
-and the corrected five-file pre-source checkpoint. The representation and
-package ownership decisions are not reopened.
+The semantic candidate passed independent v1 review, and the exact second
+evidence-boundary correction passed independent v2 review. Admission remains
+blocked only by the corrected five-file pre-source checkpoint. The
+representation and package ownership decisions are not reopened.
 
 ### WP-200 admission evidence boundary
 
-Status: SECOND CORRECTION CANDIDATE REVIEW PENDING.
+Status: V2 REVIEW PASSED; FIVE-FILE PRE-SOURCE CHECKPOINT PENDING.
 
 The attempted command
 `tools/check-wp200-property-read-plan-slice-entry.sh --admission-ready`
@@ -270,9 +273,10 @@ second correction changes only:
 - `docs/work-packages/property-read-architecture-gate.toml`;
 - `tools/design-check/src/main.rs`.
 
-A later independent root must review that single child of
-`f453f165c2ea775e5f0d10c36f1e419fcc1d79f3` and, if it passes, record
-`docs/audits/WP-200-property-read-plan-slice-review-v2.toml`.
+Independent root review passed exact candidate
+`d2dcf2e9d2e19c7c2dfa234f96c5303cc3aee24a` and records
+`docs/audits/WP-200-property-read-plan-slice-review-v2.toml` in this
+three-path checkpoint.
 
 ### Disjoint downstream blockers
 
@@ -399,9 +403,24 @@ pre-source mutations then proved:
 - that checkpoint is then incorrectly rejected because the `in-progress`
   status requires absent `core/src/binding_compiler.rs`.
 
-No v2 attestation was created. The second correction narrows implementation
-presence to `complete` while retaining the existing exact pre-source and
-implementation topology checks for `in-progress`.
+Independent v2 review of exact second correction
+`d2dcf2e9d2e19c7c2dfa234f96c5303cc3aee24a` on 2026-07-29 passed:
+
+- exact single-parent and six-path topology inspection;
+- unchanged semantic specification, public authoring fixtures, work-package
+  contract, and registered implementation scope relative to the v1 candidate;
+- `tools/check-wp200-property-read-plan-slice-entry.sh --candidate`;
+- `tools/check-design-artifacts.sh`;
+- `cargo test --workspace --locked`;
+- `sh scripts/check-feature-matrix.sh` — 21 passed, 0 failed; and
+- `git diff --check
+  f453f165c2ea775e5f0d10c36f1e419fcc1d79f3..d2dcf2e9d2e19c7c2dfa234f96c5303cc3aee24a`.
+
+The review also executed the exact next-state transition: the five-file
+pre-source checkpoint passed `--admission-ready`; omitting the carry-forward
+manifest and introducing an out-of-scope implementation path were both
+rejected. Those transition simulations were temporary review mutations and
+are not repository evidence commits.
 
 The intentionally invalid all-features combination enables mutually exclusive
 Zenoh backends. Use `scripts/check-feature-matrix.sh`, not
@@ -409,18 +428,13 @@ Zenoh backends. Use `scripts/check-feature-matrix.sh`, not
 
 ## Next Safe Actions
 
-1. In a later independent root session, review the exact six-path second
-   correction candidate, rerun `--candidate` and aggregate baselines,
-   mutation-test
-   omission of the carry-forward manifest versus the exact five-file boundary,
-   and create only the v2 attestation/registry/state checkpoint if it passes.
-2. From the v2 attestation, record one exact five-file
+1. From this v2 attestation, record one exact five-file
    `pending`/`review-pending` to `in-progress`/`approved` checkpoint with the
    gate's matching carried digest, then run `--admission-ready`.
-3. Only then implement exactly the nine registered WP-200 paths, run the
+2. Only then implement exactly the nine registered WP-200 paths, run the
    completion checker and supported feature cells, and register completion
    evidence without advancing WP-300, WP-400, or the aggregate gate.
-4. Before any remote source integration, obtain a successful
+3. Before any remote source integration, obtain a successful
    `mainline / validation` workflow result. Requiring that status through
    GitHub branch protection remains the sole unmigrated part of issue 0023.
 
@@ -449,5 +463,5 @@ commitment that repository evidence cannot resolve.
 - `docs/work-packages/WP-300-bindings.md`
 - `docs/audits/WP-200-property-read-plan-slice-entry.md`
 - `docs/audits/WP-200-property-read-plan-slice-review.toml`
-- `docs/audits/WP-200-property-read-plan-slice-review-v2.toml` (future)
+- `docs/audits/WP-200-property-read-plan-slice-review-v2.toml`
 - `tools/design-check/tests/wp200_binding_artifact_schema.rs`

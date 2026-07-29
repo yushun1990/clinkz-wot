@@ -159,3 +159,4 @@ tools/compile-contracts/wp200-property-read-plan-slice/Cargo.lock,wp-200-propert
 tools/compile-contracts/wp200-property-read-plan-slice/src/lib.rs,wp-200-property-read-plan-slice-static-contract,non-normative-compile-fixture,5.0,1,docs/spec/planning.md
 tools/compile-contracts/wp200-property-read-plan-slice/tests/host.rs,wp-200-property-read-plan-slice-host-contract,non-normative-compile-fixture,5.0,1,docs/spec/planning.md
 tools/design-check/tests/wp200_binding_artifact_schema.rs,wp-200-binding-artifact-executable-schema,non-normative-compile-fixture,5.0,1,docs/spec/planning.md
+docs/audits/WP-200-property-read-plan-slice-review-v2.toml,wp-200-property-read-plan-slice-review-v2-attestation,non-normative-review,5.0,1,docs/spec/planning.md
