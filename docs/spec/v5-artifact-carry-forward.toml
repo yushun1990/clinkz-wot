@@ -106,13 +106,13 @@ revalidation = "cargo run --locked --quiet --manifest-path tools/design-check/Ca
 [[artifact]]
 family = "property-read-integration-gate"
 path = "docs/work-packages/property-read-architecture-gate.toml"
-sha256 = "6fe1b2e831fba36de13020db1f40b1596b310d947f7d6a54cf8aca4cef48b3ef"
-disposition = "revalidated for the admitted WP-200 Property Read plan slice; its 21 requirements remain unchanged, the slice is in progress, and future gate status changes update this exact digest in the owning checkpoint"
+sha256 = "1fb7a1fa1df86dea2bcaa2a7836c7585b16712982d48fdc4829bc5d12dbddd4c"
+disposition = "revalidated for the completed WP-200 Property Read plan slice; its 21 requirements remain unchanged, WP-300 and WP-400 remain planned and blocked, and future gate status changes update this exact digest in the owning checkpoint"
 revalidation = "tools/check-v5-authority-reset-decision.sh"
 
 [[artifact]]
 family = "property-read-integration-gate"
 path = "docs/work-packages/PROPERTY-READ-ARCHITECTURE.md"
-sha256 = "075c1e87e48aa8eb74cfbcd582e20190f65ab8f8b6b578278b4628a06b1fb3e4"
-disposition = "carried-forward unchanged pre-admission narrative snapshot; the mutable WP-200 status is owned by docs/work-packages/property-read-architecture-gate.toml"
+sha256 = "5db01f600e8e7994a43dd0b3f03ceadd7f0116ddd3b914a34f02a16ab6f6577d"
+disposition = "revalidated completion narrative for the WP-100 handler and WP-200 plan slices; mutable tranche truth remains owned by docs/work-packages/property-read-architecture-gate.toml"
 revalidation = "tools/check-v5-authority-reset-decision.sh"

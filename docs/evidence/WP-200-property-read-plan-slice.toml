@@ -1,0 +1,32 @@
+schema_version = 1
+design_revision = "5.0"
+work_package = "WP-200"
+tranche = "WP-200-PROPERTY-READ-PLAN-SLICE"
+implementation_ref = "b889ae1dafa65ee66bfb331bebf9d537e1c29eee"
+recorded_on = "2026-07-29"
+verification_command = "tools/check-wp200-property-read-plan-slice.sh"
+verification_check = "wp200-property-read-plan-slice-check"
+status = "passed"
+evidence_key = "property-read-plan-slice"
+
+requirement_ids = [
+    "DOC-RUNTIME-001",
+    "FORM-FINALIZE-001",
+    "FORM-OWNER-001",
+    "PLAN-ARTIFACT-001",
+    "PLAN-COST-001",
+    "PLAN-SET-001",
+]
+compilation_cells = ["no-default", "async-no-std", "std"]
+coverage = [
+    "exact nine-path implementation topology after the admitted pre-source checkpoint",
+    "Core-owned immutable logical plan and bounded binding artifact identity, envelope, compatibility, role, and footprint",
+    "application-closed typed static compiler, cursor, and artifact composition",
+    "Core-owned std host erasure with original cursor and artifact ownership returned on concrete-type mismatch",
+    "Property Read TD selection and href resolution completed only during bounded planning",
+    "zero-budget preservation and deterministic output across work-step partitions",
+    "owned plan output survives borrowed TD and registration input destruction",
+    "external no-default static and std host compiler authoring fixtures",
+    "WP-100 Property Read handler and aggregate predecessor regression suites",
+    "no downstream Property Read architecture fixture root created",
+]

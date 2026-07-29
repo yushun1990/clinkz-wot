@@ -154,8 +154,8 @@ owns crate direction and the absence of hidden dispatch imports.
 
 Every slice is Category B or C according to its actual candidate impact and
 requires its own exact paths, contract fixtures, impact analysis, independent
-review, and ADR-0013 admission. The handler slice is complete, the WP-200 plan
-slice is `pending`/`review-pending`, and the WP-300/WP-400 slices remain
+review, and ADR-0013 admission. The handler and WP-200 plan slices are
+`complete`/`approved`, while the WP-300/WP-400 slices remain
 `planned`/`blocked`. Each status record grants no source-edit authority
 without its approved pre-source checkpoint; approval and in-progress truth may
 share that one recoverable checkpoint under D9.

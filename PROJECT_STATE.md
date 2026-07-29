@@ -21,7 +21,8 @@ The active design revision is v5.0 bounded-core authority.
 - D9 bounded-conversion governance checkpoint:
   `a952e2b034b8939c0abdaf1662707eaef1d2fdc8`.
 - Latest completed Property Read source slice:
-  `830f47ebe044b953a3c0c3214345968f0fb5e571`.
+  `b889ae1dafa65ee66bfb331bebf9d537e1c29eee`, the exact nine-path WP-200
+  Core/Planning implementation.
 - Exact WP-200 Property Read semantic candidate:
   `4a01b5010729cb42d6e8d51125103c8b5cda8707`, the single child of
   `525bb31b42efe299ed36d46acea1a1c4286e8bde`.
@@ -37,6 +38,12 @@ The active design revision is v5.0 bounded-core authority.
 - Independent WP-200 v2 attestation:
   `4f3bdeff604e30eecfbba9c8c12e6dd0b23cc87f`, the exact three-path
   review/registry/continuation checkpoint for that immutable candidate.
+- Exact WP-200 pre-source checkpoint:
+  `ce1e4ae448617458251f4f437e66e77fb652e86b`, the five-file child of the v2
+  attestation that changes the tranche to `in-progress`/`approved`.
+- Exact WP-200 implementation:
+  `b889ae1dafa65ee66bfb331bebf9d537e1c29eee`, the nine-file child of that
+  pre-source checkpoint.
 
 The activation candidate changed exactly 27 documentation/checker paths and no
 Rust source, Cargo manifest, public API, or runtime behavior. Its independent
@@ -45,52 +52,25 @@ default workspace tests, diff hygiene, and the 21-cell valid feature matrix.
 
 ## Current Objective
 
-Implement exactly the nine registered
-`WP-200-PROPERTY-READ-PLAN-SLICE` product-source paths after the passing v2
-review and validated five-file pre-source boundary.
+Stabilize aggregate validation across shared Cargo targets, then prepare the
+exact `WP-300-PROPERTY-READ-BINDING-SLICE` admission candidate without editing
+WP-300 product source.
 
-D8 is migrated. Its one conversion packet contains:
+The narrow WP-200 plan slice is complete. Its handoff to WP-300 contains:
 
 1. one associated-type portable Core compiler/artifact contract;
-2. an application-closed, typed static compiler/cursor/artifact enum;
+2. an application-closed typed static compiler/cursor/artifact composition;
 3. Core-owned safe host erasure that returns original owned values on mismatch;
-4. sole WP-200 implementation ownership, with WP-300 consuming the component
-   only inside a complete installable registration;
-5. paired external host and constrained third-party authoring fixtures;
-6. an owned Property Read plan output with no TD lifetime; and
-7. one exact Category C tranche candidate with nine implementation paths,
-   seven prechecks, audit, exclusions, and completion key.
+4. an immutable owned Property Read plan and artifact set with no TD lifetime;
+5. bounded, deterministic planning progress in all three feature cells; and
+6. sole WP-200 implementation ownership, which WP-300 may consume only inside
+   a complete installable registration.
 
-Candidate `4a01b5010729cb42d6e8d51125103c8b5cda8707` is the exact 25-path
-single child of `525bb31b42efe299ed36d46acea1a1c4286e8bde`. A later independent
-root session inspected the registered contract and both external authoring
-forms, reran every precheck and aggregate baseline, mutation-tested all six
-required rejection boundaries, and found no intersecting blocker. The review
-attestation records that immutable semantic candidate ref.
-
-The original four-file admission-ready simulation failed at the mandatory v5
-authority-reset activation check because the changed Property Read gate no
-longer matched its carried SHA-256. The first correction added the exact
-carry-forward digest to a five-file checkpoint. Independent mutation review
-then exposed a second intersecting evidence-truth defect: the design checker
-required all implementation paths in the approved `in-progress` pre-source
-state even though the same checker required the implementation commit to be
-the next child of that checkpoint.
-
-The second correction keeps all reviewed API, fixture, implementation,
-exclusion, precheck, and five-file checkpoint semantics unchanged while:
-
-1. preserving and validating the exact failed first-correction predecessor;
-2. requiring implementation-path presence only in `complete`, while the
-   existing topology checker owns admitted `in-progress` pre-source and
-   implementation work;
-3. making the new candidate the exact six-path single child of the failed
-   first correction; and
-4. retaining a separate v2 attestation before source admission.
-
-Only the nine registered Core/Planning implementation paths are admitted. No
-product source exists yet, and no cross-package Property Read architecture
-fixture root is admitted.
+No WP-300 implementation path or cross-package Property Read architecture
+fixture root is admitted. Before using another temporary review worktree, the
+design checker must stop embedding a build-worktree root through
+`env!("CARGO_MANIFEST_DIR")`; a shared target can otherwise reuse a binary
+that points at a deleted worktree.
 
 ## Active Milestones
 
@@ -98,7 +78,9 @@ fixture root is admitted.
 - M1 v5.0 Authority Reset and Architecture Closure — IN_PROGRESS.
 - M2 Foundation and Core Contract Stabilization — IN_PROGRESS.
 - M3 Planning and Compilation Pipeline — IN_PROGRESS; the exact WP-200
-  Property Read plan slice is source-admitted.
+  Property Read plan slice is complete, while broad WP-200 exits remain open.
+- M4 Protocol Binding SPI and Lifecycle — OPEN; the exact WP-300 Property Read
+  slice dependency is satisfied but no candidate is admitted.
 
 The v5 authority switch is complete, but M1 remains open because GATE-1,
 GATE-2, GATE-4, GATE-5, and GATE-6 still require their registered closure
@@ -165,21 +147,24 @@ Completed and independently evidenced WP-100 work includes:
 - borrowed `HandlerContext`; and
 - synchronous static `ReadPropertyHandler`.
 
-The admitted WP-200 architecture is not yet implemented:
+Completed WP-200 narrow-slice work includes:
 
-- no `clinkz-wot-planning` crate exists;
-- `LogicalInteractionPlan`, `BindingArtifact*`, `BindingCompiler*`,
-  `PlanBuildInput`, `PlanCompiler`, `HostBindingRegistration`, and
-  `StaticBindingRegistration` do not exist in product Rust;
-- current form selection remains in `protocol-bindings/core`;
-- Servient still stores `Arc<dyn ClientBinding>` and
-  `Arc<dyn ServerBinding>` directly; and
-- existing protocol binding paths still reflect the legacy direct execution
-  boundary rather than the planned compiler-artifact/Servient orchestration
-  split.
+- the `clinkz-wot-planning` crate in the root workspace;
+- Core logical-plan, generation, compiler, typed static registration, safe
+  host-erasure, artifact identity/envelope, compatibility, role, footprint,
+  and rejection values;
+- a bounded Property Read `PlanCompiler` that resolves the selected form and
+  target only during planning;
+- owned plan output that outlives its borrowed TD and registration inputs; and
+- external constrained/static and host authoring fixtures with mismatch,
+  footprint, zero-budget, and deterministic-step evidence.
 
-Those facts are implementation evidence for D8, not authority to preserve the
-legacy boundary.
+The legacy form-selection implementation still exists in
+`protocol-bindings/core`; Servient still stores `Arc<dyn ClientBinding>` and
+`Arc<dyn ServerBinding>` directly; and existing concrete bindings still use
+the legacy execution boundary. D12 assigns those one-way migrations to
+WP-300, WP-400, WP-600, and final WP-700 removal evidence, so their presence
+does not weaken the completed narrow WP-200 claim.
 
 ## Open Decisions and Blockers
 
@@ -190,7 +175,8 @@ Status: seven decisions migrated; one remote-enforcement action remains.
 - 0017: the WP-200 admission path has a finite stopping condition. Independent
   review now includes the exact next-state simulation; the five-file
   pre-source transition passes, omission of its carry-forward update fails,
-  and out-of-scope implementation work fails.
+  out-of-scope implementation work fails, and the exact nine-path child now
+  has completion evidence.
 - 0018: the four Property Read source slices remain necessarily serial because
   each next slice consumes the preceding public ownership/lifecycle boundary.
   Later preparation is allowed but is neither admission nor vertical progress.
@@ -203,8 +189,8 @@ Status: seven decisions migrated; one remote-enforcement action remains.
   changes; transition reviews must now execute their declared next state.
 - 0021: D8 is reaffirmed for admission. The external host and
   `no_std + alloc` fixtures use public dependencies and preserve ownership;
-  actual compilation at WP-200 completion and the WP-600 production compilers
-  own stronger usability evidence.
+  both compile at WP-200 completion, while the WP-600 production compilers own
+  the remaining production-author usability evidence.
 - 0022: independent review is scoped by defect class. Session separation alone
   does not close runtime, lifecycle, resource, workload, performance, or
   production-author claims.
@@ -236,58 +222,50 @@ Required authoritative consumers:
 - the tranche audit/checker; and
 - PLAN, workspace lifecycle, artifact registry, and this state checkpoint.
 
-The semantic candidate passed independent v1 review, and the exact second
-evidence-boundary correction passed independent v2 review. The corrected
-five-file pre-source checkpoint passes admission, so implementation proceeds
-only through the exact nine registered paths. The representation and package
-ownership decisions are not reopened.
+The semantic candidate passed independent v1 review, the exact
+evidence-boundary correction passed independent v2 review, and the exact
+pre-source/implementation topology now has completion evidence. The
+representation and package ownership decisions are not reopened.
 
-### WP-200 admission evidence boundary
+### WP-200 completion boundary
 
-Status: IMPLEMENTATION ADMITTED; EXACT NINE-PATH SOURCE COMMIT PENDING.
+Status: NARROW PROPERTY READ PLAN SLICE COMPLETE.
 
-The attempted command
-`tools/check-wp200-property-read-plan-slice-entry.sh --admission-ready`
-rejected the original four-file checkpoint with:
+The immutable topology is:
 
-`v5 authority reset activation check: carried artifact
-'docs/work-packages/property-read-architecture-gate.toml' changed without
-disposition update`
+`4f3bdeff604e30eecfbba9c8c12e6dd0b23cc87f`
+`-> ce1e4ae448617458251f4f437e66e77fb652e86b`
+`-> b889ae1dafa65ee66bfb331bebf9d537e1c29eee`.
 
-`docs/spec/v5-artifact-carry-forward.toml` owns the exact digest of that gate.
-Therefore any honest gate-status transition must update the gate and its
-carried digest atomically. Exact first correction
-`f453f165c2ea775e5f0d10c36f1e419fcc1d79f3` did so, but independent review
-found that its five-file simulation then failed with:
+The middle checkpoint changes exactly the five registered pre-source paths.
+The implementation child changes exactly the nine registered Core/Planning
+paths. `docs/evidence/WP-200-property-read-plan-slice.toml` binds that
+implementation ref to the completion checker. The integration gate still has
+WP-300 and WP-400 planned/blocked and remains globally `blocked`.
 
-`design structure check: WP-200-PROPERTY-READ-PLAN-SLICE in-progress state
-lacks implementation path "core/src/binding_compiler.rs"`
+### Aggregate design-check worktree-root defect
 
-The failure contradicts the registered topology in which the approved
-pre-source checkpoint precedes the exact nine-path implementation commit. The
-second correction changes only:
+Status: OPEN SUPPORT DEFECT; CURRENT MITIGATION VERIFIED.
 
-- `PLAN.md`;
-- `PROJECT_STATE.md`;
-- `docs/audits/WP-200-property-read-plan-slice-entry.md`;
-- `docs/spec/v5-artifact-carry-forward.toml`;
-- `docs/work-packages/property-read-architecture-gate.toml`;
-- `tools/design-check/src/main.rs`.
-
-Independent root review passed exact candidate
-`d2dcf2e9d2e19c7c2dfa234f96c5303cc3aee24a` and records
-`docs/audits/WP-200-property-read-plan-slice-review-v2.toml` at exact
-three-path checkpoint `4f3bdeff604e30eecfbba9c8c12e6dd0b23cc87f`.
-The current five-file checkpoint changes the tranche directly to
-`in-progress`/`approved` with the matching carried gate digest.
+`tools/design-check` derives the repository root with the compile-time
+`env!("CARGO_MANIFEST_DIR")`. When multiple Git worktrees share one Cargo
+target directory, Cargo can reuse a design-check binary built from a later
+deleted worktree. The binary then reads a nonexistent repository root and
+produces false aggregate-validation failures. Cleaning only the
+`clinkz-wot-design-check` target artifact and rebuilding from the intended
+worktree restores the passing result. This does not invalidate the immutable
+WP-200 product implementation or its rerun evidence, but it must be corrected
+before the next candidate-review cycle.
 
 ### Disjoint downstream blockers
 
 - Broad WP-100 handler entry still lacks its remaining request/target
   migration, portable async/step admission, no-atomic public-boundary proof,
   and workload/resource evidence.
-- Broad WP-300 remains blocked by exact registration/execution contracts and
-  later binding/Servient integration evidence.
+- The exact WP-300 Property Read slice has its plan dependency but remains
+  blocked by exact registration/execution contracts and public authoring
+  fixtures; broad WP-300 also waits on later binding/Servient integration
+  evidence.
 - WP-400, WP-500, and WP-600 depend on WP-300; WP-700 joins those branches.
 
 These do not extend the D8 packet unless repository evidence shows a direct
@@ -430,16 +408,34 @@ The real five-file pre-source checkpoint from attestation
 `tools/check-wp200-property-read-plan-slice-entry.sh --admission-ready` with no
 product source present. Its gate and carried SHA-256 change atomically.
 
+Exact implementation `b889ae1dafa65ee66bfb331bebf9d537e1c29eee` passed on
+2026-07-29:
+
+- `tools/check-wp200-property-read-plan-slice.sh`, including Core/Planning
+  no-default, async/no-std, and std profiles, both external authoring fixtures,
+  and predecessor regressions;
+- `tools/check-design-artifacts.sh`;
+- `cargo test --workspace --locked`;
+- `sh scripts/check-feature-matrix.sh` — 21 passed, 0 failed; and
+- exact committed path/topology inspection and diff hygiene.
+
+The shared-target root defect described above caused one false aggregate-check
+failure before the design-check package artifact was rebuilt from the current
+worktree. The clean rebuild and rerun passed; no product source changed during
+that diagnosis.
+
 The intentionally invalid all-features combination enables mutually exclusive
 Zenoh backends. Use `scripts/check-feature-matrix.sh`, not
 `cargo test --all-features`, as the supported feature baseline.
 
 ## Next Safe Actions
 
-1. Implement exactly the nine registered WP-200 paths, run the
-   completion checker and supported feature cells, and register completion
-   evidence without advancing WP-300, WP-400, or the aggregate gate.
-2. Before any remote source integration, obtain a successful
+1. Correct `tools/design-check` repository-root resolution at runtime and prove
+   one shared target cannot bind validation to a deleted review worktree.
+2. Inspect the exact WP-300 Property Read binding-slice contract, then prepare
+   its non-implementation candidate and public authoring fixtures under
+   ADR-0013. Do not edit WP-300 product source before admission.
+3. Before any remote source integration, obtain a successful
    `mainline / validation` workflow result. Requiring that status through
    GitHub branch protection remains the sole unmigrated part of issue 0023.
 
@@ -469,4 +465,5 @@ commitment that repository evidence cannot resolve.
 - `docs/audits/WP-200-property-read-plan-slice-entry.md`
 - `docs/audits/WP-200-property-read-plan-slice-review.toml`
 - `docs/audits/WP-200-property-read-plan-slice-review-v2.toml`
+- `docs/evidence/WP-200-property-read-plan-slice.toml`
 - `tools/design-check/tests/wp200_binding_artifact_schema.rs`

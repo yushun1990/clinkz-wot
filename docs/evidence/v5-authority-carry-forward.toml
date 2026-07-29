@@ -95,3 +95,17 @@ active_claim_ids = [
 ]
 inactive_claim_ids = []
 disposition = "All claims remain active and are reaffirmed without changing implementation or fixture scope."
+
+[[record]]
+source = "docs/evidence/WP-200-property-read-plan-slice.toml"
+verification_command = "tools/check-wp200-property-read-plan-slice.sh"
+active_claim_ids = [
+  "DOC-RUNTIME-001",
+  "FORM-FINALIZE-001",
+  "FORM-OWNER-001",
+  "PLAN-ARTIFACT-001",
+  "PLAN-COST-001",
+  "PLAN-SET-001",
+]
+inactive_claim_ids = []
+disposition = "All narrow Property Read plan-slice claims remain active; broad WP-200 and cross-package completion remain separate evidence."
