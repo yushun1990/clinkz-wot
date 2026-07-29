@@ -26,7 +26,7 @@ Topics are retained after migration as decision history.
 
 ** OPEN
 
-- [[file:0017-post-reset-execution-risks.md][0017 WP-200 Admission Evidence Recursion Risk]]
+- [[file:0017-wp200-admission-evidence-recursion.md][0017 WP-200 Admission Evidence Recursion Risk]]
 - [[file:0018-property-read-critical-path-serialization.md][0018 Property Read Critical-Path Serialization]]
 - [[file:0019-target-architecture-legacy-migration-gap.md][0019 Target Architecture and Legacy Migration Gap]]
 - [[file:0020-governance-and-checker-complexity.md][0020 Governance and Checker Complexity]]
