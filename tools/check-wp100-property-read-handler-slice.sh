@@ -2,6 +2,7 @@
 set -euo pipefail
 
 root=$(cd "$(dirname "$0")/.." && pwd)
+export CLINKZ_WOT_REPOSITORY_ROOT="$root"
 manifest="$root/tools/compile-contracts/wp100-property-read-handler-slice/Cargo.toml"
 
 fail() {

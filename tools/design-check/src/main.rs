@@ -15,6 +15,7 @@ const ACTIVE_DESIGN_REVISION: &str = "4.9";
 const ACTIVE_AUTHORITY_REVISION: &str = "5.0";
 const REJECTED_DESIGN_REVISION: &str = "4.8";
 const WP000_EVIDENCE_REVISION: &str = "4.6";
+const REPOSITORY_ROOT_ENV: &str = "CLINKZ_WOT_REPOSITORY_ROOT";
 const ARCHITECTURE_INTERIM_REVIEW: &str = "architecture-review-03-v4.9-interim";
 const ARCHITECTURE_REVIEW_02_PREDECESSOR: &str = "architecture-review-02-v4.8-rejected";
 
@@ -1534,11 +1535,45 @@ fn check_handler_ownership_row(
 }
 
 fn repository_root() -> Result<PathBuf, String> {
-    Path::new(env!("CARGO_MANIFEST_DIR"))
-        .parent()
-        .and_then(Path::parent)
+    let configured = env::var_os(REPOSITORY_ROOT_ENV).map(PathBuf::from);
+    let current = env::current_dir()
+        .map_err(|error| format!("cannot read the current directory: {error}"))?;
+    resolve_repository_root(configured.as_deref(), &current)
+}
+
+fn resolve_repository_root(configured: Option<&Path>, current: &Path) -> Result<PathBuf, String> {
+    if let Some(root) = configured {
+        return validate_repository_root(root, REPOSITORY_ROOT_ENV);
+    }
+
+    current
+        .ancestors()
+        .find(|candidate| is_repository_root(candidate))
         .map(Path::to_path_buf)
-        .ok_or_else(|| "cannot resolve repository root".to_owned())
+        .ok_or_else(|| {
+            format!(
+                "cannot resolve repository root from {}; run inside the repository or set \
+                 {REPOSITORY_ROOT_ENV}",
+                current.display()
+            )
+        })
+}
+
+fn validate_repository_root(root: &Path, source: &str) -> Result<PathBuf, String> {
+    if !is_repository_root(root) {
+        return Err(format!(
+            "{source} points to {}, which is not a ClinkZ-WoT repository root",
+            root.display()
+        ));
+    }
+    Ok(root.to_path_buf())
+}
+
+fn is_repository_root(path: &Path) -> bool {
+    path.join("AGENTS.md").is_file()
+        && path.join("Cargo.toml").is_file()
+        && path.join("docs/design.md").is_file()
+        && path.join("tools/design-check/Cargo.toml").is_file()
 }
 
 fn check_state_machines(root: &Path) -> Result<(), String> {
@@ -12465,6 +12500,10 @@ fn require_string(item: Option<&Item>, field: &str, expected: &str) -> Result<()
 #[cfg(test)]
 mod tests {
     use std::collections::BTreeSet;
+    use std::fs;
+    use std::path::{Path, PathBuf};
+    use std::process;
+    use std::sync::atomic::{AtomicU64, Ordering};
 
     use toml_edit::DocumentMut;
 
@@ -12476,10 +12515,78 @@ mod tests {
         expected_work_package_dependencies, handler_value_status_pair_is_valid,
         parse_deadline_cleanup_review_attestation, parse_handler_review_attestation,
         parse_logical_time_review_attestation, parse_scoped_review_attestation, parse_transitions,
-        validate_handler_context_source, validate_handler_value_audit_source,
-        validate_handler_value_primitives_source, validate_property_read_handler_audit_source,
-        validate_property_read_handler_source,
+        resolve_repository_root, validate_handler_context_source,
+        validate_handler_value_audit_source, validate_handler_value_primitives_source,
+        validate_property_read_handler_audit_source, validate_property_read_handler_source,
     };
+
+    static TEST_DIRECTORY_SEQUENCE: AtomicU64 = AtomicU64::new(0);
+
+    struct TestDirectory(PathBuf);
+
+    impl TestDirectory {
+        fn path(&self) -> &Path {
+            &self.0
+        }
+    }
+
+    impl Drop for TestDirectory {
+        fn drop(&mut self) {
+            fs::remove_dir_all(&self.0).expect("test directory must be removable");
+        }
+    }
+
+    fn test_repository_root(label: &str) -> TestDirectory {
+        let sequence = TEST_DIRECTORY_SEQUENCE.fetch_add(1, Ordering::Relaxed);
+        let root = std::env::temp_dir().join(format!(
+            "clinkz-wot-design-check-{label}-{}-{sequence}",
+            process::id()
+        ));
+        fs::create_dir_all(root.join("docs")).expect("docs directory must be creatable");
+        fs::create_dir_all(root.join("tools/design-check"))
+            .expect("design-check directory must be creatable");
+        for path in [
+            root.join("AGENTS.md"),
+            root.join("Cargo.toml"),
+            root.join("docs/design.md"),
+            root.join("tools/design-check/Cargo.toml"),
+        ] {
+            fs::write(path, "").expect("repository marker must be writable");
+        }
+        TestDirectory(root)
+    }
+
+    #[test]
+    fn repository_root_walks_the_runtime_worktree() {
+        let root = test_repository_root("walk");
+        let nested = root.path().join("tools/design-check/src/nested");
+        fs::create_dir_all(&nested).expect("nested directory must be creatable");
+
+        assert_eq!(
+            resolve_repository_root(None, &nested),
+            Ok(root.path().to_path_buf())
+        );
+    }
+
+    #[test]
+    fn explicit_repository_root_overrides_another_worktree_cwd() {
+        let current = test_repository_root("current");
+        let selected = test_repository_root("selected");
+
+        assert_eq!(
+            resolve_repository_root(Some(selected.path()), current.path()),
+            Ok(selected.path().to_path_buf())
+        );
+    }
+
+    #[test]
+    fn invalid_explicit_repository_root_does_not_fall_back_to_cwd() {
+        let current = test_repository_root("invalid-explicit");
+
+        assert!(
+            resolve_repository_root(Some(&current.path().join("missing")), current.path()).is_err()
+        );
+    }
 
     fn producer_contract(obligation_bits: &str) -> DocumentMut {
         format!(

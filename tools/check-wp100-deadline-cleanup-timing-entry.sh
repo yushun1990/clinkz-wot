@@ -2,6 +2,7 @@
 set -euo pipefail
 
 root=$(cd "$(dirname "$0")/.." && pwd)
+export CLINKZ_WOT_REPOSITORY_ROOT="$root"
 mode=${1:---candidate}
 attestation_rel="docs/audits/WP-100-deadline-cleanup-timing-review.toml"
 attestation="$root/$attestation_rel"

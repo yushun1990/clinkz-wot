@@ -2,6 +2,7 @@
 set -euo pipefail
 
 root=$(cd "$(dirname "$0")/.." && pwd)
+export CLINKZ_WOT_REPOSITORY_ROOT="$root"
 handler_source="$root/core/src/handler.rs"
 root_source="$root/core/src/lib.rs"
 fixture_root="$root/tools/compile-contracts/wp100-handler-context"

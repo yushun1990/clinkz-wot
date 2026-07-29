@@ -2,6 +2,7 @@
 set -euo pipefail
 
 root=$(cd "$(dirname "$0")/.." && pwd)
+export CLINKZ_WOT_REPOSITORY_ROOT="$root"
 mode=${1:-check}
 
 case "$mode" in
