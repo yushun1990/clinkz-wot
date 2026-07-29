@@ -1,6 +1,6 @@
 # Project State
 
-Last updated: 2026-07-28
+Last updated: 2026-07-29
 
 ## Repository Basis
 
@@ -22,6 +22,9 @@ The active design revision is v5.0 bounded-core authority.
   `a952e2b034b8939c0abdaf1662707eaef1d2fdc8`.
 - Latest completed Property Read source slice:
   `830f47ebe044b953a3c0c3214345968f0fb5e571`.
+- Exact WP-200 Property Read plan candidate:
+  `4a01b5010729cb42d6e8d51125103c8b5cda8707`, the single child of
+  `525bb31b42efe299ed36d46acea1a1c4286e8bde`.
 
 The activation candidate changed exactly 27 documentation/checker paths and no
 Rust source, Cargo manifest, public API, or runtime behavior. Its independent
@@ -30,9 +33,10 @@ default workspace tests, diff hygiene, and the 21-cell valid feature matrix.
 
 ## Current Objective
 
-Freeze and validate the exact non-implementation
-`WP-200-PROPERTY-READ-PLAN-SLICE` candidate, register its immutable commit, and
-stop at the independent-review boundary without self-attesting.
+Advance the independently reviewed
+`WP-200-PROPERTY-READ-PLAN-SLICE` candidate through one combined pre-source
+approval/in-progress checkpoint, then implement exactly its nine registered
+paths and produce completion evidence.
 
 D8 is migrated. Its one conversion packet contains:
 
@@ -46,24 +50,25 @@ D8 is migrated. Its one conversion packet contains:
 7. one exact Category C tranche candidate with nine implementation paths,
    seven prechecks, audit, exclusions, and completion key.
 
-The candidate commit is the single child of
-`525bb31b42efe299ed36d46acea1a1c4286e8bde`. Before review, that exact
-single-child/path boundary identifies the candidate without a self-referential
-hash-registration commit. The independent attestation records its immutable
-hash.
+Candidate `4a01b5010729cb42d6e8d51125103c8b5cda8707` is the exact 25-path
+single child of `525bb31b42efe299ed36d46acea1a1c4286e8bde`. A later independent
+root session inspected the registered contract and both external authoring
+forms, reran every precheck and aggregate baseline, mutation-tested all six
+required rejection boundaries, and found no intersecting blocker. The review
+attestation records that immutable candidate ref.
 
-The next source-changing event remains the independently reviewed and admitted
-WP-200 slice. No registered Core/Planning implementation path or either
-cross-package Property Read architecture fixture root is admitted before that
-checkpoint.
+The next checkpoint is the exact four-path combined pre-source transition from
+`pending`/`review-pending` to `in-progress`/`approved`. No registered
+Core/Planning implementation path or either cross-package Property Read
+architecture fixture root is admitted before that checkpoint.
 
 ## Active Milestones
 
 - M0 Execution Baseline and Collaboration Reset — CLOSED.
 - M1 v5.0 Authority Reset and Architecture Closure — IN_PROGRESS.
 - M2 Foundation and Core Contract Stabilization — IN_PROGRESS.
-- M3 Planning and Compilation Pipeline — OPEN; exact entry candidate review
-  pending.
+- M3 Planning and Compilation Pipeline — OPEN; exact entry candidate
+  independently reviewed, pre-source admission checkpoint pending.
 
 The v5 authority switch is complete, but M1 remains open because GATE-1,
 GATE-2, GATE-4, GATE-5, and GATE-6 still require their registered closure
@@ -167,9 +172,9 @@ Required authoritative consumers:
 - the tranche audit/checker; and
 - PLAN, workspace lifecycle, artifact registry, and this state checkpoint.
 
-The exact candidate still requires immutable-ref registration and independent
-review. Independent review, admission, implementation, and completion evidence
-are execution states, not reopened design questions.
+The exact candidate passed independent review. The remaining combined
+pre-source admission checkpoint, implementation, and completion evidence are
+execution states, not reopened design questions.
 
 ### Disjoint downstream blockers
 
@@ -244,8 +249,25 @@ Author-side exact candidate validation also passed:
 - the supported feature matrix, 21 passed and 0 failed; and
 - staged/committed diff hygiene and the exact 25-path candidate comparison.
 
-The candidate is ready for independent review. Its independent attestation,
-not an intermediate metadata checkpoint, records the immutable candidate ref.
+Independent root-session review of exact candidate
+`4a01b5010729cb42d6e8d51125103c8b5cda8707` on 2026-07-29 passed:
+
+- `tools/check-wp200-property-read-plan-slice-entry.sh --candidate`;
+- inspection of the full 25-path diff, executable schema, and paired external
+  static/host authoring fixtures;
+- all seven registered prechecks and the expected absent-source completion
+  boundary;
+- `tools/check-design-artifacts.sh`;
+- `cargo test --workspace --locked`;
+- `sh scripts/check-feature-matrix.sh` — 21 passed, 0 failed; and
+- `git diff --check
+  525bb31b42efe299ed36d46acea1a1c4286e8bde..4a01b5010729cb42d6e8d51125103c8b5cda8707`.
+
+The review additionally mutation-tested and rejected host payload
+compatibility mismatch, host payload concrete-type mismatch, host cursor
+concrete-type mismatch, artifact footprint overflow, static enum variant
+mismatch, premature product-source creation, and premature cross-package
+architecture-fixture creation. No finding intersects the tranche.
 
 The intentionally invalid all-features combination enables mutually exclusive
 Zenoh backends. Use `scripts/check-feature-matrix.sh`, not
@@ -253,14 +275,15 @@ Zenoh backends. Use `scripts/check-feature-matrix.sh`, not
 
 ## Next Safe Actions
 
-1. Commit the exact D8/WP-200 non-implementation packet as the single child of
-   its frozen base, run candidate and aggregate checks, and stop without
-   creating a review attestation or hash-registration checkpoint.
-2. In a later independent root continuation, review and mutation-test that
-   exact commit; the attestation records its immutable hash.
-3. Only after a passing attestation, record one combined, recoverable
-   pre-source approval/in-progress checkpoint, implement exactly the nine named
-   paths, and produce completion evidence.
+1. Record one combined, recoverable pre-source approval/in-progress checkpoint
+   as the single child of the independent review attestation, changing exactly
+   `PLAN.md`, `PROJECT_STATE.md`, the entry audit, and the Property Read gate
+   manifest; run the admission-ready check.
+2. Implement exactly the nine registered WP-200 paths in one source
+   checkpoint and run the completion checker plus supported feature cells.
+3. Register exact implementation and completion evidence, close only the
+   package-local Property Read planning slice, and leave WP-300, WP-400, and
+   the aggregate architecture gate unchanged.
 
 Ask the Project Owner only if the investigation reaches a product-goal,
 real-world constraint, unacceptable direction, or irreversible external
@@ -286,4 +309,5 @@ commitment that repository evidence cannot resolve.
 - `docs/work-packages/WP-200-planning.md`
 - `docs/work-packages/WP-300-bindings.md`
 - `docs/audits/WP-200-property-read-plan-slice-entry.md`
+- `docs/audits/WP-200-property-read-plan-slice-review.toml`
 - `tools/design-check/tests/wp200_binding_artifact_schema.rs`

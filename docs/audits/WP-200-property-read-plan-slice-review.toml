@@ -1,0 +1,35 @@
+schema_version = 1
+design_revision = "5.0"
+tranche = "WP-200-PROPERTY-READ-PLAN-SLICE"
+status = "passed"
+reviewer_attestation_kind = "independent-root-session"
+reviewer_id = "codex-agent:/root"
+reviewed_ref = "4a01b5010729cb42d6e8d51125103c8b5cda8707"
+
+[[precheck]]
+id = "api-ownership-check"
+result = "passed"
+
+[[precheck]]
+id = "architecture-adr-check"
+result = "passed"
+
+[[precheck]]
+id = "design-requirement-check"
+result = "passed"
+
+[[precheck]]
+id = "resource-profile-check"
+result = "passed"
+
+[[precheck]]
+id = "v5-authority-reset-candidate-check"
+result = "passed"
+
+[[precheck]]
+id = "work-package-dag-check"
+result = "passed"
+
+[[precheck]]
+id = "wp100-property-read-handler-slice-check"
+result = "passed"
