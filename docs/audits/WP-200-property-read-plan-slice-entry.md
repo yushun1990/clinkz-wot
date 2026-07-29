@@ -20,11 +20,23 @@ The subsequent admission-ready simulation found an intersecting evidence-truth
 defect: changing the Property Read gate without changing
 `docs/spec/v5-artifact-carry-forward.toml` leaves the carried SHA-256 stale, so
 the mandatory `v5-authority-reset-candidate-check` rejects the planned
-four-file checkpoint. The correction candidate keeps the reviewed API,
-implementation paths, fixtures, exclusions, and prechecks unchanged. It
-changes the future pre-source checkpoint boundary from four files to five,
-updates the exact candidate topology/checkers, and requires a new independent
-v2 attestation before source admission.
+four-file checkpoint. Exact first correction
+`f453f165c2ea775e5f0d10c36f1e419fcc1d79f3` changed the future pre-source
+boundary from four files to five and made the carried digest atomic with the
+gate transition.
+
+Independent review passed that commit's static diff, candidate checks, and
+aggregate baselines, then rejected its required exact-five-file mutation. Once
+the digest matched, `check-work-packages` required
+`core/src/binding_compiler.rs` in the approved `in-progress` pre-source state,
+even though the registered topology requires the nine-path implementation
+commit to follow that checkpoint. No v2 attestation was created.
+
+The second correction keeps the reviewed API, implementation paths, fixtures,
+exclusions, prechecks, and five-file checkpoint unchanged. It preserves the
+failed predecessor topology, makes implementation-path presence mandatory only
+for `complete`, and leaves the existing exact topology checker responsible for
+`in-progress` pre-source and implementation states.
 
 ## Decision and exact scope
 
@@ -247,15 +259,16 @@ The original semantic candidate is
 `525bb31b42efe299ed36d46acea1a1c4286e8bde`; its v1 attestation is
 `8a7aa198f5c983be8fbf5ef1a9750c90b5837703`.
 
-The corrective candidate base is the v1 attestation commit. The gate manifest
-owns its exact seven paths:
+The failed first correction is exact seven-path single child
+`f453f165c2ea775e5f0d10c36f1e419fcc1d79f3` of the v1 attestation. The second
+corrective candidate base is that failed commit. The gate manifest owns the
+new candidate's exact six paths:
 
 - `PLAN.md`;
 - `PROJECT_STATE.md`;
 - this audit;
 - `docs/spec/v5-artifact-carry-forward.toml`;
 - `docs/work-packages/property-read-architecture-gate.toml`;
-- `tools/check-wp200-property-read-plan-slice-entry.sh`; and
 - `tools/design-check/src/main.rs`.
 
 The corrective authoring commit must be the single child of that base and must
@@ -264,15 +277,17 @@ set, and single-child rule identify that commit without a self-referential
 hash-registration checkpoint. The independent v2 attestation records the
 immutable corrective candidate ref.
 
-The independent reviewer must inspect the registered corrective commit,
-revalidate the original v1 attestation, run every precheck and the executable
-schema, confirm that the API/fixture/implementation contract is unchanged, and
-mutation-test at least:
+The independent reviewer must inspect the failed first correction and the
+registered second corrective commit, revalidate the original v1 attestation,
+run every precheck and the executable schema, confirm that the
+API/fixture/implementation contract is unchanged, and mutation-test at least:
 
 - omitting `docs/spec/v5-artifact-carry-forward.toml` from the pre-source
   boundary is rejected;
-- the exact five-file pre-source boundary is accepted when its carried digest
-  matches the gate;
+- the exact five-file pre-source boundary is accepted with no implementation
+  source when its carried digest matches the gate;
+- the implementation worktree/commit remains restricted to exactly the nine
+  registered paths;
 - premature source or architecture-fixture creation remains rejected; and
 - the original host/static mismatch, footprint, and ownership rejection
   boundaries remain represented by the frozen v1 evidence.

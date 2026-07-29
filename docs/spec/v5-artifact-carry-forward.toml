@@ -106,8 +106,8 @@ revalidation = "cargo run --locked --quiet --manifest-path tools/design-check/Ca
 [[artifact]]
 family = "property-read-integration-gate"
 path = "docs/work-packages/property-read-architecture-gate.toml"
-sha256 = "b678b82120976c18a644a45d72dbe96b3b77f9adce877b38c51540ebe9c684b0"
-disposition = "revalidated for the WP-200 admission-evidence correction; its 21 requirements remain unchanged, the slice remains review-pending, and future gate status changes update this exact digest in the owning five-file pre-source checkpoint"
+sha256 = "387f75b09a976a71661aedf32384671f186a56f3d55a7f505720c8225ea2410a"
+disposition = "revalidated for the second WP-200 admission-evidence correction; its 21 requirements remain unchanged, the slice remains review-pending, and future gate status changes update this exact digest in the owning five-file pre-source checkpoint"
 revalidation = "tools/check-v5-authority-reset-decision.sh"
 
 [[artifact]]

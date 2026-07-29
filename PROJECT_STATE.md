@@ -27,8 +27,12 @@ The active design revision is v5.0 bounded-core authority.
   `525bb31b42efe299ed36d46acea1a1c4286e8bde`.
 - Independent WP-200 v1 semantic-candidate attestation:
   `8a7aa198f5c983be8fbf5ef1a9750c90b5837703`.
-- WP-200 admission-evidence correction base:
-  `8a7aa198f5c983be8fbf5ef1a9750c90b5837703`; the exact seven-path
+- First WP-200 admission-evidence correction candidate:
+  `f453f165c2ea775e5f0d10c36f1e419fcc1d79f3`, the exact seven-path
+  single child of the v1 attestation. Independent review rejected its
+  pre-source state projection.
+- Second WP-200 admission-evidence correction base:
+  `f453f165c2ea775e5f0d10c36f1e419fcc1d79f3`; the exact six-path
   single-child candidate is resolved by its future v2 attestation.
 
 The activation candidate changed exactly 27 documentation/checker paths and no
@@ -38,7 +42,7 @@ default workspace tests, diff hygiene, and the 21-cell valid feature matrix.
 
 ## Current Objective
 
-Obtain independent v2 review for the exact seven-path
+Obtain independent v2 review for the exact six-path second
 `WP-200-PROPERTY-READ-PLAN-SLICE` admission-evidence correction. Do not change
 product source before that review and the corrected five-file pre-source
 checkpoint both pass.
@@ -62,19 +66,25 @@ forms, reran every precheck and aggregate baseline, mutation-tested all six
 required rejection boundaries, and found no intersecting blocker. The review
 attestation records that immutable semantic candidate ref.
 
-The subsequent four-file admission-ready simulation failed at the mandatory
-v5 authority-reset activation check because the changed Property Read gate no
-longer matched its carried SHA-256. This is an intersecting evidence-truth
-finding. The correction keeps all reviewed API, fixture, implementation,
-exclusion, and precheck semantics unchanged while:
+The original four-file admission-ready simulation failed at the mandatory v5
+authority-reset activation check because the changed Property Read gate no
+longer matched its carried SHA-256. The first correction added the exact
+carry-forward digest to a five-file checkpoint. Independent mutation review
+then exposed a second intersecting evidence-truth defect: the design checker
+required all implementation paths in the approved `in-progress` pre-source
+state even though the same checker required the implementation commit to be
+the next child of that checkpoint.
 
-1. making the corrective candidate the exact seven-path single child of the
-   v1 attestation;
-2. preserving and revalidating the v1 semantic attestation as predecessor
-   evidence;
-3. requiring a separate v2 attestation for the correction; and
-4. including `docs/spec/v5-artifact-carry-forward.toml` in the future
-   five-file pre-source checkpoint.
+The second correction keeps all reviewed API, fixture, implementation,
+exclusion, precheck, and five-file checkpoint semantics unchanged while:
+
+1. preserving and validating the exact failed first-correction predecessor;
+2. requiring implementation-path presence only in `complete`, while the
+   existing topology checker owns admitted `in-progress` pre-source and
+   implementation work;
+3. making the new candidate the exact six-path single child of the failed
+   first correction; and
+4. retaining a separate v2 attestation before source admission.
 
 No registered Core/Planning implementation path or cross-package Property Read
 architecture fixture root is admitted.
@@ -84,8 +94,8 @@ architecture fixture root is admitted.
 - M0 Execution Baseline and Collaboration Reset — CLOSED.
 - M1 v5.0 Authority Reset and Architecture Closure — IN_PROGRESS.
 - M2 Foundation and Core Contract Stabilization — IN_PROGRESS.
-- M3 Planning and Compilation Pipeline — OPEN; exact admission-evidence
-  correction candidate review pending.
+- M3 Planning and Compilation Pipeline — OPEN; exact second
+  admission-evidence correction candidate review pending.
 
 The v5 authority switch is complete, but M1 remains open because GATE-1,
 GATE-2, GATE-4, GATE-5, and GATE-6 still require their registered closure
@@ -190,13 +200,13 @@ Required authoritative consumers:
 - PLAN, workspace lifecycle, artifact registry, and this state checkpoint.
 
 The semantic candidate passed independent v1 review. Admission remains blocked
-only by independent v2 review of the exact evidence-boundary correction and
-the corrected five-file pre-source checkpoint. The representation and package
-ownership decisions are not reopened.
+only by independent v2 review of the exact second evidence-boundary correction
+and the corrected five-file pre-source checkpoint. The representation and
+package ownership decisions are not reopened.
 
 ### WP-200 admission evidence boundary
 
-Status: CORRECTION CANDIDATE REVIEW PENDING.
+Status: SECOND CORRECTION CANDIDATE REVIEW PENDING.
 
 The attempted command
 `tools/check-wp200-property-read-plan-slice-entry.sh --admission-ready`
@@ -208,18 +218,26 @@ disposition update`
 
 `docs/spec/v5-artifact-carry-forward.toml` owns the exact digest of that gate.
 Therefore any honest gate-status transition must update the gate and its
-carried digest atomically. The exact correction candidate changes only:
+carried digest atomically. Exact first correction
+`f453f165c2ea775e5f0d10c36f1e419fcc1d79f3` did so, but independent review
+found that its five-file simulation then failed with:
+
+`design structure check: WP-200-PROPERTY-READ-PLAN-SLICE in-progress state
+lacks implementation path "core/src/binding_compiler.rs"`
+
+The failure contradicts the registered topology in which the approved
+pre-source checkpoint precedes the exact nine-path implementation commit. The
+second correction changes only:
 
 - `PLAN.md`;
 - `PROJECT_STATE.md`;
 - `docs/audits/WP-200-property-read-plan-slice-entry.md`;
 - `docs/spec/v5-artifact-carry-forward.toml`;
 - `docs/work-packages/property-read-architecture-gate.toml`;
-- `tools/check-wp200-property-read-plan-slice-entry.sh`; and
 - `tools/design-check/src/main.rs`.
 
 A later independent root must review that single child of
-`8a7aa198f5c983be8fbf5ef1a9750c90b5837703` and, if it passes, record
+`f453f165c2ea775e5f0d10c36f1e419fcc1d79f3` and, if it passes, record
 `docs/audits/WP-200-property-read-plan-slice-review-v2.toml`.
 
 ### Disjoint downstream blockers
@@ -257,6 +275,10 @@ contract, rollback, or validation intersection.
   exact carried digest is active v5 evidence, not optional bookkeeping.
 - Entering product source on the v1 semantic attestation alone is rejected
   because the discovered evidence-truth defect intersects admission.
+- Attesting first correction
+  `f453f165c2ea775e5f0d10c36f1e419fcc1d79f3` is rejected because its exact
+  five-file pre-source simulation requires implementation source before the
+  registered implementation commit.
 
 ## Verification Baseline
 
@@ -329,7 +351,23 @@ aggregate design and default workspace baselines.
 The subsequent original four-file admission-ready simulation intentionally
 failed at `v5-authority-reset-candidate-check`: the gate changed while its
 carried digest/disposition did not. That failure is the evidence for the
-seven-file correction candidate and corrected five-file pre-source boundary.
+first seven-file correction candidate and corrected five-file pre-source
+boundary.
+
+Independent review of exact first correction
+`f453f165c2ea775e5f0d10c36f1e419fcc1d79f3` on 2026-07-29 passed its full
+seven-path inspection, `--candidate`, aggregate design checks, default
+workspace tests, the 21-cell feature matrix, and diff hygiene. Its required
+pre-source mutations then proved:
+
+- omitting `docs/spec/v5-artifact-carry-forward.toml` is rejected as expected;
+- the exact five-file checkpoint passes the carried-digest check; but
+- that checkpoint is then incorrectly rejected because the `in-progress`
+  status requires absent `core/src/binding_compiler.rs`.
+
+No v2 attestation was created. The second correction narrows implementation
+presence to `complete` while retaining the existing exact pre-source and
+implementation topology checks for `in-progress`.
 
 The intentionally invalid all-features combination enables mutually exclusive
 Zenoh backends. Use `scripts/check-feature-matrix.sh`, not
@@ -337,8 +375,9 @@ Zenoh backends. Use `scripts/check-feature-matrix.sh`, not
 
 ## Next Safe Actions
 
-1. In a later independent root session, review the exact seven-path correction
-   candidate, rerun `--candidate` and aggregate baselines, mutation-test
+1. In a later independent root session, review the exact six-path second
+   correction candidate, rerun `--candidate` and aggregate baselines,
+   mutation-test
    omission of the carry-forward manifest versus the exact five-file boundary,
    and create only the v2 attestation/registry/state checkpoint if it passes.
 2. From the v2 attestation, record one exact five-file

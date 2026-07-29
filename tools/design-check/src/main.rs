@@ -166,11 +166,12 @@ const PROPERTY_READ_PLAN_V1_REVIEW_ATTESTATION_REF: &str =
     "8a7aa198f5c983be8fbf5ef1a9750c90b5837703";
 const PROPERTY_READ_PLAN_V1_CANDIDATE_BASE_REF: &str = "525bb31b42efe299ed36d46acea1a1c4286e8bde";
 const PROPERTY_READ_PLAN_V1_CANDIDATE_REF: &str = "4a01b5010729cb42d6e8d51125103c8b5cda8707";
+const PROPERTY_READ_PLAN_FIRST_CORRECTION_REF: &str = "f453f165c2ea775e5f0d10c36f1e419fcc1d79f3";
 const PROPERTY_READ_PLAN_COMPLETION_EVIDENCE: &str =
     "docs/evidence/WP-200-property-read-plan-slice.toml";
 const PROPERTY_READ_PLAN_ADMISSION_REVIEW: &str =
     "docs/audits/WP-200-property-read-plan-slice-entry.md";
-const PROPERTY_READ_PLAN_CANDIDATE_BASE_REF: &str = PROPERTY_READ_PLAN_V1_REVIEW_ATTESTATION_REF;
+const PROPERTY_READ_PLAN_CANDIDATE_BASE_REF: &str = PROPERTY_READ_PLAN_FIRST_CORRECTION_REF;
 const PROPERTY_READ_PLAN_CANDIDATE_REF_MODE: &str = "resolved-by-review-attestation";
 const PROPERTY_READ_PLAN_API_ITEMS: &[&str] = &[
     "BindingArtifact",
@@ -282,13 +283,21 @@ const PROPERTY_READ_PLAN_V1_CANDIDATE_PATHS: &[&str] = &[
     "workspace/0014-property-read-plan-artifact-boundary.md",
     "workspace/INDEX.org",
 ];
-const PROPERTY_READ_PLAN_CANDIDATE_PATHS: &[&str] = &[
+const PROPERTY_READ_PLAN_FIRST_CORRECTION_PATHS: &[&str] = &[
     "PLAN.md",
     "PROJECT_STATE.md",
     "docs/audits/WP-200-property-read-plan-slice-entry.md",
     "docs/spec/v5-artifact-carry-forward.toml",
     "docs/work-packages/property-read-architecture-gate.toml",
     "tools/check-wp200-property-read-plan-slice-entry.sh",
+    "tools/design-check/src/main.rs",
+];
+const PROPERTY_READ_PLAN_CANDIDATE_PATHS: &[&str] = &[
+    "PLAN.md",
+    "PROJECT_STATE.md",
+    "docs/audits/WP-200-property-read-plan-slice-entry.md",
+    "docs/spec/v5-artifact-carry-forward.toml",
+    "docs/work-packages/property-read-architecture-gate.toml",
     "tools/design-check/src/main.rs",
 ];
 const PROPERTY_READ_PLAN_PRECHECKS: &[&str] = &[
@@ -3784,7 +3793,7 @@ fn check_property_read_integration_gate(
                         ));
                     }
                 }
-            } else {
+            } else if status == "complete" {
                 for path in &implementation_paths {
                     if !root.join(path).is_file() {
                         return Err(format!(
@@ -3861,6 +3870,15 @@ fn check_property_read_integration_gate(
                 "property-read plan original candidate",
                 ACTIVE_AUTHORITY_REVISION,
                 &["PROJECT_STATE.md"],
+            )?;
+
+            let first_correction_paths = owned_set(PROPERTY_READ_PLAN_FIRST_CORRECTION_PATHS);
+            check_candidate_commit(
+                &id,
+                root,
+                PROPERTY_READ_PLAN_V1_REVIEW_ATTESTATION_REF,
+                PROPERTY_READ_PLAN_FIRST_CORRECTION_REF,
+                &first_correction_paths,
             )?;
 
             let candidate_base_ref = string_field(tranche, "candidate_base_ref", &id)?;

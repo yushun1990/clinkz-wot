@@ -71,8 +71,11 @@ The repository evidence establishes the following starting point:
   `4a01b5010729cb42d6e8d51125103c8b5cda8707` passed independent review at
   `8a7aa198f5c983be8fbf5ef1a9750c90b5837703`. Its admission-ready simulation
   exposed a stale carry-forward-digest defect in the declared four-file
-  pre-source checkpoint; an exact seven-file evidence-boundary correction
-  candidate is review-pending, and no WP-200 product source is admitted;
+  pre-source checkpoint. Exact first correction
+  `f453f165c2ea775e5f0d10c36f1e419fcc1d79f3` repaired that boundary but its
+  independent simulation exposed a contradictory pre-source source-presence
+  check; an exact six-file second correction candidate is review-pending, and
+  no WP-200 product source is admitted;
 - WP-300 is blocked before admission by incomplete exact binding contracts,
   host/constrained authoring fixtures, and the blocked property-read
   architecture gate; D4 has resolved subscription receiver ownership;
@@ -104,10 +107,10 @@ answer and does not automatically block unrelated admitted work.
 | D2 | MIGRATED | Use clock-source-owned non-wrapping extended logical ticks; retain raw wrap metadata as diagnostics; fail incomparable clock domains explicitly; correct Foundation before Core Deadline/cleanup timing | Completed `WP-100-LOGICAL-TIME-CORRECTION -> WP-100-DEADLINE-CLEANUP-TIMING`; the time blocker is resolved while independent broad-handler blockers remain | M2 exit |
 | D3 | SUPERSEDED | The former lossless residual-decomposition direction remains historical decision input | Do not integrate Foundation candidate `2494f33fdfe49ec3c7ae850d20990e446e628865` or open another D3 domain migration; ADR-0018/D7 replace its activation path | Superseded by D7 |
 | D4 | MIGRATED | Use one non-`Clone` linear `Subscription`/`StaticSubscription` receive capability; expose no cloneable receiver/control split, competing-consumer contract, or per-clone broadcast | WP-300 owns one binding driver/cursor; WP-400 owns the Servient record/facade and must provide negative `Clone` compile fixtures | M4 entry |
-| D5 | MIGRATED | Adopt `PROPERTY-READ-ARCHITECTURE` as the first executable cross-package composition proof, using one property read in host and manual runtime cells plus an async/no-std compile projection | Four exact ordered tranches form `WP-100 -> WP-200 -> WP-300 -> WP-400`; WP-100 is complete, the WP-200 semantic contract has v1 review evidence but its admission-boundary correction is review-pending, and WP-300/WP-400 remain blocked | Before broad WP-100/WP-300/WP-400 expansion |
+| D5 | MIGRATED | Adopt `PROPERTY-READ-ARCHITECTURE` as the first executable cross-package composition proof, using one property read in host and manual runtime cells plus an async/no-std compile projection | Four exact ordered tranches form `WP-100 -> WP-200 -> WP-300 -> WP-400`; WP-100 is complete, the WP-200 semantic contract has v1 review evidence but its second admission-boundary correction is review-pending, and WP-300/WP-400 remain blocked | Before broad WP-100/WP-300/WP-400 expansion |
 | D6 | MIGRATED | Use `CandidateFallbackPolicy::PreExecution` by default; permit only side-effect-free security inapplicability and exact deterministic lazy-artifact negatives to skip candidates; prohibit binding-input, health, transient, security-commit, and post-acceptance fallback | ADR-0017 makes the policy constructible and bounds one fixed-width diagnostic per eligible skip; the WP-200 Property Read review reaffirmed it while fallback/lazy implementation remains outside the frozen narrow scope | M3 entry |
 | D7 | MIGRATED | Adopt ADR-0018's bounded v5.0 authority reset: 62 active requirements, explicit inactive classifications for the other 59, and domain-entry re-adoption for later v1 obligations | Exact candidate `b1916250a28ee133e8d0b12225c5b6311c975247` was independently attested and integrated as the unchanged second parent of activation checkpoint `30b845a4b17dd3eb56670da48c939b72daea7d59`; v5.0 authority is active | M1 exit and WP-200 resume |
-| D8 | MIGRATED | Use one associated-type portable compiler contract, an application-closed static compiler/cursor/artifact enum, and Core-owned safe host erasure; WP-200 solely implements the compiler/artifact components and WP-300 consumes them only inside a complete installable bundle | The exact Rust contract, paired third-party authoring fixtures, and no-runtime-TD output boundary have v1 review evidence; the corrected five-file pre-source evidence boundary requires independent v2 review before admission | M3 entry |
+| D8 | MIGRATED | Use one associated-type portable compiler contract, an application-closed static compiler/cursor/artifact enum, and Core-owned safe host erasure; WP-200 solely implements the compiler/artifact components and WP-300 consumes them only inside a complete installable bundle | The exact Rust contract, paired third-party authoring fixtures, and no-runtime-TD output boundary have v1 review evidence; the five-file pre-source boundary and its corrected state projection require independent v2 review before admission | M3 entry |
 | D9 | MIGRATED | Adopt bounded design-to-implementation conversion from `workspace/0016-post-reset-implementation-throughput.md` | Once D8's declared closure boundary is satisfied, refuse unrelated refinement and proceed through one exact review, one pre-source admission checkpoint, implementation, and completion evidence; track authority, local contracts, and vertical integration separately | Continuous execution |
 
 The former D3 Foundation candidate is the exact single child of
@@ -125,23 +128,26 @@ fixtures formed exact candidate
 `4a01b5010729cb42d6e8d51125103c8b5cda8707`, independently reviewed at
 `8a7aa198f5c983be8fbf5ef1a9750c90b5837703`. A later admission-ready
 simulation proved that the original four-file pre-source boundary could not
-preserve the exact carried digest of its changed gate. The seven-file
-correction candidate changes no API, fixture, implementation path, exclusion,
-or precheck; it freezes a five-file pre-source checkpoint and is awaiting
-independent v2 review. No product source or cross-package architecture fixture
-is admitted.
+preserve the exact carried digest of its changed gate. First correction
+`f453f165c2ea775e5f0d10c36f1e419fcc1d79f3` froze a five-file checkpoint, but
+independent mutation review proved its `in-progress` projection prematurely
+required the implementation source that must follow that checkpoint. The
+exact six-file second correction preserves the five-file boundary and narrows
+source-presence enforcement to `complete`; it is awaiting independent v2
+review. No product source or cross-package architecture fixture is admitted.
 
 D9 makes the remaining conversion finite. D8 no longer blocks design
 convergence: its technical decision, authoritative migration, paired authoring
 fixtures, and exact tranche-admission material shared one semantic conversion
-packet and v1 review. The later intersecting evidence-truth defect is isolated
-in one seven-file correction candidate and one v2 review, rather than reopening
-the frozen technical representation or creating artifact-by-artifact cycles.
+packet and v1 review. The two sequentially exposed evidence-truth defects are
+bounded to the carried digest and pre-source state projection; the second exact
+correction still requires only one successful v2 review and does not reopen the
+frozen technical representation.
 
 D5 preserves package completion order but adds a cross-package integration
 dependency in the registered work-package DAG. The completed WP-100 handler
 slice was independently admitted and changes only its two registered Core
-paths; the WP-200 semantic candidate has v1 evidence but its corrected
+paths; the WP-200 semantic candidate has v1 evidence but its second corrected
 admission boundary remains review-pending, while the WP-300 and WP-400 slices
 remain planned and blocked until their own exact candidates receive
 independent ADR-0013 review. Broad
@@ -243,7 +249,7 @@ inactive dispositions, explicit machine-artifact and completed-evidence
 carry-forward manifests, active-only gate requirement sets, and an immutable
 review/activation chain. Architecture closure remains open on the registered
 global gates; the executable critical path is independent review of the exact
-WP-200 admission-evidence correction candidate.
+WP-200 second admission-evidence correction candidate.
 
 AI deliverable:
 
@@ -327,7 +333,8 @@ Exit criteria:
 
 ## M3 — Planning and Compilation Pipeline
 
-Status: OPEN; exact admission-evidence correction candidate review pending.
+Status: OPEN; exact second admission-evidence correction candidate review
+pending.
 
 Authoritative package scope: WP-200.
 

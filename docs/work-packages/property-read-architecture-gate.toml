@@ -306,7 +306,7 @@ contract_artifacts = [
     "tools/design-check/src/main.rs",
     "tools/design-check/tests/wp200_binding_artifact_schema.rs",
 ]
-candidate_base_ref = "8a7aa198f5c983be8fbf5ef1a9750c90b5837703"
+candidate_base_ref = "f453f165c2ea775e5f0d10c36f1e419fcc1d79f3"
 candidate_ref = "resolved-by-review-attestation"
 candidate_paths = [
     "PLAN.md",
@@ -314,7 +314,6 @@ candidate_paths = [
     "docs/audits/WP-200-property-read-plan-slice-entry.md",
     "docs/spec/v5-artifact-carry-forward.toml",
     "docs/work-packages/property-read-architecture-gate.toml",
-    "tools/check-wp200-property-read-plan-slice-entry.sh",
     "tools/design-check/src/main.rs",
 ]
 pre_implementation_checks = [
