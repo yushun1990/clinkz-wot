@@ -8,8 +8,10 @@ Active design revision: v5.0 bounded-core authority
 
 Convergence target: v5.0 bounded-core authority
 
-Release target: ClinkZ-WoT v1, a protocol-neutral W3C WoT runtime with a
-stable Servient architecture and Zenoh binding support.
+Release target: ClinkZ-WoT v1, a protocol-neutral W3C WoT runtime for
+producing, consuming, and discovering Things, with a stable Servient
+architecture, a client-only Directory/Discovery boundary, and Zenoh plus
+zenoh-pico binding support.
 
 This plan records roadmap, milestones, dependencies, status, and acceptance
 objectives. It does not define architecture or implementation admission.
@@ -112,6 +114,14 @@ answer and does not automatically block unrelated admitted work.
 | D7 | MIGRATED | Adopt ADR-0018's bounded v5.0 authority reset: 62 active requirements, explicit inactive classifications for the other 59, and domain-entry re-adoption for later v1 obligations | Exact candidate `b1916250a28ee133e8d0b12225c5b6311c975247` was independently attested and integrated as the unchanged second parent of activation checkpoint `30b845a4b17dd3eb56670da48c939b72daea7d59`; v5.0 authority is active | M1 exit and WP-200 resume |
 | D8 | MIGRATED | Use one associated-type portable compiler contract, an application-closed static compiler/cursor/artifact enum, and Core-owned safe host erasure; WP-200 solely implements the compiler/artifact components and WP-300 consumes them only inside a complete installable bundle | The exact Rust contract, paired third-party authoring fixtures, and no-runtime-TD output boundary have v1 review evidence; the five-file pre-source boundary and its corrected state projection require independent v2 review before admission | M3 entry |
 | D9 | MIGRATED | Adopt bounded design-to-implementation conversion from `workspace/0016-post-reset-implementation-throughput.md` | Once D8's declared closure boundary is satisfied, refuse unrelated refinement and proceed through one exact review, one pre-source admission checkpoint, implementation, and completion evidence; track authority, local contracts, and vertical integration separately | Continuous execution |
+| D10 | MIGRATED | Treat the WP-200 admission path as finite only after review exercises the complete next-state transition, not merely the candidate state | The exact second correction and isolated five-file transition pass; after v2 attestation and `--admission-ready`, the nine registered source paths are the mandatory next critical-path event | M3 entry |
+| D11 | MIGRATED | Preserve the exact WP-100 -> WP-200 -> WP-300 -> WP-400 source dependency chain while allowing non-authoritative preparation for later slices | Later preparation may reduce uncertainty but cannot claim admission or vertical progress before its predecessor's completion event | Property Read gate |
+| D12 | MIGRATED | Use one staged legacy-to-target authority map: Planning owns selection/artifacts, WP-300 owns execution SPI, WP-400 owns orchestration, WP-600 migrates concrete Zenoh paths, and WP-700 proves final removal | Old and new paths may coexist only at named one-way migration adapters; no generation may have two selection, dispatch, or activation authorities | M3-M6 |
+| D13 | MIGRATED | Keep the directed owner/projection/evidence/checker model and require transition checks to bind immutable candidates and exercise their next state | Support-artifact failures block only when they falsify an owned technical or evidence claim; no additional WP-200 refinement cycle is admitted | Continuous execution |
+| D14 | MIGRATED | Reaffirm D8 constructibility for admission from the paired external public-boundary fixtures, while reserving runtime ergonomics and production-author claims for implementation and WP-600 evidence | WP-200 completion must compile both profiles; real Zenoh and zenoh-pico authoring may reopen the API only on a concrete ownership, resource, or portability defect | M3 and M5C |
+| D15 | MIGRATED | Define review effectiveness by independently falsifiable evidence classes, not session separation alone | The pending v2 review owns the evidence-boundary transition; later completion reviews must add real compile, runtime, lifecycle, resource, workload, and integration evidence as applicable | Continuous execution |
+| D16 | DECIDED | Establish one remote mainline validation status covering diff hygiene, aggregate design evidence, locked workspace tests, and the supported feature matrix | The repository workflow is defined, but `master` is not mechanically protected until the remote requires that status; no protected-mainline claim is allowed before then | Before remote source integration |
+| D17 | MIGRATED | Retain the full v1 target and make its critical path and post-WP-300 branch join explicit | Directory/Discovery client work is mandatory client scope, the Directory service remains excluded, and WP-400/WP-500/WP-600 rejoin at WP-700 before release review | M7 exit |
 
 The former D3 Foundation candidate is the exact single child of
 `56fea9813df80fe29527755fcb2ce91d43cc5086`, changes only its registered
@@ -174,6 +184,27 @@ or execution.
 
 M1 and admitted parts of M2 may progress in parallel. M5A, M5B, and M5C may
 progress independently after their shared WP-300 dependency is complete.
+
+The dominant executable and release path is:
+
+```text
+WP-100 Property Read complete
+  -> WP-200 Property Read
+  -> WP-300 Property Read
+  -> WP-400 Property Read
+  -> PROPERTY-READ-ARCHITECTURE
+  -> remaining WP-100/WP-200/WP-300 package completion
+  -> {WP-400, WP-500, WP-600}
+  -> WP-700 plus all global gates
+  -> M7 technical release review
+```
+
+Preparation and disjoint M1/M2 closure may proceed alongside this chain, but
+they are not executable vertical progress. After WP-300, the Servient,
+Directory/Discovery client, and concrete-binding branches are independently
+validatable and must all rejoin at WP-700. A late global-gate finding
+invalidates earlier evidence only through the normal explicit impact and
+revalidation rules.
 
 ## M0 — Execution Baseline and Collaboration Reset
 
@@ -517,7 +548,7 @@ Authoritative package scope: WP-700.
 
 Dependencies: WP-400, WP-500, and WP-600.
 
-Objective: compose the v4.9 implementation through the umbrella crate, remove
+Objective: compose the active v5.0 implementation through the umbrella crate, remove
 obsolete APIs, and close final cross-package evidence.
 
 Exit criteria:

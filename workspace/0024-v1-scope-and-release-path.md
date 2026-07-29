@@ -1,6 +1,6 @@
 # 0024 v1 Scope and Release Path
 
-Status: OPEN
+Status: MIGRATED
 
 Kind: owner-raised release-risk investigation
 
@@ -64,3 +64,38 @@ Codex should determine:
 4. whether any progress or readiness claim requires correction;
 5. whether an authoritative release, milestone, work-package, gate, or conformance decision is required;
 6. the conditions for moving this topic through its workspace lifecycle.
+
+## Decision
+
+The v1 scope is large but internally consistent and finitely registered. Its
+dominant path is the four-slice Property Read proof, followed by remaining
+WP-100/WP-200/WP-300 completion. After WP-300, WP-400 Servient, WP-500
+Directory/Discovery client, and WP-600 Zenoh/zenoh-pico may progress
+independently; all three rejoin at WP-700, where global gates, legacy removal,
+feature/conformance evidence, and the umbrella surface close before M7.
+
+WP-500 is mandatory to the existing v1 claim because the architecture goal is
+to produce, consume, and discover Things and WP-700 explicitly depends on it.
+Its scope is only the engine-side Directory/Discovery client. A Directory
+service, storage backend, and server-side query engine remain excluded. WP-600
+must complete both supported concrete backend cells and realistic Zenoh
+interaction evidence; Zenoh remains optional to protocol-neutral crates.
+
+The 34 inactive declared-v1 requirements are not silently waived. Each is
+re-adopted or otherwise dispositioned at its owning domain entry under
+ADR-0018. Package completion, gate closure, executable vertical integration,
+production-binding readiness, and release conformance remain separate claims.
+A later global finding can invalidate completed evidence only through an
+explicit impact and revalidation record.
+
+This decision does not estimate release proximity. Boundedness comes from the
+registered DAG, finite package completion keys, gate exits, supported feature
+cells, workload manifests, WP-700 join, and clean-checkout M7 criteria. Reducing
+or redefining v1 is not supported by current evidence.
+
+## Migration
+
+The release target, dominant topology, branch join, and active v5.0 M6 wording
+are migrated into `PLAN.md`; D17 and `PROJECT_STATE.md` preserve the decision.
+Existing WP-500, WP-600, WP-700, architecture-goal, and M7 owners retain their
+exact behavioral and evidence scope.

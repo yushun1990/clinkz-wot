@@ -26,14 +26,7 @@ Topics are retained after migration as decision history.
 
 ** OPEN
 
-- [[file:0017-wp200-admission-evidence-recursion.md][0017 WP-200 Admission Evidence Recursion Risk]]
-- [[file:0018-property-read-critical-path-serialization.md][0018 Property Read Critical-Path Serialization]]
-- [[file:0019-target-architecture-legacy-migration-gap.md][0019 Target Architecture and Legacy Migration Gap]]
-- [[file:0020-governance-and-checker-complexity.md][0020 Governance and Checker Complexity]]
-- [[file:0021-host-constrained-authoring-constructibility.md][0021 Host and Constrained Authoring Constructibility]]
-- [[file:0022-independent-review-effectiveness.md][0022 Independent Review Effectiveness]]
-- [[file:0023-mainline-validation-integrity.md][0023 Mainline Validation Integrity]]
-- [[file:0024-v1-scope-and-release-path.md][0024 v1 Scope and Release Path]]
+- None.
 
 ** DISCUSSING
 
@@ -41,7 +34,7 @@ Topics are retained after migration as decision history.
 
 ** DECIDED
 
-- None.
+- [[file:0023-mainline-validation-integrity.md][0023 Mainline Validation Integrity]]
 
 ** MIGRATED
 
@@ -61,6 +54,13 @@ Topics are retained after migration as decision history.
 - [[file:0014-property-read-plan-artifact-boundary.md][0014 Property-read plan artifact boundary]]
 - [[file:0015-normative-authority-reset.md][0015 Normative Authority Reset Versus Continued Design Decomposition]]
 - [[file:0016-post-reset-implementation-throughput.md][0016 Post-Reset Implementation Throughput and Executable Progress]]
+- [[file:0017-wp200-admission-evidence-recursion.md][0017 WP-200 Admission Evidence Recursion Risk]]
+- [[file:0018-property-read-critical-path-serialization.md][0018 Property Read Critical-Path Serialization]]
+- [[file:0019-target-architecture-legacy-migration-gap.md][0019 Target Architecture and Legacy Migration Gap]]
+- [[file:0020-governance-and-checker-complexity.md][0020 Governance and Checker Complexity]]
+- [[file:0021-host-constrained-authoring-constructibility.md][0021 Host and Constrained Authoring Constructibility]]
+- [[file:0022-independent-review-effectiveness.md][0022 Independent Review Effectiveness]]
+- [[file:0024-v1-scope-and-release-path.md][0024 v1 Scope and Release Path]]
 
 * History
 

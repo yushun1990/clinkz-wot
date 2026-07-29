@@ -1,6 +1,6 @@
 # 0020 Governance and Checker Complexity
 
-Status: OPEN
+Status: MIGRATED
 
 Kind: owner-raised governance-risk investigation
 
@@ -62,3 +62,42 @@ Codex should determine:
 3. whether D9 currently bounds support-artifact work as intended;
 4. whether any authoritative responsibility or progress claim requires correction;
 5. the conditions for moving this topic through its workspace lifecycle.
+
+## Decision
+
+The concern is supported in a bounded form. The repository does not need a new
+governance model, but it did contain transition coupling capable of creating
+critical-path failures without changing product semantics. The stale carried
+digest, the pre-source source-presence rule, and the temporary dependence of a
+review-pending candidate on moving `HEAD` are concrete examples.
+
+The valid dependency direction is:
+
+```text
+authoritative contract/work-package state
+  -> PLAN and PROJECT_STATE projections
+  -> audit/attestation and registry evidence
+  -> executable validation
+```
+
+The reverse direction is invalid. An audit, registry row, digest, or checker
+cannot define technical truth solely because another support artifact points
+to it. Exact digests still protect authority and evidence transitions, and
+topology checks still protect candidate and implementation scope; those are
+distinct invariants rather than duplicate owners.
+
+The stable correction is to bind candidate identity independently of unrelated
+later `HEAD` movement and to exercise the declared next state before
+attestation. A support failure blocks only when it falsifies contract,
+dependency, admission, completion, authority, or evidence truth. Otherwise it
+travels with its owning checkpoint and cannot start another refinement cycle.
+Deleting current authority, review, rollback, or resource controls would not
+address the proven defect and is rejected.
+
+## Migration
+
+The directed responsibility model and transition rule are migrated into
+`PROJECT_GOVERNANCE.md`; D13 and `PROJECT_STATE.md` record their execution
+consequence. The current WP-200 transition has been exercised end to end, so
+no additional checker or governance checkpoint is admitted on its critical
+path.

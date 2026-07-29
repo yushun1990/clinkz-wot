@@ -1,0 +1,46 @@
+name: mainline
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mainline-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validation:
+    name: validation
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out the complete candidate history
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          fetch-depth: 0
+
+      - name: Install the reviewed Rust toolchain
+        uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4
+        with:
+          toolchain: 1.95.0
+
+      - name: Check pull-request diff hygiene
+        if: github.event_name == 'pull_request'
+        run: git diff --check "${{ github.event.pull_request.base.sha }}...${{ github.sha }}"
+
+      - name: Check pushed diff hygiene
+        if: github.event_name == 'push'
+        run: git diff --check "${{ github.event.before }}..${{ github.sha }}"
+
+      - name: Validate active design and completed evidence
+        run: tools/check-design-artifacts.sh
+
+      - name: Run locked workspace tests
+        run: cargo test --workspace --locked
+
+      - name: Validate the supported feature matrix
+        run: sh scripts/check-feature-matrix.sh

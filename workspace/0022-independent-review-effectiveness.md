@@ -1,6 +1,6 @@
 # 0022 Independent Review Effectiveness
 
-Status: OPEN
+Status: MIGRATED
 
 Kind: owner-raised review-quality investigation
 
@@ -60,3 +60,36 @@ Codex should determine:
 3. whether review requirements remain proportionate across work categories;
 4. whether any governance, audit, fixture, or work-package contract requires correction or reaffirmation;
 5. the conditions for moving this topic through its workspace lifecycle.
+
+## Decision
+
+Independent root review has materially detected defects that author-side
+validation missed: stale carry-forward truth and a contradictory pre-source
+state projection. Its current exact-ref, path, mutation, feature, and
+transition checks are sufficient for the pending WP-200 admission-evidence
+claim.
+
+Session separation alone is not sufficient for every later claim. Candidate
+and audit material can share the same mistaken assumption, and static schemas
+cannot establish callback behavior, cancellation, cleanup, fairness, resource
+peaks, performance, or real production-binding usability. Review sufficiency
+therefore follows defect class:
+
+- pre-source review reconstructs authoritative contracts, exact topology,
+  negative capabilities, public authoring boundaries, and the next state;
+- implementation completion adds real compile/test and boundary behavior;
+- lifecycle/resource/performance work adds failure injection and workload
+  evidence; and
+- vertical and release review adds production binding and end-to-end evidence.
+
+An author-prepared audit is navigation, not the reviewer's authority.
+Independent reconstruction, mutation cases, external public-boundary fixtures,
+and executable observations provide material independence. No additional
+reviewer identity or Owner approval gate is justified by current evidence.
+
+## Migration
+
+The claim-class and reconstruction rules are migrated into
+`PROJECT_GOVERNANCE.md`, D15 in `PLAN.md`, and the continuation summary. The
+WP-200 v2 audit already requires the exact next-state mutations; later work
+packages retain their distinct completion and integration evidence.

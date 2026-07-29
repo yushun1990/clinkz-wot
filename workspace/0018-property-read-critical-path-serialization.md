@@ -1,6 +1,6 @@
 # 0018 Property Read Critical-Path Serialization
 
-Status: OPEN
+Status: MIGRATED
 
 Kind: owner-raised execution-risk investigation
 
@@ -60,3 +60,41 @@ Codex should determine:
 3. whether any serial boundary duplicates another boundary's contract, rollback, or validation truth;
 4. whether authoritative records require correction;
 5. the conditions for moving this topic through `OPEN -> DISCUSSING -> DECIDED -> MIGRATED`.
+
+## Decision
+
+The source dependency chain is necessary and remains:
+
+```text
+WP-100 handler
+  -> WP-200 immutable logical plan and binding artifact
+  -> WP-300 complete registration, route, accept, response, and cleanup SPI
+  -> WP-400 Servient publication, route/handler selection, and orchestration
+  -> PROPERTY-READ-ARCHITECTURE
+```
+
+Each edge transfers a public contract or exclusive lifecycle authority that
+the next slice must consume. Removing an edge would require a fixture adapter
+to impersonate a production plan, artifact, registration, route permit,
+response opportunity, or cleanup owner, all of which the gate explicitly
+forbids.
+
+Preparation for a later slice may occur before its predecessor completes:
+contract inspection, non-authoritative experiments, risk analysis, and draft
+negative cases can reduce uncertainty. It cannot create the planned
+architecture fixture root, obtain source admission, or count as vertical
+progress. The transition events remain the predecessor's registered
+completion evidence and the successor's own exact admission.
+
+No duplicate source-review boundary remains. The WP-200 v2 review is a bounded
+correction of admission evidence, not another review of the semantic contract.
+WP-300 and WP-400 reviews cover distinct execution and orchestration ownership.
+Disjoint M1/M2 work may proceed but cannot be reported as advancement of the
+executable slice.
+
+## Migration
+
+The conclusion is migrated into D11 and the release-critical topology in
+`PLAN.md`, the three-track and tranche-conversion rules in
+`PROJECT_GOVERNANCE.md`, and the critical-path summary in
+`PROJECT_STATE.md`. The existing gate DAG remains authoritative and unchanged.

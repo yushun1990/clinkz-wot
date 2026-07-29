@@ -1,6 +1,6 @@
 # 0017 WP-200 Admission Evidence Recursion Risk
 
-Status: OPEN
+Status: MIGRATED
 
 Kind: owner-raised execution-risk investigation
 
@@ -63,3 +63,38 @@ Codex should determine:
 4. whether the current authoritative records overstate or understate implementation readiness;
 5. whether any stable conclusion must be migrated to governance, work-package, audit, checker, state, or implementation owners;
 6. the conditions under which this topic can move from `OPEN` to `DECIDED`, and from `DECIDED` to `MIGRATED`.
+
+## Decision
+
+The risk was real in the first two attempted boundaries, but the current path
+has a finite verified stopping condition. Review of exact second correction
+`d2dcf2e9d2e19c7c2dfa234f96c5303cc3aee24a` passed its candidate check. An
+isolated review worktree then exercised the complete declared next state:
+
+- the exact five-file pre-source worktree passed `--admission-ready` with no
+  product source;
+- restoring the carry-forward manifest, and therefore reducing the transition
+  to four changed files, was rejected;
+- committing the five-file state with no implementation worktree passed the
+  topology check; and
+- an unrelated implementation-worktree path was rejected.
+
+The observable closure event is therefore a real v2 attestation followed by a
+passing exact five-file `--admission-ready` state. At that point the next
+critical-path commit must contain exactly the nine registered implementation
+paths. No current checker, manifest, registry, audit, state, or topology rule
+remains unexercised for that transition.
+
+The two defects were governance-implementation defects: the first omitted a
+required carried digest and the second required implementation source in a
+pre-source state. Neither changed WP-200 semantics, ownership, lifecycle,
+resources, public API, or implementation scope. Another support-only cycle may
+block only if it produces a new explicit intersecting falsification under D9;
+additional preparation or reassurance is insufficient.
+
+## Migration
+
+The conclusion is migrated into the transition-evidence rule in
+`PROJECT_GOVERNANCE.md`, D10 in `PLAN.md`, the current objective and evidence
+summary in `PROJECT_STATE.md`, and the already registered v2 transition
+requirements in the WP-200 entry audit. No new checker is required.

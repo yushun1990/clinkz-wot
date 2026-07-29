@@ -1,6 +1,6 @@
 # 0023 Mainline Validation Integrity
 
-Status: OPEN
+Status: DECIDED
 
 Kind: owner-raised repository-integrity investigation
 
@@ -64,3 +64,42 @@ Codex should determine:
 3. whether audit and state claims can diverge from remote repository truth;
 4. whether any repository policy, checker, workflow, or evidence owner requires correction;
 5. the conditions for moving this topic through its workspace lifecycle.
+
+## Decision
+
+The concern is confirmed. At investigation time the repository had no
+`.github/workflows` file, no active Git hook, no commit status on remote
+`master`, and GitHub reported `protected: false` with required status checks
+disabled. Comprehensive local evidence therefore did not imply durable
+default-branch enforcement. The review-pending WP-200 checker also demonstrated
+that unrelated workspace commits could temporarily make the aggregate
+mainline check fail by moving `HEAD` beyond the exact un-attested candidate.
+
+The selected repository matrix is:
+
+- committed diff hygiene;
+- `tools/check-design-artifacts.sh`;
+- `cargo test --workspace --locked`; and
+- `sh scripts/check-feature-matrix.sh`.
+
+Registered candidate, admission, completion, workload, and release checks
+remain additional scoped evidence. The new `.github/workflows/mainline.yml`
+runs the matrix for pushes and pull requests to `master`, uses full Git history,
+pins both action revisions, and installs Rust 1.95.0. A successful workflow is
+remote integration evidence; local runs remain author/review evidence.
+
+`cargo fmt --check` is not claimed by this matrix because the pre-existing
+clean `master` already contains rustfmt drift in Core and Zenoh source. Adding
+a known-red status would not establish integrity. Formatting remains visible
+code-quality work and may join the required matrix only with its own clean
+baseline.
+
+## Remaining migration
+
+The technical direction is recorded in `PROJECT_GOVERNANCE.md`, D16, the
+workflow, and `PROJECT_STATE.md`. The topic remains `DECIDED`, not `MIGRATED`,
+because remote `master` still does not require the resulting
+`mainline / validation` status. Enabling a GitHub branch rule is an external
+repository mutation and must be verified after the workflow exists and has
+reported its context. Until then, no mechanically protected-mainline claim is
+valid and a direct push can still land before validation succeeds.

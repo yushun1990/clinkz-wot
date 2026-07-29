@@ -180,6 +180,40 @@ legacy boundary.
 
 ## Open Decisions and Blockers
 
+### Focused execution-risk decisions / workspace issues 0017-0024
+
+Status: seven decisions migrated; one remote-enforcement action remains.
+
+- 0017: the WP-200 admission path has a finite stopping condition. Independent
+  review now includes the exact next-state simulation; the five-file
+  pre-source transition passes, omission of its carry-forward update fails,
+  and out-of-scope implementation work fails.
+- 0018: the four Property Read source slices remain necessarily serial because
+  each next slice consumes the preceding public ownership/lifecycle boundary.
+  Later preparation is allowed but is neither admission nor vertical progress.
+- 0019: the legacy migration map is owned by WP-200, WP-300, WP-400, WP-600,
+  and WP-700. Coexistence is permitted only at their named one-way adapters;
+  final absence is a WP-700 claim, not a narrow-gate claim.
+- 0020: governance artifacts form a directed
+  owner -> projection -> evidence -> validation graph. The two WP-200
+  correction cycles were real transition-validation defects, not architecture
+  changes; transition reviews must now execute their declared next state.
+- 0021: D8 is reaffirmed for admission. The external host and
+  `no_std + alloc` fixtures use public dependencies and preserve ownership;
+  actual compilation at WP-200 completion and the WP-600 production compilers
+  own stronger usability evidence.
+- 0022: independent review is scoped by defect class. Session separation alone
+  does not close runtime, lifecycle, resource, workload, performance, or
+  production-author claims.
+- 0023: the local/remote integrity concern is confirmed. The repository now
+  defines a `mainline / validation` workflow, but GitHub `master` remains
+  unprotected until a remote rule requires that status. Do not report
+  mechanically protected mainline before that external state changes.
+- 0024: the full v1 target remains coherent and bounded by registered package
+  and evidence exits. The critical path reaches the Property Read gate and
+  broad WP-300 completion, then WP-400/WP-500/WP-600 branch and rejoin at
+  WP-700 before M7.
+
 ### D8 / workspace issue 0014
 
 Status: MIGRATED. No technical representation or package-ownership decision
@@ -386,6 +420,9 @@ Zenoh backends. Use `scripts/check-feature-matrix.sh`, not
 3. Only then implement exactly the nine registered WP-200 paths, run the
    completion checker and supported feature cells, and register completion
    evidence without advancing WP-300, WP-400, or the aggregate gate.
+4. Before any remote source integration, obtain a successful
+   `mainline / validation` workflow result. Requiring that status through
+   GitHub branch protection remains the sole unmigrated part of issue 0023.
 
 Ask the Project Owner only if the investigation reaches a product-goal,
 real-world constraint, unacceptable direction, or irreversible external

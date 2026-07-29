@@ -1,6 +1,6 @@
 # 0019 Target Architecture and Legacy Migration Gap
 
-Status: OPEN
+Status: MIGRATED
 
 Kind: owner-raised architecture-migration investigation
 
@@ -61,3 +61,35 @@ Codex should determine:
 3. whether current work-package and completion boundaries fully cover migration and removal truth;
 4. what evidence closes the migration risk for the Property Read slice and later broad entry;
 5. the conditions for moving this topic through its workspace lifecycle.
+
+## Decision
+
+The migration has one staged authority map:
+
+| Current legacy responsibility | Target owner and closure |
+| --- | --- |
+| TD form selection and target/security resolution in `protocol-bindings/core/src/form.rs` | WP-200 Planning owns selection and immutable artifacts; broad WP-200 completion removes the shared legacy selection authority |
+| `core/src/inbound.rs` / `outbound.rs` direct `ServerBinding`, `ClientBinding`, `BindingContext`, and dispatch/call shapes | WP-300 replaces them with complete registration, route-scoped progress, owned calls, and explicit cleanup |
+| Servient storage of bare binding trait objects and direct serve/shutdown/dispatch integration | WP-400 installs only complete startup bundles and owns publication, selection, progress, and cleanup |
+| Zenoh and zenoh-pico TD/form rescanning and legacy binding implementations | WP-600 compiles protocol-local artifacts and migrates both concrete execution paths |
+| Umbrella aliases and remaining compatibility entry points | WP-700 negative fixtures and source inspection prove final absence |
+
+Old and new code may coexist only while a named downstream caller is
+unmigrated and only through the one-way adapters registered by WP-300,
+WP-400, or WP-600. For one Servient generation there is exactly one planning,
+registration, dispatch, and activation authority. A binding cannot select a
+handler, reinterpret a TD, or bypass the Servient merely because its legacy
+helper still exists for an unmigrated path.
+
+The narrow Property Read gate intentionally does not prove repository-wide
+legacy removal. It proves that one target path composes without a shortcut.
+Broad package completion owns removal at each boundary, and WP-700 owns the
+final no-legacy claim. This prevents a passing narrow fixture from overstating
+migration completion.
+
+## Migration
+
+The selected map is already projected in the Old API Removal and completion
+sections of WP-200, WP-300, WP-400, WP-600, and WP-700. D12 in `PLAN.md` and
+the continuation summary in `PROJECT_STATE.md` now make the intermediate
+authority rule explicit. No target architecture decision is reopened.

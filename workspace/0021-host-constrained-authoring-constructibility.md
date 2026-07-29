@@ -1,6 +1,6 @@
 # 0021 Host and Constrained Authoring Constructibility
 
-Status: OPEN
+Status: MIGRATED
 
 Kind: owner-raised API-and-portability investigation
 
@@ -64,3 +64,36 @@ Codex should determine:
 3. whether host and constrained semantics remain equivalent where required;
 4. whether any authoritative contract requires correction or reaffirmation;
 5. the conditions for moving this topic through its workspace lifecycle.
+
+## Decision
+
+D8 is reaffirmed for admission. The constrained fixture is a `no_std + alloc`
+crate outside the root workspace and depends only on public Core and
+Foundation packages. It implements two independent compiler/cursor/artifact
+families and an application-owned closed enum without repository-private
+types. The host fixture authors the same compilers through one Core-owned
+erased registration and proves that cursor, compatibility, and concrete
+payload mismatches return the original owned value.
+
+The constrained profile necessarily requires central editing of the
+application's compiler, cursor, and artifact enums when its closed compiler
+universe changes. That is an explicit application composition cost, not a
+hidden Protocol Binding requirement. The host profile avoids that wiring
+through safe erasure. Both preserve the same compiler identity, pending/failure
+ownership, artifact compatibility, and measured-footprint semantics.
+
+Current evidence closes public constructibility and portability-schema claims,
+not production ergonomics. The external crate intentionally cannot compile
+until the reviewed product API exists. WP-200 completion must compile and run
+both fixture profiles. WP-600's real Zenoh and zenoh-pico compilers own the
+stronger evidence for third-party friction, allocation behavior, and practical
+maintenance. A concrete failure there reopens D8; generic concern about
+boilerplate does not.
+
+## Migration
+
+The evidence boundary is migrated into D14, the review-claim rule in
+`PROJECT_GOVERNANCE.md`, and `PROJECT_STATE.md`. The existing WP-200 completion
+checker and WP-600 authoring/completion contracts already own the required
+executable evidence, so no speculative macro or alternate representation is
+introduced.

@@ -229,6 +229,34 @@ Independent review, pre-source admission, risk-proportional evidence, and
 architecture change control remain mandatory. This rule bounds their
 composition; it does not waive them.
 
+### Validation Truth and Support Artifacts
+
+Validation artifacts have a directed responsibility model:
+
+- registered specifications and work-package records own technical contracts,
+  dependency, admission, completion, and removal truth;
+- `PLAN.md` projects roadmap and milestone state, while `PROJECT_STATE.md`
+  projects the current continuation point;
+- audits and attestations record evidence about immutable candidates or
+  implementation checkpoints;
+- registries enumerate owners and evidence without redefining their content;
+  and
+- executable checks derive and falsify invariants from those owners.
+
+A support artifact does not become an independent source of technical truth
+merely because another support artifact references it. A support-only failure
+blocks work only when it demonstrates a false contract, dependency, admission,
+completion, authority, or evidence claim. Otherwise its repair travels with the
+checkpoint whose truth it records and does not reopen an already reviewed
+technical contract.
+
+Once a review candidate exists, its identity must be immutable and independent
+of later unrelated `HEAD` movement. A state-changing review must exercise the
+declared next repository transition before attestation, including its exact
+path boundary, required manifest or registry updates, expected absent/present
+source boundary, and the next implementation topology. Passing only the
+candidate's current state is insufficient evidence for a transition claim.
+
 Project progress is reported on three distinct tracks:
 
 - architecture/authority closure;
@@ -252,6 +280,36 @@ Review verifies:
 Independent technical reviews or audits may be required by architecture
 governance, work-package records, or milestone exit criteria. Those reviews are
 technical evidence requirements, not Owner approval gates.
+
+Review claims must identify the defect class they cover. A pre-source review
+may close contract, ownership, topology, portability-schema, and admission
+transition claims, but it cannot close runtime behavior, workload, lifecycle,
+resource, performance, or production-author usability claims without matching
+executable evidence. Reviewers reconstruct the intended contract from
+authoritative owners; an author-prepared audit is navigation and evidence, not
+a substitute authority.
+
+Session separation is one independence mechanism, not the evidence claim by
+itself. Material independence comes from immutable candidate reconstruction,
+negative or mutation cases, external public-boundary fixtures, and
+risk-appropriate compile, runtime, workload, and integration evidence.
+
+## Default-Branch Validation
+
+Every proposed default-branch revision must pass one reproducible mainline
+matrix:
+
+- committed diff hygiene for the proposed revision range;
+- `tools/check-design-artifacts.sh`;
+- `cargo test --workspace --locked`; and
+- `sh scripts/check-feature-matrix.sh`.
+
+Candidate-, admission-, completion-, workload-, and release-specific checks
+remain additional requirements when their registered owner applies; the
+mainline matrix does not replace them. A local result is valid author or review
+evidence, while a successful remote workflow status is integration evidence.
+Do not claim that the default branch is mechanically protected unless the
+remote branch rule actually requires the recorded mainline status check.
 
 ## Change Management
 
