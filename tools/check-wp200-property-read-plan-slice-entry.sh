@@ -3,7 +3,7 @@ set -euo pipefail
 
 root=$(cd "$(dirname "$0")/.." && pwd)
 mode=${1:---candidate}
-attestation_rel="docs/audits/WP-200-property-read-plan-slice-review.toml"
+attestation_rel="docs/audits/WP-200-property-read-plan-slice-review-v2.toml"
 attestation="$root/$attestation_rel"
 
 fail() {
@@ -62,10 +62,11 @@ case "$mode" in
             "PLAN.md"
             "PROJECT_STATE.md"
             "docs/audits/WP-200-property-read-plan-slice-entry.md"
+            "docs/spec/v5-artifact-carry-forward.toml"
             "docs/work-packages/property-read-architecture-gate.toml"
         )
         [[ "${approval_changes[*]}" == "${expected_approval_changes[*]}" ]] \
-            || fail "approval diff is not the exact four-file pre-source checkpoint"
+            || fail "approval diff is not the exact five-file pre-source checkpoint"
         mapfile -t untracked_paths < <(
             git -C "$root" ls-files --others --exclude-standard
         )

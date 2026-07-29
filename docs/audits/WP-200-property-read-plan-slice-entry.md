@@ -8,6 +8,24 @@ Admission scope: `WP-200-PROPERTY-READ-PLAN-SLICE`
 
 Verdict: Candidate ready for independent review
 
+Independent root review at
+`8a7aa198f5c983be8fbf5ef1a9750c90b5837703` confirmed exact candidate
+`4a01b5010729cb42d6e8d51125103c8b5cda8707`, all seven prechecks, the
+executable schema, both external authoring forms, and the expected absent-source
+boundary. It also rejected the required host compatibility/type/cursor,
+footprint, static-variant, premature-source, and premature-fixture mutations.
+That review remains immutable predecessor evidence for the semantic contract.
+
+The subsequent admission-ready simulation found an intersecting evidence-truth
+defect: changing the Property Read gate without changing
+`docs/spec/v5-artifact-carry-forward.toml` leaves the carried SHA-256 stale, so
+the mandatory `v5-authority-reset-candidate-check` rejects the planned
+four-file checkpoint. The correction candidate keeps the reviewed API,
+implementation paths, fixtures, exclusions, and prechecks unchanged. It
+changes the future pre-source checkpoint boundary from four files to five,
+updates the exact candidate topology/checkers, and requires a new independent
+v2 attestation before source admission.
+
 ## Decision and exact scope
 
 Workspace issue 0014 is decided and migrated. The tranche uses one portable
@@ -224,27 +242,40 @@ runtime or source authority.
 
 ## Candidate and independent review
 
-The frozen candidate base is
-`525bb31b42efe299ed36d46acea1a1c4286e8bde`. The gate manifest owns the exact
-candidate paths, implementation paths, contract artifacts, prechecks, audit,
-entry check, completion path, exclusions, and API items.
+The original semantic candidate is
+`4a01b5010729cb42d6e8d51125103c8b5cda8707`, the single child of
+`525bb31b42efe299ed36d46acea1a1c4286e8bde`; its v1 attestation is
+`8a7aa198f5c983be8fbf5ef1a9750c90b5837703`.
 
-The authoring commit must be the single child of that base and must not change
-an implementation path. Before review, the frozen base, exact path set, and
-single-child rule identify that commit without a self-referential
-hash-registration checkpoint. The independent attestation records the
-immutable candidate ref.
+The corrective candidate base is the v1 attestation commit. The gate manifest
+owns its exact seven paths:
 
-The independent reviewer must inspect the registered commit, run every
-precheck and the executable schema, inspect both external authoring forms, and
+- `PLAN.md`;
+- `PROJECT_STATE.md`;
+- this audit;
+- `docs/spec/v5-artifact-carry-forward.toml`;
+- `docs/work-packages/property-read-architecture-gate.toml`;
+- `tools/check-wp200-property-read-plan-slice-entry.sh`; and
+- `tools/design-check/src/main.rs`.
+
+The corrective authoring commit must be the single child of that base and must
+not change an implementation path. Before review, the frozen base, exact path
+set, and single-child rule identify that commit without a self-referential
+hash-registration checkpoint. The independent v2 attestation records the
+immutable corrective candidate ref.
+
+The independent reviewer must inspect the registered corrective commit,
+revalidate the original v1 attestation, run every precheck and the executable
+schema, confirm that the API/fixture/implementation contract is unchanged, and
 mutation-test at least:
 
-- host payload compatibility mismatch;
-- host payload concrete-type mismatch;
-- host cursor concrete-type mismatch;
-- artifact footprint overflow;
-- static enum variant mismatch; and
-- premature source or architecture-fixture creation.
+- omitting `docs/spec/v5-artifact-carry-forward.toml` from the pre-source
+  boundary is rejected;
+- the exact five-file pre-source boundary is accepted when its carried digest
+  matches the gate;
+- premature source or architecture-fixture creation remains rejected; and
+- the original host/static mismatch, footprint, and ownership rejection
+  boundaries remain represented by the frozen v1 evidence.
 
 A later root continuation that did not author this candidate may use
 `reviewer_attestation_kind = "independent-root-session"` and
@@ -252,11 +283,12 @@ A later root continuation that did not author this candidate may use
 `reviewer_attestation_kind = "separate-agent-task"` with its real canonical
 task id.
 
-The attestation commit changes only
-`docs/audits/WP-200-property-read-plan-slice-review.toml`, its artifact
+The v2 attestation commit changes only
+`docs/audits/WP-200-property-read-plan-slice-review-v2.toml`, its artifact
 registry row, and `PROJECT_STATE.md`. The continuation update records the
 reviewed immutable ref and the remaining combined pre-source checkpoint; it is
-not a separate critical-path commit.
+not a separate critical-path commit. The original v1 attestation remains
+registered predecessor evidence.
 
 ## Pre-implementation checks
 
@@ -275,17 +307,20 @@ Before implementation, the completion checker must fail only because
 
 ## Admission and completion
 
-After a passing independent attestation, one combined approval/in-progress
+After a passing independent v2 attestation, one combined approval/in-progress
 checkpoint may change only:
 
 - `PLAN.md`;
 - `PROJECT_STATE.md`;
 - this audit; and
+- `docs/spec/v5-artifact-carry-forward.toml`; and
 - `docs/work-packages/property-read-architecture-gate.toml`.
 
 That single recoverable checkpoint changes the tranche directly from
 `pending`/`review-pending` to `in-progress`/`approved`; no separate approval,
 progress, or admission-hash registration checkpoint is required before source.
+The carry-forward record must contain the exact digest of the changed gate in
+that same checkpoint.
 
 The implementation commit must change exactly the nine registered
 implementation paths. Completion requires:

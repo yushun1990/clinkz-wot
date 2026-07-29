@@ -159,12 +159,18 @@ const PROPERTY_READ_PLAN_SLICE: &str = "WP-200-PROPERTY-READ-PLAN-SLICE";
 const PROPERTY_READ_PLAN_ENTRY_CHECK: &str = "wp200-property-read-plan-slice-entry-check";
 const PROPERTY_READ_PLAN_COMPLETION_CHECK: &str = "wp200-property-read-plan-slice-check";
 const PROPERTY_READ_PLAN_REVIEW_ATTESTATION: &str =
+    "docs/audits/WP-200-property-read-plan-slice-review-v2.toml";
+const PROPERTY_READ_PLAN_V1_REVIEW_ATTESTATION: &str =
     "docs/audits/WP-200-property-read-plan-slice-review.toml";
+const PROPERTY_READ_PLAN_V1_REVIEW_ATTESTATION_REF: &str =
+    "8a7aa198f5c983be8fbf5ef1a9750c90b5837703";
+const PROPERTY_READ_PLAN_V1_CANDIDATE_BASE_REF: &str = "525bb31b42efe299ed36d46acea1a1c4286e8bde";
+const PROPERTY_READ_PLAN_V1_CANDIDATE_REF: &str = "4a01b5010729cb42d6e8d51125103c8b5cda8707";
 const PROPERTY_READ_PLAN_COMPLETION_EVIDENCE: &str =
     "docs/evidence/WP-200-property-read-plan-slice.toml";
 const PROPERTY_READ_PLAN_ADMISSION_REVIEW: &str =
     "docs/audits/WP-200-property-read-plan-slice-entry.md";
-const PROPERTY_READ_PLAN_CANDIDATE_BASE_REF: &str = "525bb31b42efe299ed36d46acea1a1c4286e8bde";
+const PROPERTY_READ_PLAN_CANDIDATE_BASE_REF: &str = PROPERTY_READ_PLAN_V1_REVIEW_ATTESTATION_REF;
 const PROPERTY_READ_PLAN_CANDIDATE_REF_MODE: &str = "resolved-by-review-attestation";
 const PROPERTY_READ_PLAN_API_ITEMS: &[&str] = &[
     "BindingArtifact",
@@ -249,7 +255,7 @@ const PROPERTY_READ_PLAN_CONTRACT_ARTIFACTS: &[&str] = &[
     "tools/design-check/src/main.rs",
     "tools/design-check/tests/wp200_binding_artifact_schema.rs",
 ];
-const PROPERTY_READ_PLAN_CANDIDATE_PATHS: &[&str] = &[
+const PROPERTY_READ_PLAN_V1_CANDIDATE_PATHS: &[&str] = &[
     "PLAN.md",
     "PROJECT_STATE.md",
     "docs/api-ownership.csv",
@@ -275,6 +281,15 @@ const PROPERTY_READ_PLAN_CANDIDATE_PATHS: &[&str] = &[
     "tools/design-check/tests/wp200_binding_artifact_schema.rs",
     "workspace/0014-property-read-plan-artifact-boundary.md",
     "workspace/INDEX.org",
+];
+const PROPERTY_READ_PLAN_CANDIDATE_PATHS: &[&str] = &[
+    "PLAN.md",
+    "PROJECT_STATE.md",
+    "docs/audits/WP-200-property-read-plan-slice-entry.md",
+    "docs/spec/v5-artifact-carry-forward.toml",
+    "docs/work-packages/property-read-architecture-gate.toml",
+    "tools/check-wp200-property-read-plan-slice-entry.sh",
+    "tools/design-check/src/main.rs",
 ];
 const PROPERTY_READ_PLAN_PRECHECKS: &[&str] = &[
     "api-ownership-check",
@@ -3823,6 +3838,30 @@ fn check_property_read_integration_gate(
                     ));
                 }
             }
+
+            if !registered_artifacts.contains(PROPERTY_READ_PLAN_V1_REVIEW_ATTESTATION)
+                || !root
+                    .join(PROPERTY_READ_PLAN_V1_REVIEW_ATTESTATION)
+                    .is_file()
+            {
+                return Err(format!(
+                    "{id} original review attestation is not registered and present"
+                ));
+            }
+            let v1_candidate_paths = owned_set(PROPERTY_READ_PLAN_V1_CANDIDATE_PATHS);
+            check_scoped_review_attestation(
+                root,
+                PROPERTY_READ_PLAN_V1_REVIEW_ATTESTATION,
+                PROPERTY_READ_PLAN_V1_REVIEW_ATTESTATION_REF,
+                &id,
+                PROPERTY_READ_PLAN_PRECHECKS,
+                PROPERTY_READ_PLAN_V1_CANDIDATE_BASE_REF,
+                PROPERTY_READ_PLAN_V1_CANDIDATE_REF,
+                &v1_candidate_paths,
+                "property-read plan original candidate",
+                ACTIVE_AUTHORITY_REVISION,
+                &["PROJECT_STATE.md"],
+            )?;
 
             let candidate_base_ref = string_field(tranche, "candidate_base_ref", &id)?;
             if candidate_base_ref != PROPERTY_READ_PLAN_CANDIDATE_BASE_REF {
@@ -8285,6 +8324,7 @@ fn check_property_read_plan_pre_source_checkpoint_state(
         "PLAN.md",
         "PROJECT_STATE.md",
         PROPERTY_READ_PLAN_ADMISSION_REVIEW,
+        "docs/spec/v5-artifact-carry-forward.toml",
         PROPERTY_READ_GATE_MANIFEST,
     ]);
     let head = git_text(
@@ -8943,6 +8983,7 @@ fn check_property_read_plan_completion_evidence(
         "PLAN.md",
         "PROJECT_STATE.md",
         PROPERTY_READ_PLAN_ADMISSION_REVIEW,
+        "docs/spec/v5-artifact-carry-forward.toml",
         PROPERTY_READ_GATE_MANIFEST,
     ]);
     if pre_source_paths != expected_pre_source_paths {

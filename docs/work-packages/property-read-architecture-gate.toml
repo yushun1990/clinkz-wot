@@ -306,34 +306,16 @@ contract_artifacts = [
     "tools/design-check/src/main.rs",
     "tools/design-check/tests/wp200_binding_artifact_schema.rs",
 ]
-candidate_base_ref = "525bb31b42efe299ed36d46acea1a1c4286e8bde"
+candidate_base_ref = "8a7aa198f5c983be8fbf5ef1a9750c90b5837703"
 candidate_ref = "resolved-by-review-attestation"
 candidate_paths = [
     "PLAN.md",
     "PROJECT_STATE.md",
-    "docs/api-ownership.csv",
-    "docs/architecture/30-compiled-plan-lifecycle.md",
-    "docs/architecture/40-protocol-binding-spi-and-deployment.md",
-    "docs/artifacts.csv",
     "docs/audits/WP-200-property-read-plan-slice-entry.md",
-    "docs/governance.toml",
-    "docs/spec/binding-spi.md",
-    "docs/spec/planning.md",
     "docs/spec/v5-artifact-carry-forward.toml",
-    "docs/work-packages/PROPERTY-READ-ARCHITECTURE.md",
-    "docs/work-packages/WP-200-planning.md",
-    "docs/work-packages/WP-300-bindings.md",
     "docs/work-packages/property-read-architecture-gate.toml",
     "tools/check-wp200-property-read-plan-slice-entry.sh",
-    "tools/check-wp200-property-read-plan-slice.sh",
-    "tools/compile-contracts/wp200-property-read-plan-slice/Cargo.lock",
-    "tools/compile-contracts/wp200-property-read-plan-slice/Cargo.toml",
-    "tools/compile-contracts/wp200-property-read-plan-slice/src/lib.rs",
-    "tools/compile-contracts/wp200-property-read-plan-slice/tests/host.rs",
     "tools/design-check/src/main.rs",
-    "tools/design-check/tests/wp200_binding_artifact_schema.rs",
-    "workspace/0014-property-read-plan-artifact-boundary.md",
-    "workspace/INDEX.org",
 ]
 pre_implementation_checks = [
     "api-ownership-check",
