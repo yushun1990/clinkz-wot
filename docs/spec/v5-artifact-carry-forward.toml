@@ -106,13 +106,13 @@ revalidation = "cargo run --locked --quiet --manifest-path tools/design-check/Ca
 [[artifact]]
 family = "property-read-integration-gate"
 path = "docs/work-packages/property-read-architecture-gate.toml"
-sha256 = "387f75b09a976a71661aedf32384671f186a56f3d55a7f505720c8225ea2410a"
-disposition = "revalidated for the second WP-200 admission-evidence correction; its 21 requirements remain unchanged, the slice remains review-pending, and future gate status changes update this exact digest in the owning five-file pre-source checkpoint"
+sha256 = "6fe1b2e831fba36de13020db1f40b1596b310d947f7d6a54cf8aca4cef48b3ef"
+disposition = "revalidated for the admitted WP-200 Property Read plan slice; its 21 requirements remain unchanged, the slice is in progress, and future gate status changes update this exact digest in the owning checkpoint"
 revalidation = "tools/check-v5-authority-reset-decision.sh"
 
 [[artifact]]
 family = "property-read-integration-gate"
 path = "docs/work-packages/PROPERTY-READ-ARCHITECTURE.md"
 sha256 = "075c1e87e48aa8eb74cfbcd582e20190f65ab8f8b6b578278b4628a06b1fb3e4"
-disposition = "revalidated narrative boundary with completed WP-100, review-pending WP-200, and blocked downstream slice status"
+disposition = "carried-forward unchanged pre-admission narrative snapshot; the mutable WP-200 status is owned by docs/work-packages/property-read-architecture-gate.toml"
 revalidation = "tools/check-v5-authority-reset-decision.sh"

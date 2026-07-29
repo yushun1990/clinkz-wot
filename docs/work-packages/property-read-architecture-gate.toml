@@ -199,8 +199,8 @@ completion_check = "wp100-property-read-handler-slice-check"
 id = "WP-200-PROPERTY-READ-PLAN-SLICE"
 work_package = "WP-200"
 sequence = 210
-status = "pending"
-admission_status = "review-pending"
+status = "in-progress"
+admission_status = "approved"
 depends_on = ["WP-100-PROPERTY-READ-HANDLER-SLICE"]
 requirements = [
     "DOC-RUNTIME-001",
@@ -326,6 +326,8 @@ pre_implementation_checks = [
     "wp100-property-read-handler-slice-check",
 ]
 admission_review = "docs/audits/WP-200-property-read-plan-slice-entry.md"
+review_attestation = "docs/audits/WP-200-property-read-plan-slice-review-v2.toml"
+review_attestation_ref = "4f3bdeff604e30eecfbba9c8c12e6dd0b23cc87f"
 entry_check = "wp200-property-read-plan-slice-entry-check"
 completion_evidence_path = "docs/evidence/WP-200-property-read-plan-slice.toml"
 completion_check = "wp200-property-read-plan-slice-check"

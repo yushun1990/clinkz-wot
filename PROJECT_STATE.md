@@ -34,9 +34,9 @@ The active design revision is v5.0 bounded-core authority.
 - Exact second WP-200 admission-evidence correction candidate:
   `d2dcf2e9d2e19c7c2dfa234f96c5303cc3aee24a`, the exact six-path
   single child of `f453f165c2ea775e5f0d10c36f1e419fcc1d79f3`.
-- Independent WP-200 v2 review passed for that immutable candidate. This
-  checkpoint carries its three-path attestation; the next pre-source
-  checkpoint records this commit's exact identity.
+- Independent WP-200 v2 attestation:
+  `4f3bdeff604e30eecfbba9c8c12e6dd0b23cc87f`, the exact three-path
+  review/registry/continuation checkpoint for that immutable candidate.
 
 The activation candidate changed exactly 27 documentation/checker paths and no
 Rust source, Cargo manifest, public API, or runtime behavior. Its independent
@@ -45,10 +45,9 @@ default workspace tests, diff hygiene, and the 21-cell valid feature matrix.
 
 ## Current Objective
 
-Create the exact five-file `WP-200-PROPERTY-READ-PLAN-SLICE` pre-source
-checkpoint from this v2 attestation, record its commit identity in the gate,
-and pass `--admission-ready`. Do not change product source before that
-checkpoint passes.
+Implement exactly the nine registered
+`WP-200-PROPERTY-READ-PLAN-SLICE` product-source paths after the passing v2
+review and validated five-file pre-source boundary.
 
 D8 is migrated. Its one conversion packet contains:
 
@@ -89,16 +88,17 @@ exclusion, precheck, and five-file checkpoint semantics unchanged while:
    first correction; and
 4. retaining a separate v2 attestation before source admission.
 
-No registered Core/Planning implementation path or cross-package Property Read
-architecture fixture root is admitted.
+Only the nine registered Core/Planning implementation paths are admitted. No
+product source exists yet, and no cross-package Property Read architecture
+fixture root is admitted.
 
 ## Active Milestones
 
 - M0 Execution Baseline and Collaboration Reset — CLOSED.
 - M1 v5.0 Authority Reset and Architecture Closure — IN_PROGRESS.
 - M2 Foundation and Core Contract Stabilization — IN_PROGRESS.
-- M3 Planning and Compilation Pipeline — OPEN; v2 review passed and exact
-  five-file source admission checkpoint pending.
+- M3 Planning and Compilation Pipeline — IN_PROGRESS; the exact WP-200
+  Property Read plan slice is source-admitted.
 
 The v5 authority switch is complete, but M1 remains open because GATE-1,
 GATE-2, GATE-4, GATE-5, and GATE-6 still require their registered closure
@@ -165,7 +165,7 @@ Completed and independently evidenced WP-100 work includes:
 - borrowed `HandlerContext`; and
 - synchronous static `ReadPropertyHandler`.
 
-The planned WP-200 architecture is not implemented:
+The admitted WP-200 architecture is not yet implemented:
 
 - no `clinkz-wot-planning` crate exists;
 - `LogicalInteractionPlan`, `BindingArtifact*`, `BindingCompiler*`,
@@ -237,13 +237,14 @@ Required authoritative consumers:
 - PLAN, workspace lifecycle, artifact registry, and this state checkpoint.
 
 The semantic candidate passed independent v1 review, and the exact second
-evidence-boundary correction passed independent v2 review. Admission remains
-blocked only by the corrected five-file pre-source checkpoint. The
-representation and package ownership decisions are not reopened.
+evidence-boundary correction passed independent v2 review. The corrected
+five-file pre-source checkpoint passes admission, so implementation proceeds
+only through the exact nine registered paths. The representation and package
+ownership decisions are not reopened.
 
 ### WP-200 admission evidence boundary
 
-Status: V2 REVIEW PASSED; FIVE-FILE PRE-SOURCE CHECKPOINT PENDING.
+Status: IMPLEMENTATION ADMITTED; EXACT NINE-PATH SOURCE COMMIT PENDING.
 
 The attempted command
 `tools/check-wp200-property-read-plan-slice-entry.sh --admission-ready`
@@ -275,8 +276,10 @@ second correction changes only:
 
 Independent root review passed exact candidate
 `d2dcf2e9d2e19c7c2dfa234f96c5303cc3aee24a` and records
-`docs/audits/WP-200-property-read-plan-slice-review-v2.toml` in this
-three-path checkpoint.
+`docs/audits/WP-200-property-read-plan-slice-review-v2.toml` at exact
+three-path checkpoint `4f3bdeff604e30eecfbba9c8c12e6dd0b23cc87f`.
+The current five-file checkpoint changes the tranche directly to
+`in-progress`/`approved` with the matching carried gate digest.
 
 ### Disjoint downstream blockers
 
@@ -422,19 +425,21 @@ manifest and introducing an out-of-scope implementation path were both
 rejected. Those transition simulations were temporary review mutations and
 are not repository evidence commits.
 
+The real five-file pre-source checkpoint from attestation
+`4f3bdeff604e30eecfbba9c8c12e6dd0b23cc87f` also passes
+`tools/check-wp200-property-read-plan-slice-entry.sh --admission-ready` with no
+product source present. Its gate and carried SHA-256 change atomically.
+
 The intentionally invalid all-features combination enables mutually exclusive
 Zenoh backends. Use `scripts/check-feature-matrix.sh`, not
 `cargo test --all-features`, as the supported feature baseline.
 
 ## Next Safe Actions
 
-1. From this v2 attestation, record one exact five-file
-   `pending`/`review-pending` to `in-progress`/`approved` checkpoint with the
-   gate's matching carried digest, then run `--admission-ready`.
-2. Only then implement exactly the nine registered WP-200 paths, run the
+1. Implement exactly the nine registered WP-200 paths, run the
    completion checker and supported feature cells, and register completion
    evidence without advancing WP-300, WP-400, or the aggregate gate.
-3. Before any remote source integration, obtain a successful
+2. Before any remote source integration, obtain a successful
    `mainline / validation` workflow result. Requiring that status through
    GitHub branch protection remains the sole unmigrated part of issue 0023.
 

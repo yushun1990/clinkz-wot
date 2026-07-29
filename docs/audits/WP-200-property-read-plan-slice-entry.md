@@ -1,12 +1,17 @@
 # WP-200 Property-Read Plan Slice Entry Audit
 
-Status: Review pending
+Status: Passed
 
 Design revision: v5.0
 
 Admission scope: `WP-200-PROPERTY-READ-PLAN-SLICE`
 
-Verdict: Candidate ready for independent review
+Verdict: Implementation-ready
+
+Independent v2 review at
+`4f3bdeff604e30eecfbba9c8c12e6dd0b23cc87f` confirmed exact corrective
+candidate `d2dcf2e9d2e19c7c2dfa234f96c5303cc3aee24a` and the complete
+pre-source transition.
 
 Independent root review at
 `8a7aa198f5c983be8fbf5ef1a9750c90b5837703` confirmed exact candidate
@@ -30,7 +35,8 @@ aggregate baselines, then rejected its required exact-five-file mutation. Once
 the digest matched, `check-work-packages` required
 `core/src/binding_compiler.rs` in the approved `in-progress` pre-source state,
 even though the registered topology requires the nine-path implementation
-commit to follow that checkpoint. No v2 attestation was created.
+commit to follow that checkpoint. No v2 attestation was created for that
+failed correction.
 
 The second correction keeps the reviewed API, implementation paths, fixtures,
 exclusions, prechecks, and five-file checkpoint unchanged. It preserves the
