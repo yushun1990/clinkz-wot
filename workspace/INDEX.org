@@ -27,6 +27,17 @@ Topics are retained after migration as decision history.
 ** OPEN
 
 - [[file:0030-automatic-pull-request-integration.md][0030 Automatic Pull Request Integration]]
+- [[file:0031-end-to-end-architecture-feedback-latency.md][0031 End-to-End Architecture Feedback Latency]]
+- [[file:0032-production-binding-authoring-complexity.md][0032 Production Binding Authoring Complexity]]
+- [[file:0033-servient-orchestration-concentration.md][0033 Servient Orchestration Concentration]]
+- [[file:0034-multi-route-serving-availability.md][0034 Multi-Route Serving Availability]]
+- [[file:0035-cleanup-protocol-implementability.md][0035 Cleanup Protocol Implementability]]
+- [[file:0036-host-constrained-semantic-parity.md][0036 Host and Constrained Semantic Parity]]
+- [[file:0037-resource-configuration-surface-growth.md][0037 Resource Configuration Surface Growth]]
+- [[file:0038-startup-only-binding-deployment-experience.md][0038 Startup-Only Binding Deployment Experience]]
+- [[file:0039-candidate-fallback-availability-semantics.md][0039 Candidate Fallback Availability Semantics]]
+- [[file:0040-repository-truth-synchronization.md][0040 Repository Truth Synchronization]]
+- [[file:0041-target-legacy-coexistence-verification.md][0041 Target and Legacy Coexistence Verification]]
 
 ** DISCUSSING
 
