@@ -26,7 +26,7 @@ Topics are retained after migration as decision history.
 
 ** OPEN
 
-- None.
+- [[file:0030-automatic-pull-request-integration.md][0030 Automatic Pull Request Integration]]
 
 ** DISCUSSING
 
