@@ -55,6 +55,11 @@ The active design revision is v5.0 bounded-core authority.
   registered candidate paths and retains
   `candidate_ref = "register-after-candidate-commit"` so the commit does not
   attempt to contain its own object id.
+- Independent WP-300 candidate review: passed on 2026-07-30 with no
+  intersecting finding. The task-tip attestation checkpoint adds exactly
+  `docs/artifacts.csv` and
+  `docs/audits/WP-300-property-read-binding-slice-review.toml`; resolve its
+  generated commit id from the latter path's introducing commit.
 
 The activation candidate changed exactly 27 documentation/checker paths and no
 Rust source, Cargo manifest, public API, or runtime behavior. Its independent
@@ -63,11 +68,13 @@ default workspace tests, diff hygiene, and the 21-cell valid feature matrix.
 
 ## Current Objective
 
-Obtain an independent scoped review of the immutable
-`WP-300-PROPERTY-READ-BINDING-SLICE` candidate, including mutation tests and
-simulation of the exact five-file combined pre-source checkpoint and exact
-two-path implementation child. Do not edit WP-300 product source before that
-review and checkpoint pass.
+Publish the passed independent scoped review of immutable candidate
+`e31b975b329fa147bbccf71e5bc6be4254902d89` through the draft pull request for
+`codex/wp300-property-read-admission`, then await remote review and integration
+before the dependent pre-source admission task. Product source remains
+unadmitted: the next repository transition is the exact five-file combined
+pre-source checkpoint, followed by an implementation child limited to
+`core/src/binding.rs` and `core/src/lib.rs`.
 
 The narrow WP-200 plan slice is complete. Its handoff to WP-300 contains:
 
@@ -93,7 +100,8 @@ Workspace issues 0025-0029 are decided and migrated. They establish a finite
 Producer Property Read slice, two distinct downstream release events, strict
 no-backflow into legacy selection, explicit global-gate impact mapping, and
 reuse of the existing immutable candidate/transition machinery. Independent
-candidate review is now the next critical-path action.
+candidate review is complete; remote task review is the handoff boundary
+before the exact pre-source checkpoint.
 
 ## Active Milestones
 
@@ -539,6 +547,29 @@ Author-side WP-300 candidate validation on 2026-07-30 passes:
 - `sh scripts/check-feature-matrix.sh` — 21 passed and 0 failed; and
 - exact single-parent/20-path topology plus diff hygiene.
 
+Independent root-session review of exact candidate
+`e31b975b329fa147bbccf71e5bc6be4254902d89` on 2026-07-30 passed:
+
+- exact single-parent/20-path reconstruction and diff hygiene;
+- `tools/check-wp300-property-read-binding-slice-entry.sh --candidate`,
+  including all eight registered prechecks, five lifecycle-schema tests, and
+  the expected absent-source completion boundary;
+- mutation rejection for compiler/server compatibility mismatch, zero-budget
+  progress, response-input loss, permit lifetime escape, rejected cleanup
+  handoff, premature product source, and premature cross-package fixture roots;
+- exact two-path review-attestation topology;
+- an exact five-file combined pre-source simulation that passed
+  `--admission-ready`;
+- an exact `core/src/binding.rs` plus `core/src/lib.rs` implementation-child
+  topology accepted by the work-package checker; and
+- a simulated passed completion record rejected by the real external
+  authoring compile contract while the implementation was incomplete.
+
+The transition and mutation changes existed only in an isolated review
+worktree. No simulated product source, admission state, or completion evidence
+was retained. The aggregate design-artifact suite, locked workspace tests, and
+21-cell feature matrix also pass on the review branch.
+
 The static and host compile contracts deliberately do not compile against
 product source before admission; the completion checker owns their three-cell
 compile/runtime validation after the exact two-path implementation child.
@@ -549,16 +580,15 @@ Zenoh backends. Use `scripts/check-feature-matrix.sh`, not
 
 ## Next Safe Actions
 
-1. Independently review the immutable WP-300 candidate, run all eight
-   registered prechecks and the five-test lifecycle schema, mutation-test the
-   negative boundaries listed in its audit, and simulate its exact pre-source,
-   implementation, and completion-evidence transitions before attestation.
-2. Only after that attestation, create and validate the exact five-file
-   combined pre-source checkpoint. Product implementation may then touch only
-   `core/src/binding.rs` and `core/src/lib.rs`.
-3. Keep remote source integration on pull requests targeting `master`; active
+1. Complete the automatic remote handoff for
+   `codex/wp300-property-read-admission`: push the task-tip attestation and
+   expose one draft pull request targeting `master`.
+2. After Owner remote review and pull-request integration, create and validate
+   the exact five-file combined pre-source checkpoint. Product implementation
+   may then touch only `core/src/binding.rs` and `core/src/lib.rs`.
+3. Keep all source integration on pull requests targeting `master`; active
    Ruleset `20009352` requires the GitHub Actions `validation` job before
-   merge.
+   merge. Do not merge automatically.
 
 Ask the Project Owner only if the investigation reaches a product-goal,
 real-world constraint, unacceptable direction, or irreversible external
