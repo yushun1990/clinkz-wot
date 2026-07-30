@@ -68,6 +68,10 @@ The active design revision is v5.0 bounded-core authority.
   request #2 and introduced workspace topics 0030-0041. The current correction
   branch `agent/decide-workspace-topics` starts from that default-branch
   checkpoint.
+- Draft pull request #3
+  (`https://github.com/yushun1990/clinkz-wot/pull/3`) is the remote handoff for
+  that correction branch. It remains draft with auto-merge disabled pending
+  independent review, current remote validation, and the D23 prerequisites.
 
 The activation candidate changed exactly 27 documentation/checker paths and no
 Rust source, Cargo manifest, public API, or runtime behavior. Its independent
@@ -76,11 +80,12 @@ default workspace tests, diff hygiene, and the 21-cell valid feature matrix.
 
 ## Current Objective
 
-Finish and remotely hand off the decision/migration and evidence-topology
-correction packet for workspace topics 0030-0041. The technical decisions are
-migrated to governance, ADR/specification, architecture, work-package, plan,
-and continuation owners. The packet also corrects WP-300 admission validation:
-immutable semantic review evidence remains bound to
+Obtain independent review and integration for the decision/migration and
+evidence-topology correction packet handed off as draft pull request #3. The
+technical decisions for workspace topics 0030-0041 are migrated to governance,
+ADR/specification, architecture, work-package, plan, and continuation owners.
+The packet also corrects WP-300 admission validation: immutable semantic review
+evidence remains bound to
 `d5169ba34ad846b2d45d0841b5d57210ee4df0c1`, while the later reviewed and
 integrated default-branch commit is recorded separately as
 `admission_base_ref`.
