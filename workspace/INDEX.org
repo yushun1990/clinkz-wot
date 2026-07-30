@@ -26,7 +26,7 @@ Topics are retained after migration as decision history.
 
 ** OPEN
 
-- None.
+- [[file:0042-protocol-binding-spi-validation-risk.md][0042 Protocol Binding SPI Validation and Freeze Risk]]
 
 ** DISCUSSING
 
