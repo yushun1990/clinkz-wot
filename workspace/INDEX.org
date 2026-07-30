@@ -26,7 +26,11 @@ Topics are retained after migration as decision history.
 
 ** OPEN
 
-- None.
+- [[file:0025-wp300-property-read-slice-scope.md][0025 WP-300 Property Read Slice Scope]]
+- [[file:0026-wp300-critical-path-concentration.md][0026 WP-300 Critical-Path Concentration]]
+- [[file:0027-legacy-migration-boundary-leakage.md][0027 Legacy Migration Boundary Leakage]]
+- [[file:0028-global-gates-and-scoped-implementation.md][0028 Global Gates and Scoped Implementation]]
+- [[file:0029-wp300-admission-machinery-regression.md][0029 WP-300 Admission Machinery Regression]]
 
 ** DISCUSSING
 
