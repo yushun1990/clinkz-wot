@@ -93,11 +93,11 @@ route or response calls. The tranche has no performance-workload completion
 claim; it freezes and tests deterministic resource/footprint behavior while
 the broad package retains its registered GATE-5 workloads.
 
-The public complete-bundle and server interfaces may expose optional-operation
-methods required for forward compatibility. An unadvertised client,
-subscription, publication, collection, or contribution capability must use a
-bounded default adapter that returns the complete input before state creation
-or side effects. Interface presence does not admit or complete those behaviors.
+The narrow public bundle and server interfaces omit inactive client,
+subscription, publication, collection, contribution, and emission families.
+Broad WP-300 may add bounded default rejection adapters only after the owning
+domain-entry review. Retained API-inventory names do not authorize those
+behaviors in this slice.
 
 The tranche excludes:
 
@@ -118,6 +118,15 @@ must not depend on or call the legacy
 request through legacy `ServerBinding::serve`, `Dispatch`, or handler lookup.
 Legacy selector and execution paths remain separate legacy generations until
 their WP-600/WP-700 removal checkpoints.
+
+Rust method overloading cannot preserve the legacy
+`ServerBinding::shutdown(&ThingId)` and add target
+`shutdown(RouteShutdownInput)` to the same trait. The narrow target therefore
+uses the uniquely named `RouteServerBinding`, `RouteInboundRequest`,
+`RouteResponseOpportunity`, and `RouteInboundResponse` types in
+`core/src/binding.rs`. Existing `core/src/inbound.rs` values remain the legacy
+generation and are not edited by this tranche. WP-700 removes the old exports;
+there is no alias or conversion from a target request to a legacy request.
 
 AR-002 and AR-003 close for this tranche when its immutable candidate contains
 the exact signatures, API and source scope, both readiness shapes, both public
@@ -210,7 +219,7 @@ Implement the frozen shared binding surface:
   associated states, `ServerResponseSlot<B::ResponseState>`, and
   `BindingEmissionSlot<B::EmissionState>`; a committed route slot records
   `CommittedClosed` and `poll_accept` requires a borrowed `RouteActivationPermit<'_>`;
-- host execution components: `ServerBinding`, `HostPreparedRouteGuard`,
+- host execution components: narrow `RouteServerBinding`, `HostPreparedRouteGuard`,
   `HostActiveRouteGuard`, `HostCommittedRouteGuard`, `HostShutdownRouteGuard`,
   `RouteCommitOutcome<A, C>`, `RouteCleanupSuccessor<P, A, C>`,
   `HostRouteCleanupSuccessor`, route-scoped `RouteAcceptEvent`, `BindingCallFootprint`,
@@ -222,12 +231,15 @@ Implement the frozen shared binding surface:
   `RouteAcceptClaimError`; and the non-`Clone`, non-`Copy`, lifetime-bound
   `RouteActivationPermit<'a>` created only by consuming that claim. None exposes
   a registry view or application dispatch capability;
+- recoverable author inputs: `HostBindingRegistrationInput` and
+  `StaticBindingRegistrationInput<B>`; validation rejection returns the
+  complete input before publication or protocol side effects;
 - installable units: `HostBindingRegistration` and
   `StaticBindingRegistration<B>`, each carrying compiler, execution,
   contribution, footprint, ingress, status, overflow, readiness, reactor,
   cleanup, capability, and profile-cell metadata as one validated startup
-  bundle. Their constructors consume the matching WP-200 compiler component;
-  no API installs that component by itself.
+  bundle. Their constructors consume the input and its matching WP-200
+  compiler component; no API installs that component by itself.
 - Host and static complete registrations expose the same exact
   `try_with_collection_subscription_capability` and
   `collection_subscription_capability` methods, keyed only by
@@ -341,10 +353,14 @@ contributor metadata; a bare trait object is never the configuration contract.
 
 ## Old API Removal
 
-- Replace the current `core/src/inbound.rs::ServerBinding` methods with the frozen
-  route-scoped prepare/readiness/activate/commit/accept/abort/shutdown contract and the server
-  component inside a complete registration bundle. Remove any registration-wide acceptance and
-  any cleanup path whose only completion signal is guard drop or an unstructured outer error.
+- Add the frozen route-scoped
+  prepare/readiness/activate/commit/accept/abort/shutdown contract as
+  `core/src/binding.rs::RouteServerBinding` inside a complete registration
+  bundle. Keep the current `core/src/inbound.rs::ServerBinding` confined to the
+  legacy generation until WP-400/WP-600 migrate its consumers; WP-700 removes
+  its export. Remove any registration-wide acceptance and any cleanup path
+  whose only completion signal is guard drop or an unstructured outer error
+  at that owning removal checkpoint.
 - Remove any successful `RouteCommitOutcome::Serving` branch, any `poll_accept` overload that
   accepts an active guard or omits `RouteActivationPermit<'_>`, every per-route `open_gate` or
   `release_gate` callback, and every binding view of Servient registry state. Successful commit

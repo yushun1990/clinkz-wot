@@ -161,3 +161,11 @@ tools/compile-contracts/wp200-property-read-plan-slice/tests/host.rs,wp-200-prop
 tools/design-check/tests/wp200_binding_artifact_schema.rs,wp-200-binding-artifact-executable-schema,non-normative-compile-fixture,5.0,1,docs/spec/planning.md
 docs/audits/WP-200-property-read-plan-slice-review-v2.toml,wp-200-property-read-plan-slice-review-v2-attestation,non-normative-review,5.0,1,docs/spec/planning.md
 docs/evidence/WP-200-property-read-plan-slice.toml,wp-200-property-read-plan-slice-completion-evidence,non-normative,5.0,1,docs/spec/planning.md
+docs/audits/WP-300-property-read-binding-slice-entry.md,wp-300-property-read-binding-slice-entry-review,non-normative-review,5.0,1,docs/spec/binding-spi.md
+tools/check-wp300-property-read-binding-slice-entry.sh,wp-300-property-read-binding-slice-entry-checker,non-normative-checker,5.0,1,docs/spec/binding-spi.md
+tools/check-wp300-property-read-binding-slice.sh,wp-300-property-read-binding-slice-checker,non-normative-checker,5.0,1,docs/spec/binding-spi.md
+tools/compile-contracts/wp300-property-read-binding-slice/Cargo.toml,wp-300-property-read-binding-slice-contract-manifest,non-normative-compile-fixture,5.0,1,docs/spec/binding-spi.md
+tools/compile-contracts/wp300-property-read-binding-slice/Cargo.lock,wp-300-property-read-binding-slice-contract-lock,non-normative-compile-fixture,5.0,1,docs/spec/binding-spi.md
+tools/compile-contracts/wp300-property-read-binding-slice/src/lib.rs,wp-300-property-read-binding-slice-static-contract,non-normative-compile-fixture,5.0,1,docs/spec/binding-spi.md
+tools/compile-contracts/wp300-property-read-binding-slice/tests/host.rs,wp-300-property-read-binding-slice-host-contract,non-normative-compile-fixture,5.0,1,docs/spec/binding-spi.md
+tools/design-check/tests/wp300_property_read_binding_schema.rs,wp-300-property-read-binding-executable-schema,non-normative-compile-fixture,5.0,1,docs/spec/binding-spi.md

@@ -196,6 +196,13 @@ adapter that sends a target artifact back through legacy selection.
 - WP-700 proves that the public selector family and every named lifecycle,
   handler, subscription, and publication compatibility edge are absent.
 
+The source boundary is also a Rust type boundary. Narrow WP-300 defines
+`RouteServerBinding`, `RouteInboundRequest`, `RouteResponseOpportunity`, and
+`RouteInboundResponse` in `core/src/binding.rs`; it does not overload or mutate
+the legacy names in `core/src/inbound.rs`. No conversion from a target request
+to the legacy request type exists. WP-700 removes the legacy root exports after
+WP-400 and WP-600 have migrated their owners.
+
 The one positive cross-generation compatibility path is the named legacy
 handler-publication to `ProducerEmission` adapter. It is one-way, preserves all
 generation and ownership identities, accepts no new callers after WP-300, and

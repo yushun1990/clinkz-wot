@@ -76,12 +76,13 @@ The repository evidence establishes the following starting point:
   fixtures, bounded progress, owned output, predecessor regressions, aggregate
   design check, locked workspace tests, and 21-cell feature matrix pass; no
   cross-package architecture fixture root was created;
-- the exact WP-300 Property Read slice now has a complete planner dependency
-  and a finite migrated scope. It remains blocked before admission until the
-  exact candidate, host/constrained authoring fixtures, executable lifecycle
-  schema, transition check, and independent review are complete. The aggregate
-  Property Read gate remains blocked; D4 has resolved subscription receiver
-  ownership;
+- the exact WP-300 Property Read slice now has a complete planner dependency,
+  a finite migrated scope, and an exact non-product-source candidate with
+  paired host/static authoring contracts, executable lifecycle schema, entry
+  check, and completion boundary. It is `pending`/`review-pending`; product
+  source remains blocked until independent review and the exact combined
+  pre-source checkpoint. The aggregate Property Read gate remains blocked;
+  D4 has resolved subscription receiver ownership;
 - WP-400, WP-500, and WP-600 remain downstream of WP-300, and WP-700 joins
   those three branches;
 - default workspace tests, the 21-cell valid feature matrix, and the aggregate
@@ -152,9 +153,10 @@ integration remain downstream work.
 
 D5 preserves package completion order but adds a cross-package integration
 dependency in the registered work-package DAG. The WP-100 handler and WP-200
-plan slices are complete, while the WP-300 and WP-400 slices remain planned
-and blocked until their own exact candidates receive independent ADR-0013
-review. Broad
+plan slices are complete. WP-300 is `pending`/`review-pending` at its exact
+non-product-source candidate, and WP-400 remains planned/blocked; neither may
+enter its source scope until its own exact candidate receives independent
+ADR-0013 review. Broad
 `WP-100-HANDLER-ENTRY`, `WP-300-BROAD-ENTRY`, and `WP-400-BROAD-ENTRY` remain
 blocked until the gate passes. The gate exception does not claim final
 `InteractionInput` storage, `AcceptHint` resource admission,
@@ -283,9 +285,9 @@ Current progress: v5.0 authority is active with 62 exact single owners, 59
 inactive dispositions, explicit machine-artifact and completed-evidence
 carry-forward manifests, active-only gate requirement sets, and an immutable
 review/activation chain. Architecture closure remains open on the registered
-global gates; the executable critical path now proceeds to an exact
-`WP-300-PROPERTY-READ-BINDING-SLICE` admission candidate after WP-200 plan
-slice completion.
+global gates; the executable critical path now proceeds to independent review
+of the exact `WP-300-PROPERTY-READ-BINDING-SLICE` candidate after WP-200
+plan-slice completion.
 
 AI deliverable:
 
@@ -434,9 +436,12 @@ Entry conditions:
   `WP-300-PROPERTY-READ-BINDING-SLICE` may seek independent admission after
   its exact planner-slice dependency completes even while the remaining WP-200
   package is incomplete;
-- exact complete-registration, compiler, route, cancellation, response,
-  subscription, emission, and constrained-progress signatures are frozen;
-- independent host and `no_std + alloc` binding-authoring fixtures pass;
+- for the narrow Property Read tranche, exact complete-registration, compiler,
+  route, cancellation, response, cleanup-transfer, and constrained-progress
+  signatures are frozen; subscription, emission, client, form, collection,
+  Servient, and production-protocol behavior remain excluded;
+- independent host and `no_std + alloc` binding-authoring contracts and the
+  executable lifecycle schema are present in the immutable candidate;
 - the exact tranche is admitted.
 
 AI deliverable:

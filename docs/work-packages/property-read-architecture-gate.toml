@@ -336,22 +336,39 @@ completion_check = "wp200-property-read-plan-slice-check"
 id = "WP-300-PROPERTY-READ-BINDING-SLICE"
 work_package = "WP-300"
 sequence = 310
-status = "planned"
-admission_status = "blocked"
+status = "pending"
+admission_status = "review-pending"
 depends_on = ["WP-200-PROPERTY-READ-PLAN-SLICE"]
 requirements = [
+    "PLAN-ARTIFACT-001",
     "API-PAYLOAD-001",
     "BIND-REG-001",
     "BIND-ROUTE-001",
+    "BIND-STORAGE-001",
     "BIND-DELIVERY-001",
     "BIND-IO-001",
     "BIND-MEM-001",
+    "BIND-CALL-CANCEL-001",
+    "BIND-HOST-CANCEL-001",
+    "LIFE-EXPOSE-002",
+    "LIFE-EXPOSE-003",
     "STATE-BIND-001",
     "STATE-INFLIGHT-001",
     "CLEANUP-RECORD-001",
     "API-RESOURCE-001",
+    "CONSTRAINED-STORAGE-001",
+    "CONSTRAINED-STORAGE-002",
+    "CONSTRAINED-PROGRESS-001",
+    "CONSTRAINED-WORK-001",
+    "CONSTRAINED-OWN-001",
+    "RES-LIMIT-001",
+    "ERR-TAXONOMY-001",
+    "ERR-RETRY-001",
+    "ADMIT-MEM-001",
+    "CAP-OVERFLOW-001",
+    "HOST-ASYNC-001",
 ]
-owner_packages = ["clinkz-wot-core", "workspace"]
+owner_packages = ["clinkz-wot-core"]
 feature_cells = ["no-default", "async-no-std", "std"]
 authoritative_artifacts = [
     "docs/architecture/40-protocol-binding-spi-and-deployment.md",
@@ -363,9 +380,184 @@ authoritative_artifacts = [
 completion_evidence_keys = ["property-read-binding-slice"]
 blocking_conditions = [
     "plan-slice-complete",
-    "registration-route-accept-response-and-cleanup-signatures-reviewed",
-    "host-and-manual-mock-binding-authoring-fixtures-defined",
+    "property-read-binding-candidate-independently-reviewed",
+    "host-and-static-authoring-contracts-and-next-state-validated",
 ]
+api_items = [
+    "BindingCallSettlement",
+    "BindingCancellationDisposition",
+    "BindingDeliveryOutcome",
+    "BindingExecutionSupport",
+    "BindingIngressLimits",
+    "BindingIngressPolicy",
+    "BindingInputRejection",
+    "BindingLifetimeFootprint",
+    "BindingOperationalError",
+    "BindingRegistrationCapabilities",
+    "BindingRegistrationIdentity",
+    "BindingResourceDeclarations",
+    "BindingStateLayout",
+    "BindingStatusPolicy",
+    "BindingTransientFootprint",
+    "CleanupPhaseContext",
+    "CleanupReservation",
+    "CleanupTransferAcceptance",
+    "CleanupTransferEnvelope",
+    "CleanupTransferRequest",
+    "CleanupTransferTarget",
+    "CollisionDomainId",
+    "EndpointReservationKey",
+    "HostActiveRouteGuard",
+    "HostBindingCall",
+    "HostBindingCallBox",
+    "HostBindingRegistration",
+    "HostBindingRegistrationInput",
+    "HostCommittedRouteGuard",
+    "HostPreparedRouteGuard",
+    "HostRouteCleanupSuccessor",
+    "HostShutdownRouteGuard",
+    "NoCleanupSuccessor",
+    "PollServerBinding",
+    "PrepareInput",
+    "RouteAbortInput",
+    "RouteAcceptClaim",
+    "RouteAcceptClaimError",
+    "RouteAcceptEvent",
+    "RouteAcceptLease",
+    "RouteActivationOutcome",
+    "RouteActivationPermit",
+    "RouteCleanupOutcome",
+    "RouteCleanupSuccessor",
+    "RouteCommitOutcome",
+    "RoutePreparationVisibility",
+    "RouteInboundRequest",
+    "RouteInboundResponse",
+    "RoutePrepareOutcome",
+    "RouteReadinessOutcome",
+    "RouteReadinessSlot",
+    "RouteReservationIdentity",
+    "RouteResponseOpportunity",
+    "RouteShutdownInput",
+    "RouteTerminal",
+    "RouteServerBinding",
+    "ServerResponseSlot",
+    "ServerRouteSlot",
+    "ServingActivationAuthority",
+    "StaticBindingRegistration",
+    "StaticBindingRegistrationInput",
+]
+reused_api_items = [
+    "AffordanceTarget",
+    "BindingArtifactCompatibility",
+    "BindingArtifactEnvelope",
+    "BindingCompilerExtension",
+    "BindingConfigurationDigest",
+    "BindingGeneration",
+    "BindingId",
+    "CleanupOperation",
+    "CleanupOutcome",
+    "CleanupRecord",
+    "CoreError",
+    "CoreResult",
+    "CorrelationId",
+    "Deadline",
+    "ErrorContext",
+    "ErrorPhase",
+    "Generation",
+    "HostBindingCompilerRegistration",
+    "InteractionInput",
+    "InteractionOutput",
+    "LogicalInteractionPlan",
+    "Operation",
+    "Payload",
+    "PlanId",
+    "PlanSetGeneration",
+    "RetryClass",
+    "SlotIndex",
+    "StartStatus",
+    "StaticBindingCompilerRegistration",
+    "ThingId",
+    "WorkBudget",
+    "WorkClass",
+]
+implementation_paths = [
+    "core/src/binding.rs",
+    "core/src/lib.rs",
+]
+excluded_claims = [
+    "broad-cancellation-and-race-matrix",
+    "broad-old-api-removal",
+    "client-invoke-and-subscribe",
+    "collection-and-form-contribution",
+    "cross-package-property-read-architecture",
+    "legacy-selector-and-dispatch-adapter",
+    "multi-route-fairness-and-workloads",
+    "producer-emission-and-publication",
+    "production-protocol-and-zenoh",
+    "runtime-td-or-form-selection",
+    "servient-registry-publication-and-dispatch",
+    "subscription-driver-and-delivery",
+]
+risk_category = "C"
+impact_status = "current"
+state_machines = [
+    "active-route-acceptance",
+    "binding-call-cleanup-transfer",
+    "binding-route-lifecycle",
+    "binding-route-readiness",
+    "response-delivery-ownership",
+]
+old_api_removals = []
+performance_workloads = []
+contract_artifacts = [
+    "tools/check-wp300-property-read-binding-slice-entry.sh",
+    "tools/check-wp300-property-read-binding-slice.sh",
+    "tools/compile-contracts/wp300-property-read-binding-slice/Cargo.lock",
+    "tools/compile-contracts/wp300-property-read-binding-slice/Cargo.toml",
+    "tools/compile-contracts/wp300-property-read-binding-slice/src/lib.rs",
+    "tools/compile-contracts/wp300-property-read-binding-slice/tests/host.rs",
+    "tools/design-check/Cargo.toml",
+    "tools/design-check/src/main.rs",
+    "tools/design-check/tests/wp300_property_read_binding_schema.rs",
+]
+candidate_base_ref = "d8ed500ddba85997d380adc5071818a90150858b"
+candidate_ref = "register-after-candidate-commit"
+candidate_paths = [
+    "PLAN.md",
+    "PROJECT_STATE.md",
+    "docs/api-ownership.csv",
+    "docs/architecture/40-protocol-binding-spi-and-deployment.md",
+    "docs/artifacts.csv",
+    "docs/audits/WP-300-property-read-binding-slice-entry.md",
+    "docs/governance.toml",
+    "docs/spec/binding-spi.md",
+    "docs/spec/v5-artifact-carry-forward.toml",
+    "docs/work-packages/property-read-architecture-gate.toml",
+    "docs/work-packages/WP-300-bindings.md",
+    "docs/work-packages/WP-700-integration.md",
+    "tools/check-wp300-property-read-binding-slice-entry.sh",
+    "tools/check-wp300-property-read-binding-slice.sh",
+    "tools/compile-contracts/wp300-property-read-binding-slice/Cargo.lock",
+    "tools/compile-contracts/wp300-property-read-binding-slice/Cargo.toml",
+    "tools/compile-contracts/wp300-property-read-binding-slice/src/lib.rs",
+    "tools/compile-contracts/wp300-property-read-binding-slice/tests/host.rs",
+    "tools/design-check/src/main.rs",
+    "tools/design-check/tests/wp300_property_read_binding_schema.rs",
+]
+pre_implementation_checks = [
+    "api-ownership-check",
+    "architecture-adr-check",
+    "design-requirement-check",
+    "resource-profile-check",
+    "state-machine-check",
+    "v5-authority-reset-candidate-check",
+    "work-package-dag-check",
+    "wp200-property-read-plan-slice-check",
+]
+admission_review = "docs/audits/WP-300-property-read-binding-slice-entry.md"
+entry_check = "wp300-property-read-binding-slice-entry-check"
+completion_evidence_path = "docs/evidence/WP-300-property-read-binding-slice.toml"
+completion_check = "wp300-property-read-binding-slice-check"
 
 [[tranche]]
 id = "WP-400-PROPERTY-READ-SERVIENT-SLICE"

@@ -69,7 +69,7 @@ the returned call. Constructor rejection certifies that no protocol resource or
 cleanup obligation escaped. Once accepted, an operational error cannot certify
 an empty cleanup obligation unless the call has actually settled it.
 
-`BIND-IO-001`: `InboundRequest` and `InboundResponse` MUST own their route,
+`BIND-IO-001`: `RouteInboundRequest` and `RouteInboundResponse` MUST own their route,
 binding and route generations, correlation identity, plan identity, payload,
 media/status metadata, and transport-authentication material across every SPI
 call. A live correlation id is unique within one route generation. A binding
@@ -245,8 +245,8 @@ The tranche requires these behavior families:
   activate, commit-to-closed, abort, and shutdown;
 - one route-scoped `poll_accept` under a fresh borrowed
   `RouteActivationPermit<'_>`;
-- one generation-bearing Property Read `InboundRequest`;
-- one owned response opportunity and `InboundResponse`, with the complete
+- one generation-bearing Property Read `RouteInboundRequest`;
+- one owned `RouteResponseOpportunity` and `RouteInboundResponse`, with the complete
   response returned on pre-acceptance rejection; and
 - explicit terminal route and response cleanup in host-erased and
   application-static forms.
@@ -287,6 +287,307 @@ legacy `clinkz-wot-protocol-bindings` form-selection surface, rescan a TD, or
 reinterpret a selected form. A target-generation accepted request cannot enter
 legacy `ServerBinding::serve`, `Dispatch`, or binding-owned handler lookup.
 
+### Exact active Property Read authoring surface
+
+The narrow tranche does not activate the retained client, subscription,
+publication, emission, or form-contribution APIs. In particular,
+`B::EmissionState`, `BindingPublication`, `BindingEmissionSlot`, and
+`RouteServerBinding::publish` remain inactive domain-entry input and are not
+implemented by this slice. The complete bundle is complete for the one role it
+advertises; it is not required to contain empty implementations of inactive
+roles.
+
+The two installable representations have these exact narrow input and bundle
+constructors. `BindingExecutionSupport` declares only Producer Property Read
+server execution. The input constructors are infallible ownership assembly.
+The bundle constructors consume that complete input, compare the identity,
+compiler, and server artifact-compatibility values, validate all declarations,
+and perform no protocol side effect. Any rejection returns the complete input:
+
+```rust
+impl HostBindingRegistrationInput {
+    pub fn new(
+        identity: BindingRegistrationIdentity,
+        capabilities: BindingRegistrationCapabilities,
+        execution: BindingExecutionSupport,
+        compiler: HostBindingCompilerRegistration,
+        server: Box<dyn RouteServerBinding>,
+        resources: BindingResourceDeclarations,
+        ingress: BindingIngressPolicy,
+        status: BindingStatusPolicy,
+    ) -> Self;
+}
+
+impl HostBindingRegistration {
+    pub fn new(
+        input: HostBindingRegistrationInput,
+    ) -> Result<
+        Self,
+        BindingInputRejection<HostBindingRegistrationInput>,
+    >;
+}
+
+impl<B> StaticBindingRegistrationInput<B>
+where
+    B: PollServerBinding,
+{
+    pub fn new(
+        identity: BindingRegistrationIdentity,
+        capabilities: BindingRegistrationCapabilities,
+        execution: BindingExecutionSupport,
+        compiler: StaticBindingCompilerRegistration<B::Compiler>,
+        server: B,
+        resources: BindingResourceDeclarations,
+        ingress: BindingIngressPolicy,
+        status: BindingStatusPolicy,
+    ) -> Self;
+}
+
+impl<B> StaticBindingRegistration<B>
+where
+    B: PollServerBinding,
+{
+    pub fn new(
+        input: StaticBindingRegistrationInput<B>,
+    ) -> Result<
+        Self,
+        BindingInputRejection<StaticBindingRegistrationInput<B>>,
+    >;
+}
+```
+
+The static server contract is exact for this tranche. Its route slot retains
+the admitted `PrepareInput`, route identity, stage, and `RouteState`; its
+response slot retains the accepted `RouteInboundResponse`, associated state,
+and terminal result; and its readiness slot retains its associated state and
+terminal result. `ServerRouteSlot::initialize(input, state)` and
+`ServerResponseSlot::initialize(response, state)` accept owned input only into
+an admitted vacant slot. `RouteReadinessSlot::initialize_state(state)` follows
+the same vacant-slot rule. `state_mut` is valid only while that state is live,
+and `clear` is valid only after the matching terminal acknowledgement. The
+caller owns every slot and its generation throughout the call:
+
+```rust
+pub trait PollServerBinding {
+    type Compiler: BindingCompilerExtension;
+    type RouteState;
+    type ReadinessState;
+    type ResponseState;
+
+    fn artifact_compatibility(&self) -> BindingArtifactCompatibility;
+    fn route_state_layout(&self) -> BindingStateLayout;
+    fn readiness_state_layout(&self) -> BindingStateLayout;
+    fn response_state_layout(&self) -> BindingStateLayout;
+
+    fn start_prepare(
+        &mut self,
+        input: PrepareInput,
+        route: &mut ServerRouteSlot<Self::RouteState>,
+        budget: &mut WorkBudget,
+    ) -> Result<
+        StartStatus<RoutePrepareOutcome<()>>,
+        BindingInputRejection<PrepareInput>,
+    >;
+
+    fn poll_prepare(
+        &mut self,
+        cx: &mut Context<'_>,
+        route: &mut ServerRouteSlot<Self::RouteState>,
+        budget: &mut WorkBudget,
+    ) -> Poll<RoutePrepareOutcome<()>>;
+
+    fn poll_cancel_prepare(
+        &mut self,
+        cx: &mut Context<'_>,
+        cleanup: &CleanupPhaseContext,
+        route: &mut ServerRouteSlot<Self::RouteState>,
+        budget: &mut WorkBudget,
+    ) -> Poll<
+        CoreResult<BindingCallSettlement<RoutePrepareOutcome<()>, ()>>,
+    >;
+
+    fn start_readiness(
+        &mut self,
+        route: &mut ServerRouteSlot<Self::RouteState>,
+        readiness: &mut RouteReadinessSlot<Self::ReadinessState>,
+        budget: &mut WorkBudget,
+    ) -> StartStatus<RouteReadinessOutcome<()>>;
+
+    fn poll_readiness(
+        &mut self,
+        cx: &mut Context<'_>,
+        route: &mut ServerRouteSlot<Self::RouteState>,
+        readiness: &mut RouteReadinessSlot<Self::ReadinessState>,
+        budget: &mut WorkBudget,
+    ) -> Poll<RouteReadinessOutcome<()>>;
+
+    fn poll_cancel_readiness(
+        &mut self,
+        cx: &mut Context<'_>,
+        cleanup: &CleanupPhaseContext,
+        route: &mut ServerRouteSlot<Self::RouteState>,
+        readiness: &mut RouteReadinessSlot<Self::ReadinessState>,
+        budget: &mut WorkBudget,
+    ) -> Poll<
+        CoreResult<BindingCallSettlement<RouteReadinessOutcome<()>, ()>>,
+    >;
+
+    fn start_activate(
+        &mut self,
+        route: &mut ServerRouteSlot<Self::RouteState>,
+        budget: &mut WorkBudget,
+    ) -> StartStatus<RouteActivationOutcome<(), ()>>;
+
+    fn poll_activate(
+        &mut self,
+        cx: &mut Context<'_>,
+        route: &mut ServerRouteSlot<Self::RouteState>,
+        budget: &mut WorkBudget,
+    ) -> Poll<RouteActivationOutcome<(), ()>>;
+
+    fn poll_cancel_activate(
+        &mut self,
+        cx: &mut Context<'_>,
+        cleanup: &CleanupPhaseContext,
+        route: &mut ServerRouteSlot<Self::RouteState>,
+        budget: &mut WorkBudget,
+    ) -> Poll<
+        CoreResult<BindingCallSettlement<RouteActivationOutcome<(), ()>, ()>>,
+    >;
+
+    fn start_commit(
+        &mut self,
+        route: &mut ServerRouteSlot<Self::RouteState>,
+        budget: &mut WorkBudget,
+    ) -> StartStatus<RouteCommitOutcome<(), ()>>;
+
+    fn poll_commit(
+        &mut self,
+        cx: &mut Context<'_>,
+        route: &mut ServerRouteSlot<Self::RouteState>,
+        budget: &mut WorkBudget,
+    ) -> Poll<RouteCommitOutcome<(), ()>>;
+
+    fn poll_cancel_commit(
+        &mut self,
+        cx: &mut Context<'_>,
+        cleanup: &CleanupPhaseContext,
+        route: &mut ServerRouteSlot<Self::RouteState>,
+        budget: &mut WorkBudget,
+    ) -> Poll<
+        CoreResult<BindingCallSettlement<RouteCommitOutcome<(), ()>, ()>>,
+    >;
+
+    fn poll_accept(
+        &mut self,
+        cx: &mut Context<'_>,
+        route: &mut ServerRouteSlot<Self::RouteState>,
+        permit: RouteActivationPermit<'_>,
+        budget: &mut WorkBudget,
+    ) -> Poll<CoreResult<RouteAcceptEvent>>;
+
+    fn start_abort(
+        &mut self,
+        cleanup: CleanupPhaseContext,
+        route: &mut ServerRouteSlot<Self::RouteState>,
+        budget: &mut WorkBudget,
+    ) -> StartStatus<RouteCleanupOutcome>;
+
+    fn poll_abort(
+        &mut self,
+        cx: &mut Context<'_>,
+        route: &mut ServerRouteSlot<Self::RouteState>,
+        budget: &mut WorkBudget,
+    ) -> Poll<RouteCleanupOutcome>;
+
+    fn start_shutdown(
+        &mut self,
+        cleanup: CleanupPhaseContext,
+        route: &mut ServerRouteSlot<Self::RouteState>,
+        budget: &mut WorkBudget,
+    ) -> StartStatus<RouteCleanupOutcome>;
+
+    fn poll_shutdown(
+        &mut self,
+        cx: &mut Context<'_>,
+        route: &mut ServerRouteSlot<Self::RouteState>,
+        budget: &mut WorkBudget,
+    ) -> Poll<RouteCleanupOutcome>;
+
+    fn acknowledge_route(
+        &mut self,
+        route: &mut ServerRouteSlot<Self::RouteState>,
+    ) -> CoreResult<()>;
+
+    fn start_response(
+        &mut self,
+        response: RouteInboundResponse,
+        slot: &mut ServerResponseSlot<Self::ResponseState>,
+        budget: &mut WorkBudget,
+    ) -> Result<
+        StartStatus<BindingDeliveryOutcome>,
+        BindingInputRejection<RouteInboundResponse>,
+    >;
+
+    fn poll_response(
+        &mut self,
+        cx: &mut Context<'_>,
+        slot: &mut ServerResponseSlot<Self::ResponseState>,
+        budget: &mut WorkBudget,
+    ) -> Poll<BindingDeliveryOutcome>;
+
+    fn poll_cancel_response(
+        &mut self,
+        cx: &mut Context<'_>,
+        cleanup: &CleanupPhaseContext,
+        slot: &mut ServerResponseSlot<Self::ResponseState>,
+        budget: &mut WorkBudget,
+    ) -> Poll<CoreResult<BindingCallSettlement<BindingDeliveryOutcome>>>;
+
+    fn acknowledge_response(
+        &mut self,
+        slot: &mut ServerResponseSlot<Self::ResponseState>,
+    ) -> CoreResult<()>;
+}
+```
+
+The route lifecycle outcomes above use `()` because the typed route state
+never leaves `ServerRouteSlot`; every pending, failure, cancellation, and late
+result therefore leaves the caller-addressable slot intact. A response moves
+into `ServerResponseSlot` only after `start_response` accepts it. Zero
+`BindingPolls` budget invokes no binding callback and changes no slot state.
+
+The host guard constructors preserve identity while changing stage and safely
+erase only the binding-authored state:
+
+```rust
+impl HostPreparedRouteGuard {
+    pub fn new<S>(
+        input: PrepareInput,
+        footprint: BindingLifetimeFootprint,
+        state: S,
+    ) -> Self
+    where
+        S: Send + 'static;
+}
+
+impl HostActiveRouteGuard {
+    pub fn new<S>(prepared: HostPreparedRouteGuard, state: S) -> Self
+    where
+        S: Send + 'static;
+}
+
+impl HostCommittedRouteGuard {
+    pub fn new<S>(active: HostActiveRouteGuard, state: S) -> Self
+    where
+        S: Send + 'static;
+}
+```
+
+The `std` server trait below is the matching host authoring surface. Its
+`artifact_compatibility` value is compared with the consumed WP-200 compiler
+component before the bundle can be published.
+
 ## Shared input and identity contract
 
 `OutboundRequest` is created only after planning selected one candidate and
@@ -315,14 +616,15 @@ for explicit disposition; it does not re-enter candidate selection. Binding
 operational health is likewise diagnostic-only and cannot reorder or skip
 immutable plan candidates.
 
-`InboundRequest` owns one `BindingRouteKey`, exact `InboundRouteMatch`, binding
+`RouteInboundRequest` owns one `BindingRouteKey`, exact `InboundRouteMatch`, binding
 and route generations, plan-set and plan ids, correlation id, wire payload,
 media metadata, URI-variable values, and `TransportAuthMaterial`. URI matching
 and framing are binding work. Effective authorization, body-auth extraction,
 schema validation, and application projection are core work performed against
 the immutable route match.
 
-`InboundResponse` owns the same route and correlation identities and exactly
+`RouteResponseOpportunity` owns the same route and correlation identities and
+is neither `Clone` nor `Copy`. `RouteInboundResponse` consumes that opportunity and owns exactly
 one success output or structured error mapping. A response opportunity is
 generation-bearing and single-use. Duplicate live correlation ids on one route
 are rejected; unrelated route generations may reuse the wire value.
@@ -654,7 +956,9 @@ constructors consume the complete guard and phase context, and their
 pub struct RouteAbortInput { /* prepared guard plus cleanup phase */ }
 pub struct RouteShutdownInput { /* HostShutdownRouteGuard plus cleanup phase */ }
 
-pub trait ServerBinding: Send + Sync {
+pub trait RouteServerBinding: Send + Sync {
+    fn artifact_compatibility(&self) -> BindingArtifactCompatibility;
+
     fn prepare(
         &self,
         input: PrepareInput,
@@ -725,18 +1029,10 @@ pub trait ServerBinding: Send + Sync {
 
     fn deliver_response(
         &self,
-        response: InboundResponse,
+        response: RouteInboundResponse,
     ) -> Result<
         HostBindingCallBox<BindingDeliveryOutcome>,
-        BindingInputRejection<InboundResponse>,
-    >;
-
-    fn publish(
-        &self,
-        publication: BindingPublication,
-    ) -> Result<
-        HostBindingCallBox<BindingDeliveryOutcome>,
-        BindingInputRejection<BindingPublication>,
+        BindingInputRejection<RouteInboundResponse>,
     >;
 }
 ```
@@ -747,6 +1043,10 @@ failures appear in its typed outcome and therefore retain the required
 predecessor or successor. The outer `CoreResult` on `start_cancel` and
 `poll_cancel` is limited to a stale or invalid callback that leaves the complete
 call box owned by its caller.
+
+The retained `RouteServerBinding::publish` signature is inactive until the
+Producer-emission domain-entry review. It is deliberately absent from the
+Property Read implementation and its public authoring fixture.
 
 ### Commit and acceptance
 
@@ -838,7 +1138,7 @@ post-publication advertise phase.
 borrows the claimed route lease. It
 returns exactly one:
 
-- `RouteAcceptEvent::Request(InboundRequest)`;
+- `RouteAcceptEvent::Request(RouteInboundRequest)`;
 - `RouteAcceptEvent::OperationalError(BindingOperationalError)`; or
 - `RouteAcceptEvent::Terminal(RouteTerminal)`.
 
@@ -880,7 +1180,7 @@ partial rollback result.
 Preparation visibility is explicit registration metadata. An externally
 visible prepared endpoint declares exactly one closed-ingress behavior:
 `Reject`, `Backpressure`, or `BufferWithinAdmittedLimits`. Before publication,
-it cannot emit an `InboundRequest`, report application acceptance, or create an
+it cannot emit a `RouteInboundRequest`, report application acceptance, or create an
 engine response opportunity. Buffered protocol input remains route-owned,
 counts against the existing binding ingress item and byte limits, and joins
 rollback or shutdown. Limited external visibility is reported in diagnostics
@@ -1049,13 +1349,13 @@ request arrived in a terminal driver event.
 
 Host response delivery is an owned call. Before the call is accepted, an
 invalid route, stale generation, capacity failure, or backpressure result is
-`BindingInputRejection<InboundResponse>` and returns the complete response and
+`BindingInputRejection<RouteInboundResponse>` and returns the complete response and
 opportunity. Once accepted, the call owns both and reaches exactly one delivery
 result, cancellation settlement, late result, or residual.
 
 Constrained `start_response` follows the same boundary: it either completes
 synchronously, transfers the response into the caller-owned response slot, or
-returns `BindingInputRejection<InboundResponse>`. `poll_response` and
+returns `BindingInputRejection<RouteInboundResponse>`. `poll_response` and
 `poll_cancel_response` operate only after acceptance. The application handler
 is never invoked again to retry delivery.
 
@@ -1072,75 +1372,26 @@ input without retaining it in an admitted owner.
 
 ## Constrained associated-state SPI
 
-Constrained client and server traits use associated state types rather than
-private concrete core slot payloads. The semantic shape is:
+The exact active `PollServerBinding` associated-state contract is frozen in the
+Property Read projection above. Its methods are complete rather than comment
+placeholders. Constrained client request/subscription state and the server
+`EmissionState`/publication extension remain inactive domain-entry input in the
+API ownership matrix. A later broad WP-300 review may re-adopt or replace those
+families; their retained names do not authorize the narrow implementation to
+publish them.
+
+The retained client-subscription spelling remains traceability input for the
+completed handler amendment and is not part of the active Property Read
+surface:
 
 ```rust
-pub trait PollClientBinding {
-    type RequestState;
-    type SubscriptionState;
-
-    fn request_state_layout(&self) -> BindingStateLayout;
-    fn subscription_state_layout(&self) -> BindingStateLayout;
-
-    fn start_subscription(
-        &mut self,
-        request: OutboundRequest,
-        slot: &mut ClientSubscriptionSlot<Self::SubscriptionState>,
-        budget: &mut WorkBudget,
-    ) -> CoreResult<StartStatus<SubscriptionStart>>;
-
-    fn poll_subscription_start(
-        &mut self,
-        cx: &mut Context<'_>,
-        subscription: &mut ClientSubscriptionSlot<Self::SubscriptionState>,
-        budget: &mut WorkBudget,
-    ) -> Poll<CoreResult<SubscriptionStart>>;
-
-    fn start_subscription_stop(
-        &mut self,
-        cx: &mut Context<'_>,
-        input: SubscriptionStopInput,
-        slot: &mut ClientSubscriptionSlot<Self::SubscriptionState>,
-        budget: &mut WorkBudget,
-    ) -> Result<
-        StartStatus<SubscriptionDriverCleanupDisposition>,
-        BindingInputRejection<SubscriptionStopInput>,
-    >;
-
-    // The request/subscription start, poll, cancel, item, and terminal
-    // acknowledgement methods use the same caller-owned typed slots.
-}
-
-pub trait PollServerBinding {
-    type RouteState;
-    type ReadinessState;
-    type ResponseState;
-    type EmissionState;
-
-    fn route_state_layout(&self) -> BindingStateLayout;
-    fn readiness_state_layout(&self) -> BindingStateLayout;
-    fn response_state_layout(&self) -> BindingStateLayout;
-    fn emission_state_layout(&self) -> BindingStateLayout;
-
-    fn poll_accept(
-        &mut self,
-        cx: &mut Context<'_>,
-        route: &mut ServerRouteSlot<Self::RouteState>,
-        permit: RouteActivationPermit<'_>,
-        budget: &mut WorkBudget,
-    ) -> Poll<CoreResult<RouteAcceptEvent>>;
-
-    // Prepare, accept, delivery, publication, cancellation, and cleanup use
-    // caller-owned typed slots.
-}
+fn poll_subscription_start(
+    &mut self,
+    cx: &mut Context<'_>,
+    subscription: &mut ClientSubscriptionSlot<Self::SubscriptionState>,
+    budget: &mut WorkBudget,
+) -> Poll<CoreResult<SubscriptionStart>>;
 ```
-
-The comment placeholders above describe method families, not permission to
-omit them. The API ownership matrix freezes their exact public names and paths.
-Every family has start, poll/step, cancellation where applicable, terminal
-acknowledgement, and explicit cleanup operations using the same semantic input
-and result types as the host SPI.
 
 `BindingStateLayout` declares maximum size, alignment, immutable lifetime
 footprint, transient-per-poll bound, and whether state destruction is trivial

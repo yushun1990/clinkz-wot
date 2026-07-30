@@ -161,7 +161,12 @@ revision.
   removed by `WP-500`.
 - Remove exports of the old monolithic `ServerBinding::serve`/`shutdown` lifecycle, implicit
   subscription/discovery end markers, and current binding registration methods superseded by
-  complete generation-bearing bundles, route-scoped acceptance, and associated-state slots.
+  complete generation-bearing bundles, `RouteServerBinding`, route-scoped
+  acceptance, and associated-state slots. Remove the legacy
+  `InboundRequest`/`InboundResponse`/`BindingContext` root exports only after
+  every owner uses the target `RouteInboundRequest`,
+  `RouteResponseOpportunity`, and `RouteInboundResponse`; do not retain a
+  target-to-legacy conversion alias.
 - Remove or rename ambiguous `produce(Thing)` and source-envelope methods whose result shape does
   not match their documented Scripting-compatible contract. Complete TD and source-document paths
   remain available only under their explicit names.
