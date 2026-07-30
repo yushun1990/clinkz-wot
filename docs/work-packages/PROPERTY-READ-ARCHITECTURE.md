@@ -21,6 +21,17 @@ for package-local completion. The package order remains
 slice tranches in the manifest to cross incomplete package boundaries after
 their own admission reviews. No manifest record is implementation admission.
 
+Evidence claims advance in this order:
+
+1. package-local slice constructibility and ownership;
+2. the mock cross-package Property Read architecture gate;
+3. a real Zenoh Property Read smoke using the same admitted boundaries; and
+4. broad workload and release-readiness evidence.
+
+No earlier rung implies a later one. In particular, the mock gate makes no
+production-protocol, multi-route availability, deployment, performance, or
+release claim.
+
 The WP-100 slice is one deliberately narrow synchronous seam. It adds only the
 root-re-exported `ReadPropertyHandler` trait in `core/src/handler.rs` and
 `core/src/lib.rs`, and composes it with the already implemented
@@ -164,6 +175,11 @@ Negative compile/source checks prove:
   retained beyond their borrow;
 - the mock cannot rescan the TD or construct a runtime logical plan; and
 - the `async-no-std` portable surface compiles without choosing an executor.
+
+The target runner also poisons the legacy form selector,
+`ServerBinding::serve`, and `Dispatch` boundaries and records zero calls. This
+is the slice-level no-backflow proof; WP-600 later removes concrete call edges
+and WP-700 proves final source and public-surface absence.
 
 Runtime tests own state-transition and cleanup claims. Compile-fail tests own
 capability absence and construction boundaries. Dependency/source inspection

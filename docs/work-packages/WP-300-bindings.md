@@ -147,6 +147,15 @@ Completion of this slice releases
 released only by broad WP-300 completion. Preparation in those packages is
 allowed but is not source admission or vertical progress.
 
+After this narrow slice completes and before the broad WP-300 candidate is
+frozen, run one bounded, non-authoritative external Zenoh authoring spike
+against the complete public registration surface. Helpers may group fields,
+generate closed static enums/tables, and adapt synchronous
+`NoCleanupSuccessor` operations, but may not hide resources or lifecycle
+ownership. Reopen the SPI only for concrete ownership, portability,
+resource-accounting, unsafe-erasure, or implementability evidence. The spike
+does not release WP-600 or claim production-protocol progress.
+
 ## Requirements
 
 - `BIND-REG-001`, `BIND-ROUTE-001`, `BIND-STORAGE-001`, `BIND-MEM-001`, and
@@ -423,6 +432,9 @@ Produce these package evidence keys exactly as indexed by the work-package DAG:
   points, identity/branch checks, action invariants, and additional-response bounds;
 - `drop-and-cleanup-ownership` for complete work-object transfer, handoff rejection/manual
   fallback, idempotent teardown, deadline progress, and durable residual state.
+- `cleanup-kernel-implementability` for the common source-owned -> offered ->
+  acknowledged-transfer/manual-return -> complete/residual machine, including
+  synchronous `NoCleanupSuccessor` authors with no executor requirement.
 - `producer-emission-migration` for the one-way legacy-adapter boundary, identity preservation,
   bounded admission, and proof that no new caller enters the bridge.
 - `host-subscription-driver` for object safety, exact source attribution, one receive cursor,
@@ -432,6 +444,12 @@ Produce these package evidence keys exactly as indexed by the work-package DAG:
 - `binding-call-settlement` for constructor/poll/cancel races, late Returned routing, exact
   cleanup-reservation binding and acknowledged work transfer, declared footprint admission,
   zero-budget retry, and generation-safe slot reuse.
+- `host-constrained-semantic-parity` for shared trace case ids, identical
+  observable outcomes and resource deltas, and explicit compile-only
+  `async-no-std` claims.
+- `target-legacy-no-backflow` for poisoned legacy selector,
+  `ServerBinding::serve`, and `Dispatch` boundaries with zero
+  target-generation calls.
 
 These records satisfy the corresponding requirement-index evidence families:
 

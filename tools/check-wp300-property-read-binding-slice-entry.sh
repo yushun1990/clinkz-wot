@@ -8,10 +8,29 @@ attestation_rel="docs/audits/WP-300-property-read-binding-slice-review.toml"
 attestation="$root/$attestation_rel"
 fixture_root="$root/tools/compile-contracts/wp300-property-read-binding-slice"
 schema="$root/tools/design-check/tests/wp300_property_read_binding_schema.rs"
+gate_manifest="$root/docs/work-packages/property-read-architecture-gate.toml"
 
 fail() {
     echo "WP-300 property-read binding slice entry check: $*" >&2
     exit 1
+}
+
+verify_review_basis() {
+    review_attestation_ref=$(
+        git -C "$root" log --diff-filter=A -1 --format=%H -- "$attestation_rel"
+    )
+    [[ "$review_attestation_ref" =~ ^[0-9a-f]{40}$ ]] \
+        || fail "cannot resolve the immutable review-attestation commit"
+    git -C "$root" merge-base --is-ancestor "$review_attestation_ref" HEAD \
+        || fail "review attestation is not an ancestor of the current admission basis"
+    grep -Fqx \
+        "review_attestation = \"$attestation_rel\"" \
+        "$gate_manifest" \
+        || fail "gate manifest does not bind the review attestation path"
+    grep -Fqx \
+        "review_attestation_ref = \"$review_attestation_ref\"" \
+        "$gate_manifest" \
+        || fail "gate manifest does not bind the immutable review attestation commit"
 }
 
 inspect_contract_sources() {
@@ -117,17 +136,24 @@ require_preimplementation_failure() {
 case "$mode" in
     --candidate)
         inspect_contract_sources
+        [[ -f "$attestation" ]] \
+            || fail "independent semantic review attestation is missing"
+        verify_review_basis
+        grep -Fqx \
+            'admission_base_ref = "register-at-admission"' \
+            "$gate_manifest" \
+            || fail "review-pending gate must defer the admission base"
         run_prechecks
-        [[ ! -e "$attestation" ]] || fail "independent review attestation is premature"
         require_preimplementation_failure
-        echo "WP-300 property-read binding slice entry check: candidate ready for independent review"
+        echo "WP-300 property-read binding slice entry check: reviewed semantic candidate and deferred admission basis are valid"
         ;;
     --admission-ready)
         [[ -f "$attestation" ]] || fail "independent review attestation is missing"
-        review_ref=$(git -C "$root" rev-parse HEAD)
+        verify_review_basis
+        admission_base_ref=$(git -C "$root" rev-parse HEAD)
 
         mapfile -t approval_changes < <(
-            git -C "$root" diff --name-only "$review_ref"
+            git -C "$root" diff --name-only "$admission_base_ref"
         )
         expected_approval_changes=(
             "PLAN.md"
@@ -143,6 +169,10 @@ case "$mode" in
         )
         [[ ${#untracked_paths[@]} -eq 0 ]] \
             || fail "approval contains untracked paths: ${untracked_paths[*]}"
+        grep -Fqx \
+            "admission_base_ref = \"$admission_base_ref\"" \
+            "$gate_manifest" \
+            || fail "approval does not bind the exact current admission base"
 
         inspect_contract_sources
         run_prechecks

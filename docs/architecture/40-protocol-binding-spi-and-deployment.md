@@ -168,6 +168,20 @@ Cargo features select compiled capabilities; they are not runtime rollout
 switches. Compiling multiple bindings into one binary allows startup selection,
 not safe code unload.
 
+The binding crate supplies build-time package metadata for its crate/source
+identity, version, engine-contract range, supported targets and profiles,
+features, configuration-schema identity, capability roles, and complete-bundle
+constructor. The `clinkz-wot` engine owns registration validation, runtime
+readiness, generation publication, drain, and cleanup. A platform package
+manager or deployment system owns trust, lockfile and feature selection,
+toolchain/target choice, build/sign/install, traffic cutover, and rollback.
+
+External configuration can avoid a rebuild only when already linked binding
+code explicitly accepts that configuration. It still creates a new Servient
+generation and never mutates a published bundle. In v1, “plugin” therefore
+means build/install/deploy composition, not dynamic-library loading or hot
+unload.
+
 ## Dynamic loading decision
 
 Rust trait objects, `Arc`, `Box`, futures, wakers, enums, allocators, and panic

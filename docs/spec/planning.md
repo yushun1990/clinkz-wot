@@ -1024,6 +1024,17 @@ the immutable diagnostics. Runtime dispatch before handler publication returns
 the separately specified structured `UnsupportedOperation` outcome; this
 specification does not redefine handler lookup or dispatch.
 
+Every Producer route implied by every form retained in the frozen effective TD
+is required for that produced generation. Planning and expose admission do not
+label advertised routes optional, redundant, or alternative at runtime. If any
+required route cannot be reserved, prepared, made ready, or committed closed,
+the generation is not published and all prepared state follows rollback.
+Applications that want to omit an unavailable form must construct and admit a
+new effective TD and plan-set generation without that form. V1 has no
+late-joining route. A future availability group or redundant-route policy
+requires a versioned TD/plan contract plus explicit lifecycle, resource, and
+evidence rules.
+
 ## Consumer plan construction and selection
 
 Consumer admission eagerly compiles all protocol-neutral metadata needed for
@@ -1054,6 +1065,14 @@ pre-reserved diagnostics. `Disabled` and every strict selection return the
 first failure. Once security commit or binding input construction fails, or a
 binding execution operation accepts or rejects a request, that interaction
 never triggers implicit fallback that could repeat a side effect.
+
+An explicit retry is a new interaction. The caller may combine the returned
+`RetryClass` with its own idempotency and security policy and select a strict
+form or binding for the new call. That call receives a fresh deadline,
+`WorkBudget`, provider-probe allowance, and security commit; no prior
+side-effect assumption is carried forward. Diagnostics identify the failed
+selection/execution phase and why another admitted form was not attempted.
+Multiple forms are ordered candidates, not a runtime failover pool.
 
 Selection errors remain distinct from execution errors. They identify missing
 targets or operations, absent compatible forms, target-resolution failures,

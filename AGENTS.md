@@ -93,11 +93,16 @@ Before substantial work:
 
 1.  Read `AGENTS.md`.
 2.  Read `PROJECT_STATE.md`.
-3.  Identify the active milestone and objective from `PLAN.md`.
-4.  Follow references to the smallest necessary subset of governance,
+3.  When remote integration can affect the next safe action, fetch the remote
+    default branch when available and reconcile its pull-request/merge state
+    with `PROJECT_STATE.md` before relying on the recorded objective. Offline
+    work may use the last observed snapshot but may not release a dependent
+    source transition from an unverified remote merge.
+4.  Identify the active milestone and objective from `PLAN.md`.
+5.  Follow references to the smallest necessary subset of governance,
     specifications, workspace discussions, code, tests, audits, and
     evidence.
-5.  Inspect implementation before making implementation claims.
+6.  Inspect implementation before making implementation claims.
 
 ## Durable Continuation
 
@@ -264,14 +269,44 @@ handoff. The AI agent must:
 -   report the branch, commits, pull-request URL, validation state, and any
     remaining limitation.
 
-Never push task commits directly to the default branch and never merge the
-pull request automatically. Follow-up fixes for the same task update the same
-branch and pull request. A dependent task waits for remote review and
-integration unless the Owner explicitly requests stacked work; disjoint
-preparation may continue but cannot claim the dependent task's progress.
+Never push task commits directly to the default branch. Follow-up fixes for
+the same task update the same branch and pull request. A dependent task waits
+for remote integration and the passing default-branch workflow unless the
+Owner explicitly requests stacked work; disjoint preparation may continue but
+cannot claim the dependent task's progress.
+
+After handoff, AI may mark the pull request ready and enable GitHub native
+auto-merge only when the exact current head satisfies all of these conditions:
+
+-   the intended diff is complete and contains no unrelated work;
+-   all applicable candidate, independent-review, admission, completion,
+    workload, release, and removal evidence is current;
+-   task-specific local checks and the required remote `validation` job cover
+    that head;
+-   the branch is current with the default branch, conflict-free, not a
+    dependent stack, and has no unresolved conversation or requested change;
+-   no unresolved Owner-owned goal, product trade-off, unacceptable direction,
+    public release, or other external commitment is crossed; and
+-   the active remote ruleset is verified to require strict current-base
+    validation and conversation resolution.
+
+Eligible automatic integration uses a merge commit and an expected head object
+id. Do not squash or rebase semantically meaningful candidate, review,
+admission, implementation, or evidence commits. A later commit requires the
+eligibility predicate and all applicable checks to be rerun. Failed,
+cancelled, stale, missing, or superseded checks, merge conflicts, or stacked
+dependencies leave auto-merge disabled. Until the remote ruleset prerequisites
+are verified, keep the pull request draft.
 
 Remote Owner review is a collaboration and integration boundary. It does not
 replace AI-owned technical judgment, registered independent review, or
 repository evidence. If authentication, network access, or the remote is
 unavailable, keep a local Git checkpoint, record the blocker in
 `PROJECT_STATE.md`, and do not claim that remote handoff is complete.
+
+After any manual or automatic merge, fetch the default branch and reconcile
+the pull request, merge revision, and default-branch workflow before starting
+dependent source work. GitHub owns remote draft/check/merge facts; repository
+commits, registered work-package state, audits, and evidence own technical
+admission and completion truth. `PROJECT_STATE.md` is the last observed
+projection and never overrides either source.

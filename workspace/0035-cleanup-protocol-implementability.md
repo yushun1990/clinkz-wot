@@ -1,6 +1,6 @@
 # 0035 Cleanup Protocol Implementability
 
-Status: OPEN
+Status: MIGRATED
 
 Kind: owner-raised lifecycle API and implementation-risk investigation
 
@@ -40,3 +40,37 @@ This topic records a Project Owner concern that the cleanup ownership model is r
 ## Expected decision output
 
 Codex should define the reusable implementation pattern, public-versus-private cleanup surface, mandatory negative/runtime tests, simple-binding helpers, and any API corrections revealed by the first WP-300 implementation.
+
+## Decision
+
+The reusable semantic pattern is one linear complete-object state machine:
+source-owned, offered, acknowledged-transferred or returned-to-manual-owner,
+then complete or durably residual. Public binding authors see the phase
+context, complete transfer envelope, acceptance result, settlement/outcome,
+and an explicit no-successor form. Servient owns executor queues, manual
+fallback slots, retry scheduling, status projection, and durable residual
+storage.
+
+Simple synchronous bindings may use `NoCleanupSuccessor` and explicit
+complete/no-resource helpers; they do not implement an executor or successor
+enum merely to report synchronous completion. Those helpers certify absence of
+owned continuation and cannot turn drop into cleanup. Host and constrained
+storage use one transition/outcome oracle even though their containers differ.
+
+Mandatory evidence covers accepted transfer before `PendingCleanup`, rejected
+handoff returning the identical object, executor rejection/shutdown, zero
+budget, deadline progress, first-cause retention, late results, stale
+generations, double acknowledgement/clear rejection, durable residual commit,
+and no destructor-only success.
+
+The reviewed narrow WP-300 API is not revised from concern alone. Its first
+implementation is the implementability test. A correction is admitted only if
+that implementation cannot preserve the complete object, requires a private or
+unsafe escape, or demonstrates unusable generic/code-size behavior that the
+no-successor helper cannot remove.
+
+## Migration
+
+The reusable pattern, visibility boundary, helper rule, and evidence matrix are
+projected into ADR-0011, `docs/spec/binding-spi.md`, and the WP-300/WP-400 work
+packages. This topic is `MIGRATED`.

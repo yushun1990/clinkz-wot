@@ -79,9 +79,14 @@ The repository evidence establishes the following starting point:
 - the exact WP-300 Property Read slice now has a complete planner dependency,
   a finite migrated scope, and an exact non-product-source candidate with
   paired host/static authoring contracts, executable lifecycle schema, entry
-  check, and completion boundary. It is `pending`/`review-pending`; product
-  source remains blocked until independent review and the exact combined
-  pre-source checkpoint. The aggregate Property Read gate remains blocked;
+  check, and completion boundary. Its semantic review was recorded at
+  `d5169ba34ad846b2d45d0841b5d57210ee4df0c1` and integrated through pull
+  request #1 at `a8eac35f955730b54a1ed1c233458ed9b269fa35`. It remains
+  `pending`/`review-pending` because default-branch integration exposed a
+  checker defect that conflated immutable review evidence with the later
+  admission base. The correction separates those refs and requires its own
+  independent review before the exact combined pre-source checkpoint; product
+  source remains blocked. The aggregate Property Read gate remains blocked;
   D4 has resolved subscription receiver ownership;
 - WP-400, WP-500, and WP-600 remain downstream of WP-300, and WP-700 joins
   those three branches;
@@ -128,6 +133,18 @@ answer and does not automatically block unrelated admitted work.
 | D20 | MIGRATED | Enforce source- and generation-segregated legacy coexistence with no target-artifact backflow into legacy selection | New Planning/Core/WP-300 code cannot call legacy selectors or dispatch; WP-600 removes concrete selector/execution calls and WP-700 proves final public selector and adapter absence | M3-M6 |
 | D21 | MIGRATED | Make global-gate impact on scoped tranches an explicit requirement/artifact/state/resource/evidence mapping | Intersecting findings block or reopen, compatible changes receive named revalidation, and disjoint findings cannot trigger undifferentiated re-review; aggregate gates remain required for WP-700/release | Continuous execution |
 | D22 | MIGRATED | Reuse the immutable-candidate, scoped-review, exact-transition, pre-source, and completion machinery for WP-300 | Add only WP-300-specific contract/lifecycle fixtures and checks; preparation ends at the passing candidate plus expected absent-source boundary and reviewed next-state simulation | M4 entry |
+| D23 | MIGRATED | Permit native GitHub auto-merge only as a terminal integration action after exact-head, current-evidence, strict up-to-date validation, resolved-conversation, non-stacked, conflict-free, and Owner-boundary checks all pass | Keep automatic handoffs draft by default; use merge-commit mode with expected-head protection only after the remote ruleset prerequisites are freshly verified | Continuous remote integration |
+| D24 | MIGRATED | Preserve the shortest Property Read feedback path and separate local slice, mock cross-package, real Zenoh smoke, and release-readiness claims | Do not add support-only refinement between reviewed tranches; make a real Zenoh Property Read smoke the first executable WP-600 tranche after broad WP-300 | M4-M5C |
+| D25 | MIGRATED | Treat the narrow mock authors as constructibility evidence, then run one bounded external Zenoh authoring spike before broad WP-300 admission | Helpers may group/generate declarations but cannot hide ownership or resources; reopen the SPI only for a concrete ownership, portability, resource, unsafe, or implementability defect | Broad M4 entry |
+| D26 | MIGRATED | Keep Servient semantic authority while sharding host storage and scheduling by Thing/generation and route/slot | Bounded queues/cursors and brief critical sections must isolate never-ready, hot, slow, draining, and cleanup-heavy owners; callbacks execute outside locks | M5A |
+| D27 | MIGRATED | Treat every route represented by every advertised Producer form as required for one frozen generation | Any route failure blocks publication; omission requires a new effective TD and generation. Optional/redundant/late-join policy is deferred until versioned lifecycle/resource evidence exists | M5A |
+| D28 | MIGRATED | Use one complete-object cleanup transition kernel with acknowledged transfer or unchanged manual return | Synchronous bindings use `NoCleanupSuccessor` without an executor; Servient owns executor/manual queues and durable fallback | M4-M5A |
+| D29 | MIGRATED | Require host and constrained profiles to share semantic transitions, trace ids, outcomes, and resource deltas | Representation may differ only in storage, dispatch, wake, executor, and critical-section mechanics; compile-only cells make no runtime claim | M4-M6 |
+| D30 | MIGRATED | Retain the exhaustive flat resource schema and generate checked named-profile and role builders as projections | Every applicable field remains explicit, typed `NA` is the only omission, and representation change requires measured evidence rather than field count | M2-M6 |
+| D31 | MIGRATED | Define v1 binding “plugins” as build/install/deploy composition, not dynamic loading | Binding crates publish build metadata; the engine owns readiness/drain, while the platform owns trust/build/sign/cutover/rollback. External config still creates a new Servient generation | M5C-M7 |
+| D32 | MIGRATED | Keep multiple forms as ordered candidates rather than runtime failover; make explicit retry a fresh application call | Retry combines `RetryClass` with caller idempotency/security policy, strict selection, and fresh deadline/work/security budgets; diagnostics explain non-attempted forms | M3-M6 |
+| D33 | MIGRATED | Separate remote integration facts, repository technical truth, and curated continuation projections; reconcile them at session entry | Fix WP-300 by separating immutable `review_attestation_ref` from `admission_base_ref`, and include the registered work-package check in mainline validation | Continuous execution |
+| D34 | MIGRATED | Verify legacy coexistence with staged no-backflow evidence rather than one final grep | WP-300 poisons legacy target exits, WP-400 records zero target calls, WP-600 removes concrete edges, and WP-700 proves public/source absence; only the one-way legacy-publication adapter is temporarily allowed | M4-M6 |
 
 The former D3 Foundation candidate is the exact single child of
 `56fea9813df80fe29527755fcb2ce91d43cc5086`, changes only its registered
@@ -154,9 +171,10 @@ integration remain downstream work.
 D5 preserves package completion order but adds a cross-package integration
 dependency in the registered work-package DAG. The WP-100 handler and WP-200
 plan slices are complete. WP-300 is `pending`/`review-pending` at its exact
-non-product-source candidate, and WP-400 remains planned/blocked; neither may
-enter its source scope until its own exact candidate receives independent
-ADR-0013 review. Broad
+non-product-source semantic candidate with a passed immutable review; its
+admission-basis correction still requires independent ADR-0013 review and
+integration. WP-400 remains planned/blocked; neither may enter its source scope
+until its exact admission transition passes. Broad
 `WP-100-HANDLER-ENTRY`, `WP-300-BROAD-ENTRY`, and `WP-400-BROAD-ENTRY` remain
 blocked until the gate passes. The gate exception does not claim final
 `InteractionInput` storage, `AcceptHint` resource admission,

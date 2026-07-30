@@ -21,6 +21,14 @@ dependency on the concrete package. There is currently one concrete Cargo packag
 `clinkz-wot-protocol-bindings-zenoh`; zenoh-pico is a feature/backend of that package, not a
 separate Cargo package. Work may begin after `WP-300` and all entry gates are closed.
 
+The first executable WP-600 tranche is a real Zenoh Producer Property Read
+smoke after broad WP-300 completion. It must reuse the admitted plan,
+registration, route, permit, request, response, and cleanup boundaries and may
+claim only that production path. A bounded authoring-only Zenoh spike may run
+earlier after the narrow WP-300 slice to test SPI constructibility, but it is
+non-authoritative preparation and grants no WP-600 progress or source
+admission.
+
 Concrete response metadata follows
 `docs/amendments/WP-100-interaction-output-api-v1.md`: bindings populate the
 untrusted fixed-size metadata channel, while shared WP-300 validation retains it
@@ -223,6 +231,13 @@ No compatibility feature may reintroduce zenoh into a protocol-neutral crate.
 - `zenoh-complete-registration`: bundle construction and rejection fixtures covering compiler and
   execution compatibility, all required policies and maxima, profile cells, startup-only
   publication, and absence of independently installable components.
+- `zenoh-property-read-smoke`: one real host Zenoh Property Read route from
+  immutable plan through permit-authorized acceptance, response delivery, and
+  terminal cleanup, with no mock transport or legacy selection/dispatch edge.
+- `zenoh-author-usability`: an external binding-author fixture recording the
+  complete required declarations and helper use; only concrete ownership,
+  portability, resource, unsafe, or implementability defects can reopen the
+  shared SPI.
 - `zenoh-route-scoped-progress`: prepare/readiness/activate/commit/accept/drain ownership, one
   accept cursor and waker per serving committed route, reactor wake isolation, no direct handler
   dispatch, and route-terminal isolation for the host backend.
@@ -262,6 +277,11 @@ No compatibility feature may reintroduce zenoh into a protocol-neutral crate.
 The `producer-emission-migration` evidence owned by WP-300 is consumed here with concrete source
 inspection proving that both backend features have removed their adapter exit and every
 `PublisherSink` reference.
+
+The same source inspection proves that every concrete Zenoh call to the legacy
+selector family, monolithic `ServerBinding::serve`, and target-to-legacy
+execution adapter is absent. This is the concrete-edge stage of the no-backflow
+proof; WP-700 owns final public and source absence.
 
 Feature evidence must include `--no-default-features`, host `zenoh`, constrained `zenoh-pico`, and
 an expected compile failure when both concrete backend features are selected.

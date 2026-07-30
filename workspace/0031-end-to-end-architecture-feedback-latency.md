@@ -1,6 +1,6 @@
 # 0031 End-to-End Architecture Feedback Latency
 
-Status: OPEN
+Status: MIGRATED
 
 Kind: owner-raised execution and architecture-validation investigation
 
@@ -40,3 +40,36 @@ This topic records a Project Owner concern that the target architecture may free
 ## Expected decision output
 
 Codex should determine the shortest safe path to target-generation runtime feedback, the exact claim boundary of the first Property Read gate, any required follow-on production smoke evidence, and the authoritative progress records that need correction.
+
+## Decision
+
+The shortest safe path remains the existing direct chain:
+
+`WP-300 Property Read -> WP-400 Property Read -> PROPERTY-READ-ARCHITECTURE`.
+
+No additional support-only refinement or protocol spike may enter that chain
+without a concrete intersecting ownership, lifecycle, resource, dependency, or
+evidence-truth defect. The first gate proves one target-generation mock route
+from planning through Servient dispatch, response, and cleanup in the host and
+manual runtime cells, plus the executor-neutral async/no-std compile
+projection. It proves cross-package constructibility and ownership flow only.
+It does not prove multi-route availability, broad fairness, production
+transport behavior, production-author ergonomics, security/fallback/retry,
+subscriptions, cancellation races, workloads, or release readiness.
+
+Progress must use four distinct observable events:
+
+1. package-local slice completion;
+2. the passed mock cross-package Property Read gate;
+3. a real Zenoh Property Read authoring/runtime smoke owned by WP-600; and
+4. final release readiness after the full branch join and global gates.
+
+The Zenoh smoke is the first executable WP-600 tranche after broad WP-300
+releases that package. Non-authoritative preparation may begin earlier but
+cannot block or take progress credit from the narrow WP-300/WP-400 chain.
+
+## Migration
+
+The claim ladder and immediate critical path are projected into `PLAN.md`,
+`docs/work-packages/PROPERTY-READ-ARCHITECTURE.md`, and
+`docs/work-packages/WP-600-protocol-bindings.md`. This topic is `MIGRATED`.

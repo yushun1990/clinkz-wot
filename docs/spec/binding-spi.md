@@ -55,6 +55,11 @@ owned input and its response or publication opportunity on every failure before
 acceptance. After acceptance, host and constrained representations MUST retain
 the same exactly-once terminal result, cancellation, late-result, cleanup, and
 retry classification; they MAY differ only in allocation and driving shape.
+Both representations implement one semantic transition kernel and execute
+shared trace case ids with identical observable outcomes and resource deltas.
+Only storage, dispatch, waker, executor, and critical-section mechanics may
+differ. An `async-no-std` compile-only cell proves surface availability only;
+it cannot stand in for a runtime-parity claim.
 
 `BIND-CALL-CANCEL-001`: Every host binding operation that may remain pending
 MUST return one owned, cancellation-aware call before its first protocol side
@@ -181,6 +186,17 @@ WP-300 owns the exact complete-bundle constructor, optional execution
 components, validation errors, and `B::Compiler` association. It must consume
 the WP-200 compiler component unchanged; it must not implement a second
 compiler trait, erasure layer, artifact envelope, or payload-access rule.
+
+Authoring helpers may group fields by lifecycle role, generate static closed
+enums and tables, or adapt a synchronous no-successor operation. They must
+still construct the same complete input and expose its resource, lifecycle,
+profile, and cleanup declarations to validation. A helper cannot synthesize
+hidden defaults, erase an owned protocol resource, merge fallible ownership
+phases, or install a partial bundle. After the narrow Property Read slice
+completes and before broad WP-300 admission, a bounded external Zenoh authoring
+spike must exercise the public surface. The SPI is reopened only for concrete
+ownership, portability, resource-accounting, unsafe-erasure, or
+implementability evidence, not field count by itself.
 
 Both complete registration representations expose the same keyed capability
 operations:
@@ -708,6 +724,16 @@ accepted task commits its
 pre-reserved `ResidualExternalState` fallback; it never restores manual
 ownership or schedules replacement work.
 
+All cleanup-capable operations use one representation-independent transition:
+source-owned work is offered as a complete envelope, then either acknowledged
+as transferred or returned unchanged to the source's pre-reserved manual
+owner, and finally reaches complete or durable residual state. Binding authors
+see the phase context, complete envelope, acceptance result, and typed
+successor; Servient owns executor/manual queues and durable fallback. A
+strictly synchronous operation with no local continuation uses
+`NoCleanupSuccessor`; it does not acquire an executor merely to fit the
+contract.
+
 ## Host binding calls
 
 `HostBindingCall<T, C>` is the common erased host call role for client invoke,
@@ -1134,6 +1160,12 @@ registry generation, and their shared activation authority selectable. There
 is no per-route gate-opening callback, binding registry observation, or
 post-publication advertise phase.
 
+“Every required route” means every route represented by every advertised form
+in the frozen Producer plan set. V1 provides no optional-route,
+redundant-route, degraded-publication, or late-join label. A failure on any such
+route prevents publication; omission requires a newly admitted effective TD
+and generation.
+
 `poll_accept` is scoped to one committed guard and one permit that exclusively
 borrows the claimed route lease. It
 returns exactly one:
@@ -1533,6 +1565,10 @@ identities. At minimum it covers:
 - a fake third-party binding crate outside the workspace member list that
   constructs one complete bundle and supports consume and expose without
   umbrella changes;
+- a bounded external production-Zenoh authoring spike, run after the narrow
+  Property Read slice and before broad WP-300 admission, that records helper
+  use, required explicit declarations, and any concrete ownership,
+  portability, resource, unsafe, or implementability defect;
 - duplicate, incomplete, incompatible, unsupported-cell, and over-footprint
   bundle rejection before publication;
 - prepare/readiness/activate/commit failure and cancellation at every boundary,
@@ -1542,6 +1578,9 @@ identities. At minimum it covers:
   publication/cancellation races, stale permit rejection, drain/accept races,
   externally visible closed ingress, and identical host/constrained activation
   traces, with zero partial admission and zero lost committed guards;
+- shared trace case ids and identical host/constrained outcome and resource
+  deltas for every semantic state transition, with compile-only cells making no
+  runtime claim;
 - many-route fairness with one never-ready route, one accept waker per route,
   route-terminal isolation, and commit/drain admission boundaries;
 - host invoke, subscribe, response, and publication cancellation races,
@@ -1557,6 +1596,11 @@ identities. At minimum it covers:
   unrelated route continues; and
 - explicit shutdown with zero unowned live calls, guards, drivers, slots,
   cleanup tasks, or unrecorded residual state.
+
+Staged migration evidence additionally poisons the legacy selector,
+`ServerBinding::serve`, and `Dispatch` boundaries in the target runner and
+records zero target-generation calls through them. Later WP-600 and WP-700
+evidence removes the remaining concrete and public paths respectively.
 
 No benchmark or inspection report closes a gate unless its workload identity,
 profile, feature cell, registration set, limits, policy, clock, allocator, and

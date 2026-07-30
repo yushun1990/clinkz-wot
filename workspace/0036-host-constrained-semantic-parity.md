@@ -1,6 +1,6 @@
 # 0036 Host and Constrained Semantic Parity
 
-Status: OPEN
+Status: MIGRATED
 
 Kind: owner-raised portability and duplicate-semantics investigation
 
@@ -40,3 +40,32 @@ This topic records a Project Owner concern that host and constrained profiles de
 ## Expected decision output
 
 Codex should identify shared semantic machinery, cross-profile trace/equivalence tests, runtime evidence required beyond compilation, acceptable representation-specific differences, and any work-package changes needed to prevent drift.
+
+## Decision
+
+Identity checks, lifecycle transitions, ownership classifications, terminal
+retention, cancellation settlement, cleanup transfer, generation rejection,
+resource charges, and observable outcomes form one representation-independent
+semantic kernel. Host erasure and constrained associated-state storage adapt
+that kernel; they do not implement separate outcome rules.
+
+Every lifecycle evidence family that claims both profiles uses the same
+versioned trace case ids and compares transitions, outcomes, resource deltas,
+late-result handling, terminal acknowledgement, and clear/reuse behavior.
+Legitimate differences are allocation, trait-object versus enum dispatch,
+waker versus caller polling, synchronization container, and executor presence.
+A different accepted input, terminal class, cleanup owner, generation result,
+or resource charge is semantic drift.
+
+The narrow gate may retain an async/no-std compile-only cell because it selects
+no executor and makes no async runtime claim. Compilation is insufficient once
+a package claims async cancellation, wake, deadline, or cleanup behavior; that
+claim needs deterministic executor-neutral runtime traces in addition to the
+manual no-default and std executions. No `Arc`, atomic, thread, or executor is
+added to the constrained contract.
+
+## Migration
+
+The shared-kernel and trace-oracle requirement is projected into
+`docs/spec/binding-spi.md` and the WP-300/WP-400 evidence contracts. This topic
+is `MIGRATED`.

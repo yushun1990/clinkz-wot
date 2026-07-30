@@ -1,6 +1,6 @@
 # 0032 Production Binding Authoring Complexity
 
-Status: OPEN
+Status: MIGRATED
 
 Kind: owner-raised API and extension-constructibility investigation
 
@@ -40,3 +40,40 @@ This topic records a Project Owner concern that the complete registration, route
 ## Expected decision output
 
 Codex should define the production-author evidence required at WP-300 and WP-600, decide whether an early protocol-author spike is warranted, identify safe helper or generation opportunities, and migrate any stable usability requirements to the Binding SPI, work packages, fixtures, or examples.
+
+## Decision
+
+The reviewed narrow WP-300 public mock authors prove constructibility, not
+production ergonomics, and remain sufficient to begin that exact source slice.
+A bounded, non-authoritative Zenoh authoring spike should follow narrow WP-300
+completion and precede the broad WP-300 candidate. It uses public crates only,
+implements one server-only Property Read registration, and records concepts,
+boilerplate, generic/code-size pressure, protocol-reactor integration,
+correlation, ingress, and cleanup friction. It grants no WP-600 source
+admission or completion credit.
+
+Every binding author must still declare identity/compatibility, advertised
+capabilities, complete compiler/execution pairing, preparation/ingress policy,
+retained/transient footprints, route progress, response ownership, and cleanup
+outcomes. Helpers may group those declarations, generate application-closed
+static enums, or provide explicit synchronous/no-successor adapters. They may
+not infer protocol state, omit applicable resource limits, detach work, or
+hide a lifecycle phase. Official helper layers remain conveniences over the
+public SPI rather than a second normative extension mechanism.
+
+The public SPI is reopened only when the spike or a production backend shows a
+concrete ownership loss, impossible portable representation, unaccounted
+resource, unimplementable lifecycle, or a required unsafe/private dependency.
+Repetitive but mechanically generatable declarations justify helpers, not a
+semantic relaxation.
+
+WP-600 must then prove both public construction and production operation for
+Zenoh and zenoh-pico, including reactor/transport storage, correlation,
+ingress, cleanup, feature cells, and realistic end-to-end Property Read.
+
+## Migration
+
+The evidence split, early-spike boundary, helper rules, and reopening predicate
+are projected into `docs/spec/binding-spi.md`,
+`docs/work-packages/WP-300-bindings.md`, and
+`docs/work-packages/WP-600-protocol-bindings.md`. This topic is `MIGRATED`.

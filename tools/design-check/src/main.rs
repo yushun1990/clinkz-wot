@@ -3630,6 +3630,9 @@ fn check_property_read_integration_gate(
             let admission_status = string_field(tranche, "admission_status", &id)?;
             if admission_status == "approved" {
                 exact_fields.extend(["review_attestation", "review_attestation_ref"]);
+                if id == PROPERTY_READ_BINDING_SLICE {
+                    exact_fields.push("admission_base_ref");
+                }
                 if !matches!(
                     id.as_str(),
                     PROPERTY_READ_PLAN_SLICE | PROPERTY_READ_BINDING_SLICE
@@ -3637,6 +3640,16 @@ fn check_property_read_integration_gate(
                 {
                     exact_fields.push("admission_ref");
                 }
+            } else if id == PROPERTY_READ_BINDING_SLICE
+                && root
+                    .join(PROPERTY_READ_BINDING_REVIEW_ATTESTATION)
+                    .is_file()
+            {
+                exact_fields.extend([
+                    "review_attestation",
+                    "review_attestation_ref",
+                    "admission_base_ref",
+                ]);
             }
         }
         require_exact_table_fields(tranche, &id, &exact_fields)?;
@@ -4524,13 +4537,21 @@ fn check_property_read_integration_gate(
                             "{id} attestation exists without an artifact-registry entry"
                         ));
                     }
-                    let attestation_ref =
-                        git_text(root, &["rev-parse", "HEAD"], &format!("{id} attested HEAD"))?
-                            .trim()
-                            .to_owned();
+                    let attestation_path = string_field(tranche, "review_attestation", &id)?;
+                    let attestation_ref = string_field(tranche, "review_attestation_ref", &id)?;
+                    if attestation_path != PROPERTY_READ_BINDING_REVIEW_ATTESTATION {
+                        return Err(format!("{id} review attestation path is not frozen"));
+                    }
+                    let admission_base_ref = string_field(tranche, "admission_base_ref", &id)?;
+                    if admission_base_ref != "register-at-admission" {
+                        return Err(format!(
+                            "{id} review-pending admission_base_ref must remain \
+                             \"register-at-admission\""
+                        ));
+                    }
                     check_scoped_review_attestation(
                         root,
-                        PROPERTY_READ_BINDING_REVIEW_ATTESTATION,
+                        &attestation_path,
                         &attestation_ref,
                         &id,
                         PROPERTY_READ_BINDING_PRECHECKS,
@@ -4551,6 +4572,7 @@ fn check_property_read_integration_gate(
                 }
                 let attestation_path = string_field(tranche, "review_attestation", &id)?;
                 let attestation_ref = string_field(tranche, "review_attestation_ref", &id)?;
+                let admission_base_ref = string_field(tranche, "admission_base_ref", &id)?;
                 if attestation_path != PROPERTY_READ_BINDING_REVIEW_ATTESTATION
                     || !registered_artifacts.contains(&attestation_path)
                     || !root.join(&attestation_path).is_file()
@@ -4570,10 +4592,25 @@ fn check_property_read_integration_gate(
                     ACTIVE_AUTHORITY_REVISION,
                     &[],
                 )?;
+                require_full_commit_id(
+                    &admission_base_ref,
+                    "property-read binding admission_base_ref",
+                )?;
+                check_git_commit_is_ancestor(
+                    root,
+                    &admission_base_ref,
+                    "property-read binding admission_base_ref",
+                )?;
+                require_git_ancestor(
+                    root,
+                    &attestation_ref,
+                    &admission_base_ref,
+                    "property-read binding review attestation/admission base",
+                )?;
                 if status == "in-progress" {
                     check_property_read_binding_pre_source_checkpoint_state(
                         root,
-                        &attestation_ref,
+                        &admission_base_ref,
                         &implementation_paths,
                     )?;
                 }
@@ -4587,11 +4624,13 @@ fn check_property_read_integration_gate(
                     ));
                 }
                 let attestation_ref = string_field(tranche, "review_attestation_ref", &id)?;
+                let admission_base_ref = string_field(tranche, "admission_base_ref", &id)?;
                 check_property_read_binding_completion_evidence(
                     root,
                     &evidence_path,
                     &completion_check,
                     &attestation_ref,
+                    &admission_base_ref,
                 )?;
             } else if evidence_exists && tranche_evidence_is_passed(root, &evidence_path)? {
                 return Err(format!(
@@ -8945,7 +8984,7 @@ fn check_property_read_plan_pre_source_checkpoint_state(
 
 fn check_property_read_binding_pre_source_checkpoint_state(
     root: &Path,
-    attestation_ref: &str,
+    admission_base_ref: &str,
     implementation_paths: &BTreeSet<String>,
 ) -> Result<(), String> {
     let context = "property-read binding slice";
@@ -8967,7 +9006,7 @@ fn check_property_read_binding_pre_source_checkpoint_state(
         "property-read binding pre-source/implementation worktree",
     )?;
 
-    if head == attestation_ref {
+    if head == admission_base_ref {
         if worktree_paths != expected_pre_source_paths {
             return Err(format!(
                 "{context} pre-source worktree path mismatch; expected \
@@ -8986,7 +9025,7 @@ fn check_property_read_binding_pre_source_checkpoint_state(
         require_git_single_parent(
             root,
             head,
-            attestation_ref,
+            admission_base_ref,
             "property-read binding combined pre-source checkpoint",
         )?;
     } else if &head_paths == implementation_paths {
@@ -8995,7 +9034,7 @@ fn check_property_read_binding_pre_source_checkpoint_state(
         require_git_single_parent(
             root,
             &pre_source_ref,
-            attestation_ref,
+            admission_base_ref,
             "property-read binding combined pre-source checkpoint",
         )?;
         let pre_source_paths = git_commit_changed_paths(
@@ -9655,6 +9694,7 @@ fn check_property_read_binding_completion_evidence(
     relative_path: &str,
     verification_check: &str,
     attestation_ref: &str,
+    admission_base_ref: &str,
 ) -> Result<(), String> {
     let context = "property-read binding slice";
     let path = root.join(relative_path);
@@ -9726,6 +9766,12 @@ fn check_property_read_binding_completion_evidence(
         implementation_ref,
         "property-read binding implementation_ref",
     )?;
+    require_git_ancestor(
+        root,
+        attestation_ref,
+        admission_base_ref,
+        "property-read binding review attestation/admission base",
+    )?;
     let pre_source_ref = git_single_parent(
         root,
         implementation_ref,
@@ -9734,7 +9780,7 @@ fn check_property_read_binding_completion_evidence(
     require_git_single_parent(
         root,
         &pre_source_ref,
-        attestation_ref,
+        admission_base_ref,
         "property-read binding combined pre-source checkpoint",
     )?;
     let pre_source_paths = git_commit_changed_paths(

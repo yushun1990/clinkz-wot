@@ -80,6 +80,22 @@ shutdown reporting; it is not represented as successful cleanup. Destruction
 occurs outside engine locks, and no destructor is permitted to block or to be
 the only cleanup mechanism.
 
+The reusable implementation is one linear complete-object transition kernel:
+source-owned, offered, acknowledged-transferred or returned to the
+pre-reserved manual owner, then complete or durably residual. Public binding
+authors see the phase context, complete transfer envelope, acceptance result,
+settlement/outcome, and the explicit no-successor form. Servient owns executor
+queues, manual fallback slots, retry scheduling, status projection, and
+durable residual storage.
+
+A synchronous binding that proves no operation-specific continuation may use
+=NoCleanupSuccessor= and explicit complete/no-resource helpers. It does not
+implement an executor or successor enum merely to report synchronous
+completion. Those helpers never certify external cleanup from =Drop= and never
+replace a residual record or complete work object. Host and constrained
+representations share the transition/outcome oracle even when their storage
+containers differ.
+
 The complete object's declared lifetime footprint includes cancellation and
 cleanup state. Transfer changes the owner ledger but does not reduce or
 re-admit that footprint. Capacity is released only after completion or durable
@@ -106,6 +122,9 @@ objects and constrained caller-owned typed slots.
 - Deterministic workloads must exercise transfer to every supported owner,
   executor rejection/drop, a transport that never wakes, deadline races, and
   cleanup objects whose retained footprint reaches the declared maximum.
+- Negative evidence must also cover transfer acknowledgement before pending,
+  identical-object return on rejection, zero budget, stale generations, late
+  results, double acknowledgement or clear, and terminal slot reuse.
 
 * Rejected alternatives
 

@@ -30,6 +30,15 @@ its binding-slice dependency completes, it may receive an independent ADR-0013
 review to compose the architecture-gate scenario. This exception neither opens
 the broad entry point nor changes package completion order.
 
+Servient retains semantic authority without concentrating all progress behind
+one coordinator lock or queue. Host storage and scheduling are sharded first
+by Thing/generation and then by route or operation slot, with bounded ready
+queues and retained cursors. State transitions use brief critical sections;
+binding, protocol, and application callbacks run outside them. Protocol
+reactors may only record bounded protocol state and wake an owner. The
+constrained profile implements the same semantic transition kernel with
+caller-owned storage rather than copying the host synchronization layout.
+
 Handler-origin response validation follows
 `docs/amendments/WP-100-interaction-output-api-v1.md`: every producer response
 uses WP-300 `InboundResponse::try_success`, which rejects binding metadata and
@@ -202,6 +211,11 @@ integration remains behind an explicit test feature.
   distinct committed-closed guard. The transition atomically makes the immutable Producer plan
   set, produced registry generation, and their one `ServingActivationAuthority` selectable; it
   invokes no binding callback.
+- Treat every route represented by every advertised form in the frozen plan as
+  required. V1 has no optional, redundant, degraded, or late-joining route
+  status. Any route failure blocks publication and triggers complete rollback;
+  omitting a form requires a new effective TD, plan set, and produced
+  generation.
 - Store every prepared guard, readiness token, active guard, committed-closed guard, reservation,
   and primary failure in the `ExposedThingRecord` until cleanup is complete, residual, or
   atomically transferred to the bounded cleanup owner. Commit failure retains the active guard;
@@ -336,6 +350,10 @@ No compatibility facade may keep the removed lifecycle callable on a releasable 
 - `servient-plan-route-fairness`: plan-set publication/pinning/draining/reclamation plus
   route-scoped readiness and permit-authorized acceptance fairness, per-owner quanta, deadline
   progress, and no generation invalidation of existing leases.
+- `servient-sharded-orchestration`: multi-Thing and multi-route contention
+  with never-ready, continuously hot, slow, draining, and cleanup-heavy owners;
+  bounded shard queues/cursors; brief critical sections; callbacks outside
+  locks; and unrelated-owner progress.
 - `servient-typed-slot-scheduling`: caller-owned associated-state layouts, static storage
   admission, typed slot generation reuse, state drop, and fair manual progress.
 - `servient-binding-memory-ledger`: lifetime and transient footprint admission, ingress item/byte
@@ -354,6 +372,9 @@ No compatibility facade may keep the removed lifecycle callable on a releasable 
   binding-metadata and action/status failure cases plus route/generation/correlation rechecks.
 - `host-independent-progress`: contention evidence that unrelated Things and bindings progress
   independently and that callbacks execute outside engine locks.
+- `servient-semantic-trace-parity`: the same case ids, outcomes, and resource
+  deltas for host and constrained state transitions; storage, dispatch, wake,
+  executor, and critical-section mechanics are the only permitted differences.
 - `host-default-snapshots`: exhaustive `GatewayDefaultV1` and `DirectoryClientDefaultV1` timeout,
   source-retention, overflow, observability, and emission-policy defaults. The exact
   `GatewayDefaultV1` emission snapshot is one lane per binding generation and sixteen in-flight
