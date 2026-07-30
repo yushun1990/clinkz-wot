@@ -680,9 +680,13 @@ default-branch packet validation also passes:
 - `bash -n tools/check-wp300-property-read-binding-slice-entry.sh`; and
 - `git diff --check`.
 
-The exact five-file admission-ready simulation is the remaining author-side
-transition check and must be performed from the committed correction tip in an
-isolated worktree.
+An isolated worktree at correction commit
+`08f7c6b5498b875ffce8d8e76367bd9deb6a26e1` then changed exactly the five
+registered pre-source paths, bound that commit as `admission_base_ref`, updated
+the carried gate digest, and passed
+`tools/check-wp300-property-read-binding-slice-entry.sh --admission-ready`.
+The checker reported `implementation admission ready`; the simulated state was
+discarded and no product source was created.
 
 The static and host compile contracts deliberately do not compile against
 product source before admission; the completion checker owns their three-cell
