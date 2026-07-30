@@ -81,7 +81,7 @@ The repository evidence establishes the following starting point:
   paired host/static authoring contracts, executable lifecycle schema, entry
   check, and completion boundary. Its semantic review was recorded at
   `d5169ba34ad846b2d45d0841b5d57210ee4df0c1` and integrated through pull
-  request #1 at `a8eac35f955730b54a1ed1c233458ed9b269fa35`. It remains
+  request #1 at `a8eac3504f7e4252e9c3ac66da5e3038cb532cfc`. It remains
   `pending`/`review-pending` because default-branch integration exposed a
   checker defect that conflated immutable review evidence with the later
   admission base. The correction separates those refs and requires its own

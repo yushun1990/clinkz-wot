@@ -1,0 +1,46 @@
+schema_version = 1
+design_revision = "5.0"
+tranche = "WP-300-PROPERTY-READ-BINDING-SLICE"
+status = "passed-with-support-correction"
+reviewer_attestation_kind = "independent-root-session"
+reviewer_id = "codex-agent:/root"
+reviewed_base_ref = "2250d1e7ef1b2a65b52edceabce312e344682374"
+reviewed_ref = "90b385f4ae82ba10187d4f67f7656185a577125f"
+integration_merge_ref = "14acdf3ddf19bdab52a2f03901cfa02c34750477"
+observed_default_branch_ref = "28d717c48a9b6598a93ae09f88503a695392400e"
+remote_validation_run_id = 30524546209
+remote_validation_result = "passed"
+
+[[precheck]]
+id = "exact-candidate-topology"
+result = "passed"
+
+[[precheck]]
+id = "diff-hygiene"
+result = "passed"
+
+[[precheck]]
+id = "wp300-property-read-binding-candidate"
+result = "passed"
+
+[[precheck]]
+id = "five-file-admission-ready-transition"
+result = "passed"
+gate_sha256 = "a679bd3a393e500d55515cf8ed732076615a66ad53d1bc917926153d089bf3b7"
+
+[[precheck]]
+id = "two-path-implementation-topology"
+result = "passed"
+
+[[precheck]]
+id = "incomplete-implementation-completion-probe"
+result = "rejected-as-required"
+detail = "reviewed binding marker is missing: pub trait PollServerBinding"
+
+[[finding]]
+id = "PLAN-PR1-MERGE-REF"
+classification = "support-only-reference"
+result = "corrected"
+observed = "a8eac35f955730b54a1ed1c233458ed9b269fa35"
+expected = "a8eac3504f7e4252e9c3ac66da5e3038cb532cfc"
+impact = "No semantic contract, source admission, or product behavior changed."
