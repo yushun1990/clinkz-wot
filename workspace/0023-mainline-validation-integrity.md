@@ -1,6 +1,6 @@
 # 0023 Mainline Validation Integrity
 
-Status: DECIDED
+Status: MIGRATED
 
 Kind: owner-raised repository-integrity investigation
 
@@ -94,15 +94,13 @@ a known-red status would not establish integrity. Formatting remains visible
 code-quality work and may join the required matrix only with its own clean
 baseline.
 
-## Remaining migration
+## Migration evidence
 
 The technical direction is recorded in `PROJECT_GOVERNANCE.md`, D16, the
-workflow, and `PROJECT_STATE.md`. The topic remains `DECIDED`, not `MIGRATED`,
-because remote `master` still does not require the resulting
-`mainline / validation` status.
+workflow, and `PROJECT_STATE.md`.
 
 On 2026-07-30 the Project Owner added a GitHub protection rule. A read-only
-remote check then confirmed:
+remote check initially observed:
 
 - the branch API reports `master` as protected;
 - mainline workflow run `30503733056` for
@@ -110,8 +108,18 @@ remote check then confirmed:
 - the same branch response reports required-status-check enforcement `off`
   with empty contexts/checks.
 
-The external action is therefore partially complete: branch protection exists,
-but successful validation is not yet a required merge condition. Migration
-requires the remote rule to name `mainline / validation` as a required status
-and a subsequent read-only check to observe that enforcement. Until then, no
-mechanically protected-validation claim is valid.
+That last observation was an incomplete interpretation of the classic branch
+protection summary. A follow-up read through the current effective-rules API
+(`GET /repos/yushun1990/clinkz-wot/rules/branches/master`, REST API version
+`2026-03-10`) established that repository Ruleset `20009352` (`automerge`) is
+active, targets `~DEFAULT_BRANCH`, has no bypass actor, and requires status
+context `validation` from GitHub Actions integration `15368`. The actual check
+run on the named `master` commit is also named `validation`, was produced by
+`github-actions`, and concluded `success`.
+
+The workflow/check-suite UI can display this pair as `mainline / validation`,
+but the Ruleset correctly stores the workflow job name `validation`. The
+classic branch response does not expose the effective Ruleset requirement and
+must not be used alone to audit Ruleset enforcement. Remote enforcement is
+complete, the earlier partial-completion conclusion is withdrawn, and this
+topic is migrated.

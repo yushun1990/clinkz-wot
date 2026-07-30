@@ -49,9 +49,10 @@ The active design revision is v5.0 bounded-core authority.
 - WP-300 issue-decision and migration checkpoint:
   `d8ed500ddba85997d380adc5071818a90150858b`, which migrates workspace
   issues 0025-0029 without product-source changes.
-- Exact WP-300 candidate topology: the immutable candidate is the single child
-  of `d8ed500ddba85997d380adc5071818a90150858b`, changes exactly the 20
-  registered candidate paths, and retains
+- Exact WP-300 candidate:
+  `e31b975b329fa147bbccf71e5bc6be4254902d89`, the single child of
+  `d8ed500ddba85997d380adc5071818a90150858b`; it changes exactly the 20
+  registered candidate paths and retains
   `candidate_ref = "register-after-candidate-commit"` so the commit does not
   attempt to contain its own object id.
 
@@ -215,7 +216,7 @@ does not weaken the completed narrow WP-200 claim.
 
 ### Focused execution-risk decisions / workspace issues 0017-0029
 
-Status: twelve decisions migrated; one remote-enforcement action remains.
+Status: all thirteen decisions migrated.
 
 - 0017: the WP-200 admission path has a finite stopping condition. Independent
   review now includes the exact next-state simulation; the five-file
@@ -239,12 +240,13 @@ Status: twelve decisions migrated; one remote-enforcement action remains.
 - 0022: independent review is scoped by defect class. Session separation alone
   does not close runtime, lifecycle, resource, workload, performance, or
   production-author claims.
-- 0023: the local/remote integrity concern is confirmed. GitHub now reports
-  `master` protected, and mainline workflow run `30503733056` passed for
-  `9082ff4eb24d96572ae1124096185aa20abb3472`, but the branch API reports
-  required-status-check enforcement `off` with no contexts/checks. Do not
-  report mechanically protected validation until the remote rule requires
-  `mainline / validation`.
+- 0023: the local/remote integrity concern is confirmed and migrated. Active
+  repository Ruleset `20009352` targets the default branch and requires the
+  `validation` job from GitHub Actions; that exact check passed in mainline
+  workflow run `30503733056` for remote `master`
+  `9082ff4eb24d96572ae1124096185aa20abb3472`. The classic branch-protection
+  summary's `off` value does not describe effective Ruleset enforcement and
+  must not be used alone for this audit.
 - 0024: the full v1 target remains coherent and bounded by registered package
   and evidence exits. The critical path reaches the Property Read gate and
   broad WP-300 completion, then WP-400/WP-500/WP-600 branch and rejoin at
@@ -554,10 +556,9 @@ Zenoh backends. Use `scripts/check-feature-matrix.sh`, not
 2. Only after that attestation, create and validate the exact five-file
    combined pre-source checkpoint. Product implementation may then touch only
    `core/src/binding.rs` and `core/src/lib.rs`.
-3. Before remote source integration, change the GitHub rule so
-   `mainline / validation` is a required status and verify that remote
-   enforcement. A successful workflow already exists; status enforcement is
-   the sole unmigrated part of issue 0023.
+3. Keep remote source integration on pull requests targeting `master`; active
+   Ruleset `20009352` requires the GitHub Actions `validation` job before
+   merge.
 
 Ask the Project Owner only if the investigation reaches a product-goal,
 real-world constraint, unacceptable direction, or irreversible external
