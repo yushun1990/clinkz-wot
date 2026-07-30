@@ -26,13 +26,7 @@ Topics are retained after migration as decision history.
 
 ** OPEN
 
-- [[file:0042-protocol-binding-spi-validation-risk.md][0042 Protocol Binding SPI Validation and Freeze Risk]]
-- [[file:0043-servient-internal-architecture-and-cross-shard-coordination.md][0043 Servient Internal Architecture and Cross-Shard Coordination]]
-- [[file:0044-cleanup-state-machine-complexity-and-evidence-boundary.md][0044 Cleanup State-Machine Complexity and Evidence Boundary]]
-- [[file:0045-host-constrained-parity-proof-and-evolution.md][0045 Host and Constrained Parity Proof and Evolution]]
-- [[file:0046-publication-and-explicit-retry-availability-semantics.md][0046 Publication and Explicit Retry Availability Semantics]]
-- [[file:0047-resource-schema-growth-applicability-and-authoring-boundary.md][0047 Resource Schema Growth, Applicability, and Authoring Boundary]]
-- [[file:0048-repository-truth-reachability-and-state-projection-drift.md][0048 Repository Truth Reachability and State Projection Drift]]
+- None.
 
 ** DISCUSSING
 
@@ -85,6 +79,13 @@ Topics are retained after migration as decision history.
 - [[file:0039-candidate-fallback-availability-semantics.md][0039 Candidate Fallback Availability Semantics]]
 - [[file:0040-repository-truth-synchronization.md][0040 Repository Truth Synchronization]]
 - [[file:0041-target-legacy-coexistence-verification.md][0041 Target and Legacy Coexistence Verification]]
+- [[file:0042-protocol-binding-spi-validation-risk.md][0042 Protocol Binding SPI Validation and Freeze Risk]]
+- [[file:0043-servient-internal-architecture-and-cross-shard-coordination.md][0043 Servient Internal Architecture and Cross-Shard Coordination]]
+- [[file:0044-cleanup-state-machine-complexity-and-evidence-boundary.md][0044 Cleanup State-Machine Complexity and Evidence Boundary]]
+- [[file:0045-host-constrained-parity-proof-and-evolution.md][0045 Host and Constrained Parity Proof and Evolution]]
+- [[file:0046-publication-and-explicit-retry-availability-semantics.md][0046 Publication and Explicit Retry Availability Semantics]]
+- [[file:0047-resource-schema-growth-applicability-and-authoring-boundary.md][0047 Resource Schema Growth, Applicability, and Authoring Boundary]]
+- [[file:0048-repository-truth-reachability-and-state-projection-drift.md][0048 Repository Truth Reachability and State Projection Drift]]
 
 * History
 

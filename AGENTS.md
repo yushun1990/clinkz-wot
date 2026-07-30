@@ -95,9 +95,12 @@ Before substantial work:
 2.  Read `PROJECT_STATE.md`.
 3.  When remote integration can affect the next safe action, fetch the remote
     default branch when available and reconcile its pull-request/merge state
-    with `PROJECT_STATE.md` before relying on the recorded objective. Offline
-    work may use the last observed snapshot but may not release a dependent
-    source transition from an unverified remote merge.
+    with `PROJECT_STATE.md` before relying on the recorded objective. A merged
+    pull request counts as default-branch integration only after checking its
+    actual base, merge ancestry from the fetched default branch, expected
+    repository content, and applicable merge-revision validation. Offline work
+    may use the last observed snapshot but may not release a dependent source
+    transition from an unverified remote merge.
 4.  Identify the active milestone and objective from `PLAN.md`.
 5.  Follow references to the smallest necessary subset of governance,
     specifications, workspace discussions, code, tests, audits, and
@@ -306,7 +309,10 @@ unavailable, keep a local Git checkpoint, record the blocker in
 
 After any manual or automatic merge, fetch the default branch and reconcile
 the pull request, merge revision, and default-branch workflow before starting
-dependent source work. GitHub owns remote draft/check/merge facts; repository
-commits, registered work-package state, audits, and evidence own technical
-admission and completion truth. `PROJECT_STATE.md` is the last observed
-projection and never overrides either source.
+dependent source work. A merge into another task branch, reverted content, or
+superseded head does not release a default-branch dependency merely because
+GitHub reports `merged = true`; a later repair commit may be the canonical
+content-integration event. GitHub owns remote draft/check/merge facts;
+repository commits, registered work-package state, audits, and evidence own
+technical admission and completion truth. `PROJECT_STATE.md` records its last
+observed fetched-default basis and never overrides either source.

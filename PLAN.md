@@ -80,14 +80,12 @@ The repository evidence establishes the following starting point:
   a finite migrated scope, and an exact non-product-source candidate with
   paired host/static authoring contracts, executable lifecycle schema, entry
   check, and completion boundary. Its semantic review was recorded at
-  `d5169ba34ad846b2d45d0841b5d57210ee4df0c1` and integrated through pull
-  request #1 at `a8eac35f955730b54a1ed1c233458ed9b269fa35`. It remains
-  `pending`/`review-pending` because default-branch integration exposed a
-  checker defect that conflated immutable review evidence with the later
-  admission base. The correction separates those refs and requires its own
-  independent review before the exact combined pre-source checkpoint; product
-  source remains blocked. The aggregate Property Read gate remains blocked;
-  D4 has resolved subscription receiver ownership;
+  `d5169ba34ad846b2d45d0841b5d57210ee4df0c1`. Its evidence-topology
+  correction is integrated, but the tranche remains
+  `pending`/`review-pending` until the correction review and exact combined
+  pre-source checkpoint are integrated against a current default-branch
+  descendant; product source remains blocked. The aggregate Property Read gate
+  remains blocked; D4 has resolved subscription receiver ownership;
 - WP-400, WP-500, and WP-600 remain downstream of WP-300, and WP-700 joins
   those three branches;
 - default workspace tests, the 21-cell valid feature matrix, and the aggregate
@@ -145,6 +143,13 @@ answer and does not automatically block unrelated admitted work.
 | D32 | MIGRATED | Keep multiple forms as ordered candidates rather than runtime failover; make explicit retry a fresh application call | Retry combines `RetryClass` with caller idempotency/security policy, strict selection, and fresh deadline/work/security budgets; diagnostics explain non-attempted forms | M3-M6 |
 | D33 | MIGRATED | Separate remote integration facts, repository technical truth, and curated continuation projections; reconcile them at session entry | Fix WP-300 by separating immutable `review_attestation_ref` from `admission_base_ref`, and include the registered work-package check in mainline validation | Continuous execution |
 | D34 | MIGRATED | Verify legacy coexistence with staged no-backflow evidence rather than one final grep | WP-300 poisons legacy target exits, WP-400 records zero target calls, WP-600 removes concrete edges, and WP-700 proves public/source absence; only the one-way legacy-publication adapter is temporarily allowed | M4-M6 |
+| D35 | MIGRATED | Treat narrow WP-300 as package-local constructibility, then advance through external authoring, mock composition, production-family execution, and release evidence without overstating protocol neutrality or stable third-party ergonomics | The Zenoh authoring spike precedes broad WP-300; systematic unsafe/private workarounds, repeated ownership errors, unusable diagnostics, or bounded code/layout blow-up may reopen a provisional Rust surface even when implementation is possible | Broad M4 through M6 |
+| D36 | MIGRATED | Close broad Servient architecture with explicit private owners, dependency direction, scheduling domains, complete-object cross-shard handoff, and one shared semantic-kernel/trace owner | The narrow Property Read Servient slice remains unblocked; broad WP-400 must freeze the internal owner graph and run an early multi-owner/multi-shard feedback tranche before feature breadth accumulates | Broad M5A entry |
+| D37 | MIGRATED | Preserve the complete-object cleanup kernel while treating operation-specific Rust containers as provisional and making reservation coexistence, progress ownership, observability, scheduling isolation, and v1 residual durability explicit | Reserve simultaneously live obligations rather than every named phase additively; v1 residual durability is bounded in-instance status and final shutdown reporting, not restart persistence | Broad M4-M5A |
+| D38 | MIGRATED | Require one code-owned semantic kernel and machine-readable trace oracle per shared Host/constrained capability, comparing safety and normalized liveness while separating semantic resource units from physical profile costs | Capability applicability and Host-default expansion are explicit; compile-only async/no-std makes no runtime claim, and production-backed parity is required before constrained runtime maturity is claimed | M4-M6 |
+| D39 | MIGRATED | Keep atomic publication distinct from the conservative v1 all-advertised-route policy, and keep explicit retry distinct from product failover | Applications/platforms build a new effective TD/generation after rollback; broad Consumer/Gateway availability claims require execution-certainty/action taxonomy, overall attempt bounds, and attempt correlation beyond `RetryClass` alone | M5A-M7 |
+| D40 | MIGRATED | Keep the exhaustive flat resource schema as canonical authority, not as the stable external authoring surface | Before broad public resource/SPI maturity, add typed applicability and lifecycle/classification metadata, complete role builders, schema revision/digest identity, field-admission/retirement discipline, and evidence-backed default maturity | Broad M4-M6 |
+| D41 | MIGRATED | Count remote integration only from actual base, fetched default-branch ancestry, expected content, and validation coverage; treat an impossible objective or false blocker as dangerous projection drift | `PROJECT_STATE.md` records its observed basis and next bounded task; `PLAN.md` retains roadmap/package state rather than transient PR workflow, and stacked/repair PRs do not release dependent work merely because `merged = true` | Continuous execution |
 
 The former D3 Foundation candidate is the exact single child of
 `56fea9813df80fe29527755fcb2ce91d43cc5086`, changes only its registered
@@ -172,8 +177,9 @@ D5 preserves package completion order but adds a cross-package integration
 dependency in the registered work-package DAG. The WP-100 handler and WP-200
 plan slices are complete. WP-300 is `pending`/`review-pending` at its exact
 non-product-source semantic candidate with a passed immutable review; its
-admission-basis correction still requires independent ADR-0013 review and
-integration. WP-400 remains planned/blocked; neither may enter its source scope
+admission-basis correction is integrated, but independently reviewed
+correction evidence and the exact combined pre-source checkpoint must still be
+integrated. WP-400 remains planned/blocked; neither may enter its source scope
 until its exact admission transition passes. Broad
 `WP-100-HANDLER-ENTRY`, `WP-300-BROAD-ENTRY`, and `WP-400-BROAD-ENTRY` remain
 blocked until the gate passes. The gate exception does not claim final
@@ -442,8 +448,10 @@ Authoritative package scope: WP-300.
 
 Dependency: WP-200.
 
-Objective: provide a constructible protocol-neutral client/server binding SPI
-with route-scoped progress, explicit ownership, and bounded cleanup.
+Objective: provide a constructible protocol-neutral client/server binding
+architecture with route-scoped progress, explicit ownership, and bounded
+cleanup, while keeping empirical maturity claims scoped to the protocol and
+profile evidence actually executed.
 
 Entry conditions:
 
@@ -461,6 +469,13 @@ Entry conditions:
 - independent host and `no_std + alloc` binding-authoring contracts and the
   executable lifecycle schema are present in the immutable candidate;
 - the exact tranche is admitted.
+
+Before broad WP-300 admission, the external Zenoh authoring spike must record
+authoring, cleanup, resource, diagnostic, generic/layout, and unsafe/private
+dependency evidence; the resource authoring and capability-applicability gaps
+in D38/D40 must have an exact owner and closure tranche. Narrow Property Read
+completion remains a constructibility claim and is not blocked by those broad
+entry requirements.
 
 AI deliverable:
 
@@ -484,6 +499,9 @@ Exit criteria:
   cannot dispatch handlers or reinterpret TDs;
 - activation, cancellation, subscription, response, emission, and cleanup
   state transitions are executable and bounded;
+- shared Host/constrained capabilities use one semantic kernel and one
+  machine-readable trace oracle, while profile-specific physical costs and
+  applicability remain explicit;
 - WP-300 is complete and independently reviewed.
 
 ## M5A — Servient Runtime and Application Lifecycle
@@ -503,7 +521,10 @@ Entry conditions:
   `PROPERTY-READ-ARCHITECTURE` passes;
 - only `WP-400-PROPERTY-READ-SERVIENT-SLICE` may seek independent admission
   after its exact binding-slice dependency completes; and
-- package completion order and all ordinary WP-400 evidence remain unchanged.
+- before broad source admission, the private owner/dependency graph,
+  scheduling domains, cross-shard transfer rules, shared semantic-kernel
+  owner, and first multi-owner/multi-shard feedback tranche are frozen; and
+- package completion order and the narrow WP-400 slice remain unchanged.
 
 Exit criteria:
 
@@ -513,6 +534,8 @@ Exit criteria:
 - handler selection and progress have no binding-owned shortcut;
 - host and constrained scheduling, fairness, cleanup, and resource-ledger
   evidence pass;
+- publication and retry facades make the conservative v1 availability
+  limitations explicit and do not claim degraded service or failover;
 - application-facing producer/consumer/subscription facades have their frozen
   ownership and semantics;
 - WP-400 is complete and independently reviewed.
@@ -561,6 +584,8 @@ Exit criteria:
   subscriptions, emissions, activation, cleanup, and bounds pass;
 - both valid backend feature cells pass without relying on their intentionally
   invalid simultaneous configuration;
+- production-backed parity covers the common Zenoh/zenoh-pico capability
+  intersection while making profile-only and unsupported cells explicit;
 - realistic end-to-end Thing interaction works through Zenoh;
 - WP-600 is complete and independently reviewed.
 
@@ -586,6 +611,9 @@ Exit criteria:
 - workspace feature, `no_std + alloc`, TD compatibility, integration,
   architecture-boundary, resource, and performance checks pass;
 - requirement-to-evidence coverage is complete;
+- protocol-neutrality, constrained-runtime maturity, resource-authoring, and
+  availability claims are no broader than their executed protocol-shape,
+  profile, authoring, and recovery evidence;
 - `PROPERTY-READ-ARCHITECTURE` passes and its evidence remains current;
 - WP-700 and all global conformance evidence are complete;
 - an independent release-candidate review is complete and ready for release

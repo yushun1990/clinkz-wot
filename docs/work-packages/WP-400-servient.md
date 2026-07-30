@@ -39,6 +39,27 @@ reactors may only record bounded protocol state and wake an owner. The
 constrained profile implements the same semantic transition kernel with
 caller-owned storage rather than copying the host synchronization layout.
 
+Before broad WP-400 source admission, its candidate freezes:
+
+- one private owner/dependency graph for registration snapshots, plan sets,
+  Thing lifecycle, route drivers, operation/handler calls, subscriptions,
+  emissions, cleanup, reclamation, resource accounts, and status;
+- separate retained scheduling domains for route progress, operation/delivery,
+  subscription/emission, cleanup/deadline, and reclamation/status work, using
+  one `WorkBudget` model without one universal queue;
+- cross-shard rules that prohibit callbacks under multiple mutable shards and
+  use generation-bearing commands, reservations, complete-object transfer,
+  acknowledgement, rejection return, and commit revalidation;
+- one profile-neutral Servient transition-kernel code owner and one versioned
+  machine-readable trace oracle consumed by both runtime adapters; and
+- one independently reviewable early broad tranche that executes at least two
+  Things, two bindings, multiple routes, a hot owner, a never-ready owner,
+  cleanup/deadline pressure, and unrelated-shard progress before subscriptions,
+  emissions, and broad facade work accumulate.
+
+The exact single-route Property Read Servient slice does not make those broad
+scalability or decomposition claims and remains independently admissible.
+
 Handler-origin response validation follows
 `docs/amendments/WP-100-interaction-output-api-v1.md`: every producer response
 uses WP-300 `InboundResponse::try_success`, which rejects binding metadata and
@@ -216,6 +237,11 @@ integration remains behind an explicit test feature.
   status. Any route failure blocks publication and triggers complete rollback;
   omitting a form requires a new effective TD, plan set, and produced
   generation.
+- Treat that all-route requirement as a conservative v1 availability policy,
+  not as a logical consequence of atomic publication. After failed rollback,
+  the application/platform owns any new effective TD and generation, exposure
+  attempt bound/backoff, signature, Directory update, and later restoration.
+  Servient does not mutate forms or claim degraded publication.
 - Store every prepared guard, readiness token, active guard, committed-closed guard, reservation,
   and primary failure in the `ExposedThingRecord` until cleanup is complete, residual, or
   atomically transferred to the bounded cleanup owner. Commit failure retains the active guard;
@@ -354,6 +380,10 @@ No compatibility facade may keep the removed lifecycle callable on a releasable 
   with never-ready, continuously hot, slow, draining, and cleanup-heavy owners;
   bounded shard queues/cursors; brief critical sections; callbacks outside
   locks; and unrelated-owner progress.
+- `servient-owner-graph-and-cross-shard-feedback`: exact private owners and
+  dependency edges, no callback under multiple mutable shards, acknowledged
+  complete-object handoff or identical rejection return, bounded scheduling
+  domains, and the early two-Thing/two-binding/multi-route scenario.
 - `servient-typed-slot-scheduling`: caller-owned associated-state layouts, static storage
   admission, typed slot generation reuse, state drop, and fair manual progress.
 - `servient-binding-memory-ledger`: lifetime and transient footprint admission, ingress item/byte
@@ -373,12 +403,21 @@ No compatibility facade may keep the removed lifecycle callable on a releasable 
 - `host-independent-progress`: contention evidence that unrelated Things and bindings progress
   independently and that callbacks execute outside engine locks.
 - `servient-semantic-trace-parity`: the same case ids, outcomes, and resource
-  deltas for host and constrained state transitions; storage, dispatch, wake,
-  executor, and critical-section mechanics are the only permitted differences.
+  semantic deltas plus normalized zero-budget/wake/deadline/non-starvation
+  obligations for host and constrained state transitions, consumed from one
+  machine-readable oracle; physical storage, dispatch, wake, executor,
+  critical-section, layout, and code-size costs are reported separately.
 - `host-default-snapshots`: exhaustive `GatewayDefaultV1` and `DirectoryClientDefaultV1` timeout,
   source-retention, overflow, observability, and emission-policy defaults. The exact
   `GatewayDefaultV1` emission snapshot is one lane per binding generation and sixteen in-flight
-  publications per lane.
+  publications per lane. Each value is classified as implemented/measured
+  product default, tested reference, or provisional; a provisional value
+  cannot close a release default claim.
+- `resource-profile-authoring-and-applicability`: executable role/profile-cell
+  applicability, illegal-`None` rejection, complete role builders, value
+  origin diagnostics, schema revision/value digest identity, cross-field
+  limiting-scope diagnostics, and one real multi-Thing/multi-binding tuning
+  scenario without raw-array authoring.
 - `producer-subscription-transaction`: handler accept/reject, guard install, cancel/drop during
   setup, late accept, install rollback, active stop, repeated stop, teardown failure, retained
   cleanup, reentrant stop, and proof of exactly-once setup/teardown callback leases. Gateway
@@ -392,6 +431,16 @@ No compatibility facade may keep the removed lifecycle callable on a releasable 
   cursors, payload sharing, partial outcomes, slow-lane isolation, and host/constrained policies.
 - `native-collection-subscriptions`: one root-form request and one driver for each standard
   collection operation, plus structured rejection without implicit fan-out.
+- `publication-recovery-boundary`: Nth-route failure, truthful non-publication,
+  complete rollback, application-created reduced effective TD/new generation,
+  bounded repeated attempts, restoration to the full route set, and explicit
+  absence of engine-owned signing, Directory republish, or degraded serving.
+- `explicit-retry-facade`: one bounded product-operation identity over fresh
+  attempts, execution-certainty and permitted-action classification,
+  idempotency requirement, strict candidate/generation identity, overall
+  deadline/work/probe/attempt bounds, cancellation, bounded history, and
+  negative proof that uncertain or post-acceptance outcomes cannot trigger
+  hidden fallback.
 
 The evidence must also include compile fixtures for all three feature cells and model tests that
 cover every legal and illegal transition in the `expose`, `binding-route`,

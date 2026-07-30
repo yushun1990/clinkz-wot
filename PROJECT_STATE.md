@@ -65,13 +65,25 @@ The active design revision is v5.0 bounded-core authority.
   `9082ff4eb24d96572ae1124096185aa20abb3472` and reviewed second parent
   `d5169ba34ad846b2d45d0841b5d57210ee4df0c1`.
 - Remote merge `2250d1e7ef1b2a65b52edceabce312e344682374` integrated pull
-  request #2 and introduced workspace topics 0030-0041. The current correction
-  branch `agent/decide-workspace-topics` starts from that default-branch
-  checkpoint.
-- Draft pull request #3
-  (`https://github.com/yushun1990/clinkz-wot/pull/3`) is the remote handoff for
-  that correction branch. It remains draft with auto-merge disabled pending
-  independent review, current remote validation, and the D23 prerequisites.
+  request #2 and introduced workspace topics 0030-0041.
+- Remote merge `14acdf3ddf19bdab52a2f03901cfa02c34750477` integrated pull
+  request #3. Its reviewed content head is
+  `90b385f4ae82ba10187d4f67f7656185a577125f`, its actual base is
+  `2250d1e7ef1b2a65b52edceabce312e344682374`, and exact-head workflow run
+  `30524546209` passed.
+- The remote default branch was fetched on 2026-07-30 at
+  `28d717c48a9b6598a93ae09f88503a695392400e`. It contains the pull-request #3
+  correction and workspace topics 0042-0048.
+- Independent review of the exact pull-request #3 correction and both
+  registered next-state simulations passed locally. Branch
+  `agent/review-wp300-admission-basis` records that review at
+  `4ae812f` and adds
+  `docs/audits/WP-300-admission-basis-correction-review.toml`.
+  That checkpoint is not yet on the remote default branch.
+- The current decision/migration task uses
+  `agent/decide-workspace-topics-0042-0048` from the observed default
+  checkpoint. GitHub CLI authentication for `yushun1990` is invalid, so
+  neither local task branch currently has a complete remote handoff.
 
 The activation candidate changed exactly 27 documentation/checker paths and no
 Rust source, Cargo manifest, public API, or runtime behavior. Its independent
@@ -80,21 +92,22 @@ default workspace tests, diff hygiene, and the 21-cell valid feature matrix.
 
 ## Current Objective
 
-Obtain independent review and integration for the decision/migration and
-evidence-topology correction packet handed off as draft pull request #3. The
-technical decisions for workspace topics 0030-0041 are migrated to governance,
-ADR/specification, architecture, work-package, plan, and continuation owners.
-The packet also corrects WP-300 admission validation: immutable semantic review
-evidence remains bound to
-`d5169ba34ad846b2d45d0841b5d57210ee4df0c1`, while the later reviewed and
-integrated default-branch commit is recorded separately as
-`admission_base_ref`.
+Complete and hand off the decision/migration packet for workspace topics
+0042-0048. Their repository-grounded conclusions are migrated locally into
+governance, specifications, architecture, work packages, the plan, workspace
+index, and this continuation checkpoint. They strengthen broad-package and
+release evidence without reopening the immutable narrow WP-300 semantic
+candidate.
 
-Product source remains unadmitted. This correction requires independent review
-and integration before the exact five-file combined pre-source checkpoint.
-That checkpoint must replace `register-at-admission` with the exact current
-default-branch base and be its single child. Only then may the implementation
-child touch `core/src/binding.rs` and `core/src/lib.rs`.
+Product source remains unadmitted. Pull request #3 corrected the WP-300
+admission-basis model on the remote default branch, and an exact independent
+review now passes locally at `4ae812f`. That review checkpoint must be handed
+off and integrated before the exact five-file combined pre-source checkpoint.
+The pre-source checkpoint must bind `admission_base_ref` to the then-current
+reviewed default-branch descendant and be its single child. Only its
+implementation child may touch `core/src/binding.rs` and `core/src/lib.rs`.
+The 0042-0048 migration packet is disjoint preparation and does not count as
+WP-300 source admission.
 
 The narrow WP-200 plan slice is complete. Its handoff to WP-300 contains:
 
@@ -106,15 +119,14 @@ The narrow WP-200 plan slice is complete. Its handoff to WP-300 contains:
 6. sole WP-200 implementation ownership, which WP-300 may consume only inside
    a complete installable registration.
 
-The exact non-product-source WP-300 candidate now contains paired public
+The exact non-product-source WP-300 candidate contains paired public
 host/static authoring contracts, a five-test executable lifecycle schema,
 entry/completion checks, and the expected
 absent-`core/src/binding.rs` completion boundary. No WP-300 implementation path
 or cross-package Property Read architecture fixture root is admitted. The
-semantic candidate review is complete. Its admission-topology projection is
-being corrected because merge integration is a valid admission ancestor but
-cannot be treated as the single-parent attestation commit. The earlier
-validation prerequisite remains resolved:
+semantic candidate review and admission-topology correction are complete. The
+correction's independent review is locally recorded but not yet integrated.
+The earlier validation prerequisite remains resolved:
 `tools/design-check` now selects an explicit runtime worktree root from its
 callers, falls back only to runtime ancestor discovery, and rejects an invalid
 explicit root instead of silently checking another worktree.
@@ -132,7 +144,16 @@ all-route publication; one complete-object cleanup kernel; host/constrained
 semantic trace parity; generated projections over the exhaustive resource
 schema; build/deploy plugin semantics; explicit-retry rather than failover;
 remote/repository/state truth separation; and staged no-backflow evidence.
-Remote review of this correction packet is the next integration boundary.
+
+Workspace issues 0042-0048 are decided and migrated locally. They establish a
+six-rung Binding-SPI maturity ladder and honest Zenoh-family claim; a private
+Servient owner graph and early cross-shard feedback checkpoint; cleanup
+obligation coexistence and observable progress; one shared Host/constrained
+kernel and trace oracle with normalized liveness; separation of atomic
+publication from the conservative all-route v1 policy plus a bounded explicit
+retry-facade contract; separation of the canonical resource schema from stable
+authoring projections; and a default-branch reachability/content/validation
+predicate for remote truth. Remote handoff is the remaining task boundary.
 
 ## Active Milestones
 
@@ -142,8 +163,9 @@ Remote review of this correction packet is the next integration boundary.
 - M3 Planning and Compilation Pipeline — IN_PROGRESS; the exact WP-200
   Property Read plan slice is complete, while broad WP-200 exits remain open.
 - M4 Protocol Binding SPI and Lifecycle — OPEN; the exact WP-300 Property Read
-  slice dependency and semantic review are satisfied, but its evidence-basis
-  correction remains `pending`/`review-pending`; no product source is admitted.
+  slice dependency, semantic review, and correction are satisfied. The exact
+  correction review passes locally but is not integrated; no product source is
+  admitted.
 
 The v5 authority switch is complete, but M1 remains open because GATE-1,
 GATE-2, GATE-4, GATE-5, and GATE-6 still require their registered closure
@@ -238,6 +260,34 @@ D23-D34 add these execution and realism boundaries:
 - no-backflow evidence advances from WP-300 poisoned exits through WP-400 zero
   calls and WP-600 concrete-edge removal to WP-700 final absence.
 
+D35-D41 add these maturity and continuation boundaries:
+
+- Binding-SPI evidence advances through immutable consistency, narrow
+  constructibility, external Zenoh authoring, mock cross-package composition,
+  production Zenoh-family execution, and final release evidence; Zenoh and
+  zenoh-pico alone do not prove protocol-shape neutrality;
+- broad Servient admission requires a private owner/dependency graph,
+  complete-object cross-shard handoff, distinct bounded scheduling domains,
+  one shared semantic kernel, and an early multi-Thing/multi-binding feedback
+  checkpoint;
+- cleanup admission requires an operation/obligation coexistence matrix,
+  observable pending progress, and an explicit v1 in-instance residual
+  durability boundary;
+- Host/constrained parity uses one code-level transition kernel and trace
+  oracle, compares semantic resources and normalized liveness, and separately
+  bounds profile-specific physical costs;
+- atomic publication truth is distinct from the conservative v1 all-route
+  policy, while degraded recovery and bounded multi-attempt retry remain
+  explicit application/platform contracts;
+- the exhaustive flat resource schema remains canonical authority rather than
+  a stable public authoring surface; broad maturity requires executable
+  applicability, typed projections, diagnostics, revision/digest identity,
+  and field-lifecycle discipline; and
+- remote integration requires actual-base inspection, default-branch
+  reachability, expected content, and relevant validation, while
+  `PROJECT_STATE.md` records the last observed projection and `PLAN.md` retains
+  only durable roadmap/package truth.
+
 D8 selects this exact representation:
 
 - `BindingCompilerExtension` owns associated `Cursor` and `Artifact` types;
@@ -285,9 +335,9 @@ does not weaken the completed narrow WP-200 claim.
 
 ## Open Decisions and Blockers
 
-### Focused execution-risk decisions / workspace issues 0017-0041
+### Focused execution-risk decisions / workspace issues 0017-0048
 
-Status: all twenty-five decisions migrated.
+Status: all thirty-two decisions migrated.
 
 - 0017: the WP-200 admission path has a finite stopping condition. Independent
   review now includes the exact next-state simulation; the five-file
@@ -367,6 +417,33 @@ Status: all twenty-five decisions migrated.
   registered work-package checker.
 - 0041: no-backflow proof is staged from poisoned target exits to zero calls,
   concrete-edge removal, and final public/source absence.
+- 0042: the narrow Binding-SPI candidate proves constructibility only.
+  Maturity now has six evidence rungs; the Zenoh authoring spike has concrete
+  reopening predicates, and Zenoh plus zenoh-pico remain one protocol family.
+- 0043: broad Servient admission requires a private owner graph, one-way
+  dependencies, complete-object cross-shard handoff, bounded scheduling
+  domains, one shared trace kernel, and early multi-route feedback. Narrow
+  Property Read remains admissible.
+- 0044: complete-object cleanup remains frozen while exact Rust layout stays
+  provisional. Broad admission now owns obligation coexistence, pending
+  progress observability, unique progress authority, and an honest
+  in-instance residual durability boundary.
+- 0045: common Host/constrained capabilities use one code-level kernel and
+  trace oracle. Semantic resources and normalized liveness must match;
+  profile-specific physical costs remain separately bounded, and compile-only
+  cells make no runtime claim.
+- 0046: atomic publication and all-route-required are distinct. The latter is
+  a conservative v1 availability policy; recovery generation construction is
+  application/platform-owned, and `RetryClass` alone is not a bounded retry
+  facade.
+- 0047: the flat exhaustive resource schema remains canonical but is not yet a
+  stable authoring surface. Broad maturity requires executable applicability,
+  typed role projections, diagnostics, revision/digest identity, and field
+  lifecycle evidence.
+- 0048: dependent work proves remote truth from actual base, default
+  reachability, expected content, and validation. Dangerous continuation drift
+  is corrected before the next transition; PLAN no longer owns transient
+  branch or handoff facts.
 
 Candidate preparation also resolved one Rust staging constraint. The existing
 legacy `core::inbound::ServerBinding` owns `shutdown(&ThingId)`, while the
@@ -422,8 +499,8 @@ globally `blocked`.
 
 ### WP-300 admission candidate
 
-Status: SEMANTIC REVIEW PASSED; ADMISSION-BASIS CORRECTION REVIEW PENDING;
-SOURCE NOT ADMITTED.
+Status: SEMANTIC REVIEW PASSED; ADMISSION-BASIS CORRECTION INTEGRATED;
+CORRECTION REVIEW PASSED LOCALLY BUT NOT INTEGRATED; SOURCE NOT ADMITTED.
 
 The candidate is the exact 20-path single child of decision checkpoint
 `d8ed500ddba85997d380adc5071818a90150858b`. It owns:
@@ -441,10 +518,18 @@ The semantic candidate changes no product source. Its immutable review
 attestation is present at
 `d5169ba34ad846b2d45d0841b5d57210ee4df0c1`. The aggregate checker formerly
 substituted current `HEAD` for that ref and required a later pre-source commit
-to be its direct child. That becomes false after valid merge integration.
-The correction binds `review_attestation_ref` separately from a deferred
-`admission_base_ref`, requires the attestation to be an ancestor of the base,
-and makes the exact five-file checkpoint a single child of the base.
+to be its direct child, which is false after valid merge integration. Pull
+request #3 integrated the correction that binds `review_attestation_ref`
+separately from a deferred `admission_base_ref`, requires the attestation to be
+an ancestor of the base, and makes the exact five-file checkpoint a single
+child of the base.
+
+Independent inspection of the exact pull-request #3 head found no intersecting
+semantic change. It also reproduced the passing five-file
+`--admission-ready` transition and the accepted exact two-path implementation
+topology while rejecting an incomplete completion claim. Local checkpoint
+`4ae812f` records that result. Source admission waits for that checkpoint's
+remote integration and a fresh default-base reconciliation.
 
 Future implementation scope remains exactly `core/src/binding.rs` and
 `core/src/lib.rs`; existing `core/src/inbound.rs` is not an admitted path.
@@ -469,10 +554,15 @@ removed.
   migration, portable async/step admission, no-atomic public-boundary proof,
   and workload/resource evidence.
 - The exact WP-300 Property Read slice has its plan dependency and immutable
-  semantic review but remains blocked on independent review/integration of the
-  admission-basis correction and its combined pre-source checkpoint; broad
-  WP-300 also waits on later binding/Servient integration evidence.
+  semantic review. Its correction is integrated and independently reviewed
+  locally, but the review checkpoint must be handed off and integrated before
+  the combined pre-source checkpoint. Broad WP-300 also waits on external
+  authoring, cleanup-coexistence, shared-parity-oracle, and resource-authoring
+  evidence.
 - WP-400, WP-500, and WP-600 depend on WP-300; WP-700 joins those branches.
+- GitHub CLI authentication is invalid. This blocks the mandatory push/draft
+  pull-request handoff for both current local branches, but it does not change
+  architecture truth or authorize source admission.
 
 These do not extend the D8 packet unless repository evidence shows a direct
 contract, rollback, or validation intersection.
@@ -693,6 +783,36 @@ the carried gate digest, and passed
 The checker reported `implementation admission ready`; the simulated state was
 discarded and no product source was created.
 
+Remote reconciliation then proved pull request #3's actual base, exact content
+head, merge reachability from `master`, and successful exact-head workflow run
+`30524546209`. Independent review of that correction on 2026-07-30 passed:
+
+- full correction-diff and topology inspection;
+- the exact five-file `--admission-ready` simulation, with gate SHA-256
+  `a679bd3ac055d519740d0771603bd12382181f64e4c00e72343413511447b00a`;
+- the exact two-path implementation topology simulation;
+- rejection of an incomplete passed-completion claim;
+- `tools/check-wp300-property-read-binding-slice-entry.sh --candidate`;
+- `tools/check-design-artifacts.sh`;
+- `cargo test --workspace --locked`;
+- `sh scripts/check-feature-matrix.sh` — 21 passed, 0 failed; and
+- diff hygiene.
+
+Local checkpoint `4ae812f` contains the resulting registered audit and
+continuation correction. Its remote handoff is blocked only by invalid GitHub
+CLI authentication.
+
+The 24-path workspace-topic 0042-0048 decision/migration packet changes no
+product source. On 2026-07-30 it passes:
+
+- `tools/check-design-artifacts.sh`, including revalidated state-machine and
+  work-package carry-forward digests;
+- `tools/check-wp300-property-read-binding-slice-entry.sh --candidate`, proving
+  the broad maturity decisions do not reopen the narrow candidate;
+- `cargo test --workspace --locked`;
+- `sh scripts/check-feature-matrix.sh` — 21 passed, 0 failed; and
+- `git diff --check`.
+
 The static and host compile contracts deliberately do not compile against
 product source before admission; the completion checker owns their three-cell
 compile/runtime validation after the exact two-path implementation child.
@@ -703,17 +823,18 @@ Zenoh backends. Use `scripts/check-feature-matrix.sh`, not
 
 ## Next Safe Actions
 
-1. Independently review the exact decision/migration and evidence-topology
-   correction on `agent/decide-workspace-topics`, including the simulated
-   five-file `--admission-ready` transition.
-2. Integrate the correction through its draft pull request only after current
-   mainline validation and remote review pass. Do not enable auto-merge until
-   the strict ruleset, up-to-date check, conversation-resolution, exact-head,
-   and Owner-boundary prerequisites in D23 are freshly verified.
-3. From the reviewed and integrated default-branch commit, create the exact
-   five-file combined pre-source checkpoint with
-   `admission_base_ref = <that commit>`. Product implementation may then touch
-   only `core/src/binding.rs` and `core/src/lib.rs`.
+1. Restore GitHub CLI authentication with `gh auth login -h github.com`.
+   Preserve the two local checkpoints until remote handoff is complete.
+2. Push `agent/review-wp300-admission-basis`, open its draft pull request, and
+   integrate it only after exact-head validation and review pass. Push and hand
+   off `agent/decide-workspace-topics-0042-0048` independently; the topic
+   packet does not need to serialize WP-300 once its own evidence passes.
+3. Fetch the resulting default branch and reconcile actual ancestry, expected
+   review content, and default-head validation. From that reviewed descendant,
+   create the exact five-file combined pre-source checkpoint with
+   `admission_base_ref = <that commit>`.
+4. Only after the pre-source checkpoint passes `--admission-ready`, implement
+   the exact child touching `core/src/binding.rs` and `core/src/lib.rs`.
 
 Ask the Project Owner only if the investigation reaches a product-goal,
 real-world constraint, unacceptable direction, or irreversible external
@@ -740,6 +861,8 @@ commitment that repository evidence cannot resolve.
 - `workspace/0029-wp300-admission-machinery-regression.md`
 - `workspace/0030-automatic-pull-request-integration.md` through
   `workspace/0041-target-legacy-coexistence-verification.md`
+- `workspace/0042-protocol-binding-spi-validation-risk.md` through
+  `workspace/0048-repository-truth-reachability-and-state-projection-drift.md`
 - `docs/spec/planning.md`
 - `docs/spec/binding-spi.md`
 - `docs/work-packages/property-read-architecture-gate.toml`

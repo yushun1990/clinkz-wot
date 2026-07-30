@@ -1035,6 +1035,15 @@ late-joining route. A future availability group or redundant-route policy
 requires a versioned TD/plan contract plus explicit lifecycle, resource, and
 evidence rules.
 
+This all-advertised-route conjunction is a conservative v1 product policy, not
+a logical consequence of atomic publication. Atomicity requires that whichever
+effective TD and route set is selected be published as one truthful immutable
+generation. The engine does not derive a reduced TD after route failure.
+Applications or deployment platforms own any replacement source/effective TD,
+new generation, attempt/backoff bound, signing and Directory update, and later
+restoration of the full route set after the failed generation's conflicting
+endpoint and cleanup ownership is settled.
+
 ## Consumer plan construction and selection
 
 Consumer admission eagerly compiles all protocol-neutral metadata needed for
@@ -1073,6 +1082,28 @@ form or binding for the new call. That call receives a fresh deadline,
 side-effect assumption is carried forward. Diagnostics identify the failed
 selection/execution phase and why another admitted form was not attempted.
 Multiple forms are ordered candidates, not a runtime failover pool.
+
+`RetryClass` is advice about one terminal error; by itself it is not a complete
+availability action. Before a broad Consumer or Gateway facade claims reusable
+retry or failover behavior, its domain-entry contract must freeze bounded
+values for:
+
+- execution certainty (proved no protocol side effect, result known, or result
+  possibly committed/unknown);
+- permitted next action (same candidate, another admitted candidate, rebuild
+  the consumed handle/generation, caller decision, or no retry);
+- operation/idempotency proof required for that action;
+- strict plan-set, candidate, form, binding, and generation identity;
+- one product-operation correlation identity over fresh per-attempt
+  correlation ids;
+- overall attempt, elapsed-time, work, provider-probe, and retained-diagnostic
+  bounds; and
+- cancellation and a bounded final attempt history.
+
+Until that facade and its negative evidence exist, the v1 engine offers
+structured failure and low-level strict selection, not automatic failover.
+No classification may authorize another candidate after acceptance or when
+execution certainty is unknown.
 
 Selection errors remain distinct from execution errors. They identify missing
 targets or operations, absent compatible forms, target-resolution failures,

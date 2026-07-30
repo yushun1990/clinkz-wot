@@ -152,9 +152,31 @@ frozen, run one bounded, non-authoritative external Zenoh authoring spike
 against the complete public registration surface. Helpers may group fields,
 generate closed static enums/tables, and adapt synchronous
 `NoCleanupSuccessor` operations, but may not hide resources or lifecycle
-ownership. Reopen the SPI only for concrete ownership, portability,
-resource-accounting, unsafe-erasure, or implementability evidence. The spike
-does not release WP-600 or claim production-protocol progress.
+ownership. The spike records cleanup-library mapping, diagnostics, repeated
+workarounds, generic/monomorphization pressure, constrained layout/code size,
+and unsafe/private dependency needs. Reopen the SPI for a concrete ownership,
+portability, resource-accounting, unsafe-erasure, or implementability defect,
+or for systematic authoring failures that repeatedly lose semantic truth or
+exceed declared bounds. Mechanical repetition and field count alone remain
+helper/generation concerns. The spike does not release WP-600, prove
+protocol-shape neutrality, or claim production-protocol progress.
+
+Broad WP-300 admission additionally requires:
+
+- one executable capability/profile applicability taxonomy;
+- one shared Core semantic-kernel owner and versioned machine-readable trace
+  oracle consumed by both Host and constrained runners;
+- semantic resource deltas separated from profile-specific physical
+  allocation/layout/code-size costs;
+- a cleanup-obligation coexistence matrix for every activated operation
+  family; and
+- an exact resource-authoring closure tranche for typed applicability,
+  complete role projections, and schema identity before the resource surface
+  is called stable for external applications or bindings.
+
+These are broad maturity boundaries. They do not intersect the reviewed narrow
+Property Read source paths or turn its package-local constructibility claim
+into a production, protocol-neutrality, ergonomics, or runtime-parity claim.
 
 ## Requirements
 
@@ -445,8 +467,20 @@ Produce these package evidence keys exactly as indexed by the work-package DAG:
   cleanup-reservation binding and acknowledged work transfer, declared footprint admission,
   zero-budget retry, and generation-safe slot reuse.
 - `host-constrained-semantic-parity` for shared trace case ids, identical
-  observable outcomes and resource deltas, and explicit compile-only
-  `async-no-std` claims.
+  observable outcomes, semantic reservation/release deltas, normalized
+  zero-budget/wake/deadline liveness, separately bounded physical costs,
+  explicit applicability classes, and explicit compile-only `async-no-std`
+  claims.
+- `binding-semantic-trace-oracle` for one versioned machine-readable scenario
+  source consumed unchanged by Host and constrained runners, with negative
+  mutations for terminal class, owner, generation, resource delta, deadline,
+  wake, and acknowledgement.
+- `cleanup-obligation-coexistence` for the legal simultaneous-obligation
+  matrix, non-additive mutually exclusive reservations, and saturation at each
+  real coexistence boundary.
+- `binding-authoring-usability` for the external Zenoh spike's diagnostics,
+  workaround, generic/layout/code-size, cleanup mapping, and unsafe/private
+  dependency findings.
 - `target-legacy-no-backflow` for poisoned legacy selector,
   `ServerBinding::serve`, and `Dispatch` boundaries with zero
   target-generation calls.

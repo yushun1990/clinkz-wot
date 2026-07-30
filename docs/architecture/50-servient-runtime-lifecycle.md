@@ -19,6 +19,39 @@ builder cannot safely invent preparation visibility, capabilities, compiler,
 resource footprint, ingress policy, readiness, or cleanup behavior. Binding
 crates return complete registrations.
 
+## Internal owner and dependency graph
+
+One Servient facade coordinates transactions, but broad source is partitioned
+among private owners for the immutable registration snapshot, plan-set
+arena/leases, per-Thing lifecycle generation, per-route driver, per-operation
+call/handler state, subscription, emission, cleanup, reclamation,
+per-binding resource accounts, and status projection. A monolithic
+`ServientInner` that lets unrelated transitions mutate one shared record does
+not satisfy this boundary merely because its maps are sharded.
+
+Dependency direction is one-way:
+
+1. immutable registration/profile snapshots and plan arenas are inputs;
+2. Thing lifecycle owners retain generation-bearing leases into them;
+3. route and operation owners retain only their exact leases and reservations;
+4. cleanup owners receive complete objects through acknowledged transfer;
+5. reclamation consumes only terminal lease/capacity facts; and
+6. status observes committed events and never becomes lifecycle authority.
+
+No callback runs while two mutable shards are held. Cross-shard work uses a
+generation-bearing command, complete-object envelope, reservation, and
+acknowledgement; rejection returns the complete input and commit revalidates
+every generation. A bounded global or parent resource account may reserve
+allowances for local shards, but it cannot be a mandatory process-wide
+interaction-path lock.
+
+`clinkz-wot-servient` owns one profile-neutral transition kernel and one
+versioned machine-readable trace oracle for every Host/constrained capability
+claimed in both profiles. Host synchronization and static caller-owned records
+adapt that kernel; they do not independently compute generation validity,
+terminal class, cleanup ownership, retry classification, or semantic resource
+deltas.
+
 ## Produced Thing lifecycle
 
 ```text
@@ -51,6 +84,18 @@ exclusively borrows the lease through the callback. A registration that cannot
 prevent request admission without the permit is rejected in v1. A binding
 neither opens its own gate nor observes registry state.
 
+Atomic publication and the v1 all-advertised-route rule are separate
+contracts. Atomicity preserves one truthful immutable generation; the
+all-route rule is the conservative v1 policy that every route in that
+generation is required. A route failure therefore returns a structured failed
+expose and completes rollback/cleanup. The engine does not delete a form,
+publish a degraded generation, republish a TD, or retry exposure. The
+application or deployment platform may construct and validate a different
+effective TD and start a new generation after conflicting endpoint and cleanup
+ownership is settled. Signing, Directory publication/withdrawal, backoff, and
+restoration of the full route set remain explicit application/platform
+responsibilities.
+
 Destroy stops new permit issuance and marks the registry draining before route
 shutdown. No new accept claim is admitted after that transition. A poll claimed
 before drain retains its route and plan leases; in-flight handlers may finish
@@ -72,6 +117,13 @@ Servient schedules ready work through maintained queues/cursors. A work step
 does not discover readiness by scanning all records. Host policy may use
 bounded per-binding lanes; constrained policy uses retained round-robin cursors
 and explicit `WorkBudget`.
+
+`WorkBudget` is the common linear accounting model, not a mandate for one
+universal scheduler or queue. Route readiness/acceptance, operation and
+delivery progress, subscription/emission progress, cleanup/deadline work, and
+reclamation/status work have independently retained cursors or ready queues
+and bounded inter-domain arbitration. Cleanup deadlines and older retained
+owners cannot be starved by hot foreground work.
 
 Route readiness polls all ready tokens fairly under one overall expose deadline.
 One slow token cannot prevent other tokens from progressing or being cancelled.
@@ -104,10 +156,23 @@ cleanup obligations that the operation can create. Independent obligations use
 independent reservations; for example readiness cancellation and prepared-route
 abort cannot compete for one item.
 
+The operation's machine-readable coexistence matrix determines that maximum.
+Obligations that can coexist reserve independently; mutually exclusive phases
+are not multiplied merely because each phase has a distinct name. Reusing
+capacity across exclusive phases requires an ownership-preserving reservation
+transfer with no interval in which both phases can claim it.
+
 Cleanup progress is explicit and budgeted. A transfer moves the complete owned
 call, guard, driver, or slot into a named Servient/static-runtime owner. A
 `CleanupRecord` alone is not the work object. Deadline exhaustion records a
 bounded residual status before the object is destroyed outside locks.
+
+In v1 that residual is durable only for the configured lifetime of the owning
+Servient and its explicit final shutdown report. The engine promises neither
+process-restart persistence nor automatic external compensation. Pending
+status identifies the owner class, progress mode, phase, deadline/age class,
+and blocked reclamation/shutdown consequence without exposing protocol-private
+state.
 
 Child-handle drop never blocks; it transfers into a pre-reserved runtime owner.
 The root Servient provides explicit shutdown and a final report. Dropping the

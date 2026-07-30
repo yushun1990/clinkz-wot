@@ -1,6 +1,6 @@
 # 0043 Servient Internal Architecture and Cross-Shard Coordination
 
-Status: OPEN
+Status: MIGRATED
 
 Kind: owner-raised runtime architecture-closure and implementation-readiness investigation
 
@@ -114,3 +114,44 @@ Codex should:
 5. identify any unsupported maturity or scalability claim;
 6. identify any architecture, specification, work-package, machine, workload, checker, audit, plan, or continuation projection that requires correction; and
 7. migrate only conclusions supported by repository evidence.
+
+## Decision
+
+D26 already closes Servient as the owner of orchestration, registry
+observation, interaction acceptance, handler dispatch, publication, and
+cross-binding policy. Exact Rust module boundaries, map types, executor
+choices, and queue representations remain implementation choices. That
+authority decision did not, however, close the internal ownership graph needed
+before broad WP-400 work.
+
+Broad WP-400 must preserve one private mutable owner per lifecycle shard and a
+one-way dependency graph. A cross-shard transition transfers a complete owned
+object or immutable fact, receives an explicit acknowledgement where required,
+and revalidates generation and deadline state before committing the next
+transition. A callback may not retain simultaneous mutable authority over two
+shards. Common `WorkBudget` accounting does not require one universal queue:
+acceptance, binding progress, handler execution, response, publication, and
+cleanup may use distinct scheduling domains while consuming the same bounded
+authority.
+
+Servient also owns one shared semantic transition kernel and machine-readable
+trace oracle for behavior common across bindings and profiles. Per-route or
+per-profile orchestration may adapt inputs and drive progress, but may not
+duplicate normative transition logic.
+
+Before broad WP-400 admission, an early executable feedback checkpoint must
+exercise at least two Things, two binding profiles, and a multi-route
+generation, including a hot route, a never-ready or stalled route, and cleanup
+progress. This protects ownership, non-starvation, and cross-shard handoff
+claims before a large implementation tranche accumulates. It is not a claim
+of arbitrary-scale throughput.
+
+The already bounded Property Read tranche remains admissible because it does
+not claim the broad internal topology, scheduling, or scalability closure.
+
+## Migration
+
+The owner graph, scheduling-domain boundary, cross-shard handoff rules, shared
+kernel ownership, and early feedback checkpoint are projected into `PLAN.md`,
+`docs/architecture/50-servient-runtime-lifecycle.md`, and
+`docs/work-packages/WP-400-servient.md`. This topic is `MIGRATED`.

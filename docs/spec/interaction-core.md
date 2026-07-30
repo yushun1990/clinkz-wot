@@ -85,6 +85,13 @@ Writes, actions, publication, and teardown default to `CallerDecision` unless
 idempotency or acknowledgement proves safe retry. The engine never retries
 merely because a failure is transient.
 
+`RetryClass` classifies one error and never means “try the next form.” It does
+not by itself encode execution certainty, same-versus-alternate-candidate
+permission, handle/generation rebuild, idempotency proof, or an overall retry
+budget. Any higher-level availability facade must add those bounded values and
+retain fresh per-attempt ownership; an unknown or possibly committed result
+cannot authorize automatic retry.
+
 `CLEANUP-RECORD-001`: A queued cleanup record contains only a
 generation-bearing owner/plan reference, cleanup operation, deadline/retry
 state, and bounded status. Teardown plans, targets, security expressions, and

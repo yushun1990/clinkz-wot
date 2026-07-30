@@ -56,10 +56,14 @@ acceptance. After acceptance, host and constrained representations MUST retain
 the same exactly-once terminal result, cancellation, late-result, cleanup, and
 retry classification; they MAY differ only in allocation and driving shape.
 Both representations implement one semantic transition kernel and execute
-shared trace case ids with identical observable outcomes and resource deltas.
-Only storage, dispatch, waker, executor, and critical-section mechanics may
-differ. An `async-no-std` compile-only cell proves surface availability only;
-it cannot stand in for a runtime-parity claim.
+shared trace case ids with identical observable outcomes, semantic reservation
+and release deltas, and normalized liveness obligations. Profile-specific
+allocation bytes, slot size/alignment, code size, queue/waker/executor storage,
+and synchronization costs are physical deltas: they MUST be declared and
+bounded in their owning profile but need not be numerically equal. Only
+storage, dispatch, waker, executor, and critical-section mechanics may differ.
+An `async-no-std` compile-only cell proves surface availability only; it cannot
+stand in for a runtime-parity claim.
 
 `BIND-CALL-CANCEL-001`: Every host binding operation that may remain pending
 MUST return one owned, cancellation-aware call before its first protocol side
@@ -129,6 +133,14 @@ A binding does not own the Servient registry, plan-set lifecycle, application
 handles, cross-binding fairness, global emission coordination, a universal
 subscription queue, W3C defaulting, or Directory service behavior.
 
+For every capability claimed in both profiles, `clinkz-wot-core` owns one
+representation-independent binding transition kernel and one versioned
+machine-readable trace oracle. Host-erased and constrained typed adapters may
+own storage and driving mechanics, but MUST NOT independently recompute
+accepted-input class, generation validity, terminal class, cleanup owner,
+retry class, or semantic resource deltas. A change to any of those outputs is a
+kernel change even when only one adapter file is edited.
+
 All binding, provider, codec, contributor, and application callbacks run outside
 engine locks and constrained critical sections. Returning `Pending` never gives
 permission to detach semantic ownership into an unregistered task.
@@ -182,6 +194,16 @@ client half, server half, form contributor, or runtime trait object. Component
 values may remain public for downstream construction and testing, but only the
 complete bundle is accepted by `ServientBuilder`.
 
+Every advertised capability is classified for each selected profile cell as
+runtime-supported in both profiles, host-only, constrained-only, compile-only,
+not applicable, or shared semantics with a profile-specific driver. These
+classes are executable registration metadata, not prose labels. Registration
+validation rejects a selected cell that lacks its declared implementation, and
+parity evidence compares only the declared common runtime intersection. Host
+defaults and convenience adapters expand into explicit policy, deadline,
+budget, cleanup, and capability inputs before the common semantic kernel runs;
+they cannot supply an unobservable second behavior contract.
+
 WP-300 owns the exact complete-bundle constructor, optional execution
 components, validation errors, and `B::Compiler` association. It must consume
 the WP-200 compiler component unchanged; it must not implement a second
@@ -196,7 +218,33 @@ phases, or install a partial bundle. After the narrow Property Read slice
 completes and before broad WP-300 admission, a bounded external Zenoh authoring
 spike must exercise the public surface. The SPI is reopened only for concrete
 ownership, portability, resource-accounting, unsafe-erasure, or
-implementability evidence, not field count by itself.
+implementability evidence, or for repeated author workarounds that
+systematically lose ownership/generation truth, require unsafe or private
+dependencies, produce unusable diagnostics, duplicate normative transition
+logic, or exceed declared compile/layout/code-size bounds. Field count,
+subjective awkwardness, or mechanically generatable repetition alone is not a
+reopening predicate.
+
+The public maturity ladder is explicit:
+
+1. the immutable candidate proves internal contract consistency;
+2. the narrow source plus external fixtures prove package-local
+   constructibility for the advertised Property Read role;
+3. the external Zenoh spike proves one third-party-style author can express
+   that role against one protocol family;
+4. the Property Read architecture gate proves mock cross-package composition;
+5. WP-600 proves production execution for the Zenoh family; and
+6. WP-700 release review may claim stable cross-profile or protocol-neutral
+   maturity only for the capability and protocol-shape evidence actually
+   registered.
+
+Zenoh and zenoh-pico exercise different runtime representations of one
+protocol family. They are strong cross-profile evidence but do not by
+themselves prove protocol-shape neutrality. Before a release claim uses
+“protocol-neutral” as an empirical compatibility claim, one independently
+authored conformance fixture with materially different route, correlation,
+response, or cancellation shape must pass, or the claim remains limited to
+protocol-independent source ownership plus Zenoh-family operation.
 
 Both complete registration representations expose the same keyed capability
 operations:
@@ -652,6 +700,14 @@ item and byte reservation, durable-status reservation, owner class, and complete
 identity seed needed by a possible cleanup obligation. Independent obligations
 use independent reservations.
 
+Before broad WP-300 admission, every operation family records a
+machine-readable cleanup-obligation coexistence matrix. Obligations that can
+be simultaneously live retain independent capacity. Mutually exclusive phases
+MUST NOT be charged as additive worst cases merely because they have distinct
+names; any reuse must be proved by the state machine, preserve the complete
+maximum footprint, and transfer the reservation without a window in which two
+owners can claim it.
+
 At cancellation, stop, abort, shutdown, or remote-terminal linearization, the
 runtime binds one reservation into a `CleanupPhaseContext`. The context fixes:
 
@@ -682,6 +738,20 @@ progress lease, supplies deadline wakeups even when transport does not wake,
 charges `WorkBudget`, and commits complete or residual status before destroying
 the object outside locks. Zero budget retains the object without invoking
 binding code. Destructors never block and are never the only cleanup path.
+
+Observable pending status identifies the current owner class, progress mode
+(executor, manual caller, external wake, deadline-due, or residual commit),
+phase, generation, deadline/age class, and which reclamation or shutdown
+boundary remains blocked. It need not expose protocol-private state. The
+Servient/static runtime, not a binding author or detached task, is the unique
+progress owner after transfer.
+
+“Durable residual” in v1 means a bounded record retained for the configured
+lifetime of the owning Servient and included in its explicit final shutdown
+report before the live work object is destroyed. It does not promise
+process-restart persistence, automatic recovery, or external compensation.
+An application or platform may export that report through a separately
+configured durable system; the engine does not infer such integration.
 
 The reusable transfer handshake is exact and does not require behavior bounds
 on its generic object type:
@@ -1567,8 +1637,10 @@ identities. At minimum it covers:
   umbrella changes;
 - a bounded external production-Zenoh authoring spike, run after the narrow
   Property Read slice and before broad WP-300 admission, that records helper
-  use, required explicit declarations, and any concrete ownership,
-  portability, resource, unsafe, or implementability defect;
+  use, required explicit declarations, cleanup-library mapping, diagnostics,
+  repeated workaround classes, generic/monomorphization pressure, constrained
+  layout and code-size cost, and any concrete ownership, portability,
+  resource, unsafe, or implementability defect;
 - duplicate, incomplete, incompatible, unsupported-cell, and over-footprint
   bundle rejection before publication;
 - prepare/readiness/activate/commit failure and cancellation at every boundary,
@@ -1578,9 +1650,11 @@ identities. At minimum it covers:
   publication/cancellation races, stale permit rejection, drain/accept races,
   externally visible closed ingress, and identical host/constrained activation
   traces, with zero partial admission and zero lost committed guards;
-- shared trace case ids and identical host/constrained outcome and resource
-  deltas for every semantic state transition, with compile-only cells making no
-  runtime claim;
+- one versioned machine-readable trace-oracle fixture consumed by both runners,
+  with shared case ids, identical host/constrained outcome and semantic
+  resource deltas, normalized zero-budget/wake/deadline/non-starvation
+  obligations, separately reported physical costs, and explicit
+  unsupported/not-applicable cells; compile-only cells make no runtime claim;
 - many-route fairness with one never-ready route, one accept waker per route,
   route-terminal isolation, and commit/drain admission boundaries;
 - host invoke, subscribe, response, and publication cancellation races,
