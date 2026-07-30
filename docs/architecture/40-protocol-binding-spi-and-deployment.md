@@ -94,6 +94,15 @@ backpressured, or buffered within admitted ingress limits. It cannot emit an
 inbound request or report application acceptance before publication. A binding
 that cannot enforce permit-gated acceptance is rejected.
 
+The first WP-300 implementation tranche is deliberately narrower than the
+complete package. It installs one complete bundle advertising only Producer
+Property Read, exercises both immediate and externally visible readiness,
+accepts one permit-authorized request, delivers one owned response, and cleans
+up the route. Optional client, subscription, emission, collection, and
+contributor roles remain absent or use pre-side-effect default rejection. This
+keeps the installable-unit invariant intact without treating the presence of a
+forward-compatible interface as evidence for every optional behavior.
+
 The plan set, produced registry generation, and immutable serving activation
 authority are published by one Servient transition after every required route
 is committed-closed. The authority remains inside a private mutable Servient
@@ -170,6 +179,27 @@ an out-of-process adapter. It must define ABI negotiation, allocation/free,
 panic isolation, capability manifests, polling/cancellation, resource limits,
 and unload only after every route, call, subscription, and cleanup owner is
 terminal. That work is not inferred from the Rust crate SPI.
+
+## Staged legacy separation
+
+Legacy and target execution coexist by source path and generation; there is no
+adapter that sends a target artifact back through legacy selection.
+
+- Planning is the only target owner of form selection and resolved artifacts.
+- Core and WP-300 consume only the selected plan/artifact identity and have no
+  dependency on `clinkz-wot-protocol-bindings` selectors or a complete TD.
+- The current Zenoh selector call remains reachable only from the legacy
+  execution generation until WP-600 replaces it with compiled input.
+- WP-400 prevents a target accepted request from entering legacy
+  `ServerBinding::serve`, `Dispatch`, or handler lookup.
+- WP-600 removes concrete calls to the legacy selector and execution boundary.
+- WP-700 proves that the public selector family and every named lifecycle,
+  handler, subscription, and publication compatibility edge are absent.
+
+The one positive cross-generation compatibility path is the named legacy
+handler-publication to `ProducerEmission` adapter. It is one-way, preserves all
+generation and ownership identities, accepts no new callers after WP-300, and
+is removed at its WP-400 and WP-600 ends.
 
 ## Extension evidence
 

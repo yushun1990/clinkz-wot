@@ -187,6 +187,10 @@ The `no-default` cell is an independent baseline and is not implied by `async-no
 - Remove zenoh runtime paths that accept a complete `Thing` and re-run form selection, TD default
   operations, `base` resolution, security inheritance, or schema selection. Runtime execution
   receives compiled protocol-neutral candidates and inbound plans.
+- Remove every concrete call to
+  `select_affordance_form_selection_with_result_filter` and the other legacy
+  `select_form*`/`select_affordance_form*` family. No adapter may translate a
+  WP-200 artifact back into a TD/form input for those functions.
 - Remove public direct-TD planning helpers such as `plan_zenoh_operation` and
   `plan_zenoh_affordance_operation` after equivalent `PlanCompiler` entry points and migration
   fixtures exist. Protocol-local inspection helpers may remain private to the compiler.

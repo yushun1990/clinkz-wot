@@ -1,6 +1,6 @@
 # 0025 WP-300 Property Read Slice Scope
 
-Status: OPEN
+Status: MIGRATED
 
 Kind: owner-raised execution-risk investigation
 
@@ -46,3 +46,44 @@ The current repository records that:
 - Do not weaken ownership, lifecycle, portability, resource, or evidence requirements under this topic.
 - Do not preselect a smaller or larger tranche before the repository evidence is reconstructed.
 - Preserve the AI-led model: the Owner raises the question, while Codex determines the technical answer and migration from repository evidence.
+
+## Decision
+
+The concern is confirmed at the admission-record boundary, not at the target
+architecture boundary. The Property Read slice is finite, but its previous
+machine-readable record named only requirements and three broad blockers. It
+did not yet distinguish API surface required for forward-compatible complete
+registration from behavior claimed by this tranche.
+
+The exact slice contains one complete registration that advertises only the
+Producer Property Read server role and consumes one matching WP-200 compiler
+component. It covers:
+
+- registration identity and compatibility validation;
+- immediate-readiness and externally-ready route preparation;
+- prepared -> ready -> active -> committed-closed route ownership;
+- one borrowed-permit Property Read acceptance;
+- one owned response opportunity and response delivery;
+- explicit abort or shutdown with retained cleanup ownership; and
+- equivalent host-erased and application-static authoring forms.
+
+Public traits may include default rejection adapters for optional capabilities
+needed by the complete bundle shape. Merely exposing such an interface does
+not claim working client invocation, subscription delivery, Producer emission,
+form contribution, broad cancellation matrices, multi-route fairness,
+production networking, Servient orchestration, or package completion. Those
+domains remain broad WP-300 work.
+
+AR-002 and AR-003 close for this tranche when the exact signatures, both
+readiness shapes, both authoring profiles, exclusions, implementation paths,
+and expected absent-source completion boundary are executable in the immutable
+candidate. They do not expand to every broad WP-300 behavior.
+
+## Migration
+
+The finite boundary and interface-versus-behavior distinction are projected
+into `docs/spec/binding-spi.md`,
+`docs/architecture/40-protocol-binding-spi-and-deployment.md`,
+`docs/work-packages/WP-300-bindings.md`, the Property Read architecture-gate
+document, D18 in `PLAN.md`, and `PROJECT_STATE.md`. The candidate record and
+checks consume this decision; they are not a new design cycle.

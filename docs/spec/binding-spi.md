@@ -228,6 +228,65 @@ binding or configuration is deployed through a new application, process,
 container, or firmware generation. Existing handles keep the registration and
 plan-set generations they captured until drain and reclamation.
 
+## Property Read binding-slice projection
+
+`WP-300-PROPERTY-READ-BINDING-SLICE` implements one registration that is
+complete for its advertised roles, not a partial installable half. The
+registration advertises exactly one Producer Property Read server capability,
+consumes one matching WP-200 compiler component, and may omit client,
+subscription, publication, collection, and form-contribution capabilities.
+
+The tranche requires these behavior families:
+
+- registration identity, generation, configuration, compiler/artifact
+  compatibility, profile-cell, footprint, ingress, readiness, status,
+  overflow, and cleanup validation before publication;
+- immediate-ready and externally-ready implementations of prepare, readiness,
+  activate, commit-to-closed, abort, and shutdown;
+- one route-scoped `poll_accept` under a fresh borrowed
+  `RouteActivationPermit<'_>`;
+- one generation-bearing Property Read `InboundRequest`;
+- one owned response opportunity and `InboundResponse`, with the complete
+  response returned on pre-acceptance rejection; and
+- explicit terminal route and response cleanup in host-erased and
+  application-static forms.
+
+The complete host and static public interfaces retain their forward-compatible
+optional-operation shape. An unadvertised optional operation uses a bounded
+default rejection adapter that returns its complete input before state
+creation, capacity transfer, or protocol side effects. The presence of that
+interface is not completion evidence for client invocation, subscription
+delivery, Producer emission, form contribution, broad cancellation, multiple
+routes, production networking, or a Servient scheduler.
+
+The exact route projection is:
+
+```text
+Absent
+  -> Preparing
+  -> Prepared
+  -> AwaitingReadiness
+  -> Ready
+  -> Activating
+  -> Active
+  -> Committing
+  -> CommittedClosed
+  -> permit-authorized accept
+  -> Draining
+  -> explicit shutdown or durable residual
+```
+
+Failure before activation retains the prepared guard for abort. Commit failure
+retains the active guard for shutdown. Response rejection retains the complete
+response opportunity and payload. No branch relies on guard drop as cleanup.
+
+This tranche consumes only `LogicalInteractionPlan`,
+`BindingArtifactEnvelope`, and their compact identities from Planning. Core,
+the new WP-300 implementation, and its fixtures MUST NOT depend on or call the
+legacy `clinkz-wot-protocol-bindings` form-selection surface, rescan a TD, or
+reinterpret a selected form. A target-generation accepted request cannot enter
+legacy `ServerBinding::serve`, `Dispatch`, or binding-owned handler lookup.
+
 ## Shared input and identity contract
 
 `OutboundRequest` is created only after planning selected one candidate and

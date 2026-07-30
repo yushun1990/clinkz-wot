@@ -76,10 +76,12 @@ The repository evidence establishes the following starting point:
   fixtures, bounded progress, owned output, predecessor regressions, aggregate
   design check, locked workspace tests, and 21-cell feature matrix pass; no
   cross-package architecture fixture root was created;
-- the exact WP-300 Property Read slice now has a complete planner dependency,
-  but remains blocked before admission by incomplete exact binding contracts
-  and host/constrained authoring fixtures. The aggregate Property Read gate
-  remains blocked; D4 has resolved subscription receiver ownership;
+- the exact WP-300 Property Read slice now has a complete planner dependency
+  and a finite migrated scope. It remains blocked before admission until the
+  exact candidate, host/constrained authoring fixtures, executable lifecycle
+  schema, transition check, and independent review are complete. The aggregate
+  Property Read gate remains blocked; D4 has resolved subscription receiver
+  ownership;
 - WP-400, WP-500, and WP-600 remain downstream of WP-300, and WP-700 joins
   those three branches;
 - default workspace tests, the 21-cell valid feature matrix, and the aggregate
@@ -118,8 +120,13 @@ answer and does not automatically block unrelated admitted work.
 | D13 | MIGRATED | Keep the directed owner/projection/evidence/checker model and require transition checks to bind immutable candidates and exercise their next state | Support-artifact failures block only when they falsify an owned technical or evidence claim; no additional WP-200 refinement cycle is admitted | Continuous execution |
 | D14 | MIGRATED | Reaffirm D8 constructibility for admission from the paired external public-boundary fixtures, while reserving runtime ergonomics and production-author claims for implementation and WP-600 evidence | WP-200 completion compiles both profiles; real Zenoh and zenoh-pico authoring may reopen the API only on a concrete ownership, resource, or portability defect | M3 and M5C |
 | D15 | MIGRATED | Define review effectiveness by independently falsifiable evidence classes, not session separation alone | The completed v2 review closed only the evidence-boundary transition; later completion reviews must add real compile, runtime, lifecycle, resource, workload, and integration evidence as applicable | Continuous execution |
-| D16 | DECIDED | Establish one remote mainline validation status covering diff hygiene, aggregate design evidence, locked workspace tests, and the supported feature matrix | The repository workflow is defined, but `master` is not mechanically protected until the remote requires that status; no protected-mainline claim is allowed before then | Before remote source integration |
+| D16 | DECIDED | Establish one remote mainline validation status covering diff hygiene, aggregate design evidence, locked workspace tests, and the supported feature matrix | GitHub reports `master` protected and workflow run 30503733056 passed, but required status-check enforcement remains `off` with no contexts; no protected-validation claim is allowed until `mainline / validation` is required | Before remote source integration |
 | D17 | MIGRATED | Retain the full v1 target and make its critical path and post-WP-300 branch join explicit | Directory/Discovery client work is mandatory client scope, the Directory service remains excluded, and WP-400/WP-500/WP-600 rejoin at WP-700 before release review | M7 exit |
+| D18 | MIGRATED | Bound the WP-300 Property Read slice to one complete Producer Property Read registration, two readiness shapes, permit-gated acceptance, one response, cleanup, and paired host/static authors | Forward-compatible optional interfaces may reject unsupported roles before side effects; subscription, emission, client, Servient, production protocol, workload, and broad cancellation behavior remain excluded | M4 entry |
+| D19 | MIGRATED | Distinguish narrow and broad WP-300 release events instead of inferring progress from package status | Narrow WP-300 completion releases only the WP-400 Property Read slice; broad WP-300 completion releases broad WP-400, WP-500, and WP-600; preparation before release is non-authoritative | M4-M5 entry |
+| D20 | MIGRATED | Enforce source- and generation-segregated legacy coexistence with no target-artifact backflow into legacy selection | New Planning/Core/WP-300 code cannot call legacy selectors or dispatch; WP-600 removes concrete selector/execution calls and WP-700 proves final public selector and adapter absence | M3-M6 |
+| D21 | MIGRATED | Make global-gate impact on scoped tranches an explicit requirement/artifact/state/resource/evidence mapping | Intersecting findings block or reopen, compatible changes receive named revalidation, and disjoint findings cannot trigger undifferentiated re-review; aggregate gates remain required for WP-700/release | Continuous execution |
+| D22 | MIGRATED | Reuse the immutable-candidate, scoped-review, exact-transition, pre-source, and completion machinery for WP-300 | Add only WP-300-specific contract/lifecycle fixtures and checks; preparation ends at the passing candidate plus expected absent-source boundary and reviewed next-state simulation | M4 entry |
 
 The former D3 Foundation candidate is the exact single child of
 `56fea9813df80fe29527755fcb2ce91d43cc5086`, changes only its registered
@@ -192,6 +199,16 @@ Directory/Discovery client, and concrete-binding branches are independently
 validatable and must all rejoin at WP-700. A late global-gate finding
 invalidates earlier evidence only through the normal explicit impact and
 revalidation rules.
+
+The exact release events inside that path are asymmetric:
+
+- `WP-300-PROPERTY-READ-BINDING-SLICE` completion releases
+  `WP-400-PROPERTY-READ-SERVIENT-SLICE`; and
+- broad WP-300 completion releases broad WP-400, WP-500, and WP-600.
+
+Package-level blocking therefore does not serialize the narrow Property Read
+proof, while a narrow server slice does not pretend to stabilize the complete
+client, subscription, emission, and concrete-binding contract.
 
 ## M0 — Execution Baseline and Collaboration Reset
 

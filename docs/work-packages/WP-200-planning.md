@@ -208,6 +208,11 @@ candidate vectors and retain enough source identity for strict selection and dia
   `SelectedForm`, `SelectedAffordanceForm`, `SelectedAffordanceSelection`, and
   `EffectiveFormSecurity` after their target equivalents are available. A private compiler
   helper may keep an internal role but not the obsolete cross-crate contract.
+- While legacy concrete callers remain, the public selector implementation in
+  `protocol-bindings/core` is a legacy-generation source boundary, not a
+  target adapter. New Planning, Core, and WP-300 code must not call it or send a
+  selected target artifact back through it. WP-600 removes the concrete Zenoh
+  call edge and WP-700 proves final absence of the legacy selector exports.
 - Remove per-call TD-tree scanning, repeated `base`/default/security resolution, and plan-time
   cloning of target strings, schemas, response metadata, security expressions, or extension
   maps into `OutboundRequest`.

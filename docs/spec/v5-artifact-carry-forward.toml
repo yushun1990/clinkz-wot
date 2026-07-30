@@ -113,6 +113,6 @@ revalidation = "tools/check-v5-authority-reset-decision.sh"
 [[artifact]]
 family = "property-read-integration-gate"
 path = "docs/work-packages/PROPERTY-READ-ARCHITECTURE.md"
-sha256 = "5db01f600e8e7994a43dd0b3f03ceadd7f0116ddd3b914a34f02a16ab6f6577d"
-disposition = "revalidated completion narrative for the WP-100 handler and WP-200 plan slices; mutable tranche truth remains owned by docs/work-packages/property-read-architecture-gate.toml"
+sha256 = "ce421296dc7c6957786870ea792f819229061c77018d2259152a74a5c099c9c9"
+disposition = "revalidated completion narrative for the WP-100 handler and WP-200 plan slices and migrated finite-scope, release-boundary, and global-impact decisions for the still-planned/blocked WP-300 slice; mutable tranche truth remains owned by docs/work-packages/property-read-architecture-gate.toml"
 revalidation = "tools/check-v5-authority-reset-decision.sh"

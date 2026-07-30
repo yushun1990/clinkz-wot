@@ -1,6 +1,6 @@
 # 0026 WP-300 Critical-Path Concentration
 
-Status: OPEN
+Status: MIGRATED
 
 Kind: owner-raised execution-risk investigation
 
@@ -47,3 +47,37 @@ The current repository records that:
 - Do not bypass scoped admission, public-contract stability, or predecessor completion requirements.
 - Do not prescribe a package split, DAG rewrite, or parallel implementation schedule before the dependency evidence is reconstructed.
 - Preserve the AI-led model: the Owner raises the question, while Codex determines the technical answer and migration from repository evidence.
+
+## Decision
+
+The dependency concentration is necessary but has two different release
+boundaries. The registered tranche DAG already releases the narrow
+`WP-400-PROPERTY-READ-SERVIENT-SLICE` when the exact WP-300 Property Read
+binding slice completes. It does not wait for broad WP-300 package completion.
+
+The broad downstream branches correctly retain their package dependency:
+
+- broad WP-400 consumes the complete server/client/lifecycle SPI;
+- WP-500 consumes the complete client-call, cancellation, and generation-safe
+  execution boundary rather than the Producer Property Read subset; and
+- WP-600 implements the complete host and constrained binding SPI and performs
+  the concrete legacy migration.
+
+Therefore broad WP-300 completion is the release event for broad WP-400,
+WP-500, and WP-600, while narrow WP-300 completion releases only the narrow
+WP-400 integration tranche. A later broad WP-300 finding cannot delay the
+narrow WP-400 tranche unless an explicit impact record intersects its exact
+requirements, lifecycle, or evidence.
+
+Non-authoritative contract reconstruction, fixture planning, workload
+preparation, and migration inspection may proceed in downstream packages.
+They do not grant source admission or executable vertical-progress credit.
+No additional package split or DAG rewrite is justified before a downstream
+tranche has a distinct dependency-complete contract and evidence boundary.
+
+## Migration
+
+The two release boundaries are projected into D19 and the critical-path text
+in `PLAN.md`, the Property Read gate document, the WP-300 work-package record,
+and `PROJECT_STATE.md`. The existing package and tranche DAG edges remain
+unchanged.

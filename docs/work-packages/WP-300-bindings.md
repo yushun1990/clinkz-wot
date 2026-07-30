@@ -63,6 +63,81 @@ validation, and the public shared consumer-origin
 legacy response envelope once, after the route and planning values from WP-200
 exist.
 
+## Scoped Property Read admission boundary
+
+`WP-300-PROPERTY-READ-BINDING-SLICE` is Category C because it introduces the
+route, permit, response, cleanup, resource, and host/static ownership boundary.
+It is nevertheless finite. The tranche constructs one complete registration
+that advertises only the Producer Property Read server role and consumes one
+matching WP-200 compiler component.
+
+Its behavior scope is:
+
+1. validate registration, compiler/artifact, generation, profile-cell,
+   footprint, ingress, readiness, status, overflow, and cleanup identity before
+   publication;
+2. cover both an immediate-ready mock and an externally-ready mock;
+3. preserve owned guards through prepare, readiness, activate, commit,
+   abort, and shutdown;
+4. return a committed-closed guard without opening request admission;
+5. accept one Property Read request only under a fresh borrowed route permit;
+6. preserve the complete response opportunity and response on pre-acceptance
+   rejection, then settle accepted delivery exactly once; and
+7. prove the same contract through a host-erased `std` author and an
+   application-static `no_std + alloc` author.
+
+The applicable state projections are `binding-route-lifecycle`,
+`binding-route-readiness`, `active-route-acceptance`,
+`response-delivery-ownership`, and the cleanup-transfer projection used by
+route or response calls. The tranche has no performance-workload completion
+claim; it freezes and tests deterministic resource/footprint behavior while
+the broad package retains its registered GATE-5 workloads.
+
+The public complete-bundle and server interfaces may expose optional-operation
+methods required for forward compatibility. An unadvertised client,
+subscription, publication, collection, or contribution capability must use a
+bounded default adapter that returns the complete input before state creation
+or side effects. Interface presence does not admit or complete those behaviors.
+
+The tranche excludes:
+
+- client invoke or subscribe behavior;
+- subscription drivers and delivery;
+- Producer emission or publication behavior;
+- collection capability behavior and form contribution;
+- broad cancellation/race matrices, multi-route fairness, and package
+  workloads;
+- Servient registry, publication, scheduling, or application dispatch;
+- production protocol or Zenoh implementation;
+- broad old-API removal; and
+- either cross-package Property Read architecture fixture root.
+
+Target code may consume only the WP-200 logical plan and artifact identity. It
+must not depend on or call the legacy
+`clinkz-wot-protocol-bindings` form selectors, receive a TD, or send a target
+request through legacy `ServerBinding::serve`, `Dispatch`, or handler lookup.
+Legacy selector and execution paths remain separate legacy generations until
+their WP-600/WP-700 removal checkpoints.
+
+AR-002 and AR-003 close for this tranche when its immutable candidate contains
+the exact signatures, API and source scope, both readiness shapes, both public
+author profiles, exclusions, and completion boundary. They do not require
+subscription, emission, or the rest of broad WP-300 to be implemented.
+
+Candidate preparation ends when all registered prechecks and the executable
+schema pass, both authoring fixtures reach their expected pre-source boundary,
+and the completion check fails only because the exact product implementation
+paths are absent. Independent review must simulate the combined pre-source
+checkpoint and the next implementation topology before attestation. No later
+support-only refinement may block the tranche without an explicit intersecting
+semantic, ownership, lifecycle, resource, dependency, or evidence-truth
+finding.
+
+Completion of this slice releases
+`WP-400-PROPERTY-READ-SERVIENT-SLICE`. Broad WP-400, WP-500, and WP-600 remain
+released only by broad WP-300 completion. Preparation in those packages is
+allowed but is not source admission or vertical progress.
+
 ## Requirements
 
 - `BIND-REG-001`, `BIND-ROUTE-001`, `BIND-STORAGE-001`, `BIND-MEM-001`, and

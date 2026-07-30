@@ -1,6 +1,6 @@
 # 0029 WP-300 Admission Machinery Regression
 
-Status: OPEN
+Status: MIGRATED
 
 Kind: owner-raised execution-governance investigation
 
@@ -50,3 +50,42 @@ The current repository records that:
 - Do not create new governance layers or checkers unless repository evidence proves a missing falsifiable claim.
 - Do not reopen migrated topics 0017 or 0020 without identifying new evidence that conflicts with their conclusions.
 - Preserve the AI-led model: the Owner raises the question, while Codex determines the technical answer and migration from repository evidence.
+
+## Decision
+
+The WP-200 admission corrections do not justify a new governance layer for
+WP-300. The generic mechanisms are reused unchanged:
+
+- immutable candidate base/ref/path identity;
+- registered prechecks and an expected absent-product-source boundary;
+- one independent scoped review attestation;
+- review-time simulation of the exact pre-source transition and next
+  implementation topology;
+- one combined approved/in-progress pre-source checkpoint; and
+- completion evidence bound to the immutable implementation checkpoint.
+
+WP-300 needs new executable content only where its defect classes differ:
+host/static complete-registration authoring, route/readiness/permit ownership,
+response input preservation, cleanup successors, resource declarations, and
+the no-legacy-selection edge. These are contract and lifecycle checks, not new
+governance concepts.
+
+Preparation ends when the exact candidate prechecks pass, the public authoring
+fixtures and self-contained schema pass, the completion checker fails only at
+the registered absent-source boundary, and review has exercised both the
+pre-source checkpoint and the exact implementation path set. After that event,
+support-only refinement cannot block implementation without a new explicit
+semantic, ownership, lifecycle, resource, dependency, or evidence-truth
+falsification.
+
+The remote mainline workflow is integration evidence and remains additional
+to candidate/admission checks. Shared-target and runtime-root regressions stay
+covered by the corrected aggregate design-check root selection; no WP-300
+specific worktree mechanism is needed.
+
+## Migration
+
+The reuse boundary and stopping condition are projected into the WP-300 work
+package, D22 in `PLAN.md`, and `PROJECT_STATE.md`. The WP-300 entry and
+completion checks implement the new contract-specific claims while reusing the
+existing scoped-review and transition model.

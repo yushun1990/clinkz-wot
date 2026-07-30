@@ -99,7 +99,19 @@ baseline.
 The technical direction is recorded in `PROJECT_GOVERNANCE.md`, D16, the
 workflow, and `PROJECT_STATE.md`. The topic remains `DECIDED`, not `MIGRATED`,
 because remote `master` still does not require the resulting
-`mainline / validation` status. Enabling a GitHub branch rule is an external
-repository mutation and must be verified after the workflow exists and has
-reported its context. Until then, no mechanically protected-mainline claim is
-valid and a direct push can still land before validation succeeds.
+`mainline / validation` status.
+
+On 2026-07-30 the Project Owner added a GitHub protection rule. A read-only
+remote check then confirmed:
+
+- the branch API reports `master` as protected;
+- mainline workflow run `30503733056` for
+  `9082ff4eb24d96572ae1124096185aa20abb3472` completed successfully; and
+- the same branch response reports required-status-check enforcement `off`
+  with empty contexts/checks.
+
+The external action is therefore partially complete: branch protection exists,
+but successful validation is not yet a required merge condition. Migration
+requires the remote rule to name `mainline / validation` as a required status
+and a subsequent read-only check to observe that enforcement. Until then, no
+mechanically protected-validation claim is valid.

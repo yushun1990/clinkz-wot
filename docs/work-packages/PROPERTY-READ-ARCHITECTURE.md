@@ -28,6 +28,16 @@ root-re-exported `ReadPropertyHandler` trait in `core/src/handler.rs` and
 `InteractionInput` and `InteractionOutput` values. It does not replace those
 reused values or add async/step traits, host erasure, storage, or execution.
 
+The WP-300 slice similarly installs one complete bundle rather than a split
+compiler or server half, but advertises only Producer Property Read. It covers
+immediate and externally visible readiness, committed-closed route ownership,
+borrowed-permit acceptance, one response opportunity, and explicit cleanup in
+host and application-static forms. Optional client, subscription, emission,
+collection, contributor, multi-route, workload, Servient, and production
+protocol behavior remains broad work. Default methods for unadvertised roles
+must reject before state or side effects and do not constitute behavior
+evidence.
+
 ## Tranche DAG and entry points
 
 ```text
@@ -50,6 +60,15 @@ It does not block M1 documentation convergence, corrective work, the current
 preparation for the four exact slices. WP-500 and WP-600 remain downstream of
 WP-300 and are therefore indirectly protected from becoming the first
 architecture proof.
+
+The exact downstream release events are:
+
+- completion of `WP-300-PROPERTY-READ-BINDING-SLICE` releases only
+  `WP-400-PROPERTY-READ-SERVIENT-SLICE`; and
+- broad WP-300 completion releases broad WP-400, WP-500, and WP-600.
+
+Downstream preparation may reduce uncertainty before those events but grants
+neither source admission nor executable vertical-progress credit.
 
 ## Exact scenario
 
@@ -149,6 +168,23 @@ Negative compile/source checks prove:
 Runtime tests own state-transition and cleanup claims. Compile-fail tests own
 capability absence and construction boundaries. Dependency/source inspection
 owns crate direction and the absence of hidden dispatch imports.
+
+## Global-gate impact
+
+The open global gates and this scoped path are not separate truth systems. Each
+slice maps exact requirements, authoritative artifacts, state/API/resource
+claims, dependencies, exclusions, and completion evidence. A global finding
+blocks or reopens a slice only when an explicit impact record intersects that
+map. A change that preserves the completed contract may require named
+revalidation without invalidating completion; a disjoint finding cannot trigger
+an undifferentiated re-review.
+
+The WP-300 candidate must close the exact GATE-1, GATE-2, GATE-4, and GATE-6
+contract findings it consumes. Its deterministic resource declarations are
+pre-code contract evidence; it claims no broad GATE-5 workload result.
+Applicable workload identities and measurements remain broad WP-300
+completion evidence. All aggregate gates remain open for their broader domains
+and must close before final integration and release.
 
 ## Admission and completion
 

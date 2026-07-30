@@ -175,6 +175,12 @@ revision.
   `property_handler_*`, `action_handler_*`, and `event_handler_*` lookup methods. The final
   umbrella exposes only the 54 operation-specific core traits and the 73 WP-400 host
   registration methods frozen in `docs/api-ownership.csv`.
+- Remove the legacy public form-selection family from
+  `clinkz-wot-protocol-bindings`, including `FormSelectionCriteria`,
+  `SelectedForm`, `SelectedAffordanceForm`, `SelectedAffordanceSelection`,
+  `select_form*`, and `select_affordance_form*`. Final source inspection proves
+  that no target plan, registration, route, or request can re-enter a TD/form
+  selection path after Planning has acted.
 - Remove stale crate documentation claiming that the default `std` feature installs Tokio or a
   concrete transport when the actual feature graph does not do so.
 - Remove `RuntimeEventSinkConfig`, `BindingDrivingMode`, independently installable host/static
