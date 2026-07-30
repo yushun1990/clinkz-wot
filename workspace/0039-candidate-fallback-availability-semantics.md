@@ -1,6 +1,6 @@
 # 0039 Candidate Fallback Availability Semantics
 
-Status: OPEN
+Status: MIGRATED
 
 Kind: owner-raised runtime behavior and user-expectation investigation
 
@@ -40,3 +40,34 @@ This topic records a Project Owner concern that the deliberately narrow fallback
 ## Expected decision output
 
 Codex should define the application-visible failover and retry semantics, diagnostics, examples, any facade support needed for explicit retry, and whether a future versioned health-aware policy requires a deferred design owner.
+
+## Decision
+
+Multiple Consumer forms are ordered candidates, not an automatic runtime
+failover pool. `PreExecution` may skip only the two already frozen
+planning-owned outcomes. Temporary transport unavailability, backpressure,
+stale/draining generation, binding rejection, timeout, resource failure, or
+any post-acceptance result terminates that interaction.
+
+The returned structured error retains selection/execution phase, retry class,
+plan/form/binding/generation identities when known, and bounded candidate-skip
+diagnostics. Those diagnostics must make clear that another form was not tried
+because the failure occurred outside the fallback boundary.
+
+Explicit retry is a new application action. A caller may inspect
+`RetryClass`, application idempotency/security policy, and immutable candidate
+metadata, then issue a new call with a strict `form_index`/binding choice. The
+engine does not carry side effects, deadlines, work budgets, or security
+commit across that new call. Scripting-compatible `formIndex` and Rust strict
+options are the facade; `GatewayDefaultV1` performs no automatic retry.
+
+A health-aware policy remains deferred. It requires a separately admitted,
+immutable versioned health snapshot with bounds, invalidation, fairness,
+diagnostics, and security/retry evidence; mutable live health cannot become a
+second planner.
+
+## Migration
+
+The caller-visible distinction, diagnostic obligation, explicit retry path,
+and deferred health-policy boundary are projected into ADR-0017 and
+`docs/spec/planning.md`. This topic is `MIGRATED`.

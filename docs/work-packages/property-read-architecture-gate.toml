@@ -555,6 +555,9 @@ pre_implementation_checks = [
     "wp200-property-read-plan-slice-check",
 ]
 admission_review = "docs/audits/WP-300-property-read-binding-slice-entry.md"
+review_attestation = "docs/audits/WP-300-property-read-binding-slice-review.toml"
+review_attestation_ref = "d5169ba34ad846b2d45d0841b5d57210ee4df0c1"
+admission_base_ref = "register-at-admission"
 entry_check = "wp300-property-read-binding-slice-entry-check"
 completion_evidence_path = "docs/evidence/WP-300-property-read-binding-slice.toml"
 completion_check = "wp300-property-read-binding-slice-check"

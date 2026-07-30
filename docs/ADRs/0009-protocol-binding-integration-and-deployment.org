@@ -52,6 +52,28 @@ completes readiness before traffic/ownership cutover; the old instance then
 drains and shuts down. Cargo features are compile-time selection, not hot
 runtime switches.
 
+The engine/platform assembly boundary is explicit. A binding intended for
+automated assembly publishes build-time package metadata covering its
+crate/source identity and version, engine-contract compatibility, supported
+targets, profile and feature cells, configuration-schema version, advertised
+roles, and the generated registration-constructor hook. This metadata assists
+dependency selection and code generation; it is not runtime authority and does
+not replace complete-bundle validation.
+
+clinkz-wot owns registration compatibility, resource admission, readiness,
+status, drain, and generation-safe shutdown. A service/application manager owns
+source trust, version and checksum pinning, lockfiles, feature/target/toolchain
+resolution, isolated builds, artifact signing, deployment, health observation,
+cutover, and rollback. This repository does not require one platform manager
+or package registry.
+
+Configuration accepted by code already linked into the binary may be changed
+without recompiling, but it still produces a new application and Servient
+generation and follows readiness/cutover/drain. A crate, code, Cargo feature,
+target, or compatibility change requires a rebuild. User-facing =plugin=
+therefore means an install/build/deploy workflow, not in-process dynamic
+loading or hot unload.
+
 Rust trait objects and engine Rust values are not a stable dynamic-library ABI.
 V1 does not load or unload arbitrary Rust =dylib= bindings. A future host-only
 plugin design must use a versioned stable C ABI or an out-of-process protocol
@@ -72,6 +94,9 @@ poll/cancel/drop, resource limits, and safe unload after all owners terminate.
   member list.
 - Runtime binding replacement, dynamic loading, and hot unload require future
   ADRs rather than accidental extension of the v1 SPI.
+- Platform assembly may automate the complete Cargo build and generation
+  rollout, but it cannot bypass lock, trust, compatibility, readiness, drain,
+  or rollback evidence.
 
 * Rejected alternatives
 

@@ -26,18 +26,7 @@ Topics are retained after migration as decision history.
 
 ** OPEN
 
-- [[file:0030-automatic-pull-request-integration.md][0030 Automatic Pull Request Integration]]
-- [[file:0031-end-to-end-architecture-feedback-latency.md][0031 End-to-End Architecture Feedback Latency]]
-- [[file:0032-production-binding-authoring-complexity.md][0032 Production Binding Authoring Complexity]]
-- [[file:0033-servient-orchestration-concentration.md][0033 Servient Orchestration Concentration]]
-- [[file:0034-multi-route-serving-availability.md][0034 Multi-Route Serving Availability]]
-- [[file:0035-cleanup-protocol-implementability.md][0035 Cleanup Protocol Implementability]]
-- [[file:0036-host-constrained-semantic-parity.md][0036 Host and Constrained Semantic Parity]]
-- [[file:0037-resource-configuration-surface-growth.md][0037 Resource Configuration Surface Growth]]
-- [[file:0038-startup-only-binding-deployment-experience.md][0038 Startup-Only Binding Deployment Experience]]
-- [[file:0039-candidate-fallback-availability-semantics.md][0039 Candidate Fallback Availability Semantics]]
-- [[file:0040-repository-truth-synchronization.md][0040 Repository Truth Synchronization]]
-- [[file:0041-target-legacy-coexistence-verification.md][0041 Target and Legacy Coexistence Verification]]
+- None.
 
 ** DISCUSSING
 
@@ -45,7 +34,7 @@ Topics are retained after migration as decision history.
 
 ** DECIDED
 
-- [[file:0023-mainline-validation-integrity.md][0023 Mainline Validation Integrity]]
+- None.
 
 ** MIGRATED
 
@@ -71,12 +60,25 @@ Topics are retained after migration as decision history.
 - [[file:0020-governance-and-checker-complexity.md][0020 Governance and Checker Complexity]]
 - [[file:0021-host-constrained-authoring-constructibility.md][0021 Host and Constrained Authoring Constructibility]]
 - [[file:0022-independent-review-effectiveness.md][0022 Independent Review Effectiveness]]
+- [[file:0023-mainline-validation-integrity.md][0023 Mainline Validation Integrity]]
 - [[file:0024-v1-scope-and-release-path.md][0024 v1 Scope and Release Path]]
 - [[file:0025-wp300-property-read-slice-scope.md][0025 WP-300 Property Read Slice Scope]]
 - [[file:0026-wp300-critical-path-concentration.md][0026 WP-300 Critical-Path Concentration]]
 - [[file:0027-legacy-migration-boundary-leakage.md][0027 Legacy Migration Boundary Leakage]]
 - [[file:0028-global-gates-and-scoped-implementation.md][0028 Global Gates and Scoped Implementation]]
 - [[file:0029-wp300-admission-machinery-regression.md][0029 WP-300 Admission Machinery Regression]]
+- [[file:0030-automatic-pull-request-integration.md][0030 Automatic Pull Request Integration]]
+- [[file:0031-end-to-end-architecture-feedback-latency.md][0031 End-to-End Architecture Feedback Latency]]
+- [[file:0032-production-binding-authoring-complexity.md][0032 Production Binding Authoring Complexity]]
+- [[file:0033-servient-orchestration-concentration.md][0033 Servient Orchestration Concentration]]
+- [[file:0034-multi-route-serving-availability.md][0034 Multi-Route Serving Availability]]
+- [[file:0035-cleanup-protocol-implementability.md][0035 Cleanup Protocol Implementability]]
+- [[file:0036-host-constrained-semantic-parity.md][0036 Host and Constrained Semantic Parity]]
+- [[file:0037-resource-configuration-surface-growth.md][0037 Resource Configuration Surface Growth]]
+- [[file:0038-startup-only-binding-deployment-experience.md][0038 Startup-Only Binding Deployment Experience]]
+- [[file:0039-candidate-fallback-availability-semantics.md][0039 Candidate Fallback Availability Semantics]]
+- [[file:0040-repository-truth-synchronization.md][0040 Repository Truth Synchronization]]
+- [[file:0041-target-legacy-coexistence-verification.md][0041 Target and Legacy Coexistence Verification]]
 
 * History
 

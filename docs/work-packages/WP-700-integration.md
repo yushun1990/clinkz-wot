@@ -205,6 +205,11 @@ no-default, async, or optional binding cell restores it.
   feature cell, and optional integration, with defining-type identity checks.
 - `old-api-removal`: negative compile fixtures and source/reference inspection for every removed
   API and compatibility facade.
+- `target-legacy-no-backflow-final`: compile and source absence of the legacy
+  selector family, monolithic serve/dispatch paths, and any target-to-legacy
+  request or artifact conversion in every releasable feature cell. The sole
+  permitted staged bridge was legacy handler publication into
+  `ProducerEmission`; it must also be absent at this final gate.
 - `workspace-feature-matrix`: Cargo feature/dependency checks for all required package cells,
   no-std targets, optional bindings/codecs, mutual exclusion, and `td2-preview` additivity.
 - `requirement-evidence-completeness`: machine-readable proof that every applicable expanded

@@ -306,10 +306,13 @@ matrix:
 
 Candidate-, admission-, completion-, workload-, and release-specific checks
 remain additional requirements when their registered owner applies; the
-mainline matrix does not replace them. A local result is valid author or review
-evidence, while a successful remote workflow status is integration evidence.
-Do not claim that the default branch is mechanically protected unless the
-remote branch rule actually requires the recorded mainline status check.
+mainline workflow also executes the registered work-package/evidence checker
+so the required status validates repository-owned task state for the proposed
+revision. That checker does not invent missing task-specific evidence. A local
+result is valid author or review evidence, while a successful remote workflow
+status is integration evidence. Do not claim that the default branch is
+mechanically protected unless the remote branch rule actually requires the
+recorded mainline status check.
 
 ## Remote Task Review and Publication
 
@@ -336,17 +339,69 @@ explicitly requests stacked work, the dependent pull request must name its
 predecessor and use the predecessor branch as its review base until the stack
 is rebased after integration.
 
-Task commits are never pushed directly to the default branch. Pull requests
-are not merged automatically. The Owner's remote review may contribute project
-constraints, product feedback, or counterexamples, while AI remains
-responsible for technical evidence and milestone judgment. A remote workflow
-pass is integration evidence and does not replace local candidate, admission,
-completion, or release checks.
+Task commits are never pushed directly to the default branch. The Owner's
+remote review may contribute project constraints, product feedback, or
+counterexamples, while AI remains responsible for technical evidence and
+milestone judgment. A remote workflow pass is integration evidence and does
+not replace local candidate, admission, completion, or release checks.
+
+### Automatic Integration Eligibility
+
+A draft pull request may be promoted to ready and use GitHub native auto-merge
+only for the exact current head and only after all of these are true:
+
+1. the intended scope is complete and contains no unrelated work;
+2. every applicable candidate, independent-review, admission, completion,
+   workload, release, and removal record is present and current;
+3. the task-specific local checks pass and the required remote `validation`
+   job covers that head;
+4. the branch is current with the target branch, conflict-free, not a
+   dependent stack, and has no unresolved review conversation or requested
+   change;
+5. the task crosses no unresolved Owner-owned project-goal, product-trade-off,
+   unacceptable-direction, public-release, or other external-commitment
+   boundary; and
+6. the active remote ruleset has been verified to require strict
+   current-base validation and conversation resolution.
+
+Eligible automatic integration uses GitHub's native mechanism, a merge commit,
+and an expected head object id. Squash and rebase integration are prohibited
+when they rewrite semantically meaningful candidate, review, admission,
+implementation, or evidence identities. A later commit invalidates the
+eligibility decision and reruns the applicable evidence. Failed, cancelled,
+stale, missing, or superseded checks, conflicts, or stacked dependencies leave
+the pull request unmerged. No custom write-capable merge workflow or merge
+queue is introduced without a separately evidenced need.
+
+Until the remote ruleset prerequisites are verified, the pull request remains
+draft and auto-merge remains disabled. Owner intervention remains required for
+Owner-owned boundaries and actual public release, not as a ceremonial merge
+click for routine technical work.
 
 If push or pull-request creation fails, the task remains locally checkpointed
 but remote handoff is incomplete. The blocker and exact retry action must be
 recorded in `PROJECT_STATE.md`; the AI must not silently treat a local commit
 as remotely reviewable.
+
+### Remote Reconciliation
+
+GitHub owns pull-request draft/ready/check/merge facts. Git commits, registered
+work-package records, audits, and evidence own candidate, review, admission,
+implementation, and completion truth. `PROJECT_STATE.md` projects the last
+observed combination and cannot override either owner.
+
+Before substantial work whose next action depends on remote integration, a
+fresh session fetches the remote default branch when available and reconciles
+the recorded task/PR state. Offline work may use the last observed snapshot
+but cannot release dependent source work from an unverified merge. Pre-merge
+continuation state records both conditional next actions. After integration,
+the next task updates continuation state in its first checkpoint; the project
+does not use a write-capable post-merge workflow or a recursive state-only pull
+request.
+
+A dependent task begins only after the merge is visible in the fetched
+default branch and the default-branch validation for the merge revision
+passes. This rule applies equally to manual and automatic integration.
 
 ## Change Management
 

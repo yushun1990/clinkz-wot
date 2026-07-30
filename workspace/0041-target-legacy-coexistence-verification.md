@@ -1,6 +1,6 @@
 # 0041 Target and Legacy Coexistence Verification
 
-Status: OPEN
+Status: MIGRATED
 
 Kind: owner-raised migration and implementation-conformance investigation
 
@@ -40,3 +40,45 @@ This topic records a Project Owner concern that the migration rules decided in w
 ## Expected decision output
 
 Codex should define the staged executable no-backflow evidence, permitted adapter ownership, test isolation rules, generation-mixing negatives, and exact removal proofs for WP-300 through WP-700.
+
+## Decision
+
+Distinct target types are necessary but do not alone prove no backflow. The
+staged evidence is:
+
+1. WP-300 compiles the target registration/request/response surface without a
+   protocol-bindings or Servient dependency, source-scans the target module for
+   legacy selectors/dispatch, exposes no target-to-legacy conversion, and
+   rejects mismatched compiler, artifact, binding, configuration, route, and
+   plan generations.
+2. WP-400's target runner imports only target types and arms legacy selector,
+   `ServerBinding::serve`, and `Dispatch` paths with poison counters/panics;
+   the target Property Read trace must complete with every poison count zero.
+3. WP-600 removes concrete selector and legacy execution calls for Zenoh and
+   zenoh-pico and proves compiled targets enter only the target SPI.
+4. WP-700 uses negative public compile fixtures, dependency/source inspection,
+   and the full feature matrix to prove the selector family, legacy root
+   exports, and every named adapter edge are absent.
+
+The only temporary positive adapter remains the already named one-way legacy
+handler-publication to `ProducerEmission` bridge. WP-300 owns its contract,
+WP-400 and WP-600 remove their respective ends, no new caller may enter it,
+and no adapter may translate a target artifact/request back to a TD, form, or
+legacy server call.
+
+Tests claiming target-generation coverage must construct a target plan,
+artifact, registration, route, permit, request, response opportunity, and
+generation chain. A legacy fixture cannot satisfy that claim. Generation
+mixing negatives are required at each owning package.
+
+Issue 0027 is reopened only by concrete evidence that a required target
+operation cannot be expressed without information owned solely by the legacy
+path, that identity/ownership cannot survive the one-way migration, or that a
+production binding cannot implement the target SPI. Convenience or existing
+legacy test coverage is not such evidence.
+
+## Migration
+
+The staged evidence and poison-boundary requirements are projected into the
+Property Read gate and WP-300/WP-400/WP-600/WP-700 work-package evidence. This
+topic is `MIGRATED`.

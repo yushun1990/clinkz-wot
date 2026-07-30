@@ -34,6 +34,20 @@ and release idempotently unless committed to a published owner. Accounting
 objects are advanced runtime and SPI building blocks; ordinary application
 interactions inherit their Servient profile.
 
+The exhaustive flat schema remains the authority as the field set grows.
+Named profiles and generated role/profile builders are checked projections
+that must construct one complete `ResourceLimits`; they are not independent
+configuration formats. A caller either names one explicit profile or supplies
+every field applicable to its selected roles. `None` is permitted only for a
+field whose schema declares typed non-applicability; it never means inherit or
+unbounded. Validation diagnostics name the field, scope, accounting owner, and
+profile/role projection that supplied the value.
+
+Changing the authoritative representation requires measured evidence that the
+flat schema or its generated projections no longer provide bounded
+construction, reviewability, or compatibility. Field count alone is not such
+evidence.
+
 `RES-LIMIT-001`: Every public ingestion and runtime-construction surface MUST
 accept or inherit a resource policy before processing externally influenced
 variable-size state. `docs/resource-limits.csv` is the single exhaustive field

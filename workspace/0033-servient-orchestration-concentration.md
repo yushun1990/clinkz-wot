@@ -1,6 +1,6 @@
 # 0033 Servient Orchestration Concentration
 
-Status: OPEN
+Status: MIGRATED
 
 Kind: owner-raised runtime architecture and scalability investigation
 
@@ -40,3 +40,34 @@ This topic records a Project Owner concern that removing hidden Binding dispatch
 ## Expected decision output
 
 Codex should define the minimal Servient state/scheduling architecture, the earliest deterministic scalability workloads, the acceptable protocol-reactor boundary, and any work-package or performance-evidence changes needed before broad runtime claims.
+
+## Decision
+
+Servient retains the single semantic authority for publication, route/plan
+leases, permit claims, handler dispatch, cancellation, status, and cleanup.
+That authority does not require one process-wide lock or polling scan.
+Implementation is partitioned by Thing/plan-set generation and then by route
+or operation slot, with bounded ready queues, one retained cursor per owner,
+brief claim/commit critical sections, and callbacks outside those sections.
+Status/event storage is per binding or bounded shard.
+
+A binding reactor may own protocol I/O, correlation, transport buffers, local
+credit, and wake production. It may wake only the engine-owned route/call
+driver and cannot observe registries, choose handlers, or retain semantic
+permits. Host and constrained profiles share transition and outcome semantics
+but use separate synchronization/storage representations.
+
+Scheduling uses one linear work budget with bounded per-owner quanta across
+readiness, acceptance, handlers, responses, subscriptions, emissions,
+reclamation, and cleanup. Older cleanup and deadlines cannot be starved by hot
+routes. The earliest broad WP-400 workloads must cover multiple Things and
+bindings, many routes, a never-ready route, continuously ready and slow
+siblings, drain/accept races, terminal isolation, cleanup saturation, and
+contention-free progress of unrelated shards. The single-route Property Read
+gate makes no scalability claim.
+
+## Migration
+
+The minimal architecture and evidence boundary are projected into
+`docs/work-packages/WP-400-servient.md`; existing registered fairness and
+contention workloads remain the executable owners. This topic is `MIGRATED`.

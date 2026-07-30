@@ -192,9 +192,25 @@ Servient or production-protocol authority.
 
 ## Review and transition contract
 
-The immutable candidate must be one child of
-`d8ed500ddba85997d380adc5071818a90150858b` and change exactly the registered
-candidate paths. Independent review must:
+The immutable semantic candidate is
+`e31b975b329fa147bbccf71e5bc6be4254902d89`, the exact registered-path child of
+`d8ed500ddba85997d380adc5071818a90150858b`. Its independent semantic review
+passed and is immutably recorded by
+`docs/audits/WP-300-property-read-binding-slice-review.toml` at
+`d5169ba34ad846b2d45d0841b5d57210ee4df0c1`.
+
+Default-branch integration subsequently exposed an evidence-topology defect:
+the checker treated the current mergeable `HEAD` as though it were the
+single-parent review-attestation commit and also required the future
+pre-source checkpoint to be its direct child. Review evidence and integration
+basis are different facts. The corrected contract binds the immutable
+`review_attestation_ref` separately and leaves
+`admission_base_ref = "register-at-admission"` while review is pending. The
+future five-file checkpoint must replace that sentinel with the exact reviewed
+and integrated default-branch commit and be its single child; the review
+attestation must be an ancestor of that base.
+
+Independent review of this correction must:
 
 1. inspect that exact diff and all public signatures;
 2. run every registered pre-implementation check;
@@ -208,10 +224,8 @@ candidate paths. Independent review must:
 7. simulate the exact two-path implementation child and completion-evidence
    boundary.
 
-Review attestation will be
-`docs/audits/WP-300-property-read-binding-slice-review.toml`. The attestation
-is deliberately absent from this candidate. No product source may begin until
-the attestation exists and the exact five-file transition passes
+No product source may begin until this evidence-topology correction receives
+independent review, is integrated, and the exact five-file transition passes
 `tools/check-wp300-property-read-binding-slice-entry.sh --admission-ready`.
 
 ## Dependency and release verdict

@@ -1,6 +1,6 @@
 # 0030 Automatic Pull Request Integration
 
-Status: OPEN
+Status: MIGRATED
 
 Kind: owner-raised repository-workflow proposal
 
@@ -78,3 +78,54 @@ Codex should determine:
 7. any required GitHub setting, Ruleset, workflow-permission, checker, or status-context changes;
 8. the authoritative migrations required in `AGENTS.md`, `PROJECT_GOVERNANCE.md`, `PLAN.md`, `PROJECT_STATE.md`, or other owners; and
 9. the validation and remote evidence that prove the new workflow is complete without weakening integration integrity.
+
+## Decision
+
+Routine integration may use GitHub native auto-merge, but only as the terminal
+state of the existing AI-owned evidence workflow. Auto-merge is not itself an
+admission or review mechanism.
+
+An AI agent may move a draft pull request to ready and enable auto-merge only
+when all of the following hold for the exact current head:
+
+1. the intended diff is complete and contains no unrelated work;
+2. every applicable candidate, independent-review, admission, completion,
+   workload, release, and removal record is present and current;
+3. the task-specific local checks and the required remote `validation` job
+   cover the current head;
+4. the branch is current with the target branch, has no conflict, is not a
+   dependent stack, and has no unresolved review conversation or requested
+   change;
+5. the pull request crosses no unresolved Owner-owned product-goal, trade-off,
+   unacceptable-direction, public-release, or other external-commitment
+   boundary; and
+6. the remote ruleset is verified to require strict current-base validation
+   and conversation resolution.
+
+The merge method is a merge commit. Squash and rebase integration are
+ineligible when they would erase or rewrite candidate, review, admission,
+implementation, or evidence object identities. Auto-merge is enabled with an
+expected head object id. A later commit invalidates the eligibility decision
+and must rerun the evidence predicate; failed, cancelled, stale, or missing
+checks leave the pull request unmerged. Conflicts and stacked work require a
+new current-base validation rather than bypass.
+
+The existing GitHub-native mechanism is sufficient once those prerequisites
+hold; no custom write-capable merge workflow or merge queue is introduced.
+The mainline workflow now executes the registered work-package/evidence check
+in addition to the generic matrix so its required status is not blind to
+repository-owned task state. Until the remote ruleset prerequisites are
+verified, handoff remains draft and auto-merge remains disabled.
+
+Dependent work is released only after the merge is visible on the fetched
+default branch and the default-branch validation for the merge revision
+passes. A merge click, automatic or manual, never substitutes for that
+reconciliation event.
+
+## Migration
+
+The eligibility predicate, merge method, failure handling, Owner boundary, and
+post-merge release event are projected into `AGENTS.md`,
+`PROJECT_GOVERNANCE.md`, `.github/workflows/mainline.yml`, `PLAN.md`, and
+`PROJECT_STATE.md`. Operational activation remains conditional on verified
+remote ruleset state. This topic is therefore `MIGRATED`.

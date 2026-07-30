@@ -1,6 +1,6 @@
 # 0038 Startup-Only Binding Deployment Experience
 
-Status: OPEN
+Status: MIGRATED
 
 Kind: owner-raised product-boundary and deployment-workflow investigation
 
@@ -40,3 +40,37 @@ This topic records a Project Owner concern that the safe v1 decision against run
 ## Expected decision output
 
 Codex should define the engine/platform ownership boundary, required Binding package metadata and assembly contract, rollout and rollback expectations, terminology, and any future repository or platform work needed to make startup-only composition usable as a plugin experience.
+
+## Decision
+
+clinkz-wot owns the Cargo-linkable binding contract, complete runtime
+registration, compatibility/resource validation, readiness, drain, status, and
+generation-safe shutdown. A ClinkZ service/application manager owns package
+discovery, source trust, version and checksum pinning, lockfiles, feature and
+target resolution, toolchain/build isolation, artifact signing, deployment,
+health observation, cutover, and rollback.
+
+A binding package intended for automated assembly must expose build-time
+metadata for crate/source identity and version, supported engine contract,
+targets/profile cells/features, configuration-schema version, advertised
+roles, and the generated registration-constructor hook. That manifest helps an
+assembler select dependencies but is not runtime authority; the complete
+registration still validates its actual binding/configuration generations,
+compatibility, capabilities, and footprints.
+
+External configuration may change without recompiling only when the already
+linked crate accepts that schema. It still creates a new application/Servient
+generation and follows readiness, cutover, drain, and rollback. Changing code,
+crate version, Cargo feature, target, or compatibility requires a rebuild.
+
+This repository defines the integration contract and conformance metadata, not
+a platform-specific package registry or one-click assembly service. User-facing
+“plugin” means an install/build/deploy workflow, not in-process dynamic loading
+or hot unload.
+
+## Migration
+
+The boundary, metadata contract, configuration rule, and terminology are
+projected into ADR-0009 and
+`docs/architecture/40-protocol-binding-spi-and-deployment.md`. This topic is
+`MIGRATED`.

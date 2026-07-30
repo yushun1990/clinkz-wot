@@ -39,6 +39,9 @@ jobs:
       - name: Validate active design and completed evidence
         run: tools/check-design-artifacts.sh
 
+      - name: Validate registered work-package and task evidence
+        run: cargo run --locked --quiet --manifest-path tools/design-check/Cargo.toml -- check-work-packages
+
       - name: Run locked workspace tests
         run: cargo test --workspace --locked
 

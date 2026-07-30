@@ -59,6 +59,21 @@ generation serving, and makes its serving activation authority available for
 route-admission claims. These are projections of one Servient state transition,
 not N binding mutations. No binding callback runs at this boundary.
 
+For v1, every route represented by an advertised Producer form in the frozen
+effective TD and immutable plan set is required for that serving generation.
+=Optional=, =redundant=, and =alternative= are not runtime route labels. If any
+advertised route cannot reach =CommittedClosed=, that generation is rolled
+back and never published. Deliberate omission is expressed before planning by
+constructing a different effective TD/application configuration; exposing it
+creates a new generation. A failed or omitted route cannot join an already
+published generation.
+
+This preserves agreement between advertised forms, immutable plans, and actual
+serving routes. A future availability-group model requires a separately
+versioned immutable plan/TD policy, bounded variant selection, honest TD
+publication, resource accounting, regeneration rules, and failure/workload
+evidence. It is not inferred from multiple forms.
+
 Each call to =poll_accept= requires a route-scoped permit produced through the
 linear =RouteAcceptLease -> RouteAcceptClaim -> RouteActivationPermit= chain.
 The claim exclusively borrows the one route-driver lease, and consuming it
@@ -142,6 +157,9 @@ state is not a substitute for guard cleanup ownership.
   drain/accept races, externally visible preparation, and host/constrained
   equivalence. It must observe zero pre-publication admissions, zero partial
   route activation, and zero post-drain accept claims.
+- Status for a failed expose identifies the route, binding, generation,
+  readiness/commit phase, primary failure, and cleanup disposition; it never
+  describes the rejected generation as partially serving.
 
 * Rejected alternatives
 
@@ -157,3 +175,6 @@ state is not a substitute for guard cleanup ownership.
   observation to one route generation or prevent retention after drain.
 - Treating successful =commit= as serving was rejected because an earlier route
   could admit traffic before a later route commits or fails.
+- Silently dropping an unavailable advertised route was rejected because the
+  published TD and plan set would claim a route that the serving generation
+  cannot provide.

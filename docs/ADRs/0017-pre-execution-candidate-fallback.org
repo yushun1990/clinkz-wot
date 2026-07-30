@@ -62,6 +62,15 @@ selects another candidate. Explicit caller retry remains governed by the
 structured =RetryClass=; =GatewayDefaultV1= performs no automatic interaction
 retry.
 
+Explicit retry is a new application action, not continuation of the failed
+interaction. The caller may combine =RetryClass= with its own idempotency and
+security policy, inspect bounded plan/form/binding/generation diagnostics, and
+issue a new call with a strict =form_index= or binding choice. The new call
+receives a fresh deadline, work allowance, and security commit; the engine does
+not carry side-effect assumptions across calls. Scripting-compatible
+=formIndex= and Rust strict options are the facade rather than an automatic
+failover helper.
+
 Mutable runtime health is diagnostic input only in v1. It cannot reorder,
 remove, or skip an admitted candidate. A stale, unavailable, or draining
 generation fails through the generation/lifecycle contract rather than being
@@ -99,6 +108,9 @@ All examined candidates share the one
   cannot silently cause another security commit or protocol attempt.
 - Binding operational status remains observable without becoming a second
   mutable planning system.
+- Diagnostics identify the selection/execution phase and why another admitted
+  form was not attempted; multiple forms are ordered candidates, not a runtime
+  failover pool.
 - The diagnostic bound follows the already admitted candidate bound and uses
   fixed-width identities rather than a new unbounded journal.
 - The property-read planning slice may omit a multi-candidate runtime scenario,
