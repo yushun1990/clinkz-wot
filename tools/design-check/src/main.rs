@@ -311,6 +311,209 @@ const PROPERTY_READ_PLAN_PRECHECKS: &[&str] = &[
     "wp100-property-read-handler-slice-check",
 ];
 const PROPERTY_READ_BINDING_SLICE: &str = "WP-300-PROPERTY-READ-BINDING-SLICE";
+const PROPERTY_READ_BINDING_ENTRY_CHECK: &str = "wp300-property-read-binding-slice-entry-check";
+const PROPERTY_READ_BINDING_COMPLETION_CHECK: &str = "wp300-property-read-binding-slice-check";
+const PROPERTY_READ_BINDING_REVIEW_ATTESTATION: &str =
+    "docs/audits/WP-300-property-read-binding-slice-review.toml";
+const PROPERTY_READ_BINDING_COMPLETION_EVIDENCE: &str =
+    "docs/evidence/WP-300-property-read-binding-slice.toml";
+const PROPERTY_READ_BINDING_ADMISSION_REVIEW: &str =
+    "docs/audits/WP-300-property-read-binding-slice-entry.md";
+const PROPERTY_READ_BINDING_CANDIDATE_BASE_REF: &str = "d8ed500ddba85997d380adc5071818a90150858b";
+const PROPERTY_READ_BINDING_CANDIDATE_REF_MODE: &str = "register-after-candidate-commit";
+const PROPERTY_READ_BINDING_REQUIREMENTS: &[&str] = &[
+    "PLAN-ARTIFACT-001",
+    "API-PAYLOAD-001",
+    "BIND-REG-001",
+    "BIND-ROUTE-001",
+    "BIND-STORAGE-001",
+    "BIND-DELIVERY-001",
+    "BIND-IO-001",
+    "BIND-MEM-001",
+    "BIND-CALL-CANCEL-001",
+    "BIND-HOST-CANCEL-001",
+    "LIFE-EXPOSE-002",
+    "LIFE-EXPOSE-003",
+    "STATE-BIND-001",
+    "STATE-INFLIGHT-001",
+    "CLEANUP-RECORD-001",
+    "API-RESOURCE-001",
+    "CONSTRAINED-STORAGE-001",
+    "CONSTRAINED-STORAGE-002",
+    "CONSTRAINED-PROGRESS-001",
+    "CONSTRAINED-WORK-001",
+    "CONSTRAINED-OWN-001",
+    "RES-LIMIT-001",
+    "ERR-TAXONOMY-001",
+    "ERR-RETRY-001",
+    "ADMIT-MEM-001",
+    "CAP-OVERFLOW-001",
+    "HOST-ASYNC-001",
+];
+const PROPERTY_READ_BINDING_API_ITEMS: &[&str] = &[
+    "BindingCallSettlement",
+    "BindingCancellationDisposition",
+    "BindingDeliveryOutcome",
+    "BindingExecutionSupport",
+    "BindingIngressLimits",
+    "BindingIngressPolicy",
+    "BindingInputRejection",
+    "BindingLifetimeFootprint",
+    "BindingOperationalError",
+    "BindingRegistrationCapabilities",
+    "BindingRegistrationIdentity",
+    "BindingResourceDeclarations",
+    "BindingStateLayout",
+    "BindingStatusPolicy",
+    "BindingTransientFootprint",
+    "CleanupPhaseContext",
+    "CleanupReservation",
+    "CleanupTransferAcceptance",
+    "CleanupTransferEnvelope",
+    "CleanupTransferRequest",
+    "CleanupTransferTarget",
+    "CollisionDomainId",
+    "EndpointReservationKey",
+    "HostActiveRouteGuard",
+    "HostBindingCall",
+    "HostBindingCallBox",
+    "HostBindingRegistration",
+    "HostBindingRegistrationInput",
+    "HostCommittedRouteGuard",
+    "HostPreparedRouteGuard",
+    "HostRouteCleanupSuccessor",
+    "HostShutdownRouteGuard",
+    "NoCleanupSuccessor",
+    "PollServerBinding",
+    "PrepareInput",
+    "RouteAbortInput",
+    "RouteAcceptClaim",
+    "RouteAcceptClaimError",
+    "RouteAcceptEvent",
+    "RouteAcceptLease",
+    "RouteActivationOutcome",
+    "RouteActivationPermit",
+    "RouteCleanupOutcome",
+    "RouteCleanupSuccessor",
+    "RouteCommitOutcome",
+    "RouteInboundRequest",
+    "RouteInboundResponse",
+    "RoutePreparationVisibility",
+    "RoutePrepareOutcome",
+    "RouteReadinessOutcome",
+    "RouteReadinessSlot",
+    "RouteReservationIdentity",
+    "RouteResponseOpportunity",
+    "RouteServerBinding",
+    "RouteShutdownInput",
+    "RouteTerminal",
+    "ServerResponseSlot",
+    "ServerRouteSlot",
+    "ServingActivationAuthority",
+    "StaticBindingRegistration",
+    "StaticBindingRegistrationInput",
+];
+const PROPERTY_READ_BINDING_REUSED_API_ITEMS: &[&str] = &[
+    "AffordanceTarget",
+    "BindingArtifactCompatibility",
+    "BindingArtifactEnvelope",
+    "BindingCompilerExtension",
+    "BindingConfigurationDigest",
+    "BindingGeneration",
+    "BindingId",
+    "CleanupOperation",
+    "CleanupOutcome",
+    "CleanupRecord",
+    "CoreError",
+    "CoreResult",
+    "CorrelationId",
+    "Deadline",
+    "ErrorContext",
+    "ErrorPhase",
+    "Generation",
+    "HostBindingCompilerRegistration",
+    "InteractionInput",
+    "InteractionOutput",
+    "LogicalInteractionPlan",
+    "Operation",
+    "Payload",
+    "PlanId",
+    "PlanSetGeneration",
+    "RetryClass",
+    "SlotIndex",
+    "StartStatus",
+    "StaticBindingCompilerRegistration",
+    "ThingId",
+    "WorkBudget",
+    "WorkClass",
+];
+const PROPERTY_READ_BINDING_IMPLEMENTATION_PATHS: &[&str] =
+    &["core/src/binding.rs", "core/src/lib.rs"];
+const PROPERTY_READ_BINDING_NEW_IMPLEMENTATION_PATHS: &[&str] = &["core/src/binding.rs"];
+const PROPERTY_READ_BINDING_EXCLUDED_CLAIMS: &[&str] = &[
+    "broad-cancellation-and-race-matrix",
+    "broad-old-api-removal",
+    "client-invoke-and-subscribe",
+    "collection-and-form-contribution",
+    "cross-package-property-read-architecture",
+    "legacy-selector-and-dispatch-adapter",
+    "multi-route-fairness-and-workloads",
+    "producer-emission-and-publication",
+    "production-protocol-and-zenoh",
+    "runtime-td-or-form-selection",
+    "servient-registry-publication-and-dispatch",
+    "subscription-driver-and-delivery",
+];
+const PROPERTY_READ_BINDING_STATE_MACHINES: &[&str] = &[
+    "active-route-acceptance",
+    "binding-call-cleanup-transfer",
+    "binding-route-lifecycle",
+    "binding-route-readiness",
+    "response-delivery-ownership",
+];
+const PROPERTY_READ_BINDING_CONTRACT_ARTIFACTS: &[&str] = &[
+    "tools/check-wp300-property-read-binding-slice-entry.sh",
+    "tools/check-wp300-property-read-binding-slice.sh",
+    "tools/compile-contracts/wp300-property-read-binding-slice/Cargo.lock",
+    "tools/compile-contracts/wp300-property-read-binding-slice/Cargo.toml",
+    "tools/compile-contracts/wp300-property-read-binding-slice/src/lib.rs",
+    "tools/compile-contracts/wp300-property-read-binding-slice/tests/host.rs",
+    "tools/design-check/Cargo.toml",
+    "tools/design-check/src/main.rs",
+    "tools/design-check/tests/wp300_property_read_binding_schema.rs",
+];
+const PROPERTY_READ_BINDING_CANDIDATE_PATHS: &[&str] = &[
+    "PLAN.md",
+    "PROJECT_STATE.md",
+    "docs/api-ownership.csv",
+    "docs/architecture/40-protocol-binding-spi-and-deployment.md",
+    "docs/artifacts.csv",
+    "docs/audits/WP-300-property-read-binding-slice-entry.md",
+    "docs/governance.toml",
+    "docs/spec/binding-spi.md",
+    "docs/spec/v5-artifact-carry-forward.toml",
+    "docs/work-packages/property-read-architecture-gate.toml",
+    "docs/work-packages/WP-300-bindings.md",
+    "docs/work-packages/WP-700-integration.md",
+    "tools/check-wp300-property-read-binding-slice-entry.sh",
+    "tools/check-wp300-property-read-binding-slice.sh",
+    "tools/compile-contracts/wp300-property-read-binding-slice/Cargo.lock",
+    "tools/compile-contracts/wp300-property-read-binding-slice/Cargo.toml",
+    "tools/compile-contracts/wp300-property-read-binding-slice/src/lib.rs",
+    "tools/compile-contracts/wp300-property-read-binding-slice/tests/host.rs",
+    "tools/design-check/src/main.rs",
+    "tools/design-check/tests/wp300_property_read_binding_schema.rs",
+];
+const PROPERTY_READ_BINDING_PRECHECKS: &[&str] = &[
+    "api-ownership-check",
+    "architecture-adr-check",
+    "design-requirement-check",
+    "resource-profile-check",
+    "state-machine-check",
+    "v5-authority-reset-candidate-check",
+    "work-package-dag-check",
+    "wp200-property-read-plan-slice-check",
+];
 const PROPERTY_READ_SERVIENT_SLICE: &str = "WP-400-PROPERTY-READ-SERVIENT-SLICE";
 const WP300_BROAD_ENTRYPOINT: &str = "WP-300-BROAD-ENTRY";
 const WP400_BROAD_ENTRYPOINT: &str = "WP-400-BROAD-ENTRY";
@@ -2568,6 +2771,19 @@ fn expected_check_mapping(id: &str) -> Option<CheckMapping> {
             ],
             &["executable"],
         )),
+        PROPERTY_READ_BINDING_COMPLETION_CHECK => Some((
+            "tools/check-wp300-property-read-binding-slice.sh",
+            &["tools/check-wp300-property-read-binding-slice.sh"],
+            &["executable"],
+        )),
+        PROPERTY_READ_BINDING_ENTRY_CHECK => Some((
+            "tools/check-wp300-property-read-binding-slice-entry.sh",
+            &[
+                "tools/check-wp300-property-read-binding-slice-entry.sh",
+                "--admission-ready",
+            ],
+            &["executable"],
+        )),
         _ => None,
     }
 }
@@ -3051,24 +3267,13 @@ fn property_read_slice_spec(id: &str) -> Option<PropertyReadSliceSpec> {
             work_package: "WP-300",
             sequence: 310,
             dependencies: &[PROPERTY_READ_PLAN_SLICE],
-            requirements: &[
-                "API-PAYLOAD-001",
-                "BIND-REG-001",
-                "BIND-ROUTE-001",
-                "BIND-DELIVERY-001",
-                "BIND-IO-001",
-                "BIND-MEM-001",
-                "STATE-BIND-001",
-                "STATE-INFLIGHT-001",
-                "CLEANUP-RECORD-001",
-                "API-RESOURCE-001",
-            ],
-            owners: &["clinkz-wot-core", "workspace"],
+            requirements: PROPERTY_READ_BINDING_REQUIREMENTS,
+            owners: &["clinkz-wot-core"],
             evidence_key: "property-read-binding-slice",
             blockers: &[
                 "plan-slice-complete",
-                "registration-route-accept-response-and-cleanup-signatures-reviewed",
-                "host-and-manual-mock-binding-authoring-fixtures-defined",
+                "property-read-binding-candidate-independently-reviewed",
+                "host-and-static-authoring-contracts-and-next-state-validated",
             ],
         },
         PROPERTY_READ_SERVIENT_SLICE => PropertyReadSliceSpec {
@@ -3400,7 +3605,7 @@ fn check_property_read_integration_gate(
         ];
         if matches!(
             id.as_str(),
-            PROPERTY_READ_HANDLER_SLICE | PROPERTY_READ_PLAN_SLICE
+            PROPERTY_READ_HANDLER_SLICE | PROPERTY_READ_PLAN_SLICE | PROPERTY_READ_BINDING_SLICE
         ) {
             exact_fields.extend([
                 "api_items",
@@ -3425,8 +3630,10 @@ fn check_property_read_integration_gate(
             let admission_status = string_field(tranche, "admission_status", &id)?;
             if admission_status == "approved" {
                 exact_fields.extend(["review_attestation", "review_attestation_ref"]);
-                if id != PROPERTY_READ_PLAN_SLICE
-                    && string_field(tranche, "status", &id)? != "pending"
+                if !matches!(
+                    id.as_str(),
+                    PROPERTY_READ_PLAN_SLICE | PROPERTY_READ_BINDING_SLICE
+                ) && string_field(tranche, "status", &id)? != "pending"
                 {
                     exact_fields.push("admission_ref");
                 }
@@ -3449,7 +3656,7 @@ fn check_property_read_integration_gate(
         let admission_status = string_field(tranche, "admission_status", &id)?;
         if matches!(
             id.as_str(),
-            PROPERTY_READ_HANDLER_SLICE | PROPERTY_READ_PLAN_SLICE
+            PROPERTY_READ_HANDLER_SLICE | PROPERTY_READ_PLAN_SLICE | PROPERTY_READ_BINDING_SLICE
         ) {
             if !handler_value_status_pair_is_valid(&status, &admission_status) {
                 return Err(format!(
@@ -4094,6 +4301,293 @@ fn check_property_read_integration_gate(
                 }
                 let attestation_ref = string_field(tranche, "review_attestation_ref", &id)?;
                 check_property_read_plan_completion_evidence(
+                    root,
+                    &evidence_path,
+                    &completion_check,
+                    &attestation_ref,
+                )?;
+            } else if evidence_exists && tranche_evidence_is_passed(root, &evidence_path)? {
+                return Err(format!(
+                    "{id} is not complete while {evidence_path} claims passed"
+                ));
+            }
+        } else if id == PROPERTY_READ_BINDING_SLICE {
+            let api_items = package_string_set(tranche, "api_items", &id)?;
+            let expected_api_items = owned_set(PROPERTY_READ_BINDING_API_ITEMS);
+            if api_items != expected_api_items {
+                return Err(format!(
+                    "{id} API-item scope mismatch; expected \
+                     {expected_api_items:?}, found {api_items:?}"
+                ));
+            }
+            let reused_api_items = package_string_set(tranche, "reused_api_items", &id)?;
+            let expected_reused_api_items = owned_set(PROPERTY_READ_BINDING_REUSED_API_ITEMS);
+            if reused_api_items != expected_reused_api_items {
+                return Err(format!(
+                    "{id} reused API-item scope mismatch; expected \
+                     {expected_reused_api_items:?}, found {reused_api_items:?}"
+                ));
+            }
+
+            let implementation_paths = package_string_set(tranche, "implementation_paths", &id)?;
+            let expected_implementation_paths =
+                owned_set(PROPERTY_READ_BINDING_IMPLEMENTATION_PATHS);
+            if implementation_paths != expected_implementation_paths {
+                return Err(format!(
+                    "{id} implementation-path scope mismatch; expected \
+                     {expected_implementation_paths:?}, found {implementation_paths:?}"
+                ));
+            }
+            for path in &implementation_paths {
+                validate_relative_path(path, &id)?;
+            }
+            if status == "pending" {
+                for path in PROPERTY_READ_BINDING_NEW_IMPLEMENTATION_PATHS {
+                    if root.join(path).exists() {
+                        return Err(format!(
+                            "{id} pending state has premature implementation path {path:?}"
+                        ));
+                    }
+                }
+            } else if status == "complete" {
+                for path in &implementation_paths {
+                    if !root.join(path).is_file() {
+                        return Err(format!(
+                            "{id} {status} state lacks implementation path {path:?}"
+                        ));
+                    }
+                }
+            }
+
+            let excluded_claims = package_string_set(tranche, "excluded_claims", &id)?;
+            let expected_excluded_claims = owned_set(PROPERTY_READ_BINDING_EXCLUDED_CLAIMS);
+            if excluded_claims != expected_excluded_claims {
+                return Err(format!(
+                    "{id} excluded-claim scope mismatch; expected \
+                     {expected_excluded_claims:?}, found {excluded_claims:?}"
+                ));
+            }
+            require_table_string(tranche, "risk_category", "C", &id)?;
+            require_table_string(tranche, "impact_status", "current", &id)?;
+            let state_machines = package_string_set(tranche, "state_machines", &id)?;
+            let expected_state_machines = owned_set(PROPERTY_READ_BINDING_STATE_MACHINES);
+            if state_machines != expected_state_machines {
+                return Err(format!(
+                    "{id} state-machine scope mismatch; expected \
+                     {expected_state_machines:?}, found {state_machines:?}"
+                ));
+            }
+            for field in ["old_api_removals", "performance_workloads"] {
+                let values = string_set(array_field(tranche, field, &id)?, &id, field)?;
+                if !values.is_empty() {
+                    return Err(format!("{id} must have an empty {field} set"));
+                }
+            }
+
+            let contract_artifacts = package_string_set(tranche, "contract_artifacts", &id)?;
+            let expected_contract_artifacts = owned_set(PROPERTY_READ_BINDING_CONTRACT_ARTIFACTS);
+            if contract_artifacts != expected_contract_artifacts {
+                return Err(format!(
+                    "{id} contract-artifact scope mismatch; expected \
+                     {expected_contract_artifacts:?}, found {contract_artifacts:?}"
+                ));
+            }
+            for artifact in &contract_artifacts {
+                validate_relative_path(artifact, &id)?;
+                if !root.join(artifact).is_file() {
+                    return Err(format!("{id} contract artifact {artifact:?} is not a file"));
+                }
+                let design_checker_source_is_registered = artifact
+                    == "tools/design-check/src/main.rs"
+                    && registered_artifacts.contains("tools/design-check/Cargo.toml");
+                if !registered_artifacts.contains(artifact) && !design_checker_source_is_registered
+                {
+                    return Err(format!(
+                        "{id} contract artifact {artifact:?} is not registered"
+                    ));
+                }
+            }
+
+            let candidate_base_ref = string_field(tranche, "candidate_base_ref", &id)?;
+            if candidate_base_ref != PROPERTY_READ_BINDING_CANDIDATE_BASE_REF {
+                return Err(format!("{id} candidate base ref is not frozen"));
+            }
+            let candidate_ref = string_field(tranche, "candidate_ref", &id)?;
+            if candidate_ref != PROPERTY_READ_BINDING_CANDIDATE_REF_MODE {
+                return Err(format!(
+                    "{id} candidate ref mode must remain \
+                     {PROPERTY_READ_BINDING_CANDIDATE_REF_MODE:?}"
+                ));
+            }
+            let candidate_paths = package_string_set(tranche, "candidate_paths", &id)?;
+            let expected_candidate_paths = owned_set(PROPERTY_READ_BINDING_CANDIDATE_PATHS);
+            if candidate_paths != expected_candidate_paths {
+                return Err(format!(
+                    "{id} candidate-path scope mismatch; expected \
+                     {expected_candidate_paths:?}, found {candidate_paths:?}"
+                ));
+            }
+            check_candidate_paths(
+                &id,
+                root,
+                &candidate_paths,
+                &implementation_paths,
+                &registered_artifacts,
+            )?;
+            let attestation_exists = root
+                .join(PROPERTY_READ_BINDING_REVIEW_ATTESTATION)
+                .is_file();
+            let effective_candidate_ref = if attestation_exists {
+                let attestation_source =
+                    fs::read_to_string(root.join(PROPERTY_READ_BINDING_REVIEW_ATTESTATION))
+                        .map_err(|error| {
+                            format!(
+                                "cannot read {}: {error}",
+                                root.join(PROPERTY_READ_BINDING_REVIEW_ATTESTATION)
+                                    .display()
+                            )
+                        })?;
+                parse_scoped_review_attestation(
+                    &attestation_source,
+                    &id,
+                    PROPERTY_READ_BINDING_PRECHECKS,
+                    "property-read binding slice",
+                    ACTIVE_AUTHORITY_REVISION,
+                )?
+                .reviewed_ref
+            } else {
+                git_text(
+                    root,
+                    &["rev-parse", "HEAD"],
+                    &format!("{id} candidate HEAD"),
+                )?
+                .trim()
+                .to_owned()
+            };
+            check_candidate_commit(
+                &id,
+                root,
+                &candidate_base_ref,
+                &effective_candidate_ref,
+                &candidate_paths,
+            )?;
+
+            let governance_statuses = load_governance_check_statuses(root)?;
+            let prechecks = package_string_set(tranche, "pre_implementation_checks", &id)?;
+            let expected_prechecks = owned_set(PROPERTY_READ_BINDING_PRECHECKS);
+            if prechecks != expected_prechecks {
+                return Err(format!(
+                    "{id} precheck set mismatch; expected \
+                     {expected_prechecks:?}, found {prechecks:?}"
+                ));
+            }
+            for check in &prechecks {
+                if governance_statuses.get(check).map(String::as_str) != Some("executable") {
+                    return Err(format!("{id} precheck {check:?} is not executable"));
+                }
+            }
+
+            let admission_review = string_field(tranche, "admission_review", &id)?;
+            if admission_review != PROPERTY_READ_BINDING_ADMISSION_REVIEW
+                || !registered_artifacts.contains(&admission_review)
+                || !root.join(&admission_review).is_file()
+            {
+                return Err(format!(
+                    "{id} admission review is not registered and present"
+                ));
+            }
+            check_property_read_handler_audit_state(root, &admission_review, &admission_status)?;
+            let entry_check = string_field(tranche, "entry_check", &id)?;
+            if entry_check != PROPERTY_READ_BINDING_ENTRY_CHECK
+                || governance_statuses.get(&entry_check).map(String::as_str) != Some("executable")
+            {
+                return Err(format!("{id} entry check is not executable"));
+            }
+            let evidence_path = string_field(tranche, "completion_evidence_path", &id)?;
+            if evidence_path != PROPERTY_READ_BINDING_COMPLETION_EVIDENCE {
+                return Err(format!("{id} completion evidence path is not frozen"));
+            }
+            let completion_check = string_field(tranche, "completion_check", &id)?;
+            if completion_check != PROPERTY_READ_BINDING_COMPLETION_CHECK
+                || governance_statuses
+                    .get(&completion_check)
+                    .map(String::as_str)
+                    != Some("executable")
+            {
+                return Err(format!("{id} completion check is not executable"));
+            }
+
+            if admission_status == "review-pending" {
+                if attestation_exists {
+                    if !registered_artifacts.contains(PROPERTY_READ_BINDING_REVIEW_ATTESTATION) {
+                        return Err(format!(
+                            "{id} attestation exists without an artifact-registry entry"
+                        ));
+                    }
+                    let attestation_ref =
+                        git_text(root, &["rev-parse", "HEAD"], &format!("{id} attested HEAD"))?
+                            .trim()
+                            .to_owned();
+                    check_scoped_review_attestation(
+                        root,
+                        PROPERTY_READ_BINDING_REVIEW_ATTESTATION,
+                        &attestation_ref,
+                        &id,
+                        PROPERTY_READ_BINDING_PRECHECKS,
+                        &candidate_base_ref,
+                        &effective_candidate_ref,
+                        &candidate_paths,
+                        "property-read binding slice",
+                        ACTIVE_AUTHORITY_REVISION,
+                        &[],
+                    )?;
+                }
+            } else {
+                if status == "pending" {
+                    return Err(format!(
+                        "{id} approved state must be the combined in-progress \
+                         pre-source checkpoint"
+                    ));
+                }
+                let attestation_path = string_field(tranche, "review_attestation", &id)?;
+                let attestation_ref = string_field(tranche, "review_attestation_ref", &id)?;
+                if attestation_path != PROPERTY_READ_BINDING_REVIEW_ATTESTATION
+                    || !registered_artifacts.contains(&attestation_path)
+                    || !root.join(&attestation_path).is_file()
+                {
+                    return Err(format!("{id} review attestation path is not frozen"));
+                }
+                check_scoped_review_attestation(
+                    root,
+                    &attestation_path,
+                    &attestation_ref,
+                    &id,
+                    PROPERTY_READ_BINDING_PRECHECKS,
+                    &candidate_base_ref,
+                    &effective_candidate_ref,
+                    &candidate_paths,
+                    "property-read binding slice",
+                    ACTIVE_AUTHORITY_REVISION,
+                    &[],
+                )?;
+                if status == "in-progress" {
+                    check_property_read_binding_pre_source_checkpoint_state(
+                        root,
+                        &attestation_ref,
+                        &implementation_paths,
+                    )?;
+                }
+            }
+
+            let evidence_exists = root.join(&evidence_path).is_file();
+            if status == "complete" {
+                if !evidence_exists || !registered_artifacts.contains(&evidence_path) {
+                    return Err(format!(
+                        "{id} complete state lacks registered completion evidence"
+                    ));
+                }
+                let attestation_ref = string_field(tranche, "review_attestation_ref", &id)?;
+                check_property_read_binding_completion_evidence(
                     root,
                     &evidence_path,
                     &completion_check,
@@ -8449,6 +8943,88 @@ fn check_property_read_plan_pre_source_checkpoint_state(
     Ok(())
 }
 
+fn check_property_read_binding_pre_source_checkpoint_state(
+    root: &Path,
+    attestation_ref: &str,
+    implementation_paths: &BTreeSet<String>,
+) -> Result<(), String> {
+    let context = "property-read binding slice";
+    let expected_pre_source_paths = owned_set(&[
+        "PLAN.md",
+        "PROJECT_STATE.md",
+        PROPERTY_READ_BINDING_ADMISSION_REVIEW,
+        "docs/spec/v5-artifact-carry-forward.toml",
+        PROPERTY_READ_GATE_MANIFEST,
+    ]);
+    let head = git_text(
+        root,
+        &["rev-parse", "HEAD"],
+        "resolve property-read binding pre-source HEAD",
+    )?;
+    let head = head.trim();
+    let worktree_paths = git_worktree_paths(
+        root,
+        "property-read binding pre-source/implementation worktree",
+    )?;
+
+    if head == attestation_ref {
+        if worktree_paths != expected_pre_source_paths {
+            return Err(format!(
+                "{context} pre-source worktree path mismatch; expected \
+                 {expected_pre_source_paths:?}, found {worktree_paths:?}"
+            ));
+        }
+        return Ok(());
+    }
+
+    let head_paths = git_commit_changed_paths(
+        root,
+        head,
+        "property-read binding pre-source or implementation commit",
+    )?;
+    if head_paths == expected_pre_source_paths {
+        require_git_single_parent(
+            root,
+            head,
+            attestation_ref,
+            "property-read binding combined pre-source checkpoint",
+        )?;
+    } else if &head_paths == implementation_paths {
+        let pre_source_ref =
+            git_single_parent(root, head, "property-read binding implementation commit")?;
+        require_git_single_parent(
+            root,
+            &pre_source_ref,
+            attestation_ref,
+            "property-read binding combined pre-source checkpoint",
+        )?;
+        let pre_source_paths = git_commit_changed_paths(
+            root,
+            &pre_source_ref,
+            "property-read binding combined pre-source checkpoint",
+        )?;
+        if pre_source_paths != expected_pre_source_paths {
+            return Err(format!(
+                "{context} pre-source checkpoint path mismatch; expected \
+                 {expected_pre_source_paths:?}, found {pre_source_paths:?}"
+            ));
+        }
+    } else {
+        return Err(format!(
+            "{context} HEAD must be the exact combined pre-source or implementation \
+             commit; found paths {head_paths:?}"
+        ));
+    }
+
+    if !worktree_paths.is_subset(implementation_paths) {
+        let out_of_scope: Vec<&String> = worktree_paths.difference(implementation_paths).collect();
+        return Err(format!(
+            "{context} implementation worktree has out-of-scope paths {out_of_scope:?}"
+        ));
+    }
+    Ok(())
+}
+
 fn check_scoped_progress_checkpoint_state(
     root: &Path,
     admission_ref: &str,
@@ -9059,6 +9635,140 @@ fn check_property_read_plan_completion_evidence(
     }
 
     let checker = root.join("tools/check-wp200-property-read-plan-slice.sh");
+    let status = Command::new(&checker)
+        .current_dir(root)
+        .status()
+        .map_err(|error| {
+            format!(
+                "cannot execute {context} completion checker {}: {error}",
+                checker.display()
+            )
+        })?;
+    if !status.success() {
+        return Err(format!("{context} completion checker exited with {status}"));
+    }
+    Ok(())
+}
+
+fn check_property_read_binding_completion_evidence(
+    root: &Path,
+    relative_path: &str,
+    verification_check: &str,
+    attestation_ref: &str,
+) -> Result<(), String> {
+    let context = "property-read binding slice";
+    let path = root.join(relative_path);
+    let source = fs::read_to_string(&path)
+        .map_err(|error| format!("cannot read {}: {error}", path.display()))?;
+    let document = source
+        .parse::<DocumentMut>()
+        .map_err(|error| format!("invalid {}: {error}", path.display()))?;
+    require_integer(
+        document.get("schema_version"),
+        "property-read binding evidence schema_version",
+        1,
+    )?;
+    require_string(
+        document.get("design_revision"),
+        "property-read binding evidence design_revision",
+        ACTIVE_AUTHORITY_REVISION,
+    )?;
+    require_string(
+        document.get("work_package"),
+        "property-read binding evidence work_package",
+        "WP-300",
+    )?;
+    require_string(
+        document.get("tranche"),
+        "property-read binding evidence tranche",
+        PROPERTY_READ_BINDING_SLICE,
+    )?;
+    require_string(
+        document.get("status"),
+        "property-read binding evidence status",
+        "passed",
+    )?;
+    require_string(
+        document.get("evidence_key"),
+        "property-read binding evidence key",
+        "property-read-binding-slice",
+    )?;
+    require_string(
+        document.get("verification_check"),
+        "property-read binding evidence verification_check",
+        verification_check,
+    )?;
+    require_string(
+        document.get("verification_command"),
+        "property-read binding evidence verification_command",
+        "tools/check-wp300-property-read-binding-slice.sh",
+    )?;
+    for field in ["implementation_ref", "recorded_on"] {
+        let value = document
+            .get(field)
+            .and_then(Item::as_str)
+            .ok_or_else(|| format!("{relative_path} has no string field {field:?}"))?;
+        if value.trim().is_empty() {
+            return Err(format!("{relative_path} has empty field {field:?}"));
+        }
+    }
+
+    let implementation_ref = document
+        .get("implementation_ref")
+        .and_then(Item::as_str)
+        .ok_or_else(|| format!("{relative_path} has no implementation_ref"))?;
+    require_full_commit_id(
+        implementation_ref,
+        "property-read binding implementation_ref",
+    )?;
+    check_git_commit_is_ancestor(
+        root,
+        implementation_ref,
+        "property-read binding implementation_ref",
+    )?;
+    let pre_source_ref = git_single_parent(
+        root,
+        implementation_ref,
+        "property-read binding implementation commit",
+    )?;
+    require_git_single_parent(
+        root,
+        &pre_source_ref,
+        attestation_ref,
+        "property-read binding combined pre-source checkpoint",
+    )?;
+    let pre_source_paths = git_commit_changed_paths(
+        root,
+        &pre_source_ref,
+        "property-read binding combined pre-source checkpoint",
+    )?;
+    let expected_pre_source_paths = owned_set(&[
+        "PLAN.md",
+        "PROJECT_STATE.md",
+        PROPERTY_READ_BINDING_ADMISSION_REVIEW,
+        "docs/spec/v5-artifact-carry-forward.toml",
+        PROPERTY_READ_GATE_MANIFEST,
+    ]);
+    if pre_source_paths != expected_pre_source_paths {
+        return Err(format!(
+            "{context} pre-source checkpoint path mismatch; expected \
+             {expected_pre_source_paths:?}, found {pre_source_paths:?}"
+        ));
+    }
+    let implementation_paths = git_commit_changed_paths(
+        root,
+        implementation_ref,
+        "property-read binding implementation commit",
+    )?;
+    let expected_implementation_paths = owned_set(PROPERTY_READ_BINDING_IMPLEMENTATION_PATHS);
+    if implementation_paths != expected_implementation_paths {
+        return Err(format!(
+            "{context} implementation path mismatch; expected \
+             {expected_implementation_paths:?}, found {implementation_paths:?}"
+        ));
+    }
+
+    let checker = root.join("tools/check-wp300-property-read-binding-slice.sh");
     let status = Command::new(&checker)
         .current_dir(root)
         .status()

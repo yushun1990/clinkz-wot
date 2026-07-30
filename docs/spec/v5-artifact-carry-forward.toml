@@ -8,8 +8,8 @@ rule = "A carried artifact projects active requirements only where ADR-0018 clas
 [[artifact]]
 family = "api-ownership"
 path = "docs/api-ownership.csv"
-sha256 = "b44e7d7eef53c190eecd315e2d71efa330665b0b539da8bd762f914fad3752bc"
-disposition = "revalidated and extended by migrated D8 with the exact WP-200 compiler/artifact and Property Read planning surface"
+sha256 = "aa2b5060be05050111836714e88f5bc4a3f8703ad1acf52831ed7fa127b37387"
+disposition = "revalidated and extended with the exact active WP-300 Property Read registration, route, response, cleanup-transfer, host/static author-input, and execution surface; retained broad binding families remain domain-entry input"
 revalidation = "tools/check-api-ownership.sh"
 
 [[artifact]]
@@ -43,8 +43,8 @@ revalidation = "tools/check-v5-authority-reset-candidate.sh"
 [[artifact]]
 family = "governance"
 path = "docs/governance.toml"
-sha256 = "6f46c3ec3b3cca4d1cb8a2a78dee30fdff235d91a607dc4140242b57127f6080"
-disposition = "carried forward with the v5 checker and exact WP-200 Property Read entry/completion checks registered; v4.9 reviews remain historical gate evidence"
+sha256 = "f6ffcec2442e6e6db515dfa32410e2967e2841432d3999db835b94f29339bfa6"
+disposition = "carried forward with the v5 checker and exact WP-300 Property Read binding entry/completion checks registered; v4.9 reviews remain historical gate evidence"
 revalidation = "tools/check-v5-authority-reset-candidate.sh"
 
 [[artifact]]
@@ -106,13 +106,13 @@ revalidation = "cargo run --locked --quiet --manifest-path tools/design-check/Ca
 [[artifact]]
 family = "property-read-integration-gate"
 path = "docs/work-packages/property-read-architecture-gate.toml"
-sha256 = "1fb7a1fa1df86dea2bcaa2a7836c7585b16712982d48fdc4829bc5d12dbddd4c"
-disposition = "revalidated for the completed WP-200 Property Read plan slice; its 21 requirements remain unchanged, WP-300 and WP-400 remain planned and blocked, and future gate status changes update this exact digest in the owning checkpoint"
+sha256 = "4b9855901ef0c8b055d612740c2fe91bb3632607cab643196482ba03d4fa55e0"
+disposition = "revalidated for the exact pending/review-pending WP-300 Property Read binding candidate with active requirement, API, state, exclusion, evidence, and transition scope; WP-400 remains planned/blocked and the aggregate gate remains blocked"
 revalidation = "tools/check-v5-authority-reset-decision.sh"
 
 [[artifact]]
 family = "property-read-integration-gate"
 path = "docs/work-packages/PROPERTY-READ-ARCHITECTURE.md"
-sha256 = "5db01f600e8e7994a43dd0b3f03ceadd7f0116ddd3b914a34f02a16ab6f6577d"
-disposition = "revalidated completion narrative for the WP-100 handler and WP-200 plan slices; mutable tranche truth remains owned by docs/work-packages/property-read-architecture-gate.toml"
+sha256 = "ce421296dc7c6957786870ea792f819229061c77018d2259152a74a5c099c9c9"
+disposition = "revalidated completion narrative for the WP-100 handler and WP-200 plan slices and migrated finite-scope, release-boundary, and global-impact decisions for the still-planned/blocked WP-300 slice; mutable tranche truth remains owned by docs/work-packages/property-read-architecture-gate.toml"
 revalidation = "tools/check-v5-authority-reset-decision.sh"

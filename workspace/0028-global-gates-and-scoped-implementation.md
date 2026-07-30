@@ -1,6 +1,6 @@
 # 0028 Global Gates and Scoped Implementation
 
-Status: OPEN
+Status: MIGRATED
 
 Kind: owner-raised architecture-closure investigation
 
@@ -49,3 +49,38 @@ The current repository records that:
 - Do not expand a gate finding beyond its demonstrated technical and evidence impact.
 - Do not prescribe gate closure order or pause the active critical path before Codex reconstructs the exact intersections.
 - Preserve the AI-led model: the Owner raises the question, while Codex determines the technical answer and migration from repository evidence.
+
+## Decision
+
+ADR-0013 already defines the correct semantic relationship, so no global-gate
+policy change is required. The missing projection was an exact impact claim on
+the still-planned WP-300 tranche.
+
+Disjointness is not inferred from package names or changed files. A candidate
+maps its requirements, authoritative artifacts, state machines, API items,
+resource claims, dependencies, exclusions, and completion evidence. An open
+finding has one of three effects:
+
+1. an intersection with any mapped contract or evidence claim blocks or
+   revokes the tranche;
+2. a change that leaves the completed contract true may require named
+   revalidation without invalidating the completion event; or
+3. a finding with disjoint requirement, artifact, dependency, and evidence
+   scope cannot reopen the tranche.
+
+The WP-300 Property Read candidate must close the exact GATE-1/GATE-2/GATE-4/
+GATE-6 findings it uses. GATE-5 remains contract-before-code: applicable
+identities and oracles are frozen before implementation, while measurements
+belong to completion. The aggregate gates remain open for their broader
+domains and must all close before WP-700/release conformance.
+
+A later finding cannot trigger an undifferentiated review of WP-100 or WP-200.
+It must name the affected requirement, authoritative artifact, evidence key,
+and transitive tranche impact. Unbounded impact remains blocking by design.
+
+## Migration
+
+The impact rule is projected into the Property Read architecture-gate
+document, the WP-300 work package, D21 in `PLAN.md`, and `PROJECT_STATE.md`.
+The candidate checker makes the planned tranche's mapping executable without
+adding a second gate system.

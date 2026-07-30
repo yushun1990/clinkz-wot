@@ -1,6 +1,6 @@
 # 0027 Legacy Migration Boundary Leakage
 
-Status: OPEN
+Status: MIGRATED
 
 Kind: owner-raised architecture-migration investigation
 
@@ -50,3 +50,39 @@ The current repository records that:
 - Do not require immediate removal of legacy code merely because its target replacement is designed.
 - Do not introduce a second public compatibility contract under this topic.
 - Preserve the staged migration and AI-led decision model while Codex determines whether the current boundaries are sufficient.
+
+## Decision
+
+No current target-generation request can leak into a legacy authority because
+the WP-300 target execution path does not yet exist. The concern nevertheless
+found a real enforcement gap: the migration records did not explicitly forbid
+new Core/WP-300 code from calling the still-public
+`clinkz-wot-protocol-bindings` form selectors, and the final removal list did
+not name that selector family.
+
+The boundary is source- and generation-segregated:
+
+- WP-200 Planning selects the form, resolves the target, and produces the
+  artifact exactly once;
+- a target WP-300 registration consumes only that plan/artifact identity and
+  must not depend on or call a legacy TD/form selector;
+- a target request is accepted only under its target binding, plan, route, and
+  serving generations and is never passed to legacy `serve`, `Dispatch`, or
+  binding-owned handler lookup;
+- the existing Zenoh selector call remains a legacy-generation path until
+  WP-600 replaces it with compiled input; and
+- WP-700 proves final absence of the legacy selector exports and all other
+  named compatibility surfaces.
+
+This is not a per-request adapter from the new artifact back into the legacy
+selector. The only positive compatibility adapter retained by WP-300 is the
+already named one-way legacy publication-to-`ProducerEmission` boundary; its
+handler-side and protocol-side ends remain removed by WP-400 and WP-600.
+
+## Migration
+
+The no-backflow rule and selector-removal owner are projected into
+`docs/architecture/40-protocol-binding-spi-and-deployment.md`,
+`docs/spec/binding-spi.md`, WP-300/WP-600/WP-700 work-package records, D20 in
+`PLAN.md`, and `PROJECT_STATE.md`. The WP-300 candidate must add source and
+dependency evidence for the negative edge.

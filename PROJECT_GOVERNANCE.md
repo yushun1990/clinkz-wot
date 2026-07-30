@@ -311,6 +311,43 @@ evidence, while a successful remote workflow status is integration evidence.
 Do not claim that the default branch is mechanically protected unless the
 remote branch rule actually requires the recorded mainline status check.
 
+## Remote Task Review and Publication
+
+A bounded repository-changing task is handed off through GitHub automatically
+at its completion. The standing workflow is:
+
+1. confirm the intended diff and preserve unrelated work;
+2. update continuation state and run the task-specific evidence plus the
+   risk-appropriate default-branch matrix;
+3. retain semantically necessary checkpoint boundaries instead of squashing
+   immutable candidate, review, admission, implementation, or evidence
+   topology into one commit;
+4. commit on the current task branch and push it to `origin`;
+5. open one draft pull request targeting the remote default branch, or update
+   the existing pull request for that task; and
+6. hand off the pull-request URL, exact commits, checks, remote workflow state,
+   and known limitations to the Owner.
+
+When a new task starts from the default branch, its branch is named
+`agent/<task-slug>`. Follow-up changes for the same bounded task remain on the
+same branch and pull request. A dependent task normally starts only after its
+predecessor pull request is remotely reviewed and integrated. If the Owner
+explicitly requests stacked work, the dependent pull request must name its
+predecessor and use the predecessor branch as its review base until the stack
+is rebased after integration.
+
+Task commits are never pushed directly to the default branch. Pull requests
+are not merged automatically. The Owner's remote review may contribute project
+constraints, product feedback, or counterexamples, while AI remains
+responsible for technical evidence and milestone judgment. A remote workflow
+pass is integration evidence and does not replace local candidate, admission,
+completion, or release checks.
+
+If push or pull-request creation fails, the task remains locally checkpointed
+but remote handoff is incomplete. The blocker and exact retry action must be
+recorded in `PROJECT_STATE.md`; the AI must not silently treat a local commit
+as remotely reviewable.
+
 ## Change Management
 
 Changes affecting project goals, release claims, unacceptable directions,

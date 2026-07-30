@@ -161,7 +161,12 @@ revision.
   removed by `WP-500`.
 - Remove exports of the old monolithic `ServerBinding::serve`/`shutdown` lifecycle, implicit
   subscription/discovery end markers, and current binding registration methods superseded by
-  complete generation-bearing bundles, route-scoped acceptance, and associated-state slots.
+  complete generation-bearing bundles, `RouteServerBinding`, route-scoped
+  acceptance, and associated-state slots. Remove the legacy
+  `InboundRequest`/`InboundResponse`/`BindingContext` root exports only after
+  every owner uses the target `RouteInboundRequest`,
+  `RouteResponseOpportunity`, and `RouteInboundResponse`; do not retain a
+  target-to-legacy conversion alias.
 - Remove or rename ambiguous `produce(Thing)` and source-envelope methods whose result shape does
   not match their documented Scripting-compatible contract. Complete TD and source-document paths
   remain available only under their explicit names.
@@ -175,6 +180,12 @@ revision.
   `property_handler_*`, `action_handler_*`, and `event_handler_*` lookup methods. The final
   umbrella exposes only the 54 operation-specific core traits and the 73 WP-400 host
   registration methods frozen in `docs/api-ownership.csv`.
+- Remove the legacy public form-selection family from
+  `clinkz-wot-protocol-bindings`, including `FormSelectionCriteria`,
+  `SelectedForm`, `SelectedAffordanceForm`, `SelectedAffordanceSelection`,
+  `select_form*`, and `select_affordance_form*`. Final source inspection proves
+  that no target plan, registration, route, or request can re-enter a TD/form
+  selection path after Planning has acted.
 - Remove stale crate documentation claiming that the default `std` feature installs Tokio or a
   concrete transport when the actual feature graph does not do so.
 - Remove `RuntimeEventSinkConfig`, `BindingDrivingMode`, independently installable host/static

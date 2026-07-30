@@ -77,9 +77,12 @@ The repository evidence establishes the following starting point:
   design check, locked workspace tests, and 21-cell feature matrix pass; no
   cross-package architecture fixture root was created;
 - the exact WP-300 Property Read slice now has a complete planner dependency,
-  but remains blocked before admission by incomplete exact binding contracts
-  and host/constrained authoring fixtures. The aggregate Property Read gate
-  remains blocked; D4 has resolved subscription receiver ownership;
+  a finite migrated scope, and an exact non-product-source candidate with
+  paired host/static authoring contracts, executable lifecycle schema, entry
+  check, and completion boundary. It is `pending`/`review-pending`; product
+  source remains blocked until independent review and the exact combined
+  pre-source checkpoint. The aggregate Property Read gate remains blocked;
+  D4 has resolved subscription receiver ownership;
 - WP-400, WP-500, and WP-600 remain downstream of WP-300, and WP-700 joins
   those three branches;
 - default workspace tests, the 21-cell valid feature matrix, and the aggregate
@@ -118,8 +121,13 @@ answer and does not automatically block unrelated admitted work.
 | D13 | MIGRATED | Keep the directed owner/projection/evidence/checker model and require transition checks to bind immutable candidates and exercise their next state | Support-artifact failures block only when they falsify an owned technical or evidence claim; no additional WP-200 refinement cycle is admitted | Continuous execution |
 | D14 | MIGRATED | Reaffirm D8 constructibility for admission from the paired external public-boundary fixtures, while reserving runtime ergonomics and production-author claims for implementation and WP-600 evidence | WP-200 completion compiles both profiles; real Zenoh and zenoh-pico authoring may reopen the API only on a concrete ownership, resource, or portability defect | M3 and M5C |
 | D15 | MIGRATED | Define review effectiveness by independently falsifiable evidence classes, not session separation alone | The completed v2 review closed only the evidence-boundary transition; later completion reviews must add real compile, runtime, lifecycle, resource, workload, and integration evidence as applicable | Continuous execution |
-| D16 | DECIDED | Establish one remote mainline validation status covering diff hygiene, aggregate design evidence, locked workspace tests, and the supported feature matrix | The repository workflow is defined, but `master` is not mechanically protected until the remote requires that status; no protected-mainline claim is allowed before then | Before remote source integration |
+| D16 | MIGRATED | Establish one remote mainline validation status covering diff hygiene, aggregate design evidence, locked workspace tests, and the supported feature matrix | Active repository Ruleset `20009352` targets the default branch and requires GitHub Actions context `validation`; the matching check passed on remote `master`. The classic branch-protection summary is not sufficient Ruleset evidence | Before remote source integration |
 | D17 | MIGRATED | Retain the full v1 target and make its critical path and post-WP-300 branch join explicit | Directory/Discovery client work is mandatory client scope, the Directory service remains excluded, and WP-400/WP-500/WP-600 rejoin at WP-700 before release review | M7 exit |
+| D18 | MIGRATED | Bound the WP-300 Property Read slice to one complete Producer Property Read registration, two readiness shapes, permit-gated acceptance, one response, cleanup, and paired host/static authors | Forward-compatible optional interfaces may reject unsupported roles before side effects; subscription, emission, client, Servient, production protocol, workload, and broad cancellation behavior remain excluded | M4 entry |
+| D19 | MIGRATED | Distinguish narrow and broad WP-300 release events instead of inferring progress from package status | Narrow WP-300 completion releases only the WP-400 Property Read slice; broad WP-300 completion releases broad WP-400, WP-500, and WP-600; preparation before release is non-authoritative | M4-M5 entry |
+| D20 | MIGRATED | Enforce source- and generation-segregated legacy coexistence with no target-artifact backflow into legacy selection | New Planning/Core/WP-300 code cannot call legacy selectors or dispatch; WP-600 removes concrete selector/execution calls and WP-700 proves final public selector and adapter absence | M3-M6 |
+| D21 | MIGRATED | Make global-gate impact on scoped tranches an explicit requirement/artifact/state/resource/evidence mapping | Intersecting findings block or reopen, compatible changes receive named revalidation, and disjoint findings cannot trigger undifferentiated re-review; aggregate gates remain required for WP-700/release | Continuous execution |
+| D22 | MIGRATED | Reuse the immutable-candidate, scoped-review, exact-transition, pre-source, and completion machinery for WP-300 | Add only WP-300-specific contract/lifecycle fixtures and checks; preparation ends at the passing candidate plus expected absent-source boundary and reviewed next-state simulation | M4 entry |
 
 The former D3 Foundation candidate is the exact single child of
 `56fea9813df80fe29527755fcb2ce91d43cc5086`, changes only its registered
@@ -145,9 +153,10 @@ integration remain downstream work.
 
 D5 preserves package completion order but adds a cross-package integration
 dependency in the registered work-package DAG. The WP-100 handler and WP-200
-plan slices are complete, while the WP-300 and WP-400 slices remain planned
-and blocked until their own exact candidates receive independent ADR-0013
-review. Broad
+plan slices are complete. WP-300 is `pending`/`review-pending` at its exact
+non-product-source candidate, and WP-400 remains planned/blocked; neither may
+enter its source scope until its own exact candidate receives independent
+ADR-0013 review. Broad
 `WP-100-HANDLER-ENTRY`, `WP-300-BROAD-ENTRY`, and `WP-400-BROAD-ENTRY` remain
 blocked until the gate passes. The gate exception does not claim final
 `InteractionInput` storage, `AcceptHint` resource admission,
@@ -192,6 +201,16 @@ Directory/Discovery client, and concrete-binding branches are independently
 validatable and must all rejoin at WP-700. A late global-gate finding
 invalidates earlier evidence only through the normal explicit impact and
 revalidation rules.
+
+The exact release events inside that path are asymmetric:
+
+- `WP-300-PROPERTY-READ-BINDING-SLICE` completion releases
+  `WP-400-PROPERTY-READ-SERVIENT-SLICE`; and
+- broad WP-300 completion releases broad WP-400, WP-500, and WP-600.
+
+Package-level blocking therefore does not serialize the narrow Property Read
+proof, while a narrow server slice does not pretend to stabilize the complete
+client, subscription, emission, and concrete-binding contract.
 
 ## M0 — Execution Baseline and Collaboration Reset
 
@@ -266,9 +285,9 @@ Current progress: v5.0 authority is active with 62 exact single owners, 59
 inactive dispositions, explicit machine-artifact and completed-evidence
 carry-forward manifests, active-only gate requirement sets, and an immutable
 review/activation chain. Architecture closure remains open on the registered
-global gates; the executable critical path now proceeds to an exact
-`WP-300-PROPERTY-READ-BINDING-SLICE` admission candidate after WP-200 plan
-slice completion.
+global gates; the executable critical path now proceeds to independent review
+of the exact `WP-300-PROPERTY-READ-BINDING-SLICE` candidate after WP-200
+plan-slice completion.
 
 AI deliverable:
 
@@ -417,9 +436,12 @@ Entry conditions:
   `WP-300-PROPERTY-READ-BINDING-SLICE` may seek independent admission after
   its exact planner-slice dependency completes even while the remaining WP-200
   package is incomplete;
-- exact complete-registration, compiler, route, cancellation, response,
-  subscription, emission, and constrained-progress signatures are frozen;
-- independent host and `no_std + alloc` binding-authoring fixtures pass;
+- for the narrow Property Read tranche, exact complete-registration, compiler,
+  route, cancellation, response, cleanup-transfer, and constrained-progress
+  signatures are frozen; subscription, emission, client, form, collection,
+  Servient, and production-protocol behavior remain excluded;
+- independent host and `no_std + alloc` binding-authoring contracts and the
+  executable lifecycle schema are present in the immutable candidate;
 - the exact tranche is admitted.
 
 AI deliverable:

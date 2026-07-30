@@ -246,3 +246,32 @@ Git protects repository changes. `PROJECT_STATE.md` protects project
 understanding and continuity.
 
 Use both.
+
+## Remote Task Handoff
+
+Every bounded task that changes the repository ends with an automatic remote
+handoff. The AI agent must:
+
+-   preserve unrelated work and commit only the task's intended scope;
+-   update `PROJECT_STATE.md` before the task's final evidence-topology commit
+    when that topology requires an exact path set;
+-   run the task-specific checks and the risk-appropriate default-branch
+    matrix;
+-   commit the completed task on its task branch;
+-   push that branch without waiting for a separate Owner prompt;
+-   open or update one draft pull request targeting the repository default
+    branch; and
+-   report the branch, commits, pull-request URL, validation state, and any
+    remaining limitation.
+
+Never push task commits directly to the default branch and never merge the
+pull request automatically. Follow-up fixes for the same task update the same
+branch and pull request. A dependent task waits for remote review and
+integration unless the Owner explicitly requests stacked work; disjoint
+preparation may continue but cannot claim the dependent task's progress.
+
+Remote Owner review is a collaboration and integration boundary. It does not
+replace AI-owned technical judgment, registered independent review, or
+repository evidence. If authentication, network access, or the remote is
+unavailable, keep a local Git checkpoint, record the blocker in
+`PROJECT_STATE.md`, and do not claim that remote handoff is complete.

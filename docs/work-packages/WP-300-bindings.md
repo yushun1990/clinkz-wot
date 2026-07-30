@@ -63,6 +63,90 @@ validation, and the public shared consumer-origin
 legacy response envelope once, after the route and planning values from WP-200
 exist.
 
+## Scoped Property Read admission boundary
+
+`WP-300-PROPERTY-READ-BINDING-SLICE` is Category C because it introduces the
+route, permit, response, cleanup, resource, and host/static ownership boundary.
+It is nevertheless finite. The tranche constructs one complete registration
+that advertises only the Producer Property Read server role and consumes one
+matching WP-200 compiler component.
+
+Its behavior scope is:
+
+1. validate registration, compiler/artifact, generation, profile-cell,
+   footprint, ingress, readiness, status, overflow, and cleanup identity before
+   publication;
+2. cover both an immediate-ready mock and an externally-ready mock;
+3. preserve owned guards through prepare, readiness, activate, commit,
+   abort, and shutdown;
+4. return a committed-closed guard without opening request admission;
+5. accept one Property Read request only under a fresh borrowed route permit;
+6. preserve the complete response opportunity and response on pre-acceptance
+   rejection, then settle accepted delivery exactly once; and
+7. prove the same contract through a host-erased `std` author and an
+   application-static `no_std + alloc` author.
+
+The applicable state projections are `binding-route-lifecycle`,
+`binding-route-readiness`, `active-route-acceptance`,
+`response-delivery-ownership`, and the cleanup-transfer projection used by
+route or response calls. The tranche has no performance-workload completion
+claim; it freezes and tests deterministic resource/footprint behavior while
+the broad package retains its registered GATE-5 workloads.
+
+The narrow public bundle and server interfaces omit inactive client,
+subscription, publication, collection, contribution, and emission families.
+Broad WP-300 may add bounded default rejection adapters only after the owning
+domain-entry review. Retained API-inventory names do not authorize those
+behaviors in this slice.
+
+The tranche excludes:
+
+- client invoke or subscribe behavior;
+- subscription drivers and delivery;
+- Producer emission or publication behavior;
+- collection capability behavior and form contribution;
+- broad cancellation/race matrices, multi-route fairness, and package
+  workloads;
+- Servient registry, publication, scheduling, or application dispatch;
+- production protocol or Zenoh implementation;
+- broad old-API removal; and
+- either cross-package Property Read architecture fixture root.
+
+Target code may consume only the WP-200 logical plan and artifact identity. It
+must not depend on or call the legacy
+`clinkz-wot-protocol-bindings` form selectors, receive a TD, or send a target
+request through legacy `ServerBinding::serve`, `Dispatch`, or handler lookup.
+Legacy selector and execution paths remain separate legacy generations until
+their WP-600/WP-700 removal checkpoints.
+
+Rust method overloading cannot preserve the legacy
+`ServerBinding::shutdown(&ThingId)` and add target
+`shutdown(RouteShutdownInput)` to the same trait. The narrow target therefore
+uses the uniquely named `RouteServerBinding`, `RouteInboundRequest`,
+`RouteResponseOpportunity`, and `RouteInboundResponse` types in
+`core/src/binding.rs`. Existing `core/src/inbound.rs` values remain the legacy
+generation and are not edited by this tranche. WP-700 removes the old exports;
+there is no alias or conversion from a target request to a legacy request.
+
+AR-002 and AR-003 close for this tranche when its immutable candidate contains
+the exact signatures, API and source scope, both readiness shapes, both public
+author profiles, exclusions, and completion boundary. They do not require
+subscription, emission, or the rest of broad WP-300 to be implemented.
+
+Candidate preparation ends when all registered prechecks and the executable
+schema pass, both authoring fixtures reach their expected pre-source boundary,
+and the completion check fails only because the exact product implementation
+paths are absent. Independent review must simulate the combined pre-source
+checkpoint and the next implementation topology before attestation. No later
+support-only refinement may block the tranche without an explicit intersecting
+semantic, ownership, lifecycle, resource, dependency, or evidence-truth
+finding.
+
+Completion of this slice releases
+`WP-400-PROPERTY-READ-SERVIENT-SLICE`. Broad WP-400, WP-500, and WP-600 remain
+released only by broad WP-300 completion. Preparation in those packages is
+allowed but is not source admission or vertical progress.
+
 ## Requirements
 
 - `BIND-REG-001`, `BIND-ROUTE-001`, `BIND-STORAGE-001`, `BIND-MEM-001`, and
@@ -135,7 +219,7 @@ Implement the frozen shared binding surface:
   associated states, `ServerResponseSlot<B::ResponseState>`, and
   `BindingEmissionSlot<B::EmissionState>`; a committed route slot records
   `CommittedClosed` and `poll_accept` requires a borrowed `RouteActivationPermit<'_>`;
-- host execution components: `ServerBinding`, `HostPreparedRouteGuard`,
+- host execution components: narrow `RouteServerBinding`, `HostPreparedRouteGuard`,
   `HostActiveRouteGuard`, `HostCommittedRouteGuard`, `HostShutdownRouteGuard`,
   `RouteCommitOutcome<A, C>`, `RouteCleanupSuccessor<P, A, C>`,
   `HostRouteCleanupSuccessor`, route-scoped `RouteAcceptEvent`, `BindingCallFootprint`,
@@ -147,12 +231,15 @@ Implement the frozen shared binding surface:
   `RouteAcceptClaimError`; and the non-`Clone`, non-`Copy`, lifetime-bound
   `RouteActivationPermit<'a>` created only by consuming that claim. None exposes
   a registry view or application dispatch capability;
+- recoverable author inputs: `HostBindingRegistrationInput` and
+  `StaticBindingRegistrationInput<B>`; validation rejection returns the
+  complete input before publication or protocol side effects;
 - installable units: `HostBindingRegistration` and
   `StaticBindingRegistration<B>`, each carrying compiler, execution,
   contribution, footprint, ingress, status, overflow, readiness, reactor,
   cleanup, capability, and profile-cell metadata as one validated startup
-  bundle. Their constructors consume the matching WP-200 compiler component;
-  no API installs that component by itself.
+  bundle. Their constructors consume the input and its matching WP-200
+  compiler component; no API installs that component by itself.
 - Host and static complete registrations expose the same exact
   `try_with_collection_subscription_capability` and
   `collection_subscription_capability` methods, keyed only by
@@ -266,10 +353,14 @@ contributor metadata; a bare trait object is never the configuration contract.
 
 ## Old API Removal
 
-- Replace the current `core/src/inbound.rs::ServerBinding` methods with the frozen
-  route-scoped prepare/readiness/activate/commit/accept/abort/shutdown contract and the server
-  component inside a complete registration bundle. Remove any registration-wide acceptance and
-  any cleanup path whose only completion signal is guard drop or an unstructured outer error.
+- Add the frozen route-scoped
+  prepare/readiness/activate/commit/accept/abort/shutdown contract as
+  `core/src/binding.rs::RouteServerBinding` inside a complete registration
+  bundle. Keep the current `core/src/inbound.rs::ServerBinding` confined to the
+  legacy generation until WP-400/WP-600 migrate its consumers; WP-700 removes
+  its export. Remove any registration-wide acceptance and any cleanup path
+  whose only completion signal is guard drop or an unstructured outer error
+  at that owning removal checkpoint.
 - Remove any successful `RouteCommitOutcome::Serving` branch, any `poll_accept` overload that
   accepts an active guard or omits `RouteActivationPermit<'_>`, every per-route `open_gate` or
   `release_gate` callback, and every binding view of Servient registry state. Successful commit
