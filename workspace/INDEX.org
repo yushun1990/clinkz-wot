@@ -31,6 +31,7 @@ Topics are retained after migration as decision history.
 - [[file:0044-cleanup-state-machine-complexity-and-evidence-boundary.md][0044 Cleanup State-Machine Complexity and Evidence Boundary]]
 - [[file:0045-host-constrained-parity-proof-and-evolution.md][0045 Host and Constrained Parity Proof and Evolution]]
 - [[file:0046-publication-and-explicit-retry-availability-semantics.md][0046 Publication and Explicit Retry Availability Semantics]]
+- [[file:0047-resource-schema-growth-applicability-and-authoring-boundary.md][0047 Resource Schema Growth, Applicability, and Authoring Boundary]]
 
 ** DISCUSSING
 
