@@ -65,13 +65,20 @@ The active design revision is v5.0 bounded-core authority.
   `9082ff4eb24d96572ae1124096185aa20abb3472` and reviewed second parent
   `d5169ba34ad846b2d45d0841b5d57210ee4df0c1`.
 - Remote merge `2250d1e7ef1b2a65b52edceabce312e344682374` integrated pull
-  request #2 and introduced workspace topics 0030-0041. The current correction
-  branch `agent/decide-workspace-topics` starts from that default-branch
-  checkpoint.
-- Draft pull request #3
-  (`https://github.com/yushun1990/clinkz-wot/pull/3`) is the remote handoff for
-  that correction branch. It remains draft with auto-merge disabled pending
-  independent review, current remote validation, and the D23 prerequisites.
+  request #2 and introduced workspace topics 0030-0041.
+- Remote merge `14acdf3ddf19bdab52a2f03901cfa02c34750477` integrated pull
+  request #3. Its reviewed second parent is the exact correction head
+  `90b385f4ae82ba10187d4f67f7656185a577125f`; exact-head remote validation
+  run `30524546209` passed.
+- Independent post-integration review of that correction passed on 2026-07-30
+  and is recorded by
+  `docs/audits/WP-300-admission-basis-correction-review.toml`. It found one
+  support-only PR #1 merge-reference typo in `PLAN.md`; the corrected value is
+  `a8eac3504f7e4252e9c3ac66da5e3038cb532cfc`.
+- Last observed fetched default-branch checkpoint:
+  `28d717c48a9b6598a93ae09f88503a695392400e` on 2026-07-30. It contains the
+  PR #3 merge in its first-parent ancestry and introduces workspace topics
+  0042-0048 through later merged discussion-only branches.
 
 The activation candidate changed exactly 27 documentation/checker paths and no
 Rust source, Cargo manifest, public API, or runtime behavior. Its independent
@@ -80,21 +87,23 @@ default workspace tests, diff hygiene, and the 21-cell valid feature matrix.
 
 ## Current Objective
 
-Obtain independent review and integration for the decision/migration and
-evidence-topology correction packet handed off as draft pull request #3. The
-technical decisions for workspace topics 0030-0041 are migrated to governance,
+Record and integrate the independent correction review while deciding and
+migrating workspace topics 0042-0048 on a disjoint branch. The technical
+decisions for workspace topics 0030-0041 are already migrated to governance,
 ADR/specification, architecture, work-package, plan, and continuation owners.
-The packet also corrects WP-300 admission validation: immutable semantic review
-evidence remains bound to
+The integrated correction fixes WP-300 admission validation: immutable
+semantic review evidence remains bound to
 `d5169ba34ad846b2d45d0841b5d57210ee4df0c1`, while the later reviewed and
 integrated default-branch commit is recorded separately as
 `admission_base_ref`.
 
-Product source remains unadmitted. This correction requires independent review
-and integration before the exact five-file combined pre-source checkpoint.
-That checkpoint must replace `register-at-admission` with the exact current
-default-branch base and be its single child. Only then may the implementation
-child touch `core/src/binding.rs` and `core/src/lib.rs`.
+Product source remains unadmitted. The correction review checkpoint must be
+integrated and the remote default branch reconciled before the exact five-file
+combined pre-source checkpoint. That checkpoint must replace
+`register-at-admission` with the exact reviewed current default-branch base and
+be its single child. Only then may the implementation child touch
+`core/src/binding.rs` and `core/src/lib.rs`. The discussion-only decisions for
+0042-0048 may proceed independently but cannot claim WP-300 source admission.
 
 The narrow WP-200 plan slice is complete. Its handoff to WP-300 contains:
 
@@ -477,6 +486,17 @@ removed.
 These do not extend the D8 packet unless repository evidence shows a direct
 contract, rollback, or validation intersection.
 
+### Remote handoff authentication
+
+Status: BLOCKED on local GitHub CLI authentication.
+
+`gh` 2.94.0 is installed, but `gh auth status` reports that the active
+`yushun1990` token is invalid. The GitHub connector remains available for
+read-only reconciliation, but the repository-required publish workflow stops
+before push/PR creation until `gh auth login -h github.com` succeeds. The
+correction review is preserved as a local Git checkpoint; remote handoff must
+not be claimed complete.
+
 ## Rejected or Superseded Approaches
 
 - Lossless D3 domain-by-domain authority migration is superseded by ADR-0018.
@@ -703,14 +723,14 @@ Zenoh backends. Use `scripts/check-feature-matrix.sh`, not
 
 ## Next Safe Actions
 
-1. Independently review the exact decision/migration and evidence-topology
-   correction on `agent/decide-workspace-topics`, including the simulated
-   five-file `--admission-ready` transition.
-2. Integrate the correction through its draft pull request only after current
-   mainline validation and remote review pass. Do not enable auto-merge until
-   the strict ruleset, up-to-date check, conversation-resolution, exact-head,
-   and Owner-boundary prerequisites in D23 are freshly verified.
-3. From the reviewed and integrated default-branch commit, create the exact
+1. Hand off and integrate the independent correction-review checkpoint only
+   after current mainline validation passes. Do not enable auto-merge until the
+   strict ruleset, up-to-date check, conversation-resolution, exact-head, and
+   Owner-boundary prerequisites in D23 are freshly verified.
+2. Decide and migrate workspace topics 0042-0048 on a disjoint branch without
+   claiming WP-300 source admission.
+3. After the review checkpoint is visible on a fetched, validated default
+   branch, create the exact
    five-file combined pre-source checkpoint with
    `admission_base_ref = <that commit>`. Product implementation may then touch
    only `core/src/binding.rs` and `core/src/lib.rs`.

@@ -210,7 +210,17 @@ future five-file checkpoint must replace that sentinel with the exact reviewed
 and integrated default-branch commit and be its single child; the review
 attestation must be an ancestor of that base.
 
-Independent review of this correction must:
+Independent review of this correction passed against exact correction head
+`90b385f4ae82ba10187d4f67f7656185a577125f` and is recorded in
+`docs/audits/WP-300-admission-basis-correction-review.toml`. The review
+reconstructed the exact candidate, reran the registered candidate check,
+simulated the exact five-file admission transition and two-path implementation
+child, and confirmed that an incomplete implementation still fails the
+completion marker. It found and corrected one support-only merge-reference
+typo in `PLAN.md`; no semantic contract, source admission, or product behavior
+changed.
+
+The correction review covered:
 
 1. inspect that exact diff and all public signatures;
 2. run every registered pre-implementation check;
