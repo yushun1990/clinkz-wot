@@ -71,27 +71,28 @@ The active design revision is v5.0 bounded-core authority.
   `90b385f4ae82ba10187d4f67f7656185a577125f`, its actual base is
   `2250d1e7ef1b2a65b52edceabce312e344682374`, and exact-head workflow run
   `30524546209` passed.
+- Independent post-integration review of that correction is exact checkpoint
+  `4ae812fd603820c48f5be03264cb2a3f2a39e3e0`. Pull request #13 integrated it
+  through merge commit `ff86c1582138d9a231dd44068b35cf6464214cd5`, whose
+  first parent is `28d717c48a9b6598a93ae09f88503a695392400e` and whose
+  second parent is the exact review checkpoint. The merge tree equals the
+  reviewed tree, changes the expected five paths, and default-branch
+  `mainline` run `30697858866` passed on that merge revision.
 - The remote default branch was fetched on 2026-08-01 at
-  `28d717c48a9b6598a93ae09f88503a695392400e`. It contains the pull-request #3
-  correction and workspace topics 0042-0048.
-- Independent review of the exact pull-request #3 correction and both
-  registered next-state simulations passed locally. Branch
-  `agent/review-wp300-admission-basis` records that review at
-  `4ae812f` and adds
-  `docs/audits/WP-300-admission-basis-correction-review.toml`.
-  Draft pull request #13 targets `master` from that exact head; remote
-  `mainline` run `30693434071` passed, the branch is mergeable, and no review
-  thread is open. The checkpoint is not yet on the remote default branch.
+  `ff86c1582138d9a231dd44068b35cf6464214cd5`. It contains the correction
+  review in its actual ancestry and expected content; the WP-300 review
+  integration dependency is satisfied.
 - The workspace-topic 0042-0048 decision/migration checkpoint is
-  `b8635059059b9f97aba38f6f44fbb59b1eab33b3`, the single child of the observed
-  default checkpoint. Draft pull request #12 targets `master` from branch
-  `agent/decide-workspace-topics-0042-0048`; exact-head `mainline` runs
-  `30596434779` and `30597175091` passed, and no review thread is open.
-- GitHub CLI authentication is valid through the host keyring. The active
-  Ruleset `20009352` requires `validation`, but strict current-base checking
-  and required review-thread resolution are both disabled. Repository policy
-  therefore keeps pull requests #12 and #13 draft and forbids AI-enabled
-  automatic integration until those prerequisites are enabled and reverified.
+  `b8635059059b9f97aba38f6f44fbb59b1eab33b3`; continuation checkpoint
+  `26800cc4605b4b1b3198de13a2f156c8d8868523` records its first remote
+  handoff and passed exact-head `mainline` run `30695308130`. Draft pull
+  request #12 now reconciles the validated default branch in this merge
+  checkpoint and requires fresh exact-head validation before integration.
+- GitHub CLI authentication is valid through the host keyring. Active Ruleset
+  `20009352` requires `validation`, strict current-base checking, and resolved
+  review threads; it has no bypass actor and permits merge commits. Native
+  automatic integration is eligible only while every terminal predicate
+  remains true for the exact current head.
 
 The activation candidate changed exactly 27 documentation/checker paths and no
 Rust source, Cargo manifest, public API, or runtime behavior. Its independent
@@ -100,28 +101,22 @@ default workspace tests, diff hygiene, and the 21-cell valid feature matrix.
 
 ## Current Objective
 
-Integrate the independent WP-300 admission-basis correction review recorded at
-`4ae812f`. Its exact-head remote validation passes in draft pull request #13,
-but repository policy prohibits automatic integration while the active remote
-Ruleset lacks strict current-base validation and required review-thread
-resolution. The dependent five-file pre-source checkpoint must wait for
-verified default-branch integration.
+Complete exact-head validation and automatic integration of draft pull request
+#12 after reconciling validated default checkpoint
+`ff86c1582138d9a231dd44068b35cf6464214cd5`. The decision/migration packet for
+workspace topics 0042-0048 is complete: its repository-grounded conclusions
+are migrated into governance, specifications, architecture, work packages,
+the plan, workspace index, and this continuation checkpoint without changing
+product source or reopening the immutable narrow WP-300 semantic candidate.
 
-The decision/migration packet for workspace topics 0042-0048 is complete and
-handed off in draft pull request #12. Its repository-grounded conclusions are
-migrated into governance, specifications, architecture, work packages, the
-plan, workspace index, and this continuation checkpoint. They strengthen
-broad-package and release evidence without reopening the immutable narrow
-WP-300 semantic candidate.
-
-Product source remains unadmitted. Pull request #3 corrected the WP-300
-admission-basis model on the remote default branch, and an exact independent
-review now passes locally at `4ae812f`. That review checkpoint must be handed
-off and integrated before the exact five-file combined pre-source checkpoint.
-The pre-source checkpoint must bind `admission_base_ref` to the then-current
-reviewed default-branch descendant and be its single child. Only its
-implementation child may touch `core/src/binding.rs` and `core/src/lib.rs`.
-The 0042-0048 migration packet is disjoint preparation and does not count as
+Product source remains unadmitted. The independent WP-300 admission-basis
+correction review is now integrated and validated on the fetched default
+branch. After pull request #12's disjoint packet is integrated and the resulting
+default branch is freshly reconciled, create its exact five-file combined
+pre-source checkpoint. That checkpoint must bind `admission_base_ref` to the
+then-current reviewed default-branch descendant and be its single child. Only
+its implementation child may touch `core/src/binding.rs` and
+`core/src/lib.rs`; the 0042-0048 migration packet does not itself count as
 WP-300 source admission.
 
 The narrow WP-200 plan slice is complete. Its handoff to WP-300 contains:
@@ -140,7 +135,8 @@ entry/completion checks, and the expected
 absent-`core/src/binding.rs` completion boundary. No WP-300 implementation path
 or cross-package Property Read architecture fixture root is admitted. The
 semantic candidate review and admission-topology correction are complete. The
-correction's independent review is locally recorded but not yet integrated.
+correction's independent review is integrated and default-branch validated at
+`ff86c1582138d9a231dd44068b35cf6464214cd5`.
 The earlier validation prerequisite remains resolved:
 `tools/design-check` now selects an explicit runtime worktree root from its
 callers, falls back only to runtime ancestor discovery, and rejects an invalid
@@ -180,8 +176,8 @@ boundary.
   Property Read plan slice is complete, while broad WP-200 exits remain open.
 - M4 Protocol Binding SPI and Lifecycle — OPEN; the exact WP-300 Property Read
   slice dependency, semantic review, and correction are satisfied. The exact
-  correction review passes locally but is not integrated; no product source is
-  admitted.
+  correction review is integrated and default-branch validated; no product
+  source is admitted because the combined pre-source checkpoint remains absent.
 
 The v5 authority switch is complete, but M1 remains open because GATE-1,
 GATE-2, GATE-4, GATE-5, and GATE-6 still require their registered closure
@@ -515,8 +511,8 @@ globally `blocked`.
 
 ### WP-300 admission candidate
 
-Status: SEMANTIC REVIEW PASSED; ADMISSION-BASIS CORRECTION INTEGRATED;
-CORRECTION REVIEW PASSED LOCALLY BUT NOT INTEGRATED; SOURCE NOT ADMITTED.
+Status: SEMANTIC REVIEW PASSED; ADMISSION-BASIS CORRECTION AND INDEPENDENT
+REVIEW INTEGRATED; SOURCE NOT ADMITTED.
 
 The candidate is the exact 20-path single child of decision checkpoint
 `d8ed500ddba85997d380adc5071818a90150858b`. It owns:
@@ -544,8 +540,10 @@ Independent inspection of the exact pull-request #3 head found no intersecting
 semantic change. It also reproduced the passing five-file
 `--admission-ready` transition and the accepted exact two-path implementation
 topology while rejecting an incomplete completion claim. Local checkpoint
-`4ae812f` records that result. Source admission waits for that checkpoint's
-remote integration and a fresh default-base reconciliation.
+`4ae812f` records that result; merge checkpoint
+`ff86c1582138d9a231dd44068b35cf6464214cd5` integrates and validates it on the
+default branch. Source admission now waits for a fresh exact five-file
+combined pre-source checkpoint from the then-current reviewed default base.
 
 Future implementation scope remains exactly `core/src/binding.rs` and
 `core/src/lib.rs`; existing `core/src/inbound.rs` is not an admitted path.
@@ -570,20 +568,24 @@ removed.
   migration, portable async/step admission, no-atomic public-boundary proof,
   and workload/resource evidence.
 - The exact WP-300 Property Read slice has its plan dependency and immutable
-  semantic review. Its correction is integrated and independently reviewed
-  locally, but the review checkpoint must be handed off and integrated before
-  the combined pre-source checkpoint. Broad WP-300 also waits on external
-  authoring, cleanup-coexistence, shared-parity-oracle, and resource-authoring
-  evidence.
+  semantic review. Its correction and independent correction review are
+  integrated; the exact combined pre-source checkpoint remains absent. Broad
+  WP-300 also waits on external authoring, cleanup-coexistence,
+  shared-parity-oracle, and resource-authoring evidence.
 - WP-400, WP-500, and WP-600 depend on WP-300; WP-700 joins those branches.
-- Draft pull request #13 has passed exact-head validation but cannot be
-  automatically integrated under repository policy because Ruleset `20009352`
-  does not require strict current-base validation or review-thread resolution.
-  This is an external integration blocker, not an architecture finding, and it
-  does not authorize source admission.
 
 These do not extend the D8 packet unless repository evidence shows a direct
 contract, rollback, or validation intersection.
+
+### Remote integration controls
+
+Status: ACTIVE AND VERIFIED.
+
+`gh` 2.94.0 accesses the valid `yushun1990` host-keyring credential. Ruleset
+`20009352` targets the default branch and requires current-base `validation`
+plus resolved review threads, with no bypass actor. Pull request #13 exercised
+the terminal path through exact-head protection, merge-commit integration, and
+passed merge-revision workflow run `30697858866`.
 
 ## Rejected or Superseded Approaches
 
@@ -817,10 +819,12 @@ head, merge reachability from `master`, and successful exact-head workflow run
 - diff hygiene.
 
 Local checkpoint `4ae812f` contains the resulting registered audit and
-continuation correction. Draft pull request #13 contains that exact head;
-remote `mainline` run `30693434071` passed on 2026-08-01, the branch is
-mergeable against `master` at
-`28d717c48a9b6598a93ae09f88503a695392400e`, and no review thread is open.
+continuation correction. Pull request #13 exact-head `mainline` run
+`30693434071` passed; merge commit
+`ff86c1582138d9a231dd44068b35cf6464214cd5` has first parent
+`28d717c48a9b6598a93ae09f88503a695392400e`, exact reviewed second parent
+`4ae812fd603820c48f5be03264cb2a3f2a39e3e0`, an equal merge/review tree, and
+passed default-branch `mainline` run `30697858866`.
 
 The 24-path workspace-topic 0042-0048 decision/migration packet changes no
 product source. On 2026-07-30 it passes:
@@ -834,14 +838,22 @@ product source. On 2026-07-30 it passes:
 - `git diff --check`.
 
 Draft pull request #12 contains exact migration checkpoint
-`b8635059059b9f97aba38f6f44fbb59b1eab33b3`; remote `mainline` runs
-`30596434779` and `30597175091` passed, and no review thread is open.
+`b8635059059b9f97aba38f6f44fbb59b1eab33b3`; continuation checkpoint
+`26800cc4605b4b1b3198de13a2f156c8d8868523` passed remote `mainline` run
+`30695308130`. This merge checkpoint reconciles validated default branch
+`ff86c1582138d9a231dd44068b35cf6464214cd5` and requires fresh exact-head
+validation after push.
 
 The 2026-08-01 continuation-only remote reconciliation update passes
 `tools/check-design-artifacts.sh`,
 `tools/check-wp300-property-read-binding-slice-entry.sh --candidate`,
 `cargo test --workspace --locked`, the 21-cell supported feature matrix, and
 diff hygiene.
+
+The pull-request #12 merge resolution against validated default checkpoint
+`ff86c1582138d9a231dd44068b35cf6464214cd5` passes the same aggregate design,
+WP-300 candidate, locked workspace, 21-cell feature-matrix, and diff-hygiene
+suite before its merge commit.
 
 The static and host compile contracts deliberately do not compile against
 product source before admission; the completion checker owns their three-cell
@@ -853,20 +865,18 @@ Zenoh backends. Use `scripts/check-feature-matrix.sh`, not
 
 ## Next Safe Actions
 
-1. Keep draft pull requests #12 and #13 unmerged while Ruleset `20009352`
-   lacks strict current-base validation and required review-thread resolution.
-   Changing that external repository policy requires explicit Owner direction.
-2. After those prerequisites are enabled and freshly verified, recheck the
-   exact head, current-base validation, diff, independent evidence,
-   mergeability, reviews, and conversations; then make pull request #13 ready
-   and enable native merge-commit auto-merge with expected-head protection.
-   Pull request #12 remains an independently integrable disjoint packet.
-3. Fetch the resulting default branch and reconcile actual ancestry, expected
-   review content, and default-head validation. From that reviewed descendant,
-   create the exact five-file combined pre-source checkpoint with
-   `admission_base_ref = <that commit>`.
-4. Only after the pre-source checkpoint passes `--admission-ready`, implement
-   the exact child touching `core/src/binding.rs` and `core/src/lib.rs`.
+1. Finish this pull-request #12 default-branch merge checkpoint, run the full
+   local packet, push it, and wait for exact-head current-base `validation`.
+   Recheck the intended diff, mergeability, reviews, conversations, Owner
+   boundaries, and Ruleset before enabling merge-commit auto-merge with
+   expected-head protection.
+2. Fetch the resulting default branch and verify pull request #12's actual
+   base, merge ancestry, expected content, and merge-revision `validation`.
+3. From that reviewed default-branch descendant, create the exact five-file
+   combined pre-source checkpoint with `admission_base_ref = <that commit>` as
+   its single child and pass `--admission-ready`.
+4. Only then implement the exact child touching `core/src/binding.rs` and
+   `core/src/lib.rs`.
 
 Ask the Project Owner only if the investigation reaches a product-goal,
 real-world constraint, unacceptable direction, or irreversible external

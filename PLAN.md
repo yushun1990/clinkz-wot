@@ -80,12 +80,14 @@ The repository evidence establishes the following starting point:
   a finite migrated scope, and an exact non-product-source candidate with
   paired host/static authoring contracts, executable lifecycle schema, entry
   check, and completion boundary. Its semantic review was recorded at
-  `d5169ba34ad846b2d45d0841b5d57210ee4df0c1`. Its evidence-topology
-  correction is integrated, but the tranche remains
-  `pending`/`review-pending` until the correction review and exact combined
-  pre-source checkpoint are integrated against a current default-branch
-  descendant; product source remains blocked. The aggregate Property Read gate
-  remains blocked; D4 has resolved subscription receiver ownership;
+  `d5169ba34ad846b2d45d0841b5d57210ee4df0c1` and integrated through pull
+  request #1 at `a8eac3504f7e4252e9c3ac66da5e3038cb532cfc`. It remains
+  `pending`/`review-pending`: its evidence-topology correction and independent
+  correction review are integrated through pull request #13 merge
+  `ff86c1582138d9a231dd44068b35cf6464214cd5`, while the exact combined
+  pre-source checkpoint remains absent. Product source remains blocked. The
+  aggregate Property Read gate remains blocked; D4 has resolved subscription
+  receiver ownership;
 - WP-400, WP-500, and WP-600 remain downstream of WP-300, and WP-700 joins
   those three branches;
 - default workspace tests, the 21-cell valid feature matrix, and the aggregate
