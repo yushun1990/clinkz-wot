@@ -1,6 +1,6 @@
 # Project State
 
-Last updated: 2026-07-30
+Last updated: 2026-08-01
 
 ## Repository Basis
 
@@ -71,7 +71,7 @@ The active design revision is v5.0 bounded-core authority.
   `90b385f4ae82ba10187d4f67f7656185a577125f`, its actual base is
   `2250d1e7ef1b2a65b52edceabce312e344682374`, and exact-head workflow run
   `30524546209` passed.
-- The remote default branch was fetched on 2026-07-30 at
+- The remote default branch was fetched on 2026-08-01 at
   `28d717c48a9b6598a93ae09f88503a695392400e`. It contains the pull-request #3
   correction and workspace topics 0042-0048.
 - Independent review of the exact pull-request #3 correction and both
@@ -79,11 +79,19 @@ The active design revision is v5.0 bounded-core authority.
   `agent/review-wp300-admission-basis` records that review at
   `4ae812f` and adds
   `docs/audits/WP-300-admission-basis-correction-review.toml`.
-  That checkpoint is not yet on the remote default branch.
-- The current decision/migration task uses
-  `agent/decide-workspace-topics-0042-0048` from the observed default
-  checkpoint. GitHub CLI authentication for `yushun1990` is invalid, so
-  neither local task branch currently has a complete remote handoff.
+  Draft pull request #13 targets `master` from that exact head; remote
+  `mainline` run `30693434071` passed, the branch is mergeable, and no review
+  thread is open. The checkpoint is not yet on the remote default branch.
+- The workspace-topic 0042-0048 decision/migration checkpoint is
+  `b8635059059b9f97aba38f6f44fbb59b1eab33b3`, the single child of the observed
+  default checkpoint. Draft pull request #12 targets `master` from branch
+  `agent/decide-workspace-topics-0042-0048`; exact-head `mainline` runs
+  `30596434779` and `30597175091` passed, and no review thread is open.
+- GitHub CLI authentication is valid through the host keyring. The active
+  Ruleset `20009352` requires `validation`, but strict current-base checking
+  and required review-thread resolution are both disabled. Repository policy
+  therefore keeps pull requests #12 and #13 draft and forbids AI-enabled
+  automatic integration until those prerequisites are enabled and reverified.
 
 The activation candidate changed exactly 27 documentation/checker paths and no
 Rust source, Cargo manifest, public API, or runtime behavior. Its independent
@@ -92,12 +100,19 @@ default workspace tests, diff hygiene, and the 21-cell valid feature matrix.
 
 ## Current Objective
 
-Complete and hand off the decision/migration packet for workspace topics
-0042-0048. Their repository-grounded conclusions are migrated locally into
-governance, specifications, architecture, work packages, the plan, workspace
-index, and this continuation checkpoint. They strengthen broad-package and
-release evidence without reopening the immutable narrow WP-300 semantic
-candidate.
+Integrate the independent WP-300 admission-basis correction review recorded at
+`4ae812f`. Its exact-head remote validation passes in draft pull request #13,
+but repository policy prohibits automatic integration while the active remote
+Ruleset lacks strict current-base validation and required review-thread
+resolution. The dependent five-file pre-source checkpoint must wait for
+verified default-branch integration.
+
+The decision/migration packet for workspace topics 0042-0048 is complete and
+handed off in draft pull request #12. Its repository-grounded conclusions are
+migrated into governance, specifications, architecture, work packages, the
+plan, workspace index, and this continuation checkpoint. They strengthen
+broad-package and release evidence without reopening the immutable narrow
+WP-300 semantic candidate.
 
 Product source remains unadmitted. Pull request #3 corrected the WP-300
 admission-basis model on the remote default branch, and an exact independent
@@ -153,7 +168,8 @@ kernel and trace oracle with normalized liveness; separation of atomic
 publication from the conservative all-route v1 policy plus a bounded explicit
 retry-facade contract; separation of the canonical resource schema from stable
 authoring projections; and a default-branch reachability/content/validation
-predicate for remote truth. Remote handoff is the remaining task boundary.
+predicate for remote truth. Draft pull request #12 is the remaining integration
+boundary.
 
 ## Active Milestones
 
@@ -560,9 +576,11 @@ removed.
   authoring, cleanup-coexistence, shared-parity-oracle, and resource-authoring
   evidence.
 - WP-400, WP-500, and WP-600 depend on WP-300; WP-700 joins those branches.
-- GitHub CLI authentication is invalid. This blocks the mandatory push/draft
-  pull-request handoff for both current local branches, but it does not change
-  architecture truth or authorize source admission.
+- Draft pull request #13 has passed exact-head validation but cannot be
+  automatically integrated under repository policy because Ruleset `20009352`
+  does not require strict current-base validation or review-thread resolution.
+  This is an external integration blocker, not an architecture finding, and it
+  does not authorize source admission.
 
 These do not extend the D8 packet unless repository evidence shows a direct
 contract, rollback, or validation intersection.
@@ -799,8 +817,10 @@ head, merge reachability from `master`, and successful exact-head workflow run
 - diff hygiene.
 
 Local checkpoint `4ae812f` contains the resulting registered audit and
-continuation correction. Its remote handoff is blocked only by invalid GitHub
-CLI authentication.
+continuation correction. Draft pull request #13 contains that exact head;
+remote `mainline` run `30693434071` passed on 2026-08-01, the branch is
+mergeable against `master` at
+`28d717c48a9b6598a93ae09f88503a695392400e`, and no review thread is open.
 
 The 24-path workspace-topic 0042-0048 decision/migration packet changes no
 product source. On 2026-07-30 it passes:
@@ -813,6 +833,16 @@ product source. On 2026-07-30 it passes:
 - `sh scripts/check-feature-matrix.sh` — 21 passed, 0 failed; and
 - `git diff --check`.
 
+Draft pull request #12 contains exact migration checkpoint
+`b8635059059b9f97aba38f6f44fbb59b1eab33b3`; remote `mainline` runs
+`30596434779` and `30597175091` passed, and no review thread is open.
+
+The 2026-08-01 continuation-only remote reconciliation update passes
+`tools/check-design-artifacts.sh`,
+`tools/check-wp300-property-read-binding-slice-entry.sh --candidate`,
+`cargo test --workspace --locked`, the 21-cell supported feature matrix, and
+diff hygiene.
+
 The static and host compile contracts deliberately do not compile against
 product source before admission; the completion checker owns their three-cell
 compile/runtime validation after the exact two-path implementation child.
@@ -823,12 +853,14 @@ Zenoh backends. Use `scripts/check-feature-matrix.sh`, not
 
 ## Next Safe Actions
 
-1. Restore GitHub CLI authentication with `gh auth login -h github.com`.
-   Preserve the two local checkpoints until remote handoff is complete.
-2. Push `agent/review-wp300-admission-basis`, open its draft pull request, and
-   integrate it only after exact-head validation and review pass. Push and hand
-   off `agent/decide-workspace-topics-0042-0048` independently; the topic
-   packet does not need to serialize WP-300 once its own evidence passes.
+1. Keep draft pull requests #12 and #13 unmerged while Ruleset `20009352`
+   lacks strict current-base validation and required review-thread resolution.
+   Changing that external repository policy requires explicit Owner direction.
+2. After those prerequisites are enabled and freshly verified, recheck the
+   exact head, current-base validation, diff, independent evidence,
+   mergeability, reviews, and conversations; then make pull request #13 ready
+   and enable native merge-commit auto-merge with expected-head protection.
+   Pull request #12 remains an independently integrable disjoint packet.
 3. Fetch the resulting default branch and reconcile actual ancestry, expected
    review content, and default-head validation. From that reviewed descendant,
    create the exact five-file combined pre-source checkpoint with
