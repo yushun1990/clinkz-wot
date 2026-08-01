@@ -209,6 +209,21 @@ command = [
 ]
 
 [[check]]
+id = "wp200-property-read-producer-route-check"
+status = "executable"
+artifact = "tools/check-wp200-property-read-producer-route.sh"
+command = ["tools/check-wp200-property-read-producer-route.sh"]
+
+[[check]]
+id = "wp200-property-read-producer-route-entry-check"
+status = "executable"
+artifact = "tools/check-wp200-property-read-producer-route-entry.sh"
+command = [
+    "tools/check-wp200-property-read-producer-route-entry.sh",
+    "--admission-ready",
+]
+
+[[check]]
 id = "wp300-property-read-binding-slice-check"
 status = "executable"
 artifact = "tools/check-wp300-property-read-binding-slice.sh"

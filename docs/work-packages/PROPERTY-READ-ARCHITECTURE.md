@@ -17,7 +17,10 @@ and request cleanup.
 
 It is architecture evidence, not a demonstration application or a replacement
 for package-local completion. The package order remains
-`WP-100 -> WP-200 -> WP-300 -> WP-400`. ADR-0013 permits only the four exact
+`WP-100 -> WP-200 -> WP-300 -> WP-400`. The executable tranche DAG contains
+one additional WP-200-owned Producer-route correction after WP-300 because
+the completed package-local slices exposed a concrete handoff gap. ADR-0013
+permits only the five exact
 slice tranches in the manifest to cross incomplete package boundaries after
 their own admission reviews. No manifest record is implementation admission.
 
@@ -49,12 +52,22 @@ protocol behavior remains broad work. Default methods for unadvertised roles
 must reject before state or side effects and do not constitute behavior
 evidence.
 
+The Producer-route projection corrects the only concrete intersection found
+while preparing WP-400: the implemented Property Read algorithm is private and
+hard-codes `ConsumerCall`, while the complete registration is Producer-only.
+The correction preserves that completed Consumer behavior and exposes only a
+bounded `ProducerRoute` constructor plus opaque cursor. Its external fixture
+must borrow the compiler from the complete WP-300 registration and carry the
+real plan output directly into `PrepareInput`; it cannot synthesize any gate
+owner in fixture code.
+
 ## Tranche DAG and entry points
 
 ```text
 WP-100-PROPERTY-READ-HANDLER-SLICE
     -> WP-200-PROPERTY-READ-PLAN-SLICE
     -> WP-300-PROPERTY-READ-BINDING-SLICE
+    -> WP-200-PROPERTY-READ-PRODUCER-ROUTE-PROJECTION
     -> WP-400-PROPERTY-READ-SERVIENT-SLICE
     -> PROPERTY-READ-ARCHITECTURE
 ```
@@ -68,13 +81,15 @@ The gate blocks:
 
 It does not block M1 documentation convergence, corrective work, the current
 `WP-100-HANDLER-CONTEXT` candidate lifecycle, WP-200 planning work, or admission
-preparation for the four exact slices. WP-500 and WP-600 remain downstream of
+preparation for the five exact slices. WP-500 and WP-600 remain downstream of
 WP-300 and are therefore indirectly protected from becoming the first
 architecture proof.
 
 The exact downstream release events are:
 
 - completion of `WP-300-PROPERTY-READ-BINDING-SLICE` releases only
+  `WP-200-PROPERTY-READ-PRODUCER-ROUTE-PROJECTION`;
+- completion of that projection releases only
   `WP-400-PROPERTY-READ-SERVIENT-SLICE`; and
 - broad WP-300 completion releases broad WP-400, WP-500, and WP-600.
 
@@ -206,11 +221,13 @@ and must close before final integration and release.
 
 Every slice is Category B or C according to its actual candidate impact and
 requires its own exact paths, contract fixtures, impact analysis, independent
-review, and ADR-0013 admission. The handler, WP-200 plan, and WP-300 binding
-slices are `complete`/`approved`; the WP-400 Servient slice remains
-`planned`/`blocked` pending its own candidate and review. Narrow WP-300
-completion releases that next admission process but grants no WP-400
-source-edit authority. Each status record grants no source-edit authority
+review, and ADR-0013 admission. The handler, original WP-200 plan, and WP-300
+binding slices are `complete`/`approved`; the Producer-route projection is
+`pending`/`review-pending`, and the WP-400 Servient slice remains
+`planned`/`blocked`. Narrow WP-300 completion releases the correction's
+admission process, not WP-400 source. The correction must prove a real
+`ProducerRoute` plan output reaches real `PrepareInput` before it can release
+the WP-400 candidate. Each status record grants no source-edit authority
 without its approved pre-source checkpoint; approval and in-progress truth may
 share that one recoverable checkpoint under D9.
 
@@ -221,7 +238,7 @@ values named above. The property-read slice cannot claim the final
 `AffordanceTarget` relocation/no-atomic evidence, async/step handler traits,
 host registration, sparse storage, or dispatch ownership.
 
-The integration gate becomes `ready` only after all four slice completion
+The integration gate becomes `ready` only after all five slice completion
 records pass. It becomes `passed` only when the planned completion check is
 registered and executable, both runtime cells pass, the compile-only cell
 passes, all mandatory assertions are represented, and an independent

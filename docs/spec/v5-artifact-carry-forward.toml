@@ -8,8 +8,8 @@ rule = "A carried artifact projects active requirements only where ADR-0018 clas
 [[artifact]]
 family = "api-ownership"
 path = "docs/api-ownership.csv"
-sha256 = "aa2b5060be05050111836714e88f5bc4a3f8703ad1acf52831ed7fa127b37387"
-disposition = "revalidated and extended with the exact active WP-300 Property Read registration, route, response, cleanup-transfer, host/static author-input, and execution surface; retained broad binding families remain domain-entry input"
+sha256 = "054c43883b9a63c961c8695bad756ae954e4d1e6172492fa1789e3a7b5047f2e"
+disposition = "revalidated and extended with the exact active WP-300 Property Read surface plus the reviewed-name Producer-route Planning compiler/cursor projection; retained broad planning and binding families remain domain-entry input"
 revalidation = "tools/check-api-ownership.sh"
 
 [[artifact]]
@@ -43,8 +43,8 @@ revalidation = "tools/check-v5-authority-reset-candidate.sh"
 [[artifact]]
 family = "governance"
 path = "docs/governance.toml"
-sha256 = "f6ffcec2442e6e6db515dfa32410e2967e2841432d3999db835b94f29339bfa6"
-disposition = "carried forward with the v5 checker and exact WP-300 Property Read binding entry/completion checks registered; v4.9 reviews remain historical gate evidence"
+sha256 = "d2b8b93f70bcf489e2fc3d16ef9cd54f8caf48fb18c2d2a234078cfad1606cf1"
+disposition = "carried forward with the v5 checker and exact WP-300 completion plus Producer-route planning correction entry/completion checks registered; v4.9 reviews remain historical gate evidence"
 revalidation = "tools/check-v5-authority-reset-candidate.sh"
 
 [[artifact]]
@@ -99,20 +99,20 @@ revalidation = "cargo run --locked --quiet --manifest-path tools/performance-har
 [[artifact]]
 family = "work-package-dag"
 path = "docs/work-packages/index.toml"
-sha256 = "6cfd802e45aded85316f1df9066328e2a012d33bbf601e14178514763db61051"
-disposition = "revalidated with package order and status unchanged and broad evidence identities added for shared parity traces, cleanup coexistence, Servient cross-shard feedback, resource authoring, availability recovery, and protocol-shape claim closure"
+sha256 = "40556d77607e6519fdc71cda6553d6d4698c1096f221f1047463bd46508e437f"
+disposition = "revalidated with package order and status unchanged, the WP-200 Producer-route projection evidence identity added, and broad evidence identities retained for parity, cleanup, Servient, resource, availability, and protocol-shape closure"
 revalidation = "cargo run --locked --quiet --manifest-path tools/design-check/Cargo.toml -- check-work-packages"
 
 [[artifact]]
 family = "property-read-integration-gate"
 path = "docs/work-packages/property-read-architecture-gate.toml"
-sha256 = "a3b07bd83249e42ea8d3a3b6b308a2c8765990658bd4615c7f5a50c0e2c624df"
-disposition = "revalidated for the completed narrow WP-300 Property Read binding slice and its exact admission/implementation topology; WP-400 remains planned/blocked pending its own admission and the aggregate gate remains blocked"
+sha256 = "30b5ac80ace2a84555ff4fceb473e46308aa135a92fec6cebba5f1affa828d22"
+disposition = "revalidated for completed WP-300 and the pending exact WP-200 Producer-route projection correction; WP-400 remains planned/blocked behind the correction and the aggregate gate remains blocked"
 revalidation = "tools/check-v5-authority-reset-decision.sh"
 
 [[artifact]]
 family = "property-read-integration-gate"
 path = "docs/work-packages/PROPERTY-READ-ARCHITECTURE.md"
-sha256 = "cac25b70adb25471df6cca7475d2496d003cdc680d2d76e836ae0e6af0798ef4"
-disposition = "revalidated completion narrative and evidence-claim ladder for the completed WP-100/WP-200/WP-300 slices and still-planned/blocked WP-400 slice, including staged legacy no-backflow evidence; mutable tranche truth remains owned by docs/work-packages/property-read-architecture-gate.toml"
+sha256 = "0c298fc470540a2241633ac14bbeb0ab7ddca8c5f17436b4875410e47ec852a9"
+disposition = "revalidated completion narrative and five-tranche evidence ladder for completed WP-100/WP-200/WP-300, the pending Producer-route correction, and still-planned/blocked WP-400; mutable tranche truth remains owned by docs/work-packages/property-read-architecture-gate.toml"
 revalidation = "tools/check-v5-authority-reset-decision.sh"

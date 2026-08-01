@@ -1366,6 +1366,48 @@ returns the exact post-security-commit request before binding acceptance, but it
 does not prove that choosing and committing another candidate would be
 side-effect free.
 
+## Property Read Producer-route projection
+
+The package-local Property Read plan slice initially completed a private
+Consumer-call algorithm. The completed narrow WP-300 registration advertises
+Producer Property Read and exposes its compiler only as the immutable
+projection of one complete registration. Before WP-400 may prepare a route,
+Planning therefore provides one exact public Producer-route projection.
+
+`PropertyReadPlanCompiler::producer_route` consumes a `PlanId`, one complete
+`BindingRegistrationIdentity`, a registration index, and a deterministic
+candidate order. It derives binding id, binding generation, configuration
+digest, and compatibility from that identity and fixes every compiler input,
+artifact envelope, and compact artifact reference to
+`BindingArtifactRole::ProducerRoute`. No public constructor accepts an
+arbitrary role, and the existing Consumer-call constructor remains
+crate-private.
+
+The existing `PlanCompiler` contract determines the concrete cursor type.
+`PropertyReadBuildCursor<C, A>` is therefore public but opaque: external code
+may own, move, and resume it, while only Planning may construct or inspect its
+state. Static and host callers borrow the compiler projection from a complete
+registration; they neither move the compiler out of that bundle nor build a
+second installable compiler half.
+
+The correction does not add another selection algorithm. It reuses the same
+validated-TD read, immutable logical plan, bounded compiler progress, admitted
+artifact envelope, and TD-lifetime-free output. Completion evidence joins the
+real output to the real WP-300 boundary:
+
+```text
+validated TD + complete Producer registration projection
+  -> PropertyReadPlanCompiler::producer_route
+  -> BindingArtifactRef(role = ProducerRoute)
+  -> PrepareInput
+  -> PollServerBinding::start_prepare
+```
+
+The evidence must preserve identity and role across that chain, prove zero
+budget makes no progress, and end all TD and compiler-projection borrows before
+route preparation. A fixture-created logical plan, artifact, or preparation
+substitute is not evidence for this contract.
+
 ## API roles
 
 The API ownership matrix freezes public paths and exact Rust schemas. It must
@@ -1377,6 +1419,7 @@ project these roles without moving their behavior to another crate:
 | Semantic plan, source, target, binding, artifact, and plan-set generation ids | `clinkz-wot-core` | Static distinctions and stale-reference rejection; they may contain the foundation-owned generic `Generation` primitive without exposing it as an interchangeable semantic id |
 | Binding compiler input, artifact envelope/ref, compatibility identity, footprint, outcome, and compiler-extension trait | `clinkz-wot-core` binding SPI | Portable contract between shared planning and one complete registration |
 | `CapabilityIndex`, `PlanCompiler`, `PlanBuildInput`, `PlanBuildOutput`, build cursor, `CompiledUriTemplate`, and `ResolvedFormTarget` | `clinkz-wot-planning` | Shared deterministic planning algorithms and resumable build surface |
+| `PropertyReadPlanCompiler` and opaque `PropertyReadBuildCursor` | `clinkz-wot-planning` | Exact bounded Producer-route projection from one complete registration identity/compiler view; no arbitrary role construction |
 | `CandidateFallbackPolicy`, `CandidateSkipReason`, `CandidateSkipDiagnostic`, and `CandidateSelectionDiagnostics` | `clinkz-wot-planning` | Immutable Consumer fallback policy plus bounded, typed pre-execution selection diagnostics |
 | `ServerFormContributor` and form-contribution values | `clinkz-wot-core` binding SPI | Side-effect-free Producer form finalization input/output |
 | Compiled plan-set record, plan-set lease, lazy-artifact slot, compiler lease, and reclaim cursor | `clinkz-wot-servient` | Aggregate lifecycle and mutable runtime ownership; these records are not binding APIs |
