@@ -21,8 +21,8 @@ The active design revision is v5.0 bounded-core authority.
 - D9 bounded-conversion governance checkpoint:
   `a952e2b034b8939c0abdaf1662707eaef1d2fdc8`.
 - Latest completed Property Read source slice:
-  `b889ae1dafa65ee66bfb331bebf9d537e1c29eee`, the exact nine-path WP-200
-  Core/Planning implementation.
+  `89fb9f17ac961294032123173b29692a719a174c`, the exact two-path WP-300
+  Core binding implementation.
 - Exact WP-200 Property Read semantic candidate:
   `4a01b5010729cb42d6e8d51125103c8b5cda8707`, the single child of
   `525bb31b42efe299ed36d46acea1a1c4286e8bde`.
@@ -91,9 +91,12 @@ The active design revision is v5.0 bounded-core authority.
 - The remote default branch was fetched on 2026-08-01 at
   `384461ba33a3639a0f89978159719aa6937e1f36`. It is the reviewed and
   validated `admission_base_ref` for the WP-300 five-file pre-source
-  transition. The current checkpoint is its exact single child and changes
-  only the five registered admission paths; its commit id is intentionally
-  not self-recorded.
+  transition. Exact checkpoint
+  `6aaf1ef1586428152e535b9cd75f7183ec764cd0` is its single child and changes
+  only the five registered admission paths. Exact implementation
+  `89fb9f17ac961294032123173b29692a719a174c` is the immediate single child of
+  that checkpoint and changes only `core/src/binding.rs` and
+  `core/src/lib.rs`.
 - GitHub CLI authentication is valid through the host keyring. Active Ruleset
   `20009352` requires `validation`, strict current-base checking, and resolved
   review threads; it has no bypass actor and permits merge commits. Native
@@ -107,20 +110,22 @@ default workspace tests, diff hygiene, and the 21-cell valid feature matrix.
 
 ## Current Objective
 
-Complete the exact two-path implementation child of this WP-300 combined
-pre-source checkpoint. Pull request #12 is integrated and its merge revision
-`384461ba33a3639a0f89978159719aa6937e1f36` passed default-branch
-validation. This checkpoint binds that exact commit as `admission_base_ref`,
-sets `WP-300-PROPERTY-READ-BINDING-SLICE` to
-`in-progress`/`approved`, and changes only the five registered pre-source
-paths.
+Close completion evidence and remote handoff for exact WP-300 implementation
+`89fb9f17ac961294032123173b29692a719a174c`. Pull request #12 merge
+`384461ba33a3639a0f89978159719aa6937e1f36` is the validated
+`admission_base_ref`; exact five-file pre-source checkpoint
+`6aaf1ef1586428152e535b9cd75f7183ec764cd0` and its immediate exact two-path
+implementation child satisfy the registered topology.
 
-Product source is now admitted only for the immediate child touching exactly
-`core/src/binding.rs` and `core/src/lib.rs`; it remains absent at this
-checkpoint. No other product, manifest, fixture, audit, registry, or
-cross-package path is admitted in that implementation commit. Completion
-evidence and remote handoff follow only after the exact implementation passes
-its registered compile/runtime and aggregate checks.
+The implementation commit touches only `core/src/binding.rs` and
+`core/src/lib.rs`. Its registered three-cell compile/runtime, external
+authoring, lifecycle, predecessor, and legacy-separation check passes. The
+completion documentation tree also passes the aggregate design suite, locked
+workspace tests, 21-cell feature matrix, and diff hygiene. The next event is
+its exact completion-evidence commit and automatic remote handoff. After
+verified default-branch integration, the next executable objective is an exact
+WP-400 Property Read Servient candidate and independent admission; no WP-400
+source is yet admitted.
 
 The narrow WP-200 plan slice is complete. Its handoff to WP-300 contains:
 
@@ -137,7 +142,8 @@ host/static authoring contracts, a five-test executable lifecycle schema,
 entry/completion checks, and the expected
 absent-`core/src/binding.rs` completion boundary. The candidate itself contains
 no implementation or cross-package Property Read architecture fixture root;
-the current pre-source checkpoint admits exactly the two registered Core paths.
+the later exact pre-source and implementation checkpoints preserve its
+registered two-path boundary.
 The semantic candidate review and admission-topology correction are complete. The
 correction's independent review is integrated and default-branch validated at
 `ff86c1582138d9a231dd44068b35cf6464214cd5`.
@@ -178,10 +184,10 @@ close that disjoint integration boundary.
 - M2 Foundation and Core Contract Stabilization — IN_PROGRESS.
 - M3 Planning and Compilation Pipeline — IN_PROGRESS; the exact WP-200
   Property Read plan slice is complete, while broad WP-200 exits remain open.
-- M4 Protocol Binding SPI and Lifecycle — OPEN; the exact WP-300 Property Read
-  slice is `in-progress`/`approved` at its combined five-file pre-source
-  checkpoint. Only its exact two-path Core implementation child is admitted;
-  narrow completion evidence and all broad WP-300 exits remain open.
+- M4 Protocol Binding SPI and Lifecycle — IN_PROGRESS; the exact WP-300
+  Property Read binding slice is `complete`/`approved`. Broad WP-300 exits
+  remain open, and narrow completion releases only the WP-400 Property Read
+  Servient slice to prepare its own candidate and admission.
 
 The v5 authority switch is complete, but M1 remains open because GATE-1,
 GATE-2, GATE-4, GATE-5, and GATE-6 still require their registered closure
@@ -510,12 +516,12 @@ The middle checkpoint changes exactly the five registered pre-source paths.
 The implementation child changes exactly the nine registered Core/Planning
 paths. `docs/evidence/WP-200-property-read-plan-slice.toml` binds that
 implementation ref to the completion checker. The integration gate now has
-WP-300 `in-progress`/`approved`, WP-400 planned/blocked, and remains globally
+WP-300 `complete`/`approved`, WP-400 planned/blocked, and remains globally
 `blocked`.
 
-### WP-300 admission candidate
+### WP-300 Property Read binding slice
 
-Status: IMPLEMENTATION ADMITTED; EXACT TWO-PATH SOURCE CHILD PENDING.
+Status: NARROW PROPERTY READ BINDING SLICE COMPLETE.
 
 The candidate is the exact 20-path single child of decision checkpoint
 `d8ed500ddba85997d380adc5071818a90150858b`. It owns:
@@ -547,11 +553,18 @@ topology while rejecting an incomplete completion claim. Local checkpoint
 `ff86c1582138d9a231dd44068b35cf6464214cd5` integrates and validates it on the
 default branch. Pull request #12 merge
 `384461ba33a3639a0f89978159719aa6937e1f36` is the later reviewed default
-descendant selected as the admission base. The current exact five-file single
-child binds that base and admits the implementation transition.
+descendant selected as the admission base. Exact five-file checkpoint
+`6aaf1ef1586428152e535b9cd75f7183ec764cd0` binds that base. Its immediate
+single child `89fb9f17ac961294032123173b29692a719a174c` implements exactly
+`core/src/binding.rs` and `core/src/lib.rs`; existing `core/src/inbound.rs`
+remains outside the admitted and completed path set.
 
-Future implementation scope remains exactly `core/src/binding.rs` and
-`core/src/lib.rs`; existing `core/src/inbound.rs` is not an admitted path.
+`docs/evidence/WP-300-property-read-binding-slice.toml` binds the implementation
+ref to the registered completion checker and all 27 active narrow-slice
+requirements. This completion releases only the narrow WP-400 Property Read
+Servient candidate/admission process. Broad binding roles, production protocol
+execution, Servient composition, workload proof, and cross-package completion
+remain separate work.
 
 ### Aggregate design-check worktree-root defect
 
@@ -572,12 +585,12 @@ removed.
 - Broad WP-100 handler entry still lacks its remaining request/target
   migration, portable async/step admission, no-atomic public-boundary proof,
   and workload/resource evidence.
-- The exact WP-300 Property Read slice has its plan dependency, immutable
-  semantic review, integrated correction review, and combined pre-source
-  admission. Its narrow two-path implementation and completion evidence remain
-  open. Broad WP-300 also waits on external authoring, cleanup-coexistence,
-  shared-parity-oracle, and resource-authoring evidence.
-- WP-400, WP-500, and WP-600 depend on WP-300; WP-700 joins those branches.
+- The exact narrow WP-300 Property Read slice is complete. Broad WP-300 still
+  waits on external authoring, cleanup-coexistence, shared-parity-oracle, and
+  resource-authoring evidence.
+- Narrow WP-400 may prepare its own candidate and admission after verified
+  WP-300 default-branch integration. Broad WP-400, WP-500, and WP-600 still
+  depend on broad WP-300; WP-700 joins those branches.
 
 These do not extend the D8 packet unless repository evidence shows a direct
 contract, rollback, or validation intersection.
@@ -861,6 +874,24 @@ The pull-request #12 merge resolution against validated default checkpoint
 WP-300 candidate, locked workspace, 21-cell feature-matrix, and diff-hygiene
 suite before its merge commit.
 
+Exact WP-300 source topology on 2026-08-01 is:
+
+`384461ba33a3639a0f89978159719aa6937e1f36`
+`-> 6aaf1ef1586428152e535b9cd75f7183ec764cd0`
+`-> 89fb9f17ac961294032123173b29692a719a174c`.
+
+The middle checkpoint passes
+`tools/check-wp300-property-read-binding-slice-entry.sh --admission-ready` and
+changes exactly five registered paths. The implementation changes exactly the
+two registered Core paths and passes
+`tools/check-wp300-property-read-binding-slice.sh`, including no-default,
+async/no-std, and std external fixtures, std host execution, lifecycle and
+resource checks, Core/Servient/protocol regressions, and WP-100/WP-200
+predecessor checks. With completion records present, the tree also passes
+`tools/check-design-artifacts.sh`, `cargo test --workspace --locked`,
+`sh scripts/check-feature-matrix.sh` (21 passed, 0 failed), and diff hygiene.
+Commit and remote integration are the remaining events at this checkpoint.
+
 The static and host compile contracts deliberately do not compile against
 product source before admission; the completion checker owns their three-cell
 compile/runtime validation after the exact two-path implementation child.
@@ -871,16 +902,18 @@ Zenoh backends. Use `scripts/check-feature-matrix.sh`, not
 
 ## Next Safe Actions
 
-1. Pass `tools/check-wp300-property-read-binding-slice-entry.sh
-   --admission-ready` on this exact five-file worktree and commit it as the
-   single child of `384461ba33a3639a0f89978159719aa6937e1f36`.
-2. Implement the immediate exact child touching only `core/src/binding.rs` and
-   `core/src/lib.rs`; do not merge or add an intervening checkpoint.
-3. Run the registered WP-300 completion contract, aggregate design suite,
-   locked workspace tests, and supported feature matrix; record completion
-   evidence only when all claims pass.
-4. Perform the automatic remote handoff, then re-evaluate exact-head auto-merge
-   eligibility against the current default branch and active Ruleset.
+1. Revalidate the registered WP-300 completion contract, aggregate design
+   suite, locked workspace tests, supported feature matrix, and diff hygiene
+   with the completion records present.
+2. Commit only the exact completion-evidence topology, push the existing task
+   branch, and open or update one draft pull request against `master`.
+3. Re-fetch `master`; verify the exact head, intended diff, conflict state,
+   conversation/review state, Ruleset, and current-base `validation` result.
+4. If every terminal predicate still holds, mark ready and enable native
+   merge-commit auto-merge with the exact expected head object id.
+5. Fetch the merged default branch and verify merge ancestry, tree/path
+   content, and the default-branch workflow before preparing the exact WP-400
+   Property Read Servient candidate.
 
 Ask the Project Owner only if the investigation reaches a product-goal,
 real-world constraint, unacceptable direction, or irreversible external
@@ -919,5 +952,6 @@ commitment that repository evidence cannot resolve.
 - `docs/audits/WP-200-property-read-plan-slice-review.toml`
 - `docs/audits/WP-200-property-read-plan-slice-review-v2.toml`
 - `docs/evidence/WP-200-property-read-plan-slice.toml`
+- `docs/evidence/WP-300-property-read-binding-slice.toml`
 - `tools/design-check/tests/wp200_binding_artifact_schema.rs`
 - `tools/design-check/tests/wp300_property_read_binding_schema.rs`

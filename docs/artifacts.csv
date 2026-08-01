@@ -164,6 +164,7 @@ docs/evidence/WP-200-property-read-plan-slice.toml,wp-200-property-read-plan-sli
 docs/audits/WP-300-property-read-binding-slice-entry.md,wp-300-property-read-binding-slice-entry-review,non-normative-review,5.0,1,docs/spec/binding-spi.md
 docs/audits/WP-300-property-read-binding-slice-review.toml,wp-300-property-read-binding-slice-review-attestation,non-normative-review,5.0,1,docs/spec/binding-spi.md
 docs/audits/WP-300-admission-basis-correction-review.toml,wp-300-admission-basis-correction-review-attestation,non-normative-review,5.0,1,docs/spec/binding-spi.md
+docs/evidence/WP-300-property-read-binding-slice.toml,wp-300-property-read-binding-slice-completion-evidence,non-normative,5.0,1,docs/spec/binding-spi.md
 tools/check-wp300-property-read-binding-slice-entry.sh,wp-300-property-read-binding-slice-entry-checker,non-normative-checker,5.0,1,docs/spec/binding-spi.md
 tools/check-wp300-property-read-binding-slice.sh,wp-300-property-read-binding-slice-checker,non-normative-checker,5.0,1,docs/spec/binding-spi.md
 tools/compile-contracts/wp300-property-read-binding-slice/Cargo.toml,wp-300-property-read-binding-slice-contract-manifest,non-normative-compile-fixture,5.0,1,docs/spec/binding-spi.md
