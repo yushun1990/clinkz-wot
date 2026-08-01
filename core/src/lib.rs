@@ -5,6 +5,7 @@ extern crate std;
 
 extern crate alloc;
 
+pub mod binding;
 pub mod binding_compiler;
 pub mod deadline;
 pub mod error;
@@ -22,6 +23,29 @@ pub mod sync;
 pub mod thing;
 pub mod transport;
 
+pub use binding::{
+    BindingCallSettlement, BindingCancellationDisposition, BindingDeliveryOutcome,
+    BindingExecutionSupport, BindingIngressLimits, BindingIngressPolicy, BindingInputRejection,
+    BindingLifetimeFootprint, BindingOperationalError, BindingRegistrationCapabilities,
+    BindingRegistrationIdentity, BindingResourceDeclarations, BindingStateLayout,
+    BindingStatusPolicy, BindingTransientFootprint, CleanupPhaseContext, CleanupReservation,
+    CleanupTransferAcceptance, CleanupTransferEnvelope, CleanupTransferRequest,
+    CleanupTransferTarget, CollisionDomainId, EndpointReservationKey, NoCleanupSuccessor,
+    PollServerBinding, PrepareInput, RouteAcceptClaim, RouteAcceptClaimError, RouteAcceptEvent,
+    RouteAcceptLease, RouteActivationOutcome, RouteActivationPermit, RouteCleanupOutcome,
+    RouteCleanupSuccessor, RouteCommitOutcome, RouteInboundRequest, RouteInboundResponse,
+    RoutePreparationVisibility, RoutePrepareOutcome, RouteReadinessOutcome, RouteReadinessSlot,
+    RouteReservationIdentity, RouteResponseOpportunity, RouteTerminal, ServerResponseSlot,
+    ServerRouteSlot, ServingActivationAuthority, StaticBindingRegistration,
+    StaticBindingRegistrationInput,
+};
+#[cfg(feature = "std")]
+pub use binding::{
+    HostActiveRouteGuard, HostBindingCall, HostBindingCallBox, HostBindingRegistration,
+    HostBindingRegistrationInput, HostCommittedRouteGuard, HostPreparedRouteGuard,
+    HostRouteCleanupSuccessor, HostShutdownRouteGuard, RouteAbortInput, RouteServerBinding,
+    RouteShutdownInput,
+};
 pub use binding_compiler::{
     BindingArtifact, BindingArtifactCompatibility, BindingArtifactEnvelope,
     BindingArtifactFootprint, BindingArtifactIdentity, BindingArtifactRef,

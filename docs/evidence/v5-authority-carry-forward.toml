@@ -109,3 +109,38 @@ active_claim_ids = [
 ]
 inactive_claim_ids = []
 disposition = "All narrow Property Read plan-slice claims remain active; broad WP-200 and cross-package completion remain separate evidence."
+
+[[record]]
+source = "docs/evidence/WP-300-property-read-binding-slice.toml"
+verification_command = "tools/check-wp300-property-read-binding-slice.sh"
+active_claim_ids = [
+  "ADMIT-MEM-001",
+  "API-PAYLOAD-001",
+  "API-RESOURCE-001",
+  "BIND-CALL-CANCEL-001",
+  "BIND-DELIVERY-001",
+  "BIND-HOST-CANCEL-001",
+  "BIND-IO-001",
+  "BIND-MEM-001",
+  "BIND-REG-001",
+  "BIND-ROUTE-001",
+  "BIND-STORAGE-001",
+  "CAP-OVERFLOW-001",
+  "CLEANUP-RECORD-001",
+  "CONSTRAINED-OWN-001",
+  "CONSTRAINED-PROGRESS-001",
+  "CONSTRAINED-STORAGE-001",
+  "CONSTRAINED-STORAGE-002",
+  "CONSTRAINED-WORK-001",
+  "ERR-RETRY-001",
+  "ERR-TAXONOMY-001",
+  "HOST-ASYNC-001",
+  "LIFE-EXPOSE-002",
+  "LIFE-EXPOSE-003",
+  "PLAN-ARTIFACT-001",
+  "RES-LIMIT-001",
+  "STATE-BIND-001",
+  "STATE-INFLIGHT-001",
+]
+inactive_claim_ids = []
+disposition = "All narrow Property Read binding-slice claims remain active; broad WP-300, Servient composition, production protocols, workloads, and release maturity remain separate evidence."

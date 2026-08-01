@@ -206,9 +206,11 @@ and must close before final integration and release.
 
 Every slice is Category B or C according to its actual candidate impact and
 requires its own exact paths, contract fixtures, impact analysis, independent
-review, and ADR-0013 admission. The handler and WP-200 plan slices are
-`complete`/`approved`, while the WP-300/WP-400 slices remain
-`planned`/`blocked`. Each status record grants no source-edit authority
+review, and ADR-0013 admission. The handler, WP-200 plan, and WP-300 binding
+slices are `complete`/`approved`; the WP-400 Servient slice remains
+`planned`/`blocked` pending its own candidate and review. Narrow WP-300
+completion releases that next admission process but grants no WP-400
+source-edit authority. Each status record grants no source-edit authority
 without its approved pre-source checkpoint; approval and in-progress truth may
 share that one recoverable checkpoint under D9.
 

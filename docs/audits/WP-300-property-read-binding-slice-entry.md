@@ -1,12 +1,21 @@
 # WP-300 Property-Read Binding Slice Entry Audit
 
-Status: Review pending
+Status: Passed
 
 Design revision: v5.0
 
 Admission scope: `WP-300-PROPERTY-READ-BINDING-SLICE`
 
-Verdict: Candidate ready for independent review
+Verdict: Implementation-ready
+
+The exact admission base is default-branch merge
+`384461ba33a3639a0f89978159719aa6937e1f36`. Pull request #12 integrated its
+reviewed head `8a9c5395cd0b70412a4b1c67f6652a1811a1b19e` as the merge's second
+parent; exact-head `mainline` run `30698464368` and merge-revision run
+`30698804288` passed. The current five-file checkpoint is that admission
+base's single child, binds the base separately from immutable review
+attestation `d5169ba34ad846b2d45d0841b5d57210ee4df0c1`, and admits only the
+registered two-path implementation child.
 
 ## Decision and exact scope
 

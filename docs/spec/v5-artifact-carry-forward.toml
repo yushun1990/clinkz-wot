@@ -106,13 +106,13 @@ revalidation = "cargo run --locked --quiet --manifest-path tools/design-check/Ca
 [[artifact]]
 family = "property-read-integration-gate"
 path = "docs/work-packages/property-read-architecture-gate.toml"
-sha256 = "037152285d7d3ec1eb0d9b1b67a62c431a57381dd010105e053fe0acdfad6d6c"
-disposition = "revalidated for the exact pending/review-pending WP-300 Property Read binding semantic candidate, immutable review attestation, and deferred admission base; WP-400 remains planned/blocked and the aggregate gate remains blocked"
+sha256 = "a3b07bd83249e42ea8d3a3b6b308a2c8765990658bd4615c7f5a50c0e2c624df"
+disposition = "revalidated for the completed narrow WP-300 Property Read binding slice and its exact admission/implementation topology; WP-400 remains planned/blocked pending its own admission and the aggregate gate remains blocked"
 revalidation = "tools/check-v5-authority-reset-decision.sh"
 
 [[artifact]]
 family = "property-read-integration-gate"
 path = "docs/work-packages/PROPERTY-READ-ARCHITECTURE.md"
-sha256 = "0cc466af71ac9d492ac34d0c68cfb994df20138c942297b0779af05570174621"
-disposition = "revalidated completion narrative and evidence-claim ladder for the completed WP-100/WP-200 slices and still-planned/blocked WP-300/WP-400 slices, including staged legacy no-backflow evidence; mutable tranche truth remains owned by docs/work-packages/property-read-architecture-gate.toml"
+sha256 = "cac25b70adb25471df6cca7475d2496d003cdc680d2d76e836ae0e6af0798ef4"
+disposition = "revalidated completion narrative and evidence-claim ladder for the completed WP-100/WP-200/WP-300 slices and still-planned/blocked WP-400 slice, including staged legacy no-backflow evidence; mutable tranche truth remains owned by docs/work-packages/property-read-architecture-gate.toml"
 revalidation = "tools/check-v5-authority-reset-decision.sh"
