@@ -81,11 +81,14 @@ The repository evidence establishes the following starting point:
   paired host/static authoring contracts, executable lifecycle schema, entry
   check, and completion boundary. Its semantic review was recorded at
   `d5169ba34ad846b2d45d0841b5d57210ee4df0c1` and integrated through pull
-  request #1 at `a8eac3504f7e4252e9c3ac66da5e3038cb532cfc`. It remains
-  `pending`/`review-pending`: its evidence-topology correction and independent
-  correction review are integrated through pull request #13 merge
-  `ff86c1582138d9a231dd44068b35cf6464214cd5`, while the exact combined
-  pre-source checkpoint remains absent. Product source remains blocked. The
+  request #1 at `a8eac3504f7e4252e9c3ac66da5e3038cb532cfc`. Its
+  evidence-topology correction and independent correction review are
+  integrated through pull request #13 merge
+  `ff86c1582138d9a231dd44068b35cf6464214cd5`. Pull request #12 merge
+  `384461ba33a3639a0f89978159719aa6937e1f36` is the validated admission
+  base for the exact combined pre-source checkpoint, so the tranche is now
+  `in-progress`/`approved`. Product source is admitted only in the registered
+  two-path implementation child and remains absent at this checkpoint. The
   aggregate Property Read gate remains blocked; D4 has resolved subscription
   receiver ownership;
 - WP-400, WP-500, and WP-600 remain downstream of WP-300, and WP-700 joins
@@ -177,12 +180,12 @@ integration remain downstream work.
 
 D5 preserves package completion order but adds a cross-package integration
 dependency in the registered work-package DAG. The WP-100 handler and WP-200
-plan slices are complete. WP-300 is `pending`/`review-pending` at its exact
-non-product-source semantic candidate with a passed immutable review; its
-admission-basis correction is integrated, but independently reviewed
-correction evidence and the exact combined pre-source checkpoint must still be
-integrated. WP-400 remains planned/blocked; neither may enter its source scope
-until its exact admission transition passes. Broad
+plan slices are complete. The exact WP-300 Property Read tranche is
+`in-progress`/`approved`: its semantic candidate, admission-basis correction,
+independent review, reviewed default-branch base, and combined five-file
+pre-source transition are complete. Its next event is the exact two-path Core
+implementation child. WP-400 remains planned/blocked until narrow WP-300
+completion. Broad
 `WP-100-HANDLER-ENTRY`, `WP-300-BROAD-ENTRY`, and `WP-400-BROAD-ENTRY` remain
 blocked until the gate passes. The gate exception does not claim final
 `InteractionInput` storage, `AcceptHint` resource admission,
@@ -311,9 +314,9 @@ Current progress: v5.0 authority is active with 62 exact single owners, 59
 inactive dispositions, explicit machine-artifact and completed-evidence
 carry-forward manifests, active-only gate requirement sets, and an immutable
 review/activation chain. Architecture closure remains open on the registered
-global gates; the executable critical path now proceeds to independent review
-of the exact `WP-300-PROPERTY-READ-BINDING-SLICE` candidate after WP-200
-plan-slice completion.
+global gates; the exact `WP-300-PROPERTY-READ-BINDING-SLICE` is admitted and
+its executable critical path now proceeds to the registered two-path Core
+implementation child.
 
 AI deliverable:
 

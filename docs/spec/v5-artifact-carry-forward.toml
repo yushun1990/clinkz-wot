@@ -106,8 +106,8 @@ revalidation = "cargo run --locked --quiet --manifest-path tools/design-check/Ca
 [[artifact]]
 family = "property-read-integration-gate"
 path = "docs/work-packages/property-read-architecture-gate.toml"
-sha256 = "037152285d7d3ec1eb0d9b1b67a62c431a57381dd010105e053fe0acdfad6d6c"
-disposition = "revalidated for the exact pending/review-pending WP-300 Property Read binding semantic candidate, immutable review attestation, and deferred admission base; WP-400 remains planned/blocked and the aggregate gate remains blocked"
+sha256 = "f32fa5cc12d1a0135a9748100684f90a6f7aba37ae48ad017bb87e07c4045644"
+disposition = "revalidated for the admitted in-progress WP-300 Property Read binding slice, immutable review attestation, and exact reviewed default-branch admission base; WP-400 remains planned/blocked and the aggregate gate remains blocked"
 revalidation = "tools/check-v5-authority-reset-decision.sh"
 
 [[artifact]]
