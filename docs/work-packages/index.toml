@@ -816,6 +816,10 @@ evidence_keys = [
     "host-subscription-driver",
     "binding-emission-slot",
     "binding-call-settlement",
+    "host-constrained-semantic-parity",
+    "binding-semantic-trace-oracle",
+    "cleanup-obligation-coexistence",
+    "binding-authoring-usability",
 ]
 performance_workloads = [
     "PERF-GW-007",
@@ -890,6 +894,7 @@ evidence_keys = [
     "servient-cleanup-outcomes",
     "servient-registration-snapshot",
     "servient-plan-route-fairness",
+    "servient-owner-graph-and-cross-shard-feedback",
     "servient-serving-activation",
     "servient-typed-slot-scheduling",
     "servient-binding-memory-ledger",
@@ -898,11 +903,15 @@ evidence_keys = [
     "servient-constrained-fairness",
     "servient-response-validation",
     "host-independent-progress",
+    "servient-semantic-trace-parity",
     "host-default-snapshots",
+    "resource-profile-authoring-and-applicability",
     "producer-subscription-transaction",
     "binding-owned-subscription-driver",
     "emission-coordinator",
     "native-collection-subscriptions",
+    "publication-recovery-boundary",
+    "explicit-retry-facade",
 ]
 performance_workloads = [
     "PERF-GW-001",
@@ -1025,6 +1034,8 @@ evidence_keys = [
     "zenoh-lifetime-ingress-bounds",
     "zenoh-input-preservation",
     "zenoh-form-and-route-compilation",
+    "zenoh-author-usability",
+    "zenoh-cross-profile-parity",
     "zenoh-binding-lifecycle",
     "zenoh-pico-bounded-progress",
     "binding-generation-and-correlation",
@@ -1099,5 +1110,6 @@ evidence_keys = [
     "serving-activation-integration",
     "subscription-and-emission-boundaries",
     "native-collection-operation-conformance",
+    "protocol-shape-authoring-conformance",
 ]
 performance_workloads = ["PERF-GW-001..032", "PERF-DIR-001..011", "PERF-CS-001..023"]

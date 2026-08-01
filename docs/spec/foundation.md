@@ -48,6 +48,59 @@ flat schema or its generated projections no longer provide bounded
 construction, reviewability, or compatibility. Field count alone is not such
 evidence.
 
+The flat schema is the canonical resource authority, not by itself the stable
+external authoring surface. The current raw `[Option<u64>;
+RESOURCE_LIMIT_COUNT]` construction and mutation APIs are low-level canonical
+assembly only: they do not prove that every applicable field is present for a
+selected role/profile set. A `ResourceLimits` value becomes a validated
+configuration authority only after the owning builder binds an executable
+role/profile-cell applicability set and rejects every illegal `None`.
+
+Before broad Protocol Binding or Servient resource authoring is described as a
+stable external surface, the canonical schema and generator must provide:
+
+- an authority class for each row: semantic capacity, lifecycle/scheduler
+  policy, runtime topology, operational tuning, product default,
+  protocol-private declaration, or workload-only parameter;
+- executable applicability separated across capability role, compilation cell,
+  execution model, and product profile;
+- lifecycle status (`active`, `deferred`, `historical`, `retired`, or
+  `provisional`) plus the active owner and evidence/default maturity;
+- complete checked role/profile projections whose omission checks fail when a
+  newly applicable field has no explicit value;
+- structured diagnostics that retain value origin and every effective limiting
+  scope; and
+- one first-class schema revision, stable ordering rule, and schema/value
+  digest for application-defined profile identity.
+
+The existing `capability_roles` text and fixed field count are not sufficient
+executable applicability or schema identity. `None` is legal only after role
+binding and only for typed non-applicability; inactive or unimplemented
+behavior is not silently equivalent to `NA`.
+
+Within one schema revision, stable numeric ordering is append-only. A rename,
+split, merge, semantic reinterpretation, applicability change, or retirement
+requires an explicit schema revision and migration disposition rather than
+reusing an old `ResourceKind` identity. `ResourceProfileId::APPLICATION_DEFINED`
+identifies an origin class, not one value set; external configuration, caches,
+and audit records pair it with the schema revision and value digest.
+
+A new global row is admitted only with an active owner, distinct reservation
+or validation point, applicability, structured diagnostic, default-maturity
+classification, boundary/negative evidence, and a reason it cannot remain a
+private binding/runtime declaration or workload parameter. Rows without an
+implemented owner may remain provisional/deferred input but cannot support a
+product-default or runtime-enforcement claim. Retirement or reclassification
+preserves the old identity as historical and names the replacement or
+non-applicability disposition.
+
+A concrete binding may declare bounded protocol-private physical costs in its
+complete registration and aggregate them into admitted lifetime/transient
+footprints without creating a new global `ResourceKind` for every library
+allocation category. Semantic owner counts and reservations remain comparable
+across profiles; Host allocation/queue costs and constrained
+slot/layout/code-size costs are separately bounded physical evidence.
+
 `RES-LIMIT-001`: Every public ingestion and runtime-construction surface MUST
 accept or inherit a resource policy before processing externally influenced
 variable-size state. `docs/resource-limits.csv` is the single exhaustive field

@@ -1,6 +1,6 @@
 # 0046 Publication and Explicit Retry Availability Semantics
 
-Status: OPEN
+Status: MIGRATED
 
 Kind: owner-raised product-availability and runtime-semantics investigation
 
@@ -172,3 +172,39 @@ Codex should:
 6. identify any unsupported degraded-service, failover, retry, recovery, or availability claim;
 7. identify any architecture, ADR, specification, work package, state machine, error taxonomy, retry classification, TD or generation authority, fixture, workload, checker, audit, example, plan, risk projection, default, or continuation record that requires correction; and
 8. migrate only conclusions supported by repository evidence.
+
+## Decision
+
+Atomic publication truth and the v1 all-advertised-route policy are distinct.
+Atomicity requires that one immutable generation become visible only with the
+routes it truthfully advertises. Requiring every planned route to be ready is
+a deliberately conservative v1 availability policy, not a logical
+consequence of atomic publication.
+
+After readiness failure or post-publication route loss, the current engine
+rolls back or cleans up the failed generation and reports exact status. The
+application or platform decides whether to construct a new effective Thing
+Description and generation, obtain any required signature, republish
+Directory state, apply backoff, and later restore routes. The repository does
+not yet claim degraded publication, automatic route substitution, or
+transparent failover.
+
+`RetryClass` is advice about one completed attempt; it is not a reusable
+availability facade. A future Consumer or Gateway retry facade must also own
+execution certainty, the permitted next action, idempotency policy, strict TD
+revision, generation and candidate identity, overall attempt and time bounds,
+operation correlation, cancellation, and attempt history. Each retry is a
+fresh explicit call. No implementation may try an alternate candidate after
+acceptance or an unknown side effect merely because the error is classified
+as retryable.
+
+These requirements are downstream of the narrow WP-300 Producer Property Read
+slice and do not reopen or block it.
+
+## Migration
+
+The policy distinction, recovery ownership, bounded retry-facade contract, and
+honest availability claim are projected into `PLAN.md`,
+`docs/spec/planning.md`, `docs/spec/interaction-core.md`,
+`docs/architecture/50-servient-runtime-lifecycle.md`, and
+`docs/work-packages/WP-400-servient.md`. This topic is `MIGRATED`.

@@ -29,6 +29,13 @@ earlier after the narrow WP-300 slice to test SPI constructibility, but it is
 non-authoritative preparation and grants no WP-600 progress or source
 admission.
 
+Zenoh and zenoh-pico are two representations of one protocol family. Their
+shared runtime cases establish production-backed Host/constrained parity for
+the explicitly declared common capability intersection; they do not by
+themselves establish protocol-shape neutrality. Profile-only, compile-only,
+unsupported, and not-applicable capabilities remain explicit registration and
+evidence dispositions rather than silently omitted cases.
+
 Concrete response metadata follows
 `docs/amendments/WP-100-interaction-output-api-v1.md`: bindings populate the
 untrusted fixed-size metadata channel, while shared WP-300 validation retains it
@@ -235,9 +242,15 @@ No compatibility feature may reintroduce zenoh into a protocol-neutral crate.
   immutable plan through permit-authorized acceptance, response delivery, and
   terminal cleanup, with no mock transport or legacy selection/dispatch edge.
 - `zenoh-author-usability`: an external binding-author fixture recording the
-  complete required declarations and helper use; only concrete ownership,
-  portability, resource, unsafe, or implementability defects can reopen the
-  shared SPI.
+  complete required declarations, helper use, diagnostics, repeated
+  workaround classes, cleanup-library mapping, generic/layout/code-size cost,
+  and unsafe/private dependencies; systematic semantic-error patterns or
+  bounded-cost violations can reopen the shared SPI as well as outright
+  ownership, portability, resource, unsafe, or implementability defects.
+- `zenoh-cross-profile-parity`: both backends consume one versioned
+  machine-readable trace oracle for their common capability intersection,
+  compare semantic transitions, normalized liveness and semantic resource
+  deltas, and report physical allocation/layout/reactor/wake costs separately.
 - `zenoh-route-scoped-progress`: prepare/readiness/activate/commit/accept/drain ownership, one
   accept cursor and waker per serving committed route, reactor wake isolation, no direct handler
   dispatch, and route-terminal isolation for the host backend.
@@ -319,6 +332,10 @@ manifest explicitly includes it; a host result cannot stand in for zenoh-pico ev
   reverse dependency or executor leakage.
 - Host zenoh and constrained zenoh-pico pass the lifecycle, ownership, progress, security, codec,
   generation, correlation, cancellation, and cleanup evidence above.
+- Their common capability intersection and every profile-only, compile-only,
+  unsupported, or not-applicable cell are explicit; the completion claim is
+  Zenoh-family production evidence rather than proof of general
+  protocol-shape neutrality.
 - The host constructors preserve complete registration metadata, while zenoh-pico exposes a useful
   caller-driven surface without `std` or erased host traits.
 - Route progress is engine-orchestrated and route-scoped in both backends; no protocol reactor has

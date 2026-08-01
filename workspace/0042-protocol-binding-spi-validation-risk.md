@@ -1,6 +1,6 @@
 # 0042 Protocol Binding SPI Validation and Freeze Risk
 
-Status: OPEN
+Status: MIGRATED
 
 Kind: owner-raised architecture-validation and public-SPI maturity investigation
 
@@ -95,3 +95,44 @@ Codex should:
 4. decide whether the current evidence order and reopening predicates are sufficient;
 5. identify any authoritative specification, architecture, work-package, plan, checker, fixture, audit, or continuation projection that requires correction; and
 6. migrate only conclusions supported by repository evidence.
+
+## Decision
+
+The existing narrow WP-300 order remains valid because it freezes one finite
+Property Read candidate and then executes exactly that package-local
+constructibility claim. It does not prove production operation, broad
+operation-family fit, third-party ergonomics, protocol-shape neutrality,
+cross-package orchestration, or release stability.
+
+SPI maturity advances through six named evidence levels: immutable internal
+consistency, narrow package-local constructibility, external Zenoh authoring,
+mock cross-package composition, production Zenoh-family execution, and final
+release evidence. Public semantic invariants—generation identity, complete
+ownership, permit-gated acceptance, bounded progress, cleanup transfer, and no
+hidden dispatch—remain frozen. Exact Rust containers and operation-family
+signatures remain normal broad-candidate correction points until their
+external-authoring/domain evidence closes; later changes require explicit
+reopening and migration.
+
+The Zenoh spike stays before broad WP-300. Its reopening predicate is expanded
+beyond impossibility: repeated workarounds that lose semantic truth, duplicate
+normative transitions, require unsafe/private dependencies, produce unusable
+diagnostics, or exceed declared generic/layout/code-size bounds are concrete
+defects. Mechanical repetition or field count alone still justifies
+helpers/generation rather than semantic relaxation.
+
+Zenoh and zenoh-pico are one protocol family. They provide meaningful Host
+versus constrained representation evidence but not independent protocol-shape
+neutrality. A release claim of empirical protocol neutrality therefore needs a
+materially different independently authored route/correlation/response/
+cancellation fixture; otherwise the honest claim is protocol-independent
+engine ownership plus Zenoh-family operation.
+
+## Migration
+
+The maturity ladder, broader reopening predicate, protocol-family limitation,
+and release claim boundary are projected into `PLAN.md`,
+`docs/spec/binding-spi.md`, `docs/work-packages/WP-300-bindings.md`,
+`docs/work-packages/WP-600-protocol-bindings.md`, and
+`docs/work-packages/WP-700-integration.md`. Narrow WP-300 remains unblocked.
+This topic is `MIGRATED`.

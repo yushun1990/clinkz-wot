@@ -219,7 +219,16 @@ no-default, async, or optional binding cell restores it.
   startup bundles, core compiler-extension artifacts, immutable plan-set leases, route-scoped
   fairness, committed-closed guards, borrowed activation permits, associated-state slots,
   lifetime/ingress accounting, typed input rejection, and acknowledged complete-work cleanup
-  transfer across host and constrained feature cells.
+  transfer across host and constrained feature cells. Each common capability
+  consumes one machine-readable trace oracle; semantic deltas and normalized
+  liveness match while physical profile costs and applicability are reported
+  separately.
+- `protocol-shape-authoring-conformance`: one independently authored fixture
+  whose route, correlation, response, or cancellation shape differs
+  materially from the Zenoh family. If that evidence is not admitted, release
+  documentation limits the empirical claim to protocol-independent engine
+  ownership plus Zenoh-family operation and does not claim general
+  protocol-shape neutrality.
 - `serving-activation-integration`: composed host and constrained evidence that all required route
   commits precede one atomic serving publication and that each accept poll receives one fresh,
   exact-route, non-retained borrowed permit produced only by consuming the exclusive claim over
@@ -275,6 +284,9 @@ reference gate. The Gateway `PERF-GW-030` and constrained `PERF-CS-022` results 
 - Every positive and negative public-surface fixture passes, including useful no-default and async
   no-std umbrella builds, optional `zenoh`, optional `zenoh-pico`, `cbor`, and additive
   `td2-preview`.
+- Constrained runtime maturity is claimed only for executed common runtime
+  capabilities; compile-only async/no-std and profile-only capabilities are
+  listed separately and cannot inherit runtime parity from type availability.
 - `legacy-handler-surface-removal` proves that no old handler, slot, raw lookup, push facade, or
   migration adapter survives in any releasable cell and that every target operation/flavor and
   host registration path resolves to its single defining type or method.

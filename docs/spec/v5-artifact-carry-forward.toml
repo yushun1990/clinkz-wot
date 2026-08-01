@@ -15,8 +15,8 @@ revalidation = "tools/check-api-ownership.sh"
 [[artifact]]
 family = "state-model"
 path = "docs/state-machines.toml"
-sha256 = "bfe06b1fa4bba7027d1f57c104a54a188fbbe8ce4a5717e6fdf9081279502b1c"
-disposition = "active-state-expose-bind-inflight-projections-carried; other machines are domain-entry input"
+sha256 = "c333d9e023f12160013e29064c920419ecc8d7f878617862f1af807145e5d78c"
+disposition = "revalidated and extended with cleanup reservation-coexistence, pending-progress observability, and v1 in-instance residual-durability contracts; other machines remain domain-entry input"
 revalidation = "cargo run --locked --quiet --manifest-path tools/design-check/Cargo.toml -- check-state"
 
 [[artifact]]
@@ -99,8 +99,8 @@ revalidation = "cargo run --locked --quiet --manifest-path tools/performance-har
 [[artifact]]
 family = "work-package-dag"
 path = "docs/work-packages/index.toml"
-sha256 = "8aa248a72be203e2216f03b09b214da43e3e500bd44734a13b87296da66caa8f"
-disposition = "carried-forward-unchanged; package order and completed/admitted states remain implementation truth"
+sha256 = "6cfd802e45aded85316f1df9066328e2a012d33bbf601e14178514763db61051"
+disposition = "revalidated with package order and status unchanged and broad evidence identities added for shared parity traces, cleanup coexistence, Servient cross-shard feedback, resource authoring, availability recovery, and protocol-shape claim closure"
 revalidation = "cargo run --locked --quiet --manifest-path tools/design-check/Cargo.toml -- check-work-packages"
 
 [[artifact]]

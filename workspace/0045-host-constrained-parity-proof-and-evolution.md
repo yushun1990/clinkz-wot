@@ -1,6 +1,6 @@
 # 0045 Host and Constrained Parity Proof and Evolution
 
-Status: OPEN
+Status: MIGRATED
 
 Kind: owner-raised cross-profile semantic-closure and evidence-risk investigation
 
@@ -172,3 +172,44 @@ Codex should:
 5. identify any unsupported parity, portability, constrained-runtime maturity, or cross-version claim;
 6. identify any architecture, ADR, specification, work package, state machine, capability matrix, resource profile, fixture, trace, workload, checker, audit, plan, risk projection, feature-cell statement, or continuation record that requires correction; and
 7. migrate only conclusions supported by repository evidence.
+
+## Decision
+
+Every capability claimed by both Host and constrained profiles must be owned
+by one code-level semantic transition kernel and one machine-readable trace
+oracle. Shared prose, type names, case identifiers, or independently copied
+transition functions do not prove parity. Profile adapters may differ in
+storage, wake integration, polling, allocation, and dispatch mechanics.
+
+Parity compares semantic reservations, releases, outcomes, generation and
+cleanup truth, plus normalized liveness obligations. It does not require equal
+physical bytes, allocation behavior, synchronization primitives, wake counts,
+or code size. Those profile-specific costs remain separately declared and
+bounded.
+
+Capability applicability must be executable rather than inferred from absent
+fields. The authority distinguishes common required capabilities,
+profile-required capabilities, optional supported capabilities, and typed
+not-applicable cases. Host convenience defaults are expanded to the canonical
+semantic configuration before entering the shared kernel; they do not create
+a second normative model.
+
+`async-no-std` compilation proves surface portability only. Runtime parity for
+the common production capability intersection is established during WP-600,
+and the release claim is closed by WP-700 traces and workloads. Mock
+Host/static Property Read traces prove narrow constructibility, not broad
+liveness, production support, or future-version compatibility.
+
+The narrow WP-300 tranche remains unblocked. Broad WP-300 and WP-400 must
+supply the shared oracle and applicability model before claiming generalized
+cross-profile parity.
+
+## Migration
+
+The kernel and oracle ownership, semantic-versus-physical resource boundary,
+normalized liveness rule, capability taxonomy, Host-default expansion, and
+evidence maturity boundary are projected into `PLAN.md`,
+`docs/spec/binding-spi.md`, `docs/work-packages/WP-300-bindings.md`,
+`docs/work-packages/WP-400-servient.md`,
+`docs/work-packages/WP-600-protocol-bindings.md`, and
+`docs/work-packages/WP-700-integration.md`. This topic is `MIGRATED`.

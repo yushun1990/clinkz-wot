@@ -1,6 +1,6 @@
 # 0048 Repository Truth Reachability and State Projection Drift
 
-Status: OPEN
+Status: MIGRATED
 
 Kind: owner-raised repository-integration, continuation-projection, and next-action integrity investigation
 
@@ -201,3 +201,48 @@ Codex should:
 6. identify the exact current correction needed for the stale PR #3/WP-300 projection and the justified admission-base next step after intervening disjoint merges;
 7. identify any unsupported integration, milestone, admission, completion, workspace, or next-action claim in current repository projections; and
 8. migrate only conclusions supported by repository evidence.
+
+## Decision
+
+Remote integration of a dependent transition requires four facts: the pull
+request's actual base and head, reachability of the merge result from the
+remote default branch, presence of the expected content without a later
+revert or superseding repair, and required validation covering the resulting
+head. A GitHub `merged` flag alone is insufficient. PR #7, which merged into a
+feature branch before its content reached `master` through PR #9, is the
+repository's concrete counterexample.
+
+Git history and registered work-package evidence own technical truth. GitHub
+owns current remote pull-request, check, and merge facts. `PROJECT_STATE.md`
+records the last observed default revision, observation time, current task,
+blockers, and next safe action. `PLAN.md` owns roadmap, milestone, package,
+dependency, and durable completion state; it must not carry transient branch,
+authentication, draft-PR, workflow, or handoff narration.
+
+Projection drift is dangerous when it changes the active objective, blocker,
+admission basis, milestone status, or next safe action, or directs a fresh
+agent toward completed, impossible, or unsafe work. Such drift is corrected at
+the first checkpoint before dependent work. Harmless explanatory lag may
+remain monitored. A merge into a feature branch does not release a dependent
+transition; a later repair pull request may be the canonical content path.
+
+Reconciliation stays lightweight and local-first: fetch when remote state can
+affect the next action, inspect actual base and ancestry, verify expected
+paths/content, and match required validation to the relevant head. The project
+does not need a remote state database, recursive state-only pull requests, or
+a write-capable post-merge bot for this guarantee.
+
+For the current WP-300 transition, the correction is present on the observed
+default branch and its exact head validation succeeded. The independent review
+checkpoint must still be integrated before source admission. After fetching
+that validated default descendant, the next pre-source transition remains the
+registered five-file admission topology; the implementation transition
+remains the registered two source paths. Disjoint topic migration does not
+reopen the immutable semantic candidate.
+
+## Migration
+
+The integration predicate and session-entry reconciliation rule are projected
+into `AGENTS.md` and `PROJECT_GOVERNANCE.md`; the durable roadmap projection is
+corrected in `PLAN.md`; the current observation, blocker, and next action are
+projected into `PROJECT_STATE.md`. This topic is `MIGRATED`.

@@ -1,6 +1,6 @@
 # 0047 Resource Schema Growth, Applicability, and Authoring Boundary
 
-Status: OPEN
+Status: MIGRATED
 
 Kind: owner-raised resource-authority, configuration-surface, and evidence-maturity investigation
 
@@ -212,3 +212,43 @@ Codex should:
 6. identify any unsupported resource-authoring, named-profile, applicability, compatibility, boundedness, or usability claim;
 7. identify any architecture, ADR, Foundation specification, resource-schema row, named profile, generated API, Binding declaration, work package, fixture, workload, checker, audit, example, plan, risk projection, default, or continuation record that requires correction; and
 8. migrate only conclusions supported by repository evidence.
+
+## Decision
+
+The flat exhaustive resource schema remains the canonical finite authority. It
+is not, by itself, a stable public authoring surface. Raw construction of the
+generated `[Option<_>; N]` representation is a low-level mechanism and cannot
+serve as evidence that application authors or independent binding authors can
+configure the schema safely.
+
+Before broad resource or Binding-SPI maturity is claimed, each field needs an
+authority class, executable applicability axes, lifecycle status and default
+maturity. Generated role projections or builders must validate cross-field
+rules, distinguish omitted, disabled, zero, rendezvous, inherited, and typed
+not-applicable values, and retain diagnostics that identify the value origin.
+`None` becomes not-applicable only after a typed role/profile binding proves
+that meaning; it is not a universal sentinel.
+
+The schema also needs an explicit revision, canonical field order, and digest.
+Evolution is append-only within a revision and uses an explicit migration when
+semantics or order change. Application-defined named profiles bind their
+revision and value digest. Field admission, defaulting, deprecation, and
+retirement require a checklist covering semantic authority, bounds,
+applicability, lifecycle, compatibility, authoring projection, diagnostics,
+and executable evidence.
+
+Protocol-private physical costs do not automatically become global semantic
+resource fields. They may remain Binding declarations or aggregate footprint
+evidence when they do not affect cross-binding admission or Servient policy.
+
+The current narrow WP-300 package supplies an exact fixed profile and remains
+admissible. Broad WP-300/WP-400 authoring maturity is blocked until the above
+closure exists; no Foundation source change is admitted by this topic alone.
+
+## Migration
+
+The canonical-authority versus authoring-surface boundary, applicability and
+revision requirements, evolution discipline, and field lifecycle checklist
+are projected into `PLAN.md`, `docs/spec/foundation.md`,
+`docs/work-packages/WP-300-bindings.md`, and
+`docs/work-packages/WP-400-servient.md`. This topic is `MIGRATED`.

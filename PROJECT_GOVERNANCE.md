@@ -123,7 +123,13 @@ PLAN.md does not contain:
 - temporary debugging information;
 - detailed design discussions;
 - architecture decisions;
-- governance policies.
+- governance policies; or
+- transient branch, pull-request, workflow-run, authentication, or handoff
+  state used only to derive the next bounded task.
+
+`PLAN.md` may name an immutable evidence checkpoint when it is part of a
+milestone or package acceptance fact. Volatile remote observations and the
+currently selected bounded task belong in `PROJECT_STATE.md`.
 
 ## Open Decision Management
 
@@ -402,6 +408,36 @@ request.
 A dependent task begins only after the merge is visible in the fetched
 default branch and the default-branch validation for the merge revision
 passes. This rule applies equally to manual and automatic integration.
+
+`merged = true` is historical pull-request state, not sufficient
+default-branch integration evidence. Reconciliation records and verifies:
+
+1. the pull request's actual base and expected head;
+2. whether the merge/repair commit is an ancestor of the fetched default
+   branch;
+3. whether the expected paths and semantic/evidence content are present and
+   not subsequently reverted or superseded; and
+4. whether required validation covers the applicable merge revision/current
+   base rather than only an obsolete head.
+
+A merge into a feature branch may complete a review/handoff step but releases
+no default-branch dependency. A later repair pull request may be the content's
+canonical integration event while preserving the earlier merge as history.
+Stacked, retargeted, reverted, superseded, and repaired tasks are described by
+their actual commit reachability and content, not by branch name or pull
+request number alone.
+
+`PROJECT_STATE.md` records the last fetched default-branch commit and
+observation date/basis used to derive its objective. Freshness is semantic, not
+commit-distance based. An intervening disjoint change may leave the objective
+unchanged, but a known change to the executable objective, blocker/release
+set, source-admission boundary, milestone status, or next safe action is
+dangerous projection drift and is repaired in the first checkpoint before
+further dependent work. Overclaims stop affected work immediately; false
+blockers and impossible objectives are also defects because they repeat
+completed work. A lightweight local checker may validate admission-critical
+ancestry and expected content, but local correctness never depends on live
+GitHub access or parsing every narrative sentence.
 
 ## Change Management
 

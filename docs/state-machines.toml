@@ -4401,6 +4401,9 @@ scope = "Owns one complete call, guard, driver, input, or typed slot after ackno
 record_contract = "CleanupRecord is bounded status only and never substitutes for the complete work object held by ExecutorCleanupOwner or ManualCleanupOwner."
 progress_contract = "Zero budget invokes no binding code. Pending registers wake interest before rechecking, and Servient supplies deadline wakeups independently of transport wakes."
 transfer_contract = "Offered remains source-owned. accepted acknowledges capacity and complete-object ownership; executor rejection returns the complete envelope to ManualCleanupOwner, while a contract-violating drop after acceptance commits durable residual status before destruction."
+reservation_coexistence_contract = "Each operation family registers a machine-readable coexistence matrix. Simultaneously live obligations reserve independently; mutually exclusive phases may transfer one full maximum reservation without additive charging only when the state machine proves that two owners cannot claim it."
+progress_observability_contract = "Status retains owner class, progress mode, phase, generation, deadline or age class, and blocked reclamation or shutdown consequence without exposing protocol-private state."
+residual_durability_contract = "V1 durable residual means bounded status retained for the configured Servient lifetime and explicit final shutdown report; it does not claim process-restart persistence, automatic recovery, or external compensation."
 initial = "Reserved"
 states = [
     "Reserved",

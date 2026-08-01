@@ -1,6 +1,6 @@
 # 0044 Cleanup State-Machine Complexity and Evidence Boundary
 
-Status: OPEN
+Status: MIGRATED
 
 Kind: owner-raised cleanup architecture-closure and implementation-risk investigation
 
@@ -134,3 +134,43 @@ Codex should:
 5. identify any unsupported cleanup maturity, durability, scalability, or ergonomics claim;
 6. identify any architecture, ADR, specification, work package, state machine, resource profile, fixture, workload, checker, audit, plan, risk projection, or continuation record that requires correction; and
 7. migrate only conclusions supported by repository evidence.
+
+## Decision
+
+The complete-object cleanup invariant remains frozen: ownership ends only at
+verified completion, acknowledged transfer, or an explicit durable residual
+disposition. Exact Rust containers, generic parameters, helper layers, and
+operation-family layout remain provisional implementation choices so long as
+they preserve that semantic kernel.
+
+Broad cleanup admission now requires an operation-by-obligation coexistence
+matrix. Obligations that can be live together reserve independent bounded
+capacity; obligations proven mutually exclusive may reuse capacity and must
+not be counted additively. A generic slot count or a sum of all declared
+operation costs is not evidence for either case.
+
+Every observable `Pending` cleanup state must expose a unique progress owner,
+the retained complete object, deadline or bound, and the condition blocking
+completion. The progress owner may be a static driver in a constrained
+profile or a Servient scheduling domain on Host, but it cannot be ambiguous or
+depend on task destruction. Cleanup receives its own bounded progress
+authority where sharing a hot interaction lane could starve it.
+
+For v1, “durable residual” means retained in-instance authority plus a bounded
+final shutdown report. Process-restart persistence is not claimed. A stronger
+restart-survival claim requires an explicit persistence format, recovery
+owner, and executable evidence rather than an overloaded cleanup record.
+
+The external Zenoh authoring checkpoint must record operation-to-cleanup
+mapping, diagnostics, generic/layout pressure, and code-size impact. Broad
+WP-300 and broad WP-400 remain gated on that evidence; the narrow Property Read
+slice remains unblocked because its exact cleanup topology is already finite.
+
+## Migration
+
+The coexistence matrix, pending observability, progress ownership, v1
+durability boundary, and external-authoring evidence are projected into
+`PLAN.md`, `docs/spec/binding-spi.md`,
+`docs/architecture/50-servient-runtime-lifecycle.md`,
+`docs/state-machines.toml`, `docs/work-packages/WP-300-bindings.md`, and
+`docs/work-packages/WP-400-servient.md`. This topic is `MIGRATED`.
