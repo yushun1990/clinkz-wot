@@ -100,7 +100,9 @@ The repository evidence establishes the following starting point:
   because both excluded cross-package composition. Independent review rejected
   original Producer-route candidate `613ee18d11b8f60e93d0792fcc76b83a00569044`
   on evidence sufficiency and passed exact corrective candidate
-  `376ee84f80ea27c8d3faa4b1840ce7b68d61f23f`; no source is admitted yet.
+  `376ee84f80ea27c8d3faa4b1840ce7b68d61f23f`. Exact five-file pre-source
+  admission now releases only the two registered Planning paths; neither has
+  changed yet.
   WP-400 source remains blocked until that Planning-owned correction completes
   its real handoff evidence. Broad WP-400, WP-500, and WP-600 remain downstream
   of broad WP-300, and WP-700 joins those branches;
@@ -130,7 +132,7 @@ answer and does not automatically block unrelated admitted work.
 | D2 | MIGRATED | Use clock-source-owned non-wrapping extended logical ticks; retain raw wrap metadata as diagnostics; fail incomparable clock domains explicitly; correct Foundation before Core Deadline/cleanup timing | Completed `WP-100-LOGICAL-TIME-CORRECTION -> WP-100-DEADLINE-CLEANUP-TIMING`; the time blocker is resolved while independent broad-handler blockers remain | M2 exit |
 | D3 | SUPERSEDED | The former lossless residual-decomposition direction remains historical decision input | Do not integrate Foundation candidate `2494f33fdfe49ec3c7ae850d20990e446e628865` or open another D3 domain migration; ADR-0018/D7 replace its activation path | Superseded by D7 |
 | D4 | MIGRATED | Use one non-`Clone` linear `Subscription`/`StaticSubscription` receive capability; expose no cloneable receiver/control split, competing-consumer contract, or per-clone broadcast | WP-300 owns one binding driver/cursor; WP-400 owns the Servient record/facade and must provide negative `Clone` compile fixtures | M4 entry |
-| D5 | MIGRATED | Adopt `PROPERTY-READ-ARCHITECTURE` as the first executable cross-package composition proof, using one property read in host and manual runtime cells plus an async/no-std compile projection | Five exact ordered tranches form `WP-100 -> WP-200 plan -> WP-300 -> WP-200 Producer-route projection -> WP-400`; the first three are complete, the Producer-route correction review passed, and the executable chain remains stopped before its source admission and completion | Before broad WP-100/WP-300/WP-400 expansion |
+| D5 | MIGRATED | Adopt `PROPERTY-READ-ARCHITECTURE` as the first executable cross-package composition proof, using one property read in host and manual runtime cells plus an async/no-std compile projection | Five exact ordered tranches form `WP-100 -> WP-200 plan -> WP-300 -> WP-200 Producer-route projection -> WP-400`; the first three are complete, the Producer-route correction is independently admitted, and the executable chain remains stopped before its implementation and completion | Before broad WP-100/WP-300/WP-400 expansion |
 | D6 | MIGRATED | Use `CandidateFallbackPolicy::PreExecution` by default; permit only side-effect-free security inapplicability and exact deterministic lazy-artifact negatives to skip candidates; prohibit binding-input, health, transient, security-commit, and post-acceptance fallback | ADR-0017 makes the policy constructible and bounds one fixed-width diagnostic per eligible skip; the WP-200 Property Read review reaffirmed it while fallback/lazy implementation remains outside the frozen narrow scope | M3 entry |
 | D7 | MIGRATED | Adopt ADR-0018's bounded v5.0 authority reset: 62 active requirements, explicit inactive classifications for the other 59, and domain-entry re-adoption for later v1 obligations | Exact candidate `b1916250a28ee133e8d0b12225c5b6311c975247` was independently attested and integrated as the unchanged second parent of activation checkpoint `30b845a4b17dd3eb56670da48c939b72daea7d59`; v5.0 authority is active | M1 exit and WP-200 resume |
 | D8 | MIGRATED | Use one associated-type portable compiler contract, an application-closed static compiler/cursor/artifact enum, and Core-owned safe host erasure; WP-200 solely implements the compiler/artifact components and WP-300 consumes them only inside a complete installable bundle | The exact nine-path WP-200 implementation and both public author profiles pass completion evidence; WP-300 may consume but must not duplicate this ownership | M3 entry |
@@ -339,10 +341,10 @@ inactive dispositions, explicit machine-artifact and completed-evidence
 carry-forward manifests, active-only gate requirement sets, and an immutable
 review/activation chain. Architecture closure remains open on the registered
 global gates; the exact `WP-300-PROPERTY-READ-BINDING-SLICE` is complete and
-the executable critical path now proceeds through the exact non-source review
-correction for `WP-200-PROPERTY-READ-PRODUCER-ROUTE-PROJECTION`, followed by
-independent admission. WP-400 remains blocked behind that concrete handoff
-correction.
+the executable critical path now proceeds through the independently reviewed
+and admitted two-path implementation for
+`WP-200-PROPERTY-READ-PRODUCER-ROUTE-PROJECTION`. WP-400 remains blocked behind
+that concrete handoff correction's completion.
 
 AI deliverable:
 

@@ -124,8 +124,13 @@ The active design revision is v5.0 bounded-core authority.
   simulation, full Producer-route completion check, and declared negative
   mutations. Review checkpoint
   `56ee6b990373c12b83aac26a0377e3489fbde194` changes exactly the registered
-  attestation, artifact row, and continuation projection. No source is yet
-  admitted or integrated.
+  attestation, artifact row, and continuation projection. That review
+  checkpoint itself admitted no source and is not integrated.
+- Exact current-default reconciliation merge
+  `2a469b1d4a3579d4db6115351b76867a0a531db8` preserves the original,
+  correction, and review checkpoints and includes fetched default revision
+  `5352e5b00c6f94a7633e4e71c8f80ddd3a7fd80b`. It is the immutable
+  `admission_base_ref` for the five-file Producer-route pre-source transition.
 - GitHub CLI authentication is currently invalid, but SSH fetch/push and the
   connected GitHub application are available. Active Ruleset `20009352` was
   fetched on 2026-08-02: it targets the default branch, requires strict
@@ -157,13 +162,13 @@ Planning implementation. WP-400 source remains unadmitted.
 
 ### Before verified integration
 
-Complete the conflict-free current-base merge without rewriting the semantic
-or review checkpoints. Record the exact five-file admission checkpoint, then
-implement only `planning/src/property_read.rs` and `planning/src/lib.rs`, add
-completion evidence, and run the task-specific, aggregate, locked-workspace,
-feature-matrix, and diff-hygiene checks. Commit and push the complete head to
-draft pull request #15; keep WP-400 source blocked until that head is remotely
-integrated and its merge revision passes `validation`.
+Commit the exact five-file admission checkpoint based on
+`2a469b1d4a3579d4db6115351b76867a0a531db8`, then implement only
+`planning/src/property_read.rs` and `planning/src/lib.rs`, add completion
+evidence, and run the task-specific, aggregate, locked-workspace,
+feature-matrix, and diff-hygiene checks. Push the complete head to draft pull
+request #15; keep WP-400 source blocked until that head is remotely integrated
+and its merge revision passes `validation`.
 
 ### After verified integration
 
@@ -245,8 +250,8 @@ conditional actions are aggregate-checked.
 - M2 Foundation and Core Contract Stabilization — IN_PROGRESS.
 - M3 Planning and Compilation Pipeline — IN_PROGRESS; the exact WP-200
   Property Read plan slice is complete. Its exact Producer-route projection
-  correction passed independent review but remains `pending`/`review-pending`
-  until the combined pre-source transition; broad WP-200 exits remain open.
+  correction passed independent review and is now `in-progress`/`approved` at
+  the combined pre-source transition; broad WP-200 exits remain open.
 - M4 Protocol Binding SPI and Lifecycle — IN_PROGRESS; the exact WP-300
   Property Read binding slice is `complete`/`approved`. Broad WP-300 exits
   remain open, and narrow completion releases only the Producer-route
@@ -661,8 +666,7 @@ composition, workload proof, and cross-package completion remain separate.
 
 ### WP-200 Property Read Producer-route projection
 
-Status: CORRECTIVE CANDIDATE INDEPENDENT REVIEW PASSED; DEFAULT-BRANCH
-RECONCILED BASIS AND PRE-SOURCE ADMISSION NEXT.
+Status: IMPLEMENTATION ADMITTED; EXACT TWO-PATH SOURCE CHILD NEXT.
 
 Original candidate `613ee18d11b8f60e93d0792fcc76b83a00569044` owns 22
 registered non-product-source paths and passed exact-head remote run
@@ -673,8 +677,8 @@ and passed independent review on 2026-08-02. Exact three-path review checkpoint
 `56ee6b990373c12b83aac26a0377e3489fbde194` records the immutable correction
 and all eight prechecks.
 
-The future source topology is exactly `planning/src/property_read.rs` and
-`planning/src/lib.rs`. No source is admitted yet. The review rejected
+The admitted source topology is exactly `planning/src/property_read.rs` and
+`planning/src/lib.rs`; neither path has changed yet. The review rejected
 Consumer-role substitution, caller-restated registration identity,
 arbitrary-role/public Consumer construction, forgeable cursor state, omitted
 borrowed static/host projections, fixture-owned preparation, zero-budget
@@ -682,10 +686,12 @@ progress, source outside the two-path boundary, and premature WP-400 fixtures.
 
 Author-side schema tests, ownership/design/ADR/resource/authority checks,
 formatting, shell syntax, carry-forward digests, corrected candidate topology,
-full next-state completion, and diff hygiene pass. The branch is being merged
-with fetched default checkpoint `5352e5b00c6f94a7633e4e71c8f80ddd3a7fd80b`
-without rewriting the original, correction, or review checkpoints. Draft pull
-request #15 remains the sole remote handoff for this task.
+full next-state completion, and diff hygiene pass. Reconciliation merge
+`2a469b1d4a3579d4db6115351b76867a0a531db8` includes fetched default checkpoint
+`5352e5b00c6f94a7633e4e71c8f80ddd3a7fd80b` without rewriting the original,
+correction, or review checkpoints. The exact five-file worktree transition
+binds that merge as its admission base. Draft pull request #15 remains the
+sole remote handoff for this task.
 
 ### Aggregate design-check worktree-root defect
 
@@ -1068,11 +1074,9 @@ source. Its current tree passes:
 
 ## Next Safe Actions
 
-1. Finish and validate the non-rewriting merge of reviewed pull request #15
-   history with fetched default checkpoint
-   `5352e5b00c6f94a7633e4e71c8f80ddd3a7fd80b`.
-2. Record the exact five-file combined pre-source admission checkpoint, then
-   implement only `planning/src/property_read.rs` and
+1. Validate and commit the exact five-file combined pre-source admission
+   checkpoint based on `2a469b1d4a3579d4db6115351b76867a0a531db8`.
+2. Implement only `planning/src/property_read.rs` and
    `planning/src/lib.rs` as its immediate source child.
 3. Add exact completion evidence, run task-specific and default-branch
    validation, commit and push the complete head to draft pull request #15.

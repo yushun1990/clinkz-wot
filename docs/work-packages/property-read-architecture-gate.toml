@@ -567,8 +567,8 @@ completion_check = "wp300-property-read-binding-slice-check"
 id = "WP-200-PROPERTY-READ-PRODUCER-ROUTE-PROJECTION"
 work_package = "WP-200"
 sequence = 320
-status = "pending"
-admission_status = "review-pending"
+status = "in-progress"
+admission_status = "approved"
 depends_on = ["WP-300-PROPERTY-READ-BINDING-SLICE"]
 requirements = [
     "PLAN-COST-001",
@@ -660,6 +660,9 @@ pre_implementation_checks = [
     "wp300-property-read-binding-slice-check",
 ]
 admission_review = "docs/audits/WP-200-property-read-producer-route-entry.md"
+review_attestation = "docs/audits/WP-200-property-read-producer-route-review.toml"
+review_attestation_ref = "56ee6b990373c12b83aac26a0377e3489fbde194"
+admission_base_ref = "2a469b1d4a3579d4db6115351b76867a0a531db8"
 entry_check = "wp200-property-read-producer-route-entry-check"
 completion_evidence_path = "docs/evidence/WP-200-property-read-producer-route.toml"
 completion_check = "wp200-property-read-producer-route-check"

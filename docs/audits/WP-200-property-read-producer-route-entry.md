@@ -1,12 +1,12 @@
 # WP-200 Property-Read Producer-Route Projection Entry Audit
 
-Status: Review pending
+Status: Passed
 
 Design revision: v5.0
 
 Admission scope: `WP-200-PROPERTY-READ-PRODUCER-ROUTE-PROJECTION`
 
-Verdict: Candidate ready for independent review
+Verdict: Implementation-ready
 
 ## Finding and exact scope
 
@@ -181,16 +181,24 @@ The review attestation checkpoint changes exactly the attestation, its artifact
 registry row, and `PROJECT_STATE.md`. It may report `passed` only after the
 corrected compile/runtime contract and all declared mutations pass.
 
+Independent root-session review passed corrective candidate
+`376ee84f80ea27c8d3faa4b1840ce7b68d61f23f`. Exact review checkpoint
+`56ee6b990373c12b83aac26a0377e3489fbde194` changes only the registered three
+review paths and records all eight prechecks as passed. The isolated next-state
+simulation completed the real handoff, and every declared negative mutation
+failed closed.
+
 ## Admission and completion
 
-After a passing independent attestation, one combined pre-source checkpoint
-may change only `PLAN.md`, `PROJECT_STATE.md`, this audit,
+This combined pre-source checkpoint changes only `PLAN.md`, `PROJECT_STATE.md`,
+this audit,
 `docs/spec/v5-artifact-carry-forward.toml`, and
-`docs/work-packages/property-read-architecture-gate.toml`. It changes the
+`docs/work-packages/property-read-architecture-gate.toml`. It is based on exact
+current-default reconciliation merge
+`2a469b1d4a3579d4db6115351b76867a0a531db8`, changes the
 tranche from `pending`/`review-pending` to
 `in-progress`/`approved`, records the immutable review ref, and binds
-`admission_base_ref` to the exact reviewed default-branch basis from which the
-five-file checkpoint is created.
+`admission_base_ref` to that exact reviewed basis.
 
 The immediate implementation child must change exactly the two Planning
 paths. Completion requires the correction checker, all three feature cells,
