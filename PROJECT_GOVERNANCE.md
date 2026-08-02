@@ -272,6 +272,39 @@ Project progress is reported on three distinct tracks:
 
 One track must not be presented as executable progress on another.
 
+### Tranche Completion and Successor Entry
+
+A tranche completion record proves only the requirements, public contracts,
+implementation paths, exclusions, feature cells, and evidence named by that
+tranche. It does not implicitly prove that every possible downstream role can
+be constructed or that a successor may edit source. In particular, running a
+predecessor regression check proves preservation of the predecessor contract;
+it is not by itself a cross-package handoff test.
+
+Downstream progression has two separate release events:
+
+1. predecessor completion may release successor candidate construction,
+   fixtures, independent review, and pre-source transition simulation; and
+2. successor source admission requires the successor's own approved pre-source
+   checkpoint plus every registered entry dependency.
+
+When a successor declares that it consumes an upstream value, capability, or
+owned object, its entry evidence owns the transition proof. That evidence must
+carry a real output from the registered upstream implementation into the first
+legal downstream entry point, preserve the declared identity and ownership,
+and reject fixture-created substitutes for either side of the handoff. If the
+first downstream candidate cannot construct that proof, successor source stays
+blocked and the defect is corrected in the package that owns the missing
+output or adapter. The already completed local tranches remain valid unless
+the finding falsifies one of their explicit completion claims.
+
+The integration-gate manifest owns cross-package order and the exact transition
+whose evidence releases source; the predecessor completion record owns only
+its local claim; and the successor admission record owns source-edit authority.
+`PLAN.md` may project these durable release relationships but cannot broaden
+them. Terms such as "releases the next tranche" mean candidate/admission
+preparation unless the registered transition explicitly says source admission.
+
 ## Review Requirements
 
 A milestone entering `REVIEW` should provide evidence.
@@ -399,11 +432,25 @@ observed combination and cannot override either owner.
 Before substantial work whose next action depends on remote integration, a
 fresh session fetches the remote default branch when available and reconciles
 the recorded task/PR state. Offline work may use the last observed snapshot
-but cannot release dependent source work from an unverified merge. Pre-merge
-continuation state records both conditional next actions. After integration,
-the next task updates continuation state in its first checkpoint; the project
-does not use a write-capable post-merge workflow or a recursive state-only pull
-request.
+but cannot release dependent source work from an unverified merge.
+
+Every pre-merge continuation checkpoint is a merge-stable envelope. It records
+the exact fetched default-branch basis used for the projection and two
+conditional next actions: the remaining handoff/reconciliation work while the
+task content is not verified on the default branch, and the successor action
+after default reachability, expected content, and merge-revision validation are
+proved. An unconditional "current objective" that becomes false merely because
+its own pull request merges is invalid continuation state. A local aggregate
+check enforces the envelope shape and verifies that the recorded basis is a
+commit reachable from the checked revision; it does not query or infer live
+GitHub state.
+
+After integration, the next repository-changing task resolves the envelope's
+predicate and replaces it in its first checkpoint. A disjoint workspace-only
+task may perform that repair because continuation truth travels with the first
+checkpoint that relies on it; this does not change the task's technical review
+claim. The project does not use a write-capable post-merge workflow or a
+recursive state-only pull request.
 
 A dependent task begins only after the merge is visible in the fetched
 default branch and the default-branch validation for the merge revision

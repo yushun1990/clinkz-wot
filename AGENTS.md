@@ -134,6 +134,12 @@ Rules:
 -   Preserve reasoning needed for future decisions.
 -   Do not duplicate authoritative specifications.
 -   Do not store important knowledge only in chat history.
+-   Record the exact fetched default-branch revision used to derive the
+    continuation projection.
+-   During remote handoff, record both conditional next actions: what remains
+    before verified default-branch integration and what becomes next after
+    integration plus merge-revision validation. Do not use an unconditional
+    objective that becomes false merely because its own pull request merges.
 
 ## Continuous Checkpointing
 
@@ -245,6 +251,12 @@ a new linked topic and re-evaluate the migrated conclusion.
 -   Split a tranche only when blockers, ownership, lifecycle, contracts,
     validation independence, rollback boundaries, or evidence truth differ.
     Do not split work merely because each type or file can be named.
+-   Treat tranche completion as a package-local claim unless a registered
+    integration owner says otherwise. Completion may release successor
+    candidate and review preparation, but successor source admission requires
+    its own approved checkpoint and, for a declared cross-package handoff,
+    evidence that a real upstream output reaches the first legal downstream
+    entry without a fixture-owned substitute.
 
 ## Git Checkpoints
 

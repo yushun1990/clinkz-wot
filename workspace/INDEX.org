@@ -26,8 +26,7 @@ Topics are retained after migration as decision history.
 
 ** OPEN
 
-- [[file:0050-tranche-release-and-successor-entry-evidence.md][0050 Tranche Completion and Successor-Entry Evidence]]
-- [[file:0051-project-state-merge-transition-drift.md][0051 PROJECT_STATE Merge-Transition Drift]]
+- None.
 
 ** DISCUSSING
 
@@ -87,6 +86,8 @@ Topics are retained after migration as decision history.
 - [[file:0046-publication-and-explicit-retry-availability-semantics.md][0046 Publication and Explicit Retry Availability Semantics]]
 - [[file:0047-resource-schema-growth-applicability-and-authoring-boundary.md][0047 Resource Schema Growth, Applicability, and Authoring Boundary]]
 - [[file:0048-repository-truth-reachability-and-state-projection-drift.md][0048 Repository Truth Reachability and State Projection Drift]]
+- [[file:0050-tranche-release-and-successor-entry-evidence.md][0050 Tranche Completion and Successor-Entry Evidence]]
+- [[file:0051-project-state-merge-transition-drift.md][0051 PROJECT_STATE Merge-Transition Drift]]
 
 * History
 
