@@ -165,6 +165,18 @@ collection operations, Producer form contribution, plan-set lifecycle,
 binding execution, Servient publication, or either cross-package architecture
 fixture root.
 
+The later `WP-200-PROPERTY-READ-PRODUCER-ROUTE-PROJECTION` correction is a
+separate exact tranche because the completed private algorithm emits only
+`ConsumerCall`, while the completed WP-300 registration advertises only a
+Producer Property Read server. It adds public
+`PropertyReadPlanCompiler::producer_route` and an opaque
+`PropertyReadBuildCursor<C, A>` in `planning/src/property_read.rs`, re-exports
+them from `planning/src/lib.rs`, and changes no other product source. The
+constructor consumes the complete `BindingRegistrationIdentity`, fixes the
+role to `ProducerRoute`, and accepts a borrowed static or host compiler
+projection from the complete registration. Arbitrary role selection and a
+public Consumer-call constructor remain excluded.
+
 Resolve effective operation, root-versus-affordance form context, original form index, `base`
 plus relative `href`, media defaults, response metadata, URI variables, security inheritance,
 scope, extensions, and stable plan identity exactly once per logical form. Preserve TD order in
@@ -249,6 +261,10 @@ Produce these package evidence keys exactly as indexed by the work-package DAG:
   footprint, and transfer of one unpublished Frozen draft without Servient lifecycle state;
 - `binding-compiler-extension` for a third-party core-owned compiler extension, deterministic
   bounded artifacts, identity mismatch rejection, and absence of protocol side effects;
+- `property-read-producer-route-projection` for a real complete WP-300
+  registration whose borrowed compiler projection produces a real
+  `ProducerRoute` artifact reference that constructs `PrepareInput` and starts
+  real route preparation after TD and registration-projection borrows end;
 - `admission-transaction-rollback` for exact charges, phase release, and peak memory;
 - `native-collection-plan-selection` for root-form selection, exact source attribution, typed
   capability rejection, one selected binding generation, and proof that no implicit fan-out plan

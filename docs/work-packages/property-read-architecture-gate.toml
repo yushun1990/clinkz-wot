@@ -16,6 +16,7 @@ depends_on_tranches = [
     "WP-100-PROPERTY-READ-HANDLER-SLICE",
     "WP-200-PROPERTY-READ-PLAN-SLICE",
     "WP-300-PROPERTY-READ-BINDING-SLICE",
+    "WP-200-PROPERTY-READ-PRODUCER-ROUTE-PROJECTION",
     "WP-400-PROPERTY-READ-SERVIENT-SLICE",
 ]
 blocks_entrypoints = [
@@ -563,12 +564,116 @@ completion_evidence_path = "docs/evidence/WP-300-property-read-binding-slice.tom
 completion_check = "wp300-property-read-binding-slice-check"
 
 [[tranche]]
+id = "WP-200-PROPERTY-READ-PRODUCER-ROUTE-PROJECTION"
+work_package = "WP-200"
+sequence = 320
+status = "complete"
+admission_status = "approved"
+depends_on = ["WP-300-PROPERTY-READ-BINDING-SLICE"]
+requirements = [
+    "PLAN-COST-001",
+    "PLAN-SET-001",
+    "PLAN-ARTIFACT-001",
+    "BIND-REG-001",
+    "BIND-ROUTE-001",
+    "CONSTRAINED-WORK-001",
+]
+owner_packages = ["clinkz-wot-planning"]
+feature_cells = ["no-default", "async-no-std", "std"]
+authoritative_artifacts = [
+    "docs/spec/planning.md",
+    "docs/work-packages/WP-200-planning.md",
+    "docs/work-packages/index.toml",
+    "docs/work-packages/property-read-architecture-gate.toml",
+]
+completion_evidence_keys = ["property-read-producer-route-projection"]
+blocking_conditions = [
+    "binding-slice-complete",
+    "producer-route-planner-public-boundary-candidate-reviewed",
+    "real-plan-output-to-prepare-input-fixture-defined",
+]
+api_items = [
+    "PropertyReadBuildCursor",
+    "PropertyReadPlanCompiler",
+]
+reused_api_items = [
+    "BindingArtifactRef",
+    "BindingArtifactRole",
+    "BindingRegistrationIdentity",
+    "HostBindingCompilerRegistration",
+    "PlanBuildInput",
+    "PlanBuildOutput",
+    "PlanBuildStep",
+    "PlanCompiler",
+    "PrepareInput",
+    "StaticBindingCompilerRegistration",
+]
+implementation_paths = [
+    "planning/src/lib.rs",
+    "planning/src/property_read.rs",
+]
+excluded_claims = [
+    "arbitrary-artifact-role-selection",
+    "broad-capability-index-fallback-and-lazy-planning",
+    "consumer-call-public-construction",
+    "consumer-subscription-and-producer-publication-planning",
+    "cross-package-property-read-architecture",
+    "production-protocol-and-zenoh",
+    "servient-registry-publication-and-dispatch",
+]
+risk_category = "C"
+impact_status = "current"
+state_machines = []
+old_api_removals = []
+performance_workloads = []
+contract_artifacts = [
+    "tools/check-wp200-property-read-producer-route-entry.sh",
+    "tools/check-wp200-property-read-producer-route.sh",
+    "tools/compile-contracts/wp200-property-read-producer-route/Cargo.lock",
+    "tools/compile-contracts/wp200-property-read-producer-route/Cargo.toml",
+    "tools/compile-contracts/wp200-property-read-producer-route/src/lib.rs",
+    "tools/compile-contracts/wp200-property-read-producer-route/tests/producer_route.rs",
+    "tools/design-check/Cargo.toml",
+    "tools/design-check/src/main.rs",
+    "tools/design-check/tests/wp200_property_read_producer_route_schema.rs",
+]
+candidate_base_ref = "613ee18d11b8f60e93d0792fcc76b83a00569044"
+candidate_ref = "resolved-by-review-attestation"
+candidate_paths = [
+    "PLAN.md",
+    "PROJECT_STATE.md",
+    "docs/audits/WP-200-property-read-producer-route-entry.md",
+    "docs/spec/v5-artifact-carry-forward.toml",
+    "docs/work-packages/property-read-architecture-gate.toml",
+    "tools/check-wp200-property-read-producer-route-entry.sh",
+    "tools/compile-contracts/wp200-property-read-producer-route/src/lib.rs",
+    "tools/design-check/src/main.rs",
+]
+pre_implementation_checks = [
+    "api-ownership-check",
+    "architecture-adr-check",
+    "design-requirement-check",
+    "resource-profile-check",
+    "v5-authority-reset-candidate-check",
+    "work-package-dag-check",
+    "wp200-property-read-plan-slice-check",
+    "wp300-property-read-binding-slice-check",
+]
+admission_review = "docs/audits/WP-200-property-read-producer-route-entry.md"
+review_attestation = "docs/audits/WP-200-property-read-producer-route-review.toml"
+review_attestation_ref = "56ee6b990373c12b83aac26a0377e3489fbde194"
+admission_base_ref = "2a469b1d4a3579d4db6115351b76867a0a531db8"
+entry_check = "wp200-property-read-producer-route-entry-check"
+completion_evidence_path = "docs/evidence/WP-200-property-read-producer-route.toml"
+completion_check = "wp200-property-read-producer-route-check"
+
+[[tranche]]
 id = "WP-400-PROPERTY-READ-SERVIENT-SLICE"
 work_package = "WP-400"
 sequence = 410
 status = "planned"
 admission_status = "blocked"
-depends_on = ["WP-300-PROPERTY-READ-BINDING-SLICE"]
+depends_on = ["WP-200-PROPERTY-READ-PRODUCER-ROUTE-PROJECTION"]
 requirements = [
     "IMPL-CONFORM-001",
     "PLAN-SET-001",
@@ -595,7 +700,7 @@ authoritative_artifacts = [
 ]
 completion_evidence_keys = ["property-read-servient-slice"]
 blocking_conditions = [
-    "binding-slice-complete",
+    "producer-route-projection-complete",
     "serving-activation-route-selection-response-and-cleanup-candidate-reviewed",
     "host-and-manual-runner-fixtures-defined",
 ]

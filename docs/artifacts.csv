@@ -161,6 +161,17 @@ tools/compile-contracts/wp200-property-read-plan-slice/tests/host.rs,wp-200-prop
 tools/design-check/tests/wp200_binding_artifact_schema.rs,wp-200-binding-artifact-executable-schema,non-normative-compile-fixture,5.0,1,docs/spec/planning.md
 docs/audits/WP-200-property-read-plan-slice-review-v2.toml,wp-200-property-read-plan-slice-review-v2-attestation,non-normative-review,5.0,1,docs/spec/planning.md
 docs/evidence/WP-200-property-read-plan-slice.toml,wp-200-property-read-plan-slice-completion-evidence,non-normative,5.0,1,docs/spec/planning.md
+docs/audits/WP-200-property-read-producer-route-entry.md,wp-200-property-read-producer-route-entry-review,non-normative-review,5.0,1,docs/spec/planning.md
+docs/audits/WP-200-property-read-producer-route-review.toml,wp-200-property-read-producer-route-review-attestation,non-normative-review,5.0,1,docs/spec/planning.md
+docs/evidence/WP-200-property-read-producer-route.toml,wp-200-property-read-producer-route-completion-evidence,non-normative,5.0,1,docs/spec/planning.md
+tools/check-wp200-property-read-producer-route-entry.sh,wp-200-property-read-producer-route-entry-checker,non-normative-checker,5.0,1,docs/spec/planning.md
+tools/check-wp200-property-read-producer-route.sh,wp-200-property-read-producer-route-checker,non-normative-checker,5.0,1,docs/spec/planning.md
+tools/compile-contracts/wp200-property-read-producer-route/Cargo.toml,wp-200-property-read-producer-route-contract-manifest,non-normative-compile-fixture,5.0,1,docs/spec/planning.md
+tools/compile-contracts/wp200-property-read-producer-route/Cargo.lock,wp-200-property-read-producer-route-contract-lock,non-normative-compile-fixture,5.0,1,docs/spec/planning.md
+tools/compile-contracts/wp200-property-read-producer-route/src/lib.rs,wp-200-property-read-producer-route-static-contract,non-normative-compile-fixture,5.0,1,docs/spec/planning.md
+tools/compile-contracts/wp200-property-read-producer-route/tests/producer_route.rs,wp-200-property-read-producer-route-runtime-contract,non-normative-compile-fixture,5.0,1,docs/spec/planning.md
+tools/design-check/tests/wp200_property_read_producer_route_schema.rs,wp-200-property-read-producer-route-executable-schema,non-normative-compile-fixture,5.0,1,docs/spec/planning.md
+workspace/0049-property-read-producer-route-planning-gap.md,property-read-producer-route-planning-gap-topic,non-normative-workspace-topic,5.0,1,docs/spec/planning.md
 docs/audits/WP-300-property-read-binding-slice-entry.md,wp-300-property-read-binding-slice-entry-review,non-normative-review,5.0,1,docs/spec/binding-spi.md
 docs/audits/WP-300-property-read-binding-slice-review.toml,wp-300-property-read-binding-slice-review-attestation,non-normative-review,5.0,1,docs/spec/binding-spi.md
 docs/audits/WP-300-admission-basis-correction-review.toml,wp-300-admission-basis-correction-review-attestation,non-normative-review,5.0,1,docs/spec/binding-spi.md

@@ -21,8 +21,8 @@ The active design revision is v5.0 bounded-core authority.
 - D9 bounded-conversion governance checkpoint:
   `a952e2b034b8939c0abdaf1662707eaef1d2fdc8`.
 - Latest completed Property Read source slice:
-  `89fb9f17ac961294032123173b29692a719a174c`, the exact two-path WP-300
-  Core binding implementation.
+  `42fca7a63cefd3a5916a7edc6582044d2c04845e`, the exact two-path WP-200
+  Producer-route Planning implementation.
 - Exact WP-200 Property Read semantic candidate:
   `4a01b5010729cb42d6e8d51125103c8b5cda8707`, the single child of
   `525bb31b42efe299ed36d46acea1a1c4286e8bde`.
@@ -98,21 +98,44 @@ The active design revision is v5.0 bounded-core authority.
   that checkpoint and changes only `core/src/binding.rs` and
   `core/src/lib.rs`.
 - WP-300 completion evidence is exact checkpoint
-  `c5b59d60c237b275e0121092006bd9f5e1f3c54d`. Pull request #14 integrated it
-  through merge `b2adf0756c06cc41be5d809c33211d7c20f86aba`; default-branch
-  `mainline` run `30701503019` passed on that merge revision.
+  `c5b59d60c237b275e0121092006bd9f5e1f3c54d`. Pull request #14 exact-head
+  run `30701146704` passed and merge
+  `b2adf0756c06cc41be5d809c33211d7c20f86aba` integrated its exact reviewed
+  tree; default-branch run `30701503019` passed on that merge revision.
 - Pull request #16 integrated workspace topics 0050 and 0051 through merge
   `6dcc0df5ddd8f6461670bb8b1e572bda95a68300`, whose expected topic content is
   present on `master`. Default-branch `mainline` run `30741610515` passed on
   that exact merge revision.
-- Draft pull request #15 is the separate, unreviewed Producer-route planning
-  correction candidate. Its exact head
-  `613ee18d11b8f60e93d0792fcc76b83a00569044` is a single child of
-  `b2adf0756c06cc41be5d809c33211d7c20f86aba`, changes the registered 22-path
-  non-source candidate scope, and passed exact-head `mainline` run
-  `30705872070`. It is not integrated, source-admitted, or completion evidence;
-  current `master` has advanced and the draft reports non-mergeable until its
-  overlap is reconciled.
+- Pull request #17 integrated the 0050/0051 decisions through exact head
+  `67e57e09afa8ced0fa5c8cdad72e253c900ad99d` and merge
+  `5352e5b00c6f94a7633e4e71c8f80ddd3a7fd80b`. Exact-head run `30742571841`
+  and default-branch run `30742976937` passed; the fetched merge contains the
+  expected eight-path decision packet.
+- Draft pull request #15 preserves original Producer-route semantic candidate
+  `613ee18d11b8f60e93d0792fcc76b83a00569044`, the exact 22-path single child
+  of `b2adf0756c06cc41be5d809c33211d7c20f86aba`; its exact-head run
+  `30705872070` passed. Independent review nevertheless rejected its evidence
+  sufficiency because the next-state fixture did not compile, omitted the
+  borrowed host projection and cursor-opacity negative contract, and did not
+  prove the compiler borrow ended before mutable server preparation.
+- Corrective candidate `376ee84f80ea27c8d3faa4b1840ce7b68d61f23f`
+  is the exact eight-path single child of the original candidate. Independent
+  root-session review on 2026-08-02 passed its corrected next-state source
+  simulation, full Producer-route completion check, and declared negative
+  mutations. Review checkpoint
+  `56ee6b990373c12b83aac26a0377e3489fbde194` changes exactly the registered
+  attestation, artifact row, and continuation projection. That review
+  checkpoint itself admitted no source and is not integrated.
+- Exact current-default reconciliation merge
+  `2a469b1d4a3579d4db6115351b76867a0a531db8` preserves the original,
+  correction, and review checkpoints and includes fetched default revision
+  `5352e5b00c6f94a7633e4e71c8f80ddd3a7fd80b`. It is the immutable
+  `admission_base_ref` for the five-file Producer-route pre-source transition.
+- Exact pre-source checkpoint
+  `342f93f4ef6a1322864456454be958821beb2802` is its five-path single child.
+  Exact implementation `42fca7a63cefd3a5916a7edc6582044d2c04845e`
+  is the immediate child and changes only `planning/src/lib.rs` and
+  `planning/src/property_read.rs`.
 - GitHub CLI authentication is currently invalid, but SSH fetch/push and the
   connected GitHub application are available. Active Ruleset `20009352` was
   fetched on 2026-08-02: it targets the default branch, requires strict
@@ -127,36 +150,38 @@ default workspace tests, diff hygiene, and the 21-cell valid feature matrix.
 
 ## Continuation Projection
 
-Observed default branch: `6dcc0df5ddd8f6461670bb8b1e572bda95a68300`
+Observed default branch: `5352e5b00c6f94a7633e4e71c8f80ddd3a7fd80b`
 
 Observed on: 2026-08-02 after fetch, content/ancestry inspection, and successful
-default-branch workflow run `30741610515`.
+default-branch workflow run `30742976937`.
 
 Projection mode: conditional remote handoff
 
-The bounded task decides and migrates workspace topics 0050 and 0051. It
-changes governance, planning/continuation projections, workspace lifecycle,
-and the aggregate continuation check; it changes no product source and grants
-no WP-200 or WP-400 source authority.
+The bounded task completes and remotely hands off independently reviewed
+`WP-200-PROPERTY-READ-PRODUCER-ROUTE-PROJECTION` on draft pull request #15.
+It preserves original candidate `613ee18`, corrective candidate `376ee84`, and
+review checkpoint `56ee6b990373c12b83aac26a0377e3489fbde194`, admission
+`342f93f4ef6a1322864456454be958821beb2802`, and implementation
+`42fca7a63cefd3a5916a7edc6582044d2c04845e`. WP-400 source remains
+unadmitted.
 
 ### Before verified integration
 
-Complete local validation, commit the exact decision packet on
-`agent/decide-workspace-0050-0051`, push it, and create or update one draft
-pull request against `master`. Keep WP-400 source blocked. Draft pull request
-#15 remains a separate immutable candidate and must not absorb this packet or
-be treated as reviewed merely because its earlier validation passed.
+Validate the completion records and the Producer-route-specific evidence
+parser correction, including exact implementation ancestry and honest WP-200
+ownership. Run the task-specific, aggregate, locked-workspace, feature-matrix,
+and diff-hygiene checks, then commit and push the complete head to draft pull
+request #15. Keep WP-400 source blocked until that head is remotely integrated
+and its merge revision passes `validation`.
 
 ### After verified integration
 
-Fetch `master` and verify this packet's actual base, default reachability,
-expected content, and merge-revision `validation`. Then reconcile pull request
-#15 with the newer default branch while preserving or explicitly superseding
-its immutable candidate identity, and independently review the exact resulting
-Producer-route candidate. Only a passed review and later approved pre-source
-checkpoint may release its two Planning implementation paths; only completed
-real `ProducerRoute -> PrepareInput` evidence may release WP-400 pre-source
-admission.
+Fetch `master` and verify pull request #15's actual base, merge ancestry,
+expected implementation/evidence content, and passing merge-revision
+`validation`. Then replace this envelope while preparing the exact WP-400
+Servient candidate/review transition released by the completed real
+`ProducerRoute -> PrepareInput` handoff; do not infer WP-400 source admission
+from the predecessor merge alone.
 
 The narrow WP-200 plan slice is complete. Its handoff to WP-300 contains:
 
@@ -208,8 +233,14 @@ authoring projections; and a default-branch reachability/content/validation
 predicate for remote truth. Pull request #12 and its merge-revision validation
 close that disjoint integration boundary.
 
-Workspace issues 0050 and 0051 are decided and migrated in the active decision
-packet. They establish that tranche completion is package-local, predecessor
+Workspace issue 0049 is decided and migrated in the active correction
+candidate. It records the concrete Producer-route planning reachability gap,
+preserves the completed Consumer-call and Producer-registration claims, and
+inserts one exact independently reviewed correction before WP-400. The topic
+does not itself admit either correction source or WP-400 source.
+
+Workspace issues 0050 and 0051 are decided, migrated, and integrated. They
+establish that tranche completion is package-local, predecessor
 completion releases successor preparation rather than source, and declared
 cross-package handoffs are proved by real upstream output at the successor's
 first legal entry. They also replace an unconditional current objective with a
@@ -222,14 +253,13 @@ conditional actions are aggregate-checked.
 - M1 v5.0 Authority Reset and Architecture Closure — IN_PROGRESS.
 - M2 Foundation and Core Contract Stabilization — IN_PROGRESS.
 - M3 Planning and Compilation Pipeline — IN_PROGRESS; the exact WP-200
-  Property Read plan slice is complete. A separate Producer-route correction
-  candidate exists at draft pull request #15 but remains unreviewed and
-  unadmitted; broad WP-200 exits remain open.
+  Property Read plan slice is complete. Its exact Producer-route projection
+  correction is also `complete`/`approved`; broad WP-200 exits remain open.
 - M4 Protocol Binding SPI and Lifecycle — IN_PROGRESS; the exact WP-300
   Property Read binding slice is `complete`/`approved`. Broad WP-300 exits
-  remain open. Narrow completion releases only WP-400 candidate/review
-  preparation; the confirmed `ProducerRoute -> PrepareInput` gap blocks
-  WP-400 source admission.
+  remain open. The completed Producer-route correction releases WP-400
+  candidate/review preparation; WP-400 source still requires its own approved
+  transition.
 
 The v5 authority switch is complete, but M1 remains open because GATE-1,
 GATE-2, GATE-4, GATE-5, and GATE-6 still require their registered closure
@@ -280,9 +310,9 @@ D18-D22 add the WP-300 conversion boundary:
   side effects, but do not complete client, subscription, emission,
   contribution, broad cancellation, workload, Servient, or concrete-protocol
   behavior;
-- narrow WP-300 completion releases only the narrow WP-400 Property Read
-  tranche, while broad WP-300 completion releases broad WP-400, WP-500, and
-  WP-600;
+- narrow WP-300 completion releases only the exact Producer-route planning
+  correction; that correction's completion releases narrow WP-400, while
+  broad WP-300 completion releases broad WP-400, WP-500, and WP-600;
 - target Planning/Core/WP-300 code cannot call a legacy selector, rescan a TD,
   or send a target request into legacy dispatch; WP-600 removes concrete call
   edges and WP-700 proves final absence;
@@ -455,9 +485,11 @@ and is not default-branch authority.
   request acceptance, response delivery, cleanup, and paired host/static
   authors; optional interface presence is not a broad behavior claim.
 - 0026: narrow WP-300 completion releases only narrow WP-400 Property Read
-  candidate/review preparation. Broad WP-300 completion analogously releases
-  broad successor preparation; every successor still requires its own source
-  admission and declared handoff evidence.
+  entry preparation. The concrete 0049 handoff defect refines that edge
+  through one exact Producer-route Planning correction. Broad WP-300
+  completion analogously releases broad successor preparation; every
+  successor still requires its own source admission and declared handoff
+  evidence.
 - 0027: no current target request can leak because WP-300 target execution is
   absent, but the negative boundary needed strengthening. New target code may
   not call legacy selectors or dispatch; WP-600 removes concrete calls and
@@ -472,8 +504,9 @@ and is not default-branch authority.
   failure, and reviewed next-state simulation.
 - 0030: automatic integration is allowed only as a verified terminal action;
   handoff stays draft until current remote ruleset prerequisites are proven.
-- 0031: the shortest feedback path remains narrow WP-300, narrow WP-400, the
-  mock Property Read gate, then a real Zenoh smoke and broader claims.
+- 0031: the shortest valid feedback path is narrow WP-300, the exact 0049
+  Producer-route correction, narrow WP-400, the mock Property Read gate, then
+  a real Zenoh smoke and broader claims.
 - 0032: constructibility fixtures are followed by a bounded Zenoh authoring
   spike; only concrete defects reopen the SPI.
 - 0033: Servient orchestration is semantically central but physically sharded
@@ -625,11 +658,58 @@ remains outside the admitted and completed path set.
 
 `docs/evidence/WP-300-property-read-binding-slice.toml` binds the implementation
 ref to the registered completion checker and all 27 active narrow-slice
-requirements. This completion releases only the narrow WP-400 Property Read
-Servient candidate/review and pre-source-transition preparation. It does not
-release WP-400 source. Broad binding roles, production protocol execution,
-Servient composition, workload proof, and cross-package completion remain
-separate work.
+requirements. Pull request #14 integrates that completion at
+`b2adf0756c06cc41be5d809c33211d7c20f86aba`, and merge-revision validation
+run `30701503019` passed. This completion released successor-entry preparation,
+which exposed the real Producer-route gap and therefore released only the
+exact Planning correction's candidate/review work. It does not release WP-400
+source. Broad binding roles, production protocol execution, Servient
+composition, workload proof, and cross-package completion remain separate.
+
+### WP-200 Property Read Producer-route projection
+
+Status: NARROW PRODUCER-ROUTE PROJECTION COMPLETE.
+
+Original candidate `613ee18d11b8f60e93d0792fcc76b83a00569044` owns 22
+registered non-product-source paths and passed exact-head remote run
+`30705872070`; independent review rejected only its next-state evidence.
+Corrective candidate `376ee84f80ea27c8d3faa4b1840ce7b68d61f23f`
+changes exactly eight registered support paths, grants no source authority,
+and passed independent review on 2026-08-02. Exact three-path review checkpoint
+`56ee6b990373c12b83aac26a0377e3489fbde194` records the immutable correction
+and all eight prechecks.
+
+Exact pre-source checkpoint `342f93f4ef6a1322864456454be958821beb2802`
+is the five-path single child of admission base
+`2a469b1d4a3579d4db6115351b76867a0a531db8`. Its immediate implementation
+child `42fca7a63cefd3a5916a7edc6582044d2c04845e` changes exactly
+`planning/src/property_read.rs` and `planning/src/lib.rs`. The review rejected
+Consumer-role substitution, caller-restated registration identity,
+arbitrary-role/public Consumer construction, forgeable cursor state, omitted
+borrowed static/host projections, fixture-owned preparation, zero-budget
+progress, source outside the two-path boundary, and premature WP-400 fixtures.
+
+Author-side schema tests, ownership/design/ADR/resource/authority checks,
+formatting, shell syntax, carry-forward digests, corrected candidate topology,
+full next-state completion, and diff hygiene pass. The real implementation now
+passes the same three-cell completion checker. Reconciliation merge
+`2a469b1d4a3579d4db6115351b76867a0a531db8` includes fetched default checkpoint
+`5352e5b00c6f94a7633e4e71c8f80ddd3a7fd80b` without rewriting the original,
+correction, or review checkpoints. Completion evidence binds the exact
+implementation and six active requirements. Draft pull request #15 remains
+the sole remote handoff for this task.
+
+Completion preparation exposed one support-only evidence defect: the tranche
+selected a handler-scoped generic parser that hard-coded `WP-100`. The
+Producer-route-specific parser now requires honest `WP-200` ownership, exact
+review/admission/implementation ancestry, the five-path pre-source checkpoint,
+the two-path implementation, and the registered completion command. This
+changes no product source or public API.
+
+The honest completion tree passes `check-work-packages`. An isolated mutation
+that relabels the completion evidence as `WP-100` is rejected with the exact
+Producer-route ownership mismatch before completion can be accepted; the
+mutation was then discarded.
 
 ### Aggregate design-check worktree-root defect
 
@@ -653,10 +733,10 @@ removed.
 - The exact narrow WP-300 Property Read slice is complete. Broad WP-300 still
   waits on external authoring, cleanup-coexistence, shared-parity-oracle, and
   resource-authoring evidence.
-- Narrow WP-400 preparation is allowed after verified WP-300 integration, but
-  its source admission is blocked by the confirmed real Producer-route
-  handoff gap. Draft pull request #15 proposes the Planning-owned correction;
-  it remains unreviewed/unadmitted. Broad WP-400, WP-500, and WP-600 still
+- Narrow WP-400 candidate/review preparation is released locally by the
+  completed Producer-route handoff, but its source remains blocked until the
+  correction is remotely integrated/default-branch validated and WP-400
+  passes its own pre-source admission. Broad WP-400, WP-500, and WP-600 still
   depend on broad WP-300; WP-700 joins those branches.
 
 These do not extend the D8 packet unless repository evidence shows a direct
@@ -671,8 +751,8 @@ with strict current-base `validation` plus resolved review threads, no bypass
 actor, and merge commits allowed. `gh` 2.94.0 reports an invalid host-keyring
 token; the connected GitHub application provides PR operations and SSH Git
 transport remains available. Pull request #13 previously exercised the full
-terminal path, and pull request #16 merge-revision run `30741610515` confirms
-the current default basis.
+terminal path; pull request #17 merge-revision run `30742976937` confirms the
+current fetched default basis.
 
 ## Rejected or Superseded Approaches
 
@@ -966,12 +1046,55 @@ resource checks, Core/Servient/protocol regressions, and WP-100/WP-200
 predecessor checks. With completion records present, the tree also passes
 `tools/check-design-artifacts.sh`, `cargo test --workspace --locked`,
 `sh scripts/check-feature-matrix.sh` (21 passed, 0 failed), and diff hygiene.
-Completion checkpoint `c5b59d60c237b275e0121092006bd9f5e1f3c54d` and pull request #14
-merge `b2adf0756c06cc41be5d809c33211d7c20f86aba` closed those events.
+Completion commit `c5b59d60c237b275e0121092006bd9f5e1f3c54d`, exact-head run
+`30701146704`, pull request #14, merge
+`b2adf0756c06cc41be5d809c33211d7c20f86aba`, and merge-revision run
+`30701503019` close the remote integration boundary.
 
 The static and host compile contracts deliberately do not compile against
 product source before admission; the completion checker owns their three-cell
 compile/runtime validation after the exact two-path implementation child.
+
+Independent root-session review of corrective candidate
+`376ee84f80ea27c8d3faa4b1840ce7b68d61f23f` on 2026-08-02 passed:
+
+- exact single-parent/eight-path topology and all eight registered prechecks;
+- the corrected external contract for borrowed static and host projections,
+  real public Core imports, opaque cursor state, and lexical borrow release;
+- an isolated exact two-path Planning source simulation through the full
+  completion checker, including the real plan-output-to-`PrepareInput`
+  runtime handoff in all three feature cells; and
+- negative mutation rejection for Consumer-role substitution, public cursor
+  state, missing borrowed host/static support, zero-budget progress,
+  caller-restated identity, arbitrary public role selection, fixture-owned
+  preparation, out-of-scope source, and premature WP-400 fixture creation.
+
+The review simulation and mutations were isolated and discarded. Review
+checkpoint `56ee6b990373c12b83aac26a0377e3489fbde194` contains no product
+source; the later exact admitted implementation is separately bound by its
+completion evidence.
+
+The exact admitted implementation and completion tree also pass the registered
+three-cell Producer-route checker and `check-work-packages`. The latter now
+uses the dedicated Producer-route evidence parser; a temporary evidence
+mutation from `work_package = "WP-200"` to `"WP-100"` fails with the expected
+ownership mismatch. No mutation remains in the worktree.
+
+The completed 2026-08-02 worktree additionally passes:
+
+- `tools/check-design-artifacts.sh`;
+- `cargo test --workspace --locked`;
+- `sh scripts/check-feature-matrix.sh` — 21 passed, 0 failed;
+- `rustfmt --edition 2024 --check` on the two Planning implementation paths
+  and `tools/design-check/src/main.rs`;
+- shell syntax checks for the registered design, entry, completion, and
+  feature-matrix scripts; and
+- `git diff --check`.
+
+Workspace-wide `cargo fmt --all -- --check` remains blocked by pre-existing,
+out-of-scope formatting differences in `core/src/handler.rs` and existing
+Zenoh source. The three Rust paths owned by this task are clean, and none of
+the out-of-scope files is modified by this branch.
 
 The intentionally invalid all-features combination enables mutually exclusive
 Zenoh backends. Use `scripts/check-feature-matrix.sh`, not
@@ -992,21 +1115,13 @@ source. Its current tree passes:
 
 ## Next Safe Actions
 
-1. Validate the 0050/0051 migration with the aggregate continuation/design
-   check, locked workspace tests, supported feature matrix, and diff hygiene.
-2. Commit only the decision packet on
-   `agent/decide-workspace-0050-0051`, push it, and open one draft pull request
-   against `master` through the connected GitHub application.
-3. Re-fetch `master`; verify the exact decision head, intended diff, conflict
-   and conversation state, active Ruleset, current-base `validation`, actual
-   merge ancestry, expected content, and merge-revision workflow.
-4. After that integration predicate passes, reconcile the separate pull
-   request #15 candidate with current `master`, preserving or explicitly
-   superseding candidate identity before independent review. Do not admit
-   Planning source on the earlier validation result alone.
-5. Only after correction review, pre-source admission, implementation, and
-   real `ProducerRoute -> PrepareInput` completion evidence may WP-400 prepare
-   its own approved pre-source checkpoint and source child.
+1. Validate the exact completion evidence, Producer-route-specific evidence
+   parser, aggregate design suite, locked workspace, feature matrix, and diff
+   hygiene on implementation `42fca7a63cefd3a5916a7edc6582044d2c04845e`.
+2. Commit and push the completion topology to draft pull request #15, then
+   verify exact-head current-base remote `validation` and conversation state.
+3. Only after verified default integration and merge-revision validation may
+   WP-400 prepare its own candidate/review and approved pre-source checkpoint.
 
 Ask the Project Owner only if the investigation reaches a product-goal,
 real-world constraint, unacceptable direction, or irreversible external
@@ -1035,6 +1150,7 @@ commitment that repository evidence cannot resolve.
   `workspace/0041-target-legacy-coexistence-verification.md`
 - `workspace/0042-protocol-binding-spi-validation-risk.md` through
   `workspace/0048-repository-truth-reachability-and-state-projection-drift.md`
+- `workspace/0049-property-read-producer-route-planning-gap.md`
 - `workspace/0050-tranche-release-and-successor-entry-evidence.md`
 - `workspace/0051-project-state-merge-transition-drift.md`
 - `docs/spec/planning.md`
@@ -1046,7 +1162,9 @@ commitment that repository evidence cannot resolve.
 - `docs/audits/WP-200-property-read-plan-slice-entry.md`
 - `docs/audits/WP-200-property-read-plan-slice-review.toml`
 - `docs/audits/WP-200-property-read-plan-slice-review-v2.toml`
+- `docs/audits/WP-200-property-read-producer-route-entry.md`
 - `docs/evidence/WP-200-property-read-plan-slice.toml`
 - `docs/evidence/WP-300-property-read-binding-slice.toml`
 - `tools/design-check/tests/wp200_binding_artifact_schema.rs`
 - `tools/design-check/tests/wp300_property_read_binding_schema.rs`
+- `tools/design-check/tests/wp200_property_read_producer_route_schema.rs`

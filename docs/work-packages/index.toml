@@ -726,6 +726,7 @@ owner_packages = [
 feature_cells = ["no-default", "async-no-std", "std"]
 evidence_keys = [
     "property-read-plan-slice",
+    "property-read-producer-route-projection",
     "logical-plan-footprint",
     "capability-index-pruning",
     "bounded-candidate-selection",
