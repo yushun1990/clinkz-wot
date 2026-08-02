@@ -26,7 +26,8 @@ Topics are retained after migration as decision history.
 
 ** OPEN
 
-- None.
+- [[file:0050-tranche-release-and-successor-entry-evidence.md][0050 Tranche Completion and Successor-Entry Evidence]]
+- [[file:0051-project-state-merge-transition-drift.md][0051 PROJECT_STATE Merge-Transition Drift]]
 
 ** DISCUSSING
 
