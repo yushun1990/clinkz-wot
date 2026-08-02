@@ -1,6 +1,6 @@
 # Project State
 
-Last updated: 2026-08-01
+Last updated: 2026-08-02
 
 ## Repository Basis
 
@@ -88,7 +88,7 @@ The active design revision is v5.0 bounded-core authority.
   `ff86c1582138d9a231dd44068b35cf6464214cd5` and second parent is that
   exact head. Its merge tree equals the reviewed head, changes the expected
   24 paths, and default-branch `mainline` run `30698804288` passed.
-- The remote default branch was fetched on 2026-08-01 at
+- Historical WP-300 admission basis was fetched on 2026-08-01 at
   `384461ba33a3639a0f89978159719aa6937e1f36`. It is the reviewed and
   validated `admission_base_ref` for the WP-300 five-file pre-source
   transition. Exact checkpoint
@@ -97,35 +97,66 @@ The active design revision is v5.0 bounded-core authority.
   `89fb9f17ac961294032123173b29692a719a174c` is the immediate single child of
   that checkpoint and changes only `core/src/binding.rs` and
   `core/src/lib.rs`.
-- GitHub CLI authentication is valid through the host keyring. Active Ruleset
-  `20009352` requires `validation`, strict current-base checking, and resolved
-  review threads; it has no bypass actor and permits merge commits. Native
-  automatic integration is eligible only while every terminal predicate
-  remains true for the exact current head.
+- WP-300 completion evidence is exact checkpoint
+  `c5b59d60c237b275e0121092006bd9f5e1f3c54d`. Pull request #14 integrated it
+  through merge `b2adf0756c06cc41be5d809c33211d7c20f86aba`; default-branch
+  `mainline` run `30701503019` passed on that merge revision.
+- Pull request #16 integrated workspace topics 0050 and 0051 through merge
+  `6dcc0df5ddd8f6461670bb8b1e572bda95a68300`, whose expected topic content is
+  present on `master`. Default-branch `mainline` run `30741610515` passed on
+  that exact merge revision.
+- Draft pull request #15 is the separate, unreviewed Producer-route planning
+  correction candidate. Its exact head
+  `613ee18d11b8f60e93d0792fcc76b83a00569044` is a single child of
+  `b2adf0756c06cc41be5d809c33211d7c20f86aba`, changes the registered 22-path
+  non-source candidate scope, and passed exact-head `mainline` run
+  `30705872070`. It is not integrated, source-admitted, or completion evidence;
+  current `master` has advanced and the draft reports non-mergeable until its
+  overlap is reconciled.
+- GitHub CLI authentication is currently invalid, but SSH fetch/push and the
+  connected GitHub application are available. Active Ruleset `20009352` was
+  fetched on 2026-08-02: it targets the default branch, requires strict
+  current-base `validation` and resolved review threads, has no bypass actor,
+  and permits merge commits. Native automatic integration remains eligible
+  only while every terminal predicate is freshly true for the exact head.
 
 The activation candidate changed exactly 27 documentation/checker paths and no
 Rust source, Cargo manifest, public API, or runtime behavior. Its independent
 review passed the exact candidate checker, aggregate design/evidence suite,
 default workspace tests, diff hygiene, and the 21-cell valid feature matrix.
 
-## Current Objective
+## Continuation Projection
 
-Close completion evidence and remote handoff for exact WP-300 implementation
-`89fb9f17ac961294032123173b29692a719a174c`. Pull request #12 merge
-`384461ba33a3639a0f89978159719aa6937e1f36` is the validated
-`admission_base_ref`; exact five-file pre-source checkpoint
-`6aaf1ef1586428152e535b9cd75f7183ec764cd0` and its immediate exact two-path
-implementation child satisfy the registered topology.
+Observed default branch: `6dcc0df5ddd8f6461670bb8b1e572bda95a68300`
 
-The implementation commit touches only `core/src/binding.rs` and
-`core/src/lib.rs`. Its registered three-cell compile/runtime, external
-authoring, lifecycle, predecessor, and legacy-separation check passes. The
-completion documentation tree also passes the aggregate design suite, locked
-workspace tests, 21-cell feature matrix, and diff hygiene. The next event is
-its exact completion-evidence commit and automatic remote handoff. After
-verified default-branch integration, the next executable objective is an exact
-WP-400 Property Read Servient candidate and independent admission; no WP-400
-source is yet admitted.
+Observed on: 2026-08-02 after fetch, content/ancestry inspection, and successful
+default-branch workflow run `30741610515`.
+
+Projection mode: conditional remote handoff
+
+The bounded task decides and migrates workspace topics 0050 and 0051. It
+changes governance, planning/continuation projections, workspace lifecycle,
+and the aggregate continuation check; it changes no product source and grants
+no WP-200 or WP-400 source authority.
+
+### Before verified integration
+
+Complete local validation, commit the exact decision packet on
+`agent/decide-workspace-0050-0051`, push it, and create or update one draft
+pull request against `master`. Keep WP-400 source blocked. Draft pull request
+#15 remains a separate immutable candidate and must not absorb this packet or
+be treated as reviewed merely because its earlier validation passed.
+
+### After verified integration
+
+Fetch `master` and verify this packet's actual base, default reachability,
+expected content, and merge-revision `validation`. Then reconcile pull request
+#15 with the newer default branch while preserving or explicitly superseding
+its immutable candidate identity, and independently review the exact resulting
+Producer-route candidate. Only a passed review and later approved pre-source
+checkpoint may release its two Planning implementation paths; only completed
+real `ProducerRoute -> PrepareInput` evidence may release WP-400 pre-source
+admission.
 
 The narrow WP-200 plan slice is complete. Its handoff to WP-300 contains:
 
@@ -177,17 +208,28 @@ authoring projections; and a default-branch reachability/content/validation
 predicate for remote truth. Pull request #12 and its merge-revision validation
 close that disjoint integration boundary.
 
+Workspace issues 0050 and 0051 are decided and migrated in the active decision
+packet. They establish that tranche completion is package-local, predecessor
+completion releases successor preparation rather than source, and declared
+cross-package handoffs are proved by real upstream output at the successor's
+first legal entry. They also replace an unconditional current objective with a
+merge-stable continuation envelope whose observed local basis and two
+conditional actions are aggregate-checked.
+
 ## Active Milestones
 
 - M0 Execution Baseline and Collaboration Reset — CLOSED.
 - M1 v5.0 Authority Reset and Architecture Closure — IN_PROGRESS.
 - M2 Foundation and Core Contract Stabilization — IN_PROGRESS.
 - M3 Planning and Compilation Pipeline — IN_PROGRESS; the exact WP-200
-  Property Read plan slice is complete, while broad WP-200 exits remain open.
+  Property Read plan slice is complete. A separate Producer-route correction
+  candidate exists at draft pull request #15 but remains unreviewed and
+  unadmitted; broad WP-200 exits remain open.
 - M4 Protocol Binding SPI and Lifecycle — IN_PROGRESS; the exact WP-300
   Property Read binding slice is `complete`/`approved`. Broad WP-300 exits
-  remain open, and narrow completion releases only the WP-400 Property Read
-  Servient slice to prepare its own candidate and admission.
+  remain open. Narrow completion releases only WP-400 candidate/review
+  preparation; the confirmed `ProducerRoute -> PrepareInput` gap blocks
+  WP-400 source admission.
 
 The v5 authority switch is complete, but M1 remains open because GATE-1,
 GATE-2, GATE-4, GATE-5, and GATE-6 still require their registered closure
@@ -310,6 +352,17 @@ D35-D41 add these maturity and continuation boundaries:
   `PROJECT_STATE.md` records the last observed projection and `PLAN.md` retains
   only durable roadmap/package truth.
 
+D43-D44 add these release and continuation boundaries:
+
+- tranche completion proves its registered package-local contract only;
+  successor preparation and successor source admission are distinct events;
+- a declared cross-package handoff is owned by successor-entry evidence that
+  carries real upstream output into the first legal downstream entry without
+  fixture-owned substitutes; and
+- every handoff checkpoint records one fetched-default basis plus explicit
+  pre-integration and post-integration actions, and aggregate validation proves
+  the envelope shape and local ancestry without claiming live GitHub truth.
+
 D8 selects this exact representation:
 
 - `BindingCompilerExtension` owns associated `Cursor` and `Artifact` types;
@@ -357,18 +410,21 @@ does not weaken the completed narrow WP-200 claim.
 
 ## Open Decisions and Blockers
 
-### Focused execution-risk decisions / workspace issues 0017-0048
+### Focused execution-risk decisions / workspace issues 0017-0048 and 0050-0051
 
-Status: all thirty-two decisions migrated.
+Status: all thirty-four listed decisions are migrated in the active packet.
+Workspace issue 0049 remains part of the separate pull-request #15 candidate
+and is not default-branch authority.
 
 - 0017: the WP-200 admission path has a finite stopping condition. Independent
   review now includes the exact next-state simulation; the five-file
   pre-source transition passes, omission of its carry-forward update fails,
   out-of-scope implementation work fails, and the exact nine-path child now
   has completion evidence.
-- 0018: the four Property Read source slices remain necessarily serial because
-  each next slice consumes the preceding public ownership/lifecycle boundary.
-  Later preparation is allowed but is neither admission nor vertical progress.
+- 0018: the Property Read source path remains necessarily serial where each
+  next slice consumes a preceding public ownership/lifecycle boundary. Later
+  preparation is allowed but is neither admission nor vertical progress, and a
+  newly proved handoff gap may insert one owner-scoped correction.
 - 0019: the legacy migration map is owned by WP-200, WP-300, WP-400, WP-600,
   and WP-700. Coexistence is permitted only at their named one-way adapters;
   final absence is a WP-700 claim, not a narrow-gate claim.
@@ -398,10 +454,10 @@ Status: all thirty-two decisions migrated.
   Producer Property Read registration, both readiness forms, permit-gated
   request acceptance, response delivery, cleanup, and paired host/static
   authors; optional interface presence is not a broad behavior claim.
-- 0026: narrow WP-300 completion releases only narrow WP-400 Property Read.
-  Broad WP-300 completion remains the necessary release event for broad
-  WP-400, WP-500, and WP-600; downstream preparation is allowed but is not
-  source admission or vertical progress.
+- 0026: narrow WP-300 completion releases only narrow WP-400 Property Read
+  candidate/review preparation. Broad WP-300 completion analogously releases
+  broad successor preparation; every successor still requires its own source
+  admission and declared handoff evidence.
 - 0027: no current target request can leak because WP-300 target execution is
   absent, but the negative boundary needed strengthening. New target code may
   not call legacy selectors or dispatch; WP-600 removes concrete calls and
@@ -466,6 +522,14 @@ Status: all thirty-two decisions migrated.
   reachability, expected content, and validation. Dangerous continuation drift
   is corrected before the next transition; PLAN no longer owns transient
   branch or handoff facts.
+- 0050: completion is package-local. Successor preparation and source
+  admission are distinct; real upstream output must reach the first legal
+  downstream entry when a handoff is declared. The confirmed Property Read
+  gap blocks WP-400 source without revoking WP-200/WP-300 local completion.
+- 0051: continuation state is a merge-stable conditional envelope, not live
+  remote truth. It records one fetched-default basis and both integration
+  branches; aggregate validation rejects the stale unconditional shape and
+  checks local ancestry only.
 
 Candidate preparation also resolved one Rust staging constraint. The existing
 legacy `core::inbound::ServerBinding` owns `shutdown(&ThingId)`, while the
@@ -562,9 +626,10 @@ remains outside the admitted and completed path set.
 `docs/evidence/WP-300-property-read-binding-slice.toml` binds the implementation
 ref to the registered completion checker and all 27 active narrow-slice
 requirements. This completion releases only the narrow WP-400 Property Read
-Servient candidate/admission process. Broad binding roles, production protocol
-execution, Servient composition, workload proof, and cross-package completion
-remain separate work.
+Servient candidate/review and pre-source-transition preparation. It does not
+release WP-400 source. Broad binding roles, production protocol execution,
+Servient composition, workload proof, and cross-package completion remain
+separate work.
 
 ### Aggregate design-check worktree-root defect
 
@@ -588,8 +653,10 @@ removed.
 - The exact narrow WP-300 Property Read slice is complete. Broad WP-300 still
   waits on external authoring, cleanup-coexistence, shared-parity-oracle, and
   resource-authoring evidence.
-- Narrow WP-400 may prepare its own candidate and admission after verified
-  WP-300 default-branch integration. Broad WP-400, WP-500, and WP-600 still
+- Narrow WP-400 preparation is allowed after verified WP-300 integration, but
+  its source admission is blocked by the confirmed real Producer-route
+  handoff gap. Draft pull request #15 proposes the Planning-owned correction;
+  it remains unreviewed/unadmitted. Broad WP-400, WP-500, and WP-600 still
   depend on broad WP-300; WP-700 joins those branches.
 
 These do not extend the D8 packet unless repository evidence shows a direct
@@ -597,13 +664,15 @@ contract, rollback, or validation intersection.
 
 ### Remote integration controls
 
-Status: ACTIVE AND VERIFIED.
+Status: RULESET VERIFIED; CLI AUTHENTICATION DEGRADED.
 
-`gh` 2.94.0 accesses the valid `yushun1990` host-keyring credential. Ruleset
-`20009352` targets the default branch and requires current-base `validation`
-plus resolved review threads, with no bypass actor. Pull request #13 exercised
-the terminal path through exact-head protection, merge-commit integration, and
-passed merge-revision workflow run `30697858866`.
+Ruleset `20009352` was fetched on 2026-08-02 and targets the default branch
+with strict current-base `validation` plus resolved review threads, no bypass
+actor, and merge commits allowed. `gh` 2.94.0 reports an invalid host-keyring
+token; the connected GitHub application provides PR operations and SSH Git
+transport remains available. Pull request #13 previously exercised the full
+terminal path, and pull request #16 merge-revision run `30741610515` confirms
+the current default basis.
 
 ## Rejected or Superseded Approaches
 
@@ -614,6 +683,13 @@ passed merge-revision workflow run `30697858866`.
 - Partial v5 activation or piecemeal rollback is prohibited.
 - A separate documentation/review cycle for each artifact in one semantic
   conversion packet is rejected by D9.
+- Treating package-local completion as implicit successor source admission is
+  rejected; a declared handoff is a separately falsifiable successor-entry
+  claim.
+- An unconditional continuation objective, pre-written merge success, a
+  write-capable post-merge state bot, and recursive state-only pull requests
+  are rejected. The merge-stable conditional envelope closes the gap without
+  claiming live remote truth.
 - Protocol Bindings selecting handlers, rescanning TDs at runtime, or owning
   Servient orchestration remains outside the frozen direction.
 - A representation that works only through in-repository private types, or
@@ -890,7 +966,8 @@ resource checks, Core/Servient/protocol regressions, and WP-100/WP-200
 predecessor checks. With completion records present, the tree also passes
 `tools/check-design-artifacts.sh`, `cargo test --workspace --locked`,
 `sh scripts/check-feature-matrix.sh` (21 passed, 0 failed), and diff hygiene.
-Commit and remote integration are the remaining events at this checkpoint.
+Completion checkpoint `c5b59d60c237b275e0121092006bd9f5e1f3c54d` and pull request #14
+merge `b2adf0756c06cc41be5d809c33211d7c20f86aba` closed those events.
 
 The static and host compile contracts deliberately do not compile against
 product source before admission; the completion checker owns their three-cell
@@ -900,20 +977,36 @@ The intentionally invalid all-features combination enables mutually exclusive
 Zenoh backends. Use `scripts/check-feature-matrix.sh`, not
 `cargo test --all-features`, as the supported feature baseline.
 
+The 2026-08-02 workspace-topic 0050/0051 decision packet changes no product
+source. Its current tree passes:
+
+- `tools/check-design-artifacts.sh`, including the new merge-stable
+  continuation envelope and local observed-basis ancestry check;
+- an isolated negative mutation that replaces the envelope with the former
+  unconditional `Current Objective` heading and is rejected before the
+  aggregate suite runs;
+- `cargo test --workspace --locked`;
+- `sh scripts/check-feature-matrix.sh` — 21 passed, 0 failed;
+- `bash -n tools/check-design-artifacts.sh`; and
+- `git diff --check`.
+
 ## Next Safe Actions
 
-1. Revalidate the registered WP-300 completion contract, aggregate design
-   suite, locked workspace tests, supported feature matrix, and diff hygiene
-   with the completion records present.
-2. Commit only the exact completion-evidence topology, push the existing task
-   branch, and open or update one draft pull request against `master`.
-3. Re-fetch `master`; verify the exact head, intended diff, conflict state,
-   conversation/review state, Ruleset, and current-base `validation` result.
-4. If every terminal predicate still holds, mark ready and enable native
-   merge-commit auto-merge with the exact expected head object id.
-5. Fetch the merged default branch and verify merge ancestry, tree/path
-   content, and the default-branch workflow before preparing the exact WP-400
-   Property Read Servient candidate.
+1. Validate the 0050/0051 migration with the aggregate continuation/design
+   check, locked workspace tests, supported feature matrix, and diff hygiene.
+2. Commit only the decision packet on
+   `agent/decide-workspace-0050-0051`, push it, and open one draft pull request
+   against `master` through the connected GitHub application.
+3. Re-fetch `master`; verify the exact decision head, intended diff, conflict
+   and conversation state, active Ruleset, current-base `validation`, actual
+   merge ancestry, expected content, and merge-revision workflow.
+4. After that integration predicate passes, reconcile the separate pull
+   request #15 candidate with current `master`, preserving or explicitly
+   superseding candidate identity before independent review. Do not admit
+   Planning source on the earlier validation result alone.
+5. Only after correction review, pre-source admission, implementation, and
+   real `ProducerRoute -> PrepareInput` completion evidence may WP-400 prepare
+   its own approved pre-source checkpoint and source child.
 
 Ask the Project Owner only if the investigation reaches a product-goal,
 real-world constraint, unacceptable direction, or irreversible external
@@ -942,6 +1035,8 @@ commitment that repository evidence cannot resolve.
   `workspace/0041-target-legacy-coexistence-verification.md`
 - `workspace/0042-protocol-binding-spi-validation-risk.md` through
   `workspace/0048-repository-truth-reachability-and-state-projection-drift.md`
+- `workspace/0050-tranche-release-and-successor-entry-evidence.md`
+- `workspace/0051-project-state-merge-transition-drift.md`
 - `docs/spec/planning.md`
 - `docs/spec/binding-spi.md`
 - `docs/work-packages/property-read-architecture-gate.toml`
