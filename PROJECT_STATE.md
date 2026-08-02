@@ -116,13 +116,13 @@ The active design revision is v5.0 bounded-core authority.
   sufficiency: its next-state fixture did not compile, omitted the borrowed
   host projection, lacked a cursor-opacity negative contract, and did not
   actually prove the compiler borrow ended before mutable server preparation.
-- The corrective candidate is the exact eight-path single child of
-  `613ee18d11b8f60e93d0792fcc76b83a00569044`, resolved from `HEAD` until a
-  review attestation records its immutable object id. It changes only
-  planning/continuation records, the entry audit and topology, the gate and
-  carry-forward digest, the entry checker, the real external contract, and
-  the aggregate design checker. It changes no product source or public API
-  direction.
+- The corrective candidate is exact checkpoint
+  `376ee84f80ea27c8d3faa4b1840ce7b68d61f23f`, the eight-path single child of
+  `613ee18d11b8f60e93d0792fcc76b83a00569044`. Independent root-session review
+  on 2026-08-02 passed its corrected next-state source simulation, full
+  Producer-route completion check, and all declared negative mutations. The
+  registered attestation records that immutable object id; no product source
+  or public API direction changes in either candidate checkpoint.
 - GitHub CLI authentication is currently invalid, but SSH Git and the
   connected GitHub application remain available. Active Ruleset
   `20009352` requires `validation`, strict current-base checking, and resolved
@@ -137,12 +137,13 @@ default workspace tests, diff hygiene, and the 21-cell valid feature matrix.
 
 ## Current Objective
 
-Correct and independently re-review the non-product-source evidence for
-`WP-200-PROPERTY-READ-PRODUCER-ROUTE-PROJECTION`. Preserve original candidate
-`613ee18d11b8f60e93d0792fcc76b83a00569044` and its bounded API direction;
-do not attest it because its declared next state was not constructible from
-its own fixture. The exact corrective candidate must remain a single child,
-change only its registered eight paths, and still grant no source authority.
+Integrate the independently reviewed evidence correction for
+`WP-200-PROPERTY-READ-PRODUCER-ROUTE-PROJECTION` with current `master`, record
+one exact combined pre-source admission checkpoint, and implement only the two
+registered Planning paths. Preserve original candidate
+`613ee18d11b8f60e93d0792fcc76b83a00569044`, reviewed correction
+`376ee84f80ea27c8d3faa4b1840ce7b68d61f23f`, and their distinct semantic and
+evidence roles without rewriting either checkpoint.
 
 The correction imports the real public `binding::BindingRouteKey`, handles the
 ownership-preserving registration error without requiring `Debug`, compiles
@@ -623,15 +624,14 @@ separate work.
 
 ### WP-200 Property Read Producer-route projection
 
-Status: NON-SOURCE CANDIDATE READY FOR INDEPENDENT REVIEW AFTER CURRENT-HEAD
-REMOTE RECONCILIATION.
+Status: CORRECTIVE CANDIDATE INDEPENDENT REVIEW PASSED; DEFAULT-BRANCH
+RECONCILIATION AND PRE-SOURCE ADMISSION NEXT.
 
-The correction base is fetched default-branch merge
-`b2adf0756c06cc41be5d809c33211d7c20f86aba`. The exact candidate owns 22
-registered non-product-source paths: workspace decision, roadmap/continuation,
-planning and gate specifications, API/evidence/check registries, entry audit,
-entry/completion checks, a pre-source executable schema, and a real external
-cross-slice contract fixture.
+The original correction base is fetched default-branch merge
+`b2adf0756c06cc41be5d809c33211d7c20f86aba`. Original candidate `613ee18`
+owns 22 registered non-product-source paths. Corrective candidate `376ee84`
+changes exactly its registered eight support paths and grants no source
+authority. Its independent review passed on 2026-08-02.
 
 The future source topology is exactly `planning/src/property_read.rs` and
 `planning/src/lib.rs`. No source is admitted yet. Independent review must
@@ -995,21 +995,36 @@ The static and host compile contracts deliberately do not compile against
 product source before admission; the completion checker owns their three-cell
 compile/runtime validation after the exact two-path implementation child.
 
+Independent root-session review of corrective candidate
+`376ee84f80ea27c8d3faa4b1840ce7b68d61f23f` on 2026-08-02 passed:
+
+- exact single-parent/eight-path topology and all eight registered prechecks;
+- the corrected external contract for borrowed static and host projections,
+  real public Core imports, opaque cursor state, and lexical borrow release;
+- an isolated exact two-path Planning source simulation through the full
+  completion checker, including the real plan-output-to-`PrepareInput`
+  runtime handoff in all three feature cells; and
+- negative mutation rejection for Consumer-role substitution, public cursor
+  state, missing borrowed host/static support, zero-budget progress,
+  caller-restated identity, arbitrary public role selection, fixture-owned
+  preparation, out-of-scope source, and premature WP-400 fixture creation.
+
+The review simulation and mutations were isolated and discarded. The branch
+still contains no product source; only the registered review attestation,
+artifact row, and continuation update are retained by this checkpoint.
+
 The intentionally invalid all-features combination enables mutually exclusive
 Zenoh backends. Use `scripts/check-feature-matrix.sh`, not
 `cargo test --all-features`, as the supported feature baseline.
 
 ## Next Safe Actions
 
-1. Commit the exact eight-path evidence correction as the single child of
-   `613ee18d11b8f60e93d0792fcc76b83a00569044` and rerun its candidate checker.
-2. Reconstruct both immutable candidates, execute the corrected next-state
-   simulation and all registered negative mutations, and record
-   `docs/audits/WP-200-property-read-producer-route-review.toml` only if the
-   corrective candidate passes.
-3. Reconcile the reviewed correction and draft pull request #15 with the
-   fetched current `master` without rewriting either semantic commit.
-4. After review and exact pre-source admission, implement only
+1. Commit the exact review-attestation/registry/continuation checkpoint for
+   corrective candidate `376ee84f80ea27c8d3faa4b1840ce7b68d61f23f`.
+2. Reconcile the reviewed correction and draft pull request #15 with fetched
+   current `master` without rewriting either semantic commit.
+3. Record the exact five-file combined pre-source admission checkpoint against
+   that reconciled basis, then implement only
    `planning/src/property_read.rs` and `planning/src/lib.rs`, complete and
    integrate the correction, then resume the exact WP-400 Servient candidate.
 

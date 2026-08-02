@@ -162,6 +162,7 @@ tools/design-check/tests/wp200_binding_artifact_schema.rs,wp-200-binding-artifac
 docs/audits/WP-200-property-read-plan-slice-review-v2.toml,wp-200-property-read-plan-slice-review-v2-attestation,non-normative-review,5.0,1,docs/spec/planning.md
 docs/evidence/WP-200-property-read-plan-slice.toml,wp-200-property-read-plan-slice-completion-evidence,non-normative,5.0,1,docs/spec/planning.md
 docs/audits/WP-200-property-read-producer-route-entry.md,wp-200-property-read-producer-route-entry-review,non-normative-review,5.0,1,docs/spec/planning.md
+docs/audits/WP-200-property-read-producer-route-review.toml,wp-200-property-read-producer-route-review-attestation,non-normative-review,5.0,1,docs/spec/planning.md
 tools/check-wp200-property-read-producer-route-entry.sh,wp-200-property-read-producer-route-entry-checker,non-normative-checker,5.0,1,docs/spec/planning.md
 tools/check-wp200-property-read-producer-route.sh,wp-200-property-read-producer-route-checker,non-normative-checker,5.0,1,docs/spec/planning.md
 tools/compile-contracts/wp200-property-read-producer-route/Cargo.toml,wp-200-property-read-producer-route-contract-manifest,non-normative-compile-fixture,5.0,1,docs/spec/planning.md
