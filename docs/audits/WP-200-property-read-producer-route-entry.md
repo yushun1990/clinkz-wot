@@ -74,8 +74,8 @@ intersecting impact review.
 workspace member list. It consumes:
 
 - the real TD builder and Planning `PlanCompiler` contract;
-- the real WP-300 static complete registration fixture;
-- the complete registration's borrowed compiler projection;
+- the real WP-300 static complete registration fixture and both the static and
+  host complete registrations' borrowed compiler projections;
 - the real `BindingArtifactEnvelope`, `BindingArtifactRef`,
   `BindingRouteKey`, and `PrepareInput`; and
 - the real WP-300 `PollServerBinding::start_prepare` boundary.
@@ -91,6 +91,12 @@ route preparation and proves:
    generations; and
 4. the resulting reference constructs `PrepareInput` and starts the real mock
    server's route preparation.
+
+The planning scope is lexical: the TD, plan input, and borrowed registration
+compiler projection leave scope before the mutable server borrow begins. A
+`compile_fail` doctest rejects readable/forgeable public cursor state. The
+fixture constructs the real public `PrepareInput`; the forbidden case is a
+fixture-owned substitute that would sever the production type handoff.
 
 `tools/design-check/tests/wp200_property_read_producer_route_schema.rs`
 provides a pre-source executable model and negative Consumer-call mutation.
@@ -113,25 +119,53 @@ This correction does not:
 
 ## Candidate and review topology
 
-The immutable candidate base is fetched and validated default-branch merge
-`b2adf0756c06cc41be5d809c33211d7c20f86aba`, which integrated WP-300 through
-pull request #14 and passed default-branch validation run `30701503019`.
+The immutable original candidate base is fetched and validated default-branch
+merge `b2adf0756c06cc41be5d809c33211d7c20f86aba`, which integrated WP-300
+through pull request #14 and passed default-branch validation run
+`30701503019`. Exact 22-path single child
+`613ee18d11b8f60e93d0792fcc76b83a00569044` is the original semantic
+candidate.
 
-The candidate is the single child of that base and changes exactly the
-registered non-product-source candidate paths. Its manifest uses
-`candidate_ref = "register-after-candidate-commit"`; independent review must
-record the actual immutable candidate object id in
+Independent review on 2026-08-02 rejected that original candidate's evidence,
+not its bounded public API direction. A next-state source simulation found:
+
+- the fixture imported `BindingRouteKey` from a Core root that does not
+  re-export it;
+- registration construction used `.expect(...)` even though the preserved
+  rejected input is intentionally not `Debug`;
+- only the borrowed static compiler projection was compiled, so omission of
+  the borrowed host projection remained green;
+- cursor opacity had no negative compile contract; and
+- dropping a `Copy` array of borrowed compiler references did not prove the
+  borrow ended before mutable server preparation.
+
+The corrective candidate is the exact eight-path single child of
+`613ee18d11b8f60e93d0792fcc76b83a00569044`:
+
+- `PLAN.md`;
+- `PROJECT_STATE.md`;
+- this audit;
+- `docs/spec/v5-artifact-carry-forward.toml`;
+- `docs/work-packages/property-read-architecture-gate.toml`;
+- `tools/check-wp200-property-read-producer-route-entry.sh`;
+- `tools/compile-contracts/wp200-property-read-producer-route/src/lib.rs`; and
+- `tools/design-check/src/main.rs`.
+
+It changes no product source, public API proposal, implementation owner, or
+future two-path source boundary. The gate uses
+`candidate_ref = "resolved-by-review-attestation"`; independent review records
+the immutable corrective candidate object id in
 `docs/audits/WP-200-property-read-producer-route-review.toml`.
 
-Candidate validation may run with `HEAD` at either that exact commit or a
-GitHub pull-request merge checkout. A merge checkout is only an execution
-wrapper: it must have the registered candidate base as first parent, the exact
-single-child candidate as second parent, and a tree identical to that
-candidate. The checker unwraps and validates the second parent; it never
-treats the two-parent wrapper as the reviewed candidate object.
+Candidate validation may run with `HEAD` at either the exact corrective commit
+or a tree-equivalent two-parent execution wrapper whose first parent is the
+registered corrective base. Once an attestation exists, all later checks
+resolve the reviewed correction from its `reviewed_ref` instead of
+reclassifying a merge or continuation head as the candidate.
 
-The reviewer must reconstruct the candidate from the base, inspect the exact
-diff, run every precheck and candidate check, and mutation-test at least:
+The reviewer must reconstruct both immutable candidates, inspect the exact
+diffs, run every precheck and candidate check, execute the corrected next-state
+source simulation, and mutation-test at least:
 
 - `ConsumerCall` substituted for `ProducerRoute`;
 - caller-restated registration identity in place of the complete identity;
@@ -142,6 +176,10 @@ diff, run every precheck and candidate check, and mutation-test at least:
 - progress under zero budget;
 - any product-source path outside the exact two-path topology; and
 - premature WP-400 or architecture-fixture source.
+
+The review attestation checkpoint changes exactly the attestation, its artifact
+registry row, and `PROJECT_STATE.md`. It may report `passed` only after the
+corrected compile/runtime contract and all declared mutations pass.
 
 ## Admission and completion
 

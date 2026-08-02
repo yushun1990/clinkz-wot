@@ -9,7 +9,9 @@ attestation_rel="docs/audits/WP-200-property-read-producer-route-review.toml"
 attestation="$root/$attestation_rel"
 fixture="$root/tools/compile-contracts/wp200-property-read-producer-route"
 schema="$root/tools/design-check/tests/wp200_property_read_producer_route_schema.rs"
-candidate_base="b2adf0756c06cc41be5d809c33211d7c20f86aba"
+original_base="b2adf0756c06cc41be5d809c33211d7c20f86aba"
+original_candidate="613ee18d11b8f60e93d0792fcc76b83a00569044"
+candidate_base="$original_candidate"
 
 fail() {
     echo "WP-200 Property Read Producer-route entry check: $*" >&2
@@ -42,16 +44,14 @@ candidate_ref() {
 }
 
 verify_candidate_topology() {
-    local candidate parent_count parent
-    candidate=$(candidate_ref)
-    [[ "$candidate" =~ ^[0-9a-f]{40}$ ]] || fail "cannot resolve immutable candidate ref"
-    parent_count=$(git -C "$root" rev-list --parents -n 1 "$candidate" | awk '{print NF - 1}')
-    [[ "$parent_count" -eq 1 ]] || fail "candidate is not a single-parent commit"
-    parent=$(git -C "$root" rev-parse "$candidate^")
-    [[ "$parent" == "$candidate_base" ]] || fail "candidate is not the single child of its registered base"
-
-    mapfile -t actual < <(git -C "$root" diff-tree --no-commit-id --name-only -r "$candidate" | sort)
-    expected=(
+    local candidate original_parent_count original_parent parent_count parent
+    original_parent_count=$(git -C "$root" rev-list --parents -n 1 "$original_candidate" | awk '{print NF - 1}')
+    [[ "$original_parent_count" -eq 1 ]] || fail "original candidate is not a single-parent commit"
+    original_parent=$(git -C "$root" rev-parse "$original_candidate^")
+    [[ "$original_parent" == "$original_base" ]] \
+        || fail "original candidate is not the single child of its registered base"
+    mapfile -t original_actual < <(git -C "$root" diff-tree --no-commit-id --name-only -r "$original_candidate" | sort)
+    original_expected=(
         "PLAN.md"
         "PROJECT_STATE.md"
         "docs/api-ownership.csv"
@@ -75,7 +75,29 @@ verify_candidate_topology() {
         "workspace/0049-property-read-producer-route-planning-gap.md"
         "workspace/INDEX.org"
     )
-    [[ "${actual[*]}" == "${expected[*]}" ]] || fail "candidate diff is not the exact registered 22-path topology"
+    [[ "${original_actual[*]}" == "${original_expected[*]}" ]] \
+        || fail "original candidate diff is not the registered 22-path topology"
+
+    candidate=$(candidate_ref)
+    [[ "$candidate" =~ ^[0-9a-f]{40}$ ]] || fail "cannot resolve immutable candidate ref"
+    parent_count=$(git -C "$root" rev-list --parents -n 1 "$candidate" | awk '{print NF - 1}')
+    [[ "$parent_count" -eq 1 ]] || fail "candidate is not a single-parent commit"
+    parent=$(git -C "$root" rev-parse "$candidate^")
+    [[ "$parent" == "$candidate_base" ]] || fail "candidate is not the single child of its registered base"
+
+    mapfile -t actual < <(git -C "$root" diff-tree --no-commit-id --name-only -r "$candidate" | sort)
+    expected=(
+        "PLAN.md"
+        "PROJECT_STATE.md"
+        "docs/audits/WP-200-property-read-producer-route-entry.md"
+        "docs/spec/v5-artifact-carry-forward.toml"
+        "docs/work-packages/property-read-architecture-gate.toml"
+        "tools/check-wp200-property-read-producer-route-entry.sh"
+        "tools/compile-contracts/wp200-property-read-producer-route/src/lib.rs"
+        "tools/design-check/src/main.rs"
+    )
+    [[ "${actual[*]}" == "${expected[*]}" ]] \
+        || fail "corrective candidate diff is not the exact registered eight-path topology"
 }
 
 inspect_contract() {
@@ -90,17 +112,25 @@ inspect_contract() {
     for marker in \
         "PropertyReadPlanCompiler::producer_route(" \
         "registration.compiler()" \
+        "typecheck_borrowed_host_projection(" \
+        "CursorOpacityContract" \
         "BindingArtifactRole::ProducerRoute" \
         "PrepareInput::new(" \
         "start_prepare("; do
         grep -Fq "$marker" "$fixture/src/lib.rs" \
             || fail "real handoff fixture is missing: $marker"
     done
-    grep -Fq "PropertyReadPlanCompiler::producer_route(plan_id, registration.identity(), 0, 0)" \
-        "$fixture/src/lib.rs" \
-        || fail "planner input does not consume the complete registration identity"
+    [[ $(grep -Fc "PropertyReadPlanCompiler::producer_route(plan_id, registration.identity(), 0, 0)" \
+        "$fixture/src/lib.rs") -eq 2 ]] \
+        || fail "static and host planner inputs do not both consume complete registration identity"
+    [[ $(grep -Fc "registration.compiler()" "$fixture/src/lib.rs") -eq 2 ]] \
+        || fail "static and host contracts do not both borrow the complete registration compiler"
     for forbidden in \
         "BindingArtifactRole::ConsumerCall" \
+        "struct LogicalInteractionPlan" \
+        "struct BindingArtifactRef" \
+        "struct PrepareInput" \
+        ".expect(\"complete Producer Property Read registration\")" \
         "clinkz_wot_protocol_bindings" \
         "clinkz_wot_servient" \
         "select_affordance_form" \

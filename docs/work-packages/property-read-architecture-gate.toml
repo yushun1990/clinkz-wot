@@ -637,31 +637,17 @@ contract_artifacts = [
     "tools/design-check/src/main.rs",
     "tools/design-check/tests/wp200_property_read_producer_route_schema.rs",
 ]
-candidate_base_ref = "b2adf0756c06cc41be5d809c33211d7c20f86aba"
-candidate_ref = "register-after-candidate-commit"
+candidate_base_ref = "613ee18d11b8f60e93d0792fcc76b83a00569044"
+candidate_ref = "resolved-by-review-attestation"
 candidate_paths = [
     "PLAN.md",
     "PROJECT_STATE.md",
-    "docs/api-ownership.csv",
-    "docs/artifacts.csv",
     "docs/audits/WP-200-property-read-producer-route-entry.md",
-    "docs/governance.toml",
-    "docs/spec/planning.md",
     "docs/spec/v5-artifact-carry-forward.toml",
-    "docs/work-packages/PROPERTY-READ-ARCHITECTURE.md",
-    "docs/work-packages/WP-200-planning.md",
-    "docs/work-packages/index.toml",
     "docs/work-packages/property-read-architecture-gate.toml",
     "tools/check-wp200-property-read-producer-route-entry.sh",
-    "tools/check-wp200-property-read-producer-route.sh",
-    "tools/compile-contracts/wp200-property-read-producer-route/Cargo.lock",
-    "tools/compile-contracts/wp200-property-read-producer-route/Cargo.toml",
     "tools/compile-contracts/wp200-property-read-producer-route/src/lib.rs",
-    "tools/compile-contracts/wp200-property-read-producer-route/tests/producer_route.rs",
     "tools/design-check/src/main.rs",
-    "tools/design-check/tests/wp200_property_read_producer_route_schema.rs",
-    "workspace/0049-property-read-producer-route-planning-gap.md",
-    "workspace/INDEX.org",
 ]
 pre_implementation_checks = [
     "api-ownership-check",

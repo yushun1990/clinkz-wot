@@ -106,8 +106,8 @@ revalidation = "cargo run --locked --quiet --manifest-path tools/design-check/Ca
 [[artifact]]
 family = "property-read-integration-gate"
 path = "docs/work-packages/property-read-architecture-gate.toml"
-sha256 = "30b5ac80ace2a84555ff4fceb473e46308aa135a92fec6cebba5f1affa828d22"
-disposition = "revalidated for completed WP-300 and the pending exact WP-200 Producer-route projection correction; WP-400 remains planned/blocked behind the correction and the aggregate gate remains blocked"
+sha256 = "432f9879ef4f3b56e6a6090f3065671c084b36fd9b4a8a7b140c30bd25d01772"
+disposition = "revalidated for completed WP-300 and the exact eight-path review-evidence correction after the rejected original WP-200 Producer-route candidate; WP-400 remains planned/blocked and the aggregate gate remains blocked"
 revalidation = "tools/check-v5-authority-reset-decision.sh"
 
 [[artifact]]

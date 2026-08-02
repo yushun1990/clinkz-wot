@@ -526,8 +526,13 @@ const PROPERTY_READ_PRODUCER_ROUTE_COMPLETION_EVIDENCE: &str =
     "docs/evidence/WP-200-property-read-producer-route.toml";
 const PROPERTY_READ_PRODUCER_ROUTE_ADMISSION_REVIEW: &str =
     "docs/audits/WP-200-property-read-producer-route-entry.md";
-const PROPERTY_READ_PRODUCER_ROUTE_CANDIDATE_BASE_REF: &str =
+const PROPERTY_READ_PRODUCER_ROUTE_ORIGINAL_CANDIDATE_BASE_REF: &str =
     "b2adf0756c06cc41be5d809c33211d7c20f86aba";
+const PROPERTY_READ_PRODUCER_ROUTE_ORIGINAL_CANDIDATE_REF: &str =
+    "613ee18d11b8f60e93d0792fcc76b83a00569044";
+const PROPERTY_READ_PRODUCER_ROUTE_CANDIDATE_BASE_REF: &str =
+    PROPERTY_READ_PRODUCER_ROUTE_ORIGINAL_CANDIDATE_REF;
+const PROPERTY_READ_PRODUCER_ROUTE_CANDIDATE_REF_MODE: &str = "resolved-by-review-attestation";
 const PROPERTY_READ_PRODUCER_ROUTE_API_ITEMS: &[&str] =
     &["PropertyReadBuildCursor", "PropertyReadPlanCompiler"];
 const PROPERTY_READ_PRODUCER_ROUTE_REUSED_API_ITEMS: &[&str] = &[
@@ -564,7 +569,7 @@ const PROPERTY_READ_PRODUCER_ROUTE_CONTRACT_ARTIFACTS: &[&str] = &[
     "tools/design-check/src/main.rs",
     "tools/design-check/tests/wp200_property_read_producer_route_schema.rs",
 ];
-const PROPERTY_READ_PRODUCER_ROUTE_CANDIDATE_PATHS: &[&str] = &[
+const PROPERTY_READ_PRODUCER_ROUTE_ORIGINAL_CANDIDATE_PATHS: &[&str] = &[
     "PLAN.md",
     "PROJECT_STATE.md",
     "docs/api-ownership.csv",
@@ -587,6 +592,16 @@ const PROPERTY_READ_PRODUCER_ROUTE_CANDIDATE_PATHS: &[&str] = &[
     "tools/design-check/tests/wp200_property_read_producer_route_schema.rs",
     "workspace/0049-property-read-producer-route-planning-gap.md",
     "workspace/INDEX.org",
+];
+const PROPERTY_READ_PRODUCER_ROUTE_CANDIDATE_PATHS: &[&str] = &[
+    "PLAN.md",
+    "PROJECT_STATE.md",
+    "docs/audits/WP-200-property-read-producer-route-entry.md",
+    "docs/spec/v5-artifact-carry-forward.toml",
+    "docs/work-packages/property-read-architecture-gate.toml",
+    "tools/check-wp200-property-read-producer-route-entry.sh",
+    "tools/compile-contracts/wp200-property-read-producer-route/src/lib.rs",
+    "tools/design-check/src/main.rs",
 ];
 const PROPERTY_READ_PRODUCER_ROUTE_PRECHECKS: &[&str] = &[
     "api-ownership-check",
@@ -5015,16 +5030,26 @@ fn check_property_read_producer_route_projection_tranche(
         }
     }
 
+    let original_candidate_paths = owned_set(PROPERTY_READ_PRODUCER_ROUTE_ORIGINAL_CANDIDATE_PATHS);
+    check_candidate_commit(
+        id,
+        root,
+        PROPERTY_READ_PRODUCER_ROUTE_ORIGINAL_CANDIDATE_BASE_REF,
+        PROPERTY_READ_PRODUCER_ROUTE_ORIGINAL_CANDIDATE_REF,
+        &original_candidate_paths,
+    )?;
+
     let candidate_base_ref = string_field(tranche, "candidate_base_ref", id)?;
     if candidate_base_ref != PROPERTY_READ_PRODUCER_ROUTE_CANDIDATE_BASE_REF {
         return Err(format!("{id} candidate base ref is not frozen"));
     }
-    require_table_string(
-        tranche,
-        "candidate_ref",
-        "register-after-candidate-commit",
-        id,
-    )?;
+    let candidate_ref = string_field(tranche, "candidate_ref", id)?;
+    if candidate_ref != PROPERTY_READ_PRODUCER_ROUTE_CANDIDATE_REF_MODE {
+        return Err(format!(
+            "{id} candidate ref mode must remain \
+             {PROPERTY_READ_PRODUCER_ROUTE_CANDIDATE_REF_MODE:?}"
+        ));
+    }
     let candidate_paths = package_string_set(tranche, "candidate_paths", id)?;
     let expected_candidate_paths = owned_set(PROPERTY_READ_PRODUCER_ROUTE_CANDIDATE_PATHS);
     if candidate_paths != expected_candidate_paths {
@@ -5148,7 +5173,7 @@ fn check_property_read_producer_route_projection_tranche(
                 &candidate_paths,
                 "property-read Producer-route projection",
                 ACTIVE_AUTHORITY_REVISION,
-                &[],
+                &["PROJECT_STATE.md"],
             )?;
         }
     } else {
@@ -5177,7 +5202,7 @@ fn check_property_read_producer_route_projection_tranche(
             &candidate_paths,
             "property-read Producer-route projection",
             ACTIVE_AUTHORITY_REVISION,
-            &[],
+            &["PROJECT_STATE.md"],
         )?;
         require_full_commit_id(
             &admission_base_ref,

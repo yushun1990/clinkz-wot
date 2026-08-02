@@ -1,6 +1,6 @@
 # Project State
 
-Last updated: 2026-08-01
+Last updated: 2026-08-02
 
 ## Repository Basis
 
@@ -109,7 +109,22 @@ The active design revision is v5.0 bounded-core authority.
 - The remote default branch was fetched and reconciled on 2026-08-01 at
   `b2adf0756c06cc41be5d809c33211d7c20f86aba`. This is the immutable base for
   the exact non-source Producer-route planning correction candidate.
-- GitHub CLI authentication is valid through the host keyring. Active Ruleset
+- Original Producer-route candidate
+  `613ee18d11b8f60e93d0792fcc76b83a00569044` is the exact 22-path single
+  child of that base and the immutable semantic candidate on draft pull
+  request #15. Independent review on 2026-08-02 rejected its evidence
+  sufficiency: its next-state fixture did not compile, omitted the borrowed
+  host projection, lacked a cursor-opacity negative contract, and did not
+  actually prove the compiler borrow ended before mutable server preparation.
+- The corrective candidate is the exact eight-path single child of
+  `613ee18d11b8f60e93d0792fcc76b83a00569044`, resolved from `HEAD` until a
+  review attestation records its immutable object id. It changes only
+  planning/continuation records, the entry audit and topology, the gate and
+  carry-forward digest, the entry checker, the real external contract, and
+  the aggregate design checker. It changes no product source or public API
+  direction.
+- GitHub CLI authentication is currently invalid, but SSH Git and the
+  connected GitHub application remain available. Active Ruleset
   `20009352` requires `validation`, strict current-base checking, and resolved
   review threads; it has no bypass actor and permits merge commits. Native
   automatic integration is eligible only while every terminal predicate
@@ -122,11 +137,20 @@ default workspace tests, diff hygiene, and the 21-cell valid feature matrix.
 
 ## Current Objective
 
-Prepare and hand off the exact non-product-source
-`WP-200-PROPERTY-READ-PRODUCER-ROUTE-PROJECTION` candidate. WP-300 is fully
-integrated and default-branch validated at
-`b2adf0756c06cc41be5d809c33211d7c20f86aba`; no WP-300 commit, check, or
-remote action remains.
+Correct and independently re-review the non-product-source evidence for
+`WP-200-PROPERTY-READ-PRODUCER-ROUTE-PROJECTION`. Preserve original candidate
+`613ee18d11b8f60e93d0792fcc76b83a00569044` and its bounded API direction;
+do not attest it because its declared next state was not constructible from
+its own fixture. The exact corrective candidate must remain a single child,
+change only its registered eight paths, and still grant no source authority.
+
+The correction imports the real public `binding::BindingRouteKey`, handles the
+ownership-preserving registration error without requiring `Debug`, compiles
+both borrowed static and borrowed host complete-registration projections, adds
+a compile-fail cursor-opacity contract, and scopes the TD/input/compiler borrow
+lexically before mutable route preparation. An isolated reference source
+simulation proves the same public API is implementable with four concrete
+`PlanCompiler` implementations and no new public registration trait.
 
 WP-400 preparation exposed an intersecting predecessor defect. The only
 implemented Property Read planner is private and creates compiler inputs and
@@ -138,7 +162,7 @@ those slices. The package-local WP-200 and WP-300 completions remain true, but
 their Producer-route handoff is unreachable.
 
 Workspace topic 0049 decides a distinct Category C correction after WP-300
-and before WP-400. Its candidate adds no product source. It freezes only
+and before WP-400. Its semantic direction adds no product source. It freezes only
 `PropertyReadPlanCompiler::producer_route`, opaque
 `PropertyReadBuildCursor<C, A>`, borrowed static/host compiler projections,
 two future Planning implementation paths, and a real external fixture that
@@ -977,14 +1001,15 @@ Zenoh backends. Use `scripts/check-feature-matrix.sh`, not
 
 ## Next Safe Actions
 
-1. Reconcile draft pull request #15's actual current head, exact 22-path diff,
-   mergeability, and current-head `validation` result with this candidate.
-   Do not amend it again unless that reconciliation exposes a real finding.
-2. A later independent root session reconstructs the immutable candidate,
-   executes the registered mutations and next-state simulation, and records
-   `docs/audits/WP-200-property-read-producer-route-review.toml` only if all
-   evidence passes.
-3. After review and exact pre-source admission, implement only
+1. Commit the exact eight-path evidence correction as the single child of
+   `613ee18d11b8f60e93d0792fcc76b83a00569044` and rerun its candidate checker.
+2. Reconstruct both immutable candidates, execute the corrected next-state
+   simulation and all registered negative mutations, and record
+   `docs/audits/WP-200-property-read-producer-route-review.toml` only if the
+   corrective candidate passes.
+3. Reconcile the reviewed correction and draft pull request #15 with the
+   fetched current `master` without rewriting either semantic commit.
+4. After review and exact pre-source admission, implement only
    `planning/src/property_read.rs` and `planning/src/lib.rs`, complete and
    integrate the correction, then resume the exact WP-400 Servient candidate.
 
