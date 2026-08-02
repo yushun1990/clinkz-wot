@@ -89,7 +89,8 @@ The exact downstream release events are:
 
 - completion of `WP-300-PROPERTY-READ-BINDING-SLICE` releases only
   `WP-200-PROPERTY-READ-PRODUCER-ROUTE-PROJECTION`;
-- completion of that projection releases only
+- completion of that projection releases only candidate, review, and
+  pre-source-transition preparation for
   `WP-400-PROPERTY-READ-SERVIENT-SLICE`; and
 - broad WP-300 completion releases broad WP-400, WP-500, and WP-600.
 
@@ -221,15 +222,14 @@ and must close before final integration and release.
 
 Every slice is Category B or C according to its actual candidate impact and
 requires its own exact paths, contract fixtures, impact analysis, independent
-review, and ADR-0013 admission. The handler, original WP-200 plan, and WP-300
-binding slices are `complete`/`approved`; the Producer-route projection is
-`pending`/`review-pending`, and the WP-400 Servient slice remains
-`planned`/`blocked`. Narrow WP-300 completion releases the correction's
-admission process, not WP-400 source. The correction must prove a real
-`ProducerRoute` plan output reaches real `PrepareInput` before it can release
-the WP-400 candidate. Each status record grants no source-edit authority
-without its approved pre-source checkpoint; approval and in-progress truth may
-share that one recoverable checkpoint under D9.
+review, and ADR-0013 admission. The handler, original WP-200 plan, WP-300
+binding, and Producer-route projection slices are `complete`/`approved`; the
+WP-400 Servient slice remains `planned`/`blocked`. The correction's real
+`ProducerRoute` plan-output-to-`PrepareInput` evidence now releases only the
+WP-400 candidate/review and pre-source-transition process, not WP-400 source.
+Each status record grants no source-edit authority without its approved
+pre-source checkpoint; approval and in-progress truth may share that one
+recoverable checkpoint under D9.
 
 For `WP-100-PROPERTY-READ-HANDLER-SLICE`, the candidate and completion record
 must claim only `ReadPropertyHandler` and its composition with the four reused

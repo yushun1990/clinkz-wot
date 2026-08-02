@@ -144,3 +144,17 @@ active_claim_ids = [
 ]
 inactive_claim_ids = []
 disposition = "All narrow Property Read binding-slice claims remain active; broad WP-300, Servient composition, production protocols, workloads, and release maturity remain separate evidence."
+
+[[record]]
+source = "docs/evidence/WP-200-property-read-producer-route.toml"
+verification_command = "tools/check-wp200-property-read-producer-route.sh"
+active_claim_ids = [
+  "BIND-REG-001",
+  "BIND-ROUTE-001",
+  "CONSTRAINED-WORK-001",
+  "PLAN-ARTIFACT-001",
+  "PLAN-COST-001",
+  "PLAN-SET-001",
+]
+inactive_claim_ids = []
+disposition = "The exact Planning-owned Producer-route projection and real plan-output-to-PrepareInput handoff are active; WP-400 orchestration, production protocols, workloads, and aggregate architecture completion remain separate evidence."

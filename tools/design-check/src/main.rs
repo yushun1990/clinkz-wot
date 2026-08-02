@@ -5235,12 +5235,14 @@ fn check_property_read_producer_route_projection_tranche(
                 "{id} complete state lacks registered completion evidence"
             ));
         }
-        check_tranche_evidence(
+        let attestation_ref = string_field(tranche, "review_attestation_ref", id)?;
+        let admission_base_ref = string_field(tranche, "admission_base_ref", id)?;
+        check_property_read_producer_route_completion_evidence(
             root,
             &evidence_path,
-            id,
-            "property-read-producer-route-projection",
             &completion_check,
+            &attestation_ref,
+            &admission_base_ref,
         )?;
     } else if evidence_exists && tranche_evidence_is_passed(root, &evidence_path)? {
         return Err(format!(
@@ -9622,6 +9624,148 @@ fn check_property_read_producer_route_pre_source_checkpoint_state(
         return Err(format!(
             "{context} implementation worktree has out-of-scope paths {out_of_scope:?}"
         ));
+    }
+    Ok(())
+}
+
+fn check_property_read_producer_route_completion_evidence(
+    root: &Path,
+    relative_path: &str,
+    verification_check: &str,
+    attestation_ref: &str,
+    admission_base_ref: &str,
+) -> Result<(), String> {
+    let context = "property-read Producer-route projection";
+    let path = root.join(relative_path);
+    let source = fs::read_to_string(&path)
+        .map_err(|error| format!("cannot read {}: {error}", path.display()))?;
+    let document = source
+        .parse::<DocumentMut>()
+        .map_err(|error| format!("invalid {}: {error}", path.display()))?;
+    require_integer(
+        document.get("schema_version"),
+        "property-read Producer-route evidence schema_version",
+        1,
+    )?;
+    require_string(
+        document.get("design_revision"),
+        "property-read Producer-route evidence design_revision",
+        ACTIVE_AUTHORITY_REVISION,
+    )?;
+    require_string(
+        document.get("work_package"),
+        "property-read Producer-route evidence work_package",
+        "WP-200",
+    )?;
+    require_string(
+        document.get("tranche"),
+        "property-read Producer-route evidence tranche",
+        PROPERTY_READ_PRODUCER_ROUTE_PROJECTION,
+    )?;
+    require_string(
+        document.get("status"),
+        "property-read Producer-route evidence status",
+        "passed",
+    )?;
+    require_string(
+        document.get("evidence_key"),
+        "property-read Producer-route evidence key",
+        "property-read-producer-route-projection",
+    )?;
+    require_string(
+        document.get("verification_check"),
+        "property-read Producer-route evidence verification_check",
+        verification_check,
+    )?;
+    require_string(
+        document.get("verification_command"),
+        "property-read Producer-route evidence verification_command",
+        "tools/check-wp200-property-read-producer-route.sh",
+    )?;
+    for field in ["implementation_ref", "recorded_on"] {
+        let value = document
+            .get(field)
+            .and_then(Item::as_str)
+            .ok_or_else(|| format!("{relative_path} has no string field {field:?}"))?;
+        if value.trim().is_empty() {
+            return Err(format!("{relative_path} has empty field {field:?}"));
+        }
+    }
+
+    let implementation_ref = document
+        .get("implementation_ref")
+        .and_then(Item::as_str)
+        .ok_or_else(|| format!("{relative_path} has no implementation_ref"))?;
+    require_full_commit_id(
+        implementation_ref,
+        "property-read Producer-route implementation_ref",
+    )?;
+    check_git_commit_is_ancestor(
+        root,
+        implementation_ref,
+        "property-read Producer-route implementation_ref",
+    )?;
+    require_git_ancestor(
+        root,
+        attestation_ref,
+        admission_base_ref,
+        "property-read Producer-route review attestation/admission base",
+    )?;
+    let pre_source_ref = git_single_parent(
+        root,
+        implementation_ref,
+        "property-read Producer-route implementation commit",
+    )?;
+    require_git_single_parent(
+        root,
+        &pre_source_ref,
+        admission_base_ref,
+        "property-read Producer-route combined pre-source checkpoint",
+    )?;
+    let pre_source_paths = git_commit_changed_paths(
+        root,
+        &pre_source_ref,
+        "property-read Producer-route combined pre-source checkpoint",
+    )?;
+    let expected_pre_source_paths = owned_set(&[
+        "PLAN.md",
+        "PROJECT_STATE.md",
+        PROPERTY_READ_PRODUCER_ROUTE_ADMISSION_REVIEW,
+        "docs/spec/v5-artifact-carry-forward.toml",
+        PROPERTY_READ_GATE_MANIFEST,
+    ]);
+    if pre_source_paths != expected_pre_source_paths {
+        return Err(format!(
+            "{context} pre-source checkpoint path mismatch; expected \
+             {expected_pre_source_paths:?}, found {pre_source_paths:?}"
+        ));
+    }
+    let implementation_paths = git_commit_changed_paths(
+        root,
+        implementation_ref,
+        "property-read Producer-route implementation commit",
+    )?;
+    let expected_implementation_paths =
+        owned_set(PROPERTY_READ_PRODUCER_ROUTE_IMPLEMENTATION_PATHS);
+    if implementation_paths != expected_implementation_paths {
+        return Err(format!(
+            "{context} implementation path mismatch; expected \
+             {expected_implementation_paths:?}, found {implementation_paths:?}"
+        ));
+    }
+
+    let checker = root.join("tools/check-wp200-property-read-producer-route.sh");
+    let status = Command::new(&checker)
+        .current_dir(root)
+        .status()
+        .map_err(|error| {
+            format!(
+                "cannot execute {context} completion checker {}: {error}",
+                checker.display()
+            )
+        })?;
+    if !status.success() {
+        return Err(format!("{context} completion checker exited with {status}"));
     }
     Ok(())
 }

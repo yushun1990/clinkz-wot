@@ -1,0 +1,31 @@
+schema_version = 1
+design_revision = "5.0"
+work_package = "WP-200"
+tranche = "WP-200-PROPERTY-READ-PRODUCER-ROUTE-PROJECTION"
+implementation_ref = "42fca7a63cefd3a5916a7edc6582044d2c04845e"
+recorded_on = "2026-08-02"
+verification_command = "tools/check-wp200-property-read-producer-route.sh"
+verification_check = "wp200-property-read-producer-route-check"
+status = "passed"
+evidence_key = "property-read-producer-route-projection"
+
+requirement_ids = [
+    "BIND-REG-001",
+    "BIND-ROUTE-001",
+    "CONSTRAINED-WORK-001",
+    "PLAN-ARTIFACT-001",
+    "PLAN-COST-001",
+    "PLAN-SET-001",
+]
+compilation_cells = ["no-default", "async-no-std", "std"]
+coverage = [
+    "exact five-path pre-source checkpoint and immediate two-path Planning implementation topology",
+    "public fixed Producer-route constructor plus opaque resumable cursor with no arbitrary-role or Consumer-call constructor",
+    "owned and borrowed static compiler projections in no-default and async-no-std profiles",
+    "owned and borrowed Core-erased host compiler projections in the std profile",
+    "complete-registration identity and compatibility carried into every compiler input, envelope identity, and compact reference",
+    "zero BindingPolls budget preserves the cursor and deterministic bounded progress",
+    "lexical TD and compiler borrow release before real PrepareInput construction and mock-server start_prepare",
+    "WP-200 plan and WP-300 binding predecessor regressions plus absence of premature Property Read architecture fixtures",
+    "completion evidence parser binds WP-200 ownership and the exact implementation ancestry instead of the handler-only generic projection",
+]
