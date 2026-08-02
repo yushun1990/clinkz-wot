@@ -1,15 +1,15 @@
 //! First bounded Property Read plan-build algorithm.
 
 use alloc::{boxed::Box, vec};
-use core::{convert::TryFrom, marker::PhantomData};
+use core::convert::TryFrom;
 
 use clinkz_wot_core::{
     BindingArtifact, BindingArtifactCompatibility, BindingArtifactEnvelope,
     BindingArtifactFootprint, BindingArtifactIdentity, BindingArtifactRef, BindingArtifactRole,
     BindingCandidate, BindingCompilerBounds, BindingCompilerExtension, BindingCompilerInput,
-    BindingCompilerStep, BindingConfigurationDigest, BindingGeneration, BindingId, CoreError,
-    CoreResult, ErrorContext, ErrorPhase, LogicalInteractionPlan, PlanId, RetryClass,
-    StaticBindingCompilerRegistration, ThingId,
+    BindingCompilerStep, BindingConfigurationDigest, BindingGeneration, BindingId,
+    BindingRegistrationIdentity, CoreError, CoreResult, ErrorContext, ErrorPhase,
+    LogicalInteractionPlan, PlanId, RetryClass, StaticBindingCompilerRegistration, ThingId,
 };
 #[cfg(feature = "std")]
 use clinkz_wot_core::{
@@ -67,6 +67,35 @@ where
     }
 }
 
+impl<T> PropertyReadCompilerRegistration for &T
+where
+    T: PropertyReadCompilerRegistration + ?Sized,
+{
+    type Cursor = T::Cursor;
+    type Artifact = T::Artifact;
+
+    fn compatibility(&self) -> BindingArtifactCompatibility {
+        <T as PropertyReadCompilerRegistration>::compatibility(*self)
+    }
+
+    fn bounds(&self, input: &BindingCompilerInput<'_>) -> CoreResult<BindingCompilerBounds> {
+        <T as PropertyReadCompilerRegistration>::bounds(*self, input)
+    }
+
+    fn start(&self, input: &BindingCompilerInput<'_>) -> CoreResult<Self::Cursor> {
+        <T as PropertyReadCompilerRegistration>::start(*self, input)
+    }
+
+    fn step(
+        &self,
+        input: &BindingCompilerInput<'_>,
+        cursor: Self::Cursor,
+        budget: &mut WorkBudget,
+    ) -> BindingCompilerStep<Self::Cursor, Self::Artifact> {
+        <T as PropertyReadCompilerRegistration>::step(*self, input, cursor, budget)
+    }
+}
+
 #[cfg(feature = "std")]
 impl PropertyReadCompilerRegistration for HostBindingCompilerRegistration {
     type Cursor = HostBindingCompilerCursor;
@@ -95,7 +124,7 @@ impl PropertyReadCompilerRegistration for HostBindingCompilerRegistration {
 }
 
 #[derive(Debug, Eq, PartialEq)]
-enum PropertyReadBuildCursor<C, A> {
+enum PropertyReadBuildState<C, A> {
     Start,
     Compiling {
         plan: LogicalInteractionPlan,
@@ -111,24 +140,31 @@ enum PropertyReadBuildCursor<C, A> {
     },
 }
 
-/// Internal narrow-slice compiler. WP-300 later supplies complete registration
-/// metadata before this component becomes an installation path.
-struct PropertyReadPlanCompiler<R> {
+/// Opaque resumable state for one bounded Property Read plan build.
+#[derive(Debug, Eq, PartialEq)]
+pub struct PropertyReadBuildCursor<C, A> {
+    state: PropertyReadBuildState<C, A>,
+}
+
+/// Exact bounded compiler for the reviewed Property Read projection.
+pub struct PropertyReadPlanCompiler {
     plan_id: PlanId,
     binding_id: BindingId,
     binding_generation: BindingGeneration,
     configuration: BindingConfigurationDigest,
+    compatibility: BindingArtifactCompatibility,
     registration_index: u32,
     candidate_order: u32,
-    registration: PhantomData<fn() -> R>,
+    role: BindingArtifactRole,
 }
 
-impl<R> PropertyReadPlanCompiler<R> {
+impl PropertyReadPlanCompiler {
     const fn new(
         plan_id: PlanId,
         binding_id: BindingId,
         binding_generation: BindingGeneration,
         configuration: BindingConfigurationDigest,
+        compatibility: BindingArtifactCompatibility,
         registration_index: u32,
         candidate_order: u32,
     ) -> Self {
@@ -137,43 +173,70 @@ impl<R> PropertyReadPlanCompiler<R> {
             binding_id,
             binding_generation,
             configuration,
+            compatibility,
             registration_index,
             candidate_order,
-            registration: PhantomData,
+            role: BindingArtifactRole::ConsumerCall,
+        }
+    }
+
+    /// Creates the exact Producer-route projection for one complete registration.
+    pub const fn producer_route(
+        plan_id: PlanId,
+        registration: BindingRegistrationIdentity,
+        registration_index: u32,
+        candidate_order: u32,
+    ) -> Self {
+        Self {
+            plan_id,
+            binding_id: registration.binding_id(),
+            binding_generation: registration.binding_generation(),
+            configuration: registration.configuration(),
+            compatibility: registration.artifact_compatibility(),
+            registration_index,
+            candidate_order,
+            role: BindingArtifactRole::ProducerRoute,
         }
     }
 }
 
-impl<R> PlanCompiler<[R]> for PropertyReadPlanCompiler<R>
-where
-    R: PropertyReadCompilerRegistration,
-{
-    type Cursor = PropertyReadBuildCursor<R::Cursor, R::Artifact>;
-    type Artifact = R::Artifact;
-
-    fn start(&self, input: &PlanBuildInput<'_, [R]>) -> CoreResult<Self::Cursor> {
-        self.registration(input.registrations())?;
-        Ok(PropertyReadBuildCursor::Start)
-    }
-
-    fn step(
+impl PropertyReadPlanCompiler {
+    fn start_impl<R>(
         &self,
         input: &PlanBuildInput<'_, [R]>,
-        cursor: Self::Cursor,
+    ) -> CoreResult<PropertyReadBuildCursor<R::Cursor, R::Artifact>>
+    where
+        R: PropertyReadCompilerRegistration,
+    {
+        self.registration(input.registrations())?;
+        Ok(PropertyReadBuildCursor {
+            state: PropertyReadBuildState::Start,
+        })
+    }
+
+    fn step_impl<R>(
+        &self,
+        input: &PlanBuildInput<'_, [R]>,
+        cursor: PropertyReadBuildCursor<R::Cursor, R::Artifact>,
         budget: &mut WorkBudget,
-    ) -> PlanBuildStep<Self::Cursor, Self::Artifact> {
+    ) -> PlanBuildStep<PropertyReadBuildCursor<R::Cursor, R::Artifact>, R::Artifact>
+    where
+        R: PropertyReadCompilerRegistration,
+    {
         if budget.remaining(WorkClass::BindingPolls) == 0 {
             return PlanBuildStep::Pending(cursor);
         }
 
-        let (plan, candidate, admitted, compiler_cursor) = match cursor {
-            PropertyReadBuildCursor::Start => {
+        let (plan, candidate, admitted, compiler_cursor) = match cursor.state {
+            PropertyReadBuildState::Start => {
                 let plan = match property_read_plan(input.validated_td(), self.plan_id) {
                     Ok(plan) => plan,
                     Err(error) => {
                         return PlanBuildStep::Failed(PlanBuildFailure::new(
                             error,
-                            PropertyReadBuildCursor::Start,
+                            PropertyReadBuildCursor {
+                                state: PropertyReadBuildState::Start,
+                            },
                         ));
                     }
                 };
@@ -182,7 +245,9 @@ where
                     Err(error) => {
                         return PlanBuildStep::Failed(PlanBuildFailure::new(
                             error,
-                            PropertyReadBuildCursor::Start,
+                            PropertyReadBuildCursor {
+                                state: PropertyReadBuildState::Start,
+                            },
                         ));
                     }
                 };
@@ -190,25 +255,28 @@ where
                     self.binding_id,
                     self.binding_generation,
                     self.configuration,
-                    registration.compatibility(),
+                    self.compatibility,
                     self.registration_index,
                     self.candidate_order,
                 );
-                let compiler_input =
-                    BindingCompilerInput::new(&plan, candidate, BindingArtifactRole::ConsumerCall);
+                let compiler_input = BindingCompilerInput::new(&plan, candidate, self.role);
                 let bounds = match registration.bounds(&compiler_input) {
                     Ok(bounds) => bounds,
                     Err(error) => {
                         return PlanBuildStep::Failed(PlanBuildFailure::new(
                             error,
-                            PropertyReadBuildCursor::Start,
+                            PropertyReadBuildCursor {
+                                state: PropertyReadBuildState::Start,
+                            },
                         ));
                     }
                 };
                 if !compiler_work_is_portable(&bounds) {
                     return PlanBuildStep::Failed(PlanBuildFailure::new(
                         compiler_contract_error(&plan, candidate),
-                        PropertyReadBuildCursor::Start,
+                        PropertyReadBuildCursor {
+                            state: PropertyReadBuildState::Start,
+                        },
                     ));
                 }
                 let admitted = bounds.artifact();
@@ -217,19 +285,21 @@ where
                     Err(error) => {
                         return PlanBuildStep::Failed(PlanBuildFailure::new(
                             error,
-                            PropertyReadBuildCursor::Start,
+                            PropertyReadBuildCursor {
+                                state: PropertyReadBuildState::Start,
+                            },
                         ));
                     }
                 };
                 (plan, candidate, admitted, compiler_cursor)
             }
-            PropertyReadBuildCursor::Compiling {
+            PropertyReadBuildState::Compiling {
                 plan,
                 candidate,
                 admitted,
                 compiler_cursor,
             } => (plan, candidate, admitted, compiler_cursor),
-            PropertyReadBuildCursor::ArtifactReady {
+            PropertyReadBuildState::ArtifactReady {
                 plan,
                 candidate,
                 admitted,
@@ -241,6 +311,7 @@ where
                     candidate,
                     admitted,
                     artifact,
+                    self.role,
                 );
             }
         };
@@ -250,24 +321,27 @@ where
             Err(error) => {
                 return PlanBuildStep::Failed(PlanBuildFailure::new(
                     error,
-                    PropertyReadBuildCursor::Compiling {
+                    PropertyReadBuildCursor {
+                        state: PropertyReadBuildState::Compiling {
+                            plan,
+                            candidate,
+                            admitted,
+                            compiler_cursor,
+                        },
+                    },
+                ));
+            }
+        };
+        let compiler_input = BindingCompilerInput::new(&plan, candidate, self.role);
+        match registration.step(&compiler_input, compiler_cursor, budget) {
+            BindingCompilerStep::Pending(compiler_cursor) => {
+                PlanBuildStep::Pending(PropertyReadBuildCursor {
+                    state: PropertyReadBuildState::Compiling {
                         plan,
                         candidate,
                         admitted,
                         compiler_cursor,
                     },
-                ));
-            }
-        };
-        let compiler_input =
-            BindingCompilerInput::new(&plan, candidate, BindingArtifactRole::ConsumerCall);
-        match registration.step(&compiler_input, compiler_cursor, budget) {
-            BindingCompilerStep::Pending(compiler_cursor) => {
-                PlanBuildStep::Pending(PropertyReadBuildCursor::Compiling {
-                    plan,
-                    candidate,
-                    admitted,
-                    compiler_cursor,
                 })
             }
             BindingCompilerStep::Complete(output) => finish_property_read_build(
@@ -276,33 +350,153 @@ where
                 candidate,
                 admitted,
                 output.into_artifact(),
+                self.role,
             ),
             BindingCompilerStep::Failed(failure) => {
                 let (error, compiler_cursor) = failure.into_parts();
                 PlanBuildStep::Failed(PlanBuildFailure::new(
                     error,
-                    PropertyReadBuildCursor::Compiling {
-                        plan,
-                        candidate,
-                        admitted,
-                        compiler_cursor,
+                    PropertyReadBuildCursor {
+                        state: PropertyReadBuildState::Compiling {
+                            plan,
+                            candidate,
+                            admitted,
+                            compiler_cursor,
+                        },
                     },
                 ))
             }
         }
     }
 
-    fn abort(&self, _cursor: Self::Cursor) {}
+    fn abort_impl<C, A>(&self, _cursor: PropertyReadBuildCursor<C, A>) {}
 }
 
-impl<R> PropertyReadPlanCompiler<R> {
-    fn registration<'a>(&self, registrations: &'a [R]) -> CoreResult<&'a R> {
+impl<C> PlanCompiler<[StaticBindingCompilerRegistration<C>]> for PropertyReadPlanCompiler
+where
+    C: BindingCompilerExtension,
+{
+    type Cursor = PropertyReadBuildCursor<C::Cursor, C::Artifact>;
+    type Artifact = C::Artifact;
+
+    fn start(
+        &self,
+        input: &PlanBuildInput<'_, [StaticBindingCompilerRegistration<C>]>,
+    ) -> CoreResult<Self::Cursor> {
+        self.start_impl(input)
+    }
+
+    fn step(
+        &self,
+        input: &PlanBuildInput<'_, [StaticBindingCompilerRegistration<C>]>,
+        cursor: Self::Cursor,
+        budget: &mut WorkBudget,
+    ) -> PlanBuildStep<Self::Cursor, Self::Artifact> {
+        self.step_impl(input, cursor, budget)
+    }
+
+    fn abort(&self, cursor: Self::Cursor) {
+        self.abort_impl(cursor);
+    }
+}
+
+impl<'a, C> PlanCompiler<[&'a StaticBindingCompilerRegistration<C>]> for PropertyReadPlanCompiler
+where
+    C: BindingCompilerExtension,
+{
+    type Cursor = PropertyReadBuildCursor<C::Cursor, C::Artifact>;
+    type Artifact = C::Artifact;
+
+    fn start(
+        &self,
+        input: &PlanBuildInput<'_, [&'a StaticBindingCompilerRegistration<C>]>,
+    ) -> CoreResult<Self::Cursor> {
+        self.start_impl(input)
+    }
+
+    fn step(
+        &self,
+        input: &PlanBuildInput<'_, [&'a StaticBindingCompilerRegistration<C>]>,
+        cursor: Self::Cursor,
+        budget: &mut WorkBudget,
+    ) -> PlanBuildStep<Self::Cursor, Self::Artifact> {
+        self.step_impl(input, cursor, budget)
+    }
+
+    fn abort(&self, cursor: Self::Cursor) {
+        self.abort_impl(cursor);
+    }
+}
+
+#[cfg(feature = "std")]
+impl PlanCompiler<[HostBindingCompilerRegistration]> for PropertyReadPlanCompiler {
+    type Cursor = PropertyReadBuildCursor<HostBindingCompilerCursor, HostBindingArtifact>;
+    type Artifact = HostBindingArtifact;
+
+    fn start(
+        &self,
+        input: &PlanBuildInput<'_, [HostBindingCompilerRegistration]>,
+    ) -> CoreResult<Self::Cursor> {
+        self.start_impl(input)
+    }
+
+    fn step(
+        &self,
+        input: &PlanBuildInput<'_, [HostBindingCompilerRegistration]>,
+        cursor: Self::Cursor,
+        budget: &mut WorkBudget,
+    ) -> PlanBuildStep<Self::Cursor, Self::Artifact> {
+        self.step_impl(input, cursor, budget)
+    }
+
+    fn abort(&self, cursor: Self::Cursor) {
+        self.abort_impl(cursor);
+    }
+}
+
+#[cfg(feature = "std")]
+impl<'a> PlanCompiler<[&'a HostBindingCompilerRegistration]> for PropertyReadPlanCompiler {
+    type Cursor = PropertyReadBuildCursor<HostBindingCompilerCursor, HostBindingArtifact>;
+    type Artifact = HostBindingArtifact;
+
+    fn start(
+        &self,
+        input: &PlanBuildInput<'_, [&'a HostBindingCompilerRegistration]>,
+    ) -> CoreResult<Self::Cursor> {
+        self.start_impl(input)
+    }
+
+    fn step(
+        &self,
+        input: &PlanBuildInput<'_, [&'a HostBindingCompilerRegistration]>,
+        cursor: Self::Cursor,
+        budget: &mut WorkBudget,
+    ) -> PlanBuildStep<Self::Cursor, Self::Artifact> {
+        self.step_impl(input, cursor, budget)
+    }
+
+    fn abort(&self, cursor: Self::Cursor) {
+        self.abort_impl(cursor);
+    }
+}
+
+impl PropertyReadPlanCompiler {
+    fn registration<'a, R>(&self, registrations: &'a [R]) -> CoreResult<&'a R>
+    where
+        R: PropertyReadCompilerRegistration,
+    {
         let index = usize::try_from(self.registration_index).map_err(|_| {
             selection_error(clinkz_wot_core::SelectionFailureReason::NoSupportingBinding)
         })?;
-        registrations.get(index).ok_or_else(|| {
+        let registration = registrations.get(index).ok_or_else(|| {
             selection_error(clinkz_wot_core::SelectionFailureReason::NoSupportingBinding)
-        })
+        })?;
+        if registration.compatibility() != self.compatibility {
+            return Err(selection_error(
+                clinkz_wot_core::SelectionFailureReason::NoSupportingBinding,
+            ));
+        }
+        Ok(registration)
     }
 }
 
@@ -364,6 +558,7 @@ fn finish_property_read_build<C, A>(
     candidate: BindingCandidate,
     admitted: BindingArtifactFootprint,
     artifact: BindingArtifact<A>,
+    role: BindingArtifactRole,
 ) -> PlanBuildStep<PropertyReadBuildCursor<C, A>, A> {
     let identity = BindingArtifactIdentity::new(
         plan_set_generation,
@@ -372,18 +567,20 @@ fn finish_property_read_build<C, A>(
         candidate.binding_generation(),
         candidate.configuration(),
         candidate.compatibility(),
-        BindingArtifactRole::ConsumerCall,
+        role,
     );
     let envelope = match BindingArtifactEnvelope::try_new(identity, admitted, artifact) {
         Ok(envelope) => envelope,
         Err(rejection) => {
             return PlanBuildStep::Failed(PlanBuildFailure::new(
                 compiler_contract_error(&plan, candidate),
-                PropertyReadBuildCursor::ArtifactReady {
-                    plan,
-                    candidate,
-                    admitted,
-                    artifact: rejection.into_artifact(),
+                PropertyReadBuildCursor {
+                    state: PropertyReadBuildState::ArtifactReady {
+                        plan,
+                        candidate,
+                        admitted,
+                        artifact: rejection.into_artifact(),
+                    },
                 },
             ));
         }
@@ -521,12 +718,13 @@ mod tests {
         PlanId::new(SlotIndex::new(3), Generation::INITIAL)
     }
 
-    fn compiler<R>() -> PropertyReadPlanCompiler<R> {
+    fn compiler<R>() -> PropertyReadPlanCompiler {
         PropertyReadPlanCompiler::new(
             plan_id(),
             BindingId::new(11),
             BindingGeneration::new(Generation::INITIAL),
             BindingConfigurationDigest::new([12; 32]),
+            BindingArtifactCompatibility::new([13; 16]),
             0,
             0,
         )
@@ -574,7 +772,11 @@ mod tests {
             let cursor = compiler.start(&input).expect("build cursor");
             let mut zero = WorkBudget::new();
             let cursor = match compiler.step(&input, cursor, &mut zero) {
-                PlanBuildStep::Pending(cursor @ PropertyReadBuildCursor::Start) => cursor,
+                PlanBuildStep::Pending(cursor)
+                    if matches!(&cursor.state, PropertyReadBuildState::Start) =>
+                {
+                    cursor
+                }
                 _ => panic!("zero budget advanced the planner"),
             };
             let mut first = WorkBudget::new().with_remaining(WorkClass::BindingPolls, 1);
