@@ -57,6 +57,8 @@ allowed_fixture_adapters = [
 forbidden_fixture_adapters = [
     "logical-plan",
     "binding-artifact",
+    "complete-registration-or-plan-set-lease",
+    "route-key-or-prepare-input",
     "route-guard-or-permit",
     "accepted-request",
     "handler-context-input-or-output",
@@ -67,6 +69,7 @@ mandatory_runtime_assertions = [
     "td-read-only-during-planning",
     "logical-plan-immutable-after-admission",
     "binding-artifact-sufficient-without-td",
+    "first-entry-production-provenance-closed-before-prepare",
     "no-accept-before-servient-publication",
     "servient-selects-route-and-handler",
     "handler-called-exactly-once",
@@ -83,8 +86,97 @@ mandatory_compile_assertions = [
     "binding-api-exposes-no-handler-or-dispatch-capability",
     "activation-permit-not-constructible-cloneable-or-storable",
     "fixture-uses-production-boundary-types",
+    "runner-cannot-assemble-wp400-entry-owned-values",
     "async-no-std-portable-surface-compiles",
 ]
+
+first_legal_wp400_entry = "binding-route:Absent:begin_prepare->Preparing"
+first_entry_parent_transition = "expose:Draft:expose->Preparing"
+first_entry_prepare_calls = [
+    "RouteServerBinding::prepare",
+    "PollServerBinding::start_prepare",
+]
+first_entry_profiles = ["application-static", "host-erased"]
+first_entry_deferred_values = [
+    "prepared-readiness-active-and-committed-guards",
+    "inbound-request-correlation-and-security-result",
+    "handler-context-input-output-and-response-opportunity",
+    "serving-publication-and-drain-state",
+    "accept-hint-final-interaction-input-subscription-emission-and-broad-workloads",
+]
+first_entry_negative_mutations = [
+    "fixture-restated-artifact-or-reservation",
+    "dropped-or-mismatched-generation",
+    "planning-or-servient-reservation-reconstruction",
+    "host-erasure-metadata-loss",
+    "unrelated-reservation-with-real-artifact",
+    "partial-or-bare-registration",
+    "binding-side-effect-before-resource-and-cleanup-reservation",
+    "host-static-semantic-divergence",
+]
+
+[[first_entry_input]]
+id = "producer-logical-route"
+owner = "clinkz-wot-planning"
+carrier = "PlanBuildOutput.logical_plans+artifact_refs"
+provenance = "upstream-output"
+fixture_policy = "production-object-only"
+
+[[first_entry_input]]
+id = "producer-route-artifact-metadata"
+owner = "concrete-binding-compiler"
+carrier = "PlanBuildOutput.artifacts+BindingArtifactEnvelope"
+provenance = "upstream-output"
+fixture_policy = "production-object-only"
+
+[[first_entry_input]]
+id = "complete-binding-registration"
+owner = "clinkz-wot-servient"
+carrier = "BindingRegistrationSnapshot+HostBindingRegistration|StaticBindingRegistration"
+provenance = "root-input"
+fixture_policy = "legal-root-input"
+
+[[first_entry_input]]
+id = "produced-thing-generation"
+owner = "clinkz-wot-servient"
+carrier = "ExposedThingRecord+ThingSlotId"
+provenance = "servient-derived"
+fixture_policy = "product-code-derived-only"
+
+[[first_entry_input]]
+id = "property-read-handler-coverage"
+owner = "application"
+carrier = "Servient-frozen-handler-view+StaticHandlerRegistration|HostHandlerRegistration"
+provenance = "root-input"
+fixture_policy = "legal-root-input"
+
+[[first_entry_input]]
+id = "servient-admission-policy"
+owner = "clinkz-wot-foundation+clinkz-wot-servient"
+carrier = "ServientBuilder+ResourceLimits+WorkBudget+Deadline+Clock"
+provenance = "root-input"
+fixture_policy = "legal-root-input"
+
+[[first_entry_input]]
+id = "compiled-plan-set-ownership"
+owner = "clinkz-wot-servient"
+carrier = "CompiledPlanSetRecord+PlanSetLease"
+provenance = "servient-derived"
+fixture_policy = "product-code-derived-only"
+
+[[first_entry_input]]
+id = "route-preparation-assembly"
+owner = "clinkz-wot-servient"
+carrier = "BindingRouteRecord+BindingRouteKey+PrepareInput"
+provenance = "servient-derived"
+fixture_policy = "product-code-derived-only"
+
+[[first_entry_input]]
+id = "activation-and-cleanup-ownership"
+owner = "clinkz-wot-servient"
+carrier = "ServingActivationRecord+RouteAcceptLease+cleanup-reservations"
+provenance = "servient-derived"
+fixture_policy = "product-code-derived-only"
 
 [[tranche]]
 id = "WP-100-PROPERTY-READ-HANDLER-SLICE"
@@ -819,6 +911,7 @@ authoritative_artifacts = [
 completion_evidence_keys = ["property-read-servient-slice"]
 blocking_conditions = [
     "route-reservation-projection-complete",
+    "first-entry-input-closure-candidate-reviewed",
     "serving-activation-route-selection-response-and-cleanup-candidate-reviewed",
     "host-and-manual-runner-fixtures-defined",
 ]
