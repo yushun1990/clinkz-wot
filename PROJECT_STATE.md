@@ -156,6 +156,12 @@ The active design revision is v5.0 bounded-core authority.
   not default-branch authority and does not release WP-400. That branch already
   assigns D45 to the route-reservation decision, so the disjoint 0053 packet
   intentionally uses D46 even though D45 is not yet present on `master`.
+- Draft pull request #20 targets `master` from
+  `agent/decide-wp400-first-entry-closure` and carries technical decision
+  checkpoint `6271c2861771a0fbc18772bd853bc451ba0fd614`. Its current-head
+  validation and conversation state remain GitHub-owned live facts that must
+  be checked before integration; this packet does not satisfy an independent
+  review or automatic-integration predicate by itself.
 - GitHub CLI, SSH fetch/push, and the connected GitHub application are
   available as of 2026-08-09. Active Ruleset `20009352` was
   fetched on 2026-08-02: it targets the default branch, requires strict
@@ -188,13 +194,11 @@ review or widen pull request #18. WP-400 remains blocked.
 
 ### Before verified integration
 
-The exact 0053 decision packet on
-`agent/decide-wp400-first-entry-closure` passes its Property Read checker,
-aggregate design suite in a clean target, locked workspace tests, 21-cell
-feature matrix, formatting, and diff hygiene. Commit and push only that scope,
-open one draft pull request against `master`, and verify exact-head remote
-`validation`. Keep pull request #18 independently draft/unreviewed and keep
-WP-400 candidate and source blocked.
+Draft pull request #20 carries the exact 0053 decision packet from
+`agent/decide-wp400-first-entry-closure`. Verify its exact current-head remote
+`validation`, scope, draft status, and conversation state. Keep pull request
+#18 independently draft/unreviewed and keep WP-400 candidate and source
+blocked.
 
 ### After verified integration
 
@@ -788,7 +792,8 @@ review cycle. WP-400 source fails closed on an unowned or fixture-only value,
 illegal recomputation, generation mismatch, missing pre-side-effect resource
 or cleanup reservation, or host/static semantic divergence.
 
-The current decision worktree passes the design-check unit suite,
+Technical decision checkpoint
+`6271c2861771a0fbc18772bd853bc451ba0fd614` passes the design-check unit suite,
 `check-work-packages`, the active-v5 aggregate design suite in a clean isolated
 Cargo target, `cargo test --workspace --locked`, the supported 21-cell feature
 matrix, formatting, carry-forward digests, and diff hygiene. An isolated
@@ -1211,10 +1216,9 @@ source. Its current tree passes:
 
 ## Next Safe Actions
 
-1. Commit and push only the locally validated issue-0053 decision scope from
-   `agent/decide-wp400-first-entry-closure`, open one draft pull request against
-   `master`, and verify exact-head remote `validation`. Keep it draft unless
-   every registered terminal integration predicate is current.
+1. Verify draft pull request #20's exact current-head remote `validation`,
+   intended decision-only diff, draft state, and conversation state. Keep it
+   draft unless every registered terminal integration predicate is current.
 2. After that pull request is verified on fetched `master`, reconcile draft
    pull request #18 onto the new default while preserving its exact
    route-reservation scope. Rerun its candidate checks and obtain independent
