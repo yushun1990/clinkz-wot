@@ -26,7 +26,7 @@ Topics are retained after migration as decision history.
 
 ** OPEN
 
-- None.
+- [[file:0053-wp400-first-entry-input-closure-audit.md][0053 WP-400 First-Legal-Entry Input Closure Audit]]
 
 ** DISCUSSING
 
