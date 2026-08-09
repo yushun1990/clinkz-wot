@@ -26,7 +26,7 @@ Topics are retained after migration as decision history.
 
 ** OPEN
 
-- [[file:0053-wp400-first-entry-input-closure-audit.md][0053 WP-400 First-Legal-Entry Input Closure Audit]]
+- None.
 
 ** DISCUSSING
 
@@ -89,6 +89,7 @@ Topics are retained after migration as decision history.
 - [[file:0049-property-read-producer-route-planning-gap.md][0049 Property Read Producer-Route Planning Reachability Gap]]
 - [[file:0050-tranche-release-and-successor-entry-evidence.md][0050 Tranche Completion and Successor-Entry Evidence]]
 - [[file:0051-project-state-merge-transition-drift.md][0051 PROJECT_STATE Merge-Transition Drift]]
+- [[file:0053-wp400-first-entry-input-closure-audit.md][0053 WP-400 First-Legal-Entry Input Closure Audit]]
 
 * History
 

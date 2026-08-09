@@ -17,12 +17,14 @@ and request cleanup.
 
 It is architecture evidence, not a demonstration application or a replacement
 for package-local completion. The package order remains
-`WP-100 -> WP-200 -> WP-300 -> WP-400`. The executable tranche DAG contains
-one additional WP-200-owned Producer-route correction after WP-300 because
-the completed package-local slices exposed a concrete handoff gap. ADR-0013
-permits only the five exact
-slice tranches in the manifest to cross incomplete package boundaries after
-their own admission reviews. No manifest record is implementation admission.
+`WP-100 -> WP-200 -> WP-300 -> WP-400`. The executable path contains the
+completed WP-200-owned Producer-route correction after WP-300 and requires one
+distinct compiler-owned route-reservation correction before WP-400 because
+successor reconstruction exposed those two concrete handoff gaps. ADR-0013
+permits only exact tranches registered in the manifest to cross incomplete
+package boundaries after their own admission reviews. A pending correction is
+not part of the executable DAG until its reviewed registration is integrated,
+and no manifest record is implementation admission.
 
 Evidence claims advance in this order:
 
@@ -72,6 +74,11 @@ WP-100-PROPERTY-READ-HANDLER-SLICE
     -> PROPERTY-READ-ARCHITECTURE
 ```
 
+This diagram reflects the currently integrated manifest. Before WP-400 may be
+released, the reviewed route-reservation correction must be inserted between
+the Producer-route projection and WP-400; its draft candidate is not treated
+as integrated authority by this document.
+
 The gate blocks:
 
 - broad `WP-100-HANDLER-ENTRY`, while leaving its current exact prerequisite
@@ -81,17 +88,21 @@ The gate blocks:
 
 It does not block M1 documentation convergence, corrective work, the current
 `WP-100-HANDLER-CONTEXT` candidate lifecycle, WP-200 planning work, or admission
-preparation for the five exact slices. WP-500 and WP-600 remain downstream of
-WP-300 and are therefore indirectly protected from becoming the first
-architecture proof.
+preparation for the registered exact slices. WP-500 and WP-600 remain
+downstream of WP-300 and are therefore indirectly protected from becoming the
+first architecture proof.
 
 The exact downstream release events are:
 
 - completion of `WP-300-PROPERTY-READ-BINDING-SLICE` releases only
   `WP-200-PROPERTY-READ-PRODUCER-ROUTE-PROJECTION`;
-- completion of that projection releases only candidate, review, and
-  pre-source-transition preparation for
-  `WP-400-PROPERTY-READ-SERVIENT-SLICE`; and
+- completion of that projection exposed the missing compiler-owned canonical
+  route reservation and releases only its owner-scoped correction;
+- the independently reviewed completion and verified default integration of
+  that production metadata correction jointly release only candidate, review,
+  and pre-source-transition preparation for
+  `WP-400-PROPERTY-READ-SERVIENT-SLICE`, whose candidate must also close the
+  first-entry table below; and
 - broad WP-300 completion releases broad WP-400, WP-500, and WP-600.
 
 Downstream preparation may reduce uncertainty before those events but grants
@@ -134,6 +145,54 @@ and final `InteractionInput` storage migration remain broad WP-100 work and
 completion claims. Any later change to a production boundary reused by this
 gate triggers the normal change-control impact review and reruns this evidence.
 
+## WP-400 first-entry input closure
+
+For this gate, the first legal WP-400 route entry is the exact
+`binding-route` transition
+`Absent --begin_prepare--> Preparing`. It occurs inside the expose
+transaction after `Draft --expose--> Preparing` has transferred transaction
+ownership. The transition may invoke `RouteServerBinding::prepare` or
+`PollServerBinding::start_prepare` only after its route record and every
+pre-side-effect reservation are complete.
+
+`PrepareInput` is therefore a derived WP-300 call operand, not the complete
+WP-400 entry boundary. The future public or private Rust helper that assembles
+the record remains a WP-400 implementation detail, but it must consume the
+following closed production inputs and may not acquire another semantic root
+input after binding preparation starts:
+
+| Required class | Semantic creator and production carrier | Entry treatment | Fixture rule |
+| --- | --- | --- | --- |
+| Producer logical route | Planning, through the real `PlanBuildOutput` logical plan and `BindingArtifactRef` | Retain the Thing id, Property target, `ReadProperty` operation, plan id, and plan-set-qualified reference | The runner uses the planner output object; it does not restate a plan, target, or reference |
+| Producer-route artifact metadata | The concrete binding compiler, role-checked and preserved by Core/Planning in the admitted artifact envelope | Retain the opaque artifact and its identity, role, admitted footprint, and canonical route reservation | The route reservation must arrive from the admitted envelope after the route-reservation correction; equal fixture bytes are not provenance |
+| Complete binding registration | The binding author through a Core-validated host or static registration, frozen by the Servient registration snapshot | Match binding id/generation, configuration, compatibility, capability, execution form, server, resources, ingress, and status to the artifact identity before side effects | No bare server/compiler or separately recreated registration identity is accepted |
+| Produced Thing and generation | The logical plan supplies `ThingId`; WP-400 allocates the produced Thing slot/generation and retains it in `ExposedThingRecord` | Validate one Thing/plan-set generation and use it for every derived record and authority | A test may seed a legal root generation only through the production allocator/constructor; it may not patch a private record |
+| Property Read handler coverage | The application supplies the real WP-100 handler registration and footprint; WP-400 freezes the matching handler view | Prove exact Thing/Property/operation coverage before the route can become publishable | The handler and its result may be fixture implementations, but the runner cannot fabricate handler lookup or `HandlerContext` |
+| Servient admission policy | Foundation/Servient configuration supplies resource limits, work/deadline/clock policy, and cleanup/status capacity | Reserve the plan/runtime record, route/guard/readiness/accept, ingress, status, and cleanup obligations required before the first binding side effect | Numeric test policy is a legal root input; implicit or post-side-effect capacity is forbidden |
+| Compiled plan-set ownership | WP-400 installs the real plan output in `CompiledPlanSetRecord` and retains a `PlanSetLease` | Keep the referenced logical plan and artifact live through route, request, response, cleanup, and reclamation ownership | The runner cannot keep a detached reference while bypassing the plan-set record/lease |
+| Route preparation assembly | WP-400 allocates the route generation and derives one `BindingRouteKey` and `PrepareInput` from the matching plan, artifact, registration, reservation, and admitted route-state footprint | Publish `BindingRouteRecord: Preparing` only after every identity check and reservation succeeds | The architecture runner enters through WP-400 product code; it does not construct the route key or `PrepareInput` itself |
+| Activation and cleanup ownership | WP-400 derives one reserved `ServingActivationAuthority`, matching route accept-lease identity/capacity, and complete cleanup reservations from the produced Thing, route, plan-set, and policy | Retain them unavailable until their legal later transitions; no binding work starts without rollback ownership | The runner cannot inject an authority, permit, lease, cleanup record, or status-only substitute |
+
+Host-erased and application-static representations may store these values
+differently, but their semantic identities, generation checks, resource
+deltas, and transition outcomes must match. An accept lease or other derived
+object may be instantiated later when its transition requires it, but all of
+its external identity and capacity inputs are closed at this boundary.
+
+Prepared/readiness/active/committed guards, inbound match and request,
+correlation, security result, handler context/input, response opportunity,
+and serving publication state are later lifecycle outputs. `AcceptHint`, final
+`InteractionInput` storage, subscription/emission, multi-route availability,
+production protocol, and workload maturity remain excluded broad work rather
+than missing inputs to this single-route closure.
+
+This is a one-time closure review owned by the
+`WP-400-PROPERTY-READ-SERVIENT-SLICE` candidate and its normal independent
+admission review. It is not a new tranche or a permanent cross-package gate.
+Any unowned row, fixture-only substitute, illegal recomputation, generation
+loss/mismatch, resource or cleanup reservation after side effects, or
+host/static semantic divergence blocks WP-400 source admission.
+
 ## Fixture topology
 
 The future fixture has two package roots:
@@ -144,12 +203,18 @@ The future fixture has two package roots:
 - `property-read-runner` composes the TD, planner, mock registration, Servient,
   and handler, and owns the runtime assertions.
 
-Only protocol-frame values, deterministic I/O state, and instrumentation probes
-are fixture adapters. A fixture may not replace the logical plan, binding
-artifact, route guard or activation permit, accepted request, handler
-context/input/output, response opportunity, or cleanup owner. If any one of
-those production boundaries is unavailable or unconstructible, the owning
-slice remains blocked and the difficulty becomes design feedback.
+Only protocol-frame values, deterministic I/O state, and instrumentation
+probes are fixture adapters. Separately, the fixture may choose deterministic
+values at a real production root input, including TD contents, binding
+configuration and registration seed, initial generations, handler behavior,
+and explicit resource policy. A fixture may not replace or restate a
+production-carried logical plan, binding artifact/metadata, complete
+registration, compiled plan-set lease, route key/preparation input, route
+guard or activation
+capability, accepted request, handler context/input/output, response
+opportunity, or cleanup owner. If any one of those production boundaries is
+unavailable or unconstructible, the owning slice remains blocked and the
+difficulty becomes design feedback.
 
 The fixture directories are not created until their owning tranche has an exact
 reviewed candidate. Placeholder crates would falsely imply a constructible
@@ -163,6 +228,8 @@ The completion check must prove:
 - the TD fixture is read during planning and not at runtime;
 - the logical plan is immutable after admission, and the binding artifact is
   sufficient without the TD;
+- every row in the first-entry closure is supplied through its production
+  carrier before the first binding side effect;
 - no acceptance occurs before Servient publication;
 - only Servient selects the admitted route and handler;
 - the static handler is invoked exactly once with protocol-neutral input;
@@ -189,6 +256,11 @@ Negative compile/source checks prove:
   or mutable plan-set capability;
 - activation permits cannot be independently constructed, cloned, copied, or
   retained beyond their borrow;
+- the runner cannot construct `BindingRouteKey`, `PrepareInput`, an activation
+  authority/lease, or cleanup ownership outside WP-400 product code;
+- fixture-restated artifact metadata, a dropped generation, an unrelated
+  reservation, a partial registration, and pre-reservation side effects are
+  rejected in both runtime profiles;
 - the mock cannot rescan the TD or construct a runtime logical plan; and
 - the `async-no-std` portable surface compiles without choosing an executor.
 
@@ -224,12 +296,15 @@ Every slice is Category B or C according to its actual candidate impact and
 requires its own exact paths, contract fixtures, impact analysis, independent
 review, and ADR-0013 admission. The handler, original WP-200 plan, WP-300
 binding, and Producer-route projection slices are `complete`/`approved`; the
-WP-400 Servient slice remains `planned`/`blocked`. The correction's real
-`ProducerRoute` plan-output-to-`PrepareInput` evidence now releases only the
-WP-400 candidate/review and pre-source-transition process, not WP-400 source.
-Each status record grants no source-edit authority without its approved
-pre-source checkpoint; approval and in-progress truth may share that one
-recoverable checkpoint under D9.
+WP-400 Servient slice remains `planned`/`blocked`. The completed
+`ProducerRoute` plan-output-to-`PrepareInput` evidence alone does not release
+that candidate: the canonical route reservation must first arrive through an
+independently reviewed, implemented, and default-branch-validated production
+metadata path. The later WP-400 candidate must then close the complete
+first-entry table above in its existing independent review; it does not gain a
+separate preliminary review cycle. Each status record grants no source-edit authority.
+Approval and in-progress truth may share one approved, recoverable pre-source
+checkpoint under D9.
 
 For `WP-100-PROPERTY-READ-HANDLER-SLICE`, the candidate and completion record
 must claim only `ReadPropertyHandler` and its composition with the four reused

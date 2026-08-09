@@ -26,7 +26,8 @@ does not reinterpret forms, security expressions, Directory requests, or binding
 Work may begin only after `WP-300` is complete and every entry gate above is closed.
 
 The exact `WP-400-PROPERTY-READ-SERVIENT-SLICE` is the sole exception: after
-its binding-slice dependency completes, it may receive an independent ADR-0013
+its Producer-route and compiler-owned route-reservation handoffs complete and
+are verified on the default branch, it may receive an independent ADR-0013
 review to compose the architecture-gate scenario. This exception neither opens
 the broad entry point nor changes package completion order.
 
@@ -65,6 +66,42 @@ Handler-origin response validation follows
 uses WP-300 `InboundResponse::try_success`, which rejects binding metadata and
 invalid action/status combinations. Servient does not implement a second
 validator.
+
+## Narrow Property Read first-entry closure
+
+The first legal route boundary for the narrow slice is not the WP-300
+`PrepareInput` type in isolation. It is the Servient-owned
+`binding-route: Absent --begin_prepare--> Preparing` transition inside the
+`expose: Draft --expose--> Preparing` transaction. Only after the private
+route record and all pre-side-effect reservations are complete may WP-400
+derive `PrepareInput` and call the host or static preparation operation.
+
+The exact consumer-backward input/provenance table is owned by
+`docs/work-packages/PROPERTY-READ-ARCHITECTURE.md` and
+`docs/work-packages/property-read-architecture-gate.toml`. In summary, the
+entry consumes one real Producer plan/artifact output, one matching complete
+binding registration snapshot, one produced Thing/generation, one matching
+Property Read handler registration, and explicit resource/time/cleanup policy.
+WP-400 then derives the retained plan-set record/lease, route generation and
+key, `PrepareInput`, reserved serving authority/accept-lease identity, and
+complete rollback ownership. It cannot read the TD again, call a legacy
+selector, inspect opaque artifact payloads, or request another semantic root
+input after preparation starts.
+
+The Rust constructor or private record layout remains implementation feedback,
+not a frozen public API. What is frozen is provenance and timing: every
+required identity must come from its production owner, generation equality is
+validated before the first binding side effect, and route/ingress/guard/
+readiness/accept/status/cleanup capacity is reserved first. Host-erased and
+application-static representations preserve the same semantic values and
+resource deltas.
+
+The narrow WP-400 candidate must close this table in its existing independent
+review. Any unowned value, fixture-only substitute, illegal canonicalization,
+generation loss/mismatch, partial registration, detached artifact reference,
+or side effect before resource and cleanup reservation blocks source
+admission. This is a one-time Property Read feedback control, not a new broad
+WP-400 design freeze or a project-wide successor rule.
 
 ## Requirements
 

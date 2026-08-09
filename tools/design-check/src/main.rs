@@ -3417,6 +3417,7 @@ fn property_read_slice_spec(id: &str) -> Option<PropertyReadSliceSpec> {
             evidence_key: "property-read-servient-slice",
             blockers: &[
                 "producer-route-projection-complete",
+                "first-entry-input-closure-candidate-reviewed",
                 "serving-activation-route-selection-response-and-cleanup-candidate-reviewed",
                 "host-and-manual-runner-fixtures-defined",
             ],
@@ -3631,6 +3632,8 @@ fn check_property_read_integration_gate(
     let expected_forbidden_adapters = owned_set(&[
         "logical-plan",
         "binding-artifact",
+        "complete-registration-or-plan-set-lease",
+        "route-key-or-prepare-input",
         "route-guard-or-permit",
         "accepted-request",
         "handler-context-input-or-output",
@@ -3649,6 +3652,7 @@ fn check_property_read_integration_gate(
         "td-read-only-during-planning",
         "logical-plan-immutable-after-admission",
         "binding-artifact-sufficient-without-td",
+        "first-entry-production-provenance-closed-before-prepare",
         "no-accept-before-servient-publication",
         "servient-selects-route-and-handler",
         "handler-called-exactly-once",
@@ -3672,6 +3676,7 @@ fn check_property_read_integration_gate(
         "binding-api-exposes-no-handler-or-dispatch-capability",
         "activation-permit-not-constructible-cloneable-or-storable",
         "fixture-uses-production-boundary-types",
+        "runner-cannot-assemble-wp400-entry-owned-values",
         "async-no-std-portable-surface-compiles",
     ]);
     if compile_assertions != expected_compile_assertions {
@@ -3679,6 +3684,167 @@ fn check_property_read_integration_gate(
             "{PROPERTY_READ_GATE} compile assertions mismatch; expected \
              {expected_compile_assertions:?}, found {compile_assertions:?}"
         ));
+    }
+
+    require_string(
+        manifest.get("first_legal_wp400_entry"),
+        "property-read gate first_legal_wp400_entry",
+        "binding-route:Absent:begin_prepare->Preparing",
+    )?;
+    require_string(
+        manifest.get("first_entry_parent_transition"),
+        "property-read gate first_entry_parent_transition",
+        "expose:Draft:expose->Preparing",
+    )?;
+    let prepare_calls = root_string_set(&manifest, "first_entry_prepare_calls")?;
+    let expected_prepare_calls = owned_set(&[
+        "RouteServerBinding::prepare",
+        "PollServerBinding::start_prepare",
+    ]);
+    if prepare_calls != expected_prepare_calls {
+        return Err(format!(
+            "{PROPERTY_READ_GATE} first-entry prepare calls mismatch; expected \
+             {expected_prepare_calls:?}, found {prepare_calls:?}"
+        ));
+    }
+    let first_entry_profiles = root_string_set(&manifest, "first_entry_profiles")?;
+    let expected_first_entry_profiles = owned_set(&["application-static", "host-erased"]);
+    if first_entry_profiles != expected_first_entry_profiles {
+        return Err(format!(
+            "{PROPERTY_READ_GATE} first-entry profiles mismatch; expected \
+             {expected_first_entry_profiles:?}, found {first_entry_profiles:?}"
+        ));
+    }
+    let deferred_values = root_string_set(&manifest, "first_entry_deferred_values")?;
+    let expected_deferred_values = owned_set(&[
+        "prepared-readiness-active-and-committed-guards",
+        "inbound-request-correlation-and-security-result",
+        "handler-context-input-output-and-response-opportunity",
+        "serving-publication-and-drain-state",
+        "accept-hint-final-interaction-input-subscription-emission-and-broad-workloads",
+    ]);
+    if deferred_values != expected_deferred_values {
+        return Err(format!(
+            "{PROPERTY_READ_GATE} first-entry deferred values mismatch; expected \
+             {expected_deferred_values:?}, found {deferred_values:?}"
+        ));
+    }
+    let negative_mutations = root_string_set(&manifest, "first_entry_negative_mutations")?;
+    let expected_negative_mutations = owned_set(&[
+        "fixture-restated-artifact-or-reservation",
+        "dropped-or-mismatched-generation",
+        "planning-or-servient-reservation-reconstruction",
+        "host-erasure-metadata-loss",
+        "unrelated-reservation-with-real-artifact",
+        "partial-or-bare-registration",
+        "binding-side-effect-before-resource-and-cleanup-reservation",
+        "host-static-semantic-divergence",
+    ]);
+    if negative_mutations != expected_negative_mutations {
+        return Err(format!(
+            "{PROPERTY_READ_GATE} first-entry negative mutations mismatch; expected \
+             {expected_negative_mutations:?}, found {negative_mutations:?}"
+        ));
+    }
+
+    let first_entry_inputs = manifest
+        .get("first_entry_input")
+        .and_then(Item::as_array_of_tables)
+        .ok_or_else(|| format!("{PROPERTY_READ_GATE} has no [[first_entry_input]] records"))?;
+    let mut first_entry_inputs_by_id = BTreeMap::new();
+    for input in first_entry_inputs {
+        let id = string_field(input, "id", "property-read first-entry input")?;
+        require_exact_table_fields(
+            input,
+            &format!("property-read first-entry input {id:?}"),
+            &["id", "owner", "carrier", "provenance", "fixture_policy"],
+        )?;
+        if first_entry_inputs_by_id.insert(id.clone(), input).is_some() {
+            return Err(format!(
+                "{PROPERTY_READ_GATE} duplicates first-entry input {id:?}"
+            ));
+        }
+    }
+    let expected_first_entry_inputs = [
+        (
+            "producer-logical-route",
+            "clinkz-wot-planning",
+            "PlanBuildOutput.logical_plans+artifact_refs",
+            "upstream-output",
+            "production-object-only",
+        ),
+        (
+            "producer-route-artifact-metadata",
+            "concrete-binding-compiler",
+            "PlanBuildOutput.artifacts+BindingArtifactEnvelope",
+            "upstream-output",
+            "production-object-only",
+        ),
+        (
+            "complete-binding-registration",
+            "clinkz-wot-servient",
+            "BindingRegistrationSnapshot+HostBindingRegistration|StaticBindingRegistration",
+            "root-input",
+            "legal-root-input",
+        ),
+        (
+            "produced-thing-generation",
+            "clinkz-wot-servient",
+            "ExposedThingRecord+ThingSlotId",
+            "servient-derived",
+            "product-code-derived-only",
+        ),
+        (
+            "property-read-handler-coverage",
+            "application",
+            "Servient-frozen-handler-view+StaticHandlerRegistration|HostHandlerRegistration",
+            "root-input",
+            "legal-root-input",
+        ),
+        (
+            "servient-admission-policy",
+            "clinkz-wot-foundation+clinkz-wot-servient",
+            "ServientBuilder+ResourceLimits+WorkBudget+Deadline+Clock",
+            "root-input",
+            "legal-root-input",
+        ),
+        (
+            "compiled-plan-set-ownership",
+            "clinkz-wot-servient",
+            "CompiledPlanSetRecord+PlanSetLease",
+            "servient-derived",
+            "product-code-derived-only",
+        ),
+        (
+            "route-preparation-assembly",
+            "clinkz-wot-servient",
+            "BindingRouteRecord+BindingRouteKey+PrepareInput",
+            "servient-derived",
+            "product-code-derived-only",
+        ),
+        (
+            "activation-and-cleanup-ownership",
+            "clinkz-wot-servient",
+            "ServingActivationRecord+RouteAcceptLease+cleanup-reservations",
+            "servient-derived",
+            "product-code-derived-only",
+        ),
+    ];
+    if first_entry_inputs_by_id.len() != expected_first_entry_inputs.len() {
+        return Err(format!(
+            "{PROPERTY_READ_GATE} first-entry input count mismatch; expected {}, found {}",
+            expected_first_entry_inputs.len(),
+            first_entry_inputs_by_id.len()
+        ));
+    }
+    for (id, owner, carrier, provenance, fixture_policy) in expected_first_entry_inputs {
+        let input = first_entry_inputs_by_id
+            .get(id)
+            .ok_or_else(|| format!("{PROPERTY_READ_GATE} is missing first-entry input {id:?}"))?;
+        require_table_string(input, "owner", owner, id)?;
+        require_table_string(input, "carrier", carrier, id)?;
+        require_table_string(input, "provenance", provenance, id)?;
+        require_table_string(input, "fixture_policy", fixture_policy, id)?;
     }
 
     let tranches = manifest

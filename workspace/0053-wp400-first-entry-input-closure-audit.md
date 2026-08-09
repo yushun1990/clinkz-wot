@@ -1,6 +1,6 @@
 # 0053 WP-400 First-Legal-Entry Input Closure Audit
 
-Status: OPEN
+Status: MIGRATED
 
 Kind: Owner review concern on cross-package integration completeness and feedback latency
 
@@ -171,6 +171,123 @@ The decision should explicitly state:
 - whether and when WP-400 candidate/source preparation is blocked;
 - the smallest executable/negative evidence needed;
 - how the decision avoids another open-ended evidence expansion cycle.
+
+## Investigation result
+
+The concern is confirmed, but its scope is narrower than a reusable global
+successor rule. D43 requires evidence for each *declared* upstream handoff; it
+does not require a consumer-backward enumeration of every value needed before
+the successor's first side effect. The successive `ProducerRoute` and
+`RouteReservationIdentity` findings therefore expose a real completeness gap
+in the first Property Read cross-package composition rather than merely a
+missed invocation of an existing complete-input rule.
+
+The first legal WP-400 route entry is not `PrepareInput` by itself.
+`PrepareInput` is the owned WP-300 call operand produced at the end of a
+Servient-owned admission boundary. The exact boundary is the
+`binding-route` state transition
+`Absent --begin_prepare--> Preparing`, nested under the expose transaction's
+`Draft --expose--> Preparing` transition. Before that route transition may
+call `RouteServerBinding::prepare` or
+`PollServerBinding::start_prepare`, WP-400 must have frozen or reserved the
+complete plan-set, registration, produced-Thing, handler, resource, route,
+activation, and cleanup inputs described by the Property Read architecture
+gate.
+
+Repository reconstruction found no third upstream ownership gap once the
+route-reservation correction is assumed:
+
+- the logical plan supplies the Thing, target, operation, and plan identity;
+- the admitted artifact envelope/reference supplies the complete binding and
+  plan-set identity, role, opaque artifact, and compiler-owned reservation;
+- the complete binding registration supplies the matching server plus
+  resource, ingress, and status declarations;
+- the application supplies a real handler registration and explicit Servient
+  policy at their normal root boundaries; and
+- WP-400 legitimately allocates produced/route generations and derives the
+  private plan-set lease, `BindingRouteKey`, `PrepareInput`, activation
+  authority/lease, and cleanup reservations without another cross-package
+  producer.
+
+Guards, readiness results, committed state, accepted request/correlation,
+security result, handler context/input, response opportunity, and publication
+state are later lifecycle results, not missing first-entry inputs. Broad
+`AcceptHint`, final `InteractionInput` storage, subscription/emission,
+multi-route policy, production protocol, and workload claims remain outside
+the narrow slice.
+
+## Decision
+
+Adopt one bounded consumer-backward closure review for
+`WP-400-PROPERTY-READ-SERVIENT-SLICE`. It is part of that tranche's existing
+candidate and independent admission review, not a new tranche, global rule,
+document family, or serial review cycle.
+
+The machine-readable input/provenance table lives in the existing
+`docs/work-packages/property-read-architecture-gate.toml`; the explanatory
+contract lives in the existing
+`docs/work-packages/PROPERTY-READ-ARCHITECTURE.md` and WP-400 work-package
+document. The review fails before source admission if any required row has no
+production owner/carrier, is fixture-manufactured after its legal root
+boundary, is recomputed by a layer that does not own it, loses or mismatches a
+generation, starts binding work before resource/cleanup reservation, or
+diverges semantically between host and static profiles.
+
+Fixtures may choose deterministic TD, binding-configuration, root generation,
+handler-result, resource-policy, and protocol-I/O values at the same legal
+root inputs available to production. They may not restate a value that
+production must receive from an upstream object, even if the bytes compare
+equal. Object provenance is required for the plan/artifact/registration path;
+semantic equality alone is insufficient. The future Property Read runner must
+enter through WP-400 product code and may not construct its route key,
+`PrepareInput`, activation capability, or cleanup ownership as a substitute.
+
+The finite falsification set covers fixture-restated artifact metadata,
+dropped or mismatched generations, Servient-side reservation reconstruction,
+host-erasure loss, an unrelated reservation paired with a real artifact,
+partial/bare registration use, side effects before resource and cleanup
+reservation, and host/static semantic divergence. The existing legacy-poison
+and no-runtime-TD-read assertions remain applicable.
+
+## Relationship to pull request #18 and WP-400 admission
+
+This decision does not widen, validate, or invalidate draft pull request #18.
+Its route-reservation candidate owns a distinct upstream compiler/Core/Planning
+correction and still requires its independent review. Its package-local
+fixture may construct the downstream contract types to prove that one handoff;
+that proof is not the WP-400 closure review and must not be copied as the
+future architecture runner's assembly path.
+
+Non-authoritative WP-400 analysis may proceed before #18 integrates, but the
+exact WP-400 candidate remains blocked until the route-reservation correction
+is independently reviewed, integrated into fetched `master`, and validated on
+its merge revision. The WP-400 candidate must then carry this closure table
+and its executable negative evidence. WP-400 source remains blocked until
+that same candidate passes independent review and its normal pre-source
+admission checkpoint. No extra review stage is inserted between candidate
+review and admission.
+
+## Alternatives rejected
+
+- No change to review practice is rejected because D43 demonstrably proves
+  declared handoffs one at a time and did not require consumer-complete input
+  enumeration.
+- A permanent project-wide successor-input rule is rejected because the
+  observed risk is concentrated in the first mock vertical composition and
+  there is not yet repeated evidence across unrelated successors.
+- Widening pull request #18 is rejected because the missing evidence belongs
+  to WP-400 admission and has different source ownership, rollback, and
+  validation truth.
+- A new audit/checker/document family is rejected because the existing
+  Property Read manifest, work-package documents, design checker, candidate
+  review, and future architecture runner can express and falsify the claim.
+
+## Migration
+
+The stable conclusion is projected into the Property Read architecture
+document and manifest, the WP-400 work package, the roadmap, the continuation
+state, and the existing design checker. This topic remains the non-normative
+decision history.
 
 ## Non-goals
 
