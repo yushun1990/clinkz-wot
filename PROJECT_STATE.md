@@ -169,12 +169,22 @@ The active design revision is v5.0 bounded-core authority.
   entry are present and the merge is descended from the verified Producer-route
   integration. Default-branch `mainline` run `31303954629` passed on that
   exact merge revision.
-- Draft pull request #18 remains open at exact remote head
+- Draft pull request #18 remains open at immutable candidate head
   `b4fedb61a63d6eab6b1ca77c0e9a4595a4ed9d8c`, targeting `master` from
   `agent/wp200-route-reservation-correction-candidate`. Exact-head
-  `mainline` run `31298103735` passed. It remains draft and unreviewed; no
-  independent attestation exists. Its immutable compiler/Core/Planning
-  correction is not default-branch authority and does not release WP-400.
+  `mainline` run `31298103735` passed. Local reconciliation merge
+  `cd4bc966c3fc472779bcd81b07b85011fee4bfec` preserves that immutable object
+  as first parent and fetched D46 default
+  `8b9405cbd73a5c35c935d417a2c765650110e6a4` as second parent; its PR diff
+  remains the exact registered 23 candidate paths with no product source.
+  Independent root-session review passed on 2026-08-09: it reran the exact
+  candidate/precheck matrix, simulated only the two registered product paths
+  plus the one WP-300 mock-compiler support path, passed the complete
+  no-default/async/std and real compiler-to-route-preparation contract, and
+  rejected all eight declared mutation classes. The current exact three-path
+  review checkpoint adds only the attestation, artifact row, and continuation
+  projection. The candidate/review chain is not default-branch authority and
+  does not release any implementation or WP-400 source.
 - Pull request #20 integrated technical decision checkpoint
   `6271c2861771a0fbc18772bd853bc451ba0fd614` and continuation checkpoint
   `72cf711adef3712ebf502b2fd01273e6f2d23376` through exact merge
@@ -206,7 +216,7 @@ revision.
 
 Projection mode: conditional remote handoff
 
-The bounded task reconciles and independently reviews the immutable
+The bounded task has reconciled and independently reviewed the immutable
 non-product-source candidate for
 `WP-200-PROPERTY-READ-ROUTE-RESERVATION-PROJECTION` against the fetched D46
 default. It freezes the concrete compiler-owned route identity, Core role
@@ -218,12 +228,13 @@ and source remain blocked.
 
 Preserve corrected candidate `b4fedb61a63d6eab6b1ca77c0e9a4595a4ed9d8c`
 as the immutable 23-path single child of
-`5a53a82a5d68a336b56b19e2e8f4c27f87492731`; reconcile it with fetched
-default `8b9405cbd73a5c35c935d417a2c765650110e6a4` without changing that object or
-widening its upstream scope. Rerun its exact candidate checks. Independent
-review must then simulate the exact two product-source paths plus the one
-registered WP-300 mock-compiler support path and run all negative mutations.
-This phase grants no Core, Planning, or WP-400 source authority.
+`5a53a82a5d68a336b56b19e2e8f4c27f87492731` and preserve reconciliation
+merge `cd4bc966c3fc472779bcd81b07b85011fee4bfec`. Register the exact review
+checkpoint in the route-reservation gate while leaving the tranche
+`pending`/`review-pending` and `admission_base_ref = "register-at-admission"`;
+then run the reviewed entry checker, push the same PR #18 branch, and require
+exact-head validation before integration. This phase grants no Core, Planning,
+or WP-400 source authority.
 
 ### After verified integration
 
