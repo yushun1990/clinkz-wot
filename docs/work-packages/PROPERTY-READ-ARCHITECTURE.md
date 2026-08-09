@@ -61,7 +61,18 @@ The correction preserves that completed Consumer behavior and exposes only a
 bounded `ProducerRoute` constructor plus opaque cursor. Its external fixture
 must borrow the compiler from the complete WP-300 registration and carry the
 real plan output directly into `PrepareInput`; it cannot synthesize any gate
-owner in fixture code.
+logical plan, artifact, or preparation type in fixture code. Its local proof
+does use a fixed mock route reservation and therefore does not by itself
+release WP-400.
+
+The route-reservation projection closes that distinct remaining boundary. The
+complete mock registration's concrete compiler must attach a canonical
+`RouteReservationIdentity` to its real Producer-route artifact, Core must
+preserve and role-check it through typed and erased paths, and the runner must
+read it only from the admitted envelope. The runner may not construct a
+collision domain or endpoint key. This correction keeps broad form
+contribution, capability indexing, collision tables, Servient lifecycle, and
+protocol behavior outside its scope.
 
 ## Tranche DAG and entry points
 
@@ -70,6 +81,7 @@ WP-100-PROPERTY-READ-HANDLER-SLICE
     -> WP-200-PROPERTY-READ-PLAN-SLICE
     -> WP-300-PROPERTY-READ-BINDING-SLICE
     -> WP-200-PROPERTY-READ-PRODUCER-ROUTE-PROJECTION
+    -> WP-200-PROPERTY-READ-ROUTE-RESERVATION-PROJECTION
     -> WP-400-PROPERTY-READ-SERVIENT-SLICE
     -> PROPERTY-READ-ARCHITECTURE
 ```
@@ -97,10 +109,12 @@ The exact downstream release events are:
 - completion of `WP-300-PROPERTY-READ-BINDING-SLICE` releases only
   `WP-200-PROPERTY-READ-PRODUCER-ROUTE-PROJECTION`;
 - completion of that projection exposed the missing compiler-owned canonical
-  route reservation and releases only its owner-scoped correction;
+  route reservation and releases only
+  `WP-200-PROPERTY-READ-ROUTE-RESERVATION-PROJECTION`;
 - the independently reviewed completion and verified default integration of
-  that production metadata correction jointly release only candidate, review,
-  and pre-source-transition preparation for
+  that production metadata correction, including the real
+  `compiler -> admitted envelope -> BindingRouteKey` evidence, jointly release
+  only candidate, review, and pre-source-transition preparation for
   `WP-400-PROPERTY-READ-SERVIENT-SLICE`, whose candidate must also close the
   first-entry table below; and
 - broad WP-300 completion releases broad WP-400, WP-500, and WP-600.
@@ -117,7 +131,7 @@ TD fixture
   -> shared planner
   -> immutable property-read logical plan
   -> mock binding compiler
-  -> binding-owned artifact
+  -> binding-owned artifact with canonical route-reservation metadata
   -> prepared and committed-closed route
   -> Servient serving publication
   -> permit-authorized mock acceptance
@@ -216,6 +230,11 @@ opportunity, or cleanup owner. If any one of those production boundaries is
 unavailable or unconstructible, the owning slice remains blocked and the
 difficulty becomes design feedback.
 
+The canonical collision domain and endpoint key are binding compiler output,
+not runner fixture data. The binding fixture may derive its deterministic mock
+identity from protocol-local configuration; the runner obtains it only from
+the real admitted artifact envelope.
+
 The fixture directories are not created until their owning tranche has an exact
 reviewed candidate. Placeholder crates would falsely imply a constructible
 boundary. The WP-200 compiler authoring contract is a package-local external
@@ -235,8 +254,8 @@ The completion check must prove:
 - the static handler is invoked exactly once with protocol-neutral input;
 - its protocol-neutral output consumes one response opportunity and reaches
   the mock binding exactly once;
-- Thing, plan, binding, route, request/correlation, and generation identities
-  remain consistent;
+- Thing, plan, binding, compiler-produced route reservation,
+  request/correlation, and generation identities remain consistent;
 - deactivation prevents new acceptance; and
 - route/request counts return to zero with no retained hidden handler, request,
   permit, response, or cleanup owner.
@@ -262,6 +281,8 @@ Negative compile/source checks prove:
   reservation, a partial registration, and pre-reservation side effects are
   rejected in both runtime profiles;
 - the mock cannot rescan the TD or construct a runtime logical plan; and
+- the runner cannot construct a route reservation, collision domain, or
+  endpoint key; and
 - the `async-no-std` portable surface compiles without choosing an executor.
 
 The target runner also poisons the legacy form selector,
@@ -296,15 +317,16 @@ Every slice is Category B or C according to its actual candidate impact and
 requires its own exact paths, contract fixtures, impact analysis, independent
 review, and ADR-0013 admission. The handler, original WP-200 plan, WP-300
 binding, and Producer-route projection slices are `complete`/`approved`; the
-WP-400 Servient slice remains `planned`/`blocked`. The completed
-`ProducerRoute` plan-output-to-`PrepareInput` evidence alone does not release
-that candidate: the canonical route reservation must first arrive through an
-independently reviewed, implemented, and default-branch-validated production
-metadata path. The later WP-400 candidate must then close the complete
-first-entry table above in its existing independent review; it does not gain a
-separate preliminary review cycle. Each status record grants no source-edit authority.
-Approval and in-progress truth may share one approved, recoverable pre-source
-checkpoint under D9.
+route-reservation projection is `pending`/`review-pending`, and the WP-400
+Servient slice remains `planned`/`blocked`. The completed `ProducerRoute`
+plan-output-to-`PrepareInput` evidence alone does not release that candidate:
+the canonical route reservation must first arrive through an independently
+reviewed, implemented, and default-branch-validated production metadata path.
+The later WP-400 candidate must then close the complete first-entry table above
+in its existing independent review; it does not gain a separate preliminary
+review cycle. Each status record grants no source-edit authority. Approval and
+in-progress truth may share one approved, recoverable pre-source checkpoint
+under D9.
 
 For `WP-100-PROPERTY-READ-HANDLER-SLICE`, the candidate and completion record
 must claim only `ReadPropertyHandler` and its composition with the four reused
@@ -313,7 +335,7 @@ values named above. The property-read slice cannot claim the final
 `AffordanceTarget` relocation/no-atomic evidence, async/step handler traits,
 host registration, sparse storage, or dispatch ownership.
 
-The integration gate becomes `ready` only after all five slice completion
+The integration gate becomes `ready` only after all six slice completion
 records pass. It becomes `passed` only when the planned completion check is
 registered and executable, both runtime cells pass, the compile-only cell
 passes, all mandatory assertions are represented, and an independent

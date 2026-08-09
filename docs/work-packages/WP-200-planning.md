@@ -177,6 +177,24 @@ role to `ProducerRoute`, and accepts a borrowed static or host compiler
 projection from the complete registration. Arbitrary role selection and a
 public Consumer-call constructor remain excluded.
 
+The subsequent
+`WP-200-PROPERTY-READ-ROUTE-RESERVATION-PROJECTION` is separate again because
+the public Producer-route constructor preserves role and registration identity
+but does not supply the protocol-canonical endpoint collision identity needed
+to construct a production `BindingRouteKey`. This Category C correction
+extends the existing Core `BindingArtifact<A>` wrapper with immutable optional
+route metadata, requires it exactly for `ProducerRoute`, preserves it through
+static and host erasure, and exposes it through the admitted artifact envelope.
+The concrete compiler remains the only protocol canonicalization owner;
+Planning retains but never derives or interprets the value.
+
+The exact product implementation paths are
+`core/src/binding_compiler.rs` and `planning/src/property_read.rs`. The
+registered external WP-300 mock compiler is the only support-source path in the
+implementation transition. Form contribution, capability indexes, collision
+tables, Servient lifecycle, production protocols, and architecture fixture
+roots remain excluded until their own tranches.
+
 Resolve effective operation, root-versus-affordance form context, original form index, `base`
 plus relative `href`, media defaults, response metadata, URI variables, security inheritance,
 scope, extensions, and stable plan identity exactly once per logical form. Preserve TD order in
@@ -265,6 +283,11 @@ Produce these package evidence keys exactly as indexed by the work-package DAG:
   registration whose borrowed compiler projection produces a real
   `ProducerRoute` artifact reference that constructs `PrepareInput` and starts
   real route preparation after TD and registration-projection borrows end;
+- `property-read-route-reservation-projection` for a real complete WP-300
+  registration whose compiler supplies the canonical Producer-route
+  `RouteReservationIdentity`, whose admitted envelope preserves it through
+  static and host erasure, and whose runner constructs no substitute collision
+  or endpoint identity;
 - `admission-transaction-rollback` for exact charges, phase release, and peak memory;
 - `native-collection-plan-selection` for root-form selection, exact source attribution, typed
   capability rejection, one selected binding generation, and proof that no implicit fan-out plan

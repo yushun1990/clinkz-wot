@@ -8,8 +8,8 @@ rule = "A carried artifact projects active requirements only where ADR-0018 clas
 [[artifact]]
 family = "api-ownership"
 path = "docs/api-ownership.csv"
-sha256 = "054c43883b9a63c961c8695bad756ae954e4d1e6172492fa1789e3a7b5047f2e"
-disposition = "revalidated and extended with the exact active WP-300 Property Read surface plus the reviewed-name Producer-route Planning compiler/cursor projection; retained broad planning and binding families remain domain-entry input"
+sha256 = "9c910efd62c2e5e75b85fb298b5e663d3132e4dad74e2b049cd1e57cdd679153"
+disposition = "revalidated with the existing Property Read surfaces and the BindingArtifact, BindingArtifactEnvelope, and BindingArtifactRejectionReason route-reservation responsibilities mapped to active planning, form-owner, and binding-route authority; retained broad planning and binding families remain domain-entry input"
 revalidation = "tools/check-api-ownership.sh"
 
 [[artifact]]
@@ -43,8 +43,8 @@ revalidation = "tools/check-v5-authority-reset-candidate.sh"
 [[artifact]]
 family = "governance"
 path = "docs/governance.toml"
-sha256 = "d2b8b93f70bcf489e2fc3d16ef9cd54f8caf48fb18c2d2a234078cfad1606cf1"
-disposition = "carried forward with the v5 checker and exact WP-300 completion plus Producer-route planning correction entry/completion checks registered; v4.9 reviews remain historical gate evidence"
+sha256 = "bdc9697a5ca9b5323a48ebb09507d38232f642a28463d52189511306abd800a1"
+disposition = "carried forward with the v5 checker and exact route-reservation correction entry/completion checks registered after the completed Producer-route projection; v4.9 reviews remain historical gate evidence"
 revalidation = "tools/check-v5-authority-reset-candidate.sh"
 
 [[artifact]]
@@ -99,20 +99,20 @@ revalidation = "cargo run --locked --quiet --manifest-path tools/performance-har
 [[artifact]]
 family = "work-package-dag"
 path = "docs/work-packages/index.toml"
-sha256 = "40556d77607e6519fdc71cda6553d6d4698c1096f221f1047463bd46508e437f"
-disposition = "revalidated with package order and status unchanged, the WP-200 Producer-route projection evidence identity added, and broad evidence identities retained for parity, cleanup, Servient, resource, availability, and protocol-shape closure"
+sha256 = "1996df2bcecddf4470855c9f1621f5698fb79f62f87afa6676b6e2aee59745a4"
+disposition = "revalidated with package order and status unchanged, the WP-200 route-reservation projection evidence identity added after the completed Producer-route evidence, and broad evidence identities retained for parity, cleanup, Servient, resource, availability, and protocol-shape closure"
 revalidation = "cargo run --locked --quiet --manifest-path tools/design-check/Cargo.toml -- check-work-packages"
 
 [[artifact]]
 family = "property-read-integration-gate"
 path = "docs/work-packages/property-read-architecture-gate.toml"
-sha256 = "f22987de15343f9a3d44f105bc8d8d7a914002860ca185dbc64ff2d9c2bcab2c"
-disposition = "revalidated with D46's one-time nine-row WP-400 first-entry provenance closure and finite mutation set; the route-reservation correction remains outside default-branch authority, WP-400 remains planned/blocked pending that correction plus its own candidate and admission, and the aggregate gate remains blocked"
+sha256 = "ee01681012dd66bcc7e1f91688218feac8e7bae832cd3a39bc45cc6870c6df05"
+disposition = "revalidated as a six-tranche gate with the independently reviewed but still pending/review-pending route-reservation correction followed by D46's one-time nine-row WP-400 first-entry provenance closure and finite mutation set; WP-400 and the aggregate gate remain blocked"
 revalidation = "tools/check-v5-authority-reset-decision.sh"
 
 [[artifact]]
 family = "property-read-integration-gate"
 path = "docs/work-packages/PROPERTY-READ-ARCHITECTURE.md"
-sha256 = "aa5b19a72e05982c81c6a46c7ff6f0dd56c3de4829699e6ea3d6dc573144e954"
+sha256 = "e71a55abbceed81d27dc8529813694cb7182d241c3b3108f64aa27b21bbe9920"
 disposition = "revalidated with the completed WP-100/WP-200/WP-300/Producer-route claims kept package-local, the non-authoritative route-reservation correction kept ahead of WP-400, and D46's one-time first-entry closure assigned to the still-planned/blocked WP-400 candidate; mutable tranche truth remains owned by docs/work-packages/property-read-architecture-gate.toml"
 revalidation = "tools/check-v5-authority-reset-decision.sh"

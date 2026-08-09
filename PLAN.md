@@ -103,10 +103,11 @@ The repository evidence establishes the following starting point:
   `376ee84f80ea27c8d3faa4b1840ce7b68d61f23f`. Exact five-file pre-source
   admission `342f93f4ef6a1322864456454be958821beb2802` and immediate exact
   two-path implementation `42fca7a63cefd3a5916a7edc6582044d2c04845e`
-  complete the real role/reference handoff evidence. Later WP-400
+  complete the real Producer-route role/reference handoff. Later WP-400
   reconstruction showed that the canonical route reservation was still
-  fixture-owned, so the Producer-route completion now releases only the exact
-  route-reservation correction. That correction must complete before WP-400
+  fixture-owned, so the distinct
+  `WP-200-PROPERTY-READ-ROUTE-RESERVATION-PROJECTION` correction is now
+  `pending`/`review-pending`. Its verified completion must precede WP-400
   candidate/review preparation; D46 additionally makes the one-time complete
   first-entry provenance review part of the WP-400 candidate, not a separate
   gate. Broad WP-400, WP-500, and WP-600 remain downstream of broad WP-300,
@@ -177,6 +178,7 @@ answer and does not automatically block unrelated admitted work.
 | D42 | MIGRATED | Preserve the completed Consumer-call planner and Producer registration, but insert one exact Producer-route projection correction because their role/reference handoff is unreachable | Exact implementation `42fca7a63cefd3a5916a7edc6582044d2c04845e` publishes only `PropertyReadPlanCompiler::producer_route` plus an opaque cursor and proves real output reaches real `PrepareInput`; the later route-reservation finding narrows, but does not revoke, that package-local claim | Before WP-400 Property Read admission |
 | D43 | MIGRATED | Define tranche completion as an exact package-local claim and split successor preparation release from successor source-admission release | A declared cross-package handoff is owned by successor-entry evidence and must carry real upstream output into the first legal downstream entry without synthetic substitutes; the missing compiler-owned reservation keeps WP-400 blocked without reopening completed local claims | Continuous execution and every cross-package entry |
 | D44 | MIGRATED | Use a merge-stable continuation envelope with one fetched-default basis and explicit pre-integration and post-integration actions | Aggregate validation rejects an unconditional current objective and verifies the recorded basis locally; fresh sessions still obtain live PR/check facts from GitHub and replace the resolved envelope at their first checkpoint | Continuous remote integration |
+| D45 | MIGRATED | Carry canonical Producer-route reservation identity as immutable Core artifact metadata produced only by the concrete binding compiler | The exact Category C route-reservation projection preserves the value through static/host erasure and admitted envelopes; Planning/Servient URI hashing, runner constants, broad form contribution, and WP-400 source remain excluded | Before WP-400 Property Read candidate admission |
 | D46 | MIGRATED | Require one bounded consumer-backward closure review at the first legal WP-400 Property Read route entry, without creating a permanent global rule | The WP-400 candidate must prove the complete production provenance table before `binding-route:Absent:begin_prepare->Preparing`; fixture synthesis, illegal recomputation, generation loss, missing pre-side-effect reservations, or host/static divergence block source admission, while PR #18 remains a distinct upstream review boundary | Before WP-400 Property Read admission |
 
 The former D3 Foundation candidate is the exact single child of
@@ -210,10 +212,11 @@ default-branch admission base `384461ba33a3639a0f89978159719aa6937e1f36`
 planned/blocked. D42 inserts one exact
 `WP-200-PROPERTY-READ-PRODUCER-ROUTE-PROJECTION` after WP-300 because the
 previous private planner could produce only `ConsumerCall`. That correction is
-now complete and proves the real `ProducerRoute` role/reference handoff. WP-400
+complete and proves the real `ProducerRoute` role/reference handoff. WP-400
 reconstruction then found that the canonical route reservation still has no
-production carrier, so one exact owner-scoped route-reservation projection
-must complete before WP-400 candidate/review preparation is released. D46
+production carrier. D45 therefore inserts the exact owner-scoped
+`WP-200-PROPERTY-READ-ROUTE-RESERVATION-PROJECTION`, which must complete
+before WP-400 candidate/review preparation is released. D46
 requires that candidate to close the complete first-entry provenance table in
 its existing independent review before source admission. Broad
 `WP-100-HANDLER-ENTRY`, `WP-300-BROAD-ENTRY`, and `WP-400-BROAD-ENTRY` remain
@@ -268,7 +271,9 @@ The exact preparation-release events inside that path are asymmetric:
 - `WP-300-PROPERTY-READ-BINDING-SLICE` completion releases
   `WP-200-PROPERTY-READ-PRODUCER-ROUTE-PROJECTION` preparation only;
 - completion of the Producer-route projection releases the exact
-  route-reservation correction; verified completion of that correction
+  route-reservation correction; its real
+  `compiler -> admitted envelope -> BindingRouteKey` successor-entry evidence
+  and verified completion
   releases exact WP-400 candidate/review and pre-source-admission preparation,
   whose candidate review also owns the one-time first-entry closure; and
 - broad WP-300 completion releases broad WP-400, WP-500, and WP-600 candidate
@@ -354,7 +359,7 @@ review/activation chain. Architecture closure remains open on the registered
 global gates; the exact `WP-300-PROPERTY-READ-BINDING-SLICE` is complete and
 the exact `WP-200-PROPERTY-READ-PRODUCER-ROUTE-PROJECTION` is complete, and the
 executable critical path now proceeds through the exact route-reservation
-projection. Its verified completion releases WP-400 candidate/review
+projection's candidate/review. Its verified completion releases WP-400 candidate/review
 preparation; D46 then requires the existing WP-400 candidate review to close
 the complete first-entry provenance table before source admission.
 
@@ -465,6 +470,9 @@ Entry conditions:
 - D42 is migrated; the exact Producer-route projection correction is present
   after WP-300 and may change only the two registered Planning source paths
   after its own independent admission;
+- D45 is migrated; the exact route-reservation projection follows the
+  completed role/reference projection and admits no Core or Planning source
+  until its own independent review and pre-source checkpoint;
 - the exact tranche is admitted under the active governance policy.
 
 AI deliverable:
@@ -581,7 +589,8 @@ Entry conditions:
   `PROPERTY-READ-ARCHITECTURE` passes;
 - `WP-400-PROPERTY-READ-SERVIENT-SLICE` may seek independent admission only
   after the Producer-route role/reference and compiler-owned route-reservation
-  projections complete and are verified on the default branch;
+  projections complete their real compiler-to-envelope-to-`BindingRouteKey`
+  evidence and are verified on the default branch;
 - the narrow candidate's normal independent review must close D46's complete
   first-entry provenance table before its pre-source admission; and
 - before broad source admission, the private owner/dependency graph,

@@ -172,6 +172,16 @@ tools/compile-contracts/wp200-property-read-producer-route/src/lib.rs,wp-200-pro
 tools/compile-contracts/wp200-property-read-producer-route/tests/producer_route.rs,wp-200-property-read-producer-route-runtime-contract,non-normative-compile-fixture,5.0,1,docs/spec/planning.md
 tools/design-check/tests/wp200_property_read_producer_route_schema.rs,wp-200-property-read-producer-route-executable-schema,non-normative-compile-fixture,5.0,1,docs/spec/planning.md
 workspace/0049-property-read-producer-route-planning-gap.md,property-read-producer-route-planning-gap-topic,non-normative-workspace-topic,5.0,1,docs/spec/planning.md
+docs/audits/WP-200-property-read-route-reservation-entry.md,wp-200-property-read-route-reservation-entry-review,non-normative-review,5.0,1,docs/spec/planning.md
+docs/audits/WP-200-property-read-route-reservation-review.toml,wp-200-property-read-route-reservation-review-attestation,non-normative-review,5.0,1,docs/spec/planning.md
+tools/check-wp200-property-read-route-reservation-entry.sh,wp-200-property-read-route-reservation-entry-checker,non-normative-checker,5.0,1,docs/spec/planning.md
+tools/check-wp200-property-read-route-reservation.sh,wp-200-property-read-route-reservation-checker,non-normative-checker,5.0,1,docs/spec/planning.md
+tools/compile-contracts/wp200-property-read-route-reservation/Cargo.toml,wp-200-property-read-route-reservation-contract-manifest,non-normative-compile-fixture,5.0,1,docs/spec/planning.md
+tools/compile-contracts/wp200-property-read-route-reservation/Cargo.lock,wp-200-property-read-route-reservation-contract-lock,non-normative-compile-fixture,5.0,1,docs/spec/planning.md
+tools/compile-contracts/wp200-property-read-route-reservation/src/lib.rs,wp-200-property-read-route-reservation-static-contract,non-normative-compile-fixture,5.0,1,docs/spec/planning.md
+tools/compile-contracts/wp200-property-read-route-reservation/tests/route_reservation.rs,wp-200-property-read-route-reservation-runtime-contract,non-normative-compile-fixture,5.0,1,docs/spec/planning.md
+tools/design-check/tests/wp200_property_read_route_reservation_schema.rs,wp-200-property-read-route-reservation-executable-schema,non-normative-compile-fixture,5.0,1,docs/spec/planning.md
+workspace/0052-property-read-route-reservation-handoff.md,property-read-route-reservation-handoff-topic,non-normative-workspace-topic,5.0,1,docs/spec/planning.md
 docs/audits/WP-300-property-read-binding-slice-entry.md,wp-300-property-read-binding-slice-entry-review,non-normative-review,5.0,1,docs/spec/binding-spi.md
 docs/audits/WP-300-property-read-binding-slice-review.toml,wp-300-property-read-binding-slice-review-attestation,non-normative-review,5.0,1,docs/spec/binding-spi.md
 docs/audits/WP-300-admission-basis-correction-review.toml,wp-300-admission-basis-correction-review-attestation,non-normative-review,5.0,1,docs/spec/binding-spi.md

@@ -635,6 +635,7 @@ pub struct BindingCompilerInput<'a> {
 pub struct BindingArtifact<A> {
     compatibility: BindingArtifactCompatibility,
     footprint: BindingArtifactFootprint,
+    route_reservation: Option<RouteReservationIdentity>,
     payload: A,
 }
 
@@ -678,10 +679,25 @@ pub trait BindingCompilerExtension {
 ```
 
 `BindingCompilerInput::new` and its accessors expose exactly the three fields
-shown. `BindingArtifact::new`, `compatibility`, `footprint`, `payload`,
-`into_payload`, and `into_parts` preserve typed access. The output and failure
-wrappers provide immutable accessors and consuming `into_*` operations so no
-cursor or artifact is hidden on any branch.
+shown. `BindingArtifact::new` creates an artifact without route metadata.
+`BindingArtifact::producer_route` requires one complete
+`RouteReservationIdentity`; `route_reservation` exposes it read-only.
+The existing three-part `into_parts` surface remains unchanged;
+`into_route_parts` returns compatibility, footprint, optional route
+reservation, and payload for callers such as host erasure that must preserve
+the added structural metadata. `compatibility`, `footprint`, `payload`, and
+`into_payload` retain their existing meanings. The output and failure wrappers
+continue to preserve their owned cursor or artifact on every resumable or
+error branch; `into_route_parts` is the complete consuming path when route
+metadata must survive payload conversion.
+
+The route reservation is fixed-width Core wrapper metadata, not an external
+lease or binding-authored payload allocation. It is accounted with the
+compiled plan set's structural metadata; `BindingArtifactFootprint` continues
+to measure the binding-authored retained payload. Only a concrete binding
+compiler may derive the canonical collision domain and endpoint key from the
+resolved logical plan and immutable local binding configuration. Planning and
+Servient must not hash or otherwise reinterpret the target URI.
 
 `start` creates only a pure caller-owned cursor; externally chargeable progress
 occurs in `step`. `step` consumes the cursor and returns it in both `Pending`
@@ -697,6 +713,8 @@ Artifact admission is exact and ownership-preserving:
 pub enum BindingArtifactRejectionReason {
     CompatibilityMismatch,
     FootprintExceeded,
+    MissingRouteReservation,
+    UnexpectedRouteReservation,
 }
 
 pub struct BindingArtifactRejection<A> {
@@ -713,6 +731,7 @@ impl<A> BindingArtifactEnvelope<A> {
 
     pub const fn identity(&self) -> BindingArtifactIdentity;
     pub const fn admitted(&self) -> BindingArtifactFootprint;
+    pub const fn route_reservation(&self) -> Option<RouteReservationIdentity>;
     pub fn artifact(&self) -> &BindingArtifact<A>;
     pub fn into_artifact(self) -> BindingArtifact<A>;
 }
@@ -729,10 +748,12 @@ impl BindingArtifactRef {
 ```
 
 Envelope construction compares the artifact compatibility with the complete
-identity and compares the measured footprint with the admitted bound. A
-rejection returns the original typed artifact. The compact reference is scoped
-by the identity's plan-set generation and can address only its immutable
-artifact slot.
+identity, compares the measured footprint with the admitted bound, requires
+route metadata for `ProducerRoute`, and rejects route metadata for every other
+role. A rejection returns the original typed artifact. The compact reference
+is scoped by the identity's plan-set generation and can address only its
+immutable artifact slot. A plan-set owner obtains the reservation through the
+matched envelope; it does not inspect a static or erased protocol payload.
 
 ### Static compiler representation
 
@@ -845,9 +866,10 @@ the candidate.
 
 For a fixed input snapshot and budget-independent completion, the extension
 must produce equivalent artifact bytes or values, compatibility identity,
-footprint, and diagnostic outcome. It cannot use wall-clock time, random input,
-ambient mutable process state, network state, or discovery state. Different
-step sizes must produce the same completed artifact and failure classification.
+route reservation when the role is `ProducerRoute`, footprint, and diagnostic
+outcome. It cannot use wall-clock time, random input, ambient mutable process
+state, network state, or discovery state. Different step sizes must produce the
+same completed artifact and failure classification.
 
 The measured lifetime footprint must not exceed the pre-admitted bound. A bound
 violation is a binding contract error; the artifact is rejected before any
@@ -942,7 +964,11 @@ and a bounded `FormContributionCapability`. The contributor receives only the
 binding-independent draft view, matching bounded affordance requirements, and
 an immutable contribution context. It returns generated forms associated with
 their exact targets, generated security definitions and JSON-LD context terms,
-and canonical endpoint reservation identities.
+and canonical endpoint reservation identities for the forms it generates.
+Application-supplied forms instead obtain their canonical reservation identity
+from the selected Producer-route compiler output. If a generated form is also
+compiled, the compiler result must equal the contributor's identity before the
+plan set can freeze.
 
 The contributor is local, nonblocking, deterministic, and side-effect free. It
 must not open a listener, contact a peer, reserve an external lease, spawn work,
@@ -965,10 +991,12 @@ the effective TD.
 3. merge contributions transactionally, including deterministic Clinkz JSON-LD
    prefix allocation and duplicate security-definition checks;
 4. validate every supplied and generated form and resolve one server owner;
-5. reject missing ownership, ambiguous ownership, endpoint collisions, invalid
-   effective security, and resource-limit violations;
-6. freeze the effective TD and compile every inbound and publication plan and
-   artifact eagerly; and
+5. compile every inbound and publication plan and artifact eagerly, obtaining
+   the canonical reservation identity for supplied Producer routes and
+   checking generated-route compiler identity against contributor output;
+6. reject missing ownership, ambiguous ownership, endpoint collisions, invalid
+   effective security, route-metadata mismatch, and resource-limit violations,
+   then freeze the effective TD and unpublished plan set; and
 7. hand the frozen unpublished Producer plan set to Servient route admission.
 
 After step 6, no form, security definition, context term, plan id, binding
@@ -1407,6 +1435,28 @@ The evidence must preserve identity and role across that chain, prove zero
 budget makes no progress, and end all TD and compiler-projection borrows before
 route preparation. A fixture-created logical plan, artifact, or preparation
 substitute is not evidence for this contract.
+
+## Property Read route-reservation projection
+
+The Producer-route role/reference projection alone does not supply the
+canonical collision identity needed by WP-400 to construct `BindingRouteKey`.
+Its package-local fixture may construct the real `PrepareInput` type with a
+fixed mock reservation, but that value is not a production output and therefore
+does not release successor source or the cross-package architecture fixture.
+
+`WP-200-PROPERTY-READ-ROUTE-RESERVATION-PROJECTION` closes that distinct
+boundary. A `ProducerRoute` compiler completes with
+`BindingArtifact::producer_route`; Core preserves its
+`RouteReservationIdentity` through typed and host-erased payload paths and
+artifact admission. Missing metadata and metadata attached to a non-route role
+fail without losing the artifact. Planning retains the admitted envelope and
+the future Servient obtains the identity from the artifact slot paired with its
+real `BindingArtifactRef`.
+
+The correction does not implement form contribution, capability indexing, a
+collision table, Servient capacity reservation, route lifecycle, or protocol
+I/O. It supplies the previously missing immutable value at the existing legal
+compiler/artifact boundary.
 
 ## API roles
 

@@ -224,6 +224,21 @@ command = [
 ]
 
 [[check]]
+id = "wp200-property-read-route-reservation-check"
+status = "executable"
+artifact = "tools/check-wp200-property-read-route-reservation.sh"
+command = ["tools/check-wp200-property-read-route-reservation.sh"]
+
+[[check]]
+id = "wp200-property-read-route-reservation-entry-check"
+status = "executable"
+artifact = "tools/check-wp200-property-read-route-reservation-entry.sh"
+command = [
+    "tools/check-wp200-property-read-route-reservation-entry.sh",
+    "--admission-ready",
+]
+
+[[check]]
 id = "wp300-property-read-binding-slice-check"
 status = "executable"
 artifact = "tools/check-wp300-property-read-binding-slice.sh"
