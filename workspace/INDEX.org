@@ -89,6 +89,7 @@ Topics are retained after migration as decision history.
 - [[file:0049-property-read-producer-route-planning-gap.md][0049 Property Read Producer-Route Planning Reachability Gap]]
 - [[file:0050-tranche-release-and-successor-entry-evidence.md][0050 Tranche Completion and Successor-Entry Evidence]]
 - [[file:0051-project-state-merge-transition-drift.md][0051 PROJECT_STATE Merge-Transition Drift]]
+- [[file:0052-property-read-route-reservation-handoff.md][0052 Property Read Route-Reservation Handoff]]
 
 * History
 

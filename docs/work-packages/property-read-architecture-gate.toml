@@ -17,6 +17,7 @@ depends_on_tranches = [
     "WP-200-PROPERTY-READ-PLAN-SLICE",
     "WP-300-PROPERTY-READ-BINDING-SLICE",
     "WP-200-PROPERTY-READ-PRODUCER-ROUTE-PROJECTION",
+    "WP-200-PROPERTY-READ-ROUTE-RESERVATION-PROJECTION",
     "WP-400-PROPERTY-READ-SERVIENT-SLICE",
 ]
 blocks_entrypoints = [
@@ -668,12 +669,129 @@ completion_evidence_path = "docs/evidence/WP-200-property-read-producer-route.to
 completion_check = "wp200-property-read-producer-route-check"
 
 [[tranche]]
+id = "WP-200-PROPERTY-READ-ROUTE-RESERVATION-PROJECTION"
+work_package = "WP-200"
+sequence = 330
+status = "pending"
+admission_status = "review-pending"
+depends_on = ["WP-200-PROPERTY-READ-PRODUCER-ROUTE-PROJECTION"]
+requirements = [
+    "PLAN-SET-001",
+    "PLAN-ARTIFACT-001",
+    "FORM-OWNER-001",
+    "BIND-REG-001",
+    "BIND-ROUTE-001",
+]
+owner_packages = ["clinkz-wot-core", "clinkz-wot-planning"]
+feature_cells = ["no-default", "async-no-std", "std"]
+authoritative_artifacts = [
+    "docs/architecture/10-primary-data-flows.md",
+    "docs/spec/planning.md",
+    "docs/work-packages/PROPERTY-READ-ARCHITECTURE.md",
+    "docs/work-packages/WP-200-planning.md",
+    "docs/work-packages/index.toml",
+    "docs/work-packages/property-read-architecture-gate.toml",
+]
+completion_evidence_keys = ["property-read-route-reservation-projection"]
+blocking_conditions = [
+    "producer-route-projection-complete",
+    "compiler-owned-route-reservation-candidate-reviewed",
+    "real-envelope-to-binding-route-key-fixture-defined",
+]
+api_items = [
+    "BindingArtifact",
+    "BindingArtifactEnvelope",
+    "BindingArtifactRejectionReason",
+]
+reused_api_items = [
+    "BindingArtifactRef",
+    "BindingArtifactRole",
+    "BindingRouteKey",
+    "HostBindingArtifact",
+    "HostBindingCompilerRegistration",
+    "PlanBuildOutput",
+    "PrepareInput",
+    "RouteReservationIdentity",
+]
+implementation_paths = [
+    "core/src/binding_compiler.rs",
+    "planning/src/property_read.rs",
+]
+excluded_claims = [
+    "broad-capability-index-and-form-contribution",
+    "collision-table-and-external-endpoint-reservation",
+    "consumer-subscription-and-producer-publication-metadata",
+    "planning-or-servient-uri-canonicalization",
+    "production-protocol-and-zenoh",
+    "servient-registry-publication-and-dispatch",
+]
+risk_category = "C"
+impact_status = "current"
+state_machines = []
+old_api_removals = []
+performance_workloads = []
+contract_artifacts = [
+    "tools/check-wp200-property-read-route-reservation-entry.sh",
+    "tools/check-wp200-property-read-route-reservation.sh",
+    "tools/compile-contracts/wp200-property-read-route-reservation/Cargo.lock",
+    "tools/compile-contracts/wp200-property-read-route-reservation/Cargo.toml",
+    "tools/compile-contracts/wp200-property-read-route-reservation/src/lib.rs",
+    "tools/compile-contracts/wp200-property-read-route-reservation/tests/route_reservation.rs",
+    "tools/compile-contracts/wp300-property-read-binding-slice/src/lib.rs",
+    "tools/design-check/Cargo.toml",
+    "tools/design-check/src/main.rs",
+    "tools/design-check/tests/wp200_property_read_route_reservation_schema.rs",
+]
+candidate_base_ref = "5a53a82a5d68a336b56b19e2e8f4c27f87492731"
+candidate_ref = "resolved-by-review-attestation"
+candidate_paths = [
+    "PLAN.md",
+    "PROJECT_STATE.md",
+    "docs/api-ownership.csv",
+    "docs/architecture/10-primary-data-flows.md",
+    "docs/artifacts.csv",
+    "docs/audits/WP-200-property-read-route-reservation-entry.md",
+    "docs/governance.toml",
+    "docs/spec/planning.md",
+    "docs/spec/v5-artifact-carry-forward.toml",
+    "docs/work-packages/PROPERTY-READ-ARCHITECTURE.md",
+    "docs/work-packages/WP-200-planning.md",
+    "docs/work-packages/index.toml",
+    "docs/work-packages/property-read-architecture-gate.toml",
+    "tools/check-wp200-property-read-route-reservation-entry.sh",
+    "tools/check-wp200-property-read-route-reservation.sh",
+    "tools/compile-contracts/wp200-property-read-route-reservation/Cargo.lock",
+    "tools/compile-contracts/wp200-property-read-route-reservation/Cargo.toml",
+    "tools/compile-contracts/wp200-property-read-route-reservation/src/lib.rs",
+    "tools/compile-contracts/wp200-property-read-route-reservation/tests/route_reservation.rs",
+    "tools/design-check/src/main.rs",
+    "tools/design-check/tests/wp200_property_read_route_reservation_schema.rs",
+    "workspace/0052-property-read-route-reservation-handoff.md",
+    "workspace/INDEX.org",
+]
+pre_implementation_checks = [
+    "api-ownership-check",
+    "architecture-adr-check",
+    "design-requirement-check",
+    "resource-profile-check",
+    "v5-authority-reset-candidate-check",
+    "work-package-dag-check",
+    "wp200-property-read-plan-slice-check",
+    "wp300-property-read-binding-slice-check",
+    "wp200-property-read-producer-route-check",
+]
+admission_review = "docs/audits/WP-200-property-read-route-reservation-entry.md"
+entry_check = "wp200-property-read-route-reservation-entry-check"
+completion_evidence_path = "docs/evidence/WP-200-property-read-route-reservation.toml"
+completion_check = "wp200-property-read-route-reservation-check"
+
+[[tranche]]
 id = "WP-400-PROPERTY-READ-SERVIENT-SLICE"
 work_package = "WP-400"
 sequence = 410
 status = "planned"
 admission_status = "blocked"
-depends_on = ["WP-200-PROPERTY-READ-PRODUCER-ROUTE-PROJECTION"]
+depends_on = ["WP-200-PROPERTY-READ-ROUTE-RESERVATION-PROJECTION"]
 requirements = [
     "IMPL-CONFORM-001",
     "PLAN-SET-001",
@@ -700,7 +818,7 @@ authoritative_artifacts = [
 ]
 completion_evidence_keys = ["property-read-servient-slice"]
 blocking_conditions = [
-    "producer-route-projection-complete",
+    "route-reservation-projection-complete",
     "serving-activation-route-selection-response-and-cleanup-candidate-reviewed",
     "host-and-manual-runner-fixtures-defined",
 ]

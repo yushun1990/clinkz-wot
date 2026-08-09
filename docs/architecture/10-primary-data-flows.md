@@ -101,10 +101,14 @@ transport execution.
 
 1. A produced-Thing draft contains TD data and registered application handlers,
    not live protocol routes.
-2. Captured form contributors deterministically add protocol forms and endpoint
-   reservation identities without opening listeners or contacting peers.
-3. The shared planner validates the effective TD and assigns exactly one
-   binding owner to every inbound plan and publication target.
+2. Captured form contributors deterministically add generated protocol forms
+   and their endpoint reservation identities without opening listeners or
+   contacting peers.
+3. The shared planner validates the effective TD, assigns exactly one binding
+   owner to every inbound plan and publication target, and eagerly invokes the
+   selected Producer compiler. For an application-supplied form the compiler
+   provides the canonical endpoint reservation identity; for a generated form
+   its identity must equal the contributor output before freeze.
 4. The Servient reserves plan, route, readiness, ingress, response, status, and
    cleanup capacity before the first binding side effect.
 5. The immutable Producer plan set is frozen before route preparation.
