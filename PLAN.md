@@ -215,8 +215,8 @@ previous private planner could produce only `ConsumerCall`. That correction is
 complete and proves the real `ProducerRoute` role/reference handoff. WP-400
 reconstruction then found that the canonical route reservation still has no
 production carrier. D45 therefore inserts the exact owner-scoped
-`WP-200-PROPERTY-READ-ROUTE-RESERVATION-PROJECTION`
-must complete before WP-400 candidate/review preparation is released. D46
+`WP-200-PROPERTY-READ-ROUTE-RESERVATION-PROJECTION`, which must complete
+before WP-400 candidate/review preparation is released. D46
 requires that candidate to close the complete first-entry provenance table in
 its existing independent review before source admission. Broad
 `WP-100-HANDLER-ENTRY`, `WP-300-BROAD-ENTRY`, and `WP-400-BROAD-ENTRY` remain
