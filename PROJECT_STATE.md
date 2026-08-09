@@ -1,6 +1,6 @@
 # Project State
 
-Last updated: 2026-08-02
+Last updated: 2026-08-09
 
 ## Repository Basis
 
@@ -124,8 +124,9 @@ The active design revision is v5.0 bounded-core authority.
   simulation, full Producer-route completion check, and declared negative
   mutations. Review checkpoint
   `56ee6b990373c12b83aac26a0377e3489fbde194` changes exactly the registered
-  attestation, artifact row, and continuation projection. That review
-  checkpoint itself admitted no source and is not integrated.
+  attestation, artifact row, and continuation projection. That checkpoint
+  admitted no source; it was later preserved in pull request #15's integrated
+  implementation chain.
 - Exact current-default reconciliation merge
   `2a469b1d4a3579d4db6115351b76867a0a531db8` preserves the original,
   correction, and review checkpoints and includes fetched default revision
@@ -136,8 +137,33 @@ The active design revision is v5.0 bounded-core authority.
   Exact implementation `42fca7a63cefd3a5916a7edc6582044d2c04845e`
   is the immediate child and changes only `planning/src/lib.rs` and
   `planning/src/property_read.rs`.
-- GitHub CLI authentication is currently invalid, but SSH fetch/push and the
-  connected GitHub application are available. Active Ruleset `20009352` was
+- Producer-route completion checkpoint
+  `d26f21cb3d3f3f499a770ebf70fbc32bd3f1d24f` was integrated by pull request
+  #15 at merge `30485b1a51470f328e79453ba0e82e3358c14f79`. The fetched merge tree
+  contains the expected implementation/evidence, and default-branch
+  `mainline` run `30758506555` passed on that exact merge revision.
+- Pull request #19 integrated workspace issue 0053 at fetched default revision
+  `e8e339635f2448b4f377ea6a0c3ba2566134828e`; the expected topic and index
+  entry are present and the merge is descended from the verified Producer-route
+  integration. Default-branch `mainline` run `31303954629` passed on that
+  exact merge revision.
+- Draft pull request #18 remains open at exact remote head
+  `b4fedb61a63d6eab6b1ca77c0e9a4595a4ed9d8c`, targeting `master` from
+  `agent/wp200-route-reservation-correction-candidate`. Exact-head
+  `mainline` run `31298103735` passed. GitHub currently reports it draft,
+  unreviewed, and non-mergeable against the advanced default branch; no
+  independent attestation exists. Its compiler/Core/Planning correction is
+  not default-branch authority and does not release WP-400. That branch already
+  assigns D45 to the route-reservation decision, so the disjoint 0053 packet
+  intentionally uses D46 even though D45 is not yet present on `master`.
+- Draft pull request #20 targets `master` from
+  `agent/decide-wp400-first-entry-closure` and carries technical decision
+  checkpoint `6271c2861771a0fbc18772bd853bc451ba0fd614`. Its current-head
+  validation and conversation state remain GitHub-owned live facts that must
+  be checked before integration; this packet does not satisfy an independent
+  review or automatic-integration predicate by itself.
+- GitHub CLI, SSH fetch/push, and the connected GitHub application are
+  available as of 2026-08-09. Active Ruleset `20009352` was
   fetched on 2026-08-02: it targets the default branch, requires strict
   current-base `validation` and resolved review threads, has no bypass actor,
   and permits merge commits. Native automatic integration remains eligible
@@ -150,38 +176,41 @@ default workspace tests, diff hygiene, and the 21-cell valid feature matrix.
 
 ## Continuation Projection
 
-Observed default branch: `5352e5b00c6f94a7633e4e71c8f80ddd3a7fd80b`
+Observed default branch: `e8e339635f2448b4f377ea6a0c3ba2566134828e`
 
-Observed on: 2026-08-02 after fetch, content/ancestry inspection, and successful
-default-branch workflow run `30742976937`.
+Observed on: 2026-08-09 after fetch plus default ancestry/content inspection.
+The fetched tree contains pull request #19's open workspace issue 0053 and is
+descended from verified Producer-route merge
+`30485b1a51470f328e79453ba0e82e3358c14f79`; default-branch `mainline` run
+`31303954629` passed on the observed revision.
 
 Projection mode: conditional remote handoff
 
-The bounded task completes and remotely hands off independently reviewed
-`WP-200-PROPERTY-READ-PRODUCER-ROUTE-PROJECTION` on draft pull request #15.
-It preserves original candidate `613ee18`, corrective candidate `376ee84`, and
-review checkpoint `56ee6b990373c12b83aac26a0377e3489fbde194`, admission
-`342f93f4ef6a1322864456454be958821beb2802`, and implementation
-`42fca7a63cefd3a5916a7edc6582044d2c04845e`. WP-400 source remains
-unadmitted.
+The bounded task decides and migrates workspace issue 0053 as a one-time
+consumer-backward closure review inside the existing
+`WP-400-PROPERTY-READ-SERVIENT-SLICE` candidate/admission boundary. It changes
+no product source, does not establish a reusable global gate, and does not
+review or widen pull request #18. WP-400 remains blocked.
 
 ### Before verified integration
 
-Validate the completion records and the Producer-route-specific evidence
-parser correction, including exact implementation ancestry and honest WP-200
-ownership. Run the task-specific, aggregate, locked-workspace, feature-matrix,
-and diff-hygiene checks, then commit and push the complete head to draft pull
-request #15. Keep WP-400 source blocked until that head is remotely integrated
-and its merge revision passes `validation`.
+Draft pull request #20 carries the exact 0053 decision packet from
+`agent/decide-wp400-first-entry-closure`. Verify its exact current-head remote
+`validation`, scope, draft status, and conversation state. Keep pull request
+#18 independently draft/unreviewed and keep WP-400 candidate and source
+blocked.
 
 ### After verified integration
 
-Fetch `master` and verify pull request #15's actual base, merge ancestry,
-expected implementation/evidence content, and passing merge-revision
-`validation`. Then replace this envelope while preparing the exact WP-400
-Servient candidate/review transition released by the completed real
-`ProducerRoute -> PrepareInput` handoff; do not infer WP-400 source admission
-from the predecessor merge alone.
+Fetch `master` and verify the 0053 decision pull request's actual base, merge
+ancestry, expected decision content, and passing merge-revision `validation`.
+Then reconcile pull request #18's immutable route-reservation candidate onto
+that fetched default without widening its upstream source/evidence scope, rerun
+its exact candidate checks, and obtain the still-missing independent review.
+Only independently reviewed implementation and verified default integration of
+that correction may release the WP-400 candidate. The WP-400 candidate must
+then include D46's first-entry closure evidence in its normal independent
+review before any pre-source admission.
 
 The narrow WP-200 plan slice is complete. Its handoff to WP-300 contains:
 
@@ -257,9 +286,10 @@ conditional actions are aggregate-checked.
   correction is also `complete`/`approved`; broad WP-200 exits remain open.
 - M4 Protocol Binding SPI and Lifecycle — IN_PROGRESS; the exact WP-300
   Property Read binding slice is `complete`/`approved`. Broad WP-300 exits
-  remain open. The completed Producer-route correction releases WP-400
-  candidate/review preparation; WP-400 source still requires its own approved
-  transition.
+  remain open. The completed Producer-route correction releases only the
+  route-reservation correction; narrow WP-400 candidate/review preparation
+  remains blocked until that correction is independently reviewed, integrated,
+  and verified on the default branch.
 
 The v5 authority switch is complete, but M1 remains open because GATE-1,
 GATE-2, GATE-4, GATE-5, and GATE-6 still require their registered closure
@@ -440,11 +470,12 @@ does not weaken the completed narrow WP-200 claim.
 
 ## Open Decisions and Blockers
 
-### Focused execution-risk decisions / workspace issues 0017-0048 and 0050-0051
+### Focused execution-risk decisions / workspace issues 0017-0051 and 0053
 
-Status: all thirty-four listed decisions are migrated in the active packet.
-Workspace issue 0049 remains part of the separate pull-request #15 candidate
-and is not default-branch authority.
+Status: issues 0017-0051 are migrated and integrated; issue 0053 is migrated
+in the current decision packet and awaits remote integration. Issue 0052 and
+its route-reservation migration remain confined to unreviewed draft pull
+request #18 and are not default-branch authority.
 
 - 0017: the WP-200 admission path has a finite stopping condition. Independent
   review now includes the exact next-state simulation; the five-file
@@ -555,6 +586,10 @@ and is not default-branch authority.
   reachability, expected content, and validation. Dangerous continuation drift
   is corrected before the next transition; PLAN no longer owns transient
   branch or handoff facts.
+- 0049: the completed Producer-route projection carries a real
+  `BindingArtifactRef` into `PrepareInput` and is integrated at
+  `30485b1a51470f328e79453ba0e82e3358c14f79`; its local role/reference claim
+  remains valid despite the later reservation finding.
 - 0050: completion is package-local. Successor preparation and source
   admission are distinct; real upstream output must reach the first legal
   downstream entry when a handoff is declared. The confirmed Property Read
@@ -563,6 +598,14 @@ and is not default-branch authority.
   remote truth. It records one fetched-default basis and both integration
   branches; aggregate validation rejects the stale unconditional shape and
   checks local ancestry only.
+- 0053: D43 proves declared handoffs one at a time and does not close a
+  successor's complete input set. The exact WP-400 boundary is
+  `binding-route:Absent:begin_prepare->Preparing`; one machine-readable
+  consumer-backward provenance table now belongs to the existing WP-400
+  candidate/review. It is one-time, does not widen or validate pull request
+  #18, and blocks WP-400 source on any unowned/synthetic/recomputed value,
+  generation mismatch, missing pre-side-effect reservation, or profile
+  divergence.
 
 Candidate preparation also resolved one Rust staging constraint. The existing
 legacy `core::inbound::ServerBinding` owns `shutdown(&ThingId)`, while the
@@ -696,8 +739,9 @@ passes the same three-cell completion checker. Reconciliation merge
 `2a469b1d4a3579d4db6115351b76867a0a531db8` includes fetched default checkpoint
 `5352e5b00c6f94a7633e4e71c8f80ddd3a7fd80b` without rewriting the original,
 correction, or review checkpoints. Completion evidence binds the exact
-implementation and six active requirements. Draft pull request #15 remains
-the sole remote handoff for this task.
+implementation and six active requirements. Pull request #15 integrated the
+complete chain at `30485b1a51470f328e79453ba0e82e3358c14f79` and its exact
+merge-revision validation passed.
 
 Completion preparation exposed one support-only evidence defect: the tranche
 selected a handler-scoped generic parser that hard-coded `WP-100`. The
@@ -711,9 +755,55 @@ that relabels the completion evidence as `WP-100` is rejected with the exact
 Producer-route ownership mismatch before completion can be accepted; the
 mutation was then discarded.
 
+### WP-200 route-reservation projection and WP-400 first-entry closure
+
+Status: ROUTE-RESERVATION CANDIDATE UNREVIEWED; WP-400 BLOCKED.
+
+WP-400 reconstruction found that the completed Producer-route fixture obtains
+`RouteReservationIdentity` from direct fixture constants. No default-branch
+compiler output, artifact metadata, or plan output supplies the canonical
+reservation to a real Servient. Draft pull request #18 proposes an exact
+compiler/Core/Planning metadata correction at remote head
+`b4fedb61a63d6eab6b1ca77c0e9a4595a4ed9d8c`; its validation passed, but it
+has no independent review and GitHub reports it non-mergeable after `master`
+advanced. Its contract is not widened or technically validated by issue 0053.
+
+Issue 0053 confirms a distinct evidence gap: D43 validates each declared
+handoff but did not require the consumer's complete first-entry input set. D46
+therefore adds one bounded review inside the existing WP-400 candidate. The
+exact boundary is
+`binding-route:Absent:begin_prepare->Preparing`, not `PrepareInput` alone.
+The existing Property Read gate now carries nine checked provenance rows for
+the real plan/artifact, complete registration, produced Thing/generation,
+handler coverage, policy, plan-set ownership, route assembly, and
+activation/cleanup ownership. It also declares the finite negative mutations.
+
+No third upstream correction is currently required after the proposed
+reservation carrier: remaining required values are either existing production
+outputs/root inputs or WP-400-owned derivations. Guards, accepted requests,
+security results, handler/response values, and publication state arise later;
+`AcceptHint`, final `InteractionInput` storage, subscription/emission,
+multi-route, protocol, and workload claims remain broad exclusions.
+
+The closure is one-time and uses the existing manifest, design checker,
+work-package documents, candidate review, and future architecture runner. It
+adds no global governance rule, new tranche, audit family, or independent
+review cycle. WP-400 source fails closed on an unowned or fixture-only value,
+illegal recomputation, generation mismatch, missing pre-side-effect resource
+or cleanup reservation, or host/static semantic divergence.
+
+Technical decision checkpoint
+`6271c2861771a0fbc18772bd853bc451ba0fd614` passes the design-check unit suite,
+`check-work-packages`, the active-v5 aggregate design suite in a clean isolated
+Cargo target, `cargo test --workspace --locked`, the supported 21-cell feature
+matrix, formatting, carry-forward digests, and diff hygiene. An isolated
+mutation that relabels `producer-route-artifact-metadata` from
+`upstream-output` to `root-input` is rejected with the exact provenance
+mismatch; the mutation was then discarded.
+
 ### Aggregate design-check worktree-root defect
 
-Status: RESOLVED.
+Status: DESIGN CHECK RESOLVED; PERFORMANCE HARNESS LIMITATION CONFIRMED.
 
 Commit `eacaaf1242a41861758ebc78a40ada2d88d15bba` removes the compile-time
 repository root. Design-check callers export
@@ -725,6 +815,16 @@ worktree, and then executed the cached binary from `/tmp` against the current
 root successfully. The temporary worktree and 160.9 MiB test target were
 removed.
 
+The aggregate script also invokes `tools/performance-harness`, which still
+derives its repository root from compile-time `CARGO_MANIFEST_DIR`. On
+2026-08-09 the shared default target reused a harness binary built in a deleted
+pull-request #18 validation worktree and therefore failed before reading the
+current performance schemas. Rebuilding in a clean isolated Cargo target
+verified all 66 fixtures/cases and allowed the complete aggregate suite to
+pass. This pre-existing support-tool cache defect is disjoint from issue 0053,
+does not affect a clean remote runner, and should be corrected in a separate
+bounded task rather than widening this decision packet or pull request #18.
+
 ### Disjoint downstream blockers
 
 - Broad WP-100 handler entry still lacks its remaining request/target
@@ -733,26 +833,27 @@ removed.
 - The exact narrow WP-300 Property Read slice is complete. Broad WP-300 still
   waits on external authoring, cleanup-coexistence, shared-parity-oracle, and
   resource-authoring evidence.
-- Narrow WP-400 candidate/review preparation is released locally by the
-  completed Producer-route handoff, but its source remains blocked until the
-  correction is remotely integrated/default-branch validated and WP-400
-  passes its own pre-source admission. Broad WP-400, WP-500, and WP-600 still
-  depend on broad WP-300; WP-700 joins those branches.
+- Narrow WP-400 candidate/review preparation is blocked until the
+  route-reservation correction is independently reviewed, implemented,
+  remotely integrated, and default-branch validated. Its candidate must then
+  close D46's one-time first-entry table before its own pre-source admission.
+  Broad WP-400, WP-500, and WP-600 still depend on broad WP-300; WP-700 joins
+  those branches.
 
 These do not extend the D8 packet unless repository evidence shows a direct
 contract, rollback, or validation intersection.
 
 ### Remote integration controls
 
-Status: RULESET VERIFIED; CLI AUTHENTICATION DEGRADED.
+Status: RULESET VERIFIED; CLI AUTHENTICATION AVAILABLE.
 
 Ruleset `20009352` was fetched on 2026-08-02 and targets the default branch
 with strict current-base `validation` plus resolved review threads, no bypass
-actor, and merge commits allowed. `gh` 2.94.0 reports an invalid host-keyring
-token; the connected GitHub application provides PR operations and SSH Git
-transport remains available. Pull request #13 previously exercised the full
-terminal path; pull request #17 merge-revision run `30742976937` confirms the
-current fetched default basis.
+actor, and merge commits allowed. `gh auth status` passed for account
+`yushun1990` on 2026-08-09; the connected GitHub application and SSH Git
+transport are also available. Pull request #13 previously exercised the full
+terminal path; Producer-route merge-revision run `30758506555` confirms that
+integrated predecessor.
 
 ## Rejected or Superseded Approaches
 
@@ -1115,13 +1216,21 @@ source. Its current tree passes:
 
 ## Next Safe Actions
 
-1. Validate the exact completion evidence, Producer-route-specific evidence
-   parser, aggregate design suite, locked workspace, feature matrix, and diff
-   hygiene on implementation `42fca7a63cefd3a5916a7edc6582044d2c04845e`.
-2. Commit and push the completion topology to draft pull request #15, then
-   verify exact-head current-base remote `validation` and conversation state.
-3. Only after verified default integration and merge-revision validation may
-   WP-400 prepare its own candidate/review and approved pre-source checkpoint.
+1. Verify draft pull request #20's exact current-head remote `validation`,
+   intended decision-only diff, draft state, and conversation state. Keep it
+   draft unless every registered terminal integration predicate is current.
+2. After that pull request is verified on fetched `master`, reconcile draft
+   pull request #18 onto the new default while preserving its exact
+   route-reservation scope. Rerun its candidate checks and obtain independent
+   review; do not infer correctness from the issue-0053 decision.
+3. Only after the route-reservation correction is reviewed, implemented,
+   integrated, and merge-revision validated may WP-400 construct its exact
+   candidate. That candidate's normal independent review must execute D46's
+   complete first-entry closure and negative mutations before pre-source
+   admission.
+4. Correct the performance harness's compile-time repository-root capture in
+   a separate support-tool task; until then, use a clean Cargo target when a
+   shared target may contain binaries compiled from deleted worktrees.
 
 Ask the Project Owner only if the investigation reaches a product-goal,
 real-world constraint, unacceptable direction, or irreversible external
@@ -1139,6 +1248,10 @@ commitment that repository evidence cannot resolve.
 - `docs/spec/v5-authority-reset.toml`
 - `docs/audits/D7-v5-authority-reset-candidate.toml`
 - `docs/audits/D7-v5-authority-reset-review.toml`
+- `docs/work-packages/PROPERTY-READ-ARCHITECTURE.md`
+- `docs/work-packages/WP-400-servient.md`
+- `docs/work-packages/property-read-architecture-gate.toml`
+- `workspace/0053-wp400-first-entry-input-closure-audit.md`
 - `workspace/0014-property-read-plan-artifact-boundary.md`
 - `workspace/0016-post-reset-implementation-throughput.md`
 - `workspace/0025-wp300-property-read-slice-scope.md`

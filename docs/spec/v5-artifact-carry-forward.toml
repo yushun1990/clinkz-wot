@@ -106,13 +106,13 @@ revalidation = "cargo run --locked --quiet --manifest-path tools/design-check/Ca
 [[artifact]]
 family = "property-read-integration-gate"
 path = "docs/work-packages/property-read-architecture-gate.toml"
-sha256 = "6d2659de82f03640cd697df09161f3408558809a5155c02d052ff7d74e4afb7b"
-disposition = "revalidated for completed WP-300 and the independently reviewed, exactly admitted and implemented WP-200 Producer-route correction; WP-400 remains planned/blocked pending its own candidate and admission, and the aggregate gate remains blocked"
+sha256 = "f22987de15343f9a3d44f105bc8d8d7a914002860ca185dbc64ff2d9c2bcab2c"
+disposition = "revalidated with D46's one-time nine-row WP-400 first-entry provenance closure and finite mutation set; the route-reservation correction remains outside default-branch authority, WP-400 remains planned/blocked pending that correction plus its own candidate and admission, and the aggregate gate remains blocked"
 revalidation = "tools/check-v5-authority-reset-decision.sh"
 
 [[artifact]]
 family = "property-read-integration-gate"
 path = "docs/work-packages/PROPERTY-READ-ARCHITECTURE.md"
-sha256 = "2196383d71bea44caffd49c4ecf712797187440e86ebef7cd26343657689e2d5"
-disposition = "revalidated completion narrative and five-tranche evidence ladder for completed WP-100/WP-200/WP-300/Producer-route slices and still-planned/blocked WP-400; mutable tranche truth remains owned by docs/work-packages/property-read-architecture-gate.toml"
+sha256 = "aa5b19a72e05982c81c6a46c7ff6f0dd56c3de4829699e6ea3d6dc573144e954"
+disposition = "revalidated with the completed WP-100/WP-200/WP-300/Producer-route claims kept package-local, the non-authoritative route-reservation correction kept ahead of WP-400, and D46's one-time first-entry closure assigned to the still-planned/blocked WP-400 candidate; mutable tranche truth remains owned by docs/work-packages/property-read-architecture-gate.toml"
 revalidation = "tools/check-v5-authority-reset-decision.sh"
