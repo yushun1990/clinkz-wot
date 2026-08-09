@@ -873,6 +873,9 @@ pre_implementation_checks = [
     "wp200-property-read-producer-route-check",
 ]
 admission_review = "docs/audits/WP-200-property-read-route-reservation-entry.md"
+review_attestation = "docs/audits/WP-200-property-read-route-reservation-review.toml"
+review_attestation_ref = "4853344dd705835f45bf44b3007673fb9d793120"
+admission_base_ref = "register-at-admission"
 entry_check = "wp200-property-read-route-reservation-entry-check"
 completion_evidence_path = "docs/evidence/WP-200-property-read-route-reservation.toml"
 completion_check = "wp200-property-read-route-reservation-check"
