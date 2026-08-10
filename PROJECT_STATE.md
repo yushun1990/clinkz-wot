@@ -218,10 +218,18 @@ The active design revision is v5.0 bounded-core authority.
   reconstruction nevertheless rejected it because the host runner names
   nonexistent `WorkClass::HandlerCalls`; the frozen Foundation variant is
   `WorkClass::HandlerSteps`.
-- The third non-source WP-400 correction is the registered exact nine-path
-  child of `8ce5b4426921f7343a298a5910b40fa5c87942d2`. It changes only that work-class
-  spelling plus its reused-API and negative-evidence registration. Its object
-  id is resolved after commit. No WP-400 source is admitted.
+- Exact third non-source WP-400 correction
+  `129af4349dbd29d0ca3212646020f7dfe59baf47` is the registered nine-path
+  child of `8ce5b4426921f7343a298a5910b40fa5c87942d2`. It uses
+  `WorkClass::HandlerSteps` and passed pull-request #22 exact-head validation
+  run `31358644443`. Independent source reconstruction rejected it because the
+  portable contract root imports std-only `HostBindingRegistration`
+  unconditionally; its std runtime passed, while no-default and async/no-std
+  both stopped with `E0432`.
+- The fourth non-source WP-400 correction is the registered exact nine-path
+  child of `129af4349dbd29d0ca3212646020f7dfe59baf47`. It gates the host-only
+  imports behind `feature = "std"` and adds the thirteenth negative-evidence
+  class. Its object id is resolved after commit. No WP-400 source is admitted.
 - Pull request #20 integrated technical decision checkpoint
   `6271c2861771a0fbc18772bd853bc451ba0fd614` and continuation checkpoint
   `72cf711adef3712ebf502b2fd01273e6f2d23376` through exact merge
@@ -265,16 +273,22 @@ correction is exact commit `8ce5b4426921f7343a298a5910b40fa5c87942d2`.
 It passed pull-request #22 validation run `31356400537`, but a minimal external
 no-std compile proof stopped with `E0599` because its host budget uses nonexistent
 `WorkClass::HandlerCalls` instead of frozen `WorkClass::HandlerSteps`. The
-registered third correction is the second correction's exact nine-path child.
-It preserves all nine D46 first-entry rows, seven future product paths, three
-support paths, source absence, and the active-v5 `StepStatus<()>` boundary.
-WP-400 source remains blocked until the third correction passes independent
-review and a later pre-source admission checkpoint.
+third correction is exact commit
+`129af4349dbd29d0ca3212646020f7dfe59baf47`; run `31358644443` passed, but
+full isolated simulation found its portable contract root importing std-only
+`HostBindingRegistration` without a feature gate. The std runtime completed
+one full lifecycle, while no-default and async/no-std stopped with `E0432`.
+The registered fourth correction is the third correction's exact nine-path
+child. It preserves all nine D46 first-entry rows, seven future product paths,
+three support paths, source absence, and the active-v5 `StepStatus<()>`
+boundary while gating the host-only import. WP-400 source remains blocked
+until the fourth correction passes independent review and a later pre-source
+admission checkpoint.
 
 ### Before verified integration
 
-Validate the third correction's exact single-child/nine-path topology, all
-three earlier candidate topologies, absent-source boundary, nine D46 provenance rows, twelve
+Validate the fourth correction's exact single-child/nine-path topology, all
+four earlier candidate topologies, absent-source boundary, nine D46 provenance rows, thirteen
 registered mutation classes, aggregate design suite, locked workspace,
 supported feature matrix, and diff hygiene. Push it to existing draft pull
 request #22 and keep the pull request draft while independent review is absent.
@@ -285,8 +299,8 @@ support source, and the two affected lockfiles; no source is admitted.
 
 Fetch `master` and verify the pull request's actual base, merge ancestry, exact
 correction/review content, and passing merge-revision `validation` before
-releasing dependent work. Independent review of the immutable third correction must
-reconstruct all four candidates, simulate only the registered implementation and
+releasing dependent work. Independent review of the immutable fourth correction must
+reconstruct all five candidates, simulate only the registered implementation and
 support paths, run both runtime profiles plus the async/no-std compile
 projection, trace all nine first-entry rows, and reject every registered
 mutation. Only a passed review followed by a separate exact pre-source
@@ -998,16 +1012,31 @@ source cannot repair it, and adding a new Foundation variant lies outside the
 registered implementation topology. The third correction changes only that
 fixture spelling plus `WorkClass` reuse and its twelfth executable negative
 mutation, preserving the exact nine-path correction topology and all source
-absence constraints.
-
-The exact second-correction tree passes the 12-test WP-400 schema, all
-design-check test suites, API ownership with 743 frozen items, design
+absence constraints. Exact commit
+`129af4349dbd29d0ca3212646020f7dfe59baf47` passes the 13-test WP-400 schema,
+all design-check suites, API ownership with 743 frozen items, design
 requirements with 62 active owners and 59 inactive dispositions, 18-decision
 architecture registration, 195-field/3-profile resource validation, v5
 authority-reset validation, Rust formatting, shell syntax, diff hygiene,
-locked workspace tests, the 21-cell feature matrix, and aggregate design
-validation. Its remote validation passed as recorded above; independent review
-rejected only the nonexistent work-class root before attestation.
+locked workspace tests, the 21-cell feature matrix, aggregate design
+validation with 66 fixtures/cases, and exact-head run `31358644443`.
+
+Independent reconstruction of that third correction used a fresh detached
+checkout and modified only the registered product and support paths. All three
+Servient feature cells compiled, and the external std host cell completed
+planning, publication, one accepted request, exactly one handler call, exactly
+one response, shutdown, and zero outstanding counts. The external no-default
+and async/no-std cells both stopped at the contract boundary with `E0432`:
+`HostBindingRegistration` is exported by Core only under
+`feature = "std"`, but the contract root imports it unconditionally. The
+contract root is not an implementation/support path, so no admitted source
+transition can fix this candidate. The isolated source mutation remains
+review evidence only and is not present on the task branch.
+
+The fourth correction moves `HandlerFootprint` and
+`HostBindingRegistration` into an exact std-gated import, registers the
+thirteenth mutation class, preserves the prior 7+3 future source topology,
+and admits no product or support source.
 
 ### Aggregate design-check worktree-root defect
 
@@ -1423,15 +1452,16 @@ source. Its current tree passes:
 
 ## Next Safe Actions
 
-1. Commit the exact nine-path third non-source WP-400 correction as the unique
-   child of second correction
-   `8ce5b4426921f7343a298a5910b40fa5c87942d2`, validate all four immutable
+1. Commit the exact nine-path fourth non-source WP-400 correction as the unique
+   child of third correction
+   `129af4349dbd29d0ca3212646020f7dfe59baf47`, validate all five immutable
    topologies and the expected absent-source boundary, and update draft pull
    request #22.
-2. Independently review the third correction by reconstructing all four candidates,
-   exercising both runtime cells and the async/no-std compile projection, all
-   nine D46 provenance rows, and all twelve registered mutation classes. Only an
-   approved review may release the exact pre-source admission checkpoint.
+2. Independently review the fourth correction by reconstructing all five
+   candidates, exercising both runtime cells and the async/no-std compile
+   projection, all nine D46 provenance rows, and all thirteen registered
+   mutation classes. Only an approved review may release the exact pre-source
+   admission checkpoint.
 3. Keep WP-400 source absent until that checkpoint is committed and its
    topology validates. Then implement only the correction's registered paths.
 4. Correct the performance harness's compile-time repository-root capture in

@@ -125,10 +125,15 @@ The repository evidence establishes the following starting point:
   `8ce5b4426921f7343a298a5910b40fa5c87942d2` uses the existing named Gateway
   profile and passed exact-head validation run `31356400537`, but independent
   reconstruction rejected its nonexistent `WorkClass::HandlerCalls` budget
-  variant. The third non-source correction uses frozen
-  `WorkClass::HandlerSteps` and adds that rejection class; the tranche remains
-  `pending`/`review-pending`. D46 makes the one-time complete first-entry
-  provenance review part of the third correction, not a separate gate. Broad
+  variant. Exact third correction
+  `129af4349dbd29d0ca3212646020f7dfe59baf47` uses frozen
+  `WorkClass::HandlerSteps` and passed exact-head validation run `31358644443`,
+  but its full source simulation exposed an unconditional import of std-only
+  `HostBindingRegistration` in the portable contract root. The fourth
+  non-source correction gates that import and adds the thirteenth rejection
+  class; the tranche remains `pending`/`review-pending`. D46 makes the one-time
+  complete first-entry provenance review part of the fourth correction, not a
+  separate gate. Broad
   WP-400, WP-500, and WP-600 remain downstream of broad WP-300, and WP-700
   joins those branches;
 - default workspace tests, the 21-cell valid feature matrix, and the aggregate
@@ -248,10 +253,13 @@ then rejected its host test's nonexistent `ResourceLimits::default()` input.
 Second correction `8ce5b4426921f7343a298a5910b40fa5c87942d2`
 selects `GatewayDefaultV1::LIMITS`, but reconstruction then rejected its
 nonexistent `WorkClass::HandlerCalls` input. The third correction selects the
-frozen `WorkClass::HandlerSteps` variant and freezes the corresponding
-negative evidence without widening source scope. D46 requires the third
-correction to close the complete first-entry provenance table in independent
-review before source admission. Broad
+frozen `WorkClass::HandlerSteps` variant, but its isolated std runtime success
+also exposed that the no-default and async/no-std cells could not import the
+contract root's unconditional std-only `HostBindingRegistration`. The fourth
+correction gates the host-only import and freezes the corresponding thirteenth
+negative evidence without widening implementation source scope. D46 requires
+the fourth correction to close the complete first-entry provenance table in
+independent review before source admission. Broad
 `WP-100-HANDLER-ENTRY`, `WP-300-BROAD-ENTRY`, and `WP-400-BROAD-ENTRY` remain
 blocked until the gate passes. The gate exception does not claim final
 `InteractionInput` storage, `AcceptHint` resource admission,
@@ -574,9 +582,11 @@ compatibility and lockfile topology. Its first correction fixed those defects
 but retained a non-constructible `ResourceLimits::default()` fixture root.
 The second correction uses the existing Gateway profile but was independently
 rejected for naming nonexistent `WorkClass::HandlerCalls`; the third
-non-source correction uses the frozen `HandlerSteps` variant and now owns
-D46's one-time first-entry closure. WP-400 source remains blocked pending that
-third correction's independent review and admission.
+non-source correction uses the frozen `HandlerSteps` variant but was rejected
+because its portable contract root unconditionally imported std-only
+`HostBindingRegistration`. The fourth correction gates that import and now
+owns D46's one-time first-entry closure. WP-400 source remains blocked pending
+that fourth correction's independent review and admission.
 The broad entry requirements below remain open.
 
 Before broad WP-300 admission, the external Zenoh authoring spike must record

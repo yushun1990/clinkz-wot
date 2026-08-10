@@ -1011,7 +1011,7 @@ contract_artifacts = [
     "tools/design-check/src/main.rs",
     "tools/design-check/tests/wp400_property_read_servient_schema.rs",
 ]
-candidate_base_ref = "8ce5b4426921f7343a298a5910b40fa5c87942d2"
+candidate_base_ref = "129af4349dbd29d0ca3212646020f7dfe59baf47"
 candidate_ref = "resolved-by-review-attestation"
 candidate_paths = [
     "PLAN.md",
@@ -1020,7 +1020,7 @@ candidate_paths = [
     "docs/spec/v5-artifact-carry-forward.toml",
     "docs/work-packages/property-read-architecture-gate.toml",
     "tools/check-wp400-property-read-servient-slice-entry.sh",
-    "tools/compile-contracts/wp400-property-read-servient-slice/tests/host.rs",
+    "tools/compile-contracts/wp400-property-read-servient-slice/src/lib.rs",
     "tools/design-check/src/main.rs",
     "tools/design-check/tests/wp400_property_read_servient_schema.rs",
 ]

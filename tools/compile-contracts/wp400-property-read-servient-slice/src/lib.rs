@@ -3,10 +3,11 @@
 use core::task::Context;
 
 use clinkz_wot_core::{
-    CoreResult, Deadline, HandlerFootprint, HostBindingRegistration, PollServerBinding,
-    ReadPropertyHandler, StaticBindingRegistration, StaticHandlerRegistration, StepStatus,
-    ThingSlotId,
+    CoreResult, Deadline, PollServerBinding, ReadPropertyHandler, StaticBindingRegistration,
+    StaticHandlerRegistration, StepStatus, ThingSlotId,
 };
+#[cfg(feature = "std")]
+use clinkz_wot_core::{HandlerFootprint, HostBindingRegistration};
 use clinkz_wot_foundation::{ResourceLimits, WorkBudget};
 use clinkz_wot_servient::{StaticServient, StaticServientBuilder};
 use clinkz_wot_td::thing::Thing;

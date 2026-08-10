@@ -106,8 +106,8 @@ revalidation = "cargo run --locked --quiet --manifest-path tools/design-check/Ca
 [[artifact]]
 family = "property-read-integration-gate"
 path = "docs/work-packages/property-read-architecture-gate.toml"
-sha256 = "7b751280c409db21894836eb9f716d8eec0c3768aaeaa87756f10090214c040e"
-disposition = "revalidated as a six-tranche gate with the route-reservation correction integrated/default-validated, the original plus first and second non-source WP-400 candidates review-rejected, and the exact third corrective child pending independent review; D46's nine-row first-entry closure, twelve-mutation set, seven product paths, one mock-support source, and two required lockfiles are frozen while the aggregate gate and all WP-400 source remain blocked"
+sha256 = "9b5914af2f3ac0231fba1344f381e4ff6b546650f0e54bf9ffb4edc12e95b462"
+disposition = "revalidated as a six-tranche gate with the route-reservation correction integrated/default-validated, the original plus first, second, and third non-source WP-400 candidates review-rejected, and the exact fourth corrective child pending independent review; D46's nine-row first-entry closure, thirteen-mutation set, seven product paths, one mock-support source, and two required lockfiles are frozen while the aggregate gate and all WP-400 source remain blocked"
 revalidation = "tools/check-v5-authority-reset-decision.sh"
 
 [[artifact]]

@@ -194,6 +194,9 @@ It must also reject:
     existing named Foundation profile.
 12. a host runner budget that names nonexistent `WorkClass::HandlerCalls`
     instead of the frozen `WorkClass::HandlerSteps` variant.
+13. a portable contract root that imports std-only
+    `HostBindingRegistration` without `#[cfg(feature = "std")]`, making both
+    the no-default and async/no-std author cells structurally uncompilable.
 
 Review must additionally reject premature publication, accept without the unique
 route lease/permit, direct runner-created handler context or response
@@ -317,12 +320,42 @@ It replaces only the invalid work-class spelling with the frozen
 `HandlerSteps` variant, registers `WorkClass` as a reused public input, and
 adds the exact rejection to the entry/schema checks. It preserves every prior
 constructor, resource-policy, lockfile, provenance, source-path, and
-absent-source constraint. Its immutable object id is resolved after commit;
-the gate keeps `candidate_ref = "resolved-by-review-attestation"`.
+absent-source constraint. Its immutable object id is
+`129af4349dbd29d0ca3212646020f7dfe59baf47`; pull-request #22 exact-head
+validation run `31358644443` passed.
 
-Independent review must bind the third correction, reconstruct all four
+Independent reconstruction then installed only the registered seven product
+and three support paths in a fresh detached checkout. The std host cell
+compiled and completed one request, one handler call, one response, and full
+route cleanup. Both portable cells stopped earlier with `E0432`, however,
+because the external contract root imported std-only
+`HostBindingRegistration` unconditionally. Core intentionally exports that
+type only behind `feature = "std"`; no allowed Servient or support
+implementation path can change the contract root or make a host-erased type
+portable. The third correction is therefore rejected before attestation.
+
+The fourth corrective candidate is the exact nine-path single child of
+`129af4349dbd29d0ca3212646020f7dfe59baf47`:
+
+- `PLAN.md`;
+- `PROJECT_STATE.md`;
+- this audit;
+- `docs/spec/v5-artifact-carry-forward.toml`;
+- `docs/work-packages/property-read-architecture-gate.toml`;
+- `tools/check-wp400-property-read-servient-slice-entry.sh`;
+- `tools/compile-contracts/wp400-property-read-servient-slice/src/lib.rs`;
+- `tools/design-check/src/main.rs`; and
+- `tools/design-check/tests/wp400_property_read_servient_schema.rs`.
+
+It moves `HandlerFootprint` and `HostBindingRegistration` into an exact
+std-gated import while leaving the static imports available in all cells, and
+adds the thirteenth executable rejection class. No product or support source
+is admitted. Its immutable object id is resolved after commit; the gate keeps
+`candidate_ref = "resolved-by-review-attestation"`.
+
+Independent review must bind the fourth correction, reconstruct all five
 candidates, execute all eleven registered prechecks, exercise the three
-positive cells and all twelve negative mutations in an isolated checkout, and
+positive cells and all thirteen negative mutations in an isolated checkout, and
 record a separate attestation commit. Only then may a distinct admission
 checkpoint switch this tranche to `in-progress`/`approved` and bind the exact
 default-integrated admission base.

@@ -43,6 +43,7 @@ struct FirstEntryClosure {
     manifest_lockfile_transition_complete: bool,
     host_resource_policy_root_constructible: bool,
     handler_work_class_constructible: bool,
+    portable_contract_imports_gated: bool,
     generations: GenerationSet,
 }
 
@@ -69,6 +70,7 @@ impl FirstEntryClosure {
             manifest_lockfile_transition_complete: true,
             host_resource_policy_root_constructible: true,
             handler_work_class_constructible: true,
+            portable_contract_imports_gated: true,
             generations: GenerationSet {
                 binding: 3,
                 produced: 5,
@@ -94,6 +96,7 @@ enum Rejection {
     ManifestLockfileTopology,
     HostResourcePolicyRoot,
     HandlerWorkClass,
+    PortableHostImport,
 }
 
 fn validate(
@@ -151,6 +154,9 @@ fn validate(
     if closure.profile == Profile::Host && !closure.handler_work_class_constructible {
         return Err(Rejection::HandlerWorkClass);
     }
+    if !closure.portable_contract_imports_gated {
+        return Err(Rejection::PortableHostImport);
+    }
     if let Some(counterpart) = counterpart {
         let same_semantics = closure.logical_route == counterpart.logical_route
             && closure.artifact_metadata == counterpart.artifact_metadata
@@ -169,6 +175,8 @@ fn validate(
                 == counterpart.host_resource_policy_root_constructible
             && closure.handler_work_class_constructible
                 == counterpart.handler_work_class_constructible
+            && closure.portable_contract_imports_gated
+                == counterpart.portable_contract_imports_gated
             && closure.generations == counterpart.generations;
         if closure.profile == counterpart.profile || !same_semantics {
             return Err(Rejection::ProfileDivergence);
@@ -287,4 +295,11 @@ fn nonexistent_handler_work_class_is_rejected() {
     let mut closure = FirstEntryClosure::valid(Profile::Host);
     closure.handler_work_class_constructible = false;
     assert_eq!(validate(closure, None), Err(Rejection::HandlerWorkClass));
+}
+
+#[test]
+fn unconditional_host_registration_import_is_rejected() {
+    let mut closure = FirstEntryClosure::valid(Profile::Static);
+    closure.portable_contract_imports_gated = false;
+    assert_eq!(validate(closure, None), Err(Rejection::PortableHostImport));
 }
