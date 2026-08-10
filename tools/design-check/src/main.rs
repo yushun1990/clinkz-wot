@@ -717,7 +717,10 @@ const PROPERTY_READ_SERVIENT_ORIGINAL_CANDIDATE_REF: &str =
     "2d63e151ac6f89ef294c089d5f48917e8e324773";
 const PROPERTY_READ_SERVIENT_FIRST_CORRECTION_REF: &str =
     "4456632367069fb5cdd20dd51aeade1035e3768b";
-const PROPERTY_READ_SERVIENT_CANDIDATE_BASE_REF: &str = PROPERTY_READ_SERVIENT_FIRST_CORRECTION_REF;
+const PROPERTY_READ_SERVIENT_SECOND_CORRECTION_REF: &str =
+    "8ce5b4426921f7343a298a5910b40fa5c87942d2";
+const PROPERTY_READ_SERVIENT_CANDIDATE_BASE_REF: &str =
+    PROPERTY_READ_SERVIENT_SECOND_CORRECTION_REF;
 const PROPERTY_READ_SERVIENT_CANDIDATE_REF_MODE: &str = "resolved-by-review-attestation";
 const PROPERTY_READ_SERVIENT_API_ITEMS: &[&str] = &[
     "CompiledPlanSetState",
@@ -760,6 +763,7 @@ const PROPERTY_READ_SERVIENT_REUSED_API_ITEMS: &[&str] = &[
     "StaticResourceProfile",
     "StepStatus",
     "WorkBudget",
+    "WorkClass",
 ];
 const PROPERTY_READ_SERVIENT_IMPLEMENTATION_PATHS: &[&str] = &[
     "servient/Cargo.toml",
@@ -842,6 +846,8 @@ const PROPERTY_READ_SERVIENT_CANDIDATE_PATHS: &[&str] = &[
     "tools/design-check/src/main.rs",
     "tools/design-check/tests/wp400_property_read_servient_schema.rs",
 ];
+const PROPERTY_READ_SERVIENT_SECOND_CORRECTION_PATHS: &[&str] =
+    PROPERTY_READ_SERVIENT_CANDIDATE_PATHS;
 const PROPERTY_READ_SERVIENT_PRECHECKS: &[&str] = &[
     "api-ownership-check",
     "architecture-adr-check",
@@ -6202,6 +6208,15 @@ fn check_property_read_servient_slice_tranche(
         PROPERTY_READ_SERVIENT_ORIGINAL_CANDIDATE_REF,
         PROPERTY_READ_SERVIENT_FIRST_CORRECTION_REF,
         &first_correction_paths,
+    )?;
+
+    let second_correction_paths = owned_set(PROPERTY_READ_SERVIENT_SECOND_CORRECTION_PATHS);
+    check_candidate_commit(
+        id,
+        root,
+        PROPERTY_READ_SERVIENT_FIRST_CORRECTION_REF,
+        PROPERTY_READ_SERVIENT_SECOND_CORRECTION_REF,
+        &second_correction_paths,
     )?;
 
     let candidate_base_ref = string_field(tranche, "candidate_base_ref", id)?;

@@ -210,13 +210,18 @@ The active design revision is v5.0 bounded-core authority.
   original review mutation classes. Independent reconstruction nevertheless
   rejected it before source simulation because its host test calls
   nonexistent `ResourceLimits::default()`.
-- The second non-source WP-400 correction is the exact nine-path unique child
-  of `4456632367069fb5cdd20dd51aeade1035e3768b`; its object id is resolved
-  after commit. It uses the existing
-  `GatewayDefaultV1::LIMITS.clone()` policy root, registers the profile and
-  `StaticResourceProfile` as reused APIs, and adds that precise rejection class
-  without widening product or support implementation scope.
-  No WP-400 source is admitted.
+- Exact second non-source WP-400 correction
+  `8ce5b4426921f7343a298a5910b40fa5c87942d2` is the nine-path unique child of
+  `4456632367069fb5cdd20dd51aeade1035e3768b`. It uses the existing
+  `GatewayDefaultV1::LIMITS.clone()` policy root and passed pull-request #22
+  exact-head validation run `31356400537`. Independent isolated source
+  reconstruction nevertheless rejected it because the host runner names
+  nonexistent `WorkClass::HandlerCalls`; the frozen Foundation variant is
+  `WorkClass::HandlerSteps`.
+- The third non-source WP-400 correction is the registered exact nine-path
+  child of `8ce5b4426921f7343a298a5910b40fa5c87942d2`. It changes only that work-class
+  spelling plus its reused-API and negative-evidence registration. Its object
+  id is resolved after commit. No WP-400 source is admitted.
 - Pull request #20 integrated technical decision checkpoint
   `6271c2861771a0fbc18772bd853bc451ba0fd614` and continuation checkpoint
   `72cf711adef3712ebf502b2fd01273e6f2d23376` through exact merge
@@ -256,16 +261,20 @@ host-constructor and manifest/lockfile topology. Exact first correction
 a non-constructible `ResourceLimits::default()` host-test root. A minimal
 external no-std proof fails with `E0599`; the named Gateway profile replacement
 compiles against the same Foundation revision. The registered second
-correction is the first correction's exact nine-path child. It preserves all
-nine D46 first-entry rows, seven future product paths, three support paths,
-source absence, and the active-v5 `StepStatus<()>` boundary. WP-400 source
-remains blocked until the second correction passes independent review and a
-later pre-source admission checkpoint.
+correction is exact commit `8ce5b4426921f7343a298a5910b40fa5c87942d2`.
+It passed pull-request #22 validation run `31356400537`, but a minimal external
+no-std compile proof stopped with `E0599` because its host budget uses nonexistent
+`WorkClass::HandlerCalls` instead of frozen `WorkClass::HandlerSteps`. The
+registered third correction is the second correction's exact nine-path child.
+It preserves all nine D46 first-entry rows, seven future product paths, three
+support paths, source absence, and the active-v5 `StepStatus<()>` boundary.
+WP-400 source remains blocked until the third correction passes independent
+review and a later pre-source admission checkpoint.
 
 ### Before verified integration
 
-Validate the second correction's exact single-child/nine-path topology, both
-earlier candidate topologies, absent-source boundary, nine D46 provenance rows, eleven
+Validate the third correction's exact single-child/nine-path topology, all
+three earlier candidate topologies, absent-source boundary, nine D46 provenance rows, twelve
 registered mutation classes, aggregate design suite, locked workspace,
 supported feature matrix, and diff hygiene. Push it to existing draft pull
 request #22 and keep the pull request draft while independent review is absent.
@@ -276,8 +285,8 @@ support source, and the two affected lockfiles; no source is admitted.
 
 Fetch `master` and verify the pull request's actual base, merge ancestry, exact
 correction/review content, and passing merge-revision `validation` before
-releasing dependent work. Independent review of the immutable second correction must
-reconstruct all three candidates, simulate only the registered implementation and
+releasing dependent work. Independent review of the immutable third correction must
+reconstruct all four candidates, simulate only the registered implementation and
 support paths, run both runtime profiles plus the async/no-std compile
 projection, trace all nine first-entry rows, and reject every registered
 mutation. Only a passed review followed by a separate exact pre-source
@@ -852,8 +861,8 @@ mutation was then discarded.
 ### WP-200 route-reservation projection and WP-400 first-entry closure
 
 Status: ROUTE-RESERVATION PROJECTION INTEGRATED AND DEFAULT-VALIDATED; WP-400
-ORIGINAL CANDIDATE REVIEW-REJECTED; CORRECTIVE CANDIDATE ACTIVE; WP-400 SOURCE
-BLOCKED.
+ORIGINAL/FIRST/SECOND CANDIDATES REVIEW-REJECTED; THIRD CORRECTIVE CANDIDATE
+ACTIVE; WP-400 SOURCE BLOCKED.
 
 WP-400 reconstruction found that the completed Producer-route fixture obtains
 `RouteReservationIdentity` from direct fixture constants. Before this
@@ -975,17 +984,30 @@ cannot compile because `ResourceLimits` has no `Default` implementation. The
 original expression fails in a minimal external no-std crate with `E0599`,
 while `GatewayDefaultV1::LIMITS.clone()` passes in that same crate. Foundation
 source is outside the registered WP-400 implementation topology, so inventing
-a new default there is not a legal repair. The second correction changes only
-the registered host test and evidence/checker paths, adds the eleventh
-mutation class, and must bind its own immutable object id before admission.
+a new default there is not a legal repair. Exact second correction
+`8ce5b4426921f7343a298a5910b40fa5c87942d2` changes only the registered host
+test and evidence/checker paths, adds the eleventh mutation class, and passed
+pull-request #22 exact-head validation run `31356400537`.
 
-The exact first-correction tree passes the 11-test WP-400 schema, all design-check
-test suites, API ownership with 743 frozen items, design requirements with 62
-active owners and 59 inactive dispositions, 18-decision architecture
-registration, 195-field/3-profile resource validation, v5 authority-reset
-validation, Rust formatting, shell syntax, and diff hygiene. The
-topology-dependent candidate/aggregate checks run against the committed unique
-child before the branch is pushed again.
+Independent reconstruction of that second correction then reached the
+candidate's host budget; a minimal external no-std proof stopped with `E0599`:
+`WorkClass::HandlerCalls`
+does not exist in the frozen Foundation enum, whose handler-progress variant
+is `WorkClass::HandlerSteps`. This is a contract-owned input error; Servient
+source cannot repair it, and adding a new Foundation variant lies outside the
+registered implementation topology. The third correction changes only that
+fixture spelling plus `WorkClass` reuse and its twelfth executable negative
+mutation, preserving the exact nine-path correction topology and all source
+absence constraints.
+
+The exact second-correction tree passes the 12-test WP-400 schema, all
+design-check test suites, API ownership with 743 frozen items, design
+requirements with 62 active owners and 59 inactive dispositions, 18-decision
+architecture registration, 195-field/3-profile resource validation, v5
+authority-reset validation, Rust formatting, shell syntax, diff hygiene,
+locked workspace tests, the 21-cell feature matrix, and aggregate design
+validation. Its remote validation passed as recorded above; independent review
+rejected only the nonexistent work-class root before attestation.
 
 ### Aggregate design-check worktree-root defect
 
@@ -1401,14 +1423,14 @@ source. Its current tree passes:
 
 ## Next Safe Actions
 
-1. Commit the exact nine-path second non-source WP-400 correction as the unique
-   child of first correction
-   `4456632367069fb5cdd20dd51aeade1035e3768b`, validate all three immutable
+1. Commit the exact nine-path third non-source WP-400 correction as the unique
+   child of second correction
+   `8ce5b4426921f7343a298a5910b40fa5c87942d2`, validate all four immutable
    topologies and the expected absent-source boundary, and update draft pull
    request #22.
-2. Independently review the second correction by reconstructing all three candidates,
+2. Independently review the third correction by reconstructing all four candidates,
    exercising both runtime cells and the async/no-std compile projection, all
-   nine D46 provenance rows, and all eleven registered mutation classes. Only an
+   nine D46 provenance rows, and all twelve registered mutation classes. Only an
    approved review may release the exact pre-source admission checkpoint.
 3. Keep WP-400 source absent until that checkpoint is committed and its
    topology validates. Then implement only the correction's registered paths.

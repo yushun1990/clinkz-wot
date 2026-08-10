@@ -192,6 +192,8 @@ It must also reject:
 11. a host resource-policy root that assumes a nonexistent
     `ResourceLimits::default()` implementation instead of selecting an
     existing named Foundation profile.
+12. a host runner budget that names nonexistent `WorkClass::HandlerCalls`
+    instead of the frozen `WorkClass::HandlerSteps` variant.
 
 Review must additionally reject premature publication, accept without the unique
 route lease/permit, direct runner-created handler context or response
@@ -267,7 +269,8 @@ revision. The registered implementation paths cannot add the missing trait
 implementation to Foundation, and doing so would silently invent a default
 policy beyond this tranche's authority.
 
-The second corrective candidate is the exact nine-path single child of
+The second corrective candidate is exact commit
+`8ce5b4426921f7343a298a5910b40fa5c87942d2`, the nine-path single child of
 `4456632367069fb5cdd20dd51aeade1035e3768b`:
 
 - `PLAN.md`;
@@ -285,12 +288,41 @@ Gateway profile, registers `GatewayDefaultV1` and `StaticResourceProfile` as
 reused public inputs, and adds that precise rejection class to the entry/schema
 checks. It preserves the first correction's compatible builder API, two
 lockfile paths, all nine D46 rows, seven product paths, three support paths,
-and source absence. Its immutable object id is resolved after the commit; the
-gate uses `candidate_ref = "resolved-by-review-attestation"`.
+and source absence. Pull-request #22 exact-head validation run `31356400537`
+passed for that immutable commit.
 
-Independent review must bind the second correction, reconstruct all three
+Independent reconstruction rejected the second correction before attestation.
+Its host runner assigns handler work through `WorkClass::HandlerCalls`, but
+the frozen Foundation enum has no such variant; the implemented public value
+is `WorkClass::HandlerSteps`. A minimal external no-std compile proof of that
+exact enum reference stops with `E0599` and recommends `HandlerSteps`. No choice inside the seven
+registered Servient implementation paths can make a nonexistent public enum
+variant compile, and adding a Foundation variant would be an out-of-scope
+semantic expansion rather than a correction.
+
+The third corrective candidate is the exact nine-path single child of
+`8ce5b4426921f7343a298a5910b40fa5c87942d2`:
+
+- `PLAN.md`;
+- `PROJECT_STATE.md`;
+- this audit;
+- `docs/spec/v5-artifact-carry-forward.toml`;
+- `docs/work-packages/property-read-architecture-gate.toml`;
+- `tools/check-wp400-property-read-servient-slice-entry.sh`;
+- `tools/compile-contracts/wp400-property-read-servient-slice/tests/host.rs`;
+- `tools/design-check/src/main.rs`; and
+- `tools/design-check/tests/wp400_property_read_servient_schema.rs`.
+
+It replaces only the invalid work-class spelling with the frozen
+`HandlerSteps` variant, registers `WorkClass` as a reused public input, and
+adds the exact rejection to the entry/schema checks. It preserves every prior
+constructor, resource-policy, lockfile, provenance, source-path, and
+absent-source constraint. Its immutable object id is resolved after commit;
+the gate keeps `candidate_ref = "resolved-by-review-attestation"`.
+
+Independent review must bind the third correction, reconstruct all four
 candidates, execute all eleven registered prechecks, exercise the three
-positive cells and all eleven negative mutations in an isolated checkout, and
+positive cells and all twelve negative mutations in an isolated checkout, and
 record a separate attestation commit. Only then may a distinct admission
 checkpoint switch this tranche to `in-progress`/`approved` and bind the exact
 default-integrated admission base.

@@ -42,6 +42,7 @@ struct FirstEntryClosure {
     host_zero_argument_constructor_preserved: bool,
     manifest_lockfile_transition_complete: bool,
     host_resource_policy_root_constructible: bool,
+    handler_work_class_constructible: bool,
     generations: GenerationSet,
 }
 
@@ -67,6 +68,7 @@ impl FirstEntryClosure {
             host_zero_argument_constructor_preserved: true,
             manifest_lockfile_transition_complete: true,
             host_resource_policy_root_constructible: true,
+            handler_work_class_constructible: true,
             generations: GenerationSet {
                 binding: 3,
                 produced: 5,
@@ -91,6 +93,7 @@ enum Rejection {
     HostConstructorCompatibility,
     ManifestLockfileTopology,
     HostResourcePolicyRoot,
+    HandlerWorkClass,
 }
 
 fn validate(
@@ -145,6 +148,9 @@ fn validate(
     if closure.profile == Profile::Host && !closure.host_resource_policy_root_constructible {
         return Err(Rejection::HostResourcePolicyRoot);
     }
+    if closure.profile == Profile::Host && !closure.handler_work_class_constructible {
+        return Err(Rejection::HandlerWorkClass);
+    }
     if let Some(counterpart) = counterpart {
         let same_semantics = closure.logical_route == counterpart.logical_route
             && closure.artifact_metadata == counterpart.artifact_metadata
@@ -161,6 +167,8 @@ fn validate(
             && closure.capacities_reserved == counterpart.capacities_reserved
             && closure.host_resource_policy_root_constructible
                 == counterpart.host_resource_policy_root_constructible
+            && closure.handler_work_class_constructible
+                == counterpart.handler_work_class_constructible
             && closure.generations == counterpart.generations;
         if closure.profile == counterpart.profile || !same_semantics {
             return Err(Rejection::ProfileDivergence);
@@ -272,4 +280,11 @@ fn nonexistent_foundation_default_assumption_is_rejected() {
         validate(closure, None),
         Err(Rejection::HostResourcePolicyRoot)
     );
+}
+
+#[test]
+fn nonexistent_handler_work_class_is_rejected() {
+    let mut closure = FirstEntryClosure::valid(Profile::Host);
+    closure.handler_work_class_constructible = false;
+    assert_eq!(validate(closure, None), Err(Rejection::HandlerWorkClass));
 }

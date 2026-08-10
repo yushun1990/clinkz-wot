@@ -56,7 +56,7 @@ fn drive_until_idle(servient: &clinkz_wot_servient::Servient, cx: &mut Context<'
     for _ in 0..32 {
         let mut budget = WorkBudget::new()
             .with_remaining(WorkClass::BindingPolls, 8)
-            .with_remaining(WorkClass::HandlerCalls, 1)
+            .with_remaining(WorkClass::HandlerSteps, 1)
             .with_remaining(WorkClass::CleanupItems, 8);
         if matches!(
             step_host_property_read(servient, cx, &mut budget),
