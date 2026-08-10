@@ -226,10 +226,21 @@ The active design revision is v5.0 bounded-core authority.
   portable contract root imports std-only `HostBindingRegistration`
   unconditionally; its std runtime passed, while no-default and async/no-std
   both stopped with `E0432`.
-- The fourth non-source WP-400 correction is the registered exact nine-path
+- Exact fourth non-source WP-400 correction
+  `43db15247279660ef910fdd13757e2767801fd94` is the registered nine-path
   child of `129af4349dbd29d0ca3212646020f7dfe59baf47`. It gates the host-only
-  imports behind `feature = "std"` and adds the thirteenth negative-evidence
-  class. Its object id is resolved after commit. No WP-400 source is admitted.
+  imports behind `feature = "std"` and passed pull-request #22 exact-head
+  validation run `31361336829`. Its full isolated completion matrix passed,
+  but independent negative evidence rejected it because static deactivation
+  is unreachable, an accepted request is lost when `HandlerSteps` is
+  exhausted, the simulated host builder changes its existing result type, and
+  required public lifecycle methods are absent from API ownership.
+- The fifth non-source WP-400 correction is the registered exact twelve-path
+  child of `43db15247279660ef910fdd13757e2767801fd94`. It preserves
+  `ServientResult`, registers five exact public methods, adds a no-default
+  static runtime cell, and requires accepted-request retention across handler
+  budget exhaustion in both runtime profiles. No WP-400 product or
+  implementation-support source is admitted.
 - Pull request #20 integrated technical decision checkpoint
   `6271c2861771a0fbc18772bd853bc451ba0fd614` and continuation checkpoint
   `72cf711adef3712ebf502b2fd01273e6f2d23376` through exact merge
@@ -278,17 +289,23 @@ third correction is exact commit
 full isolated simulation found its portable contract root importing std-only
 `HostBindingRegistration` without a feature gate. The std runtime completed
 one full lifecycle, while no-default and async/no-std stopped with `E0432`.
-The registered fourth correction is the third correction's exact nine-path
-child. It preserves all nine D46 first-entry rows, seven future product paths,
-three support paths, source absence, and the active-v5 `StepStatus<()>`
-boundary while gating the host-only import. WP-400 source remains blocked
-until the fourth correction passes independent review and a later pre-source
-admission checkpoint.
+Exact fourth correction `43db15247279660ef910fdd13757e2767801fd94`
+preserved those boundaries and passed validation run `31361336829`, but
+independent isolated reconstruction rejected its runtime/API closure after the
+full completion matrix passed. An external static deactivation proof failed
+with `E0599`; a host request accepted with zero `HandlerSteps` never resumed
+and left its response opportunity live. The simulation also required a
+breaking `CoreResult<Servient>` builder result and unregistered public methods.
+The registered fifth correction is the fourth correction's exact twelve-path
+child. It preserves all nine D46 rows, the 7+3 future source topology, source
+absence, and `StepStatus<()>`, while closing those runtime and API contracts.
+WP-400 source remains blocked until the fifth correction passes independent
+review and a later pre-source admission checkpoint.
 
 ### Before verified integration
 
-Validate the fourth correction's exact single-child/nine-path topology, all
-four earlier candidate topologies, absent-source boundary, nine D46 provenance rows, thirteen
+Validate the fifth correction's exact single-child/twelve-path topology, all
+five earlier candidate topologies, absent-source boundary, nine D46 provenance rows, seventeen
 registered mutation classes, aggregate design suite, locked workspace,
 supported feature matrix, and diff hygiene. Push it to existing draft pull
 request #22 and keep the pull request draft while independent review is absent.
@@ -299,9 +316,9 @@ support source, and the two affected lockfiles; no source is admitted.
 
 Fetch `master` and verify the pull request's actual base, merge ancestry, exact
 correction/review content, and passing merge-revision `validation` before
-releasing dependent work. Independent review of the immutable fourth correction must
-reconstruct all five candidates, simulate only the registered implementation and
-support paths, run both runtime profiles plus the async/no-std compile
+releasing dependent work. Independent review of the immutable fifth correction must
+reconstruct all six candidates, simulate only the registered implementation and
+support paths, run the no-default static and std host runtime profiles plus the async/no-std compile
 projection, trace all nine first-entry rows, and reject every registered
 mutation. Only a passed review followed by a separate exact pre-source
 checkpoint may authorize WP-400 source.
@@ -1036,7 +1053,38 @@ review evidence only and is not present on the task branch.
 The fourth correction moves `HandlerFootprint` and
 `HostBindingRegistration` into an exact std-gated import, registers the
 thirteenth mutation class, preserves the prior 7+3 future source topology,
-and admits no product or support source.
+and admits no product or support source. Exact commit
+`43db15247279660ef910fdd13757e2767801fd94` passes the 14-test schema, all
+registered local matrices, and pull-request #22 validation run `31361336829`.
+
+Independent reconstruction of that exact fourth correction then installed
+only the registered seven product and three support paths in a persistent
+detached checkout. All Servient and external feature cells, both host runtime
+tests then present, every predecessor check, and the terminal
+`WP-400 Property Read Servient check: lifecycle composition valid` completed
+successfully. The matrix did not exercise two required adverse transitions.
+An added external generic proof of `StaticServient::begin_destroy` failed with
+`E0599`, because the static trait exposes only `step`. An added host runtime
+test accepted a request with binding budget but zero `HandlerSteps`; a later
+funded step still observed zero handler calls and zero responses because the
+request's unique response opportunity had been dropped. The binding retained
+one in-flight record that cleanup could not close. Source inspection also
+showed that the simulation changed `ServientBuilder::build` from its existing
+`ServientResult<Servient>` and added `produce_td`, `begin_expose`, and
+`begin_destroy` without API-ownership/tranche entries. These are candidate
+contract defects, not reasons to widen product source, so the fourth
+correction is rejected before attestation. The isolated source remains review
+evidence only.
+
+The fifth correction registers `StaticServientBuilder::read_property_handler`,
+`StaticServient::begin_destroy`, `Servient::produce_td`, and
+`ExposedThingHandle::{begin_expose,begin_destroy}`; preserves the existing
+host builder result; adds a no-default static runtime test; and adds host plus
+static assertions that an accepted request survives handler-budget exhaustion
+before exactly-once delivery and cleanup. Its four new mutation classes bring
+the schema to 18 tests: one positive closure and seventeen negative cases. It
+changes exactly twelve non-source paths and preserves the prior 7+3 future
+implementation topology.
 
 ### Aggregate design-check worktree-root defect
 
@@ -1452,15 +1500,15 @@ source. Its current tree passes:
 
 ## Next Safe Actions
 
-1. Commit the exact nine-path fourth non-source WP-400 correction as the unique
-   child of third correction
-   `129af4349dbd29d0ca3212646020f7dfe59baf47`, validate all five immutable
+1. Commit the exact twelve-path fifth non-source WP-400 correction as the
+   unique child of fourth correction
+   `43db15247279660ef910fdd13757e2767801fd94`, validate all six immutable
    topologies and the expected absent-source boundary, and update draft pull
    request #22.
-2. Independently review the fourth correction by reconstructing all five
-   candidates, exercising both runtime cells and the async/no-std compile
-   projection, all nine D46 provenance rows, and all thirteen registered
-   mutation classes. Only an approved review may release the exact pre-source
+2. Independently review the fifth correction by reconstructing all six
+   candidates, exercising the no-default static and std host runtime cells and
+   the async/no-std compile projection, all nine D46 provenance rows, and all
+   seventeen registered mutation classes. Only an approved review may release the exact pre-source
    admission checkpoint.
 3. Keep WP-400 source absent until that checkpoint is committed and its
    topology validates. Then implement only the correction's registered paths.

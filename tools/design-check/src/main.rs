@@ -721,7 +721,10 @@ const PROPERTY_READ_SERVIENT_SECOND_CORRECTION_REF: &str =
     "8ce5b4426921f7343a298a5910b40fa5c87942d2";
 const PROPERTY_READ_SERVIENT_THIRD_CORRECTION_REF: &str =
     "129af4349dbd29d0ca3212646020f7dfe59baf47";
-const PROPERTY_READ_SERVIENT_CANDIDATE_BASE_REF: &str = PROPERTY_READ_SERVIENT_THIRD_CORRECTION_REF;
+const PROPERTY_READ_SERVIENT_FOURTH_CORRECTION_REF: &str =
+    "43db15247279660ef910fdd13757e2767801fd94";
+const PROPERTY_READ_SERVIENT_CANDIDATE_BASE_REF: &str =
+    PROPERTY_READ_SERVIENT_FOURTH_CORRECTION_REF;
 const PROPERTY_READ_SERVIENT_CANDIDATE_REF_MODE: &str = "resolved-by-review-attestation";
 const PROPERTY_READ_SERVIENT_API_ITEMS: &[&str] = &[
     "CompiledPlanSetState",
@@ -733,11 +736,16 @@ const PROPERTY_READ_SERVIENT_API_ITEMS: &[&str] = &[
     "ServingActivationRecord",
     "StaticServient",
     "StaticServientBuilder",
+    "begin_destroy",
+    "begin_expose",
+    "produce_td",
     "servient_builder_binding_registration",
     "servient_builder_resource_limits",
     "servient_step",
     "set_read_property_handler",
+    "static_servient_begin_destroy",
     "static_servient_builder_binding_registration",
+    "static_servient_builder_read_property_handler",
     "static_servient_step",
 ];
 const PROPERTY_READ_SERVIENT_REUSED_API_ITEMS: &[&str] = &[
@@ -851,7 +859,7 @@ const PROPERTY_READ_SERVIENT_SECOND_CORRECTION_PATHS: &[&str] =
     PROPERTY_READ_SERVIENT_HOST_FIXTURE_CORRECTION_PATHS;
 const PROPERTY_READ_SERVIENT_THIRD_CORRECTION_PATHS: &[&str] =
     PROPERTY_READ_SERVIENT_HOST_FIXTURE_CORRECTION_PATHS;
-const PROPERTY_READ_SERVIENT_CANDIDATE_PATHS: &[&str] = &[
+const PROPERTY_READ_SERVIENT_FOURTH_CORRECTION_PATHS: &[&str] = &[
     "PLAN.md",
     "PROJECT_STATE.md",
     "docs/audits/WP-400-property-read-servient-slice-entry.md",
@@ -859,6 +867,20 @@ const PROPERTY_READ_SERVIENT_CANDIDATE_PATHS: &[&str] = &[
     "docs/work-packages/property-read-architecture-gate.toml",
     "tools/check-wp400-property-read-servient-slice-entry.sh",
     "tools/compile-contracts/wp400-property-read-servient-slice/src/lib.rs",
+    "tools/design-check/src/main.rs",
+    "tools/design-check/tests/wp400_property_read_servient_schema.rs",
+];
+const PROPERTY_READ_SERVIENT_CANDIDATE_PATHS: &[&str] = &[
+    "PLAN.md",
+    "PROJECT_STATE.md",
+    "docs/api-ownership.csv",
+    "docs/audits/WP-400-property-read-servient-slice-entry.md",
+    "docs/spec/v5-artifact-carry-forward.toml",
+    "docs/work-packages/property-read-architecture-gate.toml",
+    "tools/check-wp400-property-read-servient-slice-entry.sh",
+    "tools/check-wp400-property-read-servient-slice.sh",
+    "tools/compile-contracts/wp400-property-read-servient-slice/src/lib.rs",
+    "tools/compile-contracts/wp400-property-read-servient-slice/tests/host.rs",
     "tools/design-check/src/main.rs",
     "tools/design-check/tests/wp400_property_read_servient_schema.rs",
 ];
@@ -3702,6 +3724,7 @@ fn property_read_slice_spec(id: &str) -> Option<PropertyReadSliceSpec> {
                 "CONSTRAINED-PROGRESS-001",
                 "CONSTRAINED-WORK-001",
                 "HOST-ASYNC-001",
+                "HANDLE-DROP-001",
             ],
             owners: &["clinkz-wot-servient", "workspace"],
             evidence_key: "property-read-servient-slice",
@@ -6240,6 +6263,15 @@ fn check_property_read_servient_slice_tranche(
         PROPERTY_READ_SERVIENT_SECOND_CORRECTION_REF,
         PROPERTY_READ_SERVIENT_THIRD_CORRECTION_REF,
         &third_correction_paths,
+    )?;
+
+    let fourth_correction_paths = owned_set(PROPERTY_READ_SERVIENT_FOURTH_CORRECTION_PATHS);
+    check_candidate_commit(
+        id,
+        root,
+        PROPERTY_READ_SERVIENT_THIRD_CORRECTION_REF,
+        PROPERTY_READ_SERVIENT_FOURTH_CORRECTION_REF,
+        &fourth_correction_paths,
     )?;
 
     let candidate_base_ref = string_field(tranche, "candidate_base_ref", id)?;

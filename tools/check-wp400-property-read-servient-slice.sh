@@ -43,9 +43,12 @@ done
 
 for marker in \
     "pub fn binding_registration(" \
+    "pub fn read_property_handler(" \
     "pub fn resource_limits(" \
+    "pub fn produce_td(" \
     "pub fn set_read_property_handler" \
     "pub fn begin_expose(" \
+    "fn begin_destroy(" \
     "pub fn step("; do
     grep -FRq "$marker" "$root/servient/src" \
         || fail "reviewed Servient public boundary is missing: $marker"
@@ -71,6 +74,7 @@ done
 export CARGO_TARGET_DIR="$root/target/wp400-property-read-servient-slice"
 
 cargo check --locked --quiet --manifest-path "$fixture" --no-default-features
+cargo test --locked --quiet --manifest-path "$fixture" --no-default-features --lib
 cargo check --locked --quiet --manifest-path "$fixture" --features async
 cargo check --locked --quiet --manifest-path "$fixture" --features std
 cargo test --locked --quiet --manifest-path "$fixture" --features std

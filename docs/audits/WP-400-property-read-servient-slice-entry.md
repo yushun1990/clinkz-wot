@@ -32,19 +32,23 @@ those WP-400-owned values.
 
 ## Active v5 public boundary
 
-The narrow slice uses the already frozen public names and adds no one-off
-Property Read facade:
+The narrow slice uses the frozen Servient types and exact lifecycle methods;
+it adds no separate Property Read facade:
 
 - `StaticServientBuilder::binding_registration` consumes one complete
   `StaticBindingRegistration<B>`; its Property Read handler input is one real
   `StaticHandlerRegistration<'h, H>` where `H: ReadPropertyHandler`.
+  `StaticServient::begin_destroy` closes route selection before later
+  caller-budgeted cleanup steps.
 - `ServientBuilder::binding_registration` consumes one complete
   `HostBindingRegistration`. The existing zero-argument
   `ServientBuilder::new()` remains source-compatible;
   `ServientBuilder::resource_limits` installs the explicit narrow resource
-  policy before `build`. `ExposedThingHandle::set_read_property_handler` admits
-  one synchronous `ReadPropertyHandler` plus its declared `HandlerFootprint`;
-  WP-400 privately owns the necessary host erasure in
+  policy before `build`, and `build` retains its existing
+  `ServientResult<Servient>` result. `Servient::produce_td`,
+  `ExposedThingHandle::set_read_property_handler`, `begin_expose`, and
+  `begin_destroy` form the exact host lifecycle boundary. WP-400 privately
+  owns the necessary synchronous-handler erasure in
   `PropertyReadHandlerRecord`.
 - `StaticServient::step` and `Servient::step` each accept an explicit
   `Context` and `WorkBudget` and return `StepStatus<()>`. The async/no-std
@@ -95,7 +99,10 @@ become selectable atomically with that publication.
 
 Each step claims the route lease, creates the borrowed activation permit,
 polls the binding outside any Servient mutable-state boundary, and transfers a
-complete `RouteInboundRequest` into one `InFlightRecord`. Servient constructs
+complete `RouteInboundRequest` into one `InFlightRecord`. If the caller's
+`HandlerSteps` allowance is exhausted after acceptance, that complete request
+and its unique response opportunity remain in the record for a later step;
+they are never dropped or re-polled from the binding. Servient constructs
 `HandlerContext` from retained production identities, calls the selected
 handler exactly once, and consumes the request's unique response opportunity
 into `RouteInboundResponse`. Delivery acknowledgement releases the in-flight
@@ -149,7 +156,7 @@ compile cell must enter the real Servient product API. They consume the real
 TD, complete WP-300 mock registration, real handler registration, explicit
 resource/time policy, and a caller-supplied budget/waker only.
 
-The runtime cells must prove:
+The no-default static runtime cell and std host runtime cell must prove:
 
 - TD access ends after planning and no runtime TD selector is used;
 - one real compiler output reaches the first legal Servient route entry;
@@ -158,6 +165,8 @@ The runtime cells must prove:
 - the handler is called once with protocol-neutral input;
 - the response opportunity is consumed once and the mock binding observes the
   exact output;
+- an accepted request survives an exhausted handler-step allowance and resumes
+  exactly once with a later allowance;
 - deactivation rejects a later request; and
 - all narrow route, in-flight, response, and cleanup counts return to zero.
 
@@ -197,6 +206,15 @@ It must also reject:
 13. a portable contract root that imports std-only
     `HostBindingRegistration` without `#[cfg(feature = "std")]`, making both
     the no-default and async/no-std author cells structurally uncompilable.
+14. an application-static boundary with no callable deactivation/cleanup
+    entry despite claiming host/static lifecycle parity;
+15. loss of an already accepted request and its response opportunity when the
+    caller supplies no remaining `HandlerSteps` allowance;
+16. replacement of the existing `ServientBuilder::build` result from
+    `ServientResult<Servient>` to `CoreResult<Servient>`; and
+17. omission from API ownership or tranche scope of the exact static handler,
+    static destroy, host produce, host expose, or host destroy method required
+    by the runner contract.
 
 Review must additionally reject premature publication, accept without the unique
 route lease/permit, direct runner-created handler context or response
@@ -350,12 +368,54 @@ The fourth corrective candidate is the exact nine-path single child of
 It moves `HandlerFootprint` and `HostBindingRegistration` into an exact
 std-gated import while leaving the static imports available in all cells, and
 adds the thirteenth executable rejection class. No product or support source
-is admitted. Its immutable object id is resolved after commit; the gate keeps
+is admitted. Its immutable object id is
+`43db15247279660ef910fdd13757e2767801fd94`; pull-request #22 exact-head
+validation run `31361336829` passed.
+
+Independent reconstruction installed only the registered seven product and
+three support paths and completed the entire WP-400 completion matrix in an
+isolated checkout. Source-level negative evidence still rejected the fourth
+correction before attestation:
+
+- `StaticServient` exposed only `step`; an external deactivation proof stopped
+  with `E0599` because `begin_destroy` was unreachable, while the candidate
+  requires the no-default runtime cell to close its route and cleanup counts;
+- after a binding returned an owned `RouteInboundRequest`, exhausting
+  `HandlerSteps` dropped the request and response opportunity. A later funded
+  step observed zero handler calls and zero delivered responses, leaving the
+  binding's in-flight count live; and
+- the simulated source could compile only by changing the existing
+  `ServientBuilder::build` result type and adding required public lifecycle
+  methods that were absent from API ownership and tranche scope.
+
+The fifth corrective candidate is the exact twelve-path single child of
+`43db15247279660ef910fdd13757e2767801fd94`:
+
+- `PLAN.md`;
+- `PROJECT_STATE.md`;
+- `docs/api-ownership.csv`;
+- this audit;
+- `docs/spec/v5-artifact-carry-forward.toml`;
+- `docs/work-packages/property-read-architecture-gate.toml`;
+- `tools/check-wp400-property-read-servient-slice-entry.sh`;
+- `tools/check-wp400-property-read-servient-slice.sh`;
+- `tools/compile-contracts/wp400-property-read-servient-slice/src/lib.rs`;
+- `tools/compile-contracts/wp400-property-read-servient-slice/tests/host.rs`;
+- `tools/design-check/src/main.rs`; and
+- `tools/design-check/tests/wp400_property_read_servient_schema.rs`.
+
+It registers the five previously unowned public methods, preserves the host
+builder's application-facing result type, adds a real no-default static
+runtime test, and requires both runtime profiles to retain an accepted request
+across handler-budget exhaustion before completing response delivery and
+deactivation. It adds four exact rejection classes, bringing the executable
+schema to one positive closure plus seventeen negative mutations. No product
+or implementation-support source is admitted; the gate keeps
 `candidate_ref = "resolved-by-review-attestation"`.
 
-Independent review must bind the fourth correction, reconstruct all five
-candidates, execute all eleven registered prechecks, exercise the three
-positive cells and all thirteen negative mutations in an isolated checkout, and
-record a separate attestation commit. Only then may a distinct admission
-checkpoint switch this tranche to `in-progress`/`approved` and bind the exact
-default-integrated admission base.
+Independent review must bind the fifth correction, reconstruct all six
+candidates, execute the eleven registered prechecks, exercise the no-default
+static and std host runtime cells plus the async/no-std compile projection,
+and reject all seventeen negative mutations in an isolated checkout. Only
+then may a distinct admission checkpoint switch this tranche to
+`in-progress`/`approved` and bind the exact default-integrated admission base.

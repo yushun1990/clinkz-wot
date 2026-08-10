@@ -129,11 +129,18 @@ The repository evidence establishes the following starting point:
   `129af4349dbd29d0ca3212646020f7dfe59baf47` uses frozen
   `WorkClass::HandlerSteps` and passed exact-head validation run `31358644443`,
   but its full source simulation exposed an unconditional import of std-only
-  `HostBindingRegistration` in the portable contract root. The fourth
-  non-source correction gates that import and adds the thirteenth rejection
-  class; the tranche remains `pending`/`review-pending`. D46 makes the one-time
-  complete first-entry provenance review part of the fourth correction, not a
-  separate gate. Broad
+  `HostBindingRegistration` in the portable contract root. Exact fourth
+  correction `43db15247279660ef910fdd13757e2767801fd94` gates that import and
+  passed exact-head validation run `31361336829`, but full isolated source
+  reconstruction found two lifecycle contradictions: static deactivation was
+  unreachable, and an accepted request lost its response opportunity when
+  `HandlerSteps` was exhausted. The same simulation required unregistered
+  public methods and changed the existing host-builder result type. The fifth
+  non-source correction registers the exact lifecycle API, preserves
+  `ServientResult`, and adds static plus zero-handler-budget runtime evidence;
+  the tranche remains `pending`/`review-pending`. D46 makes the one-time
+  complete first-entry and runtime-closure review part of the fifth
+  correction, not a separate gate. Broad
   WP-400, WP-500, and WP-600 remain downstream of broad WP-300, and WP-700
   joins those branches;
 - default workspace tests, the 21-cell valid feature matrix, and the aggregate

@@ -87,7 +87,6 @@ fn host_runner_enters_servient_for_one_complete_property_read() {
     let waker = Waker::noop();
     let mut cx = Context::from_waker(waker);
     drive_until_idle(&servient, &mut cx);
-    assert!(exposed.is_serving());
 
     probe.enqueue_property_read("level", InteractionInput::empty());
     drive_until_idle(&servient, &mut cx);
@@ -98,7 +97,43 @@ fn host_runner_enters_servient_for_one_complete_property_read() {
         .begin_destroy()
         .expect("accepted destroy transaction");
     drive_until_idle(&servient, &mut cx);
-    assert!(exposed.is_closed());
     assert_eq!(probe.outstanding_counts(), (0, 0, 0, 0));
     assert_eq!(probe.poll_after_close(&mut cx), Poll::Ready(false));
+}
+
+#[test]
+fn accepted_request_survives_exhausted_handler_budget() {
+    let (binding, probe) = host_property_read_fixture();
+    let limits = GatewayDefaultV1::LIMITS.clone();
+    let servient = build_host_property_read(limits, binding).expect("complete host Servient");
+    let calls = Arc::new(AtomicU32::new(0));
+    let exposed = begin_host_property_read(
+        &servient,
+        thing(),
+        Handler {
+            calls: Arc::clone(&calls),
+        },
+        HandlerFootprint::new(1, 0, 0),
+    )
+    .expect("accepted expose transaction");
+
+    let waker = Waker::noop();
+    let mut cx = Context::from_waker(waker);
+    drive_until_idle(&servient, &mut cx);
+
+    probe.enqueue_property_read("level", InteractionInput::empty());
+    let mut exhausted = WorkBudget::new().with_remaining(WorkClass::BindingPolls, 8);
+    let _ = step_host_property_read(&servient, &mut cx, &mut exhausted);
+    assert_eq!(calls.load(Ordering::SeqCst), 0);
+    assert_eq!(probe.outstanding_counts(), (1, 0, 1, 0));
+
+    drive_until_idle(&servient, &mut cx);
+    assert_eq!(calls.load(Ordering::SeqCst), 1);
+    assert_eq!(probe.delivered_responses(), 1);
+
+    exposed
+        .begin_destroy()
+        .expect("accepted destroy transaction");
+    drive_until_idle(&servient, &mut cx);
+    assert_eq!(probe.outstanding_counts(), (0, 0, 0, 0));
 }

@@ -8,8 +8,8 @@ rule = "A carried artifact projects active requirements only where ADR-0018 clas
 [[artifact]]
 family = "api-ownership"
 path = "docs/api-ownership.csv"
-sha256 = "46549b9378ca61dc9a051a098c19cde97bec67a14f4b217cb42332e6428b007b"
-disposition = "revalidated with the narrow StaticServient/Servient bounded-step, complete-registration, synchronous handler, plan-set, route, activation, and cleanup ownership assigned to active v5 requirements; the corrective host boundary preserves zero-argument ServientBuilder construction and adds the explicit resource_limits setter, while StepStatus<()> remains narrow and broad RuntimeEvent/status and reusable Core host-handler registration remain inactive domain-entry input"
+sha256 = "419fd2688476cc5a081177e8e0942af05ae74100e551de666b2c4442084c2a52"
+disposition = "revalidated with the narrow StaticServient/Servient bounded-step, complete-registration, synchronous handler, plan-set, route, activation, and cleanup ownership assigned to active v5 requirements; the corrective boundary preserves zero-argument ServientBuilder construction and its ServientResult, adds the explicit resource_limits setter, and registers static handler/destroy plus host produce/expose/destroy methods, while StepStatus<()> remains narrow and broad RuntimeEvent/status and reusable Core host-handler registration remain inactive domain-entry input"
 revalidation = "tools/check-api-ownership.sh"
 
 [[artifact]]
@@ -106,8 +106,8 @@ revalidation = "cargo run --locked --quiet --manifest-path tools/design-check/Ca
 [[artifact]]
 family = "property-read-integration-gate"
 path = "docs/work-packages/property-read-architecture-gate.toml"
-sha256 = "9b5914af2f3ac0231fba1344f381e4ff6b546650f0e54bf9ffb4edc12e95b462"
-disposition = "revalidated as a six-tranche gate with the route-reservation correction integrated/default-validated, the original plus first, second, and third non-source WP-400 candidates review-rejected, and the exact fourth corrective child pending independent review; D46's nine-row first-entry closure, thirteen-mutation set, seven product paths, one mock-support source, and two required lockfiles are frozen while the aggregate gate and all WP-400 source remain blocked"
+sha256 = "5e70c00bdd58a2ad3f3d88bdfa88cf698cfd440b2f53148161c8ae8bada2c2ff"
+disposition = "revalidated as a six-tranche gate with the route-reservation correction integrated/default-validated, the original through fourth non-source WP-400 candidates review-rejected, and the exact fifth corrective child pending independent review; D46's nine-row first-entry closure, seventeen-mutation set, five added lifecycle/authoring API items, seven product paths, one mock-support source, and two required lockfiles are frozen while the aggregate gate and all WP-400 source remain blocked"
 revalidation = "tools/check-v5-authority-reset-decision.sh"
 
 [[artifact]]

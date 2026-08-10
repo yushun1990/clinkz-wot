@@ -44,6 +44,10 @@ struct FirstEntryClosure {
     host_resource_policy_root_constructible: bool,
     handler_work_class_constructible: bool,
     portable_contract_imports_gated: bool,
+    static_deactivation_reachable: bool,
+    accepted_request_retained_on_handler_budget_exhaustion: bool,
+    host_builder_result_type_preserved: bool,
+    public_api_scope_complete: bool,
     generations: GenerationSet,
 }
 
@@ -71,6 +75,10 @@ impl FirstEntryClosure {
             host_resource_policy_root_constructible: true,
             handler_work_class_constructible: true,
             portable_contract_imports_gated: true,
+            static_deactivation_reachable: true,
+            accepted_request_retained_on_handler_budget_exhaustion: true,
+            host_builder_result_type_preserved: true,
+            public_api_scope_complete: true,
             generations: GenerationSet {
                 binding: 3,
                 produced: 5,
@@ -97,6 +105,10 @@ enum Rejection {
     HostResourcePolicyRoot,
     HandlerWorkClass,
     PortableHostImport,
+    StaticDeactivation,
+    AcceptedRequestRetention,
+    HostBuilderResultType,
+    PublicApiScope,
 }
 
 fn validate(
@@ -157,6 +169,18 @@ fn validate(
     if !closure.portable_contract_imports_gated {
         return Err(Rejection::PortableHostImport);
     }
+    if !closure.static_deactivation_reachable {
+        return Err(Rejection::StaticDeactivation);
+    }
+    if !closure.accepted_request_retained_on_handler_budget_exhaustion {
+        return Err(Rejection::AcceptedRequestRetention);
+    }
+    if closure.profile == Profile::Host && !closure.host_builder_result_type_preserved {
+        return Err(Rejection::HostBuilderResultType);
+    }
+    if !closure.public_api_scope_complete {
+        return Err(Rejection::PublicApiScope);
+    }
     if let Some(counterpart) = counterpart {
         let same_semantics = closure.logical_route == counterpart.logical_route
             && closure.artifact_metadata == counterpart.artifact_metadata
@@ -177,6 +201,12 @@ fn validate(
                 == counterpart.handler_work_class_constructible
             && closure.portable_contract_imports_gated
                 == counterpart.portable_contract_imports_gated
+            && closure.static_deactivation_reachable == counterpart.static_deactivation_reachable
+            && closure.accepted_request_retained_on_handler_budget_exhaustion
+                == counterpart.accepted_request_retained_on_handler_budget_exhaustion
+            && closure.host_builder_result_type_preserved
+                == counterpart.host_builder_result_type_preserved
+            && closure.public_api_scope_complete == counterpart.public_api_scope_complete
             && closure.generations == counterpart.generations;
         if closure.profile == counterpart.profile || !same_semantics {
             return Err(Rejection::ProfileDivergence);
@@ -302,4 +332,38 @@ fn unconditional_host_registration_import_is_rejected() {
     let mut closure = FirstEntryClosure::valid(Profile::Static);
     closure.portable_contract_imports_gated = false;
     assert_eq!(validate(closure, None), Err(Rejection::PortableHostImport));
+}
+
+#[test]
+fn unreachable_static_deactivation_is_rejected() {
+    let mut closure = FirstEntryClosure::valid(Profile::Static);
+    closure.static_deactivation_reachable = false;
+    assert_eq!(validate(closure, None), Err(Rejection::StaticDeactivation));
+}
+
+#[test]
+fn accepted_request_loss_on_exhausted_handler_budget_is_rejected() {
+    let mut closure = FirstEntryClosure::valid(Profile::Host);
+    closure.accepted_request_retained_on_handler_budget_exhaustion = false;
+    assert_eq!(
+        validate(closure, None),
+        Err(Rejection::AcceptedRequestRetention)
+    );
+}
+
+#[test]
+fn host_builder_result_type_replacement_is_rejected() {
+    let mut closure = FirstEntryClosure::valid(Profile::Host);
+    closure.host_builder_result_type_preserved = false;
+    assert_eq!(
+        validate(closure, None),
+        Err(Rejection::HostBuilderResultType)
+    );
+}
+
+#[test]
+fn incomplete_public_api_scope_is_rejected() {
+    let mut closure = FirstEntryClosure::valid(Profile::Static);
+    closure.public_api_scope_complete = false;
+    assert_eq!(validate(closure, None), Err(Rejection::PublicApiScope));
 }

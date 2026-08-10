@@ -14,7 +14,8 @@ original_candidate="2d63e151ac6f89ef294c089d5f48917e8e324773"
 first_correction="4456632367069fb5cdd20dd51aeade1035e3768b"
 second_correction="8ce5b4426921f7343a298a5910b40fa5c87942d2"
 third_correction="129af4349dbd29d0ca3212646020f7dfe59baf47"
-candidate_base="$third_correction"
+fourth_correction="43db15247279660ef910fdd13757e2767801fd94"
+candidate_base="$fourth_correction"
 
 fail() {
     echo "WP-400 Property Read Servient entry check: $*" >&2
@@ -31,15 +32,15 @@ candidate_ref() {
         read -r -a fields <<<"$head_record"
         if [[ ${#fields[@]} -eq 2 ]]; then
             [[ "${fields[1]}" == "$candidate_base" ]] \
-                || fail "local fourth corrective candidate is not based on the third correction"
+                || fail "local fifth corrective candidate is not based on the fourth correction"
             candidate=${fields[0]}
         elif [[ ${#fields[@]} -eq 3 ]]; then
             git -C "$root" merge-base --is-ancestor \
                 "${fields[1]}" "$candidate_base" \
-                || fail "PR merge checkout first parent is not an ancestor of the fourth corrective base"
+                || fail "PR merge checkout first parent is not an ancestor of the fifth corrective base"
             candidate=${fields[2]}
             [[ "$(git -C "$root" rev-parse "$candidate^")" == "$candidate_base" ]] \
-                || fail "PR merge correction is not the unique child of the third correction"
+                || fail "PR merge correction is not the unique child of the fourth correction"
             git -C "$root" diff --quiet "$candidate" "${fields[0]}" -- \
                 || fail "PR merge checkout tree differs from its candidate parent"
         else
@@ -50,7 +51,7 @@ candidate_ref() {
 }
 
 verify_candidate_topology() {
-    local candidate correction_parent correction_parent_count original_parent original_parent_count parent parent_count second_parent second_parent_count third_parent third_parent_count
+    local candidate correction_parent correction_parent_count fourth_parent fourth_parent_count original_parent original_parent_count parent parent_count second_parent second_parent_count third_parent third_parent_count
     original_parent_count=$(git -C "$root" rev-list --parents -n 1 "$original_candidate" | awk '{print NF - 1}')
     [[ "$original_parent_count" -eq 1 ]] \
         || fail "original candidate is not a single-parent commit"
@@ -146,16 +147,14 @@ verify_candidate_topology() {
     [[ "${third_actual[*]}" == "${third_expected[*]}" ]] \
         || fail "third correction diff is not the exact registered 9-path topology"
 
-    candidate=$(candidate_ref)
-    [[ "$candidate" =~ ^[0-9a-f]{40}$ ]] || fail "cannot resolve immutable candidate ref"
-    parent_count=$(git -C "$root" rev-list --parents -n 1 "$candidate" | awk '{print NF - 1}')
-    [[ "$parent_count" -eq 1 ]] || fail "candidate is not a single-parent commit"
-    parent=$(git -C "$root" rev-parse "$candidate^")
-    [[ "$parent" == "$candidate_base" ]] \
-        || fail "fourth corrective candidate is not the single child of the third correction"
-
-    mapfile -t actual < <(git -C "$root" diff-tree --no-commit-id --name-only -r "$candidate" | sort)
-    expected=(
+    fourth_parent_count=$(git -C "$root" rev-list --parents -n 1 "$fourth_correction" | awk '{print NF - 1}')
+    [[ "$fourth_parent_count" -eq 1 ]] \
+        || fail "fourth correction is not a single-parent commit"
+    fourth_parent=$(git -C "$root" rev-parse "$fourth_correction^")
+    [[ "$fourth_parent" == "$third_correction" ]] \
+        || fail "fourth correction is not the unique child of the third correction"
+    mapfile -t fourth_actual < <(git -C "$root" diff-tree --no-commit-id --name-only -r "$fourth_correction" | sort)
+    fourth_expected=(
         "PLAN.md"
         "PROJECT_STATE.md"
         "docs/audits/WP-400-property-read-servient-slice-entry.md"
@@ -166,8 +165,34 @@ verify_candidate_topology() {
         "tools/design-check/src/main.rs"
         "tools/design-check/tests/wp400_property_read_servient_schema.rs"
     )
+    [[ "${fourth_actual[*]}" == "${fourth_expected[*]}" ]] \
+        || fail "fourth correction diff is not the exact registered 9-path topology"
+
+    candidate=$(candidate_ref)
+    [[ "$candidate" =~ ^[0-9a-f]{40}$ ]] || fail "cannot resolve immutable candidate ref"
+    parent_count=$(git -C "$root" rev-list --parents -n 1 "$candidate" | awk '{print NF - 1}')
+    [[ "$parent_count" -eq 1 ]] || fail "candidate is not a single-parent commit"
+    parent=$(git -C "$root" rev-parse "$candidate^")
+    [[ "$parent" == "$candidate_base" ]] \
+        || fail "fifth corrective candidate is not the single child of the fourth correction"
+
+    mapfile -t actual < <(git -C "$root" diff-tree --no-commit-id --name-only -r "$candidate" | sort)
+    expected=(
+        "PLAN.md"
+        "PROJECT_STATE.md"
+        "docs/api-ownership.csv"
+        "docs/audits/WP-400-property-read-servient-slice-entry.md"
+        "docs/spec/v5-artifact-carry-forward.toml"
+        "docs/work-packages/property-read-architecture-gate.toml"
+        "tools/check-wp400-property-read-servient-slice-entry.sh"
+        "tools/check-wp400-property-read-servient-slice.sh"
+        "tools/compile-contracts/wp400-property-read-servient-slice/src/lib.rs"
+        "tools/compile-contracts/wp400-property-read-servient-slice/tests/host.rs"
+        "tools/design-check/src/main.rs"
+        "tools/design-check/tests/wp400_property_read_servient_schema.rs"
+    )
     [[ "${actual[*]}" == "${expected[*]}" ]] \
-        || fail "fourth corrective candidate diff is not the exact registered 9-path topology"
+        || fail "fifth corrective candidate diff is not the exact registered 12-path topology"
 }
 
 inspect_contract() {
@@ -184,18 +209,28 @@ inspect_contract() {
         "StaticServientBuilder::new(" \
         ".binding_registration(" \
         ".read_property_handler(" \
+        "begin_static_property_read_destroy" \
+        "servient.begin_destroy()" \
         "servient.step(" \
         "ServientBuilder::new()" \
         ".resource_limits(limits)" \
         ".set_read_property_handler(" \
         ".begin_expose(" \
         "host_property_read_fixture" \
-        "probe.enqueue_property_read"; do
+        "static_property_read_fixture" \
+        "probe.enqueue_property_read" \
+        "accepted_request_survives_exhausted_handler_budget" \
+        "static_runner_retains_request_and_completes_deactivation"; do
         grep -FRq "$marker" "$fixture/src" "$fixture/tests" \
             || fail "runner contract is missing product-boundary marker: $marker"
     done
     if grep -Fq "ServientBuilder::new(limits)" "$fixture/src/lib.rs"; then
         fail "host fixture replaces the existing zero-argument builder constructor"
+    fi
+    grep -Fq ') -> ServientResult<Servient> {' "$fixture/src/lib.rs" \
+        || fail "host fixture does not preserve the existing Servient builder result type"
+    if grep -Fq ') -> CoreResult<Servient> {' "$fixture/src/lib.rs"; then
+        fail "host fixture replaces the existing Servient builder result type"
     fi
     grep -Fq "GatewayDefaultV1::LIMITS.clone()" "$fixture/tests/host.rs" \
         || fail "host fixture does not use the existing named Gateway resource profile"
@@ -215,6 +250,16 @@ inspect_contract() {
         END { exit !found }
     ' "$fixture/src/lib.rs" \
         || fail "portable contract does not gate host-only Core imports behind std"
+
+    for api_item in \
+        "static_servient_builder_read_property_handler" \
+        "static_servient_begin_destroy" \
+        "produce_td" \
+        "begin_expose" \
+        "begin_destroy"; do
+        grep -Fq "${api_item}," "$root/docs/api-ownership.csv" \
+            || fail "required public boundary is absent from API ownership: $api_item"
+    done
 
     for forbidden in \
         "BindingRouteKey::new(" \
@@ -247,7 +292,11 @@ inspect_contract() {
         "manifest_lockfile_transition_omission_is_rejected" \
         "nonexistent_foundation_default_assumption_is_rejected" \
         "nonexistent_handler_work_class_is_rejected" \
-        "unconditional_host_registration_import_is_rejected"; do
+        "unconditional_host_registration_import_is_rejected" \
+        "unreachable_static_deactivation_is_rejected" \
+        "accepted_request_loss_on_exhausted_handler_budget_is_rejected" \
+        "host_builder_result_type_replacement_is_rejected" \
+        "incomplete_public_api_scope_is_rejected"; do
         grep -Fq "$mutation" "$schema" \
             || fail "executable schema is missing negative mutation: $mutation"
     done
