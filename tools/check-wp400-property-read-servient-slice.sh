@@ -43,6 +43,7 @@ done
 
 for marker in \
     "pub fn binding_registration(" \
+    "pub fn resource_limits(" \
     "pub fn set_read_property_handler" \
     "pub fn begin_expose(" \
     "pub fn step("; do

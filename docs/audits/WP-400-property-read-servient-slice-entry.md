@@ -39,9 +39,12 @@ Property Read facade:
   `StaticBindingRegistration<B>`; its Property Read handler input is one real
   `StaticHandlerRegistration<'h, H>` where `H: ReadPropertyHandler`.
 - `ServientBuilder::binding_registration` consumes one complete
-  `HostBindingRegistration`. `ExposedThingHandle::set_read_property_handler`
-  admits one synchronous `ReadPropertyHandler` plus its declared
-  `HandlerFootprint`; WP-400 privately owns the necessary host erasure in
+  `HostBindingRegistration`. The existing zero-argument
+  `ServientBuilder::new()` remains source-compatible;
+  `ServientBuilder::resource_limits` installs the explicit narrow resource
+  policy before `build`. `ExposedThingHandle::set_read_property_handler` admits
+  one synchronous `ReadPropertyHandler` plus its declared `HandlerFootprint`;
+  WP-400 privately owns the necessary host erasure in
   `PropertyReadHandlerRecord`.
 - `StaticServient::step` and `Servient::step` each accept an explicit
   `Context` and `WorkBudget` and return `StepStatus<()>`. The async/no-std
@@ -117,14 +120,23 @@ checkpoint, the only permitted product implementation paths are:
 - `servient/src/servient.rs`; and
 - new `servient/src/property_read.rs`.
 
-The implementation checkpoint may also extend exactly one non-product mock
-support path,
-`tools/compile-contracts/wp300-property-read-binding-slice/src/lib.rs`, so the
-existing complete mock registration can inject one protocol-neutral request
-and retain one delivered response in allowed deterministic I/O and
-instrumentation state. That support object may create protocol frames, but it
-may not create a plan, artifact, route key, `PrepareInput`, activation permit,
-handler value, response opportunity, or cleanup owner.
+The implementation checkpoint may also change exactly three non-product
+support paths:
+
+- root `Cargo.lock`, which must record the new Servient Foundation/Planning
+  dependency edges;
+- `tools/compile-contracts/wp400-property-read-servient-slice/Cargo.lock`,
+  which must record the same path-dependency edge for the external contract;
+  and
+- `tools/compile-contracts/wp300-property-read-binding-slice/src/lib.rs`, so
+  the existing complete mock registration can inject one protocol-neutral
+  request and retain one delivered response in allowed deterministic I/O and
+  instrumentation state.
+
+The mock support object may create protocol frames, but it may not create a
+plan, artifact, route key, `PrepareInput`, activation permit, handler value,
+response opportunity, or cleanup owner. Both lockfile changes are metadata
+closure for `--locked`; neither grants implementation authority.
 
 Any other product or support source path revokes admission pending an
 intersecting impact review.
@@ -172,7 +184,13 @@ registered mutation:
 7. binding preparation before resource and cleanup reservation; and
 8. host/static semantic divergence.
 
-It must additionally reject premature publication, accept without the unique
+It must also reject:
+
+9. replacement of the existing zero-argument host builder constructor by the
+   proposed one-argument spelling; and
+10. a Servient dependency transition that omits either affected lockfile.
+
+Review must additionally reject premature publication, accept without the unique
 route lease/permit, direct runner-created handler context or response
 opportunity, handler double-call, response double-delivery, cleanup-object
 loss, source outside the exact path sets, and creation of either final
@@ -194,14 +212,52 @@ This candidate does not implement or claim:
 
 ## Candidate topology
 
-The immutable candidate base is fetched, merge-validated default revision
-`fcce9e69036459506a163ac73ef5542f92e5eb7f`. The candidate is its exact
-single child, changes only the 18 paths registered in the Property Read gate,
-and changes no product or support source. Its commit id is resolved only after
-the candidate commit is created.
+Fetched, merge-validated default revision
+`fcce9e69036459506a163ac73ef5542f92e5eb7f` is the original candidate base.
+Exact 18-path non-source child
+`2d63e151ac6f89ef294c089d5f48917e8e324773` passed the candidate checker,
+aggregate design/evidence suite, locked workspace, 21-cell feature matrix, and
+pull-request #22 validation run `31353096175`.
 
-Independent review must bind that immutable commit, execute all eleven
-registered prechecks, exercise the three positive cells and all negative
-mutations in an isolated checkout, and record a separate attestation commit.
-Only then may a distinct admission checkpoint switch this tranche to
-`in-progress`/`approved` and bind the exact default-integrated admission base.
+Independent next-state reconstruction nevertheless rejected that original
+candidate before attestation:
+
+- its host fixture replaced the existing zero-argument
+  `ServientBuilder::new()` with `ServientBuilder::new(limits)`. Rust cannot
+  overload inherent associated functions by arity, and 28 current
+  valid source/test/example call sites use the zero-argument constructor; and
+- adding the completion check's mandatory Foundation and Planning manifest
+  dependencies makes both the root and external-contract lockfiles stale,
+  while neither lockfile was registered in the proposed implementation
+  topology. An isolated `cargo test --locked --no-run` stopped on that exact
+  lockfile drift before source compilation.
+
+The corrective candidate is the exact 11-path single child of
+`2d63e151ac6f89ef294c089d5f48917e8e324773`:
+
+- `PLAN.md`;
+- `PROJECT_STATE.md`;
+- `docs/api-ownership.csv`;
+- this audit;
+- `docs/spec/v5-artifact-carry-forward.toml`;
+- `docs/work-packages/property-read-architecture-gate.toml`;
+- `tools/check-wp400-property-read-servient-slice-entry.sh`;
+- `tools/check-wp400-property-read-servient-slice.sh`;
+- `tools/compile-contracts/wp400-property-read-servient-slice/src/lib.rs`;
+- `tools/design-check/src/main.rs`; and
+- `tools/design-check/tests/wp400_property_read_servient_schema.rs`.
+
+It preserves all nine D46 provenance rows, all seven product implementation
+paths, and source absence. It changes the host fixture to zero-argument
+construction followed by the frozen `resource_limits` method, registers the
+two lockfiles as implementation support metadata, and adds both rejection
+classes to executable schema evidence. Its immutable object id is resolved
+after the correction commit; the gate uses
+`candidate_ref = "resolved-by-review-attestation"`.
+
+Independent review must bind that corrective commit, reconstruct both
+candidates, execute all eleven registered prechecks, exercise the three
+positive cells and every negative mutation in an isolated checkout, and record
+a separate attestation commit. Only then may a distinct admission checkpoint
+switch this tranche to `in-progress`/`approved` and bind the exact
+default-integrated admission base.

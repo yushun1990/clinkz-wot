@@ -113,9 +113,15 @@ The repository evidence establishes the following starting point:
   complete its real compiler-to-envelope-to-route-key handoff. Pull request
   #21 integrated that completion as default revision
   `fcce9e69036459506a163ac73ef5542f92e5eb7f`, whose push-event validation
-  passed. The exact non-source WP-400 candidate is now
-  `pending`/`review-pending`; D46 makes the one-time complete first-entry
-  provenance review part of that candidate, not a separate gate. Broad
+  passed. Original non-source WP-400 candidate
+  `2d63e151ac6f89ef294c089d5f48917e8e324773` also passed exact-head remote
+  validation, but independent next-state reconstruction rejected its
+  one-argument host-builder spelling and incomplete Manifest/lockfile path
+  closure. Its exact non-source corrective child preserves the zero-argument
+  constructor, adds a frozen `resource_limits` method, and registers both
+  affected lockfiles; the tranche remains `pending`/`review-pending`. D46 makes
+  the one-time complete first-entry provenance review part of that corrective
+  candidate, not a separate gate. Broad
   WP-400, WP-500, and WP-600 remain downstream of broad WP-300, and WP-700
   joins those branches;
 - default workspace tests, the 21-cell valid feature matrix, and the aggregate
@@ -223,11 +229,15 @@ complete and proves the real `ProducerRoute` role/reference handoff. WP-400
 reconstruction then found that the canonical route reservation still has no
 production carrier. D45 therefore inserts the exact owner-scoped
 `WP-200-PROPERTY-READ-ROUTE-RESERVATION-PROJECTION`, now integrated and
-default-validated. The released WP-400 candidate freezes seven product paths,
-one mock-support path, both runtime cells, the async/no-std compile projection,
-and the active-v5 `StepStatus<()>` progress boundary. D46 requires that
-candidate to close the complete first-entry provenance table in its existing
-independent review before source admission. Broad
+default-validated. The original WP-400 candidate froze seven product paths,
+one mock-support source path, both runtime cells, the async/no-std compile
+projection, and the active-v5 `StepStatus<()>` progress boundary. Independent
+reconstruction rejected only its incompatible one-argument host builder and
+omitted lockfile-transition paths. The corrective candidate preserves the
+seven product paths, expands support topology to that mock path plus the root
+and external-contract lockfiles, and adds the compatible explicit resource
+setter. D46 requires the correction to close the complete first-entry
+provenance table in independent review before source admission. Broad
 `WP-100-HANDLER-ENTRY`, `WP-300-BROAD-ENTRY`, and `WP-400-BROAD-ENTRY` remain
 blocked until the gate passes. The gate exception does not claim final
 `InteractionInput` storage, `AcceptHint` resource admission,
@@ -544,8 +554,11 @@ the two registered Core paths. Its completion evidence releases only the
 exact Producer-route Planning correction's preparation. That correction is now
 complete and released only the distinct route-reservation correction. That
 correction is integrated and default-validated, releasing narrow WP-400
-candidate/review preparation; WP-400 source remains blocked while its
-candidate owns D46's one-time first-entry closure and independent admission.
+candidate/review preparation. The original WP-400 candidate passed remote
+validation but failed independent next-state reconstruction on constructor
+compatibility and lockfile topology; its non-source corrective child now owns
+D46's one-time first-entry closure. WP-400 source remains blocked pending that
+correction's independent review and admission.
 The broad entry requirements below remain open.
 
 Before broad WP-300 admission, the external Zenoh authoring spike must record

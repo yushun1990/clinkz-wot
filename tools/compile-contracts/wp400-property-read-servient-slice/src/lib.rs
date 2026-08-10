@@ -52,7 +52,8 @@ pub fn build_host_property_read(
     limits: ResourceLimits,
     binding: HostBindingRegistration,
 ) -> CoreResult<Servient> {
-    ServientBuilder::new(limits)
+    ServientBuilder::new()
+        .resource_limits(limits)
         .binding_registration(binding)
         .build()
 }

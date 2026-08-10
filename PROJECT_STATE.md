@@ -194,6 +194,20 @@ The active design revision is v5.0 bounded-core authority.
   passed. The fetched merge contains the expected 12-path task diff and exact
   completion evidence, so WP-400 candidate/review preparation is released;
   WP-400 source remains blocked pending its own review and admission.
+- Original WP-400 Servient candidate
+  `2d63e151ac6f89ef294c089d5f48917e8e324773` is the exact 18-path non-source
+  child of `fcce9e69036459506a163ac73ef5542f92e5eb7f`. Pull request #22 exact-head
+  validation run `31353096175` passed. Independent next-state reconstruction
+  rejected the candidate before attestation: its one-argument host-builder
+  spelling cannot coexist with the 28 valid zero-argument call sites, and its
+  mandatory Foundation/Planning manifest edges make two unregistered
+  lockfiles stale under `--locked`.
+- The exact non-source WP-400 corrective candidate is the unique child of
+  `2d63e151ac6f89ef294c089d5f48917e8e324773`; its object id is resolved after
+  the commit. It preserves the zero-argument builder, adds the explicit frozen
+  `resource_limits` setter, registers the root and external-contract lockfiles
+  as support metadata, and adds both review mutation classes. No WP-400 source
+  is admitted.
 - Pull request #20 integrated technical decision checkpoint
   `6271c2861771a0fbc18772bd853bc451ba0fd614` and continuation checkpoint
   `72cf711adef3712ebf502b2fd01273e6f2d23376` through exact merge
@@ -225,34 +239,36 @@ revision.
 
 Projection mode: conditional remote handoff
 
-The exact non-source `WP-400-PROPERTY-READ-SERVIENT-SLICE` candidate is
-registered as the unique child of fetched and default-validated merge
-`fcce9e69036459506a163ac73ef5542f92e5eb7f`; its immutable commit id is
-resolved from that topology after the candidate commit. It freezes one honest
-host/manual product entry and runner, carries every D46 first-entry row through
-its production owner, reserves resource and cleanup ownership before the first
-binding side effect, and defines the finite negative set. It changes no
-product or support source. WP-400 source remains blocked until the candidate
+Original exact non-source `WP-400-PROPERTY-READ-SERVIENT-SLICE` candidate
+`2d63e151ac6f89ef294c089d5f48917e8e324773` passed pull-request #22 validation
+run `31353096175`, but independent next-state reconstruction rejected its
+host-constructor and manifest/lockfile topology. The corrective candidate is
+registered as that immutable commit's exact 11-path single child. It preserves
+all nine D46 first-entry rows, seven future product paths, source absence, and
+the active-v5 `StepStatus<()>` boundary while correcting only API compatibility
+and transition-path closure. WP-400 source remains blocked until the correction
 passes independent review and a later pre-source admission checkpoint.
 
 ### Before verified integration
 
-Validate the candidate's exact single-child/18-path topology, absent-source
-boundary, nine D46 provenance rows, registered negative mutations, aggregate
-design suite, locked workspace, supported feature matrix, and diff hygiene.
-Push the immutable candidate to one draft pull request and keep it draft while
-independent review is absent. The candidate reserves seven future Servient
-product paths and one future WP-300 mock-support path; no source is admitted.
+Validate the correction's exact single-child/11-path topology, original
+candidate ancestry, absent-source boundary, nine D46 provenance rows, ten
+registered mutation classes, aggregate design suite, locked workspace,
+supported feature matrix, and diff hygiene. Push it to existing draft pull
+request #22 and keep the pull request draft while independent review is absent.
+The future transition reserves seven Servient product paths, one WP-300 mock
+support source, and the two affected lockfiles; no source is admitted.
 
 ### After verified integration
 
 Fetch `master` and verify the pull request's actual base, merge ancestry, exact
-candidate/review content, and passing merge-revision `validation` before
-releasing dependent work. Independent review of the immutable candidate must
-simulate only the registered implementation paths, run both runtime profiles
-plus the async/no-std compile projection, trace all nine first-entry rows, and
-reject every registered mutation. Only a passed review followed by a separate
-exact pre-source checkpoint may authorize WP-400 source.
+correction/review content, and passing merge-revision `validation` before
+releasing dependent work. Independent review of the immutable correction must
+reconstruct both candidates, simulate only the registered implementation and
+support paths, run both runtime profiles plus the async/no-std compile
+projection, trace all nine first-entry rows, and reject every registered
+mutation. Only a passed review followed by a separate exact pre-source
+checkpoint may authorize WP-400 source.
 
 The narrow WP-200 plan slice is complete. Its handoff to WP-300 contains:
 
@@ -823,7 +839,8 @@ mutation was then discarded.
 ### WP-200 route-reservation projection and WP-400 first-entry closure
 
 Status: ROUTE-RESERVATION PROJECTION INTEGRATED AND DEFAULT-VALIDATED; WP-400
-CANDIDATE PREPARATION ACTIVE; WP-400 SOURCE BLOCKED.
+ORIGINAL CANDIDATE REVIEW-REJECTED; CORRECTIVE CANDIDATE ACTIVE; WP-400 SOURCE
+BLOCKED.
 
 WP-400 reconstruction found that the completed Producer-route fixture obtains
 `RouteReservationIdentity` from direct fixture constants. Before this
@@ -919,6 +936,33 @@ route-reservation completion head
 `fcce9e69036459506a163ac73ef5542f92e5eb7f`; its exact push-event validation
 run `31349086799` passed. This releases WP-400 candidate/review preparation,
 not WP-400 source.
+
+Original exact 18-path WP-400 candidate
+`2d63e151ac6f89ef294c089d5f48917e8e324773` then passed all local candidate
+checks and pull-request #22 validation run `31353096175`. Independent
+reconstruction created only the proposed Servient manifest/builder transition
+inside an isolated detached checkout. Replacing `ServientBuilder::new()` with
+`ServientBuilder::new(limits)` cannot preserve the 28 existing zero-argument
+call sites because Rust has no inherent associated-function arity overloading.
+The same simulation stopped under `cargo test --locked --no-run` because the
+new Foundation/Planning dependency edges require updates to root `Cargo.lock`
+and the external WP-400 contract lockfile, neither of which the original
+implementation topology registered. The isolated source mutation remains only
+review evidence and is not present in this branch.
+
+The correction keeps `ServientBuilder::new()`, freezes additive
+`ServientBuilder::resource_limits`, registers both lockfiles beside the
+existing WP-300 mock-support source, and adds two executable negative mutation
+classes. It changes no product or support source. Independent review must bind
+the correction's immutable object id before any admission transition.
+
+The exact correction tree passes the 11-test WP-400 schema, all design-check
+test suites, API ownership with 743 frozen items, design requirements with 62
+active owners and 59 inactive dispositions, 18-decision architecture
+registration, 195-field/3-profile resource validation, v5 authority-reset
+validation, Rust formatting, shell syntax, and diff hygiene. The
+topology-dependent candidate/aggregate checks run against the committed unique
+child before the branch is pushed again.
 
 ### Aggregate design-check worktree-root defect
 
@@ -1334,16 +1378,17 @@ source. Its current tree passes:
 
 ## Next Safe Actions
 
-1. Commit the exact 18-path non-source
-   `WP-400-PROPERTY-READ-SERVIENT-SLICE` candidate as the unique child of
-   `fcce9e69036459506a163ac73ef5542f92e5eb7f`, validate its expected
-   absent-source boundary, and complete the automatic draft remote handoff.
-2. Independently review that immutable commit by exercising both runtime
-   cells and the async/no-std compile projection, all nine D46 provenance rows,
-   and every registered negative mutation. Only an approved review may
-   release the exact pre-source admission checkpoint.
+1. Commit the exact 11-path non-source WP-400 corrective candidate as the
+   unique child of original candidate
+   `2d63e151ac6f89ef294c089d5f48917e8e324773`, validate both immutable
+   topologies and the expected absent-source boundary, and update draft pull
+   request #22.
+2. Independently review that correction by reconstructing both candidates,
+   exercising both runtime cells and the async/no-std compile projection, all
+   nine D46 provenance rows, and all ten registered mutation classes. Only an
+   approved review may release the exact pre-source admission checkpoint.
 3. Keep WP-400 source absent until that checkpoint is committed and its
-   topology validates. Then implement only the candidate's registered paths.
+   topology validates. Then implement only the correction's registered paths.
 4. Correct the performance harness's compile-time repository-root capture in
    a separate support-tool task; until then, use a clean Cargo target when a
    shared target may contain binaries compiled from deleted worktrees.

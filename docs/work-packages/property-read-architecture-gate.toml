@@ -939,6 +939,7 @@ api_items = [
     "StaticServient",
     "StaticServientBuilder",
     "servient_builder_binding_registration",
+    "servient_builder_resource_limits",
     "servient_step",
     "set_read_property_handler",
     "static_servient_builder_binding_registration",
@@ -977,7 +978,9 @@ implementation_paths = [
     "servient/src/servient.rs",
 ]
 support_implementation_paths = [
+    "Cargo.lock",
     "tools/compile-contracts/wp300-property-read-binding-slice/src/lib.rs",
+    "tools/compile-contracts/wp400-property-read-servient-slice/Cargo.lock",
 ]
 excluded_claims = [
     "async-or-step-handler-families",
@@ -1005,25 +1008,18 @@ contract_artifacts = [
     "tools/design-check/src/main.rs",
     "tools/design-check/tests/wp400_property_read_servient_schema.rs",
 ]
-candidate_base_ref = "fcce9e69036459506a163ac73ef5542f92e5eb7f"
-candidate_ref = "register-after-candidate-commit"
+candidate_base_ref = "2d63e151ac6f89ef294c089d5f48917e8e324773"
+candidate_ref = "resolved-by-review-attestation"
 candidate_paths = [
     "PLAN.md",
     "PROJECT_STATE.md",
     "docs/api-ownership.csv",
-    "docs/artifacts.csv",
     "docs/audits/WP-400-property-read-servient-slice-entry.md",
-    "docs/governance.toml",
     "docs/spec/v5-artifact-carry-forward.toml",
-    "docs/work-packages/PROPERTY-READ-ARCHITECTURE.md",
-    "docs/work-packages/WP-400-servient.md",
     "docs/work-packages/property-read-architecture-gate.toml",
     "tools/check-wp400-property-read-servient-slice-entry.sh",
     "tools/check-wp400-property-read-servient-slice.sh",
-    "tools/compile-contracts/wp400-property-read-servient-slice/Cargo.lock",
-    "tools/compile-contracts/wp400-property-read-servient-slice/Cargo.toml",
     "tools/compile-contracts/wp400-property-read-servient-slice/src/lib.rs",
-    "tools/compile-contracts/wp400-property-read-servient-slice/tests/host.rs",
     "tools/design-check/src/main.rs",
     "tools/design-check/tests/wp400_property_read_servient_schema.rs",
 ]

@@ -39,6 +39,8 @@ struct FirstEntryClosure {
     registration_complete: bool,
     capacities_reserved: bool,
     binding_side_effect_started: bool,
+    host_zero_argument_constructor_preserved: bool,
+    manifest_lockfile_transition_complete: bool,
     generations: GenerationSet,
 }
 
@@ -61,6 +63,8 @@ impl FirstEntryClosure {
             registration_complete: true,
             capacities_reserved: true,
             binding_side_effect_started: false,
+            host_zero_argument_constructor_preserved: true,
+            manifest_lockfile_transition_complete: true,
             generations: GenerationSet {
                 binding: 3,
                 produced: 5,
@@ -82,6 +86,8 @@ enum Rejection {
     PartialRegistration,
     SideEffectBeforeReservation,
     ProfileDivergence,
+    HostConstructorCompatibility,
+    ManifestLockfileTopology,
 }
 
 fn validate(
@@ -126,6 +132,12 @@ fn validate(
     }
     if closure.binding_side_effect_started && !closure.capacities_reserved {
         return Err(Rejection::SideEffectBeforeReservation);
+    }
+    if closure.profile == Profile::Host && !closure.host_zero_argument_constructor_preserved {
+        return Err(Rejection::HostConstructorCompatibility);
+    }
+    if !closure.manifest_lockfile_transition_complete {
+        return Err(Rejection::ManifestLockfileTopology);
     }
     if let Some(counterpart) = counterpart {
         let same_semantics = closure.logical_route == counterpart.logical_route
@@ -221,5 +233,25 @@ fn host_static_semantic_divergence_is_rejected() {
     assert_eq!(
         validate(static_closure, Some(host_closure)),
         Err(Rejection::ProfileDivergence)
+    );
+}
+
+#[test]
+fn one_argument_host_constructor_replacement_is_rejected() {
+    let mut closure = FirstEntryClosure::valid(Profile::Host);
+    closure.host_zero_argument_constructor_preserved = false;
+    assert_eq!(
+        validate(closure, None),
+        Err(Rejection::HostConstructorCompatibility)
+    );
+}
+
+#[test]
+fn manifest_lockfile_transition_omission_is_rejected() {
+    let mut closure = FirstEntryClosure::valid(Profile::Static);
+    closure.manifest_lockfile_transition_complete = false;
+    assert_eq!(
+        validate(closure, None),
+        Err(Rejection::ManifestLockfileTopology)
     );
 }

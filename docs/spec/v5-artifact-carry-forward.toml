@@ -8,8 +8,8 @@ rule = "A carried artifact projects active requirements only where ADR-0018 clas
 [[artifact]]
 family = "api-ownership"
 path = "docs/api-ownership.csv"
-sha256 = "90229c5be4b2046c9d0f539337e86d0ffadc4e4f56067fbb60c18fc53d462ba5"
-disposition = "revalidated with the narrow StaticServient/Servient bounded-step, complete-registration, synchronous handler, plan-set, route, activation, and cleanup ownership assigned to active v5 requirements; the candidate returns StepStatus<()> and keeps broad RuntimeEvent/status and reusable Core host-handler registration as inactive domain-entry input"
+sha256 = "46549b9378ca61dc9a051a098c19cde97bec67a14f4b217cb42332e6428b007b"
+disposition = "revalidated with the narrow StaticServient/Servient bounded-step, complete-registration, synchronous handler, plan-set, route, activation, and cleanup ownership assigned to active v5 requirements; the corrective host boundary preserves zero-argument ServientBuilder construction and adds the explicit resource_limits setter, while StepStatus<()> remains narrow and broad RuntimeEvent/status and reusable Core host-handler registration remain inactive domain-entry input"
 revalidation = "tools/check-api-ownership.sh"
 
 [[artifact]]
@@ -106,8 +106,8 @@ revalidation = "cargo run --locked --quiet --manifest-path tools/design-check/Ca
 [[artifact]]
 family = "property-read-integration-gate"
 path = "docs/work-packages/property-read-architecture-gate.toml"
-sha256 = "f6ee68214d99c7025ffaf6d7fa0167acf37b6a1a5c6cc2d8b027720f6c121353"
-disposition = "revalidated as a six-tranche gate with the route-reservation correction integrated/default-validated and the exact non-source WP-400 Servient candidate pending independent review; D46's nine-row first-entry closure, finite mutation set, seven product paths, and one mock-support path are frozen while the aggregate gate and all WP-400 source remain blocked"
+sha256 = "8c5f642dd565e38582ecd7be03af5ec4c437326253c6410d3ce37c8599296c90"
+disposition = "revalidated as a six-tranche gate with the route-reservation correction integrated/default-validated, original non-source WP-400 candidate review-rejected, and its exact corrective child pending independent review; D46's nine-row first-entry closure, expanded finite mutation set, seven product paths, one mock-support source, and two required lockfiles are frozen while the aggregate gate and all WP-400 source remain blocked"
 revalidation = "tools/check-v5-authority-reset-decision.sh"
 
 [[artifact]]
