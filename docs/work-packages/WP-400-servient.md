@@ -103,6 +103,23 @@ or side effect before resource and cleanup reservation blocks source
 admission. This is a one-time Property Read feedback control, not a new broad
 WP-400 design freeze or a project-wide successor rule.
 
+The active-v5 narrow candidate is frozen by
+`docs/audits/WP-400-property-read-servient-slice-entry.md`. It reuses the
+public `StaticServient`, `StaticServientBuilder`, `Servient`,
+`ServientBuilder`, and `ExposedThingHandle` names. Static authors supply one
+complete `StaticBindingRegistration` and `StaticHandlerRegistration`; host
+authors supply one complete `HostBindingRegistration`, while Servient owns the
+private erasure of one synchronous `ReadPropertyHandler`. Both runtime cells
+enter the same product-owned transition kernel through explicit
+`Context`/`WorkBudget` steps returning `StepStatus<()>`.
+
+That unit progress value is an intentional narrow-v5 boundary. The v4.9 broad
+target below names `RuntimeEvent` and reusable host handler registration, but
+their owning `CAP-STATUS-001`/broad storage families are not active authority
+for this slice and the types are not implemented. Candidate review may not
+activate them by implication. A later broad domain-entry review owns any
+status-event value or reusable Core host-handler registration.
+
 ## Requirements
 
 - `LIFE-EXPOSE-001`
@@ -167,7 +184,9 @@ integration remains behind an explicit test feature.
   `clinkz_wot_servient::StaticSubscription`, and
   `clinkz_wot_servient::StaticServientBuilder` surfaces for caller-owned storage and manual
   progress. Their `step` operation uses `WorkBudget` and returns
-  `StepStatus<RuntimeEvent>` exactly as frozen by `API-SURFACE-001`.
+  `StepStatus<RuntimeEvent>` as v4.9 broad domain-entry input. The admitted
+  narrow Property Read exception above returns `StepStatus<()>` and does not
+  activate the deferred runtime-event family.
 - Replace the current host builder's bare binding vectors with one validated
   `HostBindingRegistration` per installed binding. Replace the static split client/server lists
   with `StaticBindingRegistration<B>`. No builder method accepts a bare `Arc<dyn ServerBinding>`,

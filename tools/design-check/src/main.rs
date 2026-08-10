@@ -704,6 +704,122 @@ const PROPERTY_READ_ROUTE_RESERVATION_PRECHECKS: &[&str] = &[
     "wp200-property-read-producer-route-check",
 ];
 const PROPERTY_READ_SERVIENT_SLICE: &str = "WP-400-PROPERTY-READ-SERVIENT-SLICE";
+const PROPERTY_READ_SERVIENT_ENTRY_CHECK: &str = "wp400-property-read-servient-slice-entry-check";
+const PROPERTY_READ_SERVIENT_COMPLETION_CHECK: &str = "wp400-property-read-servient-slice-check";
+const PROPERTY_READ_SERVIENT_REVIEW_ATTESTATION: &str =
+    "docs/audits/WP-400-property-read-servient-slice-review.toml";
+const PROPERTY_READ_SERVIENT_COMPLETION_EVIDENCE: &str =
+    "docs/evidence/WP-400-property-read-servient-slice.toml";
+const PROPERTY_READ_SERVIENT_ADMISSION_REVIEW: &str =
+    "docs/audits/WP-400-property-read-servient-slice-entry.md";
+const PROPERTY_READ_SERVIENT_CANDIDATE_BASE_REF: &str = "fcce9e69036459506a163ac73ef5542f92e5eb7f";
+const PROPERTY_READ_SERVIENT_CANDIDATE_REF_MODE: &str = "register-after-candidate-commit";
+const PROPERTY_READ_SERVIENT_API_ITEMS: &[&str] = &[
+    "CompiledPlanSetState",
+    "ExposeState",
+    "ExposedThingHandle",
+    "PropertyReadHandlerRecord",
+    "Servient",
+    "ServientBuilder",
+    "ServingActivationRecord",
+    "StaticServient",
+    "StaticServientBuilder",
+    "servient_builder_binding_registration",
+    "servient_step",
+    "set_read_property_handler",
+    "static_servient_builder_binding_registration",
+    "static_servient_step",
+];
+const PROPERTY_READ_SERVIENT_REUSED_API_ITEMS: &[&str] = &[
+    "BindingArtifactEnvelope",
+    "BindingArtifactRef",
+    "BindingRouteKey",
+    "Deadline",
+    "HandlerContext",
+    "HostBindingRegistration",
+    "InteractionInput",
+    "InteractionOutput",
+    "PlanBuildOutput",
+    "PrepareInput",
+    "PropertyReadPlanCompiler",
+    "ReadPropertyHandler",
+    "ResourceLimits",
+    "RouteAcceptLease",
+    "RouteInboundRequest",
+    "RouteInboundResponse",
+    "ServingActivationAuthority",
+    "StaticBindingRegistration",
+    "StaticHandlerRegistration",
+    "StepStatus",
+    "WorkBudget",
+];
+const PROPERTY_READ_SERVIENT_IMPLEMENTATION_PATHS: &[&str] = &[
+    "servient/Cargo.toml",
+    "servient/src/builder.rs",
+    "servient/src/handle.rs",
+    "servient/src/lib.rs",
+    "servient/src/property_read.rs",
+    "servient/src/registry.rs",
+    "servient/src/servient.rs",
+];
+const PROPERTY_READ_SERVIENT_SUPPORT_IMPLEMENTATION_PATHS: &[&str] =
+    &["tools/compile-contracts/wp300-property-read-binding-slice/src/lib.rs"];
+const PROPERTY_READ_SERVIENT_EXCLUDED_CLAIMS: &[&str] = &[
+    "async-or-step-handler-families",
+    "broad-cleanup-executor-and-drop-transfer",
+    "consumer-subscription-and-producer-emission",
+    "dynamic-registration-or-plan-regeneration",
+    "multi-thing-multi-route-fairness-and-workloads",
+    "production-protocol-and-zenoh",
+    "runtime-event-and-status-stream",
+];
+const PROPERTY_READ_SERVIENT_STATE_MACHINES: &[&str] =
+    &["binding-route", "compiled-plan-set", "expose", "in-flight"];
+const PROPERTY_READ_SERVIENT_CONTRACT_ARTIFACTS: &[&str] = &[
+    "tools/check-wp400-property-read-servient-slice-entry.sh",
+    "tools/check-wp400-property-read-servient-slice.sh",
+    "tools/compile-contracts/wp300-property-read-binding-slice/src/lib.rs",
+    "tools/compile-contracts/wp400-property-read-servient-slice/Cargo.lock",
+    "tools/compile-contracts/wp400-property-read-servient-slice/Cargo.toml",
+    "tools/compile-contracts/wp400-property-read-servient-slice/src/lib.rs",
+    "tools/compile-contracts/wp400-property-read-servient-slice/tests/host.rs",
+    "tools/design-check/Cargo.toml",
+    "tools/design-check/src/main.rs",
+    "tools/design-check/tests/wp400_property_read_servient_schema.rs",
+];
+const PROPERTY_READ_SERVIENT_CANDIDATE_PATHS: &[&str] = &[
+    "PLAN.md",
+    "PROJECT_STATE.md",
+    "docs/api-ownership.csv",
+    "docs/artifacts.csv",
+    "docs/audits/WP-400-property-read-servient-slice-entry.md",
+    "docs/governance.toml",
+    "docs/spec/v5-artifact-carry-forward.toml",
+    "docs/work-packages/PROPERTY-READ-ARCHITECTURE.md",
+    "docs/work-packages/WP-400-servient.md",
+    "docs/work-packages/property-read-architecture-gate.toml",
+    "tools/check-wp400-property-read-servient-slice-entry.sh",
+    "tools/check-wp400-property-read-servient-slice.sh",
+    "tools/compile-contracts/wp400-property-read-servient-slice/Cargo.lock",
+    "tools/compile-contracts/wp400-property-read-servient-slice/Cargo.toml",
+    "tools/compile-contracts/wp400-property-read-servient-slice/src/lib.rs",
+    "tools/compile-contracts/wp400-property-read-servient-slice/tests/host.rs",
+    "tools/design-check/src/main.rs",
+    "tools/design-check/tests/wp400_property_read_servient_schema.rs",
+];
+const PROPERTY_READ_SERVIENT_PRECHECKS: &[&str] = &[
+    "api-ownership-check",
+    "architecture-adr-check",
+    "design-requirement-check",
+    "resource-profile-check",
+    "v5-authority-reset-candidate-check",
+    "work-package-dag-check",
+    "wp100-property-read-handler-slice-check",
+    "wp200-property-read-plan-slice-check",
+    "wp300-property-read-binding-slice-check",
+    "wp200-property-read-producer-route-check",
+    "wp200-property-read-route-reservation-check",
+];
 const WP300_BROAD_ENTRYPOINT: &str = "WP-300-BROAD-ENTRY";
 const WP400_BROAD_ENTRYPOINT: &str = "WP-400-BROAD-ENTRY";
 const HANDLER_VALUE_PRECHECKS: &[&str] = &[
@@ -3515,12 +3631,22 @@ fn property_read_slice_spec(id: &str) -> Option<PropertyReadSliceSpec> {
                 "HANDLER-API-001",
                 "BIND-ROUTE-001",
                 "BIND-DELIVERY-001",
+                "BIND-IO-001",
+                "BIND-MEM-001",
+                "LIFE-EXPOSE-001",
                 "LIFE-EXPOSE-002",
+                "LIFE-EXPOSE-003",
                 "STATE-EXPOSE-001",
                 "STATE-BIND-001",
                 "STATE-INFLIGHT-001",
                 "CLEANUP-RECORD-001",
                 "API-RESOURCE-001",
+                "ADMIT-MEM-001",
+                "CONCUR-LIN-001",
+                "CONSTRAINED-STORAGE-001",
+                "CONSTRAINED-PROGRESS-001",
+                "CONSTRAINED-WORK-001",
+                "HOST-ASYNC-001",
             ],
             owners: &["clinkz-wot-servient", "workspace"],
             evidence_key: "property-read-servient-slice",
@@ -3907,7 +4033,7 @@ fn check_property_read_integration_gate(
         (
             "property-read-handler-coverage",
             "application",
-            "Servient-frozen-handler-view+StaticHandlerRegistration|HostHandlerRegistration",
+            "Servient-frozen-handler-view+StaticHandlerRegistration|PropertyReadHandlerRecord",
             "root-input",
             "legal-root-input",
         ),
@@ -4006,6 +4132,7 @@ fn check_property_read_integration_gate(
                 | PROPERTY_READ_BINDING_SLICE
                 | PROPERTY_READ_PRODUCER_ROUTE_PROJECTION
                 | PROPERTY_READ_ROUTE_RESERVATION_PROJECTION
+                | PROPERTY_READ_SERVIENT_SLICE
         ) {
             exact_fields.extend([
                 "api_items",
@@ -4027,6 +4154,9 @@ fn check_property_read_integration_gate(
                 "completion_evidence_path",
                 "completion_check",
             ]);
+            if id == PROPERTY_READ_SERVIENT_SLICE {
+                exact_fields.push("support_implementation_paths");
+            }
             let admission_status = string_field(tranche, "admission_status", &id)?;
             if admission_status == "approved" {
                 exact_fields.extend(["review_attestation", "review_attestation_ref"]);
@@ -4035,6 +4165,7 @@ fn check_property_read_integration_gate(
                     PROPERTY_READ_BINDING_SLICE
                         | PROPERTY_READ_PRODUCER_ROUTE_PROJECTION
                         | PROPERTY_READ_ROUTE_RESERVATION_PROJECTION
+                        | PROPERTY_READ_SERVIENT_SLICE
                 ) {
                     exact_fields.push("admission_base_ref");
                 }
@@ -4044,6 +4175,7 @@ fn check_property_read_integration_gate(
                         | PROPERTY_READ_BINDING_SLICE
                         | PROPERTY_READ_PRODUCER_ROUTE_PROJECTION
                         | PROPERTY_READ_ROUTE_RESERVATION_PROJECTION
+                        | PROPERTY_READ_SERVIENT_SLICE
                 ) && string_field(tranche, "status", &id)? != "pending"
                 {
                     exact_fields.push("admission_ref");
@@ -4059,6 +4191,10 @@ fn check_property_read_integration_gate(
                 || (id == PROPERTY_READ_ROUTE_RESERVATION_PROJECTION
                     && root
                         .join(PROPERTY_READ_ROUTE_RESERVATION_REVIEW_ATTESTATION)
+                        .is_file())
+                || (id == PROPERTY_READ_SERVIENT_SLICE
+                    && root
+                        .join(PROPERTY_READ_SERVIENT_REVIEW_ATTESTATION)
                         .is_file())
             {
                 exact_fields.extend([
@@ -4090,6 +4226,7 @@ fn check_property_read_integration_gate(
                 | PROPERTY_READ_BINDING_SLICE
                 | PROPERTY_READ_PRODUCER_ROUTE_PROJECTION
                 | PROPERTY_READ_ROUTE_RESERVATION_PROJECTION
+                | PROPERTY_READ_SERVIENT_SLICE
         ) {
             if !handler_value_status_pair_is_valid(&status, &admission_status) {
                 return Err(format!(
@@ -5075,6 +5212,15 @@ fn check_property_read_integration_gate(
                 &admission_status,
                 &registered_artifacts,
             )?;
+        } else if id == PROPERTY_READ_SERVIENT_SLICE {
+            check_property_read_servient_slice_tranche(
+                root,
+                tranche,
+                &id,
+                &status,
+                &admission_status,
+                &registered_artifacts,
+            )?;
         }
     }
     if slice_ids != expected_slice_ids {
@@ -5860,6 +6006,332 @@ fn check_property_read_route_reservation_projection_tranche(
             &attestation_ref,
             &admission_base_ref,
         )?;
+    } else if evidence_exists && tranche_evidence_is_passed(root, &evidence_path)? {
+        return Err(format!(
+            "{id} is not complete while {evidence_path} claims passed"
+        ));
+    }
+
+    Ok(())
+}
+
+fn check_property_read_servient_slice_tranche(
+    root: &Path,
+    tranche: &Table,
+    id: &str,
+    status: &str,
+    admission_status: &str,
+    registered_artifacts: &BTreeSet<String>,
+) -> Result<(), String> {
+    let api_items = package_string_set(tranche, "api_items", id)?;
+    let expected_api_items = owned_set(PROPERTY_READ_SERVIENT_API_ITEMS);
+    if api_items != expected_api_items {
+        return Err(format!(
+            "{id} API-item scope mismatch; expected {expected_api_items:?}, found {api_items:?}"
+        ));
+    }
+    let ownership_items = load_first_column(root, "docs/api-ownership.csv")?;
+    check_known_values(id, "API item", &api_items, &ownership_items)?;
+
+    let reused_api_items = package_string_set(tranche, "reused_api_items", id)?;
+    let expected_reused_api_items = owned_set(PROPERTY_READ_SERVIENT_REUSED_API_ITEMS);
+    if reused_api_items != expected_reused_api_items {
+        return Err(format!(
+            "{id} reused API-item scope mismatch; expected \
+             {expected_reused_api_items:?}, found {reused_api_items:?}"
+        ));
+    }
+    check_known_values(id, "reused API item", &reused_api_items, &ownership_items)?;
+
+    let implementation_paths = package_string_set(tranche, "implementation_paths", id)?;
+    let expected_implementation_paths = owned_set(PROPERTY_READ_SERVIENT_IMPLEMENTATION_PATHS);
+    if implementation_paths != expected_implementation_paths {
+        return Err(format!(
+            "{id} implementation-path scope mismatch; expected \
+             {expected_implementation_paths:?}, found {implementation_paths:?}"
+        ));
+    }
+    for path in &implementation_paths {
+        validate_relative_path(path, id)?;
+        let is_new_reviewed_module = path == "servient/src/property_read.rs";
+        if !is_new_reviewed_module && !root.join(path).is_file() {
+            return Err(format!(
+                "{id} implementation owner path {path:?} is missing"
+            ));
+        }
+    }
+
+    let support_paths = package_string_set(tranche, "support_implementation_paths", id)?;
+    let expected_support_paths = owned_set(PROPERTY_READ_SERVIENT_SUPPORT_IMPLEMENTATION_PATHS);
+    if support_paths != expected_support_paths {
+        return Err(format!(
+            "{id} support implementation-path mismatch; expected \
+             {expected_support_paths:?}, found {support_paths:?}"
+        ));
+    }
+    for path in &support_paths {
+        validate_relative_path(path, id)?;
+        if !root.join(path).is_file() {
+            return Err(format!(
+                "{id} support implementation path {path:?} is missing"
+            ));
+        }
+    }
+
+    let servient_cargo = fs::read_to_string(root.join("servient/Cargo.toml"))
+        .map_err(|error| format!("cannot read Servient manifest: {error}"))?;
+    let servient_lib = fs::read_to_string(root.join("servient/src/lib.rs"))
+        .map_err(|error| format!("cannot read Servient root: {error}"))?;
+    let reviewed_source_exists = servient_cargo
+        .contains("clinkz-wot-planning = { path = \"../planning\"")
+        && servient_lib.contains("mod property_read;")
+        && root.join("servient/src/property_read.rs").is_file();
+    if status == "pending" && reviewed_source_exists {
+        return Err(format!("{id} pending state has premature Servient source"));
+    }
+    if status == "complete" && !reviewed_source_exists {
+        return Err(format!(
+            "{id} complete state lacks reviewed Servient source"
+        ));
+    }
+
+    let excluded_claims = package_string_set(tranche, "excluded_claims", id)?;
+    let expected_excluded_claims = owned_set(PROPERTY_READ_SERVIENT_EXCLUDED_CLAIMS);
+    if excluded_claims != expected_excluded_claims {
+        return Err(format!(
+            "{id} excluded-claim scope mismatch; expected \
+             {expected_excluded_claims:?}, found {excluded_claims:?}"
+        ));
+    }
+    require_table_string(tranche, "risk_category", "C", id)?;
+    require_table_string(tranche, "impact_status", "current", id)?;
+
+    let state_machines = package_string_set(tranche, "state_machines", id)?;
+    let expected_state_machines = owned_set(PROPERTY_READ_SERVIENT_STATE_MACHINES);
+    if state_machines != expected_state_machines {
+        return Err(format!(
+            "{id} state-machine scope mismatch; expected \
+             {expected_state_machines:?}, found {state_machines:?}"
+        ));
+    }
+    let state_source = fs::read_to_string(root.join("docs/state-machines.toml"))
+        .map_err(|error| format!("cannot read state-machine registry: {error}"))?;
+    for machine in &state_machines {
+        let marker = format!("id = \"{machine}\"");
+        if !state_source.lines().any(|line| line == marker) {
+            return Err(format!("{id} state machine {machine:?} is not registered"));
+        }
+    }
+    for field in ["old_api_removals", "performance_workloads"] {
+        let values = string_set(array_field(tranche, field, id)?, id, field)?;
+        if !values.is_empty() {
+            return Err(format!("{id} must have an empty {field} set"));
+        }
+    }
+
+    let contract_artifacts = package_string_set(tranche, "contract_artifacts", id)?;
+    let expected_contract_artifacts = owned_set(PROPERTY_READ_SERVIENT_CONTRACT_ARTIFACTS);
+    if contract_artifacts != expected_contract_artifacts {
+        return Err(format!(
+            "{id} contract-artifact scope mismatch; expected \
+             {expected_contract_artifacts:?}, found {contract_artifacts:?}"
+        ));
+    }
+    for artifact in &contract_artifacts {
+        validate_relative_path(artifact, id)?;
+        if !root.join(artifact).is_file() {
+            return Err(format!("{id} contract artifact {artifact:?} is not a file"));
+        }
+        let design_checker_source_is_registered = artifact == "tools/design-check/src/main.rs"
+            && registered_artifacts.contains("tools/design-check/Cargo.toml");
+        if !registered_artifacts.contains(artifact) && !design_checker_source_is_registered {
+            return Err(format!(
+                "{id} contract artifact {artifact:?} is not registered"
+            ));
+        }
+    }
+
+    let candidate_base_ref = string_field(tranche, "candidate_base_ref", id)?;
+    if candidate_base_ref != PROPERTY_READ_SERVIENT_CANDIDATE_BASE_REF {
+        return Err(format!("{id} candidate base ref is not frozen"));
+    }
+    let candidate_ref = string_field(tranche, "candidate_ref", id)?;
+    if candidate_ref != PROPERTY_READ_SERVIENT_CANDIDATE_REF_MODE {
+        return Err(format!(
+            "{id} candidate ref mode must remain \
+             {PROPERTY_READ_SERVIENT_CANDIDATE_REF_MODE:?}"
+        ));
+    }
+    let candidate_paths = package_string_set(tranche, "candidate_paths", id)?;
+    let expected_candidate_paths = owned_set(PROPERTY_READ_SERVIENT_CANDIDATE_PATHS);
+    if candidate_paths != expected_candidate_paths {
+        return Err(format!(
+            "{id} candidate-path scope mismatch; expected \
+             {expected_candidate_paths:?}, found {candidate_paths:?}"
+        ));
+    }
+    check_candidate_paths(
+        id,
+        root,
+        &candidate_paths,
+        &implementation_paths,
+        registered_artifacts,
+    )?;
+
+    let attestation_exists = root
+        .join(PROPERTY_READ_SERVIENT_REVIEW_ATTESTATION)
+        .is_file();
+    let effective_candidate_ref = if attestation_exists {
+        let source = fs::read_to_string(root.join(PROPERTY_READ_SERVIENT_REVIEW_ATTESTATION))
+            .map_err(|error| format!("cannot read Servient review attestation: {error}"))?;
+        parse_scoped_review_attestation(
+            &source,
+            id,
+            PROPERTY_READ_SERVIENT_PRECHECKS,
+            "property-read Servient slice",
+            ACTIVE_AUTHORITY_REVISION,
+        )?
+        .reviewed_ref
+    } else {
+        resolve_unattested_candidate_ref(
+            root,
+            &candidate_base_ref,
+            &format!("{id} candidate checkout"),
+        )?
+    };
+    check_candidate_commit(
+        id,
+        root,
+        &candidate_base_ref,
+        &effective_candidate_ref,
+        &candidate_paths,
+    )?;
+
+    let governance_statuses = load_governance_check_statuses(root)?;
+    let prechecks = package_string_set(tranche, "pre_implementation_checks", id)?;
+    let expected_prechecks = owned_set(PROPERTY_READ_SERVIENT_PRECHECKS);
+    if prechecks != expected_prechecks {
+        return Err(format!(
+            "{id} precheck set mismatch; expected {expected_prechecks:?}, found {prechecks:?}"
+        ));
+    }
+    for check in &prechecks {
+        if governance_statuses.get(check).map(String::as_str) != Some("executable") {
+            return Err(format!("{id} precheck {check:?} is not executable"));
+        }
+    }
+
+    let admission_review = string_field(tranche, "admission_review", id)?;
+    if admission_review != PROPERTY_READ_SERVIENT_ADMISSION_REVIEW
+        || !registered_artifacts.contains(&admission_review)
+        || !root.join(&admission_review).is_file()
+    {
+        return Err(format!(
+            "{id} admission review is not registered and present"
+        ));
+    }
+    check_property_read_handler_audit_state(root, &admission_review, admission_status)?;
+
+    let entry_check = string_field(tranche, "entry_check", id)?;
+    if entry_check != PROPERTY_READ_SERVIENT_ENTRY_CHECK
+        || governance_statuses.get(&entry_check).map(String::as_str) != Some("executable")
+    {
+        return Err(format!("{id} entry check is not executable"));
+    }
+    let completion_check = string_field(tranche, "completion_check", id)?;
+    if completion_check != PROPERTY_READ_SERVIENT_COMPLETION_CHECK
+        || governance_statuses
+            .get(&completion_check)
+            .map(String::as_str)
+            != Some("executable")
+    {
+        return Err(format!("{id} completion check is not executable"));
+    }
+    let evidence_path = string_field(tranche, "completion_evidence_path", id)?;
+    if evidence_path != PROPERTY_READ_SERVIENT_COMPLETION_EVIDENCE {
+        return Err(format!("{id} completion evidence path is not frozen"));
+    }
+
+    if admission_status == "review-pending" {
+        if attestation_exists {
+            if !registered_artifacts.contains(PROPERTY_READ_SERVIENT_REVIEW_ATTESTATION) {
+                return Err(format!(
+                    "{id} attestation exists without an artifact-registry entry"
+                ));
+            }
+            let attestation_path = string_field(tranche, "review_attestation", id)?;
+            let attestation_ref = string_field(tranche, "review_attestation_ref", id)?;
+            let admission_base_ref = string_field(tranche, "admission_base_ref", id)?;
+            if attestation_path != PROPERTY_READ_SERVIENT_REVIEW_ATTESTATION {
+                return Err(format!("{id} review attestation path is not frozen"));
+            }
+            if admission_base_ref != "register-at-admission" {
+                return Err(format!(
+                    "{id} review-pending admission_base_ref must remain \
+                     \"register-at-admission\""
+                ));
+            }
+            check_scoped_review_attestation(
+                root,
+                &attestation_path,
+                &attestation_ref,
+                id,
+                PROPERTY_READ_SERVIENT_PRECHECKS,
+                &candidate_base_ref,
+                &effective_candidate_ref,
+                &candidate_paths,
+                "property-read Servient slice",
+                ACTIVE_AUTHORITY_REVISION,
+                &["PROJECT_STATE.md"],
+            )?;
+        }
+    } else {
+        if status == "pending" {
+            return Err(format!(
+                "{id} approved state must be the combined in-progress pre-source checkpoint"
+            ));
+        }
+        let attestation_path = string_field(tranche, "review_attestation", id)?;
+        let attestation_ref = string_field(tranche, "review_attestation_ref", id)?;
+        let admission_base_ref = string_field(tranche, "admission_base_ref", id)?;
+        if attestation_path != PROPERTY_READ_SERVIENT_REVIEW_ATTESTATION
+            || !registered_artifacts.contains(&attestation_path)
+            || !root.join(&attestation_path).is_file()
+        {
+            return Err(format!("{id} review attestation path is not frozen"));
+        }
+        check_scoped_review_attestation(
+            root,
+            &attestation_path,
+            &attestation_ref,
+            id,
+            PROPERTY_READ_SERVIENT_PRECHECKS,
+            &candidate_base_ref,
+            &effective_candidate_ref,
+            &candidate_paths,
+            "property-read Servient slice",
+            ACTIVE_AUTHORITY_REVISION,
+            &["PROJECT_STATE.md"],
+        )?;
+        require_full_commit_id(
+            &admission_base_ref,
+            "property-read Servient admission_base_ref",
+        )?;
+        require_git_ancestor(
+            root,
+            &attestation_ref,
+            &admission_base_ref,
+            "property-read Servient review/admission base",
+        )?;
+    }
+
+    let evidence_exists = root.join(&evidence_path).is_file();
+    if status == "complete" {
+        if !evidence_exists || !registered_artifacts.contains(&evidence_path) {
+            return Err(format!(
+                "{id} complete state lacks registered completion evidence"
+            ));
+        }
     } else if evidence_exists && tranche_evidence_is_passed(root, &evidence_path)? {
         return Err(format!(
             "{id} is not complete while {evidence_path} claims passed"

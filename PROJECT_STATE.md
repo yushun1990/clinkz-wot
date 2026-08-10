@@ -185,6 +185,15 @@ The active design revision is v5.0 bounded-core authority.
   child and changes only `core/src/binding_compiler.rs`,
   `planning/src/property_read.rs`, and the registered WP-300 mock-compiler
   support path.
+- Pull request #21 integrated that exact admission/implementation/completion
+  chain through merge `fcce9e69036459506a163ac73ef5542f92e5eb7f`. Its first
+  parent is prior fetched default `410b576a1325c7b55df6c58ed99f01d793b9f06f`,
+  its second parent is exact PR head
+  `256e8e39c3bf80cd5034ff369925ecc162c3a81d`, and its tree equals that
+  head. Exact-head run `31347838448` and default-branch run `31349086799`
+  passed. The fetched merge contains the expected 12-path task diff and exact
+  completion evidence, so WP-400 candidate/review preparation is released;
+  WP-400 source remains blocked pending its own review and admission.
 - Pull request #20 integrated technical decision checkpoint
   `6271c2861771a0fbc18772bd853bc451ba0fd614` and continuation checkpoint
   `72cf711adef3712ebf502b2fd01273e6f2d23376` through exact merge
@@ -196,7 +205,7 @@ The active design revision is v5.0 bounded-core authority.
   widens nor reviews PR #18's distinct D45 candidate.
 - GitHub CLI, SSH fetch/push, and the connected GitHub application are
   available as of 2026-08-10. Active Ruleset `20009352` was
-  fetched on 2026-08-09: it targets the default branch, requires strict
+  fetched again on 2026-08-10: it targets the default branch, requires strict
   current-base `validation` and resolved review threads, has no bypass actor,
   and permits merge commits. Native automatic integration remains eligible
   only while every terminal predicate is freshly true for the exact head.
@@ -208,41 +217,42 @@ default workspace tests, diff hygiene, and the 21-cell valid feature matrix.
 
 ## Continuation Projection
 
-Observed default branch: `410b576a1325c7b55df6c58ed99f01d793b9f06f`
+Observed default branch: `fcce9e69036459506a163ac73ef5542f92e5eb7f`
 
 Observed on: 2026-08-10 after fetch plus pull-request/base/head/tree/content
-inspection. Default-branch `mainline` run `31322284712` passed on that exact
+inspection. Default-branch `mainline` run `31349086799` passed on that exact
 revision.
 
 Projection mode: conditional remote handoff
 
-The bounded task completes and remotely hands off independently reviewed
-`WP-200-PROPERTY-READ-ROUTE-RESERVATION-PROJECTION` from exact fetched and
-default-validated admission base `410b576a1325c7b55df6c58ed99f01d793b9f06f`.
-It preserves exact five-file admission `17cbadc5e3334ec801234509babaeb3cfa421cb6`
-and immediate three-path implementation
-`b47899150aa957b1dea8d844aa49852e3e6aa356`. Completion proves the concrete
-compiler-owned identity through Core role validation, typed/host preservation,
-Planning retention, admitted envelope, `BindingRouteKey`, and WP-300 route
-preparation. WP-400 candidate and source remain blocked pending verified
-default integration.
+The exact non-source `WP-400-PROPERTY-READ-SERVIENT-SLICE` candidate is
+registered as the unique child of fetched and default-validated merge
+`fcce9e69036459506a163ac73ef5542f92e5eb7f`; its immutable commit id is
+resolved from that topology after the candidate commit. It freezes one honest
+host/manual product entry and runner, carries every D46 first-entry row through
+its production owner, reserves resource and cleanup ownership before the first
+binding side effect, and defines the finite negative set. It changes no
+product or support source. WP-400 source remains blocked until the candidate
+passes independent review and a later pre-source admission checkpoint.
 
 ### Before verified integration
 
-Validate the completion topology and evidence, including exact
-review/admission/implementation ancestry, five-path pre-source and three-path
-implementation boundaries, the task-specific checker, aggregate design suite,
-locked workspace, supported feature matrix, and diff hygiene. Commit and push
-the completed head to one draft implementation pull request. WP-400 source
-remains blocked.
+Validate the candidate's exact single-child/18-path topology, absent-source
+boundary, nine D46 provenance rows, registered negative mutations, aggregate
+design suite, locked workspace, supported feature matrix, and diff hygiene.
+Push the immutable candidate to one draft pull request and keep it draft while
+independent review is absent. The candidate reserves seven future Servient
+product paths and one future WP-300 mock-support path; no source is admitted.
 
 ### After verified integration
 
-After route-reservation completion integration, fetch `master` and verify its
-actual base, merge ancestry, exact implementation/completion content, and
-passing merge-revision `validation`. Only then may WP-400 prepare its own
-candidate and execute D46's complete first-entry closure during independent
-review. WP-400 source still requires its own approved checkpoint.
+Fetch `master` and verify the pull request's actual base, merge ancestry, exact
+candidate/review content, and passing merge-revision `validation` before
+releasing dependent work. Independent review of the immutable candidate must
+simulate only the registered implementation paths, run both runtime profiles
+plus the async/no-std compile projection, trace all nine first-entry rows, and
+reject every registered mutation. Only a passed review followed by a separate
+exact pre-source checkpoint may authorize WP-400 source.
 
 The narrow WP-200 plan slice is complete. Its handoff to WP-300 contains:
 
@@ -313,8 +323,12 @@ integrated. It separates the still-valid Producer-route role/reference claim
 from the missing canonical route-reservation output, rejects runner constants
 and Planning/Servient URI hashing, and assigns the correction to immutable
 Core/compiler artifact metadata. The integrated candidate adds no product
-source; its exact implementation is now locally complete while WP-400 stays
-blocked pending verified default integration.
+source. Pull request #21 integrated its exact completion head
+`256e8e39c3bf80cd5034ff369925ecc162c3a81d` unchanged as merge revision
+`fcce9e69036459506a163ac73ef5542f92e5eb7f`; default-branch validation run
+`31349086799` passed. Narrow WP-400 candidate/review preparation is therefore
+released, while WP-400 source remains blocked on that candidate's own review
+and pre-source admission.
 
 ## Active Milestones
 
@@ -329,10 +343,9 @@ blocked pending verified default integration.
 - M4 Protocol Binding SPI and Lifecycle — IN_PROGRESS; the exact WP-300
   Property Read binding slice is `complete`/`approved`. Broad WP-300 exits
   remain open. The completed Producer-route correction releases only the
-  route-reservation correction; narrow WP-400 candidate/review preparation
-  remains blocked until that locally completed correction is integrated and
-  verified on the default branch. Its later candidate must also close D46
-  before WP-400 source admission.
+  route-reservation correction. Its verified default integration releases
+  narrow WP-400 candidate/review preparation; the candidate must close D46
+  before its own pre-source admission, so no WP-400 source is yet admitted.
 
 The v5 authority switch is complete, but M1 remains open because GATE-1,
 GATE-2, GATE-4, GATE-5, and GATE-6 still require their registered closure
@@ -708,8 +721,8 @@ The middle checkpoint changes exactly the five registered pre-source paths.
 The implementation child changes exactly the nine registered Core/Planning
 paths. `docs/evidence/WP-200-property-read-plan-slice.toml` binds that
 implementation ref to the completion checker. The integration gate now has
-WP-300 `complete`/`approved`, WP-400 planned/blocked, and remains globally
-`blocked`.
+WP-300 `complete`/`approved`, WP-400 `pending`/`review-pending`, and remains
+globally `blocked`.
 
 ### WP-300 Property Read binding slice
 
@@ -809,8 +822,8 @@ mutation was then discarded.
 
 ### WP-200 route-reservation projection and WP-400 first-entry closure
 
-Status: ROUTE-RESERVATION PROJECTION LOCALLY COMPLETE; REMOTE HANDOFF NEXT;
-WP-400 BLOCKED.
+Status: ROUTE-RESERVATION PROJECTION INTEGRATED AND DEFAULT-VALIDATED; WP-400
+CANDIDATE PREPARATION ACTIVE; WP-400 SOURCE BLOCKED.
 
 WP-400 reconstruction found that the completed Producer-route fixture obtains
 `RouteReservationIdentity` from direct fixture constants. Before this
@@ -843,7 +856,7 @@ declared mutation class. Exact five-file pre-source checkpoint
 The real implementation passes the same three-cell completion checker and
 predecessor regression chain.
 
-The exact locally completed tree was revalidated on 2026-08-10. It passes:
+The exact completion tree was revalidated locally on 2026-08-10. It passes:
 
 - `tools/check-wp200-property-read-route-reservation.sh`;
 - `cargo run --locked --quiet --manifest-path tools/design-check/Cargo.toml --
@@ -900,7 +913,12 @@ Technical decision checkpoint
 merge `8b9405cbd73a5c35c935d417a2c765650110e6a4`; merge-revision run
 `31313444889` passed. Its isolated provenance mutation was rejected with the
 expected mismatch. The subsequent PR #18 integration preserves both D45 and
-D46 while admitting no WP-400 source.
+D46 while admitting no WP-400 source. Pull request #21 then integrated exact
+route-reservation completion head
+`256e8e39c3bf80cd5034ff369925ecc162c3a81d` as merge revision
+`fcce9e69036459506a163ac73ef5542f92e5eb7f`; its exact push-event validation
+run `31349086799` passed. This releases WP-400 candidate/review preparation,
+not WP-400 source.
 
 ### Aggregate design-check worktree-root defect
 
@@ -934,11 +952,11 @@ bounded task rather than widening this decision packet or pull request #18.
 - The exact narrow WP-300 Property Read slice is complete. Broad WP-300 still
   waits on external authoring, cleanup-coexistence, shared-parity-oracle, and
   resource-authoring evidence.
-- Narrow WP-400 candidate/review preparation is blocked until the locally
-  completed route-reservation correction is remotely integrated and
-  default-branch validated. Its candidate must then close D46's one-time
-  first-entry table before its own pre-source admission. Broad WP-400, WP-500,
-  and WP-600 still depend on broad WP-300; WP-700 joins those branches.
+- Narrow WP-400 candidate/review preparation is active from verified default
+  revision `fcce9e69036459506a163ac73ef5542f92e5eb7f`. Its candidate must close
+  D46's one-time first-entry table before its own pre-source admission. Broad
+  WP-400, WP-500, and WP-600 still depend on broad WP-300; WP-700 joins those
+  branches.
 
 These do not extend the D8 packet unless repository evidence shows a direct
 contract, rollback, or validation intersection.
@@ -947,13 +965,13 @@ contract, rollback, or validation intersection.
 
 Status: RULESET VERIFIED; CLI AUTHENTICATION AVAILABLE.
 
-Ruleset `20009352` was fetched on 2026-08-09 and targets the default branch
+Ruleset `20009352` was fetched on 2026-08-10 and targets the default branch
 with strict current-base `validation` plus resolved review threads, no bypass
-actor, and merge commits allowed. `gh auth status` passed for account
-`yushun1990` on 2026-08-09; the connected GitHub application and SSH Git
-transport are also available. Pull request #18 exercised the full terminal
-path; merge-revision run `31322284712` confirms the current fetched default
-basis.
+actor, and merge commits allowed. `gh auth status` passes for account
+`yushun1990`; the connected GitHub application and SSH Git transport are also
+available. Pull request #21 exercised the full terminal path; exact
+default-branch push run `31349086799` validates fetched basis
+`fcce9e69036459506a163ac73ef5542f92e5eb7f`.
 
 ## Rejected or Superseded Approaches
 
@@ -1316,14 +1334,17 @@ source. Its current tree passes:
 
 ## Next Safe Actions
 
-1. Commit and push the validated completion topology to one draft
-   implementation pull request, then verify exact-head current-base remote
-   `validation`, scope, conversations, and mergeability.
-2. Only the correction's verified default integration may release WP-400
-   candidate work. That candidate's independent review must execute D46's
-   complete first-entry closure and negative mutations before pre-source
-   admission.
-3. Correct the performance harness's compile-time repository-root capture in
+1. Commit the exact 18-path non-source
+   `WP-400-PROPERTY-READ-SERVIENT-SLICE` candidate as the unique child of
+   `fcce9e69036459506a163ac73ef5542f92e5eb7f`, validate its expected
+   absent-source boundary, and complete the automatic draft remote handoff.
+2. Independently review that immutable commit by exercising both runtime
+   cells and the async/no-std compile projection, all nine D46 provenance rows,
+   and every registered negative mutation. Only an approved review may
+   release the exact pre-source admission checkpoint.
+3. Keep WP-400 source absent until that checkpoint is committed and its
+   topology validates. Then implement only the candidate's registered paths.
+4. Correct the performance harness's compile-time repository-root capture in
    a separate support-tool task; until then, use a clean Cargo target when a
    shared target may contain binaries compiled from deleted worktrees.
 
