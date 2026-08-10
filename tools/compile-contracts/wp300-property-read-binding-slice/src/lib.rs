@@ -6,15 +6,16 @@ use alloc::boxed::Box;
 use core::task::{Context, Poll};
 
 use clinkz_wot_core::{
-    BindingArtifact, BindingArtifactCompatibility, BindingArtifactFootprint, BindingCallSettlement,
-    BindingCancellationDisposition, BindingCompilerBounds, BindingCompilerExtension,
-    BindingCompilerInput, BindingCompilerOutput, BindingCompilerStep, BindingDeliveryOutcome,
-    BindingExecutionSupport, BindingIngressPolicy, BindingInputRejection, BindingLifetimeFootprint,
-    BindingRegistrationCapabilities, BindingRegistrationIdentity, BindingResourceDeclarations,
-    BindingStateLayout, BindingStatusPolicy, CleanupPhaseContext, NoCleanupSuccessor,
-    PollServerBinding, PrepareInput, RouteActivationOutcome, RouteActivationPermit,
-    RouteCleanupOutcome, RouteCommitOutcome, RouteInboundResponse, RoutePrepareOutcome,
-    RouteReadinessOutcome, RouteReadinessSlot, ServerResponseSlot, ServerRouteSlot,
+    BindingArtifact, BindingArtifactCompatibility, BindingArtifactFootprint, BindingArtifactRole,
+    BindingCallSettlement, BindingCancellationDisposition, BindingCompilerBounds,
+    BindingCompilerExtension, BindingCompilerInput, BindingCompilerOutput, BindingCompilerStep,
+    BindingDeliveryOutcome, BindingExecutionSupport, BindingIngressPolicy, BindingInputRejection,
+    BindingLifetimeFootprint, BindingRegistrationCapabilities, BindingRegistrationIdentity,
+    BindingResourceDeclarations, BindingStateLayout, BindingStatusPolicy, CleanupPhaseContext,
+    CollisionDomainId, EndpointReservationKey, NoCleanupSuccessor, PollServerBinding, PrepareInput,
+    RouteActivationOutcome, RouteActivationPermit, RouteCleanupOutcome, RouteCommitOutcome,
+    RouteInboundResponse, RoutePrepareOutcome, RouteReadinessOutcome, RouteReadinessSlot,
+    RouteReservationIdentity, ServerResponseSlot, ServerRouteSlot,
     StaticBindingCompilerRegistration, StaticBindingRegistration, StaticBindingRegistrationInput,
 };
 use clinkz_wot_foundation::{WorkBudget, WorkClass};
@@ -39,6 +40,26 @@ impl MockCompiler {
     /// Creates the compiler for one stable execution compatibility identity.
     pub const fn new(compatibility: BindingArtifactCompatibility) -> Self {
         Self { compatibility }
+    }
+
+    fn route_reservation(&self, input: &BindingCompilerInput<'_>) -> RouteReservationIdentity {
+        let mut endpoint = *input.candidate().configuration().as_bytes();
+        for (index, byte) in input
+            .logical_plan()
+            .resolved_target()
+            .as_bytes()
+            .iter()
+            .enumerate()
+        {
+            let slot = index % endpoint.len();
+            endpoint[slot] = endpoint[slot]
+                .wrapping_add(*byte)
+                .rotate_left((index % 8) as u32);
+        }
+        RouteReservationIdentity::new(
+            CollisionDomainId::new(*self.compatibility.as_bytes()),
+            EndpointReservationKey::new(endpoint),
+        )
     }
 }
 
@@ -80,11 +101,17 @@ impl BindingCompilerExtension for MockCompiler {
         }
         let target: Box<str> = input.logical_plan().resolved_target().into();
         let footprint = BindingArtifactFootprint::new(1, target.len() as u64);
-        BindingCompilerStep::Complete(BindingCompilerOutput::new(BindingArtifact::new(
-            self.compatibility,
-            footprint,
-            MockArtifact { target },
-        )))
+        let artifact = if input.role() == BindingArtifactRole::ProducerRoute {
+            BindingArtifact::producer_route(
+                self.compatibility,
+                footprint,
+                self.route_reservation(input),
+                MockArtifact { target },
+            )
+        } else {
+            BindingArtifact::new(self.compatibility, footprint, MockArtifact { target })
+        };
+        BindingCompilerStep::Complete(BindingCompilerOutput::new(artifact))
     }
 
     fn abort(&self, _cursor: Self::Cursor) {}
