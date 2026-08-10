@@ -158,3 +158,16 @@ active_claim_ids = [
 ]
 inactive_claim_ids = []
 disposition = "The exact Planning-owned Producer-route projection and real plan-output-to-PrepareInput handoff are active; WP-400 orchestration, production protocols, workloads, and aggregate architecture completion remain separate evidence."
+
+[[record]]
+source = "docs/evidence/WP-200-property-read-route-reservation.toml"
+verification_command = "tools/check-wp200-property-read-route-reservation.sh"
+active_claim_ids = [
+  "BIND-REG-001",
+  "BIND-ROUTE-001",
+  "FORM-OWNER-001",
+  "PLAN-ARTIFACT-001",
+  "PLAN-SET-001",
+]
+inactive_claim_ids = []
+disposition = "The exact compiler-owned route-reservation metadata projection and real compiler-to-admitted-envelope-to-BindingRouteKey handoff are active; WP-400 orchestration, production protocols, collision-table maturity, workloads, and aggregate architecture completion remain separate evidence."

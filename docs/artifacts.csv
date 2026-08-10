@@ -174,6 +174,7 @@ tools/design-check/tests/wp200_property_read_producer_route_schema.rs,wp-200-pro
 workspace/0049-property-read-producer-route-planning-gap.md,property-read-producer-route-planning-gap-topic,non-normative-workspace-topic,5.0,1,docs/spec/planning.md
 docs/audits/WP-200-property-read-route-reservation-entry.md,wp-200-property-read-route-reservation-entry-review,non-normative-review,5.0,1,docs/spec/planning.md
 docs/audits/WP-200-property-read-route-reservation-review.toml,wp-200-property-read-route-reservation-review-attestation,non-normative-review,5.0,1,docs/spec/planning.md
+docs/evidence/WP-200-property-read-route-reservation.toml,wp-200-property-read-route-reservation-completion-evidence,non-normative,5.0,1,docs/spec/planning.md
 tools/check-wp200-property-read-route-reservation-entry.sh,wp-200-property-read-route-reservation-entry-checker,non-normative-checker,5.0,1,docs/spec/planning.md
 tools/check-wp200-property-read-route-reservation.sh,wp-200-property-read-route-reservation-checker,non-normative-checker,5.0,1,docs/spec/planning.md
 tools/compile-contracts/wp200-property-read-route-reservation/Cargo.toml,wp-200-property-read-route-reservation-contract-manifest,non-normative-compile-fixture,5.0,1,docs/spec/planning.md

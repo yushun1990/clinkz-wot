@@ -11,7 +11,7 @@ use clinkz_wot_foundation::{SlotIndex, WorkBudget};
 
 use crate::{
     BindingCandidate, BindingConfigurationDigest, BindingGeneration, BindingId, CoreError,
-    CoreResult, LogicalInteractionPlan, PlanId, PlanSetGeneration,
+    CoreResult, LogicalInteractionPlan, PlanId, PlanSetGeneration, RouteReservationIdentity,
 };
 #[cfg(feature = "std")]
 use crate::{ErrorContext, ErrorPhase, RetryClass};
@@ -254,6 +254,7 @@ impl fmt::Debug for BindingCompilerInput<'_> {
 pub struct BindingArtifact<A> {
     compatibility: BindingArtifactCompatibility,
     footprint: BindingArtifactFootprint,
+    route_reservation: Option<RouteReservationIdentity>,
     payload: A,
 }
 
@@ -267,6 +268,22 @@ impl<A> BindingArtifact<A> {
         Self {
             compatibility,
             footprint,
+            route_reservation: None,
+            payload,
+        }
+    }
+
+    /// Creates a measured Producer-route artifact with its canonical endpoint identity.
+    pub const fn producer_route(
+        compatibility: BindingArtifactCompatibility,
+        footprint: BindingArtifactFootprint,
+        reservation: RouteReservationIdentity,
+        payload: A,
+    ) -> Self {
+        Self {
+            compatibility,
+            footprint,
+            route_reservation: Some(reservation),
             payload,
         }
     }
@@ -279,6 +296,11 @@ impl<A> BindingArtifact<A> {
     /// Returns the measured retained footprint.
     pub const fn footprint(&self) -> BindingArtifactFootprint {
         self.footprint
+    }
+
+    /// Returns the canonical endpoint identity carried by a Producer-route artifact.
+    pub const fn route_reservation(&self) -> Option<RouteReservationIdentity> {
+        self.route_reservation
     }
 
     /// Borrows the typed payload.
@@ -294,6 +316,23 @@ impl<A> BindingArtifact<A> {
     /// Consumes the wrapper and returns every captured part.
     pub fn into_parts(self) -> (BindingArtifactCompatibility, BindingArtifactFootprint, A) {
         (self.compatibility, self.footprint, self.payload)
+    }
+
+    /// Consumes the wrapper and returns every part, including route metadata.
+    pub fn into_route_parts(
+        self,
+    ) -> (
+        BindingArtifactCompatibility,
+        BindingArtifactFootprint,
+        Option<RouteReservationIdentity>,
+        A,
+    ) {
+        (
+            self.compatibility,
+            self.footprint,
+            self.route_reservation,
+            self.payload,
+        )
     }
 }
 
@@ -396,6 +435,10 @@ pub enum BindingArtifactRejectionReason {
     CompatibilityMismatch,
     /// Measured retained items or bytes exceed the admitted bound.
     FootprintExceeded,
+    /// A Producer-route artifact omitted its canonical endpoint identity.
+    MissingRouteReservation,
+    /// A non-Producer-route artifact supplied Producer-only endpoint metadata.
+    UnexpectedRouteReservation,
 }
 
 /// Artifact-admission failure that returns the original typed artifact.
@@ -449,6 +492,21 @@ impl<A> BindingArtifactEnvelope<A> {
                 artifact,
             });
         }
+        match (identity.role(), artifact.route_reservation()) {
+            (BindingArtifactRole::ProducerRoute, None) => {
+                return Err(BindingArtifactRejection {
+                    reason: BindingArtifactRejectionReason::MissingRouteReservation,
+                    artifact,
+                });
+            }
+            (BindingArtifactRole::ProducerRoute, Some(_)) | (_, None) => {}
+            (_, Some(_)) => {
+                return Err(BindingArtifactRejection {
+                    reason: BindingArtifactRejectionReason::UnexpectedRouteReservation,
+                    artifact,
+                });
+            }
+        }
         Ok(Self {
             identity,
             admitted,
@@ -469,6 +527,11 @@ impl<A> BindingArtifactEnvelope<A> {
     /// Borrows the admitted typed artifact.
     pub const fn artifact(&self) -> &BindingArtifact<A> {
         &self.artifact
+    }
+
+    /// Returns the admitted canonical endpoint identity for a Producer route.
+    pub const fn route_reservation(&self) -> Option<RouteReservationIdentity> {
+        self.artifact.route_reservation()
     }
 
     /// Consumes the envelope and returns the typed artifact.
@@ -620,12 +683,22 @@ where
                 BindingCompilerStep::Pending(HostBindingCompilerCursor(Box::new(cursor)))
             }
             BindingCompilerStep::Complete(output) => {
-                let (compatibility, footprint, payload) = output.into_artifact().into_parts();
-                BindingCompilerStep::Complete(BindingCompilerOutput::new(BindingArtifact::new(
-                    compatibility,
-                    footprint,
-                    HostBindingArtifact(Box::new(payload)),
-                )))
+                let (compatibility, footprint, reservation, payload) =
+                    output.into_artifact().into_route_parts();
+                let artifact = match reservation {
+                    Some(reservation) => BindingArtifact::producer_route(
+                        compatibility,
+                        footprint,
+                        reservation,
+                        HostBindingArtifact(Box::new(payload)),
+                    ),
+                    None => BindingArtifact::new(
+                        compatibility,
+                        footprint,
+                        HostBindingArtifact(Box::new(payload)),
+                    ),
+                };
+                BindingCompilerStep::Complete(BindingCompilerOutput::new(artifact))
             }
             BindingCompilerStep::Failed(failure) => {
                 let (error, cursor) = failure.into_parts();
@@ -750,6 +823,7 @@ impl BindingArtifact<HostBindingArtifact> {
         let Self {
             compatibility,
             footprint,
+            route_reservation,
             payload,
         } = self;
         match payload.0.downcast::<T>() {
@@ -757,6 +831,7 @@ impl BindingArtifact<HostBindingArtifact> {
             Err(payload) => Err(Self {
                 compatibility,
                 footprint,
+                route_reservation,
                 payload: HostBindingArtifact(payload),
             }),
         }
@@ -793,6 +868,29 @@ mod tests {
             0,
         );
         (plan, candidate)
+    }
+
+    fn route_reservation() -> RouteReservationIdentity {
+        RouteReservationIdentity::new(
+            crate::CollisionDomainId::new([21; 16]),
+            crate::EndpointReservationKey::new([22; 32]),
+        )
+    }
+
+    fn artifact_identity(
+        compatibility: BindingArtifactCompatibility,
+        role: BindingArtifactRole,
+    ) -> BindingArtifactIdentity {
+        let (plan, candidate) = plan_and_candidate(compatibility);
+        BindingArtifactIdentity::new(
+            PlanSetGeneration::INITIAL,
+            plan.plan_id(),
+            candidate.binding_id(),
+            candidate.binding_generation(),
+            candidate.configuration(),
+            compatibility,
+            role,
+        )
     }
 
     #[test]
@@ -837,6 +935,50 @@ mod tests {
         assert_eq!(rejected.into_artifact().payload(), &17);
     }
 
+    #[test]
+    fn envelope_enforces_role_scoped_route_reservation_metadata() {
+        let compatibility = BindingArtifactCompatibility::new([4; 16]);
+        let footprint = BindingArtifactFootprint::new(1, 2);
+        let missing = BindingArtifactEnvelope::try_new(
+            artifact_identity(compatibility, BindingArtifactRole::ProducerRoute),
+            footprint,
+            BindingArtifact::new(compatibility, footprint, 17_u8),
+        )
+        .expect_err("Producer route without reservation must fail");
+        assert_eq!(
+            missing.reason(),
+            BindingArtifactRejectionReason::MissingRouteReservation
+        );
+        assert_eq!(missing.into_artifact().route_reservation(), None);
+
+        let unexpected = BindingArtifactEnvelope::try_new(
+            artifact_identity(compatibility, BindingArtifactRole::ConsumerCall),
+            footprint,
+            BindingArtifact::producer_route(compatibility, footprint, route_reservation(), 17_u8),
+        )
+        .expect_err("Consumer artifact with route reservation must fail");
+        assert_eq!(
+            unexpected.reason(),
+            BindingArtifactRejectionReason::UnexpectedRouteReservation
+        );
+        assert_eq!(
+            unexpected.into_artifact().route_reservation(),
+            Some(route_reservation())
+        );
+
+        let admitted = BindingArtifactEnvelope::try_new(
+            artifact_identity(compatibility, BindingArtifactRole::ProducerRoute),
+            footprint,
+            BindingArtifact::producer_route(compatibility, footprint, route_reservation(), 17_u8),
+        )
+        .expect("complete Producer-route metadata");
+        assert_eq!(admitted.route_reservation(), Some(route_reservation()));
+        assert_eq!(
+            admitted.into_artifact().into_route_parts(),
+            (compatibility, footprint, Some(route_reservation()), 17_u8)
+        );
+    }
+
     #[cfg(feature = "std")]
     #[derive(Clone, Copy)]
     struct OneStepCompiler {
@@ -867,18 +1009,25 @@ mod tests {
 
         fn step(
             &self,
-            _input: &BindingCompilerInput<'_>,
+            input: &BindingCompilerInput<'_>,
             cursor: Self::Cursor,
             budget: &mut WorkBudget,
         ) -> BindingCompilerStep<Self::Cursor, Self::Artifact> {
             if budget.consume(WorkClass::BindingPolls, 1).is_err() {
                 return BindingCompilerStep::Pending(cursor);
             }
-            BindingCompilerStep::Complete(BindingCompilerOutput::new(BindingArtifact::new(
-                self.compatibility,
-                BindingArtifactFootprint::new(1, 1),
-                cursor,
-            )))
+            let footprint = BindingArtifactFootprint::new(1, 1);
+            let artifact = if input.role() == BindingArtifactRole::ProducerRoute {
+                BindingArtifact::producer_route(
+                    self.compatibility,
+                    footprint,
+                    route_reservation(),
+                    cursor,
+                )
+            } else {
+                BindingArtifact::new(self.compatibility, footprint, cursor)
+            };
+            BindingCompilerStep::Complete(BindingCompilerOutput::new(artifact))
         }
 
         fn abort(&self, _cursor: Self::Cursor) {}
@@ -963,6 +1112,32 @@ mod tests {
             artifact
                 .try_into_payload::<u16>(second_compatibility)
                 .expect("matching payload"),
+            7
+        );
+    }
+
+    #[cfg(feature = "std")]
+    #[test]
+    fn host_erasure_preserves_route_reservation_metadata() {
+        let compatibility = BindingArtifactCompatibility::new([6; 16]);
+        let compiler = HostBindingCompilerRegistration::new(OneStepCompiler { compatibility });
+        let (plan, candidate) = plan_and_candidate(compatibility);
+        let input = BindingCompilerInput::new(&plan, candidate, BindingArtifactRole::ProducerRoute);
+        let cursor = compiler.start(&input).expect("Producer-route cursor");
+        let mut budget = WorkBudget::new().with_remaining(WorkClass::BindingPolls, 1);
+        let artifact = match compiler.step(&input, cursor, &mut budget) {
+            BindingCompilerStep::Complete(output) => output.into_artifact(),
+            _ => panic!("Producer-route host compiler did not complete"),
+        };
+        assert_eq!(artifact.route_reservation(), Some(route_reservation()));
+        let artifact = artifact
+            .try_into_payload::<u16>(compatibility)
+            .expect_err("payload mismatch must preserve complete artifact");
+        assert_eq!(artifact.route_reservation(), Some(route_reservation()));
+        let (_, _, reservation, payload) = artifact.into_route_parts();
+        assert_eq!(reservation, Some(route_reservation()));
+        assert_eq!(
+            *payload.0.downcast::<u8>().expect("matching erased payload"),
             7
         );
     }

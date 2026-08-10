@@ -20,11 +20,12 @@ for package-local completion. The package order remains
 `WP-100 -> WP-200 -> WP-300 -> WP-400`. The executable path contains the
 completed WP-200-owned Producer-route correction after WP-300 and requires one
 distinct compiler-owned route-reservation correction before WP-400 because
-successor reconstruction exposed those two concrete handoff gaps. ADR-0013
-permits only exact tranches registered in the manifest to cross incomplete
-package boundaries after their own admission reviews. A pending correction is
-not part of the executable DAG until its reviewed registration is integrated,
-and no manifest record is implementation admission.
+successor reconstruction exposed those two concrete handoff gaps. That second
+correction is now independently reviewed, exactly admitted, and locally
+complete; verified default integration remains its successor-release boundary.
+ADR-0013 permits only exact tranches registered in the manifest to cross
+incomplete package boundaries after their own admission reviews. No manifest
+record alone is implementation admission.
 
 Evidence claims advance in this order:
 
@@ -86,10 +87,10 @@ WP-100-PROPERTY-READ-HANDLER-SLICE
     -> PROPERTY-READ-ARCHITECTURE
 ```
 
-This diagram reflects the currently integrated manifest. Before WP-400 may be
-released, the reviewed route-reservation correction must be inserted between
-the Producer-route projection and WP-400; its draft candidate is not treated
-as integrated authority by this document.
+This diagram reflects the current manifest. The reviewed route-reservation
+correction is locally complete between the Producer-route projection and
+WP-400, but its implementation/completion head is not treated as successor-
+release authority until verified default integration.
 
 The gate blocks:
 
@@ -316,17 +317,18 @@ and must close before final integration and release.
 Every slice is Category B or C according to its actual candidate impact and
 requires its own exact paths, contract fixtures, impact analysis, independent
 review, and ADR-0013 admission. The handler, original WP-200 plan, WP-300
-binding, and Producer-route projection slices are `complete`/`approved`; the
-route-reservation projection is `pending`/`review-pending`, and the WP-400
-Servient slice remains `planned`/`blocked`. The completed `ProducerRoute`
-plan-output-to-`PrepareInput` evidence alone does not release that candidate:
-the canonical route reservation must first arrive through an independently
-reviewed, implemented, and default-branch-validated production metadata path.
-The later WP-400 candidate must then close the complete first-entry table above
-in its existing independent review; it does not gain a separate preliminary
-review cycle. Each status record grants no source-edit authority. Approval and
-in-progress truth may share one approved, recoverable pre-source checkpoint
-under D9.
+binding, Producer-route projection, and route-reservation projection slices
+are `complete`/`approved`; the WP-400 Servient slice remains
+`planned`/`blocked`. The route-reservation completion claim binds exact
+implementation `b47899150aa957b1dea8d844aa49852e3e6aa356` and proves the
+canonical identity arrives through the compiler-owned production metadata
+path. Only its verified default integration releases WP-400 candidate/review
+preparation. That later candidate must close the complete first-entry table
+above in its existing independent review; it does not gain a separate
+preliminary review cycle. Each status record grants no successor source-edit
+authority; specifically, each status record grants no source-edit authority.
+Approval and in-progress truth may share one approved, recoverable pre-source
+checkpoint under D9.
 
 For `WP-100-PROPERTY-READ-HANDLER-SLICE`, the candidate and completion record
 must claim only `ReadPropertyHandler` and its composition with the four reused

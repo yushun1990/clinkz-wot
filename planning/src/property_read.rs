@@ -560,6 +560,7 @@ fn finish_property_read_build<C, A>(
     artifact: BindingArtifact<A>,
     role: BindingArtifactRole,
 ) -> PlanBuildStep<PropertyReadBuildCursor<C, A>, A> {
+    let route_reservation = artifact.route_reservation();
     let identity = BindingArtifactIdentity::new(
         plan_set_generation,
         plan.plan_id(),
@@ -585,6 +586,7 @@ fn finish_property_read_build<C, A>(
             ));
         }
     };
+    debug_assert_eq!(envelope.route_reservation(), route_reservation);
     PlanBuildStep::Complete(PlanBuildOutput::new(
         vec![plan],
         vec![envelope],
