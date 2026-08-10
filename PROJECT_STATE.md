@@ -202,12 +202,21 @@ The active design revision is v5.0 bounded-core authority.
   spelling cannot coexist with the 28 valid zero-argument call sites, and its
   mandatory Foundation/Planning manifest edges make two unregistered
   lockfiles stale under `--locked`.
-- The exact non-source WP-400 corrective candidate is the unique child of
-  `2d63e151ac6f89ef294c089d5f48917e8e324773`; its object id is resolved after
-  the commit. It preserves the zero-argument builder, adds the explicit frozen
-  `resource_limits` setter, registers the root and external-contract lockfiles
-  as support metadata, and adds both review mutation classes. No WP-400 source
-  is admitted.
+- Exact first non-source WP-400 corrective candidate
+  `4456632367069fb5cdd20dd51aeade1035e3768b` is the 11-path unique child of
+  `2d63e151ac6f89ef294c089d5f48917e8e324773`. It preserves the zero-argument
+  builder, adds the explicit frozen `resource_limits` setter, registers the
+  root and external-contract lockfiles as support metadata, and adds both
+  original review mutation classes. Independent reconstruction nevertheless
+  rejected it before source simulation because its host test calls
+  nonexistent `ResourceLimits::default()`.
+- The second non-source WP-400 correction is the exact nine-path unique child
+  of `4456632367069fb5cdd20dd51aeade1035e3768b`; its object id is resolved
+  after commit. It uses the existing
+  `GatewayDefaultV1::LIMITS.clone()` policy root, registers the profile and
+  `StaticResourceProfile` as reused APIs, and adds that precise rejection class
+  without widening product or support implementation scope.
+  No WP-400 source is admitted.
 - Pull request #20 integrated technical decision checkpoint
   `6271c2861771a0fbc18772bd853bc451ba0fd614` and continuation checkpoint
   `72cf711adef3712ebf502b2fd01273e6f2d23376` through exact merge
@@ -242,17 +251,21 @@ Projection mode: conditional remote handoff
 Original exact non-source `WP-400-PROPERTY-READ-SERVIENT-SLICE` candidate
 `2d63e151ac6f89ef294c089d5f48917e8e324773` passed pull-request #22 validation
 run `31353096175`, but independent next-state reconstruction rejected its
-host-constructor and manifest/lockfile topology. The corrective candidate is
-registered as that immutable commit's exact 11-path single child. It preserves
-all nine D46 first-entry rows, seven future product paths, source absence, and
-the active-v5 `StepStatus<()>` boundary while correcting only API compatibility
-and transition-path closure. WP-400 source remains blocked until the correction
-passes independent review and a later pre-source admission checkpoint.
+host-constructor and manifest/lockfile topology. Exact first correction
+`4456632367069fb5cdd20dd51aeade1035e3768b` closed those defects but retained
+a non-constructible `ResourceLimits::default()` host-test root. A minimal
+external no-std proof fails with `E0599`; the named Gateway profile replacement
+compiles against the same Foundation revision. The registered second
+correction is the first correction's exact nine-path child. It preserves all
+nine D46 first-entry rows, seven future product paths, three support paths,
+source absence, and the active-v5 `StepStatus<()>` boundary. WP-400 source
+remains blocked until the second correction passes independent review and a
+later pre-source admission checkpoint.
 
 ### Before verified integration
 
-Validate the correction's exact single-child/11-path topology, original
-candidate ancestry, absent-source boundary, nine D46 provenance rows, ten
+Validate the second correction's exact single-child/nine-path topology, both
+earlier candidate topologies, absent-source boundary, nine D46 provenance rows, eleven
 registered mutation classes, aggregate design suite, locked workspace,
 supported feature matrix, and diff hygiene. Push it to existing draft pull
 request #22 and keep the pull request draft while independent review is absent.
@@ -263,8 +276,8 @@ support source, and the two affected lockfiles; no source is admitted.
 
 Fetch `master` and verify the pull request's actual base, merge ancestry, exact
 correction/review content, and passing merge-revision `validation` before
-releasing dependent work. Independent review of the immutable correction must
-reconstruct both candidates, simulate only the registered implementation and
+releasing dependent work. Independent review of the immutable second correction must
+reconstruct all three candidates, simulate only the registered implementation and
 support paths, run both runtime profiles plus the async/no-std compile
 projection, trace all nine first-entry rows, and reject every registered
 mutation. Only a passed review followed by a separate exact pre-source
@@ -950,13 +963,23 @@ and the external WP-400 contract lockfile, neither of which the original
 implementation topology registered. The isolated source mutation remains only
 review evidence and is not present in this branch.
 
-The correction keeps `ServientBuilder::new()`, freezes additive
+First correction `4456632367069fb5cdd20dd51aeade1035e3768b` keeps
+`ServientBuilder::new()`, freezes additive
 `ServientBuilder::resource_limits`, registers both lockfiles beside the
 existing WP-300 mock-support source, and adds two executable negative mutation
-classes. It changes no product or support source. Independent review must bind
-the correction's immutable object id before any admission transition.
+classes. It changes no product or support source. Pull-request #22 validation
+run `31354359944` passed on that exact head.
 
-The exact correction tree passes the 11-test WP-400 schema, all design-check
+Independent reconstruction then proved that the first correction's host test
+cannot compile because `ResourceLimits` has no `Default` implementation. The
+original expression fails in a minimal external no-std crate with `E0599`,
+while `GatewayDefaultV1::LIMITS.clone()` passes in that same crate. Foundation
+source is outside the registered WP-400 implementation topology, so inventing
+a new default there is not a legal repair. The second correction changes only
+the registered host test and evidence/checker paths, adds the eleventh
+mutation class, and must bind its own immutable object id before admission.
+
+The exact first-correction tree passes the 11-test WP-400 schema, all design-check
 test suites, API ownership with 743 frozen items, design requirements with 62
 active owners and 59 inactive dispositions, 18-decision architecture
 registration, 195-field/3-profile resource validation, v5 authority-reset
@@ -1378,14 +1401,14 @@ source. Its current tree passes:
 
 ## Next Safe Actions
 
-1. Commit the exact 11-path non-source WP-400 corrective candidate as the
-   unique child of original candidate
-   `2d63e151ac6f89ef294c089d5f48917e8e324773`, validate both immutable
+1. Commit the exact nine-path second non-source WP-400 correction as the unique
+   child of first correction
+   `4456632367069fb5cdd20dd51aeade1035e3768b`, validate all three immutable
    topologies and the expected absent-source boundary, and update draft pull
    request #22.
-2. Independently review that correction by reconstructing both candidates,
+2. Independently review the second correction by reconstructing all three candidates,
    exercising both runtime cells and the async/no-std compile projection, all
-   nine D46 provenance rows, and all ten registered mutation classes. Only an
+   nine D46 provenance rows, and all eleven registered mutation classes. Only an
    approved review may release the exact pre-source admission checkpoint.
 3. Keep WP-400 source absent until that checkpoint is committed and its
    topology validates. Then implement only the correction's registered paths.

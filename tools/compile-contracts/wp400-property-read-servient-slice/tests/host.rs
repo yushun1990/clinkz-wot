@@ -6,7 +6,7 @@ use clinkz_wot_core::{
     CoreResult, HandlerContext, HandlerFootprint, InteractionInput, InteractionOutput,
     ReadPropertyHandler, StepStatus,
 };
-use clinkz_wot_foundation::{ResourceLimits, WorkBudget, WorkClass};
+use clinkz_wot_foundation::{GatewayDefaultV1, StaticResourceProfile, WorkBudget, WorkClass};
 use clinkz_wot_td::{
     affordance::{InteractionHelper, PropertyAffordance},
     data_schema::DataSchema,
@@ -71,7 +71,7 @@ fn drive_until_idle(servient: &clinkz_wot_servient::Servient, cx: &mut Context<'
 #[test]
 fn host_runner_enters_servient_for_one_complete_property_read() {
     let (binding, probe) = host_property_read_fixture();
-    let limits = ResourceLimits::default();
+    let limits = GatewayDefaultV1::LIMITS.clone();
     let servient = build_host_property_read(limits, binding).expect("complete host Servient");
     let calls = Arc::new(AtomicU32::new(0));
     let exposed = begin_host_property_read(

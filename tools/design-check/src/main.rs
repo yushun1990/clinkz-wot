@@ -715,8 +715,9 @@ const PROPERTY_READ_SERVIENT_ADMISSION_REVIEW: &str =
 const PROPERTY_READ_SERVIENT_ORIGINAL_BASE_REF: &str = "fcce9e69036459506a163ac73ef5542f92e5eb7f";
 const PROPERTY_READ_SERVIENT_ORIGINAL_CANDIDATE_REF: &str =
     "2d63e151ac6f89ef294c089d5f48917e8e324773";
-const PROPERTY_READ_SERVIENT_CANDIDATE_BASE_REF: &str =
-    PROPERTY_READ_SERVIENT_ORIGINAL_CANDIDATE_REF;
+const PROPERTY_READ_SERVIENT_FIRST_CORRECTION_REF: &str =
+    "4456632367069fb5cdd20dd51aeade1035e3768b";
+const PROPERTY_READ_SERVIENT_CANDIDATE_BASE_REF: &str = PROPERTY_READ_SERVIENT_FIRST_CORRECTION_REF;
 const PROPERTY_READ_SERVIENT_CANDIDATE_REF_MODE: &str = "resolved-by-review-attestation";
 const PROPERTY_READ_SERVIENT_API_ITEMS: &[&str] = &[
     "CompiledPlanSetState",
@@ -740,6 +741,7 @@ const PROPERTY_READ_SERVIENT_REUSED_API_ITEMS: &[&str] = &[
     "BindingArtifactRef",
     "BindingRouteKey",
     "Deadline",
+    "GatewayDefaultV1",
     "HandlerContext",
     "HostBindingRegistration",
     "InteractionInput",
@@ -755,6 +757,7 @@ const PROPERTY_READ_SERVIENT_REUSED_API_ITEMS: &[&str] = &[
     "ServingActivationAuthority",
     "StaticBindingRegistration",
     "StaticHandlerRegistration",
+    "StaticResourceProfile",
     "StepStatus",
     "WorkBudget",
 ];
@@ -815,7 +818,7 @@ const PROPERTY_READ_SERVIENT_ORIGINAL_CANDIDATE_PATHS: &[&str] = &[
     "tools/design-check/src/main.rs",
     "tools/design-check/tests/wp400_property_read_servient_schema.rs",
 ];
-const PROPERTY_READ_SERVIENT_CANDIDATE_PATHS: &[&str] = &[
+const PROPERTY_READ_SERVIENT_FIRST_CORRECTION_PATHS: &[&str] = &[
     "PLAN.md",
     "PROJECT_STATE.md",
     "docs/api-ownership.csv",
@@ -825,6 +828,17 @@ const PROPERTY_READ_SERVIENT_CANDIDATE_PATHS: &[&str] = &[
     "tools/check-wp400-property-read-servient-slice-entry.sh",
     "tools/check-wp400-property-read-servient-slice.sh",
     "tools/compile-contracts/wp400-property-read-servient-slice/src/lib.rs",
+    "tools/design-check/src/main.rs",
+    "tools/design-check/tests/wp400_property_read_servient_schema.rs",
+];
+const PROPERTY_READ_SERVIENT_CANDIDATE_PATHS: &[&str] = &[
+    "PLAN.md",
+    "PROJECT_STATE.md",
+    "docs/audits/WP-400-property-read-servient-slice-entry.md",
+    "docs/spec/v5-artifact-carry-forward.toml",
+    "docs/work-packages/property-read-architecture-gate.toml",
+    "tools/check-wp400-property-read-servient-slice-entry.sh",
+    "tools/compile-contracts/wp400-property-read-servient-slice/tests/host.rs",
     "tools/design-check/src/main.rs",
     "tools/design-check/tests/wp400_property_read_servient_schema.rs",
 ];
@@ -6179,6 +6193,15 @@ fn check_property_read_servient_slice_tranche(
         PROPERTY_READ_SERVIENT_ORIGINAL_BASE_REF,
         PROPERTY_READ_SERVIENT_ORIGINAL_CANDIDATE_REF,
         &original_candidate_paths,
+    )?;
+
+    let first_correction_paths = owned_set(PROPERTY_READ_SERVIENT_FIRST_CORRECTION_PATHS);
+    check_candidate_commit(
+        id,
+        root,
+        PROPERTY_READ_SERVIENT_ORIGINAL_CANDIDATE_REF,
+        PROPERTY_READ_SERVIENT_FIRST_CORRECTION_REF,
+        &first_correction_paths,
     )?;
 
     let candidate_base_ref = string_field(tranche, "candidate_base_ref", id)?;

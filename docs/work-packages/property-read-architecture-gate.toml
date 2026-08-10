@@ -950,6 +950,7 @@ reused_api_items = [
     "BindingArtifactRef",
     "BindingRouteKey",
     "Deadline",
+    "GatewayDefaultV1",
     "HandlerContext",
     "HostBindingRegistration",
     "InteractionInput",
@@ -965,6 +966,7 @@ reused_api_items = [
     "ServingActivationAuthority",
     "StaticBindingRegistration",
     "StaticHandlerRegistration",
+    "StaticResourceProfile",
     "StepStatus",
     "WorkBudget",
 ]
@@ -1008,18 +1010,16 @@ contract_artifacts = [
     "tools/design-check/src/main.rs",
     "tools/design-check/tests/wp400_property_read_servient_schema.rs",
 ]
-candidate_base_ref = "2d63e151ac6f89ef294c089d5f48917e8e324773"
+candidate_base_ref = "4456632367069fb5cdd20dd51aeade1035e3768b"
 candidate_ref = "resolved-by-review-attestation"
 candidate_paths = [
     "PLAN.md",
     "PROJECT_STATE.md",
-    "docs/api-ownership.csv",
     "docs/audits/WP-400-property-read-servient-slice-entry.md",
     "docs/spec/v5-artifact-carry-forward.toml",
     "docs/work-packages/property-read-architecture-gate.toml",
     "tools/check-wp400-property-read-servient-slice-entry.sh",
-    "tools/check-wp400-property-read-servient-slice.sh",
-    "tools/compile-contracts/wp400-property-read-servient-slice/src/lib.rs",
+    "tools/compile-contracts/wp400-property-read-servient-slice/tests/host.rs",
     "tools/design-check/src/main.rs",
     "tools/design-check/tests/wp400_property_read_servient_schema.rs",
 ]

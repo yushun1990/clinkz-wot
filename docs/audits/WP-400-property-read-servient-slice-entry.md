@@ -188,7 +188,10 @@ It must also reject:
 
 9. replacement of the existing zero-argument host builder constructor by the
    proposed one-argument spelling; and
-10. a Servient dependency transition that omits either affected lockfile.
+10. a Servient dependency transition that omits either affected lockfile; and
+11. a host resource-policy root that assumes a nonexistent
+    `ResourceLimits::default()` implementation instead of selecting an
+    existing named Foundation profile.
 
 Review must additionally reject premature publication, accept without the unique
 route lease/permit, direct runner-created handler context or response
@@ -232,7 +235,8 @@ candidate before attestation:
   topology. An isolated `cargo test --locked --no-run` stopped on that exact
   lockfile drift before source compilation.
 
-The corrective candidate is the exact 11-path single child of
+The first corrective candidate is exact commit
+`4456632367069fb5cdd20dd51aeade1035e3768b`, the 11-path single child of
 `2d63e151ac6f89ef294c089d5f48917e8e324773`:
 
 - `PLAN.md`;
@@ -251,13 +255,42 @@ It preserves all nine D46 provenance rows, all seven product implementation
 paths, and source absence. It changes the host fixture to zero-argument
 construction followed by the frozen `resource_limits` method, registers the
 two lockfiles as implementation support metadata, and adds both rejection
-classes to executable schema evidence. Its immutable object id is resolved
-after the correction commit; the gate uses
-`candidate_ref = "resolved-by-review-attestation"`.
+classes to executable schema evidence. Pull-request #22 exact-head validation
+run `31354359944` passed for that immutable commit.
 
-Independent review must bind that corrective commit, reconstruct both
+Independent reconstruction rejected that first correction before source
+simulation. The std runtime cell calls `ResourceLimits::default()`, but the
+frozen Foundation type has no `Default` implementation. A minimal external
+no-std compile proof fails with `E0599`; replacing the expression with
+`GatewayDefaultV1::LIMITS.clone()` compiles against the same Foundation
+revision. The registered implementation paths cannot add the missing trait
+implementation to Foundation, and doing so would silently invent a default
+policy beyond this tranche's authority.
+
+The second corrective candidate is the exact nine-path single child of
+`4456632367069fb5cdd20dd51aeade1035e3768b`:
+
+- `PLAN.md`;
+- `PROJECT_STATE.md`;
+- this audit;
+- `docs/spec/v5-artifact-carry-forward.toml`;
+- `docs/work-packages/property-read-architecture-gate.toml`;
+- `tools/check-wp400-property-read-servient-slice-entry.sh`;
+- `tools/compile-contracts/wp400-property-read-servient-slice/tests/host.rs`;
+- `tools/design-check/src/main.rs`; and
+- `tools/design-check/tests/wp400_property_read_servient_schema.rs`.
+
+It changes only the host test's legal resource-policy root to the existing
+Gateway profile, registers `GatewayDefaultV1` and `StaticResourceProfile` as
+reused public inputs, and adds that precise rejection class to the entry/schema
+checks. It preserves the first correction's compatible builder API, two
+lockfile paths, all nine D46 rows, seven product paths, three support paths,
+and source absence. Its immutable object id is resolved after the commit; the
+gate uses `candidate_ref = "resolved-by-review-attestation"`.
+
+Independent review must bind the second correction, reconstruct all three
 candidates, execute all eleven registered prechecks, exercise the three
-positive cells and every negative mutation in an isolated checkout, and record
-a separate attestation commit. Only then may a distinct admission checkpoint
-switch this tranche to `in-progress`/`approved` and bind the exact
+positive cells and all eleven negative mutations in an isolated checkout, and
+record a separate attestation commit. Only then may a distinct admission
+checkpoint switch this tranche to `in-progress`/`approved` and bind the exact
 default-integrated admission base.

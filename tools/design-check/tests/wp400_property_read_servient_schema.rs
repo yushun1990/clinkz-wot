@@ -41,6 +41,7 @@ struct FirstEntryClosure {
     binding_side_effect_started: bool,
     host_zero_argument_constructor_preserved: bool,
     manifest_lockfile_transition_complete: bool,
+    host_resource_policy_root_constructible: bool,
     generations: GenerationSet,
 }
 
@@ -65,6 +66,7 @@ impl FirstEntryClosure {
             binding_side_effect_started: false,
             host_zero_argument_constructor_preserved: true,
             manifest_lockfile_transition_complete: true,
+            host_resource_policy_root_constructible: true,
             generations: GenerationSet {
                 binding: 3,
                 produced: 5,
@@ -88,6 +90,7 @@ enum Rejection {
     ProfileDivergence,
     HostConstructorCompatibility,
     ManifestLockfileTopology,
+    HostResourcePolicyRoot,
 }
 
 fn validate(
@@ -139,6 +142,9 @@ fn validate(
     if !closure.manifest_lockfile_transition_complete {
         return Err(Rejection::ManifestLockfileTopology);
     }
+    if closure.profile == Profile::Host && !closure.host_resource_policy_root_constructible {
+        return Err(Rejection::HostResourcePolicyRoot);
+    }
     if let Some(counterpart) = counterpart {
         let same_semantics = closure.logical_route == counterpart.logical_route
             && closure.artifact_metadata == counterpart.artifact_metadata
@@ -153,6 +159,8 @@ fn validate(
             && closure.route_reservation == counterpart.route_reservation
             && closure.registration_complete == counterpart.registration_complete
             && closure.capacities_reserved == counterpart.capacities_reserved
+            && closure.host_resource_policy_root_constructible
+                == counterpart.host_resource_policy_root_constructible
             && closure.generations == counterpart.generations;
         if closure.profile == counterpart.profile || !same_semantics {
             return Err(Rejection::ProfileDivergence);
@@ -253,5 +261,15 @@ fn manifest_lockfile_transition_omission_is_rejected() {
     assert_eq!(
         validate(closure, None),
         Err(Rejection::ManifestLockfileTopology)
+    );
+}
+
+#[test]
+fn nonexistent_foundation_default_assumption_is_rejected() {
+    let mut closure = FirstEntryClosure::valid(Profile::Host);
+    closure.host_resource_policy_root_constructible = false;
+    assert_eq!(
+        validate(closure, None),
+        Err(Rejection::HostResourcePolicyRoot)
     );
 }

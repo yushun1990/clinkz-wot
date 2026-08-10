@@ -117,11 +117,15 @@ The repository evidence establishes the following starting point:
   `2d63e151ac6f89ef294c089d5f48917e8e324773` also passed exact-head remote
   validation, but independent next-state reconstruction rejected its
   one-argument host-builder spelling and incomplete Manifest/lockfile path
-  closure. Its exact non-source corrective child preserves the zero-argument
+  closure. Exact first correction
+  `4456632367069fb5cdd20dd51aeade1035e3768b` preserves the zero-argument
   constructor, adds a frozen `resource_limits` method, and registers both
-  affected lockfiles; the tranche remains `pending`/`review-pending`. D46 makes
-  the one-time complete first-entry provenance review part of that corrective
-  candidate, not a separate gate. Broad
+  affected lockfiles, but independent reconstruction rejected its nonexistent
+  `ResourceLimits::default()` test input. Its second non-source correction uses
+  the existing named Gateway profile and adds that rejection class; the tranche
+  remains `pending`/`review-pending`. D46 makes the one-time complete
+  first-entry provenance review part of the second correction, not a separate
+  gate. Broad
   WP-400, WP-500, and WP-600 remain downstream of broad WP-300, and WP-700
   joins those branches;
 - default workspace tests, the 21-cell valid feature matrix, and the aggregate
@@ -232,12 +236,16 @@ production carrier. D45 therefore inserts the exact owner-scoped
 default-validated. The original WP-400 candidate froze seven product paths,
 one mock-support source path, both runtime cells, the async/no-std compile
 projection, and the active-v5 `StepStatus<()>` progress boundary. Independent
-reconstruction rejected only its incompatible one-argument host builder and
-omitted lockfile-transition paths. The corrective candidate preserves the
-seven product paths, expands support topology to that mock path plus the root
-and external-contract lockfiles, and adds the compatible explicit resource
-setter. D46 requires the correction to close the complete first-entry
-provenance table in independent review before source admission. Broad
+reconstruction rejected its incompatible one-argument host builder and omitted
+lockfile-transition paths. First correction
+`4456632367069fb5cdd20dd51aeade1035e3768b` preserves the seven product paths,
+expands support topology to that mock path plus the root and external-contract
+lockfiles, and adds the compatible explicit resource setter. Reconstruction
+then rejected its host test's nonexistent `ResourceLimits::default()` input;
+the second correction selects `GatewayDefaultV1::LIMITS` and freezes the
+corresponding negative evidence without widening source scope. D46 requires
+the second correction to close the complete first-entry provenance table in
+independent review before source admission. Broad
 `WP-100-HANDLER-ENTRY`, `WP-300-BROAD-ENTRY`, and `WP-400-BROAD-ENTRY` remain
 blocked until the gate passes. The gate exception does not claim final
 `InteractionInput` storage, `AcceptHint` resource admission,
@@ -556,9 +564,11 @@ complete and released only the distinct route-reservation correction. That
 correction is integrated and default-validated, releasing narrow WP-400
 candidate/review preparation. The original WP-400 candidate passed remote
 validation but failed independent next-state reconstruction on constructor
-compatibility and lockfile topology; its non-source corrective child now owns
+compatibility and lockfile topology. Its first correction fixed those defects
+but retained a non-constructible `ResourceLimits::default()` fixture root; the
+second non-source correction uses the existing Gateway profile and now owns
 D46's one-time first-entry closure. WP-400 source remains blocked pending that
-correction's independent review and admission.
+second correction's independent review and admission.
 The broad entry requirements below remain open.
 
 Before broad WP-300 admission, the external Zenoh authoring spike must record
