@@ -1,12 +1,12 @@
 # WP-200 Property-Read Route-Reservation Projection Entry Audit
 
-Status: Review pending
+Status: Passed
 
 Design revision: v5.0
 
 Admission scope: `WP-200-PROPERTY-READ-ROUTE-RESERVATION-PROJECTION`
 
-Verdict: Candidate ready for independent review
+Verdict: Implementation-ready
 
 ## Finding and evidence truth
 
@@ -140,9 +140,9 @@ default merge `30485b1a51470f328e79453ba0e82e3358c14f79`. The candidate changes 
 the exact paths registered in the Property Read gate and contains no product
 source.
 
-Independent review must reconstruct that single-child candidate, run all
-registered prechecks, simulate the exact three-path implementation transition,
-and mutation-test at least:
+Independent root-session review reconstructed that single-child candidate, ran
+all registered prechecks, simulated the exact three-path implementation
+transition, and mutation-tested:
 
 - missing `ProducerRoute` reservation metadata;
 - reservation metadata on `ConsumerCall`;
@@ -153,7 +153,24 @@ and mutation-test at least:
 - support source outside the one registered WP-300 compiler path; and
 - premature WP-400 or architecture-fixture source.
 
-Review writes one new attestation and registry row. The admission checkpoint
-then changes only the registered governance/state paths, binds the fetched
-review integration as `admission_base_ref`, and changes this tranche to
-`in-progress`/`approved`. No source is admitted before that checkpoint.
+Exact review checkpoint `4853344dd705835f45bf44b3007673fb9d793120`
+records candidate `b4fedb61a63d6eab6b1ca77c0e9a4595a4ed9d8c` and all nine
+registered prechecks as passed. The isolated next-state simulation completed
+the real compiler-to-route-preparation handoff, and every declared negative
+mutation failed closed.
+
+Pull request #18 integrated that candidate/review chain at merge
+`410b576a1325c7b55df6c58ed99f01d793b9f06f`. Its first parent is fetched
+default `8b9405cbd73a5c35c935d417a2c765650110e6a4`, its second parent is exact PR
+head `c4ca794ee730a0a3a00e96817a508399dffcddd9`, and its merge tree equals the
+reviewed head tree. Default-branch validation run `31322284712` passed on the
+exact merge revision.
+
+This combined pre-source checkpoint changes only `PLAN.md`,
+`PROJECT_STATE.md`, this audit,
+`docs/spec/v5-artifact-carry-forward.toml`, and
+`docs/work-packages/property-read-architecture-gate.toml`. It binds exact
+fetched/default-validated merge `410b576a1325c7b55df6c58ed99f01d793b9f06f`
+as `admission_base_ref` and changes this tranche to
+`in-progress`/`approved`. Neither registered product path nor the one support
+path has changed at this checkpoint.
