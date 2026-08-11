@@ -1,6 +1,6 @@
 # 0020 Governance and Checker Complexity
 
-Status: OPEN
+Status: MIGRATED
 
 Kind: owner-raised governance-risk investigation
 
@@ -173,3 +173,56 @@ grows?
 - Treat the latest Property Read aggregate architecture gate as useful evidence
   for whether newer work reuses stable validation machinery or continues to
   generate tranche-specific executable control logic.
+
+## Reopened decision
+
+The reopened concern is supported. The historical migration corrected the
+direction of authority and stopped support artifacts from defining technical
+truth in reverse. It did not sufficiently constrain the implementation shape
+of executable validation. Recent route-reservation and WP-400 work continued
+to make checker control flow grow with transition instances even when much of
+the new information was data about a particular candidate history.
+
+The evidence divides into two materially different classes:
+
+- stable, independently falsifiable invariants include compiler-owned
+  reservation provenance, preservation through erasure, real upstream output
+  reaching the first legal downstream entry, reservations preceding side
+  effects, publication/acceptance/handler/response/cleanup ownership,
+  capability absence, and host/static semantic parity; and
+- instance-specific transition facts include candidate and correction object
+  ids, exact parent chains and path arrays, precheck lists, status/ref pairs,
+  admission/completion checkpoint shapes, evidence keys, and artifact links.
+
+Both classes remain worth validating, but they should not have the same
+implementation owner. Focused compile/runtime/mutation fixtures and reusable
+invariant validators own the first class. Authoritative work-package, gate, and
+evidence manifests own the second class declaratively, and one generic
+transition validator checks it. A new tranche normally does not justify a new
+Rust branch or another executable restatement of the same transition data.
+
+New custom `tools/design-check` control flow is admitted only for a genuinely
+new invariant category that the generic schema cannot express. The checkpoint
+must identify its defect class, why the generic path is insufficient, and its
+positive and negative evidence. This makes the scaling test structural: a new
+tranche using existing invariant categories adds records and focused behavior
+evidence without adding tranche-specific generic-engine control flow.
+
+Immediate deletion, raw size quotas, weaker evidence, and a full governance
+replacement are rejected. Existing route-reservation and WP-400 validators
+remain active as oracles until a generic path proves valid-state, negative,
+topology, and current-completion parity.
+
+## Reopened migration
+
+The stable rule is migrated to `AGENTS.md` and the Scalable Validation
+Architecture section of `PROJECT_GOVERNANCE.md`. PLAN decision D48 records the
+roadmap consequence.
+
+The next distinct engineering claim is a bounded convergence tranche: define
+the declarative transition schema and generic validator, apply it to the two
+newest high-complexity route-reservation and WP-400 records, and demonstrate
+equivalence while retaining the old validators. The later aggregate Property
+Read candidate must consume that generic path and must not extend the
+tranche-specific checker pattern. Implementing this convergence tranche is
+outside the current governance-decision review cycle.

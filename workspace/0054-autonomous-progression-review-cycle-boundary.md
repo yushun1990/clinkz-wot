@@ -1,6 +1,6 @@
 # 0054 Autonomous Progression Review-Cycle Boundary
 
-Status: OPEN
+Status: MIGRATED
 
 Kind: owner-raised execution-governance investigation
 
@@ -96,3 +96,59 @@ Codex should determine:
 5. which authoritative owner should carry the stable rule, likely `AGENTS.md` and/or `PROJECT_GOVERNANCE.md`;
 6. what `PROJECT_STATE.md` must record at a cycle boundary; and
 7. how the rule interacts with remote handoff, automatic integration, successor release, and disjoint preparation.
+
+## Decision
+
+The concern is supported. Existing governance defines how a bounded task is
+reviewed, handed off, integrated, and reconciled, but did not state that a
+broad progression instruction ends before a materially distinct successor
+claim. A valid next safe action could therefore silently expand one request
+into indefinite roadmap execution.
+
+A broad `continue`, `continue progressing`, or equivalent instruction now
+authorizes one **autonomous review cycle** from the current next safe action.
+The semantic unit is one coherent, independently reviewable engineering claim,
+selected and decomposed by AI. Candidate construction, independent review,
+admission, implementation, completion evidence, remote handoff, integration,
+and reconciliation may remain together when they share the same contract,
+rollback boundary, and evidence truth.
+
+A required upstream correction remains in the same cycle only when it makes
+that same claim constructible and shares its ownership, lifecycle, rollback,
+and validation boundary. Otherwise the discovered defect is recorded as the
+next distinct claim and the current cycle stops at the stable finding.
+
+The cycle ends at the first stable independently reviewable result whose next
+safe action crosses a materially different package, ownership, lifecycle,
+public-contract, rollback, or evidence boundary. Tranche completion, a proved
+blocking correction, or a material gate transition are typical boundaries. An
+Owner-owned goal, real-world constraint, unacceptable direction, public
+release, or irreversible commitment also ends the cycle.
+
+At the boundary, AI records the established fact, fetched-default basis,
+remaining limits, stopping point, and conditional next safe actions in
+`PROJECT_STATE.md`, completes the current claim's recoverable checkpoint and
+remote handoff when available, and does not begin the successor's candidate,
+review, admission, implementation, or source preparation. This returns
+visibility; it does not make the Owner a technical approval gate. A new broad
+progression request starts the next cycle.
+
+When remote integration is pending or unavailable, a complete draft handoff
+plus a merge-stable continuation envelope is a valid boundary. A later request
+may reconcile that claim, but does not silently authorize the already named
+successor. An explicit request naming multiple claims or a broader endpoint
+may set a wider bound. Time, tokens, lines, commits, and pull requests are not
+the primary rule.
+
+## Migration
+
+The stable operating rule is migrated to `AGENTS.md`; detailed execution and
+remote-boundary semantics are migrated to `PROJECT_GOVERNANCE.md`; PLAN
+decision D47 records the roadmap-wide consequence; and `PROJECT_STATE.md`
+records the current boundary and next distinct claim.
+
+This decision packet is itself the first applied boundary: resolving and
+migrating issues 0054 and reopened 0020, validating them, and publishing one
+draft pull request is the current review cycle. The generic validation
+convergence required by D48 is identified but not begun so the Owner can
+evaluate this stable result.

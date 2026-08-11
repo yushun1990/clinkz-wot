@@ -149,6 +149,63 @@ For each open technical decision, AI must:
 Owner questions and counterexamples are evidence inputs. They are not direct
 technical instructions and not predetermined conclusions.
 
+## Autonomous Review Cycles
+
+This section uses **review cycle** for the Owner-visibility cadence of broad
+autonomous progression. It does not replace or rename an independent technical
+review, candidate review, or milestone `REVIEW` state.
+
+A broad request such as `continue`, `continue progressing`, or an equivalent
+instruction with no fixed endpoint authorizes one review cycle beginning at
+the next safe action recorded in `PROJECT_STATE.md`. AI remains responsible for
+selecting and decomposing the technical claim. The semantic unit is one
+coherent, independently reviewable engineering claim, not a work-package,
+session, elapsed-time, token, line, commit, or pull-request quota.
+
+Activities stay inside one cycle when they establish the same claim and share
+its authoritative contract, rollback boundary, and evidence truth. This may
+include investigation, authoritative migration, candidate construction,
+independent review, pre-source admission, implementation, completion evidence,
+automatic remote handoff, integration, and reconciliation. A discovered
+upstream defect may be corrected in the same cycle only when the correction is
+necessary to make the current claim constructible and shares its ownership,
+lifecycle, rollback, and validation boundary. Otherwise it is a separate
+claim and the current cycle ends after recording the finding and safe next
+action.
+
+The first stable repository fact that is independently reviewable ends the
+cycle when the successor crosses a materially different boundary. Such facts
+include:
+
+- completion of one tranche or equivalently scoped claim;
+- proved correction of a blocking architecture or handoff defect;
+- a material admission, integration, or architecture-gate transition that
+  releases different work;
+- a next safe action with different package, ownership, lifecycle,
+  public-contract, rollback, or evidence truth; or
+- evidence requiring Owner input on goals, real-world constraints,
+  unacceptable directions, public release, or another irreversible external
+  commitment.
+
+Before returning visibility, AI completes the current claim's recoverable
+checkpoint and required remote handoff when available, and updates
+`PROJECT_STATE.md` with the exact established fact, fetched-default basis,
+remote/evidence limits, stopping point, and conditional next actions. It names
+but does not begin a materially distinct successor's candidate, review,
+admission, implementation, or source preparation. Disjoint preparation after
+the boundary is limited to recording that it is safe; materially beginning it
+requires a new explicit request.
+
+The boundary is not an Owner approval gate. The repository remains technically
+ready to continue, and a later broad progression request authorizes the next
+cycle. If remote integration or reconciliation is pending or unavailable, a
+complete draft handoff plus its merge-stable continuation envelope is itself a
+stable stopping point. A later cycle may finish that reconciliation, but does
+not inherit authority to start the already identified successor unless the
+Owner's request also scopes it. A request that explicitly names multiple
+claims or a broader terminal fact overrides the single-claim default only to
+that stated bound.
+
 ## Risk-Proportional Implementation Admission
 
 Implementation admission remains tranche-scoped. No runtime or public-API
@@ -271,6 +328,46 @@ Project progress is reported on three distinct tracks:
   in the active integration gate.
 
 One track must not be presented as executable progress on another.
+
+### Scalable Validation Architecture
+
+Executable validation must scale with distinct invariant categories rather
+than with the number of work-package or tranche instances. The validation
+architecture has four responsibilities:
+
+1. registered specifications, work-package records, gate manifests, and
+   evidence records declare instance-specific facts;
+2. one generic transition validator checks common lifecycle/status pairs,
+   immutable refs, parent/tree relationships, exact path sets, expected
+   absent/present boundaries, check/artifact registration, and
+   attestation/evidence linkage;
+3. reusable invariant-category validators check semantics such as real-value
+   provenance, ownership/dependency direction, capability absence, resource
+   bounds, and profile/cell parity; and
+4. focused external compile, runtime, mutation, workload, or source fixtures
+   prove behavior at the applicable public or protocol boundary.
+
+Candidate and correction object ids, per-transition path arrays, precheck
+lists, admission/completion refs, and evidence keys are transition data. They
+remain worth validating, but normally belong in the declarative owner consumed
+by the generic transition validator. A tranche-specific entry or completion
+script may orchestrate the generic validator and focused behavioral evidence;
+it must not become a second independent restatement of the same topology.
+
+New `tools/design-check` control flow is admitted only when a new falsifiable
+invariant category cannot be expressed by the existing generic schema and
+validators. Its checkpoint must name that invariant, the defect class it
+detects, why declarative validation is insufficient, and its positive and
+negative evidence. Merely adding another tranche, correction ref, exact path
+set, status transition, or completion record is not sufficient reason.
+
+Existing bespoke validation is not deleted on size grounds. Migration first
+runs old and generic validators as parallel oracles and proves parity across
+valid state, negative mutations, commit topology, and current completion
+evidence. Only then may duplicated instance-specific control flow be retired.
+The measurable scaling criterion is that a new tranche using existing
+invariant categories adds declarative records and focused behavior evidence
+without requiring a new tranche branch in the generic engine.
 
 ### Tranche Completion and Successor Entry
 
