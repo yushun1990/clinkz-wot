@@ -1,6 +1,6 @@
 # Project State
 
-Last updated: 2026-08-10
+Last updated: 2026-08-11
 
 ## Repository Basis
 
@@ -235,12 +235,16 @@ The active design revision is v5.0 bounded-core authority.
   is unreachable, an accepted request is lost when `HandlerSteps` is
   exhausted, the simulated host builder changes its existing result type, and
   required public lifecycle methods are absent from API ownership.
-- The fifth non-source WP-400 correction is the registered exact twelve-path
+- Exact fifth non-source WP-400 correction
+  `43e2669117f6e2a550e862837f3ab55cc5f956fb` is the registered twelve-path
   child of `43db15247279660ef910fdd13757e2767801fd94`. It preserves
   `ServientResult`, registers five exact public methods, adds a no-default
   static runtime cell, and requires accepted-request retention across handler
-  budget exhaustion in both runtime profiles. No WP-400 product or
-  implementation-support source is admitted.
+  budget exhaustion in both runtime profiles. Pull-request #22 exact-head
+  validation run `31370902588` passed. Independent review passed on
+  2026-08-11 and is recorded by
+  `docs/audits/WP-400-property-read-servient-slice-review.toml`; no WP-400
+  product or implementation-support source is present on the task branch.
 - Pull request #20 integrated technical decision checkpoint
   `6271c2861771a0fbc18772bd853bc451ba0fd614` and continuation checkpoint
   `72cf711adef3712ebf502b2fd01273e6f2d23376` through exact merge
@@ -266,7 +270,7 @@ default workspace tests, diff hygiene, and the 21-cell valid feature matrix.
 
 Observed default branch: `fcce9e69036459506a163ac73ef5542f92e5eb7f`
 
-Observed on: 2026-08-10 after fetch plus pull-request/base/head/tree/content
+Observed on: 2026-08-11 after fetch plus pull-request/base/head/tree/content
 inspection. Default-branch `mainline` run `31349086799` passed on that exact
 revision.
 
@@ -296,32 +300,32 @@ full completion matrix passed. An external static deactivation proof failed
 with `E0599`; a host request accepted with zero `HandlerSteps` never resumed
 and left its response opportunity live. The simulation also required a
 breaking `CoreResult<Servient>` builder result and unregistered public methods.
-The registered fifth correction is the fourth correction's exact twelve-path
-child. It preserves all nine D46 rows, the 7+3 future source topology, source
-absence, and `StepStatus<()>`, while closing those runtime and API contracts.
-WP-400 source remains blocked until the fifth correction passes independent
-review and a later pre-source admission checkpoint.
+Exact fifth correction `43e2669117f6e2a550e862837f3ab55cc5f956fb` is the
+fourth correction's twelve-path child. It preserves all nine D46 rows, the
+7+3 future source topology, source absence, and `StepStatus<()>`, while closing
+those runtime and API contracts. Independent reconstruction and negative
+testing passed; this checkpoint records the exact-ref review attestation.
+WP-400 source remains blocked until that review checkpoint is remotely
+integrated and a later distinct pre-source admission checkpoint binds the
+verified default-branch base.
 
 ### Before verified integration
 
-Validate the fifth correction's exact single-child/twelve-path topology, all
-five earlier candidate topologies, absent-source boundary, nine D46 provenance rows, seventeen
-registered mutation classes, aggregate design suite, locked workspace,
-supported feature matrix, and diff hygiene. Push it to existing draft pull
-request #22 and keep the pull request draft while independent review is absent.
-The future transition reserves seven Servient product paths, one WP-300 mock
-support source, and the two affected lockfiles; no source is admitted.
+Commit the exact three-path review checkpoint containing this continuation
+state, the review attestation, and its artifact-registry row. Run the reviewed
+entry matrix, push the same branch to pull request #22, and require a new
+exact-head `validation` result. Keep all simulated product/support source out
+of the task branch. The future transition reserves seven Servient product
+paths, one WP-300 mock support source, and two affected lockfiles.
 
 ### After verified integration
 
 Fetch `master` and verify the pull request's actual base, merge ancestry, exact
 correction/review content, and passing merge-revision `validation` before
-releasing dependent work. Independent review of the immutable fifth correction must
-reconstruct all six candidates, simulate only the registered implementation and
-support paths, run the no-default static and std host runtime profiles plus the async/no-std compile
-projection, trace all nine first-entry rows, and reject every registered
-mutation. Only a passed review followed by a separate exact pre-source
-checkpoint may authorize WP-400 source.
+releasing dependent work. Then create the separate exact five-path pre-source
+checkpoint from that fetched default base, switch the tranche to
+`in-progress`/`approved`, and bind its exact `admission_base_ref`. Only that
+verified checkpoint may authorize the registered WP-400 source transition.
 
 The narrow WP-200 plan slice is complete. Its handoff to WP-300 contains:
 
@@ -1086,6 +1090,27 @@ the schema to 18 tests: one positive closure and seventeen negative cases. It
 changes exactly twelve non-source paths and preserves the prior 7+3 future
 implementation topology.
 
+Independent reconstruction of exact fifth correction
+`43e2669117f6e2a550e862837f3ab55cc5f956fb` installed only the registered
+seven product and three support paths in the persistent detached checkout
+`target/wp400-fifth-review-worktree`. The immutable no-default static and std
+host runtime cells passed, the async/no-std projection compiled, all eleven
+registered predecessor/prechecks and seventeen schema mutations passed, and
+the terminal completion marker was
+`WP-400 Property Read Servient check: lifecycle composition valid`.
+
+Source-level review additionally traced every returned guard, request,
+response, cleanup input, first cause, and residual record. Added isolated
+negative probes proved that static readiness failure reaches abort; host
+readiness and abort-constructor rejections return and later consume their
+complete inputs; shutdown-constructor rejection preserves the committed guard
+and cleanup phase; and destroy before publication aborts rather than publishes
+in both profiles. All probes returned route, in-flight, response, and cleanup
+counts to zero. The transient probe code was removed after execution so the
+candidate contract remained immutable. The simulated source is review evidence
+only and is absent from the task branch. The fifth correction is therefore
+approved for its distinct review-attestation checkpoint, not yet for source.
+
 ### Aggregate design-check worktree-root defect
 
 Status: DESIGN CHECK RESOLVED; PERFORMANCE HARNESS LIMITATION CONFIRMED.
@@ -1500,18 +1525,17 @@ source. Its current tree passes:
 
 ## Next Safe Actions
 
-1. Commit the exact twelve-path fifth non-source WP-400 correction as the
-   unique child of fourth correction
-   `43db15247279660ef910fdd13757e2767801fd94`, validate all six immutable
-   topologies and the expected absent-source boundary, and update draft pull
-   request #22.
-2. Independently review the fifth correction by reconstructing all six
-   candidates, exercising the no-default static and std host runtime cells and
-   the async/no-std compile projection, all nine D46 provenance rows, and all
-   seventeen registered mutation classes. Only an approved review may release the exact pre-source
-   admission checkpoint.
-3. Keep WP-400 source absent until that checkpoint is committed and its
-   topology validates. Then implement only the correction's registered paths.
+1. Commit the exact three-path WP-400 review checkpoint, validate
+   `tools/check-wp400-property-read-servient-slice-entry.sh --reviewed`, push
+   it to draft pull request #22, and require exact-head remote `validation`.
+2. Integrate only after the current head remains complete, current with
+   `master`, conflict-free, thread-clean, and covered by the verified strict
+   ruleset; then fetch and validate the actual merge revision and its
+   default-branch workflow.
+3. From that verified fetched default, create the distinct five-path
+   pre-source admission checkpoint. Keep all WP-400 source absent until that
+   checkpoint is integrated and validated; then implement only the registered
+   7+3 paths.
 4. Correct the performance harness's compile-time repository-root capture in
    a separate support-tool task; until then, use a clean Cargo target when a
    shared target may contain binaries compiled from deleted worktrees.
