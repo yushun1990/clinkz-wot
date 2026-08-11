@@ -10,6 +10,8 @@ result_large_err = "allow"
 [dependencies]
 clinkz-wot-core = { path = "../core", default-features = false }
 clinkz-wot-discovery = { path = "../discovery", default-features = false }
+clinkz-wot-foundation = { path = "../foundation", default-features = false }
+clinkz-wot-planning = { path = "../planning", default-features = false }
 clinkz-wot-protocol-bindings = { path = "../protocol-bindings/core", default-features = false }
 clinkz-wot-protocol-bindings-zenoh = { path = "../protocol-bindings/protocols/zenoh", default-features = false, optional = true }
 clinkz-wot-td = { path = "../td", default-features = false }
@@ -31,6 +33,8 @@ std = [
     "async",
     "clinkz-wot-core/std",
     "clinkz-wot-discovery/std",
+    "clinkz-wot-foundation/std",
+    "clinkz-wot-planning/std",
     "clinkz-wot-protocol-bindings/std",
     "clinkz-wot-td/std",
 ]
@@ -47,6 +51,8 @@ async = [
     "dep:futures-util",
     "clinkz-wot-core/async",
     "clinkz-wot-discovery/async",
+    "clinkz-wot-foundation/async",
+    "clinkz-wot-planning/async",
 ]
 test-zenoh = [
     "dep:clinkz-wot-protocol-bindings-zenoh",

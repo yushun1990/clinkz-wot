@@ -130,6 +130,15 @@ name = "clinkz-wot-foundation"
 version = "0.1.0"
 
 [[package]]
+name = "clinkz-wot-planning"
+version = "0.1.0"
+dependencies = [
+ "clinkz-wot-core",
+ "clinkz-wot-foundation",
+ "clinkz-wot-td",
+]
+
+[[package]]
 name = "clinkz-wot-protocol-bindings"
 version = "0.1.0"
 dependencies = [
@@ -144,6 +153,8 @@ dependencies = [
  "async-trait",
  "clinkz-wot-core",
  "clinkz-wot-discovery",
+ "clinkz-wot-foundation",
+ "clinkz-wot-planning",
  "clinkz-wot-protocol-bindings",
  "clinkz-wot-td",
  "futures-util",

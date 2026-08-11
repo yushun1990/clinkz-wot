@@ -402,6 +402,8 @@ dependencies = [
  "clinkz-wot-codec-cbor",
  "clinkz-wot-core",
  "clinkz-wot-discovery",
+ "clinkz-wot-foundation",
+ "clinkz-wot-planning",
  "clinkz-wot-protocol-bindings",
  "clinkz-wot-protocol-bindings-zenoh",
  "clinkz-wot-td",

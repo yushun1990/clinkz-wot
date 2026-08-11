@@ -12,12 +12,16 @@ use clinkz_wot_core::{
     BindingContext, ClientBinding, CoreError, CredentialStore, Dispatch, ErrorContext, ErrorPhase,
     EventBroker, EventName, ExposedThing, InboundRequest, InboundResponse, InteractionOutput,
     Payload, Principal, RetryClass, SecurityProvider, SelectionFailureReason, ServerBinding,
-    ThingId, WotLock,
+    StepStatus, ThingId, ThingSlotId, WotLock,
 };
 use clinkz_wot_discovery::{Discoverer, DiscoveryFilter, ProcessState, ThingDiscoveryProcess};
+#[cfg(feature = "std")]
+use clinkz_wot_foundation::{Generation, SlotIndex, WorkBudget};
 use clinkz_wot_td::{AbsoluteUri, thing::Thing};
 
 use crate::handle::{ConsumedThingHandle, ExposedThingHandle};
+#[cfg(feature = "std")]
+use crate::property_read::HostPropertyReadOwner;
 use crate::registry::{ConsumedThingRegistry, ExposedThingRegistry, ExposedThingSlot};
 use crate::{ServientError, ServientResult};
 
@@ -42,6 +46,8 @@ pub struct Servient {
     pub(crate) discoverer: Arc<dyn Discoverer>,
     pub(crate) event_broker: EventBroker,
     shutdown: Arc<core::sync::atomic::AtomicBool>,
+    #[cfg(feature = "std")]
+    pub(crate) property_read: Option<HostPropertyReadOwner>,
 }
 
 /// Drives the shutdown flag for graceful teardown.
@@ -69,6 +75,7 @@ impl Servient {
         credential_store: Option<Arc<dyn CredentialStore>>,
         discoverer: Arc<dyn Discoverer>,
         event_broker: EventBroker,
+        property_read: Option<HostPropertyReadOwner>,
     ) -> Self {
         Self {
             exposed,
@@ -80,6 +87,7 @@ impl Servient {
             discoverer,
             event_broker,
             shutdown: Arc::new(core::sync::atomic::AtomicBool::new(false)),
+            property_read,
         }
     }
 
@@ -104,6 +112,45 @@ impl Servient {
             id,
             self.default_server_bindings.clone(),
         ))
+    }
+
+    /// Produces one Thing through the narrow, manually progressed Property
+    /// Read lifecycle owned by this Servient.
+    #[cfg(feature = "std")]
+    pub fn produce_td(&self, td: Thing) -> ServientResult<ExposedThingHandle> {
+        let id = td
+            .id
+            .as_ref()
+            .map(|uri| ThingId::from(uri.as_str()))
+            .ok_or(ServientError::MissingThingId)?;
+        let owner = self.property_read.as_ref().ok_or_else(|| {
+            CoreError::UnsupportedOperation(ErrorContext::new(
+                ErrorPhase::Admission,
+                RetryClass::Never,
+            ))
+        })?;
+        let thing_slot = ThingSlotId::new(SlotIndex::new(0), Generation::INITIAL);
+        owner.install(td.clone(), thing_slot)?;
+        let slot = Arc::new(WotLock::new(ExposedThingSlot::new(ExposedThing::new(td))));
+        Ok(ExposedThingHandle::new_property_read(
+            self.clone(),
+            slot,
+            id,
+            self.default_server_bindings.clone(),
+            owner.clone(),
+        ))
+    }
+
+    /// Drives one bounded transition of the narrow host Property Read cell.
+    #[cfg(feature = "std")]
+    pub fn step(
+        &self,
+        cx: &mut core::task::Context<'_>,
+        budget: &mut WorkBudget,
+    ) -> StepStatus<()> {
+        self.property_read
+            .as_ref()
+            .map_or(StepStatus::Idle, |owner| owner.step(cx, budget))
     }
 
     #[cfg(feature = "async")]

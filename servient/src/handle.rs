@@ -16,8 +16,8 @@ use clinkz_wot_core::{
     EventSubscribeHandler, EventUnsubscribeHandler, InteractionInput, InteractionOptions,
     InteractionOutput, InvokeSlot, ObserveSlot, Payload, PropertyObserveHandler,
     PropertyReadHandler, PropertyUnobserveHandler, PropertyWriteHandler, PushFn, QuerySlot,
-    ReadSlot, RetryClass, SelectionFailureReason, SubscribeSlot, Subscription, SubscriptionGuard,
-    ThingId, UnobserveSlot, UnsubscribeSlot, WotLock, WriteSlot,
+    ReadPropertyHandler, ReadSlot, RetryClass, SelectionFailureReason, SubscribeSlot, Subscription,
+    SubscriptionGuard, ThingId, UnobserveSlot, UnsubscribeSlot, WotLock, WriteSlot,
 };
 #[cfg(feature = "async")]
 use clinkz_wot_core::{
@@ -28,6 +28,8 @@ use clinkz_wot_core::{
 use clinkz_wot_td::{data_type::Operation, thing::Thing};
 
 use crate::ServientResult;
+#[cfg(feature = "std")]
+use crate::property_read::HostPropertyReadOwner;
 use crate::registry::ExposedThingSlot;
 use crate::servient::Servient;
 
@@ -47,6 +49,8 @@ pub struct ExposedThingHandle {
     slot: Arc<WotLock<ExposedThingSlot>>,
     id: ThingId,
     server_bindings: Arc<[Arc<dyn clinkz_wot_core::ServerBinding>]>,
+    #[cfg(feature = "std")]
+    property_read: Option<HostPropertyReadOwner>,
 }
 
 impl ExposedThingHandle {
@@ -61,6 +65,25 @@ impl ExposedThingHandle {
             slot,
             id,
             server_bindings,
+            #[cfg(feature = "std")]
+            property_read: None,
+        }
+    }
+
+    #[cfg(feature = "std")]
+    pub(crate) fn new_property_read(
+        servient: Servient,
+        slot: Arc<WotLock<ExposedThingSlot>>,
+        id: ThingId,
+        server_bindings: Arc<[Arc<dyn clinkz_wot_core::ServerBinding>]>,
+        property_read: HostPropertyReadOwner,
+    ) -> Self {
+        Self {
+            servient,
+            slot,
+            id,
+            server_bindings,
+            property_read: Some(property_read),
         }
     }
 
@@ -83,6 +106,29 @@ impl ExposedThingHandle {
     ) {
         self.slot
             .with(|s| s.thing.set_property_read_handler(name, handler));
+    }
+
+    /// Freezes one synchronous Property Read handler into the narrow v5
+    /// lifecycle cell before exposure begins.
+    #[cfg(feature = "std")]
+    pub fn set_read_property_handler<H>(
+        &self,
+        name: impl Into<Box<str>>,
+        handler: H,
+        footprint: clinkz_wot_core::HandlerFootprint,
+    ) -> CoreResult<()>
+    where
+        H: ReadPropertyHandler + Send + Sync + 'static,
+    {
+        self.property_read
+            .as_ref()
+            .ok_or_else(|| {
+                CoreError::UnsupportedOperation(ErrorContext::new(
+                    ErrorPhase::Admission,
+                    RetryClass::Never,
+                ))
+            })?
+            .set_read_property_handler(name, handler, footprint)
     }
 
     pub fn set_property_write_handler(
@@ -257,6 +303,34 @@ impl ExposedThingHandle {
     }
 
     // --- lifecycle ---
+
+    /// Begins the manually progressed expose transaction.
+    #[cfg(feature = "std")]
+    pub fn begin_expose(&self) -> CoreResult<()> {
+        self.property_read
+            .as_ref()
+            .ok_or_else(|| {
+                CoreError::UnsupportedOperation(ErrorContext::new(
+                    ErrorPhase::Admission,
+                    RetryClass::Never,
+                ))
+            })?
+            .begin_expose()
+    }
+
+    /// Begins deactivation while first closing route-permit issuance.
+    #[cfg(feature = "std")]
+    pub fn begin_destroy(&self) -> CoreResult<()> {
+        self.property_read
+            .as_ref()
+            .ok_or_else(|| {
+                CoreError::UnsupportedOperation(ErrorContext::new(
+                    ErrorPhase::Cleanup,
+                    RetryClass::Never,
+                ))
+            })?
+            .begin_destroy()
+    }
 
     /// Registers routes on every server binding, inserts into the servable
     /// registry, and publishes the TD. Multi-binding rollback on failure
