@@ -135,12 +135,17 @@ The repository evidence establishes the following starting point:
   reconstruction found two lifecycle contradictions: static deactivation was
   unreachable, and an accepted request lost its response opportunity when
   `HandlerSteps` was exhausted. The same simulation required unregistered
-  public methods and changed the existing host-builder result type. The fifth
-  non-source correction registers the exact lifecycle API, preserves
-  `ServientResult`, and adds static plus zero-handler-budget runtime evidence;
-  the tranche remains `pending`/`review-pending`. D46 makes the one-time
-  complete first-entry and runtime-closure review part of the fifth
-  correction, not a separate gate. Broad
+  public methods and changed the existing host-builder result type. Exact fifth
+  correction `43e2669117f6e2a550e862837f3ab55cc5f956fb` registers the lifecycle
+  API, preserves `ServientResult`, and adds static plus zero-handler-budget
+  runtime evidence. Independent review checkpoint
+  `f04814c31a5a5f0ba4144d3bedcb3956ad00ab44` passed the complete reconstruction
+  and negative matrix. Pull request #22 integrated the candidate/review chain
+  at default-validated merge `1652976500941f0f61e7578391d8d2ce8fcee862`;
+  the distinct exact five-file pre-source checkpoint now makes the narrow
+  tranche `in-progress`/`approved` while all registered source paths remain
+  unchanged. D46's one-time complete first-entry and runtime-closure review is
+  therefore discharged without a separate gate. Broad
   WP-400, WP-500, and WP-600 remain downstream of broad WP-300, and WP-700
   joins those branches;
 - default workspace tests, the 21-cell valid feature matrix, and the aggregate
@@ -169,7 +174,7 @@ answer and does not automatically block unrelated admitted work.
 | D2 | MIGRATED | Use clock-source-owned non-wrapping extended logical ticks; retain raw wrap metadata as diagnostics; fail incomparable clock domains explicitly; correct Foundation before Core Deadline/cleanup timing | Completed `WP-100-LOGICAL-TIME-CORRECTION -> WP-100-DEADLINE-CLEANUP-TIMING`; the time blocker is resolved while independent broad-handler blockers remain | M2 exit |
 | D3 | SUPERSEDED | The former lossless residual-decomposition direction remains historical decision input | Do not integrate Foundation candidate `2494f33fdfe49ec3c7ae850d20990e446e628865` or open another D3 domain migration; ADR-0018/D7 replace its activation path | Superseded by D7 |
 | D4 | MIGRATED | Use one non-`Clone` linear `Subscription`/`StaticSubscription` receive capability; expose no cloneable receiver/control split, competing-consumer contract, or per-clone broadcast | WP-300 owns one binding driver/cursor; WP-400 owns the Servient record/facade and must provide negative `Clone` compile fixtures | M4 entry |
-| D5 | MIGRATED | Adopt `PROPERTY-READ-ARCHITECTURE` as the first executable cross-package composition proof, using one property read in host and manual runtime cells plus an async/no-std compile projection | The critical path is `WP-100 -> WP-200 plan -> WP-300 -> WP-200 Producer-route projection -> owner-scoped route-reservation correction -> WP-400`; the first five stages are integrated and default-validated, WP-400 candidate/review preparation is active, and WP-400 source remains blocked on its own review and admission | Before broad WP-100/WP-300/WP-400 expansion |
+| D5 | MIGRATED | Adopt `PROPERTY-READ-ARCHITECTURE` as the first executable cross-package composition proof, using one property read in host and manual runtime cells plus an async/no-std compile projection | The critical path is `WP-100 -> WP-200 plan -> WP-300 -> WP-200 Producer-route projection -> owner-scoped route-reservation correction -> WP-400`; the first five stages and the WP-400 candidate/review chain are integrated and default-validated, and the exact WP-400 source transition is admitted but not yet implemented | Before broad WP-100/WP-300/WP-400 expansion |
 | D6 | MIGRATED | Use `CandidateFallbackPolicy::PreExecution` by default; permit only side-effect-free security inapplicability and exact deterministic lazy-artifact negatives to skip candidates; prohibit binding-input, health, transient, security-commit, and post-acceptance fallback | ADR-0017 makes the policy constructible and bounds one fixed-width diagnostic per eligible skip; the WP-200 Property Read review reaffirmed it while fallback/lazy implementation remains outside the frozen narrow scope | M3 entry |
 | D7 | MIGRATED | Adopt ADR-0018's bounded v5.0 authority reset: 62 active requirements, explicit inactive classifications for the other 59, and domain-entry re-adoption for later v1 obligations | Exact candidate `b1916250a28ee133e8d0b12225c5b6311c975247` was independently attested and integrated as the unchanged second parent of activation checkpoint `30b845a4b17dd3eb56670da48c939b72daea7d59`; v5.0 authority is active | M1 exit and WP-200 resume |
 | D8 | MIGRATED | Use one associated-type portable compiler contract, an application-closed static compiler/cursor/artifact enum, and Core-owned safe host erasure; WP-200 solely implements the compiler/artifact components and WP-300 consumes them only inside a complete installable bundle | The exact nine-path WP-200 implementation and both public author profiles pass completion evidence; WP-300 may consume but must not duplicate this ownership | M3 entry |
@@ -240,8 +245,9 @@ plan, and WP-300 binding slices are complete. The exact WP-300 topology is
 default-branch admission base `384461ba33a3639a0f89978159719aa6937e1f36`
 `-> 6aaf1ef1586428152e535b9cd75f7183ec764cd0`
 `-> 89fb9f17ac961294032123173b29692a719a174c`. The narrow WP-400 slice is
-`pending`/`review-pending` with no source admitted; broad WP-400 remains
-blocked. D42 inserts one exact
+`in-progress`/`approved` at its exact pre-source checkpoint, with all seven
+product and three support paths still unchanged; broad WP-400 remains blocked.
+D42 inserts one exact
 `WP-200-PROPERTY-READ-PRODUCER-ROUTE-PROJECTION` after WP-300 because the
 previous private planner could produce only `ConsumerCall`. That correction is
 complete and proves the real `ProducerRoute` role/reference handoff. WP-400
@@ -264,9 +270,14 @@ frozen `WorkClass::HandlerSteps` variant, but its isolated std runtime success
 also exposed that the no-default and async/no-std cells could not import the
 contract root's unconditional std-only `HostBindingRegistration`. The fourth
 correction gates the host-only import and freezes the corresponding thirteenth
-negative evidence without widening implementation source scope. D46 requires
-the fourth correction to close the complete first-entry provenance table in
-independent review before source admission. Broad
+negative evidence without widening implementation source scope. The fifth
+correction adds static deactivation, accepted-request retention, compatible
+builder results, the five exact public methods, and four further mutations.
+Its isolated review closed D46's complete first-entry provenance table plus
+runtime guard/cleanup retention, and pull request #22 integrated the exact
+candidate/review chain at default-validated merge
+`1652976500941f0f61e7578391d8d2ce8fcee862`. The current exact five-file
+checkpoint admits only the registered 7+3 source topology. Broad
 `WP-100-HANDLER-ENTRY`, `WP-300-BROAD-ENTRY`, and `WP-400-BROAD-ENTRY` remain
 blocked until the gate passes. The gate exception does not claim final
 `InteractionInput` storage, `AcceptHint` resource admission,
@@ -407,9 +418,9 @@ review/activation chain. Architecture closure remains open on the registered
 global gates; the exact `WP-300-PROPERTY-READ-BINDING-SLICE` is complete and
 the exact `WP-200-PROPERTY-READ-PRODUCER-ROUTE-PROJECTION` and
 `WP-200-PROPERTY-READ-ROUTE-RESERVATION-PROJECTION` are integrated and
-default-validated. WP-400 candidate/review preparation is released; D46
-requires that candidate review to close the complete first-entry provenance
-table before source admission.
+default-validated. The WP-400 candidate/review chain is also integrated and
+default-validated; its independent review closed D46, and the exact narrow
+source transition is now admitted while implementation remains absent.
 
 AI deliverable:
 
@@ -591,9 +602,13 @@ The second correction uses the existing Gateway profile but was independently
 rejected for naming nonexistent `WorkClass::HandlerCalls`; the third
 non-source correction uses the frozen `HandlerSteps` variant but was rejected
 because its portable contract root unconditionally imported std-only
-`HostBindingRegistration`. The fourth correction gates that import and now
-owns D46's one-time first-entry closure. WP-400 source remains blocked pending
-that fourth correction's independent review and admission.
+`HostBindingRegistration`. The fourth correction gates that import but was
+rejected for static-deactivation, accepted-request, API-ownership, and builder-
+result contradictions. The fifth correction closes those defects; independent
+review passed D46 and the full runtime/cleanup matrix, and pull request #22 is
+integrated and default-validated. The exact five-file pre-source checkpoint
+now admits the registered seven product plus three support paths, none of which
+has changed yet.
 The broad entry requirements below remain open.
 
 Before broad WP-300 admission, the external Zenoh authoring spike must record
