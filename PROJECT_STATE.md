@@ -296,6 +296,16 @@ The active design revision is v5.0 bounded-core authority.
   merge revision. That verified integration releases the distinct D48
   transition-validator convergence claim; it does not release aggregate
   fixture source.
+- Draft pull request #28 targets `master` from
+  `agent/transition-validator-convergence`. It was opened on exact technical
+  completion head `5d875db914c149f15301b7452d7dcb26ed12dc55` with base
+  `3f12f4450fb40d5bf0d546a86005b0263d003308`; its URL is
+  `https://github.com/yushun1990/clinkz-wot/pull/28`. The final
+  continuation-only handoff child updates that branch after this recorded
+  technical head, so GitHub's exact current head and `validation` status remain
+  the remote authority. Keep the pull request draft until that final head is
+  current-base validated and the other terminal integration predicates are
+  freshly true.
 - Pull request #20 integrated technical decision checkpoint
   `6271c2861771a0fbc18772bd853bc451ba0fd614` and continuation checkpoint
   `72cf711adef3712ebf502b2fd01273e6f2d23376` through exact merge
@@ -379,11 +389,11 @@ new explicit autonomous review cycle.
 
 ### Before verified integration
 
-Run the task-specific plus default-branch matrix on the passed D48 state, then
-publish `agent/transition-validator-convergence` through one draft pull request
-against `master` and require exact-head remote `validation`. That draft handoff
-is this autonomous review-cycle boundary; do not begin aggregate candidate,
-review, admission, or fixture-source work.
+Draft pull request #28 is the current remote handoff. Push the final
+continuation-only child, require exact-head remote `validation`, and keep the
+pull request draft at this autonomous review-cycle boundary. Do not begin
+aggregate candidate, review, admission, or fixture-source work while D48 is not
+verified on fetched `master`.
 
 ### After verified integration
 
@@ -1736,16 +1746,13 @@ removed or weakened.
 
 ## Next Safe Actions
 
-1. Commit the passed D48 state and final local validation projection, then
-   fetch `master` once more before remote handoff. If the fetched base moved,
-   reconcile it and rerun the affected exact-head matrix before publication.
-2. Push `agent/transition-validator-convergence`, open one draft pull request
-   against `master`, and stop this autonomous cycle at that remote handoff.
-   Require exact-head remote `validation`; do not create aggregate fixtures.
-3. On a later explicit progression request, first fetch `master` and reconcile
+1. Commit and push this final continuation-only handoff update to draft pull
+   request #28. Require remote `validation` on its exact resulting head and
+   keep the pull request draft; do not create aggregate fixtures.
+2. On a later explicit progression request, first fetch `master` and reconcile
    the D48 pull request's actual base, expected head/content, merge ancestry,
    and merge-revision `validation`.
-4. Only after that verified integration may a later review cycle prepare the
+3. Only after that verified integration may a later review cycle prepare the
    aggregate `PROPERTY-READ-ARCHITECTURE` fixture candidate on the generic
    path. Its own review/admission still controls creation of
    `tools/architecture-fixtures/property-read-binding` and
