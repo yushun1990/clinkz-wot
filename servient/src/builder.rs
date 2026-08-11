@@ -3,12 +3,15 @@
 use alloc::{sync::Arc, vec::Vec};
 
 use clinkz_wot_core::{
-    ClientBinding, CredentialStore, EventBroker, SecurityProvider, ServerBinding,
+    ClientBinding, CoreError, CredentialStore, ErrorContext, ErrorPhase, EventBroker,
+    HostBindingRegistration, RetryClass, SecurityProvider, ServerBinding,
 };
 use clinkz_wot_discovery::{Discoverer, InMemoryDirectory, LocalDiscoverer};
+use clinkz_wot_foundation::ResourceLimits;
 
+use crate::ServientResult;
+use crate::property_read::{HostPropertyReadConfig, HostPropertyReadOwner};
 use crate::servient::Servient;
-use crate::{ServientError, ServientResult};
 
 /// Consuming, move-fluent builder for a [`Servient`].
 pub struct ServientBuilder {
@@ -18,6 +21,8 @@ pub struct ServientBuilder {
     security_providers: Vec<Arc<dyn SecurityProvider>>,
     credential_store: Option<Arc<dyn CredentialStore>>,
     discoverer: Option<Arc<dyn Discoverer>>,
+    resource_limits: Option<ResourceLimits>,
+    property_read_binding: Option<HostBindingRegistration>,
 }
 
 impl ServientBuilder {
@@ -29,6 +34,8 @@ impl ServientBuilder {
             security_providers: Vec::new(),
             credential_store: None,
             discoverer: None,
+            resource_limits: None,
+            property_read_binding: None,
         }
     }
 
@@ -69,6 +76,19 @@ impl ServientBuilder {
         self
     }
 
+    /// Installs the explicit resource policy used by the narrow manually
+    /// progressed Property Read runtime.
+    pub fn resource_limits(mut self, limits: ResourceLimits) -> Self {
+        self.resource_limits = Some(limits);
+        self
+    }
+
+    /// Installs one complete host-erased Producer Property Read registration.
+    pub fn binding_registration(mut self, registration: HostBindingRegistration) -> Self {
+        self.property_read_binding = Some(registration);
+        self
+    }
+
     /// Builds the [`Servient`].
     pub fn build(self) -> ServientResult<Servient> {
         let Self {
@@ -78,7 +98,23 @@ impl ServientBuilder {
             security_providers,
             credential_store,
             discoverer,
+            resource_limits,
+            property_read_binding,
         } = self;
+
+        let property_read = match (resource_limits, property_read_binding) {
+            (Some(limits), Some(registration)) => Some(HostPropertyReadOwner::new(
+                HostPropertyReadConfig::new(limits, registration),
+            )),
+            (None, Some(_)) => {
+                return Err(CoreError::Validation(ErrorContext::new(
+                    ErrorPhase::Admission,
+                    RetryClass::Never,
+                ))
+                .into());
+            }
+            (_, None) => None,
+        };
 
         let discoverer: Arc<dyn Discoverer> = discoverer
             .unwrap_or_else(|| Arc::new(LocalDiscoverer::new(Arc::new(InMemoryDirectory::new()))));
@@ -105,9 +141,9 @@ impl ServientBuilder {
             credential_store,
             discoverer,
             event_broker,
+            property_read,
         );
 
-        let _ = ServientError::AlreadyExposed; // suppress unused import
         Ok(servient)
     }
 }

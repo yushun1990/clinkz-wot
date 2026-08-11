@@ -171,3 +171,34 @@ active_claim_ids = [
 ]
 inactive_claim_ids = []
 disposition = "The exact compiler-owned route-reservation metadata projection and real compiler-to-admitted-envelope-to-BindingRouteKey handoff are active; WP-400 orchestration, production protocols, collision-table maturity, workloads, and aggregate architecture completion remain separate evidence."
+
+[[record]]
+source = "docs/evidence/WP-400-property-read-servient-slice.toml"
+verification_command = "tools/check-wp400-property-read-servient-slice.sh"
+active_claim_ids = [
+  "ADMIT-MEM-001",
+  "API-RESOURCE-001",
+  "BIND-DELIVERY-001",
+  "BIND-IO-001",
+  "BIND-MEM-001",
+  "BIND-ROUTE-001",
+  "CLEANUP-RECORD-001",
+  "CONCUR-LIN-001",
+  "CONSTRAINED-PROGRESS-001",
+  "CONSTRAINED-STORAGE-001",
+  "CONSTRAINED-WORK-001",
+  "HANDLE-DROP-001",
+  "HANDLER-API-001",
+  "HOST-ASYNC-001",
+  "IMPL-CONFORM-001",
+  "LIFE-EXPOSE-001",
+  "LIFE-EXPOSE-002",
+  "LIFE-EXPOSE-003",
+  "PLAN-ARTIFACT-001",
+  "PLAN-SET-001",
+  "STATE-BIND-001",
+  "STATE-EXPOSE-001",
+  "STATE-INFLIGHT-001",
+]
+inactive_claim_ids = []
+disposition = "The exact narrow Servient Property Read lifecycle is active in application-static and host-erased profiles; aggregate fixtures, production protocols, broad Servient lifecycle families, workloads, and release maturity remain separate evidence."

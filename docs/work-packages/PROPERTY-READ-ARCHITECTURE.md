@@ -1,6 +1,6 @@
 # Property-Read Architecture Gate
 
-Status: BLOCKED
+Status: READY
 
 Gate id: `PROPERTY-READ-ARCHITECTURE`
 
@@ -21,9 +21,12 @@ for package-local completion. The package order remains
 completed WP-200-owned Producer-route correction after WP-300 and requires one
 distinct compiler-owned route-reservation correction before WP-400 because
 successor reconstruction exposed those two concrete handoff gaps. That second
-correction is now independently reviewed, exactly admitted, and locally
-complete, integrated, and default-validated. Its successor release authorizes
-the WP-400 candidate/review lifecycle, not WP-400 source.
+correction is independently reviewed, exactly admitted, complete, integrated,
+and default-validated. The resulting WP-400 slice is also independently
+reviewed and exactly admitted; implementation
+`a993555f3cbd2bc7026423f34ed5620f3a2e058f` now completes its package-local
+lifecycle evidence. Verified integration of that implementation/completion
+chain remains the aggregate fixture candidate's successor-release boundary.
 ADR-0013 permits only exact tranches registered in the manifest to cross
 incomplete package boundaries after their own admission reviews. No manifest
 record alone is implementation admission.
@@ -88,11 +91,12 @@ WP-100-PROPERTY-READ-HANDLER-SLICE
     -> PROPERTY-READ-ARCHITECTURE
 ```
 
-This diagram reflects the current manifest. The reviewed route-reservation
-correction is integrated and default-validated between the Producer-route
-projection and WP-400. It releases WP-400 candidate/review preparation, not
-WP-400 source; the latter still requires the candidate's own approved review
-and pre-source admission.
+This diagram reflects the current manifest. Every package-local tranche is now
+`complete`/`approved`; the WP-400 implementation is the immediate child of the
+tree-equivalent pre-source admission merge and passes its registered static,
+host, and portable cells. The aggregate gate is therefore `ready`, while its
+planned fixture roots remain absent pending their own exact candidate, review,
+and admission lifecycle.
 
 The gate blocks:
 
@@ -119,7 +123,10 @@ The exact downstream release events are:
   `compiler -> admitted envelope -> BindingRouteKey` evidence, jointly release
   only candidate, review, and pre-source-transition preparation for
   `WP-400-PROPERTY-READ-SERVIENT-SLICE`, whose candidate must also close the
-  first-entry table below; and
+  first-entry table below;
+- completion and verified default integration of that exact WP-400 slice
+  release only aggregate Property Read fixture candidate/review and admission
+  preparation; and
 - broad WP-300 completion releases broad WP-400, WP-500, and WP-600.
 
 Downstream preparation may reduce uncertainty before those events but grants
@@ -329,20 +336,19 @@ and must close before final integration and release.
 
 Every slice is Category B or C according to its actual candidate impact and
 requires its own exact paths, contract fixtures, impact analysis, independent
-review, and ADR-0013 admission. The handler, original WP-200 plan, WP-300
-binding, Producer-route projection, and route-reservation projection slices
-are `complete`/`approved`; the WP-400 Servient slice is now
-`pending`/`review-pending` with no source admission. The route-reservation completion claim binds exact
-implementation `b47899150aa957b1dea8d844aa49852e3e6aa356` and proves the
-canonical identity arrives through the compiler-owned production metadata
-path. Verified default integration
-`fcce9e69036459506a163ac73ef5542f92e5eb7f` released WP-400 candidate/review
-preparation. The immutable candidate must close the complete first-entry table
-above in its existing independent review; it does not gain a separate
-preliminary review cycle. Each status record grants no successor source-edit
-authority; specifically, each status record grants no source-edit authority.
-Approval and in-progress truth may share one approved, recoverable pre-source
-checkpoint under D9.
+review, and ADR-0013 admission. All six slices are now
+`complete`/`approved`. The route-reservation claim binds exact implementation
+`b47899150aa957b1dea8d844aa49852e3e6aa356`; its verified integration released
+the independently reviewed WP-400 lifecycle. Pull request #23 then integrated
+the exact five-file WP-400 admission checkpoint as tree-equivalent merge
+`63015a6e4528a0f9e7d1b677ea987aa2ba1c8781`, and default-branch validation run
+`31472025404` passed. Exact implementation
+`a993555f3cbd2bc7026423f34ed5620f3a2e058f` proves that canonical compiler
+metadata reaches the first legal Servient route entry and closes the static,
+host, response, deactivation, and cleanup cells. Each status record grants no
+successor source-edit authority. Specifically, each status record
+grants no source-edit authority. The aggregate fixture roots remain absent
+until their own exact reviewed candidate and admission checkpoint.
 
 For `WP-100-PROPERTY-READ-HANDLER-SLICE`, the candidate and completion record
 must claim only `ReadPropertyHandler` and its composition with the four reused
@@ -351,8 +357,8 @@ values named above. The property-read slice cannot claim the final
 `AffordanceTarget` relocation/no-atomic evidence, async/step handler traits,
 host registration, sparse storage, or dispatch ownership.
 
-The integration gate becomes `ready` only after all six slice completion
-records pass. It becomes `passed` only when the planned completion check is
+All six slice completion records now pass, so the integration gate is `ready`.
+It becomes `passed` only when the planned completion check is
 registered and executable, both runtime cells pass, the compile-only cell
 passes, all mandatory assertions are represented, and an independent
 cross-package review attests the exact fixture revision. Broad entry points may

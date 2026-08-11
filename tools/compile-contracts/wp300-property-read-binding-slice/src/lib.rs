@@ -2,20 +2,26 @@
 
 extern crate alloc;
 
-use alloc::boxed::Box;
-use core::task::{Context, Poll};
+use alloc::{boxed::Box, rc::Rc, sync::Arc};
+use core::{
+    cell::RefCell,
+    task::{Context, Poll},
+};
 
 use clinkz_wot_core::{
-    BindingArtifact, BindingArtifactCompatibility, BindingArtifactFootprint, BindingArtifactRole,
-    BindingCallSettlement, BindingCancellationDisposition, BindingCompilerBounds,
-    BindingCompilerExtension, BindingCompilerInput, BindingCompilerOutput, BindingCompilerStep,
-    BindingDeliveryOutcome, BindingExecutionSupport, BindingIngressPolicy, BindingInputRejection,
-    BindingLifetimeFootprint, BindingRegistrationCapabilities, BindingRegistrationIdentity,
-    BindingResourceDeclarations, BindingStateLayout, BindingStatusPolicy, CleanupPhaseContext,
-    CollisionDomainId, EndpointReservationKey, NoCleanupSuccessor, PollServerBinding, PrepareInput,
-    RouteActivationOutcome, RouteActivationPermit, RouteCleanupOutcome, RouteCommitOutcome,
+    AffordanceTarget, BindingArtifact, BindingArtifactCompatibility, BindingArtifactFootprint,
+    BindingArtifactRole, BindingCallSettlement, BindingCancellationDisposition,
+    BindingCompilerBounds, BindingCompilerExtension, BindingCompilerInput, BindingCompilerOutput,
+    BindingCompilerStep, BindingConfigurationDigest, BindingDeliveryOutcome,
+    BindingExecutionSupport, BindingGeneration, BindingId, BindingIngressPolicy,
+    BindingInputRejection, BindingLifetimeFootprint, BindingOperationalError,
+    BindingRegistrationCapabilities, BindingRegistrationIdentity, BindingResourceDeclarations,
+    BindingStateLayout, BindingStatusPolicy, CleanupPhaseContext, CollisionDomainId, CoreError,
+    CorrelationId, EndpointReservationKey, ErrorContext, ErrorPhase, InteractionInput,
+    NoCleanupSuccessor, PollServerBinding, PrepareInput, RetryClass, RouteActivationOutcome,
+    RouteActivationPermit, RouteCleanupOutcome, RouteCommitOutcome, RouteInboundRequest,
     RouteInboundResponse, RoutePrepareOutcome, RouteReadinessOutcome, RouteReadinessSlot,
-    RouteReservationIdentity, ServerResponseSlot, ServerRouteSlot,
+    RouteReservationIdentity, RouteTerminal, ServerResponseSlot, ServerRouteSlot,
     StaticBindingCompilerRegistration, StaticBindingRegistration, StaticBindingRegistrationInput,
 };
 use clinkz_wot_foundation::{WorkBudget, WorkClass};
@@ -135,10 +141,79 @@ pub struct MockResponseState {
     accepted: bool,
 }
 
+struct StaticProbeState {
+    queued: Option<(Box<str>, InteractionInput)>,
+    next_correlation: u64,
+    delivered: u32,
+    routes: u32,
+    in_flight: u32,
+    cleanup: u32,
+    aborts: u32,
+    closed: bool,
+}
+
+impl Default for StaticProbeState {
+    fn default() -> Self {
+        Self {
+            queued: None,
+            next_correlation: 1,
+            delivered: 0,
+            routes: 0,
+            in_flight: 0,
+            cleanup: 0,
+            aborts: 0,
+            closed: false,
+        }
+    }
+}
+
+/// Deterministic no-default protocol I/O visible to the WP-400 runner.
+#[derive(Clone)]
+pub struct StaticPropertyReadProbe {
+    state: Rc<RefCell<StaticProbeState>>,
+}
+
+impl StaticPropertyReadProbe {
+    pub fn enqueue_property_read(&self, name: &str, input: InteractionInput) {
+        let mut state = self.state.borrow_mut();
+        assert!(!state.closed, "request queued after route closure");
+        assert!(state.queued.is_none(), "mock ingress slot is occupied");
+        state.queued = Some((Box::from(name), input));
+    }
+
+    pub fn delivered_responses(&self) -> u32 {
+        self.state.borrow().delivered
+    }
+
+    pub fn outstanding_counts(&self) -> (u32, u32, u32, u32) {
+        let state = self.state.borrow();
+        (
+            state.routes,
+            u32::from(state.queued.is_some()),
+            state.in_flight,
+            state.cleanup,
+        )
+    }
+
+    pub fn aborted_routes(&self) -> u32 {
+        self.state.borrow().aborts
+    }
+
+    pub fn poll_after_close(&self, _cx: &mut Context<'_>) -> Poll<bool> {
+        if self.state.borrow().closed {
+            Poll::Ready(false)
+        } else {
+            Poll::Pending
+        }
+    }
+}
+
 /// Third-party manual-progress server with no TD, handler, or Servient access.
 pub struct ManualMockBinding {
     compatibility: BindingArtifactCompatibility,
     external_readiness_polls: u8,
+    fail_readiness: bool,
+    probe: Option<Rc<RefCell<StaticProbeState>>>,
 }
 
 impl ManualMockBinding {
@@ -150,6 +225,21 @@ impl ManualMockBinding {
         Self {
             compatibility,
             external_readiness_polls,
+            fail_readiness: false,
+            probe: None,
+        }
+    }
+
+    fn with_probe(
+        compatibility: BindingArtifactCompatibility,
+        probe: Rc<RefCell<StaticProbeState>>,
+        fail_readiness: bool,
+    ) -> Self {
+        Self {
+            compatibility,
+            external_readiness_polls: 0,
+            fail_readiness,
+            probe: Some(probe),
         }
     }
 }
@@ -186,6 +276,11 @@ impl PollServerBinding for ManualMockBinding {
         BindingInputRejection<PrepareInput>,
     > {
         route.initialize(input, MockRouteState { phase: 1 });
+        if let Some(probe) = &self.probe {
+            let mut state = probe.borrow_mut();
+            assert_eq!(state.routes, 0);
+            state.routes = 1;
+        }
         Ok(clinkz_wot_core::StartStatus::Ready(
             RoutePrepareOutcome::Prepared(()),
         ))
@@ -212,13 +307,23 @@ impl PollServerBinding for ManualMockBinding {
 
     fn start_readiness(
         &mut self,
-        _route: &mut ServerRouteSlot<Self::RouteState>,
+        route: &mut ServerRouteSlot<Self::RouteState>,
         readiness: &mut RouteReadinessSlot<Self::ReadinessState>,
         _budget: &mut WorkBudget,
     ) -> clinkz_wot_core::StartStatus<RouteReadinessOutcome<()>> {
         readiness.initialize_state(MockReadinessState {
             remaining_polls: self.external_readiness_polls,
         });
+        if self.fail_readiness {
+            self.fail_readiness = false;
+            return clinkz_wot_core::StartStatus::Ready(RouteReadinessOutcome::Failed {
+                guard: (),
+                error: BindingOperationalError::for_route(
+                    *route.input().route(),
+                    CoreError::Binding(ErrorContext::new(ErrorPhase::Readiness, RetryClass::Never)),
+                ),
+            });
+        }
         if self.external_readiness_polls == 0 {
             clinkz_wot_core::StartStatus::Ready(RouteReadinessOutcome::Ready(()))
         } else {
@@ -319,10 +424,37 @@ impl PollServerBinding for ManualMockBinding {
         &mut self,
         _cx: &mut Context<'_>,
         _route: &mut ServerRouteSlot<Self::RouteState>,
-        _permit: RouteActivationPermit<'_>,
-        _budget: &mut WorkBudget,
+        permit: RouteActivationPermit<'_>,
+        budget: &mut WorkBudget,
     ) -> Poll<clinkz_wot_core::CoreResult<clinkz_wot_core::RouteAcceptEvent>> {
-        Poll::Pending
+        let Some(probe) = &self.probe else {
+            return Poll::Pending;
+        };
+        if budget.consume(WorkClass::BindingPolls, 1).is_err() {
+            return Poll::Pending;
+        }
+        let mut state = probe.borrow_mut();
+        if state.closed {
+            return Poll::Ready(Ok(clinkz_wot_core::RouteAcceptEvent::Terminal(
+                RouteTerminal::Closed {
+                    route: *permit.route(),
+                },
+            )));
+        }
+        let Some((name, input)) = state.queued.take() else {
+            return Poll::Pending;
+        };
+        let correlation = CorrelationId::new(state.next_correlation);
+        state.next_correlation += 1;
+        state.in_flight = 1;
+        Poll::Ready(Ok(clinkz_wot_core::RouteAcceptEvent::Request(
+            RouteInboundRequest::new(
+                *permit.route(),
+                correlation,
+                AffordanceTarget::Property(Arc::from(name)),
+                input,
+            ),
+        )))
     }
 
     fn start_abort(
@@ -331,6 +463,14 @@ impl PollServerBinding for ManualMockBinding {
         _route: &mut ServerRouteSlot<Self::RouteState>,
         _budget: &mut WorkBudget,
     ) -> clinkz_wot_core::StartStatus<RouteCleanupOutcome> {
+        if let Some(probe) = &self.probe {
+            let mut state = probe.borrow_mut();
+            state.cleanup = 1;
+            state.aborts += 1;
+            state.routes = 0;
+            state.cleanup = 0;
+            state.closed = true;
+        }
         clinkz_wot_core::StartStatus::Ready(RouteCleanupOutcome::Complete)
     }
 
@@ -340,15 +480,33 @@ impl PollServerBinding for ManualMockBinding {
         _route: &mut ServerRouteSlot<Self::RouteState>,
         _budget: &mut WorkBudget,
     ) -> Poll<RouteCleanupOutcome> {
+        if let Some(probe) = &self.probe {
+            let mut state = probe.borrow_mut();
+            state.routes = 0;
+            state.cleanup = 0;
+            state.closed = true;
+        }
         Poll::Ready(RouteCleanupOutcome::Complete)
     }
 
     fn start_shutdown(
         &mut self,
         _cleanup: CleanupPhaseContext,
-        _route: &mut ServerRouteSlot<Self::RouteState>,
-        _budget: &mut WorkBudget,
+        route: &mut ServerRouteSlot<Self::RouteState>,
+        budget: &mut WorkBudget,
     ) -> clinkz_wot_core::StartStatus<RouteCleanupOutcome> {
+        let Some(probe) = &self.probe else {
+            return clinkz_wot_core::StartStatus::Ready(RouteCleanupOutcome::Complete);
+        };
+        probe.borrow_mut().cleanup = 1;
+        if budget.consume(WorkClass::CleanupItems, 1).is_err() {
+            route.state_mut().phase = 4;
+            return clinkz_wot_core::StartStatus::Pending;
+        }
+        let mut state = probe.borrow_mut();
+        state.routes = 0;
+        state.cleanup = 0;
+        state.closed = true;
         clinkz_wot_core::StartStatus::Ready(RouteCleanupOutcome::Complete)
     }
 
@@ -356,8 +514,18 @@ impl PollServerBinding for ManualMockBinding {
         &mut self,
         _cx: &mut Context<'_>,
         _route: &mut ServerRouteSlot<Self::RouteState>,
-        _budget: &mut WorkBudget,
+        budget: &mut WorkBudget,
     ) -> Poll<RouteCleanupOutcome> {
+        let Some(probe) = &self.probe else {
+            return Poll::Ready(RouteCleanupOutcome::Complete);
+        };
+        if budget.consume(WorkClass::CleanupItems, 1).is_err() {
+            return Poll::Pending;
+        }
+        let mut state = probe.borrow_mut();
+        state.routes = 0;
+        state.cleanup = 0;
+        state.closed = true;
         Poll::Ready(RouteCleanupOutcome::Complete)
     }
 
@@ -378,6 +546,13 @@ impl PollServerBinding for ManualMockBinding {
         clinkz_wot_core::StartStatus<BindingDeliveryOutcome>,
         BindingInputRejection<RouteInboundResponse>,
     > {
+        if let Some(probe) = &self.probe {
+            assert!(response.result().is_ok(), "fixture handler response failed");
+            let mut state = probe.borrow_mut();
+            assert_eq!(state.in_flight, 1);
+            state.in_flight = 0;
+            state.delivered += 1;
+        }
         slot.initialize(response, MockResponseState { accepted: true });
         Ok(clinkz_wot_core::StartStatus::Ready(
             BindingDeliveryOutcome::Delivered,
@@ -443,9 +618,660 @@ pub fn static_registration(
     ))
 }
 
+/// Builds the complete no-default registration and deterministic I/O probe
+/// used by the WP-400 runtime contract.
+pub fn static_property_read_fixture() -> (
+    StaticBindingRegistration<ManualMockBinding>,
+    StaticPropertyReadProbe,
+) {
+    static_property_read_fixture_with_readiness(false)
+}
+
+/// Builds a no-default registration whose prepared route fails readiness and
+/// therefore must be returned intact to the explicit abort path.
+pub fn static_property_read_readiness_failure_fixture() -> (
+    StaticBindingRegistration<ManualMockBinding>,
+    StaticPropertyReadProbe,
+) {
+    static_property_read_fixture_with_readiness(true)
+}
+
+fn static_property_read_fixture_with_readiness(
+    fail_readiness: bool,
+) -> (
+    StaticBindingRegistration<ManualMockBinding>,
+    StaticPropertyReadProbe,
+) {
+    let compatibility = BindingArtifactCompatibility::new([0x41; 16]);
+    let identity = BindingRegistrationIdentity::new(
+        BindingId::new(7),
+        BindingGeneration::INITIAL,
+        BindingConfigurationDigest::new([0x52; 32]),
+        compatibility,
+        0,
+    );
+    let state = Rc::new(RefCell::new(StaticProbeState::default()));
+    let input = StaticBindingRegistrationInput::new(
+        identity,
+        BindingRegistrationCapabilities::producer_property_read(),
+        BindingExecutionSupport::application_static(),
+        StaticBindingCompilerRegistration::new(MockCompiler::new(compatibility)),
+        ManualMockBinding::with_probe(compatibility, state.clone(), fail_readiness),
+        BindingResourceDeclarations::new(
+            BindingLifetimeFootprint::new(4, 256),
+            BindingLifetimeFootprint::new(4, 256),
+        ),
+        BindingIngressPolicy::hidden(),
+        BindingStatusPolicy::new(1, 64),
+    );
+    let registration = match StaticBindingRegistration::new(input) {
+        Ok(registration) => registration,
+        Err(_) => panic!("complete static mock registration was rejected"),
+    };
+    (registration, StaticPropertyReadProbe { state })
+}
+
 fn cancelled<T>() -> BindingCallSettlement<T, ()> {
     BindingCallSettlement::Cancelled {
         retry_class: clinkz_wot_core::RetryClass::Never,
         disposition: BindingCancellationDisposition::Complete { successor: () },
     }
 }
+
+#[cfg(feature = "std")]
+mod host_fixture {
+    use alloc::{boxed::Box, sync::Arc};
+    use core::pin::Pin;
+    use core::task::{Context, Poll};
+
+    use clinkz_wot_core::{
+        AffordanceTarget, BindingArtifactCompatibility, BindingCallSettlement,
+        BindingConfigurationDigest, BindingDeliveryOutcome, BindingExecutionSupport,
+        BindingGeneration, BindingId, BindingIngressPolicy, BindingInputRejection,
+        BindingLifetimeFootprint, BindingOperationalError, BindingRegistrationCapabilities,
+        BindingRegistrationIdentity, BindingResourceDeclarations, BindingStatusPolicy,
+        CleanupPhaseContext, CoreError, CorrelationId, Deadline, ErrorContext, ErrorPhase,
+        HostActiveRouteGuard, HostBindingCall, HostBindingCallBox, HostBindingCompilerRegistration,
+        HostBindingRegistration, HostBindingRegistrationInput, HostCommittedRouteGuard,
+        HostPreparedRouteGuard, HostRouteCleanupSuccessor, InteractionInput, NoCleanupSuccessor,
+        PrepareInput, RetryClass, RouteAbortInput, RouteActivationOutcome, RouteCleanupOutcome,
+        RouteCommitOutcome, RouteInboundRequest, RouteInboundResponse, RoutePrepareOutcome,
+        RouteReadinessOutcome, RouteServerBinding, RouteShutdownInput, RouteTerminal, StartStatus,
+        WotLock,
+    };
+    use clinkz_wot_foundation::{WorkBudget, WorkClass};
+
+    use super::MockCompiler;
+
+    struct ProbeState {
+        queued: Option<(Box<str>, InteractionInput)>,
+        next_correlation: u64,
+        delivered: u32,
+        routes: u32,
+        in_flight: u32,
+        cleanup: u32,
+        aborts: u32,
+        shutdowns: u32,
+        reject_readiness_once: bool,
+        reject_abort_once: bool,
+        reject_shutdown_once: bool,
+        readiness_rejections: u32,
+        abort_rejections: u32,
+        shutdown_rejections: u32,
+        closed: bool,
+    }
+
+    impl Default for ProbeState {
+        fn default() -> Self {
+            Self {
+                queued: None,
+                next_correlation: 1,
+                delivered: 0,
+                routes: 0,
+                in_flight: 0,
+                cleanup: 0,
+                aborts: 0,
+                shutdowns: 0,
+                reject_readiness_once: false,
+                reject_abort_once: false,
+                reject_shutdown_once: false,
+                readiness_rejections: 0,
+                abort_rejections: 0,
+                shutdown_rejections: 0,
+                closed: false,
+            }
+        }
+    }
+
+    /// Deterministic protocol-I/O and instrumentation state for the WP-400
+    /// host runner. It creates no plan, route, permit, handler, or response.
+    #[derive(Clone)]
+    pub struct HostPropertyReadProbe {
+        state: WotLock<ProbeState>,
+    }
+
+    impl HostPropertyReadProbe {
+        pub fn enqueue_property_read(&self, name: &str, input: InteractionInput) {
+            self.state.with(|state| {
+                assert!(!state.closed, "request queued after route closure");
+                assert!(state.queued.is_none(), "mock ingress slot is occupied");
+                state.queued = Some((Box::from(name), input));
+            });
+        }
+
+        pub fn delivered_responses(&self) -> u32 {
+            self.state.with_read(|state| state.delivered)
+        }
+
+        pub fn outstanding_counts(&self) -> (u32, u32, u32, u32) {
+            self.state.with_read(|state| {
+                (
+                    state.routes,
+                    u32::from(state.queued.is_some()),
+                    state.in_flight,
+                    state.cleanup,
+                )
+            })
+        }
+
+        pub fn poll_after_close(&self, _cx: &mut Context<'_>) -> Poll<bool> {
+            self.state.with_read(|state| {
+                if state.closed {
+                    Poll::Ready(false)
+                } else {
+                    Poll::Pending
+                }
+            })
+        }
+
+        pub fn cleanup_attempts(&self) -> (u32, u32) {
+            self.state
+                .with_read(|state| (state.aborts, state.shutdowns))
+        }
+
+        pub fn input_rejections(&self) -> (u32, u32, u32) {
+            self.state.with_read(|state| {
+                (
+                    state.readiness_rejections,
+                    state.abort_rejections,
+                    state.shutdown_rejections,
+                )
+            })
+        }
+    }
+
+    struct ReadyCall<T, C> {
+        value: Option<T>,
+        pending_polls: u8,
+        _cleanup: core::marker::PhantomData<C>,
+    }
+
+    impl<T, C> ReadyCall<T, C> {
+        fn new(value: T) -> Self {
+            Self {
+                value: Some(value),
+                pending_polls: 0,
+                _cleanup: core::marker::PhantomData,
+            }
+        }
+
+        fn pending_once(value: T) -> Self {
+            Self {
+                value: Some(value),
+                pending_polls: 1,
+                _cleanup: core::marker::PhantomData,
+            }
+        }
+    }
+
+    impl<T, C> HostBindingCall<T, C> for ReadyCall<T, C>
+    where
+        T: Send + Unpin + 'static,
+        C: Send + Unpin + 'static,
+    {
+        fn lifetime_footprint(&self) -> BindingLifetimeFootprint {
+            BindingLifetimeFootprint::new(1, 128)
+        }
+
+        fn poll_result(
+            mut self: Pin<&mut Self>,
+            cx: &mut Context<'_>,
+            budget: &mut WorkBudget,
+        ) -> Poll<T> {
+            if self.pending_polls != 0 {
+                if budget.consume(WorkClass::BindingPolls, 1).is_err() {
+                    return Poll::Pending;
+                }
+                self.pending_polls -= 1;
+                cx.waker().wake_by_ref();
+                return Poll::Pending;
+            }
+            Poll::Ready(
+                self.value
+                    .take()
+                    .expect("host call polled after completion"),
+            )
+        }
+
+        fn start_cancel(
+            self: Pin<&mut Self>,
+            _cx: &mut Context<'_>,
+            _cleanup: CleanupPhaseContext,
+            _budget: &mut WorkBudget,
+        ) -> clinkz_wot_core::CoreResult<StartStatus<BindingCallSettlement<T, C>>> {
+            Ok(StartStatus::Pending)
+        }
+
+        fn poll_cancel(
+            mut self: Pin<&mut Self>,
+            _cx: &mut Context<'_>,
+            _budget: &mut WorkBudget,
+        ) -> Poll<clinkz_wot_core::CoreResult<BindingCallSettlement<T, C>>> {
+            Poll::Ready(Ok(BindingCallSettlement::Returned(
+                self.value.take().expect("host call cancelled twice"),
+            )))
+        }
+
+        fn next_deadline(&self) -> Option<Deadline> {
+            None
+        }
+    }
+
+    struct DeliveryCall {
+        response: Option<RouteInboundResponse>,
+        probe: WotLock<ProbeState>,
+    }
+
+    impl HostBindingCall<BindingDeliveryOutcome, NoCleanupSuccessor> for DeliveryCall {
+        fn lifetime_footprint(&self) -> BindingLifetimeFootprint {
+            BindingLifetimeFootprint::new(1, 128)
+        }
+
+        fn poll_result(
+            mut self: Pin<&mut Self>,
+            _cx: &mut Context<'_>,
+            budget: &mut WorkBudget,
+        ) -> Poll<BindingDeliveryOutcome> {
+            if budget.consume(WorkClass::BindingPolls, 1).is_err() {
+                return Poll::Pending;
+            }
+            let response = self.response.take().expect("response delivered twice");
+            assert!(response.result().is_ok(), "fixture handler response failed");
+            self.probe.with(|state| {
+                assert_eq!(state.in_flight, 1);
+                state.in_flight = 0;
+                state.delivered += 1;
+            });
+            Poll::Ready(BindingDeliveryOutcome::Delivered)
+        }
+
+        fn start_cancel(
+            self: Pin<&mut Self>,
+            _cx: &mut Context<'_>,
+            _cleanup: CleanupPhaseContext,
+            _budget: &mut WorkBudget,
+        ) -> clinkz_wot_core::CoreResult<StartStatus<BindingCallSettlement<BindingDeliveryOutcome>>>
+        {
+            Ok(StartStatus::Pending)
+        }
+
+        fn poll_cancel(
+            self: Pin<&mut Self>,
+            _cx: &mut Context<'_>,
+            _budget: &mut WorkBudget,
+        ) -> Poll<clinkz_wot_core::CoreResult<BindingCallSettlement<BindingDeliveryOutcome>>>
+        {
+            Poll::Pending
+        }
+
+        fn next_deadline(&self) -> Option<Deadline> {
+            None
+        }
+    }
+
+    enum CleanupInput {
+        Abort(RouteAbortInput),
+        Shutdown(RouteShutdownInput),
+    }
+
+    struct CleanupCall {
+        input: Option<CleanupInput>,
+        probe: WotLock<ProbeState>,
+    }
+
+    impl HostBindingCall<RouteCleanupOutcome, HostRouteCleanupSuccessor> for CleanupCall {
+        fn lifetime_footprint(&self) -> BindingLifetimeFootprint {
+            BindingLifetimeFootprint::new(1, 128)
+        }
+
+        fn poll_result(
+            mut self: Pin<&mut Self>,
+            _cx: &mut Context<'_>,
+            budget: &mut WorkBudget,
+        ) -> Poll<RouteCleanupOutcome> {
+            if budget.consume(WorkClass::CleanupItems, 1).is_err() {
+                return Poll::Pending;
+            }
+            let input = self.input.take().expect("cleanup completed twice");
+            self.probe.with(|state| {
+                match input {
+                    CleanupInput::Abort(input) => {
+                        let _ = input.into_parts();
+                        state.aborts += 1;
+                    }
+                    CleanupInput::Shutdown(input) => {
+                        let _ = input.into_parts();
+                        state.shutdowns += 1;
+                    }
+                }
+                state.routes = 0;
+                state.cleanup = 0;
+                state.closed = true;
+            });
+            Poll::Ready(RouteCleanupOutcome::Complete)
+        }
+
+        fn start_cancel(
+            self: Pin<&mut Self>,
+            _cx: &mut Context<'_>,
+            _cleanup: CleanupPhaseContext,
+            _budget: &mut WorkBudget,
+        ) -> clinkz_wot_core::CoreResult<
+            StartStatus<BindingCallSettlement<RouteCleanupOutcome, HostRouteCleanupSuccessor>>,
+        > {
+            Ok(StartStatus::Pending)
+        }
+
+        fn poll_cancel(
+            self: Pin<&mut Self>,
+            _cx: &mut Context<'_>,
+            _budget: &mut WorkBudget,
+        ) -> Poll<
+            clinkz_wot_core::CoreResult<
+                BindingCallSettlement<RouteCleanupOutcome, HostRouteCleanupSuccessor>,
+            >,
+        > {
+            Poll::Pending
+        }
+
+        fn next_deadline(&self) -> Option<Deadline> {
+            None
+        }
+    }
+
+    struct HostMockBinding {
+        compatibility: BindingArtifactCompatibility,
+        probe: WotLock<ProbeState>,
+    }
+
+    impl RouteServerBinding for HostMockBinding {
+        fn artifact_compatibility(&self) -> BindingArtifactCompatibility {
+            self.compatibility
+        }
+
+        fn prepare(
+            &self,
+            input: PrepareInput,
+        ) -> Result<
+            HostBindingCallBox<
+                RoutePrepareOutcome<HostPreparedRouteGuard>,
+                HostRouteCleanupSuccessor,
+            >,
+            BindingInputRejection<PrepareInput>,
+        > {
+            self.probe.with(|state| {
+                assert_eq!(state.routes, 0);
+                state.routes = 1;
+            });
+            let guard =
+                HostPreparedRouteGuard::new(input, BindingLifetimeFootprint::new(1, 128), 0_u8);
+            Ok(HostBindingCallBox::new(ReadyCall::new(
+                RoutePrepareOutcome::Prepared(guard),
+            )))
+        }
+
+        fn start_readiness(
+            &self,
+            guard: HostPreparedRouteGuard,
+        ) -> Result<
+            HostBindingCallBox<
+                RouteReadinessOutcome<HostPreparedRouteGuard>,
+                HostRouteCleanupSuccessor,
+            >,
+            BindingInputRejection<HostPreparedRouteGuard>,
+        > {
+            let rejected = self.probe.with(|state| {
+                if state.reject_readiness_once {
+                    state.reject_readiness_once = false;
+                    state.readiness_rejections += 1;
+                    true
+                } else {
+                    false
+                }
+            });
+            if rejected {
+                let error = BindingOperationalError::for_route(
+                    *guard.route(),
+                    CoreError::Binding(ErrorContext::new(ErrorPhase::Readiness, RetryClass::Never)),
+                );
+                return Err(BindingInputRejection::new(guard, error));
+            }
+            Ok(HostBindingCallBox::new(ReadyCall::pending_once(
+                RouteReadinessOutcome::Ready(guard),
+            )))
+        }
+
+        fn activate(
+            &self,
+            guard: HostPreparedRouteGuard,
+        ) -> Result<
+            HostBindingCallBox<
+                RouteActivationOutcome<HostPreparedRouteGuard, HostActiveRouteGuard>,
+                HostRouteCleanupSuccessor,
+            >,
+            BindingInputRejection<HostPreparedRouteGuard>,
+        > {
+            Ok(HostBindingCallBox::new(ReadyCall::new(
+                RouteActivationOutcome::Active(HostActiveRouteGuard::new(guard, 1_u8)),
+            )))
+        }
+
+        fn commit(
+            &self,
+            guard: HostActiveRouteGuard,
+        ) -> Result<
+            HostBindingCallBox<
+                RouteCommitOutcome<HostActiveRouteGuard, HostCommittedRouteGuard>,
+                HostRouteCleanupSuccessor,
+            >,
+            BindingInputRejection<HostActiveRouteGuard>,
+        > {
+            Ok(HostBindingCallBox::new(ReadyCall::new(
+                RouteCommitOutcome::Committed(HostCommittedRouteGuard::new(guard, 2_u8)),
+            )))
+        }
+
+        fn poll_accept(
+            &self,
+            _route: Pin<&mut HostCommittedRouteGuard>,
+            permit: clinkz_wot_core::RouteActivationPermit<'_>,
+            _cx: &mut Context<'_>,
+            budget: &mut WorkBudget,
+        ) -> Poll<clinkz_wot_core::CoreResult<clinkz_wot_core::RouteAcceptEvent>> {
+            if budget.consume(WorkClass::BindingPolls, 1).is_err() {
+                return Poll::Pending;
+            }
+            self.probe.with(|state| {
+                if state.closed {
+                    return Poll::Ready(Ok(clinkz_wot_core::RouteAcceptEvent::Terminal(
+                        RouteTerminal::Closed {
+                            route: *permit.route(),
+                        },
+                    )));
+                }
+                let Some((name, input)) = state.queued.take() else {
+                    return Poll::Pending;
+                };
+                let correlation = CorrelationId::new(state.next_correlation);
+                state.next_correlation += 1;
+                state.in_flight = 1;
+                Poll::Ready(Ok(clinkz_wot_core::RouteAcceptEvent::Request(
+                    RouteInboundRequest::new(
+                        *permit.route(),
+                        correlation,
+                        AffordanceTarget::Property(Arc::from(name)),
+                        input,
+                    ),
+                )))
+            })
+        }
+
+        fn abort(
+            &self,
+            input: RouteAbortInput,
+        ) -> Result<
+            HostBindingCallBox<RouteCleanupOutcome, HostRouteCleanupSuccessor>,
+            BindingInputRejection<RouteAbortInput>,
+        > {
+            let rejected = self.probe.with(|state| {
+                if state.reject_abort_once {
+                    state.reject_abort_once = false;
+                    state.abort_rejections += 1;
+                    true
+                } else {
+                    false
+                }
+            });
+            if rejected {
+                let (guard, cleanup) = input.into_parts();
+                let error = BindingOperationalError::for_route(
+                    *guard.route(),
+                    CoreError::Binding(ErrorContext::new(ErrorPhase::Cleanup, RetryClass::Never)),
+                );
+                return Err(BindingInputRejection::new(
+                    RouteAbortInput::new(guard, cleanup),
+                    error,
+                ));
+            }
+            self.probe.with(|state| state.cleanup = 1);
+            Ok(HostBindingCallBox::new(CleanupCall {
+                input: Some(CleanupInput::Abort(input)),
+                probe: self.probe.clone(),
+            }))
+        }
+
+        fn shutdown(
+            &self,
+            input: RouteShutdownInput,
+        ) -> Result<
+            HostBindingCallBox<RouteCleanupOutcome, HostRouteCleanupSuccessor>,
+            BindingInputRejection<RouteShutdownInput>,
+        > {
+            let rejected = self.probe.with(|state| {
+                if state.reject_shutdown_once {
+                    state.reject_shutdown_once = false;
+                    state.shutdown_rejections += 1;
+                    true
+                } else {
+                    false
+                }
+            });
+            if rejected {
+                let (guard, cleanup) = input.into_parts();
+                let error = BindingOperationalError::for_route(
+                    *guard.route(),
+                    CoreError::Binding(ErrorContext::new(ErrorPhase::Cleanup, RetryClass::Never)),
+                );
+                return Err(BindingInputRejection::new(
+                    RouteShutdownInput::new(guard, cleanup),
+                    error,
+                ));
+            }
+            self.probe.with(|state| state.cleanup = 1);
+            Ok(HostBindingCallBox::new(CleanupCall {
+                input: Some(CleanupInput::Shutdown(input)),
+                probe: self.probe.clone(),
+            }))
+        }
+
+        fn deliver_response(
+            &self,
+            response: RouteInboundResponse,
+        ) -> Result<
+            HostBindingCallBox<BindingDeliveryOutcome>,
+            BindingInputRejection<RouteInboundResponse>,
+        > {
+            Ok(HostBindingCallBox::new(DeliveryCall {
+                response: Some(response),
+                probe: self.probe.clone(),
+            }))
+        }
+    }
+
+    /// Builds the complete host-erased mock registration and its independent
+    /// deterministic I/O probe.
+    pub fn host_property_read_fixture() -> (HostBindingRegistration, HostPropertyReadProbe) {
+        host_property_read_fixture_with_rejections(false, false, false)
+    }
+
+    /// Rejects readiness and the first abort-constructor attempt while
+    /// returning both complete inputs to the Servient cleanup owner.
+    pub fn host_property_read_readiness_rejection_fixture()
+    -> (HostBindingRegistration, HostPropertyReadProbe) {
+        host_property_read_fixture_with_rejections(true, true, false)
+    }
+
+    /// Rejects the first shutdown-constructor attempt while returning the
+    /// complete committed guard and cleanup phase for a later retry.
+    pub fn host_property_read_shutdown_rejection_fixture()
+    -> (HostBindingRegistration, HostPropertyReadProbe) {
+        host_property_read_fixture_with_rejections(false, false, true)
+    }
+
+    fn host_property_read_fixture_with_rejections(
+        reject_readiness_once: bool,
+        reject_abort_once: bool,
+        reject_shutdown_once: bool,
+    ) -> (HostBindingRegistration, HostPropertyReadProbe) {
+        let compatibility = BindingArtifactCompatibility::new([0x41; 16]);
+        let identity = BindingRegistrationIdentity::new(
+            BindingId::new(7),
+            BindingGeneration::INITIAL,
+            BindingConfigurationDigest::new([0x52; 32]),
+            compatibility,
+            0,
+        );
+        let mut probe_state = ProbeState::default();
+        probe_state.reject_readiness_once = reject_readiness_once;
+        probe_state.reject_abort_once = reject_abort_once;
+        probe_state.reject_shutdown_once = reject_shutdown_once;
+        let state = WotLock::new(probe_state);
+        let input = HostBindingRegistrationInput::new(
+            identity,
+            BindingRegistrationCapabilities::producer_property_read(),
+            BindingExecutionSupport::host_erased(),
+            HostBindingCompilerRegistration::new(MockCompiler::new(compatibility)),
+            Box::new(HostMockBinding {
+                compatibility,
+                probe: state.clone(),
+            }),
+            BindingResourceDeclarations::new(
+                BindingLifetimeFootprint::new(4, 256),
+                BindingLifetimeFootprint::new(4, 256),
+            ),
+            BindingIngressPolicy::hidden(),
+            BindingStatusPolicy::new(1, 64),
+        );
+        let registration = match HostBindingRegistration::new(input) {
+            Ok(registration) => registration,
+            Err(_) => panic!("complete host mock registration was rejected"),
+        };
+        (registration, HostPropertyReadProbe { state })
+    }
+}
+
+#[cfg(feature = "std")]
+pub use host_fixture::{
+    HostPropertyReadProbe, host_property_read_fixture,
+    host_property_read_readiness_rejection_fixture, host_property_read_shutdown_rejection_fixture,
+};

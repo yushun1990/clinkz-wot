@@ -17,6 +17,7 @@ extern crate std;
 extern crate alloc;
 
 mod error;
+mod property_read;
 mod registry;
 
 #[cfg(feature = "std")]
@@ -27,6 +28,7 @@ mod handle;
 mod servient;
 
 pub use error::{ServientError, ServientResult};
+pub use property_read::{CompiledPlanSetState, ExposeState, StaticServient, StaticServientBuilder};
 
 #[cfg(feature = "async")]
 pub use handle::{ConsumedThingHandle, ExposedThingHandle};
