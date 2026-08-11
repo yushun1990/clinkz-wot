@@ -106,13 +106,13 @@ revalidation = "cargo run --locked --quiet --manifest-path tools/design-check/Ca
 [[artifact]]
 family = "property-read-integration-gate"
 path = "docs/work-packages/property-read-architecture-gate.toml"
-sha256 = "6085a867a2eb0b482bc2fbc5a80eff4f50138b58ced3d1b1dc5b65058270c2d4"
-disposition = "revalidated as a six-tranche gate with every narrow slice complete/approved and with review-pending declarative transition records for the completed route-reservation and WP-400 chains; their immutable candidate histories, exact path sets, status/evidence links, admission topology, and source boundaries pass the generic validator while the focused validators remain parallel oracles; the aggregate gate is ready and both planned fixture roots remain absent"
+sha256 = "8663ba3a4632d409c9d8fec941bb1cf3639f308fc3efbd4096f03f33f7a4b6aa"
+disposition = "revalidated as a six-tranche gate with every narrow slice complete/approved and with review-pending declarative transition records for the completed route-reservation and WP-400 chains; their immutable candidate histories, exact path sets, status/evidence links, admission topology, and source boundaries pass the generic validator while the legacy work-package topology path and focused validators remain parallel oracles; the aggregate gate is ready and both planned fixture roots remain absent"
 revalidation = "tools/check-v5-authority-reset-decision.sh"
 
 [[artifact]]
 family = "property-read-integration-gate"
 path = "docs/work-packages/PROPERTY-READ-ARCHITECTURE.md"
-sha256 = "7f7e70cf7f02ab9b15a7b58ab4e6dc8fdcc1a1f829a7d7abc8e7a9c32c8891d9"
+sha256 = "133e05840672a0557517a2960c3b48d1e04381b50c7d43d6ceddf914af48ff10"
 disposition = "revalidated with all narrow Property Read slices integrated/default-validated, D46 discharged, and D48's generic transition-validation contract established before aggregate candidate work; the aggregate gate remains ready rather than passed, inactive RuntimeEvent/HostHandlerRegistration families remain excluded, and mutable transition data remains owned by docs/work-packages/property-read-architecture-gate.toml"
 revalidation = "tools/check-v5-authority-reset-decision.sh"

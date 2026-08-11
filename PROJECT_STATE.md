@@ -342,6 +342,16 @@ is intentional until an immutable-candidate reconstruction exercises the valid
 state, shared negative mutations, commit topology, and current completion
 evidence against both the generic engine and the retained oracles.
 
+Initial immutable candidate
+`e21633784d98d5ff124b2cd467c5271a8dea2544` passed its generic valid-state
+reconstruction, but independent evidence inspection rejected its oracle-set
+projection: it named the four focused entry/completion checks but omitted the
+registered `work-package-dag-check` command that actually retains the old
+instance-specific exact-path and topology branches. The current narrow
+corrective candidate adds that command to the declared oracle set and clarifies
+the authoritative contract; it neither changes transition semantics nor
+weakens or removes any checker.
+
 If the pre-existing uncommitted aggregate-candidate preparation remains in the
 separate `agent/property-read-architecture-candidate` worktree, preserve it as
 investigation evidence only. It is not an admitted candidate or repository

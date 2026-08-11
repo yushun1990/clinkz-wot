@@ -249,12 +249,13 @@ engine checks these facts against Git history, the artifact and governance
 registries, review attestations, and current completion evidence.
 
 The equivalence claim has four required dimensions: valid current state,
-negative mutations, commit topology, and current completion evidence. Existing
+negative mutations, commit topology, and current completion evidence. The
+legacy instance branches reached through `check-work-packages` and the focused
 entry/completion validators remain executable and run in parallel; this
-convergence does not retire their semantic or behavioral checks. Once the
-independent equivalence attestation is registered, adding another transition
-that uses the same invariant categories changes declarative records and focused
-behavior evidence, not generic-engine control flow.
+convergence does not retire their topology, semantic, or behavioral checks.
+Once the independent equivalence attestation is registered, adding another
+transition that uses the same invariant categories changes declarative records
+and focused behavior evidence, not generic-engine control flow.
 
 ## Fixture topology
 

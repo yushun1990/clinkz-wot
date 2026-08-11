@@ -125,6 +125,7 @@ record_ids = [
     "WP-400-PROPERTY-READ-SERVIENT-SLICE",
 ]
 oracle_checks = [
+    "work-package-dag-check",
     "wp200-property-read-route-reservation-entry-check",
     "wp200-property-read-route-reservation-check",
     "wp400-property-read-servient-slice-entry-check",

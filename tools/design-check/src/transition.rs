@@ -24,6 +24,7 @@ use super::{
 
 const CONFIG_TABLE: &str = "transition_validation";
 const VALIDATOR_CHECK: &str = "transition-record-check";
+const LEGACY_TRANSITION_ORACLE: &str = "work-package-dag-check";
 const REVIEW_MARKER: &str = "register-after-review";
 const CONVERGENCE_CLAIM: &str = "D48-TRANSITION-VALIDATOR-CONVERGENCE";
 
@@ -144,6 +145,7 @@ pub(crate) fn check_manifest(
         )?;
         actual_oracles.extend(oracles);
     }
+    actual_oracles.insert(LEGACY_TRANSITION_ORACLE.to_owned());
     if actual_record_ids != declared_record_ids {
         return Err(format!(
             "transition record set mismatch; declared {declared_record_ids:?}, found {actual_record_ids:?}"
