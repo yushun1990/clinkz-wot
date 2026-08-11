@@ -242,9 +242,13 @@ The active design revision is v5.0 bounded-core authority.
   static runtime cell, and requires accepted-request retention across handler
   budget exhaustion in both runtime profiles. Pull-request #22 exact-head
   validation run `31370902588` passed. Independent review passed on
-  2026-08-11 and is recorded by
-  `docs/audits/WP-400-property-read-servient-slice-review.toml`; no WP-400
-  product or implementation-support source is present on the task branch.
+  2026-08-11. Exact three-path review checkpoint
+  `f04814c31a5a5f0ba4144d3bedcb3956ad00ab44` adds only its attestation,
+  artifact row, and continuation projection. Its gate registration preserves
+  `pending`/`review-pending` and
+  `admission_base_ref = "register-at-admission"`. The full reviewed entry
+  matrix passed on the registered tree; no WP-400 product or
+  implementation-support source is present on the task branch.
 - Pull request #20 integrated technical decision checkpoint
   `6271c2861771a0fbc18772bd853bc451ba0fd614` and continuation checkpoint
   `72cf711adef3712ebf502b2fd01273e6f2d23376` through exact merge
@@ -304,19 +308,23 @@ Exact fifth correction `43e2669117f6e2a550e862837f3ab55cc5f956fb` is the
 fourth correction's twelve-path child. It preserves all nine D46 rows, the
 7+3 future source topology, source absence, and `StepStatus<()>`, while closing
 those runtime and API contracts. Independent reconstruction and negative
-testing passed; this checkpoint records the exact-ref review attestation.
-WP-400 source remains blocked until that review checkpoint is remotely
-integrated and a later distinct pre-source admission checkpoint binds the
-verified default-branch base.
+testing passed. Exact review checkpoint
+`f04814c31a5a5f0ba4144d3bedcb3956ad00ab44` records the immutable candidate
+reference, and its current gate registration leaves admission unresolved.
+WP-400 source remains blocked until the review chain is remotely integrated
+and a later distinct pre-source admission checkpoint binds the verified
+default-branch base.
 
 ### Before verified integration
 
-Commit the exact three-path review checkpoint containing this continuation
-state, the review attestation, and its artifact-registry row. Run the reviewed
-entry matrix, push the same branch to pull request #22, and require a new
-exact-head `validation` result. Keep all simulated product/support source out
-of the task branch. The future transition reserves seven Servient product
-paths, one WP-300 mock support source, and two affected lockfiles.
+Preserve exact review checkpoint
+`f04814c31a5a5f0ba4144d3bedcb3956ad00ab44` and register its reference through
+the current gate/carry-forward/continuation checkpoint. The reviewed entry
+matrix passes; commit this registration, push the same branch to pull request
+#22, and require a new exact-head `validation` result. Keep all simulated
+product/support source out of the task branch. The future transition reserves
+seven Servient product paths, one WP-300 mock support source, and two affected
+lockfiles.
 
 ### After verified integration
 
@@ -1525,9 +1533,8 @@ source. Its current tree passes:
 
 ## Next Safe Actions
 
-1. Commit the exact three-path WP-400 review checkpoint, validate
-   `tools/check-wp400-property-read-servient-slice-entry.sh --reviewed`, push
-   it to draft pull request #22, and require exact-head remote `validation`.
+1. Commit the validated exact WP-400 review-reference registration, push it to
+   draft pull request #22, and require exact-head remote `validation`.
 2. Integrate only after the current head remains complete, current with
    `master`, conflict-free, thread-clean, and covered by the verified strict
    ruleset; then fetch and validate the actual merge revision and its

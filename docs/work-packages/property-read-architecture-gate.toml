@@ -1047,6 +1047,9 @@ pre_implementation_checks = [
     "wp200-property-read-route-reservation-check",
 ]
 admission_review = "docs/audits/WP-400-property-read-servient-slice-entry.md"
+review_attestation = "docs/audits/WP-400-property-read-servient-slice-review.toml"
+review_attestation_ref = "f04814c31a5a5f0ba4144d3bedcb3956ad00ab44"
+admission_base_ref = "register-at-admission"
 entry_check = "wp400-property-read-servient-slice-entry-check"
 completion_evidence_path = "docs/evidence/WP-400-property-read-servient-slice.toml"
 completion_check = "wp400-property-read-servient-slice-check"
