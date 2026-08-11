@@ -352,6 +352,16 @@ corrective candidate adds that command to the declared oracle set and clarifies
 the authoritative contract; it neither changes transition semantics nor
 weakens or removes any checker.
 
+Corrective candidate `09204594918071b0c4b760369a3c596b275b0ac7` repaired
+that declaration and passed the isolated valid-state matrix. Mutation-test
+preparation then found an execution-order defect: `check-work-packages` invoked
+the generic engine before its retained instance-specific branches, so a shared
+invalid state would short-circuit before the legacy oracle could independently
+reject it. The current second correction moves the generic call to the end of
+the already-existing integration-gate validation. Valid states still require
+both paths; mutation review can now run the legacy command and generic command
+separately without adding a tranche-specific engine branch.
+
 If the pre-existing uncommitted aggregate-candidate preparation remains in the
 separate `agent/property-read-architecture-candidate` worktree, preserve it as
 investigation evidence only. It is not an admitted candidate or repository

@@ -3776,7 +3776,6 @@ fn check_property_read_integration_gate(
     let manifest = manifest_source
         .parse::<DocumentMut>()
         .map_err(|error| format!("invalid {}: {error}", manifest_path.display()))?;
-    transition::check_manifest(root, &manifest, &registered_artifacts)?;
     require_integer(
         manifest.get("schema_version"),
         "property-read gate schema_version",
@@ -5460,6 +5459,10 @@ fn check_property_read_integration_gate(
             ));
         }
     }
+
+    // Run the retained instance-specific validator first so review mutations can
+    // observe it independently before the generic transition oracle runs.
+    transition::check_manifest(root, &manifest, &registered_artifacts)?;
 
     Ok(())
 }
