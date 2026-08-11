@@ -21,8 +21,10 @@ The active design revision is v5.0 bounded-core authority.
 - D9 bounded-conversion governance checkpoint:
   `a952e2b034b8939c0abdaf1662707eaef1d2fdc8`.
 - Latest completed Property Read source slice:
-  `b47899150aa957b1dea8d844aa49852e3e6aa356`, the exact three-path WP-200
-  route-reservation Core/Planning/mock-compiler implementation.
+  `a993555f3cbd2bc7026423f34ed5620f3a2e058f`, the exact nine-path narrow
+  WP-400 Servient implementation and support-fixture transition. Its required
+  route-reservation predecessor remains exact implementation
+  `b47899150aa957b1dea8d844aa49852e3e6aa356`.
 - Exact WP-200 Property Read semantic candidate:
   `4a01b5010729cb42d6e8d51125103c8b5cda8707`, the single child of
   `525bb31b42efe299ed36d46acea1a1c4286e8bde`.
@@ -268,7 +270,22 @@ The active design revision is v5.0 bounded-core authority.
   completion checker, completion-topology-aware work-package check, fresh-
   target aggregate design suite, locked workspace tests, directed formatting,
   diff hygiene, and 21-cell feature matrix pass on that implementation and
-  the current completion transition.
+  the then-current completion transition.
+- Pull request #24 integrated the exact WP-400 implementation and completion
+  head `031001d584689294ed7520dd3bc62cfe040227fd` through merge
+  `f72e494d6e6a229545f54fd00df3562b0067afcb`. The actual base is
+  `63015a6e4528a0f9e7d1b677ea987aa2ba1c8781`, the expected implementation
+  and completion content is present, and default-branch `mainline` run
+  `31480042593` passed on the merge revision. All six narrow Property Read
+  tranches are therefore integrated `complete`/`approved`; the aggregate gate
+  is `ready`, not `passed`, and its two fixture roots remain absent.
+- Pull request #25 integrated only workspace topics 0054 and reopened 0020
+  plus their index entries. Its exact head
+  `cc68246f0e51f477fde5da1d96104a4e5d956636` merged to `master` as
+  `701275bef2309123edeb4659ed748884a9b245f0`; the expected three paths are
+  present and default-branch `mainline` run `31492406543` passed on that
+  revision. Those topics were investigation inputs at that merge and did not
+  themselves change governance or implementation truth.
 - Pull request #20 integrated technical decision checkpoint
   `6271c2861771a0fbc18772bd853bc451ba0fd614` and continuation checkpoint
   `72cf711adef3712ebf502b2fd01273e6f2d23376` through exact merge
@@ -292,44 +309,57 @@ default workspace tests, diff hygiene, and the 21-cell valid feature matrix.
 
 ## Continuation Projection
 
-Observed default branch: `63015a6e4528a0f9e7d1b677ea987aa2ba1c8781`
+Observed default branch: `701275bef2309123edeb4659ed748884a9b245f0`
 
-Observed on: 2026-08-11 after fetch plus pull-request/base/head/tree/content
-inspection. Default-branch `mainline` run `31472025404` passed on that exact
-revision.
+Observed on: 2026-08-11 after fetch plus pull-request/base/head/merge ancestry,
+expected-content, and workflow inspection. Default-branch `mainline` run
+`31492406543` passed on that exact revision.
 
 Projection mode: conditional remote handoff
 
-The bounded task now records completion of independently reviewed
-`WP-400-PROPERTY-READ-SERVIENT-SLICE`. Verified admission merge
-`63015a6e4528a0f9e7d1b677ea987aa2ba1c8781` is the exact parent of implementation
-`a993555f3cbd2bc7026423f34ed5620f3a2e058f`. The source commit matches the
-reviewed isolated reconstruction byte-for-byte across every registered path,
-changes only six necessary product paths plus three support paths, and passes
-the registered runtime/compile/predecessor matrix. The current completion
-worktree registers exact evidence, changes the tranche to
-`complete`/`approved`, and changes the aggregate Property Read gate to `ready`.
-It also hardens design validation so the evidence must prove the PR admission
-merge wrapper, exact source commit topology, requirement/cell sets, and actual
-completion command. Broad WP-400 remains blocked, and neither planned
-aggregate fixture root exists.
+Autonomous review-cycle state: decision migration complete; draft remote
+handoff is the stopping boundary before the distinct validator-convergence
+claim.
+
+Pull request #24 has integrated and default-validated the exact narrow WP-400
+implementation/completion chain. Pull request #25 has integrated workspace
+topic 0054 and the reopened 0020 counterexample as investigation inputs. The
+current bounded claim decides both topics and migrates their stable conclusions:
+one broad progression request authorizes one independently reviewable claim,
+and instance-specific transition facts move toward declarative generic
+validation while behavior remains protected by reusable invariant validators
+and focused fixtures. This decision packet changes no product source and does
+not remove or weaken an existing checker.
+
+If the pre-existing uncommitted aggregate-candidate preparation remains in the
+separate `agent/property-read-architecture-candidate` worktree, preserve it as
+investigation evidence only. It is not an admitted candidate or repository
+authority. Its tranche-specific checker direction is superseded by D48 and
+must not be resumed or committed before the generic-validation convergence
+claim is independently completed.
 
 ### Before verified integration
 
-Commit the validated exact nine-path completion transition as the child of
-implementation `a993555f3cbd2bc7026423f34ed5620f3a2e058f`, then publish the whole
-implementation/completion chain through one draft pull request. Require
-exact-head `validation`; keep both aggregate fixture roots absent.
+Publish or update the validated 0054/0020 decision and authority-migration
+packet on `agent/0054-0020-governance-decisions` through one draft pull request
+against `master`. If that handoff is not yet present, create it; once present,
+keep it draft for the requested Owner evaluation and require exact-head remote
+`validation`. That draft handoff is the current autonomous review-cycle
+boundary. Keep the generic validator implementation and aggregate fixture
+candidate unstarted.
 
 ### After verified integration
 
-After completion integration, fetch `master` and verify the pull request's
-actual base, merge ancestry, exact implementation/evidence content, and passing
-merge-revision `validation`. That releases only preparation of the aggregate
-`PROPERTY-READ-ARCHITECTURE` fixture candidate, independent review, and
-pre-source admission. Do not create either planned fixture root before that
-aggregate candidate is exact and reviewed, and do not claim the gate `passed`
-until its registered runtime/compile cells and cross-package attestation pass.
+After the decision pull request is integrated, a new explicit progression
+request first fetches `master` and verifies actual base, merge ancestry,
+expected content, and merge-revision `validation`. The next distinct review
+cycle then defines one declarative transition schema and generic validator and
+proves equivalence against the current route-reservation and WP-400 validators.
+Existing validators remain active oracles until positive, negative, topology,
+and current-evidence parity passes. Only a later cycle may prepare the
+aggregate `PROPERTY-READ-ARCHITECTURE` candidate on that generic path; both
+fixture roots stay absent and the gate remains `ready` until its registered
+runtime/compile and cross-package evidence passes.
 
 The narrow WP-200 plan slice is complete. Its handoff to WP-300 contains:
 
@@ -407,9 +437,11 @@ source. Pull request #21 integrated its exact completion head
 released. Pull request #22 later integrated and default-validated that exact
 review chain. Pull request #23 then integrated/default-validated its exact
 pre-source checkpoint, and immediate implementation
-`a993555f3cbd2bc7026423f34ed5620f3a2e058f` now passes the bounded completion
-matrix. The current completion transition releases only aggregate Property
-Read fixture candidate/review preparation after verified integration.
+`a993555f3cbd2bc7026423f34ed5620f3a2e058f` plus its completion evidence are
+integrated/default-validated through
+`f72e494d6e6a229545f54fd00df3562b0067afcb`. That releases the aggregate
+Property Read gate to `ready`; D48 now places the distinct generic-validation
+convergence claim before aggregate fixture candidate/review preparation.
 
 ## Active Milestones
 
@@ -426,13 +458,16 @@ Read fixture candidate/review preparation after verified integration.
   remain open. The completed Producer-route correction releases only the
   route-reservation correction. Its verified default integration releases
   narrow WP-400 candidate/review preparation. That exact review closed D46,
-  and the admission merge is integrated/default-validated. Exact
-  implementation `a993555f3cbd2bc7026423f34ed5620f3a2e058f` plus the current
-  completion transition make the narrow WP-400 tranche locally
-  `complete`/`approved` and the aggregate gate `ready`.
+  and the admission, exact implementation
+  `a993555f3cbd2bc7026423f34ed5620f3a2e058f`, and completion chain are
+  integrated/default-validated through
+  `f72e494d6e6a229545f54fd00df3562b0067afcb`. The narrow WP-400 tranche is
+  `complete`/`approved` and the aggregate gate is `ready`.
 - M5A Servient Runtime and Application Lifecycle — IN_PROGRESS; the exact
-  Property Read Servient slice is locally complete, while broad WP-400 and the
-  aggregate fixture candidate/admission remain open.
+  Property Read Servient slice is integrated and default-validated, while
+  broad WP-400 and the aggregate fixture candidate/admission remain open. D48
+  places generic transition-validator convergence before that aggregate
+  candidate.
 
 The v5 authority switch is complete, but M1 remains open because GATE-1,
 GATE-2, GATE-4, GATE-5, and GATE-6 still require their registered closure
@@ -568,6 +603,18 @@ D43-D44 add these release and continuation boundaries:
   pre-integration and post-integration actions, and aggregate validation proves
   the envelope shape and local ancestry without claiming live GitHub truth.
 
+D47-D48 add these autonomous-progression and validation-scaling boundaries:
+
+- a broad progression request establishes one independently reviewable claim
+  and returns visibility before beginning a materially distinct successor;
+  the boundary is repository-derived and is not an Owner technical approval
+  gate; and
+- instance-specific transition refs, path sets, topology, status, and evidence
+  linkage are declarative inputs to generic validation. Custom checker code
+  grows only for a new falsifiable invariant category, while focused fixtures
+  retain behavior evidence and existing validators remain equivalence oracles
+  during migration.
+
 D8 selects this exact representation:
 
 - `BindingCompilerExtension` owns associated `Cursor` and `Artifact` types;
@@ -615,13 +662,15 @@ does not weaken the completed narrow WP-200 claim.
 
 ## Open Decisions and Blockers
 
-### Focused execution-risk decisions / workspace issues 0017-0053
+### Focused execution-risk decisions / workspace issues 0017-0054
 
-Status: issues 0017-0053 are migrated and integrated. Issue 0052's immutable
-non-source candidate and independent review are default-branch authority at
-pull request #18 merge `410b576a1325c7b55df6c58ed99f01d793b9f06f`.
-Workspace issue 0049 and its reviewed correction are integrated through pull
-request #15.
+Status: issues 0017-0054 are migrated in the current repository projection.
+Issues through 0053 are integrated; issue 0054 and the reopened 0020 conclusion
+are in the current decision packet pending remote handoff. Issue 0052's
+immutable non-source candidate and independent review are default-branch
+authority at pull request #18 merge
+`410b576a1325c7b55df6c58ed99f01d793b9f06f`. Workspace issue 0049 and its
+reviewed correction are integrated through pull request #15.
 
 - 0017: the WP-200 admission path has a finite stopping condition. Independent
   review now includes the exact next-state simulation; the five-file
@@ -635,10 +684,15 @@ request #15.
 - 0019: the legacy migration map is owned by WP-200, WP-300, WP-400, WP-600,
   and WP-700. Coexistence is permitted only at their named one-way adapters;
   final absence is a WP-700 claim, not a narrow-gate claim.
-- 0020: governance artifacts form a directed
-  owner -> projection -> evidence -> validation graph. The two WP-200
-  correction cycles were real transition-validation defects, not architecture
-  changes; transition reviews must now execute their declared next state.
+- 0020: governance artifacts retain the directed
+  owner -> projection -> evidence -> validation graph, but the reopened
+  counterexample proves that dependency direction alone did not bound checker
+  implementation growth. Stable provenance, ownership, lifecycle, resource,
+  capability, and profile-parity invariants remain executable. Candidate refs,
+  correction topology, exact path sets, status/ref pairs, prechecks, and
+  evidence linkage move to declarative transition records consumed by a
+  generic validator. Existing route-reservation and WP-400 validators remain
+  active until the new path proves equivalence.
 - 0021: D8 is reaffirmed for admission. The external host and
   `no_std + alloc` fixtures use public dependencies and preserve ownership;
   both compile at WP-200 completion, while the WP-600 production compilers own
@@ -760,6 +814,12 @@ request #15.
   #18, and blocks WP-400 source on any unowned/synthetic/recomputed value,
   generation mismatch, missing pre-side-effect reservation, or profile
   divergence.
+- 0054: broad progression instructions authorize one autonomous review cycle
+  for one independently reviewable claim. The cycle may contain all normal
+  technical and remote transitions for that claim, but ends before a
+  materially distinct successor. `PROJECT_STATE.md` records the stopping fact
+  and conditional next action; returning visibility is not routine Owner
+  approval.
 
 Candidate preparation also resolved one Rust staging constraint. The existing
 legacy `core::inbound::ServerBinding` owns `shutdown(&ThingId)`, while the
@@ -1173,14 +1233,14 @@ bounded task rather than widening this decision packet or pull request #18.
 - The exact narrow WP-300 Property Read slice is complete. Broad WP-300 still
   waits on external authoring, cleanup-coexistence, shared-parity-oracle, and
   resource-authoring evidence.
-- Narrow WP-400 candidate/review and admission are integrated and
-  default-validated through revision
-  `63015a6e4528a0f9e7d1b677ea987aa2ba1c8781`. Its review closed D46, and exact
-  implementation `a993555f3cbd2bc7026423f34ed5620f3a2e058f` is locally complete.
-  The aggregate Property Read gate is `ready`, not `passed`; its two planned
-  fixture roots still require their own candidate/review/admission. Broad
-  WP-400, WP-500, and WP-600 still depend on broad WP-300; WP-700 joins those
-  branches.
+- Narrow WP-400 candidate/review, admission, exact implementation
+  `a993555f3cbd2bc7026423f34ed5620f3a2e058f`, and completion are integrated
+  and default-validated through revision
+  `f72e494d6e6a229545f54fd00df3562b0067afcb`. Its review closed D46. The
+  aggregate Property Read gate is `ready`, not `passed`; D48's generic
+  transition-validator convergence precedes its own candidate/review/admission
+  and both planned fixture roots. Broad WP-400, WP-500, and WP-600 still
+  depend on broad WP-300; WP-700 joins those branches.
 
 These do not extend the D8 packet unless repository evidence shows a direct
 contract, rollback, or validation intersection.
@@ -1193,9 +1253,11 @@ Ruleset `20009352` was fetched on 2026-08-11 and targets the default branch
 with strict current-base `validation` plus resolved review threads, no bypass
 actor, and merge commits allowed. `gh auth status` passes for account
 `yushun1990`; the connected GitHub application and SSH Git transport are also
-available. Pull request #23 exercised the latest full terminal path;
-exact-head run `31469727000` and default-branch push run `31472025404` validate
-fetched basis `63015a6e4528a0f9e7d1b677ea987aa2ba1c8781`.
+available. Pull request #24 exercised the latest full terminal path;
+exact-head run `31478178680` and default-branch push run `31480042593` validate
+merge `f72e494d6e6a229545f54fd00df3562b0067afcb`. The later workspace-only
+pull request #25 default-branch run `31492406543` validates current fetched
+basis `701275bef2309123edeb4659ed748884a9b245f0`.
 
 ## Rejected or Superseded Approaches
 
@@ -1206,6 +1268,14 @@ fetched basis `63015a6e4528a0f9e7d1b677ea987aa2ba1c8781`.
 - Partial v5 activation or piecemeal rollback is prohibited.
 - A separate documentation/review cycle for each artifact in one semantic
   conversion packet is rejected by D9.
+- Treating a broad `continue` as indefinite roadmap authority is rejected by
+  D47. One request reaches one stable independently reviewable claim and stops
+  before its materially distinct successor unless the request explicitly
+  names a broader bound.
+- Adding tranche-specific Rust branches and duplicated shell topology solely
+  to encode another candidate ref, correction chain, path set, status
+  transition, or evidence link is rejected by D48. Immediate deletion of
+  existing validators is also rejected until generic equivalence is proved.
 - Treating package-local completion as implicit successor source admission is
   rejected; a declared handoff is a separately falsifiable successor-entry
   claim.
@@ -1556,25 +1626,50 @@ source. Its current tree passes:
 - `bash -n tools/check-design-artifacts.sh`; and
 - `git diff --check`.
 
+The 2026-08-11 workspace-topic 0054/reopened-0020 decision packet changes
+exactly seven governance, planning, continuation, and workspace paths and no
+product source or executable checker. Its current tree passes:
+
+- `CARGO_INCREMENTAL=0 tools/check-design-artifacts.sh`, including the
+  merge-stable continuation envelope, authority/registry checks, all 66
+  performance cases, and every registered completed work-package check;
+- `CARGO_INCREMENTAL=0 cargo test --workspace --locked`;
+- `CARGO_INCREMENTAL=0 sh scripts/check-feature-matrix.sh` — 21 passed,
+  0 failed; and
+- `git diff --check`.
+
+The aggregate design run used one shared temporary Cargo artifact cache behind
+the ten generated per-tranche target paths because separate isolated targets
+exceeded the local temporary-filesystem quota. This changes neither repository
+content nor the validation commands; remote `validation` remains required on
+the exact pull-request head.
+
 ## Next Safe Actions
 
-1. Commit the validated exact nine-path completion transition as the immediate
-   child of implementation
-   `a993555f3cbd2bc7026423f34ed5620f3a2e058f`.
-2. Push the whole implementation/completion branch and open one draft pull
-   request. Require exact-head `validation` and integrate only while the head
-   remains current, conflict-free, thread-clean, and covered by the strict
-   ruleset.
-3. Fetch and validate the actual merge revision and its default-branch
-   workflow. Until then, keep both aggregate Property Read fixture roots absent
-   and do not claim the gate `passed`.
-4. After verified integration, prepare the exact aggregate
-   `PROPERTY-READ-ARCHITECTURE` fixture candidate and independent review. Only
-   its own pre-source admission may authorize creation of
+1. If the validated exact 0054/reopened-0020 decision packet has no remote
+   handoff yet, commit it on `agent/0054-0020-governance-decisions`, push, and
+   open one draft pull request against `master`. If the draft exists, preserve
+   that exact-head handoff and require remote `validation`.
+2. Stop at that draft handoff for the requested Owner evaluation. Do not begin
+   the generic transition validator, modify `tools/design-check`, create an
+   aggregate fixture root, or resume the pre-existing aggregate-specific
+   checker preparation during this review cycle.
+3. On a new explicit progression request, first fetch `master` and reconcile
+   the decision pull request's actual base, expected head/content, merge
+   ancestry, and merge-revision `validation`.
+4. After verified decision integration, execute one distinct validation-
+   convergence review cycle: define the declarative transition schema and
+   generic validator, apply it to the route-reservation and WP-400 records,
+   and prove positive, negative, topology, and current-evidence equivalence
+   while retaining existing validators as oracles.
+5. Only a later review cycle may prepare the aggregate
+   `PROPERTY-READ-ARCHITECTURE` fixture candidate on the generic path. Its own
+   review/admission still controls creation of
    `tools/architecture-fixtures/property-read-binding` and
-   `tools/architecture-fixtures/property-read-runner`.
-5. Correct the performance harness's compile-time repository-root capture in
-   a separate support-tool task; until then, use a clean Cargo target when a
+   `tools/architecture-fixtures/property-read-runner`; the gate remains
+   `ready`, not `passed`.
+6. Correct the performance harness's compile-time repository-root capture in
+   a separate support-tool claim; until then, use a clean Cargo target when a
    shared target may contain binaries compiled from deleted worktrees.
 
 Ask the Project Owner only if the investigation reaches a product-goal,
@@ -1612,6 +1707,8 @@ commitment that repository evidence cannot resolve.
 - `workspace/0050-tranche-release-and-successor-entry-evidence.md`
 - `workspace/0051-project-state-merge-transition-drift.md`
 - `workspace/0052-property-read-route-reservation-handoff.md`
+- `workspace/0020-governance-and-checker-complexity.md`
+- `workspace/0054-autonomous-progression-review-cycle-boundary.md`
 - `docs/spec/planning.md`
 - `docs/spec/binding-spi.md`
 - `docs/work-packages/property-read-architecture-gate.toml`

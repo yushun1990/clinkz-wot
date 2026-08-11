@@ -162,6 +162,45 @@ Before starting another major task:
 
 If not, checkpoint first.
 
+## Autonomous Review Cycles
+
+A broad progression request such as `continue` or `continue progressing`
+authorizes one coherent review cycle from the current next safe action. AI
+chooses the technical decomposition; the Owner does not need to name the
+tranche or pre-compute the stopping point.
+
+One review cycle establishes one independently reviewable engineering claim.
+Analysis, decision migration, candidate construction, independent review,
+admission, implementation, completion evidence, remote handoff, integration,
+and reconciliation may remain in that cycle when they share the same contract,
+rollback boundary, and evidence truth. A necessary upstream correction remains
+inside the cycle only when it is required to make that same claim constructible
+and shares those boundaries.
+
+The cycle ends at the first stable new fact that can be reviewed independently,
+including a completed tranche or equivalent claim, a proved correction of a
+blocking defect, a material gate transition, or a next safe action that crosses
+a different package, ownership, lifecycle, public-contract, rollback, or
+evidence boundary. An Owner-owned goal, real-world constraint, unacceptable
+direction, public release, or other irreversible commitment also ends the
+cycle.
+
+At the boundary, update `PROJECT_STATE.md` with the established fact, exact
+observed remote basis, remaining limitations, stopping point, and next safe
+action. Complete the current claim's required checkpoint and remote handoff
+when available, then identify but do not begin the materially distinct
+successor's candidate, review, admission, or source work. Returning to the
+Owner is a visibility handoff, not a routine technical approval gate; a new
+progression request starts the next cycle.
+
+If remote integration or reconciliation is unavailable or still pending, a
+recoverable remote handoff plus the conditional continuation envelope is a
+valid stopping point. A later broad progression request may finish that
+reconciliation, but must not silently expand into the already identified
+successor claim. An explicit request that names a broader endpoint or multiple
+claims may authorize a correspondingly bounded cycle. Time, token, line,
+commit, and pull-request counts do not define the boundary.
+
 ## Governance and Planning Separation
 
 ClinkZ-WoT separates execution governance from technical governance.
@@ -257,6 +296,16 @@ a new linked topic and re-evaluate the migrated conclusion.
     its own approved checkpoint and, for a declared cross-package handoff,
     evidence that a real upstream output reaches the first legal downstream
     entry without a fixture-owned substitute.
+-   Keep instance-specific candidate refs, path sets, transition topology,
+    evidence links, and status bookkeeping declarative in their authoritative
+    manifests. New custom checker control flow is admitted only for a genuinely
+    new falsifiable invariant category that generic validation cannot express,
+    with the reason recorded. Focused compile/runtime fixtures continue to own
+    behavioral evidence.
+-   Migrate existing tranche-specific validation only after the generic path
+    matches its positive, negative, topology, and current-evidence coverage;
+    until then, retain the existing checker as an oracle rather than weakening
+    evidence to reduce code volume.
 
 ## Git Checkpoints
 
