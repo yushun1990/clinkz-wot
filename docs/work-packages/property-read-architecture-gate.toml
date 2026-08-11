@@ -118,7 +118,7 @@ first_entry_negative_mutations = [
 [transition_validation]
 schema_version = 1
 design_revision = "5.0"
-status = "review-pending"
+status = "reviewed"
 check = "transition-record-check"
 record_ids = [
     "WP-200-PROPERTY-READ-ROUTE-RESERVATION-PROJECTION",
@@ -137,7 +137,7 @@ parity_dimensions = [
     "commit-topology",
     "current-completion-evidence",
 ]
-review_attestation = "register-after-review"
+review_attestation = "docs/audits/D48-transition-validator-convergence-review.toml"
 review_attestation_ref = "register-after-review"
 review_commit_paths = [
     "PROJECT_STATE.md",

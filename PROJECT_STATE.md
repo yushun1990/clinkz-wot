@@ -336,11 +336,15 @@ engine. The existing route-reservation and WP-400 entry/completion checks
 remain executable parallel oracles for provenance, ownership, lifecycle,
 resource, portability, and behavior truth.
 
-The current candidate changes no product source, creates neither aggregate
-fixture root, and leaves the aggregate gate `ready`. Its review-pending status
-is intentional until an immutable-candidate reconstruction exercises the valid
-state, shared negative mutations, commit topology, and current completion
-evidence against both the generic engine and the retained oracles.
+Reviewed corrective candidate
+`aa748fa9072ec277d3159a458e709e4ca84fa89b` changes no product source,
+creates neither aggregate fixture root, and leaves the aggregate gate `ready`.
+An isolated immutable-candidate reconstruction passed the generic and retained
+valid-state paths, then proved shared negative path/status mutations, commit
+topology, and current completion evidence are independently rejected by both
+the generic engine and the legacy oracle. The registered review audit records
+those cases; its review checkpoint ref is intentionally deferred until the
+exact five-path review commit exists.
 
 Initial immutable candidate
 `e21633784d98d5ff124b2cd467c5271a8dea2544` passed its generic valid-state
@@ -1672,7 +1676,7 @@ exceeded the local temporary-filesystem quota. This changes neither repository
 content nor the validation commands; remote `validation` remains required on
 the exact pull-request head.
 
-The D48 review-pending convergence candidate changes no product source and
+The corrected D48 convergence candidate changes no product source and
 passes:
 
 - `cargo test --locked --manifest-path tools/design-check/Cargo.toml` — 29
@@ -1689,18 +1693,33 @@ The aggregate work-package run used the already-recorded shared-cache
 workaround for ten generated per-tranche target directories after a first
 isolated-target attempt exceeded the temporary-filesystem quota. The rerun
 completed successfully and changes no repository content. Mutation parity and
-the risk-appropriate default-branch matrix remain review/final-checkpoint work.
+the risk-appropriate default-branch matrix remain final-checkpoint work.
+
+Independent reconstruction of exact candidate
+`aa748fa9072ec277d3159a458e709e4ca84fa89b` also passes the design-check tests,
+generic transition validation, and retained `check-work-packages` valid state.
+In the same isolated worktree, both commands independently reject:
+
+- removal of `workspace/INDEX.org` from the route-reservation candidate path
+  set;
+- the WP-400 `complete`/`review-pending` status pair;
+- replacing WP-400's admission base with its admission-merge ref, which breaks
+  the required first-parent topology; and
+- replacement of the route-reservation completion evidence key.
+
+Every mutation was reversed with a clean diff before the final valid-state
+rerun. `docs/audits/D48-transition-validator-convergence-review.toml` records
+the exact candidate, records, oracle set, parity dimensions, and case outcomes.
 
 ## Next Safe Actions
 
-1. Freeze the D48 candidate as an immutable commit, reconstruct it in an
-   isolated worktree, and record valid-state, shared negative-mutation,
-   commit-topology, and current-completion-evidence parity against the retained
-   route-reservation and WP-400 checks.
-2. Register the independent review audit in one exact child checkpoint, bind
-   that review ref in a final continuation checkpoint, change the declarative
-   validator state to `passed`, and rerun the task-specific plus default-branch
-   validation matrix.
+1. Commit the current independent review audit, artifact registration, carried
+   digest, gate `reviewed` state, and continuation projection as the exact
+   five-path child of reviewed candidate
+   `aa748fa9072ec277d3159a458e709e4ca84fa89b`.
+2. Bind that exact review ref in a final continuation checkpoint, change the
+   declarative validator state to `passed`, and rerun the task-specific plus
+   default-branch validation matrix.
 3. Push `agent/transition-validator-convergence`, open one draft pull request
    against `master`, and stop this autonomous cycle at that remote handoff.
    Require exact-head remote `validation`; do not create aggregate fixtures.
