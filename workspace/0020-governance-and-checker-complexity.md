@@ -1,6 +1,6 @@
 # 0020 Governance and Checker Complexity
 
-Status: MIGRATED
+Status: OPEN
 
 Kind: owner-raised governance-risk investigation
 
@@ -63,15 +63,15 @@ Codex should determine:
 4. whether any authoritative responsibility or progress claim requires correction;
 5. the conditions for moving this topic through its workspace lifecycle.
 
-## Decision
+## Historical decision
 
-The concern is supported in a bounded form. The repository does not need a new
-governance model, but it did contain transition coupling capable of creating
+The concern was supported in a bounded form. The repository did not need a new
+governance model, but it contained transition coupling capable of creating
 critical-path failures without changing product semantics. The stale carried
 digest, the pre-source source-presence rule, and the temporary dependence of a
-review-pending candidate on moving `HEAD` are concrete examples.
+review-pending candidate on moving `HEAD` were concrete examples.
 
-The valid dependency direction is:
+The valid dependency direction was established as:
 
 ```text
 authoritative contract/work-package state
@@ -86,18 +86,90 @@ to it. Exact digests still protect authority and evidence transitions, and
 topology checks still protect candidate and implementation scope; those are
 distinct invariants rather than duplicate owners.
 
-The stable correction is to bind candidate identity independently of unrelated
+The stable correction was to bind candidate identity independently of unrelated
 later `HEAD` movement and to exercise the declared next state before
 attestation. A support failure blocks only when it falsifies contract,
 dependency, admission, completion, authority, or evidence truth. Otherwise it
 travels with its owning checkpoint and cannot start another refinement cycle.
 Deleting current authority, review, rollback, or resource controls would not
-address the proven defect and is rejected.
+address the proven defect and was rejected.
 
-## Migration
+## Historical migration
 
-The directed responsibility model and transition rule are migrated into
-`PROJECT_GOVERNANCE.md`; D13 and `PROJECT_STATE.md` record their execution
-consequence. The current WP-200 transition has been exercised end to end, so
-no additional checker or governance checkpoint is admitted on its critical
-path.
+The directed responsibility model and transition rule were migrated into
+`PROJECT_GOVERNANCE.md`; D13 and `PROJECT_STATE.md` recorded their execution
+consequence. The then-current WP-200 transition had been exercised end to end,
+so no additional checker or governance checkpoint was admitted on that
+critical path.
+
+## Reopened 2026-08-11: post-migration checker-growth counterexample
+
+The Project Owner is reopening this topic because new evidence appeared after
+the original migration. This does not revoke the historical directed
+responsibility model. It asks whether that model bounded dependency direction
+without sufficiently bounding the implementation structure and cumulative cost
+of executable validation.
+
+The relevant post-migration evidence is not the current total line count by
+itself. Two consecutive, recent critical-path tranches continued to add large
+amounts of tranche-specific checker machinery:
+
+- between `30485b1a51470f328e79453ba0e82e3358c14f79` and
+  `fcce9e69036459506a163ac73ef5542f92e5eb7f`, the route-reservation correction
+  changed `tools/design-check/src/main.rs` by +924/-112 lines, added a dedicated
+  144-line schema test, and added dedicated 195-line entry and 63-line
+  completion shell checks while the principal product-source correction was
+  comparatively narrow;
+- between `fcce9e69036459506a163ac73ef5542f92e5eb7f` and
+  `f72e494d6e6a229545f54fd00df3562b0067afcb`, the WP-400 Property Read
+  Servient progression changed `tools/design-check/src/main.rs` by +975/-112
+  lines, added a dedicated 369-line schema test, and added dedicated 392-line
+  entry and 99-line completion shell checks alongside the substantial Servient
+  implementation;
+- the implementation commit `a993555f3cbd2bc7026423f34ed5620f3a2e058f`
+  itself did not need to modify `tools/design-check/src/main.rs`, while the
+  immediate completion checkpoint `031001d584689294ed7520dd3bc62cfe040227fd`
+  subsequently added 274 and removed 6 lines there to record and validate the
+  completed tranche topology.
+
+These observations are evidence of continued per-tranche checker growth, not a
+conclusion that the checks are unnecessary. They challenge the possibility
+that the present checker size is merely historical residue whose growth has
+already stopped.
+
+### Reopened questions
+
+13. Did the historical migration solve only support-artifact dependency
+direction while leaving checker implementation complexity proportional to the
+number of tranches?
+14. Which of the recent route-reservation and WP-400 checker additions protect
+new stable architecture/runtime invariants, and which encode instance-specific
+candidate refs, path sets, transition topology, or completion bookkeeping?
+15. For instance-specific transition facts that remain worth validating, can a
+generic validation engine consume declarative work-package/evidence data rather
+than requiring new tranche-specific Rust control flow?
+16. Should adding a new tranche normally require new `design-check` Rust code,
+or should Rust growth occur primarily when a genuinely new invariant category
+is introduced?
+17. Are the dedicated shell entry/completion checks and schema tests proving
+independent defect classes, or are parts of them repeated projections of one
+transition specification?
+18. Can completed historical tranche-specific executable machinery be retired,
+reduced to declarative evidence, or otherwise removed without weakening durable
+architecture, rollback, admission, or completion proof?
+19. What measurable evidence, other than raw line counts, would demonstrate
+that checker complexity is now bounded as the number of future work packages
+grows?
+
+### Reopened constraints
+
+- Do not infer unnecessary complexity from size alone; map recent additions to
+  the stable invariants or transition truths they protect.
+- Preserve strict ownership, lifecycle, resource, protocol-boundary,
+  cross-package handoff, independent-review, and remote-integration evidence.
+- Do not delete historical validation merely to reduce code volume.
+- Prefer an architectural explanation of checker scaling behavior over an
+  arbitrary line-count target.
+- Treat the latest Property Read aggregate architecture gate as useful evidence
+  for whether newer work reuses stable validation machinery or continues to
+  generate tranche-specific executable control logic.
