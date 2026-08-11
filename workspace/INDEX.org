@@ -26,7 +26,8 @@ Topics are retained after migration as decision history.
 
 ** OPEN
 
-- None.
+- [[file:0020-governance-and-checker-complexity.md][0020 Governance and Checker Complexity]]
+- [[file:0054-autonomous-progression-review-cycle-boundary.md][0054 Autonomous Progression Review-Cycle Boundary]]
 
 ** DISCUSSING
 
@@ -57,7 +58,6 @@ Topics are retained after migration as decision history.
 - [[file:0017-wp200-admission-evidence-recursion.md][0017 WP-200 Admission Evidence Recursion Risk]]
 - [[file:0018-property-read-critical-path-serialization.md][0018 Property Read Critical-Path Serialization]]
 - [[file:0019-target-architecture-legacy-migration-gap.md][0019 Target Architecture and Legacy Migration Gap]]
-- [[file:0020-governance-and-checker-complexity.md][0020 Governance and Checker Complexity]]
 - [[file:0021-host-constrained-authoring-constructibility.md][0021 Host and Constrained Authoring Constructibility]]
 - [[file:0022-independent-review-effectiveness.md][0022 Independent Review Effectiveness]]
 - [[file:0023-mainline-validation-integrity.md][0023 Mainline Validation Integrity]]
