@@ -1,12 +1,12 @@
 # WP-400 Property-Read Servient Slice Entry Audit
 
-Status: Review pending
+Status: Passed
 
 Design revision: v5.0
 
 Admission scope: `WP-400-PROPERTY-READ-SERVIENT-SLICE`
 
-Verdict: Candidate ready for independent review
+Verdict: Implementation-ready
 
 ## Selected boundary
 
@@ -116,8 +116,8 @@ executor claim.
 
 ## Implementation topology
 
-After an approved independent review and a distinct pre-source admission
-checkpoint, the only permitted product implementation paths are:
+The approved independent review and this distinct pre-source admission
+checkpoint permit only these product implementation paths:
 
 - `servient/Cargo.toml`;
 - `servient/src/lib.rs`;
@@ -127,7 +127,7 @@ checkpoint, the only permitted product implementation paths are:
 - `servient/src/servient.rs`; and
 - new `servient/src/property_read.rs`.
 
-The implementation checkpoint may also change exactly three non-product
+The immediate implementation child may also change exactly three non-product
 support paths:
 
 - root `Cargo.lock`, which must record the new Servient Foundation/Planning
@@ -179,10 +179,10 @@ The completion check must currently fail exactly because
 `clinkz-wot-servient` has no Planning dependency or reviewed Property Read
 module. Candidate preparation creates neither final architecture fixture root.
 
-## Required independent negative evidence
+## Independent negative evidence
 
-Review must simulate the exact product/support transition and reject every
-registered mutation:
+Independent review simulated the exact product/support transition and rejected
+every registered mutation:
 
 1. fixture-restated artifact or reservation;
 2. dropped or mismatched produced, plan-set, binding, plan, or route generation;
@@ -193,7 +193,7 @@ registered mutation:
 7. binding preparation before resource and cleanup reservation; and
 8. host/static semantic divergence.
 
-It must also reject:
+It also rejected:
 
 9. replacement of the existing zero-argument host builder constructor by the
    proposed one-argument spelling; and
@@ -216,7 +216,7 @@ It must also reject:
     static destroy, host produce, host expose, or host destroy method required
     by the runner contract.
 
-Review must additionally reject premature publication, accept without the unique
+Review additionally rejected premature publication, accept without the unique
 route lease/permit, direct runner-created handler context or response
 opportunity, handler double-call, response double-delivery, cleanup-object
 loss, source outside the exact path sets, and creation of either final
@@ -413,9 +413,34 @@ schema to one positive closure plus seventeen negative mutations. No product
 or implementation-support source is admitted; the gate keeps
 `candidate_ref = "resolved-by-review-attestation"`.
 
-Independent review must bind the fifth correction, reconstruct all six
-candidates, execute the eleven registered prechecks, exercise the no-default
-static and std host runtime cells plus the async/no-std compile projection,
-and reject all seventeen negative mutations in an isolated checkout. Only
-then may a distinct admission checkpoint switch this tranche to
-`in-progress`/`approved` and bind the exact default-integrated admission base.
+Independent root-session review bound exact fifth correction
+`43e2669117f6e2a550e862837f3ab55cc5f956fb`, reconstructed all six candidates,
+executed the eleven registered prechecks, exercised the no-default static and
+std host runtime cells plus the async/no-std compile projection, and rejected
+all seventeen registered mutations in an isolated checkout. Exact three-path
+review checkpoint `f04814c31a5a5f0ba4144d3bedcb3956ad00ab44` records that
+result; exact three-path checkpoint
+`d5acc49c84302f33cc18fd60c2a6e3a544e23529` registers its immutable reference.
+
+Source-level probes additionally retained every returned guard, request,
+response, cleanup input, first cause, and residual record across readiness,
+abort, shutdown, cancellation-before-publication, exhausted-handler, and
+cleanup-retry paths. Each static and host failure path returned route,
+in-flight, response, and cleanup counts to zero. The transient probes were
+removed after execution, and no simulated source entered the review branch.
+
+Pull request #22 integrated the exact candidate/review chain at merge
+`1652976500941f0f61e7578391d8d2ce8fcee862`. Its first parent is fetched
+default `fcce9e69036459506a163ac73ef5542f92e5eb7f`, its second parent is exact
+PR head `d5acc49c84302f33cc18fd60c2a6e3a544e23529`, and its merge tree equals the
+reviewed head tree. Exact-head pull-request validation run `31464618610` and
+default-branch validation run `31465621460` both passed.
+
+This combined pre-source checkpoint changes only `PLAN.md`,
+`PROJECT_STATE.md`, this audit,
+`docs/spec/v5-artifact-carry-forward.toml`, and
+`docs/work-packages/property-read-architecture-gate.toml`. It binds exact
+fetched/default-validated merge `1652976500941f0f61e7578391d8d2ce8fcee862`
+as `admission_base_ref` and changes this tranche to
+`in-progress`/`approved`. All seven product and three support implementation
+paths remain unchanged at this checkpoint.

@@ -106,13 +106,13 @@ revalidation = "cargo run --locked --quiet --manifest-path tools/design-check/Ca
 [[artifact]]
 family = "property-read-integration-gate"
 path = "docs/work-packages/property-read-architecture-gate.toml"
-sha256 = "35c32ee5d9dcd15445cbc89b65b434c98c127a546ea7588dd22accb12b810430"
-disposition = "revalidated as a six-tranche gate with the route-reservation correction integrated/default-validated, the original through fourth non-source WP-400 candidates review-rejected, and the exact fifth corrective child independently reviewed but still pending/review-pending; D46's nine-row first-entry closure, seventeen-mutation set, five added lifecycle/authoring API items, seven product paths, one mock-support source, and two required lockfiles are frozen while the aggregate gate and all WP-400 source remain blocked"
+sha256 = "0916e64e52e26a6cec09ae6aca3185f42da7eebc36d36633e72cdacb3853ce9a"
+disposition = "revalidated as a six-tranche gate with the route-reservation correction integrated/default-validated and the exact fifth WP-400 corrective child independently reviewed, default-validated, and admitted by its exact five-file pre-source checkpoint; D46's nine-row first-entry closure, seventeen-mutation set, five added lifecycle/authoring API items, seven product paths, one mock-support source, and two required lockfiles are frozen while all admitted source paths remain unchanged and the aggregate gate stays blocked"
 revalidation = "tools/check-v5-authority-reset-decision.sh"
 
 [[artifact]]
 family = "property-read-integration-gate"
 path = "docs/work-packages/PROPERTY-READ-ARCHITECTURE.md"
 sha256 = "d8d0b0f173036c7687823ec9a884accde8e32dbd4af36ce72abdf109a1c66651"
-disposition = "revalidated with all five upstream Property Read slices integrated/default-validated, the WP-400 candidate pending/review-pending, D46's one-time first-entry closure assigned to that immutable candidate, and inactive RuntimeEvent/HostHandlerRegistration families excluded from narrow v5 authority; mutable tranche truth remains owned by docs/work-packages/property-read-architecture-gate.toml"
+disposition = "revalidated with all five upstream Property Read slices integrated/default-validated, the independently reviewed WP-400 narrow slice in-progress/approved at its exact pre-source checkpoint, D46's one-time first-entry closure discharged by that immutable review, and inactive RuntimeEvent/HostHandlerRegistration families excluded from narrow v5 authority; mutable tranche truth remains owned by docs/work-packages/property-read-architecture-gate.toml"
 revalidation = "tools/check-v5-authority-reset-decision.sh"
