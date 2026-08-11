@@ -183,6 +183,15 @@ tools/compile-contracts/wp200-property-read-route-reservation/src/lib.rs,wp-200-
 tools/compile-contracts/wp200-property-read-route-reservation/tests/route_reservation.rs,wp-200-property-read-route-reservation-runtime-contract,non-normative-compile-fixture,5.0,1,docs/spec/planning.md
 tools/design-check/tests/wp200_property_read_route_reservation_schema.rs,wp-200-property-read-route-reservation-executable-schema,non-normative-compile-fixture,5.0,1,docs/spec/planning.md
 workspace/0052-property-read-route-reservation-handoff.md,property-read-route-reservation-handoff-topic,non-normative-workspace-topic,5.0,1,docs/spec/planning.md
+docs/audits/WP-400-property-read-servient-slice-entry.md,wp-400-property-read-servient-slice-entry-review,non-normative-review,5.0,1,docs/design.md
+docs/audits/WP-400-property-read-servient-slice-review.toml,wp-400-property-read-servient-slice-review-attestation,non-normative-review,5.0,1,docs/design.md
+tools/check-wp400-property-read-servient-slice-entry.sh,wp-400-property-read-servient-slice-entry-checker,non-normative-checker,5.0,1,docs/design.md
+tools/check-wp400-property-read-servient-slice.sh,wp-400-property-read-servient-slice-checker,non-normative-checker,5.0,1,docs/design.md
+tools/compile-contracts/wp400-property-read-servient-slice/Cargo.toml,wp-400-property-read-servient-slice-contract-manifest,non-normative-compile-fixture,5.0,1,docs/design.md
+tools/compile-contracts/wp400-property-read-servient-slice/Cargo.lock,wp-400-property-read-servient-slice-contract-lock,non-normative-compile-fixture,5.0,1,docs/design.md
+tools/compile-contracts/wp400-property-read-servient-slice/src/lib.rs,wp-400-property-read-servient-slice-static-contract,non-normative-compile-fixture,5.0,1,docs/design.md
+tools/compile-contracts/wp400-property-read-servient-slice/tests/host.rs,wp-400-property-read-servient-slice-host-contract,non-normative-compile-fixture,5.0,1,docs/design.md
+tools/design-check/tests/wp400_property_read_servient_schema.rs,wp-400-property-read-servient-executable-schema,non-normative-compile-fixture,5.0,1,docs/design.md
 docs/audits/WP-300-property-read-binding-slice-entry.md,wp-300-property-read-binding-slice-entry-review,non-normative-review,5.0,1,docs/spec/binding-spi.md
 docs/audits/WP-300-property-read-binding-slice-review.toml,wp-300-property-read-binding-slice-review-attestation,non-normative-review,5.0,1,docs/spec/binding-spi.md
 docs/audits/WP-300-admission-basis-correction-review.toml,wp-300-admission-basis-correction-review-attestation,non-normative-review,5.0,1,docs/spec/binding-spi.md

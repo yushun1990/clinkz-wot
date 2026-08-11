@@ -8,8 +8,8 @@ rule = "A carried artifact projects active requirements only where ADR-0018 clas
 [[artifact]]
 family = "api-ownership"
 path = "docs/api-ownership.csv"
-sha256 = "9c910efd62c2e5e75b85fb298b5e663d3132e4dad74e2b049cd1e57cdd679153"
-disposition = "revalidated with the existing Property Read surfaces and the BindingArtifact, BindingArtifactEnvelope, and BindingArtifactRejectionReason route-reservation responsibilities mapped to active planning, form-owner, and binding-route authority; retained broad planning and binding families remain domain-entry input"
+sha256 = "419fd2688476cc5a081177e8e0942af05ae74100e551de666b2c4442084c2a52"
+disposition = "revalidated with the narrow StaticServient/Servient bounded-step, complete-registration, synchronous handler, plan-set, route, activation, and cleanup ownership assigned to active v5 requirements; the corrective boundary preserves zero-argument ServientBuilder construction and its ServientResult, adds the explicit resource_limits setter, and registers static handler/destroy plus host produce/expose/destroy methods, while StepStatus<()> remains narrow and broad RuntimeEvent/status and reusable Core host-handler registration remain inactive domain-entry input"
 revalidation = "tools/check-api-ownership.sh"
 
 [[artifact]]
@@ -43,8 +43,8 @@ revalidation = "tools/check-v5-authority-reset-candidate.sh"
 [[artifact]]
 family = "governance"
 path = "docs/governance.toml"
-sha256 = "bdc9697a5ca9b5323a48ebb09507d38232f642a28463d52189511306abd800a1"
-disposition = "carried forward with the v5 checker and exact route-reservation correction entry/completion checks registered after the completed Producer-route projection; v4.9 reviews remain historical gate evidence"
+sha256 = "75e28698490814e21e52a1418421359383dfe61b9382f3cd36b511a0794c19ec"
+disposition = "carried forward with the v5 checker, completed Producer-route and route-reservation checks, and the exact WP-400 Property Read Servient entry/completion checks registered; v4.9 reviews remain historical gate evidence"
 revalidation = "tools/check-v5-authority-reset-candidate.sh"
 
 [[artifact]]
@@ -106,13 +106,13 @@ revalidation = "cargo run --locked --quiet --manifest-path tools/design-check/Ca
 [[artifact]]
 family = "property-read-integration-gate"
 path = "docs/work-packages/property-read-architecture-gate.toml"
-sha256 = "23603a693d5534f0213cb3cc2727c5bf5ebd7abdcbe4cf10ccf74c92b9238f0f"
-disposition = "revalidated as a six-tranche gate with the independently reviewed, exactly admitted and implemented route-reservation correction complete, followed by D46's one-time nine-row WP-400 first-entry provenance closure and finite mutation set; WP-400 remains planned/blocked pending verified correction integration, and the aggregate gate remains blocked"
+sha256 = "35c32ee5d9dcd15445cbc89b65b434c98c127a546ea7588dd22accb12b810430"
+disposition = "revalidated as a six-tranche gate with the route-reservation correction integrated/default-validated, the original through fourth non-source WP-400 candidates review-rejected, and the exact fifth corrective child independently reviewed but still pending/review-pending; D46's nine-row first-entry closure, seventeen-mutation set, five added lifecycle/authoring API items, seven product paths, one mock-support source, and two required lockfiles are frozen while the aggregate gate and all WP-400 source remain blocked"
 revalidation = "tools/check-v5-authority-reset-decision.sh"
 
 [[artifact]]
 family = "property-read-integration-gate"
 path = "docs/work-packages/PROPERTY-READ-ARCHITECTURE.md"
-sha256 = "fef4aeb476527b8a5feb5d0c0e4cde7b147bbfed3bc090e5800ce0fc9fa6a2bd"
-disposition = "revalidated with the completed WP-100/WP-200/WP-300/Producer-route/route-reservation claims kept package-local, verified route-reservation integration retained as the WP-400 preparation boundary, and D46's one-time first-entry closure assigned to the still-planned/blocked WP-400 candidate; mutable tranche truth remains owned by docs/work-packages/property-read-architecture-gate.toml"
+sha256 = "d8d0b0f173036c7687823ec9a884accde8e32dbd4af36ce72abdf109a1c66651"
+disposition = "revalidated with all five upstream Property Read slices integrated/default-validated, the WP-400 candidate pending/review-pending, D46's one-time first-entry closure assigned to that immutable candidate, and inactive RuntimeEvent/HostHandlerRegistration families excluded from narrow v5 authority; mutable tranche truth remains owned by docs/work-packages/property-read-architecture-gate.toml"
 revalidation = "tools/check-v5-authority-reset-decision.sh"

@@ -146,7 +146,7 @@ fixture_policy = "product-code-derived-only"
 [[first_entry_input]]
 id = "property-read-handler-coverage"
 owner = "application"
-carrier = "Servient-frozen-handler-view+StaticHandlerRegistration|HostHandlerRegistration"
+carrier = "Servient-frozen-handler-view+StaticHandlerRegistration|PropertyReadHandlerRecord"
 provenance = "root-input"
 fixture_policy = "legal-root-input"
 
@@ -884,8 +884,8 @@ completion_check = "wp200-property-read-route-reservation-check"
 id = "WP-400-PROPERTY-READ-SERVIENT-SLICE"
 work_package = "WP-400"
 sequence = 410
-status = "planned"
-admission_status = "blocked"
+status = "pending"
+admission_status = "review-pending"
 depends_on = ["WP-200-PROPERTY-READ-ROUTE-RESERVATION-PROJECTION"]
 requirements = [
     "IMPL-CONFORM-001",
@@ -894,12 +894,23 @@ requirements = [
     "HANDLER-API-001",
     "BIND-ROUTE-001",
     "BIND-DELIVERY-001",
+    "BIND-IO-001",
+    "BIND-MEM-001",
+    "LIFE-EXPOSE-001",
     "LIFE-EXPOSE-002",
+    "LIFE-EXPOSE-003",
     "STATE-EXPOSE-001",
     "STATE-BIND-001",
     "STATE-INFLIGHT-001",
     "CLEANUP-RECORD-001",
     "API-RESOURCE-001",
+    "ADMIT-MEM-001",
+    "CONCUR-LIN-001",
+    "CONSTRAINED-STORAGE-001",
+    "CONSTRAINED-PROGRESS-001",
+    "CONSTRAINED-WORK-001",
+    "HOST-ASYNC-001",
+    "HANDLE-DROP-001",
 ]
 owner_packages = ["clinkz-wot-servient", "workspace"]
 feature_cells = ["no-default", "async-no-std", "std"]
@@ -918,6 +929,130 @@ blocking_conditions = [
     "serving-activation-route-selection-response-and-cleanup-candidate-reviewed",
     "host-and-manual-runner-fixtures-defined",
 ]
+api_items = [
+    "CompiledPlanSetState",
+    "ExposeState",
+    "ExposedThingHandle",
+    "PropertyReadHandlerRecord",
+    "Servient",
+    "ServientBuilder",
+    "ServingActivationRecord",
+    "StaticServient",
+    "StaticServientBuilder",
+    "begin_destroy",
+    "begin_expose",
+    "produce_td",
+    "servient_builder_binding_registration",
+    "servient_builder_resource_limits",
+    "servient_step",
+    "set_read_property_handler",
+    "static_servient_begin_destroy",
+    "static_servient_builder_binding_registration",
+    "static_servient_builder_read_property_handler",
+    "static_servient_step",
+]
+reused_api_items = [
+    "BindingArtifactEnvelope",
+    "BindingArtifactRef",
+    "BindingRouteKey",
+    "Deadline",
+    "GatewayDefaultV1",
+    "HandlerContext",
+    "HostBindingRegistration",
+    "InteractionInput",
+    "InteractionOutput",
+    "PlanBuildOutput",
+    "PrepareInput",
+    "PropertyReadPlanCompiler",
+    "ReadPropertyHandler",
+    "ResourceLimits",
+    "RouteAcceptLease",
+    "RouteInboundRequest",
+    "RouteInboundResponse",
+    "ServingActivationAuthority",
+    "StaticBindingRegistration",
+    "StaticHandlerRegistration",
+    "StaticResourceProfile",
+    "StepStatus",
+    "WorkBudget",
+    "WorkClass",
+]
+implementation_paths = [
+    "servient/Cargo.toml",
+    "servient/src/builder.rs",
+    "servient/src/handle.rs",
+    "servient/src/lib.rs",
+    "servient/src/property_read.rs",
+    "servient/src/registry.rs",
+    "servient/src/servient.rs",
+]
+support_implementation_paths = [
+    "Cargo.lock",
+    "tools/compile-contracts/wp300-property-read-binding-slice/src/lib.rs",
+    "tools/compile-contracts/wp400-property-read-servient-slice/Cargo.lock",
+]
+excluded_claims = [
+    "async-or-step-handler-families",
+    "broad-cleanup-executor-and-drop-transfer",
+    "consumer-subscription-and-producer-emission",
+    "dynamic-registration-or-plan-regeneration",
+    "multi-thing-multi-route-fairness-and-workloads",
+    "production-protocol-and-zenoh",
+    "runtime-event-and-status-stream",
+]
+risk_category = "C"
+impact_status = "current"
+state_machines = ["binding-route", "compiled-plan-set", "expose", "in-flight"]
+old_api_removals = []
+performance_workloads = []
+contract_artifacts = [
+    "tools/check-wp400-property-read-servient-slice-entry.sh",
+    "tools/check-wp400-property-read-servient-slice.sh",
+    "tools/compile-contracts/wp300-property-read-binding-slice/src/lib.rs",
+    "tools/compile-contracts/wp400-property-read-servient-slice/Cargo.lock",
+    "tools/compile-contracts/wp400-property-read-servient-slice/Cargo.toml",
+    "tools/compile-contracts/wp400-property-read-servient-slice/src/lib.rs",
+    "tools/compile-contracts/wp400-property-read-servient-slice/tests/host.rs",
+    "tools/design-check/Cargo.toml",
+    "tools/design-check/src/main.rs",
+    "tools/design-check/tests/wp400_property_read_servient_schema.rs",
+]
+candidate_base_ref = "43db15247279660ef910fdd13757e2767801fd94"
+candidate_ref = "resolved-by-review-attestation"
+candidate_paths = [
+    "PLAN.md",
+    "PROJECT_STATE.md",
+    "docs/api-ownership.csv",
+    "docs/audits/WP-400-property-read-servient-slice-entry.md",
+    "docs/spec/v5-artifact-carry-forward.toml",
+    "docs/work-packages/property-read-architecture-gate.toml",
+    "tools/check-wp400-property-read-servient-slice-entry.sh",
+    "tools/check-wp400-property-read-servient-slice.sh",
+    "tools/compile-contracts/wp400-property-read-servient-slice/src/lib.rs",
+    "tools/compile-contracts/wp400-property-read-servient-slice/tests/host.rs",
+    "tools/design-check/src/main.rs",
+    "tools/design-check/tests/wp400_property_read_servient_schema.rs",
+]
+pre_implementation_checks = [
+    "api-ownership-check",
+    "architecture-adr-check",
+    "design-requirement-check",
+    "resource-profile-check",
+    "v5-authority-reset-candidate-check",
+    "work-package-dag-check",
+    "wp100-property-read-handler-slice-check",
+    "wp200-property-read-plan-slice-check",
+    "wp300-property-read-binding-slice-check",
+    "wp200-property-read-producer-route-check",
+    "wp200-property-read-route-reservation-check",
+]
+admission_review = "docs/audits/WP-400-property-read-servient-slice-entry.md"
+review_attestation = "docs/audits/WP-400-property-read-servient-slice-review.toml"
+review_attestation_ref = "f04814c31a5a5f0ba4144d3bedcb3956ad00ab44"
+admission_base_ref = "register-at-admission"
+entry_check = "wp400-property-read-servient-slice-entry-check"
+completion_evidence_path = "docs/evidence/WP-400-property-read-servient-slice.toml"
+completion_check = "wp400-property-read-servient-slice-check"
 
 [[expansion_entrypoint]]
 id = "WP-300-BROAD-ENTRY"

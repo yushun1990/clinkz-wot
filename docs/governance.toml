@@ -239,6 +239,21 @@ command = [
 ]
 
 [[check]]
+id = "wp400-property-read-servient-slice-check"
+status = "executable"
+artifact = "tools/check-wp400-property-read-servient-slice.sh"
+command = ["tools/check-wp400-property-read-servient-slice.sh"]
+
+[[check]]
+id = "wp400-property-read-servient-slice-entry-check"
+status = "executable"
+artifact = "tools/check-wp400-property-read-servient-slice-entry.sh"
+command = [
+    "tools/check-wp400-property-read-servient-slice-entry.sh",
+    "--admission-ready",
+]
+
+[[check]]
 id = "wp300-property-read-binding-slice-check"
 status = "executable"
 artifact = "tools/check-wp300-property-read-binding-slice.sh"
