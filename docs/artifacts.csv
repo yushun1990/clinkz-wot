@@ -185,6 +185,7 @@ tools/design-check/tests/wp200_property_read_route_reservation_schema.rs,wp-200-
 workspace/0052-property-read-route-reservation-handoff.md,property-read-route-reservation-handoff-topic,non-normative-workspace-topic,5.0,1,docs/spec/planning.md
 docs/audits/WP-400-property-read-servient-slice-entry.md,wp-400-property-read-servient-slice-entry-review,non-normative-review,5.0,1,docs/design.md
 docs/audits/WP-400-property-read-servient-slice-review.toml,wp-400-property-read-servient-slice-review-attestation,non-normative-review,5.0,1,docs/design.md
+docs/evidence/WP-400-property-read-servient-slice.toml,wp-400-property-read-servient-slice-completion-evidence,non-normative,5.0,1,docs/design.md
 tools/check-wp400-property-read-servient-slice-entry.sh,wp-400-property-read-servient-slice-entry-checker,non-normative-checker,5.0,1,docs/design.md
 tools/check-wp400-property-read-servient-slice.sh,wp-400-property-read-servient-slice-checker,non-normative-checker,5.0,1,docs/design.md
 tools/compile-contracts/wp400-property-read-servient-slice/Cargo.toml,wp-400-property-read-servient-slice-contract-manifest,non-normative-compile-fixture,5.0,1,docs/design.md

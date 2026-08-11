@@ -1,7 +1,7 @@
 schema_version = 1
 design_revision = "4.9"
 id = "PROPERTY-READ-ARCHITECTURE"
-status = "blocked"
+status = "ready"
 admission_policy = "adr-0013-tranche-scoped"
 document = "docs/work-packages/PROPERTY-READ-ARCHITECTURE.md"
 work_package_index = "docs/work-packages/index.toml"
@@ -884,7 +884,7 @@ completion_check = "wp200-property-read-route-reservation-check"
 id = "WP-400-PROPERTY-READ-SERVIENT-SLICE"
 work_package = "WP-400"
 sequence = 410
-status = "in-progress"
+status = "complete"
 admission_status = "approved"
 depends_on = ["WP-200-PROPERTY-READ-ROUTE-RESERVATION-PROJECTION"]
 requirements = [

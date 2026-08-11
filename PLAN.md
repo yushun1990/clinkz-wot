@@ -90,9 +90,10 @@ The repository evidence establishes the following starting point:
   implementation `89fb9f17ac961294032123173b29692a719a174c` complete the narrow
   tranche. Its registered three-cell authoring, route/response/cleanup,
   predecessor, and legacy-separation checks pass. The aggregate Property Read
-  gate remains blocked; pull request #14 integrated the exact completion at
-  merge `b2adf0756c06cc41be5d809c33211d7c20f86aba`, and default-branch run
-  `30701503019` passed; D4 has resolved subscription receiver ownership;
+  gate was still blocked at that transition; pull request #14 integrated the
+  exact completion at merge `b2adf0756c06cc41be5d809c33211d7c20f86aba`,
+  and default-branch run `30701503019` passed; D4 has resolved subscription
+  receiver ownership;
 - narrow WP-300 completion released only successor candidate, fixture, review,
   and pre-source-transition preparation. That preparation confirmed that the
   implemented planner cannot carry a real `ProducerRoute` artifact into real
@@ -142,10 +143,16 @@ The repository evidence establishes the following starting point:
   `f04814c31a5a5f0ba4144d3bedcb3956ad00ab44` passed the complete reconstruction
   and negative matrix. Pull request #22 integrated the candidate/review chain
   at default-validated merge `1652976500941f0f61e7578391d8d2ce8fcee862`;
-  the distinct exact five-file pre-source checkpoint now makes the narrow
-  tranche `in-progress`/`approved` while all registered source paths remain
-  unchanged. D46's one-time complete first-entry and runtime-closure review is
-  therefore discharged without a separate gate. Broad
+  pull request #23 then integrated the distinct exact five-file pre-source
+  checkpoint at default-validated merge
+  `63015a6e4528a0f9e7d1b677ea987aa2ba1c8781`. Exact immediate implementation
+  `a993555f3cbd2bc7026423f34ed5620f3a2e058f` matches the reviewed source
+  reconstruction and passes the registered completion, workspace, format, and
+  21-cell feature checks. Its completion evidence makes all six narrow slices
+  `complete`/`approved` and the aggregate Property Read gate locally `ready`;
+  no aggregate fixture root exists yet. D46's one-time complete first-entry
+  and runtime-closure review is therefore discharged without a separate gate.
+  Broad
   WP-400, WP-500, and WP-600 remain downstream of broad WP-300, and WP-700
   joins those branches;
 - default workspace tests, the 21-cell valid feature matrix, and the aggregate
@@ -174,7 +181,7 @@ answer and does not automatically block unrelated admitted work.
 | D2 | MIGRATED | Use clock-source-owned non-wrapping extended logical ticks; retain raw wrap metadata as diagnostics; fail incomparable clock domains explicitly; correct Foundation before Core Deadline/cleanup timing | Completed `WP-100-LOGICAL-TIME-CORRECTION -> WP-100-DEADLINE-CLEANUP-TIMING`; the time blocker is resolved while independent broad-handler blockers remain | M2 exit |
 | D3 | SUPERSEDED | The former lossless residual-decomposition direction remains historical decision input | Do not integrate Foundation candidate `2494f33fdfe49ec3c7ae850d20990e446e628865` or open another D3 domain migration; ADR-0018/D7 replace its activation path | Superseded by D7 |
 | D4 | MIGRATED | Use one non-`Clone` linear `Subscription`/`StaticSubscription` receive capability; expose no cloneable receiver/control split, competing-consumer contract, or per-clone broadcast | WP-300 owns one binding driver/cursor; WP-400 owns the Servient record/facade and must provide negative `Clone` compile fixtures | M4 entry |
-| D5 | MIGRATED | Adopt `PROPERTY-READ-ARCHITECTURE` as the first executable cross-package composition proof, using one property read in host and manual runtime cells plus an async/no-std compile projection | The critical path is `WP-100 -> WP-200 plan -> WP-300 -> WP-200 Producer-route projection -> owner-scoped route-reservation correction -> WP-400`; the first five stages and the WP-400 candidate/review chain are integrated and default-validated, and the exact WP-400 source transition is admitted but not yet implemented | Before broad WP-100/WP-300/WP-400 expansion |
+| D5 | MIGRATED | Adopt `PROPERTY-READ-ARCHITECTURE` as the first executable cross-package composition proof, using one property read in host and manual runtime cells plus an async/no-std compile projection | The critical path through WP-400 is locally complete with exact implementation `a993555f3cbd2bc7026423f34ed5620f3a2e058f`; verified integration of its completion chain releases the aggregate fixture candidate/review lifecycle, while the aggregate gate is `ready` rather than `passed` | Before broad WP-100/WP-300/WP-400 expansion |
 | D6 | MIGRATED | Use `CandidateFallbackPolicy::PreExecution` by default; permit only side-effect-free security inapplicability and exact deterministic lazy-artifact negatives to skip candidates; prohibit binding-input, health, transient, security-commit, and post-acceptance fallback | ADR-0017 makes the policy constructible and bounds one fixed-width diagnostic per eligible skip; the WP-200 Property Read review reaffirmed it while fallback/lazy implementation remains outside the frozen narrow scope | M3 entry |
 | D7 | MIGRATED | Adopt ADR-0018's bounded v5.0 authority reset: 62 active requirements, explicit inactive classifications for the other 59, and domain-entry re-adoption for later v1 obligations | Exact candidate `b1916250a28ee133e8d0b12225c5b6311c975247` was independently attested and integrated as the unchanged second parent of activation checkpoint `30b845a4b17dd3eb56670da48c939b72daea7d59`; v5.0 authority is active | M1 exit and WP-200 resume |
 | D8 | MIGRATED | Use one associated-type portable compiler contract, an application-closed static compiler/cursor/artifact enum, and Core-owned safe host erasure; WP-200 solely implements the compiler/artifact components and WP-300 consumes them only inside a complete installable bundle | The exact nine-path WP-200 implementation and both public author profiles pass completion evidence; WP-300 may consume but must not duplicate this ownership | M3 entry |
@@ -188,7 +195,7 @@ answer and does not automatically block unrelated admitted work.
 | D16 | MIGRATED | Establish one remote mainline validation status covering diff hygiene, aggregate design evidence, locked workspace tests, and the supported feature matrix | Active repository Ruleset `20009352` targets the default branch and requires GitHub Actions context `validation`; the matching check passed on remote `master`. The classic branch-protection summary is not sufficient Ruleset evidence | Before remote source integration |
 | D17 | MIGRATED | Retain the full v1 target and make its critical path and post-WP-300 branch join explicit | Directory/Discovery client work is mandatory client scope, the Directory service remains excluded, and WP-400/WP-500/WP-600 rejoin at WP-700 before release review | M7 exit |
 | D18 | MIGRATED | Bound the WP-300 Property Read slice to one complete Producer Property Read registration, two readiness shapes, permit-gated acceptance, one response, cleanup, and paired host/static authors | The exact package-local slice is complete; subscription, emission, client, Servient, production protocol, workload, and broad cancellation behavior remain excluded | M4 entry |
-| D19 | MIGRATED | Distinguish narrow and broad WP-300 release events instead of inferring progress from package status | Narrow WP-300 completion released the Producer-route correction's preparation; that completed correction releases only the route-reservation correction, whose verified completion will release narrow WP-400 preparation, while broad WP-300 completion still releases broad WP-400, WP-500, and WP-600 preparation | M4-M5 entry |
+| D19 | MIGRATED | Distinguish narrow and broad WP-300 release events instead of inferring progress from package status | Narrow WP-300 completion released the Producer-route correction; its completed route-reservation successor released narrow WP-400 preparation; exact narrow WP-400 completion now releases only aggregate Property Read preparation after verified integration, while broad WP-300 completion still releases broad WP-400, WP-500, and WP-600 preparation | M4-M5 entry |
 | D20 | MIGRATED | Enforce source- and generation-segregated legacy coexistence with no target-artifact backflow into legacy selection | New Planning/Core/WP-300 code cannot call legacy selectors or dispatch; WP-600 removes concrete selector/execution calls and WP-700 proves final public selector and adapter absence | M3-M6 |
 | D21 | MIGRATED | Make global-gate impact on scoped tranches an explicit requirement/artifact/state/resource/evidence mapping | Intersecting findings block or reopen, compatible changes receive named revalidation, and disjoint findings cannot trigger undifferentiated re-review; aggregate gates remain required for WP-700/release | Continuous execution |
 | D22 | MIGRATED | Reuse the immutable-candidate, scoped-review, exact-transition, pre-source, and completion machinery for WP-300 | Add only WP-300-specific contract/lifecycle fixtures and checks; preparation ends at the passing candidate plus expected absent-source boundary and reviewed next-state simulation | M4 entry |
@@ -212,10 +219,10 @@ answer and does not automatically block unrelated admitted work.
 | D40 | MIGRATED | Keep the exhaustive flat resource schema as canonical authority, not as the stable external authoring surface | Before broad public resource/SPI maturity, add typed applicability and lifecycle/classification metadata, complete role builders, schema revision/digest identity, field-admission/retirement discipline, and evidence-backed default maturity | Broad M4-M6 |
 | D41 | MIGRATED | Count remote integration only from actual base, fetched default-branch ancestry, expected content, and validation coverage; treat an impossible objective or false blocker as dangerous projection drift | `PROJECT_STATE.md` records its observed basis and next bounded task; `PLAN.md` retains roadmap/package state rather than transient PR workflow, and stacked/repair PRs do not release dependent work merely because `merged = true` | Continuous execution |
 | D42 | MIGRATED | Preserve the completed Consumer-call planner and Producer registration, but insert one exact Producer-route projection correction because their role/reference handoff is unreachable | Exact implementation `42fca7a63cefd3a5916a7edc6582044d2c04845e` publishes only `PropertyReadPlanCompiler::producer_route` plus an opaque cursor and proves real output reaches real `PrepareInput`; the later route-reservation finding narrows, but does not revoke, that package-local claim | Before WP-400 Property Read admission |
-| D43 | MIGRATED | Define tranche completion as an exact package-local claim and split successor preparation release from successor source-admission release | A declared cross-package handoff is owned by successor-entry evidence and must carry real upstream output into the first legal downstream entry without synthetic substitutes; the missing compiler-owned reservation keeps WP-400 blocked without reopening completed local claims | Continuous execution and every cross-package entry |
+| D43 | MIGRATED | Define tranche completion as an exact package-local claim and split successor preparation release from successor source-admission release | A declared cross-package handoff is owned by successor-entry evidence and must carry real upstream output into the first legal downstream entry without synthetic substitutes; the former compiler-owned reservation gap blocked WP-400 without reopening completed local claims and is now closed by its dedicated correction | Continuous execution and every cross-package entry |
 | D44 | MIGRATED | Use a merge-stable continuation envelope with one fetched-default basis and explicit pre-integration and post-integration actions | Aggregate validation rejects an unconditional current objective and verifies the recorded basis locally; fresh sessions still obtain live PR/check facts from GitHub and replace the resolved envelope at their first checkpoint | Continuous remote integration |
 | D45 | MIGRATED | Carry canonical Producer-route reservation identity as immutable Core artifact metadata produced only by the concrete binding compiler | The exact Category C route-reservation projection preserves the value through static/host erasure and admitted envelopes; Planning/Servient URI hashing, runner constants, broad form contribution, and WP-400 source remain excluded | Before WP-400 Property Read candidate admission |
-| D46 | MIGRATED | Require one bounded consumer-backward closure review at the first legal WP-400 Property Read route entry, without creating a permanent global rule | The WP-400 candidate must prove the complete production provenance table before `binding-route:Absent:begin_prepare->Preparing`; fixture synthesis, illegal recomputation, generation loss, missing pre-side-effect reservations, or host/static divergence block source admission, while PR #18 remains a distinct upstream review boundary | Before WP-400 Property Read admission |
+| D46 | MIGRATED | Require one bounded consumer-backward closure review at the first legal WP-400 Property Read route entry, without creating a permanent global rule | The reviewed WP-400 candidate proves the complete production provenance table before `binding-route:Absent:begin_prepare->Preparing`; fixture synthesis, illegal recomputation, generation loss, missing pre-side-effect reservations, or host/static divergence would have blocked source admission, while PR #18 remains a distinct upstream review boundary | Before WP-400 Property Read admission |
 
 The former D3 Foundation candidate is the exact single child of
 `56fea9813df80fe29527755fcb2ce91d43cc5086`, changes only its registered
@@ -245,9 +252,12 @@ plan, and WP-300 binding slices are complete. The exact WP-300 topology is
 default-branch admission base `384461ba33a3639a0f89978159719aa6937e1f36`
 `-> 6aaf1ef1586428152e535b9cd75f7183ec764cd0`
 `-> 89fb9f17ac961294032123173b29692a719a174c`. The narrow WP-400 slice is
-`in-progress`/`approved` at its exact pre-source checkpoint, with all seven
-product and three support paths still unchanged; broad WP-400 remains blocked.
-D42 inserts one exact
+`complete`/`approved`: pull request #23 integrated its exact five-file
+pre-source checkpoint at default-validated merge
+`63015a6e4528a0f9e7d1b677ea987aa2ba1c8781`, and immediate implementation
+`a993555f3cbd2bc7026423f34ed5620f3a2e058f` changes only the six needed product
+paths plus all three support paths. Broad WP-400 remains blocked. D42 inserts
+one exact
 `WP-200-PROPERTY-READ-PRODUCER-ROUTE-PROJECTION` after WP-300 because the
 previous private planner could produce only `ConsumerCall`. That correction is
 complete and proves the real `ProducerRoute` role/reference handoff. WP-400
@@ -276,8 +286,12 @@ builder results, the five exact public methods, and four further mutations.
 Its isolated review closed D46's complete first-entry provenance table plus
 runtime guard/cleanup retention, and pull request #22 integrated the exact
 candidate/review chain at default-validated merge
-`1652976500941f0f61e7578391d8d2ce8fcee862`. The current exact five-file
-checkpoint admits only the registered 7+3 source topology. Broad
+`1652976500941f0f61e7578391d8d2ce8fcee862`. Pull request #23 integrated its
+exact pre-source checkpoint and default validation run `31472025404` passed;
+the immediate reviewed implementation now closes the registered static, host,
+response, deactivation, and cleanup matrix. All six narrow tranche records
+therefore pass and the aggregate gate is `ready`, while its planned fixture
+roots remain absent. Broad
 `WP-100-HANDLER-ENTRY`, `WP-300-BROAD-ENTRY`, and `WP-400-BROAD-ENTRY` remain
 blocked until the gate passes. The gate exception does not claim final
 `InteractionInput` storage, `AcceptHint` resource admission,
@@ -334,7 +348,10 @@ The exact preparation-release events inside that path are asymmetric:
   `compiler -> admitted envelope -> BindingRouteKey` successor-entry evidence
   and verified completion
   releases exact WP-400 candidate/review and pre-source-admission preparation,
-  whose candidate review also owns the one-time first-entry closure; and
+  whose candidate review also owns the one-time first-entry closure;
+- exact WP-400 completion plus verified default integration releases only the
+  aggregate Property Read fixture candidate/review and admission lifecycle;
+  and
 - broad WP-300 completion releases broad WP-400, WP-500, and WP-600 candidate
   preparation, each still subject to its own admission evidence.
 
@@ -419,8 +436,11 @@ global gates; the exact `WP-300-PROPERTY-READ-BINDING-SLICE` is complete and
 the exact `WP-200-PROPERTY-READ-PRODUCER-ROUTE-PROJECTION` and
 `WP-200-PROPERTY-READ-ROUTE-RESERVATION-PROJECTION` are integrated and
 default-validated. The WP-400 candidate/review chain is also integrated and
-default-validated; its independent review closed D46, and the exact narrow
-source transition is now admitted while implementation remains absent.
+default-validated; its independent review closed D46, its distinct admission
+merge is default-validated, and exact implementation
+`a993555f3cbd2bc7026423f34ed5620f3a2e058f` locally completes the narrow slice.
+The aggregate Property Read gate is now `ready`; fixture candidate/review and
+admission remain next, and the planned fixture roots are still absent.
 
 AI deliverable:
 
@@ -606,9 +626,13 @@ because its portable contract root unconditionally imported std-only
 rejected for static-deactivation, accepted-request, API-ownership, and builder-
 result contradictions. The fifth correction closes those defects; independent
 review passed D46 and the full runtime/cleanup matrix, and pull request #22 is
-integrated and default-validated. The exact five-file pre-source checkpoint
-now admits the registered seven product plus three support paths, none of which
-has changed yet.
+integrated and default-validated. Pull request #23 integrated the exact
+five-file pre-source checkpoint, and implementation
+`a993555f3cbd2bc7026423f34ed5620f3a2e058f` installs the reviewed Property Read
+runtime across the six necessary product plus three support paths. Its
+completion checker, locked workspace tests, directed formatting, and feature
+matrix pass. The aggregate fixture lifecycle is next after verified completion
+integration.
 The broad entry requirements below remain open.
 
 Before broad WP-300 admission, the external Zenoh authoring spike must record
@@ -647,7 +671,8 @@ Exit criteria:
 
 ## M5A — Servient Runtime and Application Lifecycle
 
-Status: OPEN
+Status: IN_PROGRESS; the exact Property Read Servient slice is locally complete
+while broad WP-400 and aggregate fixture admission remain open.
 
 Authoritative package scope: WP-400.
 

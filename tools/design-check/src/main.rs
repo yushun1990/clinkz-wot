@@ -3785,11 +3785,15 @@ fn check_property_read_integration_gate(
         "property-read gate id",
         PROPERTY_READ_GATE,
     )?;
-    require_string(
-        manifest.get("status"),
-        "property-read gate status",
-        "blocked",
-    )?;
+    let gate_status = manifest
+        .get("status")
+        .and_then(Item::as_str)
+        .ok_or_else(|| "property-read gate has no string status".to_owned())?;
+    if !matches!(gate_status, "blocked" | "ready") {
+        return Err(format!(
+            "property-read gate status must be blocked or ready; found {gate_status:?}"
+        ));
+    }
     require_string(
         manifest.get("admission_policy"),
         "property-read gate admission_policy",
@@ -3826,7 +3830,7 @@ fn check_property_read_integration_gate(
         validate_relative_path(fixture_root, PROPERTY_READ_GATE)?;
         if root.join(fixture_root).exists() {
             return Err(format!(
-                "{PROPERTY_READ_GATE} blocked manifest must not pre-create fixture root \
+                "{PROPERTY_READ_GATE} pre-candidate manifest must not pre-create fixture root \
                  {fixture_root:?}"
             ));
         }
@@ -4173,6 +4177,7 @@ fn check_property_read_integration_gate(
     }
 
     let mut slice_ids = BTreeSet::new();
+    let mut all_slices_complete = true;
     let mut slice_sequences: BTreeMap<String, i64> = [
         (HANDLER_FOUNDATION_TRANCHE.to_owned(), 110),
         (HANDLER_VALUE_PRIMITIVES_TRANCHE.to_owned(), 120),
@@ -4297,6 +4302,7 @@ fn check_property_read_integration_gate(
         }
         let status = string_field(tranche, "status", &id)?;
         let admission_status = string_field(tranche, "admission_status", &id)?;
+        all_slices_complete &= status == "complete";
         if matches!(
             id.as_str(),
             PROPERTY_READ_HANDLER_SLICE
@@ -5306,6 +5312,19 @@ fn check_property_read_integration_gate(
             "{PROPERTY_READ_GATE} slice mismatch; expected {expected_slice_ids:?}, \
              found {slice_ids:?}"
         ));
+    }
+    match (gate_status, all_slices_complete) {
+        ("ready", false) => {
+            return Err(format!(
+                "{PROPERTY_READ_GATE} cannot be ready before all six slices are complete"
+            ));
+        }
+        ("blocked", true) => {
+            return Err(format!(
+                "{PROPERTY_READ_GATE} must become ready after all six slices complete"
+            ));
+        }
+        _ => {}
     }
     for (id, dependencies) in &slice_dependencies {
         let sequence = slice_sequences
@@ -6455,6 +6474,21 @@ fn check_property_read_servient_slice_tranche(
                 "{id} complete state lacks registered completion evidence"
             ));
         }
+        let attestation_ref = string_field(tranche, "review_attestation_ref", id)?;
+        let admission_base_ref = string_field(tranche, "admission_base_ref", id)?;
+        let requirements = package_string_set(tranche, "requirements", id)?;
+        let feature_cells = package_string_set(tranche, "feature_cells", id)?;
+        check_property_read_servient_completion_evidence(
+            root,
+            &evidence_path,
+            &completion_check,
+            &attestation_ref,
+            &admission_base_ref,
+            &implementation_paths,
+            &support_paths,
+            &requirements,
+            &feature_cells,
+        )?;
     } else if evidence_exists && tranche_evidence_is_passed(root, &evidence_path)? {
         return Err(format!(
             "{id} is not complete while {evidence_path} claims passed"
@@ -11100,6 +11134,240 @@ fn check_property_read_route_reservation_completion_evidence(
     }
 
     let checker = root.join("tools/check-wp200-property-read-route-reservation.sh");
+    let status = Command::new(&checker)
+        .current_dir(root)
+        .status()
+        .map_err(|error| {
+            format!(
+                "cannot execute {context} completion checker {}: {error}",
+                checker.display()
+            )
+        })?;
+    if !status.success() {
+        return Err(format!("{context} completion checker exited with {status}"));
+    }
+    Ok(())
+}
+
+fn check_property_read_servient_completion_evidence(
+    root: &Path,
+    relative_path: &str,
+    verification_check: &str,
+    attestation_ref: &str,
+    admission_base_ref: &str,
+    registered_implementation_paths: &BTreeSet<String>,
+    support_implementation_paths: &BTreeSet<String>,
+    expected_requirements: &BTreeSet<String>,
+    expected_compilation_cells: &BTreeSet<String>,
+) -> Result<(), String> {
+    let context = "property-read Servient slice";
+    let path = root.join(relative_path);
+    let source = fs::read_to_string(&path)
+        .map_err(|error| format!("cannot read {}: {error}", path.display()))?;
+    let document = source
+        .parse::<DocumentMut>()
+        .map_err(|error| format!("invalid {}: {error}", path.display()))?;
+    require_exact_table_fields(
+        document.as_table(),
+        "property-read Servient completion evidence",
+        &[
+            "schema_version",
+            "design_revision",
+            "work_package",
+            "tranche",
+            "implementation_ref",
+            "recorded_on",
+            "verification_command",
+            "verification_check",
+            "status",
+            "evidence_key",
+            "requirement_ids",
+            "compilation_cells",
+            "coverage",
+        ],
+    )?;
+    require_integer(
+        document.get("schema_version"),
+        "property-read Servient evidence schema_version",
+        1,
+    )?;
+    require_string(
+        document.get("design_revision"),
+        "property-read Servient evidence design_revision",
+        ACTIVE_AUTHORITY_REVISION,
+    )?;
+    require_string(
+        document.get("work_package"),
+        "property-read Servient evidence work_package",
+        "WP-400",
+    )?;
+    require_string(
+        document.get("tranche"),
+        "property-read Servient evidence tranche",
+        PROPERTY_READ_SERVIENT_SLICE,
+    )?;
+    require_string(
+        document.get("status"),
+        "property-read Servient evidence status",
+        "passed",
+    )?;
+    require_string(
+        document.get("evidence_key"),
+        "property-read Servient evidence key",
+        "property-read-servient-slice",
+    )?;
+    require_string(
+        document.get("verification_check"),
+        "property-read Servient evidence verification_check",
+        verification_check,
+    )?;
+    require_string(
+        document.get("verification_command"),
+        "property-read Servient evidence verification_command",
+        "tools/check-wp400-property-read-servient-slice.sh",
+    )?;
+
+    let recorded_on = document
+        .get("recorded_on")
+        .and_then(Item::as_str)
+        .ok_or_else(|| format!("{relative_path} has no recorded_on"))?;
+    if recorded_on.trim().is_empty() {
+        return Err(format!("{relative_path} has empty recorded_on"));
+    }
+    let requirement_ids = package_string_set(
+        document.as_table(),
+        "requirement_ids",
+        "property-read Servient completion evidence",
+    )?;
+    if &requirement_ids != expected_requirements {
+        return Err(format!(
+            "{context} evidence requirement mismatch; expected \
+             {expected_requirements:?}, found {requirement_ids:?}"
+        ));
+    }
+    let compilation_cells = package_string_set(
+        document.as_table(),
+        "compilation_cells",
+        "property-read Servient completion evidence",
+    )?;
+    if &compilation_cells != expected_compilation_cells {
+        return Err(format!(
+            "{context} evidence compilation-cell mismatch; expected \
+             {expected_compilation_cells:?}, found {compilation_cells:?}"
+        ));
+    }
+    let coverage = package_string_set(
+        document.as_table(),
+        "coverage",
+        "property-read Servient completion evidence",
+    )?;
+    if coverage.is_empty() {
+        return Err(format!("{context} completion evidence has empty coverage"));
+    }
+
+    let implementation_ref = document
+        .get("implementation_ref")
+        .and_then(Item::as_str)
+        .ok_or_else(|| format!("{relative_path} has no implementation_ref"))?;
+    require_full_commit_id(
+        implementation_ref,
+        "property-read Servient implementation_ref",
+    )?;
+    check_git_commit_is_ancestor(
+        root,
+        implementation_ref,
+        "property-read Servient implementation_ref",
+    )?;
+    require_git_ancestor(
+        root,
+        attestation_ref,
+        admission_base_ref,
+        "property-read Servient review/admission base",
+    )?;
+
+    let admission_merge_ref = git_single_parent(
+        root,
+        implementation_ref,
+        "property-read Servient implementation commit",
+    )?;
+    let merge_record = git_text(
+        root,
+        &["rev-list", "--parents", "-n", "1", &admission_merge_ref],
+        "property-read Servient admission merge",
+    )?;
+    let merge_fields: Vec<&str> = merge_record.split_whitespace().collect();
+    if merge_fields.len() != 3 {
+        return Err(format!(
+            "{context} implementation parent must be the two-parent admission merge; \
+             found {merge_fields:?}"
+        ));
+    }
+    for (index, reference) in merge_fields.iter().enumerate() {
+        require_full_commit_id(
+            reference,
+            &format!("property-read Servient admission merge field {index}"),
+        )?;
+    }
+    if merge_fields[0] != admission_merge_ref || merge_fields[1] != admission_base_ref {
+        return Err(format!(
+            "{context} admission merge must have first parent {admission_base_ref:?}; \
+             found {merge_fields:?}"
+        ));
+    }
+    let pre_source_ref = merge_fields[2];
+    require_git_single_parent(
+        root,
+        pre_source_ref,
+        admission_base_ref,
+        "property-read Servient combined pre-source checkpoint",
+    )?;
+    let wrapper_paths = git_changed_paths_between(
+        root,
+        pre_source_ref,
+        &admission_merge_ref,
+        "property-read Servient admission merge tree",
+    )?;
+    if !wrapper_paths.is_empty() {
+        return Err(format!(
+            "{context} admission merge tree differs from pre-source checkpoint: \
+             {wrapper_paths:?}"
+        ));
+    }
+    let pre_source_paths = git_commit_changed_paths(
+        root,
+        pre_source_ref,
+        "property-read Servient pre-source checkpoint",
+    )?;
+    let expected_pre_source_paths = owned_set(&[
+        "PLAN.md",
+        "PROJECT_STATE.md",
+        PROPERTY_READ_SERVIENT_ADMISSION_REVIEW,
+        "docs/spec/v5-artifact-carry-forward.toml",
+        PROPERTY_READ_GATE_MANIFEST,
+    ]);
+    if pre_source_paths != expected_pre_source_paths {
+        return Err(format!(
+            "{context} pre-source checkpoint path mismatch; expected \
+             {expected_pre_source_paths:?}, found {pre_source_paths:?}"
+        ));
+    }
+
+    let implementation_paths = git_commit_changed_paths(
+        root,
+        implementation_ref,
+        "property-read Servient implementation commit",
+    )?;
+    let mut expected_implementation_paths = registered_implementation_paths.clone();
+    expected_implementation_paths.extend(support_implementation_paths.iter().cloned());
+    expected_implementation_paths.remove("servient/src/registry.rs");
+    if implementation_paths != expected_implementation_paths {
+        return Err(format!(
+            "{context} implementation path mismatch; expected \
+             {expected_implementation_paths:?}, found {implementation_paths:?}"
+        ));
+    }
+
+    let checker = root.join("tools/check-wp400-property-read-servient-slice.sh");
     let status = Command::new(&checker)
         .current_dir(root)
         .status()
