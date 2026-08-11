@@ -1,6 +1,6 @@
 # Project State
 
-Last updated: 2026-08-11
+Last updated: 2026-08-12
 
 ## Repository Basis
 
@@ -328,7 +328,8 @@ expected-content, tree-equivalence, and workflow inspection. Default-branch
 Projection mode: conditional remote handoff
 
 Autonomous review-cycle state: D48 generic transition-validator convergence is
-the one active engineering claim. Its candidate declares the completed
+technically complete and is awaiting its validated remote handoff. Its records
+declare the completed
 route-reservation and WP-400 candidate histories, exact path sets, status and
 evidence links, admission topology, and source boundaries in the Property Read
 gate manifest, then validates both records through one tranche-id-independent
@@ -343,45 +344,46 @@ An isolated immutable-candidate reconstruction passed the generic and retained
 valid-state paths, then proved shared negative path/status mutations, commit
 topology, and current completion evidence are independently rejected by both
 the generic engine and the legacy oracle. The registered review audit records
-those cases; its review checkpoint ref is intentionally deferred until the
-exact five-path review commit exists.
+those cases. Exact five-path review checkpoint
+`2aaa98a136830ef80b911795466f92ecb303f8f5` is the unique child of the
+reviewed candidate and is now bound by the `passed` transition-validation
+state.
 
 Initial immutable candidate
 `e21633784d98d5ff124b2cd467c5271a8dea2544` passed its generic valid-state
 reconstruction, but independent evidence inspection rejected its oracle-set
 projection: it named the four focused entry/completion checks but omitted the
 registered `work-package-dag-check` command that actually retains the old
-instance-specific exact-path and topology branches. The current narrow
-corrective candidate adds that command to the declared oracle set and clarifies
-the authoritative contract; it neither changes transition semantics nor
-weakens or removes any checker.
+instance-specific exact-path and topology branches. Correction
+`09204594918071b0c4b760369a3c596b275b0ac7` adds that command to the declared
+oracle set and clarifies the authoritative contract; it neither changes
+transition semantics nor weakens or removes any checker.
 
 Corrective candidate `09204594918071b0c4b760369a3c596b275b0ac7` repaired
 that declaration and passed the isolated valid-state matrix. Mutation-test
 preparation then found an execution-order defect: `check-work-packages` invoked
 the generic engine before its retained instance-specific branches, so a shared
 invalid state would short-circuit before the legacy oracle could independently
-reject it. The current second correction moves the generic call to the end of
-the already-existing integration-gate validation. Valid states still require
-both paths; mutation review can now run the legacy command and generic command
-separately without adding a tranche-specific engine branch.
+reject it. Reviewed second correction
+`aa748fa9072ec277d3159a458e709e4ca84fa89b` moves the generic call to the end
+of the already-existing integration-gate validation. Valid states still
+require both paths; mutation review can run the legacy command and generic
+command separately without adding a tranche-specific engine branch.
 
 If the pre-existing uncommitted aggregate-candidate preparation remains in the
 separate `agent/property-read-architecture-candidate` worktree, preserve it as
 investigation evidence only. It is not an admitted candidate or repository
 authority. Its tranche-specific checker direction is superseded by D48 and
-must not be resumed or committed before the generic-validation convergence
-claim is independently completed.
+must not be resumed or committed before verified D48 default integration and a
+new explicit autonomous review cycle.
 
 ### Before verified integration
 
-Complete the D48 immutable-candidate reconstruction and mutation-parity audit,
-bind its exact review checkpoint, change the transition-validation status to
-`passed`, and run the task-specific plus default-branch matrix. Publish the
-completed claim from `agent/transition-validator-convergence` through one draft
-pull request against `master` and require exact-head remote `validation`. That
-draft handoff is this autonomous review-cycle boundary; do not begin aggregate
-candidate, review, admission, or fixture-source work.
+Run the task-specific plus default-branch matrix on the passed D48 state, then
+publish `agent/transition-validator-convergence` through one draft pull request
+against `master` and require exact-head remote `validation`. That draft handoff
+is this autonomous review-cycle boundary; do not begin aggregate candidate,
+review, admission, or fixture-source work.
 
 ### After verified integration
 
@@ -1693,7 +1695,8 @@ The aggregate work-package run used the already-recorded shared-cache
 workaround for ten generated per-tranche target directories after a first
 isolated-target attempt exceeded the temporary-filesystem quota. The rerun
 completed successfully and changes no repository content. Mutation parity and
-the risk-appropriate default-branch matrix remain final-checkpoint work.
+the risk-appropriate default-branch matrix are closed by the passed-state
+results below.
 
 Independent reconstruction of exact candidate
 `aa748fa9072ec277d3159a458e709e4ca84fa89b` also passes the design-check tests,
@@ -1711,25 +1714,40 @@ Every mutation was reversed with a clean diff before the final valid-state
 rerun. `docs/audits/D48-transition-validator-convergence-review.toml` records
 the exact candidate, records, oracle set, parity dimensions, and case outcomes.
 
+On 2026-08-12 the final `passed` state additionally passes:
+
+- `CARGO_INCREMENTAL=0 tools/check-design-artifacts.sh`, including the
+  merge-stable continuation envelope, 62/59 v5 authority split, 66 performance
+  cases, every completed work-package checker, retained legacy transition
+  oracle, and the exact D48 review topology;
+- `CARGO_INCREMENTAL=0 cargo test --workspace --locked` using a fresh
+  repository-local generated target cache;
+- `CARGO_INCREMENTAL=0 sh scripts/check-feature-matrix.sh` — 21 passed,
+  0 failed, using the same current-worktree cache;
+- design-check's 29 unit/module tests and six focused schema suites;
+- standalone generic transition validation and the v5 authority candidate
+  check; and
+- directed Rust formatting plus diff hygiene.
+
+The generated target cache is ignored repository state and was placed outside
+the temporary filesystem to avoid its known quota limit. No aggregate fixture
+root, product source, public API, lifecycle behavior, or existing checker was
+removed or weakened.
+
 ## Next Safe Actions
 
-1. Commit the current independent review audit, artifact registration, carried
-   digest, gate `reviewed` state, and continuation projection as the exact
-   five-path child of reviewed candidate
-   `aa748fa9072ec277d3159a458e709e4ca84fa89b`.
-2. Bind that exact review ref in a final continuation checkpoint, change the
-   declarative validator state to `passed`, and rerun the task-specific plus
-   default-branch validation matrix.
-3. Push `agent/transition-validator-convergence`, open one draft pull request
+1. Commit the passed D48 state and final local validation projection, then
+   fetch `master` once more before remote handoff. If the fetched base moved,
+   reconcile it and rerun the affected exact-head matrix before publication.
+2. Push `agent/transition-validator-convergence`, open one draft pull request
    against `master`, and stop this autonomous cycle at that remote handoff.
    Require exact-head remote `validation`; do not create aggregate fixtures.
-4. On a later explicit progression request, first fetch `master` and reconcile
+3. On a later explicit progression request, first fetch `master` and reconcile
    the D48 pull request's actual base, expected head/content, merge ancestry,
    and merge-revision `validation`.
-5. Only after that verified integration may a later review cycle prepare the
+4. Only after that verified integration may a later review cycle prepare the
    aggregate `PROPERTY-READ-ARCHITECTURE` fixture candidate on the generic
-   path. Its own
-   review/admission still controls creation of
+   path. Its own review/admission still controls creation of
    `tools/architecture-fixtures/property-read-binding` and
    `tools/architecture-fixtures/property-read-runner`; the gate remains
    `ready`, not `passed`.

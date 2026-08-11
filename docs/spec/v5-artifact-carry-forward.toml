@@ -106,8 +106,8 @@ revalidation = "cargo run --locked --quiet --manifest-path tools/design-check/Ca
 [[artifact]]
 family = "property-read-integration-gate"
 path = "docs/work-packages/property-read-architecture-gate.toml"
-sha256 = "25d650cd15f83edf477d01c8d89e3fb3633420a4824479d2b38ec8879efc3488"
-disposition = "revalidated as a six-tranche gate with every narrow slice complete/approved and independently reviewed declarative transition records for the completed route-reservation and WP-400 chains; their immutable candidate histories, exact path sets, status/evidence links, admission topology, source boundaries, and negative mutations have parity with the retained legacy work-package path and focused validators; the exact review commit ref remains deferred until this five-path review checkpoint is created, the aggregate gate is ready, and both planned fixture roots remain absent"
+sha256 = "413f026130453e287de8617c1452f107a5f748665e42ecf6edb0fb2f5a9f87a8"
+disposition = "revalidated as a six-tranche gate with every narrow slice complete/approved and passed declarative transition validation for the completed route-reservation and WP-400 chains; exact review checkpoint 2aaa98a136830ef80b911795466f92ecb303f8f5 binds valid-state, exact-path/status mutations, admission topology, current completion evidence, and retained-oracle parity; the aggregate gate remains ready and both planned fixture roots remain absent pending a distinct later-cycle candidate and admission"
 revalidation = "tools/check-v5-authority-reset-decision.sh"
 
 [[artifact]]
