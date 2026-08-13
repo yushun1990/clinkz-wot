@@ -147,19 +147,24 @@ Completion of this slice releases
 released only by broad WP-300 completion. Preparation in those packages is
 allowed but is not source admission or vertical progress.
 
-After this narrow slice completes and before the broad WP-300 candidate is
-frozen, run one bounded, non-authoritative external Zenoh authoring spike
-against the complete public registration surface. Helpers may group fields,
-generate closed static enums/tables, and adapt synchronous
-`NoCleanupSuccessor` operations, but may not hide resources or lifecycle
-ownership. The spike records cleanup-library mapping, diagnostics, repeated
-workarounds, generic/monomorphization pressure, constrained layout/code size,
-and unsafe/private dependency needs. Reopen the SPI for a concrete ownership,
-portability, resource-accounting, unsafe-erasure, or implementability defect,
-or for systematic authoring failures that repeatedly lose semantic truth or
-exceed declared bounds. Mechanical repetition and field count alone remain
-helper/generation concerns. The spike does not release WP-600, prove
-protocol-shape neutrality, or claim production-protocol progress.
+After this narrow slice completes and before either the aggregate Property Read
+mock candidate or the broad WP-300 candidate is frozen, run one bounded,
+non-authoritative real-target Zenoh Property Read feedback probe against the
+complete public registration surface. It uses actual Zenoh I/O and a network
+round trip; carries a real admitted plan/route output through readiness,
+correlation, response, cancellation/drain, and cleanup; and includes enough
+multiple-Thing/route/form shape to expose hidden single-fixture assumptions.
+Helpers may group fields, generate closed static enums/tables, and adapt
+synchronous `NoCleanupSuccessor` operations, but may not hide resources or
+lifecycle ownership. The probe records cleanup-library mapping, diagnostics,
+repeated workarounds, generic/monomorphization pressure, constrained
+layout/code size, and unsafe/private dependency needs. Reopen the SPI for a
+concrete ownership, portability, resource-accounting, unsafe-erasure, or
+implementability defect, or for systematic authoring failures that repeatedly
+lose semantic truth or exceed declared bounds. Mechanical repetition and
+field count alone remain helper/generation concerns. The probe does not
+release WP-600, prove protocol-shape neutrality, or claim production-protocol
+progress.
 
 Broad WP-300 admission additionally requires:
 
@@ -478,9 +483,11 @@ Produce these package evidence keys exactly as indexed by the work-package DAG:
 - `cleanup-obligation-coexistence` for the legal simultaneous-obligation
   matrix, non-additive mutually exclusive reservations, and saturation at each
   real coexistence boundary.
-- `binding-authoring-usability` for the external Zenoh spike's diagnostics,
-  workaround, generic/layout/code-size, cleanup mapping, and unsafe/private
-  dependency findings.
+- `binding-authoring-usability` for the real-target Zenoh feedback probe's
+  public declarations, actual network lifecycle, multiple Thing/route/form
+  shape, diagnostics, workarounds, generic/layout/code-size, cleanup mapping,
+  and unsafe/private dependency findings, with an independently accepted
+  disposition before aggregate mock candidate admission.
 - `target-legacy-no-backflow` for poisoned legacy selector,
   `ServerBinding::serve`, and `Dispatch` boundaries with zero
   target-generation calls.

@@ -113,6 +113,6 @@ revalidation = "tools/check-v5-authority-reset-decision.sh"
 [[artifact]]
 family = "property-read-integration-gate"
 path = "docs/work-packages/PROPERTY-READ-ARCHITECTURE.md"
-sha256 = "133e05840672a0557517a2960c3b48d1e04381b50c7d43d6ceddf914af48ff10"
-disposition = "revalidated with all narrow Property Read slices integrated/default-validated, D46 discharged, and D48's generic transition-validation contract established before aggregate candidate work; the aggregate gate remains ready rather than passed, inactive RuntimeEvent/HostHandlerRegistration families remain excluded, and mutable transition data remains owned by docs/work-packages/property-read-architecture-gate.toml"
+sha256 = "b830b8ced941b4328ec41cf74246def23452df1266b2d35757eedfa697fa6380"
+disposition = "revalidated with all narrow Property Read slices and D48 integrated/default-validated; the aggregate gate remains ready rather than passed, but its candidate now follows a bounded non-authoritative real-target Zenoh feedback probe with actual network I/O; inactive RuntimeEvent/HostHandlerRegistration families remain excluded, and mutable transition data remains owned by docs/work-packages/property-read-architecture-gate.toml"
 revalidation = "tools/check-v5-authority-reset-decision.sh"

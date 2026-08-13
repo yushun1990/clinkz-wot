@@ -40,7 +40,9 @@ a plan, review, or historical specification does not reactivate it.
 5. source code and tests establish implementation truth, but cannot silently
    amend an active requirement.
 
-`PLAN.md` selects project execution state. Work packages describe migration,
+`PLAN.md` owns roadmap and milestone state; `EXECUTION.md` selects the one
+current engineering claim and acceptance boundary; `PROJECT_STATE.md` caches
+continuation and observed remote state. Work packages describe migration,
 admission, and evidence; reviews attest evidence; workspace topics retain
 investigation history. None is an independent behavioral specification. When
 active owners disagree, implementation of the affected scope stops until one

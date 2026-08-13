@@ -215,8 +215,13 @@ still construct the same complete input and expose its resource, lifecycle,
 profile, and cleanup declarations to validation. A helper cannot synthesize
 hidden defaults, erase an owned protocol resource, merge fallible ownership
 phases, or install a partial bundle. After the narrow Property Read slice
-completes and before broad WP-300 admission, a bounded external Zenoh authoring
-spike must exercise the public surface. The SPI is reopened only for concrete
+completes and before either the aggregate Property Read mock candidate or broad
+WP-300 admission, a bounded non-authoritative real-target Zenoh feedback probe
+must exercise the public surface, actual protocol I/O, and at least one network
+Property Read round trip. It must carry real target plan/route outputs, cover
+readiness, correlation, response, cancellation/drain, and cleanup, and use
+enough multiple-Thing/route/form shape to expose a hidden single-fixture
+assumption. The SPI is reopened only for concrete
 ownership, portability, resource-accounting, unsafe-erasure, or
 implementability evidence, or for repeated author workarounds that
 systematically lose ownership/generation truth, require unsafe or private
@@ -230,8 +235,8 @@ The public maturity ladder is explicit:
 1. the immutable candidate proves internal contract consistency;
 2. the narrow source plus external fixtures prove package-local
    constructibility for the advertised Property Read role;
-3. the external Zenoh spike proves one third-party-style author can express
-   that role against one protocol family;
+3. the real-target Zenoh probe supplies authoring and network-lifecycle
+   feedback against one protocol family without claiming WP-600 progress;
 4. the Property Read architecture gate proves mock cross-package composition;
 5. WP-600 proves production execution for the Zenoh family; and
 6. WP-700 release review may claim stable cross-profile or protocol-neutral
@@ -1635,12 +1640,15 @@ identities. At minimum it covers:
 - a fake third-party binding crate outside the workspace member list that
   constructs one complete bundle and supports consume and expose without
   umbrella changes;
-- a bounded external production-Zenoh authoring spike, run after the narrow
-  Property Read slice and before broad WP-300 admission, that records helper
-  use, required explicit declarations, cleanup-library mapping, diagnostics,
-  repeated workaround classes, generic/monomorphization pressure, constrained
-  layout and code-size cost, and any concrete ownership, portability,
-  resource, unsafe, or implementability defect;
+- a bounded non-authoritative real-target Zenoh Property Read feedback probe,
+  run after the narrow slice and before the aggregate mock candidate or broad
+  WP-300 admission, that uses actual protocol I/O and a network round trip;
+  carries real plan/route outputs through readiness, correlation, response,
+  failure, cancellation/drain, and cleanup; includes multiple Thing/route/form
+  shape; and records helper use, required declarations, cleanup-library
+  mapping, diagnostics, repeated workarounds, generic/monomorphization
+  pressure, constrained layout/code-size cost, and concrete ownership,
+  portability, resource, unsafe, or implementability defects;
 - duplicate, incomplete, incompatible, unsupported-cell, and over-footprint
   bundle rejection before publication;
 - prepare/readiness/activate/commit failure and cancellation at every boundary,

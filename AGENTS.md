@@ -24,11 +24,16 @@ Use each repository artifact for its intended purpose:
                                       direction, and design change
                                       control
 
-  `PROJECT_STATE.md`                  AI-maintained continuation state
-
   `PLAN.md`                           Project roadmap, milestones,
                                       objectives, dependencies, and
                                       progress state
+
+  `EXECUTION.md`                      One current engineering claim,
+                                      implementation plan, acceptance
+                                      contract, handoff, and verdict
+
+  `PROJECT_STATE.md`                  Compact continuation and observed
+                                      remote-state cache
 
   `docs/`                             Authoritative specifications and
                                       accepted decisions
@@ -58,6 +63,15 @@ AI agents hold primary technical decision responsibility for:
 -   technical risk assessment;
 -   evidence sufficiency;
 -   technical milestone status.
+
+Those responsibilities are separated across capability roles so one context
+does not routinely plan, implement, and accept its own claim. The current
+model-to-role mapping and exact workflow live in `PROJECT_GOVERNANCE.md`.
+Stable authority attaches to the Technical Lead, Executor, Acceptance
+Reviewer, Plan Challenger, and Periodic Auditor roles, not to a product-tier
+name. The Technical Lead and Acceptance Reviewer may use the same capable
+model, but acceptance must start from a fresh context that reconstructs the
+claim from repository evidence and did not implement it.
 
 The Project Owner maintains project vision, goals, real-world constraints,
 unacceptable directions, and product or usage feedback.
@@ -104,7 +118,9 @@ Before substantial work:
 
 1.  Read `AGENTS.md`.
 2.  Read `PROJECT_STATE.md`.
-3.  When remote integration can affect the next safe action, fetch the remote
+3.  Read `EXECUTION.md`. If it is `IDLE`, no implementation is authorized. If
+    it is active, follow only the role and frozen contract assigned there.
+4.  When remote integration can affect the next safe action, fetch the remote
     default branch when available and reconcile its pull-request/merge state
     with `PROJECT_STATE.md` before relying on the recorded objective. A merged
     pull request counts as default-branch integration only after checking its
@@ -112,38 +128,33 @@ Before substantial work:
     repository content, and applicable merge-revision validation. Offline work
     may use the last observed snapshot but may not release a dependent source
     transition from an unverified remote merge.
-4.  Identify the active milestone and objective from `PLAN.md`.
-5.  Follow references to the smallest necessary subset of governance,
+5.  Identify the active milestone and durable dependency context from
+    `PLAN.md`; do not infer an executable claim from roadmap order.
+6.  Follow references to the smallest necessary subset of governance,
     specifications, workspace discussions, code, tests, audits, and
     evidence.
-6.  Inspect implementation before making implementation claims.
+7.  Inspect implementation before making implementation claims.
 
 ## Durable Continuation
 
-`PROJECT_STATE.md` is the AI-owned continuation checkpoint.
+`PROJECT_STATE.md` is the AI-owned continuation cache. It is deliberately not
+the current plan, a decision log, an evidence index, or an implementation
+ledger. It is limited to 200 lines and contains only:
 
-It should allow a fresh agent without previous conversation history to
-recover:
-
--   current project objective;
--   active milestone and work item;
--   relevant architecture understanding;
--   accepted decisions;
--   unresolved questions;
--   rejected approaches;
--   blockers;
--   stopping point;
--   next safe actions;
--   verification references.
-
-`PROJECT_STATE.md` is curated memory, not a session transcript.
+-   the exact fetched default-branch revision and observation basis;
+-   the established frontier and pointer to `EXECUTION.md`;
+-   current blockers or limitations;
+-   the stopping point and conditional pre/post-integration next actions; and
+-   a small set of references needed to resume safely.
 
 Rules:
 
 -   Replace stale information instead of accumulating history.
 -   Separate facts from assumptions.
--   Preserve reasoning needed for future decisions.
--   Do not duplicate authoritative specifications.
+-   Put durable rationale in workspace decisions, ADRs, specifications, work
+    packages, or audits; do not copy it into continuation state.
+-   Do not duplicate Git history, GitHub facts, authoritative specifications,
+    registered evidence, or the current execution contract.
 -   Do not store important knowledge only in chat history.
 -   Record the exact fetched default-branch revision used to derive the
     continuation projection.
@@ -154,17 +165,11 @@ Rules:
 
 ## Continuous Checkpointing
 
-Update `PROJECT_STATE.md` whenever substantial understanding or
-execution state changes.
-
-Examples:
-
--   architecture analysis;
--   design direction selection;
--   blocker discovery;
--   rejected approaches;
--   meaningful code, test, documentation, or review completion;
--   milestone transition.
+Update `PROJECT_STATE.md` only when the recoverable frontier, remote basis,
+blocker, stopping point, or conditional next action changes. Update
+`EXECUTION.md` when the current claim, plan, handoff, or acceptance state
+changes. Migrate architecture reasoning and stable decisions to their owning
+artifacts instead of retaining them in either file.
 
 Before starting another major task:
 
@@ -173,44 +178,26 @@ Before starting another major task:
 
 If not, checkpoint first.
 
-## Autonomous Review Cycles
+## Role-Separated Execution Cycles
 
-A broad progression request such as `continue` or `continue progressing`
-authorizes one coherent review cycle from the current next safe action. AI
-chooses the technical decomposition; the Owner does not need to name the
-tranche or pre-compute the stopping point.
+A broad progression request authorizes one coherent engineering claim, not
+indefinite roadmap work. A Max Technical Lead first replaces `EXECUTION.md`
+with the claim, exact planning base, scope, constraints, engineering plan,
+acceptance criteria, and stop conditions. Important plans receive an advisory
+ChatGPT challenge before execution. A High Executor implements the frozen
+contract and basic evidence without redefining it. A fresh Max Acceptance
+Reviewer reconstructs and reviews the exact result; it either returns concrete
+findings or accepts and integrates it.
 
-One review cycle establishes one independently reviewable engineering claim.
-Analysis, decision migration, candidate construction, independent review,
-admission, implementation, completion evidence, remote handoff, integration,
-and reconciliation may remain in that cycle when they share the same contract,
-rollback boundary, and evidence truth. A necessary upstream correction remains
-inside the cycle only when it is required to make that same claim constructible
-and shares those boundaries.
+If real implementation falsifies the plan or architecture, the Executor keeps
+the smallest useful evidence, marks the contract `BLOCKED`, and returns it to
+the Technical Lead. It must not silently widen scope or weaken acceptance.
 
-The cycle ends at the first stable new fact that can be reviewed independently,
-including a completed tranche or equivalent claim, a proved correction of a
-blocking defect, a material gate transition, or a next safe action that crosses
-a different package, ownership, lifecycle, public-contract, rollback, or
-evidence boundary. An Owner-owned goal, real-world constraint, unacceptable
-direction, public release, or other irreversible commitment also ends the
-cycle.
-
-At the boundary, update `PROJECT_STATE.md` with the established fact, exact
-observed remote basis, remaining limitations, stopping point, and next safe
-action. Complete the current claim's required checkpoint and remote handoff
-when available, then identify but do not begin the materially distinct
-successor's candidate, review, admission, or source work. Returning to the
-Owner is a visibility handoff, not a routine technical approval gate; a new
-progression request starts the next cycle.
-
-If remote integration or reconciliation is unavailable or still pending, a
-recoverable remote handoff plus the conditional continuation envelope is a
-valid stopping point. A later broad progression request may finish that
-reconciliation, but must not silently expand into the already identified
-successor claim. An explicit request that names a broader endpoint or multiple
-claims may authorize a correspondingly bounded cycle. Time, token, line,
-commit, and pull-request counts do not define the boundary.
+The cycle ends after accepted integration and reconciliation, or at a genuine
+blocker. Update the compact continuation envelope and stop before beginning a
+materially distinct successor. Time, token, line, commit, and pull-request
+counts do not define the boundary. `PROJECT_GOVERNANCE.md` owns the detailed
+lifecycle and remote handoff rules.
 
 ## Governance and Planning Separation
 
@@ -250,6 +237,24 @@ Defines what the project intends to achieve:
 PLAN.md must not become a session log, architecture specification, ADR
 replacement, or governance policy document.
 
+### EXECUTION.md
+
+Defines one current engineering claim:
+
+-   exact planning base, scope, and non-goals;
+-   implementation plan and acceptance criteria;
+-   escalation and stop conditions;
+-   Executor handoff; and
+-   fresh Acceptance Reviewer verdict.
+
+It is replaced for each claim and must not become a roadmap or history log.
+
+### PROJECT_STATE.md
+
+Defines only the compact continuation projection and last observed remote
+basis. It points to, but does not repeat, `EXECUTION.md`, `PLAN.md`, technical
+authority, evidence, or Git/GitHub history.
+
 ## Documentation and Workspace
 
 `docs/` is the authoritative specification space.
@@ -288,10 +293,16 @@ a new linked topic and re-evaluate the migrated conclusion.
 
 ## Implementation Judgment
 
+-   Executors make ordinary local implementation choices inside the frozen
+    `EXECUTION.md` contract, but do not change its claim, authority, scope, or
+    acceptance criteria.
 -   Implement for realistic usage.
 -   Avoid speculative abstractions.
 -   Treat awkward APIs as design feedback.
 -   Surface architectural problems.
+-   On a plan or architecture contradiction, preserve a minimal reproduction
+    and return it to the Technical Lead instead of adding an undocumented
+    workaround.
 -   Preserve unrelated changes.
 -   Inspect code and tests before asserting behavior.
 -   Apply risk-proportional implementation admission. Keep strict controls for
@@ -333,8 +344,9 @@ Every bounded task that changes the repository ends with an automatic remote
 handoff. The AI agent must:
 
 -   preserve unrelated work and commit only the task's intended scope;
--   update `PROJECT_STATE.md` before the task's final evidence-topology commit
-    when that topology requires an exact path set;
+-   update the `EXECUTION.md` handoff and `PROJECT_STATE.md` continuation before
+    the task's final evidence-topology commit when that topology requires an
+    exact path set;
 -   run the task-specific checks and the risk-appropriate default-branch
     matrix;
 -   commit the completed task on its task branch;
@@ -343,6 +355,10 @@ handoff. The AI agent must:
     branch; and
 -   report the branch, commits, pull-request URL, validation state, and any
     remaining limitation.
+
+The High Executor leaves the pull request draft at `REVIEW_READY`. Only a
+fresh Max Acceptance Reviewer may record acceptance and promote or integrate
+the exact reviewed head after all predicates below are current.
 
 Never push task commits directly to the default branch. Follow-up fixes for
 the same task update the same branch and pull request. A dependent task waits

@@ -9336,7 +9336,12 @@ fn check_candidate_paths(
             || path.starts_with("workspace/")
             || matches!(
                 path.as_str(),
-                "AGENTS.md" | "PLAN.md" | "PROJECT_STATE.md" | "Cargo.toml" | "Cargo.lock"
+                "AGENTS.md"
+                    | "PLAN.md"
+                    | "EXECUTION.md"
+                    | "PROJECT_STATE.md"
+                    | "Cargo.toml"
+                    | "Cargo.lock"
             )
             || (path == "tools/design-check/src/main.rs" && design_checker_source_is_registered);
         if !registered_artifacts.contains(path) && !explicitly_governed {

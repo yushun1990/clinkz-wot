@@ -1,6 +1,6 @@
 # 0057 Decision Migration Effectiveness
 
-Status: OPEN
+Status: MIGRATED
 
 Kind: owner-raised governance-effectiveness investigation
 
@@ -59,3 +59,52 @@ Codex should determine:
 4. the minimum evidence needed to show that a decision changed later default behavior;
 5. how ineffective migrations are detected and corrected without Owner micromanagement or recurring governance ceremonies; and
 6. which authoritative owner should carry any stable correction.
+
+## Decision
+
+The repository did conflate two different claims. `MIGRATED` proves that a
+stable conclusion is durably projected into every affected authority. It does
+not prove that a later implementation consequence has already occurred or that
+future sessions will follow the new path. Adding an `EFFECTIVE` lifecycle state
+would create another ledger and would still be vulnerable to ceremonial
+closure.
+
+When a migration changes future execution behavior, its decision record must
+therefore name four things: the displaced practical default, the new default,
+the first later engineering claim expected to exercise it, and evidence that
+would falsify adoption. The future claim belongs in `EXECUTION.md` only when a
+Lead actually plans it; `PLAN.md` may retain only a durable ordering
+consequence. Real implementation, review, workload, or integration evidence
+then demonstrates effectiveness without a separate governance ceremony.
+
+If later work follows the displaced default without a recorded and technically
+justified exception, AI reopens the original topic or creates a linked finding
+and corrects the responsible authority. Deferral is legitimate when the
+migration clearly names a later activation boundary and current work does not
+cross it. `MIGRATED` remains a projection state, not a promise that all deferred
+work is done.
+
+The counterexamples have different outcomes. Reopened 0020 and the old
+`PROJECT_STATE.md` growth show insufficiently operationalized defaults. The
+earlier Zenoh-before-broad-WP-300 decision was durably worded but did not
+prevent the current roadmap from selecting aggregate mock work first; 0056 now
+makes that feedback ordering explicit at the gate boundary. Genuine downstream
+product migrations remain valid deferrals when their work-package dependencies
+have not released them.
+
+## Migration
+
+The clarified semantics and four-field effectiveness guidance are migrated to
+`PROJECT_GOVERNANCE.md`. This same change supplies immediate non-ceremonial
+evidence: it removes the PLAN decision ledger, bounds and rewrites
+`PROJECT_STATE.md`, introduces the single `EXECUTION.md` contract, removes
+legacy checker dependencies on duplicated PLAN/state prose, and changes the
+Property Read feedback order before any aggregate source begins.
+
+Displaced default: treat authoritative textual projection as sufficient to
+guide later work implicitly. New default: name the activation and falsifier,
+then inspect real work. First activation: this execution-model reset.
+Falsifier: a second current-plan owner appears, historical state accumulation
+returns, or aggregate mock work precedes the required real-target feedback
+without an explicit evidence-backed reopening. No generic prose-compliance
+checker is introduced.

@@ -1,6 +1,6 @@
 # 0055 PROJECT_STATE Role and Retention
 
-Status: OPEN
+Status: MIGRATED
 
 Kind: owner-raised execution-governance investigation
 
@@ -54,3 +54,46 @@ Codex should determine:
 5. whether session-entry and checkpointing rules need adjustment;
 6. how the decision interacts with Git/GitHub truth, work-package/evidence ownership, review-cycle boundaries, and remote reconciliation; and
 7. the authoritative owner(s) into which the stable conclusion should be migrated.
+
+## Decision
+
+`PROJECT_STATE.md` remains necessary, but only as a compact continuation and
+observed-remote cache. A fresh session needs one cheap projection that says
+which fetched default revision was actually inspected, which frontier is
+established, what currently blocks or limits work, where the previous cycle
+stopped, and what action applies before versus after a pending integration.
+Those facts are not safely replaced by a roadmap or by asking every new session
+to reconstruct the entire repository before it knows where to look.
+
+The former ledger shape is rejected. Candidate, review, admission, commit,
+merge, and workflow histories belong to Git, GitHub, registered manifests, and
+audits. Accepted/rejected reasoning belongs to workspace decisions, ADRs, and
+specifications. The current claim and acceptance boundary belong to the new
+`EXECUTION.md`. `PLAN.md` owns only roadmap and milestone state.
+
+The retained state file is limited to 200 lines and to seven content classes:
+one exact observed default revision and observation basis; established
+frontier; current execution-contract pointer; blockers/limits; stopping point;
+conditional pre/post-integration actions; and a small navigation set. Stale
+material is replaced. It never overrides GitHub or repository evidence.
+
+The earlier rules failed because they simultaneously called the file curated
+memory and required it to retain architecture understanding, accepted and
+rejected decisions, every substantial change, exact remote history, and next
+work. Continuous checkpointing therefore rewarded accumulation. The new rules
+split those responsibilities and impose a measurable size bound in the
+existing continuation check.
+
+## Migration
+
+The responsibility split and retention rules are migrated to `AGENTS.md` and
+`PROJECT_GOVERNANCE.md`; `EXECUTION.md` now owns the active claim; `PLAN.md` and
+`PROJECT_STATE.md` are rewritten to their bounded roles; and the existing
+continuation checker enforces the state-file ceiling without validating prose.
+
+Displaced default: append enough historical narrative to make state locally
+self-contained. New default: link to authoritative owners and replace the
+small continuation projection. First activation: this execution-model reset.
+Falsifier: state again exceeds 200 lines, duplicates recoverable history, or
+requires a fresh session to reconcile competing current-plan owners. Such
+evidence reopens this topic.

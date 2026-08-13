@@ -17,7 +17,10 @@ It governs:
 It does not own:
 
 - the project roadmap or milestone ordering, which belong to `PLAN.md`;
-- current execution state, which belongs to `PROJECT_STATE.md`;
+- the current engineering claim, plan, or acceptance criteria, which belong to
+  `EXECUTION.md`;
+- continuation and observed remote state, which belong to
+  `PROJECT_STATE.md`;
 - collaboration and implementation-admission policy, which belong to
   `PROJECT_GOVERNANCE.md` and `AGENTS.md`;
 - exact work-package dependencies or admission state, which belong to
@@ -30,10 +33,20 @@ Architecture governance must not become a second execution plan.
 
 ClinkZ-WoT uses AI-led development.
 
-AI agents hold primary responsibility for technical architecture decisions.
-They must investigate repository evidence, select a direction, record the
-rationale and rejected alternatives, migrate the stable conclusion to its
-proper authoritative owner, and validate the resulting repository state.
+The Max Technical Lead holds primary responsibility for technical architecture
+decisions and projects the exact implementation claim into `EXECUTION.md`.
+It must investigate repository evidence, select a direction, record rationale
+and rejected alternatives in their proper owners, migrate the stable
+conclusion, and define falsifiable acceptance criteria.
+
+The High Executor implements accepted authority but does not silently revise
+it. Concrete awkwardness, repeated workaround pressure, unconstructible public
+APIs, or ownership/resource contradictions are architecture evidence: the
+Executor records a minimal finding and returns it to the Lead. A fresh Max
+Acceptance Reviewer checks both conformance and credible omitted defects.
+ChatGPT may challenge important plans before execution, and Ultra periodically
+audits the whole repository; neither advisory role silently overrides active
+authority.
 
 The Project Owner contributes project vision, target outcomes, real-world
 constraints, unacceptable directions, product trade-offs, questions,
@@ -133,6 +146,23 @@ The accepted v1 architecture direction active in v5.0 includes:
 The exact contracts live in the registered architecture, ADR, specification,
 API, state, resource, performance, requirement, and work-package artifacts.
 This summary is navigation, not an alternative normative owner.
+
+For the target Protocol Binding and Servient surface, the invariant direction
+above is frozen, but empirical maturity is deliberately narrower. Immutable
+artifacts, protocol-owned I/O and correlation, Servient-owned dispatch and
+publication, generation identity, route-scoped bounded progress,
+permit-gated acceptance, and explicit cleanup transfer remain authoritative.
+Exact Host/static containers, detailed lifecycle carriers, helper surface, and
+operation signatures remain correction points until a real target Zenoh
+Property Read probe exercises them through actual protocol I/O and a network
+round trip.
+
+That bounded probe precedes the aggregate mock Property Read candidate. It is
+architecture feedback rather than WP-600 product admission. Zenoh and
+zenoh-pico supply two runtime profiles for one protocol family, not general
+protocol-shape neutrality. A broader empirical claim requires a materially
+contrasting protocol shape; otherwise release language remains limited to
+protocol-independent engine ownership plus Zenoh-family operation.
 
 ## Architectural Decision Lifecycle
 
@@ -255,8 +285,10 @@ Use:
 
 - `PLAN.md` for roadmap, milestones, objectives, dependencies, and progress
   state;
-- `PROJECT_STATE.md` for the current work item, blockers, stopping point, and
-  next safe actions;
+- `EXECUTION.md` for the current claim, exact plan, acceptance criteria,
+  Executor handoff, and fresh review verdict;
+- `PROJECT_STATE.md` for the compact observed-remote continuation projection,
+  blockers, stopping point, and conditional next actions;
 - `PROJECT_GOVERNANCE.md` for collaboration, review, milestone lifecycle, and
   risk-proportional implementation governance;
 - `docs/work-packages/index.toml` for exact implementation admission and DAG
