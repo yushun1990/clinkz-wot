@@ -296,6 +296,14 @@ The active design revision is v5.0 bounded-core authority.
   merge revision. That verified integration releases the distinct D48
   transition-validator convergence claim; it does not release aggregate
   fixture source.
+- Pull request #27 integrated only workspace investigations 0055, 0056, and
+  0057 plus their index entries through exact merge
+  `cc88a0c455eb8d4bb2d48a2efc7ced6a7b6a594c`. Its first parent is
+  `3f12f4450fb40d5bf0d546a86005b0263d003308`, its second parent is exact
+  reviewed head `254ace01f9953e07f64a1b95c93db4e72fc1379a`, its merge tree equals
+  that head, and default-branch `mainline` run `31705003835` passed. Those
+  OPEN topics are investigation inputs; they do not themselves change
+  governance, planning, or implementation authority.
 - Draft pull request #28 targets `master` from
   `agent/transition-validator-convergence`. It was opened on exact technical
   completion head `5d875db914c149f15301b7452d7dcb26ed12dc55` with base
@@ -329,11 +337,11 @@ default workspace tests, diff hygiene, and the 21-cell valid feature matrix.
 
 ## Continuation Projection
 
-Observed default branch: `3f12f4450fb40d5bf0d546a86005b0263d003308`
+Observed default branch: `cc88a0c455eb8d4bb2d48a2efc7ced6a7b6a594c`
 
-Observed on: 2026-08-11 after fetch plus pull-request/base/head/merge ancestry,
+Observed on: 2026-08-13 after fetch plus pull-request/base/head/merge ancestry,
 expected-content, tree-equivalence, and workflow inspection. Default-branch
-`mainline` run `31499838068` passed on that exact revision.
+`mainline` run `31705003835` passed on that exact revision.
 
 Projection mode: conditional remote handoff
 
@@ -389,9 +397,12 @@ new explicit autonomous review cycle.
 
 ### Before verified integration
 
-Draft pull request #28 is the current remote handoff. Push the final
-continuation-only child, require exact-head remote `validation`, and keep the
-pull request draft at this autonomous review-cycle boundary. Do not begin
+Draft pull request #28 is the current remote handoff. Its branch contains
+verified default revision `cc88a0c455eb8d4bb2d48a2efc7ced6a7b6a594c` as
+the second parent of merge `6586b4d00c8d66e56e99a491f95074a99c92eda9`.
+Commit this continuation update, push the current-base head, require exact-head
+remote `validation`, and keep the pull request draft until all terminal
+integration predicates are freshly true. Do not begin
 aggregate candidate, review, admission, or fixture-source work while D48 is not
 verified on fetched `master`.
 
