@@ -31,6 +31,16 @@ ADR-0013 permits only exact tranches registered in the manifest to cross
 incomplete package boundaries after their own admission reviews. No manifest
 record alone is implementation admission.
 
+The aggregate candidate also depends on D48's validator-convergence boundary.
+The gate manifest owns candidate history, review, pre-source, implementation,
+completion, and absent/present-source facts as declarative transition records.
+The generic transition validator consumes those records; focused validators
+and public-boundary fixtures continue to own provenance, lifecycle, resource,
+profile-parity, and runtime behavior. The route-reservation and WP-400
+validators remain active parallel oracles until the registered equivalence
+review passes. A later aggregate candidate must use this generic transition
+path and may not add another tranche-specific topology branch.
+
 Evidence claims advance in this order:
 
 1. package-local slice constructibility and ownership;
@@ -227,6 +237,25 @@ public lifecycle views instead. Static construction consumes one complete
 typed registration and `StaticHandlerRegistration`; host construction
 consumes one complete erased binding registration while Servient privately
 owns the synchronous handler erasure.
+
+## Declarative transition validation
+
+`docs/work-packages/property-read-architecture-gate.toml` carries schema-v1
+transition records for the route-reservation and WP-400 slices. Each record
+declares its immutable candidate/correction chain, exact changed paths, review
+commit paths, pre-source topology, exact implementation delta, completion
+evidence linkage, and candidate/implementation source boundary. The generic
+engine checks these facts against Git history, the artifact and governance
+registries, review attestations, and current completion evidence.
+
+The equivalence claim has four required dimensions: valid current state,
+negative mutations, commit topology, and current completion evidence. The
+legacy instance branches reached through `check-work-packages` and the focused
+entry/completion validators remain executable and run in parallel; this
+convergence does not retire their topology, semantic, or behavioral checks.
+Once the independent equivalence attestation is registered, adding another
+transition that uses the same invariant categories changes declarative records
+and focused behavior evidence, not generic-engine control flow.
 
 ## Fixture topology
 

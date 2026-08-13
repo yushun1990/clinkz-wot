@@ -107,6 +107,21 @@ command = [
 ]
 
 [[check]]
+id = "transition-record-check"
+status = "executable"
+artifact = "tools/design-check/Cargo.toml"
+command = [
+    "cargo",
+    "run",
+    "--locked",
+    "--quiet",
+    "--manifest-path",
+    "tools/design-check/Cargo.toml",
+    "--",
+    "check-transitions",
+]
+
+[[check]]
 id = "wp100-handler-amendment-check"
 status = "executable"
 artifact = "tools/check-wp100-handler-amendment.sh"

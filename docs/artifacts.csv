@@ -204,3 +204,4 @@ tools/compile-contracts/wp300-property-read-binding-slice/Cargo.lock,wp-300-prop
 tools/compile-contracts/wp300-property-read-binding-slice/src/lib.rs,wp-300-property-read-binding-slice-static-contract,non-normative-compile-fixture,5.0,1,docs/spec/binding-spi.md
 tools/compile-contracts/wp300-property-read-binding-slice/tests/host.rs,wp-300-property-read-binding-slice-host-contract,non-normative-compile-fixture,5.0,1,docs/spec/binding-spi.md
 tools/design-check/tests/wp300_property_read_binding_schema.rs,wp-300-property-read-binding-executable-schema,non-normative-compile-fixture,5.0,1,docs/spec/binding-spi.md
+docs/audits/D48-transition-validator-convergence-review.toml,d48-transition-validator-convergence-review,non-normative-review,5.0,1,docs/design.md

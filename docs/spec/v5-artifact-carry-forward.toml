@@ -43,8 +43,8 @@ revalidation = "tools/check-v5-authority-reset-candidate.sh"
 [[artifact]]
 family = "governance"
 path = "docs/governance.toml"
-sha256 = "75e28698490814e21e52a1418421359383dfe61b9382f3cd36b511a0794c19ec"
-disposition = "carried forward with the v5 checker, completed Producer-route and route-reservation checks, and the exact WP-400 Property Read Servient entry/completion checks registered; v4.9 reviews remain historical gate evidence"
+sha256 = "b58e8a7b65cd769172931a686babbc86b8a08c729f004d8abde7cad56d1efdd2"
+disposition = "carried forward with the v5 checker, completed Producer-route, route-reservation, and WP-400 Property Read Servient checks, plus the generic declarative transition-record check registered; the focused route-reservation and WP-400 checks remain parallel behavior and parity oracles"
 revalidation = "tools/check-v5-authority-reset-candidate.sh"
 
 [[artifact]]
@@ -106,13 +106,13 @@ revalidation = "cargo run --locked --quiet --manifest-path tools/design-check/Ca
 [[artifact]]
 family = "property-read-integration-gate"
 path = "docs/work-packages/property-read-architecture-gate.toml"
-sha256 = "2b429d05d73ee3fc03bf14dffd1c43172e2d3ddbdfa059d1f70de38c69346144"
-disposition = "revalidated as a six-tranche gate with every narrow slice complete/approved; exact WP-400 implementation a993555f3cbd2bc7026423f34ed5620f3a2e058f follows the default-validated five-file admission merge, changes six registered product paths plus three support paths, and passes the static, host, portable, lifecycle, cleanup, and predecessor matrix; the aggregate gate is ready while both planned fixture roots remain absent pending their own candidate, review, and admission"
+sha256 = "413f026130453e287de8617c1452f107a5f748665e42ecf6edb0fb2f5a9f87a8"
+disposition = "revalidated as a six-tranche gate with every narrow slice complete/approved and passed declarative transition validation for the completed route-reservation and WP-400 chains; exact review checkpoint 2aaa98a136830ef80b911795466f92ecb303f8f5 binds valid-state, exact-path/status mutations, admission topology, current completion evidence, and retained-oracle parity; the aggregate gate remains ready and both planned fixture roots remain absent pending a distinct later-cycle candidate and admission"
 revalidation = "tools/check-v5-authority-reset-decision.sh"
 
 [[artifact]]
 family = "property-read-integration-gate"
 path = "docs/work-packages/PROPERTY-READ-ARCHITECTURE.md"
-sha256 = "af773557bc8f6b4845c054827fda7a9b8f13e5b7cfc217d32cbdc1cf20d494ce"
-disposition = "revalidated with all five upstream Property Read slices integrated/default-validated and the independently reviewed/admitted WP-400 narrow slice locally complete at exact implementation a993555f3cbd2bc7026423f34ed5620f3a2e058f; D46's one-time first-entry closure is discharged, the aggregate gate is ready but not passed, and inactive RuntimeEvent/HostHandlerRegistration families remain excluded from narrow v5 authority; mutable tranche truth remains owned by docs/work-packages/property-read-architecture-gate.toml"
+sha256 = "133e05840672a0557517a2960c3b48d1e04381b50c7d43d6ceddf914af48ff10"
+disposition = "revalidated with all narrow Property Read slices integrated/default-validated, D46 discharged, and D48's generic transition-validation contract established before aggregate candidate work; the aggregate gate remains ready rather than passed, inactive RuntimeEvent/HostHandlerRegistration families remain excluded, and mutable transition data remains owned by docs/work-packages/property-read-architecture-gate.toml"
 revalidation = "tools/check-v5-authority-reset-decision.sh"

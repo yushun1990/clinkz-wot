@@ -1,5 +1,7 @@
 //! Validates machine-readable design artifacts that require structured parsing.
 
+mod transition;
+
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::env;
 use std::fs;
@@ -1109,6 +1111,10 @@ fn run() -> Result<(), String> {
             check_work_packages(&root, false)?;
             println!("design structure check: work-package DAG valid");
         }
+        "check-transitions" => {
+            transition::check_repository(&root)?;
+            println!("design structure check: declarative transition records valid");
+        }
         "check-handler" => {
             check_handler_contract(&root)?;
             println!("design structure check: handler API matrix valid");
@@ -1181,7 +1187,7 @@ fn run() -> Result<(), String> {
                  check-handler-value-primitives-entry-state, \
                  check-logical-time-correction-entry-state, \
                  check-deadline-cleanup-timing-entry-state, \
-                 check-handler-context-entry-state, check-work-packages, \
+                 check-handler-context-entry-state, check-work-packages, check-transitions, \
                  check-governance, check-refactor-ready, or check-handler-entry"
             ));
         }
@@ -5453,6 +5459,10 @@ fn check_property_read_integration_gate(
             ));
         }
     }
+
+    // Run the retained instance-specific validator first so review mutations can
+    // observe it independently before the generic transition oracle runs.
+    transition::check_manifest(root, &manifest, &registered_artifacts)?;
 
     Ok(())
 }

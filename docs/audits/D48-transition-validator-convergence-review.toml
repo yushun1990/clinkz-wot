@@ -1,0 +1,88 @@
+schema_version = 1
+design_revision = "5.0"
+claim = "D48-TRANSITION-VALIDATOR-CONVERGENCE"
+status = "passed"
+reviewer_attestation_kind = "independent-root-session"
+reviewer_id = "codex-agent:/root"
+reviewed_ref = "aa748fa9072ec277d3159a458e709e4ca84fa89b"
+validator_check = "transition-record-check"
+record_ids = [
+    "WP-200-PROPERTY-READ-ROUTE-RESERVATION-PROJECTION",
+    "WP-400-PROPERTY-READ-SERVIENT-SLICE",
+]
+oracle_checks = [
+    "work-package-dag-check",
+    "wp200-property-read-route-reservation-entry-check",
+    "wp200-property-read-route-reservation-check",
+    "wp400-property-read-servient-slice-entry-check",
+    "wp400-property-read-servient-slice-check",
+]
+parity_dimensions = [
+    "valid-state",
+    "negative-mutation",
+    "commit-topology",
+    "current-completion-evidence",
+]
+result = "equivalent-with-parallel-oracles-retained"
+
+[[case]]
+id = "route-reservation-valid-state"
+dimension = "valid-state"
+target_record = "WP-200-PROPERTY-READ-ROUTE-RESERVATION-PROJECTION"
+mutation = "none"
+generic_result = "passed"
+oracle_result = "passed"
+oracle_checks = [
+    "work-package-dag-check",
+    "wp200-property-read-route-reservation-entry-check",
+    "wp200-property-read-route-reservation-check",
+]
+
+[[case]]
+id = "wp400-valid-state"
+dimension = "valid-state"
+target_record = "WP-400-PROPERTY-READ-SERVIENT-SLICE"
+mutation = "none"
+generic_result = "passed"
+oracle_result = "passed"
+oracle_checks = [
+    "work-package-dag-check",
+    "wp400-property-read-servient-slice-entry-check",
+    "wp400-property-read-servient-slice-check",
+]
+
+[[case]]
+id = "route-reservation-candidate-path-mutation"
+dimension = "negative-mutation"
+target_record = "WP-200-PROPERTY-READ-ROUTE-RESERVATION-PROJECTION"
+mutation = "remove workspace/INDEX.org from owner candidate_paths"
+generic_result = "rejected"
+oracle_result = "rejected"
+oracle_checks = ["work-package-dag-check"]
+
+[[case]]
+id = "wp400-status-pair-mutation"
+dimension = "negative-mutation"
+target_record = "WP-400-PROPERTY-READ-SERVIENT-SLICE"
+mutation = "set complete owner admission_status to review-pending"
+generic_result = "rejected"
+oracle_result = "rejected"
+oracle_checks = ["work-package-dag-check"]
+
+[[case]]
+id = "wp400-admission-merge-parent-mutation"
+dimension = "commit-topology"
+target_record = "WP-400-PROPERTY-READ-SERVIENT-SLICE"
+mutation = "replace admission_base_ref with admission merge 63015a6e4528a0f9e7d1b677ea987aa2ba1c8781"
+generic_result = "rejected"
+oracle_result = "rejected"
+oracle_checks = ["work-package-dag-check"]
+
+[[case]]
+id = "route-reservation-completion-evidence-mutation"
+dimension = "current-completion-evidence"
+target_record = "WP-200-PROPERTY-READ-ROUTE-RESERVATION-PROJECTION"
+mutation = "replace evidence_key with mutated-route-reservation-evidence"
+generic_result = "rejected"
+oracle_result = "rejected"
+oracle_checks = ["work-package-dag-check"]
