@@ -324,7 +324,5 @@ done
 
 grep -Fq 'workspace issue 0014' "$root/docs/design.md" \
     || fail "WP-200 representation blocker is not retained"
-grep -Fq 'issue 0014' "$root/PROJECT_STATE.md" \
-    || fail "continuation state does not retain the WP-200 blocker"
 
 echo "v5 authority reset activation check: exact reviewed candidate integrated; 62 active owners and 59 inactive dispositions valid"

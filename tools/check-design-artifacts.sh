@@ -8,6 +8,11 @@ mode=${1:-check}
 check_continuation_projection() {
     local state="$root/PROJECT_STATE.md"
     local -a observed_bases=()
+    local state_lines
+
+    state_lines=$(wc -l <"$state")
+    [[ $state_lines -le 200 ]] \
+        || { echo "continuation check: PROJECT_STATE.md exceeds 200 lines ($state_lines)" >&2; exit 1; }
 
     require_projection_body() {
         local heading="$1"
@@ -48,6 +53,37 @@ check_continuation_projection() {
     echo 'continuation check: merge-stable projection and local basis valid'
 }
 
+check_execution_contract() {
+    local execution="$root/EXECUTION.md"
+    local execution_lines
+    local -a statuses=()
+
+    execution_lines=$(wc -l <"$execution")
+    [[ $execution_lines -le 200 ]] \
+        || { echo "execution check: EXECUTION.md exceeds 200 lines ($execution_lines)" >&2; exit 1; }
+
+    mapfile -t statuses < <(sed -nE 's/^Status: ([A-Z_]+)$/\1/p' "$execution")
+    [[ ${#statuses[@]} -eq 1 ]] \
+        || { echo 'execution check: expected one lifecycle status' >&2; exit 1; }
+    case "${statuses[0]}" in
+        IDLE|PLANNED|EXECUTING|REVIEW_READY|ACCEPTED|BLOCKED) ;;
+        *) echo "execution check: invalid lifecycle status: ${statuses[0]}" >&2; exit 1 ;;
+    esac
+
+    for heading in \
+        '## Engineering Claim' \
+        '## Engineering Plan' \
+        '## Plan Challenge' \
+        '## Acceptance Criteria' \
+        '## Executor Handoff' \
+        '## Acceptance Review'; do
+        grep -Fqx "$heading" "$execution" \
+            || { echo "execution check: missing required slot: $heading" >&2; exit 1; }
+    done
+
+    echo 'execution check: bounded single-claim contract shape valid'
+}
+
 case "$mode" in
     check)
         readiness_command=""
@@ -65,6 +101,7 @@ case "$mode" in
 esac
 
 check_continuation_projection
+check_execution_contract
 
 if grep -Fqx 'status = "active"' \
     "$root/docs/spec/v5-authority-reset.toml"; then

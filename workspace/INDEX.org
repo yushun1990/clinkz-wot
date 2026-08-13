@@ -8,8 +8,9 @@ implementation-readiness proposals, development-process improvements, review
 inboxes, experiments, and collaboration guidance.
 
 Authoritative decisions are migrated into =docs/=, =AGENTS.md=, or another
-explicit project-policy owner. Implementation status remains in =PLAN.md= and
-the work-package DAG rather than in topic prose.
+explicit project-policy owner. Milestone state remains in =PLAN.md=, the
+current claim in =EXECUTION.md=, continuation in =PROJECT_STATE.md=, and exact
+implementation status in the work-package DAG rather than in topic prose.
 
 * Lifecycle
 
@@ -26,9 +27,7 @@ Topics are retained after migration as decision history.
 
 ** OPEN
 
-- [[file:0055-project-state-role-and-retention.md][0055 PROJECT_STATE Role and Retention]]
-- [[file:0056-target-spi-external-validation-and-cross-protocol-neutrality.md][0056 Target SPI External Validation and Cross-Protocol Neutrality]]
-- [[file:0057-decision-migration-effectiveness.md][0057 Decision Migration Effectiveness]]
+- None.
 
 ** DISCUSSING
 
@@ -94,6 +93,9 @@ Topics are retained after migration as decision history.
 - [[file:0052-property-read-route-reservation-handoff.md][0052 Property Read Route-Reservation Handoff]]
 - [[file:0053-wp400-first-entry-input-closure-audit.md][0053 WP-400 First-Legal-Entry Input Closure Audit]]
 - [[file:0054-autonomous-progression-review-cycle-boundary.md][0054 Autonomous Progression Review-Cycle Boundary]]
+- [[file:0055-project-state-role-and-retention.md][0055 PROJECT_STATE Role and Retention]]
+- [[file:0056-target-spi-external-validation-and-cross-protocol-neutrality.md][0056 Target SPI External Validation and Cross-Protocol Neutrality]]
+- [[file:0057-decision-migration-effectiveness.md][0057 Decision Migration Effectiveness]]
 
 * History
 

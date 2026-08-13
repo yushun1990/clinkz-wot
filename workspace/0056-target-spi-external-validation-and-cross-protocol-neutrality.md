@@ -1,6 +1,6 @@
 # 0056 Target SPI External Validation and Cross-Protocol Neutrality
 
-Status: OPEN
+Status: MIGRATED
 
 Kind: owner-raised architecture investigation
 
@@ -72,3 +72,72 @@ Codex should determine:
 5. the evidence standard for protocol neutrality and the semantic criteria for selecting at least one contrasting protocol model;
 6. any required roadmap, work-package, ADR, specification, or gate changes; and
 7. the exact next independently reviewable engineering claim, without beginning a materially distinct successor in the same review cycle.
+
+## Decision
+
+The completed narrow Property Read slices establish package-local
+constructibility, ownership, generation, route identity, bounded progress,
+permit-gated acceptance, response opportunity, and cleanup-transfer claims.
+They do not establish that the detailed public Binding/Servient lifecycle is a
+natural fit for a real protocol implementation. The planned aggregate mock
+gate would strengthen internal cross-package conformance, but would mostly
+exercise the same repository-authored model and therefore is not the highest
+value next feedback step.
+
+A bounded, non-authoritative **real-target Zenoh Property Read feedback probe**
+must precede aggregate mock-gate candidate and source admission. It uses the
+current target public Planning, Binding, and Servient boundaries and a real
+Zenoh library/network path. At minimum it carries a real immutable plan and
+route artifact into the first legal target entry, exposes and reads one
+property across an actual network round trip, covers externally visible
+readiness, correlation, response, failure, cancellation/drain, and terminal
+cleanup, and includes enough multiple-Thing/route/form shape to expose hidden
+single-fixture assumptions. It may use separate spike/fixture code but may not
+replace an upstream output with a fixture-owned substitute or call legacy
+selection/dispatch.
+
+The probe is architecture evidence, not WP-600 product implementation,
+progress, or source admission. It records the public declarations and helpers
+needed, repeated workarounds, duplicate semantic transitions, diagnostics,
+private/unsafe dependencies, generic/layout/code-size pressure, resource
+mapping, and lifecycle stages that collapse into protocol-local state. A
+concrete ownership, boundedness, portability, implementability, or systematic
+authoring defect reopens the exact affected authority; the Executor preserves
+evidence instead of bypassing it. A clean result supports, but does not itself
+pass, the later aggregate mock gate.
+
+The macro architecture and its semantic invariants remain frozen:
+protocol-independent Core/Planning/Servient ownership, immutable artifacts,
+protocol-owned I/O and correlation, Servient-owned dispatch/publication,
+generation identity, route-scoped bounded progress, permit-gated acceptance,
+and explicit cleanup transfer. Exact Host/static containers, detailed
+prepare/readiness/activate/commit carriers, helper surface, and
+operation-family signatures remain provisional until the probe supplies real
+feedback. No alternative-kernel spike is justified before that evidence;
+implementation friction may make such a comparison the next bounded claim.
+
+Zenoh and zenoh-pico remain one protocol family. Their difference is valuable
+cross-profile evidence, not independent protocol-shape neutrality. A general
+empirical neutrality claim requires an independently authored fixture selected
+for semantic contrast—such as materially different routing, correlation,
+response, connection, push/stream, cancellation, or constrained-backpressure
+behavior—not merely a different transport name. That contrast is not required
+to expand v1 product scope: absent such evidence, the honest v1 claim is
+protocol-independent engine ownership plus Zenoh-family operation.
+
+## Migration
+
+The reordered feedback ladder and maturity boundary are migrated to `PLAN.md`,
+`ARCHITECTURE_GOVERNANCE.md`, `docs/spec/binding-spi.md`,
+`docs/work-packages/WP-300-bindings.md`,
+`docs/work-packages/PROPERTY-READ-ARCHITECTURE.md`, and
+`docs/work-packages/WP-600-protocol-bindings.md`. The aggregate gate stays
+`ready`; no fixture or product source is admitted in this decision cycle.
+
+Displaced default: begin the aggregate mock candidate, then obtain real Zenoh
+feedback later. New default: real target feedback, explicit SPI disposition,
+then aggregate mock. First activation claim: a future Max-authored
+`EXECUTION.md` for the bounded probe; this reset deliberately leaves that file
+`IDLE`. Falsifier: aggregate candidate/source work begins without accepted
+probe evidence, or release material treats Zenoh/zenoh-pico alone as general
+protocol-shape neutrality. Such evidence reopens this topic.

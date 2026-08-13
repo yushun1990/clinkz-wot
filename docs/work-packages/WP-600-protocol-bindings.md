@@ -24,10 +24,14 @@ separate Cargo package. Work may begin after `WP-300` and all entry gates are cl
 The first executable WP-600 tranche is a real Zenoh Producer Property Read
 smoke after broad WP-300 completion. It must reuse the admitted plan,
 registration, route, permit, request, response, and cleanup boundaries and may
-claim only that production path. A bounded authoring-only Zenoh spike may run
-earlier after the narrow WP-300 slice to test SPI constructibility, but it is
-non-authoritative preparation and grants no WP-600 progress or source
-admission.
+claim only that production path. A bounded real-target Zenoh Property Read
+feedback probe runs earlier after the narrow WP-300 slice and before the
+aggregate mock gate. It exercises public target authoring plus actual protocol
+I/O, correlation, readiness, cancellation/drain, cleanup, multiple
+Thing/route/form shape, and at least one network round trip. It remains
+non-authoritative architecture evidence and grants no WP-600 progress or source
+admission; concrete friction reopens the exact shared SPI owner rather than
+being hidden in probe-only adapters.
 
 Zenoh and zenoh-pico are two representations of one protocol family. Their
 shared runtime cases establish production-backed Host/constrained parity for

@@ -16,7 +16,8 @@ ClinkZ-WoT separates:
   Project execution governance       `PROJECT_GOVERNANCE.md`
   Technical convergence governance   `ARCHITECTURE_GOVERNANCE.md`
   Project roadmap                    `PLAN.md`
-  Current execution context          `PROJECT_STATE.md`
+  Current engineering contract       `EXECUTION.md`
+  Continuation and remote cache       `PROJECT_STATE.md`
 
 ClinkZ-WoT uses AI-led development. AI owns routine technical decision-making
 and evidence closure. Owner feedback keeps the work aligned with project goals
@@ -24,25 +25,77 @@ and real-world constraints.
 
 ## Roles and Responsibilities
 
-### AI Agent
+Technical authority is divided by capability role. The current operational
+mapping is:
 
-Responsible for:
+| Capability role | Default model/profile |
+|---|---|
+| Technical Lead | Max |
+| Executor | High |
+| Acceptance Reviewer | fresh Max context |
+| Plan Challenger | ChatGPT |
+| Periodic Repository Auditor | Ultra |
 
-- maintaining `PROJECT_STATE.md`;
-- keeping milestone progress current in `PLAN.md`;
-- deciding technical architecture and API direction from repository evidence;
-- decomposing work packages and selecting implementation order;
-- assessing technical risk and evidence sufficiency;
-- investigating workspace questions, counterexamples, and concerns;
-- migrating stable conclusions to the proper authoritative owner;
-- closing technical milestones when registered exit criteria and evidence are
-  satisfied;
-- determining technical release readiness.
+The mapping is an operational default, not architecture authority. It may be
+updated when model capabilities change without redefining the stable roles.
 
-AI agents must not silently change accepted project goals or release claims.
-They also must not transfer technical judgment to the Owner when the decision
-can be made from architecture, code, tests, specifications, audits, or other
-repository evidence.
+### Technical Lead
+
+The Technical Lead owns technical judgment for one cycle: architecture and API
+direction, claim selection, work-package decomposition, implementation order,
+risk classification, evidence sufficiency, and acceptance criteria. It writes
+the Lead-owned sections of `EXECUTION.md` at an exact fetched default-branch
+revision and freezes them before execution.
+
+The Lead considers Plan Challenger feedback and incorporates accepted
+corrections into the one contract. If implementation evidence falsifies the
+plan, only the Lead may revise the claim, scope, constraints, or acceptance
+criteria; it increments the contract revision and returns it to `PLANNED`.
+
+### Executor
+
+The Executor implements the frozen engineering plan, tests, and necessary
+documentation; makes ordinary local implementation choices within that
+contract; runs basic task-specific validation; and records an exact handoff.
+It does not repeat a full architecture review and does not change the claim,
+authority, scope, non-goals, or acceptance criteria.
+
+If the real implementation exposes an unconstructible API, architecture
+conflict, missing authority, invalid criterion, or material scope expansion,
+the Executor preserves the smallest useful reproduction or finding, marks the
+contract `BLOCKED`, and returns it to the Lead. Passing by an undocumented
+workaround is not completion.
+
+### Acceptance Reviewer
+
+Acceptance uses a fresh context that did not implement the claim. It
+reconstructs the intended result from registered authority, `EXECUTION.md`, the
+exact diff, and executable evidence. It does not assume the Lead's or
+Executor's summary is correct. It records concrete findings or one accepted
+verdict, then handles eligible ready/merge and post-merge reconciliation.
+
+Using Max for both planning and acceptance is permitted only with this fresh
+context boundary. The model identity is not independent evidence by itself;
+negative cases, public-boundary fixtures, runtime/workload observations, and
+exact topology remain the material evidence.
+
+### Plan Challenger
+
+ChatGPT supplies an advisory independent view before execution for important
+cycles: architecture-sensitive changes, public API changes, milestone or gate
+transitions, release-claim changes, repeated correction patterns, or unusually
+complex plans. It looks for direction drift, unnecessary complexity, and
+accepted decisions that the plan does not operationalize. It does not become a
+second plan owner. The Lead resolves its findings in `EXECUTION.md`; unresolved
+technical concerns go to `workspace/`.
+
+### Periodic Repository Auditor
+
+Ultra performs low-frequency repository-wide audits at milestone closure,
+major authority reset, release-candidate review, or when repeated drift shows
+that local cycles may share a blind spot. It does not participate in routine
+execution. Findings enter registered audits or workspace investigations and do
+not silently override active authority.
 
 ### Project Owner
 
@@ -109,33 +162,82 @@ required for routine technical milestone closure.
 
 PLAN.md contains:
 
-- objectives;
 - release targets;
-- milestones;
+- durable roadmap milestones and objectives;
 - dependencies;
 - milestone status;
-- acceptance objectives;
-- AI-owned open decision queue.
+- coarse exit goals; and
+- a small current roadmap frontier when it changes durable ordering.
 
 PLAN.md does not contain:
 
 - session logs;
 - temporary debugging information;
+- the current engineering claim or implementation plan;
+- task acceptance criteria or handoff state;
 - detailed design discussions;
 - architecture decisions;
+- an open or migrated decision ledger;
 - governance policies; or
 - transient branch, pull-request, workflow-run, authentication, or handoff
   state used only to derive the next bounded task.
 
-`PLAN.md` may name an immutable evidence checkpoint when it is part of a
-milestone or package acceptance fact. Volatile remote observations and the
-currently selected bounded task belong in `PROJECT_STATE.md`.
+Exact package progress and evidence belong to registered work-package records,
+audits, and tests. The current bounded task belongs to `EXECUTION.md`; volatile
+remote observations belong to `PROJECT_STATE.md`.
+
+## EXECUTION.md Maintenance Rules
+
+`EXECUTION.md` is one replace-in-place contract, limited to 200 lines. It owns:
+
+- lifecycle status and contract revision;
+- exact planning base, task branch, and pull request;
+- one engineering claim and its authoritative inputs;
+- scope, non-goals, constraints, engineering plan, and acceptance criteria;
+- the optional Plan Challenger's disposition and Lead response;
+- escalation and stop conditions;
+- the Executor's exact handoff and findings; and
+- the fresh Acceptance Reviewer's verdict.
+
+Lifecycle:
+
+```text
+IDLE -> PLANNED -> EXECUTING -> REVIEW_READY -> ACCEPTED
+                       |              |
+                       v              v
+                    BLOCKED       EXECUTING
+```
+
+The Lead owns all contract sections except Executor Handoff and Acceptance
+Review. The Executor may update only its handoff and permitted status fields.
+The Acceptance Reviewer owns the verdict and records the exact reviewed
+implementation head. A Lead revision after execution starts increments the
+contract revision, explicitly identifies the changed assumption, and returns
+the contract to `PLANNED` before work resumes.
+
+Git history is the archive. Do not append completed contracts or maintain a
+parallel task log. A terminal `ACCEPTED` contract or `IDLE` state authorizes no
+successor; the next Lead replaces it in a new cycle.
+
+## PROJECT_STATE.md Maintenance Rules
+
+`PROJECT_STATE.md` is a non-authoritative continuation cache limited to 200
+lines. It owns only one exact observed default revision and basis, the
+established frontier, a pointer to the current execution contract, blockers or
+limits, stopping point, conditional handoff actions, and a small navigation
+set.
+
+It never retains historical candidate/review/admission/merge chains, accepted
+or rejected decision history, detailed architecture, test logs, or facts
+already recoverable from Git, GitHub, work-package manifests, audits, specs,
+or `EXECUTION.md`. Stale content is replaced, not accumulated. Remote state is
+always an observation and never overrides GitHub or repository evidence.
 
 ## Open Decision Management
 
-Open project decisions listed in `PLAN.md` are AI-owned unless they explicitly
-depend on project goals, product trade-offs, real-world constraints,
-unacceptable directions, or irreversible external commitments.
+Open project decisions live in `workspace/` and its index. They are AI-owned
+unless they depend on project goals, product trade-offs, real-world
+constraints, unacceptable directions, or irreversible external commitments.
 
 For each open technical decision, AI must:
 
@@ -143,68 +245,46 @@ For each open technical decision, AI must:
 - record alternatives, selected direction, and rejected approaches;
 - update or create the authoritative document, work package, code, or test that
   owns the conclusion;
-- update `PROJECT_STATE.md`;
+- update the current execution contract or continuation cache only when their
+  unique state changes; and
 - keep unrelated admitted work moving when the open decision is disjoint.
 
 Owner questions and counterexamples are evidence inputs. They are not direct
 technical instructions and not predetermined conclusions.
 
-## Autonomous Review Cycles
+## Role-Separated Execution Cycles
 
-This section uses **review cycle** for the Owner-visibility cadence of broad
-autonomous progression. It does not replace or rename an independent technical
-review, candidate review, or milestone `REVIEW` state.
+A broad `continue` or equivalent request authorizes one `EXECUTION.md` claim
+from the reconciled frontier. It does not authorize every released roadmap
+successor.
 
-A broad request such as `continue`, `continue progressing`, or an equivalent
-instruction with no fixed endpoint authorizes one review cycle beginning at
-the next safe action recorded in `PROJECT_STATE.md`. AI remains responsible for
-selecting and decomposing the technical claim. The semantic unit is one
-coherent, independently reviewable engineering claim, not a work-package,
-session, elapsed-time, token, line, commit, or pull-request quota.
+1. A fresh Max Lead fetches and reconciles the default branch, selects one
+   coherent claim, writes `PLANNED` at an exact base, and creates or updates the
+   task branch and draft pull request.
+2. For an important cycle, ChatGPT challenges the plan before implementation.
+   Max either revises the one contract or records why a finding does not apply.
+3. High changes the contract to `EXECUTING`, implements within it, runs basic
+   validation, records exact evidence and deviations, pushes the same branch,
+   and leaves the pull request draft at `REVIEW_READY`.
+4. A fresh Max context independently reviews the exact head. Findings return
+   the contract to `EXECUTING`; a passed review records `ACCEPTED` and may
+   perform eligible remote integration.
+5. Max fetches the resulting default branch, verifies ancestry, expected
+   content, and merge-revision validation, updates the compact continuation
+   envelope as required, and stops before the next distinct claim.
 
-Activities stay inside one cycle when they establish the same claim and share
-its authoritative contract, rollback boundary, and evidence truth. This may
-include investigation, authoritative migration, candidate construction,
-independent review, pre-source admission, implementation, completion evidence,
-automatic remote handoff, integration, and reconciliation. A discovered
-upstream defect may be corrected in the same cycle only when the correction is
-necessary to make the current claim constructible and shares its ownership,
-lifecycle, rollback, and validation boundary. Otherwise it is a separate
-claim and the current cycle ends after recording the finding and safe next
-action.
+Plan, implementation, and acceptance normally use the same task branch and
+pull request so the contract and result cannot drift across parallel task
+records. Semantically meaningful candidate, review, admission, implementation,
+and evidence commits remain distinct when their registered topology requires
+it.
 
-The first stable repository fact that is independently reviewable ends the
-cycle when the successor crosses a materially different boundary. Such facts
-include:
-
-- completion of one tranche or equivalently scoped claim;
-- proved correction of a blocking architecture or handoff defect;
-- a material admission, integration, or architecture-gate transition that
-  releases different work;
-- a next safe action with different package, ownership, lifecycle,
-  public-contract, rollback, or evidence truth; or
-- evidence requiring Owner input on goals, real-world constraints,
-  unacceptable directions, public release, or another irreversible external
-  commitment.
-
-Before returning visibility, AI completes the current claim's recoverable
-checkpoint and required remote handoff when available, and updates
-`PROJECT_STATE.md` with the exact established fact, fetched-default basis,
-remote/evidence limits, stopping point, and conditional next actions. It names
-but does not begin a materially distinct successor's candidate, review,
-admission, implementation, or source preparation. Disjoint preparation after
-the boundary is limited to recording that it is safe; materially beginning it
-requires a new explicit request.
-
-The boundary is not an Owner approval gate. The repository remains technically
-ready to continue, and a later broad progression request authorizes the next
-cycle. If remote integration or reconciliation is pending or unavailable, a
-complete draft handoff plus its merge-stable continuation envelope is itself a
-stable stopping point. A later cycle may finish that reconciliation, but does
-not inherit authority to start the already identified successor unless the
-Owner's request also scopes it. A request that explicitly names multiple
-claims or a broader terminal fact overrides the single-claim default only to
-that stated bound.
+An upstream correction stays inside the claim only when required for
+constructibility and sharing its ownership, lifecycle, rollback, and evidence
+truth. Otherwise High records the finding and stops. Owner input ends the
+cycle only at an Owner-owned goal, constraint, unacceptable direction, public
+release, or irreversible commitment. Time, tokens, lines, commits, and pull
+requests are not cycle boundaries.
 
 ## Risk-Proportional Implementation Admission
 
@@ -425,6 +505,13 @@ executable evidence. Reviewers reconstruct the intended contract from
 authoritative owners; an author-prepared audit is navigation and evidence, not
 a substitute authority.
 
+The `EXECUTION.md` acceptance verdict is written by a fresh Max context that
+did not implement the claim. The reviewer verifies the frozen criteria but
+also reports a concrete architecture, usability, ownership, or evidence defect
+when the authored checklist omitted it. Changing the claim or acceptance
+boundary in response is a new Lead revision, not an acceptance-side
+workaround.
+
 Session separation is one independence mechanism, not the evidence claim by
 itself. Material independence comes from immutable candidate reconstruction,
 negative or mutation cases, external public-boundary fixtures, and
@@ -456,8 +543,8 @@ A bounded repository-changing task is handed off through GitHub automatically
 at its completion. The standing workflow is:
 
 1. confirm the intended diff and preserve unrelated work;
-2. update continuation state and run the task-specific evidence plus the
-   risk-appropriate default-branch matrix;
+2. update the Executor handoff and continuation state, then run the
+   task-specific evidence plus the risk-appropriate default-branch matrix;
 3. retain semantically necessary checkpoint boundaries instead of squashing
    immutable candidate, review, admission, implementation, or evidence
    topology into one commit;
@@ -466,6 +553,10 @@ at its completion. The standing workflow is:
    the existing pull request for that task; and
 6. hand off the pull-request URL, exact commits, checks, remote workflow state,
    and known limitations to the Owner.
+
+Under the role-separated cycle, the Executor stops at a draft pull request and
+`REVIEW_READY`. The fresh Acceptance Reviewer owns the verdict and any
+promotion to ready, automatic integration, or merge-revision reconciliation.
 
 When a new task starts from the default branch, its branch is named
 `agent/<task-slug>`. Follow-up changes for the same bounded task remain on the
@@ -613,6 +704,15 @@ Lifecycle:
 - `MIGRATED`: the stable conclusion is present in its authoritative owner:
   documentation, work-package records, source code, tests, or governance.
 
+`MIGRATED` proves durable projection, not that every downstream consequence is
+already implemented or empirically effective. When a migration changes future
+execution behavior, its record names the displaced default, the new default,
+the first claim expected to exercise it, and evidence that would falsify
+adoption. Later real work supplies effectiveness evidence. If it continues the
+displaced default without a justified exception, reopen the topic or create a
+linked finding; do not add another lifecycle state or a checker that merely
+cross-references governance prose.
+
 Workspace records are non-authoritative discussion history. They must not be
 treated as Owner instructions or accepted technical decisions merely because
 they exist.
@@ -635,9 +735,9 @@ release timing after AI reports technical readiness.
 
 Before ending substantial work:
 
-- update `PROJECT_STATE.md`;
-- record blockers;
-- record next safe actions;
+- update the current `EXECUTION.md` handoff or verdict when applicable;
+- replace `PROJECT_STATE.md` fields whose remote basis, frontier, blocker,
+  stopping point, or conditional next action changed;
 - ensure milestone status is accurate.
 
 The repository must remain understandable without previous conversation

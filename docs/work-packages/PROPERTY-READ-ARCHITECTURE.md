@@ -8,7 +8,7 @@ Manifest: `docs/work-packages/property-read-architecture-gate.toml`
 
 ## Scope
 
-This gate is the first executable proof that the v4.9 planning, Core handler,
+This gate is the first executable proof that the active v5.0 planning, Core handler,
 Protocol Binding, and Servient boundaries compose without an ownership
 shortcut. It uses one Thing Description, one readable property, one immutable
 logical plan, one binding-owned artifact, one prepared route, one statically
@@ -25,31 +25,37 @@ correction is independently reviewed, exactly admitted, complete, integrated,
 and default-validated. The resulting WP-400 slice is also independently
 reviewed and exactly admitted; implementation
 `a993555f3cbd2bc7026423f34ed5620f3a2e058f` now completes its package-local
-lifecycle evidence. Verified integration of that implementation/completion
-chain remains the aggregate fixture candidate's successor-release boundary.
+lifecycle evidence. That implementation/completion chain is integrated and
+default-validated, satisfying the aggregate fixture candidate's package-local
+successor-release boundary.
 ADR-0013 permits only exact tranches registered in the manifest to cross
 incomplete package boundaries after their own admission reviews. No manifest
 record alone is implementation admission.
 
-The aggregate candidate also depends on D48's validator-convergence boundary.
+The aggregate candidate also depends on D48's validator-convergence boundary,
+which is integrated and default-validated.
 The gate manifest owns candidate history, review, pre-source, implementation,
 completion, and absent/present-source facts as declarative transition records.
 The generic transition validator consumes those records; focused validators
 and public-boundary fixtures continue to own provenance, lifecycle, resource,
 profile-parity, and runtime behavior. The route-reservation and WP-400
-validators remain active parallel oracles until the registered equivalence
-review passes. A later aggregate candidate must use this generic transition
+validators remain active parallel oracles after the registered equivalence
+review passed. A later aggregate candidate must use this generic transition
 path and may not add another tranche-specific topology branch.
 
-Evidence claims advance in this order:
+Evidence and feedback claims advance in this order:
 
 1. package-local slice constructibility and ownership;
-2. the mock cross-package Property Read architecture gate;
-3. a real Zenoh Property Read smoke using the same admitted boundaries; and
-4. broad workload and release-readiness evidence.
+2. a bounded non-authoritative real-target Zenoh Property Read probe using the
+   same target Planning, Binding, and Servient boundaries, actual protocol I/O,
+   and a network round trip;
+3. the mock cross-package Property Read architecture gate;
+4. WP-600 production Zenoh-family execution; and
+5. broad workload and release-readiness evidence.
 
-No earlier rung implies a later one. In particular, the mock gate makes no
-production-protocol, multi-route availability, deployment, performance, or
+No earlier rung implies a later one. The real-target probe supplies
+architecture feedback but makes no WP-600 progress claim. The mock gate makes
+no production-protocol, multi-route availability, deployment, performance, or
 release claim.
 
 The WP-100 slice is one deliberately narrow synchronous seam. It adds only the
@@ -98,15 +104,19 @@ WP-100-PROPERTY-READ-HANDLER-SLICE
     -> WP-200-PROPERTY-READ-PRODUCER-ROUTE-PROJECTION
     -> WP-200-PROPERTY-READ-ROUTE-RESERVATION-PROJECTION
     -> WP-400-PROPERTY-READ-SERVIENT-SLICE
+    -> [real-target Zenoh feedback probe; non-authoritative]
     -> PROPERTY-READ-ARCHITECTURE
 ```
 
-This diagram reflects the current manifest. Every package-local tranche is now
+The package/source transitions in this diagram reflect the current manifest;
+the bracketed probe is an execution-order prerequisite and grants no manifest
+or product source authority. Every package-local tranche is now
 `complete`/`approved`; the WP-400 implementation is the immediate child of the
 tree-equivalent pre-source admission merge and passes its registered static,
-host, and portable cells. The aggregate gate is therefore `ready`, while its
-planned fixture roots remain absent pending their own exact candidate, review,
-and admission lifecycle.
+host, and portable cells. D48 is also integrated. The aggregate gate is
+therefore `ready`, while its planned fixture roots remain absent. Its candidate
+and admission lifecycle additionally waits for an independently accepted
+disposition of the real-target probe's concrete SPI findings.
 
 The gate blocks:
 
@@ -387,7 +397,9 @@ values named above. The property-read slice cannot claim the final
 host registration, sparse storage, or dispatch ownership.
 
 All six slice completion records now pass, so the integration gate is `ready`.
-It becomes `passed` only when the planned completion check is
+Its candidate may begin only after the real-target Zenoh feedback probe has an
+independently accepted disposition for every concrete SPI finding. It becomes
+`passed` only when the planned completion check is
 registered and executable, both runtime cells pass, the compile-only cell
 passes, all mandatory assertions are represented, and an independent
 cross-package review attests the exact fixture revision. Broad entry points may

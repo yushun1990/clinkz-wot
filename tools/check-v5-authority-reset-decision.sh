@@ -121,8 +121,6 @@ grep -Fqx 'Status: MIGRATED' \
 grep -Fq 'docs/spec/v5-authority-reset.toml' \
     "$root/docs/ADRs/0018-bounded-v5-normative-authority-reset.org" \
     || fail "ADR-0018 does not register the exact transition manifest"
-grep -Fq '| D7 | MIGRATED |' "$root/PLAN.md" \
-    || fail "PLAN does not record migrated D7"
 grep -Fq 'is abandoned as an activation' \
     "$root/docs/ADRs/0018-bounded-v5-normative-authority-reset.org" \
     || fail "Foundation D3 candidate disposition is missing"
