@@ -8,7 +8,7 @@ Planning base: `0347a418ffc47299df14d6c613f1ab0f80aa63c8`
 
 Task branch: `agent/zenoh-property-read-feedback-probe`
 
-Pull request: pending creation
+Pull request: #30 (draft)
 
 ## Purpose
 

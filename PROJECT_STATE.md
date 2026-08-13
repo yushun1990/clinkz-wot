@@ -20,12 +20,12 @@ Projection mode: conditional remote handoff
 ### Before verified integration
 
 `EXECUTION.md` revision 1 is `PLANNED` on
-`agent/zenoh-property-read-feedback-probe`. Stop for the required independent
-ChatGPT plan challenge. High may not begin until Max records and resolves that
-challenge. The claim changes no product API: it first tests whether a real
-compiler artifact can reach the unchanged target route entry without a
-substitute. A concrete unconstructible boundary returns `BLOCKED`; it does not
-authorize an inline SPI correction.
+`agent/zenoh-property-read-feedback-probe` in draft PR #30. Stop for the
+required independent ChatGPT plan challenge. High may not begin until Max
+records and resolves that challenge. The claim changes no product API: it
+first tests whether a real compiler artifact can reach the unchanged target
+route entry without a substitute. A concrete unconstructible boundary returns
+`BLOCKED`; it does not authorize an inline SPI correction.
 
 ### After verified integration
 
