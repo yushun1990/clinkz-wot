@@ -87,6 +87,17 @@ AI determines technical release readiness from evidence. The Project Owner
 decides whether and when to execute an actual public release or other
 irreversible external commitment.
 
+AI architecture responsibility is proactive. Accepted architecture is the
+current implementation authority, not a presumption that the design is optimal.
+During implementation or review, AI must treat repeated corrective work,
+excessive indirection, awkward APIs, disproportionate validation cost, or a
+credible simpler design as architectural evidence and may initiate
+investigation without waiting for an Owner-raised workspace topic.
+
+AI must not silently diverge from accepted authority, but it must not preserve
+a design merely because it is already documented or implemented. Governance
+exists to prevent accidental drift, not deliberate architectural improvement.
+
 ## Session Entry
 
 Before substantial work:

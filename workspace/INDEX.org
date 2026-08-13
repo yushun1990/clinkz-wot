@@ -26,7 +26,9 @@ Topics are retained after migration as decision history.
 
 ** OPEN
 
-- None.
+- [[file:0055-project-state-role-and-retention.md][0055 PROJECT_STATE Role and Retention]]
+- [[file:0056-target-spi-external-validation-and-cross-protocol-neutrality.md][0056 Target SPI External Validation and Cross-Protocol Neutrality]]
+- [[file:0057-decision-migration-effectiveness.md][0057 Decision Migration Effectiveness]]
 
 ** DISCUSSING
 
