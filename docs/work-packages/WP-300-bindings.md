@@ -137,6 +137,73 @@ field count alone remain helper/generation concerns. The probe does not
 release WP-600, prove protocol-shape neutrality, or claim production-protocol
 progress.
 
+### Real-target probe technical disposition
+
+The executable probe is
+`protocol-bindings/protocols/zenoh/tests/target_property_read_feedback_probe.rs`.
+It is an external application-static author built from the public target
+Planning, Binding, and Servient surfaces. With the real Zenoh Rust SDK and
+loopback TCP it proves:
+
+- an immutable compiler-produced Producer-route artifact carries the resolved
+  Zenoh transport, authority, key expression, property, selected form index,
+  content type, and subprotocol through Servient's scoped artifact access;
+- the scoped borrow naturally derives one owned route state containing the
+  Zenoh session, queryable, one pending-or-in-flight query, correlation counter,
+  and one accept waker, without a plan-set lease or artifact side table;
+- a real query enters through permit-gated `PollServerBinding::poll_accept`, is
+  dispatched by Servient to `ReadPropertyHandler`, and returns through the
+  target response SPI to an independent Zenoh requester;
+- actual declaration, readiness failure, pre-publication cancellation,
+  draining, queryable undeclaration, session close, and post-cleanup route
+  absence are externally exercised across three different Thing/property/form
+  shapes; and
+- zero `BindingPolls` budget performs no compiler or binding side effect.
+
+The implementation needed one narrow public Zenoh helper that parses an
+already-resolved Planning target. It does not revisit the TD or select a form.
+Zenoh session open and queryable declaration map naturally to preparation;
+query/reply and undeclare/close map naturally to correlation, response, and
+cleanup. Zenoh has no distinct SDK operations corresponding to the target
+readiness, activate, and commit stages: readiness is a Servient-visible check
+after declaration, while activate and commit are publication barriers. The
+probe contains one protocol-local stage marker but no second dispatch or
+normative transition machine.
+
+The external test is 1,397 lines and the server implementation must spell 22
+`start_*`, `poll_*`, cancellation, and acknowledgement callbacks, including
+several mechanically closed or unreachable phase methods. This is concrete
+helper/generation and Host/static duplication pressure, although the exercised
+static path did not need to duplicate Servient's normative transition policy.
+Its generic state types compiled without a private bound or unsafe erasure; the
+probe did not obtain a useful standalone monomorphization/code-size measurement
+from a debug test binary linked with the Zenoh SDK.
+
+The typed static `ServerRouteSlot` keeps the same owned Zenoh state through all
+stages and requires no unsafe or private escape. The erased Host surface does
+not. `HostPreparedRouteGuard::try_into_state` consumes the complete guard, so
+the extracted state cannot be passed with that guard to
+`HostActiveRouteGuard::new`; using `new` directly drops the predecessor's
+erased state. The same problem recurs at active -> committed. Reconstructing
+`PrepareInput` from copied fields or retaining state in a binding side table is
+not an acceptable implementation. Workspace topic 0058 therefore reopens only
+the Host route-state succession carrier, and aggregate source admission waits
+for its bounded correction and external revalidation.
+
+The probe also records two maturity limits rather than hiding them. First,
+optional Zenoh Form extensions such as priority and congestion control are not
+present in the current protocol-neutral logical-plan projection; the minimum
+route uses target, content type, and subprotocol metadata only. Second, the
+declared route/readiness/response layouts account for binding-visible retained
+state, queue slots, and wakers, but the Zenoh SDK and caller-supplied Tokio
+reactor own additional host heap, task, socket, and wake resources that the
+current declarations do not physically admit or measure. The real SDK cannot
+exercise a constrained/no-`std` layout or yield a meaningful cross-profile
+code-size result. Polling the SDK futures also requires a caller-supplied Tokio
+reactor; driving `Session::close` without one fails at runtime, so the Host
+runtime-cell ownership cannot remain implicit. These are explicit broad
+resource-authoring and profile limits, not claims of WP-600 completion.
+
 Broad WP-300 additionally requires:
 
 - one executable capability/profile applicability taxonomy;

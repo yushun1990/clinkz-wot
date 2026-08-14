@@ -28,8 +28,9 @@ pub use error::{ZenohBindingError, ZenohBindingResult};
 pub use form::{
     CZ_ZENOH_CONGESTION_CONTROL, CZ_ZENOH_PRIORITY, CZ_ZENOH_QOS, ZENOH_SCHEME,
     ZenohAffordanceOperationPlan, ZenohFormMetadata, ZenohFormTarget, ZenohOperationKind,
-    ZenohOperationPlan, extract_zenoh_metadata, extract_zenoh_target, is_zenoh_form,
-    is_zenoh_form_target, plan_zenoh_affordance_operation,
+    ZenohOperationPlan, extract_zenoh_metadata, extract_zenoh_target,
+    extract_zenoh_target_from_resolved_href, is_zenoh_form, is_zenoh_form_target,
+    plan_zenoh_affordance_operation,
     plan_zenoh_affordance_operation_with_criteria, plan_zenoh_operation, try_extract_zenoh_target,
     zenoh_operation_kind,
 };
