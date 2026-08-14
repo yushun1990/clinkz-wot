@@ -79,8 +79,8 @@ pub fn verify_producer_route_projection() {
         compatibility,
         0,
     );
-    let state_footprint = BindingLifetimeFootprint::new(1, 8);
-    let registration_footprint = BindingLifetimeFootprint::new(3, 64);
+    let state_footprint = BindingLifetimeFootprint::new(2, 128);
+    let registration_footprint = BindingLifetimeFootprint::new(4, 256);
     let resources =
         BindingResourceDeclarations::new(registration_footprint, registration_footprint)
             .with_state_footprints(state_footprint, state_footprint, state_footprint);
@@ -105,7 +105,7 @@ pub fn verify_producer_route_projection() {
 
     let plan_id = PlanId::new(SlotIndex::new(3), Generation::INITIAL);
     let plan_set_generation = PlanSetGeneration::new(Generation::INITIAL);
-    let artifact_ref = {
+    let output = {
         let td = thing();
         let compiler_registrations = [registration.compiler()];
         let input = PlanBuildInput::new(&td, &compiler_registrations[..], plan_set_generation);
@@ -151,8 +151,9 @@ pub fn verify_producer_route_projection() {
         assert_eq!(artifact_identity.plan_set_generation(), plan_set_generation);
         assert_eq!(artifact_identity.plan_id(), plan_id);
         assert_eq!(output.artifacts()[0].identity(), artifact_identity);
-        artifact_ref
+        output
     };
+    let artifact_ref = output.artifact_refs()[0];
 
     let route = BindingRouteKey::new(
         registration.identity().binding_id(),
@@ -181,7 +182,12 @@ pub fn verify_producer_route_projection() {
     let mut prepare_budget = WorkBudget::new();
     let outcome = registration
         .server_mut()
-        .start_prepare(prepare, &mut route_slot, &mut prepare_budget)
+        .start_prepare(
+            prepare,
+            &output.artifacts()[artifact_ref.artifact_slot().get() as usize],
+            &mut route_slot,
+            &mut prepare_budget,
+        )
         .expect("real Producer server accepted plan-derived preparation input");
     assert!(matches!(
         outcome,

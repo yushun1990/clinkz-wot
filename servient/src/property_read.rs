@@ -6,16 +6,17 @@ use core::task::{Context, Poll};
 
 use clinkz_wot_core::binding::BindingRouteKey;
 use clinkz_wot_core::{
-    AffordanceTarget, BindingArtifactRef, BindingArtifactRole, BindingCompilerExtension,
-    BindingDeliveryOutcome, BindingLifetimeFootprint, BindingOperationalError,
-    BindingRegistrationIdentity, CleanupOperation, CleanupPhaseContext, CleanupRecord,
-    CleanupReservation, CleanupSlotId, CoreError, CoreResult, Deadline, ErrorContext, ErrorPhase,
-    HandlerContext, HandlerFootprint, PendingWork, PendingWorkClass, PlanId, PlanSetGeneration,
-    PollServerBinding, PrepareInput, ReadPropertyHandler, RetryClass, RouteAcceptEvent,
-    RouteAcceptLease, RouteActivationOutcome, RouteCleanupOutcome, RouteCommitOutcome,
-    RouteInboundResponse, RoutePrepareOutcome, RouteReadinessOutcome, RouteReadinessSlot,
-    RouteTerminal, ServerResponseSlot, ServerRouteSlot, ServingActivationAuthority, StartStatus,
-    StaticBindingRegistration, StaticHandlerRegistration, StepStatus, ThingId, ThingSlotId,
+    AffordanceTarget, BindingArtifactEnvelope, BindingArtifactRef, BindingArtifactRole,
+    BindingCompilerExtension, BindingDeliveryOutcome, BindingLifetimeFootprint,
+    BindingOperationalError, BindingRegistrationIdentity, CleanupOperation, CleanupPhaseContext,
+    CleanupRecord, CleanupReservation, CleanupSlotId, CoreError, CoreResult, Deadline,
+    ErrorContext, ErrorPhase, HandlerContext, HandlerFootprint, PendingWork, PendingWorkClass,
+    PlanId, PlanSetGeneration, PollServerBinding, PrepareInput, ReadPropertyHandler, RetryClass,
+    RouteAcceptEvent, RouteAcceptLease, RouteActivationOutcome, RouteCleanupOutcome,
+    RouteCommitOutcome, RouteInboundResponse, RoutePrepareOutcome, RouteReadinessOutcome,
+    RouteReadinessSlot, RouteTerminal, ServerResponseSlot, ServerRouteSlot,
+    ServingActivationAuthority, StartStatus, StaticBindingRegistration, StaticHandlerRegistration,
+    StepStatus, ThingId, ThingSlotId,
 };
 use clinkz_wot_foundation::{ResourceKind, ResourceLimits, SlotIndex, WorkBudget, WorkClass};
 use clinkz_wot_planning::{
@@ -200,6 +201,65 @@ impl<A> CompiledPlanSetRecord<A> {
         self.output = Some(output);
         self.lease = Some(PlanSetLease { generation });
         self.state = CompiledPlanSetState::Frozen;
+    }
+
+    fn resolve_prepare_artifact<'a>(
+        &'a self,
+        input: &PrepareInput,
+        registration: BindingRegistrationIdentity,
+        thing_slot: ThingSlotId,
+        admitted_footprint: BindingLifetimeFootprint,
+    ) -> CoreResult<&'a BindingArtifactEnvelope<A>> {
+        if self.state != CompiledPlanSetState::Frozen
+            || input.admitted_footprint() != admitted_footprint
+        {
+            return Err(validation_error(thing_slot));
+        }
+        let output = self
+            .output
+            .as_ref()
+            .ok_or_else(|| validation_error(thing_slot))?;
+        let lease = self
+            .lease
+            .as_ref()
+            .ok_or_else(|| validation_error(thing_slot))?;
+        let [plan] = output.logical_plans() else {
+            return Err(validation_error(thing_slot));
+        };
+        let reference = input.artifact();
+        let slot = usize::try_from(reference.artifact_slot().get())
+            .map_err(|_| validation_error(thing_slot))?;
+        let envelope = output
+            .artifacts()
+            .get(slot)
+            .ok_or_else(|| validation_error(thing_slot))?;
+        let stored_reference = output
+            .artifact_refs()
+            .get(slot)
+            .ok_or_else(|| validation_error(thing_slot))?;
+        let identity = envelope.identity();
+        let route = *input.route();
+        if output.artifacts().len() != output.artifact_refs().len()
+            || stored_reference != &reference
+            || reference.identity() != identity
+            || identity.plan_set_generation() != lease.generation
+            || identity.plan_id() != plan.plan_id()
+            || identity.binding_id() != registration.binding_id()
+            || identity.binding_generation() != registration.binding_generation()
+            || identity.configuration() != registration.configuration()
+            || identity.compatibility() != registration.artifact_compatibility()
+            || identity.compatibility() != envelope.artifact().compatibility()
+            || identity.role() != BindingArtifactRole::ProducerRoute
+            || route.binding_id() != identity.binding_id()
+            || route.binding_generation() != identity.binding_generation()
+            || route.route_generation() != thing_slot.generation()
+            || route.plan_set_generation() != identity.plan_set_generation()
+            || route.plan_id() != identity.plan_id()
+            || envelope.route_reservation() != Some(route.reservation())
+        {
+            return Err(validation_error(thing_slot));
+        }
+        Ok(envelope)
     }
 
     fn publish(&mut self) {
@@ -757,18 +817,28 @@ where
                     self.thing_slot.generation(),
                     generation,
                 );
-                self.activation = Some(ServingActivationRecord::new(authority, derived.key));
-                self.route.key = Some(derived.key);
                 let prepare = PrepareInput::new(
                     derived.key,
                     derived.artifact_ref,
                     self.registration.resources().route_state(),
                 );
                 self.plan_set.freeze(output, generation);
+                let artifact = match self.plan_set.resolve_prepare_artifact(
+                    &prepare,
+                    self.registration.identity(),
+                    self.thing_slot,
+                    self.registration.resources().route_state(),
+                ) {
+                    Ok(artifact) => artifact,
+                    Err(error) => return self.fail_without_route(error),
+                };
+                self.activation = Some(ServingActivationRecord::new(authority, derived.key));
+                self.route.key = Some(derived.key);
                 self.td = None;
                 self.derived = Some(derived);
                 match self.registration.server_mut().start_prepare(
                     prepare,
+                    artifact,
                     &mut self.route.state.route,
                     budget,
                 ) {
@@ -1652,17 +1722,26 @@ impl HostPropertyReadRuntime {
                     self.thing_slot.generation(),
                     generation,
                 );
-                self.activation = Some(ServingActivationRecord::new(authority, derived.key));
-                self.route.key = Some(derived.key);
                 let prepare = PrepareInput::new(
                     derived.key,
                     derived.artifact_ref,
                     self.registration.resources().route_state(),
                 );
                 self.plan_set.freeze(output, generation);
+                let artifact = match self.plan_set.resolve_prepare_artifact(
+                    &prepare,
+                    self.registration.identity(),
+                    self.thing_slot,
+                    self.registration.resources().route_state(),
+                ) {
+                    Ok(artifact) => artifact,
+                    Err(error) => return self.fail_without_route(error),
+                };
+                self.activation = Some(ServingActivationRecord::new(authority, derived.key));
+                self.route.key = Some(derived.key);
                 self.td = None;
                 self.derived = Some(derived);
-                let call = match self.registration.server().prepare(prepare) {
+                let call = match self.registration.server().prepare(prepare, artifact) {
                     Ok(call) => call,
                     Err(rejection) => {
                         let (_, error) = rejection.into_parts();
@@ -2164,5 +2243,348 @@ impl HostPropertyReadOwner {
     pub(crate) fn step(&self, cx: &mut Context<'_>, budget: &mut WorkBudget) -> StepStatus<()> {
         self.with_runtime(|runtime| runtime.step(cx, budget))
             .unwrap_or(StepStatus::Idle)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use alloc::{boxed::Box, vec};
+    use clinkz_wot_core::binding::BindingRouteKey;
+    use clinkz_wot_core::{
+        BindingArtifact, BindingArtifactCompatibility, BindingArtifactFootprint,
+        BindingArtifactIdentity, BindingConfigurationDigest, BindingGeneration, BindingId,
+        CollisionDomainId, EndpointReservationKey, LogicalInteractionPlan,
+        RouteReservationIdentity,
+    };
+    use clinkz_wot_foundation::Generation;
+
+    fn next_generation() -> Generation {
+        Generation::INITIAL.checked_next().expect("next generation")
+    }
+
+    fn thing_slot() -> ThingSlotId {
+        ThingSlotId::new(SlotIndex::new(0), Generation::INITIAL)
+    }
+
+    fn plan_id() -> PlanId {
+        PlanId::new(SlotIndex::new(0), Generation::INITIAL)
+    }
+
+    fn other_plan_id() -> PlanId {
+        PlanId::new(SlotIndex::new(1), Generation::INITIAL)
+    }
+
+    fn plan_set_generation() -> PlanSetGeneration {
+        PlanSetGeneration::new(Generation::INITIAL)
+    }
+
+    fn other_plan_set_generation() -> PlanSetGeneration {
+        PlanSetGeneration::new(next_generation())
+    }
+
+    fn compatibility() -> BindingArtifactCompatibility {
+        BindingArtifactCompatibility::new([0x81; 16])
+    }
+
+    fn configuration() -> BindingConfigurationDigest {
+        BindingConfigurationDigest::new([0x82; 32])
+    }
+
+    fn reservation() -> RouteReservationIdentity {
+        RouteReservationIdentity::new(
+            CollisionDomainId::new([0x83; 16]),
+            EndpointReservationKey::new([0x84; 32]),
+        )
+    }
+
+    fn registration() -> BindingRegistrationIdentity {
+        BindingRegistrationIdentity::new(
+            BindingId::new(7),
+            BindingGeneration::INITIAL,
+            configuration(),
+            compatibility(),
+            0,
+        )
+    }
+
+    fn identity(role: BindingArtifactRole) -> BindingArtifactIdentity {
+        BindingArtifactIdentity::new(
+            plan_set_generation(),
+            plan_id(),
+            registration().binding_id(),
+            registration().binding_generation(),
+            configuration(),
+            compatibility(),
+            role,
+        )
+    }
+
+    fn route() -> BindingRouteKey {
+        BindingRouteKey::new(
+            registration().binding_id(),
+            registration().binding_generation(),
+            Generation::INITIAL,
+            plan_set_generation(),
+            plan_id(),
+            reservation(),
+        )
+    }
+
+    fn footprint() -> BindingLifetimeFootprint {
+        BindingLifetimeFootprint::new(2, 128)
+    }
+
+    fn plan(id: PlanId) -> LogicalInteractionPlan {
+        LogicalInteractionPlan::try_property_read(
+            id,
+            ThingId::from("urn:test:prepare-artifact"),
+            Box::from("level"),
+            0,
+            Box::from("mock://tank/level"),
+            None,
+            None,
+        )
+        .expect("valid logical plan")
+    }
+
+    fn record(
+        artifact_identity: BindingArtifactIdentity,
+        logical_plan_id: PlanId,
+        stored_reference: BindingArtifactRef,
+        frozen_generation: PlanSetGeneration,
+    ) -> CompiledPlanSetRecord<u8> {
+        let artifact_footprint = BindingArtifactFootprint::new(1, 1);
+        let artifact = if artifact_identity.role() == BindingArtifactRole::ProducerRoute {
+            BindingArtifact::producer_route(
+                artifact_identity.compatibility(),
+                artifact_footprint,
+                reservation(),
+                17,
+            )
+        } else {
+            BindingArtifact::new(artifact_identity.compatibility(), artifact_footprint, 17)
+        };
+        let envelope =
+            BindingArtifactEnvelope::try_new(artifact_identity, artifact_footprint, artifact)
+                .expect("admitted fixture artifact");
+        let output = PlanBuildOutput::new(
+            vec![plan(logical_plan_id)],
+            vec![envelope],
+            vec![stored_reference],
+        );
+        let mut record = CompiledPlanSetRecord::building();
+        record.freeze(output, frozen_generation);
+        record
+    }
+
+    fn base_record() -> CompiledPlanSetRecord<u8> {
+        let artifact_identity = identity(BindingArtifactRole::ProducerRoute);
+        record(
+            artifact_identity,
+            plan_id(),
+            BindingArtifactRef::new(artifact_identity, SlotIndex::new(0)),
+            plan_set_generation(),
+        )
+    }
+
+    fn prepare(reference: BindingArtifactRef, route: BindingRouteKey) -> PrepareInput {
+        PrepareInput::new(route, reference, footprint())
+    }
+
+    fn base_prepare() -> PrepareInput {
+        let artifact_identity = identity(BindingArtifactRole::ProducerRoute);
+        prepare(
+            BindingArtifactRef::new(artifact_identity, SlotIndex::new(0)),
+            route(),
+        )
+    }
+
+    fn assert_rejected(
+        record: &CompiledPlanSetRecord<u8>,
+        input: &PrepareInput,
+        registration: BindingRegistrationIdentity,
+    ) {
+        assert!(
+            record
+                .resolve_prepare_artifact(input, registration, thing_slot(), footprint())
+                .is_err()
+        );
+    }
+
+    #[test]
+    fn prepare_artifact_resolution_accepts_only_the_exact_frozen_envelope() {
+        let record = base_record();
+        let input = base_prepare();
+        let envelope = record
+            .resolve_prepare_artifact(&input, registration(), thing_slot(), footprint())
+            .expect("exact frozen Producer-route envelope");
+        assert_eq!(envelope.identity(), input.artifact().identity());
+        assert_eq!(
+            envelope.route_reservation(),
+            Some(input.route().reservation())
+        );
+    }
+
+    #[test]
+    fn prepare_artifact_resolution_rejects_ref_route_and_registration_mutations() {
+        let base_identity = identity(BindingArtifactRole::ProducerRoute);
+
+        let bad_slot = prepare(
+            BindingArtifactRef::new(base_identity, SlotIndex::new(1)),
+            route(),
+        );
+        assert_rejected(&base_record(), &bad_slot, registration());
+
+        let wrong_ref_identity = BindingArtifactIdentity::new(
+            plan_set_generation(),
+            plan_id(),
+            registration().binding_id(),
+            registration().binding_generation(),
+            BindingConfigurationDigest::new([0x91; 32]),
+            compatibility(),
+            BindingArtifactRole::ProducerRoute,
+        );
+        let bad_ref = prepare(
+            BindingArtifactRef::new(wrong_ref_identity, SlotIndex::new(0)),
+            route(),
+        );
+        assert_rejected(&base_record(), &bad_ref, registration());
+
+        let wrong_routes = [
+            BindingRouteKey::new(
+                BindingId::new(8),
+                registration().binding_generation(),
+                Generation::INITIAL,
+                plan_set_generation(),
+                plan_id(),
+                reservation(),
+            ),
+            BindingRouteKey::new(
+                registration().binding_id(),
+                BindingGeneration::new(next_generation()),
+                Generation::INITIAL,
+                plan_set_generation(),
+                plan_id(),
+                reservation(),
+            ),
+            BindingRouteKey::new(
+                registration().binding_id(),
+                registration().binding_generation(),
+                next_generation(),
+                plan_set_generation(),
+                plan_id(),
+                reservation(),
+            ),
+            BindingRouteKey::new(
+                registration().binding_id(),
+                registration().binding_generation(),
+                Generation::INITIAL,
+                other_plan_set_generation(),
+                plan_id(),
+                reservation(),
+            ),
+            BindingRouteKey::new(
+                registration().binding_id(),
+                registration().binding_generation(),
+                Generation::INITIAL,
+                plan_set_generation(),
+                other_plan_id(),
+                reservation(),
+            ),
+            BindingRouteKey::new(
+                registration().binding_id(),
+                registration().binding_generation(),
+                Generation::INITIAL,
+                plan_set_generation(),
+                plan_id(),
+                RouteReservationIdentity::new(
+                    CollisionDomainId::new([0x92; 16]),
+                    EndpointReservationKey::new([0x93; 32]),
+                ),
+            ),
+        ];
+        for wrong_route in wrong_routes {
+            let bad_route = prepare(
+                BindingArtifactRef::new(base_identity, SlotIndex::new(0)),
+                wrong_route,
+            );
+            assert_rejected(&base_record(), &bad_route, registration());
+        }
+
+        let wrong_registrations = [
+            BindingRegistrationIdentity::new(
+                BindingId::new(8),
+                registration().binding_generation(),
+                configuration(),
+                compatibility(),
+                0,
+            ),
+            BindingRegistrationIdentity::new(
+                registration().binding_id(),
+                BindingGeneration::new(next_generation()),
+                configuration(),
+                compatibility(),
+                0,
+            ),
+            BindingRegistrationIdentity::new(
+                registration().binding_id(),
+                registration().binding_generation(),
+                BindingConfigurationDigest::new([0x94; 32]),
+                compatibility(),
+                0,
+            ),
+            BindingRegistrationIdentity::new(
+                registration().binding_id(),
+                registration().binding_generation(),
+                configuration(),
+                BindingArtifactCompatibility::new([0x95; 16]),
+                0,
+            ),
+        ];
+        for wrong_registration in wrong_registrations {
+            assert_rejected(&base_record(), &base_prepare(), wrong_registration);
+        }
+    }
+
+    #[test]
+    fn prepare_artifact_resolution_rejects_plan_lease_role_and_footprint_mutations() {
+        let base_identity = identity(BindingArtifactRole::ProducerRoute);
+        let stored_reference = BindingArtifactRef::new(base_identity, SlotIndex::new(0));
+        let wrong_plan = record(
+            base_identity,
+            other_plan_id(),
+            stored_reference,
+            plan_set_generation(),
+        );
+        assert_rejected(&wrong_plan, &base_prepare(), registration());
+
+        let wrong_lease = record(
+            base_identity,
+            plan_id(),
+            stored_reference,
+            other_plan_set_generation(),
+        );
+        assert_rejected(&wrong_lease, &base_prepare(), registration());
+
+        let wrong_role_identity = identity(BindingArtifactRole::ConsumerCall);
+        let wrong_role = record(
+            wrong_role_identity,
+            plan_id(),
+            BindingArtifactRef::new(wrong_role_identity, SlotIndex::new(0)),
+            plan_set_generation(),
+        );
+        let wrong_role_prepare = prepare(
+            BindingArtifactRef::new(wrong_role_identity, SlotIndex::new(0)),
+            route(),
+        );
+        assert_rejected(&wrong_role, &wrong_role_prepare, registration());
+
+        let wrong_footprint = PrepareInput::new(
+            route(),
+            stored_reference,
+            BindingLifetimeFootprint::new(3, 129),
+        );
+        assert_rejected(&base_record(), &wrong_footprint, registration());
     }
 }

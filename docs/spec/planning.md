@@ -156,9 +156,17 @@ The ownership split is exact:
 | `clinkz-wot-servient` | Build transaction, capacity reservation, plan-set record, publication, pins, lazy-slot state, draining, and reclamation |
 
 An opaque binding artifact remains owned by its plan set for its entire stored
-lifetime. A binding execution operation receives a checked reference or lease;
-it does not take the artifact out of the plan set. If an execution guard or call
-retains that reference, its plan-set lease prevents reclamation.
+lifetime; binding execution never takes it out of the plan set. For v1
+Producer-route preparation, Servient resolves the operation's compact artifact
+reference directly inside the frozen plan set, validates the complete plan,
+binding, generation, configuration, compatibility, role, and route identity,
+and lends the matching envelope only for the initial preparation call. That
+borrow cannot enter a pending call, guard, or route slot. The binding instead
+derives bounded, route-local owned runtime state before its first protocol side
+effect. The Servient's plan-set lease remains private lifecycle ownership and
+is not an execution capability. Any other operation that needs retained
+artifact access requires its own explicit specification; it is not inferred
+from the Producer-route contract.
 
 Artifact destruction releases memory only and cannot fail. It occurs outside
 Servient locks. Any value whose destruction would require protocol cleanup is a
@@ -1428,12 +1436,16 @@ validated TD + complete Producer registration projection
   -> PropertyReadPlanCompiler::producer_route
   -> BindingArtifactRef(role = ProducerRoute)
   -> PrepareInput
+  -> Servient-checked BindingArtifactEnvelope borrow
   -> PollServerBinding::start_prepare
 ```
 
-The evidence must preserve identity and role across that chain, prove zero
+The evidence must preserve identity and role across that chain, prove the
+compiler-produced nontrivial payload reaches matching preparation, prove zero
 budget makes no progress, and end all TD and compiler-projection borrows before
-route preparation. A fixture-created logical plan, artifact, or preparation
+route preparation. The envelope borrow ends when initial preparation returns;
+pending preparation and every later route phase use only binding-owned bounded
+runtime state. A fixture-created logical plan, artifact, or preparation
 substitute is not evidence for this contract.
 
 ## Property Read route-reservation projection

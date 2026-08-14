@@ -434,7 +434,14 @@ terminal result. `ServerRouteSlot::initialize(input, state)` and
 an admitted vacant slot. `RouteReadinessSlot::initialize_state(state)` follows
 the same vacant-slot rule. `state_mut` is valid only while that state is live,
 and `clear` is valid only after the matching terminal acknowledgement. The
-caller owns every slot and its generation throughout the call:
+caller owns every slot and its generation throughout the call.
+
+For Producer-route preparation, `start_prepare` also receives the exact
+Servient-validated artifact envelope as a read-only scoped borrow. The binding
+must validate the concrete static artifact variant before initializing the
+route slot or causing any protocol side effect, and must derive every value
+needed after `start_prepare` returns into its bounded owned `RouteState`. No
+pending or later lifecycle method receives or may retain the artifact borrow:
 
 ```rust
 pub trait PollServerBinding {
@@ -451,6 +458,9 @@ pub trait PollServerBinding {
     fn start_prepare(
         &mut self,
         input: PrepareInput,
+        artifact: &BindingArtifactEnvelope<
+            <Self::Compiler as BindingCompilerExtension>::Artifact,
+        >,
         route: &mut ServerRouteSlot<Self::RouteState>,
         budget: &mut WorkBudget,
     ) -> Result<
@@ -1048,6 +1058,14 @@ Servient polls all readiness calls fairly under one expose deadline and bounded
 per-owner quantum. Polling registers wake interest before rechecking state. A
 never-ready route does not block other routes from readiness or cancellation.
 
+For Producer-route preparation, `prepare` receives the exact
+Servient-validated host-erased artifact envelope only for the duration of the
+constructor call. Before accepting the input or causing a protocol side
+effect, the binding safely checks the concrete payload type and supported
+variant, then derives all retained protocol state into the owned, bounded
+`HostBindingCall`. The envelope borrow cannot enter that `'static` call, a
+guard, or any later lifecycle operation.
+
 The host server surface has the following exact ownership signatures. The
 fields of `RouteAbortInput` and `RouteShutdownInput` are private; their
 constructors consume the complete guard and phase context, and their
@@ -1063,6 +1081,7 @@ pub trait RouteServerBinding: Send + Sync {
     fn prepare(
         &self,
         input: PrepareInput,
+        artifact: &BindingArtifactEnvelope<HostBindingArtifact>,
     ) -> Result<
         HostBindingCallBox<
             RoutePrepareOutcome<HostPreparedRouteGuard>,
