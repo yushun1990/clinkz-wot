@@ -1,406 +1,201 @@
 # Agent Guidance
 
-This file defines how AI agents work in this repository.
+This file defines stable AI operating rules for ClinkZ-WoT.
 
-The repository, not a conversation, is the durable carrier of project
-continuity. Important project understanding, execution context,
-blockers, and intended next work must not exist only in chat history.
+The repository is the durable source of project truth. A conversation may carry
+working context for one task, but it is not authoritative. When precision
+matters, reconstruct the current situation from the fetched repository, Git,
+GitHub, code, tests, and the smallest relevant authoritative documents.
 
-## Authority
+## Artifact Responsibilities
 
-Use each repository artifact for its intended purpose:
+Use each artifact for one durable responsibility:
 
-  -----------------------------------------------------------------------
-  Artifact                            Responsibility
-  ----------------------------------- -----------------------------------
-  `AGENTS.md`                         Stable AI operating rules
+| Artifact | Responsibility |
+|---|---|
+| `AGENTS.md` | Stable AI operating rules |
+| `PROJECT_GOVERNANCE.md` | Project progression, task-session, review, and collaboration rules |
+| `ARCHITECTURE_GOVERNANCE.md` | Technical convergence, architecture authority, and design change control |
+| `PLAN.md` | Durable roadmap, milestones, dependencies, objectives, and coarse progress |
+| `docs/` | Accepted technical decisions, specifications, work packages, audits, and evidence |
+| `workspace/` | Open investigation, proposals, alternatives, and unresolved reasoning |
+| source code and tests | Implementation and executable behavior truth |
+| Git / GitHub / CI | Change history, current remote state, review boundary, and validation results |
 
-  `PROJECT_GOVERNANCE.md`             Project execution governance,
-                                      collaboration process, milestone
-                                      lifecycle, and review workflow
+`EXECUTION.md` and `PROJECT_STATE.md` are retained only as compatibility paths
+for historical evidence topology. They are not active state carriers, are not
+session-entry requirements, and must not be used to persist the current task,
+next action, model role, remote observation, or project status.
 
-  `ARCHITECTURE_GOVERNANCE.md`        Technical convergence rules,
-                                      architecture authority, frozen
-                                      direction, and design change
-                                      control
+A fact should have one authoritative owner. Do not maintain a second summary
+merely to make a future model session feel continuous.
 
-  `PLAN.md`                           Project roadmap, milestones,
-                                      objectives, dependencies, and
-                                      progress state
+## AI-led Technical Responsibility
 
-  `EXECUTION.md`                      One current engineering claim,
-                                      implementation plan, acceptance
-                                      contract, handoff, and verdict
+AI owns routine technical judgment, including architecture, API shape,
+implementation order, work-package decomposition, technical risk, evidence
+sufficiency, and milestone status.
 
-  `PROJECT_STATE.md`                  Compact continuation and observed
-                                      remote-state cache
+The Project Owner provides project goals, unacceptable directions, real-world
+constraints, product trade-offs, counterexamples, and usage feedback. Owner
+ideas are important evidence, but they are not presumed technical conclusions.
 
-  `docs/`                             Authoritative specifications and
-                                      accepted decisions
+AI must not merely optimize inside the Owner's or a previous model's proposed
+design. Treat an existing design inclination as a hypothesis and compare it
+against project goals, current implementation evidence, accepted authority,
+and credible simpler alternatives. Accepted architecture is implementation
+authority until deliberately changed; it is not proof that the design remains
+optimal.
 
-  `workspace/`                        Active discussion, investigation,
-                                      proposals, and unresolved reasoning
+Do not shift a technical choice that can be resolved from repository evidence
+back to the Owner. Ask the Owner only when the choice genuinely depends on a
+product goal, external commitment, real-world constraint, or unacceptable
+trade-off.
 
-  source code and tests               Implementation truth
+## Task Sessions
 
-  Git history                         Change history and recoverable
-                                      checkpoints
-  -----------------------------------------------------------------------
+Prefer one conversation for one natural major engineering task or decision
+node. Keep the conversation while the same technical objective, evidence
+boundary, and implementation truth remain coherent. Start a fresh conversation
+when moving to a materially different task node or when independent review is
+required.
 
-When sources conflict, identify the conflict and resolve it according to
-artifact ownership.
+At the start of substantial work:
 
-## AI-led Development Model
+1. Fetch and reconcile the default branch and relevant open pull request or
+   task branch.
+2. Read `PLAN.md` for durable roadmap and milestone context.
+3. Read only the smallest relevant architecture, specification, work-package,
+   workspace, audit, code, and test set needed for this task.
+4. Inspect implementation before making implementation claims.
+5. Derive the current objective and next safe action from repository evidence;
+   do not rely on a stored `next_action`, continuation summary, or remembered
+   chat state.
 
-ClinkZ-WoT uses AI-led development.
+If a long conversation begins to confuse an already-established constraint,
+current branch/PR, accepted decision, or task boundary, recover by re-fetching
+and re-reading the relevant repository truth. Do not repair conversational
+memory by creating or expanding a repository state file.
 
-AI agents hold primary technical decision responsibility for:
+## Capability Allocation
 
--   technical architecture;
--   public and internal API shape;
--   work-package decomposition;
--   implementation order;
--   technical risk assessment;
--   evidence sufficiency;
--   technical milestone status.
+Model/profile names are an operational compute choice, not repository roles.
+Do not encode a permanent Max/High organization into project state.
 
-Those responsibilities are separated across capability roles so one context
-does not routinely plan, implement, and accept its own claim. The current
-model-to-role mapping and exact workflow live in `PROJECT_GOVERNANCE.md`.
-Stable authority attaches to the Technical Lead, Executor, Acceptance
-Reviewer, Plan Challenger, and Periodic Auditor roles, not to a product-tier
-name. The Technical Lead and Acceptance Reviewer may use the same capable
-model, but acceptance must start from a fresh context that reconstructs the
-claim from repository evidence and did not implement it.
+Use High or XHigh by default when the technical objective and architecture are
+already sufficiently clear. The implementation model owns ordinary local
+planning, code changes, tests, debugging, and evidence collection inside the
+accepted technical boundary.
 
-The Project Owner maintains project vision, goals, real-world constraints,
-unacceptable directions, and product or usage feedback.
+Escalate to Max when at least one decision boundary is present:
 
-Owner feedback may appear as questions, counterexamples, concerns, or usage
-experience reports in `workspace/`. Such feedback is input for AI
-investigation. It is not a preset technical answer, not an implementation
-instruction by itself, and not an automatic blocker for unrelated work.
+- it is unclear what the next valuable engineering objective should be;
+- the correct architecture, public API, ownership, lifecycle, or protocol
+  boundary is materially uncertain;
+- implementation evidence falsifies an assumption behind the current design;
+- a milestone, architecture gate, major migration, or release-readiness claim
+  requires higher-order judgment.
 
-AI agents must investigate Owner-raised topics against repository evidence:
-architecture, code, tests, specifications, work packages, audits, and review
-records. AI agents are responsible for deciding the technical direction,
-recording the rationale, migrating stable conclusions to the proper
-authoritative owner, and validating the result.
+Max is used to reduce technical uncertainty, not to micromanage implementation.
+It should state the technical conclusion, relevant constraints, and falsifiable
+completion boundary at the detail needed for execution; it does not need to
+write a long step-by-step worker plan when High/XHigh can derive normal
+implementation mechanics safely.
 
-AI agents must not shift technical judgment that can be resolved from project
-evidence onto the Project Owner. Ask the Owner for clarification only when a
-choice depends on project goals, product trade-offs, real-world constraints,
-unacceptable directions, or irreversible external commitments rather than
-technical evidence.
+For architecture-sensitive or unusually consequential work, ChatGPT may supply
+an independent pre-implementation challenge. Ultra is reserved for low-frequency
+repository-wide audits at major architecture, milestone, or release boundaries.
+These are independent viewpoints, not durable repository offices.
 
-Technical milestones are closed by AI from registered exit criteria and
-repository evidence. A later Owner-provided goal conflict, missing constraint,
-or credible counterexample may reopen a milestone or decision.
+## Review Independence
 
-AI determines technical release readiness from evidence. The Project Owner
-decides whether and when to execute an actual public release or other
-irreversible external commitment.
+Ordinary local or clearly specified work may be accepted from the applicable
+code review, tests, CI, and repository evidence without a separate Max cycle.
 
-AI architecture responsibility is proactive. Accepted architecture is the
-current implementation authority, not a presumption that the design is optimal.
-During implementation or review, AI must treat repeated corrective work,
-excessive indirection, awkward APIs, disproportionate validation cost, or a
-credible simpler design as architectural evidence and may initiate
-investigation without waiting for an Owner-raised workspace topic.
+Use a fresh Max context for independent acceptance when the change affects
+public API, architecture, ownership/lifecycle invariants, protocol-neutral
+boundaries, major gates, milestone closure, or release readiness. The reviewer
+must reconstruct the claim from repository authority, the exact diff, and
+executable evidence rather than inherit the implementation conversation's
+conclusions.
 
-AI must not silently diverge from accepted authority, but it must not preserve
-a design merely because it is already documented or implemented. Governance
-exists to prevent accidental drift, not deliberate architectural improvement.
+## PLAN and Current State
 
-## Session Entry
+`PLAN.md` records durable roadmap facts only. It must not become a session log,
+current-task database, PR tracker, execution checklist, or architecture
+specification.
 
-Before substantial work:
+Current state is discovered from the repository and remote system:
 
-1.  Read `AGENTS.md`.
-2.  Read `PROJECT_STATE.md`.
-3.  Read `EXECUTION.md`. If it is `IDLE`, no implementation is authorized. If
-    it is active, follow only the role and frozen contract assigned there.
-4.  When remote integration can affect the next safe action, fetch the remote
-    default branch when available and reconcile its pull-request/merge state
-    with `PROJECT_STATE.md` before relying on the recorded objective. A merged
-    pull request counts as default-branch integration only after checking its
-    actual base, merge ancestry from the fetched default branch, expected
-    repository content, and applicable merge-revision validation. Offline work
-    may use the last observed snapshot but may not release a dependent source
-    transition from an unverified remote merge.
-5.  Identify the active milestone and durable dependency context from
-    `PLAN.md`; do not infer an executable claim from roadmap order.
-6.  Follow references to the smallest necessary subset of governance,
-    specifications, workspace discussions, code, tests, audits, and
-    evidence.
-7.  Inspect implementation before making implementation claims.
+- code and tests show what is implemented;
+- registered work packages, audits, and evidence show what is admitted or
+  completed;
+- Git and GitHub show branches, commits, pull requests, and merges;
+- CI shows current validation results;
+- `PLAN.md` shows the durable roadmap frontier.
 
-## Durable Continuation
-
-`PROJECT_STATE.md` is the AI-owned continuation cache. It is deliberately not
-the current plan, a decision log, an evidence index, or an implementation
-ledger. It is limited to 200 lines and contains only:
-
--   the exact fetched default-branch revision and observation basis;
--   the established frontier and pointer to `EXECUTION.md`;
--   current blockers or limitations;
--   the stopping point and conditional pre/post-integration next actions; and
--   a small set of references needed to resume safely.
-
-Rules:
-
--   Replace stale information instead of accumulating history.
--   Separate facts from assumptions.
--   Put durable rationale in workspace decisions, ADRs, specifications, work
-    packages, or audits; do not copy it into continuation state.
--   Do not duplicate Git history, GitHub facts, authoritative specifications,
-    registered evidence, or the current execution contract.
--   Do not store important knowledge only in chat history.
--   Record the exact fetched default-branch revision used to derive the
-    continuation projection.
--   During remote handoff, record both conditional next actions: what remains
-    before verified default-branch integration and what becomes next after
-    integration plus merge-revision validation. Do not use an unconditional
-    objective that becomes false merely because its own pull request merges.
-
-## Continuous Checkpointing
-
-Update `PROJECT_STATE.md` only when the recoverable frontier, remote basis,
-blocker, stopping point, or conditional next action changes. Update
-`EXECUTION.md` when the current claim, plan, handoff, or acceptance state
-changes. Migrate architecture reasoning and stable decisions to their owning
-artifacts instead of retaining them in either file.
-
-Before starting another major task:
-
-> If this conversation ended now, could a fresh agent continue correctly
-> from the repository?
-
-If not, checkpoint first.
-
-## Role-Separated Execution Cycles
-
-A broad progression request authorizes one coherent engineering claim, not
-indefinite roadmap work. A Max Technical Lead first replaces `EXECUTION.md`
-with the claim, exact planning base, scope, constraints, engineering plan,
-acceptance criteria, and stop conditions. Important plans receive an advisory
-ChatGPT challenge before execution. A High Executor implements the frozen
-contract and basic evidence without redefining it. A fresh Max Acceptance
-Reviewer reconstructs and reviews the exact result; it either returns concrete
-findings or accepts and integrates it.
-
-If real implementation falsifies the plan or architecture, the Executor keeps
-the smallest useful evidence, marks the contract `BLOCKED`, and returns it to
-the Technical Lead. It must not silently widen scope or weaken acceptance.
-
-The cycle ends after accepted integration and reconciliation, or at a genuine
-blocker. Update the compact continuation envelope and stop before beginning a
-materially distinct successor. Time, token, line, commit, and pull-request
-counts do not define the boundary. `PROJECT_GOVERNANCE.md` owns the detailed
-lifecycle and remote handoff rules.
-
-## Governance and Planning Separation
-
-ClinkZ-WoT separates execution governance from technical governance.
-
-### PROJECT_GOVERNANCE.md
-
-Defines how the project progresses:
-
--   milestone lifecycle;
--   review workflow;
--   owner and AI responsibilities;
--   execution process;
--   progress tracking rules.
-
-### ARCHITECTURE_GOVERNANCE.md
-
-Defines how technical direction remains consistent:
-
--   architecture authority;
--   active architecture target;
--   frozen design direction;
--   convergence criteria;
--   design change control.
-
-### PLAN.md
-
-Defines what the project intends to achieve:
-
--   roadmap;
--   milestones;
--   objectives;
--   dependencies;
--   milestone status;
--   acceptance goals.
-
-PLAN.md must not become a session log, architecture specification, ADR
-replacement, or governance policy document.
-
-### EXECUTION.md
-
-Defines one current engineering claim:
-
--   exact planning base, scope, and non-goals;
--   implementation plan and acceptance criteria;
--   escalation and stop conditions;
--   Executor handoff; and
--   fresh Acceptance Reviewer verdict.
-
-It is replaced for each claim and must not become a roadmap or history log.
-
-### PROJECT_STATE.md
-
-Defines only the compact continuation projection and last observed remote
-basis. It points to, but does not repeat, `EXECUTION.md`, `PLAN.md`, technical
-authority, evidence, or Git/GitHub history.
+The next action is a reasoning result produced from those sources. Do not store
+it as an additional source of truth.
 
 ## Documentation and Workspace
 
-`docs/` is the authoritative specification space.
-
-`workspace/` records discussion rather than specification.
-
-Workspace contains:
-
--   questions;
--   proposals;
--   investigations;
--   alternatives;
--   reasoning history.
-
-Docs contain:
-
--   accepted decisions;
--   specifications;
--   stable architecture;
--   formal records.
+`docs/` is the authoritative technical documentation space.
+`workspace/` is the investigation space.
 
 Workspace topics progress through:
 
     OPEN -> DISCUSSING -> DECIDED -> MIGRATED
 
-Either the Owner or AI may open a workspace topic. AI is responsible for
-investigation and for moving the topic to `DECIDED` when repository evidence
-supports a conclusion. When the conclusion is projected into the proper
-authoritative document, work package, code, or test, the topic becomes
-`MIGRATED`.
-
-Workspace topics must not be treated as Owner instructions or predetermined
-technical conclusions. If the Owner later provides a new project constraint,
-goal conflict, or credible counterexample, AI should reopen the topic or create
-a new linked topic and re-evaluate the migrated conclusion.
+A workspace topic may record Owner questions or model findings, but neither
+predetermines the answer. AI investigates alternatives and repository evidence.
+When a conclusion is stable, migrate it to the proper specification, ADR,
+architecture document, work-package record, code, or test. Do not copy the
+same conclusion into multiple current-state documents.
 
 ## Implementation Judgment
 
--   Executors make ordinary local implementation choices inside the frozen
-    `EXECUTION.md` contract, but do not change its claim, authority, scope, or
-    acceptance criteria.
--   Implement for realistic usage.
--   Avoid speculative abstractions.
--   Treat awkward APIs as design feedback.
--   Surface architectural problems.
--   On a plan or architecture contradiction, preserve a minimal reproduction
-    and return it to the Technical Lead instead of adding an undocumented
-    workaround.
--   Preserve unrelated changes.
--   Inspect code and tests before asserting behavior.
--   Apply risk-proportional implementation admission. Keep strict controls for
-    ownership, lifecycle, resource, time, protocol-boundary, and cross-module
-    changes; keep local additive work narrow when its authoritative contract,
-    dependencies, disjointness, and local evidence are already clear.
--   Split a tranche only when blockers, ownership, lifecycle, contracts,
-    validation independence, rollback boundaries, or evidence truth differ.
-    Do not split work merely because each type or file can be named.
--   Treat tranche completion as a package-local claim unless a registered
-    integration owner says otherwise. Completion may release successor
-    candidate and review preparation, but successor source admission requires
-    its own approved checkpoint and, for a declared cross-package handoff,
-    evidence that a real upstream output reaches the first legal downstream
-    entry without a fixture-owned substitute.
--   Keep instance-specific candidate refs, path sets, transition topology,
-    evidence links, and status bookkeeping declarative in their authoritative
-    manifests. New custom checker control flow is admitted only for a genuinely
-    new falsifiable invariant category that generic validation cannot express,
-    with the reason recorded. Focused compile/runtime fixtures continue to own
-    behavioral evidence.
--   Migrate existing tranche-specific validation only after the generic path
-    matches its positive, negative, topology, and current-evidence coverage;
-    until then, retain the existing checker as an oracle rather than weakening
-    evidence to reduce code volume.
+- Implement for realistic usage, not merely for internal checker satisfaction.
+- Avoid speculative abstractions and new governance machinery without a
+  concrete falsifiable need.
+- Treat awkward APIs, repeated workarounds, excessive indirection, or
+  disproportionate validation cost as design evidence.
+- Do not silently diverge from accepted architecture. If implementation proves
+  the accepted boundary wrong or unconstructible, preserve the smallest useful
+  reproduction and escalate the decision instead of hiding it behind a
+  workaround.
+- High/XHigh may change local mechanics, file structure, helper decomposition,
+  tests, and debugging approach when those choices do not alter accepted
+  semantics, public API, ownership, lifecycle, resource, or evidence truth.
+- Preserve unrelated work.
+- Keep validation proportional to semantic risk. Prefer focused compile/runtime
+  fixtures and reusable invariant-category checks over per-task orchestration
+  machinery.
+- Add a checker only when it protects a stable invariant that existing code,
+  tests, or generic validation cannot already falsify.
 
-## Git Checkpoints
+## Git and Remote Handoff
 
-Create recoverable checkpoints during long sessions.
+Use Git as the recoverable implementation history and GitHub pull requests as
+the normal review boundary.
 
-Git protects repository changes. `PROJECT_STATE.md` protects project
-understanding and continuity.
+For repository-changing work:
 
-Use both.
+- use a task branch and preserve unrelated changes;
+- run task-specific and risk-appropriate validation;
+- commit coherent checkpoints;
+- push the branch and open or update a pull request;
+- record durable technical decisions in their authoritative documents when the
+  task actually changes those decisions;
+- do not push task commits directly to the default branch;
+- after merge, fetch and verify the resulting default-branch content and
+  required CI before claiming a dependent result.
 
-## Remote Task Handoff
+Remote facts are always re-read from GitHub when they matter. Do not mirror
+branch, PR, CI, or merge state into a repository state file.
 
-Every bounded task that changes the repository ends with an automatic remote
-handoff. The AI agent must:
+## Governing Principle
 
--   preserve unrelated work and commit only the task's intended scope;
--   update the `EXECUTION.md` handoff and `PROJECT_STATE.md` continuation before
-    the task's final evidence-topology commit when that topology requires an
-    exact path set;
--   run the task-specific checks and the risk-appropriate default-branch
-    matrix;
--   commit the completed task on its task branch;
--   push that branch without waiting for a separate Owner prompt;
--   open or update one draft pull request targeting the repository default
-    branch; and
--   report the branch, commits, pull-request URL, validation state, and any
-    remaining limitation.
-
-The High Executor leaves the pull request draft at `REVIEW_READY`. Only a
-fresh Max Acceptance Reviewer may record acceptance and promote or integrate
-the exact reviewed head after all predicates below are current.
-
-Never push task commits directly to the default branch. Follow-up fixes for
-the same task update the same branch and pull request. A dependent task waits
-for remote integration and the passing default-branch workflow unless the
-Owner explicitly requests stacked work; disjoint preparation may continue but
-cannot claim the dependent task's progress.
-
-After handoff, AI may mark the pull request ready and enable GitHub native
-auto-merge only when the exact current head satisfies all of these conditions:
-
--   the intended diff is complete and contains no unrelated work;
--   all applicable candidate, independent-review, admission, completion,
-    workload, release, and removal evidence is current;
--   task-specific local checks and the required remote `validation` job cover
-    that head;
--   the branch is current with the default branch, conflict-free, not a
-    dependent stack, and has no unresolved conversation or requested change;
--   no unresolved Owner-owned goal, product trade-off, unacceptable direction,
-    public release, or other external commitment is crossed; and
--   the active remote ruleset is verified to require strict current-base
-    validation and conversation resolution.
-
-Eligible automatic integration uses a merge commit and an expected head object
-id. Do not squash or rebase semantically meaningful candidate, review,
-admission, implementation, or evidence commits. A later commit requires the
-eligibility predicate and all applicable checks to be rerun. Failed,
-cancelled, stale, missing, or superseded checks, merge conflicts, or stacked
-dependencies leave auto-merge disabled. Until the remote ruleset prerequisites
-are verified, keep the pull request draft.
-
-Remote Owner review is a collaboration and integration boundary. It does not
-replace AI-owned technical judgment, registered independent review, or
-repository evidence. If authentication, network access, or the remote is
-unavailable, keep a local Git checkpoint, record the blocker in
-`PROJECT_STATE.md`, and do not claim that remote handoff is complete.
-
-After any manual or automatic merge, fetch the default branch and reconcile
-the pull request, merge revision, and default-branch workflow before starting
-dependent source work. A merge into another task branch, reverted content, or
-superseded head does not release a default-branch dependency merely because
-GitHub reports `merged = true`; a later repair commit may be the canonical
-content-integration event. GitHub owns remote draft/check/merge facts;
-repository commits, registered work-package state, audits, and evidence own
-technical admission and completion truth. `PROJECT_STATE.md` records its last
-observed fetched-default basis and never overrides either source.
+Repository governance exists to preserve durable truth and constrain material
+risk. It must not attempt to simulate model memory, serialize conversation
+state, or create a second project-management system beside Git, GitHub, tests,
+and the authoritative technical documents.
