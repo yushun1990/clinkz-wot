@@ -382,6 +382,8 @@ version = "0.1.0"
 dependencies = [
  "async-trait",
  "clinkz-wot-core",
+ "clinkz-wot-foundation",
+ "clinkz-wot-planning",
  "clinkz-wot-protocol-bindings",
  "clinkz-wot-servient",
  "clinkz-wot-td",

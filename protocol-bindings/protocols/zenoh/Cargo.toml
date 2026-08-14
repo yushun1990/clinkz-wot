@@ -19,6 +19,8 @@ tokio = { version = "1", optional = true, features = ["sync", "macros", "rt", "r
 log = "0.4"
 
 [dev-dependencies]
+clinkz-wot-foundation = { path = "../../../foundation" }
+clinkz-wot-planning = { path = "../../../planning" }
 clinkz-wot-servient = { path = "../../../servient" }
 
 [features]

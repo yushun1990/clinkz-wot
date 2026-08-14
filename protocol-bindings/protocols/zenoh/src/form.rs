@@ -281,7 +281,12 @@ fn parse_zenoh_transport(scheme: &str) -> ZenohBindingResult<String> {
     }
 }
 
-fn extract_zenoh_target_from_resolved_href(href: &str) -> ZenohBindingResult<ZenohFormTarget> {
+/// Parses an already-resolved Zenoh target without revisiting a Thing or Form.
+///
+/// Target binding compilers receive the resolved target from Planning. This
+/// helper lets them reuse the binding's canonical Zenoh URI parsing while
+/// preserving the no-runtime-TD-rescan boundary.
+pub fn extract_zenoh_target_from_resolved_href(href: &str) -> ZenohBindingResult<ZenohFormTarget> {
     let uri = Uri::parse(href).map_err(|e| {
         ZenohBindingError::UnsupportedForm(format!("href '{}' is not a valid URI: {}", href, e))
     })?;
