@@ -4,11 +4,8 @@ target_design_revision = "5.0"
 status = "active"
 decision = "docs/ADRs/0018-bounded-v5-normative-authority-reset.org"
 workspace_basis = "workspace/0015-normative-authority-reset.md"
-reset_base_ref = "6c01e07a446f51d413618474554b5eedcf5de23e"
-abandoned_foundation_candidate_ref = "2494f33fdfe49ec3c7ae850d20990e446e628865"
 active_requirement_count = 62
 classified_requirement_count = 121
-activation = "independently-reviewed-exact-candidate-integrated"
 
 [classification.indispensable]
 authority_status = "active"
@@ -165,48 +162,6 @@ requirements = [
   "PERF-BENCH-001",
   "PERF-BENCH-002",
   "PERF-BUDGET-001",
-]
-
-[candidate]
-status = "independently-reviewed-and-integrated"
-authority_activation = "active"
-runtime_or_public_api_changes_allowed = false
-independent_review_required = true
-separate_integration_required = true
-candidate_branch = "candidate/v5-authority-reset"
-candidate_base_ref = "eb145c5e86ec9e9db0a09194bd4e2868784a927f"
-candidate_ref = "b1916250a28ee133e8d0b12225c5b6311c975247"
-review_attestation_ref = "6d483a598e654f5c7043efb887074aba3a605f7a"
-integration_ref = "30b845a4b17dd3eb56670da48c939b72daea7d59"
-activation_rollback_ref = "6d483a598e654f5c7043efb887074aba3a605f7a"
-expected_changed_paths = [
-  "ARCHITECTURE_GOVERNANCE.md",
-  "PLAN.md",
-  "PROJECT_STATE.md",
-  "docs/architecture/README.md",
-  "docs/architecture/10-primary-data-flows.md",
-  "docs/architecture/20-module-boundaries.md",
-  "docs/artifacts.csv",
-  "docs/design.md",
-  "docs/evidence/v5-authority-carry-forward.toml",
-  "docs/governance.toml",
-  "docs/refactor-gates.csv",
-  "docs/spec/README.md",
-  "docs/spec/binding-spi.md",
-  "docs/spec/decomposition.csv",
-  "docs/spec/foundation.md",
-  "docs/spec/interaction-core.md",
-  "docs/spec/planning.md",
-  "docs/spec/runtime-safety.md",
-  "docs/spec/v5-artifact-carry-forward.toml",
-  "docs/spec/v5-authority-reset.toml",
-  "tools/check-architecture-adrs.sh",
-  "tools/check-design-artifacts.sh",
-  "tools/check-design-requirements.sh",
-  "tools/check-v5-authority-reset-candidate.sh",
-  "tools/check-v5-authority-reset-decision.sh",
-  "tools/check-wp100-amendment.sh",
-  "tools/check-wp100-handler-amendment.sh",
 ]
 
 [[active_source]]

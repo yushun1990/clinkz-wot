@@ -18,9 +18,9 @@ It does not own:
 
 - the project roadmap or milestone ordering, which belong to `PLAN.md`;
 - the current engineering claim, plan, or acceptance criteria, which belong to
-  `EXECUTION.md`;
-- continuation and observed remote state, which belong to
-  `PROJECT_STATE.md`;
+  the active task session and pull request;
+- continuation and observed remote state, which must be reconstructed from
+  the repository, GitHub, implementation, tests, and CI;
 - collaboration and implementation-admission policy, which belong to
   `PROJECT_GOVERNANCE.md` and `AGENTS.md`;
 - exact work-package dependencies or admission state, which belong to
@@ -34,7 +34,7 @@ Architecture governance must not become a second execution plan.
 ClinkZ-WoT uses AI-led development.
 
 The Max Technical Lead holds primary responsibility for technical architecture
-decisions and projects the exact implementation claim into `EXECUTION.md`.
+decisions and projects the exact implementation claim into the active task.
 It must investigate repository evidence, select a direction, record rationale
 and rejected alternatives in their proper owners, migrate the stable
 conclusion, and define falsifiable acceptance criteria.
@@ -60,18 +60,13 @@ irreversible external commitment that repository evidence cannot resolve.
 
 ## Active Architecture Target
 
-The authoritative revision is v5.0 bounded-core authority. Exact candidate
-`b1916250a28ee133e8d0b12225c5b6311c975247` passed independent review at
-`6d483a598e654f5c7043efb887074aba3a605f7a` and was integrated without
-candidate-path changes at
-`30b845a4b17dd3eb56670da48c939b72daea7d59`.
+The authoritative revision is v5.0 bounded-core authority. Its active source
+map is `docs/spec/v5-authority-reset.toml`; accepted specifications, ADRs,
+work packages, code, and tests own the current contract.
 
-The integration checkpoint atomically switched the design manifest, active
-requirement ownership, registered specifications, machine-readable
-projections, evidence dispositions, and checkers. No individual v5.0 artifact
-grants implementation admission outside that active set. The exact
-pre-activation mainline commit
-`6d483a598e654f5c7043efb887074aba3a605f7a` is the rollback point.
+No individual v5.0 artifact grants implementation admission outside that
+active set. Git history retains the superseded activation and rollback record;
+current validation does not replay it.
 
 The v4.8 detailed-design candidate is migration input only. A v4.8 contract is
 not active merely because it still exists in a historical or residual document.
@@ -285,10 +280,10 @@ Use:
 
 - `PLAN.md` for roadmap, milestones, objectives, dependencies, and progress
   state;
-- `EXECUTION.md` for the current claim, exact plan, acceptance criteria,
-  Executor handoff, and fresh review verdict;
-- `PROJECT_STATE.md` for the compact observed-remote continuation projection,
-  blockers, stopping point, and conditional next actions;
+- the active task session and pull request for the current claim, exact plan,
+  acceptance criteria, and review boundary;
+- the repository, GitHub, implementation, tests, and CI for current and remote
+  state;
 - `PROJECT_GOVERNANCE.md` for collaboration, review, milestone lifecycle, and
   risk-proportional implementation governance;
 - `docs/work-packages/index.toml` for exact implementation admission and DAG

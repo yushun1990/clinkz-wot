@@ -1,10 +1,8 @@
 # WP-600 Optional Zenoh and Zenoh-Pico Protocol Bindings
 
-Status: Planned
-Design revision: v4.9
-Depends on: `WP-300`
-Global convergence gates: `GATE-1`, `GATE-2`, `GATE-3`, `GATE-4`, `GATE-5`, `GATE-6`
-Owner packages: `clinkz-wot-planning`, `clinkz-wot-protocol-bindings-zenoh`
+Machine-readable package status, design revision, dependencies, document path,
+and owner crates are defined only in [`index.toml`](index.toml). This document
+specifies technical scope and acceptance boundaries.
 
 ## Scope
 

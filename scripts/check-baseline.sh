@@ -3,8 +3,8 @@
 set -eu
 
 cargo fmt --check
-cargo test --workspace
-cargo clippy --workspace --all-targets
+cargo test --workspace --locked
+cargo clippy --workspace --all-targets --locked
 
 SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 

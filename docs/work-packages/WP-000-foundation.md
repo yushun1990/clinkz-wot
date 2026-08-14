@@ -1,14 +1,8 @@
 # WP-000 Foundation Primitives
 
-Status: Complete
-
-Design revision: v4.9
-
-Depends on: None
-
-Global convergence gates: GATE-1, GATE-2, GATE-3, GATE-4, GATE-5, GATE-6
-
-Owner packages: clinkz-wot-foundation, workspace
+Machine-readable package status, design revision, dependencies, document path,
+and owner crates are defined only in [`index.toml`](index.toml). This document
+specifies technical scope and acceptance boundaries.
 
 ## Scope
 
@@ -26,19 +20,15 @@ The package refresh required by `WP-100-ERR-DISPOSITION-001` regenerated the
 exhaustive profile schema, boundary tests, and evidence for
 `additional_responses_per_form_max`. No foundation ownership boundary changed.
 
-WP-000 completion is the historical v4.6 checkpoint recorded in
-`docs/evidence/WP-000.toml`: 118 resource fields and the work classes then
-required by its consumers. Revision v4.7 does not retroactively change that
-completion claim. The nine additive handler fields and `HandlerSteps` work
-classes are a foundation-owned surface change performed and evidenced by the
-active WP-100 foundation-entry subtranche.
+Foundation tests and generated-schema snapshots own the current resource-field
+ordering, profile boundary, generation, time, and work-class invariants. The
+nine additive handler fields and `HandlerSteps` work classes remain a
+Foundation-owned surface consumed by WP-100.
 
-ADR-0016 later identified that the checkpoint's finite raw-wrap declaration
-does not prove deadline, freshness, or cleanup ordering across wraps. The
-historical evidence remains immutable and WP-000 remains complete. The
-Foundation-owned `WP-100-LOGICAL-TIME-CORRECTION` tranche must replace its time
-claims under the extended logical tick model and reaffirm the disjoint
-generation claims before dependent Core timing work proceeds.
+ADR-0016 identified that finite raw-wrap declarations do not prove deadline,
+freshness, or cleanup ordering across wraps. Foundation now owns those claims
+under the extended logical tick model, while generated resource tests own the
+disjoint generation claims.
 
 ## Requirements
 

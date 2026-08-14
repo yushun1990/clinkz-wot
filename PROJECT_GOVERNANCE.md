@@ -24,9 +24,8 @@ The durable project model is intentionally small:
 | Current implementation and history | Git, GitHub pull requests, CI |
 
 The repository does not maintain an additional current-task or continuation
-state database. `EXECUTION.md` and `PROJECT_STATE.md` are deprecated as active
-governance artifacts and remain only where historical evidence topology still
-references their paths.
+state database. Current state is reconstructed from repository, GitHub,
+implementation, tests, and CI.
 
 ## No Shadow State
 

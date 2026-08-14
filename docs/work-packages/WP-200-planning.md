@@ -1,14 +1,8 @@
 # WP-200 Logical and Binding Planning
 
-Status: Planned
-
-Design revision: v4.9
-
-Depends on: WP-100
-
-Global convergence gates: GATE-1, GATE-2, GATE-3, GATE-4, GATE-5, GATE-6
-
-Owner packages: clinkz-wot-core, clinkz-wot-planning, clinkz-wot-td
+Machine-readable package status, design revision, dependencies, document path,
+and owner crates are defined only in [`index.toml`](index.toml). This document
+specifies technical scope and acceptance boundaries.
 
 ## Scope
 
@@ -49,23 +43,22 @@ commit, and all post-acceptance outcomes never trigger automatic fallback.
 Every eligible skip has one pre-reserved, fixed-width diagnostic bounded by the
 admitted candidate count.
 
-The exact `WP-200-PROPERTY-READ-PLAN-SLICE` is review pending under ADR-0013.
-It freezes its bounded immutable planning input, absence of runtime TD reads,
-feature cells, source boundary, exclusions, paired authoring fixtures, and
-completion key before any product source is changed.
+The narrow Property Read planning boundary has bounded immutable input, no
+runtime TD reads, identical static and host semantics, and explicit exclusions
+from broad planning. Owning-crate tests cover both authoring profiles and the
+owned output lifetime.
 
-Workspace decision 0014 resolves the former compiler-representation blocker.
 One associated-type Core contract serves both forms: an application-closed
 compiler/cursor/artifact enum keeps constrained storage typed, while Core owns
 safe host erasure and returns the complete erased cursor or artifact unchanged
 on mismatch. WP-200 is the sole implementation owner of those Core components
 and Planning coordination. WP-300 consumes one component only when it later
 builds the complete installable registration; it does not implement a second
-compiler/artifact SPI. No package-DAG revision is required.
+compiler/artifact SPI.
 
 ## Requirements
 
-The package index assigns this exact requirement set:
+This package is governed by:
 
 - `DOC-RUNTIME-001`, `DOC-RUNTIME-002`, and `DOC-RUNTIME-003`;
 - `JSONLD-PREFIX-001`;
@@ -81,7 +74,7 @@ The package index assigns this exact requirement set:
 Together these requirements govern structural sharing, indexed and bounded selection, the
 compiler-extension/artifact contract, immutable plan-set draft material, source retention,
 collection-plan attribution, admission rollback, and byte-aware complexity. The form-finalization,
-security, validation, resource-profile, and lifecycle contracts defined by the v4.9 specifications
+security, validation, resource-profile, and lifecycle contracts defined by the current specifications
 remain mandatory inputs, but their implementation evidence is assigned to the work packages that
 own those surfaces.
 
@@ -146,8 +139,7 @@ one unpublished Frozen plan-set draft, including shared logical plans, compact b
 artifact envelopes, lazy descriptors, and structured failures without embedding execution trait
 objects or Servient lifecycle state.
 
-The Property Read slice implements only the exact additive surface registered
-in its gate record:
+The Property Read slice implements only this additive surface:
 
 - one Core-owned Property Read `LogicalInteractionPlan` constructor and compact
   `BindingCandidate`;
@@ -165,35 +157,34 @@ collection operations, Producer form contribution, plan-set lifecycle,
 binding execution, Servient publication, or either cross-package architecture
 fixture root.
 
-The later `WP-200-PROPERTY-READ-PRODUCER-ROUTE-PROJECTION` correction is a
-separate exact tranche because the completed private algorithm emits only
-`ConsumerCall`, while the completed WP-300 registration advertises only a
-Producer Property Read server. It adds public
+The scoped Producer-route projection is part of the current Property Read
+boundary because the general private algorithm emits only `ConsumerCall`,
+while the WP-300 registration advertises a Producer Property Read server. It
+provides public
 `PropertyReadPlanCompiler::producer_route` and an opaque
 `PropertyReadBuildCursor<C, A>` in `planning/src/property_read.rs`, re-exports
-them from `planning/src/lib.rs`, and changes no other product source. The
+them from `planning/src/lib.rs`, and has no broader product-source reach. The
 constructor consumes the complete `BindingRegistrationIdentity`, fixes the
 role to `ProducerRoute`, and accepts a borrowed static or host compiler
 projection from the complete registration. Arbitrary role selection and a
 public Consumer-call constructor remain excluded.
 
-The subsequent
-`WP-200-PROPERTY-READ-ROUTE-RESERVATION-PROJECTION` is separate again because
-the public Producer-route constructor preserves role and registration identity
+The scoped route-reservation projection is also required because the public
+Producer-route constructor preserves role and registration identity
 but does not supply the protocol-canonical endpoint collision identity needed
-to construct a production `BindingRouteKey`. This Category C correction
+to construct a production `BindingRouteKey`. This projection
 extends the existing Core `BindingArtifact<A>` wrapper with immutable optional
 route metadata, requires it exactly for `ProducerRoute`, preserves it through
-static and host erasure, and exposes it through the admitted artifact envelope.
+static and host erasure, and exposes it through the validated artifact envelope.
 The concrete compiler remains the only protocol canonicalization owner;
 Planning retains but never derives or interprets the value.
 
-The exact product implementation paths are
-`core/src/binding_compiler.rs` and `planning/src/property_read.rs`. The
-registered external WP-300 mock compiler is the only support-source path in the
-implementation transition. Form contribution, capability indexes, collision
-tables, Servient lifecycle, production protocols, and architecture fixture
-roots remain excluded until their own tranches.
+Implementation ownership remains in `core/src/binding_compiler.rs` and
+`planning/src/property_read.rs`. The external WP-300 mock compiler in Servient
+tests exercises the real output-to-`PrepareInput` path. Form contribution,
+capability indexes, collision tables, Servient lifecycle, production
+protocols, and aggregate architecture fixture roots remain outside this
+narrow scope.
 
 Resolve effective operation, root-versus-affordance form context, original form index, `base`
 plus relative `href`, media defaults, response metadata, URI variables, security inheritance,
@@ -259,9 +250,10 @@ candidate vectors and retain enough source identity for strict selection and dia
   WP-300 owns `ProducerEmission` and its adapters, WP-400 owns host handler activation and the
   legacy handler-path removal, and WP-600 owns concrete-protocol `PublisherSink` removal.
 
-## Evidence
+## Verification Responsibilities
 
-Produce these package evidence keys exactly as indexed by the work-package DAG:
+Owning-crate unit, integration, compile-fail, and workload tests cover these
+technical invariants:
 
 - `property-read-plan-slice` for one immutable property-read logical plan,
   bounded construction from a read-only TD, a binding artifact sufficient
@@ -285,7 +277,7 @@ Produce these package evidence keys exactly as indexed by the work-package DAG:
   real route preparation after TD and registration-projection borrows end;
 - `property-read-route-reservation-projection` for a real complete WP-300
   registration whose compiler supplies the canonical Producer-route
-  `RouteReservationIdentity`, whose admitted envelope preserves it through
+  `RouteReservationIdentity`, whose validated envelope preserves it through
   static and host erasure, and whose runner constructs no substitute collision
   or endpoint identity;
 - `admission-transaction-rollback` for exact charges, phase release, and peak memory;
@@ -293,7 +285,7 @@ Produce these package evidence keys exactly as indexed by the work-package DAG:
   capability rejection, one selected binding generation, and proof that no implicit fan-out plan
   is produced.
 
-These records satisfy the corresponding requirement-index evidence families:
+Coverage also includes these requirement families:
 
 - `plan-cost-and-limits` for structural sharing, exact charges, rollback, and one-over limits;
 - `index-lazy-request-size` for capability pruning, wildcard bounds, lazy policy, and compact
@@ -311,9 +303,9 @@ These records satisfy the corresponding requirement-index evidence families:
 - `cargo-dependency-direction`, `feature-public-surface`, and `frozen-cross-crate-surface` for
   package ownership and all required cells.
 
-Evidence must distinguish admission failure from first-use compilation failure and record the
+Tests must distinguish admission failure from first-use compilation failure and record the
 plan-set, registration, compiler, configuration, schema, and policy generations used by the case.
-Credential identity is recorded only by runtime selection evidence and is never a planning-cache
+Credential identity is recorded only by runtime selection diagnostics and is never a planning-cache
 dependency.
 
 ## Performance Workloads

@@ -5,16 +5,15 @@
 # vocabulary (including `cancelaction`, `subscribeallevents`,
 # `unsubscribeallevents`) is always available in default builds.
 #
-# This check is part of the M7 baseline (see scripts/check-m7.sh) to keep the
-# gated surface compiling and tested.
+# Keep the gated surface compiling and tested across its consumers.
 
 set -eu
 
-cargo check -p clinkz-wot-td --features td2-preview
-cargo check -p clinkz-wot-core --features td2-preview
-cargo check -p clinkz-wot-servient --features td2-preview
-cargo check -p clinkz-wot-protocol-bindings-zenoh --features td2-preview
+cargo check --locked -p clinkz-wot-td --features td2-preview
+cargo check --locked -p clinkz-wot-core --features td2-preview
+cargo check --locked -p clinkz-wot-servient --features td2-preview
+cargo check --locked -p clinkz-wot-protocol-bindings-zenoh --features td2-preview
 
-cargo test -p clinkz-wot-td --features td2-preview
-cargo test -p clinkz-wot-servient --features td2-preview
-cargo test -p clinkz-wot-protocol-bindings-zenoh --features td2-preview
+cargo test --locked -p clinkz-wot-td --features td2-preview
+cargo test --locked -p clinkz-wot-servient --features td2-preview
+cargo test --locked -p clinkz-wot-protocol-bindings-zenoh --features td2-preview

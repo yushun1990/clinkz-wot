@@ -17,15 +17,13 @@ Use each artifact for one durable responsibility:
 | `PROJECT_GOVERNANCE.md` | Project progression, task-session, review, and collaboration rules |
 | `ARCHITECTURE_GOVERNANCE.md` | Technical convergence, architecture authority, and design change control |
 | `PLAN.md` | Durable roadmap, milestones, dependencies, objectives, and coarse progress |
-| `docs/` | Accepted technical decisions, specifications, work packages, audits, and evidence |
+| `docs/` | Accepted technical decisions, specifications, and work packages |
 | `workspace/` | Open investigation, proposals, alternatives, and unresolved reasoning |
 | source code and tests | Implementation and executable behavior truth |
 | Git / GitHub / CI | Change history, current remote state, review boundary, and validation results |
 
-`EXECUTION.md` and `PROJECT_STATE.md` are retained only as compatibility paths
-for historical evidence topology. They are not active state carriers, are not
-session-entry requirements, and must not be used to persist the current task,
-next action, model role, remote observation, or project status.
+There is no repository current-task or continuation-state file. Reconstruct
+task state from current repository, GitHub, implementation, tests, and CI.
 
 A fact should have one authoritative owner. Do not maintain a second summary
 merely to make a future model session feel continuous.

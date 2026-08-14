@@ -1,17 +1,8 @@
 # WP-300 Binding Contracts and Binding-Local Progress
 
-Status: Planned
-
-Design revision: v4.9
-
-Depends on: WP-200
-
-Global convergence gates: GATE-1, GATE-2, GATE-3, GATE-4, GATE-5, GATE-6
-
-Owner packages: clinkz-wot-core
-
-Broad entry point: `WP-300-BROAD-ENTRY` (blocked by
-`PROPERTY-READ-ARCHITECTURE`)
+Machine-readable package status, design revision, dependencies, document path,
+and owner crates are defined only in [`index.toml`](index.toml). This document
+specifies technical scope and acceptance boundaries.
 
 ## Scope
 
@@ -29,17 +20,16 @@ This package defines and tests the execution SPI consumed by Servient and protoc
 WP-400 owns expose/destroy orchestration and registries; WP-600 owns zenoh and zenoh-pico
 implementations. No protocol-specific route, transport, or authentication semantics enter core.
 
-The named `WP-300-PROPERTY-READ-BINDING-SLICE` may be reviewed after its
-planner-slice dependency completes. It is the only WP-300 exception to the
-blocked broad entry point and must use the exact mock-binding boundary in the
-integration-gate manifest. The manifest grants no source-edit authority.
+The narrow Property Read binding surface uses the exact mock-binding boundary
+in the integration-gate manifest. It proves one route and one request without
+claiming the subscription, emission, form-contribution, multi-route, workload,
+or production-protocol parts of broad WP-300.
 
 This is the only package that introduces `ProducerEmission`. Core defines the immutable emission
 values and a `BindingEmissionSlot` for exactly one selected binding generation; it does not own
 the Servient-wide fan-out record or a concrete dispatch policy. This package also provides bounded internal
-compatibility adapters so the still-unmigrated WP-400 Servient and WP-600 concrete binding can
-cross this checkpoint without a dependency cycle. An adapter is not a second public emission
-contract and accepts no new callers after this package completes.
+compatibility adapters for unmigrated Servient and concrete-binding callers.
+An adapter is not a second public emission contract and accepts no new callers.
 
 One host or static binding is installable only as a complete startup bundle. Component traits
 remain constructible and independently testable, but a compiler, contributor, client half,
@@ -47,14 +37,12 @@ server half, status policy, or ingress policy cannot be installed separately. Th
 immutable after `ServientBuilder` freezes its registration snapshot; v1 has no runtime binding
 add, replace, remove, or unload path.
 
-Admission remains blocked until AR-002 and AR-003 are closed by exact complete
-registration/compiler/contributor/constrained Rust signatures and independent
-authoring fixtures. The fixtures implement both a mostly synchronous binding
-and a binding with externally visible preparation/readiness in host-erased and
-application-static forms. They must prove that trivial phases use bounded
-helpers/default adapters without inventing protocol state; a result that needs
-to merge lifecycle ownership phases reopens ADR-0010/0012 instead of hiding the
-problem in an adapter.
+Broad registration/compiler/contributor signatures must remain constructible
+in both host-erased and application-static forms. External authoring tests
+cover a mostly synchronous binding and one with externally visible
+preparation/readiness. Trivial phases may use bounded helpers or default
+adapters, but those helpers must not invent protocol state or merge distinct
+lifecycle ownership phases.
 
 The final XOR-shaped `InboundResponse`, its producer-origin `try_success`
 validation, and the public shared consumer-origin
@@ -63,11 +51,10 @@ validation, and the public shared consumer-origin
 legacy response envelope once, after the route and planning values from WP-200
 exist.
 
-## Scoped Property Read admission boundary
+## Scoped Property Read Technical Boundary
 
-`WP-300-PROPERTY-READ-BINDING-SLICE` is Category C because it introduces the
-route, permit, response, cleanup, resource, and host/static ownership boundary.
-It is nevertheless finite. The tranche constructs one complete registration
+The narrow Property Read surface introduces the route, permit, response,
+cleanup, resource, and host/static ownership boundary. It constructs one complete registration
 that advertises only the Producer Property Read server role and consumes one
 matching WP-200 compiler component.
 
@@ -89,17 +76,17 @@ Its behavior scope is:
 The applicable state projections are `binding-route-lifecycle`,
 `binding-route-readiness`, `active-route-acceptance`,
 `response-delivery-ownership`, and the cleanup-transfer projection used by
-route or response calls. The tranche has no performance-workload completion
-claim; it freezes and tests deterministic resource/footprint behavior while
-the broad package retains its registered GATE-5 workloads.
+route or response calls. The narrow surface does not claim performance-workload
+coverage; it tests deterministic resource/footprint behavior while the broad
+package retains its workload boundaries.
 
 The narrow public bundle and server interfaces omit inactive client,
 subscription, publication, collection, contribution, and emission families.
-Broad WP-300 may add bounded default rejection adapters only after the owning
-domain-entry review. Retained API-inventory names do not authorize those
-behaviors in this slice.
+Broad WP-300 may add bounded default rejection adapters only within the owning
+broad domain. Retained API-inventory names do not authorize those behaviors in
+this slice.
 
-The tranche excludes:
+The narrow surface excludes:
 
 - client invoke or subscribe behavior;
 - subscription drivers and delivery;
@@ -117,7 +104,7 @@ must not depend on or call the legacy
 `clinkz-wot-protocol-bindings` form selectors, receive a TD, or send a target
 request through legacy `ServerBinding::serve`, `Dispatch`, or handler lookup.
 Legacy selector and execution paths remain separate legacy generations until
-their WP-600/WP-700 removal checkpoints.
+their WP-600/WP-700 removal scope.
 
 Rust method overloading cannot preserve the legacy
 `ServerBinding::shutdown(&ThingId)` and add target
@@ -125,33 +112,17 @@ Rust method overloading cannot preserve the legacy
 uses the uniquely named `RouteServerBinding`, `RouteInboundRequest`,
 `RouteResponseOpportunity`, and `RouteInboundResponse` types in
 `core/src/binding.rs`. Existing `core/src/inbound.rs` values remain the legacy
-generation and are not edited by this tranche. WP-700 removes the old exports;
+generation and are outside this narrow surface. WP-700 removes the old exports;
 there is no alias or conversion from a target request to a legacy request.
 
-AR-002 and AR-003 close for this tranche when its immutable candidate contains
-the exact signatures, API and source scope, both readiness shapes, both public
-author profiles, exclusions, and completion boundary. They do not require
-subscription, emission, or the rest of broad WP-300 to be implemented.
+The exact signatures, both readiness shapes, both public author profiles, and
+the exclusions above are technical constraints of the narrow surface. They do
+not imply subscription, emission, or the rest of broad WP-300.
 
-Candidate preparation ends when all registered prechecks and the executable
-schema pass, both authoring fixtures reach their expected pre-source boundary,
-and the completion check fails only because the exact product implementation
-paths are absent. Independent review must simulate the combined pre-source
-checkpoint and the next implementation topology before attestation. No later
-support-only refinement may block the tranche without an explicit intersecting
-semantic, ownership, lifecycle, resource, dependency, or evidence-truth
-finding.
-
-Completion of this slice releases
-`WP-400-PROPERTY-READ-SERVIENT-SLICE`. Broad WP-400, WP-500, and WP-600 remain
-released only by broad WP-300 completion. Preparation in those packages is
-allowed but is not source admission or vertical progress.
-
-After this narrow slice completes and before either the aggregate Property Read
-mock candidate or the broad WP-300 candidate is frozen, run one bounded,
+Before the aggregate Property Read fixture or broad WP-300 work proceeds, run one bounded,
 non-authoritative real-target Zenoh Property Read feedback probe against the
 complete public registration surface. It uses actual Zenoh I/O and a network
-round trip; carries a real admitted plan/route output through readiness,
+round trip; carries a real plan/route output through readiness,
 correlation, response, cancellation/drain, and cleanup; and includes enough
 multiple-Thing/route/form shape to expose hidden single-fixture assumptions.
 Helpers may group fields, generate closed static enums/tables, and adapt
@@ -166,7 +137,7 @@ field count alone remain helper/generation concerns. The probe does not
 release WP-600, prove protocol-shape neutrality, or claim production-protocol
 progress.
 
-Broad WP-300 admission additionally requires:
+Broad WP-300 additionally requires:
 
 - one executable capability/profile applicability taxonomy;
 - one shared Core semantic-kernel owner and versioned machine-readable trace
@@ -175,11 +146,11 @@ Broad WP-300 admission additionally requires:
   allocation/layout/code-size costs;
 - a cleanup-obligation coexistence matrix for every activated operation
   family; and
-- an exact resource-authoring closure tranche for typed applicability,
+- exact resource-authoring closure for typed applicability,
   complete role projections, and schema identity before the resource surface
   is called stable for external applications or bindings.
 
-These are broad maturity boundaries. They do not intersect the reviewed narrow
+These are broad maturity boundaries. They do not expand the narrow
 Property Read source paths or turn its package-local constructibility claim
 into a production, protocol-neutrality, ergonomics, or runtime-parity claim.
 
@@ -396,7 +367,7 @@ contributor metadata; a bare trait object is never the configuration contract.
   legacy generation until WP-400/WP-600 migrate its consumers; WP-700 removes
   its export. Remove any registration-wide acceptance and any cleanup path
   whose only completion signal is guard drop or an unstructured outer error
-  at that owning removal checkpoint.
+  in that owning removal scope.
 - Remove any successful `RouteCommitOutcome::Serving` branch, any `poll_accept` overload that
   accepts an active guard or omits `RouteActivationPermit<'_>`, every per-route `open_gate` or
   `release_gate` callback, and every binding view of Servient registry state. Successful commit
@@ -429,9 +400,10 @@ contributor metadata; a bare trait object is never the configuration contract.
 - Do not restore the removed `ProtocolBinding` or `ClientBindingFactory` facades, and do not
   retain a binding-owned unbounded pending request, subscription, response, or emission table.
 
-## Evidence
+## Verification Responsibilities
 
-Produce these package evidence keys exactly as indexed by the work-package DAG:
+Owning-crate unit, integration, compile-fail, model, and workload tests cover
+these technical invariants:
 
 - `property-read-binding-slice` for one complete mock registration, immutable
   property-read artifact, committed-closed route, permit-authorized accepted
@@ -486,13 +458,13 @@ Produce these package evidence keys exactly as indexed by the work-package DAG:
 - `binding-authoring-usability` for the real-target Zenoh feedback probe's
   public declarations, actual network lifecycle, multiple Thing/route/form
   shape, diagnostics, workarounds, generic/layout/code-size, cleanup mapping,
-  and unsafe/private dependency findings, with an independently accepted
-  disposition before aggregate mock candidate admission.
+  and unsafe/private dependency findings, with a technical disposition before
+  aggregate fixture work begins.
 - `target-legacy-no-backflow` for poisoned legacy selector,
   `ServerBinding::serve`, and `Dispatch` boundaries with zero
   target-generation calls.
 
-These records satisfy the corresponding requirement-index evidence families:
+Coverage also includes these requirement families:
 
 - `frozen-cross-crate-surface` for object safety, static registrations, owned values, and every
   applicable feature cell;

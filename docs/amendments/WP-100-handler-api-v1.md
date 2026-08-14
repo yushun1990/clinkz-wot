@@ -19,9 +19,8 @@ IMPL-CONFORM-001
 
 ## Purpose and Precedence
 
-This normative amendment closes the handler decisions identified by
-`docs/audits/WP-100-handler-entry-audit.md`. It freezes the exact request and
-context ownership split, the eighteen-operation sync/async/step matrix,
+This normative amendment freezes the exact request and context ownership split,
+the eighteen-operation sync/async/step matrix,
 registration boundaries, cancellation ownership, Producer subscription
 transaction, resource limits, workload identities, and acyclic package
 staging.

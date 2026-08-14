@@ -184,11 +184,10 @@ boundaries differ:
    plus delayed timeout behavior. Its completion key is
    `deadline-cleanup-timing`.
 
-The historical `docs/evidence/WP-000.toml` remains immutable. Completion of the
-first tranche replaces the `API-SOURCE-TIME-001` and `TIME-001` portion of its
-`time-and-generation-api` record with v4.9 logical-time evidence. The
-`API-TYPES-001` and `CONSTRAINED-STORAGE-001` generation portion is reaffirmed
-by rerunning `tools/check-wp-000.sh` with generation sources unchanged.
+Foundation unit tests own logical ordering, raw-wrap extension, delayed
+observation, source timestamp comparability, reset, scale, and exhaustion.
+Generated resource-schema snapshots and boundary tests continue to own the
+disjoint `API-TYPES-001` and `CONSTRAINED-STORAGE-001` generation contract.
 
 The `TIME-DOMAIN-AND-DEADLINE` scope continues to block broad
 `WP-100-HANDLER-ENTRY` until both corrective tranches have passed completion
