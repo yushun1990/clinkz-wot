@@ -1,6 +1,6 @@
 # 0058 Host Route State Succession
 
-Status: DISCUSSING
+Status: MIGRATED
 
 Kind: real-target implementation counterexample
 
@@ -18,9 +18,12 @@ succession API. This topic isolates that contradiction; it does not propose a
 new Host/static kernel, change the frozen macro architecture, or admit WP-600
 work.
 
-`docs/spec/binding-spi.md` remains the active contract until this question is
-decided and migrated. The probe did not use a side table, leaked `Arc`, private
-field access, or unsafe erasure to make the Host path appear executable.
+The first application-static probe did not use a side table, leaked `Arc`,
+private field access, or unsafe erasure to make the Host path appear
+executable. The corrected paired probe applies the same constraints to the
+public Host-erased path. Stable conclusions are migrated to the Binding SPI,
+runtime-safety specification, state-machine registry, API ownership inventory,
+WP-300, architecture gate, architecture governance, roadmap, code, and tests.
 
 ## Minimal counterexample
 
@@ -67,20 +70,58 @@ metadata can naturally derive owned Zenoh route state without a hidden lease or
 side table. The Host failure is specific to erased state succession, not to the
 macro Planning/Binding/Servient ownership split.
 
-## Questions for correction
+## Decision
 
-1. Should erased Host guards keep one state allocation in place across stage
-   changes, matching `ServerRouteSlot`, or expose an atomic operation that
-   returns both the complete carrier and its downcast state?
-2. Are separate prepared/active/committed erased guard types still buying a
-   useful ownership proof, or are they duplicating a state transition already
-   owned by the Servient route machine?
-3. Can the correction share a typed lifecycle kernel with the static surface
-   without weakening object safety, pinning, cancellation settlement, cleanup
-   transfer, or constrained-profile ownership?
-4. Which `docs/api-ownership.csv`, Binding SPI, state-machine, work-package,
-   compile-fail, and Host external-authoring evidence must be invalidated and
-   replaced when the successor shape is selected?
+The counterexample holds. The exact falsified contract was not the three-stage
+route machine or the macro ownership split. It was the public claim that a Host
+guard preserved the complete preparation carrier and transferred private route
+state exactly once, despite offering only these incompatible ownership paths:
+
+- consuming `try_into_state` returned the state but destroyed access to the
+  predecessor carrier, including the original `PrepareInput` and footprint;
+- successor constructors accepted an independently supplied erased state and
+  therefore could replace the predecessor state while dropping the state that
+  the predecessor guard owned.
+
+The correction keeps `HostPreparedRouteGuard`, `HostActiveRouteGuard`, and
+`HostCommittedRouteGuard` as distinct linear stage owners. A Core-private
+carrier is created once by preparation and owns the original `PrepareInput`,
+immutable footprint, generation-bearing route identity, and one erased heap
+allocation. Successor construction consumes only the predecessor guard and
+moves the unchanged carrier. There is no consuming state extraction and no
+replacement-state argument.
+
+All three legal stages expose a type-checked borrowed mutable accessor for
+matching `Unpin` state and a type-checked pinned mutable accessor for matching
+state that may be `!Unpin`. Core alone projects the pinned carrier storage; a
+binding receives a safe public borrow and needs no unsafe or private escape.
+Failure, cancellation, and late-successor ownership retain the carrier. The
+terminal cleanup or acknowledged residual owner disposes it exactly once.
+
+The scoped-artifact rule remains unchanged. The binding validates the borrowed
+immutable artifact during preparation and derives the values needed later into
+the owned route-local state before the first protocol side effect. It neither
+copies or reconstructs `PrepareInput` nor retains the artifact or a plan-set
+lease. The footprint and state remain siblings in the same carrier rather than
+independently reconstructible facts.
+
+## Alternatives rejected
+
+- Atomically extracting both carrier parts and concrete state still makes
+  route state detachable and requires a public reassembly invariant. It offers
+  replacement opportunities without adding a capability required by the real
+  protocol.
+- Collapsing the three guard types would remove useful phase ownership proofs
+  and widen this bounded carrier correction into Servient lifecycle policy.
+- A binding-owned route table or a strong shared `Arc` as primary ownership
+  would move generation, liveness, and exactly-once release truth out of the
+  guard. The probe permits only a non-owning `Weak` response alias that cannot
+  keep the route alive.
+- Unifying the Host and static lifecycle APIs would address mechanical callback
+  duplication, not this ownership defect. The paired probe needs only shared
+  protocol-local I/O helpers and does not duplicate Servient's normative
+  transition policy, so a broad kernel refactor has no correction-sized
+  justification.
 
 ## Constraints
 
@@ -92,10 +133,26 @@ macro Planning/Binding/Servient ownership split.
   around an erased-guard API.
 - Do not expand the correction into WP-600 or general operation-family work.
 
-## Decision boundary
+## Migrated evidence and remaining boundary
 
-The exact Host route-state succession surface is reopened. Aggregate Property
-Read source admission should wait for a bounded correction and external Host
-revalidation. The application-static real-target probe remains valid evidence
-for the disjoint static carrier and macro ownership path; it is not evidence
-that the current Host carrier is implementable.
+Focused Core evidence keeps one `!Unpin`, non-`Clone` state allocation and one
+footprint across prepared -> active -> committed, rejects a mismatched concrete
+type, observes no predecessor-stage drop, and observes exactly one terminal
+drop. The Servient Host fixtures now put their primary bounded ingress,
+correlation, and cleanup state in the guard instead of a shared instrumentation
+object. The real Zenoh probe pairs application-static and public Host-erased
+success, readiness-failure, and pre-publication-cancellation scenarios. It
+observes the same state address across successful Host stages, no early drop on
+failure or cancellation, one terminal drop, and generation, permit,
+correlation, response, and cleanup parity on the current Property Read overlap.
+
+This clears the real-target prerequisite; it does not pass or implement the
+aggregate Property Read gate. Multi-route resource modeling, complete
+Zenoh/Tokio physical resource accounting, generic Host/static lifecycle
+factoring, broad operation families, and WP-600 remain outside this correction.
+
+Reopen the architecture rather than widening this correction if a legitimate
+protocol implementation still requires binding-side primary state ownership,
+carrier reconstruction, binding-side unsafe/private access, or a concrete
+route-state type change between stages. None is required by the paired real
+Zenoh evidence.

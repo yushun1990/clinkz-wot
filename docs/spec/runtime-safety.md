@@ -79,7 +79,11 @@ destroy, retry, or terminal state.
 `STATE-BIND-001`: A binding route progresses from absent through prepared,
 ready, active, committed-closed, serving, draining, and closed, with explicit
 cleanup-pending transitions after resource acquisition. Servient owns state
-transitions; the guard owns protocol resources. Operations are idempotent for
-one Thing/binding generation. A guard drop is not a transition, late callbacks
-are generation checked, and a draining or closed route never returns to
-serving.
+transitions; the guard owns protocol resources. A Host route's prepared,
+active, and committed stage guards successively own one unchanged Core-private
+carrier containing its complete preparation input, footprint, generation, and
+binding-private concrete state. A stage transition cannot replace or extract
+that state. Operations are idempotent for one Thing/binding generation. A guard
+drop is not a transition, late callbacks are generation checked, and a
+draining or closed route never returns to serving. Terminal cleanup or durable
+residual acknowledgement releases the carrier state exactly once.

@@ -147,10 +147,15 @@ above is frozen, but empirical maturity is deliberately narrower. Immutable
 artifacts, protocol-owned I/O and correlation, Servient-owned dispatch and
 publication, generation identity, route-scoped bounded progress,
 permit-gated acceptance, and explicit cleanup transfer remain authoritative.
-Exact Host/static containers, detailed lifecycle carriers, helper surface, and
-operation signatures remain correction points until a real target Zenoh
-Property Read probe exercises them through actual protocol I/O and a network
-round trip.
+A real-target Zenoh Property Read probe now exercises both application-static
+and public Host-erased paths through actual protocol I/O and a network round
+trip. Its corrected Host carrier preserves one nonreplaceable erased route
+state, original preparation input, footprint, and generation identity across
+the distinct prepared, active, and committed stage owners until terminal
+cleanup. The exact helper surface, broad operation signatures, multi-route
+resource model, and profile-specific physical resource accounting remain
+maturity and correction points; the paired probe does not freeze those broader
+containers or justify merging the Host and static lifecycle APIs.
 
 That bounded probe precedes the aggregate mock Property Read candidate. It is
 architecture feedback rather than WP-600 product admission. Zenoh and

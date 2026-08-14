@@ -34,8 +34,14 @@ abort, shutdown, terminal reporting, and cleanup MUST identify one route
 generation, preserve every guard across fallible transitions, and expose
 exactly one accept poll and waker lease per serving committed route. Successful
 commit MUST return a distinct committed-closed guard and MUST NOT open request
-admission. A binding MUST NOT receive an application dispatch capability, call
-a handler from hidden work, or observe the Servient registry.
+admission. In the Host representation, prepare creates one Core-owned carrier
+containing the complete `PrepareInput`, immutable lifetime footprint,
+generation identity, and one binding-private erased state allocation. Prepared,
+active, and committed guards are linear stage owners of that same carrier;
+stage succession MUST NOT accept replacement state, extract the state, change
+its concrete type, or drop it before terminal cleanup disposition. A binding
+MUST NOT receive an application dispatch capability, call a handler from hidden
+work, or observe the Servient registry.
 
 `BIND-STORAGE-001`: A constrained binding MUST expose associated protocol state
 types and their maximum size, alignment, lifetime, and drop contract so the
@@ -82,8 +88,9 @@ an empty cleanup obligation unless the call has actually settled it.
 binding and route generations, correlation identity, plan identity, payload,
 media/status metadata, and transport-authentication material across every SPI
 call. A live correlation id is unique within one route generation. A binding
-MUST validate route identity against its prepared route table and MUST NOT
-borrow request or response data from a transport buffer after a call returns.
+MUST validate route identity against its prepared route carrier or typed route
+slot and MUST NOT borrow request or response data from a transport buffer after
+a call returns.
 
 Historical v4.9 clause (`BIND-OUT-001`, inactive): `OutboundRequest` MUST own only the selected binding and plan
 identity plus per-call varying data. It MUST NOT contain a TD, raw form,
@@ -651,16 +658,35 @@ impl HostPreparedRouteGuard {
 }
 
 impl HostActiveRouteGuard {
-    pub fn new<S>(prepared: HostPreparedRouteGuard, state: S) -> Self
+    pub fn new(prepared: HostPreparedRouteGuard) -> Self;
+}
+
+impl HostCommittedRouteGuard {
+    pub fn new(active: HostActiveRouteGuard) -> Self;
+}
+```
+
+All three stage guards expose the same type-checked borrowed access shape. The
+ordinary mutable accessor is limited to `Unpin` state; the pinned accessor
+supports binding state that requires a stable address. A mismatch returns
+`None` before mutation. Neither accessor transfers ownership or permits a
+successor to replace the stored value:
+
+```rust
+impl HostPreparedRouteGuard {
+    pub fn try_state_mut<S>(&mut self) -> Option<&mut S>
+    where
+        S: Send + Unpin + 'static;
+
+    pub fn try_state_pin_mut<S>(
+        self: Pin<&mut Self>,
+    ) -> Option<Pin<&mut S>>
     where
         S: Send + 'static;
 }
 
-impl HostCommittedRouteGuard {
-    pub fn new<S>(active: HostActiveRouteGuard, state: S) -> Self
-    where
-        S: Send + 'static;
-}
+// HostActiveRouteGuard and HostCommittedRouteGuard expose the same two
+// accessors for the same carrier allocation.
 ```
 
 The `std` server trait below is the matching host authoring surface. Its
@@ -989,26 +1015,39 @@ reuse until terminal disposition.
 
 Host prepared, active, and committed guards are downstream-constructible owned
 erased values. Each exposes its exact binding and route generations,
-reservation identity, immutable lifetime footprint, and an `into` operation
-that transfers its private binding state exactly once. A committed guard is
-closed to request admission; serving authority is never stored in the guard.
-Its pinned `try_state_pin_mut<S>` accessor lets the owning binding poll its
-type-erased committed state in place without moving it; a type mismatch returns
-`None` before state mutation. This accessor is the only borrowed state escape
-and does not expose the state to Servient.
+reservation identity, and immutable lifetime footprint from one private
+carrier created by `HostPreparedRouteGuard::new`. `HostActiveRouteGuard::new`
+and `HostCommittedRouteGuard::new` consume only the predecessor stage owner and
+move that unchanged carrier; neither accepts replacement state. The owning
+binding may type-check and mutably borrow `Unpin` state or pin and mutably
+borrow any matching state in the prepared, active, or committed stage. There is
+no consuming state extraction. A committed guard is closed to request
+admission; serving authority is never stored in the guard. The borrowed
+accessors do not expose state to Servient.
 `HostShutdownRouteGuard` owns either an active or committed guard so one
 shutdown operation can preserve both legal predecessor stages. Static
-counterparts use typed caller-owned route slots. No guard relies on `Drop` as a
+counterparts use typed caller-owned route slots. In both representations the
+same concrete route state remains owned from preparation through terminal
+cleanup; failure, cancellation, and late successor classification retain it,
+and state is released exactly once only when terminal cleanup or durable
+residual acknowledgement disposes the carrier. No guard relies on `Drop` as a
 lifecycle event.
 
 ```rust
-impl HostCommittedRouteGuard {
+impl HostPreparedRouteGuard {
+    pub fn try_state_mut<S>(&mut self) -> Option<&mut S>
+    where
+        S: Send + Unpin + 'static;
+
     pub fn try_state_pin_mut<S>(
         self: Pin<&mut Self>,
     ) -> Option<Pin<&mut S>>
     where
         S: Send + 'static;
 }
+
+// Identical accessors exist on HostActiveRouteGuard and
+// HostCommittedRouteGuard.
 ```
 
 ### Lifecycle calls

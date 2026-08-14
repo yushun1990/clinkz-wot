@@ -407,7 +407,7 @@ cleanup_transitions = [
     "cleanup-task:ExecutorOwned|ExecutorPollClaimed:executor_drop->ResidualRetained",
     "route-lifecycle-call:CleanupTransferred:executor_drop_residual_successor->ResidualSuccessorRetained",
 ]
-ownership = "The route record retains the exact generation and stage guard while each call is outside locks; a late successor guard is classified by its actual stage before abort or shutdown begins"
+ownership = "The route record retains the exact generation and stage guard while each call is outside locks; Host predecessor and successor guards own the same nonreplaceable carrier state; a late successor guard is classified by its actual stage before abort or shutdown begins"
 
 [[composition]]
 id = "binding-route-readiness"
@@ -3172,7 +3172,7 @@ visibility = "crate-private-servient-route-record"
 transition_contract = "exact"
 owner_record = "Servient BindingRouteRecord"
 scope = "Owns one binding and route generation, reservation identity, prepared/active/committed-closed stage guard, lifecycle-call lease, readiness lease, acceptance lease, first expose cause, cleanup reservation, and retained terminal disposition"
-guard_contract = "Every pending, failed, cancelled, or late transition retains exactly one predecessor or successor guard. Preparation can certify no resource; activation failure returns the prepared guard; commit failure returns the active guard; commit success returns a distinct committed-closed guard."
+guard_contract = "Every pending, failed, cancelled, or late transition retains exactly one predecessor or successor guard. Host prepared, active, and committed guards are distinct linear stage owners of one unchanged carrier containing the complete preparation input, footprint, generation, and binding-private state; successor conversion cannot replace or extract that state. Preparation can certify no resource; activation failure returns the prepared guard; commit failure returns the active guard; commit success returns a distinct committed-closed guard."
 publication_contract = "Commit retains a committed-closed guard and opens no admission. publish makes this route eligible for scoped permit claims only with the plan set, produced registry generation, and shared ServingActivationAuthority; drain stops new permit issuance before shutdown begins."
 shutdown_contract = "Serving has no direct transition to Cleaning. Servient first begins authority and route drain, joins or releases every ActiveRouteDriver claim, and may invoke Draining:begin_shutdown only after that route driver reaches Released."
 cleanup_contract = "Cleaning with Complete closes directly. TransferRequired remains source-owned, CleanupTransferred names an acknowledged owner of the complete object, and Residual retains durable external-state evidence until acknowledgement."
@@ -3362,7 +3362,7 @@ from = "Activating"
 event = "activated"
 to = "Active"
 owner = "BindingRouteOwner"
-linearization = "replace the consumed prepared guard with the returned active guard under the same route lease"
+linearization = "move the unchanged Host carrier or typed static route state from prepared-stage ownership to the returned active guard under the same route lease"
 outcome = "Active-guard-retained"
 retryability = "not-applicable"
 
@@ -3425,7 +3425,7 @@ from = "Committing"
 event = "committed"
 to = "CommittedClosed"
 owner = "BindingRouteOwner"
-linearization = "replace the consumed active guard with the returned committed-closed guard without creating serving authority"
+linearization = "move the unchanged Host carrier or typed static route state from active-stage ownership to the returned committed-closed guard without creating serving authority"
 outcome = "CommittedClosed-guard-retained-nonserving"
 retryability = "not-applicable"
 
