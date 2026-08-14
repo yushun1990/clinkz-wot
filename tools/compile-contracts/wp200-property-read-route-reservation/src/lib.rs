@@ -66,8 +66,8 @@ pub fn verify_route_reservation_projection() {
         compatibility,
         0,
     );
-    let state_footprint = BindingLifetimeFootprint::new(1, 8);
-    let registration_footprint = BindingLifetimeFootprint::new(3, 64);
+    let state_footprint = BindingLifetimeFootprint::new(2, 128);
+    let registration_footprint = BindingLifetimeFootprint::new(4, 256);
     let resources =
         BindingResourceDeclarations::new(registration_footprint, registration_footprint)
             .with_state_footprints(state_footprint, state_footprint, state_footprint);
@@ -92,7 +92,7 @@ pub fn verify_route_reservation_projection() {
 
     let plan_id = PlanId::new(SlotIndex::new(3), Generation::INITIAL);
     let plan_set_generation = PlanSetGeneration::new(Generation::INITIAL);
-    let (artifact_ref, reservation) = {
+    let output = {
         let td = thing();
         let compiler_registrations = [registration.compiler()];
         let input = PlanBuildInput::new(&td, &compiler_registrations[..], plan_set_generation);
@@ -113,18 +113,19 @@ pub fn verify_route_reservation_projection() {
             }
         };
 
-        let artifact_ref = output.artifact_refs()[0];
-        let envelope = &output.artifacts()[artifact_ref.artifact_slot().get() as usize];
-        assert_eq!(envelope.identity(), artifact_ref.identity());
-        assert_eq!(
-            artifact_ref.identity().role(),
-            BindingArtifactRole::ProducerRoute
-        );
-        let reservation = envelope
-            .route_reservation()
-            .expect("Producer-route compiler supplied canonical reservation identity");
-        (artifact_ref, reservation)
+        output
     };
+
+    let artifact_ref = output.artifact_refs()[0];
+    let envelope = &output.artifacts()[artifact_ref.artifact_slot().get() as usize];
+    assert_eq!(envelope.identity(), artifact_ref.identity());
+    assert_eq!(
+        artifact_ref.identity().role(),
+        BindingArtifactRole::ProducerRoute
+    );
+    let reservation = envelope
+        .route_reservation()
+        .expect("Producer-route compiler supplied canonical reservation identity");
 
     let artifact_identity = artifact_ref.identity();
     let route = BindingRouteKey::new(
@@ -141,7 +142,7 @@ pub fn verify_route_reservation_projection() {
     let mut prepare_budget = WorkBudget::new();
     let outcome = registration
         .server_mut()
-        .start_prepare(prepare, &mut route_slot, &mut prepare_budget)
+        .start_prepare(prepare, envelope, &mut route_slot, &mut prepare_budget)
         .expect("real server accepted compiler-derived route identity");
     assert!(matches!(
         outcome,

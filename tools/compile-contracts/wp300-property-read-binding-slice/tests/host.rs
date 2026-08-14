@@ -1,19 +1,28 @@
 use core::pin::Pin;
+use core::sync::atomic::{AtomicU32, Ordering};
 use core::task::{Context, Poll};
+use std::sync::Arc;
 
 use clinkz_wot_core::{
-    BindingArtifactCompatibility, BindingCallSettlement, BindingDeliveryOutcome,
-    BindingExecutionSupport, BindingIngressPolicy, BindingInputRejection, BindingLifetimeFootprint,
+    BindingArtifact, BindingArtifactCompatibility, BindingArtifactEnvelope,
+    BindingArtifactFootprint, BindingArtifactIdentity, BindingArtifactRef, BindingArtifactRole,
+    BindingCallSettlement, BindingCandidate, BindingCompilerBounds, BindingCompilerExtension,
+    BindingCompilerInput, BindingCompilerOutput, BindingCompilerStep, BindingConfigurationDigest,
+    BindingDeliveryOutcome, BindingExecutionSupport, BindingGeneration, BindingId,
+    BindingIngressPolicy, BindingInputRejection, BindingLifetimeFootprint, BindingOperationalError,
     BindingRegistrationCapabilities, BindingRegistrationIdentity, BindingResourceDeclarations,
-    BindingStatusPolicy, CleanupPhaseContext, Deadline, HostActiveRouteGuard, HostBindingCall,
-    HostBindingCallBox, HostBindingCompilerRegistration, HostBindingRegistration,
+    BindingStatusPolicy, CleanupPhaseContext, CollisionDomainId, CoreError, Deadline,
+    EndpointReservationKey, ErrorContext, ErrorPhase, HostActiveRouteGuard, HostBindingArtifact,
+    HostBindingCall, HostBindingCallBox, HostBindingCompilerRegistration, HostBindingRegistration,
     HostBindingRegistrationInput, HostCommittedRouteGuard, HostPreparedRouteGuard,
-    HostRouteCleanupSuccessor, HostShutdownRouteGuard, PrepareInput, RouteAbortInput,
-    RouteActivationOutcome, RouteCleanupOutcome, RouteCommitOutcome, RouteInboundResponse,
-    RoutePrepareOutcome, RouteReadinessOutcome, RouteServerBinding, RouteShutdownInput,
+    HostRouteCleanupSuccessor, HostShutdownRouteGuard, LogicalInteractionPlan, PlanId,
+    PlanSetGeneration, PrepareInput, RetryClass, RouteAbortInput, RouteActivationOutcome,
+    RouteCleanupOutcome, RouteCommitOutcome, RouteInboundResponse, RoutePrepareOutcome,
+    RouteReadinessOutcome, RouteReservationIdentity, RouteServerBinding, RouteShutdownInput,
+    ThingId,
 };
-use clinkz_wot_foundation::{WorkBudget, WorkClass};
-use clinkz_wot_wp300_property_read_binding_slice_contract::MockCompiler;
+use clinkz_wot_foundation::{Generation, SlotIndex, WorkBudget, WorkClass};
+use clinkz_wot_wp300_property_read_binding_slice_contract::{MockArtifact, MockCompiler};
 
 struct ReadyCall<T, C> {
     value: Option<T>,
@@ -99,6 +108,7 @@ where
 struct HostMockBinding {
     compatibility: BindingArtifactCompatibility,
     external_readiness: bool,
+    prepares: Arc<AtomicU32>,
 }
 
 impl RouteServerBinding for HostMockBinding {
@@ -109,11 +119,28 @@ impl RouteServerBinding for HostMockBinding {
     fn prepare(
         &self,
         input: PrepareInput,
+        artifact: &BindingArtifactEnvelope<HostBindingArtifact>,
     ) -> Result<
         HostBindingCallBox<RoutePrepareOutcome<HostPreparedRouteGuard>, HostRouteCleanupSuccessor>,
         BindingInputRejection<PrepareInput>,
     > {
-        let guard = HostPreparedRouteGuard::new(input, BindingLifetimeFootprint::new(1, 64), 0_u8);
+        let Some(target) = artifact
+            .artifact()
+            .try_payload::<MockArtifact>(self.compatibility)
+            .and_then(MockArtifact::target)
+        else {
+            let error = BindingOperationalError::for_route(
+                *input.route(),
+                CoreError::Binding(ErrorContext::new(ErrorPhase::Prepare, RetryClass::Never)),
+            );
+            return Err(BindingInputRejection::new(input, error));
+        };
+        self.prepares.fetch_add(1, Ordering::SeqCst);
+        let guard = HostPreparedRouteGuard::new(
+            input,
+            BindingLifetimeFootprint::new(1, 64),
+            Box::<str>::from(target),
+        );
         Ok(HostBindingCallBox::new(ReadyCall::new(
             RoutePrepareOutcome::Prepared(guard),
         )))
@@ -234,6 +261,7 @@ fn host_registration(
         Box::new(HostMockBinding {
             compatibility,
             external_readiness,
+            prepares: Arc::new(AtomicU32::new(0)),
         }),
         resources,
         ingress,
@@ -245,4 +273,144 @@ fn host_registration(
 fn public_host_author_can_construct_both_readiness_shapes() {
     let _constructor = host_registration;
     let _shutdown_guard: Option<HostShutdownRouteGuard> = None;
+}
+
+struct WrongPayloadCompiler {
+    compatibility: BindingArtifactCompatibility,
+    reservation: RouteReservationIdentity,
+}
+
+impl BindingCompilerExtension for WrongPayloadCompiler {
+    type Cursor = ();
+    type Artifact = u32;
+
+    fn compatibility(&self) -> BindingArtifactCompatibility {
+        self.compatibility
+    }
+
+    fn bounds(
+        &self,
+        _input: &BindingCompilerInput<'_>,
+    ) -> clinkz_wot_core::CoreResult<BindingCompilerBounds> {
+        Ok(BindingCompilerBounds::new(
+            BindingArtifactFootprint::new(1, 4),
+            0,
+            0,
+            WorkBudget::new().with_remaining(WorkClass::BindingPolls, 1),
+        ))
+    }
+
+    fn start(&self, _input: &BindingCompilerInput<'_>) -> clinkz_wot_core::CoreResult<()> {
+        Ok(())
+    }
+
+    fn step(
+        &self,
+        input: &BindingCompilerInput<'_>,
+        cursor: (),
+        budget: &mut WorkBudget,
+    ) -> BindingCompilerStep<(), u32> {
+        if budget.consume(WorkClass::BindingPolls, 1).is_err() {
+            return BindingCompilerStep::Pending(cursor);
+        }
+        assert_eq!(input.role(), BindingArtifactRole::ProducerRoute);
+        BindingCompilerStep::Complete(BindingCompilerOutput::new(BindingArtifact::producer_route(
+            self.compatibility,
+            BindingArtifactFootprint::new(1, 4),
+            self.reservation,
+            0xfeed_beef,
+        )))
+    }
+
+    fn abort(&self, _cursor: ()) {}
+}
+
+#[test]
+fn host_concrete_payload_mismatch_returns_input_before_prepare_acceptance() {
+    let compatibility = BindingArtifactCompatibility::new([0x71; 16]);
+    let configuration = BindingConfigurationDigest::new([0x72; 32]);
+    let binding_id = BindingId::new(9);
+    let binding_generation = BindingGeneration::INITIAL;
+    let plan_id = PlanId::new(SlotIndex::new(0), Generation::INITIAL);
+    let plan_set_generation = PlanSetGeneration::new(Generation::INITIAL);
+    let reservation = RouteReservationIdentity::new(
+        CollisionDomainId::new([0x73; 16]),
+        EndpointReservationKey::new([0x74; 32]),
+    );
+    let plan = LogicalInteractionPlan::try_property_read(
+        plan_id,
+        ThingId::from("urn:test:host-artifact-mismatch"),
+        Box::from("level"),
+        0,
+        Box::from("mock://tank/level"),
+        None,
+        None,
+    )
+    .expect("valid logical plan");
+    let candidate = BindingCandidate::new(
+        binding_id,
+        binding_generation,
+        configuration,
+        compatibility,
+        0,
+        0,
+    );
+    let compiler_input =
+        BindingCompilerInput::new(&plan, candidate, BindingArtifactRole::ProducerRoute);
+    let compiler = HostBindingCompilerRegistration::new(WrongPayloadCompiler {
+        compatibility,
+        reservation,
+    });
+    let cursor = compiler
+        .start(&compiler_input)
+        .expect("wrong payload cursor");
+    let artifact = match compiler.step(
+        &compiler_input,
+        cursor,
+        &mut WorkBudget::new().with_remaining(WorkClass::BindingPolls, 1),
+    ) {
+        BindingCompilerStep::Complete(output) => output.into_artifact(),
+        _ => panic!("wrong payload compiler did not complete"),
+    };
+    let artifact_identity = BindingArtifactIdentity::new(
+        plan_set_generation,
+        plan_id,
+        binding_id,
+        binding_generation,
+        configuration,
+        compatibility,
+        BindingArtifactRole::ProducerRoute,
+    );
+    let envelope = BindingArtifactEnvelope::try_new(
+        artifact_identity,
+        BindingArtifactFootprint::new(1, 4),
+        artifact,
+    )
+    .expect("admitted wrong host payload type");
+    let artifact_ref = BindingArtifactRef::new(artifact_identity, SlotIndex::new(0));
+    let route = clinkz_wot_core::binding::BindingRouteKey::new(
+        binding_id,
+        binding_generation,
+        Generation::INITIAL,
+        plan_set_generation,
+        plan_id,
+        reservation,
+    );
+    let footprint = BindingLifetimeFootprint::new(2, 128);
+    let prepare = PrepareInput::new(route, artifact_ref, footprint);
+    let prepares = Arc::new(AtomicU32::new(0));
+    let binding = HostMockBinding {
+        compatibility,
+        external_readiness: false,
+        prepares: Arc::clone(&prepares),
+    };
+    let rejection = match binding.prepare(prepare, &envelope) {
+        Ok(_) => panic!("wrong host payload type reached preparation"),
+        Err(rejection) => rejection,
+    };
+
+    assert_eq!(prepares.load(Ordering::SeqCst), 0);
+    assert_eq!(rejection.input().route(), &route);
+    assert_eq!(rejection.input().artifact(), artifact_ref);
+    assert_eq!(rejection.into_input().admitted_footprint(), footprint);
 }

@@ -5,16 +5,17 @@ extern crate alloc;
 use alloc::{boxed::Box, rc::Rc, sync::Arc};
 use core::{
     cell::RefCell,
+    sync::atomic::{AtomicU32, Ordering},
     task::{Context, Poll},
 };
 
 use clinkz_wot_core::{
-    AffordanceTarget, BindingArtifact, BindingArtifactCompatibility, BindingArtifactFootprint,
-    BindingArtifactRole, BindingCallSettlement, BindingCancellationDisposition,
-    BindingCompilerBounds, BindingCompilerExtension, BindingCompilerInput, BindingCompilerOutput,
-    BindingCompilerStep, BindingConfigurationDigest, BindingDeliveryOutcome,
-    BindingExecutionSupport, BindingGeneration, BindingId, BindingIngressPolicy,
-    BindingInputRejection, BindingLifetimeFootprint, BindingOperationalError,
+    AffordanceTarget, BindingArtifact, BindingArtifactCompatibility, BindingArtifactEnvelope,
+    BindingArtifactFootprint, BindingArtifactRole, BindingCallSettlement,
+    BindingCancellationDisposition, BindingCompilerBounds, BindingCompilerExtension,
+    BindingCompilerInput, BindingCompilerOutput, BindingCompilerStep, BindingConfigurationDigest,
+    BindingDeliveryOutcome, BindingExecutionSupport, BindingGeneration, BindingId,
+    BindingIngressPolicy, BindingInputRejection, BindingLifetimeFootprint, BindingOperationalError,
     BindingRegistrationCapabilities, BindingRegistrationIdentity, BindingResourceDeclarations,
     BindingStateLayout, BindingStatusPolicy, CleanupPhaseContext, CollisionDomainId, CoreError,
     CorrelationId, EndpointReservationKey, ErrorContext, ErrorPhase, InteractionInput,
@@ -31,21 +32,68 @@ use clinkz_wot_foundation::{WorkBudget, WorkClass};
 pub struct MockCompilerCursor(bool);
 
 /// Immutable mock protocol route data.
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Debug)]
 pub struct MockArtifact {
-    target: Box<str>,
+    variant: MockArtifactVariant,
+    drop_probe: Option<Arc<AtomicU32>>,
+}
+
+#[derive(Debug)]
+enum MockArtifactVariant {
+    Target(Box<str>),
+    UnsupportedVariant,
+}
+
+impl MockArtifact {
+    /// Borrows the compiler-produced protocol target when this server owns the variant.
+    pub fn target(&self) -> Option<&str> {
+        match &self.variant {
+            MockArtifactVariant::Target(target) => Some(target),
+            MockArtifactVariant::UnsupportedVariant => None,
+        }
+    }
+
+    /// Creates the deliberately unsupported application-static test variant.
+    pub fn unsupported_variant() -> Self {
+        Self {
+            variant: MockArtifactVariant::UnsupportedVariant,
+            drop_probe: None,
+        }
+    }
+}
+
+impl Drop for MockArtifact {
+    fn drop(&mut self) {
+        if let Some(counter) = &self.drop_probe {
+            counter.fetch_add(1, Ordering::SeqCst);
+        }
+    }
 }
 
 /// Compiler paired with the mock server implementation.
-#[derive(Clone, Copy)]
+#[derive(Clone)]
 pub struct MockCompiler {
     compatibility: BindingArtifactCompatibility,
+    artifact_drops: Option<Arc<AtomicU32>>,
 }
 
 impl MockCompiler {
     /// Creates the compiler for one stable execution compatibility identity.
     pub const fn new(compatibility: BindingArtifactCompatibility) -> Self {
-        Self { compatibility }
+        Self {
+            compatibility,
+            artifact_drops: None,
+        }
+    }
+
+    fn with_artifact_drop_probe(
+        compatibility: BindingArtifactCompatibility,
+        artifact_drops: Arc<AtomicU32>,
+    ) -> Self {
+        Self {
+            compatibility,
+            artifact_drops: Some(artifact_drops),
+        }
     }
 
     fn route_reservation(&self, input: &BindingCompilerInput<'_>) -> RouteReservationIdentity {
@@ -107,15 +155,19 @@ impl BindingCompilerExtension for MockCompiler {
         }
         let target: Box<str> = input.logical_plan().resolved_target().into();
         let footprint = BindingArtifactFootprint::new(1, target.len() as u64);
+        let payload = MockArtifact {
+            variant: MockArtifactVariant::Target(target),
+            drop_probe: self.artifact_drops.as_ref().map(Arc::clone),
+        };
         let artifact = if input.role() == BindingArtifactRole::ProducerRoute {
             BindingArtifact::producer_route(
                 self.compatibility,
                 footprint,
                 self.route_reservation(input),
-                MockArtifact { target },
+                payload,
             )
         } else {
-            BindingArtifact::new(self.compatibility, footprint, MockArtifact { target })
+            BindingArtifact::new(self.compatibility, footprint, payload)
         };
         BindingCompilerStep::Complete(BindingCompilerOutput::new(artifact))
     }
@@ -124,9 +176,10 @@ impl BindingCompilerExtension for MockCompiler {
 }
 
 /// Protocol state retained in one caller-owned route slot.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Debug, Eq, PartialEq)]
 pub struct MockRouteState {
     phase: u8,
+    target: Box<str>,
 }
 
 /// Externally visible readiness state; zero means ready.
@@ -150,6 +203,7 @@ struct StaticProbeState {
     cleanup: u32,
     aborts: u32,
     closed: bool,
+    prepared_target: Option<Box<str>>,
 }
 
 impl Default for StaticProbeState {
@@ -163,6 +217,7 @@ impl Default for StaticProbeState {
             cleanup: 0,
             aborts: 0,
             closed: false,
+            prepared_target: None,
         }
     }
 }
@@ -171,6 +226,7 @@ impl Default for StaticProbeState {
 #[derive(Clone)]
 pub struct StaticPropertyReadProbe {
     state: Rc<RefCell<StaticProbeState>>,
+    artifact_drops: Arc<AtomicU32>,
 }
 
 impl StaticPropertyReadProbe {
@@ -197,6 +253,14 @@ impl StaticPropertyReadProbe {
 
     pub fn aborted_routes(&self) -> u32 {
         self.state.borrow().aborts
+    }
+
+    pub fn prepared_target(&self) -> Option<Box<str>> {
+        self.state.borrow().prepared_target.clone()
+    }
+
+    pub fn artifact_drops(&self) -> u32 {
+        self.artifact_drops.load(Ordering::SeqCst)
     }
 
     pub fn poll_after_close(&self, _cx: &mut Context<'_>) -> Poll<bool> {
@@ -255,7 +319,7 @@ impl PollServerBinding for ManualMockBinding {
     }
 
     fn route_state_layout(&self) -> BindingStateLayout {
-        BindingStateLayout::of::<MockRouteState>(BindingLifetimeFootprint::new(1, 1))
+        BindingStateLayout::of::<MockRouteState>(BindingLifetimeFootprint::new(2, 128))
     }
 
     fn readiness_state_layout(&self) -> BindingStateLayout {
@@ -269,29 +333,51 @@ impl PollServerBinding for ManualMockBinding {
     fn start_prepare(
         &mut self,
         input: PrepareInput,
+        artifact: &BindingArtifactEnvelope<MockArtifact>,
         route: &mut ServerRouteSlot<Self::RouteState>,
         _budget: &mut WorkBudget,
     ) -> Result<
         clinkz_wot_core::StartStatus<RoutePrepareOutcome<()>>,
         BindingInputRejection<PrepareInput>,
     > {
-        route.initialize(input, MockRouteState { phase: 1 });
-        if let Some(probe) = &self.probe {
-            let mut state = probe.borrow_mut();
-            assert_eq!(state.routes, 0);
-            state.routes = 1;
+        let Some(target) = artifact.artifact().payload().target() else {
+            let error = artifact_input_error(*input.route());
+            return Err(BindingInputRejection::new(input, error));
+        };
+        route.initialize(
+            input,
+            MockRouteState {
+                phase: 0,
+                target: Box::from(target),
+            },
+        );
+        if self.probe.is_some() {
+            Ok(clinkz_wot_core::StartStatus::Pending)
+        } else {
+            route.state_mut().phase = 1;
+            Ok(clinkz_wot_core::StartStatus::Ready(
+                RoutePrepareOutcome::Prepared(()),
+            ))
         }
-        Ok(clinkz_wot_core::StartStatus::Ready(
-            RoutePrepareOutcome::Prepared(()),
-        ))
     }
 
     fn poll_prepare(
         &mut self,
         _cx: &mut Context<'_>,
-        _route: &mut ServerRouteSlot<Self::RouteState>,
-        _budget: &mut WorkBudget,
+        route: &mut ServerRouteSlot<Self::RouteState>,
+        budget: &mut WorkBudget,
     ) -> Poll<RoutePrepareOutcome<()>> {
+        if budget.consume(WorkClass::BindingPolls, 1).is_err() {
+            return Poll::Pending;
+        }
+        let state = route.state_mut();
+        state.phase = 1;
+        if let Some(probe) = &self.probe {
+            let mut probe = probe.borrow_mut();
+            assert_eq!(probe.routes, 0);
+            probe.prepared_target = Some(state.target.clone());
+            probe.routes = 1;
+        }
         Poll::Ready(RoutePrepareOutcome::Prepared(()))
     }
 
@@ -651,11 +737,15 @@ fn static_property_read_fixture_with_readiness(
         0,
     );
     let state = Rc::new(RefCell::new(StaticProbeState::default()));
+    let artifact_drops = Arc::new(AtomicU32::new(0));
     let input = StaticBindingRegistrationInput::new(
         identity,
         BindingRegistrationCapabilities::producer_property_read(),
         BindingExecutionSupport::application_static(),
-        StaticBindingCompilerRegistration::new(MockCompiler::new(compatibility)),
+        StaticBindingCompilerRegistration::new(MockCompiler::with_artifact_drop_probe(
+            compatibility,
+            Arc::clone(&artifact_drops),
+        )),
         ManualMockBinding::with_probe(compatibility, state.clone(), fail_readiness),
         BindingResourceDeclarations::new(
             BindingLifetimeFootprint::new(4, 256),
@@ -668,7 +758,22 @@ fn static_property_read_fixture_with_readiness(
         Ok(registration) => registration,
         Err(_) => panic!("complete static mock registration was rejected"),
     };
-    (registration, StaticPropertyReadProbe { state })
+    (
+        registration,
+        StaticPropertyReadProbe {
+            state,
+            artifact_drops,
+        },
+    )
+}
+
+fn artifact_input_error(
+    route: clinkz_wot_core::binding::BindingRouteKey,
+) -> BindingOperationalError {
+    BindingOperationalError::for_route(
+        route,
+        CoreError::Binding(ErrorContext::new(ErrorPhase::Prepare, RetryClass::Never)),
+    )
 }
 
 fn cancelled<T>() -> BindingCallSettlement<T, ()> {
@@ -678,20 +783,109 @@ fn cancelled<T>() -> BindingCallSettlement<T, ()> {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use clinkz_wot_core::binding::BindingRouteKey;
+    use clinkz_wot_core::{BindingArtifactIdentity, BindingArtifactRef, PlanId, PlanSetGeneration};
+    use clinkz_wot_foundation::{Generation, SlotIndex};
+
+    #[test]
+    fn static_variant_mismatch_returns_input_before_route_state_or_side_effect() {
+        let compatibility = BindingArtifactCompatibility::new([0x41; 16]);
+        let registration_identity = BindingRegistrationIdentity::new(
+            BindingId::new(7),
+            BindingGeneration::INITIAL,
+            BindingConfigurationDigest::new([0x52; 32]),
+            compatibility,
+            0,
+        );
+        let resources = BindingResourceDeclarations::new(
+            BindingLifetimeFootprint::new(4, 256),
+            BindingLifetimeFootprint::new(4, 256),
+        );
+        let mut registration = match static_registration(
+            registration_identity,
+            compatibility,
+            BindingRegistrationCapabilities::producer_property_read(),
+            BindingExecutionSupport::application_static(),
+            resources,
+            BindingIngressPolicy::hidden(),
+            BindingStatusPolicy::new(1, 64),
+            0,
+        ) {
+            Ok(registration) => registration,
+            Err(_) => panic!("complete static registration was rejected"),
+        };
+        let plan_id = PlanId::new(SlotIndex::new(0), Generation::INITIAL);
+        let plan_set_generation = PlanSetGeneration::new(Generation::INITIAL);
+        let artifact_identity = BindingArtifactIdentity::new(
+            plan_set_generation,
+            plan_id,
+            registration_identity.binding_id(),
+            registration_identity.binding_generation(),
+            registration_identity.configuration(),
+            compatibility,
+            BindingArtifactRole::ProducerRoute,
+        );
+        let reservation = RouteReservationIdentity::new(
+            CollisionDomainId::new([0x61; 16]),
+            EndpointReservationKey::new([0x62; 32]),
+        );
+        let artifact_footprint = BindingArtifactFootprint::new(1, 1);
+        let envelope = BindingArtifactEnvelope::try_new(
+            artifact_identity,
+            artifact_footprint,
+            BindingArtifact::producer_route(
+                compatibility,
+                artifact_footprint,
+                reservation,
+                MockArtifact::unsupported_variant(),
+            ),
+        )
+        .expect("admitted wrong static variant");
+        let artifact_ref = BindingArtifactRef::new(artifact_identity, SlotIndex::new(0));
+        let route = BindingRouteKey::new(
+            registration_identity.binding_id(),
+            registration_identity.binding_generation(),
+            Generation::INITIAL,
+            plan_set_generation,
+            plan_id,
+            reservation,
+        );
+        let prepare = PrepareInput::new(route, artifact_ref, resources.route_state());
+        let mut route_slot = ServerRouteSlot::new();
+        let rejection = registration
+            .server_mut()
+            .start_prepare(prepare, &envelope, &mut route_slot, &mut WorkBudget::new())
+            .expect_err("unsupported static artifact variant must be rejected");
+
+        assert!(route_slot.is_vacant());
+        assert_eq!(rejection.input().route(), &route);
+        assert_eq!(rejection.input().artifact(), artifact_ref);
+        assert_eq!(
+            rejection.into_input().admitted_footprint(),
+            resources.route_state()
+        );
+    }
+}
+
 #[cfg(feature = "std")]
 mod host_fixture {
     use alloc::{boxed::Box, sync::Arc};
     use core::pin::Pin;
+    use core::sync::atomic::{AtomicU32, Ordering};
     use core::task::{Context, Poll};
 
     use clinkz_wot_core::{
-        AffordanceTarget, BindingArtifactCompatibility, BindingCallSettlement,
-        BindingConfigurationDigest, BindingDeliveryOutcome, BindingExecutionSupport,
-        BindingGeneration, BindingId, BindingIngressPolicy, BindingInputRejection,
-        BindingLifetimeFootprint, BindingOperationalError, BindingRegistrationCapabilities,
-        BindingRegistrationIdentity, BindingResourceDeclarations, BindingStatusPolicy,
-        CleanupPhaseContext, CoreError, CorrelationId, Deadline, ErrorContext, ErrorPhase,
-        HostActiveRouteGuard, HostBindingCall, HostBindingCallBox, HostBindingCompilerRegistration,
+        AffordanceTarget, BindingArtifactCompatibility, BindingArtifactEnvelope,
+        BindingCallSettlement, BindingCancellationDisposition, BindingConfigurationDigest,
+        BindingDeliveryOutcome, BindingExecutionSupport, BindingGeneration, BindingId,
+        BindingIngressPolicy, BindingInputRejection, BindingLifetimeFootprint,
+        BindingOperationalError, BindingRegistrationCapabilities, BindingRegistrationIdentity,
+        BindingResourceDeclarations, BindingStatusPolicy, CleanupPhaseContext, CoreError,
+        CorrelationId, Deadline, ErrorContext, ErrorPhase, HostActiveRouteGuard,
+        HostBindingArtifact, HostBindingCall, HostBindingCallBox, HostBindingCompilerRegistration,
         HostBindingRegistration, HostBindingRegistrationInput, HostCommittedRouteGuard,
         HostPreparedRouteGuard, HostRouteCleanupSuccessor, InteractionInput, NoCleanupSuccessor,
         PrepareInput, RetryClass, RouteAbortInput, RouteActivationOutcome, RouteCleanupOutcome,
@@ -701,7 +895,7 @@ mod host_fixture {
     };
     use clinkz_wot_foundation::{WorkBudget, WorkClass};
 
-    use super::MockCompiler;
+    use super::{MockArtifact, MockCompiler, artifact_input_error};
 
     struct ProbeState {
         queued: Option<(Box<str>, InteractionInput)>,
@@ -719,6 +913,7 @@ mod host_fixture {
         abort_rejections: u32,
         shutdown_rejections: u32,
         closed: bool,
+        prepared_target: Option<Box<str>>,
     }
 
     impl Default for ProbeState {
@@ -739,6 +934,7 @@ mod host_fixture {
                 abort_rejections: 0,
                 shutdown_rejections: 0,
                 closed: false,
+                prepared_target: None,
             }
         }
     }
@@ -748,6 +944,7 @@ mod host_fixture {
     #[derive(Clone)]
     pub struct HostPropertyReadProbe {
         state: WotLock<ProbeState>,
+        artifact_drops: Arc<AtomicU32>,
     }
 
     impl HostPropertyReadProbe {
@@ -797,6 +994,98 @@ mod host_fixture {
                     state.shutdown_rejections,
                 )
             })
+        }
+
+        pub fn prepared_target(&self) -> Option<Box<str>> {
+            self.state.with_read(|state| state.prepared_target.clone())
+        }
+
+        pub fn artifact_drops(&self) -> u32 {
+            self.artifact_drops.load(Ordering::SeqCst)
+        }
+    }
+
+    struct PrepareCall {
+        input: Option<PrepareInput>,
+        target: Option<Box<str>>,
+        probe: WotLock<ProbeState>,
+        pending_once: bool,
+    }
+
+    impl HostBindingCall<RoutePrepareOutcome<HostPreparedRouteGuard>, HostRouteCleanupSuccessor>
+        for PrepareCall
+    {
+        fn lifetime_footprint(&self) -> BindingLifetimeFootprint {
+            BindingLifetimeFootprint::new(2, 128)
+        }
+
+        fn poll_result(
+            mut self: Pin<&mut Self>,
+            cx: &mut Context<'_>,
+            budget: &mut WorkBudget,
+        ) -> Poll<RoutePrepareOutcome<HostPreparedRouteGuard>> {
+            if budget.consume(WorkClass::BindingPolls, 1).is_err() {
+                return Poll::Pending;
+            }
+            if self.pending_once {
+                self.pending_once = false;
+                cx.waker().wake_by_ref();
+                return Poll::Pending;
+            }
+            let input = self.input.take().expect("prepare call completed twice");
+            let target = self.target.take().expect("prepare target completed twice");
+            self.probe.with(|state| {
+                assert_eq!(state.routes, 0);
+                state.prepared_target = Some(target.clone());
+                state.routes = 1;
+            });
+            let guard =
+                HostPreparedRouteGuard::new(input, BindingLifetimeFootprint::new(2, 128), target);
+            Poll::Ready(RoutePrepareOutcome::Prepared(guard))
+        }
+
+        fn start_cancel(
+            self: Pin<&mut Self>,
+            _cx: &mut Context<'_>,
+            _cleanup: CleanupPhaseContext,
+            _budget: &mut WorkBudget,
+        ) -> clinkz_wot_core::CoreResult<
+            StartStatus<
+                BindingCallSettlement<
+                    RoutePrepareOutcome<HostPreparedRouteGuard>,
+                    HostRouteCleanupSuccessor,
+                >,
+            >,
+        > {
+            Ok(StartStatus::Pending)
+        }
+
+        fn poll_cancel(
+            mut self: Pin<&mut Self>,
+            _cx: &mut Context<'_>,
+            _budget: &mut WorkBudget,
+        ) -> Poll<
+            clinkz_wot_core::CoreResult<
+                BindingCallSettlement<
+                    RoutePrepareOutcome<HostPreparedRouteGuard>,
+                    HostRouteCleanupSuccessor,
+                >,
+            >,
+        > {
+            let input = self.input.take().expect("prepare call cancelled twice");
+            self.target = None;
+            Poll::Ready(Ok(BindingCallSettlement::Cancelled {
+                retry_class: RetryClass::Never,
+                disposition: BindingCancellationDisposition::Complete {
+                    successor: HostRouteCleanupSuccessor::NoRouteResource {
+                        route: *input.route(),
+                    },
+                },
+            }))
+        }
+
+        fn next_deadline(&self) -> Option<Deadline> {
+            None
         }
     }
 
@@ -1012,6 +1301,7 @@ mod host_fixture {
         fn prepare(
             &self,
             input: PrepareInput,
+            artifact: &BindingArtifactEnvelope<HostBindingArtifact>,
         ) -> Result<
             HostBindingCallBox<
                 RoutePrepareOutcome<HostPreparedRouteGuard>,
@@ -1019,15 +1309,23 @@ mod host_fixture {
             >,
             BindingInputRejection<PrepareInput>,
         > {
-            self.probe.with(|state| {
-                assert_eq!(state.routes, 0);
-                state.routes = 1;
-            });
-            let guard =
-                HostPreparedRouteGuard::new(input, BindingLifetimeFootprint::new(1, 128), 0_u8);
-            Ok(HostBindingCallBox::new(ReadyCall::new(
-                RoutePrepareOutcome::Prepared(guard),
-            )))
+            let Some(payload) = artifact
+                .artifact()
+                .try_payload::<MockArtifact>(self.compatibility)
+            else {
+                let error = artifact_input_error(*input.route());
+                return Err(BindingInputRejection::new(input, error));
+            };
+            let Some(target) = payload.target() else {
+                let error = artifact_input_error(*input.route());
+                return Err(BindingInputRejection::new(input, error));
+            };
+            Ok(HostBindingCallBox::new(PrepareCall {
+                input: Some(input),
+                target: Some(Box::from(target)),
+                probe: self.probe.clone(),
+                pending_once: true,
+            }))
         }
 
         fn start_readiness(
@@ -1246,11 +1544,15 @@ mod host_fixture {
         probe_state.reject_abort_once = reject_abort_once;
         probe_state.reject_shutdown_once = reject_shutdown_once;
         let state = WotLock::new(probe_state);
+        let artifact_drops = Arc::new(AtomicU32::new(0));
         let input = HostBindingRegistrationInput::new(
             identity,
             BindingRegistrationCapabilities::producer_property_read(),
             BindingExecutionSupport::host_erased(),
-            HostBindingCompilerRegistration::new(MockCompiler::new(compatibility)),
+            HostBindingCompilerRegistration::new(MockCompiler::with_artifact_drop_probe(
+                compatibility,
+                Arc::clone(&artifact_drops),
+            )),
             Box::new(HostMockBinding {
                 compatibility,
                 probe: state.clone(),
@@ -1266,7 +1568,13 @@ mod host_fixture {
             Ok(registration) => registration,
             Err(_) => panic!("complete host mock registration was rejected"),
         };
-        (registration, HostPropertyReadProbe { state })
+        (
+            registration,
+            HostPropertyReadProbe {
+                state,
+                artifact_drops,
+            },
+        )
     }
 }
 

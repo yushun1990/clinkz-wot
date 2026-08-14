@@ -17,15 +17,16 @@ use std::any::Any;
 
 use clinkz_wot_foundation::{Generation, WorkBudget};
 
-#[cfg(feature = "std")]
-use crate::HostBindingCompilerRegistration;
 use crate::{
-    AffordanceTarget, BindingArtifactCompatibility, BindingArtifactRef, BindingConfigurationDigest,
-    BindingGeneration, BindingId, CleanupOperation, CleanupRecord, CleanupSlotId, CoreError,
-    CoreResult, CorrelationId, Deadline, ErrorContext, ErrorPhase, InteractionInput,
-    InteractionOutput, PlanId, PlanSetGeneration, RetryClass, StartStatus, ThingId,
+    AffordanceTarget, BindingArtifactCompatibility, BindingArtifactEnvelope, BindingArtifactRef,
+    BindingConfigurationDigest, BindingGeneration, BindingId, CleanupOperation, CleanupRecord,
+    CleanupSlotId, CoreError, CoreResult, CorrelationId, Deadline, ErrorContext, ErrorPhase,
+    InteractionInput, InteractionOutput, PlanId, PlanSetGeneration, RetryClass, StartStatus,
+    ThingId,
 };
 use crate::{BindingCompilerExtension, StaticBindingCompilerRegistration};
+#[cfg(feature = "std")]
+use crate::{HostBindingArtifact, HostBindingCompilerRegistration};
 
 // ---------------------------------------------------------------------------
 // Registration and bounded-resource declarations
@@ -1525,10 +1526,12 @@ pub trait PollServerBinding {
     /// Declares the response associated-state layout.
     fn response_state_layout(&self) -> BindingStateLayout;
 
-    /// Starts preparation and transfers input only on acceptance.
+    /// Starts preparation from one checked, non-retainable artifact borrow and
+    /// transfers input only on acceptance.
     fn start_prepare(
         &mut self,
         input: PrepareInput,
+        artifact: &BindingArtifactEnvelope<<Self::Compiler as BindingCompilerExtension>::Artifact>,
         route: &mut ServerRouteSlot<Self::RouteState>,
         budget: &mut WorkBudget,
     ) -> Result<StartStatus<RoutePrepareOutcome<()>>, BindingInputRejection<PrepareInput>>;
@@ -2203,10 +2206,12 @@ pub trait RouteServerBinding: Send + Sync {
     /// Returns the compatibility identity consumed at bundle validation.
     fn artifact_compatibility(&self) -> BindingArtifactCompatibility;
 
-    /// Creates an owned preparation call or returns the complete input.
+    /// Creates an owned preparation call from one checked, non-retainable
+    /// artifact borrow or returns the complete input.
     fn prepare(
         &self,
         input: PrepareInput,
+        artifact: &BindingArtifactEnvelope<HostBindingArtifact>,
     ) -> Result<
         HostBindingCallBox<RoutePrepareOutcome<HostPreparedRouteGuard>, HostRouteCleanupSuccessor>,
         BindingInputRejection<PrepareInput>,

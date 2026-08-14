@@ -87,6 +87,11 @@ fn host_runner_enters_servient_for_one_complete_property_read() {
     let waker = Waker::noop();
     let mut cx = Context::from_waker(waker);
     drive_until_idle(&servient, &mut cx);
+    assert_eq!(
+        probe.prepared_target().as_deref(),
+        Some("mock://tank/level")
+    );
+    assert_eq!(probe.artifact_drops(), 0);
 
     probe.enqueue_property_read("level", InteractionInput::empty());
     drive_until_idle(&servient, &mut cx);
@@ -99,6 +104,7 @@ fn host_runner_enters_servient_for_one_complete_property_read() {
     drive_until_idle(&servient, &mut cx);
     assert_eq!(probe.outstanding_counts(), (0, 0, 0, 0));
     assert_eq!(probe.poll_after_close(&mut cx), Poll::Ready(false));
+    assert_eq!(probe.artifact_drops(), 1);
 }
 
 #[test]
@@ -120,6 +126,7 @@ fn accepted_request_survives_exhausted_handler_budget() {
     let waker = Waker::noop();
     let mut cx = Context::from_waker(waker);
     drive_until_idle(&servient, &mut cx);
+    assert_eq!(probe.artifact_drops(), 0);
 
     probe.enqueue_property_read("level", InteractionInput::empty());
     let mut exhausted = WorkBudget::new().with_remaining(WorkClass::BindingPolls, 8);
