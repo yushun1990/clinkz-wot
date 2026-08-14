@@ -36,8 +36,14 @@ jobs:
         if: github.event_name == 'push'
         run: git diff --check "${{ github.event.before }}..${{ github.sha }}"
 
+      - name: Validate current technical authority
+        run: tools/check-design-artifacts.sh
+
       - name: Run locked workspace tests
         run: cargo test --workspace --locked
+
+      - name: Run no-default Property Read integration tests
+        run: cargo test --locked -p clinkz-wot-servient --no-default-features --test property_read
 
       - name: Check representative feature profiles
         run: |

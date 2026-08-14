@@ -44,12 +44,10 @@ reference, and makes `WorkBudget` nonduplicable. This does not reopen the
 completed WP-000 package; new evidence is recorded against WP-100 before
 implementation continues.
 
-The machine-readable tranche and blocking-scope records in
-`docs/work-packages/index.toml` are the source of truth for these prerequisites
-and unresolved impacts. The broad handler implementation entry continues to
-require `tools/check-design-artifacts.sh --handler-entry-ready`. Smaller
-disjoint tranches use their own ADR-0013 admission and completion checks; they
-do not weaken or bypass that broad command.
+The machine-readable package and dependency records in
+`docs/work-packages/index.toml` are the source of truth for package order and
+current ownership. Technical admission is established by current authority,
+owning-crate tests, and the Property Read aggregate dependency gate.
 
 The broad `WP-100-HANDLER-ENTRY` is also blocked by
 `PROPERTY-READ-ARCHITECTURE`. Its exact
@@ -70,23 +68,16 @@ erasure, sparse storage, and execution. Those exclusions avoid a cycle in
 which the only broad-entry exemption would require migrations that broad entry
 itself blocks.
 
-The exact non-implementation candidate is review-pending. It freezes the trait
-source projection, an external three-cell compile contract, negative async/step
-scope checks, every completed predecessor regression, and the exact two-file
-implementation boundary. The candidate does not change either Core path or
-create either planned architecture fixture root. Its immutable commit is the
-single child of frozen base
-`2d7087d100d4a0d72cabb77476175bf60b0a7925`; the immediately following
-registration checkpoint records that commit before any independent review.
+The synchronous `ReadPropertyHandler` public contract and its negative
+async/step scope are owned by Core integration and rustdoc compile-fail tests.
 
-After the completed foundation refresh, the next candidate contains only five
+The passive handler surface contains five
 passive, additive Core values: `CancellationView`, `SubscriptionAcceptance`,
 `HandlerFootprint`, `HandlerStep`, and `StaticHandlerRegistration`. It
 deliberately excludes `Deadline`, request/context/target migration, handler
 traits, storage, execution, Producer integration, Servient setters, old API
-removal, state machines, and performance workloads. Its exact entry boundary is
-recorded by
-`docs/audits/WP-100-handler-value-primitives-entry.md`.
+removal, state machines, and performance workloads. Core tests own the exact
+schema, attributes, passive value semantics, and redacted diagnostics.
 
 The value-primitives tranche's affected requirement set is exactly
 `API-SURFACE-001` and `HANDLER-VALUE-001`. `HANDLER-VALUE-001` completely owns
@@ -108,13 +99,11 @@ admission or owning-phase error disposition.
 The corrective order is
 `WP-100-FOUNDATION-REFRESH -> WP-100-LOGICAL-TIME-CORRECTION ->
 WP-100-DEADLINE-CLEANUP-TIMING`. The first tranche is Foundation-owned and
-replaces the time claims in historical WP-000 `time-and-generation-api`
-evidence while reaffirming its disjoint generation claims. The second is
+owns the extended logical-time claims while reaffirming its disjoint generation
+claims. The second is
 Core-owned and implements Deadline, CleanupRecord logical ordering, and
 incomparable-clock disposition. This decided plan is not implementation
-admission: each tranche still requires its own ADR-0013 admission record and
-completion evidence. The broad handler entry remains blocked until both
-complete.
+admission. The broad handler entry remains blocked until both complete.
 
 `WP-100-LOGICAL-TIME-CORRECTION` is complete. Its exact one-file Foundation
 implementation preserves all public time representations and the
@@ -124,15 +113,12 @@ exhaustion semantics.
 
 `WP-100-DEADLINE-CLEANUP-TIMING` is complete. Its only implementation paths
 are `core/src/deadline.rs`, `core/src/status.rs`, and the Core root
-module/export in `core/src/lib.rs`. Completion evidence proves Deadline
+module/export in `core/src/lib.rs`. Core tests prove Deadline
 NONE/finite/incomparable behavior,
 `CleanupRecord::try_with_timing` checked logical ordering, the four error
 dispositions, delayed polling, and the timeout linearization oracle across all
 three Core feature cells. It changes no handler, dispatcher, binding, Servient,
-scheduler, state-machine, resource, removal, or performance scope. Its exact
-entry and completion records are
-`docs/audits/WP-100-deadline-cleanup-timing-entry.md` and
-`docs/evidence/WP-100-deadline-cleanup-timing.toml`.
+scheduler, state-machine, resource, removal, or performance scope.
 
 ## Requirements
 

@@ -1,10 +1,5 @@
 #!/usr/bin/env sh
-# Feature-matrix build-check (audit defect AD5 / phase-p4 §4.3).
-#
-# Build-checks ALL valid feature combinations per crate (~28) to catch
-# compile-time feature-interaction defects. This is a BUILD-CHECK
-# (`cargo check`), not a test run — test coverage is a representative
-# subset (see docs/design.md).
+# Build-check the supported feature cells for every product crate.
 
 set -eu
 
@@ -13,7 +8,7 @@ fail=0
 
 check() {
     desc="$1"; shift
-    if cargo check "$@" 2>/dev/null; then
+    if cargo check --locked "$@" 2>/dev/null; then
         pass=$((pass + 1))
         # echo "  ✓ $desc"
     else
@@ -27,11 +22,21 @@ check "td default"              -p clinkz-wot-td
 check "td no-features"          -p clinkz-wot-td --no-default-features
 check "td td2-preview"          -p clinkz-wot-td --features td2-preview
 
+echo "=== foundation ==="
+check "foundation default"      -p clinkz-wot-foundation
+check "foundation no-features"  -p clinkz-wot-foundation --no-default-features
+check "foundation async"        -p clinkz-wot-foundation --no-default-features --features async
+
 echo "=== core ==="
 check "core default"            -p clinkz-wot-core
 check "core no-features"        -p clinkz-wot-core --no-default-features
 check "core async"              -p clinkz-wot-core --no-default-features --features async
 check "core td2-preview"        -p clinkz-wot-core --features td2-preview
+
+echo "=== planning ==="
+check "planning default"        -p clinkz-wot-planning
+check "planning no-features"    -p clinkz-wot-planning --no-default-features
+check "planning async"          -p clinkz-wot-planning --no-default-features --features async
 
 echo "=== protocol-bindings ==="
 check "pb default"              -p clinkz-wot-protocol-bindings
@@ -56,6 +61,10 @@ check "servient td2-preview"    -p clinkz-wot-servient --features td2-preview
 echo "=== codec-cbor ==="
 check "cbor default"            -p clinkz-wot-codec-cbor
 check "cbor no-features"        -p clinkz-wot-codec-cbor --no-default-features
+
+echo "=== facade ==="
+check "facade default"          -p clinkz-wot
+check "facade no-features"      -p clinkz-wot --no-default-features
 
 echo ""
 echo "Feature matrix: $pass passed, $fail failed"

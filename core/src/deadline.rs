@@ -5,6 +5,17 @@ use core::cmp::Ordering;
 use clinkz_wot_foundation::MonotonicInstant;
 
 /// Optional terminal instant in one extended logical clock domain.
+///
+/// Callers construct deadlines through [`Deadline::at`]; the optional instant
+/// cannot be forged directly.
+///
+/// ```compile_fail
+/// use clinkz_wot_core::Deadline;
+/// use clinkz_wot_foundation::{ClockId, MonotonicInstant};
+/// let _ = Deadline {
+///     instant: Some(MonotonicInstant::new(ClockId::new(1), 2)),
+/// };
+/// ```
 #[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
 pub struct Deadline {
     instant: Option<MonotonicInstant>,

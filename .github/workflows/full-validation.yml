@@ -17,24 +17,22 @@ jobs:
     name: full-validation
     runs-on: ubuntu-24.04
     steps:
-      - name: Check out complete history
+      - name: Check out repository
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
-        with:
-          fetch-depth: 0
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4
         with:
           toolchain: 1.95.0
 
-      - name: Validate active design and completed evidence
+      - name: Validate current technical authority
         run: tools/check-design-artifacts.sh
-
-      - name: Validate registered work-package and task evidence
-        run: cargo run --locked --quiet --manifest-path tools/design-check/Cargo.toml -- check-work-packages
 
       - name: Run locked workspace tests
         run: cargo test --workspace --locked
+
+      - name: Run no-default Property Read integration tests
+        run: cargo test --locked -p clinkz-wot-servient --no-default-features --test property_read
 
       - name: Validate the supported feature matrix
         run: sh scripts/check-feature-matrix.sh

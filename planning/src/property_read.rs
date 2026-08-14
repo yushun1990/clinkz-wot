@@ -141,6 +141,16 @@ enum PropertyReadBuildState<C, A> {
 }
 
 /// Opaque resumable state for one bounded Property Read plan build.
+///
+/// Callers may retain and return the cursor, but cannot inspect or forge its
+/// state.
+///
+/// ```compile_fail
+/// use clinkz_wot_planning::PropertyReadBuildCursor;
+/// fn inspect<C, A>(cursor: PropertyReadBuildCursor<C, A>) {
+///     let _ = cursor.state;
+/// }
+/// ```
 #[derive(Debug, Eq, PartialEq)]
 pub struct PropertyReadBuildCursor<C, A> {
     state: PropertyReadBuildState<C, A>,
@@ -625,7 +635,12 @@ fn compiler_contract_error(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use clinkz_wot_core::{BindingCompilerOutput, PlanSetGeneration};
+    use clinkz_wot_core::binding::BindingRouteKey;
+    use clinkz_wot_core::{
+        BindingCompilerOutput, BindingLifetimeFootprint, BindingRegistrationIdentity,
+        CollisionDomainId, EndpointReservationKey, PlanSetGeneration, PrepareInput,
+        RouteReservationIdentity,
+    };
     use clinkz_wot_foundation::Generation;
     use clinkz_wot_td::{
         affordance::{InteractionHelper, PropertyAffordance},
@@ -646,6 +661,13 @@ mod tests {
     #[derive(Clone, Copy)]
     struct MockCompiler {
         compatibility: BindingArtifactCompatibility,
+    }
+
+    fn route_reservation() -> RouteReservationIdentity {
+        RouteReservationIdentity::new(
+            CollisionDomainId::new([0x21; 16]),
+            EndpointReservationKey::new([0x22; 32]),
+        )
     }
 
     impl BindingCompilerExtension for MockCompiler {
@@ -687,11 +709,17 @@ mod tests {
             }
             let target: Box<str> = input.logical_plan().resolved_target().into();
             let footprint = BindingArtifactFootprint::new(1, target.len() as u64);
-            BindingCompilerStep::Complete(BindingCompilerOutput::new(BindingArtifact::new(
-                self.compatibility,
-                footprint,
-                MockArtifact { target },
-            )))
+            let artifact = if input.role() == BindingArtifactRole::ProducerRoute {
+                BindingArtifact::producer_route(
+                    self.compatibility,
+                    footprint,
+                    route_reservation(),
+                    MockArtifact { target },
+                )
+            } else {
+                BindingArtifact::new(self.compatibility, footprint, MockArtifact { target })
+            };
+            BindingCompilerStep::Complete(BindingCompilerOutput::new(artifact))
         }
 
         fn abort(&self, _cursor: Self::Cursor) {}
@@ -854,6 +882,74 @@ mod tests {
                 .map(|artifact| artifact.target.as_ref()),
             Some("mock://tank/level")
         );
+    }
+
+    #[test]
+    fn producer_route_artifact_reaches_prepare_input_with_compiler_reservation() {
+        let td = thing();
+        let compatibility = BindingArtifactCompatibility::new([13; 16]);
+        let registration = BindingRegistrationIdentity::new(
+            BindingId::new(11),
+            BindingGeneration::new(Generation::INITIAL),
+            BindingConfigurationDigest::new([12; 32]),
+            compatibility,
+            0,
+        );
+        let plan_set_generation = PlanSetGeneration::new(Generation::INITIAL);
+        let registrations = [StaticBindingCompilerRegistration::new(MockCompiler {
+            compatibility,
+        })];
+        let input = PlanBuildInput::new(&td, &registrations[..], plan_set_generation);
+        let compiler = PropertyReadPlanCompiler::producer_route(plan_id(), registration, 0, 0);
+        let cursor = compiler.start(&input).expect("Producer-route cursor");
+        let mut budget = WorkBudget::new().with_remaining(WorkClass::BindingPolls, 2);
+        let output = match compiler.step(&input, cursor, &mut budget) {
+            PlanBuildStep::Complete(output) => output,
+            PlanBuildStep::Pending(cursor) => match compiler.step(&input, cursor, &mut budget) {
+                PlanBuildStep::Complete(output) => output,
+                other => panic!("Producer-route compiler did not complete: {other:?}"),
+            },
+            PlanBuildStep::Failed(failure) => {
+                panic!("Producer-route compiler failed: {:?}", failure.error())
+            }
+        };
+
+        let artifact_ref = output.artifact_refs()[0];
+        let envelope = &output.artifacts()[artifact_ref.artifact_slot().get() as usize];
+        assert_eq!(
+            artifact_ref.identity().role(),
+            BindingArtifactRole::ProducerRoute
+        );
+        assert_eq!(
+            artifact_ref.identity().binding_id(),
+            registration.binding_id()
+        );
+        assert_eq!(
+            artifact_ref.identity().binding_generation(),
+            registration.binding_generation(),
+        );
+        assert_eq!(
+            artifact_ref.identity().plan_set_generation(),
+            plan_set_generation
+        );
+        assert_eq!(envelope.identity(), artifact_ref.identity());
+
+        let reservation = envelope
+            .route_reservation()
+            .expect("Producer-route compiler owns canonical reservation identity");
+        assert_eq!(reservation, route_reservation());
+        let route = BindingRouteKey::new(
+            artifact_ref.identity().binding_id(),
+            artifact_ref.identity().binding_generation(),
+            Generation::INITIAL,
+            artifact_ref.identity().plan_set_generation(),
+            artifact_ref.identity().plan_id(),
+            reservation,
+        );
+        let prepare = PrepareInput::new(route, artifact_ref, BindingLifetimeFootprint::new(2, 128));
+        assert_eq!(prepare.artifact(), artifact_ref);
+        assert_eq!(prepare.route().reservation(), reservation);
+        assert_eq!(prepare.route().plan_id(), artifact_ref.identity().plan_id());
     }
 
     #[test]

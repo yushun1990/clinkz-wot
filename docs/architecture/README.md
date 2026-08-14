@@ -57,8 +57,8 @@ The authority order is:
    and evidence artifacts own their exact machine-readable projections.
 5. Work packages own migration order, admission, and evidence, not behavior.
 
-`PLAN.md`, `EXECUTION.md`, `PROJECT_STATE.md`, reviews, audits, and thinking
-notes are non-normative. A conflict between normative sources is a gate
+`PLAN.md`, task sessions, pull requests, reviews, and thinking notes are
+non-normative. A conflict between normative sources is a gate
 failure, not a precedence shortcut.
 
 ADR-0018 supersedes residual decomposition and ADR-0014's D3 target DAG.

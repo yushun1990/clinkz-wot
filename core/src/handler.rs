@@ -25,6 +25,26 @@ impl CancellationView {
 }
 
 /// The response produced by a successful subscription-start handler.
+///
+/// The payload is intentionally accessible only through the consuming API,
+/// and the acceptance itself is linear.
+///
+/// ```compile_fail
+/// use clinkz_wot_core::{InteractionOutput, SubscriptionAcceptance};
+/// let _ = SubscriptionAcceptance { response: InteractionOutput::empty() };
+/// ```
+///
+/// ```compile_fail
+/// use clinkz_wot_core::SubscriptionAcceptance;
+/// fn require_copy<T: Copy>() {}
+/// require_copy::<SubscriptionAcceptance>();
+/// ```
+///
+/// ```compile_fail
+/// #![deny(unused_must_use)]
+/// use clinkz_wot_core::{InteractionOutput, SubscriptionAcceptance};
+/// SubscriptionAcceptance::new(InteractionOutput::empty());
+/// ```
 #[derive(Debug, Eq, PartialEq)]
 #[must_use = "a successful acceptance must be consumed by the subscription transaction"]
 pub struct SubscriptionAcceptance {
@@ -49,6 +69,21 @@ impl SubscriptionAcceptance {
 }
 
 /// Application-owned worst-case storage declared for one handler.
+///
+/// ```compile_fail
+/// use clinkz_wot_core::HandlerFootprint;
+/// let _ = HandlerFootprint {
+///     retained_bytes: 1,
+///     pending_call_bytes: 2,
+///     subscription_bytes: 3,
+/// };
+/// ```
+///
+/// ```compile_fail
+/// use clinkz_wot_core::HandlerFootprint;
+/// fn require_default<T: Default>() {}
+/// require_default::<HandlerFootprint>();
+/// ```
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct HandlerFootprint {
     retained_bytes: u64,
@@ -87,6 +122,18 @@ impl HandlerFootprint {
 }
 
 /// One bounded step of a portable handler.
+///
+/// ```compile_fail
+/// #![deny(unused_must_use)]
+/// use clinkz_wot_core::HandlerStep;
+/// HandlerStep::<()>::Pending;
+/// ```
+///
+/// ```compile_fail
+/// use clinkz_wot_core::HandlerStep;
+/// fn require_clone<T: Clone>() {}
+/// require_clone::<HandlerStep<()>>();
+/// ```
 #[derive(Debug, Eq, PartialEq)]
 #[must_use]
 pub enum HandlerStep<R> {
@@ -97,6 +144,17 @@ pub enum HandlerStep<R> {
 }
 
 /// A borrowed handler registration for a statically authored table.
+///
+/// ```compile_fail
+/// use clinkz_wot_core::{HandlerFootprint, HandlerSlotId, StaticHandlerRegistration};
+/// use clinkz_wot_foundation::{Generation, SlotIndex};
+/// let handler = ();
+/// let _ = StaticHandlerRegistration {
+///     slot_id: HandlerSlotId::new(SlotIndex::new(1), Generation::INITIAL),
+///     handler: &handler,
+///     footprint: HandlerFootprint::new(2, 3, 5),
+/// };
+/// ```
 pub struct StaticHandlerRegistration<'h, H> {
     slot_id: HandlerSlotId,
     handler: &'h H,
@@ -105,11 +163,7 @@ pub struct StaticHandlerRegistration<'h, H> {
 
 impl<'h, H> StaticHandlerRegistration<'h, H> {
     /// Creates a registration for a handler slot.
-    pub const fn new(
-        slot_id: HandlerSlotId,
-        handler: &'h H,
-        footprint: HandlerFootprint,
-    ) -> Self {
+    pub const fn new(slot_id: HandlerSlotId, handler: &'h H, footprint: HandlerFootprint) -> Self {
         Self {
             slot_id,
             handler,
@@ -152,6 +206,38 @@ impl<H> core::fmt::Debug for StaticHandlerRegistration<'_, H> {
 }
 
 /// Call-lifetime dispatch identity supplied to an operation handler.
+///
+/// Construction is validated and the fields cannot be forged by callers.
+/// The context deliberately has neither `Default` nor `Hash` semantics.
+///
+/// ```compile_fail
+/// use clinkz_wot_core::HandlerContext;
+/// fn require_default<T: Default>() {}
+/// require_default::<HandlerContext<'static>>();
+/// ```
+///
+/// ```compile_fail
+/// use core::hash::Hash;
+/// use clinkz_wot_core::HandlerContext;
+/// fn require_hash<T: Hash>() {}
+/// require_hash::<HandlerContext<'static>>();
+/// ```
+///
+/// ```compile_fail
+/// use clinkz_wot_core::{AffordanceTarget, HandlerContext, PlanId, ThingId, ThingSlotId};
+/// use clinkz_wot_foundation::{Generation, SlotIndex};
+/// use clinkz_wot_td::data_type::Operation;
+/// let thing_id = ThingId::from("urn:thing:private");
+/// let target = AffordanceTarget::Thing;
+/// let _ = HandlerContext {
+///     thing_id: &thing_id,
+///     thing_slot: ThingSlotId::new(SlotIndex::new(1), Generation::INITIAL),
+///     target: &target,
+///     operation: Operation::ReadAllProperties,
+///     plan_id: PlanId::new(SlotIndex::new(2), Generation::INITIAL),
+///     binding: None,
+/// };
+/// ```
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct HandlerContext<'a> {
     thing_id: &'a ThingId,
@@ -255,6 +341,17 @@ impl<'a> HandlerContext<'a> {
 }
 
 /// Handles one synchronous property-read interaction.
+///
+/// Async and portable-step handler families remain outside this narrow public
+/// slice.
+///
+/// ```compile_fail
+/// use clinkz_wot_core::AsyncReadPropertyHandler;
+/// ```
+///
+/// ```compile_fail
+/// use clinkz_wot_core::StepReadPropertyHandler;
+/// ```
 pub trait ReadPropertyHandler {
     fn handle(
         &self,

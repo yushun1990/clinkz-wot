@@ -103,9 +103,8 @@ or side effect before resource and cleanup reservation blocks source
 admission. This is a one-time Property Read feedback control, not a new broad
 WP-400 design freeze or a project-wide successor rule.
 
-The active-v5 narrow candidate is frozen by
-`docs/audits/WP-400-property-read-servient-slice-entry.md`. It reuses the
-public `StaticServient`, `StaticServientBuilder`, `Servient`,
+The active-v5 narrow slice reuses the public `StaticServient`,
+`StaticServientBuilder`, `Servient`,
 `ServientBuilder`, and `ExposedThingHandle` names. Static authors supply one
 complete `StaticBindingRegistration` and `StaticHandlerRegistration`; host
 authors supply one complete `HostBindingRegistration`, while Servient owns the

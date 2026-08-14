@@ -2,71 +2,44 @@
 set -euo pipefail
 
 root=$(cd "$(dirname "$0")/.." && pwd)
-export CLINKZ_WOT_REPOSITORY_ROOT="$root"
-mode=${1:-check}
+registry="$root/docs/artifacts.csv"
 
-case "$mode" in
-    check)
-        readiness_command=""
-        ;;
-    --refactor-ready)
-        readiness_command="check-refactor-ready"
-        ;;
-    --handler-entry-ready)
-        readiness_command="check-handler-entry"
-        ;;
-    *)
-        echo "usage: tools/check-design-artifacts.sh [--refactor-ready|--handler-entry-ready]" >&2
-        exit 2
-        ;;
-esac
+expected_header='path,role,normativity,design_revision,schema_version,requirement_source'
+if [[ $(head -n 1 "$registry") != "$expected_header" ]]; then
+    echo "design artifact check: invalid artifact registry header" >&2
+    exit 1
+fi
 
-if grep -Fqx 'status = "active"' \
-    "$root/docs/spec/v5-authority-reset.toml"; then
-    if [[ -n "$readiness_command" ]]; then
-        cargo run --locked --quiet --manifest-path "$root/tools/design-check/Cargo.toml" -- \
-            "$readiness_command"
+awk -F, '
+    NF != 6 {
+        printf "design artifact check: line %d has %d columns; expected 6\n", NR, NF > "/dev/stderr"
+        bad = 1
+    }
+    NR > 1 && seen[$1]++ {
+        printf "design artifact check: duplicate path: %s\n", $1 > "/dev/stderr"
+        bad = 1
+    }
+    END { exit bad }
+' "$registry"
+
+while IFS=, read -r relative _role _normativity _revision _schema requirement_source; do
+    [[ "$relative" == "path" ]] && continue
+    if [[ "$relative" = /* || "$relative" == *".."* || ! -e "$root/$relative" ]]; then
+        echo "design artifact check: invalid or missing registered path: $relative" >&2
+        exit 1
     fi
+    if [[ "$requirement_source" = /* || "$requirement_source" == *".."* || ! -e "$root/$requirement_source" ]]; then
+        echo "design artifact check: invalid or missing requirement source: $requirement_source" >&2
+        exit 1
+    fi
+done <"$registry"
 
-    "$root/tools/check-v5-authority-reset-candidate.sh"
-    "$root/tools/check-design-requirements.sh"
-    "$root/tools/check-api-ownership.sh"
-    "$root/tools/check-architecture-adrs.sh"
-    "$root/tools/check-directory-client-scope.sh"
-    "$root/tools/check-resource-limits.sh"
-    "$root/tools/check-wp100-amendment.sh"
-    "$root/tools/check-wp100-handler-amendment.sh"
-    cargo run --locked --quiet --manifest-path "$root/tools/design-check/Cargo.toml" -- \
-        check-state
-    cargo run --locked --quiet --manifest-path "$root/tools/performance-harness/Cargo.toml" -- \
-        verify
-    "$root/tools/check-wp-000.sh"
-    "$root/tools/check-wp100-foundation-refresh.sh"
-    "$root/tools/check-wp100-handler-value-primitives.sh"
-    "$root/tools/check-wp100-logical-time-correction.sh"
-    "$root/tools/check-wp100-deadline-cleanup-timing.sh"
-    "$root/tools/check-wp100-handler-context.sh"
-    "$root/tools/check-wp100-property-read-handler-slice.sh"
-    echo "design artifact check: active v5 authority and all completed implementation evidence validated"
-    exit 0
-fi
-
-if [[ -n "$readiness_command" ]]; then
-    cargo run --locked --quiet --manifest-path "$root/tools/design-check/Cargo.toml" -- \
-        "$readiness_command"
-fi
-
-"$root/tools/check-design-requirements.sh"
-"$root/tools/check-v5-authority-reset-decision.sh"
+cargo run --locked --quiet --manifest-path "$root/tools/design-check/Cargo.toml" -- check
 "$root/tools/check-api-ownership.sh"
 "$root/tools/check-architecture-adrs.sh"
 "$root/tools/check-directory-client-scope.sh"
 "$root/tools/check-resource-limits.sh"
-"$root/tools/check-wp100-amendment.sh"
-"$root/tools/check-wp100-handler-amendment.sh"
+"$root/tools/check-legacy-api-absence.sh"
 cargo run --locked --quiet --manifest-path "$root/tools/performance-harness/Cargo.toml" -- verify
-cargo run --locked --quiet --manifest-path "$root/tools/design-check/Cargo.toml" -- check
 
-cargo test --locked --quiet --manifest-path "$root/tools/design-check/Cargo.toml"
-
-echo "design artifact check: governance and six refactor gates validated"
+echo "design artifact check: current technical authority and stable cross-cutting invariants validated"
