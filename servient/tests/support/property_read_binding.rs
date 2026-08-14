@@ -873,7 +873,13 @@ mod host_fixture {
     use core::pin::Pin;
     use core::sync::atomic::{AtomicU32, Ordering};
     use core::task::{Context, Poll};
-    use std::{boxed::Box, sync::Arc};
+    use std::{
+        boxed::Box,
+        sync::{
+            Arc, Mutex, Weak,
+            mpsc::{Receiver, SyncSender, sync_channel},
+        },
+    };
 
     use clinkz_wot_core::{
         AffordanceTarget, BindingArtifactCompatibility, BindingArtifactEnvelope,
@@ -896,8 +902,8 @@ mod host_fixture {
     use super::{MockArtifact, MockCompiler, artifact_input_error};
 
     struct ProbeState {
-        queued: Option<(Box<str>, InteractionInput)>,
-        next_correlation: u64,
+        ingress: Option<SyncSender<(Box<str>, InteractionInput)>>,
+        queued: u32,
         delivered: u32,
         routes: u32,
         in_flight: u32,
@@ -912,13 +918,19 @@ mod host_fixture {
         shutdown_rejections: u32,
         closed: bool,
         prepared_target: Option<Box<str>>,
+        prepared_state_address: Option<usize>,
+        active_state_address: Option<usize>,
+        committed_state_address: Option<usize>,
+        prepared_footprint: Option<BindingLifetimeFootprint>,
+        active_footprint: Option<BindingLifetimeFootprint>,
+        committed_footprint: Option<BindingLifetimeFootprint>,
     }
 
     impl Default for ProbeState {
         fn default() -> Self {
             Self {
-                queued: None,
-                next_correlation: 1,
+                ingress: None,
+                queued: 0,
                 delivered: 0,
                 routes: 0,
                 in_flight: 0,
@@ -933,8 +945,66 @@ mod host_fixture {
                 shutdown_rejections: 0,
                 closed: false,
                 prepared_target: None,
+                prepared_state_address: None,
+                active_state_address: None,
+                committed_state_address: None,
+                prepared_footprint: None,
+                active_footprint: None,
+                committed_footprint: None,
             }
         }
+    }
+
+    #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+    enum HostRouteStage {
+        Prepared,
+        Active,
+        CommittedClosed,
+        Cleaning,
+        Closed,
+    }
+
+    struct HostRouteIo {
+        route: clinkz_wot_core::binding::BindingRouteKey,
+        ingress: Receiver<(Box<str>, InteractionInput)>,
+        next_correlation: u64,
+        in_flight: Option<CorrelationId>,
+        accepting: bool,
+    }
+
+    struct HostMockRouteState {
+        stage: HostRouteStage,
+        target: Box<str>,
+        io: Arc<Mutex<HostRouteIo>>,
+        cleanup: Option<CleanupPhaseContext>,
+        drops: Arc<AtomicU32>,
+    }
+
+    impl Drop for HostMockRouteState {
+        fn drop(&mut self) {
+            self.drops.fetch_add(1, Ordering::SeqCst);
+        }
+    }
+
+    fn prepared_route_state(guard: &mut HostPreparedRouteGuard) -> &mut HostMockRouteState {
+        Pin::new(guard)
+            .try_state_pin_mut::<HostMockRouteState>()
+            .expect("prepared guard retains the mock route state")
+            .get_mut()
+    }
+
+    fn active_route_state(guard: &mut HostActiveRouteGuard) -> &mut HostMockRouteState {
+        Pin::new(guard)
+            .try_state_pin_mut::<HostMockRouteState>()
+            .expect("active guard retains the mock route state")
+            .get_mut()
+    }
+
+    fn committed_route_state(guard: Pin<&mut HostCommittedRouteGuard>) -> &mut HostMockRouteState {
+        guard
+            .try_state_pin_mut::<HostMockRouteState>()
+            .expect("committed guard retains the mock route state")
+            .get_mut()
     }
 
     /// Deterministic protocol-I/O and instrumentation state for the Servient
@@ -943,14 +1013,23 @@ mod host_fixture {
     pub struct HostPropertyReadProbe {
         state: WotLock<ProbeState>,
         artifact_drops: Arc<AtomicU32>,
+        route_state_drops: Arc<AtomicU32>,
     }
 
     impl HostPropertyReadProbe {
         pub fn enqueue_property_read(&self, name: &str, input: InteractionInput) {
-            self.state.with(|state| {
+            let ingress = self.state.with_read(|state| {
                 assert!(!state.closed, "request queued after route closure");
-                assert!(state.queued.is_none(), "mock ingress slot is occupied");
-                state.queued = Some((Box::from(name), input));
+                state
+                    .ingress
+                    .clone()
+                    .expect("route-owned ingress receiver is not prepared")
+            });
+            ingress
+                .try_send((Box::from(name), input))
+                .expect("mock ingress slot is occupied");
+            self.state.with(|state| {
+                state.queued += 1;
             });
         }
 
@@ -959,14 +1038,8 @@ mod host_fixture {
         }
 
         pub fn outstanding_counts(&self) -> (u32, u32, u32, u32) {
-            self.state.with_read(|state| {
-                (
-                    state.routes,
-                    u32::from(state.queued.is_some()),
-                    state.in_flight,
-                    state.cleanup,
-                )
-            })
+            self.state
+                .with_read(|state| (state.routes, state.queued, state.in_flight, state.cleanup))
         }
 
         pub fn poll_after_close(&self, _cx: &mut Context<'_>) -> Poll<bool> {
@@ -1001,12 +1074,40 @@ mod host_fixture {
         pub fn artifact_drops(&self) -> u32 {
             self.artifact_drops.load(Ordering::SeqCst)
         }
+
+        pub fn route_state_drops(&self) -> u32 {
+            self.route_state_drops.load(Ordering::SeqCst)
+        }
+
+        pub fn carrier_evidence(
+            &self,
+        ) -> (
+            Option<usize>,
+            Option<usize>,
+            Option<usize>,
+            Option<BindingLifetimeFootprint>,
+            Option<BindingLifetimeFootprint>,
+            Option<BindingLifetimeFootprint>,
+        ) {
+            self.state.with_read(|state| {
+                (
+                    state.prepared_state_address,
+                    state.active_state_address,
+                    state.committed_state_address,
+                    state.prepared_footprint,
+                    state.active_footprint,
+                    state.committed_footprint,
+                )
+            })
+        }
     }
 
     struct PrepareCall {
         input: Option<PrepareInput>,
         target: Option<Box<str>>,
         probe: WotLock<ProbeState>,
+        response_io: Arc<Mutex<Option<Weak<Mutex<HostRouteIo>>>>>,
+        route_state_drops: Arc<AtomicU32>,
         pending_once: bool,
     }
 
@@ -1032,13 +1133,42 @@ mod host_fixture {
             }
             let input = self.input.take().expect("prepare call completed twice");
             let target = self.target.take().expect("prepare target completed twice");
+            let route = *input.route();
+            let footprint = BindingLifetimeFootprint::new(2, 128);
+            let (ingress, receiver) = sync_channel(1);
+            let io = Arc::new(Mutex::new(HostRouteIo {
+                route,
+                ingress: receiver,
+                next_correlation: 1,
+                in_flight: None,
+                accepting: true,
+            }));
+            *self
+                .response_io
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner()) = Some(Arc::downgrade(&io));
+            let mut guard = HostPreparedRouteGuard::new(
+                input,
+                footprint,
+                HostMockRouteState {
+                    stage: HostRouteStage::Prepared,
+                    target,
+                    io,
+                    cleanup: None,
+                    drops: Arc::clone(&self.route_state_drops),
+                },
+            );
+            let state = prepared_route_state(&mut guard);
+            let state_address = state as *mut HostMockRouteState as usize;
+            let prepared_target = state.target.clone();
             self.probe.with(|state| {
                 assert_eq!(state.routes, 0);
-                state.prepared_target = Some(target.clone());
+                state.ingress = Some(ingress);
+                state.prepared_target = Some(prepared_target);
+                state.prepared_state_address = Some(state_address);
+                state.prepared_footprint = Some(footprint);
                 state.routes = 1;
             });
-            let guard =
-                HostPreparedRouteGuard::new(input, BindingLifetimeFootprint::new(2, 128), target);
             Poll::Ready(RoutePrepareOutcome::Prepared(guard))
         }
 
@@ -1216,14 +1346,95 @@ mod host_fixture {
         }
     }
 
-    enum CleanupInput {
-        Abort(RouteAbortInput),
-        Shutdown(RouteShutdownInput),
+    enum CleanupGuard {
+        Prepared(HostPreparedRouteGuard),
+        Shutdown(clinkz_wot_core::HostShutdownRouteGuard),
+    }
+
+    impl CleanupGuard {
+        fn state_mut(&mut self) -> &mut HostMockRouteState {
+            match self {
+                Self::Prepared(guard) => prepared_route_state(guard),
+                Self::Shutdown(clinkz_wot_core::HostShutdownRouteGuard::Active(guard)) => {
+                    active_route_state(guard)
+                }
+                Self::Shutdown(clinkz_wot_core::HostShutdownRouteGuard::Committed(guard)) => {
+                    committed_route_state(Pin::new(guard))
+                }
+            }
+        }
+    }
+
+    #[derive(Clone, Copy)]
+    enum CleanupKind {
+        Abort,
+        Shutdown,
     }
 
     struct CleanupCall {
-        input: Option<CleanupInput>,
+        guard: Option<CleanupGuard>,
+        kind: CleanupKind,
         probe: WotLock<ProbeState>,
+        response_io: Arc<Mutex<Option<Weak<Mutex<HostRouteIo>>>>>,
+        route_state_drops: Arc<AtomicU32>,
+        pending_once: bool,
+    }
+
+    impl CleanupCall {
+        fn abort(
+            input: RouteAbortInput,
+            probe: WotLock<ProbeState>,
+            response_io: Arc<Mutex<Option<Weak<Mutex<HostRouteIo>>>>>,
+            route_state_drops: Arc<AtomicU32>,
+        ) -> Self {
+            let (mut guard, cleanup) = input.into_parts();
+            let state = prepared_route_state(&mut guard);
+            state.stage = HostRouteStage::Cleaning;
+            state.cleanup = Some(cleanup);
+            state
+                .io
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner())
+                .accepting = false;
+            Self {
+                guard: Some(CleanupGuard::Prepared(guard)),
+                kind: CleanupKind::Abort,
+                probe,
+                response_io,
+                route_state_drops,
+                pending_once: true,
+            }
+        }
+
+        fn shutdown(
+            input: RouteShutdownInput,
+            probe: WotLock<ProbeState>,
+            response_io: Arc<Mutex<Option<Weak<Mutex<HostRouteIo>>>>>,
+            route_state_drops: Arc<AtomicU32>,
+        ) -> Self {
+            let (mut guard, cleanup) = input.into_parts();
+            let state = match &mut guard {
+                clinkz_wot_core::HostShutdownRouteGuard::Active(guard) => active_route_state(guard),
+                clinkz_wot_core::HostShutdownRouteGuard::Committed(guard) => {
+                    committed_route_state(Pin::new(guard))
+                }
+            };
+            state.stage = HostRouteStage::Cleaning;
+            state.cleanup = Some(cleanup);
+            state
+                .io
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner())
+                .accepting = false;
+            Self {
+                guard: Some(CleanupGuard::Shutdown(guard)),
+                kind: CleanupKind::Shutdown,
+                probe,
+                response_io,
+                route_state_drops,
+                pending_once: true,
+            }
+        }
     }
 
     impl HostBindingCall<RouteCleanupOutcome, HostRouteCleanupSuccessor> for CleanupCall {
@@ -1233,28 +1444,61 @@ mod host_fixture {
 
         fn poll_result(
             mut self: Pin<&mut Self>,
-            _cx: &mut Context<'_>,
+            cx: &mut Context<'_>,
             budget: &mut WorkBudget,
         ) -> Poll<RouteCleanupOutcome> {
             if budget.consume(WorkClass::CleanupItems, 1).is_err() {
                 return Poll::Pending;
             }
-            let input = self.input.take().expect("cleanup completed twice");
+            assert_eq!(
+                self.route_state_drops.load(Ordering::SeqCst),
+                0,
+                "route state dropped before terminal cleanup"
+            );
+            if self.pending_once {
+                self.pending_once = false;
+                cx.waker().wake_by_ref();
+                return Poll::Pending;
+            }
+            let mut guard = self.guard.take().expect("cleanup completed twice");
+            let state = guard.state_mut();
+            assert_eq!(state.stage, HostRouteStage::Cleaning);
+            let _cleanup = state
+                .cleanup
+                .take()
+                .expect("cleanup phase stays in route state");
+            let mut io = state
+                .io
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner());
+            io.accepting = false;
+            io.in_flight = None;
+            while io.ingress.try_recv().is_ok() {}
+            drop(io);
+            state.stage = HostRouteStage::Closed;
+            let kind = self.kind;
             self.probe.with(|state| {
-                match input {
-                    CleanupInput::Abort(input) => {
-                        let _ = input.into_parts();
-                        state.aborts += 1;
-                    }
-                    CleanupInput::Shutdown(input) => {
-                        let _ = input.into_parts();
-                        state.shutdowns += 1;
-                    }
+                match kind {
+                    CleanupKind::Abort => state.aborts += 1,
+                    CleanupKind::Shutdown => state.shutdowns += 1,
                 }
+                state.ingress = None;
                 state.routes = 0;
+                state.queued = 0;
+                state.in_flight = 0;
                 state.cleanup = 0;
                 state.closed = true;
             });
+            *self
+                .response_io
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner()) = None;
+            drop(guard);
+            assert_eq!(
+                self.route_state_drops.load(Ordering::SeqCst),
+                1,
+                "terminal cleanup drops the one route state exactly once"
+            );
             Poll::Ready(RouteCleanupOutcome::Complete)
         }
 
@@ -1289,6 +1533,8 @@ mod host_fixture {
     struct HostMockBinding {
         compatibility: BindingArtifactCompatibility,
         probe: WotLock<ProbeState>,
+        response_io: Arc<Mutex<Option<Weak<Mutex<HostRouteIo>>>>>,
+        route_state_drops: Arc<AtomicU32>,
     }
 
     impl RouteServerBinding for HostMockBinding {
@@ -1322,13 +1568,15 @@ mod host_fixture {
                 input: Some(input),
                 target: Some(Box::from(target)),
                 probe: self.probe.clone(),
+                response_io: Arc::clone(&self.response_io),
+                route_state_drops: Arc::clone(&self.route_state_drops),
                 pending_once: true,
             }))
         }
 
         fn start_readiness(
             &self,
-            guard: HostPreparedRouteGuard,
+            mut guard: HostPreparedRouteGuard,
         ) -> Result<
             HostBindingCallBox<
                 RouteReadinessOutcome<HostPreparedRouteGuard>,
@@ -1346,6 +1594,11 @@ mod host_fixture {
                 }
             });
             if rejected {
+                assert_eq!(self.route_state_drops.load(Ordering::SeqCst), 0);
+                assert_eq!(
+                    prepared_route_state(&mut guard).stage,
+                    HostRouteStage::Prepared
+                );
                 let error = BindingOperationalError::for_route(
                     *guard.route(),
                     CoreError::Binding(ErrorContext::new(ErrorPhase::Readiness, RetryClass::Never)),
@@ -1359,7 +1612,7 @@ mod host_fixture {
 
         fn activate(
             &self,
-            guard: HostPreparedRouteGuard,
+            mut guard: HostPreparedRouteGuard,
         ) -> Result<
             HostBindingCallBox<
                 RouteActivationOutcome<HostPreparedRouteGuard, HostActiveRouteGuard>,
@@ -1367,14 +1620,23 @@ mod host_fixture {
             >,
             BindingInputRejection<HostPreparedRouteGuard>,
         > {
+            let footprint = guard.lifetime_footprint();
+            let state = prepared_route_state(&mut guard);
+            assert_eq!(state.stage, HostRouteStage::Prepared);
+            state.stage = HostRouteStage::Active;
+            let address = state as *mut HostMockRouteState as usize;
+            self.probe.with(|probe| {
+                probe.active_state_address = Some(address);
+                probe.active_footprint = Some(footprint);
+            });
             Ok(HostBindingCallBox::new(ReadyCall::new(
-                RouteActivationOutcome::Active(HostActiveRouteGuard::new(guard, 1_u8)),
+                RouteActivationOutcome::Active(HostActiveRouteGuard::new(guard)),
             )))
         }
 
         fn commit(
             &self,
-            guard: HostActiveRouteGuard,
+            mut guard: HostActiveRouteGuard,
         ) -> Result<
             HostBindingCallBox<
                 RouteCommitOutcome<HostActiveRouteGuard, HostCommittedRouteGuard>,
@@ -1382,14 +1644,23 @@ mod host_fixture {
             >,
             BindingInputRejection<HostActiveRouteGuard>,
         > {
+            let footprint = guard.lifetime_footprint();
+            let state = active_route_state(&mut guard);
+            assert_eq!(state.stage, HostRouteStage::Active);
+            state.stage = HostRouteStage::CommittedClosed;
+            let address = state as *mut HostMockRouteState as usize;
+            self.probe.with(|probe| {
+                probe.committed_state_address = Some(address);
+                probe.committed_footprint = Some(footprint);
+            });
             Ok(HostBindingCallBox::new(ReadyCall::new(
-                RouteCommitOutcome::Committed(HostCommittedRouteGuard::new(guard, 2_u8)),
+                RouteCommitOutcome::Committed(HostCommittedRouteGuard::new(guard)),
             )))
         }
 
         fn poll_accept(
             &self,
-            _route: Pin<&mut HostCommittedRouteGuard>,
+            route: Pin<&mut HostCommittedRouteGuard>,
             permit: clinkz_wot_core::RouteActivationPermit<'_>,
             _cx: &mut Context<'_>,
             budget: &mut WorkBudget,
@@ -1397,29 +1668,60 @@ mod host_fixture {
             if budget.consume(WorkClass::BindingPolls, 1).is_err() {
                 return Poll::Pending;
             }
-            self.probe.with(|state| {
-                if state.closed {
-                    return Poll::Ready(Ok(clinkz_wot_core::RouteAcceptEvent::Terminal(
-                        RouteTerminal::Closed {
-                            route: *permit.route(),
-                        },
-                    )));
-                }
-                let Some((name, input)) = state.queued.take() else {
-                    return Poll::Pending;
-                };
-                let correlation = CorrelationId::new(state.next_correlation);
-                state.next_correlation += 1;
-                state.in_flight = 1;
-                Poll::Ready(Ok(clinkz_wot_core::RouteAcceptEvent::Request(
-                    RouteInboundRequest::new(
-                        *permit.route(),
-                        correlation,
-                        AffordanceTarget::Property(Arc::from(name)),
-                        input,
+            let state = committed_route_state(route);
+            if state.stage == HostRouteStage::Closed {
+                return Poll::Ready(Ok(clinkz_wot_core::RouteAcceptEvent::Terminal(
+                    RouteTerminal::Closed {
+                        route: *permit.route(),
+                    },
+                )));
+            }
+            if state.stage != HostRouteStage::CommittedClosed {
+                return Poll::Ready(Err(CoreError::Binding(ErrorContext::new(
+                    ErrorPhase::Binding,
+                    RetryClass::Never,
+                ))));
+            }
+            let mut io = state
+                .io
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner());
+            if !io.accepting || permit.route() != &io.route {
+                return Poll::Ready(Err(CoreError::Binding(ErrorContext::new(
+                    ErrorPhase::Binding,
+                    RetryClass::Never,
+                ))));
+            }
+            let Ok((name, input)) = io.ingress.try_recv() else {
+                return Poll::Pending;
+            };
+            if io.in_flight.is_some() || io.next_correlation == 0 {
+                return Poll::Ready(Ok(clinkz_wot_core::RouteAcceptEvent::OperationalError(
+                    BindingOperationalError::for_route(
+                        io.route,
+                        CoreError::Binding(ErrorContext::new(
+                            ErrorPhase::Binding,
+                            RetryClass::Never,
+                        )),
                     ),
-                )))
-            })
+                )));
+            }
+            let correlation = CorrelationId::new(io.next_correlation);
+            io.next_correlation = io.next_correlation.checked_add(1).unwrap_or(0);
+            io.in_flight = Some(correlation);
+            drop(io);
+            self.probe.with(|probe| {
+                probe.queued -= 1;
+                probe.in_flight = 1;
+            });
+            Poll::Ready(Ok(clinkz_wot_core::RouteAcceptEvent::Request(
+                RouteInboundRequest::new(
+                    *permit.route(),
+                    correlation,
+                    AffordanceTarget::Property(Arc::from(name)),
+                    input,
+                ),
+            )))
         }
 
         fn abort(
@@ -1439,6 +1741,7 @@ mod host_fixture {
                 }
             });
             if rejected {
+                assert_eq!(self.route_state_drops.load(Ordering::SeqCst), 0);
                 let (guard, cleanup) = input.into_parts();
                 let error = BindingOperationalError::for_route(
                     *guard.route(),
@@ -1450,10 +1753,12 @@ mod host_fixture {
                 ));
             }
             self.probe.with(|state| state.cleanup = 1);
-            Ok(HostBindingCallBox::new(CleanupCall {
-                input: Some(CleanupInput::Abort(input)),
-                probe: self.probe.clone(),
-            }))
+            Ok(HostBindingCallBox::new(CleanupCall::abort(
+                input,
+                self.probe.clone(),
+                Arc::clone(&self.response_io),
+                Arc::clone(&self.route_state_drops),
+            )))
         }
 
         fn shutdown(
@@ -1473,6 +1778,7 @@ mod host_fixture {
                 }
             });
             if rejected {
+                assert_eq!(self.route_state_drops.load(Ordering::SeqCst), 0);
                 let (guard, cleanup) = input.into_parts();
                 let error = BindingOperationalError::for_route(
                     *guard.route(),
@@ -1484,10 +1790,12 @@ mod host_fixture {
                 ));
             }
             self.probe.with(|state| state.cleanup = 1);
-            Ok(HostBindingCallBox::new(CleanupCall {
-                input: Some(CleanupInput::Shutdown(input)),
-                probe: self.probe.clone(),
-            }))
+            Ok(HostBindingCallBox::new(CleanupCall::shutdown(
+                input,
+                self.probe.clone(),
+                Arc::clone(&self.response_io),
+                Arc::clone(&self.route_state_drops),
+            )))
         }
 
         fn deliver_response(
@@ -1497,6 +1805,41 @@ mod host_fixture {
             HostBindingCallBox<BindingDeliveryOutcome>,
             BindingInputRejection<RouteInboundResponse>,
         > {
+            let route = *response.opportunity().route();
+            let correlation = response.opportunity().correlation();
+            let io = self
+                .response_io
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner())
+                .as_ref()
+                .and_then(Weak::upgrade);
+            let Some(io) = io else {
+                return Err(BindingInputRejection::new(
+                    response,
+                    BindingOperationalError::for_route(
+                        route,
+                        CoreError::Binding(ErrorContext::new(
+                            ErrorPhase::Delivery,
+                            RetryClass::Never,
+                        )),
+                    ),
+                ));
+            };
+            let mut io = io.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+            if io.route != route || io.in_flight != Some(correlation) {
+                return Err(BindingInputRejection::new(
+                    response,
+                    BindingOperationalError::for_route(
+                        route,
+                        CoreError::Binding(ErrorContext::new(
+                            ErrorPhase::Delivery,
+                            RetryClass::Never,
+                        )),
+                    ),
+                ));
+            }
+            io.in_flight = None;
+            drop(io);
             Ok(HostBindingCallBox::new(DeliveryCall {
                 response: Some(response),
                 probe: self.probe.clone(),
@@ -1543,6 +1886,8 @@ mod host_fixture {
         probe_state.reject_shutdown_once = reject_shutdown_once;
         let state = WotLock::new(probe_state);
         let artifact_drops = Arc::new(AtomicU32::new(0));
+        let route_state_drops = Arc::new(AtomicU32::new(0));
+        let response_io = Arc::new(Mutex::new(None));
         let input = HostBindingRegistrationInput::new(
             identity,
             BindingRegistrationCapabilities::producer_property_read(),
@@ -1554,6 +1899,8 @@ mod host_fixture {
             Box::new(HostMockBinding {
                 compatibility,
                 probe: state.clone(),
+                response_io,
+                route_state_drops: Arc::clone(&route_state_drops),
             }),
             BindingResourceDeclarations::new(
                 BindingLifetimeFootprint::new(4, 256),
@@ -1571,6 +1918,7 @@ mod host_fixture {
             HostPropertyReadProbe {
                 state,
                 artifact_drops,
+                route_state_drops,
             },
         )
     }

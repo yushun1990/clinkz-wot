@@ -1877,11 +1877,57 @@ fn registration_error(identity: BindingRegistrationIdentity, code: u16) -> Bindi
 // ---------------------------------------------------------------------------
 
 #[cfg(feature = "std")]
-/// Prepared route guard with Core-owned safe state erasure.
-pub struct HostPreparedRouteGuard {
+struct HostRouteCarrier {
     input: PrepareInput,
     footprint: BindingLifetimeFootprint,
     state: Box<dyn Any + Send>,
+}
+
+#[cfg(feature = "std")]
+impl HostRouteCarrier {
+    fn new<S>(input: PrepareInput, footprint: BindingLifetimeFootprint, state: S) -> Self
+    where
+        S: Send + 'static,
+    {
+        Self {
+            input,
+            footprint,
+            state: Box::new(state),
+        }
+    }
+
+    const fn route(&self) -> &BindingRouteKey {
+        self.input.route()
+    }
+
+    const fn lifetime_footprint(&self) -> BindingLifetimeFootprint {
+        self.footprint
+    }
+
+    fn try_state_mut<S>(&mut self) -> Option<&mut S>
+    where
+        S: Send + Unpin + 'static,
+    {
+        self.state.downcast_mut::<S>()
+    }
+
+    fn try_state_pin_mut<S>(&mut self) -> Option<Pin<&mut S>>
+    where
+        S: Send + 'static,
+    {
+        let state = self.state.downcast_mut::<S>()?;
+        // SAFETY: the concrete state stays in the same heap allocation from
+        // carrier construction until carrier drop. Stage conversion moves
+        // only this private `Box` handle, and no public API can extract or
+        // replace a potentially pinned value.
+        Some(unsafe { Pin::new_unchecked(state) })
+    }
+}
+
+#[cfg(feature = "std")]
+/// Prepared route guard with Core-owned safe state erasure.
+pub struct HostPreparedRouteGuard {
+    carrier: HostRouteCarrier,
 }
 
 #[cfg(feature = "std")]
@@ -1892,34 +1938,34 @@ impl HostPreparedRouteGuard {
         S: Send + 'static,
     {
         Self {
-            input,
-            footprint,
-            state: Box::new(state),
+            carrier: HostRouteCarrier::new(input, footprint, state),
         }
     }
 
     /// Returns the exact route identity.
     pub const fn route(&self) -> &BindingRouteKey {
-        self.input.route()
+        self.carrier.route()
     }
 
     /// Returns the complete retained-footprint declaration.
     pub const fn lifetime_footprint(&self) -> BindingLifetimeFootprint {
-        self.footprint
+        self.carrier.lifetime_footprint()
     }
 
-    /// Consumes and recovers matching binding-private state.
-    pub fn try_into_state<S>(self) -> Result<S, Self>
+    /// Mutably borrows matching movable state without changing its owner.
+    pub fn try_state_mut<S>(&mut self) -> Option<&mut S>
+    where
+        S: Send + Unpin + 'static,
+    {
+        self.carrier.try_state_mut::<S>()
+    }
+
+    /// Pins and mutably borrows matching erased state without moving it.
+    pub fn try_state_pin_mut<S>(self: Pin<&mut Self>) -> Option<Pin<&mut S>>
     where
         S: Send + 'static,
     {
-        if !self.state.is::<S>() {
-            return Err(self);
-        }
-        let Self { state, .. } = self;
-        Ok(*state
-            .downcast::<S>()
-            .expect("state type was checked before consuming the guard"))
+        self.get_mut().carrier.try_state_pin_mut::<S>()
     }
 }
 
@@ -1929,7 +1975,7 @@ impl core::fmt::Debug for HostPreparedRouteGuard {
         formatter
             .debug_struct("HostPreparedRouteGuard")
             .field("route", self.route())
-            .field("footprint", &self.footprint)
+            .field("footprint", &self.lifetime_footprint())
             .finish_non_exhaustive()
     }
 }
@@ -1937,50 +1983,51 @@ impl core::fmt::Debug for HostPreparedRouteGuard {
 #[cfg(feature = "std")]
 /// Activated route guard retained while request admission remains closed.
 pub struct HostActiveRouteGuard {
-    input: PrepareInput,
-    footprint: BindingLifetimeFootprint,
-    state: Box<dyn Any + Send>,
+    carrier: HostRouteCarrier,
 }
 
 #[cfg(feature = "std")]
 impl HostActiveRouteGuard {
-    /// Consumes a prepared guard and creates its identity-preserving successor.
-    pub fn new<S>(prepared: HostPreparedRouteGuard, state: S) -> Self
-    where
-        S: Send + 'static,
-    {
-        let HostPreparedRouteGuard {
-            input, footprint, ..
-        } = prepared;
+    /// Consumes a prepared guard and advances its unchanged carrier.
+    ///
+    /// A successor cannot accept replacement state:
+    ///
+    /// ```compile_fail
+    /// # use clinkz_wot_core::{HostActiveRouteGuard, HostPreparedRouteGuard};
+    /// # fn replace(prepared: HostPreparedRouteGuard) {
+    /// let _ = HostActiveRouteGuard::new(prepared, 7_u8);
+    /// # }
+    /// ```
+    pub fn new(prepared: HostPreparedRouteGuard) -> Self {
         Self {
-            input,
-            footprint,
-            state: Box::new(state),
+            carrier: prepared.carrier,
         }
     }
 
     /// Returns the exact route identity.
     pub const fn route(&self) -> &BindingRouteKey {
-        self.input.route()
+        self.carrier.route()
     }
 
     /// Returns the immutable retained-footprint declaration.
     pub const fn lifetime_footprint(&self) -> BindingLifetimeFootprint {
-        self.footprint
+        self.carrier.lifetime_footprint()
     }
 
-    /// Consumes and recovers matching binding-private state.
-    pub fn try_into_state<S>(self) -> Result<S, Self>
+    /// Mutably borrows matching movable state without changing its owner.
+    pub fn try_state_mut<S>(&mut self) -> Option<&mut S>
+    where
+        S: Send + Unpin + 'static,
+    {
+        self.carrier.try_state_mut::<S>()
+    }
+
+    /// Pins and mutably borrows matching erased state without moving it.
+    pub fn try_state_pin_mut<S>(self: Pin<&mut Self>) -> Option<Pin<&mut S>>
     where
         S: Send + 'static,
     {
-        if !self.state.is::<S>() {
-            return Err(self);
-        }
-        let Self { state, .. } = self;
-        Ok(*state
-            .downcast::<S>()
-            .expect("state type was checked before consuming the guard"))
+        self.get_mut().carrier.try_state_pin_mut::<S>()
     }
 }
 
@@ -1990,7 +2037,7 @@ impl core::fmt::Debug for HostActiveRouteGuard {
         formatter
             .debug_struct("HostActiveRouteGuard")
             .field("route", self.route())
-            .field("footprint", &self.footprint)
+            .field("footprint", &self.lifetime_footprint())
             .finish_non_exhaustive()
     }
 }
@@ -1998,50 +2045,43 @@ impl core::fmt::Debug for HostActiveRouteGuard {
 #[cfg(feature = "std")]
 /// Committed route guard whose request-admission gate remains closed.
 pub struct HostCommittedRouteGuard {
-    input: PrepareInput,
-    footprint: BindingLifetimeFootprint,
-    state: Box<dyn Any + Send>,
+    carrier: HostRouteCarrier,
 }
 
 #[cfg(feature = "std")]
 impl HostCommittedRouteGuard {
-    /// Consumes an active guard and creates its committed-closed successor.
-    pub fn new<S>(active: HostActiveRouteGuard, state: S) -> Self
-    where
-        S: Send + 'static,
-    {
-        let HostActiveRouteGuard {
-            input, footprint, ..
-        } = active;
+    /// Consumes an active guard and advances its unchanged carrier.
+    ///
+    /// A successor cannot accept replacement state:
+    ///
+    /// ```compile_fail
+    /// # use clinkz_wot_core::{HostActiveRouteGuard, HostCommittedRouteGuard};
+    /// # fn replace(active: HostActiveRouteGuard) {
+    /// let _ = HostCommittedRouteGuard::new(active, 7_u8);
+    /// # }
+    /// ```
+    pub fn new(active: HostActiveRouteGuard) -> Self {
         Self {
-            input,
-            footprint,
-            state: Box::new(state),
+            carrier: active.carrier,
         }
     }
 
     /// Returns the exact route identity.
     pub const fn route(&self) -> &BindingRouteKey {
-        self.input.route()
+        self.carrier.route()
     }
 
     /// Returns the immutable retained-footprint declaration.
     pub const fn lifetime_footprint(&self) -> BindingLifetimeFootprint {
-        self.footprint
+        self.carrier.lifetime_footprint()
     }
 
-    /// Consumes and recovers matching binding-private state.
-    pub fn try_into_state<S>(self) -> Result<S, Self>
+    /// Mutably borrows matching movable state without changing its owner.
+    pub fn try_state_mut<S>(&mut self) -> Option<&mut S>
     where
-        S: Send + 'static,
+        S: Send + Unpin + 'static,
     {
-        if !self.state.is::<S>() {
-            return Err(self);
-        }
-        let Self { state, .. } = self;
-        Ok(*state
-            .downcast::<S>()
-            .expect("state type was checked before consuming the guard"))
+        self.carrier.try_state_mut::<S>()
     }
 
     /// Pins and mutably borrows matching erased state without moving it.
@@ -2049,14 +2089,7 @@ impl HostCommittedRouteGuard {
     where
         S: Send + 'static,
     {
-        // SAFETY: `state` is heap allocated and is never replaced or moved
-        // while this exclusive pinned borrow is live.  A failed downcast
-        // returns before exposing a mutable reference.
-        let guard = unsafe { self.get_unchecked_mut() };
-        let state = guard.state.downcast_mut::<S>()?;
-        // SAFETY: the concrete value stays at the stable allocation address
-        // for the duration of the exclusive borrow established above.
-        Some(unsafe { Pin::new_unchecked(state) })
+        self.get_mut().carrier.try_state_pin_mut::<S>()
     }
 }
 
@@ -2066,7 +2099,7 @@ impl core::fmt::Debug for HostCommittedRouteGuard {
         formatter
             .debug_struct("HostCommittedRouteGuard")
             .field("route", self.route())
-            .field("footprint", &self.footprint)
+            .field("footprint", &self.lifetime_footprint())
             .finish_non_exhaustive()
     }
 }
