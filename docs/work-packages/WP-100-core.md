@@ -1,25 +1,8 @@
 # WP-100 Core Interaction Semantics
 
-Status: In Progress
-
-Design revision: v4.9
-
-Depends on: WP-000
-
-Global convergence gates: GATE-1, GATE-2, GATE-3, GATE-4, GATE-5, GATE-6
-
-Owner packages: clinkz-wot-core, clinkz-wot-foundation, clinkz-wot-td
-
-Handler entry tranche prerequisite paths:
-
-- WP-100-FOUNDATION-REFRESH -> WP-100-HANDLER-VALUE-PRIMITIVES;
-- WP-100-FOUNDATION-REFRESH -> WP-100-LOGICAL-TIME-CORRECTION ->
-  WP-100-DEADLINE-CLEANUP-TIMING; and
-- both paths -> WP-100-HANDLER-ENTRY.
-
-Decided handler-entry blocking scope: TIME-DOMAIN-AND-DEADLINE
-
-Cross-package integration gate: `PROPERTY-READ-ARCHITECTURE`
+Machine-readable package status, design revision, dependencies, document path,
+and owner crates are defined only in [`index.toml`](index.toml). This document
+specifies technical scope and acceptance boundaries.
 
 ## Scope
 
@@ -32,41 +15,24 @@ This package does not build logical/binding plans, registration indexes, binding
 traits, Servient lifecycle orchestration, Directory clients, or concrete protocols. WP-200
 and WP-300 consume the values and callback invariants established here.
 
-The first handler subtranche is an additive cross-crate prerequisite owned by
-WP-100. It preserves the historical v4.8 139-field `ResourceKind` prefix,
-appends the exact 56-field v4.9 planning and Protocol Binding resource
-projection, and regenerates the named profiles, generated schema, snapshots,
-and boundary tests. The resulting active schema has 195 fields. The previously
-assigned `WorkClass::HandlerSteps` and three core pending-work variants remain
-part of the same foundation checkpoint. ADR-0015 also removes implicit copying
-from `ResourceLimits`, changes `StaticResourceProfile` to expose a static
-reference, and makes `WorkBudget` nonduplicable. This does not reopen the
-completed WP-000 package; new evidence is recorded against WP-100 before
-implementation continues.
+The shared `ResourceKind` schema preserves an immutable 139-field prefix and
+an exact 56-field planning and Protocol Binding resource projection. The
+active schema has 195 fields, and its named profiles, generated schema,
+snapshots, and boundary tests cover the complete layout. `WorkClass::HandlerSteps`
+and the three Core pending-work variants are part of that schema. ADR-0015 also
+removes implicit copying from `ResourceLimits`, changes
+`StaticResourceProfile` to expose a static reference, and makes `WorkBudget`
+nonduplicable.
 
-The machine-readable package and dependency records in
-`docs/work-packages/index.toml` are the source of truth for package order and
-current ownership. Technical admission is established by current authority,
-owning-crate tests, and the Property Read aggregate dependency gate.
-
-The broad `WP-100-HANDLER-ENTRY` is also blocked by
-`PROPERTY-READ-ARCHITECTURE`. Its exact
-`WP-100-PROPERTY-READ-HANDLER-SLICE` is the only gate-specific exception:
-after the five prerequisite tranches are complete, that slice may receive its
-own independent ADR-0013 review so the cross-package boundary can be proven.
-The integration-gate manifest is planning authority only and grants no
-implementation admission.
-
-That slice's candidate boundary is exactly the additive synchronous
+The narrow Property Read handler boundary is exactly the additive synchronous
 `ReadPropertyHandler` trait in `core/src/handler.rs` and its Core-root
 re-export. It reuses the completed `HandlerContext` and
 `StaticHandlerRegistration` plus the existing production `InteractionInput`
 and `InteractionOutput`; it does not replace them. The slice excludes
 `AcceptHint` admission, final `InteractionInput` storage migration,
 `AffordanceTarget` relocation and no-atomic evidence, async/step traits, host
-erasure, sparse storage, and execution. Those exclusions avoid a cycle in
-which the only broad-entry exemption would require migrations that broad entry
-itself blocks.
+erasure, sparse storage, and execution. Those exclusions keep the narrow
+cross-package proof independent of the remaining broad handler migrations.
 
 The synchronous `ReadPropertyHandler` public contract and its negative
 async/step scope are owned by Core integration and rustdoc compile-fail tests.
@@ -79,39 +45,28 @@ traits, storage, execution, Producer integration, Servient setters, old API
 removal, state machines, and performance workloads. Core tests own the exact
 schema, attributes, passive value semantics, and redacted diagnostics.
 
-The value-primitives tranche's affected requirement set is exactly
+The value-primitives surface is governed by
 `API-SURFACE-001` and `HANDLER-VALUE-001`. `HANDLER-VALUE-001` completely owns
 the five schemas' attributes, ownership, and passive value semantics. Handler,
 subscription, storage, cancellation, work-budget, ownership-admission, and
 resource-limit behavior belongs to the later traits, state records, and
-admission items that consume these values, not to this tranche. The candidate
-shares only the global `API-SURFACE-001` meta-requirement with the
-`TIME-DOMAIN-AND-DEADLINE` blocking scope. Their API-item and behavioral
-requirements are otherwise disjoint.
+admission items that consume these values, not to the passive values
+themselves.
 
-`Deadline` is excluded from the completed value-primitives tranche and remains
-under the `TIME-DOMAIN-AND-DEADLINE` blocking scope. ADR-0016 and
+`Deadline` is excluded from the value-primitives surface. ADR-0016 and
 `docs/amendments/WP-100-time-domain-v1.md` resolve that scope with
 clock-source-owned, non-wrapping extended logical ticks. Raw wrap metadata is
 diagnostic only; different clock ids are incomparable and receive the frozen
 admission or owning-phase error disposition.
 
-The corrective order is
-`WP-100-FOUNDATION-REFRESH -> WP-100-LOGICAL-TIME-CORRECTION ->
-WP-100-DEADLINE-CLEANUP-TIMING`. The first tranche is Foundation-owned and
-owns the extended logical-time claims while reaffirming its disjoint generation
-claims. The second is
-Core-owned and implements Deadline, CleanupRecord logical ordering, and
-incomparable-clock disposition. This decided plan is not implementation
-admission. The broad handler entry remains blocked until both complete.
-
-`WP-100-LOGICAL-TIME-CORRECTION` is complete. Its exact one-file Foundation
+Foundation owns the extended logical-time behavior. Its
 implementation preserves all public time representations and the
 `RuntimeClock` method set, adds the frozen `SourceTimestamp::checked_cmp`
 behavior, and proves raw overflow-epoch, delayed-observation, reset, scale, and
 exhaustion semantics.
 
-`WP-100-DEADLINE-CLEANUP-TIMING` is complete. Its only implementation paths
+Core owns Deadline, CleanupRecord logical ordering, and incomparable-clock
+disposition. The implementation paths
 are `core/src/deadline.rs`, `core/src/status.rs`, and the Core root
 module/export in `core/src/lib.rs`. Core tests prove Deadline
 NONE/finite/incomparable behavior,
@@ -143,7 +98,7 @@ scheduler, state-machine, resource, removal, or performance scope.
   schema, exact named-profile values, and generated foundation surface required by this package.
 - `PLAN-SET-001`, `PLAN-ARTIFACT-001`, `BIND-ROUTE-001`, `BIND-STORAGE-001`,
   `BIND-MEM-001`, `BIND-DELIVERY-001`, and `BIND-CALL-CANCEL-001` govern the
-  v4.9 planning and binding limits projected into the shared foundation schema.
+  planning and binding limits projected into the shared foundation schema.
 - `PERF-ALLOC-001` and `PERF-CALL-001` govern allocation-sensitive and composed interaction
   call paths.
 
@@ -153,7 +108,7 @@ scheduler, state-machine, resource, removal, or performance scope.
   for the append-only resource schema, named-profile values, generated tests
   and snapshots, `StaticResourceProfile` reference boundary, linear
   `WorkBudget`, and `WorkClass::HandlerSteps`; consume `clinkz-wot-td` only in
-  the allowed dependency direction. This tranche projects limits and does not
+  the allowed dependency direction. This scope projects limits and does not
   implement planning or binding runtime behavior.
 - The `no-default` cell exposes interaction values, synchronous local dispatch roles,
   incremental codec/security roles, status values, and generation-bearing ids without
@@ -190,17 +145,16 @@ Implement the frozen `clinkz_wot_core` surface in these groups:
   `ApplicationPayloadProjection`, `BodyAuthProjector`, `AuthMaterial`, `AppliedSecurity`,
   `CredentialStore`, credential probe/lease/generation values, and `EffectiveSecurityPlan`.
 
-Before adding these handler values, refresh the foundation schema from
-`docs/resource-limits.csv`. Indices `0..=138` are the immutable v4.8
-checkpoint. Indices `139..=194` are exactly the 18 compiled-plan-set and
+The foundation schema is generated from `docs/resource-limits.csv`. Indices
+`0..=138` are the immutable prefix. Indices `139..=194` are exactly the 18 compiled-plan-set and
 artifact limits followed by the 38 route, ingress, host-call, subscription,
 typed-slot, temporary-poll, response, cancellation, cleanup-transfer, wake,
-and reactor-queue limits registered by design revision v4.9. Gateway and
+and reactor-queue limits. Gateway and
 static-reference values are finite and nonzero for every appended field; all
-56 fields are `NA` for `DirectoryClientDefaultV1`. Regenerate the three
-feature-cell compile fixtures, profile snapshots, and exact/one-over boundary
-tests. Every bounded handler `start`, `step`, `cancel`, or constrained adapter
-poll charges its caller-supplied counter before work begins. The refresh must
+56 fields are `NA` for `DirectoryClientDefaultV1`. The three feature-cell
+compile tests, profile snapshots, and exact/one-over boundary tests cover the
+generated surface. Every bounded handler `start`, `step`, `cancel`, or constrained adapter
+poll charges its caller-supplied counter before work begins. The generated surface must
 not create a duplicate Rust-side resource schema or change the downward
 dependency graph.
 
@@ -210,7 +164,7 @@ not `Copy`. `StaticResourceProfile::LIMITS` and `limits()` return
 `WorkBudget` implements neither `Clone` nor `Copy`, and every progress API
 consumes one unique value through `&mut WorkBudget`. Update the no-std surface
 fixture so it retains references rather than returning three complete profile
-arrays by value. Do not freeze the 3,120-byte/80-byte reviewed layouts as ABI;
+arrays by value. Do not freeze the observed 3,120-byte/80-byte layouts as ABI;
 test the ownership and reference contracts instead. A dependency-free
 compile-time ambiguity assertion must prove `ResourceLimits: Clone + !Copy`,
 `WorkBudget: !Clone + !Copy`, and the exact `&'static ResourceLimits` profile
@@ -323,12 +277,13 @@ requiring `Arc`, atomics, `Send`, `Sync`, or boxed futures.
 - Remove any public re-export of internal `WotLock` or mutable registry access once the target
   handler surface is available.
 
-## Evidence
+## Verification Responsibilities
 
-Produce these package evidence keys exactly as indexed by the work-package DAG:
+Owning-crate unit, integration, compile-fail, snapshot, and workload tests
+cover these technical invariants:
 
 - `handler-foundation-refresh` for the immutable 139-field prefix, exact
-  56-field v4.9 suffix, all named-profile values including `NA`,
+  56-field planning and binding suffix, all named-profile values including `NA`,
   `WorkClass::HandlerSteps`, generated snapshots, boundaries, and three feature
   cells;
 - `handler-value-primitives` for the five admitted passive portable values, exact derive
@@ -336,8 +291,7 @@ Produce these package evidence keys exactly as indexed by the work-package DAG:
   trait assertions, and handler-redacted static-registration diagnostics;
 - `logical-time-domain-correction` for extended Foundation ticks, raw counter
   extension, reset/exhaustion, source timestamp comparability, and the explicit
-  replacement/reaffirmation disposition of historical WP-000 time/generation
-  evidence;
+  time/generation behavior preserved across the Foundation correction;
 - `deadline-cleanup-timing` for the Core Deadline value, CleanupRecord checked
   logical ordering, incomparable-clock error mapping, delayed polling, and
   timeout linearization;
@@ -360,7 +314,7 @@ Produce these package evidence keys exactly as indexed by the work-package DAG:
 - `codec-validator-reuse` for incremental accounting and one-decode reuse;
 - `core-error-taxonomy` for category, context, redaction, and retry mappings.
 
-These records satisfy the corresponding requirement-index evidence families:
+Coverage also includes these requirement families:
 
 - `lock-order-and-reentrancy` and `linearization-races` for callback and replacement races;
 - `handler-ownership`, `cancellation-and-late-results`, and `sparse-handler-storage` for sync,
@@ -389,11 +343,10 @@ all public error and debug representations.
   cancellation, replacement during dispatch, and reentrant handler operations.
 ## Completion Conditions
 
-- The WP-100 handler-foundation subtranche is complete before implementation
-  resumes: generated schemas and snapshots contain the unchanged 139-field
-  v4.8 prefix and exact 56-field v4.9 suffix for 195 fields total, plus
-  `WorkClass::HandlerSteps` and the three core pending-work variants, with no
-  duplicate schema or reopened WP-000 completion claim.
+- Generated schemas and snapshots contain the unchanged 139-field prefix and
+  exact 56-field planning and binding suffix for 195 fields total, plus
+  `WorkClass::HandlerSteps` and the three Core pending-work variants, with no
+  duplicate resource schema.
 - Every WP-100 ownership item exists at its frozen path in each applicable feature cell, and
   `--no-default-features` has no required `std`, atomics, `Arc`, executor, or boxed-future path.
 - Reentrant handler, provider, codec, and status callbacks run with no engine lock or critical

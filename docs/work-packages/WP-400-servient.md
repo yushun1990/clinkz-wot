@@ -1,13 +1,8 @@
 # WP-400 Servient Lifecycle and Host Runtime
 
-Status: Planned
-Design revision: v4.9
-Depends on: `WP-300`
-Global convergence gates: `GATE-1`, `GATE-2`, `GATE-3`, `GATE-4`, `GATE-5`, `GATE-6`
-Owner packages: `clinkz-wot-servient`, `clinkz-wot-core`
-
-Broad entry point: `WP-400-BROAD-ENTRY` (blocked by
-`PROPERTY-READ-ARCHITECTURE`)
+Machine-readable package status, design revision, dependencies, document path,
+and owner crates are defined only in [`index.toml`](index.toml). This document
+specifies technical scope and acceptance boundaries.
 
 ## Scope
 
@@ -23,13 +18,9 @@ The work includes host and constrained construction paths and owns fair engine p
 route and operation leases, but it does not own a protocol-local reactor/I/O loop, a concrete
 transport, or a Directory service. `clinkz-wot-servient` composes frozen lower-layer contracts; it
 does not reinterpret forms, security expressions, Directory requests, or binding-specific state.
-Work may begin only after `WP-300` is complete and every entry gate above is closed.
-
-The exact `WP-400-PROPERTY-READ-SERVIENT-SLICE` is the sole exception: after
-its Producer-route and compiler-owned route-reservation handoffs complete and
-are verified on the default branch, it may receive an independent ADR-0013
-review to compose the architecture-gate scenario. This exception neither opens
-the broad entry point nor changes package completion order.
+The narrow Property Read surface composes the current Producer-route and
+compiler-owned route-reservation outputs without claiming the scheduling,
+subscription, emission, multi-route, or workload parts of broad WP-400.
 
 Servient retains semantic authority without concentrating all progress behind
 one coordinator lock or queue. Host storage and scheduling are sharded first
@@ -40,7 +31,7 @@ reactors may only record bounded protocol state and wake an owner. The
 constrained profile implements the same semantic transition kernel with
 caller-owned storage rather than copying the host synchronization layout.
 
-Before broad WP-400 source admission, its candidate freezes:
+Broad WP-400 must preserve:
 
 - one private owner/dependency graph for registration snapshots, plan sets,
   Thing lifecycle, route drivers, operation/handler calls, subscriptions,
@@ -53,13 +44,13 @@ Before broad WP-400 source admission, its candidate freezes:
   acknowledgement, rejection return, and commit revalidation;
 - one profile-neutral Servient transition-kernel code owner and one versioned
   machine-readable trace oracle consumed by both runtime adapters; and
-- one independently reviewable early broad tranche that executes at least two
+- an early broad integration test that executes at least two
   Things, two bindings, multiple routes, a hot owner, a never-ready owner,
   cleanup/deadline pressure, and unrelated-shard progress before subscriptions,
   emissions, and broad facade work accumulate.
 
 The exact single-route Property Read Servient slice does not make those broad
-scalability or decomposition claims and remains independently admissible.
+scalability or decomposition claims.
 
 Handler-origin response validation follows
 `docs/amendments/WP-100-interaction-output-api-v1.md`: every producer response
@@ -96,14 +87,13 @@ readiness/accept/status/cleanup capacity is reserved first. Host-erased and
 application-static representations preserve the same semantic values and
 resource deltas.
 
-The narrow WP-400 candidate must close this table in its existing independent
-review. Any unowned value, fixture-only substitute, illegal canonicalization,
-generation loss/mismatch, partial registration, detached artifact reference,
-or side effect before resource and cleanup reservation blocks source
-admission. This is a one-time Property Read feedback control, not a new broad
-WP-400 design freeze or a project-wide successor rule.
+The narrow boundary rejects any unowned value, fixture-only substitute,
+illegal canonicalization, generation loss or mismatch, partial registration,
+detached artifact reference, or side effect before resource and cleanup
+reservation. This is a Property Read technical constraint, not a broad WP-400
+scalability claim.
 
-The active-v5 narrow slice reuses the public `StaticServient`,
+The narrow slice reuses the public `StaticServient`,
 `StaticServientBuilder`, `Servient`,
 `ServientBuilder`, and `ExposedThingHandle` names. Static authors supply one
 complete `StaticBindingRegistration` and `StaticHandlerRegistration`; host
@@ -112,12 +102,12 @@ private erasure of one synchronous `ReadPropertyHandler`. Both runtime cells
 enter the same product-owned transition kernel through explicit
 `Context`/`WorkBudget` steps returning `StepStatus<()>`.
 
-That unit progress value is an intentional narrow-v5 boundary. The v4.9 broad
+That unit progress value is an intentional narrow boundary. The broad
 target below names `RuntimeEvent` and reusable host handler registration, but
 their owning `CAP-STATUS-001`/broad storage families are not active authority
-for this slice and the types are not implemented. Candidate review may not
-activate them by implication. A later broad domain-entry review owns any
-status-event value or reusable Core host-handler registration.
+for this slice and the types are not implemented. Any status-event value or
+reusable Core host-handler registration remains part of the broad
+status/storage families.
 
 ## Requirements
 
@@ -183,8 +173,8 @@ integration remains behind an explicit test feature.
   `clinkz_wot_servient::StaticSubscription`, and
   `clinkz_wot_servient::StaticServientBuilder` surfaces for caller-owned storage and manual
   progress. Their `step` operation uses `WorkBudget` and returns
-  `StepStatus<RuntimeEvent>` as v4.9 broad domain-entry input. The admitted
-  narrow Property Read exception above returns `StepStatus<()>` and does not
+  `StepStatus<RuntimeEvent>` as broad domain input. The narrow Property Read
+  surface above returns `StepStatus<()>` and does not
   activate the deferred runtime-event family.
 - Replace the current host builder's bare binding vectors with one validated
   `HostBindingRegistration` per installed binding. Replace the static split client/server lists
@@ -408,7 +398,10 @@ integration remains behind an explicit test feature.
 
 No compatibility facade may keep the removed lifecycle callable on a releasable feature cell.
 
-## Evidence
+## Verification Responsibilities
+
+Owning-crate unit, integration, compile-fail, model, and workload tests cover
+these technical invariants:
 
 - `property-read-servient-slice`: atomic publication before mock acceptance,
   Servient-only route/handler selection, one handler call and response,
@@ -453,7 +446,7 @@ No compatibility facade may keep the removed lifecycle callable on a releasable 
 - `servient-constrained-fairness`: bounded manual steps, round-robin route/slot/plan-set progress,
   reserved response and cleanup work, and no executor or atomic-reference-counting dependency.
 - `servient-response-validation`: every handler-origin result passes through the WP-300
-  `InboundResponse::try_success` boundary using the admitted route-match operation, including
+  `InboundResponse::try_success` boundary using the validated route-match operation, including
   binding-metadata and action/status failure cases plus route/generation/correlation rechecks.
 - `host-independent-progress`: contention evidence that unrelated Things and bindings progress
   independently and that callbacks execute outside engine locks.
@@ -497,7 +490,7 @@ No compatibility facade may keep the removed lifecycle callable on a releasable 
   negative proof that uncertain or post-acceptance outcomes cannot trigger
   hidden fallback.
 
-The evidence must also include compile fixtures for all three feature cells and model tests that
+Coverage also includes compile tests for all three feature cells and model tests that
 cover every legal and illegal transition in the `expose`, `binding-route`,
 `serving-activation-authority`, and `in-flight` machines.
 
@@ -539,8 +532,8 @@ exhausted transfer capacity falls back to durable residual recording.
 
 ## Completion Conditions
 
-- `WP-300` is complete, all entry gates remain closed, and no lower crate acquires a Servient
-  dependency.
+- Broad WP-400 consumes the complete WP-300 binding contract, and no lower
+  crate acquires a Servient dependency.
 - The builder accepts only complete host/static startup bundles, publishes one immutable
   registration snapshot, and exposes no runtime add/remove/replace or bare component path.
 - All frozen Servient items have the owner, visibility, public path, feature cells, and migration

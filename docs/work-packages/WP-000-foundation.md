@@ -1,14 +1,8 @@
 # WP-000 Foundation Primitives
 
-Status: Complete
-
-Design revision: v4.9
-
-Depends on: None
-
-Global convergence gates: GATE-1, GATE-2, GATE-3, GATE-4, GATE-5, GATE-6
-
-Owner packages: clinkz-wot-foundation, workspace
+Machine-readable package status, design revision, dependencies, document path,
+and owner crates are defined only in [`index.toml`](index.toml). This document
+specifies technical scope and acceptance boundaries.
 
 ## Scope
 

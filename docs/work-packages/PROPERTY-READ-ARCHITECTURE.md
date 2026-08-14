@@ -1,14 +1,12 @@
 # Property Read Architecture Gate
 
-Status: READY
-
-Gate id: `PROPERTY-READ-ARCHITECTURE`
-
-Manifest: `docs/work-packages/property-read-architecture-gate.toml`
+Machine-readable gate status, planned fixture roots, dependencies, and current
+evidence paths are defined only in
+[`property-read-architecture-gate.toml`](property-read-architecture-gate.toml).
 
 ## Purpose
 
-This gate is the first executable proof that the active v5 Planning, Core
+This gate is the first executable proof that the current Planning, Core
 handler, Protocol Binding, and Servient boundaries compose without an
 ownership shortcut. It is architecture evidence, not a production-protocol,
 multi-route, workload, deployment, or release claim.
@@ -46,8 +44,7 @@ instead executable at the crate that can be broken:
   reservation metadata.
 
 The exact evidence paths are registered in the gate manifest. They run through
-workspace tests and focused no-default/default test cells rather than through
-historical candidate, review, or completion replay.
+workspace tests and focused no-default/default test cells.
 
 ## Required scenario
 
@@ -95,17 +92,16 @@ place of the production carrier under test.
 
 ## Aggregate fixture boundary
 
-The future aggregate fixture still has two planned roots:
+The gate manifest reserves two future aggregate roots:
 
 - `property-read-binding`, containing deterministic protocol-local I/O and a
   complete external binding implementation; and
 - `property-read-runner`, composing the TD, planner, registration, Servient,
   handler, request, response, and cleanup assertions.
 
-Those roots remain absent while the gate is `ready`. Creating them and moving
-the gate to `passed` requires the real-target Zenoh feedback disposition and
-the aggregate scenario above. Package-local crate tests remain regression
-evidence after that transition.
+Those roots remain absent until the real-target Zenoh feedback has a technical
+disposition and the aggregate scenario is implemented. Package-local crate
+tests remain regression evidence after the aggregate fixture is added.
 
 ## Exclusions
 
