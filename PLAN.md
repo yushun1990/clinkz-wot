@@ -15,17 +15,20 @@ protocol-independent engine ownership plus Zenoh-family operation.
 
 This file owns only the durable roadmap: milestones, dependencies, coarse
 status, objectives, and exit goals. It does not own the current engineering
-claim, exact implementation plan, acceptance checklist, session state, design
-authority, work-package admission, or evidence history.
+task, detailed implementation plan, session state, design authority,
+work-package admission, or evidence history.
 
 Use:
 
-- `EXECUTION.md` for the one current engineering claim and its acceptance
-  contract;
-- `PROJECT_STATE.md` for the compact continuation and remote-state cache;
 - registered `docs/` and work-package manifests for technical authority,
-  dependency, admission, and completion truth; and
-- Git, GitHub, audits, and tests for history and evidence.
+  dependency, admission, and completion truth;
+- source code and tests for implementation truth;
+- Git, GitHub, audits, and CI for current remote state, history, review, and
+  executable evidence; and
+- `PROJECT_GOVERNANCE.md` for task-session and progression rules.
+
+Current task state and the next action are derived from those sources in the
+active task session; they are not stored in this roadmap.
 
 ## Roadmap Frontier
 
@@ -40,12 +43,12 @@ admission, a bounded non-authoritative real-target Zenoh Property Read probe
 must exercise the current target Planning, Binding, and Servient boundaries
 with actual protocol I/O and a network round trip. That probe is architecture
 feedback, not WP-600 product progress. Its result either reopens the exact SPI
-surface that proved awkward or releases a later Max planning cycle for the
-aggregate mock gate.
+surface that proved awkward or allows the next task session to reconsider the
+aggregate mock gate from current repository evidence.
 
-No engineering claim is active merely because it is next on this roadmap.
-`EXECUTION.md` must be replaced by a Max planning cycle before an Executor may
-begin it.
+The roadmap identifies durable ordering, not a stored executable next action.
+A task session must still inspect the current repository and decide how to
+advance the frontier safely.
 
 ## Critical Path
 
@@ -76,15 +79,16 @@ begin it.
 
 ## M0 — Execution Baseline and Collaboration Reset
 
-Objective: maintain a repository-native, AI-led execution process with clear
-artifact ownership, recoverable remote handoff, role-separated planning,
-implementation, and acceptance, and bounded continuation context.
+Objective: maintain an AI-led process whose durable truth lives in the
+repository authorities, implementation, Git/GitHub, and executable evidence,
+without requiring a parallel current-state or conversational-memory system.
 
 Exit goals:
 
 - governance and artifact responsibilities are non-conflicting;
-- each active claim has one `EXECUTION.md` contract;
-- continuation is recoverable without a historical state ledger; and
+- task sessions reconstruct current state from repository and remote truth;
+- model/profile choice is proportional to technical uncertainty rather than a
+  mandatory role choreography; and
 - default-branch validation and remote reconciliation remain reproducible.
 
 ## M1 — v5.0 Authority Reset and Architecture Closure
@@ -216,6 +220,6 @@ independent release-candidate review; and an AI technical-readiness verdict.
 ## Progress Rule
 
 Milestone status changes only from registered repository evidence under
-`PROJECT_GOVERNANCE.md`. Detailed work progress changes its owning work-package
-record and current `EXECUTION.md`; it is summarized here only when a milestone
-or durable roadmap dependency changes.
+`PROJECT_GOVERNANCE.md`. Detailed work progress belongs to its owning source,
+work-package record, tests, audit/evidence, Git branch, and pull request. It is
+summarized here only when a milestone or durable roadmap dependency changes.
