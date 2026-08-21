@@ -57,8 +57,9 @@ probe constraints explicitly forbid both.
 
 This conflicts with the specification statement that Host guards preserve the
 complete preparation input while transferring private binding state exactly
-once. `HostCommittedRouteGuard::try_state_pin_mut` is sufficient after commit,
-but it does not solve prepared -> active or active -> committed succession.
+once. The then-current `HostCommittedRouteGuard::try_state_pin_mut` allowed
+protocol progress after commit, but it did not solve prepared -> active or
+active -> committed succession.
 
 ## Real-target evidence retained outside this question
 
@@ -91,12 +92,21 @@ allocation. Successor construction consumes only the predecessor guard and
 moves the unchanged carrier. There is no consuming state extraction and no
 replacement-state argument.
 
-All three legal stages expose a type-checked borrowed mutable accessor for
-matching `Unpin` state and a type-checked pinned mutable accessor for matching
-state that may be `!Unpin`. Core alone projects the pinned carrier storage; a
-binding receives a safe public borrow and needs no unsafe or private escape.
-Failure, cancellation, and late-successor ownership retain the carrier. The
-terminal cleanup or acknowledged residual owner disposes it exactly once.
+An independent merge-gate review then falsified the first corrected accessor
+shape. Returning `&mut S` allowed safe `mem::replace` for `Unpin` state, and
+returning `Pin<&mut S>` retained the same replacement path through
+`Pin::get_mut`. The original state could therefore be dropped before stage
+succession or retained beyond terminal carrier disposal. This was an accessor
+defect, not evidence against the private-carrier or three-stage decision.
+
+All three legal stages now expose only a type-checked pinned shared projection,
+`Pin<&S>`. Core never returns `&mut S` or `Pin<&mut S>`. Protocol-local state
+encapsulates mutation and progress behind methods on the shared projection,
+using interior mutability where needed. Core alone performs the erased-state
+pin projection; a binding needs no unsafe or private escape, and safe external
+authoring cannot extract, replace, or prematurely destroy the complete state
+value. Failure, cancellation, and late-successor ownership retain the carrier.
+The terminal cleanup or acknowledged residual owner disposes it exactly once.
 
 The scoped-artifact rule remains unchanged. The binding validates the borrowed
 immutable artifact during preparation and derives the values needed later into
@@ -135,16 +145,19 @@ independently reconstructible facts.
 
 ## Migrated evidence and remaining boundary
 
-Focused Core evidence keeps one `!Unpin`, non-`Clone` state allocation and one
-footprint across prepared -> active -> committed, rejects a mismatched concrete
-type, observes no predecessor-stage drop, and observes exactly one terminal
-drop. The Servient Host fixtures now put their primary bounded ingress,
-correlation, and cleanup state in the guard instead of a shared instrumentation
-object. The real Zenoh probe pairs application-static and public Host-erased
-success, readiness-failure, and pre-publication-cancellation scenarios. It
-observes the same state address across successful Host stages, no early drop on
-failure or cancellation, one terminal drop, and generation, permit,
-correlation, response, and cleanup parity on the current Property Read overlap.
+Focused Core evidence keeps both `!Unpin`, non-`Clone` and ordinary `Unpin`
+state allocations plus one footprint across prepared -> active -> committed,
+rejects a mismatched concrete type, observes no predecessor-stage drop, and
+observes exactly one terminal drop. Compile-fail evidence rejects both the
+reviewer's direct `mem::replace` counterexample and conversion of the shared
+pinned projection into `Pin<&mut S>`. The Servient Host fixtures now put their
+primary bounded ingress, correlation, and cleanup state in the guard and use
+protocol-local interior mutation rather than whole-state mutable projection.
+The real Zenoh probe pairs application-static and public Host-erased success,
+readiness-failure, and pre-publication-cancellation scenarios. It observes the
+same state address across successful Host stages, no early drop on failure or
+cancellation, one terminal drop, and generation, permit, correlation, response,
+and cleanup parity on the current Property Read overlap.
 
 This clears the real-target prerequisite; it does not pass or implement the
 aggregate Property Read gate. Multi-route resource modeling, complete

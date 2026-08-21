@@ -39,9 +39,11 @@ containing the complete `PrepareInput`, immutable lifetime footprint,
 generation identity, and one binding-private erased state allocation. Prepared,
 active, and committed guards are linear stage owners of that same carrier;
 stage succession MUST NOT accept replacement state, extract the state, change
-its concrete type, or drop it before terminal cleanup disposition. A binding
-MUST NOT receive an application dispatch capability, call a handler from hidden
-work, or observe the Servient registry.
+its concrete type, or drop it before terminal cleanup disposition. Public
+state access MUST be a type-checked shared pinned projection and MUST NOT expose
+`&mut S` or `Pin<&mut S>` for the complete state value. A binding MUST NOT
+receive an application dispatch capability, call a handler from hidden work,
+or observe the Servient registry.
 
 `BIND-STORAGE-001`: A constrained binding MUST expose associated protocol state
 types and their maximum size, alignment, lifetime, and drop contract so the
@@ -666,27 +668,23 @@ impl HostCommittedRouteGuard {
 }
 ```
 
-All three stage guards expose the same type-checked borrowed access shape. The
-ordinary mutable accessor is limited to `Unpin` state; the pinned accessor
-supports binding state that requires a stable address. A mismatch returns
-`None` before mutation. Neither accessor transfers ownership or permits a
-successor to replace the stored value:
+All three stage guards expose the same type-checked pinned shared projection.
+It supports matching state that requires a stable address as well as ordinary
+`Unpin` state. A mismatch returns `None` before any protocol-local operation.
+Bindings place mutation and progress behind methods on the shared state,
+using interior mutability where necessary. Core exposes neither `&mut S` nor
+`Pin<&mut S>`, so safe callers cannot replace, extract, or prematurely destroy
+the complete stored value:
 
 ```rust
 impl HostPreparedRouteGuard {
-    pub fn try_state_mut<S>(&mut self) -> Option<&mut S>
-    where
-        S: Send + Unpin + 'static;
-
-    pub fn try_state_pin_mut<S>(
-        self: Pin<&mut Self>,
-    ) -> Option<Pin<&mut S>>
+    pub fn try_state_pin_ref<S>(&self) -> Option<Pin<&S>>
     where
         S: Send + 'static;
 }
 
-// HostActiveRouteGuard and HostCommittedRouteGuard expose the same two
-// accessors for the same carrier allocation.
+// HostActiveRouteGuard and HostCommittedRouteGuard expose the same shared
+// pinned projection for the same carrier allocation.
 ```
 
 The `std` server trait below is the matching host authoring surface. Its
@@ -1019,11 +1017,12 @@ reservation identity, and immutable lifetime footprint from one private
 carrier created by `HostPreparedRouteGuard::new`. `HostActiveRouteGuard::new`
 and `HostCommittedRouteGuard::new` consume only the predecessor stage owner and
 move that unchanged carrier; neither accepts replacement state. The owning
-binding may type-check and mutably borrow `Unpin` state or pin and mutably
-borrow any matching state in the prepared, active, or committed stage. There is
-no consuming state extraction. A committed guard is closed to request
-admission; serving authority is never stored in the guard. The borrowed
-accessors do not expose state to Servient.
+binding may obtain only a type-checked pinned shared projection of matching
+state in the prepared, active, or committed stage. Protocol-local methods use
+interior mutability where progress requires mutation. There is no safe whole-
+state mutable projection and no consuming state extraction. A committed guard
+is closed to request admission; serving authority is never stored in the
+guard. The shared projection does not expose state to Servient.
 `HostShutdownRouteGuard` owns either an active or committed guard so one
 shutdown operation can preserve both legal predecessor stages. Static
 counterparts use typed caller-owned route slots. In both representations the
@@ -1035,18 +1034,12 @@ lifecycle event.
 
 ```rust
 impl HostPreparedRouteGuard {
-    pub fn try_state_mut<S>(&mut self) -> Option<&mut S>
-    where
-        S: Send + Unpin + 'static;
-
-    pub fn try_state_pin_mut<S>(
-        self: Pin<&mut Self>,
-    ) -> Option<Pin<&mut S>>
+    pub fn try_state_pin_ref<S>(&self) -> Option<Pin<&S>>
     where
         S: Send + 'static;
 }
 
-// Identical accessors exist on HostActiveRouteGuard and
+// Identical shared projections exist on HostActiveRouteGuard and
 // HostCommittedRouteGuard.
 ```
 

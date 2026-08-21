@@ -306,15 +306,146 @@ enum RouteStage {
     Closed,
 }
 
-struct ZenohRouteState {
+struct ZenohRouteLifecycle {
     stage: RouteStage,
-    metadata: ZenohRouteArtifact,
-    io: Arc<Mutex<RouteIo>>,
     declaration: Option<ProbeFuture<Result<Box<dyn DeclaredRoute>, String>>>,
     declared: Option<Box<dyn DeclaredRoute>>,
     cleanup: Option<ProbeFuture<Result<(), String>>>,
     cleanup_context: Option<CleanupPhaseContext>,
+}
+
+struct ZenohRouteState {
+    lifecycle: Mutex<ZenohRouteLifecycle>,
+    metadata: ZenohRouteArtifact,
+    io: Arc<Mutex<RouteIo>>,
     telemetry: ProbeTelemetry,
+}
+
+impl ZenohRouteState {
+    fn stage(&self) -> RouteStage {
+        self.lifecycle
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .stage
+    }
+
+    fn transition(&self, from: RouteStage, to: RouteStage) {
+        let mut lifecycle = self
+            .lifecycle
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        assert_eq!(lifecycle.stage, from);
+        lifecycle.stage = to;
+    }
+
+    fn poll_declaration(&self, cx: &mut Context<'_>) -> Poll<Result<(), String>> {
+        let mut lifecycle = self
+            .lifecycle
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        let declaration = lifecycle
+            .declaration
+            .as_mut()
+            .expect("Host preparing route retains declaration future");
+        match declaration.as_mut().poll(cx) {
+            Poll::Pending => Poll::Pending,
+            Poll::Ready(Ok(declared)) => {
+                lifecycle.declaration = None;
+                lifecycle.declared = Some(declared);
+                lifecycle.stage = RouteStage::Prepared;
+                Poll::Ready(Ok(()))
+            }
+            Poll::Ready(Err(error)) => {
+                lifecycle.declaration = None;
+                lifecycle.stage = RouteStage::Closed;
+                Poll::Ready(Err(error))
+            }
+        }
+    }
+
+    fn begin_cleanup(&self, cleanup: CleanupPhaseContext, abort: bool) {
+        if abort {
+            self.telemetry
+                .update(|snapshot| snapshot.aborts_started += 1);
+        } else {
+            self.telemetry
+                .update(|snapshot| snapshot.shutdowns_started += 1);
+        }
+        let mut lifecycle = self
+            .lifecycle
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        lifecycle.declaration = None;
+        let declared = lifecycle.declared.take();
+        let io = Arc::clone(&self.io);
+        let telemetry = self.telemetry.clone();
+        lifecycle.stage = RouteStage::Cleaning;
+        lifecycle.cleanup_context = Some(cleanup);
+        lifecycle.cleanup = Some(Box::pin(async move {
+            let (pending, in_flight) = {
+                let mut io = io.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+                io.accepting = false;
+                io.waker = None;
+                (io.pending.take(), io.in_flight.take())
+            };
+            if let Some(query) = pending {
+                query
+                    .reply_err("route draining")
+                    .await
+                    .map_err(|error| error.to_string())?;
+            }
+            if let Some(in_flight) = in_flight {
+                in_flight
+                    .query
+                    .reply_err("route draining")
+                    .await
+                    .map_err(|error| error.to_string())?;
+            }
+            if let Some(declared) = declared {
+                declared.into_cleanup().await?;
+            }
+            telemetry.update(|snapshot| snapshot.terminal_cleanups += 1);
+            Ok(())
+        }));
+    }
+
+    fn poll_cleanup(
+        &self,
+        cx: &mut Context<'_>,
+        budget: &mut WorkBudget,
+    ) -> Poll<RouteCleanupOutcome> {
+        if budget.consume(WorkClass::CleanupItems, 1).is_err() {
+            return Poll::Pending;
+        }
+        let mut lifecycle = self
+            .lifecycle
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        let cleanup = lifecycle
+            .cleanup
+            .as_mut()
+            .expect("cleanup future is retained");
+        match cleanup.as_mut().poll(cx) {
+            Poll::Pending => Poll::Pending,
+            Poll::Ready(Ok(())) => {
+                lifecycle.cleanup = None;
+                lifecycle.cleanup_context = None;
+                lifecycle.stage = RouteStage::Closed;
+                Poll::Ready(RouteCleanupOutcome::Complete)
+            }
+            Poll::Ready(Err(_)) => {
+                let context = lifecycle
+                    .cleanup_context
+                    .take()
+                    .expect("failed cleanup retains its phase");
+                lifecycle.cleanup = None;
+                lifecycle.stage = RouteStage::Closed;
+                Poll::Ready(RouteCleanupOutcome::ResidualExternalState(cleanup_record(
+                    &context,
+                )))
+            }
+        }
+    }
 }
 
 impl Drop for ZenohRouteState {
@@ -374,92 +505,19 @@ fn new_zenoh_route_state(
         snapshot.declarations_started += 1;
     });
     let state = ZenohRouteState {
-        stage: RouteStage::Declaring,
+        lifecycle: Mutex::new(ZenohRouteLifecycle {
+            stage: RouteStage::Declaring,
+            declaration: Some(declaration),
+            declared: None,
+            cleanup: None,
+            cleanup_context: None,
+        }),
         metadata,
         io,
-        declaration: Some(declaration),
-        declared: None,
-        cleanup: None,
-        cleanup_context: None,
         telemetry,
     };
     let response_io = Arc::downgrade(&state.io);
     (state, response_io)
-}
-
-fn begin_zenoh_cleanup(state: &mut ZenohRouteState, cleanup: CleanupPhaseContext, abort: bool) {
-    if abort {
-        state
-            .telemetry
-            .update(|snapshot| snapshot.aborts_started += 1);
-    } else {
-        state
-            .telemetry
-            .update(|snapshot| snapshot.shutdowns_started += 1);
-    }
-    state.declaration = None;
-    let declared = state.declared.take();
-    let io = Arc::clone(&state.io);
-    let telemetry = state.telemetry.clone();
-    state.stage = RouteStage::Cleaning;
-    state.cleanup_context = Some(cleanup);
-    state.cleanup = Some(Box::pin(async move {
-        let (pending, in_flight) = {
-            let mut io = io.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
-            io.accepting = false;
-            io.waker = None;
-            (io.pending.take(), io.in_flight.take())
-        };
-        if let Some(query) = pending {
-            query
-                .reply_err("route draining")
-                .await
-                .map_err(|error| error.to_string())?;
-        }
-        if let Some(in_flight) = in_flight {
-            in_flight
-                .query
-                .reply_err("route draining")
-                .await
-                .map_err(|error| error.to_string())?;
-        }
-        if let Some(declared) = declared {
-            declared.into_cleanup().await?;
-        }
-        telemetry.update(|snapshot| snapshot.terminal_cleanups += 1);
-        Ok(())
-    }));
-}
-
-fn poll_zenoh_cleanup(
-    state: &mut ZenohRouteState,
-    cx: &mut Context<'_>,
-    budget: &mut WorkBudget,
-) -> Poll<RouteCleanupOutcome> {
-    if budget.consume(WorkClass::CleanupItems, 1).is_err() {
-        return Poll::Pending;
-    }
-    let cleanup = state.cleanup.as_mut().expect("cleanup future is retained");
-    match cleanup.as_mut().poll(cx) {
-        Poll::Pending => Poll::Pending,
-        Poll::Ready(Ok(())) => {
-            state.cleanup = None;
-            state.cleanup_context = None;
-            state.stage = RouteStage::Closed;
-            Poll::Ready(RouteCleanupOutcome::Complete)
-        }
-        Poll::Ready(Err(_)) => {
-            let context = state
-                .cleanup_context
-                .take()
-                .expect("failed cleanup retains its phase");
-            state.cleanup = None;
-            state.stage = RouteStage::Closed;
-            Poll::Ready(RouteCleanupOutcome::ResidualExternalState(cleanup_record(
-                &context,
-            )))
-        }
-    }
 }
 
 fn begin_zenoh_response(
@@ -538,7 +596,7 @@ impl StaticZenohServer {
         route: &mut ServerRouteSlot<ZenohRouteState>,
         abort: bool,
     ) -> StartStatus<RouteCleanupOutcome> {
-        begin_zenoh_cleanup(route.state_mut(), cleanup, abort);
+        route.state_mut().begin_cleanup(cleanup, abort);
         StartStatus::Pending
     }
 
@@ -548,7 +606,7 @@ impl StaticZenohServer {
         route: &mut ServerRouteSlot<ZenohRouteState>,
         budget: &mut WorkBudget,
     ) -> Poll<RouteCleanupOutcome> {
-        poll_zenoh_cleanup(route.state_mut(), cx, budget)
+        route.state_mut().poll_cleanup(cx, budget)
     }
 }
 
@@ -612,29 +670,16 @@ impl PollServerBinding for StaticZenohServer {
         if budget.consume(WorkClass::BindingPolls, 1).is_err() {
             return Poll::Pending;
         }
-        let state = route.state_mut();
-        let declaration = state
-            .declaration
-            .as_mut()
-            .expect("preparing route retains declaration future");
-        match declaration.as_mut().poll(cx) {
+        match route.state_mut().poll_declaration(cx) {
             Poll::Pending => Poll::Pending,
-            Poll::Ready(Ok(declared)) => {
-                state.declaration = None;
-                state.declared = Some(declared);
-                state.stage = RouteStage::Prepared;
+            Poll::Ready(Ok(())) => {
                 self.telemetry
                     .update(|snapshot| snapshot.declarations_completed += 1);
                 Poll::Ready(RoutePrepareOutcome::Prepared(()))
             }
-            Poll::Ready(Err(_)) => {
-                state.declaration = None;
-                state.stage = RouteStage::Closed;
-                Poll::Ready(RoutePrepareOutcome::RejectedNoResource(operational_error(
-                    *route.input().route(),
-                    ErrorPhase::Prepare,
-                )))
-            }
+            Poll::Ready(Err(_)) => Poll::Ready(RoutePrepareOutcome::RejectedNoResource(
+                operational_error(*route.input().route(), ErrorPhase::Prepare),
+            )),
         }
     }
 
@@ -705,7 +750,7 @@ impl PollServerBinding for StaticZenohServer {
         _budget: &mut WorkBudget,
     ) -> StartStatus<RouteActivationOutcome<(), ()>> {
         let state = route.state_mut();
-        state.stage = RouteStage::Active;
+        state.transition(RouteStage::Prepared, RouteStage::Active);
         let address = state as *mut ZenohRouteState as usize;
         self.telemetry.update(|snapshot| {
             snapshot.activations += 1;
@@ -740,7 +785,7 @@ impl PollServerBinding for StaticZenohServer {
         _budget: &mut WorkBudget,
     ) -> StartStatus<RouteCommitOutcome<(), ()>> {
         let state = route.state_mut();
-        state.stage = RouteStage::CommittedClosed;
+        state.transition(RouteStage::Active, RouteStage::CommittedClosed);
         let address = state as *mut ZenohRouteState as usize;
         self.telemetry.update(|snapshot| {
             snapshot.commits_closed += 1;
@@ -780,7 +825,7 @@ impl PollServerBinding for StaticZenohServer {
             return Poll::Pending;
         }
         if permit.route() != route.input().route()
-            || route.state_mut().stage != RouteStage::CommittedClosed
+            || route.state_mut().stage() != RouteStage::CommittedClosed
         {
             return Poll::Ready(Err(core_error(ErrorPhase::Binding)));
         }
@@ -866,7 +911,7 @@ impl PollServerBinding for StaticZenohServer {
         &mut self,
         route: &mut ServerRouteSlot<Self::RouteState>,
     ) -> CoreResult<()> {
-        if route.state_mut().stage != RouteStage::Closed {
+        if route.state_mut().stage() != RouteStage::Closed {
             return Err(core_error(ErrorPhase::Cleanup));
         }
         route.clear();
@@ -936,21 +981,21 @@ impl PollServerBinding for StaticZenohServer {
     }
 }
 
-fn prepared_zenoh_state(guard: Pin<&mut HostPreparedRouteGuard>) -> Pin<&mut ZenohRouteState> {
+fn prepared_zenoh_state(guard: &HostPreparedRouteGuard) -> Pin<&ZenohRouteState> {
     guard
-        .try_state_pin_mut::<ZenohRouteState>()
+        .try_state_pin_ref::<ZenohRouteState>()
         .expect("prepared Host guard retains Zenoh route state")
 }
 
-fn active_zenoh_state(guard: Pin<&mut HostActiveRouteGuard>) -> Pin<&mut ZenohRouteState> {
+fn active_zenoh_state(guard: &HostActiveRouteGuard) -> Pin<&ZenohRouteState> {
     guard
-        .try_state_pin_mut::<ZenohRouteState>()
+        .try_state_pin_ref::<ZenohRouteState>()
         .expect("active Host guard retains Zenoh route state")
 }
 
-fn committed_zenoh_state(guard: Pin<&mut HostCommittedRouteGuard>) -> Pin<&mut ZenohRouteState> {
+fn committed_zenoh_state(guard: &HostCommittedRouteGuard) -> Pin<&ZenohRouteState> {
     guard
-        .try_state_pin_mut::<ZenohRouteState>()
+        .try_state_pin_ref::<ZenohRouteState>()
         .expect("committed Host guard retains Zenoh route state")
 }
 
@@ -1038,17 +1083,10 @@ impl HostBindingCall<RoutePrepareOutcome<HostPreparedRouteGuard>, HostRouteClean
             .as_mut()
             .expect("Host prepare call completed twice");
         let route = *guard.route();
-        let mut state = prepared_zenoh_state(Pin::new(guard));
-        let declaration = state
-            .declaration
-            .as_mut()
-            .expect("Host preparing route retains declaration future");
-        match declaration.as_mut().poll(cx) {
+        let state = prepared_zenoh_state(guard);
+        match state.get_ref().poll_declaration(cx) {
             Poll::Pending => Poll::Pending,
-            Poll::Ready(Ok(declared)) => {
-                state.declaration = None;
-                state.declared = Some(declared);
-                state.stage = RouteStage::Prepared;
+            Poll::Ready(Ok(())) => {
                 self.telemetry
                     .update(|snapshot| snapshot.declarations_completed += 1);
                 Poll::Ready(RoutePrepareOutcome::Prepared(
@@ -1056,8 +1094,6 @@ impl HostBindingCall<RoutePrepareOutcome<HostPreparedRouteGuard>, HostRouteClean
                 ))
             }
             Poll::Ready(Err(_)) => {
-                state.declaration = None;
-                state.stage = RouteStage::Closed;
                 *self
                     .response_io
                     .lock()
@@ -1206,14 +1242,12 @@ enum HostZenohCleanupGuard {
 }
 
 impl HostZenohCleanupGuard {
-    fn state(&mut self) -> Pin<&mut ZenohRouteState> {
+    fn state(&self) -> Pin<&ZenohRouteState> {
         match self {
-            Self::Prepared(guard) => prepared_zenoh_state(Pin::new(guard)),
-            Self::Shutdown(HostShutdownRouteGuard::Active(guard)) => {
-                active_zenoh_state(Pin::new(guard))
-            }
+            Self::Prepared(guard) => prepared_zenoh_state(guard),
+            Self::Shutdown(HostShutdownRouteGuard::Active(guard)) => active_zenoh_state(guard),
             Self::Shutdown(HostShutdownRouteGuard::Committed(guard)) => {
-                committed_zenoh_state(Pin::new(guard))
+                committed_zenoh_state(guard)
             }
         }
     }
@@ -1231,12 +1265,10 @@ impl HostZenohCleanupCall {
         response_io: Arc<Mutex<Option<Weak<Mutex<RouteIo>>>>>,
         telemetry: ProbeTelemetry,
     ) -> Self {
-        let (mut guard, cleanup) = input.into_parts();
-        begin_zenoh_cleanup(
-            prepared_zenoh_state(Pin::new(&mut guard)).get_mut(),
-            cleanup,
-            true,
-        );
+        let (guard, cleanup) = input.into_parts();
+        prepared_zenoh_state(&guard)
+            .get_ref()
+            .begin_cleanup(cleanup, true);
         Self {
             guard: Some(HostZenohCleanupGuard::Prepared(guard)),
             response_io,
@@ -1249,12 +1281,12 @@ impl HostZenohCleanupCall {
         response_io: Arc<Mutex<Option<Weak<Mutex<RouteIo>>>>>,
         telemetry: ProbeTelemetry,
     ) -> Self {
-        let (mut guard, cleanup) = input.into_parts();
-        let state = match &mut guard {
-            HostShutdownRouteGuard::Active(guard) => active_zenoh_state(Pin::new(guard)),
-            HostShutdownRouteGuard::Committed(guard) => committed_zenoh_state(Pin::new(guard)),
+        let (guard, cleanup) = input.into_parts();
+        let state = match &guard {
+            HostShutdownRouteGuard::Active(guard) => active_zenoh_state(guard),
+            HostShutdownRouteGuard::Committed(guard) => committed_zenoh_state(guard),
         };
-        begin_zenoh_cleanup(state.get_mut(), cleanup, false);
+        state.get_ref().begin_cleanup(cleanup, false);
         Self {
             guard: Some(HostZenohCleanupGuard::Shutdown(guard)),
             response_io,
@@ -1278,15 +1310,13 @@ impl HostBindingCall<RouteCleanupOutcome, HostRouteCleanupSuccessor> for HostZen
             0,
             "Host Zenoh state cannot drop before terminal cleanup"
         );
-        let outcome = poll_zenoh_cleanup(
-            self.guard
-                .as_mut()
-                .expect("Host cleanup call completed twice")
-                .state()
-                .get_mut(),
-            cx,
-            budget,
-        );
+        let outcome = self
+            .guard
+            .as_ref()
+            .expect("Host cleanup call completed twice")
+            .state()
+            .get_ref()
+            .poll_cleanup(cx, budget);
         if outcome.is_ready() {
             *self
                 .response_io
@@ -1441,10 +1471,9 @@ impl RouteServerBinding for HostZenohServer {
         }
         let footprint = input.admitted_footprint();
         let (state, response_io) = new_zenoh_route_state(metadata.clone(), self.telemetry.clone());
-        let mut guard = HostPreparedRouteGuard::new(input, footprint, state);
-        let state_address = prepared_zenoh_state(Pin::new(&mut guard))
-            .as_ref()
-            .get_ref() as *const ZenohRouteState as usize;
+        let guard = HostPreparedRouteGuard::new(input, footprint, state);
+        let state_address =
+            prepared_zenoh_state(&guard).get_ref() as *const ZenohRouteState as usize;
         self.telemetry.update(|snapshot| {
             snapshot.prepared_state_address = Some(state_address);
             snapshot.prepared_footprint = Some(footprint);
@@ -1462,7 +1491,7 @@ impl RouteServerBinding for HostZenohServer {
 
     fn start_readiness(
         &self,
-        mut guard: HostPreparedRouteGuard,
+        guard: HostPreparedRouteGuard,
     ) -> Result<
         HostBindingCallBox<
             RouteReadinessOutcome<HostPreparedRouteGuard>,
@@ -1471,7 +1500,7 @@ impl RouteServerBinding for HostZenohServer {
         BindingInputRejection<HostPreparedRouteGuard>,
     > {
         assert_eq!(
-            prepared_zenoh_state(Pin::new(&mut guard)).stage,
+            prepared_zenoh_state(&guard).get_ref().stage(),
             RouteStage::Prepared
         );
         Ok(HostBindingCallBox::new(HostZenohReadinessCall {
@@ -1484,7 +1513,7 @@ impl RouteServerBinding for HostZenohServer {
 
     fn activate(
         &self,
-        mut guard: HostPreparedRouteGuard,
+        guard: HostPreparedRouteGuard,
     ) -> Result<
         HostBindingCallBox<
             RouteActivationOutcome<HostPreparedRouteGuard, HostActiveRouteGuard>,
@@ -1493,10 +1522,11 @@ impl RouteServerBinding for HostZenohServer {
         BindingInputRejection<HostPreparedRouteGuard>,
     > {
         let footprint = guard.lifetime_footprint();
-        let mut state = prepared_zenoh_state(Pin::new(&mut guard));
-        assert_eq!(state.stage, RouteStage::Prepared);
-        state.stage = RouteStage::Active;
-        let address = state.as_ref().get_ref() as *const ZenohRouteState as usize;
+        let state = prepared_zenoh_state(&guard);
+        state
+            .get_ref()
+            .transition(RouteStage::Prepared, RouteStage::Active);
+        let address = state.get_ref() as *const ZenohRouteState as usize;
         self.telemetry.update(|snapshot| {
             snapshot.activations += 1;
             snapshot.active_state_address = Some(address);
@@ -1509,7 +1539,7 @@ impl RouteServerBinding for HostZenohServer {
 
     fn commit(
         &self,
-        mut guard: HostActiveRouteGuard,
+        guard: HostActiveRouteGuard,
     ) -> Result<
         HostBindingCallBox<
             RouteCommitOutcome<HostActiveRouteGuard, HostCommittedRouteGuard>,
@@ -1518,10 +1548,11 @@ impl RouteServerBinding for HostZenohServer {
         BindingInputRejection<HostActiveRouteGuard>,
     > {
         let footprint = guard.lifetime_footprint();
-        let mut state = active_zenoh_state(Pin::new(&mut guard));
-        assert_eq!(state.stage, RouteStage::Active);
-        state.stage = RouteStage::CommittedClosed;
-        let address = state.as_ref().get_ref() as *const ZenohRouteState as usize;
+        let state = active_zenoh_state(&guard);
+        state
+            .get_ref()
+            .transition(RouteStage::Active, RouteStage::CommittedClosed);
+        let address = state.get_ref() as *const ZenohRouteState as usize;
         self.telemetry.update(|snapshot| {
             snapshot.commits_closed += 1;
             snapshot.committed_state_address = Some(address);
@@ -1534,7 +1565,7 @@ impl RouteServerBinding for HostZenohServer {
 
     fn poll_accept(
         &self,
-        mut route: Pin<&mut HostCommittedRouteGuard>,
+        route: Pin<&mut HostCommittedRouteGuard>,
         permit: RouteActivationPermit<'_>,
         cx: &mut Context<'_>,
         budget: &mut WorkBudget,
@@ -1543,14 +1574,15 @@ impl RouteServerBinding for HostZenohServer {
             return Poll::Pending;
         }
         let route_key = *route.as_ref().get_ref().route();
-        let state = committed_zenoh_state(route.as_mut()).get_mut();
-        if permit.route() != &route_key || state.stage != RouteStage::CommittedClosed {
+        let state = committed_zenoh_state(route.as_ref().get_ref());
+        if permit.route() != &route_key || state.get_ref().stage() != RouteStage::CommittedClosed {
             return Poll::Ready(Err(core_error(ErrorPhase::Binding)));
         }
         self.telemetry
             .update(|snapshot| snapshot.permitted_accept_polls += 1);
-        let metadata = state.metadata.clone();
+        let metadata = state.get_ref().metadata.clone();
         let mut io = state
+            .get_ref()
             .io
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner());

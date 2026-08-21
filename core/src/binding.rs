@@ -1904,22 +1904,16 @@ impl HostRouteCarrier {
         self.footprint
     }
 
-    fn try_state_mut<S>(&mut self) -> Option<&mut S>
-    where
-        S: Send + Unpin + 'static,
-    {
-        self.state.downcast_mut::<S>()
-    }
-
-    fn try_state_pin_mut<S>(&mut self) -> Option<Pin<&mut S>>
+    fn try_state_pin_ref<S>(&self) -> Option<Pin<&S>>
     where
         S: Send + 'static,
     {
-        let state = self.state.downcast_mut::<S>()?;
+        let state = self.state.downcast_ref::<S>()?;
         // SAFETY: the concrete state stays in the same heap allocation from
         // carrier construction until carrier drop. Stage conversion moves
-        // only this private `Box` handle, and no public API can extract or
-        // replace a potentially pinned value.
+        // only this private `Box` handle. Public projection is shared and
+        // pinned, so safe code cannot extract, replace, or mutably project the
+        // complete state value after Core establishes this pin invariant.
         Some(unsafe { Pin::new_unchecked(state) })
     }
 }
@@ -1952,20 +1946,39 @@ impl HostPreparedRouteGuard {
         self.carrier.lifetime_footprint()
     }
 
-    /// Mutably borrows matching movable state without changing its owner.
-    pub fn try_state_mut<S>(&mut self) -> Option<&mut S>
-    where
-        S: Send + Unpin + 'static,
-    {
-        self.carrier.try_state_mut::<S>()
-    }
-
-    /// Pins and mutably borrows matching erased state without moving it.
-    pub fn try_state_pin_mut<S>(self: Pin<&mut Self>) -> Option<Pin<&mut S>>
+    /// Returns a pinned shared projection of matching erased state.
+    ///
+    /// Bindings place protocol-local mutation behind methods on `&self`, using
+    /// interior mutability where needed. The complete state value never has a
+    /// safe mutable projection, so whole-state replacement cannot compile:
+    ///
+    /// ```compile_fail
+    /// # use clinkz_wot_core::HostPreparedRouteGuard;
+    /// # fn replace(guard: &HostPreparedRouteGuard) {
+    /// let state = guard
+    ///     .try_state_pin_ref::<u8>()
+    ///     .expect("matching state type");
+    /// let _original = core::mem::replace(state.get_ref(), 7_u8);
+    /// # }
+    /// ```
+    ///
+    /// A shared pinned projection also cannot become pinned mutable access:
+    ///
+    /// ```compile_fail
+    /// # use core::pin::Pin;
+    /// # use clinkz_wot_core::HostPreparedRouteGuard;
+    /// # fn replace(guard: &HostPreparedRouteGuard) {
+    /// let state = guard
+    ///     .try_state_pin_ref::<u8>()
+    ///     .expect("matching state type");
+    /// let _ = Pin::get_mut(state);
+    /// # }
+    /// ```
+    pub fn try_state_pin_ref<S>(&self) -> Option<Pin<&S>>
     where
         S: Send + 'static,
     {
-        self.get_mut().carrier.try_state_pin_mut::<S>()
+        self.carrier.try_state_pin_ref::<S>()
     }
 }
 
@@ -2014,20 +2027,12 @@ impl HostActiveRouteGuard {
         self.carrier.lifetime_footprint()
     }
 
-    /// Mutably borrows matching movable state without changing its owner.
-    pub fn try_state_mut<S>(&mut self) -> Option<&mut S>
-    where
-        S: Send + Unpin + 'static,
-    {
-        self.carrier.try_state_mut::<S>()
-    }
-
-    /// Pins and mutably borrows matching erased state without moving it.
-    pub fn try_state_pin_mut<S>(self: Pin<&mut Self>) -> Option<Pin<&mut S>>
+    /// Returns a pinned shared projection of matching erased state.
+    pub fn try_state_pin_ref<S>(&self) -> Option<Pin<&S>>
     where
         S: Send + 'static,
     {
-        self.get_mut().carrier.try_state_pin_mut::<S>()
+        self.carrier.try_state_pin_ref::<S>()
     }
 }
 
@@ -2076,20 +2081,12 @@ impl HostCommittedRouteGuard {
         self.carrier.lifetime_footprint()
     }
 
-    /// Mutably borrows matching movable state without changing its owner.
-    pub fn try_state_mut<S>(&mut self) -> Option<&mut S>
-    where
-        S: Send + Unpin + 'static,
-    {
-        self.carrier.try_state_mut::<S>()
-    }
-
-    /// Pins and mutably borrows matching erased state without moving it.
-    pub fn try_state_pin_mut<S>(self: Pin<&mut Self>) -> Option<Pin<&mut S>>
+    /// Returns a pinned shared projection of matching erased state.
+    pub fn try_state_pin_ref<S>(&self) -> Option<Pin<&S>>
     where
         S: Send + 'static,
     {
-        self.get_mut().carrier.try_state_pin_mut::<S>()
+        self.carrier.try_state_pin_ref::<S>()
     }
 }
 

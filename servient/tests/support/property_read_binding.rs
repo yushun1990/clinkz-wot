@@ -972,12 +972,60 @@ mod host_fixture {
         accepting: bool,
     }
 
-    struct HostMockRouteState {
+    struct HostMockRouteLifecycle {
         stage: HostRouteStage,
+        cleanup: Option<CleanupPhaseContext>,
+    }
+
+    struct HostMockRouteState {
+        lifecycle: Mutex<HostMockRouteLifecycle>,
         target: Box<str>,
         io: Arc<Mutex<HostRouteIo>>,
-        cleanup: Option<CleanupPhaseContext>,
         drops: Arc<AtomicU32>,
+    }
+
+    impl HostMockRouteState {
+        fn stage(&self) -> HostRouteStage {
+            self.lifecycle
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner())
+                .stage
+        }
+
+        fn transition(&self, from: HostRouteStage, to: HostRouteStage) {
+            let mut lifecycle = self
+                .lifecycle
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner());
+            assert_eq!(lifecycle.stage, from);
+            lifecycle.stage = to;
+        }
+
+        fn begin_cleanup(&self, cleanup: CleanupPhaseContext) {
+            let mut lifecycle = self
+                .lifecycle
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner());
+            lifecycle.stage = HostRouteStage::Cleaning;
+            lifecycle.cleanup = Some(cleanup);
+            self.io
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner())
+                .accepting = false;
+        }
+
+        fn finish_cleanup(&self) {
+            let mut lifecycle = self
+                .lifecycle
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner());
+            assert_eq!(lifecycle.stage, HostRouteStage::Cleaning);
+            let _cleanup = lifecycle
+                .cleanup
+                .take()
+                .expect("cleanup phase stays in route state");
+            lifecycle.stage = HostRouteStage::Closed;
+        }
     }
 
     impl Drop for HostMockRouteState {
@@ -986,25 +1034,22 @@ mod host_fixture {
         }
     }
 
-    fn prepared_route_state(guard: &mut HostPreparedRouteGuard) -> &mut HostMockRouteState {
-        Pin::new(guard)
-            .try_state_pin_mut::<HostMockRouteState>()
-            .expect("prepared guard retains the mock route state")
-            .get_mut()
-    }
-
-    fn active_route_state(guard: &mut HostActiveRouteGuard) -> &mut HostMockRouteState {
-        Pin::new(guard)
-            .try_state_pin_mut::<HostMockRouteState>()
-            .expect("active guard retains the mock route state")
-            .get_mut()
-    }
-
-    fn committed_route_state(guard: Pin<&mut HostCommittedRouteGuard>) -> &mut HostMockRouteState {
+    fn prepared_route_state(guard: &HostPreparedRouteGuard) -> Pin<&HostMockRouteState> {
         guard
-            .try_state_pin_mut::<HostMockRouteState>()
+            .try_state_pin_ref::<HostMockRouteState>()
+            .expect("prepared guard retains the mock route state")
+    }
+
+    fn active_route_state(guard: &HostActiveRouteGuard) -> Pin<&HostMockRouteState> {
+        guard
+            .try_state_pin_ref::<HostMockRouteState>()
+            .expect("active guard retains the mock route state")
+    }
+
+    fn committed_route_state(guard: &HostCommittedRouteGuard) -> Pin<&HostMockRouteState> {
+        guard
+            .try_state_pin_ref::<HostMockRouteState>()
             .expect("committed guard retains the mock route state")
-            .get_mut()
     }
 
     /// Deterministic protocol-I/O and instrumentation state for the Servient
@@ -1147,20 +1192,22 @@ mod host_fixture {
                 .response_io
                 .lock()
                 .unwrap_or_else(|poisoned| poisoned.into_inner()) = Some(Arc::downgrade(&io));
-            let mut guard = HostPreparedRouteGuard::new(
+            let guard = HostPreparedRouteGuard::new(
                 input,
                 footprint,
                 HostMockRouteState {
-                    stage: HostRouteStage::Prepared,
+                    lifecycle: Mutex::new(HostMockRouteLifecycle {
+                        stage: HostRouteStage::Prepared,
+                        cleanup: None,
+                    }),
                     target,
                     io,
-                    cleanup: None,
                     drops: Arc::clone(&self.route_state_drops),
                 },
             );
-            let state = prepared_route_state(&mut guard);
-            let state_address = state as *mut HostMockRouteState as usize;
-            let prepared_target = state.target.clone();
+            let state = prepared_route_state(&guard);
+            let state_address = state.get_ref() as *const HostMockRouteState as usize;
+            let prepared_target = state.get_ref().target.clone();
             self.probe.with(|state| {
                 assert_eq!(state.routes, 0);
                 state.ingress = Some(ingress);
@@ -1352,14 +1399,14 @@ mod host_fixture {
     }
 
     impl CleanupGuard {
-        fn state_mut(&mut self) -> &mut HostMockRouteState {
+        fn state(&self) -> Pin<&HostMockRouteState> {
             match self {
                 Self::Prepared(guard) => prepared_route_state(guard),
                 Self::Shutdown(clinkz_wot_core::HostShutdownRouteGuard::Active(guard)) => {
                     active_route_state(guard)
                 }
                 Self::Shutdown(clinkz_wot_core::HostShutdownRouteGuard::Committed(guard)) => {
-                    committed_route_state(Pin::new(guard))
+                    committed_route_state(guard)
                 }
             }
         }
@@ -1387,15 +1434,10 @@ mod host_fixture {
             response_io: Arc<Mutex<Option<Weak<Mutex<HostRouteIo>>>>>,
             route_state_drops: Arc<AtomicU32>,
         ) -> Self {
-            let (mut guard, cleanup) = input.into_parts();
-            let state = prepared_route_state(&mut guard);
-            state.stage = HostRouteStage::Cleaning;
-            state.cleanup = Some(cleanup);
-            state
-                .io
-                .lock()
-                .unwrap_or_else(|poisoned| poisoned.into_inner())
-                .accepting = false;
+            let (guard, cleanup) = input.into_parts();
+            prepared_route_state(&guard)
+                .get_ref()
+                .begin_cleanup(cleanup);
             Self {
                 guard: Some(CleanupGuard::Prepared(guard)),
                 kind: CleanupKind::Abort,
@@ -1412,20 +1454,14 @@ mod host_fixture {
             response_io: Arc<Mutex<Option<Weak<Mutex<HostRouteIo>>>>>,
             route_state_drops: Arc<AtomicU32>,
         ) -> Self {
-            let (mut guard, cleanup) = input.into_parts();
-            let state = match &mut guard {
+            let (guard, cleanup) = input.into_parts();
+            let state = match &guard {
                 clinkz_wot_core::HostShutdownRouteGuard::Active(guard) => active_route_state(guard),
                 clinkz_wot_core::HostShutdownRouteGuard::Committed(guard) => {
-                    committed_route_state(Pin::new(guard))
+                    committed_route_state(guard)
                 }
             };
-            state.stage = HostRouteStage::Cleaning;
-            state.cleanup = Some(cleanup);
-            state
-                .io
-                .lock()
-                .unwrap_or_else(|poisoned| poisoned.into_inner())
-                .accepting = false;
+            state.get_ref().begin_cleanup(cleanup);
             Self {
                 guard: Some(CleanupGuard::Shutdown(guard)),
                 kind: CleanupKind::Shutdown,
@@ -1460,14 +1496,11 @@ mod host_fixture {
                 cx.waker().wake_by_ref();
                 return Poll::Pending;
             }
-            let mut guard = self.guard.take().expect("cleanup completed twice");
-            let state = guard.state_mut();
-            assert_eq!(state.stage, HostRouteStage::Cleaning);
-            let _cleanup = state
-                .cleanup
-                .take()
-                .expect("cleanup phase stays in route state");
+            let guard = self.guard.take().expect("cleanup completed twice");
+            let state = guard.state();
+            assert_eq!(state.get_ref().stage(), HostRouteStage::Cleaning);
             let mut io = state
+                .get_ref()
                 .io
                 .lock()
                 .unwrap_or_else(|poisoned| poisoned.into_inner());
@@ -1475,7 +1508,7 @@ mod host_fixture {
             io.in_flight = None;
             while io.ingress.try_recv().is_ok() {}
             drop(io);
-            state.stage = HostRouteStage::Closed;
+            state.get_ref().finish_cleanup();
             let kind = self.kind;
             self.probe.with(|state| {
                 match kind {
@@ -1576,7 +1609,7 @@ mod host_fixture {
 
         fn start_readiness(
             &self,
-            mut guard: HostPreparedRouteGuard,
+            guard: HostPreparedRouteGuard,
         ) -> Result<
             HostBindingCallBox<
                 RouteReadinessOutcome<HostPreparedRouteGuard>,
@@ -1596,7 +1629,7 @@ mod host_fixture {
             if rejected {
                 assert_eq!(self.route_state_drops.load(Ordering::SeqCst), 0);
                 assert_eq!(
-                    prepared_route_state(&mut guard).stage,
+                    prepared_route_state(&guard).get_ref().stage(),
                     HostRouteStage::Prepared
                 );
                 let error = BindingOperationalError::for_route(
@@ -1612,7 +1645,7 @@ mod host_fixture {
 
         fn activate(
             &self,
-            mut guard: HostPreparedRouteGuard,
+            guard: HostPreparedRouteGuard,
         ) -> Result<
             HostBindingCallBox<
                 RouteActivationOutcome<HostPreparedRouteGuard, HostActiveRouteGuard>,
@@ -1621,10 +1654,11 @@ mod host_fixture {
             BindingInputRejection<HostPreparedRouteGuard>,
         > {
             let footprint = guard.lifetime_footprint();
-            let state = prepared_route_state(&mut guard);
-            assert_eq!(state.stage, HostRouteStage::Prepared);
-            state.stage = HostRouteStage::Active;
-            let address = state as *mut HostMockRouteState as usize;
+            let state = prepared_route_state(&guard);
+            state
+                .get_ref()
+                .transition(HostRouteStage::Prepared, HostRouteStage::Active);
+            let address = state.get_ref() as *const HostMockRouteState as usize;
             self.probe.with(|probe| {
                 probe.active_state_address = Some(address);
                 probe.active_footprint = Some(footprint);
@@ -1636,7 +1670,7 @@ mod host_fixture {
 
         fn commit(
             &self,
-            mut guard: HostActiveRouteGuard,
+            guard: HostActiveRouteGuard,
         ) -> Result<
             HostBindingCallBox<
                 RouteCommitOutcome<HostActiveRouteGuard, HostCommittedRouteGuard>,
@@ -1645,10 +1679,11 @@ mod host_fixture {
             BindingInputRejection<HostActiveRouteGuard>,
         > {
             let footprint = guard.lifetime_footprint();
-            let state = active_route_state(&mut guard);
-            assert_eq!(state.stage, HostRouteStage::Active);
-            state.stage = HostRouteStage::CommittedClosed;
-            let address = state as *mut HostMockRouteState as usize;
+            let state = active_route_state(&guard);
+            state
+                .get_ref()
+                .transition(HostRouteStage::Active, HostRouteStage::CommittedClosed);
+            let address = state.get_ref() as *const HostMockRouteState as usize;
             self.probe.with(|probe| {
                 probe.committed_state_address = Some(address);
                 probe.committed_footprint = Some(footprint);
@@ -1668,21 +1703,22 @@ mod host_fixture {
             if budget.consume(WorkClass::BindingPolls, 1).is_err() {
                 return Poll::Pending;
             }
-            let state = committed_route_state(route);
-            if state.stage == HostRouteStage::Closed {
+            let state = committed_route_state(route.as_ref().get_ref());
+            if state.get_ref().stage() == HostRouteStage::Closed {
                 return Poll::Ready(Ok(clinkz_wot_core::RouteAcceptEvent::Terminal(
                     RouteTerminal::Closed {
                         route: *permit.route(),
                     },
                 )));
             }
-            if state.stage != HostRouteStage::CommittedClosed {
+            if state.get_ref().stage() != HostRouteStage::CommittedClosed {
                 return Poll::Ready(Err(CoreError::Binding(ErrorContext::new(
                     ErrorPhase::Binding,
                     RetryClass::Never,
                 ))));
             }
             let mut io = state
+                .get_ref()
                 .io
                 .lock()
                 .unwrap_or_else(|poisoned| poisoned.into_inner());

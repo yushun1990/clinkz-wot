@@ -152,10 +152,12 @@ and public Host-erased paths through actual protocol I/O and a network round
 trip. Its corrected Host carrier preserves one nonreplaceable erased route
 state, original preparation input, footprint, and generation identity across
 the distinct prepared, active, and committed stage owners until terminal
-cleanup. The exact helper surface, broad operation signatures, multi-route
-resource model, and profile-specific physical resource accounting remain
-maturity and correction points; the paired probe does not freeze those broader
-containers or justify merging the Host and static lifecycle APIs.
+cleanup, exposing only a type-checked shared pinned projection for
+protocol-local operations. The exact helper surface, broad operation
+signatures, multi-route resource model, and profile-specific physical resource
+accounting remain maturity and correction points; the paired probe does not
+freeze those broader containers or justify merging the Host and static
+lifecycle APIs.
 
 That bounded probe precedes the aggregate mock Property Read candidate. It is
 architecture feedback rather than WP-600 product admission. Zenoh and

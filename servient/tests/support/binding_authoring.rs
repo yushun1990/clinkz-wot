@@ -107,7 +107,7 @@ where
 
 struct AuthorRouteState {
     target: Box<str>,
-    stage: u8,
+    stage: AtomicU32,
 }
 
 struct OwnedCleanupCall<I> {
@@ -209,7 +209,7 @@ impl RouteServerBinding for HostMockBinding {
             BindingLifetimeFootprint::new(1, 64),
             AuthorRouteState {
                 target: Box::from(target),
-                stage: 0,
+                stage: AtomicU32::new(0),
             },
         );
         Ok(HostBindingCallBox::new(ReadyCall::new(
@@ -219,7 +219,7 @@ impl RouteServerBinding for HostMockBinding {
 
     fn start_readiness(
         &self,
-        mut guard: HostPreparedRouteGuard,
+        guard: HostPreparedRouteGuard,
     ) -> Result<
         HostBindingCallBox<
             RouteReadinessOutcome<HostPreparedRouteGuard>,
@@ -228,10 +228,10 @@ impl RouteServerBinding for HostMockBinding {
         BindingInputRejection<HostPreparedRouteGuard>,
     > {
         let state = guard
-            .try_state_mut::<AuthorRouteState>()
-            .expect("external author recovers prepared state by type");
-        assert_eq!(state.stage, 0);
-        assert!(!state.target.is_empty());
+            .try_state_pin_ref::<AuthorRouteState>()
+            .expect("external author recovers prepared shared state by type");
+        assert_eq!(state.get_ref().stage.load(Ordering::SeqCst), 0);
+        assert!(!state.get_ref().target.is_empty());
         let outcome = RouteReadinessOutcome::Ready(guard);
         if self.external_readiness {
             Ok(HostBindingCallBox::new(ReadyCall::pending_once(outcome)))
@@ -242,7 +242,7 @@ impl RouteServerBinding for HostMockBinding {
 
     fn activate(
         &self,
-        mut guard: HostPreparedRouteGuard,
+        guard: HostPreparedRouteGuard,
     ) -> Result<
         HostBindingCallBox<
             RouteActivationOutcome<HostPreparedRouteGuard, HostActiveRouteGuard>,
@@ -251,9 +251,11 @@ impl RouteServerBinding for HostMockBinding {
         BindingInputRejection<HostPreparedRouteGuard>,
     > {
         guard
-            .try_state_mut::<AuthorRouteState>()
-            .expect("external author mutates prepared state in place")
-            .stage = 1;
+            .try_state_pin_ref::<AuthorRouteState>()
+            .expect("external author projects prepared shared state")
+            .get_ref()
+            .stage
+            .store(1, Ordering::SeqCst);
         let active = HostActiveRouteGuard::new(guard);
         Ok(HostBindingCallBox::new(ReadyCall::new(
             RouteActivationOutcome::Active(active),
@@ -262,7 +264,7 @@ impl RouteServerBinding for HostMockBinding {
 
     fn commit(
         &self,
-        mut guard: HostActiveRouteGuard,
+        guard: HostActiveRouteGuard,
     ) -> Result<
         HostBindingCallBox<
             RouteCommitOutcome<HostActiveRouteGuard, HostCommittedRouteGuard>,
@@ -271,10 +273,10 @@ impl RouteServerBinding for HostMockBinding {
         BindingInputRejection<HostActiveRouteGuard>,
     > {
         let state = guard
-            .try_state_mut::<AuthorRouteState>()
-            .expect("external author recovers active state by type");
-        assert_eq!(state.stage, 1);
-        state.stage = 2;
+            .try_state_pin_ref::<AuthorRouteState>()
+            .expect("external author recovers active shared state by type");
+        assert_eq!(state.get_ref().stage.load(Ordering::SeqCst), 1);
+        state.get_ref().stage.store(2, Ordering::SeqCst);
         let committed = HostCommittedRouteGuard::new(guard);
         Ok(HostBindingCallBox::new(ReadyCall::new(
             RouteCommitOutcome::Committed(committed),
@@ -290,10 +292,13 @@ impl RouteServerBinding for HostMockBinding {
     ) -> Poll<clinkz_wot_core::CoreResult<clinkz_wot_core::RouteAcceptEvent>> {
         assert_eq!(
             route
-                .try_state_pin_mut::<AuthorRouteState>()
-                .expect("external author recovers committed state by type")
-                .get_mut()
-                .stage,
+                .as_ref()
+                .get_ref()
+                .try_state_pin_ref::<AuthorRouteState>()
+                .expect("external author recovers committed shared state by type")
+                .get_ref()
+                .stage
+                .load(Ordering::SeqCst),
             2
         );
         Poll::Pending

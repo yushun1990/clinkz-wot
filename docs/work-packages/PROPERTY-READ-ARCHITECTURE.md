@@ -60,12 +60,14 @@ The probe first falsified and then revalidated the Host prepared -> active ->
 committed carrier. The corrected public surface moves one private carrier with
 the original `PrepareInput`, footprint, generation identity, and non-`Clone`
 Zenoh route state through the distinct stage guards. It offers only borrowed,
-type-checked state access and accepts no replacement successor state. The
-binding uses no route table, retained plan-set lease, private access, or unsafe
-erasure. Workspace topic 0058 is migrated. This correction satisfies the
-real-target prerequisite; it is not an aggregate gate pass. The aggregate gate
-remains `ready`, its planned fixture roots remain absent, and no aggregate
-source has been admitted.
+type-checked pinned shared state access and accepts no replacement successor
+state. It exposes neither `&mut S` nor `Pin<&mut S>`; the real binding keeps
+protocol mutation behind shared-state methods and cannot safely reproduce the
+whole-state replacement counterexample. The binding uses no route table,
+retained plan-set lease, private access, or unsafe erasure. Workspace topic
+0058 is migrated. This correction satisfies the real-target prerequisite; it
+is not an aggregate gate pass. The aggregate gate remains `ready`, its planned
+fixture roots remain absent, and no aggregate source has been admitted.
 
 ## Required scenario
 

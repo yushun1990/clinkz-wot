@@ -44,10 +44,11 @@ round trips. It reaffirmed the frozen macro ownership boundary and the typed
 static route-state carrier. The Host counterexample recorded by workspace topic
 0058 is corrected by one nonreplaceable carrier whose original input,
 footprint, generation identity, and erased route state survive the three
-linear stage owners through terminal cleanup. Aggregate mock source admission
-is therefore no longer waiting on that correction, but the gate remains
-`ready`, its fixture roots remain absent, and it has not passed. The probe
-remains architecture feedback, not WP-600 product progress or
+linear stage owners through terminal cleanup; its public state projection is
+shared and pinned rather than whole-state mutable. Aggregate mock source
+admission is therefore no longer waiting on that correction, but the gate
+remains `ready`, its fixture roots remain absent, and it has not passed. The
+probe remains architecture feedback, not WP-600 product progress or
 protocol-shape-neutrality evidence.
 
 The roadmap identifies durable ordering, not a stored executable next action.

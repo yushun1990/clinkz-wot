@@ -187,14 +187,16 @@ the same owned Zenoh state through all stages. One private Host carrier is
 created with the original `PrepareInput`, immutable footprint, generation
 identity, and erased state. Prepared -> active -> committed conversion moves
 that carrier between the three linear guard types without accepting replacement
-state or exposing consuming extraction. Type-checked mutable access is borrowed
-and is pinned when the concrete state requires it. Focused Core evidence proves
-allocation identity and footprint continuity, rejects a mismatched concrete
-type, and observes one drop only after the terminal owner is disposed. The
-paired real-target Host scenarios additionally prove that declaration failure
-and pre-publication cancellation retain the non-`Clone` Zenoh state until
-terminal cleanup, and that success preserves generation, permit, correlation,
-response, and cleanup semantics already exercised by the static path. A
+state or exposing consuming extraction. Type-checked access is a pinned shared
+projection only; protocol-local methods encapsulate mutation without exposing
+`&mut S` or `Pin<&mut S>`. Focused Core evidence proves allocation identity and
+footprint continuity for `Unpin` and `!Unpin` state, rejects a mismatched
+concrete type, compile-fails whole-state replacement attempts, and observes one
+drop only after the terminal owner is disposed. The paired real-target Host
+scenarios additionally prove that readiness failure and pre-publication
+cancellation retain the non-`Clone` Zenoh state until terminal cleanup, and
+that success preserves generation, permit, correlation, response, and cleanup
+semantics already exercised by the static path. A
 response callback may retain a non-owning `Weak` alias while the route is live;
 it cannot extend or replace the guard-owned primary state and is not a route
 table. Workspace topic 0058 records the migrated correction. The real-target
