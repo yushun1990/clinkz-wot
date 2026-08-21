@@ -85,8 +85,11 @@ carrier containing its complete preparation input, footprint, generation, and
 binding-private concrete state. A stage transition cannot replace or extract
 that state. Core exposes only a type-checked shared pinned projection of the
 state, never a safe whole-state mutable projection; protocol-local mutation is
-encapsulated behind methods on the shared state. Operations are idempotent for
-one Thing/binding generation. A guard drop is not a transition, late callbacks
-are generation checked, and a draining or closed route never returns to
-serving. Terminal cleanup or durable residual acknowledgement releases the
-carrier state exactly once.
+encapsulated behind methods on the shared state. Host accept polling borrows
+the committed guard only by shared reference; Servient never lends mutable
+whole-guard authority that could replace, extract, or prematurely dispose the
+linear lifecycle owner. Operations are idempotent for one Thing/binding
+generation. A guard drop is not a transition, late callbacks are generation
+checked, and a draining or closed route never returns to serving. Terminal
+cleanup or durable residual acknowledgement releases the carrier state exactly
+once.

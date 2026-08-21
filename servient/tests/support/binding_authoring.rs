@@ -285,15 +285,13 @@ impl RouteServerBinding for HostMockBinding {
 
     fn poll_accept(
         &self,
-        route: Pin<&mut HostCommittedRouteGuard>,
+        route: &HostCommittedRouteGuard,
         _permit: clinkz_wot_core::RouteActivationPermit<'_>,
         _cx: &mut Context<'_>,
         _budget: &mut WorkBudget,
     ) -> Poll<clinkz_wot_core::CoreResult<clinkz_wot_core::RouteAcceptEvent>> {
         assert_eq!(
             route
-                .as_ref()
-                .get_ref()
                 .try_state_pin_ref::<AuthorRouteState>()
                 .expect("external author recovers committed shared state by type")
                 .get_ref()

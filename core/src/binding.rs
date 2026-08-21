@@ -2284,9 +2284,41 @@ pub trait RouteServerBinding: Send + Sync {
     >;
 
     /// Polls one committed route under a fresh exclusive permit.
+    ///
+    /// The committed guard is shared so the binding can inspect route identity
+    /// and progress binding-private state through its own interior APIs without
+    /// receiving authority to replace Servient's linear lifecycle owner.
+    ///
+    /// A binding cannot recover mutable whole-guard authority through `Pin`:
+    ///
+    /// ```compile_fail
+    /// # use core::pin::Pin;
+    /// # use clinkz_wot_core::HostCommittedRouteGuard;
+    /// # fn extract(
+    /// #     route: &HostCommittedRouteGuard,
+    /// #     replacement: HostCommittedRouteGuard,
+    /// # ) {
+    /// let pinned = Pin::new(route);
+    /// let _original = core::mem::replace(Pin::get_mut(pinned), replacement);
+    /// # }
+    /// ```
+    ///
+    /// Nor can it replace the guard through `Pin::set`:
+    ///
+    /// ```compile_fail
+    /// # use core::pin::Pin;
+    /// # use clinkz_wot_core::HostCommittedRouteGuard;
+    /// # fn replace(
+    /// #     route: &HostCommittedRouteGuard,
+    /// #     replacement: HostCommittedRouteGuard,
+    /// # ) {
+    /// let mut pinned = Pin::new(route);
+    /// pinned.set(replacement);
+    /// # }
+    /// ```
     fn poll_accept(
         &self,
-        route: Pin<&mut HostCommittedRouteGuard>,
+        route: &HostCommittedRouteGuard,
         permit: RouteActivationPermit<'_>,
         cx: &mut Context<'_>,
         budget: &mut WorkBudget,

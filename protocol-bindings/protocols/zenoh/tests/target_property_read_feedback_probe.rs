@@ -1565,7 +1565,7 @@ impl RouteServerBinding for HostZenohServer {
 
     fn poll_accept(
         &self,
-        route: Pin<&mut HostCommittedRouteGuard>,
+        route: &HostCommittedRouteGuard,
         permit: RouteActivationPermit<'_>,
         cx: &mut Context<'_>,
         budget: &mut WorkBudget,
@@ -1573,8 +1573,8 @@ impl RouteServerBinding for HostZenohServer {
         if budget.consume(WorkClass::BindingPolls, 1).is_err() {
             return Poll::Pending;
         }
-        let route_key = *route.as_ref().get_ref().route();
-        let state = committed_zenoh_state(route.as_ref().get_ref());
+        let route_key = *route.route();
+        let state = committed_zenoh_state(route);
         if permit.route() != &route_key || state.get_ref().stage() != RouteStage::CommittedClosed {
             return Poll::Ready(Err(core_error(ErrorPhase::Binding)));
         }

@@ -189,10 +189,13 @@ identity, and erased state. Prepared -> active -> committed conversion moves
 that carrier between the three linear guard types without accepting replacement
 state or exposing consuming extraction. Type-checked access is a pinned shared
 projection only; protocol-local methods encapsulate mutation without exposing
-`&mut S` or `Pin<&mut S>`. Focused Core evidence proves allocation identity and
-footprint continuity for `Unpin` and `!Unpin` state, rejects a mismatched
-concrete type, compile-fails whole-state replacement attempts, and observes one
-drop only after the terminal owner is disposed. The paired real-target Host
+`&mut S` or `Pin<&mut S>`. Accept polling borrows the committed guard only by
+shared reference while Servient retains the owner; the binding receives no
+`Pin<&mut HostCommittedRouteGuard>` replacement path. Focused Core evidence
+proves allocation identity and footprint continuity for `Unpin` and `!Unpin`
+state, rejects a mismatched concrete type, compile-fails whole-state and
+whole-guard replacement attempts, and observes one drop only after the
+terminal owner is disposed. The paired real-target Host
 scenarios additionally prove that readiness failure and pre-publication
 cancellation retain the non-`Clone` Zenoh state until terminal cleanup, and
 that success preserves generation, permit, correlation, response, and cleanup

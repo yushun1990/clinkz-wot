@@ -2014,7 +2014,7 @@ impl HostPropertyReadRuntime {
                 self.route.state = HostRouteState::Serving(guard);
                 progress(PendingWorkClass::BindingInput)
             }
-            HostRouteState::Serving(mut guard) => {
+            HostRouteState::Serving(guard) => {
                 if self.expose == ExposeState::Draining {
                     return self.start_shutdown(HostShutdownRouteGuard::Committed(guard));
                 }
@@ -2034,12 +2034,11 @@ impl HostPropertyReadRuntime {
                         );
                     }
                 };
-                match self.registration.server().poll_accept(
-                    core::pin::Pin::new(&mut guard),
-                    permit,
-                    cx,
-                    budget,
-                ) {
+                match self
+                    .registration
+                    .server()
+                    .poll_accept(&guard, permit, cx, budget)
+                {
                     Poll::Pending => {
                         self.route.state = HostRouteState::Serving(guard);
                         StepStatus::Idle

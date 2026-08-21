@@ -41,7 +41,9 @@ active, and committed guards are linear stage owners of that same carrier;
 stage succession MUST NOT accept replacement state, extract the state, change
 its concrete type, or drop it before terminal cleanup disposition. Public
 state access MUST be a type-checked shared pinned projection and MUST NOT expose
-`&mut S` or `Pin<&mut S>` for the complete state value. A binding MUST NOT
+`&mut S` or `Pin<&mut S>` for the complete state value. Accept polling MUST
+receive only a shared borrow of the committed guard and MUST NOT expose mutable
+whole-guard authority. A binding MUST NOT
 receive an application dispatch capability, call a handler from hidden work,
 or observe the Servient registry.
 
@@ -1022,7 +1024,10 @@ state in the prepared, active, or committed stage. Protocol-local methods use
 interior mutability where progress requires mutation. There is no safe whole-
 state mutable projection and no consuming state extraction. A committed guard
 is closed to request admission; serving authority is never stored in the
-guard. The shared projection does not expose state to Servient.
+guard. `poll_accept` receives only a shared borrow of that guard, so the
+binding can inspect route identity and obtain the shared state projection but
+cannot replace, extract, or dispose the lifecycle owner. The shared projection
+does not expose state to Servient.
 `HostShutdownRouteGuard` owns either an active or committed guard so one
 shutdown operation can preserve both legal predecessor stages. Static
 counterparts use typed caller-owned route slots. In both representations the
@@ -1157,7 +1162,7 @@ pub trait RouteServerBinding: Send + Sync {
 
     fn poll_accept(
         &self,
-        route: Pin<&mut HostCommittedRouteGuard>,
+        route: &HostCommittedRouteGuard,
         permit: RouteActivationPermit<'_>,
         cx: &mut Context<'_>,
         budget: &mut WorkBudget,
@@ -1292,16 +1297,19 @@ redundant-route, degraded-publication, or late-join label. A failure on any such
 route prevents publication; omission requires a newly admitted effective TD
 and generation.
 
-`poll_accept` is scoped to one committed guard and one permit that exclusively
-borrows the claimed route lease. It
+`poll_accept` is scoped to one shared borrow of the committed guard and one
+permit that exclusively borrows the claimed route lease. Servient retains the
+owned guard throughout the call; the binding receives no mutable whole-guard
+authority. It
 returns exactly one:
 
 - `RouteAcceptEvent::Request(RouteInboundRequest)`;
 - `RouteAcceptEvent::OperationalError(BindingOperationalError)`; or
 - `RouteAcceptEvent::Terminal(RouteTerminal)`.
 
-Every event carries the route generation. One route has one mutable accept
-cursor and one waker owner. A terminal event is emitted at most once, closes
+Every event carries the route generation. One route has one binding-private
+accept cursor and one waker owner; Host progress is encapsulated behind shared
+state methods. A terminal event is emitted at most once, closes
 later acceptance for that route, and does not terminate a sibling route or the
 whole registration. Operational errors update bounded status but do not imply
 terminal state. A mismatched or stale permit is rejected before binding state

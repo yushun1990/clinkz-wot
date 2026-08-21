@@ -153,7 +153,9 @@ trip. Its corrected Host carrier preserves one nonreplaceable erased route
 state, original preparation input, footprint, and generation identity across
 the distinct prepared, active, and committed stage owners until terminal
 cleanup, exposing only a type-checked shared pinned projection for
-protocol-local operations. The exact helper surface, broad operation
+protocol-local operations. Servient retains the committed owner during accept
+polling and lends the binding only a shared guard reference. The exact helper
+surface, broad operation
 signatures, multi-route resource model, and profile-specific physical resource
 accounting remain maturity and correction points; the paired probe does not
 freeze those broader containers or justify merging the Host and static

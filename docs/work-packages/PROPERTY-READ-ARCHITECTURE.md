@@ -64,7 +64,9 @@ type-checked pinned shared state access and accepts no replacement successor
 state. It exposes neither `&mut S` nor `Pin<&mut S>`; the real binding keeps
 protocol mutation behind shared-state methods and cannot safely reproduce the
 whole-state replacement counterexample. The binding uses no route table,
-retained plan-set lease, private access, or unsafe erasure. Workspace topic
+retained plan-set lease, private access, or unsafe erasure. Servient also keeps
+the owned committed guard while `poll_accept` lends the binding only a shared
+reference, closing safe whole-guard replacement or extraction. Workspace topic
 0058 is migrated. This correction satisfies the real-target prerequisite; it
 is not an aggregate gate pass. The aggregate gate remains `ready`, its planned
 fixture roots remain absent, and no aggregate source has been admitted.

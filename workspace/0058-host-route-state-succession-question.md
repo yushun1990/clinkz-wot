@@ -99,6 +99,13 @@ returning `Pin<&mut S>` retained the same replacement path through
 succession or retained beyond terminal carrier disposal. This was an accessor
 defect, not evidence against the private-carrier or three-stage decision.
 
+A second independent merge-gate review then found the same class of authority
+leak around the outer owner. `RouteServerBinding::poll_accept` received
+`Pin<&mut HostCommittedRouteGuard>`. Because the guard is `Unpin`, safe binding
+code could use `Pin::get_mut` plus `mem::replace`; `Pin::set` provided a direct
+equivalent. Rust pin safety was intact, but the binding could replace and
+prematurely dispose Servient's committed linear owner.
+
 All three legal stages now expose only a type-checked pinned shared projection,
 `Pin<&S>`. Core never returns `&mut S` or `Pin<&mut S>`. Protocol-local state
 encapsulates mutation and progress behind methods on the shared projection,
@@ -107,6 +114,15 @@ pin projection; a binding needs no unsafe or private escape, and safe external
 authoring cannot extract, replace, or prematurely destroy the complete state
 value. Failure, cancellation, and late-successor ownership retain the carrier.
 The terminal cleanup or acknowledged residual owner disposes it exactly once.
+
+Accept progress needs only route identity, the shared state projection, the
+scoped permit, wake context, and work budget. The corrected `poll_accept`
+therefore receives `&HostCommittedRouteGuard`; Servient retains the owned guard
+throughout the call. A shared reference cannot be converted to `&mut` or
+`Pin<&mut HostCommittedRouteGuard>` in safe Rust, so the binding cannot move,
+replace, or dispose the complete committed owner. A separate capability type
+would expose the same existing shared observations without narrowing ownership
+authority further, so it is not introduced.
 
 The scoped-artifact rule remains unchanged. The binding validates the borrowed
 immutable artifact during preparation and derives the values needed later into
@@ -127,6 +143,9 @@ independently reconstructible facts.
   would move generation, liveness, and exactly-once release truth out of the
   guard. The probe permits only a non-owning `Weak` response alias that cannot
   keep the route alive.
+- A new accept-context wrapper around the guard's existing shared observations
+  would add a second API surface without removing authority beyond the shared
+  guard borrow selected here.
 - Unifying the Host and static lifecycle APIs would address mechanical callback
   duplication, not this ownership defect. The paired probe needs only shared
   protocol-local I/O helpers and does not duplicate Servient's normative
@@ -150,9 +169,12 @@ state allocations plus one footprint across prepared -> active -> committed,
 rejects a mismatched concrete type, observes no predecessor-stage drop, and
 observes exactly one terminal drop. Compile-fail evidence rejects both the
 reviewer's direct `mem::replace` counterexample and conversion of the shared
-pinned projection into `Pin<&mut S>`. The Servient Host fixtures now put their
-primary bounded ingress, correlation, and cleanup state in the guard and use
-protocol-local interior mutation rather than whole-state mutable projection.
+pinned projection into `Pin<&mut S>`. Additional compile-fail evidence at the
+public `poll_accept` boundary rejects both `Pin::get_mut` plus `mem::replace`
+and `Pin::set` for the committed guard. The Servient Host fixtures now put
+their primary bounded ingress, correlation, and cleanup state in the guard and
+use protocol-local interior mutation rather than whole-state or whole-guard
+mutable authority.
 The real Zenoh probe pairs application-static and public Host-erased success,
 readiness-failure, and pre-publication-cancellation scenarios. It observes the
 same state address across successful Host stages, no early drop on failure or

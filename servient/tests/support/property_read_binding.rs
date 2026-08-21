@@ -1695,7 +1695,7 @@ mod host_fixture {
 
         fn poll_accept(
             &self,
-            route: Pin<&mut HostCommittedRouteGuard>,
+            route: &HostCommittedRouteGuard,
             permit: clinkz_wot_core::RouteActivationPermit<'_>,
             _cx: &mut Context<'_>,
             budget: &mut WorkBudget,
@@ -1703,7 +1703,7 @@ mod host_fixture {
             if budget.consume(WorkClass::BindingPolls, 1).is_err() {
                 return Poll::Pending;
             }
-            let state = committed_route_state(route.as_ref().get_ref());
+            let state = committed_route_state(route);
             if state.get_ref().stage() == HostRouteStage::Closed {
                 return Poll::Ready(Ok(clinkz_wot_core::RouteAcceptEvent::Terminal(
                     RouteTerminal::Closed {
