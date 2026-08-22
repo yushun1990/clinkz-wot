@@ -49,19 +49,27 @@ workspace tests and focused no-default/default test cells.
 The prerequisite real-target feedback is executable at
 `protocol-bindings/protocols/zenoh/tests/target_property_read_feedback_probe.rs`.
 It uses the actual Zenoh Rust SDK and loopback TCP for three varied
-Thing/property/form shapes. The application-static path reaches a real handler
-and requester response and completes shutdown, readiness-failure rollback, and
-pre-publication cancellation cleanup. Its technical disposition is recorded
-in `WP-300-bindings.md`.
+Thing/property/form shapes in both application-static and public Host-erased
+representations. Each representation reaches a real handler and requester
+response and completes terminal drain, readiness-failure rollback, and
+pre-publication cancellation cleanup. Their paired assertions cover
+generation, permit, correlation, response, and cleanup semantics. Its
+technical disposition is recorded in `WP-300-bindings.md`.
 
-That disposition is mixed rather than a gate pass. The static route slot and
-macro ownership boundary are implementable without legacy backflow, hidden
-state, private access, or unsafe. The exact Host prepared -> active -> committed
-guard succession loses the only public owner of prepared protocol state unless
-an external binding reconstructs `PrepareInput` or adds a side table. Workspace
-topic 0058 reopens that carrier. The aggregate gate remains `ready`, its planned
-fixture roots remain absent, and source admission waits for the bounded Host
-correction and external revalidation.
+The probe first falsified and then revalidated the Host prepared -> active ->
+committed carrier. The corrected public surface moves one private carrier with
+the original `PrepareInput`, footprint, generation identity, and non-`Clone`
+Zenoh route state through the distinct stage guards. It offers only borrowed,
+type-checked pinned shared state access and accepts no replacement successor
+state. It exposes neither `&mut S` nor `Pin<&mut S>`; the real binding keeps
+protocol mutation behind shared-state methods and cannot safely reproduce the
+whole-state replacement counterexample. The binding uses no route table,
+retained plan-set lease, private access, or unsafe erasure. Servient also keeps
+the owned committed guard while `poll_accept` lends the binding only a shared
+reference, closing safe whole-guard replacement or extraction. Workspace topic
+0058 is migrated. This correction satisfies the real-target prerequisite; it
+is not an aggregate gate pass. The aggregate gate remains `ready`, its planned
+fixture roots remain absent, and no aggregate source has been admitted.
 
 ## Required scenario
 
@@ -116,10 +124,10 @@ The gate manifest reserves two future aggregate roots:
 - `property-read-runner`, composing the TD, planner, registration, Servient,
   handler, request, response, and cleanup assertions.
 
-Those roots remain absent until the real-target Zenoh feedback's reopened Host
-carrier has been corrected and externally revalidated and the aggregate
-scenario is implemented. Package-local crate tests remain regression evidence
-after the aggregate fixture is added.
+Those roots remain absent until the aggregate scenario is separately admitted
+and implemented. The real-target Host carrier prerequisite is satisfied;
+package-local crate tests remain regression evidence after the aggregate
+fixture is added.
 
 ## Exclusions
 

@@ -12,6 +12,7 @@ test_commands = [
     "cargo test --locked -p clinkz-wot-planning",
     "cargo test --locked -p clinkz-wot-servient --test property_read",
     "cargo test --locked -p clinkz-wot-servient --no-default-features --test property_read",
+    "cargo test --locked -p clinkz-wot-protocol-bindings-zenoh --test target_property_read_feedback_probe -- --test-threads=1",
 ]
 
 [[dependency]]
@@ -31,8 +32,10 @@ id = "WP-300-PROPERTY-READ-BINDING"
 owner_package = "WP-300"
 status = "covered"
 evidence = [
+    "core/tests/host_route_guard.rs",
     "servient/tests/support/property_read_binding.rs",
     "servient/tests/support/binding_authoring.rs",
+    "protocol-bindings/protocols/zenoh/tests/target_property_read_feedback_probe.rs",
 ]
 
 [[dependency]]

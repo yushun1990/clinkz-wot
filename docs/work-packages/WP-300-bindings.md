@@ -141,23 +141,24 @@ progress.
 
 The executable probe is
 `protocol-bindings/protocols/zenoh/tests/target_property_read_feedback_probe.rs`.
-It is an external application-static author built from the public target
-Planning, Binding, and Servient surfaces. With the real Zenoh Rust SDK and
-loopback TCP it proves:
+It contains external application-static and public Host-erased authors built
+from the target Planning, Binding, and Servient surfaces. With the real Zenoh
+Rust SDK and loopback TCP it proves:
 
 - an immutable compiler-produced Producer-route artifact carries the resolved
   Zenoh transport, authority, key expression, property, selected form index,
   content type, and subprotocol through Servient's scoped artifact access;
-- the scoped borrow naturally derives one owned route state containing the
-  Zenoh session, queryable, one pending-or-in-flight query, correlation counter,
-  and one accept waker, without a plan-set lease or artifact side table;
-- a real query enters through permit-gated `PollServerBinding::poll_accept`, is
-  dispatched by Servient to `ReadPropertyHandler`, and returns through the
-  target response SPI to an independent Zenoh requester;
+- the scoped borrow naturally derives one non-`Clone`, route-local owned state
+  containing the Zenoh session, queryable, one pending-or-in-flight query,
+  correlation counter, and one accept waker, without copying `PrepareInput`,
+  retaining a plan-set lease, or adding an artifact or binding route table;
+- a real query enters through the applicable permit-gated static or Host
+  accept surface, is dispatched by Servient to `ReadPropertyHandler`, and
+  returns through the target response SPI to an independent Zenoh requester;
 - actual declaration, readiness failure, pre-publication cancellation,
   draining, queryable undeclaration, session close, and post-cleanup route
-  absence are externally exercised across three different Thing/property/form
-  shapes; and
+  absence are externally exercised for both representations across three
+  different Thing/property/form shapes; and
 - zero `BindingPolls` budget performs no compiler or binding side effect.
 
 The implementation needed one narrow public Zenoh helper that parses an
@@ -170,25 +171,40 @@ after declaration, while activate and commit are publication barriers. The
 probe contains one protocol-local stage marker but no second dispatch or
 normative transition machine.
 
-The external test is 1,397 lines and the server implementation must spell 22
-`start_*`, `poll_*`, cancellation, and acknowledgement callbacks, including
-several mechanically closed or unreachable phase methods. This is concrete
-helper/generation and Host/static duplication pressure, although the exercised
-static path did not need to duplicate Servient's normative transition policy.
-Its generic state types compiled without a private bound or unsafe erasure; the
-probe did not obtain a useful standalone monomorphization/code-size measurement
-from a debug test binary linked with the Zenoh SDK.
+The static and Host server traits still require authors to spell their closed
+callback sets, including mechanically unreachable phase methods. That is
+concrete helper/generation and representation-duplication pressure. It is not
+evidence of a second normative lifecycle kernel: the paired probe shares only
+protocol-local Zenoh construction, response, and cleanup helpers, while
+Servient remains the sole transition, publication, dispatch, and cleanup-policy
+owner. Its generic state types compile without a private bound or binding-side
+unsafe erasure; the probe did not obtain a useful standalone
+monomorphization/code-size measurement from a debug test binary linked with the
+Zenoh SDK.
 
-The typed static `ServerRouteSlot` keeps the same owned Zenoh state through all
-stages and requires no unsafe or private escape. The erased Host surface does
-not. `HostPreparedRouteGuard::try_into_state` consumes the complete guard, so
-the extracted state cannot be passed with that guard to
-`HostActiveRouteGuard::new`; using `new` directly drops the predecessor's
-erased state. The same problem recurs at active -> committed. Reconstructing
-`PrepareInput` from copied fields or retaining state in a binding side table is
-not an acceptable implementation. Workspace topic 0058 therefore reopens only
-the Host route-state succession carrier, and aggregate source admission waits
-for its bounded correction and external revalidation.
+The typed static `ServerRouteSlot` and corrected erased Host guards now keep
+the same owned Zenoh state through all stages. One private Host carrier is
+created with the original `PrepareInput`, immutable footprint, generation
+identity, and erased state. Prepared -> active -> committed conversion moves
+that carrier between the three linear guard types without accepting replacement
+state or exposing consuming extraction. Type-checked access is a pinned shared
+projection only; protocol-local methods encapsulate mutation without exposing
+`&mut S` or `Pin<&mut S>`. Accept polling borrows the committed guard only by
+shared reference while Servient retains the owner; the binding receives no
+`Pin<&mut HostCommittedRouteGuard>` replacement path. Focused Core evidence
+proves allocation identity and footprint continuity for `Unpin` and `!Unpin`
+state, rejects a mismatched concrete type, compile-fails whole-state and
+whole-guard replacement attempts, and observes one drop only after the
+terminal owner is disposed. The paired real-target Host
+scenarios additionally prove that readiness failure and pre-publication
+cancellation retain the non-`Clone` Zenoh state until terminal cleanup, and
+that success preserves generation, permit, correlation, response, and cleanup
+semantics already exercised by the static path. A
+response callback may retain a non-owning `Weak` alias while the route is live;
+it cannot extend or replace the guard-owned primary state and is not a route
+table. Workspace topic 0058 records the migrated correction. The real-target
+prerequisite no longer blocks aggregate source admission, but the aggregate
+gate remains merely `ready` and has not been executed.
 
 The probe also records two maturity limits rather than hiding them. First,
 optional Zenoh Form extensions such as priority and congestion control are not

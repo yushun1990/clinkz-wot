@@ -93,6 +93,13 @@ fn host_runner_enters_servient_for_one_complete_property_read() {
         Some("mock://tank/level")
     );
     assert_eq!(probe.artifact_drops(), 0);
+    let (prepared, active, committed, prepared_footprint, active_footprint, committed_footprint) =
+        probe.carrier_evidence();
+    assert_eq!(prepared, active);
+    assert_eq!(prepared, committed);
+    assert_eq!(prepared_footprint, active_footprint);
+    assert_eq!(prepared_footprint, committed_footprint);
+    assert_eq!(probe.route_state_drops(), 0);
 
     probe.enqueue_property_read("level", InteractionInput::empty());
     drive_until_idle(&servient, &mut cx);
@@ -106,6 +113,7 @@ fn host_runner_enters_servient_for_one_complete_property_read() {
     assert_eq!(probe.outstanding_counts(), (0, 0, 0, 0));
     assert_eq!(probe.poll_after_close(&mut cx), Poll::Ready(false));
     assert_eq!(probe.artifact_drops(), 1);
+    assert_eq!(probe.route_state_drops(), 1);
 }
 
 #[test]
@@ -128,6 +136,7 @@ fn accepted_request_survives_exhausted_handler_budget() {
     let mut cx = Context::from_waker(waker);
     drive_until_idle(&servient, &mut cx);
     assert_eq!(probe.artifact_drops(), 0);
+    assert_eq!(probe.route_state_drops(), 0);
 
     probe.enqueue_property_read("level", InteractionInput::empty());
     let mut exhausted = WorkBudget::new().with_remaining(WorkClass::BindingPolls, 8);
@@ -144,6 +153,7 @@ fn accepted_request_survives_exhausted_handler_budget() {
         .expect("accepted destroy transaction");
     drive_until_idle(&servient, &mut cx);
     assert_eq!(probe.outstanding_counts(), (0, 0, 0, 0));
+    assert_eq!(probe.route_state_drops(), 1);
 }
 
 #[test]
@@ -169,6 +179,11 @@ fn readiness_and_abort_constructor_rejections_return_inputs_for_cleanup_retry() 
     assert_eq!(probe.cleanup_attempts(), (1, 0));
     assert_eq!(probe.outstanding_counts(), (0, 0, 0, 0));
     assert_eq!(probe.artifact_drops(), 1);
+    let (prepared, active, committed, _, _, _) = probe.carrier_evidence();
+    assert!(prepared.is_some());
+    assert!(active.is_none());
+    assert!(committed.is_none());
+    assert_eq!(probe.route_state_drops(), 1);
 }
 
 #[test]
@@ -198,4 +213,8 @@ fn shutdown_constructor_rejection_preserves_guard_for_retry() {
     assert_eq!(probe.cleanup_attempts(), (0, 1));
     assert_eq!(probe.outstanding_counts(), (0, 0, 0, 0));
     assert_eq!(probe.artifact_drops(), 1);
+    let (prepared, active, committed, _, _, _) = probe.carrier_evidence();
+    assert_eq!(prepared, active);
+    assert_eq!(prepared, committed);
+    assert_eq!(probe.route_state_drops(), 1);
 }

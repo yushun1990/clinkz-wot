@@ -38,14 +38,20 @@ aggregate `PROPERTY-READ-ARCHITECTURE` gate is `ready`, not `passed`, and its
 planned fixture roots remain absent.
 
 The bounded real-target Zenoh Property Read probe required by workspace topic
-0056 has exercised the application-static target Planning, Binding, and
-Servient path through actual protocol I/O and a network round trip. It
-reaffirmed the frozen macro ownership boundary and the typed static route-state
-carrier, but falsified the exact Host prepared -> active -> committed erased
-state succession surface. Workspace topic 0058 isolates that correction.
-Aggregate mock source admission waits for the Host carrier correction and
-external revalidation. The probe remains architecture feedback, not WP-600
-product progress or protocol-shape-neutrality evidence.
+0056 now exercises the application-static and public Host-erased target
+Planning, Binding, and Servient paths through actual protocol I/O and network
+round trips. It reaffirmed the frozen macro ownership boundary and the typed
+static route-state carrier. The Host counterexample recorded by workspace topic
+0058 is corrected by one nonreplaceable carrier whose original input,
+footprint, generation identity, and erased route state survive the three
+linear stage owners through terminal cleanup; its public state projection is
+shared and pinned rather than whole-state mutable, and accept polling receives
+only a shared guard borrow while Servient retains the committed owner.
+Aggregate mock source
+admission is therefore no longer waiting on that correction, but the gate
+remains `ready`, its fixture roots remain absent, and it has not passed. The
+probe remains architecture feedback, not WP-600 product progress or
+protocol-shape-neutrality evidence.
 
 The roadmap identifies durable ordering, not a stored executable next action.
 A task session must still inspect the current repository and decide how to
@@ -53,13 +59,11 @@ advance the frontier safely.
 
 ## Critical Path
 
-1. Correct and independently revalidate the falsified Host route-state
-   succession surface while preserving the exercised static boundary.
-2. Complete the aggregate mock `PROPERTY-READ-ARCHITECTURE` gate.
-3. Complete the remaining broad WP-100, WP-200, WP-300, and WP-400 contracts;
+1. Complete the aggregate mock `PROPERTY-READ-ARCHITECTURE` gate.
+2. Complete the remaining broad WP-100, WP-200, WP-300, and WP-400 contracts;
    broad WP-300 releases WP-500 and WP-600 product work.
-4. Join WP-400, WP-500, and WP-600 through WP-700 and close all global gates.
-5. Perform the v1 technical release review; the Owner decides actual release.
+3. Join WP-400, WP-500, and WP-600 through WP-700 and close all global gates.
+4. Perform the v1 technical release review; the Owner decides actual release.
 
 ## Milestone Overview
 
@@ -144,12 +148,12 @@ with protocol-owned I/O and correlation, route-scoped progress, explicit
 ownership, and bounded cleanup.
 
 Current status: the narrow Property Read binding slice is complete. The
-real-target Zenoh probe has reaffirmed its macro ownership invariants and
-application-static carrier through real network I/O. The exact Host erased
-guard succession is reopened by workspace topic 0058 because the current
-public constructors cannot naturally transfer one prepared protocol state
-into the active and committed guards. The aggregate mock gate and broad WP-300
-exit remain open.
+real-target Zenoh probe has reaffirmed its macro ownership invariants and both
+the application-static and corrected Host-erased carriers through real network
+I/O. Workspace topic 0058 is migrated: public Host succession moves one
+unchanged carrier across the distinct prepared, active, and committed owners,
+with borrowed typed state access and exact terminal release. The aggregate mock
+gate and broad WP-300 exit remain open.
 
 Exit goals: externally exercised authoring and execution boundaries; explicit
 profile applicability and resource costs; executable lifecycle, failure, and

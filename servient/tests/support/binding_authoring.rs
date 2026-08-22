@@ -105,6 +105,74 @@ where
     }
 }
 
+struct AuthorRouteState {
+    target: Box<str>,
+    stage: AtomicU32,
+}
+
+struct OwnedCleanupCall<I> {
+    input: Option<I>,
+}
+
+impl<I> OwnedCleanupCall<I> {
+    fn new(input: I) -> Self {
+        Self { input: Some(input) }
+    }
+}
+
+impl<I> HostBindingCall<RouteCleanupOutcome, HostRouteCleanupSuccessor> for OwnedCleanupCall<I>
+where
+    I: Send + Unpin + 'static,
+{
+    fn lifetime_footprint(&self) -> BindingLifetimeFootprint {
+        BindingLifetimeFootprint::new(1, 64)
+    }
+
+    fn poll_result(
+        mut self: Pin<&mut Self>,
+        _cx: &mut Context<'_>,
+        budget: &mut WorkBudget,
+    ) -> Poll<RouteCleanupOutcome> {
+        if budget.consume(WorkClass::CleanupItems, 1).is_err() {
+            return Poll::Pending;
+        }
+        drop(self.input.take().expect("cleanup polled after completion"));
+        Poll::Ready(RouteCleanupOutcome::Complete)
+    }
+
+    fn start_cancel(
+        self: Pin<&mut Self>,
+        _cx: &mut Context<'_>,
+        _cleanup: CleanupPhaseContext,
+        _budget: &mut WorkBudget,
+    ) -> clinkz_wot_core::CoreResult<
+        clinkz_wot_core::StartStatus<
+            BindingCallSettlement<RouteCleanupOutcome, HostRouteCleanupSuccessor>,
+        >,
+    > {
+        Ok(clinkz_wot_core::StartStatus::Pending)
+    }
+
+    fn poll_cancel(
+        mut self: Pin<&mut Self>,
+        _cx: &mut Context<'_>,
+        _budget: &mut WorkBudget,
+    ) -> Poll<
+        clinkz_wot_core::CoreResult<
+            BindingCallSettlement<RouteCleanupOutcome, HostRouteCleanupSuccessor>,
+        >,
+    > {
+        drop(self.input.take().expect("cleanup cancelled twice"));
+        Poll::Ready(Ok(BindingCallSettlement::Returned(
+            RouteCleanupOutcome::Complete,
+        )))
+    }
+
+    fn next_deadline(&self) -> Option<Deadline> {
+        None
+    }
+}
+
 struct HostMockBinding {
     compatibility: BindingArtifactCompatibility,
     external_readiness: bool,
@@ -139,7 +207,10 @@ impl RouteServerBinding for HostMockBinding {
         let guard = HostPreparedRouteGuard::new(
             input,
             BindingLifetimeFootprint::new(1, 64),
-            Box::<str>::from(target),
+            AuthorRouteState {
+                target: Box::from(target),
+                stage: AtomicU32::new(0),
+            },
         );
         Ok(HostBindingCallBox::new(ReadyCall::new(
             RoutePrepareOutcome::Prepared(guard),
@@ -156,6 +227,11 @@ impl RouteServerBinding for HostMockBinding {
         >,
         BindingInputRejection<HostPreparedRouteGuard>,
     > {
+        let state = guard
+            .try_state_pin_ref::<AuthorRouteState>()
+            .expect("external author recovers prepared shared state by type");
+        assert_eq!(state.get_ref().stage.load(Ordering::SeqCst), 0);
+        assert!(!state.get_ref().target.is_empty());
         let outcome = RouteReadinessOutcome::Ready(guard);
         if self.external_readiness {
             Ok(HostBindingCallBox::new(ReadyCall::pending_once(outcome)))
@@ -174,7 +250,13 @@ impl RouteServerBinding for HostMockBinding {
         >,
         BindingInputRejection<HostPreparedRouteGuard>,
     > {
-        let active = HostActiveRouteGuard::new(guard, 1_u8);
+        guard
+            .try_state_pin_ref::<AuthorRouteState>()
+            .expect("external author projects prepared shared state")
+            .get_ref()
+            .stage
+            .store(1, Ordering::SeqCst);
+        let active = HostActiveRouteGuard::new(guard);
         Ok(HostBindingCallBox::new(ReadyCall::new(
             RouteActivationOutcome::Active(active),
         )))
@@ -190,7 +272,12 @@ impl RouteServerBinding for HostMockBinding {
         >,
         BindingInputRejection<HostActiveRouteGuard>,
     > {
-        let committed = HostCommittedRouteGuard::new(guard, 2_u8);
+        let state = guard
+            .try_state_pin_ref::<AuthorRouteState>()
+            .expect("external author recovers active shared state by type");
+        assert_eq!(state.get_ref().stage.load(Ordering::SeqCst), 1);
+        state.get_ref().stage.store(2, Ordering::SeqCst);
+        let committed = HostCommittedRouteGuard::new(guard);
         Ok(HostBindingCallBox::new(ReadyCall::new(
             RouteCommitOutcome::Committed(committed),
         )))
@@ -198,36 +285,41 @@ impl RouteServerBinding for HostMockBinding {
 
     fn poll_accept(
         &self,
-        _route: Pin<&mut HostCommittedRouteGuard>,
+        route: &HostCommittedRouteGuard,
         _permit: clinkz_wot_core::RouteActivationPermit<'_>,
         _cx: &mut Context<'_>,
         _budget: &mut WorkBudget,
     ) -> Poll<clinkz_wot_core::CoreResult<clinkz_wot_core::RouteAcceptEvent>> {
+        assert_eq!(
+            route
+                .try_state_pin_ref::<AuthorRouteState>()
+                .expect("external author recovers committed shared state by type")
+                .get_ref()
+                .stage
+                .load(Ordering::SeqCst),
+            2
+        );
         Poll::Pending
     }
 
     fn abort(
         &self,
-        _input: RouteAbortInput,
+        input: RouteAbortInput,
     ) -> Result<
         HostBindingCallBox<RouteCleanupOutcome, HostRouteCleanupSuccessor>,
         BindingInputRejection<RouteAbortInput>,
     > {
-        Ok(HostBindingCallBox::new(ReadyCall::new(
-            RouteCleanupOutcome::Complete,
-        )))
+        Ok(HostBindingCallBox::new(OwnedCleanupCall::new(input)))
     }
 
     fn shutdown(
         &self,
-        _input: RouteShutdownInput,
+        input: RouteShutdownInput,
     ) -> Result<
         HostBindingCallBox<RouteCleanupOutcome, HostRouteCleanupSuccessor>,
         BindingInputRejection<RouteShutdownInput>,
     > {
-        Ok(HostBindingCallBox::new(ReadyCall::new(
-            RouteCleanupOutcome::Complete,
-        )))
+        Ok(HostBindingCallBox::new(OwnedCleanupCall::new(input)))
     }
 
     fn deliver_response(

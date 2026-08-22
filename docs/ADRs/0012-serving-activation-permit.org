@@ -85,12 +85,17 @@ associated state, reactor queue, or detached task. The required host shape is:
 #+begin_src rust
 fn poll_accept(
     &self,
-    route: Pin<&mut HostCommittedRouteGuard>,
+    route: &HostCommittedRouteGuard,
     permit: RouteActivationPermit<'_>,
     cx: &mut Context<'_>,
     budget: &mut WorkBudget,
 ) -> Poll<CoreResult<RouteAcceptEvent>>;
 #+end_src
+
+Servient retains the owned committed guard while polling and lends the Host
+binding only this shared reference. The binding can inspect route identity and
+progress its private state through shared methods, but cannot replace, extract,
+or prematurely dispose the linear route owner.
 
 The constrained =PollServerBinding::poll_accept= receives the same borrowed
 permit with its caller-owned route slot and =WorkBudget=. The static runtime
