@@ -162,6 +162,7 @@ where
         Ok(StaticPropertyReadServient::new(
             self.td,
             self.thing_slot,
+            self.limits,
             self.binding,
             self.handler,
             self.handler_name
@@ -478,6 +479,10 @@ impl AdmissionReservations {
             self.deadline,
         ))
     }
+
+    const fn owns_first_entry_cleanup(&self) -> bool {
+        self.cleanup.is_some()
+    }
 }
 
 fn validate_handler_footprint(
@@ -531,6 +536,58 @@ struct DerivedRoute {
     thing_id: ThingId,
     target: AffordanceTarget,
     plan_id: PlanId,
+}
+
+#[allow(clippy::too_many_arguments)]
+fn verify_first_entry_closure<A>(
+    plan_set: &CompiledPlanSetRecord<A>,
+    prepare: &PrepareInput,
+    artifact: &BindingArtifactEnvelope<A>,
+    registration: BindingRegistrationIdentity,
+    admitted_route_footprint: BindingLifetimeFootprint,
+    thing_slot: ThingSlotId,
+    limits: &ResourceLimits,
+    derived: &DerivedRoute,
+    handler_target: &str,
+    handler_generation: Option<clinkz_wot_foundation::Generation>,
+    handler_footprint: HandlerFootprint,
+    route_key: Option<BindingRouteKey>,
+    activation: Option<&ServingActivationRecord>,
+    admission: &AdmissionReservations,
+    route_and_response_owners_vacant: bool,
+    supports_required_cell: bool,
+    supports_property_read: bool,
+    retained_status_records: u32,
+) -> CoreResult<()> {
+    let resolved = plan_set.resolve_prepare_artifact(
+        prepare,
+        registration,
+        thing_slot,
+        admitted_route_footprint,
+    )?;
+    let activation = activation.ok_or_else(|| validation_error(thing_slot))?;
+    let route = *prepare.route();
+    if !core::ptr::eq(resolved, artifact)
+        || route_key != Some(route)
+        || derived.key != route
+        || derived.artifact_ref != prepare.artifact()
+        || derived.plan_id != route.plan_id()
+        || derived.target.name() != Some(handler_target)
+        || handler_generation.is_some_and(|generation| generation != thing_slot.generation())
+        || !admission.owns_first_entry_cleanup()
+        || !route_and_response_owners_vacant
+        || !supports_required_cell
+        || !supports_property_read
+        || retained_status_records == 0
+        || activation.published
+        || activation.authority.thing_id() != &derived.thing_id
+        || activation.authority.produced_generation() != &thing_slot.generation()
+        || activation.authority.plan_set_generation() != &route.plan_set_generation()
+        || activation.lease.route() != &route
+    {
+        return Err(validation_error(thing_slot));
+    }
+    validate_handler_footprint(limits, thing_slot, handler_footprint)
 }
 
 fn derive_route<A>(
@@ -626,6 +683,7 @@ where
 {
     td: Option<Thing>,
     thing_slot: ThingSlotId,
+    limits: ResourceLimits,
     registration: StaticBindingRegistration<B>,
     handler: StaticHandlerRegistration<'h, H>,
     handler_name: Box<str>,
@@ -649,6 +707,7 @@ where
     fn new(
         td: Thing,
         thing_slot: ThingSlotId,
+        limits: ResourceLimits,
         registration: StaticBindingRegistration<B>,
         handler: StaticHandlerRegistration<'h, H>,
         handler_name: Box<str>,
@@ -657,6 +716,7 @@ where
         Self {
             td: Some(td),
             thing_slot,
+            limits,
             registration,
             handler,
             handler_name,
@@ -836,6 +896,38 @@ where
                 self.route.key = Some(derived.key);
                 self.td = None;
                 self.derived = Some(derived);
+                if let Err(error) = verify_first_entry_closure(
+                    &self.plan_set,
+                    &prepare,
+                    artifact,
+                    self.registration.identity(),
+                    self.registration.resources().route_state(),
+                    self.thing_slot,
+                    &self.limits,
+                    self.derived
+                        .as_ref()
+                        .expect("first entry retains the route projection"),
+                    &self.handler_name,
+                    Some(self.handler.slot_id().generation()),
+                    self.handler.footprint(),
+                    self.route.key,
+                    self.activation.as_ref(),
+                    &self.admission,
+                    self.route.state.route.is_vacant()
+                        && self.route.state.readiness.is_vacant()
+                        && self.route.state.response.is_vacant()
+                        && self.in_flight.is_none(),
+                    self.registration.execution().supports_application_static(),
+                    self.registration
+                        .capabilities()
+                        .supports_producer_property_read(),
+                    self.registration.status().retained_records(),
+                ) {
+                    self.activation = None;
+                    self.derived = None;
+                    self.route.key = None;
+                    return self.fail_without_route(error);
+                }
                 match self.registration.server_mut().start_prepare(
                     prepare,
                     artifact,
@@ -1741,6 +1833,36 @@ impl HostPropertyReadRuntime {
                 self.route.key = Some(derived.key);
                 self.td = None;
                 self.derived = Some(derived);
+                let handler = self.handler.as_ref().expect("exposure freezes a handler");
+                if let Err(error) = verify_first_entry_closure(
+                    &self.plan_set,
+                    &prepare,
+                    artifact,
+                    self.registration.identity(),
+                    self.registration.resources().route_state(),
+                    self.thing_slot,
+                    &self.limits,
+                    self.derived
+                        .as_ref()
+                        .expect("first entry retains the route projection"),
+                    &handler.target,
+                    None,
+                    handler.footprint,
+                    self.route.key,
+                    self.activation.as_ref(),
+                    &self.admission,
+                    matches!(&self.route.state, HostRouteState::Absent) && self.in_flight.is_none(),
+                    self.registration.execution().supports_host_erased(),
+                    self.registration
+                        .capabilities()
+                        .supports_producer_property_read(),
+                    self.registration.status().retained_records(),
+                ) {
+                    self.activation = None;
+                    self.derived = None;
+                    self.route.key = None;
+                    return self.fail_without_route(error);
+                }
                 let call = match self.registration.server().prepare(prepare, artifact) {
                     Ok(call) => call,
                     Err(rejection) => {

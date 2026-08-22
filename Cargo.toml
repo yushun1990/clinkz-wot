@@ -12,6 +12,8 @@ members = [
     "servient",
     "td",
     "tools/design-check",
+    "tools/architecture-fixtures/property-read-binding",
+    "tools/architecture-fixtures/property-read-runner",
     "tools/performance-harness",
 ]
 
