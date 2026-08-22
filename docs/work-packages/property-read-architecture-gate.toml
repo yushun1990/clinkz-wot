@@ -1,17 +1,24 @@
-schema_version = 2
+schema_version = 3
 design_revision = "5.0"
 id = "PROPERTY-READ-ARCHITECTURE"
-status = "ready"
+status = "passed"
 document = "docs/work-packages/PROPERTY-READ-ARCHITECTURE.md"
-planned_fixture_roots = [
+fixture_roots = [
     "tools/architecture-fixtures/property-read-binding",
     "tools/architecture-fixtures/property-read-runner",
+]
+evidence = [
+    "servient/src/property_read.rs",
+    "tools/architecture-fixtures/property-read-binding/src/lib.rs",
+    "tools/architecture-fixtures/property-read-runner/src/lib.rs",
 ]
 test_commands = [
     "cargo test --locked -p clinkz-wot-core",
     "cargo test --locked -p clinkz-wot-planning",
     "cargo test --locked -p clinkz-wot-servient --test property_read",
     "cargo test --locked -p clinkz-wot-servient --no-default-features --test property_read",
+    "cargo check --locked -p clinkz-wot-property-read-binding-fixture --no-default-features",
+    "cargo test --locked -p clinkz-wot-property-read-architecture-runner",
     "cargo test --locked -p clinkz-wot-protocol-bindings-zenoh --test target_property_read_feedback_probe -- --test-threads=1",
 ]
 
@@ -36,6 +43,7 @@ evidence = [
     "core/tests/host_route_guard.rs",
     "servient/tests/support/property_read_binding.rs",
     "servient/tests/support/binding_authoring.rs",
+    "tools/architecture-fixtures/property-read-binding/src/lib.rs",
     "protocol-bindings/protocols/zenoh/tests/target_property_read_feedback_probe.rs",
 ]
 
@@ -73,4 +81,5 @@ evidence = [
     "servient/src/property_read.rs",
     "servient/tests/property_read.rs",
     "servient/tests/support/servient_host.rs",
+    "tools/architecture-fixtures/property-read-runner/src/lib.rs",
 ]

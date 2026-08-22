@@ -1,6 +1,6 @@
 # Property Read Architecture Gate
 
-Machine-readable gate status, planned fixture roots, dependencies, and current
+Machine-readable gate status, fixture roots, dependencies, and current
 evidence paths are defined only in
 [`property-read-architecture-gate.toml`](property-read-architecture-gate.toml).
 
@@ -68,9 +68,31 @@ whole-state replacement counterexample. The binding uses no route table,
 retained plan-set lease, private access, or unsafe erasure. Servient also keeps
 the owned committed guard while `poll_accept` lends the binding only a shared
 reference, closing safe whole-guard replacement or extraction. Workspace topic
-0058 is migrated. This correction satisfies the real-target prerequisite; it
-is not an aggregate gate pass. The aggregate gate remains `ready`, its planned
-fixture roots remain absent, and no aggregate source has been admitted.
+0058 is migrated. This correction satisfies the real-target prerequisite but
+does not substitute for the aggregate result.
+
+The aggregate fixture now passes at the two registered roots. The external
+binding crate supplies one deterministic protocol-local ingress slot,
+correlation owner, response delivery path, compiler, static server, Host
+server, lifecycle guards, and cleanup implementation. The runner supplies only
+legal root inputs and executes both representations through the production
+Planning and Servient path. Its success cells prove one compiler-produced
+Producer-route artifact and canonical reservation reaches preparation, one
+request is retained across an exhausted handler budget, one production-created
+handler context reaches exactly one callback, one response is delivered, and
+all route, request, response, artifact, and cleanup ownership reaches zero.
+The Host assertions also preserve one route-state allocation and footprint
+through prepared, active, and committed ownership.
+
+The aggregate negative cells prove that an incomplete cleanup/resource policy
+causes zero compiler-carrier checks and zero binding preparation side effects,
+and that readiness failure returns the real prepared route through abort or
+retrying abort cleanup in both representations. Immediately before the first
+preparation call, Servient validates its private complete first-entry closure,
+including the frozen plan-set lease, real artifact/reference, canonical route,
+validated registration/profile cell, Thing/generation, exact handler coverage
+and footprint, status and cleanup capacity, activation authority/accept lease,
+and vacant request/response owners.
 
 ## Required scenario
 
@@ -119,17 +141,20 @@ place of the production carrier under test.
 
 ## Aggregate fixture boundary
 
-The gate manifest reserves two future aggregate roots:
+The gate manifest registers two aggregate roots:
 
 - `property-read-binding`, containing deterministic protocol-local I/O and a
   complete external binding implementation; and
 - `property-read-runner`, composing the TD, planner, registration, Servient,
   handler, request, response, and cleanup assertions.
 
-Those roots remain absent until the aggregate scenario is separately admitted
-and implemented. The real-target Host carrier prerequisite is satisfied;
-package-local crate tests remain regression evidence after the aggregate
-fixture is added.
+The runner contains no constructor call for a logical plan, admitted artifact,
+artifact reference, route reservation, route key, `PrepareInput`, handler
+context, response opportunity, or cleanup reservation. An executable source
+boundary check protects that negative claim. Those values are created only by
+the mock compiler/binding where protocol ownership requires it or by the
+production Planning, Core, and Servient path. Package-local crate tests remain
+regression evidence and are not treated as the aggregate pass by themselves.
 
 The response-sealing prerequisite is package-local executable evidence for the
 existing narrow carrier: Core accepts only a payload-bearing `Ok` application
