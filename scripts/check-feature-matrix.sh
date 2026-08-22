@@ -58,6 +58,12 @@ check "servient no-features"    -p clinkz-wot-servient --no-default-features
 check "servient async"          -p clinkz-wot-servient --no-default-features --features async
 check "servient td2-preview"    -p clinkz-wot-servient --features td2-preview
 
+echo "=== Property Read architecture fixtures ==="
+check "aggregate binding default"      -p clinkz-wot-property-read-binding-fixture
+check "aggregate binding no-features"  -p clinkz-wot-property-read-binding-fixture --no-default-features
+check "aggregate runner default"       -p clinkz-wot-property-read-architecture-runner
+check "aggregate runner no-features"   -p clinkz-wot-property-read-architecture-runner --no-default-features
+
 echo "=== codec-cbor ==="
 check "cbor default"            -p clinkz-wot-codec-cbor
 check "cbor no-features"        -p clinkz-wot-codec-cbor --no-default-features

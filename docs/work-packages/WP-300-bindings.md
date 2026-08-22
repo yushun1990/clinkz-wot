@@ -203,8 +203,10 @@ semantics already exercised by the static path. A
 response callback may retain a non-owning `Weak` alias while the route is live;
 it cannot extend or replace the guard-owned primary state and is not a route
 table. Workspace topic 0058 records the migrated correction. The real-target
-prerequisite no longer blocks aggregate source admission, but the aggregate
-gate remains merely `ready` and has not been executed.
+prerequisite no longer blocks aggregate source admission. The separate
+deterministic mock binding and runner now execute the aggregate gate in both
+representations, so `PROPERTY-READ-ARCHITECTURE` is `passed`; this does not
+widen the probe or aggregate evidence into broad WP-300 or WP-600 completion.
 
 The probe also records two maturity limits rather than hiding them. First,
 optional Zenoh Form extensions such as priority and congestion control are not
