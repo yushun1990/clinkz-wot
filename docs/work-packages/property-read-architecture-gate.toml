@@ -32,9 +32,24 @@ id = "WP-300-PROPERTY-READ-BINDING"
 owner_package = "WP-300"
 status = "covered"
 evidence = [
+    "core/tests/property_read_response_sealing.rs",
     "core/tests/host_route_guard.rs",
     "servient/tests/support/property_read_binding.rs",
     "servient/tests/support/binding_authoring.rs",
+    "protocol-bindings/protocols/zenoh/tests/target_property_read_feedback_probe.rs",
+]
+
+[[dependency]]
+id = "WP-300-PROPERTY-READ-RESPONSE-SEALING"
+owner_package = "WP-300"
+status = "covered"
+evidence = [
+    "core/src/binding.rs",
+    "core/tests/property_read_response_sealing.rs",
+    "servient/src/property_read.rs",
+    "servient/tests/property_read.rs",
+    "servient/tests/support/property_read_binding.rs",
+    "servient/tests/support/servient_host.rs",
     "protocol-bindings/protocols/zenoh/tests/target_property_read_feedback_probe.rs",
 ]
 

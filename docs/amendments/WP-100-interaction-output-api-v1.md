@@ -1,6 +1,6 @@
 # WP-100 Interaction Output API and Staging Amendment
 
-Status: Frozen
+Status: historical v5-inactive staging input
 
 Base design revision: v4.6
 
@@ -9,6 +9,14 @@ Amendment id: WP-100-OUTPUT-API-001
 Affected requirements: API-PAYLOAD-001, API-SURFACE-001,
 API-OWNERSHIP-001, HANDLER-API-001, BIND-IO-001, BIND-OUT-001,
 RES-LIMIT-001, IMPL-CONFORM-001
+
+This v4.6 amendment is not an active source in
+`docs/spec/v5-authority-reset.toml`. Its interaction value schemas remain
+useful history where the active v5 interaction-core specification adopted
+them, but its proposed broad `InboundResponse`, `try_success`, and consumer
+response-validation staging do not authorize implementation. Active narrow
+Property Read response authority is owned by `docs/spec/interaction-core.md`,
+`docs/spec/binding-spi.md`, and the current `RouteInboundResponse` carrier.
 
 ## Purpose
 
@@ -95,6 +103,11 @@ request and compiled response plan.
 
 ## Final Inbound Response Envelope
 
+> Historical v4.6 projection; v5-inactive. A future broad
+> `InboundResponse` may rename/generalize the current linear
+> `RouteInboundResponse` carrier and its Core-owned validation kernel. It must
+> not be implemented as a second runtime envelope from this section.
+
 The final v1 `InboundResponse` schema is owned by
 `clinkz_wot_core::binding`, re-exported as
 `clinkz_wot_core::InboundResponse`, and implemented in WP-300 after
@@ -161,6 +174,10 @@ ownership. Until then it cannot satisfy `BIND-IO-001` or the end-to-end
 success/error evidence.
 
 ## Validation Ownership and Work-Package Order
+
+> Historical v4.6 projection; v5-inactive. The active narrow Property Read
+> ownership split is specified by the v5 interaction-core and Binding SPI
+> owners and projected into WP-300/WP-400.
 
 The response contract is implemented without crossing the frozen DAG:
 

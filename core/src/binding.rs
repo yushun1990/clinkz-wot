@@ -16,13 +16,14 @@ use core::pin::Pin;
 use std::any::Any;
 
 use clinkz_wot_foundation::{Generation, WorkBudget};
+use clinkz_wot_td::data_type::Operation;
 
 use crate::{
     AffordanceTarget, BindingArtifactCompatibility, BindingArtifactEnvelope, BindingArtifactRef,
     BindingConfigurationDigest, BindingGeneration, BindingId, CleanupOperation, CleanupRecord,
     CleanupSlotId, CoreError, CoreResult, CorrelationId, Deadline, ErrorContext, ErrorPhase,
-    InteractionInput, InteractionOutput, PlanId, PlanSetGeneration, RetryClass, StartStatus,
-    ThingId,
+    InteractionInput, InteractionOutput, InteractionStatus, PlanId, PlanSetGeneration,
+    ResponsePayloadRole, RetryClass, StartStatus, ThingId,
 };
 use crate::{BindingCompilerExtension, StaticBindingCompilerRegistration};
 #[cfg(feature = "std")]
@@ -1046,7 +1047,30 @@ impl RouteInboundRequest {
     }
 }
 
-/// Complete success or failure delivered through one response opportunity.
+/// Complete Core-sealed success or failure delivered through one response
+/// opportunity.
+///
+/// Successful Property Read construction is intentionally available only
+/// through [`Self::seal_property_read_handler_result`]. The private fields and
+/// absence of public unchecked constructors prevent a binding or orchestrator
+/// from placing an unvalidated successful [`InteractionOutput`] in the
+/// delivery carrier.
+///
+/// ```compile_fail
+/// use clinkz_wot_core::{InteractionOutput, RouteInboundResponse, RouteResponseOpportunity};
+///
+/// fn bypass(opportunity: RouteResponseOpportunity, output: InteractionOutput) {
+///     let _ = RouteInboundResponse::new(opportunity, Ok(output));
+/// }
+/// ```
+///
+/// ```compile_fail
+/// use clinkz_wot_core::{InteractionOutput, RouteInboundResponse, RouteResponseOpportunity};
+///
+/// fn bypass(opportunity: RouteResponseOpportunity, output: InteractionOutput) {
+///     let _ = RouteInboundResponse::success(opportunity, output);
+/// }
+/// ```
 #[derive(Debug, Eq, PartialEq)]
 pub struct RouteInboundResponse {
     opportunity: RouteResponseOpportunity,
@@ -1054,25 +1078,34 @@ pub struct RouteInboundResponse {
 }
 
 impl RouteInboundResponse {
-    /// Creates a response from its exclusive opportunity and terminal result.
-    pub const fn new(
+    /// Seals one Property Read handler result into its exclusive response
+    /// opportunity.
+    ///
+    /// Handler failures are preserved unchanged. A nominal success becomes a
+    /// deliverable [`CoreError::Validation`] unless it has one payload,
+    /// [`InteractionStatus::Ok`], [`ResponsePayloadRole::Application`], no
+    /// binding-response metadata, and no action invocation reference. The
+    /// opportunity remains in the response for every branch.
+    pub fn seal_property_read_handler_result(
         opportunity: RouteResponseOpportunity,
         result: CoreResult<InteractionOutput>,
     ) -> Self {
+        let result = match result {
+            Err(error) => Err(error),
+            Ok(output) => seal_property_read_handler_output(&opportunity, output),
+        };
         Self {
             opportunity,
             result,
         }
     }
 
-    /// Creates a successful response.
-    pub const fn success(opportunity: RouteResponseOpportunity, output: InteractionOutput) -> Self {
-        Self::new(opportunity, Ok(output))
-    }
-
     /// Creates a failed response without synthesizing an empty output.
     pub const fn failure(opportunity: RouteResponseOpportunity, error: CoreError) -> Self {
-        Self::new(opportunity, Err(error))
+        Self {
+            opportunity,
+            result: Err(error),
+        }
     }
 
     /// Returns the single-use opportunity identity.
@@ -1089,6 +1122,30 @@ impl RouteInboundResponse {
     pub fn into_parts(self) -> (RouteResponseOpportunity, CoreResult<InteractionOutput>) {
         (self.opportunity, self.result)
     }
+}
+
+fn seal_property_read_handler_output(
+    opportunity: &RouteResponseOpportunity,
+    output: InteractionOutput,
+) -> CoreResult<InteractionOutput> {
+    let metadata = output.metadata();
+    if output.data().is_some()
+        && output.status() == InteractionStatus::Ok
+        && metadata.payload_role() == ResponsePayloadRole::Application
+        && metadata.binding_response().is_none()
+        && metadata.action_invocation().is_none()
+    {
+        return Ok(output);
+    }
+
+    let route = opportunity.route();
+    Err(CoreError::Validation(
+        ErrorContext::new(ErrorPhase::Validate, RetryClass::Never)
+            .with_operation(Operation::ReadProperty)
+            .with_plan(route.plan_id())
+            .with_binding(route.binding_id(), route.binding_generation())
+            .with_correlation(opportunity.correlation()),
+    ))
 }
 
 /// Result of route preparation while the route slot retains typed state.

@@ -33,7 +33,8 @@ Completed slice history is retained by Git. Current regression ownership is
 instead executable at the crate that can be broken:
 
 - Core tests own the synchronous handler contract, bounded values, validated
-  context, and compile-fail public type boundaries.
+  context, Property Read handler-result sealing, and compile-fail public type
+  boundaries.
 - Planning tests own immutable Property Read output, static/host parity,
   Producer-route identity, compiler-owned route reservation, and the real
   output-to-`PrepareInput` handoff.
@@ -86,6 +87,7 @@ Thing Description
   -> Servient publication
   -> permit-authorized request acceptance
   -> one ReadPropertyHandler call
+  -> Core-sealed handler result on the original response opportunity
   -> one response delivery
   -> request and route cleanup
 ```
@@ -128,6 +130,14 @@ Those roots remain absent until the aggregate scenario is separately admitted
 and implemented. The real-target Host carrier prerequisite is satisfied;
 package-local crate tests remain regression evidence after the aggregate
 fixture is added.
+
+The response-sealing prerequisite is package-local executable evidence for the
+existing narrow carrier: Core accepts only a payload-bearing `Ok` application
+success, converts every other nominal success into a deliverable validation
+error, and exposes no unvalidated success constructor. Static and Host
+Servient scenarios deliver that validation failure once and complete response
+and route cleanup. This prerequisite does not implement either aggregate
+fixture root or change the gate from `ready` to `passed`.
 
 ## Exclusions
 

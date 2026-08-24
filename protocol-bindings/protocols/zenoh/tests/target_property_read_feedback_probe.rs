@@ -29,13 +29,13 @@ use clinkz_wot_core::{
     HostBindingCompilerRegistration, HostBindingRegistration, HostBindingRegistrationInput,
     HostCommittedRouteGuard, HostPreparedRouteGuard, HostRouteCleanupSuccessor,
     HostShutdownRouteGuard, InteractionInput, InteractionOutput, NoCleanupSuccessor, Payload,
-    PollServerBinding, PrepareInput, ReadPropertyHandler, RetryClass, RouteAbortInput,
-    RouteActivationOutcome, RouteActivationPermit, RouteCleanupOutcome, RouteCommitOutcome,
-    RouteInboundRequest, RouteInboundResponse, RoutePreparationVisibility, RoutePrepareOutcome,
-    RouteReadinessOutcome, RouteReadinessSlot, RouteReservationIdentity, RouteServerBinding,
-    RouteShutdownInput, ServerResponseSlot, ServerRouteSlot, StartStatus,
-    StaticBindingCompilerRegistration, StaticBindingRegistration, StaticBindingRegistrationInput,
-    StaticHandlerRegistration, ThingSlotId,
+    PlanId, PlanSetGeneration, PollServerBinding, PrepareInput, ReadPropertyHandler, RetryClass,
+    RouteAbortInput, RouteActivationOutcome, RouteActivationPermit, RouteCleanupOutcome,
+    RouteCommitOutcome, RouteInboundRequest, RouteInboundResponse, RoutePreparationVisibility,
+    RoutePrepareOutcome, RouteReadinessOutcome, RouteReadinessSlot, RouteReservationIdentity,
+    RouteResponseOpportunity, RouteServerBinding, RouteShutdownInput, ServerResponseSlot,
+    ServerRouteSlot, StartStatus, StaticBindingCompilerRegistration, StaticBindingRegistration,
+    StaticBindingRegistrationInput, StaticHandlerRegistration, ThingSlotId,
 };
 use clinkz_wot_foundation::{
     BenchmarkStaticReferenceV1, GatewayDefaultV1, Generation, SlotIndex, StaticResourceProfile,
@@ -247,6 +247,7 @@ struct InFlightQuery {
 }
 
 struct RouteIo {
+    route: clinkz_wot_core::binding::BindingRouteKey,
     accepting: bool,
     pending: Option<Query>,
     in_flight: Option<InFlightQuery>,
@@ -254,9 +255,10 @@ struct RouteIo {
     waker: Option<Waker>,
 }
 
-impl Default for RouteIo {
-    fn default() -> Self {
+impl RouteIo {
+    fn new(route: clinkz_wot_core::binding::BindingRouteKey) -> Self {
         Self {
+            route,
             accepting: true,
             pending: None,
             in_flight: None,
@@ -456,10 +458,11 @@ impl Drop for ZenohRouteState {
 }
 
 fn new_zenoh_route_state(
+    route: clinkz_wot_core::binding::BindingRouteKey,
     metadata: ZenohRouteArtifact,
     telemetry: ProbeTelemetry,
 ) -> (ZenohRouteState, Weak<Mutex<RouteIo>>) {
-    let io = Arc::new(Mutex::new(RouteIo::default()));
+    let io = Arc::new(Mutex::new(RouteIo::new(route)));
     let callback_io = Arc::clone(&io);
     let callback_telemetry = telemetry.clone();
     let endpoint = format!("{}/{}", metadata.transport, metadata.authority);
@@ -526,25 +529,24 @@ fn begin_zenoh_response(
 ) -> Result<(RouteInboundResponse, ZenohResponseState), BindingInputRejection<RouteInboundResponse>>
 {
     let route_key = *response.opportunity().route();
-    let correlation = response.opportunity().correlation();
     let Some(io) = response_io.and_then(Weak::upgrade) else {
         return Err(BindingInputRejection::new(
             response,
             operational_error(route_key, ErrorPhase::Delivery),
         ));
     };
-    let in_flight = {
+    let (response, in_flight) = {
         let mut io = io.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
-        match io.in_flight.take() {
-            Some(in_flight) if in_flight.correlation == correlation => in_flight,
-            other => {
-                io.in_flight = other;
-                return Err(BindingInputRejection::new(
-                    response,
-                    operational_error(route_key, ErrorPhase::Delivery),
-                ));
-            }
-        }
+        let expected = io
+            .in_flight
+            .as_ref()
+            .map(|in_flight| (io.route, in_flight.correlation));
+        let response = validate_zenoh_response_identity(response, expected)?;
+        let in_flight = io
+            .in_flight
+            .take()
+            .expect("validated live Zenoh response identity has an in-flight query");
+        (response, in_flight)
     };
     let reply = match response.result() {
         Ok(output) => Ok(output.data().cloned()),
@@ -571,6 +573,21 @@ fn begin_zenoh_response(
         }
     });
     Ok((response, ZenohResponseState { future }))
+}
+
+fn validate_zenoh_response_identity(
+    response: RouteInboundResponse,
+    expected: Option<(clinkz_wot_core::binding::BindingRouteKey, CorrelationId)>,
+) -> Result<RouteInboundResponse, BindingInputRejection<RouteInboundResponse>> {
+    let route = *response.opportunity().route();
+    let correlation = response.opportunity().correlation();
+    if expected != Some((route, correlation)) {
+        return Err(BindingInputRejection::new(
+            response,
+            operational_error(route, ErrorPhase::Delivery),
+        ));
+    }
+    Ok(response)
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -650,7 +667,8 @@ impl PollServerBinding for StaticZenohServer {
             let error = operational_error(*input.route(), ErrorPhase::Prepare);
             return Err(BindingInputRejection::new(input, error));
         }
-        let (state, response_io) = new_zenoh_route_state(metadata, self.telemetry.clone());
+        let (state, response_io) =
+            new_zenoh_route_state(*input.route(), metadata, self.telemetry.clone());
         self.io = Some(response_io);
         route.initialize(input, state);
         let state_address = route.state_mut() as *mut ZenohRouteState as usize;
@@ -1470,7 +1488,8 @@ impl RouteServerBinding for HostZenohServer {
             return Err(BindingInputRejection::new(input, error));
         }
         let footprint = input.admitted_footprint();
-        let (state, response_io) = new_zenoh_route_state(metadata.clone(), self.telemetry.clone());
+        let (state, response_io) =
+            new_zenoh_route_state(*input.route(), metadata.clone(), self.telemetry.clone());
         let guard = HostPreparedRouteGuard::new(input, footprint, state);
         let state_address =
             prepared_zenoh_state(&guard).get_ref() as *const ZenohRouteState as usize;
@@ -2012,6 +2031,71 @@ fn cleanup_record(context: &CleanupPhaseContext) -> CleanupRecord {
         0,
     )
     .expect("initial residual record fits the reserved retry bound")
+}
+
+#[test]
+fn real_target_response_identity_rejection_preserves_the_complete_response() {
+    let plan_set_generation = PlanSetGeneration::new(Generation::INITIAL);
+    let plan_id = PlanId::new(SlotIndex::new(3), Generation::INITIAL);
+    let reservation = RouteReservationIdentity::new(
+        CollisionDomainId::new([0x71; 16]),
+        EndpointReservationKey::new([0x72; 32]),
+    );
+    let expected_route = clinkz_wot_core::binding::BindingRouteKey::new(
+        BindingId::new(41),
+        BindingGeneration::INITIAL,
+        Generation::INITIAL,
+        plan_set_generation,
+        plan_id,
+        reservation,
+    );
+    let expected_correlation = CorrelationId::new(21);
+    let next_generation = Generation::INITIAL.checked_next().expect("next generation");
+    let stale_inputs = [
+        (
+            clinkz_wot_core::binding::BindingRouteKey::new(
+                BindingId::new(41),
+                BindingGeneration::new(next_generation),
+                Generation::INITIAL,
+                plan_set_generation,
+                plan_id,
+                reservation,
+            ),
+            expected_correlation,
+        ),
+        (
+            clinkz_wot_core::binding::BindingRouteKey::new(
+                BindingId::new(41),
+                BindingGeneration::INITIAL,
+                next_generation,
+                plan_set_generation,
+                plan_id,
+                reservation,
+            ),
+            expected_correlation,
+        ),
+        (expected_route, CorrelationId::new(22)),
+    ];
+
+    for (stale_route, stale_correlation) in stale_inputs {
+        let application_error =
+            CoreError::Application(ErrorContext::new(ErrorPhase::Handler, RetryClass::Never));
+        let response = RouteInboundResponse::failure(
+            RouteResponseOpportunity::new(stale_route, stale_correlation),
+            application_error.clone(),
+        );
+        let rejection = validate_zenoh_response_identity(
+            response,
+            Some((expected_route, expected_correlation)),
+        )
+        .expect_err("stale real-target response identity must be rejected");
+
+        assert_eq!(rejection.error().route(), Some(&stale_route));
+        let returned = rejection.into_input();
+        assert_eq!(returned.opportunity().route(), &stale_route);
+        assert_eq!(returned.opportunity().correlation(), stale_correlation);
+        assert_eq!(returned.result(), Err(&application_error));
+    }
 }
 
 fn assert_success_semantics(snapshot: &ProbeSnapshot, binding_id: BindingId) {

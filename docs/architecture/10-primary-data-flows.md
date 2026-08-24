@@ -129,7 +129,7 @@ local registry.
 1. The Servient validates the private serving record, moves the unique accept
    lease for one committed route into the claimed-call owner, and consumes that
    claim into a route-scoped activation permit.
-2. The binding may produce one owned `InboundRequest` only while
+2. The binding may produce one owned `RouteInboundRequest` only while
    `poll_accept` holds that permit. The request carries the route, plan, form,
    correlation, payload, and transport-auth identities.
 3. The Servient validates the route generation and admits an in-flight response
@@ -137,9 +137,14 @@ local registry.
 4. Shared security, codec, schema, URI-variable, and scope processing executes
    from the immutable inbound plan.
 5. The Servient invokes the selected handler outside registry locks.
-6. The result is validated and converted to one `InboundResponse` with the same
-   route and correlation identities.
-7. The owning binding sends the response through bounded progress; retry never
+6. Core consumes the request's unique `RouteResponseOpportunity` and seals the
+   handler result into one `RouteInboundResponse`. A valid Property Read
+   success contains one application payload with `Ok` status and no binding or
+   action metadata; an invalid success becomes a deliverable validation error,
+   while a handler error remains unchanged.
+7. The owning binding revalidates the live route, generation, and correlation,
+   maps the sealed result to the protocol, and sends it through bounded
+   progress. It does not repeat handler-origin validation, and retry never
    reinvokes the application handler.
 
 The v1 binding model is engine-orchestrated. A binding does not receive a

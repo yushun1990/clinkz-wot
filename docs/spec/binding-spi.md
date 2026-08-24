@@ -94,7 +94,12 @@ media/status metadata, and transport-authentication material across every SPI
 call. A live correlation id is unique within one route generation. A binding
 MUST validate route identity against its prepared route carrier or typed route
 slot and MUST NOT borrow request or response data from a transport buffer after
-a call returns.
+a call returns. `RouteInboundResponse` is the current narrow Property Read
+linear response carrier. Core seals handler-origin successful output before a
+binding can receive it; a concrete binding still validates the live route,
+generation, and correlation and performs protocol mapping, but MUST NOT
+reimplement the handler-origin metadata, status, action-reference, payload-role,
+or required-payload rules.
 
 Historical v4.9 clause (`BIND-OUT-001`, inactive): `OutboundRequest` MUST own only the selected binding and plan
 identity plus per-call varying data. It MUST NOT contain a TD, raw form,
@@ -730,7 +735,9 @@ the immutable route match.
 
 `RouteResponseOpportunity` owns the same route and correlation identities and
 is neither `Clone` nor `Copy`. `RouteInboundResponse` consumes that opportunity and owns exactly
-one success output or structured error mapping. A response opportunity is
+one Core-sealed success output or structured error mapping. Invalid successful
+Property Read handler output is carried as `CoreError::Validation` with the
+unchanged opportunity; handler errors are carried unchanged. A response opportunity is
 generation-bearing and single-use. Duplicate live correlation ids on one route
 are rejected; unrelated route generations may reuse the wire value.
 

@@ -25,6 +25,24 @@ use clinkz_wot_core::{
 };
 use clinkz_wot_foundation::{WorkBudget, WorkClass};
 
+fn validate_live_response_identity(
+    response: RouteInboundResponse,
+    expected: Option<(clinkz_wot_core::binding::BindingRouteKey, CorrelationId)>,
+) -> Result<RouteInboundResponse, BindingInputRejection<RouteInboundResponse>> {
+    let route = *response.opportunity().route();
+    let correlation = response.opportunity().correlation();
+    if expected != Some((route, correlation)) {
+        return Err(BindingInputRejection::new(
+            response,
+            BindingOperationalError::for_route(
+                route,
+                CoreError::Binding(ErrorContext::new(ErrorPhase::Delivery, RetryClass::Never)),
+            ),
+        ));
+    }
+    Ok(response)
+}
+
 /// Pure compiler cursor authored outside the engine workspace.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct MockCompilerCursor(bool);
@@ -196,8 +214,10 @@ struct StaticProbeState {
     queued: Option<(Box<str>, InteractionInput)>,
     next_correlation: u64,
     delivered: u32,
+    delivered_validation_errors: u32,
     routes: u32,
     in_flight: u32,
+    in_flight_identity: Option<(clinkz_wot_core::binding::BindingRouteKey, CorrelationId)>,
     cleanup: u32,
     aborts: u32,
     closed: bool,
@@ -210,8 +230,10 @@ impl Default for StaticProbeState {
             queued: None,
             next_correlation: 1,
             delivered: 0,
+            delivered_validation_errors: 0,
             routes: 0,
             in_flight: 0,
+            in_flight_identity: None,
             cleanup: 0,
             aborts: 0,
             closed: false,
@@ -237,6 +259,10 @@ impl StaticPropertyReadProbe {
 
     pub fn delivered_responses(&self) -> u32 {
         self.state.borrow().delivered
+    }
+
+    pub fn delivered_validation_errors(&self) -> u32 {
+        self.state.borrow().delivered_validation_errors
     }
 
     pub fn outstanding_counts(&self) -> (u32, u32, u32, u32) {
@@ -531,6 +557,7 @@ impl PollServerBinding for ManualMockBinding {
         let correlation = CorrelationId::new(state.next_correlation);
         state.next_correlation += 1;
         state.in_flight = 1;
+        state.in_flight_identity = Some((*permit.route(), correlation));
         Poll::Ready(Ok(clinkz_wot_core::RouteAcceptEvent::Request(
             RouteInboundRequest::new(
                 *permit.route(),
@@ -631,13 +658,19 @@ impl PollServerBinding for ManualMockBinding {
         BindingInputRejection<RouteInboundResponse>,
     > {
         if let Some(probe) = &self.probe {
-            assert!(response.result().is_ok(), "fixture handler response failed");
+            let expected = probe.borrow().in_flight_identity;
+            let response = validate_live_response_identity(response, expected)?;
+            let is_validation_error = matches!(response.result(), Err(CoreError::Validation(_)));
             let mut state = probe.borrow_mut();
             assert_eq!(state.in_flight, 1);
             state.in_flight = 0;
+            state.in_flight_identity = None;
             state.delivered += 1;
+            state.delivered_validation_errors += u32::from(is_validation_error);
+            slot.initialize(response, MockResponseState { accepted: true });
+        } else {
+            slot.initialize(response, MockResponseState { accepted: true });
         }
-        slot.initialize(response, MockResponseState { accepted: true });
         Ok(clinkz_wot_core::StartStatus::Ready(
             BindingDeliveryOutcome::Delivered,
         ))
@@ -785,7 +818,10 @@ fn cancelled<T>() -> BindingCallSettlement<T, ()> {
 mod tests {
     use super::*;
     use clinkz_wot_core::binding::BindingRouteKey;
-    use clinkz_wot_core::{BindingArtifactIdentity, BindingArtifactRef, PlanId, PlanSetGeneration};
+    use clinkz_wot_core::{
+        BindingArtifactIdentity, BindingArtifactRef, PlanId, PlanSetGeneration,
+        RouteResponseOpportunity,
+    };
     use clinkz_wot_foundation::{Generation, SlotIndex};
 
     #[test]
@@ -866,6 +902,83 @@ mod tests {
             resources.route_state()
         );
     }
+
+    #[test]
+    fn static_response_delivery_rejects_stale_identity_and_preserves_the_response() {
+        let compatibility = BindingArtifactCompatibility::new([0x41; 16]);
+        let plan_id = PlanId::new(SlotIndex::new(0), Generation::INITIAL);
+        let plan_set_generation = PlanSetGeneration::new(Generation::INITIAL);
+        let reservation = RouteReservationIdentity::new(
+            CollisionDomainId::new([0x61; 16]),
+            EndpointReservationKey::new([0x62; 32]),
+        );
+        let expected_route = BindingRouteKey::new(
+            BindingId::new(7),
+            BindingGeneration::INITIAL,
+            Generation::INITIAL,
+            plan_set_generation,
+            plan_id,
+            reservation,
+        );
+        let expected_correlation = CorrelationId::new(11);
+        let next_generation = Generation::INITIAL.checked_next().expect("next generation");
+        let stale_inputs = [
+            (
+                BindingRouteKey::new(
+                    BindingId::new(7),
+                    BindingGeneration::new(next_generation),
+                    Generation::INITIAL,
+                    plan_set_generation,
+                    plan_id,
+                    reservation,
+                ),
+                expected_correlation,
+            ),
+            (
+                BindingRouteKey::new(
+                    BindingId::new(7),
+                    BindingGeneration::INITIAL,
+                    next_generation,
+                    plan_set_generation,
+                    plan_id,
+                    reservation,
+                ),
+                expected_correlation,
+            ),
+            (expected_route, CorrelationId::new(12)),
+        ];
+
+        for (stale_route, stale_correlation) in stale_inputs {
+            let state = Rc::new(RefCell::new(StaticProbeState {
+                in_flight: 1,
+                in_flight_identity: Some((expected_route, expected_correlation)),
+                ..StaticProbeState::default()
+            }));
+            let mut binding =
+                ManualMockBinding::with_probe(compatibility, Rc::clone(&state), false);
+            let application_error =
+                CoreError::Application(ErrorContext::new(ErrorPhase::Handler, RetryClass::Never));
+            let response = RouteInboundResponse::failure(
+                RouteResponseOpportunity::new(stale_route, stale_correlation),
+                application_error.clone(),
+            );
+            let mut slot = ServerResponseSlot::new();
+            let rejection = binding
+                .start_response(response, &mut slot, &mut WorkBudget::new())
+                .expect_err("stale response identity must be rejected");
+
+            assert!(slot.is_vacant());
+            assert_eq!(state.borrow().in_flight, 1);
+            assert_eq!(
+                state.borrow().in_flight_identity,
+                Some((expected_route, expected_correlation))
+            );
+            let returned = rejection.into_input();
+            assert_eq!(returned.opportunity().route(), &stale_route);
+            assert_eq!(returned.opportunity().correlation(), stale_correlation);
+            assert_eq!(returned.result(), Err(&application_error));
+        }
+    }
 }
 
 #[cfg(feature = "std")]
@@ -899,12 +1012,15 @@ mod host_fixture {
     };
     use clinkz_wot_foundation::{WorkBudget, WorkClass};
 
-    use super::{MockArtifact, MockCompiler, artifact_input_error};
+    use super::{
+        MockArtifact, MockCompiler, artifact_input_error, validate_live_response_identity,
+    };
 
     struct ProbeState {
         ingress: Option<SyncSender<(Box<str>, InteractionInput)>>,
         queued: u32,
         delivered: u32,
+        delivered_validation_errors: u32,
         routes: u32,
         in_flight: u32,
         cleanup: u32,
@@ -932,6 +1048,7 @@ mod host_fixture {
                 ingress: None,
                 queued: 0,
                 delivered: 0,
+                delivered_validation_errors: 0,
                 routes: 0,
                 in_flight: 0,
                 cleanup: 0,
@@ -1080,6 +1197,11 @@ mod host_fixture {
 
         pub fn delivered_responses(&self) -> u32 {
             self.state.with_read(|state| state.delivered)
+        }
+
+        pub fn delivered_validation_errors(&self) -> u32 {
+            self.state
+                .with_read(|state| state.delivered_validation_errors)
         }
 
         pub fn outstanding_counts(&self) -> (u32, u32, u32, u32) {
@@ -1360,11 +1482,12 @@ mod host_fixture {
                 return Poll::Pending;
             }
             let response = self.response.take().expect("response delivered twice");
-            assert!(response.result().is_ok(), "fixture handler response failed");
+            let is_validation_error = matches!(response.result(), Err(CoreError::Validation(_)));
             self.probe.with(|state| {
                 assert_eq!(state.in_flight, 1);
                 state.in_flight = 0;
                 state.delivered += 1;
+                state.delivered_validation_errors += u32::from(is_validation_error);
             });
             Poll::Ready(BindingDeliveryOutcome::Delivered)
         }
@@ -1842,7 +1965,6 @@ mod host_fixture {
             BindingInputRejection<RouteInboundResponse>,
         > {
             let route = *response.opportunity().route();
-            let correlation = response.opportunity().correlation();
             let io = self
                 .response_io
                 .lock()
@@ -1862,18 +1984,8 @@ mod host_fixture {
                 ));
             };
             let mut io = io.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
-            if io.route != route || io.in_flight != Some(correlation) {
-                return Err(BindingInputRejection::new(
-                    response,
-                    BindingOperationalError::for_route(
-                        route,
-                        CoreError::Binding(ErrorContext::new(
-                            ErrorPhase::Delivery,
-                            RetryClass::Never,
-                        )),
-                    ),
-                ));
-            }
+            let expected = io.in_flight.map(|correlation| (io.route, correlation));
+            let response = validate_live_response_identity(response, expected)?;
             io.in_flight = None;
             drop(io);
             Ok(HostBindingCallBox::new(DeliveryCall {

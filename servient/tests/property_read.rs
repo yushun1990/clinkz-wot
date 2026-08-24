@@ -103,7 +103,8 @@ mod tests {
     };
     use clinkz_wot_core::{
         CoreResult, HandlerContext, HandlerFootprint, HandlerSlotId, InteractionInput,
-        InteractionOutput, ReadPropertyHandler, StaticHandlerRegistration, StepStatus, ThingSlotId,
+        InteractionOutput, Payload, ReadPropertyHandler, StaticHandlerRegistration, StepStatus,
+        ThingSlotId,
     };
     use clinkz_wot_foundation::{
         BenchmarkStaticReferenceV1, Generation, SlotIndex, StaticResourceProfile, WorkBudget,
@@ -145,6 +146,24 @@ mod tests {
     }
 
     impl ReadPropertyHandler for Handler {
+        fn handle(
+            &self,
+            _context: HandlerContext<'_>,
+            _input: &InteractionInput,
+        ) -> CoreResult<InteractionOutput> {
+            self.calls.fetch_add(1, Ordering::SeqCst);
+            Ok(InteractionOutput::with_data(Payload::new(
+                b"42".to_vec(),
+                "application/json",
+            )))
+        }
+    }
+
+    struct MissingPayloadHandler {
+        calls: Arc<AtomicU32>,
+    }
+
+    impl ReadPropertyHandler for MissingPayloadHandler {
         fn handle(
             &self,
             _context: HandlerContext<'_>,
@@ -249,6 +268,50 @@ mod tests {
 
         assert_eq!(probe.aborted_routes(), 1);
         assert_eq!(probe.outstanding_counts(), (0, 0, 0, 0));
+        assert_eq!(probe.artifact_drops(), 1);
+    }
+
+    #[test]
+    fn static_validation_failure_is_delivered_once_and_fully_cleaned_up() {
+        let (binding, probe) = static_property_read_fixture();
+        let thing_slot = ThingSlotId::new(SlotIndex::new(0), Generation::INITIAL);
+        let calls = Arc::new(AtomicU32::new(0));
+        let handler = MissingPayloadHandler {
+            calls: Arc::clone(&calls),
+        };
+        let registration = StaticHandlerRegistration::new(
+            HandlerSlotId::new(SlotIndex::new(0), Generation::INITIAL),
+            &handler,
+            HandlerFootprint::new(1, 0, 0),
+        );
+        let mut servient = build_static_property_read(
+            thing(),
+            thing_slot,
+            BenchmarkStaticReferenceV1::LIMITS.clone(),
+            clinkz_wot_core::Deadline::NONE,
+            binding,
+            registration,
+        )
+        .expect("complete static Servient");
+
+        let waker = Waker::noop();
+        let mut cx = Context::from_waker(waker);
+        drive_until_idle(&mut servient, &mut cx);
+        probe.enqueue_property_read("level", InteractionInput::empty());
+        drive_until_idle(&mut servient, &mut cx);
+
+        assert_eq!(calls.load(Ordering::SeqCst), 1);
+        assert_eq!(probe.delivered_responses(), 1);
+        assert_eq!(probe.delivered_validation_errors(), 1);
+        assert_eq!(probe.outstanding_counts(), (1, 0, 0, 0));
+
+        begin_static_property_read_destroy(&mut servient)
+            .expect("accepted static destroy transaction");
+        drive_until_idle(&mut servient, &mut cx);
+        assert_eq!(probe.delivered_responses(), 1);
+        assert_eq!(probe.delivered_validation_errors(), 1);
+        assert_eq!(probe.outstanding_counts(), (0, 0, 0, 0));
+        assert_eq!(probe.poll_after_close(&mut cx), Poll::Ready(false));
         assert_eq!(probe.artifact_drops(), 1);
     }
 }

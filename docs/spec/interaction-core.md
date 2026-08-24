@@ -69,6 +69,23 @@ application-visible request facts. `InteractionOutput` owns one response
 payload, normalized status, and fixed-size metadata. These values never borrow
 a binding call stack.
 
+For the narrow Producer Property Read path, Core owns the handler-origin
+validation kernel at
+`RouteInboundResponse::seal_property_read_handler_result`. It consumes the
+single-use `RouteResponseOpportunity` together with the handler's
+`CoreResult<InteractionOutput>`. A handler error is preserved unchanged. A
+successful output is deliverable only when it has one payload,
+`InteractionStatus::Ok`, `ResponsePayloadRole::Application`, no
+`BindingResponseMetadata`, and no `ActionInvocationRef`. Any other successful
+shape becomes `CoreError::Validation` while the same response opportunity
+remains available for exactly-once error delivery. No public constructor may
+place an unvalidated successful output in `RouteInboundResponse`.
+
+These rules are intentionally operation-narrow. A later broad
+`InboundResponse` is a rename/generalization of the same linear carrier and
+validation kernel after its operation families enter active authority, not an
+additional runtime envelope.
+
 `ERR-TAXONOMY-001`: `CoreError` is a non-exhaustive structured error with
 bounded context and categories for invalid documents, validation, limits,
 lookup, unsupported operations, selection, security, binding, payload,

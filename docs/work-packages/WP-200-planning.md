@@ -20,10 +20,12 @@ draft. WP-400 owns the Servient record and every Building, Frozen, Published, Dr
 and Reclaimed lifecycle transition. This package does not own binding execution traits, Servient
 registrations, route lifecycle, concrete protocols, or application handles.
 
-Response classification facts follow
-`docs/amendments/WP-100-interaction-output-api-v1.md`: this package compiles the
-primary/additional branch and schema/media facts consumed by WP-300, but does
-not publish an interaction response.
+The broad response-classification staging in
+`docs/amendments/WP-100-interaction-output-api-v1.md` is v5-inactive domain-entry
+input. A later broad WP-200 review may re-adopt primary/additional branch and
+schema/media planning facts; the current narrow Property Read response-sealing
+prerequisite neither compiles those deferred facts nor publishes an interaction
+response.
 
 Collection subscription planning is first-class. `subscribe_all_events` and
 `observe_all_properties` select one compatible Thing-level form from the root `forms` array;

@@ -929,7 +929,7 @@ where
             }
         };
         let result = self.handler.handler().handle(context, &input);
-        let response = RouteInboundResponse::new(opportunity, result);
+        let response = RouteInboundResponse::seal_property_read_handler_result(opportunity, result);
         debug_assert_eq!(response.opportunity().route(), &route);
         self.in_flight = Some(InFlightRecord {
             state: InFlightState::Response(response),
@@ -1833,7 +1833,7 @@ impl HostPropertyReadRuntime {
             handler.footprint.retained_bytes() > 0 || handler.footprint.pending_call_bytes() == 0
         );
         let result = handler.handler.handle(context, &input);
-        let response = RouteInboundResponse::new(opportunity, result);
+        let response = RouteInboundResponse::seal_property_read_handler_result(opportunity, result);
         debug_assert_eq!(response.opportunity().route(), &route);
         self.in_flight = Some(InFlightRecord {
             state: InFlightState::Response(response),

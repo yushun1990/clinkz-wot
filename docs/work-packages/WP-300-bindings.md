@@ -44,12 +44,14 @@ preparation/readiness. Trivial phases may use bounded helpers or default
 adapters, but those helpers must not invent protocol state or merge distinct
 lifecycle ownership phases.
 
-The final XOR-shaped `InboundResponse`, its producer-origin `try_success`
-validation, and the public shared consumer-origin
-`validate_untrusted_binding_output` function must follow
-`docs/amendments/WP-100-interaction-output-api-v1.md`. This package replaces the
-legacy response envelope once, after the route and planning values from WP-200
-exist.
+The v4.6 `WP-100-interaction-output-api-v1.md` proposal for a broad
+`InboundResponse::try_success` and consumer response validator is historical
+v5-inactive staging input. It does not admit those broad contracts. The current
+narrow carrier is `RouteInboundResponse`. Core's single
+`seal_property_read_handler_result` boundary validates handler-origin Property
+Read success while consuming the existing response opportunity. Future
+`InboundResponse` work may rename/generalize that carrier and kernel after
+broad domain entry; it must not add a second runtime envelope.
 
 ## Scoped Property Read Technical Boundary
 
@@ -68,9 +70,12 @@ Its behavior scope is:
    abort, and shutdown;
 4. return a committed-closed guard without opening request admission;
 5. accept one Property Read request only under a fresh borrowed route permit;
-6. preserve the complete response opportunity and response on pre-acceptance
+6. accept only Core-sealed successful Property Read output, preserving handler
+   errors and converting invalid successful shapes into deliverable validation
+   errors on the same response opportunity;
+7. preserve the complete response opportunity and response on pre-acceptance
    rejection, then settle accepted delivery exactly once; and
-7. prove the same contract through a host-erased `std` author and an
+8. prove the same contract through a host-erased `std` author and an
    application-static `no_std + alloc` author.
 
 The applicable state projections are `binding-route-lifecycle`,
@@ -284,6 +289,11 @@ into a production, protocol-neutrality, ergonomics, or runtime-parity claim.
   sockets, spawned transport tasks, or Servient registries in this package.
 
 ## Public API and Data Migration
+
+The broad values below are v4.9 domain-entry input unless they are already
+implemented by the scoped Property Read surface above and owned by an active
+v5 requirement. In particular, the list does not activate the historical broad
+`InboundResponse`, client output validation, subscriptions, or emissions.
 
 Implement the frozen shared binding surface:
 
