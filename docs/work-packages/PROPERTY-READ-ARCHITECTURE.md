@@ -74,9 +74,16 @@ does not substitute for the aggregate result.
 The aggregate fixture now passes at the two registered roots. The external
 binding crate supplies one deterministic protocol-local ingress slot,
 correlation owner, response delivery path, compiler, static server, Host
-server, lifecycle guards, and cleanup implementation. The runner supplies only
-legal root inputs and executes both representations through the production
-Planning and Servient path. Its success cells prove one compiler-produced
+server, lifecycle guards, and cleanup implementation. Its ingress declaration
+admits one item and 1,024 retained bytes at route, binding, and global scope.
+The static queue, live correlation, and byte charge reside in the caller-owned
+typed route state; the probe and binding keep only weak access to that owner.
+The Host route owns the matching one-item channel receiver and retained-byte/
+correlation state, while its protocol-facing sender enforces the same byte
+ceiling before enqueue. Both owners release the charge only at response
+settlement or terminal cleanup. The runner supplies only legal root inputs and
+executes both representations through the production Planning and Servient
+path. Its success cells prove one compiler-produced
 Producer-route artifact and canonical reservation reaches preparation, one
 request is retained across an exhausted handler budget, one production-created
 handler context reaches exactly one callback, and one real application payload
@@ -88,16 +95,34 @@ and zero terminal route, request, response, artifact, and cleanup ownership in
 both representations. The Host assertions also preserve one route-state
 allocation and footprint through prepared, active, and committed ownership.
 
-The aggregate negative cells prove that incomplete cleanup/resource policy
-causes zero compiler-carrier checks and zero binding preparation side effects.
-Servient retains committed accounts for the real plan/artifact, handler,
-route/readiness/response, ingress, and Host/static storage. Call cancellation
-and later route rollback reserve distinct cleanup subjects and additive
-item/byte/status/transfer capacity. The cancellation matrix stops prepare,
-readiness, activate, and commit calls in both representations before the
-stage-appropriate abort or shutdown. Readiness failure also returns the real
-prepared route through abort or retrying abort cleanup. Immediately before the
-first preparation call, Servient validates its private complete first-entry closure,
+The aggregate negative cells prove that insufficient ingress item or byte
+capacity at every route, binding, and global scope fails before buffering,
+compiler-carrier checks, or binding preparation side effects. Incomplete
+cleanup/resource policy has the same pre-side-effect result. Servient retains
+committed accounts for the real plan/artifact, handler, route/readiness/
+response, ingress, and Host/static storage. Every narrow Host call—prepare,
+readiness, activation, commit, response delivery, abort, and shutdown—is
+checked against the pre-admitted call ceiling before its first poll. Fixture
+constructors only retain their complete input; activation, commit, delivery,
+and cleanup mutation begins inside admitted call execution. An oversized
+activation call is cancelled without a first operational poll, returns its
+unchanged prepared-route carrier, and reaches the normal abort owner with no
+premature route-state drop.
+
+Call cancellation and later route rollback reserve distinct cleanup subjects
+and additive item/byte/status/transfer capacity. The cancellation matrix stops
+prepare, readiness, activate, and commit calls in both representations before
+the stage-appropriate abort or shutdown. For every Host case, executable
+evidence compares the reservation, first cause, operation, deadline, work,
+and lifetime footprint before `Pending` with the terminal settlement. A
+pending response-delivery cancellation proves the independent
+`CancelResponseDelivery` context and exactly one cancelled response
+settlement before shutdown. A separately reserved cancellation path for a
+pending cleanup call proves both its original route-cleanup context and its
+own cancellation context reach terminal settlement without one masking the
+other. Readiness failure also
+returns the real prepared route through abort or retrying abort cleanup.
+Immediately before the first preparation call, Servient validates its private complete first-entry closure,
 including the frozen plan-set lease, real artifact/reference, canonical route,
 validated registration/profile cell, Thing/generation, exact handler coverage
 and footprint, status and cleanup capacity, activation authority/accept lease,
@@ -139,7 +164,8 @@ Before the first binding preparation side effect, WP-400 must possess:
 - the produced Thing identity and generation;
 - exact Property Read handler coverage and its declared footprint;
 - committed resource, work, deadline, and status accounts;
-- independent call-cancellation and route-rollback cleanup reservations;
+- independent call-cancellation and route-rollback cleanup reservations, plus
+  a Host cleanup-call cancellation reservation;
 - compiled-plan-set ownership and the matching plan-set lease; and
 - the route, activation, acceptance, response, and cleanup ownership needed to
   roll back every later transition.

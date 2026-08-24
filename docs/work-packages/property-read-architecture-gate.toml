@@ -12,6 +12,16 @@ evidence = [
     "tools/architecture-fixtures/property-read-binding/src/lib.rs",
     "tools/architecture-fixtures/property-read-runner/src/lib.rs",
 ]
+evidence_cases = [
+    "application_static_cell_uses_the_complete_production_path",
+    "host_erased_cell_uses_the_same_production_path_and_one_route_carrier",
+    "invalid_handler_success_is_sealed_once_on_the_original_opportunity_in_both_cells",
+    "ingress_capacity_is_admitted_at_every_scope_before_buffering_or_side_effects",
+    "oversized_activation_call_has_no_constructor_side_effect_and_preserves_predecessor",
+    "outstanding_host_lifecycle_calls_cancel_before_route_rollback",
+    "pending_response_delivery_cancellation_retains_exact_context_and_cleans_once",
+    "pending_cleanup_call_cancellation_retains_route_and_call_contexts_to_terminal",
+]
 test_commands = [
     "cargo test --locked -p clinkz-wot-core",
     "cargo test --locked -p clinkz-wot-planning",
