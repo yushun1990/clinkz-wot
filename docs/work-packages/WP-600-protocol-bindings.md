@@ -38,11 +38,15 @@ themselves establish protocol-shape neutrality. Profile-only, compile-only,
 unsupported, and not-applicable capabilities remain explicit registration and
 evidence dispositions rather than silently omitted cases.
 
-Concrete response metadata follows
-`docs/amendments/WP-100-interaction-output-api-v1.md`: bindings populate the
-untrusted fixed-size metadata channel, while shared WP-300 validation retains it
-only after live identity and response-plan checks pass. Native status
-provenance is proved by the concrete binding rather than inferred from its
+The broad consumer-response metadata flow in
+`docs/amendments/WP-100-interaction-output-api-v1.md` is v5-inactive domain-entry
+input. If broad WP-600 later re-adopts it, concrete bindings populate untrusted
+metadata and validate it against live identity and compiled response facts at
+the applicable consumer boundary. For the current Producer Property Read
+carrier, concrete bindings instead receive a Core-sealed handler result,
+validate only the live route/generation/correlation, and map the result to the
+protocol. They do not repeat handler-origin validation. Native status
+provenance remains concrete binding evidence rather than an inference from an
 opaque numeric value.
 
 ## Requirements

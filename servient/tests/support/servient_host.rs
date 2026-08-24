@@ -8,7 +8,7 @@ use super::property_read_binding::{
 };
 use crate::{begin_host_property_read, build_host_property_read, step_host_property_read};
 use clinkz_wot_core::{
-    CoreResult, HandlerContext, HandlerFootprint, InteractionInput, InteractionOutput,
+    CoreResult, HandlerContext, HandlerFootprint, InteractionInput, InteractionOutput, Payload,
     ReadPropertyHandler, StepStatus,
 };
 use clinkz_wot_foundation::{GatewayDefaultV1, StaticResourceProfile, WorkBudget, WorkClass};
@@ -43,6 +43,24 @@ struct Handler {
 }
 
 impl ReadPropertyHandler for Handler {
+    fn handle(
+        &self,
+        _context: HandlerContext<'_>,
+        _input: &InteractionInput,
+    ) -> CoreResult<InteractionOutput> {
+        self.calls.fetch_add(1, Ordering::SeqCst);
+        Ok(InteractionOutput::with_data(Payload::new(
+            b"42".to_vec(),
+            "application/json",
+        )))
+    }
+}
+
+struct MissingPayloadHandler {
+    calls: Arc<AtomicU32>,
+}
+
+impl ReadPropertyHandler for MissingPayloadHandler {
     fn handle(
         &self,
         _context: HandlerContext<'_>,
@@ -153,6 +171,45 @@ fn accepted_request_survives_exhausted_handler_budget() {
         .expect("accepted destroy transaction");
     drive_until_idle(&servient, &mut cx);
     assert_eq!(probe.outstanding_counts(), (0, 0, 0, 0));
+    assert_eq!(probe.route_state_drops(), 1);
+}
+
+#[test]
+fn host_validation_failure_is_delivered_once_and_fully_cleaned_up() {
+    let (binding, probe) = host_property_read_fixture();
+    let servient = build_host_property_read(GatewayDefaultV1::LIMITS.clone(), binding)
+        .expect("complete host Servient");
+    let calls = Arc::new(AtomicU32::new(0));
+    let exposed = begin_host_property_read(
+        &servient,
+        thing(),
+        MissingPayloadHandler {
+            calls: Arc::clone(&calls),
+        },
+        HandlerFootprint::new(1, 0, 0),
+    )
+    .expect("accepted expose transaction");
+
+    let waker = Waker::noop();
+    let mut cx = Context::from_waker(waker);
+    drive_until_idle(&servient, &mut cx);
+    probe.enqueue_property_read("level", InteractionInput::empty());
+    drive_until_idle(&servient, &mut cx);
+
+    assert_eq!(calls.load(Ordering::SeqCst), 1);
+    assert_eq!(probe.delivered_responses(), 1);
+    assert_eq!(probe.delivered_validation_errors(), 1);
+    assert_eq!(probe.outstanding_counts(), (1, 0, 0, 0));
+
+    exposed
+        .begin_destroy()
+        .expect("accepted destroy transaction");
+    drive_until_idle(&servient, &mut cx);
+    assert_eq!(probe.delivered_responses(), 1);
+    assert_eq!(probe.delivered_validation_errors(), 1);
+    assert_eq!(probe.outstanding_counts(), (0, 0, 0, 0));
+    assert_eq!(probe.poll_after_close(&mut cx), Poll::Ready(false));
+    assert_eq!(probe.artifact_drops(), 1);
     assert_eq!(probe.route_state_drops(), 1);
 }
 

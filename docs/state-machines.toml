@@ -539,6 +539,7 @@ requirements = [
 ]
 participants = ["in-flight", "binding-call", "cleanup-task"]
 trigger = "ResponseCoordinator attempts one owned response delivery"
+origin_sealing = "For Property Read Core first consumes RouteResponseOpportunity plus CoreResult<InteractionOutput>; handler Err is unchanged, valid handler success is sealed, and invalid handler success becomes deliverable CoreError::Validation on the same opportunity"
 input_policy = "return-complete-input-before-acceptance"
 accept_transitions = [
     "in-flight:Admitted:complete_direct->Completing",
@@ -557,7 +558,7 @@ terminal_transitions = [
     "binding-call:CleanupTransferred:residual->Residual",
     "in-flight:Completing:release->Released",
 ]
-ownership = "Before call acceptance BindingInputRejection returns InboundResponse and its opportunity unchanged; after acceptance the binding call retains both until exactly one terminal result and acknowledgement"
+ownership = "Before call acceptance BindingInputRejection returns the sealed RouteInboundResponse and its opportunity unchanged; after acceptance the binding call retains both until exactly one terminal result and acknowledgement; concrete bindings validate only live route/generation/correlation and protocol mapping, not handler-origin shape"
 
 [[composition]]
 id = "emission-delivery-ownership"

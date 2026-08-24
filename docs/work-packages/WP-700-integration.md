@@ -17,10 +17,14 @@ missing owner, infeasible budget, or ambiguous state transition returns to desig
 `CHANGE-CONTROL-001`. Work begins only after `WP-400`, `WP-500`, and `WP-600` are complete and
 all entry gates remain closed.
 
-The final success/error XOR evidence and cross-binding response metadata checks
-defined by `docs/amendments/WP-100-interaction-output-api-v1.md` close here;
-earlier value, planning, binding, Servient, and protocol packages provide their
-package-scoped evidence without claiming end-to-end completion.
+The broad success/error and cross-binding metadata projection retained in
+`docs/amendments/WP-100-interaction-output-api-v1.md` is v5-inactive historical
+input until its operation families pass domain entry. The current narrow
+Property Read carrier already owns one sealed success/error channel; future
+`InboundResponse` work may generalize or rename it rather than add another
+runtime envelope. Earlier value, planning, binding, Servient, and protocol
+packages provide package-scoped evidence without claiming WP-700 end-to-end
+completion.
 
 `mock-property-read-architecture` carries forward the passed
 `PROPERTY-READ-ARCHITECTURE` record, its exact fixture revision, runtime cells,

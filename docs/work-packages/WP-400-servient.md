@@ -52,11 +52,12 @@ Broad WP-400 must preserve:
 The exact single-route Property Read Servient slice does not make those broad
 scalability or decomposition claims.
 
-Handler-origin response validation follows
-`docs/amendments/WP-100-interaction-output-api-v1.md`: every producer response
-uses WP-300 `InboundResponse::try_success`, which rejects binding metadata and
-invalid action/status combinations. Servient does not implement a second
-validator.
+For narrow Property Read, every handler result passes to Core's
+`RouteInboundResponse::seal_property_read_handler_result`. Core rejects binding
+metadata, non-`Ok` status, non-application payload role, action references, and
+missing payload by converting the nominal success into a deliverable
+`CoreError::Validation` on the same response opportunity. Handler errors remain
+unchanged. Servient does not implement a second validator.
 
 ## Narrow Property Read first-entry closure
 
@@ -445,9 +446,11 @@ these technical invariants:
   progress, and zero owner loss.
 - `servient-constrained-fairness`: bounded manual steps, round-robin route/slot/plan-set progress,
   reserved response and cleanup work, and no executor or atomic-reference-counting dependency.
-- `servient-response-validation`: every handler-origin result passes through the WP-300
-  `InboundResponse::try_success` boundary using the validated route-match operation, including
-  binding-metadata and action/status failure cases plus route/generation/correlation rechecks.
+- `servient-response-validation`: every handler-origin result passes through
+  Core's `RouteInboundResponse::seal_property_read_handler_result` boundary,
+  including binding-metadata, status, payload-role, action-reference, missing-
+  payload, and unchanged-handler-error cases. Servient duplicates no semantic
+  rule; the binding separately rechecks route/generation/correlation.
 - `host-independent-progress`: contention evidence that unrelated Things and bindings progress
   independently and that callbacks execute outside engine locks.
 - `servient-semantic-trace-parity`: the same case ids, outcomes, and resource
