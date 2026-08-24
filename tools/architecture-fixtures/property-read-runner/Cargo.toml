@@ -13,6 +13,12 @@ clinkz-wot-td = { path = "../../../td", default-features = false }
 
 [features]
 default = ["std"]
+async = [
+    "clinkz-wot-core/async",
+    "clinkz-wot-foundation/async",
+    "clinkz-wot-property-read-binding-fixture/async",
+    "clinkz-wot-servient/async",
+]
 std = [
     "clinkz-wot-core/std",
     "clinkz-wot-foundation/std",

@@ -84,11 +84,16 @@ all route, request, response, artifact, and cleanup ownership reaches zero.
 The Host assertions also preserve one route-state allocation and footprint
 through prepared, active, and committed ownership.
 
-The aggregate negative cells prove that an incomplete cleanup/resource policy
-causes zero compiler-carrier checks and zero binding preparation side effects,
-and that readiness failure returns the real prepared route through abort or
-retrying abort cleanup in both representations. Immediately before the first
-preparation call, Servient validates its private complete first-entry closure,
+The aggregate negative cells prove that incomplete cleanup/resource policy
+causes zero compiler-carrier checks and zero binding preparation side effects.
+Servient retains committed accounts for the real plan/artifact, handler,
+route/readiness/response, ingress, and Host/static storage. Call cancellation
+and later route rollback reserve distinct cleanup subjects and additive
+item/byte/status/transfer capacity. The cancellation matrix stops prepare,
+readiness, activate, and commit calls in both representations before the
+stage-appropriate abort or shutdown. Readiness failure also returns the real
+prepared route through abort or retrying abort cleanup. Immediately before the
+first preparation call, Servient validates its private complete first-entry closure,
 including the frozen plan-set lease, real artifact/reference, canonical route,
 validated registration/profile cell, Thing/generation, exact handler coverage
 and footprint, status and cleanup capacity, activation authority/accept lease,
@@ -116,8 +121,9 @@ Thing Description
 
 The static cell is manually progressed with caller-owned `Context` and
 `WorkBudget`. The host cell uses the public erased registration and Servient
-builder. Async/no-std is a compile cell unless an executor-backed runtime test
-explicitly says otherwise.
+builder. The async/no-std compile cell constructs a real TD, external static
+binding registration, handler registration, and production Static Servient;
+it makes no executor-backed runtime claim.
 
 ## First-entry closure
 
@@ -128,7 +134,8 @@ Before the first binding preparation side effect, WP-400 must possess:
 - one complete, Core-validated binding registration;
 - the produced Thing identity and generation;
 - exact Property Read handler coverage and its declared footprint;
-- explicit resource, work, deadline, status, and cleanup capacity;
+- committed resource, work, deadline, and status accounts;
+- independent call-cancellation and route-rollback cleanup reservations;
 - compiled-plan-set ownership and the matching plan-set lease; and
 - the route, activation, acceptance, response, and cleanup ownership needed to
   roll back every later transition.

@@ -7,6 +7,68 @@
 
 #![cfg_attr(not(feature = "std"), no_std)]
 
+#[cfg(feature = "async")]
+use clinkz_wot_core::{
+    CoreResult, Deadline, HandlerFootprint, HandlerSlotId, ReadPropertyHandler,
+    StaticHandlerRegistration, ThingSlotId,
+};
+#[cfg(feature = "async")]
+use clinkz_wot_foundation::{
+    BenchmarkStaticReferenceV1, Generation, SlotIndex, StaticResourceProfile,
+};
+#[cfg(feature = "async")]
+use clinkz_wot_property_read_binding_fixture::static_property_read_fixture;
+#[cfg(feature = "async")]
+use clinkz_wot_servient::{StaticServient, StaticServientBuilder};
+#[cfg(feature = "async")]
+use clinkz_wot_td::{
+    affordance::{InteractionHelper, PropertyAffordance},
+    data_schema::DataSchema,
+    form::Form,
+    thing::Thing,
+};
+
+#[cfg(feature = "async")]
+pub fn async_no_std_property_read_projection<'h, H>(
+    handler: &'h H,
+) -> CoreResult<impl StaticServient + 'h>
+where
+    H: ReadPropertyHandler + 'h,
+{
+    const PROPERTY: &str = "level";
+    let td = Thing::builder("Tank")
+        .id("urn:fixture:aggregate-property-read-async")
+        .nosec()
+        .property(
+            PROPERTY,
+            PropertyAffordance::builder(DataSchema::number())
+                .form(
+                    Form::read_property("mock://tank/level")
+                        .build()
+                        .expect("valid URI"),
+                )
+                .build()
+                .expect("valid property"),
+        )
+        .build()
+        .expect("valid TD");
+    let handler = StaticHandlerRegistration::new(
+        HandlerSlotId::new(SlotIndex::new(0), Generation::INITIAL),
+        handler,
+        HandlerFootprint::new(1, 0, 0),
+    );
+    let (binding, _probe) = static_property_read_fixture();
+    StaticServientBuilder::new(
+        td,
+        ThingSlotId::new(SlotIndex::new(0), Generation::INITIAL),
+        BenchmarkStaticReferenceV1::LIMITS.clone(),
+        Deadline::NONE,
+    )
+    .binding_registration(binding)
+    .read_property_handler(PROPERTY, handler)
+    .build()
+}
+
 #[cfg(all(test, feature = "std"))]
 mod tests {
     use core::sync::atomic::{AtomicU32, Ordering};
@@ -23,9 +85,9 @@ mod tests {
         StaticResourceProfile, WorkBudget, WorkClass,
     };
     use clinkz_wot_property_read_binding_fixture::{
-        HostPropertyReadProbe, StaticPropertyReadProbe, host_property_read_fixture,
-        host_property_read_readiness_rejection_fixture, static_property_read_fixture,
-        static_property_read_readiness_failure_fixture,
+        HostPropertyReadProbe, MockLifecyclePhase, StaticPropertyReadProbe,
+        host_property_read_fixture, host_property_read_readiness_rejection_fixture,
+        static_property_read_fixture, static_property_read_readiness_failure_fixture,
     };
     use clinkz_wot_servient::{Servient, ServientBuilder, StaticServient, StaticServientBuilder};
     use clinkz_wot_td::{
@@ -152,6 +214,81 @@ mod tests {
         assert_eq!(probe.route_state_drops(), 1);
     }
 
+    fn cancel_static_call(phase: MockLifecyclePhase) {
+        let (binding, probe) = static_property_read_fixture();
+        let calls = Arc::new(AtomicU32::new(0));
+        let handler_value = Handler {
+            calls: Arc::clone(&calls),
+            evidence: Arc::new(Mutex::new(None)),
+        };
+        let handler = StaticHandlerRegistration::new(
+            HandlerSlotId::new(SlotIndex::new(0), Generation::INITIAL),
+            &handler_value,
+            HandlerFootprint::new(1, 0, 0),
+        );
+        let mut servient = StaticServientBuilder::new(
+            thing(),
+            ThingSlotId::new(SlotIndex::new(0), Generation::INITIAL),
+            BenchmarkStaticReferenceV1::LIMITS.clone(),
+            clinkz_wot_core::Deadline::NONE,
+        )
+        .binding_registration(binding)
+        .read_property_handler(PROPERTY, handler)
+        .build()
+        .unwrap();
+        let waker = Waker::noop();
+        let mut cx = Context::from_waker(waker);
+        for _ in 0..32 {
+            if probe.lifecycle_starts(phase) != 0 {
+                break;
+            }
+            let _ = servient.step(&mut cx, &mut work_budget());
+        }
+        assert_eq!(probe.lifecycle_starts(phase), 1);
+        servient.begin_destroy().unwrap();
+        drive_static_until_idle(&mut servient, &mut cx);
+        assert_eq!(probe.lifecycle_cancellations(phase), 1, "{phase:?}");
+        assert_eq!(calls.load(Ordering::SeqCst), 0);
+        assert_static_clean(&probe, &mut cx);
+    }
+
+    fn cancel_host_call(phase: MockLifecyclePhase) {
+        let (binding, probe) = host_property_read_fixture();
+        let servient = ServientBuilder::new()
+            .resource_limits(GatewayDefaultV1::LIMITS.clone())
+            .binding_registration(binding)
+            .build()
+            .unwrap();
+        let calls = Arc::new(AtomicU32::new(0));
+        let exposed = servient.produce_td(thing()).unwrap();
+        exposed
+            .set_read_property_handler(
+                PROPERTY,
+                Handler {
+                    calls: Arc::clone(&calls),
+                    evidence: Arc::new(Mutex::new(None)),
+                },
+                HandlerFootprint::new(1, 0, 0),
+            )
+            .unwrap();
+        exposed.begin_expose().unwrap();
+        let waker = Waker::noop();
+        let mut cx = Context::from_waker(waker);
+        for _ in 0..32 {
+            if probe.lifecycle_starts(phase) != 0 {
+                break;
+            }
+            let _ = servient.step(&mut cx, &mut work_budget());
+        }
+        assert_eq!(probe.lifecycle_starts(phase), 1);
+        exposed.begin_destroy().unwrap();
+        drive_host_until_idle(&servient, &mut cx);
+        assert_eq!(probe.lifecycle_cancellations(phase), 1);
+        assert_eq!(calls.load(Ordering::SeqCst), 0);
+        assert_eq!(probe.outstanding_counts(), (0, 0, 0, 0));
+        assert_eq!(probe.artifact_drops(), 1);
+    }
+
     #[test]
     fn application_static_cell_uses_the_complete_production_path() {
         let (binding, probe) = static_property_read_fixture();
@@ -264,7 +401,7 @@ mod tests {
     fn incomplete_first_entry_policy_causes_no_preparation_side_effect() {
         let (binding, static_probe) = static_property_read_fixture();
         let mut static_limits = BenchmarkStaticReferenceV1::LIMITS.clone();
-        assert!(static_limits.set(ResourceKind::CleanupItemsMax, Some(0)));
+        assert!(static_limits.set(ResourceKind::CleanupItemsMax, Some(1)));
         let calls = Arc::new(AtomicU32::new(0));
         let evidence = Arc::new(Mutex::new(None));
         let handler = Handler { calls, evidence };
@@ -288,7 +425,7 @@ mod tests {
 
         let (binding, host_probe) = host_property_read_fixture();
         let mut host_limits = GatewayDefaultV1::LIMITS.clone();
-        assert!(host_limits.set(ResourceKind::CleanupItemsMax, Some(0)));
+        assert!(host_limits.set(ResourceKind::CleanupItemsMax, Some(1)));
         let servient = ServientBuilder::new()
             .resource_limits(host_limits)
             .binding_registration(binding)
@@ -298,6 +435,58 @@ mod tests {
         assert_eq!(host_probe.carrier_checks(), 0);
         assert_eq!(host_probe.preparation_side_effects(), 0);
         assert_eq!(host_probe.route_state_drops(), 0);
+
+        let (binding, static_probe) = static_property_read_fixture();
+        let mut limits = BenchmarkStaticReferenceV1::LIMITS.clone();
+        assert!(limits.set(ResourceKind::BindingArtifactBytesPerItemMax, Some(0)));
+        let handler_value = Handler {
+            calls: Arc::new(AtomicU32::new(0)),
+            evidence: Arc::new(Mutex::new(None)),
+        };
+        let handler = StaticHandlerRegistration::new(
+            HandlerSlotId::new(SlotIndex::new(0), Generation::INITIAL),
+            &handler_value,
+            HandlerFootprint::new(1, 0, 0),
+        );
+        let mut static_servient = StaticServientBuilder::new(
+            thing(),
+            ThingSlotId::new(SlotIndex::new(0), Generation::INITIAL),
+            limits,
+            clinkz_wot_core::Deadline::NONE,
+        )
+        .binding_registration(binding)
+        .read_property_handler(PROPERTY, handler)
+        .build()
+        .unwrap();
+        let waker = Waker::noop();
+        let mut cx = Context::from_waker(waker);
+        drive_static_until_idle(&mut static_servient, &mut cx);
+        assert_eq!(static_probe.carrier_checks(), 0);
+        assert_eq!(static_probe.preparation_side_effects(), 0);
+
+        let (binding, host_probe) = host_property_read_fixture();
+        let mut limits = GatewayDefaultV1::LIMITS.clone();
+        assert!(limits.set(ResourceKind::BindingArtifactBytesPerItemMax, Some(0)));
+        let host_servient = ServientBuilder::new()
+            .resource_limits(limits)
+            .binding_registration(binding)
+            .build()
+            .unwrap();
+        let exposed = host_servient.produce_td(thing()).unwrap();
+        exposed
+            .set_read_property_handler(
+                PROPERTY,
+                Handler {
+                    calls: Arc::new(AtomicU32::new(0)),
+                    evidence: Arc::new(Mutex::new(None)),
+                },
+                HandlerFootprint::new(1, 0, 0),
+            )
+            .unwrap();
+        exposed.begin_expose().unwrap();
+        drive_host_until_idle(&host_servient, &mut cx);
+        assert_eq!(host_probe.carrier_checks(), 0);
+        assert_eq!(host_probe.preparation_side_effects(), 0);
     }
 
     #[test]
@@ -361,6 +550,30 @@ mod tests {
         assert_eq!(host_probe.input_rejections(), (1, 1, 0));
         assert_eq!(host_probe.cleanup_attempts(), (1, 0));
         assert_host_clean(&host_probe, &mut cx);
+    }
+
+    #[test]
+    fn outstanding_static_lifecycle_calls_cancel_before_route_rollback() {
+        for phase in [
+            MockLifecyclePhase::Prepare,
+            MockLifecyclePhase::Readiness,
+            MockLifecyclePhase::Activate,
+            MockLifecyclePhase::Commit,
+        ] {
+            cancel_static_call(phase);
+        }
+    }
+
+    #[test]
+    fn outstanding_host_lifecycle_calls_cancel_before_route_rollback() {
+        for phase in [
+            MockLifecyclePhase::Prepare,
+            MockLifecyclePhase::Readiness,
+            MockLifecyclePhase::Activate,
+            MockLifecyclePhase::Commit,
+        ] {
+            cancel_host_call(phase);
+        }
     }
 
     #[test]

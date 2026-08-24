@@ -196,6 +196,15 @@ pub struct MockResponseState {
     accepted: bool,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[repr(usize)]
+pub enum MockLifecyclePhase {
+    Prepare,
+    Readiness,
+    Activate,
+    Commit,
+}
+
 struct StaticProbeState {
     queued: Option<(Box<str>, InteractionInput)>,
     next_correlation: u64,
@@ -206,6 +215,8 @@ struct StaticProbeState {
     aborts: u32,
     carrier_checks: u32,
     preparation_side_effects: u32,
+    lifecycle_starts: [u32; 4],
+    lifecycle_cancellations: [u32; 4],
     closed: bool,
     prepared_target: Option<Box<str>>,
 }
@@ -222,6 +233,8 @@ impl Default for StaticProbeState {
             aborts: 0,
             carrier_checks: 0,
             preparation_side_effects: 0,
+            lifecycle_starts: [0; 4],
+            lifecycle_cancellations: [0; 4],
             closed: false,
             prepared_target: None,
         }
@@ -277,6 +290,14 @@ impl StaticPropertyReadProbe {
     /// Returns binding preparation side effects observed by the protocol fixture.
     pub fn preparation_side_effects(&self) -> u32 {
         self.state.borrow().preparation_side_effects
+    }
+
+    pub fn lifecycle_starts(&self, phase: MockLifecyclePhase) -> u32 {
+        self.state.borrow().lifecycle_starts[phase as usize]
+    }
+
+    pub fn lifecycle_cancellations(&self, phase: MockLifecyclePhase) -> u32 {
+        self.state.borrow().lifecycle_cancellations[phase as usize]
     }
 
     pub fn poll_after_close(&self, _cx: &mut Context<'_>) -> Poll<bool> {
@@ -367,7 +388,9 @@ impl PollServerBinding for ManualMockBinding {
             return Err(BindingInputRejection::new(input, error));
         }
         if let Some(probe) = &self.probe {
-            probe.borrow_mut().carrier_checks += 1;
+            let mut probe = probe.borrow_mut();
+            probe.carrier_checks += 1;
+            probe.lifecycle_starts[MockLifecyclePhase::Prepare as usize] += 1;
         }
         route.initialize(
             input,
@@ -416,6 +439,9 @@ impl PollServerBinding for ManualMockBinding {
         _route: &mut ServerRouteSlot<Self::RouteState>,
         _budget: &mut WorkBudget,
     ) -> Poll<clinkz_wot_core::CoreResult<BindingCallSettlement<RoutePrepareOutcome<()>, ()>>> {
+        if let Some(probe) = &self.probe {
+            probe.borrow_mut().lifecycle_cancellations[MockLifecyclePhase::Prepare as usize] += 1;
+        }
         Poll::Ready(Ok(cancelled()))
     }
 
@@ -426,8 +452,13 @@ impl PollServerBinding for ManualMockBinding {
         _budget: &mut WorkBudget,
     ) -> clinkz_wot_core::StartStatus<RouteReadinessOutcome<()>> {
         readiness.initialize_state(MockReadinessState {
-            remaining_polls: self.external_readiness_polls,
+            remaining_polls: self
+                .external_readiness_polls
+                .max(u8::from(self.probe.is_some())),
         });
+        if let Some(probe) = &self.probe {
+            probe.borrow_mut().lifecycle_starts[MockLifecyclePhase::Readiness as usize] += 1;
+        }
         if self.fail_readiness {
             self.fail_readiness = false;
             return clinkz_wot_core::StartStatus::Ready(RouteReadinessOutcome::Failed {
@@ -438,7 +469,7 @@ impl PollServerBinding for ManualMockBinding {
                 ),
             });
         }
-        if self.external_readiness_polls == 0 {
+        if self.external_readiness_polls == 0 && self.probe.is_none() {
             clinkz_wot_core::StartStatus::Ready(RouteReadinessOutcome::Ready(()))
         } else {
             clinkz_wot_core::StartStatus::Pending
@@ -473,6 +504,9 @@ impl PollServerBinding for ManualMockBinding {
         _budget: &mut WorkBudget,
     ) -> Poll<clinkz_wot_core::CoreResult<BindingCallSettlement<RouteReadinessOutcome<()>, ()>>>
     {
+        if let Some(probe) = &self.probe {
+            probe.borrow_mut().lifecycle_cancellations[MockLifecyclePhase::Readiness as usize] += 1;
+        }
         Poll::Ready(Ok(cancelled()))
     }
 
@@ -482,15 +516,23 @@ impl PollServerBinding for ManualMockBinding {
         _budget: &mut WorkBudget,
     ) -> clinkz_wot_core::StartStatus<RouteActivationOutcome<(), ()>> {
         route.state_mut().phase = 2;
-        clinkz_wot_core::StartStatus::Ready(RouteActivationOutcome::Active(()))
+        if let Some(probe) = &self.probe {
+            probe.borrow_mut().lifecycle_starts[MockLifecyclePhase::Activate as usize] += 1;
+            clinkz_wot_core::StartStatus::Pending
+        } else {
+            clinkz_wot_core::StartStatus::Ready(RouteActivationOutcome::Active(()))
+        }
     }
 
     fn poll_activate(
         &mut self,
         _cx: &mut Context<'_>,
         _route: &mut ServerRouteSlot<Self::RouteState>,
-        _budget: &mut WorkBudget,
+        budget: &mut WorkBudget,
     ) -> Poll<RouteActivationOutcome<(), ()>> {
+        if budget.consume(WorkClass::BindingPolls, 1).is_err() {
+            return Poll::Pending;
+        }
         Poll::Ready(RouteActivationOutcome::Active(()))
     }
 
@@ -502,6 +544,9 @@ impl PollServerBinding for ManualMockBinding {
         _budget: &mut WorkBudget,
     ) -> Poll<clinkz_wot_core::CoreResult<BindingCallSettlement<RouteActivationOutcome<(), ()>, ()>>>
     {
+        if let Some(probe) = &self.probe {
+            probe.borrow_mut().lifecycle_cancellations[MockLifecyclePhase::Activate as usize] += 1;
+        }
         Poll::Ready(Ok(cancelled()))
     }
 
@@ -511,15 +556,23 @@ impl PollServerBinding for ManualMockBinding {
         _budget: &mut WorkBudget,
     ) -> clinkz_wot_core::StartStatus<RouteCommitOutcome<(), ()>> {
         route.state_mut().phase = 3;
-        clinkz_wot_core::StartStatus::Ready(RouteCommitOutcome::Committed(()))
+        if let Some(probe) = &self.probe {
+            probe.borrow_mut().lifecycle_starts[MockLifecyclePhase::Commit as usize] += 1;
+            clinkz_wot_core::StartStatus::Pending
+        } else {
+            clinkz_wot_core::StartStatus::Ready(RouteCommitOutcome::Committed(()))
+        }
     }
 
     fn poll_commit(
         &mut self,
         _cx: &mut Context<'_>,
         _route: &mut ServerRouteSlot<Self::RouteState>,
-        _budget: &mut WorkBudget,
+        budget: &mut WorkBudget,
     ) -> Poll<RouteCommitOutcome<(), ()>> {
+        if budget.consume(WorkClass::BindingPolls, 1).is_err() {
+            return Poll::Pending;
+        }
         Poll::Ready(RouteCommitOutcome::Committed(()))
     }
 
@@ -531,6 +584,9 @@ impl PollServerBinding for ManualMockBinding {
         _budget: &mut WorkBudget,
     ) -> Poll<clinkz_wot_core::CoreResult<BindingCallSettlement<RouteCommitOutcome<(), ()>, ()>>>
     {
+        if let Some(probe) = &self.probe {
+            probe.borrow_mut().lifecycle_cancellations[MockLifecyclePhase::Commit as usize] += 1;
+        }
         Poll::Ready(Ok(cancelled()))
     }
 
@@ -780,7 +836,7 @@ fn static_property_read_fixture_with_readiness(
             BindingLifetimeFootprint::new(4, 256),
         ),
         BindingIngressPolicy::hidden(),
-        BindingStatusPolicy::new(1, 64),
+        BindingStatusPolicy::new(2, 128),
     );
     let registration = match StaticBindingRegistration::new(input) {
         Ok(registration) => registration,
@@ -842,7 +898,7 @@ mod host_fixture {
     };
     use clinkz_wot_foundation::{WorkBudget, WorkClass};
 
-    use super::{MockArtifact, MockCompiler, artifact_input_error};
+    use super::{MockArtifact, MockCompiler, MockLifecyclePhase, artifact_input_error};
 
     struct ProbeState {
         ingress: Option<SyncSender<(Box<str>, InteractionInput)>>,
@@ -861,6 +917,8 @@ mod host_fixture {
         shutdown_rejections: u32,
         carrier_checks: u32,
         preparation_side_effects: u32,
+        lifecycle_starts: [u32; 4],
+        lifecycle_cancellations: [u32; 4],
         closed: bool,
         prepared_target: Option<Box<str>>,
         prepared_state_address: Option<usize>,
@@ -890,6 +948,8 @@ mod host_fixture {
                 shutdown_rejections: 0,
                 carrier_checks: 0,
                 preparation_side_effects: 0,
+                lifecycle_starts: [0; 4],
+                lifecycle_cancellations: [0; 4],
                 closed: false,
                 prepared_target: None,
                 prepared_state_address: None,
@@ -1081,6 +1141,16 @@ mod host_fixture {
             self.state.with_read(|state| state.preparation_side_effects)
         }
 
+        pub fn lifecycle_starts(&self, phase: MockLifecyclePhase) -> u32 {
+            self.state
+                .with_read(|state| state.lifecycle_starts[phase as usize])
+        }
+
+        pub fn lifecycle_cancellations(&self, phase: MockLifecyclePhase) -> u32 {
+            self.state
+                .with_read(|state| state.lifecycle_cancellations[phase as usize])
+        }
+
         pub fn carrier_evidence(
             &self,
         ) -> (
@@ -1192,6 +1262,9 @@ mod host_fixture {
                 >,
             >,
         > {
+            self.probe.with(|state| {
+                state.lifecycle_cancellations[MockLifecyclePhase::Prepare as usize] += 1
+            });
             Ok(StartStatus::Pending)
         }
 
@@ -1227,22 +1300,28 @@ mod host_fixture {
     struct ReadyCall<T, C> {
         value: Option<T>,
         pending_polls: u8,
+        phase: MockLifecyclePhase,
+        probe: WotLock<ProbeState>,
         _cleanup: core::marker::PhantomData<C>,
     }
 
     impl<T, C> ReadyCall<T, C> {
-        fn new(value: T) -> Self {
+        fn new(value: T, phase: MockLifecyclePhase, probe: WotLock<ProbeState>) -> Self {
             Self {
                 value: Some(value),
                 pending_polls: 0,
+                phase,
+                probe,
                 _cleanup: core::marker::PhantomData,
             }
         }
 
-        fn pending_once(value: T) -> Self {
+        fn pending_once(value: T, phase: MockLifecyclePhase, probe: WotLock<ProbeState>) -> Self {
             Self {
                 value: Some(value),
                 pending_polls: 1,
+                phase,
+                probe,
                 _cleanup: core::marker::PhantomData,
             }
         }
@@ -1283,6 +1362,8 @@ mod host_fixture {
             _cleanup: CleanupPhaseContext,
             _budget: &mut WorkBudget,
         ) -> clinkz_wot_core::CoreResult<StartStatus<BindingCallSettlement<T, C>>> {
+            self.probe
+                .with(|state| state.lifecycle_cancellations[self.phase as usize] += 1);
             Ok(StartStatus::Pending)
         }
 
@@ -1565,6 +1646,7 @@ mod host_fixture {
             }
             self.probe.with(|state| {
                 state.carrier_checks += 1;
+                state.lifecycle_starts[MockLifecyclePhase::Prepare as usize] += 1;
             });
             Ok(HostBindingCallBox::new(PrepareCall {
                 input: Some(input),
@@ -1607,8 +1689,12 @@ mod host_fixture {
                 );
                 return Err(BindingInputRejection::new(guard, error));
             }
+            self.probe
+                .with(|state| state.lifecycle_starts[MockLifecyclePhase::Readiness as usize] += 1);
             Ok(HostBindingCallBox::new(ReadyCall::pending_once(
                 RouteReadinessOutcome::Ready(guard),
+                MockLifecyclePhase::Readiness,
+                self.probe.clone(),
             )))
         }
 
@@ -1629,11 +1715,14 @@ mod host_fixture {
                 .transition(HostRouteStage::Prepared, HostRouteStage::Active);
             let address = state.get_ref() as *const HostMockRouteState as usize;
             self.probe.with(|probe| {
+                probe.lifecycle_starts[MockLifecyclePhase::Activate as usize] += 1;
                 probe.active_state_address = Some(address);
                 probe.active_footprint = Some(footprint);
             });
             Ok(HostBindingCallBox::new(ReadyCall::new(
                 RouteActivationOutcome::Active(HostActiveRouteGuard::new(guard)),
+                MockLifecyclePhase::Activate,
+                self.probe.clone(),
             )))
         }
 
@@ -1654,11 +1743,14 @@ mod host_fixture {
                 .transition(HostRouteStage::Active, HostRouteStage::CommittedClosed);
             let address = state.get_ref() as *const HostMockRouteState as usize;
             self.probe.with(|probe| {
+                probe.lifecycle_starts[MockLifecyclePhase::Commit as usize] += 1;
                 probe.committed_state_address = Some(address);
                 probe.committed_footprint = Some(footprint);
             });
             Ok(HostBindingCallBox::new(ReadyCall::new(
                 RouteCommitOutcome::Committed(HostCommittedRouteGuard::new(guard)),
+                MockLifecyclePhase::Commit,
+                self.probe.clone(),
             )))
         }
 
@@ -1912,7 +2004,7 @@ mod host_fixture {
                 BindingLifetimeFootprint::new(4, 256),
             ),
             BindingIngressPolicy::hidden(),
-            BindingStatusPolicy::new(1, 64),
+            BindingStatusPolicy::new(2, 128),
         );
         let registration = match HostBindingRegistration::new(input) {
             Ok(registration) => registration,

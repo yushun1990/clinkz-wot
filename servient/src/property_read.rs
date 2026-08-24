@@ -1,16 +1,18 @@
 //! Narrow Property Read lifecycle composition shared by the static and host
 //! Servient profiles.
 
-use alloc::{boxed::Box, sync::Arc};
+use alloc::{boxed::Box, sync::Arc, vec::Vec};
 use core::task::{Context, Poll};
 
 use clinkz_wot_core::binding::BindingRouteKey;
 use clinkz_wot_core::{
     AffordanceTarget, BindingArtifactEnvelope, BindingArtifactRef, BindingArtifactRole,
-    BindingCompilerExtension, BindingDeliveryOutcome, BindingLifetimeFootprint,
-    BindingOperationalError, BindingRegistrationIdentity, CleanupOperation, CleanupPhaseContext,
-    CleanupRecord, CleanupReservation, CleanupSlotId, CoreError, CoreResult, Deadline,
-    ErrorContext, ErrorPhase, HandlerContext, HandlerFootprint, PendingWork, PendingWorkClass,
+    BindingCallSettlement, BindingCancellationDisposition, BindingCompilerExtension,
+    BindingDeliveryOutcome, BindingIngressPolicy, BindingLifetimeFootprint,
+    BindingOperationalError, BindingRegistrationIdentity, BindingResourceDeclarations,
+    BindingStateLayout, BindingStatusPolicy, CleanupOperation, CleanupPhaseContext, CleanupRecord,
+    CleanupReservation, CleanupSlotId, CoreError, CoreResult, Deadline, ErrorContext, ErrorPhase,
+    HandlerContext, HandlerFootprint, LogicalInteractionPlan, PendingWork, PendingWorkClass,
     PlanId, PlanSetGeneration, PollServerBinding, PrepareInput, ReadPropertyHandler, RetryClass,
     RouteAcceptEvent, RouteAcceptLease, RouteActivationOutcome, RouteCleanupOutcome,
     RouteCommitOutcome, RouteInboundResponse, RoutePrepareOutcome, RouteReadinessOutcome,
@@ -18,7 +20,9 @@ use clinkz_wot_core::{
     ServingActivationAuthority, StartStatus, StaticBindingRegistration, StaticHandlerRegistration,
     StepStatus, ThingId, ThingSlotId,
 };
-use clinkz_wot_foundation::{ResourceKind, ResourceLimits, SlotIndex, WorkBudget, WorkClass};
+use clinkz_wot_foundation::{
+    ResourceAccount, ResourceKind, ResourceLimits, SlotIndex, WorkBudget, WorkClass,
+};
 use clinkz_wot_planning::{
     PlanBuildOutput, PlanBuildStep, PlanCompiler, PropertyReadBuildCursor, PropertyReadPlanCompiler,
 };
@@ -28,7 +32,8 @@ use clinkz_wot_td::{data_type::Operation, thing::Thing};
 use clinkz_wot_core::{
     HostActiveRouteGuard, HostBindingArtifact, HostBindingCallBox, HostBindingCompilerCursor,
     HostBindingRegistration, HostCommittedRouteGuard, HostPreparedRouteGuard,
-    HostRouteCleanupSuccessor, HostShutdownRouteGuard, RouteAbortInput, RouteShutdownInput,
+    HostRouteCleanupSuccessor, HostShutdownRouteGuard, RouteAbortInput, RouteCleanupSuccessor,
+    RouteShutdownInput,
 };
 
 /// Read-only exposure lifecycle view.
@@ -148,17 +153,24 @@ where
     H: ReadPropertyHandler + 'h,
 {
     pub fn build(self) -> CoreResult<impl StaticServient + 'h> {
-        let admission = AdmissionReservations::new(
+        let storage = FirstEntryStorage::Static {
+            route: self.binding.server().route_state_layout(),
+            readiness: self.binding.server().readiness_state_layout(),
+            response: self.binding.server().response_state_layout(),
+        };
+        let mut admission = AdmissionReservations::new(
             &self.limits,
             self.thing_slot,
-            self.binding.resources().route_state(),
-            self.binding.status().retained_records(),
+            self.binding.resources(),
+            self.binding.ingress(),
+            self.binding.status(),
+            storage,
             self.deadline,
         )?;
         if self.handler.slot_id().generation() != self.thing_slot.generation() {
             return Err(validation_error(self.thing_slot));
         }
-        validate_handler_footprint(&self.limits, self.thing_slot, self.handler.footprint())?;
+        admission.reserve_handler(&self.limits, self.thing_slot, self.handler.footprint())?;
         Ok(StaticPropertyReadServient::new(
             self.td,
             self.thing_slot,
@@ -318,7 +330,7 @@ impl LifecycleFailure {
 struct LifecycleDisposition {
     first_failure: Option<LifecycleFailure>,
     cleanup_cause: Option<CoreError>,
-    residual_cleanup: Option<CleanupRecord>,
+    residual_cleanup: Vec<CleanupRecord>,
     cancelled_before_publication: bool,
 }
 
@@ -327,7 +339,7 @@ impl LifecycleDisposition {
         Self {
             first_failure: None,
             cleanup_cause: None,
-            residual_cleanup: None,
+            residual_cleanup: Vec::new(),
             cancelled_before_publication: false,
         }
     }
@@ -362,7 +374,7 @@ impl LifecycleDisposition {
     }
 
     fn retain_residual(&mut self, record: CleanupRecord) {
-        self.residual_cleanup = Some(record);
+        self.residual_cleanup.push(record);
     }
 
     fn mark_cancelled_before_publication(&mut self) {
@@ -410,81 +422,400 @@ impl ServingActivationRecord {
 }
 
 struct AdmissionReservations {
-    cleanup: Option<CleanupReservation>,
+    charges: Vec<ResourceAccount>,
+    call_cleanup: Option<CleanupReservation>,
+    route_cleanup: Option<CleanupReservation>,
+    compiled: bool,
+    handler: Option<HandlerFootprint>,
+    response_bytes: u64,
+    #[cfg(feature = "std")]
+    host_call_ceiling: BindingLifetimeFootprint,
     deadline: Deadline,
 }
 
+#[derive(Clone, Copy)]
+enum FirstEntryStorage {
+    Static {
+        route: BindingStateLayout,
+        readiness: BindingStateLayout,
+        response: BindingStateLayout,
+    },
+    #[cfg(feature = "std")]
+    Host,
+}
+
 impl AdmissionReservations {
+    #[allow(clippy::too_many_arguments)]
     fn new(
         limits: &ResourceLimits,
         thing_slot: ThingSlotId,
-        route_footprint: BindingLifetimeFootprint,
-        durable_status_records: u32,
+        resources: BindingResourceDeclarations,
+        ingress: BindingIngressPolicy,
+        status: BindingStatusPolicy,
+        storage: FirstEntryStorage,
         deadline: Deadline,
     ) -> CoreResult<Self> {
-        for kind in [
-            ResourceKind::PlanSetsPerThingMax,
-            ResourceKind::PlanPinsPerPlanSetMax,
-            ResourceKind::HandlerSlotsPerThingMax,
-            ResourceKind::PendingHandlerCallsPerThingMax,
-            ResourceKind::InFlightResponsesPerThingMax,
-            ResourceKind::BindingRoutesPerThingMax,
-            ResourceKind::RouteReadinessTokensPerThingMax,
-            ResourceKind::CleanupItemsMax,
-            ResourceKind::CleanupBytesMax,
-        ] {
-            require_capacity(limits, thing_slot, kind, 1)?;
+        const CLEANUPS: u64 = 2;
+        if status.retained_records() < 2 || status.retained_bytes() == 0 {
+            return Err(validation_error(thing_slot));
         }
-        let route_bytes = route_footprint.retained_bytes();
-        require_capacity(
-            limits,
-            thing_slot,
-            ResourceKind::RouteGuardBytesPerItemMax,
-            route_bytes,
-        )?;
-        let cleanup_bytes = limits
-            .get(ResourceKind::CleanupItemBytesMax)
-            .unwrap_or(route_bytes)
-            .min(route_bytes.max(1));
+        let route_bytes = resources.route_state().retained_bytes().max(1);
+        let readiness_bytes = resources.readiness_state().retained_bytes().max(1);
+        let response_bytes = resources.response_state().retained_bytes().max(1);
+        let call_bytes = resources.admitted().retained_bytes().max(1);
+        let cleanup_bytes = route_bytes
+            .max(readiness_bytes)
+            .max(response_bytes)
+            .max(call_bytes);
+        let cleanup_total = cleanup_bytes
+            .checked_mul(CLEANUPS)
+            .ok_or_else(|| validation_error(thing_slot))?;
         let cleanup_steps = limits
             .get(ResourceKind::CleanupWorkItemsPerStepMax)
-            .unwrap_or(1)
-            .max(1);
-        let cleanup = CleanupReservation::new(
-            CleanupSlotId::new(thing_slot.slot(), thing_slot.generation()),
-            BindingLifetimeFootprint::new(1, cleanup_bytes),
-            durable_status_records.max(1),
-            WorkBudget::new().with_remaining(WorkClass::CleanupItems, cleanup_steps),
-        );
+            .filter(|value| *value != 0)
+            .ok_or_else(|| validation_error(thing_slot))?;
+        let mut charges = Vec::new();
+        for (kind, amount) in [
+            (ResourceKind::PlanSetsPerThingMax, 1),
+            (ResourceKind::PlanSetsGlobalMax, 1),
+            (ResourceKind::PlanPinsPerPlanSetMax, 1),
+            (ResourceKind::PlanPinsGlobalMax, 1),
+            (ResourceKind::BindingArtifactsPerThingMax, 1),
+            (ResourceKind::BindingArtifactsGlobalMax, 1),
+            (ResourceKind::HandlerSlotsPerThingMax, 1),
+            (ResourceKind::HandlerSlotsGlobalMax, 1),
+            (ResourceKind::PendingHandlerCallsPerThingMax, 1),
+            (ResourceKind::PendingHandlerCallsGlobalMax, 1),
+            (ResourceKind::InFlightResponsesPerThingMax, 1),
+            (ResourceKind::InFlightResponsesGlobalMax, 1),
+            (ResourceKind::BindingRoutesPerThingMax, 1),
+            (ResourceKind::BindingRoutesGlobalMax, 1),
+            (ResourceKind::EndpointReservationsPerThingMax, 1),
+            (ResourceKind::EndpointReservationsGlobalMax, 1),
+            (ResourceKind::RouteReadinessTokensPerThingMax, 1),
+            (ResourceKind::RouteReadinessTokensGlobalMax, 1),
+            (ResourceKind::CleanupItemsMax, CLEANUPS),
+            (ResourceKind::CleanupRetryRecordsMax, CLEANUPS),
+            (ResourceKind::CleanupTransferSlotsGlobalMax, CLEANUPS),
+            (ResourceKind::DurableStatusEntriesPerBindingMax, 2),
+            (ResourceKind::RouteGuardBytesPerItemMax, route_bytes),
+            (ResourceKind::RouteGuardBytesPerThingMax, route_bytes),
+            (ResourceKind::RouteGuardBytesGlobalMax, route_bytes),
+            (
+                ResourceKind::RouteReadinessTokenBytesPerItemMax,
+                readiness_bytes,
+            ),
+            (
+                ResourceKind::RouteReadinessTokenBytesGlobalMax,
+                readiness_bytes,
+            ),
+            (
+                ResourceKind::BindingPollTemporaryBytesPerCallMax,
+                resources.transient().peak_bytes(),
+            ),
+            (
+                ResourceKind::BindingPollTemporaryBytesGlobalMax,
+                resources.transient().peak_bytes(),
+            ),
+            (
+                ResourceKind::BindingCancelBufferBytesPerCallMax,
+                cleanup_bytes,
+            ),
+            (
+                ResourceKind::BindingCancelBufferBytesGlobalMax,
+                cleanup_bytes,
+            ),
+            (ResourceKind::CleanupItemBytesMax, cleanup_bytes),
+            (ResourceKind::CleanupBytesMax, cleanup_total),
+            (ResourceKind::CleanupTransferBytesGlobalMax, cleanup_total),
+            (
+                ResourceKind::DurableStatusBytesPerBindingMax,
+                status.retained_bytes(),
+            ),
+            (
+                ResourceKind::DurableStatusBytesGlobalMax,
+                status.retained_bytes(),
+            ),
+            (ResourceKind::RouteReadinessStepsMax, 1),
+            (
+                ResourceKind::BindingIngressItemsPerRouteMax,
+                u64::from(ingress.per_route().items()),
+            ),
+            (
+                ResourceKind::BindingIngressItemsPerBindingMax,
+                u64::from(ingress.per_binding().items()),
+            ),
+            (
+                ResourceKind::BindingIngressItemsGlobalMax,
+                u64::from(ingress.global().items()),
+            ),
+            (
+                ResourceKind::BindingIngressBytesPerRouteMax,
+                ingress.per_route().bytes(),
+            ),
+            (
+                ResourceKind::BindingIngressBytesPerBindingMax,
+                ingress.per_binding().bytes(),
+            ),
+            (
+                ResourceKind::BindingIngressBytesGlobalMax,
+                ingress.global().bytes(),
+            ),
+        ] {
+            reserve_charge(&mut charges, limits, thing_slot, kind, amount)?;
+        }
+        match storage {
+            FirstEntryStorage::Static {
+                route,
+                readiness,
+                response,
+            } => {
+                let r = route
+                    .size()
+                    .max(route.lifetime_footprint().retained_bytes());
+                let q = readiness
+                    .size()
+                    .max(readiness.lifetime_footprint().retained_bytes());
+                let s = response
+                    .size()
+                    .max(response.lifetime_footprint().retained_bytes());
+                let total = r
+                    .checked_add(q)
+                    .and_then(|v| v.checked_add(s))
+                    .ok_or_else(|| validation_error(thing_slot))?;
+                for (kind, amount) in [
+                    (
+                        ResourceKind::BindingSlotStateBytesPerItemMax,
+                        r.max(q).max(s),
+                    ),
+                    (ResourceKind::BindingSlotStateBytesPerThingMax, total),
+                    (ResourceKind::BindingSlotStateBytesGlobalMax, total),
+                ] {
+                    reserve_charge(&mut charges, limits, thing_slot, kind, amount)?;
+                }
+            }
+            #[cfg(feature = "std")]
+            FirstEntryStorage::Host => {
+                for kind in [
+                    ResourceKind::HostBindingCallBytesPerItemMax,
+                    ResourceKind::HostBindingCallBytesPerBindingMax,
+                    ResourceKind::HostBindingCallBytesPerThingMax,
+                    ResourceKind::HostBindingCallBytesGlobalMax,
+                ] {
+                    reserve_charge(&mut charges, limits, thing_slot, kind, call_bytes)?;
+                }
+            }
+        }
+        #[cfg(feature = "std")]
+        if matches!(storage, FirstEntryStorage::Host) {
+            reserve_charge(
+                &mut charges,
+                limits,
+                thing_slot,
+                ResourceKind::HostBindingCancelDrainTimeoutMillisMax,
+                1,
+            )?;
+        }
+        let base = thing_slot
+            .slot()
+            .get()
+            .checked_mul(2)
+            .ok_or_else(|| validation_error(thing_slot))?;
+        let cleanup = |slot| {
+            CleanupReservation::new(
+                CleanupSlotId::new(SlotIndex::new(slot), thing_slot.generation()),
+                BindingLifetimeFootprint::new(1, cleanup_bytes),
+                1,
+                WorkBudget::new().with_remaining(WorkClass::CleanupItems, cleanup_steps),
+            )
+        };
         Ok(Self {
-            cleanup: Some(cleanup),
+            charges,
+            call_cleanup: Some(cleanup(base)),
+            route_cleanup: Some(cleanup(
+                base.checked_add(1)
+                    .ok_or_else(|| validation_error(thing_slot))?,
+            )),
+            compiled: false,
+            handler: None,
+            response_bytes,
+            #[cfg(feature = "std")]
+            host_call_ceiling: resources.admitted(),
             deadline,
         })
     }
 
-    fn cleanup_context(
+    fn reserve_handler(
         &mut self,
-        thing_slot: ThingSlotId,
-        operation: CleanupOperation,
-        first_cause: CoreError,
+        limits: &ResourceLimits,
+        slot: ThingSlotId,
+        footprint: HandlerFootprint,
+    ) -> CoreResult<()> {
+        if let Some(saved) = self.handler {
+            return if saved == footprint {
+                Ok(())
+            } else {
+                Err(validation_error(slot))
+            };
+        }
+        let response = self
+            .response_bytes
+            .max(footprint.pending_call_bytes().max(1));
+        for (kind, amount) in [
+            (
+                ResourceKind::HandlerStateBytesPerThingMax,
+                footprint.retained_bytes(),
+            ),
+            (
+                ResourceKind::HandlerStateBytesGlobalMax,
+                footprint.retained_bytes(),
+            ),
+            (
+                ResourceKind::BindingResponseBufferBytesPerRouteMax,
+                response,
+            ),
+            (ResourceKind::BindingResponseBufferBytesGlobalMax, response),
+        ] {
+            reserve_charge(&mut self.charges, limits, slot, kind, amount)?;
+        }
+        self.handler = Some(footprint);
+        Ok(())
+    }
+
+    fn reserve_compiled<A>(
+        &mut self,
+        limits: &ResourceLimits,
+        slot: ThingSlotId,
+        artifact: &BindingArtifactEnvelope<A>,
+        logical: u64,
+    ) -> CoreResult<()> {
+        if self.compiled {
+            return Err(validation_error(slot));
+        }
+        let footprint = artifact.artifact().footprint();
+        let structural = (core::mem::size_of::<PlanBuildOutput<A>>()
+            + core::mem::size_of::<BindingArtifactEnvelope<A>>()
+            + core::mem::size_of::<BindingArtifactRef>()) as u64;
+        let compiled = logical
+            .checked_add(footprint.retained_bytes())
+            .and_then(|v| v.checked_add(structural))
+            .ok_or_else(|| validation_error(slot))?;
+        for (kind, amount) in [
+            (
+                ResourceKind::BindingArtifactBytesPerItemMax,
+                footprint.retained_bytes(),
+            ),
+            (
+                ResourceKind::BindingArtifactBytesPerThingMax,
+                footprint.retained_bytes(),
+            ),
+            (
+                ResourceKind::BindingArtifactBytesGlobalMax,
+                footprint.retained_bytes(),
+            ),
+            (ResourceKind::LogicalPlanBytesPerThingMax, logical),
+            (ResourceKind::CompiledPlanBytesMax, compiled),
+            (ResourceKind::CompiledRuntimeBytesPerThingMax, compiled),
+            (ResourceKind::CompiledRuntimeBytesGlobalMax, compiled),
+        ] {
+            reserve_charge(&mut self.charges, limits, slot, kind, amount)?;
+        }
+        self.compiled = true;
+        Ok(())
+    }
+
+    #[cfg(feature = "std")]
+    fn admits_host_call<T: 'static, C: 'static>(
+        &self,
+        call: &mut HostBindingCallBox<T, C>,
+    ) -> bool {
+        call.as_pin_mut()
+            .lifetime_footprint()
+            .fits_within(self.host_call_ceiling)
+    }
+
+    fn call_context(
+        &mut self,
+        slot: ThingSlotId,
+        cause: CoreError,
     ) -> CoreResult<CleanupPhaseContext> {
         let reservation = self
-            .cleanup
+            .call_cleanup
             .take()
-            .ok_or_else(|| validation_error(thing_slot))?;
+            .ok_or_else(|| validation_error(slot))?;
         Ok(CleanupPhaseContext::bind(
             reservation,
-            operation,
-            first_cause,
+            CleanupOperation::CancelRouteReadiness,
+            cause,
             self.deadline,
         ))
     }
 
-    const fn owns_first_entry_cleanup(&self) -> bool {
-        self.cleanup.is_some()
+    fn route_context(
+        &mut self,
+        slot: ThingSlotId,
+        operation: CleanupOperation,
+        cause: CoreError,
+    ) -> CoreResult<CleanupPhaseContext> {
+        let reservation = self
+            .route_cleanup
+            .take()
+            .ok_or_else(|| validation_error(slot))?;
+        Ok(CleanupPhaseContext::bind(
+            reservation,
+            operation,
+            cause,
+            self.deadline,
+        ))
+    }
+
+    fn complete(&self) -> bool {
+        self.call_cleanup.is_some()
+            && self.route_cleanup.is_some()
+            && self.compiled
+            && self.handler.is_some()
+            && self.charges.iter().all(|a| a.used() != 0)
     }
 }
 
+impl Drop for AdmissionReservations {
+    fn drop(&mut self) {
+        for account in &mut self.charges {
+            let used = account.used();
+            if used != 0 {
+                let _ = account.release_committed(used);
+            }
+        }
+    }
+}
+
+fn reserve_charge(
+    charges: &mut Vec<ResourceAccount>,
+    limits: &ResourceLimits,
+    slot: ThingSlotId,
+    kind: ResourceKind,
+    amount: u64,
+) -> CoreResult<()> {
+    if amount == 0 {
+        return Ok(());
+    }
+    let limit = limits.get(kind).unwrap_or(0);
+    let mut account = ResourceAccount::new(slot.slot(), slot.generation(), kind, limit);
+    let reservation = account
+        .try_reserve(amount)
+        .ok_or_else(|| CoreError::LimitExceeded {
+            resource: kind,
+            limit,
+            requested: Some(amount),
+            observed: None,
+            context: ErrorContext::new(ErrorPhase::Admission, RetryClass::Never).with_thing(slot),
+        })?;
+    reservation.commit();
+    charges.push(account);
+    Ok(())
+}
+
+#[cfg(feature = "std")]
 fn validate_handler_footprint(
     limits: &ResourceLimits,
     thing_slot: ThingSlotId,
@@ -504,6 +835,7 @@ fn validate_handler_footprint(
     )
 }
 
+#[cfg(feature = "std")]
 fn require_capacity(
     limits: &ResourceLimits,
     thing_slot: ThingSlotId,
@@ -536,6 +868,7 @@ struct DerivedRoute {
     thing_id: ThingId,
     target: AffordanceTarget,
     plan_id: PlanId,
+    logical_bytes: u64,
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -553,7 +886,7 @@ fn verify_first_entry_closure<A>(
     handler_footprint: HandlerFootprint,
     route_key: Option<BindingRouteKey>,
     activation: Option<&ServingActivationRecord>,
-    admission: &AdmissionReservations,
+    admission: &mut AdmissionReservations,
     route_and_response_owners_vacant: bool,
     supports_required_cell: bool,
     supports_property_read: bool,
@@ -566,6 +899,8 @@ fn verify_first_entry_closure<A>(
         admitted_route_footprint,
     )?;
     let activation = activation.ok_or_else(|| validation_error(thing_slot))?;
+    admission.reserve_compiled(limits, thing_slot, artifact, derived.logical_bytes)?;
+    admission.reserve_handler(limits, thing_slot, handler_footprint)?;
     let route = *prepare.route();
     if !core::ptr::eq(resolved, artifact)
         || route_key != Some(route)
@@ -574,7 +909,7 @@ fn verify_first_entry_closure<A>(
         || derived.plan_id != route.plan_id()
         || derived.target.name() != Some(handler_target)
         || handler_generation.is_some_and(|generation| generation != thing_slot.generation())
-        || !admission.owns_first_entry_cleanup()
+        || !admission.complete()
         || !route_and_response_owners_vacant
         || !supports_required_cell
         || !supports_property_read
@@ -587,7 +922,7 @@ fn verify_first_entry_closure<A>(
     {
         return Err(validation_error(thing_slot));
     }
-    validate_handler_footprint(limits, thing_slot, handler_footprint)
+    Ok(())
 }
 
 fn derive_route<A>(
@@ -633,7 +968,22 @@ fn derive_route<A>(
         thing_id: plan.thing_id().clone(),
         target: AffordanceTarget::Property(Arc::from(plan.property_name())),
         plan_id: plan.plan_id(),
+        logical_bytes: logical_plan_bytes(plan).ok_or_else(|| validation_error(thing_slot))?,
     })
+}
+
+fn logical_plan_bytes(plan: &LogicalInteractionPlan) -> Option<u64> {
+    let mut bytes = core::mem::size_of_val(plan) as u64;
+    for value in [
+        plan.thing_id().as_str(),
+        plan.property_name(),
+        plan.resolved_target(),
+        plan.content_type().unwrap_or_default(),
+        plan.subprotocol().unwrap_or_default(),
+    ] {
+        bytes = bytes.checked_add(value.len() as u64)?;
+    }
+    Some(bytes)
 }
 
 fn progress(class: PendingWorkClass) -> StepStatus<()> {
@@ -697,6 +1047,7 @@ where
     admission: AdmissionReservations,
     disposition: LifecycleDisposition,
     cleanup_outcome: Option<RouteCleanupOutcome>,
+    call_phase: Option<CleanupPhaseContext>,
 }
 
 impl<'h, B, H> StaticPropertyReadServient<'h, B, H>
@@ -738,6 +1089,7 @@ where
             admission,
             disposition: LifecycleDisposition::new(),
             cleanup_outcome: None,
+            call_phase: None,
         }
     }
 
@@ -912,7 +1264,7 @@ where
                     self.handler.footprint(),
                     self.route.key,
                     self.activation.as_ref(),
-                    &self.admission,
+                    &mut self.admission,
                     self.route.state.route.is_vacant()
                         && self.route.state.readiness.is_vacant()
                         && self.route.state.response.is_vacant()
@@ -1112,7 +1464,7 @@ where
         let cause = self.disposition.cleanup_cause(self.thing_slot);
         let phase = match self
             .admission
-            .cleanup_context(self.thing_slot, operation, cause)
+            .route_context(self.thing_slot, operation, cause)
         {
             Ok(phase) => phase,
             Err(error) => {
@@ -1148,6 +1500,177 @@ where
 
     fn start_cleanup(&mut self, budget: &mut WorkBudget) -> StepStatus<()> {
         self.start_route_cleanup(CleanupOperation::ShutdownRoute, budget)
+    }
+
+    fn ensure_call_phase(&mut self) -> CoreResult<()> {
+        if self.call_phase.is_none() {
+            let cause = self.disposition.cleanup_cause(self.thing_slot);
+            self.call_phase = Some(self.admission.call_context(self.thing_slot, cause)?);
+        }
+        Ok(())
+    }
+
+    fn settle_cancel(
+        &mut self,
+        disposition: BindingCancellationDisposition<()>,
+        operation: CleanupOperation,
+        budget: &mut WorkBudget,
+    ) -> StepStatus<()> {
+        match disposition {
+            BindingCancellationDisposition::Complete { .. } => {
+                self.call_phase = None;
+                self.start_route_cleanup(operation, budget)
+            }
+            BindingCancellationDisposition::TransferRequired(_) => {
+                progress(PendingWorkClass::Cleanup)
+            }
+            BindingCancellationDisposition::ResidualExternalState { record, .. } => {
+                self.disposition.retain_residual(record);
+                self.call_phase = None;
+                self.start_route_cleanup(operation, budget)
+            }
+        }
+    }
+
+    fn cancel_prepare(&mut self, cx: &mut Context<'_>, budget: &mut WorkBudget) -> StepStatus<()> {
+        if let Err(error) = self.ensure_call_phase() {
+            self.disposition.record_core_failure(error);
+            return progress(PendingWorkClass::Cleanup);
+        }
+        match self.registration.server_mut().poll_cancel_prepare(
+            cx,
+            self.call_phase.as_ref().unwrap(),
+            &mut self.route.state.route,
+            budget,
+        ) {
+            Poll::Pending => progress(PendingWorkClass::Cleanup),
+            Poll::Ready(Err(error)) => {
+                self.disposition.record_core_failure(error);
+                progress(PendingWorkClass::Cleanup)
+            }
+            Poll::Ready(Ok(BindingCallSettlement::Returned(RoutePrepareOutcome::Prepared(())))) => {
+                self.call_phase = None;
+                self.start_route_cleanup(CleanupOperation::AbortPreparedRoute, budget)
+            }
+            Poll::Ready(Ok(BindingCallSettlement::Returned(
+                RoutePrepareOutcome::RejectedNoResource(error),
+            ))) => {
+                self.call_phase = None;
+                self.finish_rejected_route(error)
+            }
+            Poll::Ready(Ok(BindingCallSettlement::Cancelled { disposition, .. })) => {
+                self.settle_cancel(disposition, CleanupOperation::AbortPreparedRoute, budget)
+            }
+        }
+    }
+
+    fn cancel_readiness(
+        &mut self,
+        cx: &mut Context<'_>,
+        budget: &mut WorkBudget,
+    ) -> StepStatus<()> {
+        if let Err(error) = self.ensure_call_phase() {
+            self.disposition.record_core_failure(error);
+            return progress(PendingWorkClass::Cleanup);
+        }
+        match self.registration.server_mut().poll_cancel_readiness(
+            cx,
+            self.call_phase.as_ref().unwrap(),
+            &mut self.route.state.route,
+            &mut self.route.state.readiness,
+            budget,
+        ) {
+            Poll::Pending => progress(PendingWorkClass::Cleanup),
+            Poll::Ready(Err(error)) => {
+                self.disposition.record_core_failure(error);
+                progress(PendingWorkClass::Cleanup)
+            }
+            Poll::Ready(Ok(BindingCallSettlement::Returned(RouteReadinessOutcome::Ready(())))) => {
+                self.route.state.readiness.clear();
+                self.call_phase = None;
+                self.start_route_cleanup(CleanupOperation::AbortPreparedRoute, budget)
+            }
+            Poll::Ready(Ok(BindingCallSettlement::Returned(RouteReadinessOutcome::Failed {
+                error,
+                ..
+            }))) => {
+                self.route.state.readiness.clear();
+                self.disposition.record_binding_failure(error);
+                self.call_phase = None;
+                self.start_route_cleanup(CleanupOperation::AbortPreparedRoute, budget)
+            }
+            Poll::Ready(Ok(BindingCallSettlement::Cancelled { disposition, .. })) => {
+                self.settle_cancel(disposition, CleanupOperation::AbortPreparedRoute, budget)
+            }
+        }
+    }
+
+    fn cancel_activate(&mut self, cx: &mut Context<'_>, budget: &mut WorkBudget) -> StepStatus<()> {
+        if let Err(error) = self.ensure_call_phase() {
+            self.disposition.record_core_failure(error);
+            return progress(PendingWorkClass::Cleanup);
+        }
+        match self.registration.server_mut().poll_cancel_activate(
+            cx,
+            self.call_phase.as_ref().unwrap(),
+            &mut self.route.state.route,
+            budget,
+        ) {
+            Poll::Pending => progress(PendingWorkClass::Cleanup),
+            Poll::Ready(Err(error)) => {
+                self.disposition.record_core_failure(error);
+                progress(PendingWorkClass::Cleanup)
+            }
+            Poll::Ready(Ok(BindingCallSettlement::Returned(RouteActivationOutcome::Active(
+                (),
+            )))) => {
+                self.call_phase = None;
+                self.start_route_cleanup(CleanupOperation::ShutdownRoute, budget)
+            }
+            Poll::Ready(Ok(BindingCallSettlement::Returned(
+                RouteActivationOutcome::NotActivated { error, .. },
+            ))) => {
+                self.disposition.record_binding_failure(error);
+                self.call_phase = None;
+                self.start_route_cleanup(CleanupOperation::AbortPreparedRoute, budget)
+            }
+            Poll::Ready(Ok(BindingCallSettlement::Cancelled { disposition, .. })) => {
+                self.settle_cancel(disposition, CleanupOperation::ShutdownRoute, budget)
+            }
+        }
+    }
+
+    fn cancel_commit(&mut self, cx: &mut Context<'_>, budget: &mut WorkBudget) -> StepStatus<()> {
+        if let Err(error) = self.ensure_call_phase() {
+            self.disposition.record_core_failure(error);
+            return progress(PendingWorkClass::Cleanup);
+        }
+        match self.registration.server_mut().poll_cancel_commit(
+            cx,
+            self.call_phase.as_ref().unwrap(),
+            &mut self.route.state.route,
+            budget,
+        ) {
+            Poll::Pending => progress(PendingWorkClass::Cleanup),
+            Poll::Ready(Err(error)) => {
+                self.disposition.record_core_failure(error);
+                progress(PendingWorkClass::Cleanup)
+            }
+            Poll::Ready(Ok(BindingCallSettlement::Returned(RouteCommitOutcome::Committed(())))) => {
+                self.call_phase = None;
+                self.start_route_cleanup(CleanupOperation::ShutdownRoute, budget)
+            }
+            Poll::Ready(Ok(BindingCallSettlement::Returned(
+                RouteCommitOutcome::NotCommitted { error, .. },
+            ))) => {
+                self.disposition.record_binding_failure(error);
+                self.call_phase = None;
+                self.start_route_cleanup(CleanupOperation::ShutdownRoute, budget)
+            }
+            Poll::Ready(Ok(BindingCallSettlement::Cancelled { disposition, .. })) => {
+                self.settle_cancel(disposition, CleanupOperation::ShutdownRoute, budget)
+            }
+        }
     }
 }
 
@@ -1203,6 +1726,9 @@ where
         }
         match self.route.state.phase {
             StaticRoutePhase::Absent => StepStatus::Idle,
+            StaticRoutePhase::Preparing if self.expose == ExposeState::Cancelling => {
+                self.cancel_prepare(cx, budget)
+            }
             StaticRoutePhase::Preparing => match self.registration.server_mut().poll_prepare(
                 cx,
                 &mut self.route.state.route,
@@ -1249,6 +1775,9 @@ where
                     self.start_failed_abort(error, budget)
                 }
             },
+            StaticRoutePhase::AwaitingReadiness if self.expose == ExposeState::Cancelling => {
+                self.cancel_readiness(cx, budget)
+            }
             StaticRoutePhase::AwaitingReadiness => {
                 match self.registration.server_mut().poll_readiness(
                     cx,
@@ -1294,6 +1823,9 @@ where
                     self.start_failed_abort(error, budget)
                 }
             },
+            StaticRoutePhase::Activating if self.expose == ExposeState::Cancelling => {
+                self.cancel_activate(cx, budget)
+            }
             StaticRoutePhase::Activating => match self.registration.server_mut().poll_activate(
                 cx,
                 &mut self.route.state.route,
@@ -1332,6 +1864,9 @@ where
                     self.start_failed_shutdown(error, budget)
                 }
             },
+            StaticRoutePhase::Committing if self.expose == ExposeState::Cancelling => {
+                self.cancel_commit(cx, budget)
+            }
             StaticRoutePhase::Committing => match self.registration.server_mut().poll_commit(
                 cx,
                 &mut self.route.state.route,
@@ -1490,12 +2025,20 @@ type HostCleanupCall = HostBindingCallBox<RouteCleanupOutcome, HostRouteCleanupS
 enum HostRouteState {
     Absent,
     Preparing(HostPrepareCall),
+    CancellingPrepare(HostPrepareCall),
+    JoiningPrepare(HostPrepareCall),
     Prepared(HostPreparedRouteGuard),
     AwaitingReadiness(HostReadinessCall),
+    CancellingReadiness(HostReadinessCall),
+    JoiningReadiness(HostReadinessCall),
     Ready(HostPreparedRouteGuard),
     Activating(HostActivationCall),
+    CancellingActivation(HostActivationCall),
+    JoiningActivation(HostActivationCall),
     Active(HostActiveRouteGuard),
     Committing(HostCommitCall),
+    CancellingCommit(HostCommitCall),
+    JoiningCommit(HostCommitCall),
     CommittedClosed(HostCommittedRouteGuard),
     Serving(HostCommittedRouteGuard),
     Dispatching(HostCommittedRouteGuard),
@@ -1549,8 +2092,10 @@ impl HostPropertyReadRuntime {
         let admission = AdmissionReservations::new(
             &config.limits,
             thing_slot,
-            config.registration.resources().route_state(),
-            config.registration.status().retained_records(),
+            config.registration.resources(),
+            config.registration.ingress(),
+            config.registration.status(),
+            FirstEntryStorage::Host,
             Deadline::NONE,
         )?;
         Ok(Self {
@@ -1708,7 +2253,7 @@ impl HostPropertyReadRuntime {
         self.expose = ExposeState::CleanupPending;
         self.plan_set.state = CompiledPlanSetState::Draining;
         let cause = self.disposition.cleanup_cause(self.thing_slot);
-        let phase = match self.admission.cleanup_context(
+        let phase = match self.admission.route_context(
             self.thing_slot,
             CleanupOperation::AbortPreparedRoute,
             cause,
@@ -1729,7 +2274,7 @@ impl HostPropertyReadRuntime {
         self.expose = ExposeState::CleanupPending;
         self.plan_set.state = CompiledPlanSetState::Draining;
         let cause = self.disposition.cleanup_cause(self.thing_slot);
-        let phase = match self.admission.cleanup_context(
+        let phase = match self.admission.route_context(
             self.thing_slot,
             CleanupOperation::ShutdownRoute,
             cause,
@@ -1765,6 +2310,299 @@ impl HostPropertyReadRuntime {
     ) -> StepStatus<()> {
         self.disposition.record_binding_failure(error);
         self.start_shutdown(guard)
+    }
+
+    fn finish_cancelled_no_route(&mut self) -> StepStatus<()> {
+        self.activation = None;
+        self.plan_set.reclaim();
+        self.route.state = HostRouteState::Closed;
+        self.expose = self.disposition.terminal_expose_state();
+        progress(PendingWorkClass::Cleanup)
+    }
+
+    fn cancel_successor(&mut self, successor: HostRouteCleanupSuccessor) -> StepStatus<()> {
+        match successor {
+            RouteCleanupSuccessor::NoRouteResource { .. }
+            | RouteCleanupSuccessor::ResidualRouteState { .. } => self.finish_cancelled_no_route(),
+            RouteCleanupSuccessor::AbortPrepared(guard) => self.start_abort(guard),
+            RouteCleanupSuccessor::ShutdownActive(guard) => {
+                self.start_shutdown(HostShutdownRouteGuard::Active(guard))
+            }
+            RouteCleanupSuccessor::ShutdownCommitted(guard) => {
+                self.start_shutdown(HostShutdownRouteGuard::Committed(guard))
+            }
+        }
+    }
+
+    fn cancel_disposition(
+        &mut self,
+        disposition: BindingCancellationDisposition<HostRouteCleanupSuccessor>,
+    ) -> Option<StepStatus<()>> {
+        match disposition {
+            BindingCancellationDisposition::Complete { successor } => {
+                Some(self.cancel_successor(successor))
+            }
+            BindingCancellationDisposition::TransferRequired(_) => None,
+            BindingCancellationDisposition::ResidualExternalState { successor, record } => {
+                self.disposition.retain_residual(record);
+                Some(self.cancel_successor(successor))
+            }
+        }
+    }
+
+    fn settle_prepare(
+        &mut self,
+        call: HostPrepareCall,
+        settlement: BindingCallSettlement<
+            RoutePrepareOutcome<HostPreparedRouteGuard>,
+            HostRouteCleanupSuccessor,
+        >,
+    ) -> StepStatus<()> {
+        match settlement {
+            BindingCallSettlement::Returned(RoutePrepareOutcome::Prepared(guard)) => {
+                drop(call);
+                self.start_abort(guard)
+            }
+            BindingCallSettlement::Returned(RoutePrepareOutcome::RejectedNoResource(error)) => {
+                drop(call);
+                self.fail_binding_without_route(error)
+            }
+            BindingCallSettlement::Cancelled { disposition, .. } => {
+                match self.cancel_disposition(disposition) {
+                    Some(status) => {
+                        drop(call);
+                        status
+                    }
+                    None => {
+                        self.route.state = HostRouteState::CancellingPrepare(call);
+                        progress(PendingWorkClass::Cleanup)
+                    }
+                }
+            }
+        }
+    }
+
+    fn settle_readiness(
+        &mut self,
+        call: HostReadinessCall,
+        settlement: BindingCallSettlement<
+            RouteReadinessOutcome<HostPreparedRouteGuard>,
+            HostRouteCleanupSuccessor,
+        >,
+    ) -> StepStatus<()> {
+        match settlement {
+            BindingCallSettlement::Returned(RouteReadinessOutcome::Ready(guard)) => {
+                drop(call);
+                self.start_abort(guard)
+            }
+            BindingCallSettlement::Returned(RouteReadinessOutcome::Failed { guard, error }) => {
+                drop(call);
+                self.start_failed_abort(guard, error)
+            }
+            BindingCallSettlement::Cancelled { disposition, .. } => {
+                match self.cancel_disposition(disposition) {
+                    Some(status) => {
+                        drop(call);
+                        status
+                    }
+                    None => {
+                        self.route.state = HostRouteState::CancellingReadiness(call);
+                        progress(PendingWorkClass::Cleanup)
+                    }
+                }
+            }
+        }
+    }
+
+    fn settle_activation(
+        &mut self,
+        call: HostActivationCall,
+        settlement: BindingCallSettlement<
+            RouteActivationOutcome<HostPreparedRouteGuard, HostActiveRouteGuard>,
+            HostRouteCleanupSuccessor,
+        >,
+    ) -> StepStatus<()> {
+        match settlement {
+            BindingCallSettlement::Returned(RouteActivationOutcome::Active(guard)) => {
+                drop(call);
+                self.start_shutdown(HostShutdownRouteGuard::Active(guard))
+            }
+            BindingCallSettlement::Returned(RouteActivationOutcome::NotActivated {
+                guard,
+                error,
+            }) => {
+                drop(call);
+                self.start_failed_abort(guard, error)
+            }
+            BindingCallSettlement::Cancelled { disposition, .. } => {
+                match self.cancel_disposition(disposition) {
+                    Some(status) => {
+                        drop(call);
+                        status
+                    }
+                    None => {
+                        self.route.state = HostRouteState::CancellingActivation(call);
+                        progress(PendingWorkClass::Cleanup)
+                    }
+                }
+            }
+        }
+    }
+
+    fn settle_commit(
+        &mut self,
+        call: HostCommitCall,
+        settlement: BindingCallSettlement<
+            RouteCommitOutcome<HostActiveRouteGuard, HostCommittedRouteGuard>,
+            HostRouteCleanupSuccessor,
+        >,
+    ) -> StepStatus<()> {
+        match settlement {
+            BindingCallSettlement::Returned(RouteCommitOutcome::Committed(guard)) => {
+                drop(call);
+                self.start_shutdown(HostShutdownRouteGuard::Committed(guard))
+            }
+            BindingCallSettlement::Returned(RouteCommitOutcome::NotCommitted { guard, error }) => {
+                drop(call);
+                self.start_failed_shutdown(HostShutdownRouteGuard::Active(guard), error)
+            }
+            BindingCallSettlement::Cancelled { disposition, .. } => {
+                match self.cancel_disposition(disposition) {
+                    Some(status) => {
+                        drop(call);
+                        status
+                    }
+                    None => {
+                        self.route.state = HostRouteState::CancellingCommit(call);
+                        progress(PendingWorkClass::Cleanup)
+                    }
+                }
+            }
+        }
+    }
+
+    fn start_cancel_prepare(
+        &mut self,
+        mut call: HostPrepareCall,
+        cx: &mut Context<'_>,
+        budget: &mut WorkBudget,
+    ) -> StepStatus<()> {
+        let phase = match self.admission.call_context(
+            self.thing_slot,
+            self.disposition.cleanup_cause(self.thing_slot),
+        ) {
+            Ok(phase) => phase,
+            Err(error) => {
+                self.disposition.record_core_failure(error);
+                self.route.state = HostRouteState::JoiningPrepare(call);
+                return progress(PendingWorkClass::Cleanup);
+            }
+        };
+        match call.as_pin_mut().start_cancel(cx, phase, budget) {
+            Ok(StartStatus::Pending) => {
+                self.route.state = HostRouteState::CancellingPrepare(call);
+                progress(PendingWorkClass::Cleanup)
+            }
+            Ok(StartStatus::Ready(settlement)) => self.settle_prepare(call, settlement),
+            Err(error) => {
+                self.disposition.record_core_failure(error);
+                self.route.state = HostRouteState::JoiningPrepare(call);
+                progress(PendingWorkClass::Cleanup)
+            }
+        }
+    }
+
+    fn start_cancel_readiness(
+        &mut self,
+        mut call: HostReadinessCall,
+        cx: &mut Context<'_>,
+        budget: &mut WorkBudget,
+    ) -> StepStatus<()> {
+        let phase = match self.admission.call_context(
+            self.thing_slot,
+            self.disposition.cleanup_cause(self.thing_slot),
+        ) {
+            Ok(phase) => phase,
+            Err(error) => {
+                self.disposition.record_core_failure(error);
+                self.route.state = HostRouteState::JoiningReadiness(call);
+                return progress(PendingWorkClass::Cleanup);
+            }
+        };
+        match call.as_pin_mut().start_cancel(cx, phase, budget) {
+            Ok(StartStatus::Pending) => {
+                self.route.state = HostRouteState::CancellingReadiness(call);
+                progress(PendingWorkClass::Cleanup)
+            }
+            Ok(StartStatus::Ready(settlement)) => self.settle_readiness(call, settlement),
+            Err(error) => {
+                self.disposition.record_core_failure(error);
+                self.route.state = HostRouteState::JoiningReadiness(call);
+                progress(PendingWorkClass::Cleanup)
+            }
+        }
+    }
+
+    fn start_cancel_activation(
+        &mut self,
+        mut call: HostActivationCall,
+        cx: &mut Context<'_>,
+        budget: &mut WorkBudget,
+    ) -> StepStatus<()> {
+        let phase = match self.admission.call_context(
+            self.thing_slot,
+            self.disposition.cleanup_cause(self.thing_slot),
+        ) {
+            Ok(phase) => phase,
+            Err(error) => {
+                self.disposition.record_core_failure(error);
+                self.route.state = HostRouteState::JoiningActivation(call);
+                return progress(PendingWorkClass::Cleanup);
+            }
+        };
+        match call.as_pin_mut().start_cancel(cx, phase, budget) {
+            Ok(StartStatus::Pending) => {
+                self.route.state = HostRouteState::CancellingActivation(call);
+                progress(PendingWorkClass::Cleanup)
+            }
+            Ok(StartStatus::Ready(settlement)) => self.settle_activation(call, settlement),
+            Err(error) => {
+                self.disposition.record_core_failure(error);
+                self.route.state = HostRouteState::JoiningActivation(call);
+                progress(PendingWorkClass::Cleanup)
+            }
+        }
+    }
+
+    fn start_cancel_commit(
+        &mut self,
+        mut call: HostCommitCall,
+        cx: &mut Context<'_>,
+        budget: &mut WorkBudget,
+    ) -> StepStatus<()> {
+        let phase = match self.admission.call_context(
+            self.thing_slot,
+            self.disposition.cleanup_cause(self.thing_slot),
+        ) {
+            Ok(phase) => phase,
+            Err(error) => {
+                self.disposition.record_core_failure(error);
+                self.route.state = HostRouteState::JoiningCommit(call);
+                return progress(PendingWorkClass::Cleanup);
+            }
+        };
+        match call.as_pin_mut().start_cancel(cx, phase, budget) {
+            Ok(StartStatus::Pending) => {
+                self.route.state = HostRouteState::CancellingCommit(call);
+                progress(PendingWorkClass::Cleanup)
+            }
+            Ok(StartStatus::Ready(settlement)) => self.settle_commit(call, settlement),
+            Err(error) => {
+                self.disposition.record_core_failure(error);
+                self.route.state = HostRouteState::JoiningCommit(call);
+                progress(PendingWorkClass::Cleanup)
+            }
+        }
     }
 
     fn start_failed_shutdown_core(
@@ -1850,7 +2688,7 @@ impl HostPropertyReadRuntime {
                     handler.footprint,
                     self.route.key,
                     self.activation.as_ref(),
-                    &self.admission,
+                    &mut self.admission,
                     matches!(&self.route.state, HostRouteState::Absent) && self.in_flight.is_none(),
                     self.registration.execution().supports_host_erased(),
                     self.registration
@@ -1863,13 +2701,17 @@ impl HostPropertyReadRuntime {
                     self.route.key = None;
                     return self.fail_without_route(error);
                 }
-                let call = match self.registration.server().prepare(prepare, artifact) {
+                let mut call = match self.registration.server().prepare(prepare, artifact) {
                     Ok(call) => call,
                     Err(rejection) => {
                         let (_, error) = rejection.into_parts();
                         return self.fail_binding_without_route(error);
                     }
                 };
+                if !self.admission.admits_host_call(&mut call) {
+                    drop(call);
+                    return self.fail_without_route(validation_error(self.thing_slot));
+                }
                 self.route.state = HostRouteState::Preparing(call);
                 progress(PendingWorkClass::BindingInput)
             }
@@ -2007,6 +2849,9 @@ impl HostPropertyReadRuntime {
                 self.route.state = HostRouteState::Absent;
                 StepStatus::Idle
             }
+            HostRouteState::Preparing(call) if self.expose == ExposeState::Cancelling => {
+                self.start_cancel_prepare(call, cx, budget)
+            }
             HostRouteState::Preparing(mut call) => {
                 match call.as_pin_mut().poll_result(cx, budget) {
                     Poll::Pending => {
@@ -2026,19 +2871,58 @@ impl HostPropertyReadRuntime {
                     }
                 }
             }
+            HostRouteState::CancellingPrepare(mut call) => {
+                match call.as_pin_mut().poll_cancel(cx, budget) {
+                    Poll::Pending => {
+                        self.route.state = HostRouteState::CancellingPrepare(call);
+                        progress(PendingWorkClass::Cleanup)
+                    }
+                    Poll::Ready(Ok(settlement)) => self.settle_prepare(call, settlement),
+                    Poll::Ready(Err(error)) => {
+                        self.disposition.record_core_failure(error);
+                        self.route.state = HostRouteState::CancellingPrepare(call);
+                        progress(PendingWorkClass::Cleanup)
+                    }
+                }
+            }
+            HostRouteState::JoiningPrepare(mut call) => {
+                match call.as_pin_mut().poll_result(cx, budget) {
+                    Poll::Pending => {
+                        self.route.state = HostRouteState::JoiningPrepare(call);
+                        progress(PendingWorkClass::Cleanup)
+                    }
+                    Poll::Ready(RoutePrepareOutcome::Prepared(guard)) => {
+                        drop(call);
+                        self.start_abort(guard)
+                    }
+                    Poll::Ready(RoutePrepareOutcome::RejectedNoResource(error)) => {
+                        drop(call);
+                        self.fail_binding_without_route(error)
+                    }
+                }
+            }
             HostRouteState::Prepared(guard) => {
                 if self.expose == ExposeState::Cancelling {
                     return self.start_abort(guard);
                 }
-                let call = match self.registration.server().start_readiness(guard) {
+                let mut call = match self.registration.server().start_readiness(guard) {
                     Ok(call) => call,
                     Err(rejection) => {
                         let (guard, error) = rejection.into_parts();
                         return self.start_failed_abort(guard, error);
                     }
                 };
+                if !self.admission.admits_host_call(&mut call) {
+                    self.disposition
+                        .record_core_failure(validation_error(self.thing_slot));
+                    self.expose = ExposeState::Cancelling;
+                    return self.start_cancel_readiness(call, cx, budget);
+                }
                 self.route.state = HostRouteState::AwaitingReadiness(call);
                 progress(PendingWorkClass::RouteReadiness)
+            }
+            HostRouteState::AwaitingReadiness(call) if self.expose == ExposeState::Cancelling => {
+                self.start_cancel_readiness(call, cx, budget)
             }
             HostRouteState::AwaitingReadiness(mut call) => {
                 match call.as_pin_mut().poll_result(cx, budget) {
@@ -2059,19 +2943,58 @@ impl HostPropertyReadRuntime {
                     }
                 }
             }
+            HostRouteState::CancellingReadiness(mut call) => {
+                match call.as_pin_mut().poll_cancel(cx, budget) {
+                    Poll::Pending => {
+                        self.route.state = HostRouteState::CancellingReadiness(call);
+                        progress(PendingWorkClass::Cleanup)
+                    }
+                    Poll::Ready(Ok(settlement)) => self.settle_readiness(call, settlement),
+                    Poll::Ready(Err(error)) => {
+                        self.disposition.record_core_failure(error);
+                        self.route.state = HostRouteState::CancellingReadiness(call);
+                        progress(PendingWorkClass::Cleanup)
+                    }
+                }
+            }
+            HostRouteState::JoiningReadiness(mut call) => {
+                match call.as_pin_mut().poll_result(cx, budget) {
+                    Poll::Pending => {
+                        self.route.state = HostRouteState::JoiningReadiness(call);
+                        progress(PendingWorkClass::Cleanup)
+                    }
+                    Poll::Ready(RouteReadinessOutcome::Ready(guard)) => {
+                        drop(call);
+                        self.start_abort(guard)
+                    }
+                    Poll::Ready(RouteReadinessOutcome::Failed { guard, error }) => {
+                        drop(call);
+                        self.start_failed_abort(guard, error)
+                    }
+                }
+            }
             HostRouteState::Ready(guard) => {
                 if self.expose == ExposeState::Cancelling {
                     return self.start_abort(guard);
                 }
-                let call = match self.registration.server().activate(guard) {
+                let mut call = match self.registration.server().activate(guard) {
                     Ok(call) => call,
                     Err(rejection) => {
                         let (guard, error) = rejection.into_parts();
                         return self.start_failed_abort(guard, error);
                     }
                 };
+                if !self.admission.admits_host_call(&mut call) {
+                    self.disposition
+                        .record_core_failure(validation_error(self.thing_slot));
+                    self.expose = ExposeState::Cancelling;
+                    return self.start_cancel_activation(call, cx, budget);
+                }
                 self.route.state = HostRouteState::Activating(call);
                 progress(PendingWorkClass::BindingInput)
+            }
+            HostRouteState::Activating(call) if self.expose == ExposeState::Cancelling => {
+                self.start_cancel_activation(call, cx, budget)
             }
             HostRouteState::Activating(mut call) => match call.as_pin_mut().poll_result(cx, budget)
             {
@@ -2091,11 +3014,41 @@ impl HostPropertyReadRuntime {
                     self.start_failed_abort(guard, error)
                 }
             },
+            HostRouteState::CancellingActivation(mut call) => {
+                match call.as_pin_mut().poll_cancel(cx, budget) {
+                    Poll::Pending => {
+                        self.route.state = HostRouteState::CancellingActivation(call);
+                        progress(PendingWorkClass::Cleanup)
+                    }
+                    Poll::Ready(Ok(settlement)) => self.settle_activation(call, settlement),
+                    Poll::Ready(Err(error)) => {
+                        self.disposition.record_core_failure(error);
+                        self.route.state = HostRouteState::CancellingActivation(call);
+                        progress(PendingWorkClass::Cleanup)
+                    }
+                }
+            }
+            HostRouteState::JoiningActivation(mut call) => {
+                match call.as_pin_mut().poll_result(cx, budget) {
+                    Poll::Pending => {
+                        self.route.state = HostRouteState::JoiningActivation(call);
+                        progress(PendingWorkClass::Cleanup)
+                    }
+                    Poll::Ready(RouteActivationOutcome::Active(guard)) => {
+                        drop(call);
+                        self.start_shutdown(HostShutdownRouteGuard::Active(guard))
+                    }
+                    Poll::Ready(RouteActivationOutcome::NotActivated { guard, error }) => {
+                        drop(call);
+                        self.start_failed_abort(guard, error)
+                    }
+                }
+            }
             HostRouteState::Active(guard) => {
                 if self.expose == ExposeState::Cancelling {
                     return self.start_shutdown(HostShutdownRouteGuard::Active(guard));
                 }
-                let call = match self.registration.server().commit(guard) {
+                let mut call = match self.registration.server().commit(guard) {
                     Ok(call) => call,
                     Err(rejection) => {
                         let (guard, error) = rejection.into_parts();
@@ -2103,8 +3056,17 @@ impl HostPropertyReadRuntime {
                             .start_failed_shutdown(HostShutdownRouteGuard::Active(guard), error);
                     }
                 };
+                if !self.admission.admits_host_call(&mut call) {
+                    self.disposition
+                        .record_core_failure(validation_error(self.thing_slot));
+                    self.expose = ExposeState::Cancelling;
+                    return self.start_cancel_commit(call, cx, budget);
+                }
                 self.route.state = HostRouteState::Committing(call);
                 progress(PendingWorkClass::BindingInput)
+            }
+            HostRouteState::Committing(call) if self.expose == ExposeState::Cancelling => {
+                self.start_cancel_commit(call, cx, budget)
             }
             HostRouteState::Committing(mut call) => match call.as_pin_mut().poll_result(cx, budget)
             {
@@ -2123,6 +3085,36 @@ impl HostPropertyReadRuntime {
                     self.start_failed_shutdown(HostShutdownRouteGuard::Active(guard), error)
                 }
             },
+            HostRouteState::CancellingCommit(mut call) => {
+                match call.as_pin_mut().poll_cancel(cx, budget) {
+                    Poll::Pending => {
+                        self.route.state = HostRouteState::CancellingCommit(call);
+                        progress(PendingWorkClass::Cleanup)
+                    }
+                    Poll::Ready(Ok(settlement)) => self.settle_commit(call, settlement),
+                    Poll::Ready(Err(error)) => {
+                        self.disposition.record_core_failure(error);
+                        self.route.state = HostRouteState::CancellingCommit(call);
+                        progress(PendingWorkClass::Cleanup)
+                    }
+                }
+            }
+            HostRouteState::JoiningCommit(mut call) => {
+                match call.as_pin_mut().poll_result(cx, budget) {
+                    Poll::Pending => {
+                        self.route.state = HostRouteState::JoiningCommit(call);
+                        progress(PendingWorkClass::Cleanup)
+                    }
+                    Poll::Ready(RouteCommitOutcome::Committed(guard)) => {
+                        drop(call);
+                        self.start_shutdown(HostShutdownRouteGuard::Committed(guard))
+                    }
+                    Poll::Ready(RouteCommitOutcome::NotCommitted { guard, error }) => {
+                        drop(call);
+                        self.start_failed_shutdown(HostShutdownRouteGuard::Active(guard), error)
+                    }
+                }
+            }
             HostRouteState::CommittedClosed(guard) => {
                 if self.expose == ExposeState::Cancelling {
                     return self.start_shutdown(HostShutdownRouteGuard::Committed(guard));

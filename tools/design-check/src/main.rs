@@ -316,6 +316,7 @@ fn check_work_packages(root: &Path) -> Result<(), String> {
     )?;
     for required in [
         "cargo check --locked -p clinkz-wot-property-read-binding-fixture --no-default-features",
+        "cargo check --locked -p clinkz-wot-property-read-architecture-runner --no-default-features --features async",
         "cargo test --locked -p clinkz-wot-property-read-architecture-runner",
     ] {
         if !test_commands.iter().any(|command| command == required) {

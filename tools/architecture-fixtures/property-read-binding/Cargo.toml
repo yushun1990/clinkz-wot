@@ -10,6 +10,7 @@ clinkz-wot-foundation = { path = "../../../foundation", default-features = false
 
 [features]
 default = ["std"]
+async = ["clinkz-wot-core/async", "clinkz-wot-foundation/async"]
 std = [
     "clinkz-wot-core/std",
     "clinkz-wot-foundation/std",
