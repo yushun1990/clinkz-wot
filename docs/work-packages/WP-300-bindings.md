@@ -210,8 +210,11 @@ it cannot extend or replace the guard-owned primary state and is not a route
 table. Workspace topic 0058 records the migrated correction. The real-target
 prerequisite no longer blocks aggregate source admission. The separate
 deterministic mock binding and runner now execute the aggregate gate in both
-representations, so `PROPERTY-READ-ARCHITECTURE` is `passed`; this does not
-widen the probe or aggregate evidence into broad WP-300 or WP-600 completion.
+representations. They validate the complete live route/correlation identity,
+observe the exact successful payload and media type, and settle a Core-sealed
+invalid handler success once on its original response opportunity. Therefore
+`PROPERTY-READ-ARCHITECTURE` is `passed`; this does not widen the probe or
+aggregate evidence into broad WP-300 or WP-600 completion.
 
 The probe also records two maturity limits rather than hiding them. First,
 optional Zenoh Form extensions such as priority and congestion control are not

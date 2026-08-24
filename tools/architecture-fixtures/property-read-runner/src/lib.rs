@@ -76,8 +76,8 @@ mod tests {
     use std::sync::{Arc, Mutex};
 
     use clinkz_wot_core::{
-        BindingGeneration, BindingId, CoreResult, HandlerContext, HandlerFootprint, HandlerSlotId,
-        InteractionInput, InteractionOutput, PlanId, ReadPropertyHandler,
+        BindingGeneration, BindingId, CoreResult, CorrelationId, HandlerContext, HandlerFootprint,
+        HandlerSlotId, InteractionInput, InteractionOutput, Payload, PlanId, ReadPropertyHandler,
         StaticHandlerRegistration, StepStatus, ThingSlotId,
     };
     use clinkz_wot_foundation::{
@@ -85,9 +85,10 @@ mod tests {
         StaticResourceProfile, WorkBudget, WorkClass,
     };
     use clinkz_wot_property_read_binding_fixture::{
-        HostPropertyReadProbe, MockLifecyclePhase, StaticPropertyReadProbe,
-        host_property_read_fixture, host_property_read_readiness_rejection_fixture,
-        static_property_read_fixture, static_property_read_readiness_failure_fixture,
+        DeliveredResponseEvidence, HostPropertyReadProbe, MockLifecyclePhase,
+        StaticPropertyReadProbe, host_property_read_fixture,
+        host_property_read_readiness_rejection_fixture, static_property_read_fixture,
+        static_property_read_readiness_failure_fixture,
     };
     use clinkz_wot_servient::{Servient, ServientBuilder, StaticServient, StaticServientBuilder};
     use clinkz_wot_td::{
@@ -101,6 +102,8 @@ mod tests {
     const THING_ID: &str = "urn:fixture:aggregate-property-read";
     const PROPERTY: &str = "level";
     const TARGET: &str = "mock://tank/level";
+    const RESPONSE_PAYLOAD: &[u8] = br#"{"level":42}"#;
+    const RESPONSE_MEDIA_TYPE: &str = "application/json";
 
     #[derive(Clone, Debug, Eq, PartialEq)]
     struct HandlerEvidence {
@@ -140,6 +143,24 @@ mod tests {
                 evidence.replace(observed).is_none(),
                 "handler invoked twice"
             );
+            Ok(InteractionOutput::with_data(Payload::new(
+                RESPONSE_PAYLOAD.to_vec(),
+                RESPONSE_MEDIA_TYPE,
+            )))
+        }
+    }
+
+    struct MissingPayloadHandler {
+        calls: Arc<AtomicU32>,
+    }
+
+    impl ReadPropertyHandler for MissingPayloadHandler {
+        fn handle(
+            &self,
+            _context: HandlerContext<'_>,
+            _input: &InteractionInput,
+        ) -> CoreResult<InteractionOutput> {
+            self.calls.fetch_add(1, Ordering::SeqCst);
             Ok(InteractionOutput::empty())
         }
     }
@@ -199,6 +220,42 @@ mod tests {
         );
         assert_eq!(evidence.operation, Operation::ReadProperty);
         assert_eq!(evidence.target, PROPERTY);
+    }
+
+    fn assert_success_delivery(
+        accepted_correlation: Option<CorrelationId>,
+        delivered_responses: u32,
+        response_settlements: u32,
+        delivered_validation_errors: u32,
+        delivered_response: Option<DeliveredResponseEvidence>,
+    ) {
+        assert_eq!(delivered_responses, 1);
+        assert_eq!(response_settlements, 1);
+        assert_eq!(delivered_validation_errors, 0);
+        let delivered_response = delivered_response.expect("protocol edge observed one response");
+        assert_eq!(accepted_correlation, Some(delivered_response.correlation()));
+        assert_eq!(delivered_response.correlation(), CorrelationId::new(1));
+        assert_eq!(delivered_response.payload(), Some(RESPONSE_PAYLOAD));
+        assert_eq!(delivered_response.media_type(), Some(RESPONSE_MEDIA_TYPE));
+        assert!(!delivered_response.is_validation_failure());
+    }
+
+    fn assert_validation_failure_delivery(
+        accepted_correlation: Option<CorrelationId>,
+        delivered_responses: u32,
+        response_settlements: u32,
+        delivered_validation_errors: u32,
+        delivered_response: Option<DeliveredResponseEvidence>,
+    ) {
+        assert_eq!(delivered_responses, 1);
+        assert_eq!(response_settlements, 1);
+        assert_eq!(delivered_validation_errors, 1);
+        let delivered_response = delivered_response.expect("protocol edge observed one response");
+        assert_eq!(accepted_correlation, Some(delivered_response.correlation()));
+        assert_eq!(delivered_response.correlation(), CorrelationId::new(1));
+        assert_eq!(delivered_response.payload(), None);
+        assert_eq!(delivered_response.media_type(), None);
+        assert!(delivered_response.is_validation_failure());
     }
 
     fn assert_static_clean(probe: &StaticPropertyReadProbe, cx: &mut Context<'_>) {
@@ -332,12 +389,20 @@ mod tests {
 
         drive_static_until_idle(&mut servient, &mut cx);
         assert_eq!(calls.load(Ordering::SeqCst), 1);
-        assert_eq!(probe.delivered_responses(), 1);
+        assert_success_delivery(
+            probe.last_accepted_correlation(),
+            probe.delivered_responses(),
+            probe.response_settlements(),
+            probe.delivered_validation_errors(),
+            probe.delivered_response(),
+        );
         assert_handler_evidence(&evidence);
 
         servient.begin_destroy().expect("static destroy accepted");
         drive_static_until_idle(&mut servient, &mut cx);
         assert_static_clean(&probe, &mut cx);
+        assert_eq!(calls.load(Ordering::SeqCst), 1);
+        assert_eq!(probe.response_settlements(), 1);
     }
 
     #[test]
@@ -389,12 +454,107 @@ mod tests {
 
         drive_host_until_idle(&servient, &mut cx);
         assert_eq!(calls.load(Ordering::SeqCst), 1);
-        assert_eq!(probe.delivered_responses(), 1);
+        assert_success_delivery(
+            probe.last_accepted_correlation(),
+            probe.delivered_responses(),
+            probe.response_settlements(),
+            probe.delivered_validation_errors(),
+            probe.delivered_response(),
+        );
         assert_handler_evidence(&evidence);
 
         exposed.begin_destroy().expect("Host destroy accepted");
         drive_host_until_idle(&servient, &mut cx);
         assert_host_clean(&probe, &mut cx);
+        assert_eq!(calls.load(Ordering::SeqCst), 1);
+        assert_eq!(probe.response_settlements(), 1);
+    }
+
+    #[test]
+    fn invalid_handler_success_is_sealed_once_on_the_original_opportunity_in_both_cells() {
+        let (binding, static_probe) = static_property_read_fixture();
+        let static_calls = Arc::new(AtomicU32::new(0));
+        let static_handler_value = MissingPayloadHandler {
+            calls: Arc::clone(&static_calls),
+        };
+        let static_handler = StaticHandlerRegistration::new(
+            HandlerSlotId::new(SlotIndex::new(0), Generation::INITIAL),
+            &static_handler_value,
+            HandlerFootprint::new(1, 0, 0),
+        );
+        let mut static_servient = StaticServientBuilder::new(
+            thing(),
+            ThingSlotId::new(SlotIndex::new(0), Generation::INITIAL),
+            BenchmarkStaticReferenceV1::LIMITS.clone(),
+            clinkz_wot_core::Deadline::NONE,
+        )
+        .binding_registration(binding)
+        .read_property_handler(PROPERTY, static_handler)
+        .build()
+        .expect("complete application-static first-entry roots");
+        let waker = Waker::noop();
+        let mut cx = Context::from_waker(waker);
+        drive_static_until_idle(&mut static_servient, &mut cx);
+        static_probe.enqueue_property_read(PROPERTY, InteractionInput::empty());
+        drive_static_until_idle(&mut static_servient, &mut cx);
+
+        assert_eq!(static_calls.load(Ordering::SeqCst), 1);
+        assert_validation_failure_delivery(
+            static_probe.last_accepted_correlation(),
+            static_probe.delivered_responses(),
+            static_probe.response_settlements(),
+            static_probe.delivered_validation_errors(),
+            static_probe.delivered_response(),
+        );
+        assert_eq!(static_probe.outstanding_counts(), (1, 0, 0, 0));
+        static_servient
+            .begin_destroy()
+            .expect("static destroy accepted");
+        drive_static_until_idle(&mut static_servient, &mut cx);
+        assert_static_clean(&static_probe, &mut cx);
+        assert_eq!(static_calls.load(Ordering::SeqCst), 1);
+        assert_eq!(static_probe.response_settlements(), 1);
+
+        let (binding, host_probe) = host_property_read_fixture();
+        let host_servient = ServientBuilder::new()
+            .resource_limits(GatewayDefaultV1::LIMITS.clone())
+            .binding_registration(binding)
+            .build()
+            .expect("complete Host binding installation");
+        let host_calls = Arc::new(AtomicU32::new(0));
+        let exposed = host_servient
+            .produce_td(thing())
+            .expect("produced Thing roots");
+        exposed
+            .set_read_property_handler(
+                PROPERTY,
+                MissingPayloadHandler {
+                    calls: Arc::clone(&host_calls),
+                },
+                HandlerFootprint::new(1, 0, 0),
+            )
+            .expect("complete handler coverage");
+        exposed
+            .begin_expose()
+            .expect("exposure transaction accepted");
+        drive_host_until_idle(&host_servient, &mut cx);
+        host_probe.enqueue_property_read(PROPERTY, InteractionInput::empty());
+        drive_host_until_idle(&host_servient, &mut cx);
+
+        assert_eq!(host_calls.load(Ordering::SeqCst), 1);
+        assert_validation_failure_delivery(
+            host_probe.last_accepted_correlation(),
+            host_probe.delivered_responses(),
+            host_probe.response_settlements(),
+            host_probe.delivered_validation_errors(),
+            host_probe.delivered_response(),
+        );
+        assert_eq!(host_probe.outstanding_counts(), (1, 0, 0, 0));
+        exposed.begin_destroy().expect("Host destroy accepted");
+        drive_host_until_idle(&host_servient, &mut cx);
+        assert_host_clean(&host_probe, &mut cx);
+        assert_eq!(host_calls.load(Ordering::SeqCst), 1);
+        assert_eq!(host_probe.response_settlements(), 1);
     }
 
     #[test]

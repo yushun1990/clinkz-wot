@@ -79,10 +79,14 @@ legal root inputs and executes both representations through the production
 Planning and Servient path. Its success cells prove one compiler-produced
 Producer-route artifact and canonical reservation reaches preparation, one
 request is retained across an exhausted handler budget, one production-created
-handler context reaches exactly one callback, one response is delivered, and
-all route, request, response, artifact, and cleanup ownership reaches zero.
-The Host assertions also preserve one route-state allocation and footprint
-through prepared, active, and committed ownership.
+handler context reaches exactly one callback, and one real application payload
+is sealed and settled on the binding edge with its exact bytes, media type, and
+accepted correlation. A paired invalid handler-origin success is sealed by Core
+into exactly one deliverable validation failure on that original response
+opportunity. Both cases prove one handler invocation, one response settlement,
+and zero terminal route, request, response, artifact, and cleanup ownership in
+both representations. The Host assertions also preserve one route-state
+allocation and footprint through prepared, active, and committed ownership.
 
 The aggregate negative cells prove that incomplete cleanup/resource policy
 causes zero compiler-carrier checks and zero binding preparation side effects.
@@ -168,8 +172,11 @@ existing narrow carrier: Core accepts only a payload-bearing `Ok` application
 success, converts every other nominal success into a deliverable validation
 error, and exposes no unvalidated success constructor. Static and Host
 Servient scenarios deliver that validation failure once and complete response
-and route cleanup. This prerequisite does not implement either aggregate
-fixture root or change the gate from `ready` to `passed`.
+and route cleanup. The aggregate fixture consumes that same boundary: its
+external binding validates the full live route identity and correlation before
+acceptance, observes the real successful payload and media type, and delivers
+the sealed invalid-success failure exactly once without repeating Core's
+handler-origin validation.
 
 ## Exclusions
 
