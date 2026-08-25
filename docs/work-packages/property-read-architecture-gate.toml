@@ -1,7 +1,7 @@
 schema_version = 3
 design_revision = "5.0"
 id = "PROPERTY-READ-ARCHITECTURE"
-status = "passed"
+status = "ready"
 document = "docs/work-packages/PROPERTY-READ-ARCHITECTURE.md"
 fixture_roots = [
     "tools/architecture-fixtures/property-read-binding",
