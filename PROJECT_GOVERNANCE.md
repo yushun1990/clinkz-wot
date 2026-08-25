@@ -171,6 +171,56 @@ The fresh reviewer reconstructs the intended result from repository authority,
 the exact reviewed diff, and executable evidence. It must not assume the
 implementation conversation's summary or conclusion is correct.
 
+## Gate Status Authority
+
+A registered gate status is an acceptance claim, not an implementation-progress
+field and not a synonym for green tests or CI.
+
+The implementation author/executor does not have authority to modify the
+`status` of an existing gate manifest. The author may change implementation,
+fixtures, evidence, registered test commands, and other gate inputs needed to
+produce a reviewable candidate, but must leave the gate status unchanged while
+that candidate is being implemented or repaired.
+
+A newly registered gate starts in its non-accepted state, normally `ready`.
+Creating that initial registration does not constitute acceptance. After the
+gate exists, transitions into or out of an accepted state are controlled by an
+independent acceptance boundary, not by the implementation author.
+
+Passing registered tests, workspace validation, CI, or the author's own review
+does not authorize `ready -> passed`. For architecture-sensitive or major
+cross-package gates, the independent reviewer described above must explicitly
+conclude that the gate's acceptance claim is justified at the exact reviewed
+head.
+
+If the independent reviewer finds a blocker, the gate remains in its current
+non-accepted state. If an already accepted gate is later falsified, moving it
+out of the accepted state is likewise an independent gate-control action; the
+repair author does not rewrite gate status as part of implementation work.
+
+After independent acceptance, apply the status transition as a separate,
+status-only change by a session or maintainer that did not author the reviewed
+implementation. That change must not alter implementation or evidence. If it
+does, the modified technical content requires review before the acceptance
+claim can be applied.
+
+Therefore the normal architecture-gate flow is:
+
+    ready
+      -> implementation/evidence changes (status remains ready)
+      -> independent review
+          -> blockers: repair while status remains ready
+          -> accepted: separate status-only ready -> passed change
+      -> merge
+
+The same separation applies to reopening a previously accepted gate: evidence
+may falsify the claim, but the implementation author does not self-authorize
+the gate-state transition in either direction.
+
+Pull-request descriptions and handoff summaries must distinguish executable
+validation from independent acceptance and must not claim a gate is `passed`
+before the authorized status transition exists in repository history.
+
 ## Milestone Lifecycle
 
 Milestones are defined in `PLAN.md` and may use:
