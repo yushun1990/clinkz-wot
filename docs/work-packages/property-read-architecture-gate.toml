@@ -17,10 +17,14 @@ evidence_cases = [
     "host_erased_cell_uses_the_same_production_path_and_one_route_carrier",
     "invalid_handler_success_is_sealed_once_on_the_original_opportunity_in_both_cells",
     "ingress_capacity_is_admitted_at_every_scope_before_buffering_or_side_effects",
-    "oversized_activation_call_has_no_constructor_side_effect_and_preserves_predecessor",
+    "oversized_activation_uses_separately_admitted_recovery_and_preserves_predecessor",
+    "insufficient_host_call_recovery_capacity_rejects_before_construction_or_polling",
     "outstanding_host_lifecycle_calls_cancel_before_route_rollback",
     "pending_response_delivery_cancellation_retains_exact_context_and_cleans_once",
     "pending_cleanup_call_cancellation_retains_route_and_call_contexts_to_terminal",
+    "lifecycle_transfer_retains_exact_context_until_named_owner_acknowledges_and_settles",
+    "delivery_cancel_error_retries_with_same_context_then_transfers_and_settles",
+    "cleanup_call_transfer_retains_route_and_call_contexts_to_acknowledged_terminal",
 ]
 test_commands = [
     "cargo test --locked -p clinkz-wot-core",

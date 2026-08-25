@@ -30,10 +30,11 @@ use clinkz_wot_td::{data_type::Operation, thing::Thing};
 
 #[cfg(feature = "std")]
 use clinkz_wot_core::{
-    HostActiveRouteGuard, HostBindingArtifact, HostBindingCallBox, HostBindingCompilerCursor,
-    HostBindingRegistration, HostCommittedRouteGuard, HostPreparedRouteGuard,
-    HostRouteCleanupSuccessor, HostShutdownRouteGuard, RouteAbortInput, RouteCleanupSuccessor,
-    RouteShutdownInput,
+    CleanupHandle, CleanupTransferAcceptance, CleanupTransferEnvelope, CleanupTransferRequest,
+    CleanupTransferTarget, HostActiveRouteGuard, HostBindingArtifact, HostBindingCallBox,
+    HostBindingCompilerCursor, HostBindingRegistration, HostCommittedRouteGuard,
+    HostPreparedRouteGuard, HostRouteCleanupSuccessor, HostShutdownRouteGuard, RouteAbortInput,
+    RouteCleanupSuccessor, RouteShutdownInput,
 };
 
 /// Read-only exposure lifecycle view.
@@ -427,11 +428,15 @@ struct AdmissionReservations {
     route_cleanup: Option<CleanupReservation>,
     #[cfg(feature = "std")]
     cleanup_call_cleanup: Option<CleanupReservation>,
+    #[cfg(feature = "std")]
+    transfer_cleanup: Option<CleanupReservation>,
     compiled: bool,
     handler: Option<HandlerFootprint>,
     response_bytes: u64,
     #[cfg(feature = "std")]
     host_call_ceiling: Option<BindingLifetimeFootprint>,
+    #[cfg(feature = "std")]
+    host_call_recovery_ceiling: Option<BindingLifetimeFootprint>,
     deadline: Deadline,
 }
 
@@ -459,7 +464,7 @@ impl AdmissionReservations {
     ) -> CoreResult<Self> {
         let cleanup_slots: u32 = match storage {
             #[cfg(feature = "std")]
-            FirstEntryStorage::Host => 3,
+            FirstEntryStorage::Host => 4,
             FirstEntryStorage::Static { .. } => 2,
         };
         let cleanups = u64::from(cleanup_slots);
@@ -470,17 +475,92 @@ impl AdmissionReservations {
         let readiness_bytes = resources.readiness_state().retained_bytes().max(1);
         let response_bytes = resources.response_state().retained_bytes().max(1);
         let call_bytes = resources.admitted().retained_bytes().max(1);
-        let cleanup_bytes = route_bytes
+        let ordinary_cleanup_bytes = route_bytes
             .max(readiness_bytes)
             .max(response_bytes)
             .max(call_bytes);
-        let cleanup_items = resources
+        let ordinary_cleanup_items = resources
             .route_state()
             .retained_items()
             .max(resources.readiness_state().retained_items())
             .max(resources.response_state().retained_items())
             .max(resources.admitted().retained_items())
             .max(1);
+        #[cfg(feature = "std")]
+        let host_call_recovery_ceiling = if matches!(storage, FirstEntryStorage::Host) {
+            let item_limit = limits
+                .get(ResourceKind::CleanupItemsMax)
+                .filter(|limit| *limit != 0)
+                .ok_or_else(|| validation_error(thing_slot))?;
+            let retained_items = u32::try_from(item_limit / cleanups)
+                .unwrap_or(u32::MAX)
+                .max(1);
+            let mut retained_bytes = u64::MAX;
+            for kind in [
+                ResourceKind::HostBindingCallBytesPerItemMax,
+                ResourceKind::HostBindingCallBytesPerBindingMax,
+                ResourceKind::HostBindingCallBytesPerThingMax,
+                ResourceKind::HostBindingCallBytesGlobalMax,
+                ResourceKind::BindingCancelBufferBytesPerCallMax,
+                ResourceKind::CleanupItemBytesMax,
+            ] {
+                retained_bytes = retained_bytes.min(
+                    limits
+                        .get(kind)
+                        .filter(|limit| *limit != 0)
+                        .ok_or_else(|| validation_error(thing_slot))?,
+                );
+            }
+            for kind in [
+                ResourceKind::BindingCancelBufferBytesGlobalMax,
+                ResourceKind::CleanupBytesMax,
+                ResourceKind::CleanupTransferBytesGlobalMax,
+            ] {
+                retained_bytes = retained_bytes.min(
+                    limits
+                        .get(kind)
+                        .filter(|limit| *limit != 0)
+                        .ok_or_else(|| validation_error(thing_slot))?
+                        / cleanups,
+                );
+            }
+            let recovery = BindingLifetimeFootprint::new(retained_items, retained_bytes.max(1));
+            if !resources.admitted().fits_within(recovery) {
+                return Err(validation_error(thing_slot));
+            }
+            Some(recovery)
+        } else {
+            None
+        };
+        let cleanup_bytes = {
+            #[cfg(feature = "std")]
+            {
+                host_call_recovery_ceiling.map_or(
+                    ordinary_cleanup_bytes,
+                    BindingLifetimeFootprint::retained_bytes,
+                )
+            }
+            #[cfg(not(feature = "std"))]
+            {
+                ordinary_cleanup_bytes
+            }
+        };
+        let cleanup_items = {
+            #[cfg(feature = "std")]
+            {
+                host_call_recovery_ceiling.map_or(
+                    ordinary_cleanup_items,
+                    BindingLifetimeFootprint::retained_items,
+                )
+            }
+            #[cfg(not(feature = "std"))]
+            {
+                ordinary_cleanup_items
+            }
+        };
+        let cleanup_item_total = u64::from(cleanup_items)
+            .checked_mul(cleanups)
+            .ok_or_else(|| validation_error(thing_slot))?;
         let cleanup_total = cleanup_bytes
             .checked_mul(cleanups)
             .ok_or_else(|| validation_error(thing_slot))?;
@@ -508,7 +588,7 @@ impl AdmissionReservations {
             (ResourceKind::EndpointReservationsGlobalMax, 1),
             (ResourceKind::RouteReadinessTokensPerThingMax, 1),
             (ResourceKind::RouteReadinessTokensGlobalMax, 1),
-            (ResourceKind::CleanupItemsMax, cleanups),
+            (ResourceKind::CleanupItemsMax, cleanup_item_total),
             (ResourceKind::CleanupRetryRecordsMax, cleanups),
             (ResourceKind::CleanupTransferSlotsGlobalMax, cleanups),
             (ResourceKind::DurableStatusEntriesPerBindingMax, 2),
@@ -610,13 +690,16 @@ impl AdmissionReservations {
             }
             #[cfg(feature = "std")]
             FirstEntryStorage::Host => {
+                let retained = host_call_recovery_ceiling
+                    .expect("Host first entry computes a recovery ceiling")
+                    .retained_bytes();
                 for kind in [
                     ResourceKind::HostBindingCallBytesPerItemMax,
                     ResourceKind::HostBindingCallBytesPerBindingMax,
                     ResourceKind::HostBindingCallBytesPerThingMax,
                     ResourceKind::HostBindingCallBytesGlobalMax,
                 ] {
-                    reserve_charge(&mut charges, limits, thing_slot, kind, call_bytes)?;
+                    reserve_charge(&mut charges, limits, thing_slot, kind, retained)?;
                 }
             }
         }
@@ -652,13 +735,18 @@ impl AdmissionReservations {
             )),
             #[cfg(feature = "std")]
             cleanup_call_cleanup: matches!(storage, FirstEntryStorage::Host)
-                .then(|| cleanup(base.checked_add(2).expect("three cleanup slots admitted"))),
+                .then(|| cleanup(base.checked_add(2).expect("four cleanup slots admitted"))),
+            #[cfg(feature = "std")]
+            transfer_cleanup: matches!(storage, FirstEntryStorage::Host)
+                .then(|| cleanup(base.checked_add(3).expect("four cleanup slots admitted"))),
             compiled: false,
             handler: None,
             response_bytes,
             #[cfg(feature = "std")]
             host_call_ceiling: matches!(storage, FirstEntryStorage::Host)
                 .then_some(resources.admitted()),
+            #[cfg(feature = "std")]
+            host_call_recovery_ceiling,
             deadline,
         })
     }
@@ -751,6 +839,15 @@ impl AdmissionReservations {
             .is_some_and(|ceiling| call.as_pin_mut().lifetime_footprint().fits_within(ceiling))
     }
 
+    #[cfg(feature = "std")]
+    fn admits_host_call_recovery<T: 'static, C: 'static>(
+        &self,
+        call: &mut HostBindingCallBox<T, C>,
+    ) -> bool {
+        self.host_call_recovery_ceiling
+            .is_some_and(|ceiling| call.as_pin_mut().lifetime_footprint().fits_within(ceiling))
+    }
+
     fn call_context(
         &mut self,
         slot: ThingSlotId,
@@ -811,7 +908,10 @@ impl AdmissionReservations {
             && {
                 #[cfg(feature = "std")]
                 {
-                    self.host_call_ceiling.is_none() || self.cleanup_call_cleanup.is_some()
+                    self.host_call_ceiling.is_none()
+                        || (self.cleanup_call_cleanup.is_some()
+                            && self.transfer_cleanup.is_some()
+                            && self.host_call_recovery_ceiling.is_some())
                 }
                 #[cfg(not(feature = "std"))]
                 {
@@ -2072,22 +2172,224 @@ type HostCommitCall = HostBindingCallBox<
 type HostCleanupCall = HostBindingCallBox<RouteCleanupOutcome, HostRouteCleanupSuccessor>;
 
 #[cfg(feature = "std")]
+enum HostCallTransferOwnership<T: 'static, C: 'static> {
+    Source(CleanupTransferEnvelope<HostBindingCallBox<T, C>>),
+    Acknowledged {
+        envelope: CleanupTransferEnvelope<HostBindingCallBox<T, C>>,
+        reservation: CleanupReservation,
+        record: CleanupRecord,
+    },
+}
+
+#[cfg(feature = "std")]
+struct HostCallTransfer<T: 'static, C: 'static> {
+    ownership: HostCallTransferOwnership<T, C>,
+}
+
+#[cfg(feature = "std")]
+enum HostTransferProgress<T: 'static, C: 'static> {
+    Pending(HostCallTransfer<T, C>),
+    Ready {
+        call: HostBindingCallBox<T, C>,
+        settlement: BindingCallSettlement<T, C>,
+        reservation: CleanupReservation,
+    },
+    Error {
+        transfer: HostCallTransfer<T, C>,
+        error: CoreError,
+    },
+}
+
+#[cfg(feature = "std")]
+struct HostTransferTarget<T: 'static, C: 'static> {
+    thing_slot: ThingSlotId,
+    reservation: Option<CleanupReservation>,
+    accepted: Option<HostCallTransfer<T, C>>,
+}
+
+#[cfg(feature = "std")]
+impl<T: 'static, C: 'static> HostTransferTarget<T, C> {
+    fn new(thing_slot: ThingSlotId, reservation: CleanupReservation) -> Self {
+        Self {
+            thing_slot,
+            reservation: Some(reservation),
+            accepted: None,
+        }
+    }
+
+    fn into_parts(self) -> (Option<CleanupReservation>, Option<HostCallTransfer<T, C>>) {
+        (self.reservation, self.accepted)
+    }
+}
+
+#[cfg(feature = "std")]
+impl<T: 'static, C: 'static> CleanupTransferTarget<HostBindingCallBox<T, C>>
+    for HostTransferTarget<T, C>
+{
+    fn try_accept(
+        &mut self,
+        transfer: CleanupTransferEnvelope<HostBindingCallBox<T, C>>,
+    ) -> CleanupTransferAcceptance<HostBindingCallBox<T, C>> {
+        let Some(reservation) = self.reservation.take() else {
+            return CleanupTransferAcceptance::Rejected(transfer);
+        };
+        let (request, mut call) = transfer.into_parts();
+        let footprint = call.as_pin_mut().lifetime_footprint();
+        let valid = request.requested_owner() == reservation.subject()
+            && footprint.fits_within(reservation.lifetime_footprint())
+            && footprint.fits_within(request.phase().reservation().lifetime_footprint())
+            && reservation.durable_status_records() != 0;
+        if !valid {
+            self.reservation = Some(reservation);
+            return CleanupTransferAcceptance::Rejected(CleanupTransferEnvelope::new(
+                request, call,
+            ));
+        }
+        let record = CleanupRecord::try_new(
+            CleanupHandle::new(reservation.subject()),
+            request.phase().reservation().subject(),
+            reservation.subject(),
+            request.phase().operation(),
+            0,
+            RetryClass::Never,
+            0,
+            0,
+        )
+        .expect("zero-retry transfer record fits its admitted slot")
+        .with_diagnostic_identities(Some(self.thing_slot), None, None, None);
+        self.accepted = Some(HostCallTransfer {
+            ownership: HostCallTransferOwnership::Acknowledged {
+                envelope: CleanupTransferEnvelope::new(request, call),
+                reservation,
+                record,
+            },
+        });
+        CleanupTransferAcceptance::Accepted(record)
+    }
+}
+
+#[cfg(feature = "std")]
+impl<T: 'static, C: 'static> HostCallTransfer<T, C> {
+    fn source(request: CleanupTransferRequest, call: HostBindingCallBox<T, C>) -> Self {
+        Self {
+            ownership: HostCallTransferOwnership::Source(CleanupTransferEnvelope::new(
+                request, call,
+            )),
+        }
+    }
+
+    fn progress(
+        self,
+        admission: &mut AdmissionReservations,
+        thing_slot: ThingSlotId,
+        cx: &mut Context<'_>,
+        budget: &mut WorkBudget,
+    ) -> HostTransferProgress<T, C> {
+        match self.ownership {
+            HostCallTransferOwnership::Source(envelope) => {
+                let Some(reservation) = admission.transfer_cleanup.take() else {
+                    return HostTransferProgress::Pending(Self {
+                        ownership: HostCallTransferOwnership::Source(envelope),
+                    });
+                };
+                let mut target = HostTransferTarget::new(thing_slot, reservation);
+                match target.try_accept(envelope) {
+                    CleanupTransferAcceptance::Accepted(record) => {
+                        let (reservation, accepted) = target.into_parts();
+                        debug_assert!(reservation.is_none());
+                        let accepted = accepted.expect("accepted target retains the complete call");
+                        debug_assert!(matches!(
+                            accepted.ownership,
+                            HostCallTransferOwnership::Acknowledged { record: saved, .. }
+                                if saved == record
+                        ));
+                        HostTransferProgress::Pending(accepted)
+                    }
+                    CleanupTransferAcceptance::Rejected(envelope) => {
+                        let (reservation, accepted) = target.into_parts();
+                        debug_assert!(accepted.is_none());
+                        admission.transfer_cleanup = reservation;
+                        HostTransferProgress::Pending(Self {
+                            ownership: HostCallTransferOwnership::Source(envelope),
+                        })
+                    }
+                }
+            }
+            HostCallTransferOwnership::Acknowledged {
+                envelope,
+                reservation,
+                record,
+            } => {
+                let (request, mut call) = envelope.into_parts();
+                match call.as_pin_mut().poll_cancel(cx, budget) {
+                    Poll::Pending => HostTransferProgress::Pending(Self {
+                        ownership: HostCallTransferOwnership::Acknowledged {
+                            envelope: CleanupTransferEnvelope::new(request, call),
+                            reservation,
+                            record,
+                        },
+                    }),
+                    Poll::Ready(Err(error)) => HostTransferProgress::Error {
+                        transfer: Self {
+                            ownership: HostCallTransferOwnership::Acknowledged {
+                                envelope: CleanupTransferEnvelope::new(request, call),
+                                reservation,
+                                record,
+                            },
+                        },
+                        error,
+                    },
+                    Poll::Ready(Ok(settlement)) => {
+                        debug_assert_eq!(record.owner(), request.requested_owner());
+                        debug_assert_eq!(record.subject(), request.phase().reservation().subject());
+                        drop(request);
+                        HostTransferProgress::Ready {
+                            call,
+                            settlement,
+                            reservation,
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+#[cfg(feature = "std")]
 enum HostRouteState {
     Absent,
     Preparing(HostPrepareCall),
     CancellingPrepare(HostPrepareCall),
+    TransferringPrepare(
+        HostCallTransfer<RoutePrepareOutcome<HostPreparedRouteGuard>, HostRouteCleanupSuccessor>,
+    ),
     JoiningPrepare(HostPrepareCall),
     Prepared(HostPreparedRouteGuard),
     AwaitingReadiness(HostReadinessCall),
     CancellingReadiness(HostReadinessCall),
+    TransferringReadiness(
+        HostCallTransfer<RouteReadinessOutcome<HostPreparedRouteGuard>, HostRouteCleanupSuccessor>,
+    ),
     JoiningReadiness(HostReadinessCall),
     Ready(HostPreparedRouteGuard),
     Activating(HostActivationCall),
     CancellingActivation(HostActivationCall),
+    TransferringActivation(
+        HostCallTransfer<
+            RouteActivationOutcome<HostPreparedRouteGuard, HostActiveRouteGuard>,
+            HostRouteCleanupSuccessor,
+        >,
+    ),
     JoiningActivation(HostActivationCall),
     Active(HostActiveRouteGuard),
     Committing(HostCommitCall),
     CancellingCommit(HostCommitCall),
+    TransferringCommit(
+        HostCallTransfer<
+            RouteCommitOutcome<HostActiveRouteGuard, HostCommittedRouteGuard>,
+            HostRouteCleanupSuccessor,
+        >,
+    ),
     JoiningCommit(HostCommitCall),
     CommittedClosed(HostCommittedRouteGuard),
     Serving(HostCommittedRouteGuard),
@@ -2104,6 +2406,10 @@ enum HostRouteState {
         guard: HostCommittedRouteGuard,
         call: HostBindingCallBox<BindingDeliveryOutcome>,
     },
+    TransferringDelivery {
+        guard: HostCommittedRouteGuard,
+        transfer: HostCallTransfer<BindingDeliveryOutcome, clinkz_wot_core::NoCleanupSuccessor>,
+    },
     JoiningDelivery {
         guard: HostCommittedRouteGuard,
         call: HostBindingCallBox<BindingDeliveryOutcome>,
@@ -2113,6 +2419,7 @@ enum HostRouteState {
     Cleaning(HostCleanupCall),
     RejectingCleanup(HostCleanupCall),
     CancellingCleanup(HostCleanupCall),
+    TransferringCleanup(HostCallTransfer<RouteCleanupOutcome, HostRouteCleanupSuccessor>),
     JoiningCleanup(HostCleanupCall),
     Closed,
 }
@@ -2294,6 +2601,10 @@ impl HostPropertyReadRuntime {
                 self.route.state = if self.admission.admits_host_call(&mut call) {
                     HostRouteState::Cleaning(call)
                 } else {
+                    assert!(
+                        self.admission.admits_host_call_recovery(&mut call),
+                        "Host abort call exceeds its separately admitted recovery ceiling"
+                    );
                     self.disposition
                         .record_core_failure(validation_error(self.thing_slot));
                     HostRouteState::RejectingCleanup(call)
@@ -2313,6 +2624,10 @@ impl HostPropertyReadRuntime {
                 self.route.state = if self.admission.admits_host_call(&mut call) {
                     HostRouteState::Cleaning(call)
                 } else {
+                    assert!(
+                        self.admission.admits_host_call_recovery(&mut call),
+                        "Host shutdown call exceeds its separately admitted recovery ceiling"
+                    );
                     self.disposition
                         .record_core_failure(validation_error(self.thing_slot));
                     HostRouteState::RejectingCleanup(call)
@@ -2414,17 +2729,27 @@ impl HostPropertyReadRuntime {
     fn cancel_disposition(
         &mut self,
         disposition: BindingCancellationDisposition<HostRouteCleanupSuccessor>,
-    ) -> Option<StepStatus<()>> {
+    ) -> Result<StepStatus<()>, CleanupTransferRequest> {
         match disposition {
             BindingCancellationDisposition::Complete { successor } => {
-                Some(self.cancel_successor(successor))
+                Ok(self.cancel_successor(successor))
             }
-            BindingCancellationDisposition::TransferRequired(_) => None,
+            BindingCancellationDisposition::TransferRequired(request) => Err(request),
             BindingCancellationDisposition::ResidualExternalState { successor, record } => {
                 self.disposition.retain_residual(record);
-                Some(self.cancel_successor(successor))
+                Ok(self.cancel_successor(successor))
             }
         }
+    }
+
+    fn restore_transfer_reservation(&mut self, reservation: CleanupReservation) {
+        assert!(
+            self.admission
+                .transfer_cleanup
+                .replace(reservation)
+                .is_none(),
+            "one acknowledged transfer owns the named reservation"
+        );
     }
 
     fn settle_prepare(
@@ -2446,12 +2771,14 @@ impl HostPropertyReadRuntime {
             }
             BindingCallSettlement::Cancelled { disposition, .. } => {
                 match self.cancel_disposition(disposition) {
-                    Some(status) => {
+                    Ok(status) => {
                         drop(call);
                         status
                     }
-                    None => {
-                        self.route.state = HostRouteState::CancellingPrepare(call);
+                    Err(request) => {
+                        self.route.state = HostRouteState::TransferringPrepare(
+                            HostCallTransfer::source(request, call),
+                        );
                         progress(PendingWorkClass::Cleanup)
                     }
                 }
@@ -2478,12 +2805,14 @@ impl HostPropertyReadRuntime {
             }
             BindingCallSettlement::Cancelled { disposition, .. } => {
                 match self.cancel_disposition(disposition) {
-                    Some(status) => {
+                    Ok(status) => {
                         drop(call);
                         status
                     }
-                    None => {
-                        self.route.state = HostRouteState::CancellingReadiness(call);
+                    Err(request) => {
+                        self.route.state = HostRouteState::TransferringReadiness(
+                            HostCallTransfer::source(request, call),
+                        );
                         progress(PendingWorkClass::Cleanup)
                     }
                 }
@@ -2513,12 +2842,14 @@ impl HostPropertyReadRuntime {
             }
             BindingCallSettlement::Cancelled { disposition, .. } => {
                 match self.cancel_disposition(disposition) {
-                    Some(status) => {
+                    Ok(status) => {
                         drop(call);
                         status
                     }
-                    None => {
-                        self.route.state = HostRouteState::CancellingActivation(call);
+                    Err(request) => {
+                        self.route.state = HostRouteState::TransferringActivation(
+                            HostCallTransfer::source(request, call),
+                        );
                         progress(PendingWorkClass::Cleanup)
                     }
                 }
@@ -2545,12 +2876,14 @@ impl HostPropertyReadRuntime {
             }
             BindingCallSettlement::Cancelled { disposition, .. } => {
                 match self.cancel_disposition(disposition) {
-                    Some(status) => {
+                    Ok(status) => {
                         drop(call);
                         status
                     }
-                    None => {
-                        self.route.state = HostRouteState::CancellingCommit(call);
+                    Err(request) => {
+                        self.route.state = HostRouteState::TransferringCommit(
+                            HostCallTransfer::source(request, call),
+                        );
                         progress(PendingWorkClass::Cleanup)
                     }
                 }
@@ -2614,8 +2947,11 @@ impl HostPropertyReadRuntime {
                     self.disposition.retain_residual(record);
                     self.start_shutdown(HostShutdownRouteGuard::Committed(guard))
                 }
-                BindingCancellationDisposition::TransferRequired(_) => {
-                    self.route.state = HostRouteState::CancellingDelivery { guard, call };
+                BindingCancellationDisposition::TransferRequired(request) => {
+                    self.route.state = HostRouteState::TransferringDelivery {
+                        guard,
+                        transfer: HostCallTransfer::source(request, call),
+                    };
                     progress(PendingWorkClass::Cleanup)
                 }
             },
@@ -2634,12 +2970,14 @@ impl HostPropertyReadRuntime {
             }
             BindingCallSettlement::Cancelled { disposition, .. } => {
                 match self.cancel_disposition(disposition) {
-                    Some(status) => {
+                    Ok(status) => {
                         drop(call);
                         status
                     }
-                    None => {
-                        self.route.state = HostRouteState::CancellingCleanup(call);
+                    Err(request) => {
+                        self.route.state = HostRouteState::TransferringCleanup(
+                            HostCallTransfer::source(request, call),
+                        );
                         progress(PendingWorkClass::Cleanup)
                     }
                 }
@@ -2848,7 +3186,7 @@ impl HostPropertyReadRuntime {
         self.start_shutdown(guard)
     }
 
-    fn step_planning(&mut self, budget: &mut WorkBudget) -> StepStatus<()> {
+    fn step_planning(&mut self, cx: &mut Context<'_>, budget: &mut WorkBudget) -> StepStatus<()> {
         let td = self.td.as_ref().expect("building retains the TD");
         let plan_id = PlanId::new(self.thing_slot.slot(), self.thing_slot.generation());
         let generation = PlanSetGeneration::new(self.thing_slot.generation());
@@ -2943,8 +3281,14 @@ impl HostPropertyReadRuntime {
                     }
                 };
                 if !self.admission.admits_host_call(&mut call) {
-                    drop(call);
-                    return self.fail_without_route(validation_error(self.thing_slot));
+                    assert!(
+                        self.admission.admits_host_call_recovery(&mut call),
+                        "Host prepare call exceeds its separately admitted recovery ceiling"
+                    );
+                    self.disposition
+                        .record_core_failure(validation_error(self.thing_slot));
+                    self.expose = ExposeState::Cancelling;
+                    return self.start_cancel_prepare(call, cx, budget);
                 }
                 self.route.state = HostRouteState::Preparing(call);
                 progress(PendingWorkClass::BindingInput)
@@ -3070,6 +3414,10 @@ impl HostPropertyReadRuntime {
         self.route.state = if self.admission.admits_host_call(&mut call) {
             HostRouteState::Delivering { guard, call }
         } else {
+            assert!(
+                self.admission.admits_host_call_recovery(&mut call),
+                "Host delivery call exceeds its separately admitted recovery ceiling"
+            );
             self.disposition
                 .record_core_failure(validation_error(self.thing_slot));
             self.expose = ExposeState::Draining;
@@ -3082,7 +3430,7 @@ impl HostPropertyReadRuntime {
         if self.expose == ExposeState::Preparing
             && self.plan_set.state == CompiledPlanSetState::Building
         {
-            return self.step_planning(budget);
+            return self.step_planning(cx, budget);
         }
         let state = core::mem::replace(&mut self.route.state, HostRouteState::Absent);
         match state {
@@ -3126,6 +3474,27 @@ impl HostPropertyReadRuntime {
                     }
                 }
             }
+            HostRouteState::TransferringPrepare(transfer) => {
+                match transfer.progress(&mut self.admission, self.thing_slot, cx, budget) {
+                    HostTransferProgress::Pending(transfer) => {
+                        self.route.state = HostRouteState::TransferringPrepare(transfer);
+                        progress(PendingWorkClass::Cleanup)
+                    }
+                    HostTransferProgress::Ready {
+                        call,
+                        settlement,
+                        reservation,
+                    } => {
+                        self.restore_transfer_reservation(reservation);
+                        self.settle_prepare(call, settlement)
+                    }
+                    HostTransferProgress::Error { transfer, error } => {
+                        self.disposition.record_core_failure(error);
+                        self.route.state = HostRouteState::TransferringPrepare(transfer);
+                        progress(PendingWorkClass::Cleanup)
+                    }
+                }
+            }
             HostRouteState::JoiningPrepare(mut call) => {
                 match call.as_pin_mut().poll_result(cx, budget) {
                     Poll::Pending => {
@@ -3154,6 +3523,10 @@ impl HostPropertyReadRuntime {
                     }
                 };
                 if !self.admission.admits_host_call(&mut call) {
+                    assert!(
+                        self.admission.admits_host_call_recovery(&mut call),
+                        "Host readiness call exceeds its separately admitted recovery ceiling"
+                    );
                     self.disposition
                         .record_core_failure(validation_error(self.thing_slot));
                     self.expose = ExposeState::Cancelling;
@@ -3198,6 +3571,27 @@ impl HostPropertyReadRuntime {
                     }
                 }
             }
+            HostRouteState::TransferringReadiness(transfer) => {
+                match transfer.progress(&mut self.admission, self.thing_slot, cx, budget) {
+                    HostTransferProgress::Pending(transfer) => {
+                        self.route.state = HostRouteState::TransferringReadiness(transfer);
+                        progress(PendingWorkClass::Cleanup)
+                    }
+                    HostTransferProgress::Ready {
+                        call,
+                        settlement,
+                        reservation,
+                    } => {
+                        self.restore_transfer_reservation(reservation);
+                        self.settle_readiness(call, settlement)
+                    }
+                    HostTransferProgress::Error { transfer, error } => {
+                        self.disposition.record_core_failure(error);
+                        self.route.state = HostRouteState::TransferringReadiness(transfer);
+                        progress(PendingWorkClass::Cleanup)
+                    }
+                }
+            }
             HostRouteState::JoiningReadiness(mut call) => {
                 match call.as_pin_mut().poll_result(cx, budget) {
                     Poll::Pending => {
@@ -3226,6 +3620,10 @@ impl HostPropertyReadRuntime {
                     }
                 };
                 if !self.admission.admits_host_call(&mut call) {
+                    assert!(
+                        self.admission.admits_host_call_recovery(&mut call),
+                        "Host activation call exceeds its separately admitted recovery ceiling"
+                    );
                     self.disposition
                         .record_core_failure(validation_error(self.thing_slot));
                     self.expose = ExposeState::Cancelling;
@@ -3269,6 +3667,27 @@ impl HostPropertyReadRuntime {
                     }
                 }
             }
+            HostRouteState::TransferringActivation(transfer) => {
+                match transfer.progress(&mut self.admission, self.thing_slot, cx, budget) {
+                    HostTransferProgress::Pending(transfer) => {
+                        self.route.state = HostRouteState::TransferringActivation(transfer);
+                        progress(PendingWorkClass::Cleanup)
+                    }
+                    HostTransferProgress::Ready {
+                        call,
+                        settlement,
+                        reservation,
+                    } => {
+                        self.restore_transfer_reservation(reservation);
+                        self.settle_activation(call, settlement)
+                    }
+                    HostTransferProgress::Error { transfer, error } => {
+                        self.disposition.record_core_failure(error);
+                        self.route.state = HostRouteState::TransferringActivation(transfer);
+                        progress(PendingWorkClass::Cleanup)
+                    }
+                }
+            }
             HostRouteState::JoiningActivation(mut call) => {
                 match call.as_pin_mut().poll_result(cx, budget) {
                     Poll::Pending => {
@@ -3298,6 +3717,10 @@ impl HostPropertyReadRuntime {
                     }
                 };
                 if !self.admission.admits_host_call(&mut call) {
+                    assert!(
+                        self.admission.admits_host_call_recovery(&mut call),
+                        "Host commit call exceeds its separately admitted recovery ceiling"
+                    );
                     self.disposition
                         .record_core_failure(validation_error(self.thing_slot));
                     self.expose = ExposeState::Cancelling;
@@ -3336,6 +3759,27 @@ impl HostPropertyReadRuntime {
                     Poll::Ready(Err(error)) => {
                         self.disposition.record_core_failure(error);
                         self.route.state = HostRouteState::CancellingCommit(call);
+                        progress(PendingWorkClass::Cleanup)
+                    }
+                }
+            }
+            HostRouteState::TransferringCommit(transfer) => {
+                match transfer.progress(&mut self.admission, self.thing_slot, cx, budget) {
+                    HostTransferProgress::Pending(transfer) => {
+                        self.route.state = HostRouteState::TransferringCommit(transfer);
+                        progress(PendingWorkClass::Cleanup)
+                    }
+                    HostTransferProgress::Ready {
+                        call,
+                        settlement,
+                        reservation,
+                    } => {
+                        self.restore_transfer_reservation(reservation);
+                        self.settle_commit(call, settlement)
+                    }
+                    HostTransferProgress::Error { transfer, error } => {
+                        self.disposition.record_core_failure(error);
+                        self.route.state = HostRouteState::TransferringCommit(transfer);
                         progress(PendingWorkClass::Cleanup)
                     }
                 }
@@ -3477,6 +3921,27 @@ impl HostPropertyReadRuntime {
                     }
                 }
             }
+            HostRouteState::TransferringDelivery { guard, transfer } => {
+                match transfer.progress(&mut self.admission, self.thing_slot, cx, budget) {
+                    HostTransferProgress::Pending(transfer) => {
+                        self.route.state = HostRouteState::TransferringDelivery { guard, transfer };
+                        progress(PendingWorkClass::Cleanup)
+                    }
+                    HostTransferProgress::Ready {
+                        call,
+                        settlement,
+                        reservation,
+                    } => {
+                        self.restore_transfer_reservation(reservation);
+                        self.settle_delivery(call, guard, settlement)
+                    }
+                    HostTransferProgress::Error { transfer, error } => {
+                        self.disposition.record_core_failure(error);
+                        self.route.state = HostRouteState::TransferringDelivery { guard, transfer };
+                        progress(PendingWorkClass::Cleanup)
+                    }
+                }
+            }
             HostRouteState::JoiningDelivery { guard, mut call } => {
                 match call.as_pin_mut().poll_result(cx, budget) {
                     Poll::Pending => {
@@ -3508,6 +3973,27 @@ impl HostPropertyReadRuntime {
                     Poll::Ready(Err(error)) => {
                         self.disposition.record_core_failure(error);
                         self.route.state = HostRouteState::CancellingCleanup(call);
+                        progress(PendingWorkClass::Cleanup)
+                    }
+                }
+            }
+            HostRouteState::TransferringCleanup(transfer) => {
+                match transfer.progress(&mut self.admission, self.thing_slot, cx, budget) {
+                    HostTransferProgress::Pending(transfer) => {
+                        self.route.state = HostRouteState::TransferringCleanup(transfer);
+                        progress(PendingWorkClass::Cleanup)
+                    }
+                    HostTransferProgress::Ready {
+                        call,
+                        settlement,
+                        reservation,
+                    } => {
+                        self.restore_transfer_reservation(reservation);
+                        self.settle_cleanup_call(call, settlement)
+                    }
+                    HostTransferProgress::Error { transfer, error } => {
+                        self.disposition.record_core_failure(error);
+                        self.route.state = HostRouteState::TransferringCleanup(transfer);
                         progress(PendingWorkClass::Cleanup)
                     }
                 }

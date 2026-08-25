@@ -86,7 +86,9 @@ mod tests {
     };
     use clinkz_wot_property_read_binding_fixture::{
         DeliveredResponseEvidence, HostPropertyReadProbe, MockLifecyclePhase,
-        StaticPropertyReadProbe, host_property_read_fixture,
+        StaticPropertyReadProbe, host_property_read_activation_transfer_fixture,
+        host_property_read_cleanup_transfer_fixture,
+        host_property_read_delivery_error_transfer_fixture, host_property_read_fixture,
         host_property_read_oversized_activation_fixture,
         host_property_read_oversized_shutdown_fixture,
         host_property_read_readiness_rejection_fixture, static_property_read_fixture,
@@ -852,7 +854,7 @@ mod tests {
     }
 
     #[test]
-    fn oversized_activation_call_has_no_constructor_side_effect_and_preserves_predecessor() {
+    fn oversized_activation_uses_separately_admitted_recovery_and_preserves_predecessor() {
         let (binding, probe) = host_property_read_oversized_activation_fixture();
         let servient = ServientBuilder::new()
             .resource_limits(GatewayDefaultV1::LIMITS.clone())
@@ -880,6 +882,7 @@ mod tests {
             probe.lifecycle_cancellations(MockLifecyclePhase::Activate),
             1
         );
+        assert_eq!(probe.cancellation_polls(MockLifecyclePhase::Activate), 2);
         assert_eq!(probe.cleanup_attempts(), (1, 0));
         let call_context = assert_cleanup_context_round_trip(
             &probe,
@@ -896,6 +899,189 @@ mod tests {
         assert!(prepared.is_some());
         assert!(active.is_none());
         assert!(committed.is_none());
+        assert_host_clean(&probe, &mut cx);
+    }
+
+    #[test]
+    fn insufficient_host_call_recovery_capacity_rejects_before_construction_or_polling() {
+        for (kind, limit) in [
+            (ResourceKind::CleanupItemsMax, 31),
+            (ResourceKind::BindingCancelBufferBytesPerCallMax, 1_023),
+        ] {
+            let (binding, probe) = host_property_read_oversized_activation_fixture();
+            let mut limits = GatewayDefaultV1::LIMITS.clone();
+            assert!(limits.set(kind, Some(limit)));
+            let servient = ServientBuilder::new()
+                .resource_limits(limits)
+                .binding_registration(binding)
+                .build()
+                .expect("binding registration remains a legal root");
+            assert!(
+                servient.produce_td(thing()).is_err(),
+                "{kind:?} did not reject insufficient recovery admission"
+            );
+            assert_eq!(probe.carrier_checks(), 0);
+            assert_eq!(probe.preparation_side_effects(), 0);
+            assert_eq!(probe.lifecycle_starts(MockLifecyclePhase::Prepare), 0);
+            assert_eq!(probe.lifecycle_starts(MockLifecyclePhase::Activate), 0);
+            assert_eq!(
+                probe.lifecycle_cancellations(MockLifecyclePhase::Activate),
+                0
+            );
+            assert_eq!(probe.cancellation_polls(MockLifecyclePhase::Activate), 0);
+            assert_eq!(probe.outstanding_counts(), (0, 0, 0, 0));
+            assert_eq!(probe.route_state_drops(), 0);
+        }
+    }
+
+    #[test]
+    fn lifecycle_transfer_retains_exact_context_until_named_owner_acknowledges_and_settles() {
+        let (binding, probe) = host_property_read_activation_transfer_fixture();
+        let servient = ServientBuilder::new()
+            .resource_limits(GatewayDefaultV1::LIMITS.clone())
+            .binding_registration(binding)
+            .build()
+            .unwrap();
+        let exposed = servient.produce_td(thing()).unwrap();
+        exposed
+            .set_read_property_handler(
+                PROPERTY,
+                Handler {
+                    calls: Arc::new(AtomicU32::new(0)),
+                    evidence: Arc::new(Mutex::new(None)),
+                },
+                HandlerFootprint::new(1, 0, 0),
+            )
+            .unwrap();
+        exposed.begin_expose().unwrap();
+        let waker = Waker::noop();
+        let mut cx = Context::from_waker(waker);
+        for _ in 0..32 {
+            let _ = servient.step(&mut cx, &mut work_budget());
+            if probe.lifecycle_starts(MockLifecyclePhase::Activate) == 1 {
+                break;
+            }
+        }
+        exposed.begin_destroy().unwrap();
+        drive_host_until_idle(&servient, &mut cx);
+
+        let context = assert_cleanup_context_round_trip(
+            &probe,
+            MockLifecyclePhase::Activate,
+            CleanupOperation::CancelRouteReadiness,
+        );
+        let (requested, continuations, owner) =
+            probe.transfer_evidence(MockLifecyclePhase::Activate);
+        assert_eq!(requested, Some(context.clone()));
+        assert_eq!(continuations, 1);
+        assert_ne!(owner, Some(context.subject()));
+        assert_eq!(probe.cancellation_polls(MockLifecyclePhase::Activate), 3);
+        assert_eq!(probe.cleanup_attempts(), (1, 0));
+        assert_host_clean(&probe, &mut cx);
+    }
+
+    #[test]
+    fn delivery_cancel_error_retries_with_same_context_then_transfers_and_settles() {
+        let (binding, probe) = host_property_read_delivery_error_transfer_fixture();
+        let servient = ServientBuilder::new()
+            .resource_limits(GatewayDefaultV1::LIMITS.clone())
+            .binding_registration(binding)
+            .build()
+            .unwrap();
+        let calls = Arc::new(AtomicU32::new(0));
+        let exposed = servient.produce_td(thing()).unwrap();
+        exposed
+            .set_read_property_handler(
+                PROPERTY,
+                Handler {
+                    calls: Arc::clone(&calls),
+                    evidence: Arc::new(Mutex::new(None)),
+                },
+                HandlerFootprint::new(1, 0, 0),
+            )
+            .unwrap();
+        exposed.begin_expose().unwrap();
+        let waker = Waker::noop();
+        let mut cx = Context::from_waker(waker);
+        drive_host_until_idle(&servient, &mut cx);
+        probe.enqueue_property_read(PROPERTY, InteractionInput::empty());
+        for _ in 0..32 {
+            let _ = servient.step(&mut cx, &mut work_budget());
+            if probe.lifecycle_starts(MockLifecyclePhase::ResponseDelivery) == 1 {
+                break;
+            }
+        }
+        exposed.begin_destroy().unwrap();
+        drive_host_until_idle(&servient, &mut cx);
+
+        let context = assert_cleanup_context_round_trip(
+            &probe,
+            MockLifecyclePhase::ResponseDelivery,
+            CleanupOperation::CancelResponseDelivery,
+        );
+        let (requested, continuations, owner) =
+            probe.transfer_evidence(MockLifecyclePhase::ResponseDelivery);
+        assert_eq!(probe.delivery_cancel_errors(), 1);
+        assert_eq!(
+            probe.cancellation_polls(MockLifecyclePhase::ResponseDelivery),
+            4
+        );
+        assert_eq!(requested, Some(context.clone()));
+        assert_eq!(continuations, 1);
+        assert_ne!(owner, Some(context.subject()));
+        assert_eq!(calls.load(Ordering::SeqCst), 1);
+        assert_eq!(probe.response_settlements(), 1);
+        assert_eq!(probe.delivered_responses(), 0);
+        assert_host_clean(&probe, &mut cx);
+    }
+
+    #[test]
+    fn cleanup_call_transfer_retains_route_and_call_contexts_to_acknowledged_terminal() {
+        let (binding, probe) = host_property_read_cleanup_transfer_fixture();
+        let servient = ServientBuilder::new()
+            .resource_limits(GatewayDefaultV1::LIMITS.clone())
+            .binding_registration(binding)
+            .build()
+            .unwrap();
+        let exposed = servient.produce_td(thing()).unwrap();
+        exposed
+            .set_read_property_handler(
+                PROPERTY,
+                Handler {
+                    calls: Arc::new(AtomicU32::new(0)),
+                    evidence: Arc::new(Mutex::new(None)),
+                },
+                HandlerFootprint::new(1, 0, 0),
+            )
+            .unwrap();
+        exposed.begin_expose().unwrap();
+        let waker = Waker::noop();
+        let mut cx = Context::from_waker(waker);
+        drive_host_until_idle(&servient, &mut cx);
+        exposed.begin_destroy().unwrap();
+        drive_host_until_idle(&servient, &mut cx);
+
+        let route_context = assert_cleanup_context_round_trip(
+            &probe,
+            MockLifecyclePhase::Shutdown,
+            CleanupOperation::ShutdownRoute,
+        );
+        let call_context = assert_cleanup_context_round_trip(
+            &probe,
+            MockLifecyclePhase::CleanupCallCancellation,
+            CleanupOperation::CancelProcess,
+        );
+        let (requested, continuations, owner) =
+            probe.transfer_evidence(MockLifecyclePhase::CleanupCallCancellation);
+        assert_ne!(route_context.subject(), call_context.subject());
+        assert_eq!(requested, Some(call_context.clone()));
+        assert_eq!(continuations, 1);
+        assert_ne!(owner, Some(call_context.subject()));
+        assert_eq!(
+            probe.cancellation_polls(MockLifecyclePhase::CleanupCallCancellation),
+            3
+        );
+        assert_eq!(probe.cleanup_attempts(), (0, 1));
         assert_host_clean(&probe, &mut cx);
     }
 

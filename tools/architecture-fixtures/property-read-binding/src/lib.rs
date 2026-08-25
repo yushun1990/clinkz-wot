@@ -1324,17 +1324,17 @@ mod host_fixture {
         BindingDeliveryOutcome, BindingExecutionSupport, BindingGeneration, BindingId,
         BindingInputRejection, BindingLifetimeFootprint, BindingOperationalError,
         BindingRegistrationCapabilities, BindingRegistrationIdentity, BindingResourceDeclarations,
-        BindingStatusPolicy, CleanupOperation, CleanupPhaseContext, CleanupSlotId, CoreError,
-        CorrelationId, Deadline, ErrorContext, ErrorPhase, HostActiveRouteGuard,
-        HostBindingArtifact, HostBindingCall, HostBindingCallBox, HostBindingCompilerRegistration,
-        HostBindingRegistration, HostBindingRegistrationInput, HostCommittedRouteGuard,
-        HostPreparedRouteGuard, HostRouteCleanupSuccessor, InteractionInput, NoCleanupSuccessor,
-        PrepareInput, RetryClass, RouteAbortInput, RouteActivationOutcome, RouteCleanupOutcome,
-        RouteCommitOutcome, RouteInboundRequest, RouteInboundResponse, RoutePrepareOutcome,
-        RouteReadinessOutcome, RouteServerBinding, RouteShutdownInput, RouteTerminal, StartStatus,
-        WotLock,
+        BindingStatusPolicy, CleanupOperation, CleanupPhaseContext, CleanupSlotId,
+        CleanupTransferRequest, CoreError, CorrelationId, Deadline, ErrorContext, ErrorPhase,
+        HostActiveRouteGuard, HostBindingArtifact, HostBindingCall, HostBindingCallBox,
+        HostBindingCompilerRegistration, HostBindingRegistration, HostBindingRegistrationInput,
+        HostCommittedRouteGuard, HostPreparedRouteGuard, HostRouteCleanupSuccessor,
+        InteractionInput, NoCleanupSuccessor, PrepareInput, RetryClass, RouteAbortInput,
+        RouteActivationOutcome, RouteCleanupOutcome, RouteCommitOutcome, RouteInboundRequest,
+        RouteInboundResponse, RoutePrepareOutcome, RouteReadinessOutcome, RouteServerBinding,
+        RouteShutdownInput, RouteTerminal, StartStatus, WotLock,
     };
-    use clinkz_wot_foundation::{WorkBudget, WorkClass};
+    use clinkz_wot_foundation::{SlotIndex, WorkBudget, WorkClass};
 
     use super::{
         DeliveredResponseEvidence, FIXTURE_INGRESS_BYTES, IngressAccounting, MOCK_PHASE_COUNT,
@@ -1419,8 +1419,13 @@ mod host_fixture {
         preparation_side_effects: u32,
         lifecycle_starts: [u32; MOCK_PHASE_COUNT],
         lifecycle_cancellations: [u32; MOCK_PHASE_COUNT],
+        cancellation_polls: [u32; MOCK_PHASE_COUNT],
         cleanup_context_started: [Option<CleanupContextEvidence>; MOCK_PHASE_COUNT],
         cleanup_context_settled: [Option<CleanupContextEvidence>; MOCK_PHASE_COUNT],
+        transfer_requested: [Option<CleanupContextEvidence>; MOCK_PHASE_COUNT],
+        transfer_continuations: [u32; MOCK_PHASE_COUNT],
+        transfer_owner: [Option<CleanupSlotId>; MOCK_PHASE_COUNT],
+        delivery_cancel_errors: u32,
         closed: bool,
         prepared_target: Option<Box<str>>,
         prepared_state_address: Option<usize>,
@@ -1456,8 +1461,13 @@ mod host_fixture {
                 preparation_side_effects: 0,
                 lifecycle_starts: [0; MOCK_PHASE_COUNT],
                 lifecycle_cancellations: [0; MOCK_PHASE_COUNT],
+                cancellation_polls: [0; MOCK_PHASE_COUNT],
                 cleanup_context_started: core::array::from_fn(|_| None),
                 cleanup_context_settled: core::array::from_fn(|_| None),
+                transfer_requested: core::array::from_fn(|_| None),
+                transfer_continuations: [0; MOCK_PHASE_COUNT],
+                transfer_owner: [None; MOCK_PHASE_COUNT],
+                delivery_cancel_errors: 0,
                 closed: false,
                 prepared_target: None,
                 prepared_state_address: None,
@@ -1742,6 +1752,28 @@ mod host_fixture {
                 .with_read(|state| state.lifecycle_cancellations[phase as usize])
         }
 
+        pub fn cancellation_polls(&self, phase: MockLifecyclePhase) -> u32 {
+            self.state
+                .with_read(|state| state.cancellation_polls[phase as usize])
+        }
+
+        pub fn delivery_cancel_errors(&self) -> u32 {
+            self.state.with_read(|state| state.delivery_cancel_errors)
+        }
+
+        pub fn transfer_evidence(
+            &self,
+            phase: MockLifecyclePhase,
+        ) -> (Option<CleanupContextEvidence>, u32, Option<CleanupSlotId>) {
+            self.state.with_read(|state| {
+                (
+                    state.transfer_requested[phase as usize].clone(),
+                    state.transfer_continuations[phase as usize],
+                    state.transfer_owner[phase as usize],
+                )
+            })
+        }
+
         pub fn cleanup_context_evidence(
             &self,
             phase: MockLifecyclePhase,
@@ -1808,6 +1840,55 @@ mod host_fixture {
                     .replace(evidence)
                     .is_none(),
                 "cleanup context settled twice"
+            );
+        });
+    }
+
+    fn record_cancel_poll(probe: &WotLock<ProbeState>, phase: MockLifecyclePhase) {
+        probe.with(|state| state.cancellation_polls[phase as usize] += 1);
+    }
+
+    fn transfer_request(
+        probe: &WotLock<ProbeState>,
+        phase: MockLifecyclePhase,
+        cleanup: CleanupPhaseContext,
+    ) -> CleanupTransferRequest {
+        let evidence = CleanupContextEvidence::from_context(&cleanup);
+        let subject = cleanup.reservation().subject();
+        let base = subject.slot().get() / 4 * 4;
+        let owner = CleanupSlotId::new(
+            SlotIndex::new(base.checked_add(3).expect("four-slot Host cleanup block")),
+            subject.generation(),
+        );
+        probe.with(|state| {
+            assert!(
+                state.transfer_requested[phase as usize]
+                    .replace(evidence)
+                    .is_none(),
+                "cleanup transfer requested twice"
+            );
+            assert!(
+                state.transfer_owner[phase as usize]
+                    .replace(owner)
+                    .is_none(),
+                "cleanup transfer owner changed"
+            );
+        });
+        CleanupTransferRequest::new(cleanup, owner)
+    }
+
+    fn record_transfer_continuation(probe: &WotLock<ProbeState>, phase: MockLifecyclePhase) {
+        probe.with(|state| {
+            let evidence = state.transfer_requested[phase as usize]
+                .clone()
+                .expect("acknowledged transfer retains its exact cleanup context");
+            state.transfer_continuations[phase as usize] += 1;
+            assert_eq!(state.transfer_continuations[phase as usize], 1);
+            assert!(
+                state.cleanup_context_settled[phase as usize]
+                    .replace(evidence)
+                    .is_none(),
+                "transferred cleanup context settled twice"
             );
         });
     }
@@ -1941,6 +2022,7 @@ mod host_fixture {
                 >,
             >,
         > {
+            record_cancel_poll(&self.probe, MockLifecyclePhase::Prepare);
             let cleanup = self
                 .cancellation
                 .take()
@@ -2040,6 +2122,7 @@ mod host_fixture {
                 >,
             >,
         > {
+            record_cancel_poll(&self.probe, MockLifecyclePhase::Readiness);
             if budget.consume(WorkClass::CleanupItems, 1).is_err() {
                 return Poll::Pending;
             }
@@ -2076,6 +2159,8 @@ mod host_fixture {
         started: bool,
         probe: WotLock<ProbeState>,
         cancellation: Option<CleanupPhaseContext>,
+        transfer_once: bool,
+        transferred: bool,
     }
 
     impl
@@ -2160,6 +2245,7 @@ mod host_fixture {
                 >,
             >,
         > {
+            record_cancel_poll(&self.probe, MockLifecyclePhase::Activate);
             if budget.consume(WorkClass::CleanupItems, 1).is_err() {
                 return Poll::Pending;
             }
@@ -2168,10 +2254,31 @@ mod host_fixture {
                 cx.waker().wake_by_ref();
                 return Poll::Pending;
             }
+            if self.transferred {
+                record_transfer_continuation(&self.probe, MockLifecyclePhase::Activate);
+                return Poll::Ready(Ok(BindingCallSettlement::Cancelled {
+                    retry_class: RetryClass::Never,
+                    disposition: BindingCancellationDisposition::Complete {
+                        successor: HostRouteCleanupSuccessor::AbortPrepared(
+                            self.guard.take().expect("activation cancelled twice"),
+                        ),
+                    },
+                }));
+            }
             let cleanup = self
                 .cancellation
                 .take()
                 .expect("activation cancellation lost its cleanup context");
+            if self.transfer_once {
+                self.transfer_once = false;
+                self.transferred = true;
+                return Poll::Ready(Ok(BindingCallSettlement::Cancelled {
+                    retry_class: RetryClass::Never,
+                    disposition: BindingCancellationDisposition::TransferRequired(
+                        transfer_request(&self.probe, MockLifecyclePhase::Activate, cleanup),
+                    ),
+                }));
+            }
             record_cleanup_context_settlement(&self.probe, MockLifecyclePhase::Activate, &cleanup);
             Poll::Ready(Ok(BindingCallSettlement::Cancelled {
                 retry_class: RetryClass::Never,
@@ -2278,6 +2385,7 @@ mod host_fixture {
                 >,
             >,
         > {
+            record_cancel_poll(&self.probe, MockLifecyclePhase::Commit);
             if budget.consume(WorkClass::CleanupItems, 1).is_err() {
                 return Poll::Pending;
             }
@@ -2314,6 +2422,9 @@ mod host_fixture {
         cancel_pending_once: bool,
         started: bool,
         cancellation: Option<CleanupPhaseContext>,
+        cancel_identity_error_once: bool,
+        transfer_once: bool,
+        transferred: bool,
     }
 
     impl HostBindingCall<BindingDeliveryOutcome, NoCleanupSuccessor> for DeliveryCall {
@@ -2401,6 +2512,7 @@ mod host_fixture {
             budget: &mut WorkBudget,
         ) -> Poll<clinkz_wot_core::CoreResult<BindingCallSettlement<BindingDeliveryOutcome>>>
         {
+            record_cancel_poll(&self.probe, MockLifecyclePhase::ResponseDelivery);
             if budget.consume(WorkClass::CleanupItems, 1).is_err() {
                 return Poll::Pending;
             }
@@ -2409,32 +2521,62 @@ mod host_fixture {
                 cx.waker().wake_by_ref();
                 return Poll::Pending;
             }
-            let cleanup = self
-                .cancellation
-                .take()
-                .expect("delivery cancellation lost its cleanup context");
-            record_cleanup_context_settlement(
-                &self.probe,
-                MockLifecyclePhase::ResponseDelivery,
-                &cleanup,
-            );
             let response = self.response.take().expect("response cancelled twice");
             let io = self
                 .response_io
                 .upgrade()
                 .expect("cancelled delivery retains live route I/O");
             let mut io = io.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
-            let expected = io.in_flight.map(|correlation| (io.route, correlation));
+            let expected = if self.cancel_identity_error_once {
+                self.cancel_identity_error_once = false;
+                None
+            } else {
+                io.in_flight.map(|correlation| (io.route, correlation))
+            };
             let response = match validate_live_response_identity(response, expected) {
                 Ok(response) => response,
                 Err(rejection) => {
                     self.response = Some(rejection.into_input());
+                    self.probe.with(|state| state.delivery_cancel_errors += 1);
                     return Poll::Ready(Err(CoreError::Binding(ErrorContext::new(
                         ErrorPhase::Delivery,
                         RetryClass::Never,
                     ))));
                 }
             };
+            if self.transfer_once {
+                let cleanup = self
+                    .cancellation
+                    .take()
+                    .expect("delivery transfer lost its cleanup context");
+                self.transfer_once = false;
+                self.transferred = true;
+                self.response = Some(response);
+                drop(io);
+                return Poll::Ready(Ok(BindingCallSettlement::Cancelled {
+                    retry_class: RetryClass::Never,
+                    disposition: BindingCancellationDisposition::TransferRequired(
+                        transfer_request(
+                            &self.probe,
+                            MockLifecyclePhase::ResponseDelivery,
+                            cleanup,
+                        ),
+                    ),
+                }));
+            }
+            if self.transferred {
+                record_transfer_continuation(&self.probe, MockLifecyclePhase::ResponseDelivery);
+            } else {
+                let cleanup = self
+                    .cancellation
+                    .take()
+                    .expect("delivery cancellation lost its cleanup context");
+                record_cleanup_context_settlement(
+                    &self.probe,
+                    MockLifecyclePhase::ResponseDelivery,
+                    &cleanup,
+                );
+            }
             io.in_flight = None;
             io.release_retained();
             drop(io);
@@ -2499,6 +2641,8 @@ mod host_fixture {
         cancel_pending_once: bool,
         started: bool,
         cancellation: Option<CleanupPhaseContext>,
+        transfer_once: bool,
+        transferred: bool,
     }
 
     impl CleanupCall {
@@ -2508,6 +2652,7 @@ mod host_fixture {
             response_io: Arc<Mutex<Option<Weak<Mutex<HostRouteIo>>>>>,
             route_state_drops: Arc<AtomicU32>,
             footprint: BindingLifetimeFootprint,
+            transfer_once: bool,
         ) -> Self {
             let (guard, cleanup) = input.into_parts();
             let route = *guard.route();
@@ -2524,6 +2669,8 @@ mod host_fixture {
                 cancel_pending_once: true,
                 started: false,
                 cancellation: None,
+                transfer_once,
+                transferred: false,
             }
         }
 
@@ -2533,6 +2680,7 @@ mod host_fixture {
             response_io: Arc<Mutex<Option<Weak<Mutex<HostRouteIo>>>>>,
             route_state_drops: Arc<AtomicU32>,
             footprint: BindingLifetimeFootprint,
+            transfer_once: bool,
         ) -> Self {
             let (guard, cleanup) = input.into_parts();
             let route = match &guard {
@@ -2552,6 +2700,8 @@ mod host_fixture {
                 cancel_pending_once: true,
                 started: false,
                 cancellation: None,
+                transfer_once,
+                transferred: false,
             }
         }
 
@@ -2680,6 +2830,7 @@ mod host_fixture {
                 BindingCallSettlement<RouteCleanupOutcome, HostRouteCleanupSuccessor>,
             >,
         > {
+            record_cancel_poll(&self.probe, MockLifecyclePhase::CleanupCallCancellation);
             if budget.consume(WorkClass::CleanupItems, 1).is_err() {
                 return Poll::Pending;
             }
@@ -2689,10 +2840,38 @@ mod host_fixture {
                 cx.waker().wake_by_ref();
                 return Poll::Pending;
             }
+            if self.transferred {
+                record_transfer_continuation(
+                    &self.probe,
+                    MockLifecyclePhase::CleanupCallCancellation,
+                );
+                let route = self.route;
+                let _ = self.complete();
+                return Poll::Ready(Ok(BindingCallSettlement::Cancelled {
+                    retry_class: RetryClass::Never,
+                    disposition: BindingCancellationDisposition::Complete {
+                        successor: HostRouteCleanupSuccessor::NoRouteResource { route },
+                    },
+                }));
+            }
             let cancellation = self
                 .cancellation
                 .take()
                 .expect("cleanup-call cancellation lost its cleanup context");
+            if self.transfer_once {
+                self.transfer_once = false;
+                self.transferred = true;
+                return Poll::Ready(Ok(BindingCallSettlement::Cancelled {
+                    retry_class: RetryClass::Never,
+                    disposition: BindingCancellationDisposition::TransferRequired(
+                        transfer_request(
+                            &self.probe,
+                            MockLifecyclePhase::CleanupCallCancellation,
+                            cancellation,
+                        ),
+                    ),
+                }));
+            }
             record_cleanup_context_settlement(
                 &self.probe,
                 MockLifecyclePhase::CleanupCallCancellation,
@@ -2720,6 +2899,10 @@ mod host_fixture {
         route_state_drops: Arc<AtomicU32>,
         oversized_activation: bool,
         oversized_cleanup: bool,
+        transfer_activation: bool,
+        delivery_cancel_identity_error_once: bool,
+        transfer_delivery: bool,
+        transfer_cleanup: bool,
     }
 
     impl RouteServerBinding for HostMockBinding {
@@ -2830,6 +3013,8 @@ mod host_fixture {
                 started: false,
                 probe: self.probe.clone(),
                 cancellation: None,
+                transfer_once: self.transfer_activation,
+                transferred: false,
             }))
         }
 
@@ -2964,6 +3149,7 @@ mod host_fixture {
                 } else {
                     HOST_CALL_FOOTPRINT
                 },
+                self.transfer_cleanup,
             )))
         }
 
@@ -3005,6 +3191,7 @@ mod host_fixture {
                 } else {
                     HOST_CALL_FOOTPRINT
                 },
+                self.transfer_cleanup,
             )))
         }
 
@@ -3041,6 +3228,9 @@ mod host_fixture {
                 cancel_pending_once: true,
                 started: false,
                 cancellation: None,
+                cancel_identity_error_once: self.delivery_cancel_identity_error_once,
+                transfer_once: self.transfer_delivery,
+                transferred: false,
             }))
         }
     }
@@ -3048,33 +3238,67 @@ mod host_fixture {
     /// Builds the complete host-erased mock registration and its independent
     /// deterministic I/O probe.
     pub fn host_property_read_fixture() -> (HostBindingRegistration, HostPropertyReadProbe) {
-        host_property_read_fixture_with_rejections(false, false, false, false, false)
+        host_property_read_fixture_with_rejections(
+            false, false, false, false, false, false, false, false, false,
+        )
     }
 
     /// Rejects readiness and the first abort-constructor attempt while
     /// returning both complete inputs to the Servient cleanup owner.
     pub fn host_property_read_readiness_rejection_fixture()
     -> (HostBindingRegistration, HostPropertyReadProbe) {
-        host_property_read_fixture_with_rejections(true, true, false, false, false)
+        host_property_read_fixture_with_rejections(
+            true, true, false, false, false, false, false, false, false,
+        )
     }
 
     /// Rejects the first shutdown-constructor attempt while returning the
     /// complete committed guard and cleanup phase for a later retry.
     pub fn host_property_read_shutdown_rejection_fixture()
     -> (HostBindingRegistration, HostPropertyReadProbe) {
-        host_property_read_fixture_with_rejections(false, false, true, false, false)
+        host_property_read_fixture_with_rejections(
+            false, false, true, false, false, false, false, false, false,
+        )
     }
 
     /// Returns an activation call whose truthful footprint exceeds registration admission.
     pub fn host_property_read_oversized_activation_fixture()
     -> (HostBindingRegistration, HostPropertyReadProbe) {
-        host_property_read_fixture_with_rejections(false, false, false, true, false)
+        host_property_read_fixture_with_rejections(
+            false, false, false, true, false, false, false, false, false,
+        )
     }
 
     /// Returns an oversized shutdown call that must settle through cancellation.
     pub fn host_property_read_oversized_shutdown_fixture()
     -> (HostBindingRegistration, HostPropertyReadProbe) {
-        host_property_read_fixture_with_rejections(false, false, false, false, true)
+        host_property_read_fixture_with_rejections(
+            false, false, false, false, true, false, false, false, false,
+        )
+    }
+
+    /// Transfers an in-progress activation cancellation to the admitted named owner.
+    pub fn host_property_read_activation_transfer_fixture()
+    -> (HostBindingRegistration, HostPropertyReadProbe) {
+        host_property_read_fixture_with_rejections(
+            false, false, false, false, false, true, false, false, false,
+        )
+    }
+
+    /// Fails one delivery-cancellation identity check, then transfers the same context.
+    pub fn host_property_read_delivery_error_transfer_fixture()
+    -> (HostBindingRegistration, HostPropertyReadProbe) {
+        host_property_read_fixture_with_rejections(
+            false, false, false, false, false, false, true, true, false,
+        )
+    }
+
+    /// Transfers cancellation of an oversized cleanup call through the named owner.
+    pub fn host_property_read_cleanup_transfer_fixture()
+    -> (HostBindingRegistration, HostPropertyReadProbe) {
+        host_property_read_fixture_with_rejections(
+            false, false, false, false, true, false, false, false, true,
+        )
     }
 
     fn host_property_read_fixture_with_rejections(
@@ -3083,6 +3307,10 @@ mod host_fixture {
         reject_shutdown_once: bool,
         oversized_activation: bool,
         oversized_cleanup: bool,
+        transfer_activation: bool,
+        delivery_cancel_identity_error_once: bool,
+        transfer_delivery: bool,
+        transfer_cleanup: bool,
     ) -> (HostBindingRegistration, HostPropertyReadProbe) {
         let compatibility = BindingArtifactCompatibility::new([0x41; 16]);
         let identity = BindingRegistrationIdentity::new(
@@ -3115,6 +3343,10 @@ mod host_fixture {
                 route_state_drops: Arc::clone(&route_state_drops),
                 oversized_activation,
                 oversized_cleanup,
+                transfer_activation,
+                delivery_cancel_identity_error_once,
+                transfer_delivery,
+                transfer_cleanup,
             }),
             BindingResourceDeclarations::new(HOST_CALL_FOOTPRINT, HOST_CALL_FOOTPRINT),
             super::fixture_ingress_policy(),
@@ -3137,7 +3369,9 @@ mod host_fixture {
 
 #[cfg(feature = "std")]
 pub use host_fixture::{
-    CleanupContextEvidence, HostPropertyReadProbe, host_property_read_fixture,
+    CleanupContextEvidence, HostPropertyReadProbe, host_property_read_activation_transfer_fixture,
+    host_property_read_cleanup_transfer_fixture,
+    host_property_read_delivery_error_transfer_fixture, host_property_read_fixture,
     host_property_read_oversized_activation_fixture, host_property_read_oversized_shutdown_fixture,
     host_property_read_readiness_rejection_fixture, host_property_read_shutdown_rejection_fixture,
 };

@@ -102,15 +102,24 @@ cleanup/resource policy has the same pre-side-effect result. Servient retains
 committed accounts for the real plan/artifact, handler, route/readiness/
 response, ingress, and Host/static storage. Every narrow Host call—prepare,
 readiness, activation, commit, response delivery, abort, and shutdown—is
-checked against the pre-admitted call ceiling before its first poll. Fixture
-constructors only retain their complete input; activation, commit, delivery,
-and cleanup mutation begins inside admitted call execution. An oversized
-activation call is cancelled without a first operational poll, returns its
-unchanged prepared-route carrier, and reaches the normal abort owner with no
-premature route-state drop.
+checked against the pre-admitted normal call ceiling before its first poll.
+Host first entry also reserves a distinct recovery ceiling, bounded by the
+applicable cleanup-item, cleanup-byte, cancel-buffer, transfer-byte, and Host
+call limits. A call that misses normal admission may be retained or cancelled
+only when its complete declared item/byte footprint fits that recovery
+reservation. Fixture constructors only retain their complete input;
+activation, commit, delivery, and cleanup mutation begins inside admitted call
+execution. An oversized activation call that fits the separately admitted
+recovery ceiling receives no operational poll, returns its unchanged
+prepared-route carrier through cancellation, and reaches the normal abort
+owner with no premature route-state drop. If the configured recovery ceiling
+cannot even cover the registration's ordinary call declaration, first entry
+fails before preparation construction, operational polling, cancellation
+polling, or lifecycle mutation.
 
-Call cancellation and later route rollback reserve distinct cleanup subjects
-and additive item/byte/status/transfer capacity. The cancellation matrix stops
+Call cancellation, later route rollback, cleanup-call cancellation, and a
+named transfer owner reserve four distinct Host cleanup subjects with additive
+item/byte/status/transfer capacity. The cancellation matrix stops
 prepare, readiness, activate, and commit calls in both representations before
 the stage-appropriate abort or shutdown. For every Host case, executable
 evidence compares the reservation, first cause, operation, deadline, work,
@@ -120,7 +129,22 @@ pending response-delivery cancellation proves the independent
 settlement before shutdown. A separately reserved cancellation path for a
 pending cleanup call proves both its original route-cleanup context and its
 own cancellation context reach terminal settlement without one masking the
-other. Readiness failure also
+other. A delivery identity-validation error returns the complete response to
+the call without consuming its cleanup context; a later cancellation poll
+uses that same context without panic and reaches one terminal response
+settlement.
+
+`TransferRequired` is represented explicitly as a source-owned
+`CleanupTransferEnvelope` containing the complete call and request. Servient
+does not re-poll it while source-owned. The separately reserved named owner
+checks the unchanged call footprint, request phase footprint, requested owner,
+and durable-record capacity at the atomic `CleanupTransferTarget` boundary.
+Only `CleanupTransferAcceptance::Accepted` moves the envelope into the
+acknowledged state; rejection retains the identical envelope at the source.
+Acknowledged lifecycle, response-delivery, and cleanup-call transfer cases
+then progress the complete call to legal terminal settlement while retaining
+the request and exact cleanup context across Pending and callback errors.
+Readiness failure also
 returns the real prepared route through abort or retrying abort cleanup.
 Immediately before the first preparation call, Servient validates its private complete first-entry closure,
 including the frozen plan-set lease, real artifact/reference, canonical route,
@@ -165,7 +189,8 @@ Before the first binding preparation side effect, WP-400 must possess:
 - exact Property Read handler coverage and its declared footprint;
 - committed resource, work, deadline, and status accounts;
 - independent call-cancellation and route-rollback cleanup reservations, plus
-  a Host cleanup-call cancellation reservation;
+  Host cleanup-call cancellation and named transfer-owner reservations whose
+  admitted footprint covers every call they are allowed to retain;
 - compiled-plan-set ownership and the matching plan-set lease; and
 - the route, activation, acceptance, response, and cleanup ownership needed to
   roll back every later transition.
