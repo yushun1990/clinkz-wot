@@ -935,7 +935,7 @@ mod tests {
     }
 
     #[test]
-    fn lifecycle_transfer_retains_exact_context_until_named_owner_acknowledges_and_settles() {
+    fn lifecycle_transfer_uses_production_owner_and_retains_context_to_terminal() {
         let (binding, probe) = host_property_read_activation_transfer_fixture();
         let servient = ServientBuilder::new()
             .resource_limits(GatewayDefaultV1::LIMITS.clone())
@@ -974,6 +974,7 @@ mod tests {
             probe.transfer_evidence(MockLifecyclePhase::Activate);
         assert_eq!(requested, Some(context.clone()));
         assert_eq!(continuations, 1);
+        assert_eq!(owner, context.transfer_owner());
         assert_ne!(owner, Some(context.subject()));
         assert_eq!(probe.cancellation_polls(MockLifecyclePhase::Activate), 3);
         assert_eq!(probe.cleanup_attempts(), (1, 0));
@@ -981,7 +982,7 @@ mod tests {
     }
 
     #[test]
-    fn delivery_cancel_error_retries_with_same_context_then_transfers_and_settles() {
+    fn delivery_transfer_uses_production_owner_across_error_retry_and_terminal() {
         let (binding, probe) = host_property_read_delivery_error_transfer_fixture();
         let servient = ServientBuilder::new()
             .resource_limits(GatewayDefaultV1::LIMITS.clone())
@@ -1028,6 +1029,7 @@ mod tests {
         );
         assert_eq!(requested, Some(context.clone()));
         assert_eq!(continuations, 1);
+        assert_eq!(owner, context.transfer_owner());
         assert_ne!(owner, Some(context.subject()));
         assert_eq!(calls.load(Ordering::SeqCst), 1);
         assert_eq!(probe.response_settlements(), 1);
@@ -1036,7 +1038,7 @@ mod tests {
     }
 
     #[test]
-    fn cleanup_call_transfer_retains_route_and_call_contexts_to_acknowledged_terminal() {
+    fn cleanup_call_transfer_uses_production_owner_and_retains_both_contexts() {
         let (binding, probe) = host_property_read_cleanup_transfer_fixture();
         let servient = ServientBuilder::new()
             .resource_limits(GatewayDefaultV1::LIMITS.clone())
@@ -1076,6 +1078,7 @@ mod tests {
         assert_ne!(route_context.subject(), call_context.subject());
         assert_eq!(requested, Some(call_context.clone()));
         assert_eq!(continuations, 1);
+        assert_eq!(owner, call_context.transfer_owner());
         assert_ne!(owner, Some(call_context.subject()));
         assert_eq!(
             probe.cancellation_polls(MockLifecyclePhase::CleanupCallCancellation),

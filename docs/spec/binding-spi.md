@@ -766,6 +766,14 @@ runtime binds one reservation into a `CleanupPhaseContext`. The context fixes:
 - an independent drain deadline measured from that phase; and
 - the admitted work and lifetime-footprint bounds.
 
+For Host work that may request transfer, the runtime also binds the subject of
+its separately admitted named-owner reservation into the context. Binding code
+reads that production-derived identity through `transfer_owner()` and consumes
+the unchanged context through `try_into_transfer_request()`. It never derives
+an owner from subject indices, runtime slot layout, or profile-specific
+arithmetic. A context without named-owner authority is returned unchanged by
+that conversion and remains with its pre-reserved manual owner.
+
 Start cancellation, active subscription stop, remote-terminal cleanup,
 readiness cancellation, prepared-route abort, active-route shutdown, response
 cancellation, and emission cancellation are distinct operations. A context is
@@ -841,6 +849,11 @@ acceptance boundary and `Err(task)` is the rejection branch. Dropping an already
 accepted task commits its
 pre-reserved `ResidualExternalState` fallback; it never restores manual
 ownership or schedules replacement work.
+
+After rejection, the runtime installs the returned envelope in its admitted
+manual-owner slot. Pending or callback error retains that same request,
+complete phase context, and work object for another manual poll; it does not
+re-offer the rejected envelope as though acceptance had not been decided.
 
 All cleanup-capable operations use one representation-independent transition:
 source-owned work is offered as a complete envelope, then either acknowledged

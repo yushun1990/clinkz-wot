@@ -858,12 +858,7 @@ impl AdmissionReservations {
             .call_cleanup
             .take()
             .ok_or_else(|| validation_error(slot))?;
-        Ok(CleanupPhaseContext::bind(
-            reservation,
-            operation,
-            cause,
-            self.deadline,
-        ))
+        Ok(self.bind_cleanup_context(reservation, operation, cause))
     }
 
     #[cfg(feature = "std")]
@@ -876,12 +871,7 @@ impl AdmissionReservations {
             .cleanup_call_cleanup
             .take()
             .ok_or_else(|| validation_error(slot))?;
-        Ok(CleanupPhaseContext::bind(
-            reservation,
-            CleanupOperation::CancelProcess,
-            cause,
-            self.deadline,
-        ))
+        Ok(self.bind_cleanup_context(reservation, CleanupOperation::CancelProcess, cause))
     }
 
     fn route_context(
@@ -894,12 +884,30 @@ impl AdmissionReservations {
             .route_cleanup
             .take()
             .ok_or_else(|| validation_error(slot))?;
-        Ok(CleanupPhaseContext::bind(
-            reservation,
-            operation,
-            cause,
-            self.deadline,
-        ))
+        Ok(self.bind_cleanup_context(reservation, operation, cause))
+    }
+
+    fn bind_cleanup_context(
+        &self,
+        reservation: CleanupReservation,
+        operation: CleanupOperation,
+        cause: CoreError,
+    ) -> CleanupPhaseContext {
+        #[cfg(feature = "std")]
+        if let Some(transfer_owner) = self
+            .transfer_cleanup
+            .as_ref()
+            .map(CleanupReservation::subject)
+        {
+            return CleanupPhaseContext::bind_with_transfer_owner(
+                reservation,
+                transfer_owner,
+                operation,
+                cause,
+                self.deadline,
+            );
+        }
+        CleanupPhaseContext::bind(reservation, operation, cause, self.deadline)
     }
 
     fn complete(&self) -> bool {
@@ -2174,6 +2182,7 @@ type HostCleanupCall = HostBindingCallBox<RouteCleanupOutcome, HostRouteCleanupS
 #[cfg(feature = "std")]
 enum HostCallTransferOwnership<T: 'static, C: 'static> {
     Source(CleanupTransferEnvelope<HostBindingCallBox<T, C>>),
+    Manual(CleanupTransferEnvelope<HostBindingCallBox<T, C>>),
     Acknowledged {
         envelope: CleanupTransferEnvelope<HostBindingCallBox<T, C>>,
         reservation: CleanupReservation,
@@ -2192,7 +2201,7 @@ enum HostTransferProgress<T: 'static, C: 'static> {
     Ready {
         call: HostBindingCallBox<T, C>,
         settlement: BindingCallSettlement<T, C>,
-        reservation: CleanupReservation,
+        transfer_reservation: Option<CleanupReservation>,
     },
     Error {
         transfer: HostCallTransfer<T, C>,
@@ -2310,8 +2319,34 @@ impl<T: 'static, C: 'static> HostCallTransfer<T, C> {
                         debug_assert!(accepted.is_none());
                         admission.transfer_cleanup = reservation;
                         HostTransferProgress::Pending(Self {
-                            ownership: HostCallTransferOwnership::Source(envelope),
+                            ownership: HostCallTransferOwnership::Manual(envelope),
                         })
+                    }
+                }
+            }
+            HostCallTransferOwnership::Manual(envelope) => {
+                let (request, mut call) = envelope.into_parts();
+                match call.as_pin_mut().poll_cancel(cx, budget) {
+                    Poll::Pending => HostTransferProgress::Pending(Self {
+                        ownership: HostCallTransferOwnership::Manual(CleanupTransferEnvelope::new(
+                            request, call,
+                        )),
+                    }),
+                    Poll::Ready(Err(error)) => HostTransferProgress::Error {
+                        transfer: Self {
+                            ownership: HostCallTransferOwnership::Manual(
+                                CleanupTransferEnvelope::new(request, call),
+                            ),
+                        },
+                        error,
+                    },
+                    Poll::Ready(Ok(settlement)) => {
+                        drop(request);
+                        HostTransferProgress::Ready {
+                            call,
+                            settlement,
+                            transfer_reservation: None,
+                        }
                     }
                 }
             }
@@ -2346,7 +2381,7 @@ impl<T: 'static, C: 'static> HostCallTransfer<T, C> {
                         HostTransferProgress::Ready {
                             call,
                             settlement,
-                            reservation,
+                            transfer_reservation: Some(reservation),
                         }
                     }
                 }
@@ -3483,9 +3518,11 @@ impl HostPropertyReadRuntime {
                     HostTransferProgress::Ready {
                         call,
                         settlement,
-                        reservation,
+                        transfer_reservation,
                     } => {
-                        self.restore_transfer_reservation(reservation);
+                        if let Some(reservation) = transfer_reservation {
+                            self.restore_transfer_reservation(reservation);
+                        }
                         self.settle_prepare(call, settlement)
                     }
                     HostTransferProgress::Error { transfer, error } => {
@@ -3580,9 +3617,11 @@ impl HostPropertyReadRuntime {
                     HostTransferProgress::Ready {
                         call,
                         settlement,
-                        reservation,
+                        transfer_reservation,
                     } => {
-                        self.restore_transfer_reservation(reservation);
+                        if let Some(reservation) = transfer_reservation {
+                            self.restore_transfer_reservation(reservation);
+                        }
                         self.settle_readiness(call, settlement)
                     }
                     HostTransferProgress::Error { transfer, error } => {
@@ -3676,9 +3715,11 @@ impl HostPropertyReadRuntime {
                     HostTransferProgress::Ready {
                         call,
                         settlement,
-                        reservation,
+                        transfer_reservation,
                     } => {
-                        self.restore_transfer_reservation(reservation);
+                        if let Some(reservation) = transfer_reservation {
+                            self.restore_transfer_reservation(reservation);
+                        }
                         self.settle_activation(call, settlement)
                     }
                     HostTransferProgress::Error { transfer, error } => {
@@ -3772,9 +3813,11 @@ impl HostPropertyReadRuntime {
                     HostTransferProgress::Ready {
                         call,
                         settlement,
-                        reservation,
+                        transfer_reservation,
                     } => {
-                        self.restore_transfer_reservation(reservation);
+                        if let Some(reservation) = transfer_reservation {
+                            self.restore_transfer_reservation(reservation);
+                        }
                         self.settle_commit(call, settlement)
                     }
                     HostTransferProgress::Error { transfer, error } => {
@@ -3930,9 +3973,11 @@ impl HostPropertyReadRuntime {
                     HostTransferProgress::Ready {
                         call,
                         settlement,
-                        reservation,
+                        transfer_reservation,
                     } => {
-                        self.restore_transfer_reservation(reservation);
+                        if let Some(reservation) = transfer_reservation {
+                            self.restore_transfer_reservation(reservation);
+                        }
                         self.settle_delivery(call, guard, settlement)
                     }
                     HostTransferProgress::Error { transfer, error } => {
@@ -3986,9 +4031,11 @@ impl HostPropertyReadRuntime {
                     HostTransferProgress::Ready {
                         call,
                         settlement,
-                        reservation,
+                        transfer_reservation,
                     } => {
-                        self.restore_transfer_reservation(reservation);
+                        if let Some(reservation) = transfer_reservation {
+                            self.restore_transfer_reservation(reservation);
+                        }
                         self.settle_cleanup_call(call, settlement)
                     }
                     HostTransferProgress::Error { transfer, error } => {
@@ -4462,5 +4509,188 @@ mod tests {
             BindingLifetimeFootprint::new(3, 129),
         );
         assert_rejected(&base_record(), &wrong_footprint, registration());
+    }
+
+    #[cfg(feature = "std")]
+    struct ManualRetryCall {
+        polls: Arc<core::sync::atomic::AtomicU32>,
+        footprint: BindingLifetimeFootprint,
+    }
+
+    #[cfg(feature = "std")]
+    impl clinkz_wot_core::HostBindingCall<(), clinkz_wot_core::NoCleanupSuccessor> for ManualRetryCall {
+        fn lifetime_footprint(&self) -> BindingLifetimeFootprint {
+            self.footprint
+        }
+
+        fn poll_result(
+            self: core::pin::Pin<&mut Self>,
+            _cx: &mut Context<'_>,
+            _budget: &mut WorkBudget,
+        ) -> Poll<()> {
+            panic!("a transferred cancellation is never operationally polled")
+        }
+
+        fn start_cancel(
+            self: core::pin::Pin<&mut Self>,
+            _cx: &mut Context<'_>,
+            _cleanup: CleanupPhaseContext,
+            _budget: &mut WorkBudget,
+        ) -> CoreResult<StartStatus<BindingCallSettlement<(), clinkz_wot_core::NoCleanupSuccessor>>>
+        {
+            panic!("the source already started cancellation")
+        }
+
+        fn poll_cancel(
+            self: core::pin::Pin<&mut Self>,
+            cx: &mut Context<'_>,
+            _budget: &mut WorkBudget,
+        ) -> Poll<CoreResult<BindingCallSettlement<(), clinkz_wot_core::NoCleanupSuccessor>>>
+        {
+            let poll = self
+                .polls
+                .fetch_add(1, core::sync::atomic::Ordering::SeqCst);
+            match poll {
+                0 => {
+                    cx.waker().wake_by_ref();
+                    Poll::Pending
+                }
+                1 => Poll::Ready(Err(CoreError::Binding(ErrorContext::new(
+                    ErrorPhase::Cleanup,
+                    RetryClass::Safe,
+                )))),
+                _ => Poll::Ready(Ok(BindingCallSettlement::Cancelled {
+                    retry_class: RetryClass::Never,
+                    disposition: BindingCancellationDisposition::Complete {
+                        successor: clinkz_wot_core::NoCleanupSuccessor,
+                    },
+                })),
+            }
+        }
+
+        fn next_deadline(&self) -> Option<Deadline> {
+            None
+        }
+    }
+
+    #[cfg(feature = "std")]
+    fn assert_manual_transfer_context(
+        transfer: &HostCallTransfer<(), clinkz_wot_core::NoCleanupSuccessor>,
+        subject: CleanupSlotId,
+        owner: CleanupSlotId,
+        cause: &CoreError,
+        deadline: Deadline,
+        footprint: BindingLifetimeFootprint,
+    ) {
+        let envelope = match &transfer.ownership {
+            HostCallTransferOwnership::Manual(envelope) => envelope,
+            _ => panic!("rejected transfer did not enter manual ownership"),
+        };
+        let request = envelope.request();
+        assert_eq!(request.requested_owner(), owner);
+        assert_eq!(request.phase().transfer_owner(), Some(owner));
+        assert_eq!(request.phase().reservation().subject(), subject);
+        assert_eq!(
+            request.phase().reservation().lifetime_footprint(),
+            footprint
+        );
+        assert_eq!(request.phase().operation(), CleanupOperation::CancelProcess);
+        assert_eq!(request.phase().first_cause(), cause);
+        assert_eq!(request.phase().deadline(), deadline);
+    }
+
+    #[cfg(feature = "std")]
+    #[test]
+    fn rejected_production_owner_offer_retries_in_manual_owner_with_exact_context() {
+        let footprint = BindingLifetimeFootprint::new(3, 96);
+        let subject = CleanupSlotId::new(SlotIndex::new(8), Generation::INITIAL);
+        let owner = CleanupSlotId::new(SlotIndex::new(19), Generation::INITIAL);
+        let manual_reservation = CleanupReservation::new(
+            subject,
+            footprint,
+            1,
+            WorkBudget::new().with_remaining(WorkClass::CleanupItems, 4),
+        );
+        let rejected_owner_reservation = CleanupReservation::new(
+            owner,
+            footprint,
+            0,
+            WorkBudget::new().with_remaining(WorkClass::CleanupItems, 4),
+        );
+        let cause = CoreError::Cancelled(ErrorContext::new(ErrorPhase::Cleanup, RetryClass::Never));
+        let deadline = Deadline::NONE;
+        let context = CleanupPhaseContext::bind_with_transfer_owner(
+            manual_reservation,
+            rejected_owner_reservation.subject(),
+            CleanupOperation::CancelProcess,
+            cause.clone(),
+            deadline,
+        );
+        let request = context
+            .try_into_transfer_request()
+            .expect("production phase supplied its admitted owner");
+        let polls = Arc::new(core::sync::atomic::AtomicU32::new(0));
+        let call = HostBindingCallBox::new(ManualRetryCall {
+            polls: Arc::clone(&polls),
+            footprint,
+        });
+        let transfer = HostCallTransfer::source(request, call);
+        let mut admission = AdmissionReservations {
+            charges: Vec::new(),
+            call_cleanup: None,
+            route_cleanup: None,
+            cleanup_call_cleanup: None,
+            transfer_cleanup: Some(rejected_owner_reservation),
+            compiled: true,
+            handler: None,
+            response_bytes: 0,
+            host_call_ceiling: Some(footprint),
+            host_call_recovery_ceiling: Some(footprint),
+            deadline,
+        };
+        let waker = core::task::Waker::noop();
+        let mut cx = Context::from_waker(waker);
+        let mut budget = WorkBudget::new().with_remaining(WorkClass::CleanupItems, 8);
+
+        let transfer = match transfer.progress(&mut admission, thing_slot(), &mut cx, &mut budget) {
+            HostTransferProgress::Pending(transfer) => transfer,
+            _ => panic!("rejected named owner did not retain manual work"),
+        };
+        assert!(admission.transfer_cleanup.is_some());
+        assert_manual_transfer_context(&transfer, subject, owner, &cause, deadline, footprint);
+
+        let transfer = match transfer.progress(&mut admission, thing_slot(), &mut cx, &mut budget) {
+            HostTransferProgress::Pending(transfer) => transfer,
+            _ => panic!("manual owner did not retain a pending call"),
+        };
+        assert_manual_transfer_context(&transfer, subject, owner, &cause, deadline, footprint);
+
+        let transfer = match transfer.progress(&mut admission, thing_slot(), &mut cx, &mut budget) {
+            HostTransferProgress::Error { transfer, .. } => transfer,
+            _ => panic!("manual owner did not retain a retryable callback error"),
+        };
+        assert_manual_transfer_context(&transfer, subject, owner, &cause, deadline, footprint);
+
+        match transfer.progress(&mut admission, thing_slot(), &mut cx, &mut budget) {
+            HostTransferProgress::Ready {
+                settlement:
+                    BindingCallSettlement::Cancelled {
+                        disposition: BindingCancellationDisposition::Complete { .. },
+                        ..
+                    },
+                transfer_reservation,
+                ..
+            } => assert!(transfer_reservation.is_none()),
+            _ => panic!("manual owner did not reach terminal settlement"),
+        }
+        assert_eq!(polls.load(core::sync::atomic::Ordering::SeqCst), 3);
+        assert_eq!(
+            admission
+                .transfer_cleanup
+                .as_ref()
+                .expect("rejected named-owner reservation returned to admission")
+                .subject(),
+            owner
+        );
     }
 }

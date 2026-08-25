@@ -71,7 +71,8 @@ reference, closing safe whole-guard replacement or extraction. Workspace topic
 0058 is migrated. This correction satisfies the real-target prerequisite but
 does not substitute for the aggregate result.
 
-The aggregate fixture now passes at the two registered roots. The external
+The aggregate fixture executes successfully at the two registered roots; the
+gate remains `ready` until independent acceptance. The external
 binding crate supplies one deterministic protocol-local ingress slot,
 correlation owner, response delivery path, compiler, static server, Host
 server, lifecycle guards, and cleanup implementation. Its ingress declaration
@@ -136,11 +137,16 @@ settlement.
 
 `TransferRequired` is represented explicitly as a source-owned
 `CleanupTransferEnvelope` containing the complete call and request. Servient
-does not re-poll it while source-owned. The separately reserved named owner
+does not re-poll it while source-owned. Each Host `CleanupPhaseContext`
+receives the named owner directly from Servient's separately admitted transfer
+reservation, and the binding consumes that carrier into its request without
+knowing Servient slot layout. The separately reserved named owner
 checks the unchanged call footprint, request phase footprint, requested owner,
 and durable-record capacity at the atomic `CleanupTransferTarget` boundary.
 Only `CleanupTransferAcceptance::Accepted` moves the envelope into the
-acknowledged state; rejection retains the identical envelope at the source.
+acknowledged state. Rejection returns the identical envelope and exact phase
+context to the pre-reserved manual owner, which retains them across Pending or
+callback error until terminal settlement instead of re-offering blindly.
 Acknowledged lifecycle, response-delivery, and cleanup-call transfer cases
 then progress the complete call to legal terminal settlement while retaining
 the request and exact cleanup context across Pending and callback errors.

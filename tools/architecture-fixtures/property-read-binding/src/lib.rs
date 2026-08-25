@@ -1334,7 +1334,7 @@ mod host_fixture {
         RouteInboundResponse, RoutePrepareOutcome, RouteReadinessOutcome, RouteServerBinding,
         RouteShutdownInput, RouteTerminal, StartStatus, WotLock,
     };
-    use clinkz_wot_foundation::{SlotIndex, WorkBudget, WorkClass};
+    use clinkz_wot_foundation::{WorkBudget, WorkClass};
 
     use super::{
         DeliveredResponseEvidence, FIXTURE_INGRESS_BYTES, IngressAccounting, MOCK_PHASE_COUNT,
@@ -1348,6 +1348,7 @@ mod host_fixture {
     #[derive(Clone, Debug, Eq, PartialEq)]
     pub struct CleanupContextEvidence {
         subject: CleanupSlotId,
+        transfer_owner: Option<CleanupSlotId>,
         lifetime: BindingLifetimeFootprint,
         durable_status_records: u32,
         work: [u64; 10],
@@ -1360,6 +1361,7 @@ mod host_fixture {
         fn from_context(context: &CleanupPhaseContext) -> Self {
             Self {
                 subject: context.reservation().subject(),
+                transfer_owner: context.transfer_owner(),
                 lifetime: context.reservation().lifetime_footprint(),
                 durable_status_records: context.reservation().durable_status_records(),
                 work: core::array::from_fn(|index| {
@@ -1380,6 +1382,10 @@ mod host_fixture {
 
         pub const fn subject(&self) -> CleanupSlotId {
             self.subject
+        }
+
+        pub const fn transfer_owner(&self) -> Option<CleanupSlotId> {
+            self.transfer_owner
         }
     }
 
@@ -1854,12 +1860,9 @@ mod host_fixture {
         cleanup: CleanupPhaseContext,
     ) -> CleanupTransferRequest {
         let evidence = CleanupContextEvidence::from_context(&cleanup);
-        let subject = cleanup.reservation().subject();
-        let base = subject.slot().get() / 4 * 4;
-        let owner = CleanupSlotId::new(
-            SlotIndex::new(base.checked_add(3).expect("four-slot Host cleanup block")),
-            subject.generation(),
-        );
+        let owner = cleanup
+            .transfer_owner()
+            .expect("Servient supplies the admitted named transfer owner");
         probe.with(|state| {
             assert!(
                 state.transfer_requested[phase as usize]
@@ -1874,7 +1877,9 @@ mod host_fixture {
                 "cleanup transfer owner changed"
             );
         });
-        CleanupTransferRequest::new(cleanup, owner)
+        cleanup
+            .try_into_transfer_request()
+            .expect("production cleanup context authorizes its named owner")
     }
 
     fn record_transfer_continuation(probe: &WotLock<ProbeState>, phase: MockLifecyclePhase) {

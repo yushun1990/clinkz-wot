@@ -617,6 +617,7 @@ impl CleanupReservation {
 #[derive(Debug, Eq, PartialEq)]
 pub struct CleanupPhaseContext {
     reservation: CleanupReservation,
+    transfer_owner: Option<CleanupSlotId>,
     operation: CleanupOperation,
     first_cause: CoreError,
     deadline: Deadline,
@@ -632,6 +633,28 @@ impl CleanupPhaseContext {
     ) -> Self {
         Self {
             reservation,
+            transfer_owner: None,
+            operation,
+            first_cause,
+            deadline,
+        }
+    }
+
+    /// Binds a reservation and the separately admitted named transfer owner.
+    ///
+    /// The runtime derives `transfer_owner` from its admitted cleanup-owner
+    /// reservation before handing this context to binding code. A binding can
+    /// therefore request transfer without knowing the runtime's slot layout.
+    pub const fn bind_with_transfer_owner(
+        reservation: CleanupReservation,
+        transfer_owner: CleanupSlotId,
+        operation: CleanupOperation,
+        first_cause: CoreError,
+        deadline: Deadline,
+    ) -> Self {
+        Self {
+            reservation,
+            transfer_owner: Some(transfer_owner),
             operation,
             first_cause,
             deadline,
@@ -641,6 +664,25 @@ impl CleanupPhaseContext {
     /// Returns the reserved cleanup capacity.
     pub const fn reservation(&self) -> &CleanupReservation {
         &self.reservation
+    }
+
+    /// Returns the production-authorized named owner for a transfer request.
+    pub const fn transfer_owner(&self) -> Option<CleanupSlotId> {
+        self.transfer_owner
+    }
+
+    /// Consumes this exact phase into an authorized provisional transfer.
+    ///
+    /// A context without a production-provided named owner is returned
+    /// unchanged so its caller can retain manual cleanup ownership.
+    pub fn try_into_transfer_request(self) -> Result<CleanupTransferRequest, Self> {
+        let Some(requested_owner) = self.transfer_owner else {
+            return Err(self);
+        };
+        Ok(CleanupTransferRequest {
+            phase: self,
+            requested_owner,
+        })
     }
 
     /// Returns this context's immutable cleanup operation.
@@ -667,14 +709,6 @@ pub struct CleanupTransferRequest {
 }
 
 impl CleanupTransferRequest {
-    /// Creates a bounded transfer request; this alone does not transfer work.
-    pub const fn new(phase: CleanupPhaseContext, requested_owner: CleanupSlotId) -> Self {
-        Self {
-            phase,
-            requested_owner,
-        }
-    }
-
     /// Returns the immutable cleanup phase.
     pub const fn phase(&self) -> &CleanupPhaseContext {
         &self.phase
