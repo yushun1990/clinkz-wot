@@ -73,12 +73,18 @@ for projection in \
     fi
 done
 
-if ! grep -Fq 'ADR-0019' "$root/docs/spec/interaction-core.md" && \
-   ! grep -Fq 'ADR-0019' "$root/docs/spec/planning.md" && \
-   ! grep -Fq 'ADR-0019' "$root/docs/spec/binding-spi.md"; then
-    echo "architecture ADR candidate check: candidate ADR is not projected by a candidate spec" >&2
+grep -Fq '=PLAN-REQUEST-001=' "$root/$candidate_decision" || {
+    echo "architecture ADR candidate check: ADR-0019 does not record PLAN-REQUEST-001" >&2
     exit 1
-fi
+}
+grep -Fq '=BIND-OUT-001=' "$root/$candidate_decision" || {
+    echo "architecture ADR candidate check: ADR-0019 does not record BIND-OUT-001" >&2
+    exit 1
+}
+grep -Fq '=API-OPTIONS-001=' "$root/$candidate_decision" || {
+    echo "architecture ADR candidate check: ADR-0019 does not record API-OPTIONS-001" >&2
+    exit 1
+}
 
 grep -Fq '`CRATE-DEPS-001`:' "$root/docs/architecture/20-module-boundaries.md" || {
     echo "architecture ADR candidate check: crate dependency boundary projection is missing" >&2
@@ -89,4 +95,4 @@ grep -Fq 'ADR-0014' "$root/docs/ADRs/0018-bounded-v5-normative-authority-reset.o
     exit 1
 }
 
-echo "architecture ADR candidate check: accepted decisions plus proposed ADR-0019 projection valid"
+echo "architecture ADR candidate check: accepted decisions plus proposed ADR-0019 candidate valid"
