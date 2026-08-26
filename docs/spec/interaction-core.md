@@ -1,17 +1,20 @@
 # Interaction Core Specification
 
-Status: active v5.0 authority.
+Status: v5.1 activation candidate. v5.0 remains active until the separately
+reviewed activation checkpoint selects this revision.
 
-This specification owns ten active requirements: `HANDLER-API-001`,
-`HANDLER-CANCEL-001`, `HANDLER-CANCEL-002`, `API-TYPES-001`,
-`API-HOT-ID-001`, `API-PAYLOAD-001`, `CLEANUP-RECORD-001`,
-`ERR-TAXONOMY-001`, `ERR-RETRY-001`, and `STATE-INFLIGHT-001`.
-`HANDLER-VALUE-001` remains owned by the completed handler amendment, whose
-exact schemas refine this specification without changing the owner set.
+This specification owns eleven v5.1 candidate requirements:
+`HANDLER-API-001`, `HANDLER-CANCEL-001`, `HANDLER-CANCEL-002`,
+`API-TYPES-001`, `API-HOT-ID-001`, `API-PAYLOAD-001`, `API-OPTIONS-001`,
+`CLEANUP-RECORD-001`, `ERR-TAXONOMY-001`, `ERR-RETRY-001`, and
+`STATE-INFLIGHT-001`. `HANDLER-VALUE-001` remains owned by the completed handler
+amendment, whose exact schemas refine this specification without changing the
+owner set.
 
 Core owns protocol-neutral identities, request/result/error values, handler
-semantics, and portable operation state. It does not own application handles,
-Servient registries, plan construction, protocol I/O, or global scheduling.
+semantics, Consumer selection/control values, and portable operation state. It
+does not own application handles, Servient registries, plan construction,
+protocol I/O, or global scheduling.
 
 ## Handler boundary
 
@@ -81,10 +84,39 @@ shape becomes `CoreError::Validation` while the same response opportunity
 remains available for exactly-once error delivery. No public constructor may
 place an unvalidated successful output in `RouteInboundResponse`.
 
+For the v5.1 Consumer Property Read candidate, Core also owns the narrow shared
+binding-origin validation kernel. A client-binding success remains untrusted
+until the engine checks its `BindingResponseMetadata` against the live selected
+`OutboundRequest`: binding id, binding generation, and plan id MUST match; the
+first slice accepts only the compiled primary response branch. A successful
+Property Read then MUST have exactly one payload, `InteractionStatus::Ok`,
+`ResponsePayloadRole::Application`, and no `ActionInvocationRef`. The opaque
+protocol-native status value is provenance carried through this check; Core
+MUST NOT reinterpret the numeric value as HTTP or any other concrete protocol.
+Only after this validation may the `InteractionOutput` reach application code.
+Broad schema compilation, transcoding, additional-response tables, and
+validation-profile policy remain outside the v5.1 Consumer one-shot candidate.
+
 These rules are intentionally operation-narrow. A later broad
 `InboundResponse` is a rename/generalization of the same linear carrier and
 validation kernel after its operation families enter active authority, not an
 additional runtime envelope.
+
+`API-OPTIONS-001`: `InteractionOptions` is an owned, non-exhaustive Consumer
+selection/control value. Omission and explicit selection MUST remain
+distinguishable. The v5.1 one-shot baseline covers owned URI-template variables,
+optional explicit form selection, and call timeout/deadline intent. Every
+explicit selector may only narrow facts already represented in the immutable
+consumed plan set; applying an option MUST NOT trigger runtime TD/Form scanning,
+ask a binding to probe a raw Form, or grant authority to select outside the
+published plan set. Operation payload is not an option and remains an
+operation-input responsibility before it becomes call-varying data in the
+selected request. Binding-id, media-type, subprotocol, security-branch,
+validation-profile, broad handle-default/per-call merge semantics, and other
+advanced selectors are not part of this v5.1 requirement; adding them as
+required public semantics needs a later reviewed authority revision. Existing
+legacy fields may remain only while an unmigrated capability legitimately uses
+them and MUST NOT define the new Consumer Property Read target path.
 
 `ERR-TAXONOMY-001`: `CoreError` is a non-exhaustive structured error with
 bounded context and categories for invalid documents, validation, limits,
