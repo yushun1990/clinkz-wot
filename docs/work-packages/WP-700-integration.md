@@ -15,7 +15,19 @@ conformance decision.
 This work package does not redesign behavior or create another implementation layer. A conflict,
 missing owner, infeasible budget, or ambiguous state transition returns to design review under
 `CHANGE-CONTROL-001`. Work begins only after `WP-400`, `WP-500`, and `WP-600` are complete and
-all entry gates remain closed.
+all required predecessor gates are accepted.
+
+WP-700 is a final aggregation and absence boundary, not an architecture-discovery stage. The
+Producer Property Read proof, the required Consumer Property Read one-shot proof, the required
+minimal `ObserveProperty` long-lived proof, and matching real-protocol production evidence must be
+established in their predecessor scopes before WP-700 begins. Native collection, multi-target
+emission, Directory-client, scheduling, and additional operation-family behavior likewise arrive
+with focused package/integration evidence. WP-700 replays and composes those results; it must not
+be the first executable proof of their ownership topology.
+
+Target-to-legacy backflow is removed capability-by-capability by the package that completes each
+target path. WP-700 owns final public/source/umbrella absence and may remove only compatibility
+surfaces whose last legitimate migration user disappears at final composition.
 
 The broad success/error and cross-binding metadata projection retained in
 `docs/amendments/WP-100-interaction-output-api-v1.md` is v5-inactive historical
@@ -30,7 +42,9 @@ completion.
 `PROPERTY-READ-ARCHITECTURE` record, its exact fixture revision, runtime cells,
 compile-only portable projection, mandatory assertion coverage, and
 independent cross-package attestation. WP-700 consumes that proof; it does not
-replace it with a broader opaque integration test.
+replace it with a broader opaque integration test. The same rule applies to
+later registered Consumer and long-lived architecture proofs once their domain
+entry and gate records exist.
 
 ## Requirements
 
@@ -114,17 +128,21 @@ revision.
 - Add no new lifecycle authority in the umbrella. The Servient-owned serving activation authority,
   `ExposeState`, subscription state, `DiscoveryProcessState`, binding route state, and operation
   slots remain owned by their defining packages and are only re-exported.
-- Verify an end-to-end Producer lifecycle from form contribution through serving, emission,
-  draining, and retained cleanup. Every required route reaches committed-closed before one
-  generation-checked transition publishes the Producer plan set, produced registry generation,
-  complete route set, and serving activation authority. Later accept calls move a unique route
-  lease through claim and permit ownership; no handoff may be absent from `docs/state-machines.toml`.
-- Verify an end-to-end Consumer and Directory-client lifecycle from plan selection through request
-  or subscription progress, terminal status, cancellation, and cleanup with stable binding and
-  slot generations.
-- Verify each standard collection subscription selects one root form and starts one binding-owned
-  driver. A missing native capability must remain a structured error; integration conveniences
-  may not introduce implicit per-affordance fan-out.
+- Recompose the predecessor end-to-end Producer lifecycle evidence from form contribution through
+  serving, emission, draining, and retained cleanup. Every required route reaches
+  committed-closed before one generation-checked transition publishes the Producer plan set,
+  produced registry generation, complete route set, and serving activation authority. Later
+  accept calls move a unique route lease through claim and permit ownership; no handoff may be
+  absent from `docs/state-machines.toml`.
+- Recompose the predecessor Consumer and Directory-client lifecycle evidence from plan selection
+  through request or subscription progress, terminal status, cancellation, and cleanup with
+  stable binding and slot generations. WP-700 must not discover the Consumer one-shot or
+  long-lived ownership contract for the first time.
+- Verify the already-admitted native collection contract composes through the umbrella: each
+  standard collection subscription selects one root form and starts one binding-owned driver. A
+  missing native capability remains a structured error; integration conveniences may not
+  introduce implicit per-affordance fan-out. This is final composition evidence, not the first
+  collection architecture discovery point.
 - Verify that a source document, compiled plan, registration, serving activation authority, route
   guard, payload lease, subscription guard, Directory slot, cleanup record, and performance result
   each have exactly one live owner at every cross-crate handoff. A route activation permit remains
@@ -154,6 +172,10 @@ revision.
   forbidden concrete transport dependency.
 
 ## Old API Removal
+
+Package owners remove target-to-legacy call edges when each target capability becomes production
+complete. The checks below are WP-700's final absence and umbrella-surface obligations; they are
+not permission to keep routine legacy backflow alive until this package.
 
 - Remove `ProtocolBinding` and `ClientBindingFactory` names, documentation, prelude exports, and
   examples. Applications install complete host or static startup bundles; no split server/client
@@ -242,9 +264,10 @@ no-default, async, or optional binding cell restores it.
   callback, binding registry view, active-guard accept path, permit storage, or permit constructor
   outside the claim. Results show zero unclaimed permits, duplicate claims, partial admissions,
   pre-publication admissions, post-drain claims, and lost cleanup ownership.
-- `end-to-end-response-boundary`: composed producer and consumer paths prove that a success owns
-  only validated `InteractionOutput`, a failure owns only `CoreError`, and protocol response
-  metadata retains its live identity and native provenance through shared validation.
+- `end-to-end-response-boundary`: final recomposition of previously admitted producer and consumer
+  paths proves that a success owns only validated `InteractionOutput`, a failure owns only
+  `CoreError`, and protocol response metadata retains its live identity and native provenance
+  through shared validation. It does not replace the earlier Consumer one-shot proof.
 - `performance-baseline-and-regression-gates`: fixture-locked numeric baselines, absolute-budget
   results, regression comparisons, and approved runner identities for every gating workload.
 - `legacy-handler-surface-removal`: negative compile fixtures and source/reference inspection for
@@ -253,9 +276,10 @@ no-default, async, or optional binding cell restores it.
 - `architecture-boundary-conformance`: dependency and source inspection proving that core owns no
   application handle, concrete queue, dispatch policy, plan compiler, Servient registry, or
   protocol I/O and that shared compiler crates own no execution trait or runtime scheduler.
-- `subscription-and-emission-boundaries`: type-identity and end-to-end evidence for the core
-  driver and binding-local slot SPI, Servient facade/private records, binding-owned flow control,
-  and absence of the legacy broker/queue/sink surface.
+- `subscription-and-emission-boundaries`: final type-identity and end-to-end recomposition of the
+  already-proven core driver and binding-local slot SPI, Servient facade/private records,
+  binding-owned flow control, and absence of the legacy broker/queue/sink surface. It must not be
+  the first long-lived architecture proof.
 - `native-collection-operation-conformance`: root-form selection, one driver start, exact source
   items, native protocol multiplexing, and structured rejection without implicit fan-out.
 
@@ -278,8 +302,9 @@ reference gate. The Gateway `PERF-GW-030` and constrained `PERF-CS-022` results 
 
 ## Completion Conditions
 
-- `WP-400`, `WP-500`, and `WP-600` are complete; all six refactor gates remain closed; and the
-  work-package DAG checker reports every predecessor complete.
+- `WP-400`, `WP-500`, and `WP-600` are complete; every required registered architecture/refactor
+  gate is accepted or closed as applicable; and the work-package DAG checker reports every
+  predecessor complete.
 - The ownership matrix matches the implemented defining and umbrella paths, contains no temporary
   owner or obsolete migration disposition, and the Cargo graph follows `CRATE-DEPS-001` in every
   feature cell.
@@ -311,4 +336,4 @@ reference gate. The Gateway `PERF-GW-030` and constrained `PERF-CS-022` results 
 - Workspace formatting, Clippy, rustdoc, tests, state models, artifact checks, no-std checks, and
   old-API inspections pass from a clean tree.
 - The release notes identify the intentional breaking migrations and final public paths. Only then
-  may the coordinated implementation refactor be declared conforming to design revision v4.9.
+  may the coordinated implementation refactor be declared conforming to design revision v5.0.
