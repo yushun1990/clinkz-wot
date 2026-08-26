@@ -3,6 +3,7 @@ set -euo pipefail
 
 root=$(cd "$(dirname "$0")/.." && pwd)
 registry="$root/docs/artifacts.csv"
+authority_manifest="$root/docs/spec/v5-authority-reset.toml"
 
 expected_header='path,role,normativity,design_revision,schema_version,requirement_source'
 if [[ $(head -n 1 "$registry") != "$expected_header" ]]; then
@@ -34,12 +35,24 @@ while IFS=, read -r relative _role _normativity _revision _schema requirement_so
     fi
 done <"$registry"
 
-cargo run --locked --quiet --manifest-path "$root/tools/design-check/Cargo.toml" -- check
+authority_status=$(awk -F' *= *' '$1 == "status" { gsub(/"/, "", $2); print $2; exit }' "$authority_manifest")
+if [[ "$authority_status" == "candidate" ]]; then
+    python3 "$root/tools/check-v5.1-authority-candidate.py"
+    cargo run --locked --quiet --manifest-path "$root/tools/design-check/Cargo.toml" -- check-state
+    cargo run --locked --quiet --manifest-path "$root/tools/design-check/Cargo.toml" -- check-work-packages
+else
+    cargo run --locked --quiet --manifest-path "$root/tools/design-check/Cargo.toml" -- check
+fi
+
 "$root/tools/check-api-ownership.sh"
-"$root/tools/check-architecture-adrs.sh"
+if [[ "$authority_status" == "candidate" ]]; then
+    "$root/tools/check-architecture-adrs-candidate.sh"
+else
+    "$root/tools/check-architecture-adrs.sh"
+fi
 "$root/tools/check-directory-client-scope.sh"
 "$root/tools/check-resource-limits.sh"
 "$root/tools/check-legacy-api-absence.sh"
 cargo run --locked --quiet --manifest-path "$root/tools/performance-harness/Cargo.toml" -- verify
 
-echo "design artifact check: current technical authority and stable cross-cutting invariants validated"
+echo "design artifact check: current technical authority or reviewed candidate plus stable cross-cutting invariants validated"
