@@ -1,0 +1,111 @@
+#+title: ADR-0019: Consumer One-Shot Authority Entry
+#+date: 2026-08-26
+#+status: Proposed
+
+* Context
+
+The v5.0 bounded authority reset deliberately left declared-v1 domains inactive
+until implementation approached their ownership boundary. After the Producer
+Property Read architecture gate passed, the accepted roadmap now requires a
+Consumer Property Read architecture proof before broad Consumer expansion.
+
+The current Consumer runtime still follows the legacy topology: call-time TD/Form
+selection, =BindingRequest=, and binding-side support probing. The active v5
+architecture instead requires selection from one immutable consumed plan set,
+one owned =OutboundRequest=, one selected client binding call or constrained
+slot, shared Consumer response validation, and explicit terminal cleanup.
+
+Workspace topic 0061 reviewed the smallest deferred authority needed to specify
+that proof. It found that =PLAN-REQUEST-001= and =BIND-OUT-001= retain the
+required v5 semantics, while the historical =API-OPTIONS-001= contract is too
+broad for this domain entry and mixes concerns not required by the first
+Consumer one-shot proof.
+
+* Decision
+
+The next authority revision is v5.1 Consumer one-shot authority.
+
+Exactly three previously deferred requirement identities enter the active set:
+
+- =PLAN-REQUEST-001=, owned by =docs/spec/planning.md=;
+- =BIND-OUT-001=, owned by =docs/spec/binding-spi.md=; and
+- =API-OPTIONS-001=, owned by =docs/spec/interaction-core.md= with the narrowed
+  v5.1 definition recorded there.
+
+The v5.1 =API-OPTIONS-001= contract freezes only the owned Consumer
+selection/control kernel required by the first one-shot path: omission versus
+explicit selection, URI-template variables, optional form selection, and call
+timeout/deadline intent. An explicit selector may only narrow facts already
+represented in the immutable consumed plan set. Operation payload is not an
+option. Historical binding-id, media-type, subprotocol, security-branch,
+validation-profile, broad handle-default merge, and other advanced selectors
+remain non-authoritative until a later reviewed revision needs them.
+
+Consumer Property Read response validation does not activate a fourth deferred
+identity. The narrow shared validator is a refinement of the already-active
+=API-PAYLOAD-001=, =BIND-IO-001=, and =BIND-DELIVERY-001= contracts. It checks
+binding generation and plan identity against the live selected request, accepts
+only the compiled primary Property Read response in this first slice, preserves
+opaque protocol-native status provenance, and validates the successful
+Property Read output shape before application delivery. Broad codec/schema
+validation remains deferred.
+
+No lazy/cache/index, subscription/emission, Directory, codec, observability,
+profile-default, or advanced-option requirement enters this revision.
+
+The classified requirement total remains 121. The v5.1 candidate contains 65
+active requirements and 31 =inactive-domain-entry-review-required=
+requirements.
+
+* Activation
+
+This ADR is part of a docs-only v5.1 authority candidate. The candidate does
+not itself admit implementation or create the Consumer Property Read
+architecture gate.
+
+The candidate must receive independent architecture-level acceptance at one
+immutable head. A separate activation checkpoint then selects v5.1 without
+changing the reviewed normative boundary. Only after activation may the
+repository register =CONSUMER-PROPERTY-READ-ARCHITECTURE= and admit the
+corresponding ADR-0013 source tranches.
+
+The first admitted implementation sequence is:
+
+1. WP-100 Consumer call-value and narrow response-validation slice;
+2. WP-200 eager Consumer Property Read planning/selection slice;
+3. WP-300 =OutboundRequest= and selected ClientBinding call/static-slot slice;
+4. WP-400 consumed-plan publication, call ownership, drain, and facade slice;
+5. the cross-package Consumer Property Read architecture gate; and
+6. real Host Zenoh Consumer Property Read as later WP-600 production evidence.
+
+Each source tranche still requires its own ADR-0013 admission. Package status
+alone does not authorize implementation.
+
+* Consequences
+
+- The Consumer execution boundary gains explicit active authority before source
+  migration begins.
+- The first Consumer proof cannot fall back to runtime TD/Form scanning or
+  =supports_with_thing= merely because those legacy paths still exist.
+- =InteractionOptions= stops being treated as a catch-all input container in
+  the target design; payload remains an operation-input responsibility.
+- The stable =API-OPTIONS-001= identity is retained without importing its
+  historical speculative field breadth.
+- Shared Consumer response validation remains in Core/Binding semantic owners
+  rather than moving into a concrete protocol binding or the Planning crate.
+- The later long-lived domain still requires its own authority entry and
+  architecture proof.
+
+* Rejected alternatives
+
+- Re-adopting historical =API-OPTIONS-001= unchanged was rejected because it
+  would drag unrelated advanced selection policy into the first one-shot gate.
+- Keeping =API-OPTIONS-001= inactive was rejected because the public Consumer
+  call boundary still needs an owned active selection/control contract.
+- Splitting the stable identity into multiple new requirement ids was rejected
+  as unnecessary governance growth for the current semantic kernel.
+- Activating broad validation/codec requirements was rejected because identity,
+  primary-response, and Property Read success-shape checks are sufficient for
+  this architecture proof.
+- Mutating active v5.0 in place was rejected because the active requirement set
+  and public options semantics change.
