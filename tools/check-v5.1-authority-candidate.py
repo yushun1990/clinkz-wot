@@ -16,6 +16,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 MANIFEST = ROOT / "docs/spec/v5-authority-reset.toml"
 PACKAGE_PROJECTION = ROOT / "docs/work-packages/CONSUMER-PROPERTY-READ-V5.1-CANDIDATE.md"
+API_OWNERSHIP = ROOT / "docs/api-ownership.csv"
 
 
 def fail(message: str) -> None:
@@ -64,6 +65,45 @@ def require_metadata(rows: dict[str, dict[str, str]], requirement: str, *, sourc
         fail(f"{requirement} evidence_key is not {evidence}")
     if role is not None and role not in row.get("capability_roles", "").split("|"):
         fail(f"{requirement} metadata does not include capability role {role}")
+
+
+def require_consumer_response_validator_ownership() -> None:
+    with API_OWNERSHIP.open(newline="", encoding="utf-8") as source:
+        matches = [
+            row
+            for row in csv.DictReader(source)
+            if row.get("item") == "validate_untrusted_binding_output"
+        ]
+    if len(matches) != 1:
+        fail(
+            "api ownership must contain exactly one validate_untrusted_binding_output row"
+        )
+    row = matches[0]
+    expected = {
+        "kind": "function",
+        "defining_package": "clinkz-wot-core",
+        "defining_module": "response",
+        "visibility": "public",
+        "public_path": "clinkz_wot_core::validate_untrusted_binding_output",
+        "compilation_cells": "no-default|async-no-std|std",
+        "execution_models": "all",
+        "resource_profiles": "all",
+        "capability_roles": "consumer",
+        "requirements": "API-PAYLOAD-001|BIND-OUT-001",
+        "current_path": "absent",
+        "migration_action": "add",
+        "status": "frozen",
+    }
+    for field, value in expected.items():
+        if row.get(field) != value:
+            fail(
+                "validate_untrusted_binding_output has wrong "
+                f"{field}: {row.get(field)!r}; expected {value!r}"
+            )
+    if row.get("defining_package") == "clinkz-wot-planning" or row.get(
+        "public_path", ""
+    ).startswith("clinkz_wot_planning::"):
+        fail("Consumer response validator must not be Planning-owned")
 
 
 def main() -> None:
@@ -170,6 +210,7 @@ def main() -> None:
         evidence="consumer-selection-options",
     )
     require_metadata(rows, "BIND-DELIVERY-001", role="consumer")
+    require_consumer_response_validator_ownership()
 
     sources = manifest.get("active_source")
     if not isinstance(sources, list):
