@@ -110,6 +110,37 @@ for this slice and the types are not implemented. Any status-event value or
 reusable Core host-handler registration remains part of the broad
 status/storage families.
 
+
+## v5.1 Consumer Property Read entry slice
+
+Active authority consumed by this slice:
+
+- active plan-set/lifecycle/cancellation/drop/resource contracts plus the three
+  v5.1 Consumer entry identities consumed from their owning packages.
+
+Minimum scope:
+
+- `consume` publishes one immutable consumed Property Read plan generation
+  before returning the handle;
+- the target `read_property` path obtains a generation-bearing plan lease,
+  applies the narrowed options, constructs/admits one call owner or static slot,
+  invokes the selected binding, validates the binding-origin response, and
+  releases call and plan ownership exactly once;
+- dropping caller interest never drops the accepted binding call as the cleanup
+  protocol;
+- drain closes new call admission while already admitted calls retain the plan
+  generation through terminal settlement;
+- Host and constrained/static traces preserve the same semantic terminal
+  outcomes.
+
+Explicitly excluded:
+
+- broad ConsumedThing facade migration;
+- subscriptions/ObserveProperty;
+- collection operations;
+- scheduler-wide fairness beyond the separately owned WP-400 early checkpoint;
+- production Zenoh.
+
 ## Requirements
 
 - `LIFE-EXPOSE-001`

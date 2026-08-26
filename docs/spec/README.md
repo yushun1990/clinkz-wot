@@ -1,20 +1,17 @@
 # v5 Authority Specifications
 
-Status: v5.1 Consumer one-shot activation candidate. v5.0 remains the active
-mainline authority until the separately reviewed activation checkpoint selects
-v5.1.
+Status: active v5.1 Consumer one-shot authority.
 
-ADR-0018 established the bounded v5.0 authority reset. ADR-0019 is the proposed
-v5.1 domain-entry decision that re-adopts exactly three previously deferred
-Consumer one-shot identities. `v5-authority-reset.toml` now projects the v5.1
-candidate while retaining `current_design_revision = "5.0"` and
-`target_design_revision = "5.1"` so review cannot be mistaken for activation.
+ADR-0018 established the bounded v5.0 reset. ADR-0019 activates the independently
+reviewed v5.1 Consumer one-shot entry at candidate commit `3b133ebfe3c870102931982d6c056595f9d44255`. The
+active `v5-authority-reset.toml` now selects `current_design_revision = "5.1"`
+with 65 active requirements and records that immutable reviewed candidate.
 The deleted `decomposition.csv` remains recoverable from Git history as D3
 migration input; it is not v5 authority or roadmap.
 
-## v5.1 candidate owners
+## v5.1 active owners
 
-| Owner | Candidate responsibility | Count |
+| Owner | Active responsibility | Count |
 | --- | --- | ---: |
 | `docs/design.md` | revision, authority, admission, API ownership, profiles, standards | 6 |
 | `docs/architecture/10-primary-data-flows.md` | concurrency, callbacks, linearization, Directory scope | 5 |
@@ -27,36 +24,35 @@ migration input; it is not v5 authority or roadmap.
 | `planning.md` | immutable-plan core plus selected Consumer request static-data boundary | 9 |
 | `binding-spi.md` | registration/routes/delivery/I/O/cancellation plus `OutboundRequest` boundary | 12 |
 
-Candidate total: 65. The machine manifest is authoritative for the exact
-candidate identities; this table is navigation. Until activation, the last
-integrated v5.0 checkpoint remains the current authority for source admission.
+Active total: 65. The machine manifest is authoritative for the exact active
+identities; this table is navigation. Source admission still requires an exact
+ADR-0013 tranche; revision activation alone authorizes no Rust edit.
 
 ## Rules
 
-- One candidate-active requirement has exactly one registered candidate
-  definition.
+- One active requirement has exactly one registered active definition.
 - Architecture sources own cross-domain invariants; specifications own their
   exact detailed contracts without overriding architecture.
 - Machine artifacts project named fields and evidence; they are not parallel
   prose owners.
 - `docs/requirements.csv` retains profile/package/evidence metadata for all 121
   stable identities. It is not the authority selector; classification and
-  candidate ownership come from `v5-authority-reset.toml`.
+  active ownership comes from `v5-authority-reset.toml`.
 - Historical text retained inside `planning.md` or `binding-spi.md` is
   authoritative only when its stable id is registered active by the manifest.
 - A narrow completed amendment remains an owner only for an identity registered
   to its path. Other affected-id mentions are history or refinement context.
 - Work packages describe migration and evidence. A deferred requirement may
   trigger domain-entry review but cannot satisfy admission or close a gate.
-- A candidate does not admit source implementation merely because its proposed
+- An active revision does not admit source implementation merely because its
   normative text and checker pass.
 - A conflict blocks the affected implementation; file order does not resolve
   it.
 
 ## v5.1 domain-entry change
 
-The candidate moves exactly these identities from
-`inactive-domain-entry-review-required` to candidate-active authority:
+v5.1 moves exactly these identities from
+`inactive-domain-entry-review-required` to active authority:
 
 - `PLAN-REQUEST-001` in `planning.md`;
 - `BIND-OUT-001` in `binding-spi.md`; and
@@ -76,7 +72,7 @@ activate codec/schema or broad validation requirements.
 
 ## Inactive dispositions
 
-After v5.1 activation, 31 domain-entry identities remain deferred. They cover
+In active v5.1, 31 domain-entry identities remain deferred. They cover
 long-lived subscription/emission behavior, Directory client execution,
 codec/validation breadth, advanced planning/lazy/cache/index behavior,
 observability/status, scheduling, and profile defaults. Each affected domain
@@ -88,34 +84,23 @@ do not freeze an implementation. The four premature/superseded identities stay
 retired. The six redundant identities remain discharged by stronger governance,
 authority, or executable owners. The classified total remains exactly 121.
 
-## Candidate and activation protocol
+## v5.1 activation record
 
-The v5.1 candidate must:
+The docs-only candidate at `3b133ebfe3c870102931982d6c056595f9d44255` passed independent architecture-level
+acceptance after the Consumer response validator ownership projection was moved
+from Planning to Core and enforced by the candidate checker.
 
-1. contain only documentation and checker changes;
-2. keep `current_design_revision = "5.0"`, set
-   `target_design_revision = "5.1"`, and remain `status = "candidate"`;
-3. define the 65 candidate-active identities exactly once and classify all 121
-   identities exactly once;
-4. prove the remaining 56 identities are inactive in their recorded classes,
-   including exactly 31 domain-entry-deferred identities;
-5. keep ADR-0019 `Proposed` and outside the accepted ADR index during candidate
-   review;
-6. leave the current v5.0 work-package/gate selectors active and create no
-   Consumer gate manifest or source admission;
-7. pass candidate authority checks plus unchanged implementation regressions;
-   and
-8. receive independent architecture-level acceptance at one immutable commit.
+The activation checkpoint:
 
-Only a separate activation checkpoint may then:
+- accepts and indexes ADR-0019;
+- selects v5.1 as the active authority while preserving 65/31/121;
+- promotes the reviewed Consumer one-shot ownership and metadata checks into the
+  normal active-v5.1 checker path;
+- migrates the reviewed WP-100/WP-200/WP-300/WP-400 Consumer Property Read
+  slices into the active work-package documents;
+- marks workspace/0061 `MIGRATED`; and
+- removes candidate-only checker/package-projection files.
 
-- mark ADR-0019 accepted and index it;
-- switch current/target selectors and registered revision projections to v5.1;
-- replace candidate-only checker routing with the normal active-v5.1 checker;
-- record the independently accepted candidate commit; and
-- mark workspace/0061 `MIGRATED`.
-
-That activation checkpoint must not rewrite the reviewed requirement semantics.
-Only after activation may the repository create and register the
-`CONSUMER-PROPERTY-READ-ARCHITECTURE` gate and admit its exact ADR-0013 source
-tranches.
+It does not register `CONSUMER-PROPERTY-READ-ARCHITECTURE`, admit a source
+tranche, or activate any additional deferred identity. Those steps begin only
+after this activation checkpoint is integrated.

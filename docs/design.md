@@ -1,13 +1,13 @@
-# clinkz-wot v5.0 Authority Manifest
+# clinkz-wot v5.1 Authority Manifest
 
-Status: active v5.0 authority, independently reviewed and integrated through
-the exact ADR-0018 activation checkpoint.
+Status: active v5.1 authority, independently reviewed at candidate commit
+`3b133ebfe3c870102931982d6c056595f9d44255` and integrated through the ADR-0019 activation checkpoint.
 
 This document is intentionally a small revision and source manifest. It does
 not retain the v4.9 residual-domain monolith. The immutable historical basis is
-Git commit `6c01e07a446f51d413618474554b5eedcf5de23e`; ADR-0018 and
-`docs/spec/v5-authority-reset.toml` give every one of its 121 requirement
-identities an exact disposition. Git history, not copied residual prose, is the
+Git commit `6c01e07a446f51d413618474554b5eedcf5de23e`; ADR-0018 established the bounded reset, ADR-0019 activates the
+Consumer one-shot entry, and `docs/spec/v5-authority-reset.toml` gives every
+one of its 121 requirement identities an exact disposition. Git history, not copied residual prose, is the
 archive and rollback source.
 
 ## Normative language and identity
@@ -19,7 +19,7 @@ Only identifiers classified `active` by
 `docs/spec/v5-authority-reset.toml` may authorize implementation or satisfy a
 design or implementation gate.
 
-The 34 `inactive-domain-entry-review-required` identities are mandatory input
+The 31 `inactive-domain-entry-review-required` identities are mandatory input
 when their named domain enters implementation. The 15 historical inputs, four
 retired identities, and six redundant identities cannot authorize work. Their
 text is recoverable from the reset basis. Mentioning an inactive identifier in
@@ -33,7 +33,7 @@ a plan, review, or historical specification does not reactivate it.
    change;
 2. accepted records in `docs/ADRs/` control decisions and supersession;
 3. the registered architecture and specification sources listed in
-   `docs/spec/v5-authority-reset.toml` own the 62 active requirements;
+   `docs/spec/v5-authority-reset.toml` own the 65 active requirements;
 4. exact machine projections such as API ownership, resource limits, state
    models, work-package DAGs, and evidence records constrain their declared
    fields; and

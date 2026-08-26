@@ -66,8 +66,26 @@ fn parse_toml(root: &Path, relative: &str) -> Result<DocumentMut, String> {
 fn check_authority(root: &Path) -> Result<(), String> {
     let relative = "docs/spec/v5-authority-reset.toml";
     let document = parse_toml(root, relative)?;
-    require_root_string(&document, "current_design_revision", "5.0", relative)?;
+    require_root_string(&document, "current_design_revision", "5.1", relative)?;
     require_root_string(&document, "status", "active", relative)?;
+    require_root_string(
+        &document,
+        "decision",
+        "docs/ADRs/0019-consumer-one-shot-authority-entry.org",
+        relative,
+    )?;
+    require_root_string(
+        &document,
+        "workspace_basis",
+        "workspace/0061-consumer-one-shot-domain-entry.md",
+        relative,
+    )?;
+    require_root_string(
+        &document,
+        "reviewed_candidate_commit",
+        "3b133ebfe3c870102931982d6c056595f9d44255",
+        relative,
+    )?;
 
     let classification = document
         .get("classification")
@@ -216,7 +234,7 @@ fn expand_requirement(expression: &str) -> Result<Vec<String>, String> {
 fn check_work_packages(root: &Path) -> Result<(), String> {
     let relative = "docs/work-packages/index.toml";
     let document = parse_toml(root, relative)?;
-    require_root_string(&document, "design_revision", "5.0", relative)?;
+    require_root_string(&document, "design_revision", "5.1", relative)?;
     let packages = document
         .get("package")
         .and_then(Item::as_array_of_tables)

@@ -4,7 +4,7 @@
 
 Plan revision: active v5 bounded-core roadmap
 
-Active design revision: v5.0 bounded-core authority
+Active design revision: v5.1 Consumer one-shot authority
 
 Release target: ClinkZ-WoT v1, with protocol-independent Core, Planning, and
 Servient ownership; a client-only Directory/Discovery boundary; and optional
@@ -32,7 +32,9 @@ active task session; they are not stored in this roadmap.
 
 ## Roadmap Frontier
 
-The v5.0 authority is active. All six narrow Property Read tranches and D48's
+The v5.1 Consumer one-shot authority is active. The domain-entry review is
+complete; no Consumer source tranche or architecture gate is yet admitted. All six
+narrow Producer Property Read tranches and D48's
 generic transition-validation convergence are integrated. The aggregate
 `PROPERTY-READ-ARCHITECTURE` implementation and registered external mock
 binding/runner evidence are assembled in both application-static and public
@@ -68,8 +70,9 @@ advance the frontier safely.
 ## Critical Path
 
 1. In parallel, execute the existing WP-400 early multi-owner/scheduler
-   checkpoint and complete the Consumer one-shot domain-entry authority review.
-2. Complete a narrow Consumer Property Read cross-package architecture gate,
+   checkpoint and admit/complete the exact WP-100 -> WP-200 -> WP-300 -> WP-400
+   Consumer Property Read slices under ADR-0013.
+2. Complete the narrow Consumer Property Read cross-package architecture gate,
    then immediately exercise the matching public target path through real Host
    Zenoh production evidence before unrelated broad binding work accumulates.
 3. Broaden one-shot Core, Planning, Binding, and Servient capabilities only

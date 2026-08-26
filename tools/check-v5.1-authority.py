@@ -1,10 +1,5 @@
 #!/usr/bin/env python3
-"""Validate the docs-only v5.1 Consumer one-shot authority candidate.
-
-The current mainline design checker intentionally remains pinned to active v5.0.
-This checker validates the immutable candidate projection without pretending that
-v5.1 has already been activated.
-"""
+"""Validate the active v5.1 Consumer one-shot authority projection."""
 
 from __future__ import annotations
 
@@ -15,12 +10,12 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 MANIFEST = ROOT / "docs/spec/v5-authority-reset.toml"
-PACKAGE_PROJECTION = ROOT / "docs/work-packages/CONSUMER-PROPERTY-READ-V5.1-CANDIDATE.md"
 API_OWNERSHIP = ROOT / "docs/api-ownership.csv"
+REVIEWED_CANDIDATE = "3b133ebfe3c870102931982d6c056595f9d44255"
 
 
 def fail(message: str) -> None:
-    raise SystemExit(f"v5.1 authority candidate check: {message}")
+    raise SystemExit(f"v5.1 authority check: {message}")
 
 
 def expand_requirement(expression: str) -> list[str]:
@@ -54,8 +49,14 @@ def requirement_rows() -> tuple[set[str], dict[str, dict[str, str]]]:
     return result, rows
 
 
-def require_metadata(rows: dict[str, dict[str, str]], requirement: str, *, source: str | None = None,
-                     role: str | None = None, evidence: str | None = None) -> None:
+def require_metadata(
+    rows: dict[str, dict[str, str]],
+    requirement: str,
+    *,
+    source: str | None = None,
+    role: str | None = None,
+    evidence: str | None = None,
+) -> None:
     row = rows.get(requirement)
     if row is None:
         fail(f"missing metadata row for {requirement}")
@@ -75,9 +76,7 @@ def require_consumer_response_validator_ownership() -> None:
             if row.get("item") == "validate_untrusted_binding_output"
         ]
     if len(matches) != 1:
-        fail(
-            "api ownership must contain exactly one validate_untrusted_binding_output row"
-        )
+        fail("api ownership must contain exactly one validate_untrusted_binding_output row")
     row = matches[0]
     expected = {
         "kind": "function",
@@ -112,39 +111,24 @@ def main() -> None:
 
     if manifest.get("schema_version") != 1:
         fail("unexpected manifest schema")
-    if manifest.get("current_design_revision") != "5.0":
-        fail("candidate must retain current_design_revision = 5.0")
-    if manifest.get("target_design_revision") != "5.1":
-        fail("candidate must target design revision 5.1")
-    if manifest.get("status") != "candidate":
-        fail("candidate manifest status must be candidate")
+    if manifest.get("current_design_revision") != "5.1":
+        fail("current_design_revision must be 5.1")
+    if "target_design_revision" in manifest:
+        fail("active v5.1 manifest must not retain target_design_revision")
+    if manifest.get("status") != "active":
+        fail("v5.1 manifest status must be active")
+    if manifest.get("decision") != "docs/ADRs/0019-consumer-one-shot-authority-entry.org":
+        fail("active decision must be ADR-0019")
+    if manifest.get("workspace_basis") != "workspace/0061-consumer-one-shot-domain-entry.md":
+        fail("active workspace basis must be workspace/0061")
+    if manifest.get("reviewed_candidate_commit") != REVIEWED_CANDIDATE:
+        fail("reviewed_candidate_commit does not match independently accepted candidate")
+    if "candidate_decision" in manifest or "candidate_workspace_basis" in manifest:
+        fail("active manifest must not retain candidate selector fields")
     if manifest.get("classified_requirement_count") != 121:
         fail("classified requirement total must remain 121")
     if manifest.get("active_requirement_count") != 65:
-        fail("v5.1 candidate must contain exactly 65 active requirements")
-
-    candidate_decision = manifest.get("candidate_decision")
-    if candidate_decision != "docs/ADRs/0019-consumer-one-shot-authority-entry.org":
-        fail("candidate_decision must name ADR-0019")
-    candidate_workspace = manifest.get("candidate_workspace_basis")
-    if candidate_workspace != "workspace/0061-consumer-one-shot-domain-entry.md":
-        fail("candidate_workspace_basis must name workspace/0061")
-    for relative in (candidate_decision, candidate_workspace):
-        if not (ROOT / relative).is_file():
-            fail(f"missing candidate input {relative}")
-
-    if not PACKAGE_PROJECTION.is_file():
-        fail("missing Consumer Property Read candidate package projection")
-    package_projection = PACKAGE_PROJECTION.read_text(encoding="utf-8")
-    for marker in (
-        "## WP-100 Consumer call values and response validator",
-        "## WP-200 Consumer Property Read planning and selection",
-        "## WP-300 selected OutboundRequest and ClientBinding call",
-        "## WP-400 consumed plan-set and call ownership",
-        "CONSUMER-PROPERTY-READ-ARCHITECTURE",
-    ):
-        if marker not in package_projection:
-            fail(f"candidate package projection misses {marker!r}")
+        fail("v5.1 must contain exactly 65 active requirements")
 
     classification = manifest.get("classification")
     if not isinstance(classification, dict):
@@ -234,7 +218,7 @@ def main() -> None:
         if expected != len(requirements):
             fail(f"active_source {path} expected_count does not match")
         if path in expected_source_counts and expected != expected_source_counts[path]:
-            fail(f"active_source {path} has wrong v5.1 candidate count")
+            fail(f"active_source {path} has wrong v5.1 active count")
         source_path = ROOT / path
         if not source_path.is_file():
             fail(f"missing active authority source {path}")
@@ -254,7 +238,26 @@ def main() -> None:
             f"missing={sorted(active - sourced)!r} extra={sorted(sourced - active)!r}"
         )
 
-    print("v5.1 authority candidate check: 65/121 authority and package projection valid")
+    package_projection = ROOT / "docs/work-packages/CONSUMER-PROPERTY-READ-V5.1-CANDIDATE.md"
+    if package_projection.exists():
+        fail("candidate package projection must be migrated and removed after activation")
+    package_markers = {
+        "docs/work-packages/WP-100-core.md": "## v5.1 Consumer Property Read entry slice",
+        "docs/work-packages/WP-200-planning.md": "## v5.1 Consumer Property Read entry slice",
+        "docs/work-packages/WP-300-bindings.md": "## v5.1 Consumer Property Read entry slice",
+        "docs/work-packages/WP-400-servient.md": "## v5.1 Consumer Property Read entry slice",
+    }
+    for relative, marker in package_markers.items():
+        text = (ROOT / relative).read_text(encoding="utf-8")
+        if text.count(marker) != 1:
+            fail(f"{relative} must contain exactly one activated Consumer entry slice")
+
+    if (ROOT / "tools/check-v5.1-authority-candidate.py").exists():
+        fail("candidate authority checker must be removed after activation")
+    if (ROOT / "tools/check-architecture-adrs-candidate.sh").exists():
+        fail("candidate ADR checker must be removed after activation")
+
+    print("v5.1 authority check: active 65/121 authority, ownership, metadata, and package migration valid")
 
 
 if __name__ == "__main__":

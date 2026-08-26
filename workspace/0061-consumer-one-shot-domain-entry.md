@@ -1,6 +1,6 @@
 # 0061 Consumer One-Shot Domain Entry
 
-Status: DECIDED
+Status: MIGRATED
 Kind: v5 domain-entry authority review
 Baseline: `03e17e64c388370bd4ceb99f0bff42ba694076d7`
 

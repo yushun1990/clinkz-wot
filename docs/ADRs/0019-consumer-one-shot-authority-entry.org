@@ -1,6 +1,6 @@
 #+title: ADR-0019: Consumer One-Shot Authority Entry
 #+date: 2026-08-26
-#+status: Proposed
+#+status: Accepted
 
 * Context
 
@@ -53,21 +53,23 @@ validation remains deferred.
 No lazy/cache/index, subscription/emission, Directory, codec, observability,
 profile-default, or advanced-option requirement enters this revision.
 
-The classified requirement total remains 121. The v5.1 candidate contains 65
-active requirements and 31 =inactive-domain-entry-review-required=
+The classified requirement total remains 121. The active v5.1 authority contains
+65 active requirements and 31 =inactive-domain-entry-review-required=
 requirements.
 
 * Activation
 
-This ADR is part of a docs-only v5.1 authority candidate. The candidate does
-not itself admit implementation or create the Consumer Property Read
-architecture gate.
+The docs-only v5.1 authority candidate received independent architecture-level
+acceptance at exact commit =3b133ebfe3c870102931982d6c056595f9d44255=. The prior ownership blocker for
+=validate_untrusted_binding_output= was corrected before that acceptance, and
+the reviewed candidate retained exactly 65 active and 31 domain-entry-deferred
+identities.
 
-The candidate must receive independent architecture-level acceptance at one
-immutable head. A separate activation checkpoint then selects v5.1 without
-changing the reviewed normative boundary. Only after activation may the
-repository register =CONSUMER-PROPERTY-READ-ARCHITECTURE= and admit the
-corresponding ADR-0013 source tranches.
+This activation checkpoint selects v5.1 without changing that reviewed
+normative boundary. Activation itself creates no Consumer gate manifest and
+admits no Rust source tranche. After the activation checkpoint is integrated,
+the repository may register =CONSUMER-PROPERTY-READ-ARCHITECTURE= and admit its
+exact ADR-0013 source tranches through independent tranche review.
 
 The first admitted implementation sequence is:
 
