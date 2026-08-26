@@ -118,14 +118,39 @@ orchestration, lifecycle, scheduling, and cleanup; concrete bindings own
 protocol adaptation and I/O; Discovery is a Directory client rather than a
 service.
 
-The package order is
-`WP-000 -> WP-100 -> WP-200 -> WP-300 -> {WP-400, WP-500, WP-600} -> WP-700`.
+The coarse package-completion DAG is:
+
+```text
+WP-000 -> WP-100 -> WP-200 -> WP-300 -> {WP-400, WP-600} -> WP-700
+                 \-> WP-500 ------------------------------/
+```
+
+`WP-500` depends on `WP-100`, not `WP-300`, because the Directory client owns a
+Foundation/TD/Core state-machine boundary and does not consume Planning or
+Protocol Binding execution semantics. This package DAG is a completion and
+dependency projection, not a broad implementation start barrier.
+
 ADR-0013 permits only an exact independently reviewed tranche to proceed while
-broader gates remain open. The Property Read integration gate remains the first
-cross-package composition proof. The v5.0 reset is active; WP-200
-implementation remains blocked only until workspace issue 0014 closes its exact
-binding-artifact representation and fixture boundary and the resulting
-conversion packet receives independent admission.
+broader packages or gates remain open. Cross-package executable feedback is
+sequenced by materially different ownership topology rather than by broad
+package completion. The passed Producer Property Read proof is the first such
+proof. Before broad Consumer expansion, the Consumer one-shot domain must enter
+authority and a narrow Consumer Property Read architecture proof must pass.
+Before broad subscription/emission expansion, the streaming/emission domain must
+enter authority and one minimal `ObserveProperty` long-lived architecture proof
+must pass. The existing WP-400 multi-owner/multi-route checkpoint remains
+WP-400 package evidence and may proceed in parallel with Consumer domain-entry
+preparation; it is not another global gate.
+
+Real concrete-protocol pressure follows a stable matching capability boundary.
+Host Zenoh product evidence may proceed after the required WP-200/WP-300 and
+WP-400 tranches plus applicable architecture proof are stable, without waiting
+for unrelated broad WP-300 work. Real zenoh-pico runtime evidence remains
+required before constrained parity or corresponding WP-600 completion claims.
+None of this activates an inactive requirement: each Consumer, runtime,
+streaming/emission, Directory, codec/validation/security, or advanced-planning
+identity still requires its own domain-entry disposition before it can authorize
+implementation.
 
 ## Revision and rollback
 
