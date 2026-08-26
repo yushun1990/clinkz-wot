@@ -215,8 +215,15 @@ observe the exact successful payload and media type, and settle a Core-sealed
 invalid handler success once on its original response opportunity. This does
 not widen the probe or aggregate evidence into broad WP-300 or WP-600
 completion. The executable aggregate evidence is assembled and the registered
-gate is `ready`; only an independent acceptance may change that gate status to
-`passed`.
+`PROPERTY-READ-ARCHITECTURE` gate has passed independent acceptance.
+
+That passed Producer gate does not admit broad client, subscription, or emission
+work by implication. Consumer-side request/call work must first complete its
+explicit domain-entry authority review and the required Consumer Property Read
+cross-package proof. Subscription/emission work must first complete its own
+domain-entry review and the required minimal `ObserveProperty` long-lived
+cross-package proof. Exact unaffected tranches may still proceed under ADR-0013
+when their predecessor and authority scopes are independently shown disjoint.
 
 The probe also records two maturity limits rather than hiding them. First,
 optional Zenoh Form extensions such as priority and congestion control are not

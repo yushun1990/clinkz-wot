@@ -74,9 +74,31 @@ ADR-0013 admission; the reset itself creates no source-edit permission.
 
 The first executable composition proof is
 `PROPERTY-READ-ARCHITECTURE`, defined by the registered work-package gate
-manifest. It exercises one property read through real planner, binding,
-Servient, handler, response, generation, and cleanup boundaries in host and
-manual profiles, with an async/no-std compile projection. It blocks broad
-handler, binding, and Servient entry but grants no implementation admission;
-fixture code may adapt protocol frames and instrumentation, not replace an
-ownership boundary.
+manifest. It exercises one Producer Property Read through real planner,
+binding, Servient, handler, response, generation, and cleanup boundaries in
+host and manual profiles, with an async/no-std compile projection. The gate has
+passed independent acceptance. It proves that Producer one-shot topology only;
+it does not imply that Consumer calls or long-lived interactions share the same
+ownership proof.
+
+Cross-package architecture proofs progress only when a materially different
+ownership topology cannot be falsified early enough by package-local evidence.
+For the current v1 roadmap this requires exactly two additional planned proofs:
+
+1. after an explicit Consumer one-shot domain-entry authority review, a narrow
+   Consumer Property Read proof covering admitted consumed-plan publication,
+   selected `OutboundRequest`, binding call ownership, response validation,
+   caller cancellation/drop/late completion, generation retention, and cleanup;
+2. after an explicit subscription/emission domain-entry authority review, one
+   minimal `ObserveProperty` proof covering a binding-owned long-lived driver or
+   static slot, repeated delivery, bounded backpressure, stop/drop/cancel,
+   Producer emission handoff, Servient drain, and terminal cleanup.
+
+These planned proofs do not reactivate any inactive requirement and receive no
+machine gate registration until their own domain-entry authority is reviewed.
+The existing WP-400 multi-owner/multi-route scheduler checkpoint remains
+package evidence, not a third architecture gate. Native collections,
+multi-target emission, Directory client progress, additional one-shot
+operations, and Zenoh-family production/parity remain package or integration
+evidence unless new executable counterexamples demonstrate another distinct
+cross-package ownership boundary.

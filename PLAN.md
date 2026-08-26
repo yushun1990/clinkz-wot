@@ -53,16 +53,37 @@ executable cross-package composition proof. The real-target probe remains
 architecture feedback, not WP-600 product progress or protocol-shape-neutrality
 evidence.
 
+The first proof no longer releases an undifferentiated broad expansion. The
+next required cross-package proof is a narrow Consumer Property Read one-shot
+after its exact domain-entry authority review. A separate minimal
+`ObserveProperty` proof is required before broad subscription/emission
+expansion. The existing WP-400 multi-owner/multi-route checkpoint proceeds as
+package evidence in parallel with Consumer domain-entry preparation and is not
+a third global architecture gate.
+
 The roadmap identifies durable ordering, not a stored executable next action.
 A task session must still inspect the current repository and decide how to
 advance the frontier safely.
 
 ## Critical Path
 
-1. Complete the remaining broad WP-100, WP-200, WP-300, and WP-400 contracts;
-   broad WP-300 releases WP-500 and WP-600 product work.
-2. Join WP-400, WP-500, and WP-600 through WP-700 and close all global gates.
-3. Perform the v1 technical release review; the Owner decides actual release.
+1. In parallel, execute the existing WP-400 early multi-owner/scheduler
+   checkpoint and complete the Consumer one-shot domain-entry authority review.
+2. Complete a narrow Consumer Property Read cross-package architecture gate,
+   then immediately exercise the matching public target path through real Host
+   Zenoh production evidence before unrelated broad binding work accumulates.
+3. Broaden one-shot Core, Planning, Binding, and Servient capabilities only
+   through exact admitted tranches. Before broad subscription/emission work,
+   complete the corresponding domain-entry review and one minimal
+   `ObserveProperty` long-lived architecture gate.
+4. Expand capability families with staged target-to-legacy removal. WP-500 has
+   a WP-100 package dependency and enters only through exact Core/TD predecessor
+   tranches; WP-600 retains its WP-300 package dependency while real protocol
+   evidence proceeds capability-by-capability as matching shared/runtime
+   tranches become stable.
+5. Join completed WP-400, WP-500, and WP-600 through WP-700 for final
+   aggregation, absence, feature/conformance, and release evidence, then perform
+   the v1 technical release review.
 
 ## Milestone Overview
 
@@ -74,8 +95,8 @@ advance the frontier safely.
 | M3 — Planning and Compilation Pipeline | IN_PROGRESS | M2 tranche dependencies |
 | M4 — Protocol Binding SPI and Lifecycle | IN_PROGRESS | M3 tranche dependencies |
 | M5A — Servient Runtime and Application Lifecycle | IN_PROGRESS | M4 tranche dependencies |
-| M5B — Directory and Discovery Client Runtime | OPEN | broad M4 |
-| M5C — Zenoh and zenoh-pico Binding Migration | OPEN | broad M4 |
+| M5B — Directory and Discovery Client Runtime | OPEN | M2 package dependency; exact Core/TD tranche entry |
+| M5C — Zenoh and zenoh-pico Binding Migration | OPEN | M4 package dependency; matching capability tranche entry |
 | M6 — Umbrella Integration and Final Conformance | OPEN | M5A, M5B, M5C |
 | M7 — v1 Release Review | OPEN | M6 |
 
@@ -103,7 +124,8 @@ Exit goals:
 - every accepted ADR has one non-conflicting authoritative projection;
 - the 62 active v5 requirements retain one registered owner and all inactive
   identities retain one checked disposition;
-- GATE-1 through GATE-6 close with current evidence; and
+- every architecture/refactor gate required by the active v5 roadmap has
+  current same-revision evidence and its applicable acceptance state; and
 - an independent same-revision review finds no unresolved architecture
   conflict.
 
@@ -169,8 +191,10 @@ Objective: complete Servient-owned composition, activation, orchestration,
 scheduling, application facades, and cleanup.
 
 Current status: the narrow Property Read Servient implementation and aggregate
-architecture evidence have passed independent acceptance. Broad runtime
-evidence remains.
+architecture evidence have passed independent acceptance. The existing early
+multi-owner/multi-route scheduler checkpoint is the next broad WP-400 evidence
+that may proceed in parallel with Consumer domain-entry preparation. Broad
+runtime evidence remains.
 
 Exit goals: atomic serving activation; Servient-owned selection and progress;
 bounded host/constrained scheduling and cleanup; explicit v1 availability
@@ -178,10 +202,15 @@ limits; and independently reviewed WP-400 completion.
 
 ## M5B — Directory and Discovery Client Runtime
 
-Authoritative package scope: WP-500. Dependency: broad WP-300.
+Authoritative package scope: WP-500. Package dependency: WP-100.
 
 Objective: complete the Directory and Discovery client runtime while
 preserving the reviewed client-only boundary.
+
+Implementation entry is tranche-scoped under ADR-0013: a WP-500 tranche may
+proceed only after its exact Core/TD predecessors and Directory domain-entry
+authority are complete. Broad WP-300 completion is not a prerequisite because
+Discovery does not consume Planning or Protocol Binding execution semantics.
 
 Exit goals: bounded lazy progress, admission, cancellation, overflow, and
 result handling; no Directory service scope; and independently reviewed
@@ -189,13 +218,17 @@ WP-500 completion.
 
 ## M5C — Zenoh and zenoh-pico Binding Migration
 
-Authoritative package scope: WP-600. Dependency: broad WP-300.
+Authoritative package scope: WP-600. Package dependency: WP-300.
 
 Objective: migrate Zenoh and zenoh-pico to the admitted planning and binding
 contracts as one production protocol family.
 
 The earlier real-target Property Read probe supplies architecture feedback but
-does not satisfy this milestone's source admission or production evidence.
+does not satisfy production evidence. Real Host Zenoh product evidence should
+follow each stable matching capability boundary instead of waiting for broad
+WP-300 completion. Real zenoh-pico associated-state/backend evidence is required
+before the corresponding constrained parity or WP-600 completion claim; a
+compile-only feature cell cannot stand in for constrained runtime evidence.
 
 Exit goals: real Zenoh-family plan, route, request/response, subscription,
 emission, activation, cancellation, cleanup, and bounds evidence; valid host
@@ -206,13 +239,16 @@ legacy selection or dispatch.
 
 Authoritative package scope: WP-700. Dependencies: WP-400, WP-500, WP-600.
 
-Objective: compose the v5 implementation, remove obsolete paths, and close
-cross-package conformance.
+Objective: aggregate the completed v5 implementation, finish only remaining
+umbrella/public-surface cleanup, and close final cross-package conformance. WP-700
+must not be the first executable proof of Consumer, long-lived interaction,
+collection, emission, or protocol production ownership.
 
-Exit goals: intentional v1 public surface; no target-to-legacy backflow;
-passing workspace, feature, constrained, compatibility, resource, workload,
-and performance evidence; current requirement coverage; passed aggregate
-gates; and release claims no broader than executed evidence.
+Exit goals: intentional v1 public surface; final absence of target-to-legacy
+backflow after staged capability migration; passing workspace, feature,
+constrained, compatibility, resource, workload, and performance evidence;
+current requirement coverage; passed aggregate gates; and release claims no
+broader than executed evidence.
 
 ## M7 — v1 Release Review
 

@@ -17,26 +17,38 @@ Zenoh remains optional. Neither `clinkz-wot-td`, `clinkz-wot-core`,
 `clinkz-wot-discovery`, nor `clinkz-wot-servient` may acquire zenoh-specific behavior or a required
 dependency on the concrete package. There is currently one concrete Cargo package,
 `clinkz-wot-protocol-bindings-zenoh`; zenoh-pico is a feature/backend of that package, not a
-separate Cargo package. Work may begin after `WP-300` and all entry gates are closed.
+separate Cargo package. WP-600 package completion still depends on `WP-300`. An exact WP-600
+capability tranche may enter before broad WP-300 completion only through ADR-0013 when its
+matching WP-200/WP-300 predecessors, any required WP-400 runtime tranche, applicable domain-entry
+authority, and applicable architecture proof are complete.
 
-The first executable WP-600 tranche is a real Zenoh Producer Property Read
-smoke after broad WP-300 completion. It must reuse the admitted plan,
-registration, route, permit, request, response, and cleanup boundaries and may
-claim only that production path. A bounded real-target Zenoh Property Read
-feedback probe runs earlier after the narrow WP-300 slice and before the
-aggregate mock gate. It exercises public target authoring plus actual protocol
-I/O, correlation, readiness, cancellation/drain, cleanup, multiple
-Thing/route/form shape, and at least one network round trip. It remains
-non-authoritative architecture evidence and grants no WP-600 progress or source
-admission; concrete friction reopens the exact shared SPI owner rather than
-being hidden in probe-only adapters.
+The first production-oriented WP-600 tranche is real Host Zenoh Consumer
+Property Read after the Consumer Property Read architecture proof and its
+matching shared/runtime tranches are stable. It must reuse the admitted consumed
+plan, selected `OutboundRequest`, client-call ownership, response-validation,
+generation, cancellation, and cleanup boundaries with no legacy form or binding
+selection. Producer Property Read remains required regression evidence and joins
+that Consumer path in the first bidirectional Zenoh Property Read loop; it is not
+repeated as the only new production proof.
+
+A bounded real-target Zenoh Producer Property Read feedback probe already ran
+after the narrow WP-300 slice and before the aggregate mock gate. It exercises
+public target authoring plus actual protocol I/O, correlation, readiness,
+cancellation/drain, cleanup, multiple Thing/route/form shape, and at least one
+network round trip. That historical probe remains architecture evidence rather
+than retroactive WP-600 product progress. Future real Host Zenoh paths count as
+WP-600 production progress only when they use admitted public target contracts
+without test-only or legacy selection/dispatch edges. Real zenoh-pico
+associated-state/backend evidence may follow the Host path, but it is mandatory
+before constrained parity or completion is claimed for the corresponding common
+capability.
 
 Zenoh and zenoh-pico are two representations of one protocol family. Their
-shared runtime cases establish production-backed Host/constrained parity for
-the explicitly declared common capability intersection; they do not by
-themselves establish protocol-shape neutrality. Profile-only, compile-only,
-unsupported, and not-applicable capabilities remain explicit registration and
-evidence dispositions rather than silently omitted cases.
+shared runtime cases establish production-backed Host/constrained parity for the
+explicitly declared common capability intersection; they do not by themselves
+establish protocol-shape neutrality. Profile-only, compile-only, unsupported,
+and not-applicable capabilities remain explicit registration and evidence
+dispositions rather than silently omitted cases.
 
 The broad consumer-response metadata flow in
 `docs/amendments/WP-100-interaction-output-api-v1.md` is v5-inactive domain-entry
@@ -244,9 +256,11 @@ No compatibility feature may reintroduce zenoh into a protocol-neutral crate.
 - `zenoh-complete-registration`: bundle construction and rejection fixtures covering compiler and
   execution compatibility, all required policies and maxima, profile cells, startup-only
   publication, and absence of independently installable components.
-- `zenoh-property-read-smoke`: one real host Zenoh Property Read route from
-  immutable plan through permit-authorized acceptance, response delivery, and
-  terminal cleanup, with no mock transport or legacy selection/dispatch edge.
+- `zenoh-property-read-smoke`: real Host Zenoh Consumer Property Read through immutable consumed
+  plan, selected `OutboundRequest`, client execution, validated response, cancellation/late-result
+  settlement, and terminal cleanup, plus Producer Property Read regression through the admitted
+  route/permit/response path. Neither side may use a mock transport or legacy selection/dispatch
+  edge.
 - `zenoh-author-usability`: an external binding-author fixture recording the
   complete required declarations, helper use, diagnostics, repeated
   workaround classes, cleanup-library mapping, generic/layout/code-size cost,

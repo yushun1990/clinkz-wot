@@ -43,7 +43,7 @@ id = "WP-500"
 status = "planned"
 document = "docs/work-packages/WP-500-discovery.md"
 owner_crates = ["discovery", "core"]
-depends_on = ["WP-300"]
+depends_on = ["WP-100"]
 
 [[package]]
 id = "WP-600"
