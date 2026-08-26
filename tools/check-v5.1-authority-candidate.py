@@ -10,12 +10,12 @@ from __future__ import annotations
 
 import csv
 import re
-import sys
 import tomllib
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 MANIFEST = ROOT / "docs/spec/v5-authority-reset.toml"
+PACKAGE_PROJECTION = ROOT / "docs/work-packages/CONSUMER-PROPERTY-READ-V5.1-CANDIDATE.md"
 
 
 def fail(message: str) -> None:
@@ -39,8 +39,9 @@ def expand_requirement(expression: str) -> list[str]:
     return [f"{prefix}{number:03d}" for number in range(start, end + 1)]
 
 
-def requirement_index() -> set[str]:
+def requirement_rows() -> tuple[set[str], dict[str, dict[str, str]]]:
     result: set[str] = set()
+    rows: dict[str, dict[str, str]] = {}
     with (ROOT / "docs/requirements.csv").open(newline="", encoding="utf-8") as source:
         for row in csv.DictReader(source):
             for expression in row["requirement"].split("|"):
@@ -48,7 +49,21 @@ def requirement_index() -> set[str]:
                     if requirement in result:
                         fail(f"duplicate indexed requirement {requirement}")
                     result.add(requirement)
-    return result
+                    rows[requirement] = row
+    return result, rows
+
+
+def require_metadata(rows: dict[str, dict[str, str]], requirement: str, *, source: str | None = None,
+                     role: str | None = None, evidence: str | None = None) -> None:
+    row = rows.get(requirement)
+    if row is None:
+        fail(f"missing metadata row for {requirement}")
+    if source is not None and row.get("source_path") != source:
+        fail(f"{requirement} source_path is not {source}")
+    if evidence is not None and row.get("evidence_key") != evidence:
+        fail(f"{requirement} evidence_key is not {evidence}")
+    if role is not None and role not in row.get("capability_roles", "").split("|"):
+        fail(f"{requirement} metadata does not include capability role {role}")
 
 
 def main() -> None:
@@ -77,6 +92,19 @@ def main() -> None:
     for relative in (candidate_decision, candidate_workspace):
         if not (ROOT / relative).is_file():
             fail(f"missing candidate input {relative}")
+
+    if not PACKAGE_PROJECTION.is_file():
+        fail("missing Consumer Property Read candidate package projection")
+    package_projection = PACKAGE_PROJECTION.read_text(encoding="utf-8")
+    for marker in (
+        "## WP-100 Consumer call values and response validator",
+        "## WP-200 Consumer Property Read planning and selection",
+        "## WP-300 selected OutboundRequest and ClientBinding call",
+        "## WP-400 consumed plan-set and call ownership",
+        "CONSUMER-PROPERTY-READ-ARCHITECTURE",
+    ):
+        if marker not in package_projection:
+            fail(f"candidate package projection misses {marker!r}")
 
     classification = manifest.get("classification")
     if not isinstance(classification, dict):
@@ -115,12 +143,33 @@ def main() -> None:
     if deferred.get("expected_count") != 31:
         fail("v1_deferred must contain 31 identities")
 
-    indexed = requirement_index()
+    indexed, rows = requirement_rows()
     if indexed != classified:
         fail(
             "authority classification and requirements index differ; "
             f"missing={sorted(classified - indexed)!r} extra={sorted(indexed - classified)!r}"
         )
+    require_metadata(
+        rows,
+        "PLAN-REQUEST-001",
+        source="docs/spec/planning.md",
+        role="consumer",
+        evidence="consumer-request-static-data",
+    )
+    require_metadata(
+        rows,
+        "BIND-OUT-001",
+        source="docs/spec/binding-spi.md",
+        role="consumer",
+    )
+    require_metadata(
+        rows,
+        "API-OPTIONS-001",
+        source="docs/spec/interaction-core.md",
+        role="consumer",
+        evidence="consumer-selection-options",
+    )
+    require_metadata(rows, "BIND-DELIVERY-001", role="consumer")
 
     sources = manifest.get("active_source")
     if not isinstance(sources, list):
@@ -164,7 +213,7 @@ def main() -> None:
             f"missing={sorted(active - sourced)!r} extra={sorted(sourced - active)!r}"
         )
 
-    print("v5.1 authority candidate check: 65/121 authority projection valid")
+    print("v5.1 authority candidate check: 65/121 authority and package projection valid")
 
 
 if __name__ == "__main__":
