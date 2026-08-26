@@ -46,7 +46,7 @@ fi
 
 "$root/tools/check-api-ownership.sh"
 if [[ "$authority_status" == "candidate" ]]; then
-    "$root/tools/check-architecture-adrs-candidate.sh"
+    bash "$root/tools/check-architecture-adrs-candidate.sh"
 else
     "$root/tools/check-architecture-adrs.sh"
 fi
