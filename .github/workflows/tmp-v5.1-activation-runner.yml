@@ -1,0 +1,31 @@
+name: temporary-v5.1-activation-runner
+
+on:
+  push:
+    branches:
+      - docs/v5.1-consumer-one-shot-activation
+    paths:
+      - .github/workflows/tmp-v5.1-activation-runner.yml
+
+permissions:
+  contents: write
+
+jobs:
+  activate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: docs/v5.1-consumer-one-shot-activation
+      - name: Apply activation patch
+        run: |
+          python3 tools/apply-v5.1-activation.py
+          python3 tools/check-v5.1-authority.py
+          git diff --check
+      - name: Commit activation checkpoint
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add -A
+          git commit -m 'docs(authority): activate v5.1 Consumer one-shot authority'
+          git push origin HEAD:docs/v5.1-consumer-one-shot-activation
