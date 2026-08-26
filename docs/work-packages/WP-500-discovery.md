@@ -15,8 +15,12 @@ portable state machines.
 This package is client-only. It does not implement Directory storage, an in-memory Directory,
 server-side query evaluation, authorization or redaction policy, token issuance, compare-and-set
 execution, snapshot retention, compaction, watch fan-out, endpoint hosting, or service SLOs. Those
-concerns remain outside the active design. Work may begin after `WP-300`; it may proceed in
-parallel with `WP-400` and `WP-600` once every entry gate is closed.
+concerns remain outside the active design. Its package dependency is `WP-100`, not `WP-300`:
+Discovery consumes protocol-neutral Foundation/TD/Core contracts and does not consume Planning or
+Protocol Binding execution semantics. Source work still enters only through ADR-0013 exact tranche
+admission after the required Core/TD predecessor tranches and Directory domain-entry authority are
+complete. Eligible WP-500 tranches may therefore proceed in parallel with WP-200, WP-300, WP-400,
+and WP-600 when their own entry conditions are satisfied.
 
 ## Requirements
 
@@ -160,8 +164,9 @@ only.
 
 ## Completion Conditions
 
-- `WP-300` is complete, all entry gates remain closed, and every public Directory item has one
-  frozen owner and path in `docs/api-ownership.csv`.
+- `WP-100` is complete, every required Core/TD predecessor tranche is complete, all applicable
+  Directory entry gates remain closed, and every public Directory item has one frozen owner and
+  path in `docs/api-ownership.csv`.
 - The three feature cells expose the documented values and adapters; no-default builds have useful
   poll progress and `async` alone pulls no executor.
 - All client state machines, token-context rules, typed authority rules, incremental admission,
