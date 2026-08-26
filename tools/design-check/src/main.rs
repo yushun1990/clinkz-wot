@@ -259,6 +259,11 @@ fn check_work_packages(root: &Path) -> Result<(), String> {
 
     let gate_path = root_string(&document, "integration_gate_manifest", relative)?;
     let gate = parse_toml(root, &gate_path)?;
+    if root_integer(&gate, "schema_version", &gate_path)? != 3 {
+        return Err(format!(
+            "{gate_path} is not aggregate gate schema version 3"
+        ));
+    }
     require_root_string(&gate, "design_revision", "5.0", &gate_path)?;
     require_root_string(&gate, "id", "PROPERTY-READ-ARCHITECTURE", &gate_path)?;
     let gate_document = root_string(&gate, "document", &gate_path)?;
@@ -266,6 +271,60 @@ fn check_work_packages(root: &Path) -> Result<(), String> {
     let status = root_string(&gate, "status", &gate_path)?;
     if !matches!(status.as_str(), "ready" | "passed") {
         return Err(format!("Property Read gate has invalid status {status:?}"));
+    }
+    let fixture_roots: BTreeSet<String> = item_strings(
+        gate.get("fixture_roots")
+            .ok_or_else(|| format!("{gate_path} has no fixture_roots"))?,
+        &format!("{gate_path}.fixture_roots"),
+    )?
+    .into_iter()
+    .collect();
+    let expected_fixture_roots = BTreeSet::from([
+        "tools/architecture-fixtures/property-read-binding".to_owned(),
+        "tools/architecture-fixtures/property-read-runner".to_owned(),
+    ]);
+    if fixture_roots != expected_fixture_roots {
+        return Err(set_difference(
+            "Property Read fixture roots",
+            &expected_fixture_roots,
+            "registered fixture roots",
+            &fixture_roots,
+        ));
+    }
+    for fixture_root in &fixture_roots {
+        require_file(
+            root,
+            &format!("{fixture_root}/Cargo.toml"),
+            "Property Read fixture root",
+        )?;
+    }
+    let aggregate_evidence = item_strings(
+        gate.get("evidence")
+            .ok_or_else(|| format!("{gate_path} has no aggregate evidence"))?,
+        &format!("{gate_path}.evidence"),
+    )?;
+    if status == "passed" && aggregate_evidence.is_empty() {
+        return Err("passed Property Read gate has no aggregate evidence".to_owned());
+    }
+    for evidence in aggregate_evidence {
+        require_file(root, &evidence, "Property Read aggregate evidence")?;
+    }
+    let test_commands = item_strings(
+        gate.get("test_commands")
+            .ok_or_else(|| format!("{gate_path} has no test_commands"))?,
+        &format!("{gate_path}.test_commands"),
+    )?;
+    for required in [
+        "cargo check --locked -p clinkz-wot-property-read-binding-fixture --no-default-features",
+        "cargo test --locked -p clinkz-wot-property-read-binding-fixture",
+        "cargo check --locked -p clinkz-wot-property-read-architecture-runner --no-default-features --features async",
+        "cargo test --locked -p clinkz-wot-property-read-architecture-runner",
+    ] {
+        if !test_commands.iter().any(|command| command == required) {
+            return Err(format!(
+                "{gate_path} does not register required aggregate command {required:?}"
+            ));
+        }
     }
     let dependencies = gate
         .get("dependency")

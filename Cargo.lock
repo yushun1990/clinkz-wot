@@ -368,6 +368,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "clinkz-wot-property-read-architecture-runner"
+version = "0.1.0"
+dependencies = [
+ "clinkz-wot-core",
+ "clinkz-wot-foundation",
+ "clinkz-wot-property-read-binding-fixture",
+ "clinkz-wot-servient",
+ "clinkz-wot-td",
+]
+
+[[package]]
+name = "clinkz-wot-property-read-binding-fixture"
+version = "0.1.0"
+dependencies = [
+ "clinkz-wot-core",
+ "clinkz-wot-foundation",
+]
+
+[[package]]
 name = "clinkz-wot-protocol-bindings"
 version = "0.1.0"
 dependencies = [
@@ -404,6 +423,7 @@ dependencies = [
  "clinkz-wot-discovery",
  "clinkz-wot-foundation",
  "clinkz-wot-planning",
+ "clinkz-wot-property-read-binding-fixture",
  "clinkz-wot-protocol-bindings",
  "clinkz-wot-protocol-bindings-zenoh",
  "clinkz-wot-td",

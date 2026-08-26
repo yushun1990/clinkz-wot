@@ -33,9 +33,11 @@ active task session; they are not stored in this roadmap.
 ## Roadmap Frontier
 
 The v5.0 authority is active. All six narrow Property Read tranches and D48's
-generic transition-validation convergence are integrated and validated. The
-aggregate `PROPERTY-READ-ARCHITECTURE` gate is `ready`, not `passed`, and its
-planned fixture roots remain absent.
+generic transition-validation convergence are integrated. The aggregate
+`PROPERTY-READ-ARCHITECTURE` implementation and registered external mock
+binding/runner evidence are assembled in both application-static and public
+Host-erased representations; the gate remains ready pending independent
+acceptance.
 
 The bounded real-target Zenoh Property Read probe required by workspace topic
 0056 now exercises the application-static and public Host-erased target
@@ -47,11 +49,10 @@ footprint, generation identity, and erased route state survive the three
 linear stage owners through terminal cleanup; its public state projection is
 shared and pinned rather than whole-state mutable, and accept polling receives
 only a shared guard borrow while Servient retains the committed owner.
-Aggregate mock source
-admission is therefore no longer waiting on that correction, but the gate
-remains `ready`, its fixture roots remain absent, and it has not passed. The
-probe remains architecture feedback, not WP-600 product progress or
-protocol-shape-neutrality evidence.
+The aggregate candidate preserves that correction and supplies the first
+executable cross-package composition proof for independent acceptance. The
+real-target probe remains architecture feedback, not WP-600 product progress
+or protocol-shape-neutrality evidence.
 
 The roadmap identifies durable ordering, not a stored executable next action.
 A task session must still inspect the current repository and decide how to
@@ -59,11 +60,10 @@ advance the frontier safely.
 
 ## Critical Path
 
-1. Complete the aggregate mock `PROPERTY-READ-ARCHITECTURE` gate.
-2. Complete the remaining broad WP-100, WP-200, WP-300, and WP-400 contracts;
+1. Complete the remaining broad WP-100, WP-200, WP-300, and WP-400 contracts;
    broad WP-300 releases WP-500 and WP-600 product work.
-3. Join WP-400, WP-500, and WP-600 through WP-700 and close all global gates.
-4. Perform the v1 technical release review; the Owner decides actual release.
+2. Join WP-400, WP-500, and WP-600 through WP-700 and close all global gates.
+3. Perform the v1 technical release review; the Owner decides actual release.
 
 ## Milestone Overview
 
@@ -147,13 +147,14 @@ Objective: provide a constructible protocol-independent binding architecture
 with protocol-owned I/O and correlation, route-scoped progress, explicit
 ownership, and bounded cleanup.
 
-Current status: the narrow Property Read binding slice is complete. The
-real-target Zenoh probe has reaffirmed its macro ownership invariants and both
+Current status: the narrow Property Read binding implementation candidate and
+its executable evidence are assembled. The real-target Zenoh probe has
+reaffirmed its macro ownership invariants and both
 the application-static and corrected Host-erased carriers through real network
 I/O. Workspace topic 0058 is migrated: public Host succession moves one
 unchanged carrier across the distinct prepared, active, and committed owners,
 with borrowed typed state access and exact terminal release. The aggregate mock
-gate and broad WP-300 exit remain open.
+gate is ready pending independent acceptance; broad WP-300 exit remains open.
 
 Exit goals: externally exercised authoring and execution boundaries; explicit
 profile applicability and resource costs; executable lifecycle, failure, and
@@ -167,8 +168,9 @@ Authoritative package scope: WP-400. Dependency: WP-300.
 Objective: complete Servient-owned composition, activation, orchestration,
 scheduling, application facades, and cleanup.
 
-Current status: the narrow Property Read Servient slice is complete and
-integrated. Aggregate and broad runtime evidence remains.
+Current status: the narrow Property Read Servient implementation and aggregate
+architecture evidence are assembled for independent acceptance. Broad runtime
+evidence remains.
 
 Exit goals: atomic serving activation; Servient-owned selection and progress;
 bounded host/constrained scheduling and cleanup; explicit v1 availability

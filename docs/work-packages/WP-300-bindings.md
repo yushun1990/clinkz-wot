@@ -208,8 +208,15 @@ semantics already exercised by the static path. A
 response callback may retain a non-owning `Weak` alias while the route is live;
 it cannot extend or replace the guard-owned primary state and is not a route
 table. Workspace topic 0058 records the migrated correction. The real-target
-prerequisite no longer blocks aggregate source admission, but the aggregate
-gate remains merely `ready` and has not been executed.
+prerequisite no longer blocks aggregate source admission. The separate
+deterministic mock binding and runner now execute the aggregate gate in both
+representations. They validate the complete live route/correlation identity,
+observe the exact successful payload and media type, and settle a Core-sealed
+invalid handler success once on its original response opportunity. This does
+not widen the probe or aggregate evidence into broad WP-300 or WP-600
+completion. The executable aggregate evidence is assembled and the registered
+gate is `ready`; only an independent acceptance may change that gate status to
+`passed`.
 
 The probe also records two maturity limits rather than hiding them. First,
 optional Zenoh Form extensions such as priority and congestion control are not
@@ -377,7 +384,11 @@ Implement the frozen contribution and runtime surfaces:
   driver, input, or typed slot with the source. The source moves it into
   `CleanupTransferEnvelope<T>` and publishes `CleanupOutcome::PendingCleanup` only after
   `CleanupTransferTarget::try_accept` returns `CleanupTransferAcceptance::Accepted`. Rejection
-  returns the identical envelope to the pre-reserved manual owner. An accepted executor task
+  returns the identical envelope to the pre-reserved manual owner. For Host work, Servient binds
+  the named owner from its admitted transfer reservation into `CleanupPhaseContext`; binding code
+  consumes that production-derived carrier into `CleanupTransferRequest` and never derives an
+  owner from Servient slot arithmetic. Manual fallback retains the same request and phase across
+  Pending and retryable callback error. An accepted executor task
   that cannot finish commits its pre-reserved durable residual before destruction.
 - `RuntimeEvent`, `BindingRuntimeEvent`, `BindingStatusRecord`, and `OverflowPolicy`;
 - `ProducerEmission`, `EmissionKind`, `BindingPublication`, `EmissionStatus`, and

@@ -1,17 +1,42 @@
-schema_version = 2
+schema_version = 3
 design_revision = "5.0"
 id = "PROPERTY-READ-ARCHITECTURE"
-status = "ready"
+status = "passed"
 document = "docs/work-packages/PROPERTY-READ-ARCHITECTURE.md"
-planned_fixture_roots = [
+fixture_roots = [
     "tools/architecture-fixtures/property-read-binding",
     "tools/architecture-fixtures/property-read-runner",
+]
+evidence = [
+    "servient/src/property_read.rs",
+    "tools/architecture-fixtures/property-read-binding/src/lib.rs",
+    "tools/architecture-fixtures/property-read-runner/src/lib.rs",
+]
+evidence_cases = [
+    "application_static_cell_uses_the_complete_production_path",
+    "host_erased_cell_uses_the_same_production_path_and_one_route_carrier",
+    "invalid_handler_success_is_sealed_once_on_the_original_opportunity_in_both_cells",
+    "ingress_capacity_is_admitted_at_every_scope_before_buffering_or_side_effects",
+    "oversized_activation_uses_separately_admitted_recovery_and_preserves_predecessor",
+    "insufficient_host_call_recovery_capacity_rejects_before_construction_or_polling",
+    "outstanding_host_lifecycle_calls_cancel_before_route_rollback",
+    "pending_response_delivery_cancellation_retains_exact_context_and_cleans_once",
+    "pending_cleanup_call_cancellation_retains_route_and_call_contexts_to_terminal",
+    "lifecycle_transfer_uses_production_owner_and_retains_context_to_terminal",
+    "delivery_transfer_uses_production_owner_across_error_retry_and_terminal",
+    "cleanup_call_transfer_uses_production_owner_and_retains_both_contexts",
+    "rejected_production_owner_offer_retries_in_manual_owner_with_exact_context",
 ]
 test_commands = [
     "cargo test --locked -p clinkz-wot-core",
     "cargo test --locked -p clinkz-wot-planning",
     "cargo test --locked -p clinkz-wot-servient --test property_read",
+    "cargo test --locked -p clinkz-wot-servient --lib",
     "cargo test --locked -p clinkz-wot-servient --no-default-features --test property_read",
+    "cargo check --locked -p clinkz-wot-property-read-binding-fixture --no-default-features",
+    "cargo test --locked -p clinkz-wot-property-read-binding-fixture",
+    "cargo check --locked -p clinkz-wot-property-read-architecture-runner --no-default-features --features async",
+    "cargo test --locked -p clinkz-wot-property-read-architecture-runner",
     "cargo test --locked -p clinkz-wot-protocol-bindings-zenoh --test target_property_read_feedback_probe -- --test-threads=1",
 ]
 
@@ -36,6 +61,7 @@ evidence = [
     "core/tests/host_route_guard.rs",
     "servient/tests/support/property_read_binding.rs",
     "servient/tests/support/binding_authoring.rs",
+    "tools/architecture-fixtures/property-read-binding/src/lib.rs",
     "protocol-bindings/protocols/zenoh/tests/target_property_read_feedback_probe.rs",
 ]
 
@@ -73,4 +99,5 @@ evidence = [
     "servient/src/property_read.rs",
     "servient/tests/property_read.rs",
     "servient/tests/support/servient_host.rs",
+    "tools/architecture-fixtures/property-read-runner/src/lib.rs",
 ]

@@ -49,4 +49,6 @@ jobs:
         run: |
           cargo check --locked -p clinkz-wot-core --no-default-features
           cargo check --locked -p clinkz-wot-servient --no-default-features
+          cargo check --locked -p clinkz-wot-property-read-binding-fixture --no-default-features
+          cargo check --locked -p clinkz-wot-property-read-architecture-runner --no-default-features --features async
           cargo check --locked -p clinkz-wot-protocol-bindings-zenoh --no-default-features --features zenoh-pico
