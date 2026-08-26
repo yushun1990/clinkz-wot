@@ -1,6 +1,6 @@
 # 0060 Roadmap Execution Sequencing Review
 
-Status: DECIDED
+Status: MIGRATED
 Kind: roadmap and implementation-sequencing investigation
 Baseline: `594c1b36f1d529f2e57ee30ddbfd601f0682e52e`
 
@@ -458,10 +458,21 @@ This decision does not:
 - claim WP-500 or WP-600 implementation admission; or
 - claim release readiness.
 
+## Migration record
+
+PR #43 (`docs(roadmap): migrate lifecycle-topology sequencing`) integrated the
+decided execution sequence into `PLAN.md`, `docs/design.md`, the architecture
+backbone, the work-package DAG, and the affected WP-300/WP-500/WP-600/WP-700
+projections. Its independently accepted exact head
+`61f779ea99dfe9f2ed0f9b64f083b1119e1637ad` was merged to `master` as
+`16812e40431714365a410d51f33ac0846e272b52`.
+
+The migration deliberately did not reactivate Consumer or streaming
+requirements and did not pre-register future Consumer/long-lived gate
+manifests. Those are now owned by their respective domain-entry reviews.
+
 ## Migration condition
 
-This topic remains `DECIDED` until its durable conclusions are represented in
-the appropriate roadmap, architecture/specification, work-package, and machine
-projection owners through a reviewed repository change.
-
-Only after that migration is integrated should this topic become `MIGRATED`.
+Satisfied by the integrated PR #43 migration described above. This topic is
+`MIGRATED`; subsequent Consumer one-shot authority work continues in workspace
+0061.
