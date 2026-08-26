@@ -1,10 +1,12 @@
 schema_version = 1
 current_design_revision = "5.0"
-target_design_revision = "5.0"
-status = "active"
+target_design_revision = "5.1"
+status = "candidate"
 decision = "docs/ADRs/0018-bounded-v5-normative-authority-reset.org"
 workspace_basis = "workspace/0015-normative-authority-reset.md"
-active_requirement_count = 62
+candidate_decision = "docs/ADRs/0019-consumer-one-shot-authority-entry.org"
+candidate_workspace_basis = "workspace/0061-consumer-one-shot-domain-entry.md"
+active_requirement_count = 65
 classified_requirement_count = 121
 
 [classification.indispensable]
@@ -81,19 +83,26 @@ requirements = [
   "API-RESOURCE-001",
 ]
 
+[classification.consumer_one_shot]
+authority_status = "active"
+expected_count = 3
+requirements = [
+  "PLAN-REQUEST-001",
+  "BIND-OUT-001",
+  "API-OPTIONS-001",
+]
+
 [classification.v1_deferred]
 authority_status = "inactive-domain-entry-review-required"
-expected_count = 34
+expected_count = 31
 requirements = [
   "DOC-RUNTIME-003",
   "HANDLER-SUB-001",
   "PLAN-COST-002",
   "PLAN-INDEX-001",
   "PLAN-LAZY-001",
-  "PLAN-REQUEST-001",
   "PLAN-CACHE-001",
   "FORM-FINALIZE-002",
-  "BIND-OUT-001",
   "BIND-PROGRESS-001",
   "SUB-STORAGE-001",
   "SUB-DATA-001",
@@ -113,7 +122,6 @@ requirements = [
   "CAP-STATUS-001",
   "OBS-PROFILE-001",
   "API-DISCOVERY-EXEC-001",
-  "API-OPTIONS-001",
   "STATE-SUB-001",
   "STATE-DISC-001",
   "PRODUCER-EMIT-001",
@@ -218,7 +226,7 @@ requirements = [
 
 [[active_source]]
 path = "docs/spec/interaction-core.md"
-expected_count = 10
+expected_count = 11
 requirements = [
   "HANDLER-API-001",
   "HANDLER-CANCEL-001",
@@ -226,6 +234,7 @@ requirements = [
   "API-TYPES-001",
   "API-HOT-ID-001",
   "API-PAYLOAD-001",
+  "API-OPTIONS-001",
   "CLEANUP-RECORD-001",
   "ERR-TAXONOMY-001",
   "ERR-RETRY-001",
@@ -257,13 +266,14 @@ requirements = [
 
 [[active_source]]
 path = "docs/spec/planning.md"
-expected_count = 8
+expected_count = 9
 requirements = [
   "PLAN-COST-001",
   "PLAN-COST-003",
   "PLAN-BOUND-001",
   "PLAN-SET-001",
   "PLAN-ARTIFACT-001",
+  "PLAN-REQUEST-001",
   "FORM-FINALIZE-001",
   "FORM-OWNER-001",
   "FORM-COVERAGE-001",
@@ -271,7 +281,7 @@ requirements = [
 
 [[active_source]]
 path = "docs/spec/binding-spi.md"
-expected_count = 11
+expected_count = 12
 requirements = [
   "LIFE-EXPOSE-001",
   "LIFE-EXPOSE-002",
@@ -282,6 +292,7 @@ requirements = [
   "BIND-MEM-001",
   "BIND-DELIVERY-001",
   "BIND-IO-001",
+  "BIND-OUT-001",
   "BIND-CALL-CANCEL-001",
   "BIND-HOST-CANCEL-001",
 ]
