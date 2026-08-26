@@ -1,0 +1,43 @@
+name: temporary-v5.1-owner-fix
+
+on:
+  push:
+    branches:
+      - docs/v5.1-consumer-one-shot-authority
+    paths:
+      - .github/workflows/tmp-v5.1-owner-fix.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: docs/v5.1-consumer-one-shot-authority
+      - name: Correct validator ownership projection
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path('docs/api-ownership.csv')
+          old = 'validate_untrusted_binding_output,function,clinkz-wot-planning,response,public,clinkz_wot_planning::validate_untrusted_binding_output,no-default|async-no-std|std,all,all,consumer,API-PAYLOAD-001|BIND-OUT-001,absent,add,frozen'
+          new = 'validate_untrusted_binding_output,function,clinkz-wot-core,response,public,clinkz_wot_core::validate_untrusted_binding_output,no-default|async-no-std|std,all,all,consumer,API-PAYLOAD-001|BIND-OUT-001,absent,add,frozen'
+          text = path.read_text(encoding='utf-8')
+          if text.count(old) != 1:
+              raise SystemExit(f'expected exactly one stale validator row, found {text.count(old)}')
+          path.write_text(text.replace(old, new), encoding='utf-8')
+          PY
+          git diff --check
+          git diff -- docs/api-ownership.csv
+      - name: Commit correction
+        shell: bash
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add docs/api-ownership.csv
+          git commit -m 'docs(api): move Consumer response validator ownership to Core'
+          git push origin HEAD:docs/v5.1-consumer-one-shot-authority
