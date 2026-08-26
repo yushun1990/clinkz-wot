@@ -36,8 +36,7 @@ The v5.0 authority is active. All six narrow Property Read tranches and D48's
 generic transition-validation convergence are integrated. The aggregate
 `PROPERTY-READ-ARCHITECTURE` implementation and registered external mock
 binding/runner evidence are assembled in both application-static and public
-Host-erased representations; the gate remains ready pending independent
-acceptance.
+Host-erased representations; the gate has passed independent acceptance.
 
 The bounded real-target Zenoh Property Read probe required by workspace topic
 0056 now exercises the application-static and public Host-erased target
@@ -49,10 +48,10 @@ footprint, generation identity, and erased route state survive the three
 linear stage owners through terminal cleanup; its public state projection is
 shared and pinned rather than whole-state mutable, and accept polling receives
 only a shared guard borrow while Servient retains the committed owner.
-The aggregate candidate preserves that correction and supplies the first
-executable cross-package composition proof for independent acceptance. The
-real-target probe remains architecture feedback, not WP-600 product progress
-or protocol-shape-neutrality evidence.
+The accepted aggregate proof preserves that correction and supplies the first
+executable cross-package composition proof. The real-target probe remains
+architecture feedback, not WP-600 product progress or protocol-shape-neutrality
+evidence.
 
 The roadmap identifies durable ordering, not a stored executable next action.
 A task session must still inspect the current repository and decide how to
@@ -153,8 +152,9 @@ reaffirmed its macro ownership invariants and both
 the application-static and corrected Host-erased carriers through real network
 I/O. Workspace topic 0058 is migrated: public Host succession moves one
 unchanged carrier across the distinct prepared, active, and committed owners,
-with borrowed typed state access and exact terminal release. The aggregate mock
-gate is ready pending independent acceptance; broad WP-300 exit remains open.
+with borrowed typed state access and exact terminal release. The aggregate
+Property Read architecture gate has passed independent acceptance; broad WP-300
+exit remains open.
 
 Exit goals: externally exercised authoring and execution boundaries; explicit
 profile applicability and resource costs; executable lifecycle, failure, and
@@ -169,7 +169,7 @@ Objective: complete Servient-owned composition, activation, orchestration,
 scheduling, application facades, and cleanup.
 
 Current status: the narrow Property Read Servient implementation and aggregate
-architecture evidence are assembled for independent acceptance. Broad runtime
+architecture evidence have passed independent acceptance. Broad runtime
 evidence remains.
 
 Exit goals: atomic serving activation; Servient-owned selection and progress;
