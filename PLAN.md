@@ -124,7 +124,8 @@ Exit goals:
 - every accepted ADR has one non-conflicting authoritative projection;
 - the 62 active v5 requirements retain one registered owner and all inactive
   identities retain one checked disposition;
-- GATE-1 through GATE-6 close with current evidence; and
+- every architecture/refactor gate required by the active v5 roadmap has
+  current same-revision evidence and its applicable acceptance state; and
 - an independent same-revision review finds no unresolved architecture
   conflict.
 
