@@ -1,8 +1,8 @@
 # Planning and Compiled Plan Sets
 
-Status: active v5.0 authority. Only the eight requirement definitions
-registered below are active; retained v4.9 deferred clauses are entry-review
-input and carry no implementation authority.
+Status: active v5.1 authority. Nine requirement definitions are registered.
+Retained deferred clauses remain entry-review input and carry no implementation
+authority unless explicitly registered by the v5.1 manifest.
 
 This specification is the single normative owner of effective-form planning,
 capability indexing, logical-plan construction, binding-compiler coordination,
@@ -13,11 +13,11 @@ subscriptions, responses, and publication progress; this specification only
 defines the immutable values that those operations consume.
 
 This specification owns exactly `PLAN-COST-001`, `PLAN-COST-003`,
-`PLAN-BOUND-001`, `PLAN-SET-001`, `PLAN-ARTIFACT-001`,
-`FORM-FINALIZE-001`, `FORM-OWNER-001`, and `FORM-COVERAGE-001` in v5.0.
-The retained clauses for `PLAN-COST-002`, `PLAN-INDEX-001`, `PLAN-LAZY-001`,
-`PLAN-CACHE-001`, `PLAN-REQUEST-001`, and `FORM-FINALIZE-002` are explicitly
-inactive until a planning-domain entry review re-adopts or replaces them.
+`PLAN-BOUND-001`, `PLAN-SET-001`, `PLAN-ARTIFACT-001`, `PLAN-REQUEST-001`,
+`FORM-FINALIZE-001`, `FORM-OWNER-001`, and `FORM-COVERAGE-001` in the v5.1
+candidate. The retained clauses for `PLAN-COST-002`, `PLAN-INDEX-001`,
+`PLAN-LAZY-001`, `PLAN-CACHE-001`, and `FORM-FINALIZE-002` remain explicitly
+inactive until a later planning-domain entry review re-adopts or replaces them.
 
 ## Normative requirements
 
@@ -55,12 +55,6 @@ dependency generation MUST be single flight, with one compiler lease, bounded
 waiters or explicit backpressure, immutable Ready or deterministic Negative
 publication, no callback under registry-wide or eviction locks, generation-
 isolated reuse, and incremental reference-safe reclamation.
-
-Historical v4.9 clause (`PLAN-REQUEST-001`, inactive): Per-call requests MUST reference immutable static target,
-form, URI-template, schema, security, response, extension, and artifact data by
-generation-bearing plan slots and MUST own only varying payload, URI-variable,
-cancellation, deadline, correlation, committed-security, and protocol-status
-data.
 
 `PLAN-BOUND-001`: Every target-operation plan MUST enforce the admitted
 `form_binding_candidates_per_operation_max`; fallback MUST examine each retained
@@ -1149,17 +1143,24 @@ the selected plan identity.
 
 ## Static request data
 
-`PLAN-REQUEST-001` requires per-call requests to reference immutable static
-metadata by generation-bearing plan, target, affordance, candidate, and
-artifact slots. A request owns only varying data, including payload,
-URI-variable values, cancellation/deadline state, correlation or idempotency
-values, committed security material, and protocol status.
+`PLAN-REQUEST-001`: Per-call requests MUST reference immutable static target,
+form, URI-template, schema, security, response, extension, and artifact data by
+generation-bearing plan, target, affordance, candidate, and artifact slots. A
+request MUST own only facts that genuinely vary for that call, including
+payload, URI-variable values, cancellation/deadline state, correlation or
+idempotency values, committed security material, and protocol-status data where
+that data belongs to the selected call boundary.
 
-A request must not clone static target strings, URI-template programs, schemas,
+A request MUST NOT clone static target strings, URI-template programs, schemas,
 security expressions, response metadata, or extension maps. Host erased calls
 may retain a shared plan-set lease. Constrained calls use a generation-bearing
 slot reference whose owner retains the same plan-set lease. Neither
 representation gives a binding access to the full TD or another candidate.
+
+The v5.1 Consumer Property Read architecture slice uses an eager admitted
+Consumer artifact. Activating `PLAN-REQUEST-001` does not activate
+`PLAN-LAZY-001`, `PLAN-CACHE-001`, `PLAN-INDEX-001`, or `PLAN-COST-002`, and the
+first Consumer gate MUST NOT depend on those deferred mechanisms.
 
 ## Eager and lazy artifact policy
 

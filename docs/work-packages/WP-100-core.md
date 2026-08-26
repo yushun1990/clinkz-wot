@@ -75,6 +75,38 @@ dispositions, delayed polling, and the timeout linearization oracle across all
 three Core feature cells. It changes no handler, dispatcher, binding, Servient,
 scheduler, state-machine, resource, removal, or performance scope.
 
+
+## v5.1 Consumer Property Read entry slice
+
+Active authority consumed by this slice:
+
+- `API-OPTIONS-001` plus already-active `API-PAYLOAD-001`, `BIND-IO-001`,
+  `BIND-DELIVERY-001`, `BIND-CALL-CANCEL-001`, `BIND-STORAGE-001`, and
+  `BIND-MEM-001` as applicable to their existing owners.
+
+Minimum scope:
+
+- migrate the Consumer Property Read target call boundary to the narrowed owned
+  `InteractionOptions` selection/control contract;
+- operation payload is a separate operation input and is not read from the
+  target-path `InteractionOptions`;
+- provide the Core-owned narrow binding-origin Property Read response validator
+  defined by `docs/spec/interaction-core.md`;
+- preserve host/static semantic parity for response identity and terminal
+  classification without opening subscription progress.
+
+Explicitly excluded:
+
+- write/action migration merely to remove legacy `InteractionOptions::data`;
+- advanced options, broad defaults merging, media/subprotocol/security branch
+  selectors, validation profiles;
+- codec/schema compiler work;
+- subscriptions/emissions.
+
+Pre-code evidence must prove the narrowed options/value surface is constructible
+in the required Core feature cells and that untrusted response metadata cannot
+bypass the shared validator.
+
 ## Requirements
 
 - `CONCUR-LOCK-001`, `CONCUR-USER-001`, `CONCUR-LIN-001`, and `CONCUR-CRIT-001` govern lock

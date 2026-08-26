@@ -1,6 +1,6 @@
 # Module Boundaries
 
-Status: active v5.0 authority.
+Status: active v5.1 authority.
 
 ## Target dependency direction
 

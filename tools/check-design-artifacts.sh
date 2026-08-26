@@ -10,7 +10,7 @@ if [[ $(head -n 1 "$registry") != "$expected_header" ]]; then
     exit 1
 fi
 
-awk -F, '
+awk -F, '''
     NF != 6 {
         printf "design artifact check: line %d has %d columns; expected 6\n", NR, NF > "/dev/stderr"
         bad = 1
@@ -20,7 +20,7 @@ awk -F, '
         bad = 1
     }
     END { exit bad }
-' "$registry"
+''' "$registry"
 
 while IFS=, read -r relative _role _normativity _revision _schema requirement_source; do
     [[ "$relative" == "path" ]] && continue
@@ -34,6 +34,7 @@ while IFS=, read -r relative _role _normativity _revision _schema requirement_so
     fi
 done <"$registry"
 
+python3 "$root/tools/check-v5.1-authority.py"
 cargo run --locked --quiet --manifest-path "$root/tools/design-check/Cargo.toml" -- check
 "$root/tools/check-api-ownership.sh"
 "$root/tools/check-architecture-adrs.sh"
@@ -42,4 +43,4 @@ cargo run --locked --quiet --manifest-path "$root/tools/design-check/Cargo.toml"
 "$root/tools/check-legacy-api-absence.sh"
 cargo run --locked --quiet --manifest-path "$root/tools/performance-harness/Cargo.toml" -- verify
 
-echo "design artifact check: current technical authority and stable cross-cutting invariants validated"
+echo "design artifact check: active v5.1 authority and stable cross-cutting invariants validated"

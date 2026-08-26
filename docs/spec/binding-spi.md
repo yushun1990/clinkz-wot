@@ -1,8 +1,7 @@
 # Protocol Binding SPI
 
-Status: active v5.0 authority. Only the eleven requirement definitions
-registered below are active; retained v4.9 deferred clauses are entry-review
-input and carry no implementation authority.
+Status: active v5.1 authority. Twelve requirement definitions are registered. Retained deferred clauses remain entry-review input and carry no
+implementation authority unless explicitly registered by the v5.1 manifest.
 
 This specification is the single normative owner of Protocol Binding
 registration and execution behavior. It refines the Protocol Binding boundary
@@ -15,9 +14,9 @@ I/O remain private to each binding crate.
 This specification owns exactly `LIFE-EXPOSE-001` through
 `LIFE-EXPOSE-003`, `BIND-REG-001`, `BIND-ROUTE-001`,
 `BIND-STORAGE-001`, `BIND-MEM-001`, `BIND-DELIVERY-001`, `BIND-IO-001`,
-`BIND-CALL-CANCEL-001`, and `BIND-HOST-CANCEL-001`. The retained
-`BIND-OUT-001` and `BIND-PROGRESS-001` clauses are inactive until a binding
-domain-entry review re-adopts or replaces them.
+`BIND-OUT-001`, `BIND-CALL-CANCEL-001`, and `BIND-HOST-CANCEL-001` in the
+v5.1 active authority. The retained `BIND-PROGRESS-001` clause remains inactive until
+a later binding-domain entry review re-adopts or replaces it.
 
 ## Active requirements
 
@@ -100,12 +99,6 @@ binding can receive it; a concrete binding still validates the live route,
 generation, and correlation and performs protocol mapping, but MUST NOT
 reimplement the handler-origin metadata, status, action-reference, payload-role,
 or required-payload rules.
-
-Historical v4.9 clause (`BIND-OUT-001`, inactive): `OutboundRequest` MUST own only the selected binding and plan
-identity plus per-call varying data. It MUST NOT contain a TD, raw form,
-credential provider, mutable application options, or authority to select a
-different candidate. A binding MUST NOT rescan the TD, reinterpret application
-payload fields as credentials, weaken security, or perform implicit fallback.
 
 Historical v4.9 clause (`BIND-PROGRESS-001`, inactive): Pending client, server, subscription, response, emission,
 readiness, and cleanup operations MUST retain one generation-bearing owner,
@@ -700,23 +693,39 @@ component before the bundle can be published.
 
 ## Shared input and identity contract
 
-`OutboundRequest` is created only after planning selected one candidate and
-security application committed. It owns:
+`BIND-OUT-001`: `OutboundRequest` MUST be created only after Planning/Servient
+selected one admitted candidate and security application committed. It owns the
+selected binding, plan, artifact and per-call execution identities plus only
+call-varying data required by that selected operation. It MUST NOT contain a TD,
+raw Form, credential provider, mutable application-options object, capability to
+ask another binding for support, authority to select another candidate, or
+implicit fallback/retry-to-another-candidate permission. A binding MUST NOT
+rescan the TD, reinterpret application payload fields as credentials, weaken
+security, or perform implicit fallback.
+
+The selected request carries, as applicable:
 
 - binding id, binding generation, configuration digest, plan-set generation,
   plan id, binding-artifact reference, target, operation, and route identity;
-- resolved target and caller URI-variable values;
-- input payload and media metadata;
+- resolved caller URI-variable values and other call-varying target facts;
+- input payload and media metadata supplied by the operation-input boundary;
 - typed committed `AppliedSecurity`, without credentials or provider handles;
 - response-classification metadata;
 - correlation, deadline, cancellation view, and optional idempotency metadata;
   and
-- subscription start or teardown reservation identity when applicable.
+- subscription start or teardown reservation identity only when that later
+  capability enters active authority.
 
 Static target strings, schemas, security expressions, response tables,
 extension maps, and URI-template programs remain behind the pinned plan
 reference. The binding checks every generation and artifact compatibility
 before protocol work starts.
+
+For the v5.1 Consumer Property Read architecture slice, the request uses one
+eager admitted Consumer artifact and one selected candidate. The target path
+MUST NOT retain an `InteractionOptions` back-reference or re-enter selection.
+This activation does not activate `BIND-PROGRESS-001`, subscriptions, lazy
+artifacts, broad fallback, or another operation family.
 
 Under ADR-0017, returning `BindingInputRejection<OutboundRequest>` never
 authorizes automatic candidate fallback. The binding has not accepted protocol
@@ -1374,9 +1383,15 @@ and does not weaken rollback accounting.
 
 ## Client execution and subscriptions
 
-The host client component exposes `invoke` and `subscribe`. Each accepts one
-owned `OutboundRequest` and returns an admitted `HostBindingCallBox` before its
-first protocol side effect. Unsupported operations reject without side effects.
+The host client component exposes `invoke` and, when the later long-lived domain
+is active, `subscribe`. Each accepts one owned `OutboundRequest` and returns an
+admitted `HostBindingCallBox` before its first protocol side effect. Unsupported
+operations reject without side effects.
+
+For the v5.1 Consumer one-shot candidate, only the Property Read `invoke`
+ownership path is admitted by the new authority. Subscription start/driver
+semantics remain deferred and cannot use this section as implementation
+authority merely because the retained forward-compatible surface is shown.
 
 The client constructor result types are exact. They place operational
 `CoreResult` inside `T`; route lifecycle calls do not, because every route
@@ -1402,11 +1417,12 @@ pub trait ClientBinding: Send + Sync {
 }
 ```
 
-`invoke` has one terminal validated `InteractionOutput` or structured failure.
-The binding maps wire status and metadata, and the shared response validator
-classifies primary and additional responses. Transport success is not
-automatically WoT success. Protocol retry remains binding-local and never
-reselects a form or repeats application behavior.
+`invoke` has one terminal untrusted binding-origin `InteractionOutput` or
+structured failure. The binding maps wire status and metadata; the Core-owned
+shared response validator then checks the live selected request, compiled
+primary Property Read response, and output shape before application delivery.
+Transport success is not automatically WoT success. Protocol retry remains
+binding-local and never reselects a form or repeats application behavior.
 
 `subscribe` succeeds only after start response validation and returns
 `HostSubscriptionStart` containing the exact engine-reserved metadata and one
