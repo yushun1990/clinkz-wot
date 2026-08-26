@@ -256,6 +256,41 @@ These are broad maturity boundaries. They do not expand the narrow
 Property Read source paths or turn its package-local constructibility claim
 into a production, protocol-neutrality, ergonomics, or runtime-parity claim.
 
+
+## v5.1 Consumer Property Read entry slice
+
+Active authority consumed by this slice:
+
+- `BIND-OUT-001` plus active `BIND-REG-001`, `BIND-STORAGE-001`,
+  `BIND-MEM-001`, `BIND-DELIVERY-001`, `BIND-IO-001`,
+  `BIND-CALL-CANCEL-001`, and `BIND-HOST-CANCEL-001`.
+
+Minimum scope:
+
+- add one Consumer Property Read client capability to a complete registration;
+- construct one `OutboundRequest` only after selection/security commit;
+- invoke only the selected client execution component, with no `Thing`, raw
+  `Form`, mutable `InteractionOptions`, `supports_with_thing`, or reselection
+  authority in the binding input;
+- Host execution returns one owned cancellation-aware call before protocol side
+  effects;
+- constrained execution uses one admitted generation-bearing request slot with
+  the same accepted/rejected/terminal semantics;
+- pre-acceptance rejection returns the exact request; caller drop, cancellation,
+  timeout, late result, and cleanup preserve one owner;
+- binding-origin success remains untrusted until Core validation.
+
+Explicitly excluded:
+
+- `BIND-PROGRESS-001`;
+- subscription driver/start APIs as active implementation work;
+- broad retry/fallback;
+- concrete Zenoh production implementation.
+
+Legacy `BindingRequest` and raw-form selection may remain only for legitimate
+unmigrated capabilities. The Consumer Property Read target path must have zero
+edges to them.
+
 ## Requirements
 
 - `BIND-REG-001`, `BIND-ROUTE-001`, `BIND-STORAGE-001`, `BIND-MEM-001`, and

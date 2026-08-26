@@ -58,6 +58,35 @@ and Planning coordination. WP-300 consumes one component only when it later
 builds the complete installable registration; it does not implement a second
 compiler/artifact SPI.
 
+
+## v5.1 Consumer Property Read entry slice
+
+Active authority consumed by this slice:
+
+- `PLAN-REQUEST-001` plus active `PLAN-SET-001`, `PLAN-ARTIFACT-001`,
+  `PLAN-BOUND-001`, `PLAN-COST-001`, and `PLAN-COST-003`.
+
+Minimum scope:
+
+- make the existing bounded Property Read compiler path constructible for
+  `BindingArtifactRole::ConsumerCall` through a reviewed public Planning entry;
+- build/freeze/publish one consumed Property Read plan using an eager admitted
+  Consumer artifact;
+- select only inside that immutable plan set using the narrowed options kernel;
+- preserve the plan/binding/artifact generations required to build one
+  `OutboundRequest`;
+- prove the TD and compiler build inputs can be dropped before the call path.
+
+Explicitly excluded:
+
+- `PLAN-INDEX-001`, `PLAN-LAZY-001`, `PLAN-CACHE-001`, `PLAN-COST-002`;
+- automatic candidate fallback;
+- additional-response breadth;
+- multi-binding fairness or performance closure.
+
+The target-path negative fixture must poison call-time TD/Form scanning and raw
+binding support probing.
+
 ## Requirements
 
 This package is governed by:

@@ -1,8 +1,6 @@
 # Protocol Binding SPI
 
-Status: v5.1 activation candidate. Twelve requirement definitions are
-registered for the candidate; v5.0 remains active until the separate activation
-checkpoint. Retained deferred clauses remain entry-review input and carry no
+Status: active v5.1 authority. Twelve requirement definitions are registered. Retained deferred clauses remain entry-review input and carry no
 implementation authority unless explicitly registered by the v5.1 manifest.
 
 This specification is the single normative owner of Protocol Binding
@@ -17,7 +15,7 @@ This specification owns exactly `LIFE-EXPOSE-001` through
 `LIFE-EXPOSE-003`, `BIND-REG-001`, `BIND-ROUTE-001`,
 `BIND-STORAGE-001`, `BIND-MEM-001`, `BIND-DELIVERY-001`, `BIND-IO-001`,
 `BIND-OUT-001`, `BIND-CALL-CANCEL-001`, and `BIND-HOST-CANCEL-001` in the
-v5.1 candidate. The retained `BIND-PROGRESS-001` clause remains inactive until
+v5.1 active authority. The retained `BIND-PROGRESS-001` clause remains inactive until
 a later binding-domain entry review re-adopts or replaces it.
 
 ## Active requirements

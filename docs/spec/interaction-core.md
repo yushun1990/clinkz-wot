@@ -1,9 +1,8 @@
 # Interaction Core Specification
 
-Status: v5.1 activation candidate. v5.0 remains active until the separately
-reviewed activation checkpoint selects this revision.
+Status: active v5.1 authority.
 
-This specification owns eleven v5.1 candidate requirements:
+This specification owns eleven v5.1 active requirements:
 `HANDLER-API-001`, `HANDLER-CANCEL-001`, `HANDLER-CANCEL-002`,
 `API-TYPES-001`, `API-HOT-ID-001`, `API-PAYLOAD-001`, `API-OPTIONS-001`,
 `CLEANUP-RECORD-001`, `ERR-TAXONOMY-001`, `ERR-RETRY-001`, and

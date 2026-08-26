@@ -1,6 +1,6 @@
 # clinkz-wot Architecture Backbone
 
-Status: active v5.0 authority.
+Status: active v5.1 authority.
 
 This directory defines the concise architecture backbone for `clinkz-wot`.
 It explains the engine from core invariants to edge integration. Detailed API
@@ -52,7 +52,7 @@ The authority order is:
 1. `ARCHITECTURE_GOVERNANCE.md` controls technical convergence and change.
 2. Accepted ADRs control decisions and explicit supersession.
 3. `docs/design.md`, this backbone, and the exact sources registered by
-   `docs/spec/v5-authority-reset.toml` own the 62 active requirements.
+   `docs/spec/v5-authority-reset.toml` own the 65 active requirements.
 4. API ownership, state, resource, requirement metadata, gate, performance,
    and evidence artifacts own their exact machine-readable projections.
 5. Work packages own migration order, admission, and evidence, not behavior.
@@ -62,15 +62,16 @@ non-normative. A conflict between normative sources is a gate
 failure, not a precedence shortcut.
 
 ADR-0018 supersedes residual decomposition and ADR-0014's D3 target DAG.
+ADR-0019 activates the reviewed v5.1 Consumer one-shot authority entry.
 `docs/requirements.csv` retains metadata and historical source pointers but no
 longer selects v5 authority. The transition manifest gives all 121 inherited
-identities one disposition and registers the ten owners of the 62 active
+identities one disposition and registers the ten owners of the 65 active
 definitions. An amendment is active only for an identity assigned to its exact
 path; other mentions are refinement or evidence history.
 
-This candidate grants no authority until independent review and separate
-mainline integration. A bounded implementation tranche may proceed only through
-ADR-0013 admission; the reset itself creates no source-edit permission.
+The active v5.1 authority still grants no source-edit permission by itself. A
+bounded implementation tranche may proceed only through ADR-0013 admission;
+activation of the Consumer one-shot domain is not implementation admission.
 
 The first executable composition proof is
 `PROPERTY-READ-ARCHITECTURE`, defined by the registered work-package gate
@@ -85,8 +86,8 @@ Cross-package architecture proofs progress only when a materially different
 ownership topology cannot be falsified early enough by package-local evidence.
 For the current v1 roadmap this requires exactly two additional planned proofs:
 
-1. after an explicit Consumer one-shot domain-entry authority review, a narrow
-   Consumer Property Read proof covering admitted consumed-plan publication,
+1. with the Consumer one-shot domain now active in v5.1, a narrow Consumer
+   Property Read proof covering admitted consumed-plan publication,
    selected `OutboundRequest`, binding call ownership, response validation,
    caller cancellation/drop/late completion, generation retention, and cleanup;
 2. after an explicit subscription/emission domain-entry authority review, one

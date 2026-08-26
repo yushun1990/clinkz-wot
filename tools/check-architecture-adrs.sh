@@ -41,6 +41,7 @@ fi
 
 for projection in \
     'docs/design.md|ADR-0018' \
+    'docs/design.md|ADR-0019' \
     'docs/design.md|ADR-0013' \
     'docs/design.md|ADR-0014' \
     'docs/spec/foundation.md|ADR-0015' \

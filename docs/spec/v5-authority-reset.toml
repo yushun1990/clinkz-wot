@@ -1,11 +1,9 @@
 schema_version = 1
-current_design_revision = "5.0"
-target_design_revision = "5.1"
-status = "candidate"
-decision = "docs/ADRs/0018-bounded-v5-normative-authority-reset.org"
-workspace_basis = "workspace/0015-normative-authority-reset.md"
-candidate_decision = "docs/ADRs/0019-consumer-one-shot-authority-entry.org"
-candidate_workspace_basis = "workspace/0061-consumer-one-shot-domain-entry.md"
+current_design_revision = "5.1"
+status = "active"
+decision = "docs/ADRs/0019-consumer-one-shot-authority-entry.org"
+workspace_basis = "workspace/0061-consumer-one-shot-domain-entry.md"
+reviewed_candidate_commit = "3b133ebfe3c870102931982d6c056595f9d44255"
 active_requirement_count = 65
 classified_requirement_count = 121
 
