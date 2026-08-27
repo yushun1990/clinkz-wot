@@ -107,6 +107,160 @@ Pre-code evidence must prove the narrowed options/value surface is constructible
 in the required Core feature cells and that untrusted response metadata cannot
 bypass the shared validator.
 
+### ADR-0013 first Consumer tranche: `WP-100-CONSUMER-CALL-VALUES-VALIDATOR`
+
+This is the first independently reviewable implementation tranche for the v5.1
+Consumer Property Read path. It implements the combined WP-100 call-value and
+narrow response-validation slice required by ADR-0019; it does not move the
+validator behind WP-300.
+
+The affected active requirements are exactly:
+
+- `API-OPTIONS-001`;
+- `API-PAYLOAD-001`;
+- `BIND-IO-001`;
+- `BIND-DELIVERY-001`; and
+- `BIND-OUT-001`.
+
+The authoritative contracts are `docs/spec/interaction-core.md` and
+`docs/spec/binding-spi.md`, with public ownership projected by
+`docs/api-ownership.csv`, sequencing fixed by ADR-0019, and admission governed
+by ADR-0013. No inactive requirement enters this tranche.
+
+The tranche has no predecessor tranche. Its package implementation dependency
+is the already-complete `WP-000`; all other reused Core values are existing
+implementation truth on the admitted base rather than unfinished predecessor
+contracts. Discovering a required unfinished predecessor stops implementation
+and returns this tranche to admission review.
+
+Permitted production source paths are exactly:
+
+- `core/src/interaction.rs`;
+- `core/src/response.rs`; and
+- `core/src/lib.rs`.
+
+A required production-source change outside those paths stops implementation
+and returns the tranche to impact review.
+
+The Consumer selection/control change is limited to `InteractionOptions`. The
+exact additive target methods are:
+
+```rust
+impl InteractionOptions {
+    pub fn with_form_index(self, form_index: usize) -> Self;
+    pub fn with_timeout(self, timeout: core::time::Duration) -> Self;
+    pub fn uri_variables(&self) -> &BTreeMap<String, String>;
+    pub const fn form_index(&self) -> Option<usize>;
+    pub const fn timeout(&self) -> Option<core::time::Duration>;
+}
+```
+
+`InteractionOptions` also gains `#[non_exhaustive]`. Existing `new()` and
+`with_uri_variable(&str, &str)` remain unchanged. No other new public method,
+associated item, field, selector, or conversion is admitted by this tranche.
+Explicit form selection narrows the immutable consumed plan set; it never
+authorizes raw TD/Form scanning or binding-support probing.
+
+The existing `data` field and `with_data(...)` constructor remain legacy
+migration surface only because unmigrated write/action/subscription paths still
+use them. This tranche does not remove or privatize them. New Consumer Property
+Read code MUST NOT read `InteractionOptions::data`, and the new target methods
+MUST NOT expose payload as selection/control state.
+
+The response-validation part is implemented now as one Core-owned private
+Property Read kernel in `core/src/response.rs`:
+
+```rust
+pub(crate) fn validate_property_read_binding_output(
+    expected_binding_id: BindingId,
+    expected_binding_generation: BindingGeneration,
+    expected_plan_id: PlanId,
+    output: InteractionOutput,
+) -> CoreResult<InteractionOutput>;
+```
+
+The kernel consumes the untrusted output and returns it unchanged only when:
+
+- `BindingResponseMetadata` is present;
+- binding id, binding generation, and plan id equal the supplied selected-call
+  identities;
+- `ResponseSelection::Primary` is selected;
+- exactly one response payload is present;
+- status is exactly `InteractionStatus::Ok`;
+- payload role is exactly `ResponsePayloadRole::Application`; and
+- no `ActionInvocationRef` is present.
+
+The binding-native numeric status code remains opaque provenance and is not
+interpreted as HTTP or any other protocol. A failed check returns
+`CoreError::Validation`. No schema compilation, codec/transcoding, additional
+response table, or validation-profile policy enters this kernel.
+
+This private kernel is deliberately implementable before WP-300: it freezes
+and tests the response semantics without pretending that a caller-supplied set
+of identities is itself a trusted public validation authority. The already
+frozen public callable `clinkz_wot_core::validate_untrusted_binding_output`
+remains absent in this tranche. WP-300, after it implements the real selected
+`OutboundRequest`, MUST expose that public callable as the thin trusted wrapper
+that derives the three expected identities from `&OutboundRequest` and delegates
+to this exact Core kernel. WP-300 must not reimplement or widen the validation
+rules. This preserves ADR-0019's order: validation semantics are implemented in
+WP-100; live-request binding occurs when `OutboundRequest` enters in WP-300.
+
+Exact exclusions are:
+
+- no public `OutboundRequest` or public `validate_untrusted_binding_output`
+  wrapper yet;
+- no `ClientBinding`, binding call, static request slot, or response-delivery
+  lifecycle implementation;
+- no WP-200 Planning selection, consumed plan publication, Servient handle, or
+  hot call-path migration;
+- no removal or semantic reuse of legacy `InteractionOptions::data`;
+- no write, action, subscription, collection, or emission migration;
+- no media/subprotocol/binding-id/security-branch/validation-profile selector;
+- no broad handle-default/per-call merge semantics;
+- no codec/schema validation, lazy/cache/index planning, fallback, resource
+  profile, status, or observability expansion; and
+- no Consumer architecture-gate registration or completion claim.
+
+The authoritative tranche registration is
+`docs/work-packages/index.toml`. It fixes the exact requirement/artifact scope,
+package dependency, feature cells, implementation paths, pre-code checks,
+independent review location, and completion-evidence identity. The tranche is
+source-admitted only when the exact admission revision has independent
+acceptance on PR #48 and is merged; package status alone never authorizes it.
+
+Pre-implementation checks are exactly:
+
+```text
+tools/check-design-artifacts.sh
+cargo test --workspace --locked
+cargo check --locked -p clinkz-wot-core --no-default-features
+cargo check --locked -p clinkz-wot-core --no-default-features --features async
+cargo check --locked -p clinkz-wot-core
+```
+
+Completion evidence uses stable key
+`consumer-call-values-response-validation` at
+`docs/evidence/WP-100-consumer-call-values-response-validation.toml`. Before the
+tranche becomes complete, that evidence must record the exact implementation
+commit and passing results for:
+
+- Core tests of every new `InteractionOptions` method and `#[non_exhaustive]`
+  external construction behavior;
+- positive validation of the exact selected binding/generation/plan primary
+  Property Read response;
+- negative cases for each identity mismatch, missing binding metadata,
+  additional response selection, missing payload, non-`Ok` status,
+  non-application payload role, and action invocation reference;
+- proof that native numeric status is not semantically interpreted;
+- proof that the target options surface adds no payload accessor/builder and
+  that existing legacy callers still compile;
+- `no-default`, `async-no-std`, and `std` Core feature-cell compilation; and
+- normal mainline validation.
+
+Completion of this tranche does not claim WP-200, WP-300, WP-400, the Consumer
+Property Read architecture gate, or the complete broad WP-100 package.
+
 ## Requirements
 
 - `CONCUR-LOCK-001`, `CONCUR-USER-001`, `CONCUR-LIN-001`, and `CONCUR-CRIT-001` govern lock
