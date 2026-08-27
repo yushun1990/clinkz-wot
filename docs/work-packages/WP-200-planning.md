@@ -87,6 +87,161 @@ Explicitly excluded:
 The target-path negative fixture must poison call-time TD/Form scanning and raw
 binding support probing.
 
+### ADR-0013 Consumer tranche: `WP-200-CONSUMER-PROPERTY-READ-PLANNING`
+
+This is the exact v5.1 Planning tranche that follows the completed
+`WP-100-CONSUMER-CALL-VALUES-VALIDATOR` predecessor. It exposes the existing
+bounded eager Consumer Property Read compiler and the first immutable-plan-only
+selection projection. It does not broaden the planner beyond one eager
+Consumer-call candidate.
+
+The affected active requirements are exactly:
+
+- `PLAN-REQUEST-001`;
+- `PLAN-COST-001`;
+- `PLAN-COST-003`;
+- `PLAN-BOUND-001`;
+- `PLAN-SET-001`;
+- `PLAN-ARTIFACT-001`; and
+- `API-OPTIONS-001`.
+
+The tranche has one predecessor tranche,
+`WP-100-CONSUMER-CALL-VALUES-VALIDATOR`, which must be complete. No broad
+WP-100 package-completion claim is required because the roadmap admits this
+Consumer path by exact tranche dependency.
+
+Permitted production source paths are exactly:
+
+- `planning/src/property_read.rs`; and
+- `planning/src/lib.rs`.
+
+A required production change outside those paths stops implementation and
+returns the tranche to impact review.
+
+The public Consumer compiler entry is frozen to:
+
+```rust
+impl PropertyReadPlanCompiler {
+    pub fn consumer_call(
+        plan_id: PlanId,
+        property_name: Box<str>,
+        form_index: u32,
+        registration: BindingRegistrationIdentity,
+        registration_index: u32,
+        candidate_order: u32,
+    ) -> Self;
+}
+```
+
+`consumer_call` owns one exact Property Read target coordinate: `property_name`
+plus the index in that property's own form array. It copies the complete binding
+id, binding generation, configuration digest, and artifact compatibility from
+`registration` and fixes `BindingArtifactRole::ConsumerCall`. It does not
+accept arbitrary role or split registration-identity fields. The existing
+`producer_route(...)` contract is unchanged.
+
+The Consumer builder MUST compile exactly that target coordinate. A TD may have
+multiple readable properties and multiple readable forms. Their document order
+must not select the Consumer target. Missing property, out-of-range form index,
+or a targeted form that does not support `ReadProperty` is a structured
+selection failure; the builder MUST NOT scan forward/backward to another
+property or form and MUST NOT silently emit the first readable competitor. This
+coordinate is startup/build input only and is retained in the owned logical
+plan; it is not a call-time TD/Form selection mechanism.
+
+The public immutable-plan selection entry is frozen to:
+
+```rust
+pub fn select_consumer_property_read<A>(
+    output: &PlanBuildOutput<A>,
+    property_name: &str,
+    options: &InteractionOptions,
+) -> CoreResult<BindingArtifactRef>;
+```
+
+This selector is deliberately incapable of receiving a TD, raw Form,
+registration snapshot, compiler, binding execution object, or support-probe
+callback. It operates only on the owned immutable `PlanBuildOutput`, the
+application-addressed property name, and the narrowed call options. The exact
+build target is therefore chosen before this selector exists; this selector can
+only accept or reject the already-compiled coordinate and cannot repair or
+reinterpret a wrongly built target.
+
+For this first slice the admitted output shape is exactly one owned Property
+Read logical plan for the constructor's exact target coordinate, one eager
+`ConsumerCall` artifact envelope, and one matching `BindingArtifactRef`.
+Selection validates that the logical plan, envelope, and reference agree on
+plan, plan-set, binding, binding-generation, configuration, compatibility,
+role, and artifact slot before returning the reference. A mismatched or forged
+narrow output is rejected before any binding work.
+
+The selector applies only these call-time rules:
+
+- the addressed `property_name` must equal the immutable logical-plan target;
+- omitted `form_index` leaves the already-admitted form selected;
+- explicit `form_index` must equal that plan's original form index or returns
+  `CoreError::Selection` with `StrictSelectionMismatch`;
+- URI-variable values and timeout intent remain call-varying facts for WP-300
+  and do not trigger planning reinterpretation; and
+- legacy `InteractionOptions::data` is ignored and cannot affect planning or
+  selection.
+
+A missing addressed property returns the existing structured
+`AffordanceMissing` selection failure. This tranche has no automatic candidate
+fallback, second-candidate probing, lazy artifact creation, or runtime support
+probe.
+
+The compiler output must remain usable after the validated TD, registration
+snapshot, compiler registration, and `PlanBuildInput` have all been dropped.
+The target-path test then performs selection from that owned output after those
+sources are gone. This is the required negative proof against call-time TD/Form
+scanning and raw binding support probing.
+
+WP-200 produces an unpublished immutable eager plan-set draft. `PLAN-SET-001`
+publication, pins, leases, draining, and reclamation remain WP-400 ownership;
+this tranche must not create Servient publication state merely to satisfy the
+word "publish" in older roadmap shorthand.
+
+Exact exclusions are:
+
+- no `OutboundRequest`, ClientBinding execution, call settlement, or response
+  delivery;
+- no Servient consumed-plan publication or application facade;
+- no additional Consumer operation family;
+- no capability index, lazy/cache/single-flight, or automatic fallback;
+- no additional-response planning breadth;
+- no binding-id/media/subprotocol/security-branch/validation-profile option;
+- no TD/Form or registration back-reference in the selected result; and
+- no Consumer architecture-gate registration or completion claim.
+
+The authoritative tranche registration is
+`docs/work-packages/index.toml`. Completion evidence uses stable key
+`consumer-property-read-planning-selection` at
+`docs/evidence/WP-200-consumer-property-read-planning-selection.toml`.
+Before the tranche becomes complete, that evidence must record the exact
+implementation checkpoint and passing results for:
+
+- static and Host `consumer_call` builds with equal selected identity;
+- a TD containing at least two readable properties, with at least two readable
+  forms on the targeted property, where the constructor targets a non-first
+  property and non-first form and the output proves that exact coordinate;
+- missing property, out-of-range form index, and targeted non-ReadProperty form
+  failures that do not fall back to any readable competing property/form;
+- exact eager `ConsumerCall` role and absence of Producer route reservation;
+- owned output surviving TD, registration snapshot, compiler registration, and
+  build-input destruction;
+- selection after those source values are gone;
+- omission and explicit matching `form_index` success;
+- wrong call-time property and strict form mismatch failures;
+- rejection of forged/mismatched output identity;
+- proof that URI variables, timeout, and legacy data do not cause replanning or
+  alter the selected static reference;
+- no-default, async-no-std, and std Planning feature-cell compilation; and
+- normal locked workspace and authority validation.
+
+Completion of this tranche does not claim broad WP-200 completion, WP-300,
+WP-400, or the Consumer Property Read architecture gate.
+
 ## Requirements
 
 This package is governed by:
@@ -197,8 +352,7 @@ provides public
 them from `planning/src/lib.rs`, and has no broader product-source reach. The
 constructor consumes the complete `BindingRegistrationIdentity`, fixes the
 role to `ProducerRoute`, and accepts a borrowed static or host compiler
-projection from the complete registration. Arbitrary role selection and a
-public Consumer-call constructor remain excluded.
+projection from the complete registration. Arbitrary role selection remains excluded. The earlier Producer-only exclusion of a public Consumer-call constructor is superseded only by the exact v5.1 `WP-200-CONSUMER-PROPERTY-READ-PLANNING` admission above; no broader Consumer constructor is implied.
 
 The scoped route-reservation projection is also required because the public
 Producer-route constructor preserves role and registration identity

@@ -110,3 +110,56 @@ pre_implementation_checks = [
 admission_review = "github-pr:48"
 completion_evidence_keys = ["consumer-call-values-response-validation"]
 completion_evidence_path = "docs/evidence/WP-100-consumer-call-values-response-validation.toml"
+
+[[tranche]]
+id = "WP-200-CONSUMER-PROPERTY-READ-PLANNING"
+work_package = "WP-200"
+sequence = 210
+status = "planned"
+admission_status = "admitted"
+impact_status = "current"
+depends_on = ["WP-100-CONSUMER-CALL-VALUES-VALIDATOR"]
+depends_on_packages = ["WP-000"]
+requirements = [
+    "PLAN-REQUEST-001",
+    "PLAN-COST-001",
+    "PLAN-COST-003",
+    "PLAN-BOUND-001",
+    "PLAN-SET-001",
+    "PLAN-ARTIFACT-001",
+    "API-OPTIONS-001",
+]
+owner_packages = ["clinkz-wot-planning"]
+feature_cells = ["no-default", "async-no-std", "std"]
+authoritative_artifacts = [
+    "docs/ADRs/0013-work-package-scoped-implementation-admission.org",
+    "docs/ADRs/0019-consumer-one-shot-authority-entry.org",
+    "docs/api-ownership.csv",
+    "docs/requirements.csv",
+    "docs/spec/interaction-core.md",
+    "docs/spec/planning.md",
+    "docs/work-packages/WP-200-planning.md",
+    "docs/work-packages/index.toml",
+]
+api_items = [
+    "PropertyReadPlanCompiler::consumer_call",
+    "select_consumer_property_read",
+]
+state_machines = []
+resource_changes = []
+old_api_removals = []
+performance_workloads = []
+implementation_paths = [
+    "planning/src/property_read.rs",
+    "planning/src/lib.rs",
+]
+pre_implementation_checks = [
+    "tools/check-design-artifacts.sh",
+    "cargo test --workspace --locked",
+    "cargo check --locked -p clinkz-wot-planning --no-default-features",
+    "cargo check --locked -p clinkz-wot-planning --no-default-features --features async",
+    "cargo check --locked -p clinkz-wot-planning",
+]
+admission_review = "github-pr:50"
+completion_evidence_keys = ["consumer-property-read-planning-selection"]
+completion_evidence_path = "docs/evidence/WP-200-consumer-property-read-planning-selection.toml"
