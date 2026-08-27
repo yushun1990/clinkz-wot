@@ -22,8 +22,8 @@ use crate::{
     AffordanceTarget, BindingArtifactCompatibility, BindingArtifactEnvelope, BindingArtifactRef,
     BindingConfigurationDigest, BindingGeneration, BindingId, CleanupOperation, CleanupRecord,
     CleanupSlotId, CoreError, CoreResult, CorrelationId, Deadline, ErrorContext, ErrorPhase,
-    InteractionInput, InteractionOutput, InteractionStatus, PlanId, PlanSetGeneration,
-    ResponsePayloadRole, RetryClass, StartStatus, ThingId,
+    InteractionInput, InteractionOutput, InteractionStatus, OutboundRequest, PlanId,
+    PlanSetGeneration, ResponsePayloadRole, RetryClass, StartStatus, ThingId,
 };
 use crate::{BindingCompilerExtension, StaticBindingCompilerRegistration};
 #[cfg(feature = "std")]
@@ -234,6 +234,7 @@ impl BindingRegistrationIdentity {
 #[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
 pub struct BindingRegistrationCapabilities {
     producer_property_read: bool,
+    consumer_property_read: bool,
 }
 
 impl BindingRegistrationCapabilities {
@@ -241,6 +242,7 @@ impl BindingRegistrationCapabilities {
     pub const fn new(producer_property_read: bool) -> Self {
         Self {
             producer_property_read,
+            consumer_property_read: false,
         }
     }
 
@@ -249,9 +251,22 @@ impl BindingRegistrationCapabilities {
         Self::new(true)
     }
 
+    /// Declares the admitted dual-role Producer and Consumer Property Read bundle.
+    pub const fn producer_and_consumer_property_read() -> Self {
+        Self {
+            producer_property_read: true,
+            consumer_property_read: true,
+        }
+    }
+
     /// Returns whether Producer Property Read is advertised.
     pub const fn supports_producer_property_read(self) -> bool {
         self.producer_property_read
+    }
+
+    /// Returns whether Consumer Property Read invocation is advertised.
+    pub const fn supports_consumer_property_read(self) -> bool {
+        self.consumer_property_read
     }
 }
 
@@ -1306,6 +1321,71 @@ pub enum BindingDeliveryOutcome {
     Failed(BindingOperationalError),
 }
 
+/// Caller-owned typed storage for one accepted Consumer request generation.
+#[derive(Debug)]
+pub struct ClientRequestSlot<S> {
+    request: Option<OutboundRequest>,
+    state: Option<S>,
+}
+
+impl<S> ClientRequestSlot<S> {
+    /// Creates one vacant admitted request slot.
+    pub const fn new() -> Self {
+        Self {
+            request: None,
+            state: None,
+        }
+    }
+
+    /// Transfers an accepted request and binding-private state into this slot.
+    ///
+    /// # Panics
+    ///
+    /// Panics when a prior generation remains live. The binding must finish
+    /// terminal acknowledgement before the caller clears and reuses the slot.
+    pub fn initialize(&mut self, request: OutboundRequest, state: S) {
+        assert!(
+            self.request.is_none() && self.state.is_none(),
+            "client request slot is live"
+        );
+        self.request = Some(request);
+        self.state = Some(state);
+    }
+
+    /// Returns the exact accepted request while this generation is live.
+    pub fn request(&self) -> &OutboundRequest {
+        self.request
+            .as_ref()
+            .expect("client request slot is vacant")
+    }
+
+    /// Returns mutable binding-private state for the live request.
+    pub fn state_mut(&mut self) -> &mut S {
+        self.state.as_mut().expect("client request slot is vacant")
+    }
+
+    /// Returns whether this slot owns no request or state.
+    pub const fn is_vacant(&self) -> bool {
+        self.request.is_none() && self.state.is_none()
+    }
+
+    /// Clears an acknowledged terminal generation in caller context.
+    pub fn clear(&mut self) {
+        assert!(
+            self.request.is_some() && self.state.is_some(),
+            "client request slot is vacant"
+        );
+        self.state = None;
+        self.request = None;
+    }
+}
+
+impl<S> Default for ClientRequestSlot<S> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 /// Caller-owned typed storage for one server route generation.
 #[derive(Debug)]
 pub struct ServerRouteSlot<S> {
@@ -1597,6 +1677,63 @@ impl RouteActivationPermit<'_> {
 // Portable caller-owned server representation and complete registration
 // ---------------------------------------------------------------------------
 
+/// Application-static, manually progressed one-shot client binding contract.
+///
+/// The scoped artifact borrow is available only during `start_request`; every
+/// fact needed by pending work must be derived into the owned request state.
+/// Subscription associated state and methods are deliberately absent.
+pub trait PollClientBinding {
+    /// Compiler paired atomically with this client.
+    type Compiler: BindingCompilerExtension;
+    /// Binding-private state for one accepted request.
+    type RequestState;
+
+    /// Returns the compatibility identity consumed by registration validation.
+    fn artifact_compatibility(&self) -> BindingArtifactCompatibility;
+    /// Declares the retained associated-state layout for one request.
+    fn request_state_layout(&self) -> BindingStateLayout;
+
+    /// Starts one checked request and transfers it only on acceptance.
+    fn start_request(
+        &mut self,
+        request: OutboundRequest,
+        artifact: &BindingArtifactEnvelope<<Self::Compiler as BindingCompilerExtension>::Artifact>,
+        slot: &mut ClientRequestSlot<Self::RequestState>,
+        budget: &mut WorkBudget,
+    ) -> Result<StartStatus<CoreResult<InteractionOutput>>, BindingInputRejection<OutboundRequest>>;
+
+    /// Polls one accepted pending request.
+    fn poll_request(
+        &mut self,
+        cx: &mut Context<'_>,
+        slot: &mut ClientRequestSlot<Self::RequestState>,
+        budget: &mut WorkBudget,
+    ) -> Poll<CoreResult<InteractionOutput>>;
+
+    /// Starts explicit request cancellation with the complete cleanup phase.
+    fn start_cancel_request(
+        &mut self,
+        cx: &mut Context<'_>,
+        cleanup: CleanupPhaseContext,
+        slot: &mut ClientRequestSlot<Self::RequestState>,
+        budget: &mut WorkBudget,
+    ) -> CoreResult<StartStatus<BindingCallSettlement<CoreResult<InteractionOutput>>>>;
+
+    /// Polls accepted request cancellation to explicit settlement.
+    fn poll_cancel_request(
+        &mut self,
+        cx: &mut Context<'_>,
+        slot: &mut ClientRequestSlot<Self::RequestState>,
+        budget: &mut WorkBudget,
+    ) -> Poll<CoreResult<BindingCallSettlement<CoreResult<InteractionOutput>>>>;
+
+    /// Acknowledges terminal disposition before caller-owned storage is cleared.
+    fn acknowledge_request(
+        &mut self,
+        slot: &mut ClientRequestSlot<Self::RequestState>,
+    ) -> CoreResult<()>;
+}
+
 /// Application-static, manually progressed server binding contract.
 pub trait PollServerBinding {
     /// Compiler paired atomically with this server.
@@ -1798,6 +1935,264 @@ pub trait PollServerBinding {
     ) -> CoreResult<()>;
 }
 
+/// Typed Producer server and Consumer client sharing one compiler universe.
+pub struct StaticBindingComponents<S, C> {
+    server: S,
+    client: C,
+}
+
+impl<S, C> StaticBindingComponents<S, C> {
+    /// Creates one dual-role static component pair.
+    pub const fn new(server: S, client: C) -> Self {
+        Self { server, client }
+    }
+
+    /// Borrows the Producer server component.
+    pub const fn server(&self) -> &S {
+        &self.server
+    }
+
+    /// Borrows the Consumer client component.
+    pub const fn client(&self) -> &C {
+        &self.client
+    }
+
+    /// Mutably borrows the Consumer client for manual request progress.
+    pub fn client_mut(&mut self) -> &mut C {
+        &mut self.client
+    }
+}
+
+impl<S, C> PollServerBinding for StaticBindingComponents<S, C>
+where
+    S: PollServerBinding,
+    C: PollClientBinding<Compiler = S::Compiler>,
+{
+    type Compiler = S::Compiler;
+    type RouteState = S::RouteState;
+    type ReadinessState = S::ReadinessState;
+    type ResponseState = S::ResponseState;
+
+    fn artifact_compatibility(&self) -> BindingArtifactCompatibility {
+        self.server.artifact_compatibility()
+    }
+
+    fn route_state_layout(&self) -> BindingStateLayout {
+        self.server.route_state_layout()
+    }
+
+    fn readiness_state_layout(&self) -> BindingStateLayout {
+        self.server.readiness_state_layout()
+    }
+
+    fn response_state_layout(&self) -> BindingStateLayout {
+        self.server.response_state_layout()
+    }
+
+    fn start_prepare(
+        &mut self,
+        input: PrepareInput,
+        artifact: &BindingArtifactEnvelope<<Self::Compiler as BindingCompilerExtension>::Artifact>,
+        route: &mut ServerRouteSlot<Self::RouteState>,
+        budget: &mut WorkBudget,
+    ) -> Result<StartStatus<RoutePrepareOutcome<()>>, BindingInputRejection<PrepareInput>> {
+        self.server.start_prepare(input, artifact, route, budget)
+    }
+
+    fn poll_prepare(
+        &mut self,
+        cx: &mut Context<'_>,
+        route: &mut ServerRouteSlot<Self::RouteState>,
+        budget: &mut WorkBudget,
+    ) -> Poll<RoutePrepareOutcome<()>> {
+        self.server.poll_prepare(cx, route, budget)
+    }
+
+    fn poll_cancel_prepare(
+        &mut self,
+        cx: &mut Context<'_>,
+        cleanup: &CleanupPhaseContext,
+        route: &mut ServerRouteSlot<Self::RouteState>,
+        budget: &mut WorkBudget,
+    ) -> Poll<CoreResult<BindingCallSettlement<RoutePrepareOutcome<()>, ()>>> {
+        self.server.poll_cancel_prepare(cx, cleanup, route, budget)
+    }
+
+    fn start_readiness(
+        &mut self,
+        route: &mut ServerRouteSlot<Self::RouteState>,
+        readiness: &mut RouteReadinessSlot<Self::ReadinessState>,
+        budget: &mut WorkBudget,
+    ) -> StartStatus<RouteReadinessOutcome<()>> {
+        self.server.start_readiness(route, readiness, budget)
+    }
+
+    fn poll_readiness(
+        &mut self,
+        cx: &mut Context<'_>,
+        route: &mut ServerRouteSlot<Self::RouteState>,
+        readiness: &mut RouteReadinessSlot<Self::ReadinessState>,
+        budget: &mut WorkBudget,
+    ) -> Poll<RouteReadinessOutcome<()>> {
+        self.server.poll_readiness(cx, route, readiness, budget)
+    }
+
+    fn poll_cancel_readiness(
+        &mut self,
+        cx: &mut Context<'_>,
+        cleanup: &CleanupPhaseContext,
+        route: &mut ServerRouteSlot<Self::RouteState>,
+        readiness: &mut RouteReadinessSlot<Self::ReadinessState>,
+        budget: &mut WorkBudget,
+    ) -> Poll<CoreResult<BindingCallSettlement<RouteReadinessOutcome<()>, ()>>> {
+        self.server
+            .poll_cancel_readiness(cx, cleanup, route, readiness, budget)
+    }
+
+    fn start_activate(
+        &mut self,
+        route: &mut ServerRouteSlot<Self::RouteState>,
+        budget: &mut WorkBudget,
+    ) -> StartStatus<RouteActivationOutcome<(), ()>> {
+        self.server.start_activate(route, budget)
+    }
+
+    fn poll_activate(
+        &mut self,
+        cx: &mut Context<'_>,
+        route: &mut ServerRouteSlot<Self::RouteState>,
+        budget: &mut WorkBudget,
+    ) -> Poll<RouteActivationOutcome<(), ()>> {
+        self.server.poll_activate(cx, route, budget)
+    }
+
+    fn poll_cancel_activate(
+        &mut self,
+        cx: &mut Context<'_>,
+        cleanup: &CleanupPhaseContext,
+        route: &mut ServerRouteSlot<Self::RouteState>,
+        budget: &mut WorkBudget,
+    ) -> Poll<CoreResult<BindingCallSettlement<RouteActivationOutcome<(), ()>, ()>>> {
+        self.server.poll_cancel_activate(cx, cleanup, route, budget)
+    }
+
+    fn start_commit(
+        &mut self,
+        route: &mut ServerRouteSlot<Self::RouteState>,
+        budget: &mut WorkBudget,
+    ) -> StartStatus<RouteCommitOutcome<(), ()>> {
+        self.server.start_commit(route, budget)
+    }
+
+    fn poll_commit(
+        &mut self,
+        cx: &mut Context<'_>,
+        route: &mut ServerRouteSlot<Self::RouteState>,
+        budget: &mut WorkBudget,
+    ) -> Poll<RouteCommitOutcome<(), ()>> {
+        self.server.poll_commit(cx, route, budget)
+    }
+
+    fn poll_cancel_commit(
+        &mut self,
+        cx: &mut Context<'_>,
+        cleanup: &CleanupPhaseContext,
+        route: &mut ServerRouteSlot<Self::RouteState>,
+        budget: &mut WorkBudget,
+    ) -> Poll<CoreResult<BindingCallSettlement<RouteCommitOutcome<(), ()>, ()>>> {
+        self.server.poll_cancel_commit(cx, cleanup, route, budget)
+    }
+
+    fn poll_accept(
+        &mut self,
+        cx: &mut Context<'_>,
+        route: &mut ServerRouteSlot<Self::RouteState>,
+        permit: RouteActivationPermit<'_>,
+        budget: &mut WorkBudget,
+    ) -> Poll<CoreResult<RouteAcceptEvent>> {
+        self.server.poll_accept(cx, route, permit, budget)
+    }
+
+    fn start_abort(
+        &mut self,
+        cleanup: CleanupPhaseContext,
+        route: &mut ServerRouteSlot<Self::RouteState>,
+        budget: &mut WorkBudget,
+    ) -> StartStatus<RouteCleanupOutcome> {
+        self.server.start_abort(cleanup, route, budget)
+    }
+
+    fn poll_abort(
+        &mut self,
+        cx: &mut Context<'_>,
+        route: &mut ServerRouteSlot<Self::RouteState>,
+        budget: &mut WorkBudget,
+    ) -> Poll<RouteCleanupOutcome> {
+        self.server.poll_abort(cx, route, budget)
+    }
+
+    fn start_shutdown(
+        &mut self,
+        cleanup: CleanupPhaseContext,
+        route: &mut ServerRouteSlot<Self::RouteState>,
+        budget: &mut WorkBudget,
+    ) -> StartStatus<RouteCleanupOutcome> {
+        self.server.start_shutdown(cleanup, route, budget)
+    }
+
+    fn poll_shutdown(
+        &mut self,
+        cx: &mut Context<'_>,
+        route: &mut ServerRouteSlot<Self::RouteState>,
+        budget: &mut WorkBudget,
+    ) -> Poll<RouteCleanupOutcome> {
+        self.server.poll_shutdown(cx, route, budget)
+    }
+
+    fn acknowledge_route(
+        &mut self,
+        route: &mut ServerRouteSlot<Self::RouteState>,
+    ) -> CoreResult<()> {
+        self.server.acknowledge_route(route)
+    }
+
+    fn start_response(
+        &mut self,
+        response: RouteInboundResponse,
+        slot: &mut ServerResponseSlot<Self::ResponseState>,
+        budget: &mut WorkBudget,
+    ) -> Result<StartStatus<BindingDeliveryOutcome>, BindingInputRejection<RouteInboundResponse>>
+    {
+        self.server.start_response(response, slot, budget)
+    }
+
+    fn poll_response(
+        &mut self,
+        cx: &mut Context<'_>,
+        slot: &mut ServerResponseSlot<Self::ResponseState>,
+        budget: &mut WorkBudget,
+    ) -> Poll<BindingDeliveryOutcome> {
+        self.server.poll_response(cx, slot, budget)
+    }
+
+    fn poll_cancel_response(
+        &mut self,
+        cx: &mut Context<'_>,
+        cleanup: &CleanupPhaseContext,
+        slot: &mut ServerResponseSlot<Self::ResponseState>,
+        budget: &mut WorkBudget,
+    ) -> Poll<CoreResult<BindingCallSettlement<BindingDeliveryOutcome>>> {
+        self.server.poll_cancel_response(cx, cleanup, slot, budget)
+    }
+
+    fn acknowledge_response(
+        &mut self,
+        slot: &mut ServerResponseSlot<Self::ResponseState>,
+    ) -> CoreResult<()> {
+        self.server.acknowledge_response(slot)
+    }
+}
+
 /// Complete recoverable author input for one static registration.
 pub struct StaticBindingRegistrationInput<B>
 where
@@ -1857,6 +2252,35 @@ where
     }
 }
 
+impl<S, C> StaticBindingRegistrationInput<StaticBindingComponents<S, C>>
+where
+    S: PollServerBinding,
+    C: PollClientBinding<Compiler = S::Compiler>,
+{
+    /// Assembles one dual-role Property Read input without protocol work.
+    #[allow(clippy::too_many_arguments)]
+    pub const fn producer_and_consumer_property_read(
+        identity: BindingRegistrationIdentity,
+        execution: BindingExecutionSupport,
+        compiler: StaticBindingCompilerRegistration<S::Compiler>,
+        components: StaticBindingComponents<S, C>,
+        resources: BindingResourceDeclarations,
+        ingress: BindingIngressPolicy,
+        status: BindingStatusPolicy,
+    ) -> Self {
+        Self {
+            identity,
+            capabilities: BindingRegistrationCapabilities::producer_and_consumer_property_read(),
+            execution,
+            compiler,
+            server: components,
+            resources,
+            ingress,
+            status,
+        }
+    }
+}
+
 /// Validated complete application-static binding bundle.
 pub struct StaticBindingRegistration<B>
 where
@@ -1891,6 +2315,7 @@ where
                 .fits_within(input.resources.response_state());
 
         let valid = input.capabilities.supports_producer_property_read()
+            && !input.capabilities.supports_consumer_property_read()
             && input.execution.supports_application_static()
             && expected == compiler_compatibility
             && expected == server_compatibility
@@ -1952,6 +2377,62 @@ where
     /// Consumes the registration back into the complete validated input.
     pub fn into_input(self) -> StaticBindingRegistrationInput<B> {
         self.input
+    }
+}
+
+impl<S, C> StaticBindingRegistration<StaticBindingComponents<S, C>>
+where
+    S: PollServerBinding,
+    C: PollClientBinding<Compiler = S::Compiler>,
+{
+    /// Validates one complete dual-role compiler/server/client bundle atomically.
+    pub fn producer_and_consumer_property_read(
+        input: StaticBindingRegistrationInput<StaticBindingComponents<S, C>>,
+    ) -> Result<
+        Self,
+        BindingInputRejection<StaticBindingRegistrationInput<StaticBindingComponents<S, C>>>,
+    > {
+        let identity = input.identity;
+        let expected = identity.artifact_compatibility();
+        let compiler_compatibility = input.compiler.compiler().compatibility();
+        let server_compatibility = input.server.server.artifact_compatibility();
+        let client_compatibility = input.server.client.artifact_compatibility();
+        let server_layouts_fit = input
+            .server
+            .server
+            .route_state_layout()
+            .fits_within(input.resources.route_state())
+            && input
+                .server
+                .server
+                .readiness_state_layout()
+                .fits_within(input.resources.readiness_state())
+            && input
+                .server
+                .server
+                .response_state_layout()
+                .fits_within(input.resources.response_state());
+        let request_layout_fits = input
+            .server
+            .client
+            .request_state_layout()
+            .fits_within(input.resources.admitted());
+
+        let valid = input.capabilities.supports_producer_property_read()
+            && input.capabilities.supports_consumer_property_read()
+            && input.execution.supports_application_static()
+            && expected == compiler_compatibility
+            && expected == server_compatibility
+            && expected == client_compatibility
+            && input.resources.is_valid()
+            && server_layouts_fit
+            && request_layout_fits
+            && input.ingress.is_valid();
+        if !valid {
+            let error = registration_error(identity, 302);
+            return Err(BindingInputRejection::new(input, error));
+        }
+        Ok(Self { input })
     }
 }
 
@@ -2322,6 +2803,27 @@ impl<T, C> core::fmt::Debug for HostBindingCallBox<T, C> {
 }
 
 #[cfg(feature = "std")]
+/// Host-erased selected one-shot client component.
+///
+/// The artifact is a scoped construction borrow only. An accepted invocation
+/// returns an owned `'static` call before its first protocol side effect; a
+/// rejected invocation returns the exact request unchanged.
+pub trait ClientBinding: Send + Sync {
+    /// Returns the compatibility identity consumed at registration and call acceptance.
+    fn artifact_compatibility(&self) -> BindingArtifactCompatibility;
+
+    /// Creates one owned Property Read call from the exact selected artifact.
+    fn invoke(
+        &self,
+        request: OutboundRequest,
+        artifact: &BindingArtifactEnvelope<HostBindingArtifact>,
+    ) -> Result<
+        HostBindingCallBox<CoreResult<InteractionOutput>>,
+        BindingInputRejection<OutboundRequest>,
+    >;
+}
+
+#[cfg(feature = "std")]
 /// Route-scoped host server component without registry or dispatch authority.
 pub trait RouteServerBinding: Send + Sync {
     /// Returns the compatibility identity consumed at bundle validation.
@@ -2451,6 +2953,7 @@ pub struct HostBindingRegistrationInput {
     execution: BindingExecutionSupport,
     compiler: HostBindingCompilerRegistration,
     server: Box<dyn RouteServerBinding>,
+    client: Option<Box<dyn ClientBinding>>,
     resources: BindingResourceDeclarations,
     ingress: BindingIngressPolicy,
     status: BindingStatusPolicy,
@@ -2476,6 +2979,7 @@ impl HostBindingRegistrationInput {
             execution,
             compiler,
             server,
+            client: None,
             resources,
             ingress,
             status,
@@ -2496,6 +3000,31 @@ impl HostBindingRegistrationInput {
     pub fn server(&self) -> &dyn RouteServerBinding {
         &*self.server
     }
+
+    /// Assembles one dual-role Property Read input without protocol work.
+    #[allow(clippy::too_many_arguments)]
+    pub fn producer_and_consumer_property_read(
+        identity: BindingRegistrationIdentity,
+        execution: BindingExecutionSupport,
+        compiler: HostBindingCompilerRegistration,
+        server: Box<dyn RouteServerBinding>,
+        client: Box<dyn ClientBinding>,
+        resources: BindingResourceDeclarations,
+        ingress: BindingIngressPolicy,
+        status: BindingStatusPolicy,
+    ) -> Self {
+        Self {
+            identity,
+            capabilities: BindingRegistrationCapabilities::producer_and_consumer_property_read(),
+            execution,
+            compiler,
+            server,
+            client: Some(client),
+            resources,
+            ingress,
+            status,
+        }
+    }
 }
 
 #[cfg(feature = "std")]
@@ -2512,10 +3041,19 @@ impl HostBindingRegistration {
     ) -> Result<Self, BindingInputRejection<HostBindingRegistrationInput>> {
         let identity = input.identity;
         let expected = identity.artifact_compatibility();
+        let client_valid = match (
+            input.capabilities.supports_consumer_property_read(),
+            input.client.as_deref(),
+        ) {
+            (false, None) => true,
+            (true, Some(client)) => expected == client.artifact_compatibility(),
+            (false, Some(_)) | (true, None) => false,
+        };
         let valid = input.capabilities.supports_producer_property_read()
             && input.execution.supports_host_erased()
             && expected == input.compiler.compatibility()
             && expected == input.server.artifact_compatibility()
+            && client_valid
             && input.resources.is_valid()
             && input.ingress.is_valid();
         if !valid {
@@ -2548,6 +3086,11 @@ impl HostBindingRegistration {
     /// Borrows the route-scoped host server component.
     pub fn server(&self) -> &dyn RouteServerBinding {
         &*self.input.server
+    }
+
+    /// Borrows the selected Consumer client component when advertised.
+    pub fn client(&self) -> Option<&dyn ClientBinding> {
+        self.input.client.as_deref()
     }
 
     /// Returns validated retained-resource declarations.

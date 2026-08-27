@@ -31,14 +31,14 @@ pub use binding::{
     BindingRegistrationIdentity, BindingResourceDeclarations, BindingStateLayout,
     BindingStatusPolicy, BindingTransientFootprint, CleanupPhaseContext, CleanupReservation,
     CleanupTransferAcceptance, CleanupTransferEnvelope, CleanupTransferRequest,
-    CleanupTransferTarget, CollisionDomainId, EndpointReservationKey, NoCleanupSuccessor,
-    PollServerBinding, PrepareInput, RouteAcceptClaim, RouteAcceptClaimError, RouteAcceptEvent,
-    RouteAcceptLease, RouteActivationOutcome, RouteActivationPermit, RouteCleanupOutcome,
-    RouteCleanupSuccessor, RouteCommitOutcome, RouteInboundRequest, RouteInboundResponse,
-    RoutePreparationVisibility, RoutePrepareOutcome, RouteReadinessOutcome, RouteReadinessSlot,
-    RouteReservationIdentity, RouteResponseOpportunity, RouteTerminal, ServerResponseSlot,
-    ServerRouteSlot, ServingActivationAuthority, StaticBindingRegistration,
-    StaticBindingRegistrationInput,
+    CleanupTransferTarget, ClientRequestSlot, CollisionDomainId, EndpointReservationKey,
+    NoCleanupSuccessor, PollClientBinding, PollServerBinding, PrepareInput, RouteAcceptClaim,
+    RouteAcceptClaimError, RouteAcceptEvent, RouteAcceptLease, RouteActivationOutcome,
+    RouteActivationPermit, RouteCleanupOutcome, RouteCleanupSuccessor, RouteCommitOutcome,
+    RouteInboundRequest, RouteInboundResponse, RoutePreparationVisibility, RoutePrepareOutcome,
+    RouteReadinessOutcome, RouteReadinessSlot, RouteReservationIdentity, RouteResponseOpportunity,
+    RouteTerminal, ServerResponseSlot, ServerRouteSlot, ServingActivationAuthority,
+    StaticBindingComponents, StaticBindingRegistration, StaticBindingRegistrationInput,
 };
 #[cfg(feature = "std")]
 pub use binding::{
@@ -89,11 +89,12 @@ pub use interaction::{
     InteractionOutputMetadata, InteractionStatus, MediaType, ResponsePayloadRole,
     ResponseSelection,
 };
-pub use outbound::SubscriptionGuard;
 #[cfg(feature = "async")]
 pub use outbound::{BindingRequest, ClientBinding};
+pub use outbound::{OutboundRequest, SubscriptionGuard};
 pub use payload::{CodecInput, Payload, PayloadCodec};
 pub use plan::{BindingCandidate, LogicalInteractionPlan};
+pub use response::validate_untrusted_binding_output;
 pub use security::{
     AuthMaterial, BasicSecurityProvider, BearerSecurityProvider, CredentialStore, Credentials,
     InMemoryCredentialStore, NoSecurityProvider, Principal, PrincipalId, SecurityContext,
