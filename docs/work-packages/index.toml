@@ -163,3 +163,73 @@ pre_implementation_checks = [
 admission_review = "github-pr:50"
 completion_evidence_keys = ["consumer-property-read-planning-selection"]
 completion_evidence_path = "docs/evidence/WP-200-consumer-property-read-planning-selection.toml"
+
+[[tranche]]
+id = "WP-300-CONSUMER-PROPERTY-READ-BINDING"
+work_package = "WP-300"
+sequence = 310
+status = "planned"
+admission_status = "admitted"
+impact_status = "current"
+depends_on = ["WP-200-CONSUMER-PROPERTY-READ-PLANNING"]
+depends_on_packages = ["WP-000"]
+requirements = [
+    "BIND-OUT-001",
+    "BIND-REG-001",
+    "BIND-STORAGE-001",
+    "BIND-MEM-001",
+    "BIND-DELIVERY-001",
+    "BIND-IO-001",
+    "BIND-CALL-CANCEL-001",
+    "BIND-HOST-CANCEL-001",
+    "API-PAYLOAD-001",
+    "PLAN-REQUEST-001",
+    "PLAN-ARTIFACT-001",
+]
+owner_packages = ["clinkz-wot-core"]
+feature_cells = ["no-default", "async-no-std", "std"]
+authoritative_artifacts = [
+    "docs/ADRs/0013-work-package-scoped-implementation-admission.org",
+    "docs/ADRs/0019-consumer-one-shot-authority-entry.org",
+    "docs/architecture/40-protocol-binding-spi-and-deployment.md",
+    "docs/api-ownership.csv",
+    "docs/requirements.csv",
+    "docs/spec/binding-spi.md",
+    "docs/spec/interaction-core.md",
+    "docs/spec/planning.md",
+    "docs/work-packages/WP-300-bindings.md",
+    "docs/work-packages/WP-300-consumer-property-read-binding-admission.md",
+    "docs/work-packages/index.toml",
+]
+api_items = [
+    "OutboundRequest",
+    "validate_untrusted_binding_output",
+    "BindingRegistrationCapabilities",
+    "ClientBinding",
+    "PollClientBinding",
+    "ClientRequestSlot",
+    "HostBindingRegistrationInput",
+    "HostBindingRegistration",
+    "StaticBindingRegistrationInput",
+    "StaticBindingRegistration",
+]
+state_machines = []
+resource_changes = []
+old_api_removals = []
+performance_workloads = []
+implementation_paths = [
+    "core/src/binding.rs",
+    "core/src/outbound.rs",
+    "core/src/response.rs",
+    "core/src/lib.rs",
+]
+pre_implementation_checks = [
+    "tools/check-design-artifacts.sh",
+    "cargo test --workspace --locked",
+    "cargo check --locked -p clinkz-wot-core --no-default-features",
+    "cargo check --locked -p clinkz-wot-core --no-default-features --features async",
+    "cargo check --locked -p clinkz-wot-core",
+]
+admission_review = "github-pr:52"
+completion_evidence_keys = ["consumer-property-read-binding-execution"]
+completion_evidence_path = "docs/evidence/WP-300-consumer-property-read-binding-execution.toml"
