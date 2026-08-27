@@ -162,9 +162,9 @@ impl InteractionInput {
 /// future selection/control fields can be added without breaking source
 /// compatibility.
 ///
-/// ```compile_fail
-/// use alloc::collections::BTreeMap;
+/// ```compile_fail,E0639
 /// use clinkz_wot_core::InteractionOptions;
+/// use std::collections::BTreeMap;
 ///
 /// let _ = InteractionOptions {
 ///     uri_variables: BTreeMap::new(),
