@@ -153,9 +153,28 @@ impl InteractionInput {
 /// Caller-facing options for an outbound (consumed) interaction call
 /// (Scripting API §7.1; baseline §4.3).
 ///
-/// Mirrors [`InteractionInput`] for the concepts shared between inbound and
-/// outbound, plus outbound-only `form_index` and `timeout`.
+/// The Consumer Property Read selection/control surface carries URI-template
+/// variables, an optional form index, and optional timeout intent. The `data`
+/// field and [`Self::with_data`] remain only for legacy write, action, and
+/// subscription callers; payload is not selection/control state.
+///
+/// Callers construct this value through its constructors and builders so
+/// future selection/control fields can be added without breaking source
+/// compatibility.
+///
+/// ```compile_fail
+/// use alloc::collections::BTreeMap;
+/// use clinkz_wot_core::InteractionOptions;
+///
+/// let _ = InteractionOptions {
+///     uri_variables: BTreeMap::new(),
+///     form_index: None,
+///     data: None,
+///     timeout: None,
+/// };
+/// ```
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
+#[non_exhaustive]
 pub struct InteractionOptions {
     /// URI-template variables to expand into the selected form's target.
     pub uri_variables: BTreeMap<String, String>,
@@ -164,7 +183,7 @@ pub struct InteractionOptions {
     /// [`CoreError::Selection`](crate::CoreError::Selection) with
     /// `StrictSelectionMismatch` (baseline §5.1 / AD47).
     pub form_index: Option<usize>,
-    /// Optional encoded request payload.
+    /// Legacy encoded request payload for unmigrated operation families.
     pub data: Option<Payload>,
     /// Outbound timeout. Enforced via build-time cfg (AD39/H2): `std`/embassy
     /// apply it; bare `no_std` without a timer returns
@@ -179,7 +198,7 @@ impl InteractionOptions {
         Self::default()
     }
 
-    /// Convenience constructor that pre-seeds `data`. Equivalent to
+    /// Legacy convenience constructor that pre-seeds `data`. Equivalent to
     /// `Self::new()` followed by setting the `data` field, but reads more
     /// naturally at call sites:
     ///
@@ -205,6 +224,35 @@ impl InteractionOptions {
     pub fn with_uri_variable(mut self, key: &str, value: &str) -> Self {
         self.uri_variables.insert(key.into(), value.into());
         self
+    }
+
+    /// Selects one form from the immutable consumed plan set by its source index.
+    #[must_use]
+    pub fn with_form_index(mut self, form_index: usize) -> Self {
+        self.form_index = Some(form_index);
+        self
+    }
+
+    /// Sets the caller's timeout intent for this interaction.
+    #[must_use]
+    pub fn with_timeout(mut self, timeout: Duration) -> Self {
+        self.timeout = Some(timeout);
+        self
+    }
+
+    /// Returns the owned URI-template variables supplied by the caller.
+    pub fn uri_variables(&self) -> &BTreeMap<String, String> {
+        &self.uri_variables
+    }
+
+    /// Returns the explicitly selected form index, when present.
+    pub const fn form_index(&self) -> Option<usize> {
+        self.form_index
+    }
+
+    /// Returns the caller's timeout intent, when present.
+    pub const fn timeout(&self) -> Option<Duration> {
+        self.timeout
     }
 }
 
