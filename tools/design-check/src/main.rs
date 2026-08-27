@@ -409,6 +409,7 @@ fn check_tranche_registry(
     }
 
     let mut graph = BTreeMap::new();
+    let mut tranche_status = BTreeMap::new();
     for tranche in tranches {
         let id = table_string(tranche, "id", "tranche")?;
         if graph.contains_key(&id) {
@@ -422,6 +423,7 @@ fn check_tranche_registry(
         if !matches!(status.as_str(), "planned" | "in-progress" | "complete") {
             return Err(format!("tranche {id} has invalid status {status:?}"));
         }
+        tranche_status.insert(id.clone(), status.clone());
         let admission_status = table_string(tranche, "admission_status", &id)?;
         if !matches!(admission_status.as_str(), "candidate" | "admitted") {
             return Err(format!("tranche {id} has invalid admission status {admission_status:?}"));
@@ -483,6 +485,19 @@ fn check_tranche_registry(
             let _ = table_strings(tranche, field, &id)?;
         }
         graph.insert(id, table_strings(tranche, "depends_on", "tranche dependency")?);
+    }
+    for (id, dependencies) in &graph {
+        for dependency in dependencies {
+            match tranche_status.get(dependency).map(String::as_str) {
+                Some("complete") => {}
+                Some(state) => {
+                    return Err(format!(
+                        "tranche {id} depends on incomplete tranche {dependency} ({state})"
+                    ));
+                }
+                None => return Err(format!("tranche {id} depends on unknown tranche {dependency}")),
+            }
+        }
     }
     check_dag(&graph, "tranche")?;
     Ok(())
