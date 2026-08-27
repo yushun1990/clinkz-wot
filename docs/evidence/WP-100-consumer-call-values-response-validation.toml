@@ -1,0 +1,55 @@
+schema_version = 1
+design_revision = "5.1"
+work_package = "WP-100"
+tranche = "WP-100-CONSUMER-CALL-VALUES-VALIDATOR"
+implementation_ref = "64842df9422e5e70c15883f5177de404e1223315"
+recorded_on = "2026-08-27"
+status = "passed"
+evidence_key = "consumer-call-values-response-validation"
+admission_review = "github-pr:48"
+
+requirement_ids = [
+    "API-OPTIONS-001",
+    "API-PAYLOAD-001",
+    "BIND-IO-001",
+    "BIND-DELIVERY-001",
+    "BIND-OUT-001",
+]
+compilation_cells = ["no-default", "async-no-std", "std"]
+production_paths = [
+    "core/src/interaction.rs",
+    "core/src/response.rs",
+    "core/src/lib.rs",
+]
+coverage = [
+    "InteractionOptions omission, URI-variable access, explicit form selection, and timeout intent through every admitted new method",
+    "external struct construction rejected by the InteractionOptions non-exhaustive compile-fail doctest",
+    "legacy InteractionOptions data construction and workspace callers continue to compile without a new target payload accessor or builder",
+    "exact selected binding id, binding generation, plan id, primary response, one payload, Ok status, application role, and no action reference returns the owned output unchanged",
+    "binding-id, binding-generation, and plan-id mismatches each return CoreError::Validation",
+    "missing binding metadata and additional-response selection return CoreError::Validation",
+    "missing payload, every non-Ok status, non-application payload role, and action invocation reference return CoreError::Validation",
+    "representative and boundary binding-native numeric status values, including zero and u16::MAX, remain opaque provenance and are preserved unchanged",
+    "no-default, async-no-std, and std Core feature cells compile",
+    "full locked workspace tests and doctests pass without a public OutboundRequest or public validation wrapper",
+]
+
+[[verification]]
+command = "tools/check-design-artifacts.sh"
+status = "passed"
+
+[[verification]]
+command = "cargo test --workspace --locked"
+status = "passed"
+
+[[verification]]
+command = "cargo check --locked -p clinkz-wot-core --no-default-features"
+status = "passed"
+
+[[verification]]
+command = "cargo check --locked -p clinkz-wot-core --no-default-features --features async"
+status = "passed"
+
+[[verification]]
+command = "cargo check --locked -p clinkz-wot-core"
+status = "passed"
