@@ -1,4 +1,4 @@
-schema_version = 4
+schema_version = 5
 design_revision = "5.1"
 status = "in-progress"
 integration_gate_manifest = "docs/work-packages/property-read-architecture-gate.toml"
@@ -58,3 +58,55 @@ status = "planned"
 document = "docs/work-packages/WP-700-integration.md"
 owner_crates = ["clinkz-wot"]
 depends_on = ["WP-400", "WP-500", "WP-600"]
+
+[[tranche]]
+id = "WP-100-CONSUMER-CALL-VALUES-VALIDATOR"
+work_package = "WP-100"
+sequence = 160
+status = "planned"
+admission_status = "admitted"
+impact_status = "current"
+depends_on = []
+depends_on_packages = ["WP-000"]
+requirements = [
+    "API-OPTIONS-001",
+    "API-PAYLOAD-001",
+    "BIND-IO-001",
+    "BIND-DELIVERY-001",
+    "BIND-OUT-001",
+]
+owner_packages = ["clinkz-wot-core"]
+feature_cells = ["no-default", "async-no-std", "std"]
+authoritative_artifacts = [
+    "docs/ADRs/0013-work-package-scoped-implementation-admission.org",
+    "docs/ADRs/0019-consumer-one-shot-authority-entry.org",
+    "docs/api-ownership.csv",
+    "docs/requirements.csv",
+    "docs/spec/interaction-core.md",
+    "docs/spec/binding-spi.md",
+    "docs/work-packages/WP-100-core.md",
+    "docs/work-packages/index.toml",
+]
+api_items = [
+    "InteractionOptions",
+    "validate_property_read_binding_output",
+]
+state_machines = []
+resource_changes = []
+old_api_removals = []
+performance_workloads = []
+implementation_paths = [
+    "core/src/interaction.rs",
+    "core/src/response.rs",
+    "core/src/lib.rs",
+]
+pre_implementation_checks = [
+    "tools/check-design-artifacts.sh",
+    "cargo test --workspace --locked",
+    "cargo check --locked -p clinkz-wot-core --no-default-features",
+    "cargo check --locked -p clinkz-wot-core --no-default-features --features async",
+    "cargo check --locked -p clinkz-wot-core",
+]
+admission_review = "github-pr:48"
+completion_evidence_keys = ["consumer-call-values-response-validation"]
+completion_evidence_path = "docs/evidence/WP-100-consumer-call-values-response-validation.toml"

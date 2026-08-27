@@ -60,11 +60,11 @@ irreversible external commitment that repository evidence cannot resolve.
 
 ## Active Architecture Target
 
-The authoritative revision is v5.0 bounded-core authority. Its active source
-map is `docs/spec/v5-authority-reset.toml`; accepted specifications, ADRs,
-work packages, code, and tests own the current contract.
+The authoritative revision is v5.1 Consumer one-shot authority. Its active
+source map is `docs/spec/v5-authority-reset.toml`; accepted specifications,
+ADRs, work packages, code, and tests own the current contract.
 
-No individual v5.0 artifact grants implementation admission outside that
+No individual v5.1 artifact grants implementation admission outside that
 active set. Git history retains the superseded activation and rollback record;
 current validation does not replay it.
 
@@ -73,7 +73,7 @@ not active merely because it still exists in a historical or residual document.
 It becomes active only after reconciliation into the registered v4.9 authority
 set.
 
-The v5.0 closure effort must produce one coherent and executable target across:
+The active v5 architecture-closure effort must produce one coherent and executable target across:
 
 - architecture flows and module boundaries;
 - accepted ADRs;
@@ -103,12 +103,13 @@ Primary architecture sources are:
    completion, removal, and evidence contracts; and
 6. source code and tests for implementation truth and executable conformance.
 
-Under active v5.0 authority, `docs/design.md` is the concise revision entry
+Under active v5.1 authority, `docs/design.md` is the concise revision entry
 point and normative-source manifest. It must not override a more specific
-registered owner. ADR-0018 supersedes the D3 completion direction: the active
-revision replaces residual ownership with an exact 62-requirement set and
-checked inactive dispositions rather than continuing lossless domain
-migrations.
+registered owner. ADR-0018 established the bounded v5.0 reset; ADR-0019 then
+re-adopted exactly `PLAN-REQUEST-001`, `BIND-OUT-001`, and the narrowed
+`API-OPTIONS-001` for Consumer one-shot entry. The active v5.1 set therefore
+contains exactly 65 requirements while the remaining identities retain their
+checked inactive dispositions.
 
 `workspace/` is non-authoritative. It records questions, proposals,
 investigations, alternatives, and reasoning history. A workspace topic becomes
@@ -117,7 +118,7 @@ proper registered authority.
 
 ## Frozen Direction for v1
 
-The accepted v1 architecture direction active in v5.0 includes:
+The accepted v1 architecture direction active in v5.1 includes:
 
 - an explicit compiled-plan-set lifecycle and binding-artifact boundary;
 - immutable admitted plan sets separating protocol-neutral logical plans from
@@ -230,7 +231,7 @@ AI must:
 
 1. identify the exact conflicting claims;
 2. determine each artifact's registered ownership and revision status;
-3. distinguish active v4.9 authority from historical or residual migration
+3. distinguish active v5.1 authority from historical or residual migration
    input;
 4. open or update a workspace investigation when the conflict affects semantics,
    ownership, lifecycle, resources, public behavior, or evidence truth;
@@ -242,7 +243,7 @@ No architecture conflict is resolved merely by adding another summary document.
 
 ## Architecture Closure
 
-The v5.0 architecture-closure milestone is technically complete only when:
+The active v5 architecture-closure milestone is technically complete only when:
 
 1. the architecture backbone freezes primary flows, module boundaries,
    compiled-plan lifecycle, Servient orchestration, and Protocol Binding
@@ -250,7 +251,7 @@ The v5.0 architecture-closure milestone is technically complete only when:
 2. every accepted ADR has one non-conflicting authoritative projection;
 3. every active detailed requirement has one registered normative owner;
 4. residual v4.8/v4.9 ownership is historical rather than active, all 121 v4.9
-   identities have one checked ADR-0018 disposition, and exactly 62 active
+   identities have one checked v5 authority disposition, and exactly 65 active
    requirements have one registered normative owner;
 5. API, state, resource, performance, requirement, and work-package artifacts
    identify the same revision and contracts;

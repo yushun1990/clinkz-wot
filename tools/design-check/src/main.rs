@@ -234,6 +234,9 @@ fn expand_requirement(expression: &str) -> Result<Vec<String>, String> {
 fn check_work_packages(root: &Path) -> Result<(), String> {
     let relative = "docs/work-packages/index.toml";
     let document = parse_toml(root, relative)?;
+    if root_integer(&document, "schema_version", relative)? != 5 {
+        return Err(format!("{relative} is not work-package schema version 5"));
+    }
     require_root_string(&document, "design_revision", "5.1", relative)?;
     let packages = document
         .get("package")
@@ -274,6 +277,7 @@ fn check_work_packages(root: &Path) -> Result<(), String> {
         ));
     }
     check_dag(&graph, "work-package")?;
+    check_tranche_registry(root, &document, &graph)?;
 
     let gate_path = root_string(&document, "integration_gate_manifest", relative)?;
     let gate = parse_toml(root, &gate_path)?;
@@ -374,6 +378,113 @@ fn check_work_packages(root: &Path) -> Result<(), String> {
     if ids.is_empty() {
         return Err("Property Read gate has no current technical dependencies".to_owned());
     }
+    Ok(())
+}
+
+fn check_tranche_registry(
+    root: &Path,
+    document: &DocumentMut,
+    package_graph: &BTreeMap<String, Vec<String>>,
+) -> Result<(), String> {
+    let relative = "docs/work-packages/index.toml";
+    let tranches = document
+        .get("tranche")
+        .and_then(Item::as_array_of_tables)
+        .ok_or_else(|| format!("{relative} has no tranche admission records"))?;
+    if tranches.is_empty() {
+        return Err(format!("{relative} has no tranche admission records"));
+    }
+
+    let known_requirements = load_requirement_ids(root)?;
+    let packages = document
+        .get("package")
+        .and_then(Item::as_array_of_tables)
+        .ok_or_else(|| format!("{relative} has no package records"))?;
+    let mut package_status = BTreeMap::new();
+    for package in packages {
+        package_status.insert(
+            table_string(package, "id", "package")?,
+            table_string(package, "status", "package")?,
+        );
+    }
+
+    let mut graph = BTreeMap::new();
+    for tranche in tranches {
+        let id = table_string(tranche, "id", "tranche")?;
+        if graph.contains_key(&id) {
+            return Err(format!("duplicate tranche {id}"));
+        }
+        let work_package = table_string(tranche, "work_package", &id)?;
+        if !package_graph.contains_key(&work_package) {
+            return Err(format!("tranche {id} has unknown work package {work_package}"));
+        }
+        let status = table_string(tranche, "status", &id)?;
+        if !matches!(status.as_str(), "planned" | "in-progress" | "complete") {
+            return Err(format!("tranche {id} has invalid status {status:?}"));
+        }
+        let admission_status = table_string(tranche, "admission_status", &id)?;
+        if !matches!(admission_status.as_str(), "candidate" | "admitted") {
+            return Err(format!("tranche {id} has invalid admission status {admission_status:?}"));
+        }
+        if table_string(tranche, "impact_status", &id)? != "current" {
+            return Err(format!("tranche {id} does not have current impact status"));
+        }
+
+        for dependency in table_strings(tranche, "depends_on_packages", &id)? {
+            match package_status.get(&dependency).map(String::as_str) {
+                Some("complete") => {}
+                Some(state) => {
+                    return Err(format!(
+                        "tranche {id} depends on incomplete package {dependency} ({state})"
+                    ));
+                }
+                None => return Err(format!("tranche {id} depends on unknown package {dependency}")),
+            }
+        }
+        for requirement in table_strings(tranche, "requirements", &id)? {
+            if !known_requirements.contains(&requirement) {
+                return Err(format!("tranche {id} references unknown requirement {requirement}"));
+            }
+        }
+        let feature_cells = table_strings(tranche, "feature_cells", &id)?;
+        if feature_cells.is_empty()
+            || feature_cells.iter().any(|cell| {
+                !matches!(cell.as_str(), "no-default" | "async-no-std" | "std")
+            })
+        {
+            return Err(format!("tranche {id} has invalid or empty feature cells"));
+        }
+        for artifact in table_strings(tranche, "authoritative_artifacts", &id)? {
+            require_file(root, &artifact, &format!("tranche {id} authority"))?;
+        }
+        for implementation_path in table_strings(tranche, "implementation_paths", &id)? {
+            validate_relative_path(
+                &implementation_path,
+                &format!("tranche {id} implementation path"),
+            )?;
+        }
+        if table_strings(tranche, "pre_implementation_checks", &id)?.is_empty() {
+            return Err(format!("tranche {id} has no pre-implementation checks"));
+        }
+        if table_string(tranche, "admission_review", &id)?.is_empty() {
+            return Err(format!("tranche {id} has no independent review location"));
+        }
+        if table_strings(tranche, "completion_evidence_keys", &id)?.is_empty() {
+            return Err(format!("tranche {id} has no completion evidence keys"));
+        }
+        let evidence_path = table_string(tranche, "completion_evidence_path", &id)?;
+        validate_relative_path(&evidence_path, &format!("tranche {id} completion evidence path"))?;
+        for field in [
+            "state_machines",
+            "resource_changes",
+            "old_api_removals",
+            "performance_workloads",
+        ] {
+            let _ = table_strings(tranche, field, &id)?;
+        }
+        graph.insert(id, table_strings(tranche, "depends_on", "tranche dependency")?);
+    }
+    check_dag(&graph, "tranche")?;
     Ok(())
 }
 
