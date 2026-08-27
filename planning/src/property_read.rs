@@ -9,7 +9,8 @@ use clinkz_wot_core::{
     BindingCandidate, BindingCompilerBounds, BindingCompilerExtension, BindingCompilerInput,
     BindingCompilerStep, BindingConfigurationDigest, BindingGeneration, BindingId,
     BindingRegistrationIdentity, CoreError, CoreResult, ErrorContext, ErrorPhase,
-    LogicalInteractionPlan, PlanId, RetryClass, StaticBindingCompilerRegistration, ThingId,
+    InteractionOptions, LogicalInteractionPlan, PlanId, RetryClass,
+    StaticBindingCompilerRegistration, ThingId,
 };
 #[cfg(feature = "std")]
 use clinkz_wot_core::{
@@ -18,6 +19,7 @@ use clinkz_wot_core::{
 use clinkz_wot_foundation::{SlotIndex, WorkBudget, WorkClass};
 use clinkz_wot_td::{
     data_type::{Operation, resolve_form_href},
+    td_defaults::{FormContext, effective_form_operations},
     thing::Thing,
 };
 
@@ -159,6 +161,7 @@ pub struct PropertyReadBuildCursor<C, A> {
 /// Exact bounded compiler for the reviewed Property Read projection.
 pub struct PropertyReadPlanCompiler {
     plan_id: PlanId,
+    consumer_target: Option<(Box<str>, u32)>,
     binding_id: BindingId,
     binding_generation: BindingGeneration,
     configuration: BindingConfigurationDigest,
@@ -169,21 +172,22 @@ pub struct PropertyReadPlanCompiler {
 }
 
 impl PropertyReadPlanCompiler {
-    const fn new(
+    /// Creates the exact eager Consumer-call projection for one target coordinate.
+    pub fn consumer_call(
         plan_id: PlanId,
-        binding_id: BindingId,
-        binding_generation: BindingGeneration,
-        configuration: BindingConfigurationDigest,
-        compatibility: BindingArtifactCompatibility,
+        property_name: Box<str>,
+        form_index: u32,
+        registration: BindingRegistrationIdentity,
         registration_index: u32,
         candidate_order: u32,
     ) -> Self {
         Self {
             plan_id,
-            binding_id,
-            binding_generation,
-            configuration,
-            compatibility,
+            consumer_target: Some((property_name, form_index)),
+            binding_id: registration.binding_id(),
+            binding_generation: registration.binding_generation(),
+            configuration: registration.configuration(),
+            compatibility: registration.artifact_compatibility(),
             registration_index,
             candidate_order,
             role: BindingArtifactRole::ConsumerCall,
@@ -199,6 +203,7 @@ impl PropertyReadPlanCompiler {
     ) -> Self {
         Self {
             plan_id,
+            consumer_target: None,
             binding_id: registration.binding_id(),
             binding_generation: registration.binding_generation(),
             configuration: registration.configuration(),
@@ -239,7 +244,13 @@ impl PropertyReadPlanCompiler {
 
         let (plan, candidate, admitted, compiler_cursor) = match cursor.state {
             PropertyReadBuildState::Start => {
-                let plan = match property_read_plan(input.validated_td(), self.plan_id) {
+                let plan = match property_read_plan(
+                    input.validated_td(),
+                    self.plan_id,
+                    self.consumer_target
+                        .as_ref()
+                        .map(|(property_name, form_index)| (property_name.as_ref(), *form_index)),
+                ) {
                     Ok(plan) => plan,
                     Err(error) => {
                         return PlanBuildStep::Failed(PlanBuildFailure::new(
@@ -516,7 +527,11 @@ fn compiler_work_is_portable(bounds: &BindingCompilerBounds) -> bool {
         .all(|class| class == WorkClass::BindingPolls || bounds.work().remaining(class) == 0)
 }
 
-fn property_read_plan(td: &Thing, plan_id: PlanId) -> CoreResult<LogicalInteractionPlan> {
+fn property_read_plan(
+    td: &Thing,
+    plan_id: PlanId,
+    consumer_target: Option<(&str, u32)>,
+) -> CoreResult<LogicalInteractionPlan> {
     let thing_id = td
         .id
         .as_ref()
@@ -525,6 +540,26 @@ fn property_read_plan(td: &Thing, plan_id: PlanId) -> CoreResult<LogicalInteract
     let properties = td.properties.as_ref().ok_or_else(|| {
         selection_error(clinkz_wot_core::SelectionFailureReason::AffordanceMissing)
     })?;
+
+    if let Some((property_name, form_index)) = consumer_target {
+        let property = properties.get(property_name).ok_or_else(|| {
+            selection_error(clinkz_wot_core::SelectionFailureReason::AffordanceMissing)
+        })?;
+        let form = usize::try_from(form_index)
+            .ok()
+            .and_then(|index| property._interaction.forms.get(index))
+            .ok_or_else(|| {
+                selection_error(clinkz_wot_core::SelectionFailureReason::StrictSelectionMismatch)
+            })?;
+        if !effective_form_operations(FormContext::Property(property), form)
+            .contains(&Operation::ReadProperty)
+        {
+            return Err(selection_error(
+                clinkz_wot_core::SelectionFailureReason::NoFormSupportsOperation,
+            ));
+        }
+        return make_property_read_plan(td, plan_id, thing_id, property_name, form_index, form);
+    }
 
     for (property_name, property) in properties {
         for (form_index, form) in property._interaction.forms.iter().enumerate() {
@@ -542,24 +577,86 @@ fn property_read_plan(td: &Thing, plan_id: PlanId) -> CoreResult<LogicalInteract
                         .with_plan(plan_id),
                 )
             })?;
-            let resolved = resolve_form_href(td.base.as_ref(), &form.href).map_err(|_| {
-                selection_error(clinkz_wot_core::SelectionFailureReason::TargetResolutionFailed)
-            })?;
-            return LogicalInteractionPlan::try_property_read(
-                plan_id,
-                thing_id,
-                Box::from(property_name.as_str()),
-                form_index,
-                Box::from(resolved.as_str()),
-                Some(Box::from(form.content_type.as_str())),
-                form.subprotocol.as_deref().map(Box::from),
-            );
+            return make_property_read_plan(td, plan_id, thing_id, property_name, form_index, form);
         }
     }
 
     Err(selection_error(
         clinkz_wot_core::SelectionFailureReason::NoFormSupportsOperation,
     ))
+}
+
+fn make_property_read_plan(
+    td: &Thing,
+    plan_id: PlanId,
+    thing_id: ThingId,
+    property_name: &str,
+    form_index: u32,
+    form: &clinkz_wot_td::form::Form,
+) -> CoreResult<LogicalInteractionPlan> {
+    let resolved = resolve_form_href(td.base.as_ref(), &form.href).map_err(|_| {
+        selection_error(clinkz_wot_core::SelectionFailureReason::TargetResolutionFailed)
+    })?;
+    LogicalInteractionPlan::try_property_read(
+        plan_id,
+        thing_id,
+        Box::from(property_name),
+        form_index,
+        Box::from(resolved.as_str()),
+        Some(Box::from(form.content_type.as_str())),
+        form.subprotocol.as_deref().map(Box::from),
+    )
+}
+
+/// Selects the one eager Consumer Property Read artifact from immutable plan data.
+pub fn select_consumer_property_read<A>(
+    output: &PlanBuildOutput<A>,
+    property_name: &str,
+    options: &InteractionOptions,
+) -> CoreResult<BindingArtifactRef> {
+    let [plan] = output.logical_plans() else {
+        return Err(selection_error(
+            clinkz_wot_core::SelectionFailureReason::StrictSelectionMismatch,
+        ));
+    };
+    if plan.property_name() != property_name {
+        return Err(selection_error(
+            clinkz_wot_core::SelectionFailureReason::AffordanceMissing,
+        ));
+    }
+    if options
+        .form_index()
+        .is_some_and(|form_index| u32::try_from(form_index).ok() != Some(plan.form_index()))
+    {
+        return Err(selection_error(
+            clinkz_wot_core::SelectionFailureReason::StrictSelectionMismatch,
+        ));
+    }
+
+    let [envelope] = output.artifacts() else {
+        return Err(selection_error(
+            clinkz_wot_core::SelectionFailureReason::StrictSelectionMismatch,
+        ));
+    };
+    let [artifact_ref] = output.artifact_refs() else {
+        return Err(selection_error(
+            clinkz_wot_core::SelectionFailureReason::StrictSelectionMismatch,
+        ));
+    };
+    let identity = artifact_ref.identity();
+    if artifact_ref.artifact_slot() != SlotIndex::new(0)
+        || envelope.identity() != identity
+        || plan.plan_id() != identity.plan_id()
+        || identity.role() != BindingArtifactRole::ConsumerCall
+        || envelope.artifact().compatibility() != identity.compatibility()
+        || envelope.route_reservation().is_some()
+    {
+        return Err(selection_error(
+            clinkz_wot_core::SelectionFailureReason::StrictSelectionMismatch,
+        ));
+    }
+
+    Ok(*artifact_ref)
 }
 
 fn finish_property_read_build<C, A>(
@@ -638,8 +735,8 @@ mod tests {
     use clinkz_wot_core::binding::BindingRouteKey;
     use clinkz_wot_core::{
         BindingCompilerOutput, BindingLifetimeFootprint, BindingRegistrationIdentity,
-        CollisionDomainId, EndpointReservationKey, PlanSetGeneration, PrepareInput,
-        RouteReservationIdentity,
+        CollisionDomainId, EndpointReservationKey, InteractionOptions, Payload, PlanSetGeneration,
+        PrepareInput, RouteReservationIdentity, SelectionFailureReason,
     };
     use clinkz_wot_foundation::Generation;
     use clinkz_wot_td::{
@@ -744,17 +841,66 @@ mod tests {
             .expect("valid thing")
     }
 
+    fn competing_thing() -> Thing {
+        Thing::builder("Consumer target fixture")
+            .id("urn:test:consumer-target")
+            .nosec()
+            .property(
+                "alpha",
+                PropertyAffordance::builder(DataSchema::number())
+                    .form(
+                        Form::read_property("mock://alpha/read")
+                            .build()
+                            .expect("valid competing form"),
+                    )
+                    .build()
+                    .expect("valid competing property"),
+            )
+            .property(
+                "target",
+                PropertyAffordance::builder(DataSchema::number())
+                    .form(
+                        Form::read_property("mock://target/first")
+                            .build()
+                            .expect("valid first target form"),
+                    )
+                    .form(
+                        Form::read_property("mock://target/selected")
+                            .build()
+                            .expect("valid selected target form"),
+                    )
+                    .form(
+                        Form::write_property("mock://target/write-only")
+                            .build()
+                            .expect("valid non-read target form"),
+                    )
+                    .build()
+                    .expect("valid target property"),
+            )
+            .build()
+            .expect("valid competing thing")
+    }
+
     fn plan_id() -> PlanId {
         PlanId::new(SlotIndex::new(3), Generation::INITIAL)
     }
 
-    fn compiler<R>() -> PropertyReadPlanCompiler {
-        PropertyReadPlanCompiler::new(
-            plan_id(),
+    fn registration_identity() -> BindingRegistrationIdentity {
+        BindingRegistrationIdentity::new(
             BindingId::new(11),
             BindingGeneration::new(Generation::INITIAL),
             BindingConfigurationDigest::new([12; 32]),
             BindingArtifactCompatibility::new([13; 16]),
+            7,
+        )
+    }
+
+    fn compiler(property_name: &str, form_index: u32) -> PropertyReadPlanCompiler {
+        PropertyReadPlanCompiler::consumer_call(
+            plan_id(),
+            Box::from(property_name),
+            form_index,
+            registration_identity(),
             0,
             0,
         )
@@ -771,7 +917,7 @@ mod tests {
             &registrations[..],
             PlanSetGeneration::new(Generation::INITIAL),
         );
-        let compiler = compiler::<StaticBindingCompilerRegistration<MockCompiler>>();
+        let compiler = compiler("level", 0);
         let mut cursor = compiler.start(&input).expect("build cursor");
         loop {
             let mut budget = WorkBudget::new().with_remaining(WorkClass::BindingPolls, step_budget);
@@ -798,7 +944,7 @@ mod tests {
                 &registrations[..],
                 PlanSetGeneration::new(Generation::INITIAL),
             );
-            let compiler = compiler::<StaticBindingCompilerRegistration<MockCompiler>>();
+            let compiler = compiler("level", 0);
             let cursor = compiler.start(&input).expect("build cursor");
             let mut zero = WorkBudget::new();
             let cursor = match compiler.step(&input, cursor, &mut zero) {
@@ -831,6 +977,11 @@ mod tests {
             "mock://tank/level"
         );
         assert_eq!(output.artifact_refs()[0].artifact_slot(), SlotIndex::new(0));
+        assert_eq!(
+            select_consumer_property_read(&output, "level", &InteractionOptions::new())
+                .expect("owned output selects after every build input is dropped"),
+            output.artifact_refs()[0]
+        );
     }
 
     #[test]
@@ -853,7 +1004,7 @@ mod tests {
                 &registrations[..],
                 PlanSetGeneration::new(Generation::INITIAL),
             );
-            let compiler = compiler::<HostBindingCompilerRegistration>();
+            let compiler = compiler("level", 0);
             let mut cursor = compiler.start(&input).expect("host build cursor");
             loop {
                 let mut budget = WorkBudget::new().with_remaining(WorkClass::BindingPolls, 1);
@@ -882,6 +1033,180 @@ mod tests {
                 .map(|artifact| artifact.target.as_ref()),
             Some("mock://tank/level")
         );
+        assert_eq!(
+            select_consumer_property_read(&static_output, "level", &InteractionOptions::new())
+                .expect("static selection"),
+            select_consumer_property_read(&host_output, "level", &InteractionOptions::new())
+                .expect("Host selection")
+        );
+    }
+
+    #[test]
+    fn consumer_call_compiles_only_the_exact_non_first_coordinate() {
+        let td = competing_thing();
+        let compatibility = BindingArtifactCompatibility::new([13; 16]);
+        let registrations = [StaticBindingCompilerRegistration::new(MockCompiler {
+            compatibility,
+        })];
+        let input = PlanBuildInput::new(
+            &td,
+            &registrations[..],
+            PlanSetGeneration::new(Generation::INITIAL),
+        );
+        let compiler = compiler("target", 1);
+        let mut cursor = compiler.start(&input).expect("exact target cursor");
+        let output = loop {
+            let mut budget = WorkBudget::new().with_remaining(WorkClass::BindingPolls, 1);
+            cursor = match compiler.step(&input, cursor, &mut budget) {
+                PlanBuildStep::Pending(cursor) => cursor,
+                PlanBuildStep::Complete(output) => break output,
+                PlanBuildStep::Failed(failure) => {
+                    panic!("exact target build failed: {:?}", failure.error())
+                }
+            };
+        };
+
+        let plan = &output.logical_plans()[0];
+        assert_eq!(plan.property_name(), "target");
+        assert_eq!(plan.form_index(), 1);
+        assert_eq!(plan.resolved_target(), "mock://target/selected");
+        let selected = select_consumer_property_read(
+            &output,
+            "target",
+            &InteractionOptions::new().with_form_index(1),
+        )
+        .expect("matching strict selection");
+        assert_eq!(selected, output.artifact_refs()[0]);
+        assert_eq!(
+            selected.identity().binding_id(),
+            registration_identity().binding_id()
+        );
+        assert_eq!(
+            selected.identity().binding_generation(),
+            registration_identity().binding_generation()
+        );
+        assert_eq!(
+            selected.identity().configuration(),
+            registration_identity().configuration()
+        );
+        assert_eq!(
+            selected.identity().compatibility(),
+            registration_identity().artifact_compatibility()
+        );
+        assert_eq!(
+            selected.identity().role(),
+            BindingArtifactRole::ConsumerCall
+        );
+        assert!(output.artifacts()[0].route_reservation().is_none());
+    }
+
+    fn build_failure(property_name: &str, form_index: u32) -> CoreError {
+        let td = competing_thing();
+        let registrations = [StaticBindingCompilerRegistration::new(MockCompiler {
+            compatibility: BindingArtifactCompatibility::new([13; 16]),
+        })];
+        let input = PlanBuildInput::new(
+            &td,
+            &registrations[..],
+            PlanSetGeneration::new(Generation::INITIAL),
+        );
+        let compiler = compiler(property_name, form_index);
+        let cursor = compiler.start(&input).expect("failure-case cursor");
+        let mut budget = WorkBudget::new().with_remaining(WorkClass::BindingPolls, 1);
+        match compiler.step(&input, cursor, &mut budget) {
+            PlanBuildStep::Failed(failure) => failure.into_parts().0,
+            other => panic!("invalid exact target unexpectedly progressed: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn exact_target_failures_never_fall_back_to_readable_competitors() {
+        assert!(matches!(
+            build_failure("missing", 0),
+            CoreError::Selection {
+                reason: SelectionFailureReason::AffordanceMissing,
+                ..
+            }
+        ));
+        assert!(matches!(
+            build_failure("target", 99),
+            CoreError::Selection {
+                reason: SelectionFailureReason::StrictSelectionMismatch,
+                ..
+            }
+        ));
+        assert!(matches!(
+            build_failure("target", 2),
+            CoreError::Selection {
+                reason: SelectionFailureReason::NoFormSupportsOperation,
+                ..
+            }
+        ));
+    }
+
+    #[test]
+    fn immutable_selector_uses_only_narrow_options_and_rejects_mismatch() {
+        let output = build_static(1);
+        let omitted = select_consumer_property_read(&output, "level", &InteractionOptions::new())
+            .expect("omitted form selection");
+        let call_varying = InteractionOptions::with_data(Payload::new(
+            b"poisoned-legacy-data".to_vec(),
+            "application/octet-stream",
+        ))
+        .with_uri_variable("poison", "must-not-replan")
+        .with_timeout(core::time::Duration::from_millis(1))
+        .with_form_index(0);
+        assert_eq!(
+            select_consumer_property_read(&output, "level", &call_varying)
+                .expect("call-varying values do not alter the static reference"),
+            omitted
+        );
+        assert!(matches!(
+            select_consumer_property_read(&output, "other", &InteractionOptions::new()),
+            Err(CoreError::Selection {
+                reason: SelectionFailureReason::AffordanceMissing,
+                ..
+            })
+        ));
+        assert!(matches!(
+            select_consumer_property_read(
+                &output,
+                "level",
+                &InteractionOptions::new().with_form_index(1),
+            ),
+            Err(CoreError::Selection {
+                reason: SelectionFailureReason::StrictSelectionMismatch,
+                ..
+            })
+        ));
+    }
+
+    #[test]
+    fn immutable_selector_rejects_forged_identity_and_artifact_slot() {
+        let output = build_static(1);
+        let (plans, artifacts, refs) = output.into_parts();
+        let identity = refs[0].identity();
+        let forged_identity = BindingArtifactIdentity::new(
+            identity.plan_set_generation(),
+            identity.plan_id(),
+            BindingId::new(99),
+            identity.binding_generation(),
+            identity.configuration(),
+            identity.compatibility(),
+            identity.role(),
+        );
+        let forged = PlanBuildOutput::new(
+            plans,
+            artifacts,
+            vec![BindingArtifactRef::new(forged_identity, SlotIndex::new(1))],
+        );
+        assert!(matches!(
+            select_consumer_property_read(&forged, "level", &InteractionOptions::new()),
+            Err(CoreError::Selection {
+                reason: SelectionFailureReason::StrictSelectionMismatch,
+                ..
+            })
+        ));
     }
 
     #[test]
@@ -961,7 +1286,7 @@ mod tests {
             &registrations[..],
             PlanSetGeneration::new(Generation::INITIAL),
         );
-        let error = compiler::<StaticBindingCompilerRegistration<MockCompiler>>()
+        let error = compiler("level", 0)
             .start(&input)
             .expect_err("empty table must fail");
         assert!(matches!(

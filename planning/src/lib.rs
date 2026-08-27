@@ -18,7 +18,9 @@ use clinkz_wot_td::thing::Thing;
 // executable consumer.
 #[allow(dead_code)]
 mod property_read;
-pub use property_read::{PropertyReadBuildCursor, PropertyReadPlanCompiler};
+pub use property_read::{
+    PropertyReadBuildCursor, PropertyReadPlanCompiler, select_consumer_property_read,
+};
 
 /// Borrowed immutable inputs for one plan-build transaction.
 #[derive(Clone, Copy)]

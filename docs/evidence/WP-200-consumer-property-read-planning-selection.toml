@@ -1,0 +1,66 @@
+schema_version = 1
+design_revision = "5.1"
+work_package = "WP-200"
+tranche = "WP-200-CONSUMER-PROPERTY-READ-PLANNING"
+implementation_ref = "1e81370dfb230c5fe9fae37555964187923c0cf5"
+recorded_on = "2026-08-27"
+status = "passed"
+evidence_key = "consumer-property-read-planning-selection"
+admission_review = "github-pr:50"
+
+requirement_ids = [
+    "PLAN-REQUEST-001",
+    "PLAN-COST-001",
+    "PLAN-COST-003",
+    "PLAN-BOUND-001",
+    "PLAN-SET-001",
+    "PLAN-ARTIFACT-001",
+    "API-OPTIONS-001",
+]
+compilation_cells = ["no-default", "async-no-std", "std"]
+production_paths = [
+    "planning/src/property_read.rs",
+    "planning/src/lib.rs",
+]
+coverage = [
+    "static and Host PropertyReadPlanCompiler::consumer_call builds return equal selected BindingArtifactRef identity",
+    "a fixture with two readable properties and two readable target-property forms compiles the constructor's non-first property and non-first form exactly",
+    "missing property, out-of-range form index, and targeted non-ReadProperty form each return structured selection failure without falling back to readable competitors",
+    "the eager artifact and selected reference retain the exact plan-set, plan, binding, binding-generation, configuration, compatibility, ConsumerCall role, and slot identity with no Producer route reservation",
+    "the owned PlanBuildOutput remains usable after the TD, registration snapshot, compiler registration, compiler, and PlanBuildInput are dropped",
+    "selection succeeds after all build-time sources are dropped for omitted and explicit matching form selection",
+    "wrong call-time property and explicit form mismatch return AffordanceMissing and StrictSelectionMismatch respectively",
+    "mismatched reference identity and forged artifact slot are rejected before any binding work",
+    "URI variables, timeout intent, and legacy InteractionOptions data do not replan or alter the selected static reference",
+    "the selector's type boundary accepts no TD, Form, registration, compiler, binding execution object, or support-probe callback",
+    "no-default, async-no-std, and std Planning feature cells compile",
+    "full locked workspace tests and authority validation pass without WP-300, WP-400, fallback, lazy, cache, index, or architecture-gate expansion",
+]
+
+[[verification]]
+command = "tools/check-design-artifacts.sh"
+status = "passed"
+
+[[verification]]
+command = "cargo test --workspace --locked"
+status = "passed"
+
+[[verification]]
+command = "cargo test --locked -p clinkz-wot-planning --no-default-features --lib"
+status = "passed"
+
+[[verification]]
+command = "cargo test --locked -p clinkz-wot-planning --no-default-features --features async --lib"
+status = "passed"
+
+[[verification]]
+command = "cargo check --locked -p clinkz-wot-planning --no-default-features"
+status = "passed"
+
+[[verification]]
+command = "cargo check --locked -p clinkz-wot-planning --no-default-features --features async"
+status = "passed"
+
+[[verification]]
+command = "cargo check --locked -p clinkz-wot-planning"
+status = "passed"
