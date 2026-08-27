@@ -2,7 +2,7 @@ schema_version = 1
 design_revision = "5.1"
 work_package = "WP-100"
 tranche = "WP-100-CONSUMER-CALL-VALUES-VALIDATOR"
-implementation_ref = "64842df9422e5e70c15883f5177de404e1223315"
+implementation_ref = "041ed5f1cd5a1e0e6297194a737871a352530223"
 recorded_on = "2026-08-27"
 status = "passed"
 evidence_key = "consumer-call-values-response-validation"
@@ -23,7 +23,7 @@ production_paths = [
 ]
 coverage = [
     "InteractionOptions omission, URI-variable access, explicit form selection, and timeout intent through every admitted new method",
-    "external struct construction rejected by the InteractionOptions non-exhaustive compile-fail doctest",
+    "external struct construction is required to emit E0639 by the InteractionOptions non-exhaustive compile-fail doctest",
     "legacy InteractionOptions data construction and workspace callers continue to compile without a new target payload accessor or builder",
     "exact selected binding id, binding generation, plan id, primary response, one payload, Ok status, application role, and no action reference returns the owned output unchanged",
     "binding-id, binding-generation, and plan-id mismatches each return CoreError::Validation",
@@ -40,6 +40,10 @@ status = "passed"
 
 [[verification]]
 command = "cargo test --workspace --locked"
+status = "passed"
+
+[[verification]]
+command = "cargo test --locked -p clinkz-wot-core --doc"
 status = "passed"
 
 [[verification]]
