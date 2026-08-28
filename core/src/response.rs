@@ -4,16 +4,31 @@ use clinkz_wot_td::data_type::Operation;
 
 use crate::{
     BindingGeneration, BindingId, CoreError, CoreResult, ErrorContext, ErrorPhase,
-    InteractionOutput, InteractionStatus, PlanId, ResponsePayloadRole, ResponseSelection,
-    RetryClass,
+    InteractionOutput, InteractionStatus, OutboundRequest, PlanId, ResponsePayloadRole,
+    ResponseSelection, RetryClass,
 };
+
+/// Validates untrusted binding output against one live selected request.
+///
+/// Expected identities cannot be supplied independently: they are derived
+/// from the request's single immutable binding-artifact reference.
+pub fn validate_untrusted_binding_output(
+    request: &OutboundRequest,
+    output: InteractionOutput,
+) -> CoreResult<InteractionOutput> {
+    validate_property_read_binding_output(
+        request.binding_id(),
+        request.binding_generation(),
+        request.plan_id(),
+        output,
+    )
+}
 
 /// Validates the narrow Property Read response produced by a selected binding call.
 ///
 /// The expected identities come from the selected call owner. This kernel stays
 /// private until the admitted WP-300 `OutboundRequest` wrapper can derive them
 /// from that trusted live request.
-#[allow(dead_code)]
 pub(crate) fn validate_property_read_binding_output(
     expected_binding_id: BindingId,
     expected_binding_generation: BindingGeneration,
