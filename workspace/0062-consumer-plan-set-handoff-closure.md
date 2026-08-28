@@ -10,201 +10,289 @@ Target: the missing WP-200 -> WP-400 handoff needed to construct and publish the
 
 ## Scope and authority
 
-This topic records an implementation-boundary defect discovered immediately after completion of `WP-300-CONSUMER-PROPERTY-READ-BINDING` and before admission of the corresponding WP-400 Consumer tranche.
+This topic records an implementation-boundary defect discovered after completion of `WP-300-CONSUMER-PROPERTY-READ-BINDING` and before admission of the corresponding WP-400 Consumer tranche.
 
-It does not itself change active v5.1 authority, admit Rust source, register the Consumer architecture gate, reopen or reaffirm a completed tranche, or activate `PLAN-INDEX-001`, `PLAN-LAZY-001`, `PLAN-CACHE-001`, `BIND-PROGRESS-001`, fallback, subscriptions, or production Zenoh.
+It does not itself change active v5.1 authority, admit Rust source, register the Consumer architecture gate, reopen or reaffirm a completed tranche, or activate `PLAN-INDEX-001`, `PLAN-LAZY-001`, `PLAN-CACHE-001`, fallback, subscriptions, production Zenoh, or binding-carried security.
 
-The question is narrower: what Planning-owned value lets `Servient::consume` publish a usable consumed Property Read plan set when the already-completed WP-200 tranche compiles one exact `(property_name, property-form index)` coordinate at a time?
+The question is narrow: what Planning-owned aggregate value and transaction boundary let `Servient::consume(td)` publish a usable consumed Property Read plan set when the completed WP-200 tranche compiles one exact `(property_name, property-form index)` coordinate at a time?
 
 ## Established repository facts
 
-The following facts are already authoritative or completed implementation evidence.
-
-1. `PLAN-SET-001` assigns every consumed handle generation one Servient-owned aggregate compiled-plan-set record. Planning constructs immutable set material; Servient owns build orchestration, publication, pins, operation leases, drain, and reclamation.
-2. The general Planning algorithm owns enumeration of target contexts, effective operations, forms, and binding candidates. Servient does not reinterpret a TD to recover planning decisions.
-3. The completed WP-200 Consumer tranche deliberately exposes only an exact-coordinate compiler entry:
-
-   ```text
-   PropertyReadPlanCompiler::consumer_call(
-       property_name,
-       property_form_index,
-       ...
-   )
-   ```
-
-   Its completion proof uses multiple readable properties and multiple readable forms and proves that the exact constructor cannot acquire target semantics from a different property/form merely because it appears earlier.
-4. `select_consumer_property_read` consumes immutable `PlanBuildOutput`, property name, and narrowed `InteractionOptions`; it cannot receive a TD, raw Form, binding object, or support probe.
-5. The completed WP-200 tranche returns one unpublished eager single-coordinate draft. Publication, leases, draining, and reclamation are intentionally left to WP-400.
-6. The completed WP-300 tranche supplies the selected `OutboundRequest`, Host client call, static client slot, exact-request rejection, cancellation settlement, and Core response-validation handoff required after selection.
-7. WP-400 v5.1 authority requires `consume` to publish an immutable consumed Property Read plan generation before returning the handle, and requires `read_property` to select through that published generation rather than entering the legacy `ConsumedThing` path.
-8. The current legacy `ConsumedThingHandle` still scans the TD at call time to find a supporting Form, and current `Servient::consume(td)` has no explicit Property Read build coordinate.
-9. `Thing::properties` is represented by `BTreeMap`, so original JSON/document property order is not retained. Property iteration has deterministic key order; each property's Form vector retains its own array order and original form index.
-10. Current `PlanBuildOutput` owns only logical-plan, artifact-envelope, and artifact-reference vectors. It does not yet carry an aggregate resource/footprint ledger or zero-plan target diagnostics.
-11. ADR-0013 requires a new or reopened finding to trigger explicit impact review. An affected completed tranche must be reaffirmed or reopened; dependent completed tranches may be treated as disjoint only when requirement, artifact, dependency, and evidence scope actually remain valid.
+1. `PLAN-SET-001` assigns every consumed handle generation one Servient-owned aggregate compiled-plan-set record. Planning owns effective-view interpretation, target/form enumeration, candidate construction, immutable set material, and exact accounting. Servient owns persistent reservation, lifecycle state, publication, pins, operation leases, drain, and reclamation.
+2. The completed WP-200 Consumer tranche exposes an exact-coordinate compiler entry through `PropertyReadPlanCompiler::consumer_call(...)` and immutable-plan-only selection.
+3. The completed WP-300 Consumer tranche supplies the selected `OutboundRequest`, Host/static client execution contracts, cancellation settlement, and Core response-validation handoff after plan selection.
+4. Current `Servient::consume(td)` has no exact Property Read coordinate and the legacy `ConsumedThingHandle::read_property` still rescans TD/Form state at call time.
+5. `Thing::properties` is a `BTreeMap`; original property document order is not retained. Property traversal has deterministic key order while each property's Form vector retains array order and index.
+6. Current `PlanBuildOutput` owns only logical-plan, artifact-envelope, and artifact-reference vectors; it does not yet project the broad Planning contract's target index, diagnostics, or exact aggregate accounting ledger.
+7. `ADMIT-TXN-001` requires a reserve-build-publish transaction: charge work/temporary bytes first, reserve persistent capacity next, build private state only after reservation, then publish atomically; failure releases reservations idempotently.
+8. The accepted Planning contract is incremental. Work-budget exhaustion returns `Pending(cursor)` without semantic progress beyond the available budget; failure returns ownership-preserving cursor state. Step partitioning must not change the final plan, candidate order, artifact, or error classification.
+9. Active Planning complexity authority requires hot target-operation lookup through a prebuilt target index. Strict form lookup must not scan unrelated targets or all registrations. This target lookup obligation is independent of inactive `PLAN-INDEX-001` capability indexing.
+10. The exact Consumer compiler receives `registration_index` and `candidate_order`; an aggregate caller must therefore freeze registration-snapshot ordinal and deterministic candidate position as well as PlanId/artifact identity.
+11. The completed WP-300 admission deliberately excludes `AppliedSecurity`, credential-provider access, security branch selection, and binding-carried security material. Its first proof assumes a security decision that requires none of those representations.
+12. ADR-0013 requires a new or reopened finding to trigger explicit impact review. Affected completed tranches must be reaffirmed or reopened before downstream work relies on them.
 
 ## The closure defect
 
-The completed narrow tranches do not currently compose into the required public Servient path.
+The completed narrow tranches do not yet compose into the required public Servient path.
 
-A WP-400 implementation cannot legally choose any of the following shortcuts:
+A conforming WP-400 implementation cannot recover the gap by:
 
-- **Call-time TD/Form scanning.** This directly violates the v5.1 Consumer boundary and the negative evidence already required by WP-200.
-- **Servient-owned startup TD enumeration.** Moving the scan from call time to `consume` does not fix ownership. Target/form/effective-operation enumeration belongs to Planning; Servient may orchestrate Planning but must not implement a second planner.
-- **Selecting one readable property/form merely because the current WP-200 compiler needs one coordinate.** WP-200 explicitly proved that its exact constructor cannot silently substitute another coordinate.
-- **Changing public `consume(td)` to require one property/form coordinate.** This would move an internal compilation coordinate into the application facade, narrow one consumed Thing to one preselected property, and create a new public-contract decision not required by current v5.1 authority.
-- **Re-entering legacy `ConsumedThing`, `BindingRequest`, `supports_with_thing`, or bare client-binding arrays.** Those are the exact target backflows the Consumer architecture proof is intended to eliminate.
+- scanning TD/Form state at call time;
+- moving TD interpretation into Servient startup code;
+- selecting an arbitrary or first readable coordinate because the exact compiler needs one;
+- changing public `consume(td)` into a one-property or one-form facade;
+- re-entering legacy `ConsumedThing`, `BindingRequest`, support probing, or bare client-binding arrays; or
+- building an aggregate draft before Servient has reserved its persistent capacity.
 
-Therefore an ADR-0013 WP-400 source admission that starts directly from the current WP-200 single-coordinate draft would be incomplete: it would leave the source, bounds, identity layout, and failure semantics of the published consumed plan-set contents unspecified.
+Direct WP-400 source admission therefore remains blocked until one exact Planning -> Servient aggregate handoff is accepted.
 
-## Independent review outcome
+## Independent review history
 
-The first closure candidate at `f1601ee79401845b804879727420cdadf8a19859` was independently reviewed against baseline `b9a547859cabaeb444ba3a330b4a8a2e16697842`.
+### First review
 
-The review accepts the **technical ownership direction**: a Planning-owned narrow aggregate Consumer Property Read tranche is the smallest legal location, and it can remain outside `PLAN-INDEX-001`, lazy/cache, fallback, subscriptions, and production Zenoh.
+The first independent review accepted the Planning-owned aggregate direction but requested changes before closure. It identified missing contracts for:
 
-The review does **not** accept closure. The topic remains `DISCUSSING` and must not become `DECIDED`, migrate authority, or justify WP-400 admission yet. Four missing contracts block closure:
+- all-or-nothing aggregate compile/failure semantics;
+- first-proof security scope;
+- deterministic PlanId/artifact identity;
+- zero-plan property diagnostics;
+- exact count/byte/temp/peak/work accounting;
+- deterministic property/Form ordering; and
+- ADR-0013 impact review of completed WP-200 and potentially WP-300 tranches.
 
-1. aggregate per-coordinate failure/rollback and first-proof security scope;
-2. constructible aggregate identity, diagnostics, and exact resource ledger;
-3. ADR-0013 impact review of already-completed WP-200 and potentially WP-300 tranches; and
-4. precise deterministic ordering semantics consistent with the TD `BTreeMap` representation.
+Those findings remain valid.
 
-The active v5.1 requirement identities are sufficient for this closure; no new requirement identity is currently justified. The missing work is an implementation/admission projection of already-active bounds and ownership.
+### Second review
 
-## Revised candidate boundary
+A second fresh independent review again returned `REQUEST CHANGES`. It confirmed the diagnosis and ownership direction, but found five remaining conflicts with active authority:
 
-Subject to a later exact ADR-0013 admission, the Planning-owned aggregate direction should satisfy all of the following. These are required closure conditions, not current implementation claims.
+1. persistent reservation occurred too late in the candidate flow;
+2. `nosec` was only a fixture choice rather than an admitted public `consume(td)` boundary;
+3. aggregate bounded-progress, cursor, failure, and cleanup ownership were unspecified;
+4. aggregate-wide linear target lookup contradicted the active prebuilt target-operation lookup contract; and
+5. registration-snapshot ordinal and candidate ordering were unspecified.
 
-### 1. Aggregate build is one eager atomic transaction
+The topic therefore remains `DISCUSSING`. Neither review accepts closure, authority migration, source admission, or WP-400 implementation.
 
-The first aggregate proof uses exactly one complete Consumer-capable registration and no binding-carried security material. The reference fixture should use `nosec`; adding `AppliedSecurity`, credential-provider input, or binding-carried security state remains outside this closure.
+## Revised candidate closure
 
-Planning enumerates every declared property in deterministic key order. For each property, it inspects that property's Form vector in original array-index order and identifies every effective `ReadProperty` coordinate. A coordinate whose effective operations do not contain `ReadProperty` is not a Consumer Property Read plan candidate.
+The following is the current candidate to be challenged by a later independent review. It is not active authority.
 
-For every effective `ReadProperty` coordinate, the aggregate transaction must invoke the already-completed exact `PropertyReadPlanCompiler::consumer_call` semantics under the same complete registration. The complete registration has only coarse Consumer Property Read capability in this first proof; there is no Form-specific support callback that authorizes silent omission.
+### 1. One reserve-build-publish transaction
 
-Therefore the transaction is all-or-nothing:
+The first-proof Consumer Property Read aggregate is one transaction over a captured validated TD, immutable registration snapshot, plan-set generation, and active resource policy.
 
-- every effective `ReadProperty` coordinate must compile successfully;
-- any compiler-bound, compiler-start, compiler-step, artifact-admission, identity, count, byte, temporary, peak, or work failure fails the entire aggregate build;
-- no failed coordinate is skipped;
-- no deterministic compiler negative is retained as a lazy/cache entry;
-- no failure implicitly selects the next Form; and
-- every partially produced logical plan, artifact, reference, temporary buffer, cursor, and reservation is released/rolled back before failure returns.
+Its intended ordering is:
 
-No binding or protocol side effect may occur during this transaction.
+```text
+Planning preflight
+  -> Servient persistent reservation
+  -> Planning bounded/resumable aggregate build
+  -> Planning exact-ledger completion
+  -> Servient reconciliation/commit
+  -> atomic publication
+```
 
-### 2. Deterministic coordinate and selection semantics
+Planning preflight may consume explicitly charged work and temporary bytes and may retain only bounded transaction-local temporary state needed to resume the transaction. It must not construct unreserved persistent plan-set state.
 
-The aggregate cannot claim original property document order because `Thing::properties` is a `BTreeMap`.
+Preflight must produce a bounded persistent reservation ceiling sufficient for every retained first-proof target/index/plan/artifact/reference/diagnostic item and every admitted persistent byte that the subsequent aggregate build may commit. The ceiling is Planning-owned accounting information, not a second Servient accounting model.
 
-The first-proof deterministic order is instead:
+Servient reserves that persistent ceiling before private aggregate state is built. A reservation failure stops the transaction before aggregate construction.
 
-1. properties in the map's deterministic key order;
-2. within one property, Forms by their retained original array index/order; and
-3. only effective `ReadProperty` coordinates enter the plan sequence.
+The bounded Planning build then constructs only within the reserved ceiling. On successful completion Planning returns the immutable aggregate material plus the exact ledger. Exact persistent usage must be less than or equal to the preflight reservation ceiling. Servient releases any unused reservation delta and commits only the exact persistent footprint before the single publication transition.
 
-The property name determines the addressed target before Form selection. Omitted `form_index` selects that property's first retained applicable plan in Form-array order. It never selects a different property and it is initial immutable-plan selection, not post-failure fallback.
+If exact usage exceeds the preflight ceiling, the transaction fails as an internal admission/bounds failure; Servient must not expand the reservation after private state has already been built.
 
-An explicit `form_index` must match a retained applicable plan for that property. It cannot rescan the TD or choose another Form after failure.
+### 2. First-proof security is an admission condition
 
-### 3. Aggregate identities are one-to-one and generation-bound
+The first aggregate tranche admits only the existing no-material security case.
 
-The aggregate admission must freeze one unique deterministic `PlanId` and artifact slot for every retained applicable coordinate.
+Every retained effective `ReadProperty` coordinate must resolve deterministically to the admitted no-material `nosec` case. A coordinate requiring `AppliedSecurity`, credentials, provider access, binding-carried security material, a security branch selector, or another security representation is outside this first proof.
 
-The smallest constructible first-proof mapping is a dense ordinal over the aggregate applicable-coordinate sequence:
+A TD containing a Property Read coordinate outside that admitted security case causes deterministic aggregate admission failure before publication. Such coordinates are not skipped and do not fall through to another Form.
+
+The later source admission must freeze the exact existing error classification and provide negative evidence for secured/mixed security inputs. It must not invent a new security representation merely to make this tranche pass.
+
+### 3. Aggregate build remains eager and atomic
+
+Planning enumerates declared properties in deterministic `BTreeMap` key order and each property's Forms in retained array-index order.
+
+Every effective `ReadProperty` coordinate admitted by the first-proof security and registration boundary is mandatory eager work. Each is compiled using the completed exact `PropertyReadPlanCompiler::consumer_call(...)` semantics rather than a second artifact compiler.
+
+There is no skip, lazy negative, cache entry, post-failure fallback, or implicit next-Form selection. A terminal coordinate failure makes the aggregate transaction fail; no partial generation may be published.
+
+Atomicity does not mean destroying resumable ownership prematurely. Pending and Failed steps preserve transaction ownership as described below.
+
+### 4. Aggregate cursor and failure ownership
+
+The aggregate Planning implementation requires one explicit resumable cursor/equivalent transaction state.
+
+That state owns, directly or transitively:
+
+- deterministic property/Form enumeration position;
+- preflight or build phase identity;
+- current aggregate count/work/temp accounting;
+- provisional target-index and diagnostic material built only after reservation;
+- completed provisional per-coordinate logical-plan/artifact/reference material;
+- the current child exact-coordinate compiler cursor when one coordinate is in progress; and
+- any other Planning-owned transaction-local buffers needed to resume without rescanning unrelated completed work.
+
+A bounded step obeys the existing Planning contract:
+
+- zero available work performs no contributor/compiler progress and returns ownership without semantic advancement;
+- insufficient work returns `Pending(aggregate_cursor)`;
+- terminal Planning failure returns an ownership-preserving aggregate failure/cursor rather than silently dropping caller-owned cleanup state; and
+- varying step partitions cannot change coordinate order, PlanId, registration/candidate ordinal, artifact content, exact ledger, selection result, or terminal error classification.
+
+The later admission must freeze the exact abort/cleanup API shape. The ownership division is already constrained:
+
+- Planning abort/drop releases Planning-owned provisional plans, artifacts, indexes, diagnostics, child compiler cursor state, and transaction-local buffers according to the accepted compiler ownership contract;
+- Servient owns the persistent reservation token and releases it idempotently after Planning cleanup/ownership transfer on every non-published exit; and
+- neither side may release or forget the other's live ownership.
+
+### 5. Deterministic target and Form semantics
+
+The aggregate cannot depend on original JSON property order.
+
+The first-proof deterministic coordinate sequence is:
+
+1. property names in `BTreeMap` key order;
+2. Forms inside one property in retained array-index order; and
+3. only coordinates whose effective operation includes `ReadProperty` and which satisfy the admitted first-proof security/registration boundary.
+
+Property name determines the addressed target before Form selection.
+
+Omitted `form_index` selects that property's first retained applicable plan in Form order. Explicit `form_index` must match a retained applicable plan for that property. Neither path may rescan the TD or select a different property.
+
+### 6. Prebuilt target-operation lookup is mandatory
+
+The immutable aggregate must contain a bounded prebuilt target-operation lookup projection sufficient for Property Read hot lookup after the TD is dropped.
+
+A sorted target table, target-to-plan-range table, bounded map, or equivalent representation is acceptable if it preserves the active Planning complexity contract.
+
+For this first proof the index must allow:
+
+- lookup of one property target without scanning unrelated properties;
+- distinction between an absent property and a declared property with zero retained Property Read plans;
+- direct access to that property's retained plan range; and
+- strict `form_index` matching by examining only plans belonging to the addressed property/operation.
+
+This is the active target-operation lookup obligation. It is not activation of `PLAN-INDEX-001` capability indexing and does not require multi-binding fallback infrastructure.
+
+### 7. Zero-plan diagnostics survive TD destruction
+
+The immutable target projection must preserve enough information to distinguish after TD/build inputs are gone:
+
+- undeclared property -> `AffordanceMissing`;
+- declared property with zero retained applicable Property Read plans -> `NoFormSupportsOperation`;
+- declared property with retained plans but unmatched explicit `form_index` -> `StrictSelectionMismatch`; and
+- omitted `form_index` -> first retained applicable plan for that property.
+
+A declared zero-plan property therefore has a target/index record even though it owns no logical plan or artifact slot.
+
+### 8. Plan, artifact, registration, and candidate identity
+
+Each retained applicable coordinate receives one unique deterministic dense aggregate ordinal in the frozen coordinate sequence.
+
+The candidate mapping remains:
 
 ```text
 ordinal = 0..N in (property-key order, then form-index order)
-PlanId = PlanId::new(SlotIndex::new(ordinal), plan_set_generation.get())
-artifact_slot = SlotIndex::new(ordinal)
+PlanId slot = ordinal
+artifact slot = ordinal
 ```
 
-The logical plan, artifact envelope, and `BindingArtifactRef` for one coordinate must agree on that `PlanId`, artifact slot, plan-set generation, binding id/generation, configuration, compatibility, and `ConsumerCall` role. Each retained plan has exactly one artifact envelope and exactly one reference; an artifact slot addresses exactly one envelope. Duplicate or missing ids/slots are structural failure before publication.
+All generated identities carry the same plan-set generation required by their existing Core types.
 
-The existing exact-coordinate compiler may continue to accept a supplied `PlanId`; the aggregate owner supplies the deterministic id rather than changing compiler ownership.
+Each retained plan has exactly one logical plan, one artifact envelope, and one `BindingArtifactRef`; each artifact slot addresses exactly one envelope. Duplicate, missing, stale-generation, or mismatched plan/envelope/reference identity is structural admission failure before publication.
 
-### 4. Property-target and zero-plan diagnostics survive TD destruction
+For the first proof, Planning must find exactly one complete registration in the captured immutable snapshot that is eligible for the admitted Consumer Property Read role.
 
-The aggregate Planning result must retain enough immutable target metadata to distinguish these call-time outcomes after the TD has been dropped:
+- zero eligible registrations -> deterministic preflight admission failure;
+- more than one eligible registration -> deterministic preflight admission failure because multi-candidate selection/fallback is outside this tranche;
+- exactly one eligible registration -> its ordinal in the captured registration snapshot becomes `registration_index`; and
+- every retained coordinate has exactly one candidate, therefore `candidate_order = 0`.
 
-- addressed property was not declared -> `AffordanceMissing`;
-- addressed property was declared but has zero retained effective `ReadProperty` plans -> `NoFormSupportsOperation`;
-- addressed property has retained plans but an explicit `form_index` matches none -> `StrictSelectionMismatch`;
-- omitted `form_index` -> first retained applicable plan for that property.
+Other ineligible registrations may exist in the snapshot but must not be scanned during hot strict lookup after publication.
 
-A zero-plan property therefore remains represented in bounded immutable target diagnostics even though it consumes no plan or artifact slot. WP-400 must not recover this distinction by retaining or rescanning the TD.
+### 9. Exact aggregate accounting ledger
 
-### 5. Exact aggregate resource ledger precedes publication
+The completed Planning result must include one exact accounting ledger/equivalent projection covering the first-proof aggregate's admitted semantic costs, including at least:
 
-The aggregate result must not be only three unconstrained vectors. Its admission must define and implementation must produce one exact Planning-owned `PlanFootprint`/equivalent accounting ledger covering at least:
-
-- declared property-target count and zero-plan diagnostic count;
-- retained applicable plan count;
-- artifact/reference count;
+- declared property-target/index entries;
+- zero-plan diagnostic entries;
+- retained applicable plans;
+- artifact/reference counts;
 - logical-plan retained bytes;
+- target/index and diagnostic retained bytes;
 - binding-artifact admitted/measured retained items and bytes;
-- aggregate structural/diagnostic bytes;
-- compiler cursor bytes;
-- temporary build bytes;
+- aggregate structural retained bytes;
+- aggregate/child compiler cursor temporary bytes;
+- other temporary build bytes;
 - admitted peak bytes; and
-- total consumed Planning work by applicable `WorkClass`/budget.
+- consumed Planning work by applicable `WorkClass`/budget.
 
-All counts, bytes, temporary state, peak state, and work are checked against already-active Planning/resource limits before the aggregate draft is returned. Overflow or budget failure is atomic build failure; there is no truncation.
+The exact Rust shape and whether this extends `PlanBuildOutput` or introduces a Planning-owned aggregate draft wrapper remain admission details.
 
-The exact Rust projection and whether the ledger extends the current `PlanBuildOutput` or is owned by another Planning set-draft value must be frozen by the later tranche admission. What is already fixed here is ownership: Planning computes and returns the exact ledger from the build; WP-400 may reserve/commit that ledger into its plan-set lifecycle but must not rescan the TD, recount plans, remeasure artifacts, or invent a second accounting model.
+What is fixed by the candidate ownership boundary is:
 
-### 6. Host/static semantics remain shared without representation leakage
+- Planning computes both the preflight persistent ceiling and the exact completed ledger;
+- Servient reserves the ceiling and later commits/reconciles the exact result;
+- WP-400 does not rescan the TD, recount plans, rebuild target indexes, remeasure artifacts, or invent a parallel accounting model; and
+- overflow, ceiling violation, budget exhaustion, and terminal build failure never truncate the aggregate or publish partial state.
 
-The aggregate algorithm and selection semantics must be identical for Host-erased and application-static profiles. The artifact payload type remains generic and can differ physically by profile, while target order, plan ids, artifact slots, selection results, failure categories, and resource semantic deltas remain equal.
+### 10. Host/static semantics remain shared
 
-The static profile must not be forced to adopt host-erased storage solely to reuse aggregate logic.
+The aggregate algorithm, target ordering, registration/candidate ordinals, PlanIds, artifact slots, target index semantics, selection results, failure categories, and accounting semantics must match between Host-erased and application-static profiles.
 
-### 7. Explicit completed-tranche impact review is mandatory
+Artifact payload representation may remain generic/profile-specific. The static profile must not be forced to adopt Host-erased storage merely to reuse the semantic aggregate algorithm.
 
-This finding necessarily touches the completed WP-200 Consumer area because the aggregate closure must extend or wrap the current `PlanBuildOutput` and immutable selector behavior and will likely add production work beside or inside `planning/src/property_read.rs`.
+### 11. Completed-tranche impact review remains mandatory
 
-Before a new aggregate tranche is admitted, the repository must record ADR-0013 impact review for `WP-200-CONSUMER-PROPERTY-READ-PLANNING`:
+Before any aggregate source tranche is admitted, ADR-0013 impact review must be recorded for `WP-200-CONSUMER-PROPERTY-READ-PLANNING`.
 
-- **reaffirm** only if the existing exact-coordinate public contract, its single-coordinate behavior, and its completion evidence remain valid unchanged and the new aggregate work is strictly additive around it; or
-- **reopen** if the existing public contract, implementation semantics, admitted source boundary, or completion evidence must change.
+It may be reaffirmed only if the existing exact-coordinate public contract, exact compiler behavior, selector guarantees, and completion evidence remain valid unchanged and the aggregate work is strictly additive around them. Otherwise it must be reopened together with invalidated dependent evidence.
 
-`WP-300-CONSUMER-PROPERTY-READ-BINDING` is not predeclared unaffected. Its impact review may record **disjoint/reaffirmed** only if the aggregate closure preserves the already-frozen `BindingArtifactRef` identity semantics, complete-registration contract, `OutboundRequest` construction inputs, and selected Host/static binding execution contract. If any of those change, WP-300 and any transitively invalidated evidence must be reopened as required by ADR-0013.
+`WP-300-CONSUMER-PROPERTY-READ-BINDING` is not presumed disjoint. It may be reaffirmed/disjoint only if the aggregate closure preserves the frozen `BindingArtifactRef` semantics, registration identity contract, `OutboundRequest` inputs, and Host/static selected execution contract. Otherwise ADR-0013 reopening rules apply.
 
-This impact review occurs before downstream WP-400 admission; a completed-tranche status must not be silently carried across a changed handoff assumption.
+These impact dispositions are predecessors of downstream WP-400 admission.
 
-## Explicit exclusions retained
+## Explicit exclusions
 
-The first aggregate tranche remains deliberately smaller than broad Planning:
+The first aggregate closure does not add:
 
-- no `PLAN-INDEX-001` capability index;
-- no lazy artifact or cache/single-flight state;
-- no second Consumer binding candidate;
-- no automatic candidate fallback or failure skip;
-- no write/action/observe/collection planning;
-- no binding-id/media/subprotocol/security-branch/validation-profile selector;
-- no binding-carried security material in the first proof;
-- no Servient lifecycle or binding execution implementation; and
-- no Consumer architecture-gate or production Zenoh completion claim.
-
-A bounded linear lookup over the immutable first-proof aggregate is acceptable unless implementation evidence falsifies an already-active bound. The inactive `PLAN-INDEX-001` contract does not authorize Servient to re-enter the TD and does not require a capability index merely to complete this first proof.
+- capability indexing under `PLAN-INDEX-001` beyond the already-active target-operation lookup obligation;
+- lazy artifact/cache/single-flight state;
+- a second eligible Consumer binding candidate;
+- automatic candidate fallback or failure skip;
+- write/action/observe/collection planning;
+- advanced binding/media/subprotocol/security selectors;
+- `AppliedSecurity`, credential-provider access, or binding-carried security material;
+- Servient binding execution implementation;
+- Consumer architecture-gate completion; or
+- production Zenoh evidence.
 
 ## WP-400 consequence
 
-Only after the aggregate Planning handoff is admitted, implemented, evidenced, and its completed-tranche impact reviews are resolved may the WP-400 Consumer tranche be admitted from this closure.
+Only after this aggregate handoff is independently accepted, projected into authority, admitted, implemented, evidenced, and its completed-tranche impact reviews are resolved may the WP-400 Consumer tranche proceed.
 
-The intended composition remains:
+The intended composition is:
 
 ```text
 consume(td)
-  -> Planning-owned atomic aggregate Consumer Property Read draft + exact ledger
+  -> Planning preflight + persistent reservation ceiling
+  -> Servient reserve persistent capacity
+  -> Planning bounded/resumable aggregate build
+  -> exact aggregate draft + target index + ledger
   -> drop TD/build-only inputs
-  -> Servient reserve/commit + atomic plan-set publication
+  -> Servient reconcile/commit reservation
+  -> atomic plan-set publication
   -> ConsumedThingHandle with generation-bearing plan-set ownership
 
 read_property(name, options)
   -> acquire operation/plan-set lease
-  -> Planning-owned immutable-set selection
+  -> indexed immutable target lookup
+  -> addressed-property Form selection
   -> OutboundRequest::property_read(...)
   -> selected Host call / static ClientRequestSlot
   -> validate_untrusted_binding_output(...)
@@ -212,52 +300,45 @@ read_property(name, options)
   -> exactly-once call + plan lease settlement
 ```
 
-Servient may own the aggregate record, generation, publication state, leases, admission commit, drain, cancellation ownership, and cleanup. It must not own effective-form enumeration, raw Form interpretation, candidate construction, target diagnostics reconstruction, artifact remeasurement, or a duplicate selection algorithm.
-
-The existing legacy `ConsumedThingHandle` implementation may remain for unmigrated capabilities, but the target `read_property` evidence must poison its TD scan, `BindingRequest`, support-probe, and bare-client-binding edges.
-
-## Revised dependency consequence
-
-If a later independent review accepts this revised closure and its exact admission projection, the implementation order is expected to become:
-
-1. completed `WP-200-CONSUMER-PROPERTY-READ-PLANNING` exact-coordinate tranche, with explicit impact review disposition;
-2. completed `WP-300-CONSUMER-PROPERTY-READ-BINDING` tranche, with explicit impact review disposition;
-3. newly admitted narrow WP-200 Consumer aggregate-plan-set tranche;
-4. WP-400 Consumer Property Read Servient tranche depending on the aggregate Planning handoff and the valid WP-300 execution contracts;
-5. cross-package Consumer Property Read architecture gate; and
-6. real Host Zenoh Consumer Property Read evidence.
-
-The aggregate closure is upstream constructibility work, not broad WP-200 completion. Whether it is strictly additive to the completed exact-coordinate tranche and disjoint from WP-300 is an impact-review result, not a premise.
+Servient may orchestrate Planning, own reservation/publication/lifecycle state, and drive cleanup. It must not own TD interpretation, effective-form enumeration, candidate construction, target-index reconstruction, artifact remeasurement, or duplicate selection logic.
 
 ## Required evidence before closure acceptance
 
-A later closure/admission review must require at least:
+A later independent closure/admission review should require at least:
 
-- two declared properties in a key order that differs from insertion/source order assumptions;
-- one property with multiple Forms including multiple effective `ReadProperty` coordinates;
-- one declared property with zero effective `ReadProperty` plans;
-- deterministic dense PlanId/artifact-slot mapping and one-to-one plan/envelope/reference identity;
-- omitted Form selection of the addressed property's first retained applicable Form only;
-- explicit Form selection and mismatch behavior;
-- `AffordanceMissing`, `NoFormSupportsOperation`, and `StrictSelectionMismatch` after the TD/build inputs are dropped;
-- atomic rollback when the Nth effective coordinate fails compiler bounds/start/step/artifact admission;
-- proof that no earlier successful coordinate remains published or retained after aggregate failure;
-- exact count/byte/temp/peak/work ledger admission and overflow cases;
-- nosec/no binding-carried security material in the first proof;
-- equivalent semantic aggregate and selection behavior in Host-erased and application-static cells;
-- poison checks against Servient TD/Form scanning, legacy `ConsumedThing`, `BindingRequest`, raw support probing, lazy/cache/fallback, and second binding candidates; and
+- preflight ceiling is computed before persistent reservation and no persistent aggregate state exists before reserve succeeds;
+- reservation failure builds/publishes nothing;
+- exact persistent ledger never exceeds the reserved ceiling and unused reservation is released before/at commit;
+- secured or mixed-security Property Read coordinates outside the admitted no-material `nosec` case fail deterministically before publication;
+- zero eligible and multiple eligible Consumer registrations fail deterministically; exactly one freezes its snapshot `registration_index` and `candidate_order = 0`;
+- two properties whose insertion/source assumptions differ from `BTreeMap` key order;
+- one property with multiple effective Property Read Forms;
+- one declared property with zero retained Property Read plans;
+- target lookup never scans unrelated property targets and strict Form lookup examines only the addressed property's plan range;
+- deterministic PlanId/artifact-slot and one-to-one plan/envelope/reference identity;
+- omitted and explicit Form selection semantics after TD destruction;
+- `AffordanceMissing`, `NoFormSupportsOperation`, and `StrictSelectionMismatch` after TD/build inputs are dropped;
+- zero-work steps make no semantic/compiler progress;
+- different work-budget step partitions produce identical final aggregate identity/order/artifacts/ledger/error classification;
+- pending progress preserves aggregate/child cursor ownership;
+- terminal failure preserves cleanup ownership until explicit abort/drop semantics release Planning state;
+- Servient releases persistent reservation idempotently on every non-published exit;
+- Nth-coordinate terminal failure publishes no earlier provisional coordinate;
+- exact count/byte/temp/peak/work accounting and overflow/ceiling-failure cases;
+- equivalent semantic aggregate behavior in Host-erased and application-static cells;
+- poison checks against Servient TD/Form scanning, legacy `ConsumedThing`, `BindingRequest`, raw hot support probing, lazy/cache/fallback, and second binding candidates; and
 - recorded ADR-0013 impact-review outcomes for completed WP-200 and WP-300 Consumer tranches.
 
 ## Rejected immediate progression
 
-Directly admitting or implementing WP-400 before this handoff is closed remains rejected. The missing aggregate construction source affects package ownership, public Consumer facade correctness, immutable plan-set semantics, accounting, completed-tranche validity, and the negative legacy-backflow proof. It is therefore an architecture-sensitive predecessor issue, not a local Servient implementation detail.
+Direct WP-400 admission or implementation remains rejected.
 
-Likewise, the current aggregate direction must not be treated as accepted merely because its ownership location is plausible. The exact transaction, ledger, identity, diagnostics, and impact-review contracts above must survive a later independent closure review.
+Likewise, this revised candidate must not be treated as accepted merely because it now incorporates two rounds of review. The exact preflight/reservation ceiling, cursor/abort ownership, no-material security predicate, target-index representation, zero/multiple-registration failure classification, ledger projection, and impact dispositions still require fresh independent closure review before the topic may become `DECIDED`.
 
 ## Merge and migration condition
 
-This document may merge while `DISCUSSING` as the durable investigation record of the discovered handoff defect and the independent review findings. Such a merge does not accept the candidate closure and creates no source authority.
+This document may merge while `DISCUSSING` as the durable investigation record of the discovered handoff defect and independent review findings. Such a merge does not create source authority or unblock WP-400.
 
-This topic may become `DECIDED` only after an independent review accepts an exact legal Planning -> Servient handoff including aggregate failure semantics, deterministic identity/order, zero-plan diagnostics, resource ledger, security scope, and completed-tranche impact dispositions.
+This topic may become `DECIDED` only after a fresh independent review accepts one exact legal Planning -> Servient handoff consistent with active admission, Planning progress, lookup, security, resource, and completed-tranche requirements.
 
-It becomes `MIGRATED` only after that accepted conclusion is represented in the appropriate Planning/WP-400 authoritative owners and the necessary ADR-0013 source tranche/dependency projection is independently admitted. WP-400 implementation remains blocked until then.
+It becomes `MIGRATED` only after that accepted conclusion is projected into the appropriate authoritative Planning/WP-400 artifacts and the necessary ADR-0013 source tranche/dependency projection is independently admitted.
