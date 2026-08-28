@@ -20,7 +20,7 @@ The question is narrower: what Planning-owned value lets `Servient::consume` pub
 
 The following facts are already authoritative or completed implementation evidence.
 
-1. `PLAN-SET-001` assigns every consumed handle generation one Servient-owned aggregate compiled-plan-set record. Planning constructs immutable set material; Servient owns the build transaction orchestration, publication, pins, operation leases, drain, and reclamation.
+1. `PLAN-SET-001` assigns every consumed handle generation one Servient-owned aggregate compiled-plan-set record. Planning constructs immutable set material; Servient owns build orchestration, publication, pins, operation leases, drain, and reclamation.
 2. The general Planning algorithm owns enumeration of target contexts, effective operations, forms, and binding candidates. Servient does not reinterpret a TD to recover planning decisions.
 3. The completed WP-200 Consumer tranche deliberately exposes only an exact-coordinate compiler entry:
 
@@ -62,7 +62,7 @@ The first closure candidate at `f1601ee79401845b804879727420cdadf8a19859` was in
 
 The review accepts the **technical ownership direction**: a Planning-owned narrow aggregate Consumer Property Read tranche is the smallest legal location, and it can remain outside `PLAN-INDEX-001`, lazy/cache, fallback, subscriptions, and production Zenoh.
 
-The review does **not** accept closure. The candidate remains `DISCUSSING` and must not become `DECIDED`, migrate authority, or justify WP-400 admission yet. Four missing contracts block closure:
+The review does **not** accept closure. The topic remains `DISCUSSING` and must not become `DECIDED`, migrate authority, or justify WP-400 admission yet. Four missing contracts block closure:
 
 1. aggregate per-coordinate failure/rollback and first-proof security scope;
 2. constructible aggregate identity, diagnostics, and exact resource ledger;
