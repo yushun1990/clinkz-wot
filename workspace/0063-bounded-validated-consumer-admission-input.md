@@ -15,20 +15,21 @@ Workspace topic 0062 established that the missing Consumer plan-set handoff cann
 This topic owns only the prerequisite needed to make that premise real:
 
 - what proves that one exact `Thing` is valid for Planning;
-- who owns and drives that validation transaction;
-- how one immutable resource-policy projection and ledger owner remain bound to the whole operation;
-- how typed-input structural applicability, source/input memory, validation temporary memory, diagnostics, peak live memory, contiguous allocation, and validation work are bounded and accounted;
+- how one linear admission owner preserves that exact source and all Planning inputs across resumable validation and Planning;
+- how one immutable validated resource-policy projection, local/global accounting authority, and cumulative validation-work allowance remain bound to the whole operation;
+- how typed-input resource applicability is versioned and enforced;
+- how TD validation progress remains dependency-safe and constructible without self-referential cursors;
 - how Host and application-static profiles share the same semantic validation contract; and
 - what impact this has on the completed WP-200 Consumer planning tranche and the Foundation/TD/Servient admission substrate.
 
 This topic does **not** own:
 
-- Consumer execution-registration pinning or execution-owner lifetime;
-- the aggregate Planning -> Servient handoff from 0062;
+- persistent Consumer execution-registration pinning after plan-set publication or execution-owner lifetime;
+- the final aggregate Planning -> Servient plan-set material from 0062;
 - PlanId generation allocation;
-- final static/Host consume-cancellation ownership;
+- final static/Host consume-cancellation product API beyond the cancellation checks required while this admission transaction is live;
 - Consumer binding execution;
-- WP-400 source implementation;
+- WP-400 Consumer source implementation;
 - broad payload/schema validator compilation or codec reuse;
 - production Zenoh evidence; or
 - the Consumer architecture-gate completion claim.
@@ -39,46 +40,53 @@ This topic does **not** own:
 2. `Deserialize for Thing` checks Serde/typed field shape but returns an ordinary `Thing`; it does not call `Validate`.
 3. `ThingBuilder::build()` calls the current default `Validate::validate()` (`ValidationLevel::Basic`) but also returns the same ordinary `Thing` type. The validation result therefore has no durable type-level provenance.
 4. `Thing::validate_with_level(Basic)` traverses required Thing/security/schema/affordance/Form/local-reference semantics, but `ExtensionMap::validate_with_level(...)` is currently a no-op. Basic semantic validation therefore does **not** traverse unknown extension JSON values. The current API is synchronous and does not accept `WorkBudget`, resource accounts, or an incremental cursor.
-5. `clinkz_wot_planning::PlanBuildInput::new(...)` accepts `&Thing` and names the field `validated_td`; no type or constructor proves the claim.
-6. The completed `WP-200-CONSUMER-PROPERTY-READ-PLANNING` evidence explicitly assumes a validated TD build input and proves only that the build output survives destruction of that input.
-7. Current public `Servient::consume(td: Thing)` performs neither TD validation nor v5 admission accounting. It immediately constructs legacy `ConsumedThing` state.
-8. `ServientBuilder::resource_limits(...)` currently retains the supplied `ResourceLimits` only when the narrow Producer Property Read registration is also present. A Consumer-only Servient therefore has no durable policy owner today.
-9. `ResourceLimits` is only the canonical low-level value snapshot. Active Foundation authority says it becomes a validated configuration authority only after an owning builder binds the executable role/profile/cell applicability set and rejects every illegal `None`.
-10. Active `ADMIT-TXN-001` places validation inside the reserve-build-publish admission transaction and requires bounded cancellation checkpoints.
-11. Active `ADMIT-MEM-001` requires distinct accounting for source/input bytes, phase-local temporary bytes, persistent document retention, persistent compiled-runtime bytes, diagnostics, cleanup ownership, current live bytes, peak simultaneously live bytes, and largest contiguous allocation.
-12. `AdmissionLedger` already has distinct source, temporary, persistent-document, persistent-runtime, diagnostic, and cleanup accounts, but the active resource schema has no diagnostic-specific `ResourceKind`/ceiling suitable for constructing source-derived validation diagnostics.
-13. The active resource schema contains `retained_source_bytes_*`, `admission_temporary_bytes_*`, `peak_live_bytes_*`, `largest_contiguous_allocation_bytes_max`, structural TD limits, `document_validation_work_units_max`, and raw-document JSON shape limits.
-14. Current `WorkClass` has ten classes. None is explicitly a typed TD/admission-validation item class. `JsonSchemaNodes` is described as parsed JSON values and schema nodes visited; using it for every typed `Thing`/affordance/Form/reference traversal would be a semantic reinterpretation unless independently accepted.
-15. TD already depends on Foundation with `default-features = false`, so a portable bounded validator can use Foundation budgets/types without reversing crate dependency direction.
-16. ADR-0019 deliberately did not activate broad `VALIDATE-COMPILE-001`, `VALIDATE-REUSE-001`, or `API-CODEC-001`. This topic must not import those deferred domains merely to establish admission provenance for a typed TD.
+5. `clinkz_wot_planning::PlanBuildInput::new(...)` accepts `&Thing`, an arbitrary registration snapshot reference, and a `PlanSetGeneration`; `PlanBuildInput` is `Clone + Copy`.
+6. `PlanCompiler::start(...)` and `PlanCompiler::step(...)` both accept a fresh `&PlanBuildInput`. The current Property Read compiler rereads registration and plan-set-generation data after `Pending`, so a caller can currently substitute compatible build inputs across steps.
+7. The completed `WP-200-CONSUMER-PROPERTY-READ-PLANNING` evidence assumes a validated TD build input and proves only that the build output survives destruction of that input.
+8. Current public `Servient::consume(td: Thing)` performs neither TD validation nor v5 admission accounting. It immediately constructs legacy `ConsumedThing` state.
+9. `ServientBuilder::resource_limits(...)` currently retains the supplied `ResourceLimits` only when the narrow Producer Property Read registration is also present. A Consumer-only Servient therefore has no durable policy owner today.
+10. `ResourceLimits` is only the canonical low-level value snapshot. Active Foundation authority says it becomes a validated configuration authority only after an owning builder binds the executable role/profile/cell applicability set and rejects every illegal `None`.
+11. Active `ADMIT-TXN-001` places validation inside the reserve-build-publish admission transaction and requires bounded cancellation checkpoints.
+12. Active `ADMIT-MEM-001` requires distinct accounting for source/input bytes, phase-local temporary bytes, persistent document retention, persistent compiled-runtime bytes, diagnostics, cleanup ownership, current live bytes, peak simultaneously live bytes, and largest contiguous allocation.
+13. `AdmissionLedger` has six operation-local accounts and observes live/peak/contiguous values, but it does not itself enforce the schema's global ceilings, per-admission validation-work total, peak-live maximum, largest-contiguous maximum, or hierarchical reservations.
+14. The resource schema contains both operation-local and global source/temporary/peak/runtime rows plus `largest_contiguous_allocation_bytes_max` and `document_validation_work_units_max`.
+15. Current `WorkClass` has ten classes. None is explicitly a typed TD/admission-validation item class. Reusing `JsonSchemaNodes` for every typed TD traversal would be a semantic reinterpretation unless independently accepted.
+16. The active schema's `document_bytes_max` and `json_*` identities describe document/JSON shape. A materialized `Thing` does not retain its original JSON syntax/tree, and its serializer may emit a different shape through omitted fields, one-or-many forms, and flattened extensions.
+17. TD already depends on Foundation with `default-features = false`; Core depends on TD. TD therefore may own portable validation cursor/proof semantics but must not own a Core/Servient cancellation type.
+18. The existing `Core::ErrorContext` demonstrates a fixed-capacity, allocation-free structured diagnostic representation.
+19. ADR-0019 deliberately did not activate broad `VALIDATE-COMPILE-001`, `VALIDATE-REUSE-001`, or `API-CODEC-001`. This topic must not import those deferred domains merely to establish admission provenance for a typed TD.
 
 ## Defect
 
-The current architecture contains a trust gap:
+The current architecture contains two adjacent trust gaps:
 
 ```text
 Thing
   -> PlanBuildInput::new(&thing, ...)
   -> field is called `validated_td`
   -> Planning assumes validation happened somewhere
+
+PlanBuildInput A
+  -> PlanCompiler::start(&A)
+  -> Pending(cursor)
+  -> PlanCompiler::step(&B, cursor, ...)
+  -> Planning may observe a different TD / registration snapshot / generation
 ```
 
-Nothing in the public type system or Servient admission path establishes that premise.
+Calling `thing.validate()` immediately before Planning fixes neither gap. A freely borrowable validation view also fixes only the first gap if Planning may later substitute its other build inputs.
 
-Calling `thing.validate()` immediately before Planning would fix only the semantic check. It would still violate or leave ambiguous:
+The closure therefore needs one **linear Consumer admission transaction** above TD that binds:
 
-- operation-linear source identity;
-- resource-policy provenance and applicability;
-- bounded progress under `CONSTRAINED-WORK-001`;
-- source/input memory accounting;
-- temporary/diagnostic memory accounting;
-- peak-live and contiguous-allocation accounting;
-- cancellation/abort ownership during a long validation traversal; and
-- static-profile manual-progress parity.
+- the exact immutable source;
+- validation provenance and cursor state;
+- one validated resource-policy snapshot;
+- one local/global accounting owner set;
+- one monotonic admission validation-work allowance;
+- the immutable Planning registration snapshot used for this build;
+- the reserved plan-set generation used for this build; and
+- cancellation observation for the live admission.
 
-Conversely, introducing a marker type that can be constructed after an unbounded `validate()` call would prove provenance while leaving the admission transaction nonconforming.
-
-The closure therefore needs **one linear bounded operation** that captures the exact source, policy, ledger ownership, validation level, and progress state from start through validated Planning use.
+That owner must survive every `Pending` boundary until validation and Planning complete or abort.
 
 ## Independent review history
 
@@ -86,12 +94,23 @@ The closure therefore needs **one linear bounded operation** that captures the e
 
 The first independent review accepted the trust-gap diagnosis and WP-200 impact direction but identified four blockers:
 
-1. resumable validation accepted a fresh `&Thing` and account/policy view on every step, allowing source substitution/mutation or policy/account rotation across `Pending` boundaries;
+1. resumable validation accepted a fresh `&Thing` and account/policy view on every step;
 2. retaining raw `ResourceLimits` did not establish a validated role/profile/cell policy;
 3. bounded diagnostics had neither an authoritative ceiling nor a non-allocating admission error representation; and
 4. raw-document resource fields lacked an explicit typed-input applicability disposition.
 
 It also corrected repository fact 4: Basic validation does not traverse extension contents because `ExtensionMap::validate_with_level` is currently a no-op.
+
+### Review 2 — REQUEST CHANGES
+
+The second independent review found that the revised candidate still failed constructibility because:
+
+1. the validation proof became repeatable at the Planning handoff while Planning accepts fresh copyable build inputs on every step;
+2. an operation owning both `Thing` and iterators into that `Thing` would recreate a self-referential cursor problem;
+3. applying current JSON resource identities to a newly invented typed-tree projection requires a schema revision unconditionally;
+4. operation-local `AdmissionLedger` plus caller-replenishable `WorkBudget` does not enforce cumulative work, global/hierarchical memory, peak-live, or contiguous ceilings;
+5. the proposed diagnostic row controlled no variable resource when the issue is already fixed-width; and
+6. semantic equivalence with the existing Basic validator lacked executable proof.
 
 The topic remains `DISCUSSING`.
 
@@ -99,290 +118,355 @@ The topic remains `DISCUSSING`.
 
 The following is the only current investigation candidate. It is not implementation authority.
 
-### 1. One linear validation/admission operation captures source, policy, and ledger at start
+### 1. The first proof uses a borrowed external `Thing`
 
-A resumable validator must not accept a new source or accounting context on every step.
+The first-proof admission representation is now deliberately **borrowed external typed input**.
 
-The first-proof operation starts only after Servient/static composition has produced one **validated resource-policy handle**. Start captures, exactly once:
+The Consumer admission transaction captures `&'a Thing`; it does not take ownership of an arbitrary by-value Rust `Thing`.
 
-- the exact source `Thing` ownership/borrow used by this admission;
-- `ValidationLevel::Basic`;
-- one immutable validated resource-policy snapshot/handle;
-- one generation-bearing admission-ledger owner and its distinct accounts;
-- the deterministic typed-source census/validation cursor state; and
-- the admission cancellation view/source required by the eventual owner.
+Consequences:
+
+- ordinary Rust borrowing prevents safe mutation for the whole live admission;
+- the source object has a stable external address/lifetime, so TD validation cursors may safely borrow it without constructing a self-referential owner;
+- caller-owned source allocations are not reclassified as engine-owned heap merely because the engine reads them;
+- the engine still enforces every admitted typed structural/work limit while traversing the borrowed source;
+- any engine-owned temporary/index/diagnostic/planning state remains fully charged; and
+- the borrow ends only after Planning has copied every immutable fact needed beyond admission.
+
+This choice intentionally removes `Servient::consume(td: Thing)` from the first-proof compatibility constraint. A later convenience wrapper may move/own a `Thing` only if a separately admitted measured/accounted input adapter proves its physical footprint without allocator undercounting. Preserving the old by-value facade is not a reason to weaken `ADMIT-MEM-001`.
+
+Application-static/manual progress likewise keeps the caller's `Thing` alive for the lifetime required by the admission transaction.
+
+### 2. TD owns validation mechanics; Servient owns the composite admission transaction
+
+TD owns only protocol-independent typed-TD census/validation semantics:
+
+- borrowed source traversal;
+- opaque borrowed validation cursor state;
+- fixed-width validation issue identity/location;
+- `ValidationLevel::Basic` semantic checks; and
+- a non-forgeable validated TD view produced only after successful completion.
+
+TD does **not** own Core/Servient cancellation, Planning registration snapshots, plan-set generation, global runtime accounts, publication, or Servient lifecycle.
+
+The composite first-proof transaction belongs in the Servient composition layer because that crate already composes TD, Foundation, Core, Planning, Host, and application-static Property Read lifecycles without reversing dependencies.
 
 Provisional semantic shape:
 
 ```rust
-ConsumerValidationTxn<Source, State> {
-    source: Source,
-    level: ValidationLevel,
-    policy: ValidatedResourcePolicy,
-    ledger: AdmissionLedger,
+ConsumerAdmissionTxn<'a, R, State> {
+    source: &'a Thing,
+    policy: ValidatedConsumerPolicy,
+    accounting: ConsumerAdmissionAccounting,
+    registrations: R,
+    plan_set_generation: PlanSetGeneration,
+    cancellation: AdmissionCancellationView,
     state: State,
 }
-
-ValidationStep<Txn> = Pending(Txn) | Complete(Txn) | Failed { diagnostic, txn };
 ```
 
-The exact Rust generics/layout are not frozen. The required ownership rule is:
+Exact names/layout are not frozen. The ownership requirement is frozen for this candidate: a `Pending` result returns the same transaction owner; callers cannot replace source, policy, accounting authority, registration snapshot, generation, or cancellation owner between steps.
 
-- `step` receives the **owned transaction** plus `&mut WorkBudget` and the admitted cancellation snapshot/checkpoint input only;
-- `step` does not receive `&Thing`, `&ResourceLimits`, a replacement policy handle, or a replacement ledger/account view;
-- a `Pending` result returns the same operation ownership with the same source identity, policy snapshot, owner generation, level, and prior charges;
-- source mutation cannot coexist with a live immutable borrow, and an owned Host source cannot be substituted while the transaction exists;
-- policy/account switching across steps is structurally impossible rather than detected heuristically; and
-- abort/drop releases only state owned by that same captured ledger owner.
+### 3. TD validation cursor is borrowed and non-self-referential
 
-Evidence must include attempted source substitution, safe mutation while pending, validated-policy replacement, and ledger-owner/account replacement. Those operations must be unrepresentable on the admitted API or deterministically rejected before progress.
+Because the source is external and immutably borrowed for the whole operation, TD may use a normal borrowed cursor whose iterators/path state borrow the caller-owned `Thing` rather than the transaction itself.
 
-### 2. Validation completion returns a validated transaction state, not a self-referential proof value
+The cursor must not contain references into engine-owned movable source storage.
 
-A Host transaction may own its `Thing`; a static transaction may borrow caller-owned storage. Returning a standalone borrowed proof from an owning transaction would create an avoidable self-reference problem.
-
-The candidate therefore makes validation provenance a **state of the linear transaction**.
-
-After `Complete`, the transaction exposes an opaque TD-owned borrowed view only while the completed transaction/source remains alive:
+The portable TD step contract is deliberately cancellation-agnostic:
 
 ```rust
-impl ValidatedConsumerInput {
-    pub fn validated_thing(&self) -> ValidatedThingView<'_>;
-}
+TdValidationStep<'a> = Pending(TdValidationCursor<'a>)
+                     | Complete(ValidatedThingView<'a>)
+                     | Failed(ValidationIssue);
 ```
 
-Required semantics:
+The exact representation may use nested borrowed iterators or another safe borrowed cursor. It must satisfy:
 
-- external crates cannot forge `ValidatedThingView`;
-- the view borrows the exact source captured by the transaction;
-- the view records/proves the admitted validation level privately;
-- Planning accepts the view rather than a bare `&Thing` on the target path;
-- Planning cannot persist the borrowed view into the compiled plan set;
-- after Planning has copied every admitted immutable fact, the validation/source owner can be released at the earliest safe boundary; and
-- no validated proof survives independently after the source owner is dropped.
+- no unsafe self-reference is required by the public design;
+- one TD step performs only a bounded, pre-charged unit or declared bounded group of work;
+- the outer Servient admission owner checks cancellation before each bounded TD step and at every required lifecycle boundary;
+- TD does not depend on Core cancellation types; and
+- step partitioning cannot change semantic success/failure or first issue.
 
-This preserves a constructible Rust ownership model for both an owned Host source and a borrowed/static source.
+If implementation cannot realize a safe borrowed iterator cursor across every nested TD container without hidden rewalk or unbounded work, it must stop and return to this topic; ordinal rewalk is not silently accepted because budget partitioning must not change admission success through duplicated work.
 
-### 3. A validated resource-policy handle is a prerequisite, not raw `ResourceLimits`
+### 4. Validation completion is consumed into the same linear Planning admission owner
 
-The first source census performs no externally influenced traversal until composition has produced a validated policy projection.
+A freely repeatable `ValidatedThingView` is not the Planning handoff authority.
 
-The provisional Foundation-owned/checked handle, name not frozen, must bind at least:
+Successful validation transitions the existing `ConsumerAdmissionTxn` into a validated typestate. The only target-path entry into Planning **consumes that typestate** together with its already-captured registration snapshot and plan-set generation.
 
-- one resource-schema revision;
-- capability role `consumer`;
-- first-proof capability/domain `Consumer Property Read one-shot`;
-- execution/profile cell (`Host` or application-static/constrained);
-- ingestion representation (`TypedThing` for this topic);
-- named profile or application-defined value origin; and
-- the exact immutable `ResourceLimits` snapshot/value digest used by the transaction.
+Conceptually:
 
-Construction rejects every `None` whose field is applicable to that projection. `ResourceLimits::new/try_new`, cloning, or retention alone is not policy validation.
+```text
+ConsumerAdmissionTxn<Validating>
+    -> ConsumerAdmissionTxn<Validated>
+    -> enter_planning(self)
+    -> ConsumerAdmissionTxn<Planning { cursor, private_input }>
+```
 
-Host `GatewayDefaultV1` may be used only through the checked projection, not because the profile id by itself is authority. Application-defined policies must provide every field applicable to the selected projection.
+`private_input` captures once:
 
-The operation captures this validated handle/snapshot at start. It cannot swap to a different limits value, profile, role, cell, or applicability projection after any census/validation progress.
+- the exact validated borrowed TD view/source identity;
+- the immutable Planning registration snapshot selected for this build;
+- the exact reserved `PlanSetGeneration`; and
+- any Planning input facts copied from the validated admission state.
 
-### 4. Typed input gets an explicit applicability projection
+The admitted outer `step` API receives only the owned transaction plus a step `WorkBudget`/driver context. It does not accept a fresh `PlanBuildInput`.
 
-`consume` receives a typed `Thing`, not a raw JSON byte source. The validated policy must therefore bind an **ingestion representation** rather than pretending every raw-document field remains directly measurable.
+Internally an adapter may call the existing `PlanCompiler` trait repeatedly with the same privately captured `PlanBuildInput`, but callers cannot supply `A` at start and `B` after `Pending`. Alternatively WP-200 may revise the generic compiler contract to capture input once; that broader choice is an impact-review decision, not something implementation may choose silently.
 
-The candidate disposition is:
+The existing public `PlanBuildInput::new(&Thing, registrations, generation)` cannot remain the admitted Consumer target-path authority unless it is sealed behind this linear wrapper. Bare `&Thing` construction must not bypass validation provenance.
 
-| Resource field family | `TypedThing` first-proof disposition |
+This requirement is about **build-time Planning input identity**. Persistent execution-registration ownership after publication remains the separate execution-pinning prerequisite recorded by 0062.
+
+### 5. Resource schema revision is mandatory for `TypedThing` ingestion
+
+The current raw/document identities are not reused with invented typed semantics.
+
+Closure requires an explicit next Foundation resource-schema revision that adds an ingestion-representation applicability dimension and records a migration disposition for every field whose meaning/applicability changes.
+
+For the first-proof `TypedThingBorrowed` representation, the candidate disposition is:
+
+| Existing field/family | Revised first-proof disposition |
 | --- | --- |
-| `document_bytes_max` | raw-source-only; typed non-applicability must be made explicit by the checked applicability/schema projection before source admission. The engine must not reserialize merely to invent this value. |
-| `json_nesting_depth_max` | enforced against a deterministic canonical typed-tree projection of the `Thing`, including nested `serde_json::Value` extension values. It does not claim to reproduce original raw syntax. |
-| `json_members_per_object_max` | enforced against each object/map in the canonical typed-tree projection. |
-| `json_array_items_max` | enforced against each vector/array in the canonical typed-tree projection, including extension arrays. |
-| `json_value_nodes_per_document_max` | enforced against total nodes in the canonical typed-tree projection, including extension values. |
-| typed TD counts such as affordances/forms/schema/security limits | enforced directly from the typed representation. |
-| string/extension byte limits | enforced from the owned typed values under the accepted source-footprint representation. |
+| `document_bytes_max` | `RawJson` only; typed non-applicable. No reserialization proxy. |
+| `json_nesting_depth_max` | `RawJson` only; typed non-applicable. |
+| `json_members_per_object_max` | `RawJson` only; typed non-applicable. |
+| `json_array_items_max` | `RawJson` only; typed non-applicable. |
+| `json_value_nodes_per_document_max` | `RawJson` only; typed non-applicable. |
+| `string_bytes_max` | historical/raw-document identity is not silently reinterpreted for typed ingestion; migration disposition required. |
+| `extension_bytes_max` | historical/raw-document identity is not silently reinterpreted for typed ingestion; migration disposition required. |
+| `generated_effective_document_bytes_max` | derived-runtime/effective-document bound, not an input-byte proxy; remains applicable only when that derived representation is actually materialized. |
+| `retained_source_bytes_*` | remains an engine-retained-source account. Borrowed external first-proof input contributes zero engine-owned retained-source bytes; a later owned adapter must charge it explicitly. |
+| `admission_temporary_bytes_*`, peak/global/runtime/contiguous rows | remain applicable to engine-owned admission/runtime state. |
+| typed affordance/Form/schema/security count rows | remain applicable where their existing semantic unit already names typed WoT structure; exact migration table must confirm each row. |
+| `document_validation_work_units_max` | remains the per-admission cumulative semantic work ceiling, independent of caller step-budget replenishment. |
 
-The canonical typed-tree projection is a resource census, not semantic validation. In particular, Basic validation may continue to ignore unknown extension semantics while the census still traverses extension `serde_json::Value` trees to enforce structural/resource limits.
+The revised schema introduces distinct typed-input structure identities rather than reusing raw JSON ones. The exact stable names are to be frozen in migration, but the first proof needs at least equivalents of:
 
-If active schema applicability cannot legally mark `document_bytes_max` typed-nonapplicable without a schema revision, this topic requires that explicit Foundation applicability/schema revision before source admission. It must not silently reinterpret document bytes as heap bytes.
+- typed value nesting depth per Thing;
+- typed map/object members per container;
+- typed array/vector items per container;
+- typed value nodes per Thing; and
+- typed UTF-8 string bytes per Thing.
 
-### 5. Typed-source census and semantic Basic validation are distinct phases
+Those typed structural counts include nested `serde_json::Value` extension contents for resource purposes. This still does not make Basic semantic validation interpret extension semantics.
 
-Before Planning, the linear operation performs a bounded typed-source census and then bounded semantic Basic validation.
+A Foundation migration table must cover **every** existing document/input row, not only `document_bytes_max`, and state one of: unchanged semantic applicability, RawJson-only, TypedThingBorrowed-only/new identity, derived-runtime-only, or retired/replaced.
 
-The census establishes/charges applicable facts including:
+### 6. A validated Consumer policy binds the revised schema projection before traversal
 
-- the accepted source/input footprint representation;
-- canonical typed-tree depth/member/array/node limits;
-- string/extension owned bytes under the accepted representation;
-- affordance/Form/schema/security collection counts;
-- largest contiguous allocation relevant to engine-owned/accounted source state; and
-- current/peak source contribution while validation and later Planning temporary state overlap it.
+Raw `ResourceLimits` does not authorize admission.
 
-Semantic validation then enforces the existing Basic TD rules without pretending extension values are semantically validated.
+Before any typed source traversal, composition creates a checked immutable Consumer policy handle that binds:
 
-Both phases:
+- the exact revised resource-schema identity;
+- capability role `consumer`;
+- first-proof domain `Consumer Property Read one-shot`;
+- Host or application-static execution cell;
+- ingestion representation `TypedThingBorrowed`;
+- named profile or application-defined origin/value digest; and
+- every applicable local/global value with illegal `None` rejected.
 
-- progress from cursor state captured in the linear transaction;
-- charge before every bounded collection/reference/tree visit;
-- perform no semantic progress when the next required work class is exhausted;
-- return the same source/policy/ledger ownership on `Pending`;
-- observe cancellation at admitted bounded checkpoints; and
-- publish nothing on failure/cancellation.
+The transaction captures this validated policy once. It cannot rotate profile, schema revision, applicability, values, or origin after progress begins.
 
-### 6. Source-memory representation remains a constructibility decision
+### 7. Admission accounting is one hierarchical authority, not only `AdmissionLedger`
 
-`ADMIT-MEM-001` requires the physically live engine-owned/accounted representation to be measured or reserved, not just semantic item counts.
+The transaction captures one move-only `ConsumerAdmissionAccounting` authority (name provisional) that composes all applicable scopes from the validated policy.
 
-An arbitrary already-materialized Rust `Thing` contains `String`, `Vec`, `BTreeMap`, and nested `serde_json::Value` allocations. `size_of::<Thing>()` is insufficient, and portable exact allocator/node overhead is not obviously available from these public containers.
+It owns or holds reservations/guards for at least:
 
-Closure must therefore independently accept one constructible ownership/measurement branch:
+- operation-local admission source/temporary/persistent-runtime/diagnostic/cleanup accounts;
+- Servient/global source/temporary/peak/runtime accounts where applicable;
+- per-Thing compiled-runtime capacity when Planning reservation begins;
+- global compiled-runtime/engine-live capacity when applicable;
+- enforced per-admission peak-live ceiling;
+- enforced global admission peak-live ceiling;
+- enforced largest-contiguous-allocation ceiling; and
+- one monotonic cumulative validation-work allowance initialized from `document_validation_work_units_max`.
 
-1. **accounted owned input** — a TD-owned source-footprint rule/envelope proves a conservative non-underestimating bound for every engine-owned allocation category before the by-value source becomes admission state; or
-2. **borrowed external input** — the target admission API borrows caller-owned `Thing` storage for census/validation/Planning and accounts only engine-owned/exclusively-reserved state while enforcing all typed structural limits on the borrowed input; or
-3. another measured representation that satisfies `ADMIT-MEM-001` without depending on undocumented allocator internals.
+`AdmissionLedger` may remain one component, but observing `peak_live_bytes` or `largest_contiguous_allocation` after reservation is not sufficient. A successful new reservation/allocation must be rejected **before** mutation if it would exceed the applicable local peak, global peak, parent/global account, or contiguous ceiling.
 
-The prior preference to preserve `Servient::consume(td: Thing)` is therefore only a compatibility hypothesis. If a by-value arbitrary `Thing` cannot be accounted without undercounting, API impact review must prefer a constructible borrowed/accounted input boundary over preserving the old facade shape.
+Hierarchical acquisition/release must be deterministic and rollback-safe. A child reservation cannot succeed locally and then leave a leaked local mutation if a parent/global reservation fails.
 
-A serialization-based approximation is not accepted merely because it is easy to compute.
+The exact Foundation primitive may be an extended ledger, a composite permit, or checked reservation group. The admitted semantics are:
 
-### 7. Admission validation uses a bounded non-source-owning diagnostic representation
+```text
+reserve child/local + parent/global as one rollback-safe operation
+  -> success: all applicable scopes own the charge
+  -> failure: no scope retains a partial charge
+```
 
-The existing `ValidateError` is appropriate for ordinary authoring convenience but is not a safe admission-progress carrier: its variants allocate source-derived `String`s and `Multiple(Vec<ValidateError>)` can allocate a variable collection.
+Static/constrained composition supplies bounded application-owned parent/global account storage; Host Servient owns its corresponding shared accounts. Neither profile gets an implicit unbounded global scope.
 
-The bounded admission validator therefore uses a separate TD-owned fixed/bounded issue projection, provisionally:
+### 8. Caller step budgets cannot reset the per-admission validation-work ceiling
+
+`WorkBudget` remains the per-step linear allowance supplied by the driver, but it is not the lifetime validation-work authority.
+
+The admission transaction also owns a monotonic `validation_work_remaining` (or equivalent) initialized from the checked `document_validation_work_units_max` value.
+
+Before each TD census/validation work unit:
+
+1. the cumulative per-admission allowance is charged;
+2. the applicable `WorkClass` in the caller's current `WorkBudget` is charged; and
+3. only then does the work begin.
+
+A caller may replenish a later step's `WorkBudget`; it cannot restore the transaction's cumulative allowance.
+
+Evidence must prove that many small replenished step budgets cannot exceed the same lifetime validation-work ceiling that one large step budget would face.
+
+The exact Foundation `WorkClass` for typed census/validation remains subject to impact review. Reusing `JsonSchemaNodes` without explicit authority migration is rejected; an append-only `ValidationItems` or `AdmissionItems` class remains the preferred direction unless an existing class is independently proven exact.
+
+### 9. Diagnostics are one fixed inline issue; no new diagnostic resource row is proposed
+
+The first proof retains at most one deterministic fixed-width `ValidationIssue`:
 
 ```rust
 ValidationIssue {
     kind: ValidationIssueKind,
     location: ValidationLocation,
-    // fixed-width ordinals/field ids; no cloned source strings in first proof
 }
 ```
 
-The first proof records deterministic field/affordance/Form/reference coordinates or stable field ids rather than cloning arbitrary source names/messages. Ordinary `ValidateError` formatting may remain for the synchronous authoring API and may be produced outside the admitted bounded driver when appropriate; it is not the resumable transaction's failure payload.
+It contains only fixed-width enums/ordinals/field ids and no source-derived `String`, `Vec`, payload, or recursive cause.
 
-The validator must determine the issue first without allocating source-derived diagnostic storage. It then pre-charges any admitted retained diagnostic bytes before constructing/storing them.
+Because this is a fixed part of the transaction/failure layout rather than externally variable retained diagnostic storage, the candidate **withdraws** the proposed `admission_diagnostic_bytes_per_operation_max` resource row.
 
-### 8. Diagnostic accounting requires an explicit Foundation ceiling
+`ADMIT-MEM-001` still requires diagnostic bytes to be separately attributable. The operation-local diagnostic account therefore uses the compile-time measured size/alignment footprint of this one inline issue as its fixed ceiling/charge; it does not obtain a caller-configurable semantic capacity row for a resource that cannot vary.
 
-`AdmissionLedger` has a diagnostic account, but the exhaustive active schema currently has no diagnostic-specific `ResourceKind` that can truthfully supply its validation failure ceiling.
+No diagnostic-exhaustion fallback exists for this inline issue because constructing the sole fixed slot cannot consume additional variable capacity. Resource-limit failures themselves use an already-admitted fixed structured resource error projection that names the resource category/limit/phase; they do not recursively allocate a validation issue.
 
-The current candidate therefore requires an additive Foundation resource-schema projection before source admission, provisionally one per-operation semantic capacity such as:
+If later work retains multiple or variable diagnostic records, that is a new externally variable resource and must justify a schema row under Foundation's new-row rule.
 
-`admission_diagnostic_bytes_per_operation_max`
+### 10. Basic validation has one semantic engine
 
-The exact stable field name is not frozen, but the accepted row must define:
+The bounded TD admission validator and the synchronous authoring `Validate::validate_with_level(Basic)` must not become independent implementations.
 
-- Foundation as semantic owner;
-- bytes as unit;
-- admission operation as scope;
-- first-proof Consumer applicability plus any justified broader `all` applicability;
-- zero semantics;
-- default/profile values and constrained reference value;
-- its `ADMIT-MEM-001` / `RES-LIMIT-001` ownership; and
-- the exact reservation/diagnostic construction point.
+The target design has one TD-owned Basic semantic engine/check graph. The incremental driver is the canonical traversal of that engine. The synchronous API becomes an adapter that drives the same engine to completion outside the Servient admission transaction and then expands the fixed `ValidationIssue` location against the original `Thing` into the existing authoring-friendly allocating `ValidateError` representation.
 
-If the primary diagnostic cannot be charged, `RES-LIMIT-002` requires a fixed-size, non-allocating fallback that still names the diagnostic resource category, configured limit, safely known requested amount, and admission phase. Diagnostic exhaustion must not trigger recursive diagnostic allocation or erase the original resource category.
+During migration, differential tests are additionally required across all existing TD validation fixtures plus adversarial cases. For every fixture they must prove:
 
-Evidence must include diagnostic ceiling exhaustion independently from source, temporary, and work exhaustion.
+- success/failure agreement;
+- first deterministic issue category/location agreement with the legacy Basic outcome after projection; and
+- no rule exists only in one path.
 
-### 9. Distinct admission accounts remain distinct
+Once the synchronous API itself delegates to the shared engine, semantic equivalence is structural rather than merely a test convention.
 
-The expected phase/account model is:
+Builder-side collected construction errors may remain a separate authoring concern; this claim governs semantic Basic validation of the completed `Thing`.
 
-| Phase | Source/input | Temporary | Persistent document | Persistent runtime | Diagnostic | Cleanup | Peak/contiguous |
+### 11. Cancellation is owned above TD and checked at bounded outer intervals
+
+The Servient-owned admission transaction captures the applicable Host/static cancellation source once.
+
+TD receives no Core cancellation type. Instead, the outer owner checks cancellation:
+
+- before the first census/validation step;
+- before every bounded TD step;
+- before entering Planning;
+- before every bounded Planning step;
+- before reservation/reconciliation transitions owned by later 0062 composition; and
+- immediately before any publication transition.
+
+Cancellation therefore cannot be swapped across Pending boundaries, and TD's dependency direction remains unchanged.
+
+The final product API that requests cancellation in Host/static profiles remains a later lifecycle projection; this topic freezes only the dependency-safe ownership/checkpoint requirement needed by this admission.
+
+### 12. Distinct account phases remain explicit
+
+The first-proof phase/account model is:
+
+| Phase | Borrowed source | Engine temporary | Persistent document | Persistent runtime | Diagnostic | Cleanup | Hierarchical/peak |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| policy validation/composition | no source traversal yet | checked-builder local only | none | durable validated policy owner | bounded policy diagnostic | none | composition scope |
-| typed source census | measured/observed under accepted source branch | bounded cursor/census scratch | none | none | fixed/bounded issue | none | source + census overlap |
-| Basic validation | remains live/owned or externally borrowed as accepted | validation cursor/scratch | none | none | fixed/bounded issue | none | source + validation overlap |
-| Planning preflight/build | remains live until safe drop | Planning/child cursors | none unless later explicitly retained | separately reserved compiled runtime | separately bounded | pure unpublished abort only | source + planning + reserved/runtime overlap |
-| Frozen/Published | source released/borrow ended at earliest safe boundary | released | none for first Consumer proof | exact committed plan-set footprint | retained only if separately admitted | lifecycle-owned | published live footprint |
+| policy validation/composition | not traversed | checked-builder local only | none | durable policy/account owners | fixed structured policy/resource error | none | parent/global accounts established |
+| typed census | caller-owned borrowed source; structural limits enforced | TD cursor/scratch | none | none | one inline fixed issue | none | local/global temporary + peak/contiguous enforced |
+| Basic validation | same immutable borrow | TD cursor/scratch | none | none | one inline fixed issue | none | cumulative work + local/global peak enforced |
+| Planning | borrow retained until copied facts complete | Planning/child cursors | none | reservation acquired before private runtime build | one fixed issue/error context as applicable | unpublished abort only | per-Thing + global runtime + engine live enforced |
+| Frozen/Published | borrow ended at earliest safe boundary | validation/planning temporary released | none for first proof | exact plan-set runtime footprint committed | retained only if separately admitted | lifecycle-owned | published/global accounts remain committed |
 
 The first Consumer proof retains no complete TD source document after Planning has copied all admitted immutable facts.
 
-### 10. Consumer resource policy survives independently of Producer setup
+### 13. Consumer policy/accounting owners survive independently of Producer setup
 
-A Consumer admission transaction cannot inherit a policy that disappears when no Producer Property Read registration is configured.
+A Consumer admission transaction cannot depend on `HostPropertyReadOwner` merely to retain resource values or accounting state.
 
-The eventual Servient composition must retain a **validated Consumer-capable policy handle/snapshot** independently of `HostPropertyReadOwner`.
+Host Servient composition must own the validated Consumer policy and Host parent/global resource accounts independently of Producer Property Read registration.
 
-`ServientBuilder::resource_limits(...)` retaining raw values is not sufficient. The owning builder/projection must validate role/profile/cell/ingestion applicability before producing the Servient/static owner used by Consumer admission.
+Application-static composition must likewise provide validated static policy plus bounded parent/global account storage before admission starts.
 
-### 11. Work-class impact must be reviewed, not relabeled
-
-The active resource schema already has `document_validation_work_units_max`, but current `WorkClass` has no clearly named typed-validation traversal class.
-
-Three directions require independent review:
-
-1. prove that an existing class already owns the exact typed census/validation traversal semantics without reinterpretation;
-2. add a narrow `ValidationItems` class; or
-3. add a more general typed `AdmissionItems` class that covers non-specialized bounded admission traversal while URI/security/binding/cleanup work continues to charge specialized classes.
-
-The candidate prefers an additive typed admission/validation class over silently reusing `JsonSchemaNodes`, but the exact class name/scope remains undecided.
-
-Any Foundation extension must preserve append-only stable enum ordering, zero-budget no-progress, and existing caller semantics. It triggers ADR-0013 impact review of Foundation and of the completed WP-200 child path where current Planning start performs uncharged typed work.
-
-### 12. Broad deferred validation/codec authority remains inactive
+### 14. Broad deferred validation/codec authority remains inactive
 
 This prerequisite does not require validator compilation caches, payload-schema validator reuse, codec pipelines, or broad response validation.
 
-The active authority already requires validation as part of admission (`ADMIT-TXN-001`) and defines TD/resource/work bounds. The hypothesis remains that a bounded Basic typed-TD provenance operation is a constructibility refinement of those active requirements, not activation of `VALIDATE-COMPILE-001`, `VALIDATE-REUSE-001`, or `API-CODEC-001`.
+The active authority already requires validation as part of admission and defines resource/work bounds. The bounded borrowed typed-TD provenance operation is still treated as a constructibility refinement of those active requirements.
 
-If independent review concludes that an inactive validation identity owns unavoidable behavior here, this topic must stop for narrow domain-entry review rather than smuggle it in.
+If independent review concludes that an inactive validation identity owns unavoidable behavior here, this topic stops for narrow domain-entry review rather than smuggling that domain in.
 
-## Foundation / TD / Servient impact now known
+## Foundation / TD / Planning / Servient impact now known
 
-This topic is no longer plausibly a documentation-only adapter around existing primitives.
+This topic requires explicit ADR-0013 impact review before implementation.
 
-Before source admission, impact review must explicitly disposition:
+At minimum:
 
-- **Foundation resource policy projection** — current raw `ResourceLimits` is not a validated role/profile/cell policy;
-- **Foundation resource schema** — typed ingestion applicability for raw-document fields and a diagnostic ceiling/resource kind may require additive/revisioned projection;
-- **Foundation work classes** — typed admission/validation traversal currently lacks an obviously correct class;
-- **TD validation** — the admission driver needs deterministic non-allocating issue discovery and resumable traversal while preserving existing synchronous `Validate` behavior;
-- **Servient composition** — Consumer must inherit one validated policy independently of Producer registration setup; and
-- **Host/static input ownership** — the accepted source-footprint branch determines whether the target API owns or borrows the typed input.
+- **Foundation resource schema** — create a new schema revision with ingestion-representation applicability, migrate every existing document/input field, and add the minimal typed-input structural identities required by `TypedThingBorrowed`;
+- **Foundation policy projection** — add/complete a checked Consumer role/profile/cell/ingestion policy handle rather than treating raw `ResourceLimits` as authority;
+- **Foundation accounting** — provide rollback-safe hierarchical local/global reservation semantics, enforce peak/contiguous ceilings before mutation, and retain cumulative admission validation work;
+- **Foundation work classes** — explicitly admit the typed census/validation work class;
+- **TD validation** — provide one borrowed resumable Basic semantic engine with a fixed-width issue projection and make synchronous Basic validation adapt over it;
+- **Planning** — prevent the admitted Consumer path from substituting raw TD/registration/generation input after validation or across `Pending`; the linear Servient adapter may preserve the existing generic compiler internally only if it passes the exact same captured input every time;
+- **Servient composition** — own the linear admission transaction, validated Consumer policy, Host/static parent/global account authority, and cancellation checks; and
+- **Consumer input facade** — first proof uses borrowed `Thing`; any by-value compatibility wrapper requires a separate measured input adapter.
 
-These are all inside this claim because they jointly establish one bounded validated-input transaction. Consumer execution-registration lifetime remains separate.
+Persistent execution-registration pinning remains outside this claim.
 
 ## WP-200 impact
 
-The completed `WP-200-CONSUMER-PROPERTY-READ-PLANNING` tranche cannot be declared unaffected.
+The completed `WP-200-CONSUMER-PROPERTY-READ-PLANNING` tranche is affected and requires impact review.
 
-At minimum the impact review must examine:
+At minimum the review must examine:
 
-- `PlanBuildInput::new` currently accepts a raw `&Thing`;
-- existing fixtures call it with ordinary Thing values they regard as validated;
-- completion evidence claims the validated TD can be dropped after build;
-- changing Planning to require `ValidatedThingView` is a public Planning input-contract change even if the exact compiler algorithm and owned output remain unchanged; and
-- current child start/step work charging may need reopening if the accepted Foundation class changes how typed Planning work is debited.
+- `PlanBuildInput` is currently `Clone + Copy` and publicly constructible from raw `&Thing`;
+- `PlanCompiler::start/step` accept fresh inputs, and current Property Read code rereads registration/generation after `Pending`;
+- existing fixtures call the compiler with ordinary `Thing` values regarded as validated;
+- completion evidence claims only that a validated TD can be dropped after build;
+- the target Consumer path now requires a linear owner that captures validated source, registration snapshot, and generation once; and
+- current Planning typed work charging may change under the accepted Foundation work-class/cumulative-work model.
 
-WP-200 may be reaffirmed only if an accepted additive adapter preserves its exact-coordinate compiler behavior and evidence meaning. Otherwise the affected tranche/evidence reopens under ADR-0013 before 0062 relies on it.
+WP-200 may be reaffirmed only if a reviewed adapter seals the admitted Consumer path while preserving exact-coordinate compiler behavior and evidence meaning. If the generic Planning contract itself must change, the affected tranche/evidence reopens under ADR-0013 before 0062 relies on it.
 
 ## Required evidence before this topic can become DECIDED
 
 An accepted closure must require at least:
 
-- a deserialized or manually mutated invalid `Thing` cannot reach Planning as validated input;
-- `ThingBuilder::build()` returning an ordinary `Thing` is not itself durable provenance;
-- one started transaction cannot substitute a second `Thing` after `Pending`;
-- safe source mutation cannot coexist with the transaction/view's immutable source ownership;
-- a transaction cannot switch `ResourceLimits`, validated policy projection, profile/cell, or ledger owner/account after progress;
-- raw `ResourceLimits` with illegal `None` cannot start Consumer census;
-- Consumer-only Servient/static composition owns a validated policy before any source traversal;
-- Planning cannot construct target `PlanBuildInput` from a bare `&Thing`;
-- zero typed-validation work produces no corresponding traversal progress;
-- step partitions produce identical validation result and first deterministic issue;
-- Basic semantic validation does not falsely claim extension semantic traversal, while resource census still bounds nested extension values;
-- every raw-document resource field has an executable `TypedThing` applicability/measurement disposition;
-- source ownership/footprint evidence proves the accepted owned/borrowed representation without allocator-underestimation;
-- source census and validation respect source, temporary, peak-live, contiguous-allocation, and structural limits;
-- primary validation diagnostic construction is pre-charged;
-- diagnostic ceiling exhaustion returns the bounded fallback naming the diagnostic resource category without recursive allocation;
-- oversized source, structural-limit, validation, diagnostic, and work failures publish nothing and release private engine-owned state/accounts idempotently;
+- a deserialized or manually mutated invalid `Thing` cannot enter target Planning as validated input;
+- `ThingBuilder::build()` returning an ordinary `Thing` is not itself durable admission provenance;
+- first-proof admission borrows caller-owned `Thing` storage and safe mutation cannot coexist with the live admission;
+- the TD cursor is constructible without owning/moving the source it borrows and without hidden uncharged rewalk;
+- one started admission cannot substitute a second `Thing`, resource policy, ledger/global account owner, registration snapshot, plan-set generation, or cancellation source after `Pending`;
+- validation completion cannot be used as a freely repeatable authority to create multiple target Planning transactions;
+- target Planning cannot accept `PlanBuildInput A` at start and `B` after `Pending`;
+- a nonzero registration snapshot ordinal and non-initial plan-set generation remain identical across every Planning step;
+- raw `ResourceLimits` with illegal `None` cannot start census;
+- Consumer-only Host/static composition owns a validated policy and local/global accounting authority before source traversal;
+- resource-schema revision explicitly dispositions every prior document/input row for `RawJson`, `TypedThingBorrowed`, derived runtime, or retirement/replacement;
+- typed structural identities bound nested extension `serde_json::Value` depth/map/array/node/string growth without claiming semantic extension validation;
+- borrowed input contributes no engine-owned retained-source bytes while engine-owned temporary/index/diagnostic state is still charged;
+- zero typed-validation step work produces no corresponding traversal progress;
+- replenishing `WorkBudget` across many steps cannot exceed `document_validation_work_units_max`;
+- one large step and many partitions have the same semantic validation result under the same cumulative admission allowance;
+- concurrent admissions cannot exceed global source/temporary/peak/runtime ceilings even when each local ledger would individually fit;
+- local success plus parent/global failure leaves no partial reservation;
+- peak-live and largest-contiguous failures occur before rejected allocation/reservation mutation;
+- the single inline `ValidationIssue` remains fixed-width/non-allocating and is separately attributable to the diagnostic account without a new variable diagnostic row;
+- synchronous `Thing::validate_with_level(Basic)` drives the shared semantic engine or, during migration, differential fixtures prove exact Basic agreement;
+- Basic semantic validation does not falsely claim extension semantic traversal;
+- oversized structural, validation-work, local-memory, global-memory, peak, contiguous, and semantic-validation failures publish nothing and release private engine-owned state/accounts idempotently;
+- cancellation before/among TD steps and Planning steps returns the same transaction ownership to unpublished failure/abort handling;
 - no complete source TD is retained by the first Consumer published plan set;
-- Host and application-static driving use the same portable typed census/Basic validation semantics;
-- no broad deferred validation/codec capability becomes active implicitly;
-- Foundation schema/work-class/policy dispositions are recorded explicitly; and
-- ADR-0013 impact disposition is recorded for WP-200 and every affected Foundation/TD/Servient tranche.
+- Host and application-static driving use the same TD validation semantics and accounting invariants;
+- no broad deferred validation/codec capability becomes active implicitly; and
+- ADR-0013 impact disposition is recorded for every affected Foundation/TD/Planning/Servient tranche before implementation admission.
 
 ## Relationship to 0062
 
@@ -390,20 +474,21 @@ An accepted closure must require at least:
 
 A DECIDED/MIGRATED outcome from this topic gives 0062 only these facts:
 
-1. what completed linear transaction/view Planning receives instead of an assumed validated `&Thing`;
-2. how the exact source, validated policy snapshot, and ledger owner remain bound across resumable validation;
-3. how typed source applicability/memory overlaps later Planning admission and when the source ownership/borrow ends;
-4. what Foundation policy/schema/work/accounting primitives are authoritative; and
-5. the exact WP-200 impact disposition.
+1. first-proof Consumer admission uses one borrowed immutable typed source and one linear Servient-owned transaction;
+2. validation and Planning cannot substitute source, policy/accounting owners, registration snapshot, generation, or cancellation source across `Pending`;
+3. TD owns one shared bounded Basic semantic engine and non-forgeable validated view, while cancellation/accounting/lifecycle stay above TD;
+4. the exact revised Foundation policy/schema/work/hierarchical-accounting primitives used by typed admission;
+5. when the borrowed TD lifetime ends relative to Planning private state; and
+6. the exact WP-200 impact disposition.
 
-0062 must not absorb this topic's TD validator, policy validation, diagnostic, or source-memory design back into its local aggregate closure.
+0062 must not absorb this topic's TD validator, resource-schema migration, policy validation, or hierarchical accounting design back into its local aggregate closure.
 
-Consumer execution-registration pinning remains a separate later claim.
+Consumer execution-registration pinning after publication remains a separate later claim.
 
 ## Merge condition
 
 This document may merge while `DISCUSSING` only as an investigation record after independent review of the current candidate boundary.
 
-It may become `DECIDED` only after a fresh independent review accepts a constructible linear validation provenance, validated-policy, typed-input applicability, source-accounting, diagnostic, and bounded-work model consistent with active v5.1 authority.
+It may become `DECIDED` only after a fresh independent review accepts a constructible borrowed-source, linear validation-to-Planning handoff, revised resource-schema/policy, hierarchical-accounting, cumulative-work, and shared Basic-validation model consistent with active v5.1 authority.
 
 It becomes `MIGRATED` only after the accepted conclusion is projected into the appropriate TD/Foundation/Planning/Servient authority and ADR-0013 impact/admission records. No Rust source implementation is authorized by this workspace topic alone.
