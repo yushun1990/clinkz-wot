@@ -1,7 +1,5 @@
 #![allow(dead_code)]
 
-use std::mem::MaybeUninit;
-
 /// Non-production storage-topology proof for workspace/0063.
 ///
 /// The semantic transaction state is one safe Rust enum. Host and constrained
@@ -52,37 +50,25 @@ impl AdmissionStorage for HostAdmissionStorage {
 
 /// Caller-owned constrained cell. The future production representation may be
 /// an arena/table slot instead; this fixture proves only that an exclusive
-/// bounded cell can host the same semantic enum without self-reference or
-/// `union + ManuallyDrop` requirements.
+/// bounded cell can host the same semantic enum without self-reference,
+/// `union + ManuallyDrop`, or unsafe projection requirements.
 struct StaticAdmissionCell {
-    slot: MaybeUninit<AdmissionState>,
-    initialized: bool,
+    slot: Option<AdmissionState>,
 }
 
 impl StaticAdmissionCell {
-    const fn uninit() -> Self {
-        Self {
-            slot: MaybeUninit::uninit(),
-            initialized: false,
-        }
+    const fn empty() -> Self {
+        Self { slot: None }
     }
 
     fn initialize(&mut self, state: AdmissionState) -> StaticAdmissionStorage<'_> {
-        assert!(!self.initialized, "exclusive static cell may be initialized once");
-        self.slot.write(state);
-        self.initialized = true;
+        assert!(self.slot.is_none(), "exclusive static cell may be initialized once");
+        self.slot = Some(state);
         StaticAdmissionStorage { cell: self }
     }
-}
 
-impl Drop for StaticAdmissionCell {
-    fn drop(&mut self) {
-        if self.initialized {
-            // SAFETY: `initialized` is set only after `slot.write` and is reset
-            // by `StaticAdmissionStorage::release` after dropping the value.
-            unsafe { self.slot.assume_init_drop() };
-            self.initialized = false;
-        }
+    fn is_vacant(&self) -> bool {
+        self.slot.is_none()
     }
 }
 
@@ -92,23 +78,24 @@ struct StaticAdmissionStorage<'a> {
 
 impl AdmissionStorage for StaticAdmissionStorage<'_> {
     fn state(&self) -> &AdmissionState {
-        // SAFETY: this owner is created only by `initialize`, which writes the
-        // slot before returning the exclusive borrow.
-        unsafe { self.cell.slot.assume_init_ref() }
+        self.cell
+            .slot
+            .as_ref()
+            .expect("static admission cell is initialized while owned")
     }
 
     fn state_mut(&mut self) -> &mut AdmissionState {
-        // SAFETY: `StaticAdmissionStorage` holds the unique borrow of the cell.
-        unsafe { self.cell.slot.assume_init_mut() }
+        self.cell
+            .slot
+            .as_mut()
+            .expect("static admission cell is initialized while owned")
     }
 }
 
 impl StaticAdmissionStorage<'_> {
-    fn release(mut self) {
-        assert!(self.cell.initialized);
-        // SAFETY: the slot is initialized and this owner has unique access.
-        unsafe { self.cell.slot.assume_init_drop() };
-        self.cell.initialized = false;
+    fn release(self) {
+        let previous = self.cell.slot.take();
+        assert!(previous.is_some(), "static admission cell is already vacant");
     }
 }
 
@@ -165,7 +152,7 @@ fn host_and_static_backends_preserve_the_same_semantic_state_graph() {
         }
     );
 
-    let mut cell = StaticAdmissionCell::uninit();
+    let mut cell = StaticAdmissionCell::empty();
     let mut static_owner = cell.initialize(initial());
     drive_same_semantics(&mut static_owner);
     assert_eq!(
@@ -176,7 +163,7 @@ fn host_and_static_backends_preserve_the_same_semantic_state_graph() {
         }
     );
     static_owner.release();
-    assert!(!cell.initialized);
+    assert!(cell.is_vacant());
 }
 
 #[test]
@@ -196,7 +183,7 @@ fn aborting_is_a_real_state_in_both_storage_backends() {
     drive_abort(&mut host);
     assert_eq!(host.state(), &AdmissionState::FailedSettled);
 
-    let mut cell = StaticAdmissionCell::uninit();
+    let mut cell = StaticAdmissionCell::empty();
     let mut static_owner = cell.initialize(AdmissionState::Building {
         identity_count: 2,
         built: 1,
@@ -204,4 +191,5 @@ fn aborting_is_a_real_state_in_both_storage_backends() {
     drive_abort(&mut static_owner);
     assert_eq!(static_owner.state(), &AdmissionState::FailedSettled);
     static_owner.release();
+    assert!(cell.is_vacant());
 }
