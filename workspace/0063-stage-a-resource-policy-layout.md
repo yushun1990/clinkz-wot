@@ -4,17 +4,15 @@ Status: NON-PRODUCTION CONSTRUCTIBILITY EVIDENCE
 
 Owner topic: `workspace/0063-bounded-validated-consumer-admission-input.md`
 
-This artifact exists only to make the Stage-A candidate falsifiable before 0063 may become `DECIDED`. It does not change the active resource schema, public API, work-package status, or implementation admission by itself.
+This artifact makes the Stage-A candidate falsifiable before 0063 may become `DECIDED`. It does not change the active resource schema, public API, work-package status, or implementation admission by itself.
 
-The executable companion is:
+Executable companion:
 
-- `tools/design-check/tests/consumer_admission_stage_a.rs`
+- `planning/tests/consumer_admission_stage_a.rs`
 
-That fixture is compiled by the existing workspace test path and models the ownership/typestate/layout shape without creating the future production Consumer admission API.
+The fixture is compiled by the ordinary locked workspace test path and models ownership/typestate/work/layout constructibility without creating the future production Consumer admission API.
 
 ## 1. One unpublished build lease binds both plan identities
-
-The Stage-A boundary no longer consumes a token that proves only `PlanId`.
 
 The upstream 0062 / Servient plan-set identity authority must issue one opaque move-only unpublished build lease carrying one indivisible pair:
 
@@ -24,73 +22,73 @@ UnpublishedPlanBuildLease
   + exact PlanSetGeneration
 ```
 
-Properties:
+Rules:
 
-- the lease has no public constructor from raw `PlanId` or raw `PlanSetGeneration`;
-- one issuer reserves both values under the same unpublished plan-set build;
+- no admitted public constructor from raw `PlanId` or raw `PlanSetGeneration`;
+- one issuer reserves both values for the same unpublished plan-set build;
 - Consumer Planning accepts the lease as one value and has no independent generation parameter;
-- ephemeral Planning input reconstruction reads both identities from that same lease;
-- abort returns/releases the reservation through the upstream issuer;
+- ephemeral Planning input reconstruction reads both identities from the same lease;
+- abort returns/releases the reservation through the upstream owner;
 - successful freeze transfers the pair into the later plan-set lifecycle; and
-- 0063 does not choose the allocator/slot-generation algorithm used by the issuer.
+- 0063 does not choose the allocator/slot-generation algorithm.
 
-`tools/design-check/tests/consumer_admission_stage_a.rs` models this as `UnpublishedPlanBuildLease` and proves that `PlanId` plus `PlanSetGeneration` are reconstructed from one lease.
+The executable fixture models this boundary and proves reconstruction of both values from one lease.
 
-## 2. Typed TD admission receives one new WorkClass with an exact unit
+## 2. Typed TD admission WorkClass and exact unit
 
-The accepted migration must append one Foundation work class:
+The accepted Foundation migration must append one work class:
 
 ```text
 WorkClass::TypedTdAdmissionItems
 ```
 
-It is **not** an alias or reinterpretation of `JsonSchemaNodes`.
+It is not an alias or reinterpretation of `JsonSchemaNodes`.
 
-One `TypedTdAdmissionItems` unit means exactly one predeclared bounded TD admission transition from this table:
+One unit means one transition from this table:
 
-| Transition | Work units |
+| Transition | Units |
 | --- | ---: |
 | inspect one scalar/optional TD field for presence/value shape | 1 |
-| visit one key/value entry in a typed map (`BTreeMap` or equivalent) | 1 |
-| visit one element in a typed sequence (`Vec`/slice or equivalent) | 1 |
+| visit one key/value entry in a typed map | 1 |
+| visit one element in a typed sequence | 1 |
 | visit one nested `serde_json::Value` node in extension resource census | 1 |
-| evaluate one Basic semantic predicate that is not already fused into the charged field/map/sequence visit | 1 |
-| advance or pop one bounded traversal frame without inspecting a new TD value | 0 |
-| account UTF-8 bytes of one already-visited string | 0 additional work units; bytes are charged to the typed string-byte resource |
+| evaluate one Basic semantic predicate not already fused into the charged field/map/sequence visit | 1 |
+| advance/pop a bounded traversal frame without inspecting a new TD value | 0 |
+| account UTF-8 bytes of an already-visited string | 0 additional work units; bytes use typed string-byte resource |
 
-A production step may batch `n` transitions only when `n` is known before the batch and both the lifetime meter and current step meter are atomically charged by `n` before the first transition.
+A production step may batch `n` transitions only when `n` is known before the batch and both lifetime and current step meters are atomically charged by `n` before the first transition.
 
-The corresponding TypedThingBorrowed lifetime ceiling is a new schema row:
+Typed input uses a distinct lifetime row:
 
 ```text
 typed_td_admission_work_units_max
 ```
 
-The existing `document_validation_work_units_max` is not silently redefined for the typed representation.
+The existing `document_validation_work_units_max` is not reinterpreted for `TypedThingBorrowed`.
 
-## 3. Exhaustive first-proof migration disposition for existing document/input rows
-
-This table is exhaustive for every existing resource row whose current semantic unit is a TD/document/schema input unit or whose memory/work limit is directly exercised by the first `TypedThingBorrowed` Consumer admission. Rows outside this set (payload/codec, Directory/query, subscriptions/emission, cleanup, cache/lazy planning, resolver, Producer-only route state, and later capability families) retain their current authority and are not activated by 0063.
+## 3. First-proof resource-schema migration disposition
 
 Legend:
 
-- **RawJson-only** — not applicable to `TypedThingBorrowed`; no serialization proxy is permitted.
-- **Logical-TD unchanged** — the existing semantic unit is already representation-independent and remains applicable after the schema revision.
-- **Engine-memory unchanged** — same physical engine-owned memory meaning; applicability depends on the actual representation/materialization.
-- **Derived-only** — applies only if the derived representation is actually materialized.
-- **Typed replacement** — old row is non-applicable to typed input and a new typed row is introduced.
-- **Inactive first proof** — remains defined in the schema but does not enter the checked first-proof policy.
+- **RawJson-only** — not applicable to `TypedThingBorrowed`; no serialization proxy.
+- **Logical-TD unchanged** — existing semantic unit already names representation-independent WoT structure.
+- **Engine-memory unchanged** — physical engine-owned memory meaning is unchanged.
+- **Derived-only** — applies only when that derived representation is materialized.
+- **Typed replacement** — old row is non-applicable for typed ingestion and a new typed identity is introduced.
+- **Inactive first proof** — row remains in the schema but is not projected into this first-proof policy.
 
-| Existing field | TypedThingBorrowed disposition | First-proof authority |
+The following table covers every current document/input/validation/admission-memory row exercised or intentionally excluded by first-proof typed admission:
+
+| Existing field | `TypedThingBorrowed` disposition | First-proof rule |
 | --- | --- | --- |
-| `document_bytes_max` | RawJson-only | `None` / NA; never reserialize `Thing` to invent source bytes |
+| `document_bytes_max` | RawJson-only | NA; never reserialize `Thing` to invent source bytes |
 | `string_bytes_max` | RawJson-only | replaced by `typed_td_string_bytes_per_thing_max` |
-| `extension_bytes_max` | RawJson-only | no encoded-byte proxy; extension growth is bounded by typed node/map/sequence/string rows |
-| `generated_effective_document_bytes_max` | Derived-only | required only if effective-document materialization occurs; first proof does not materialize it |
-| `retained_source_bytes_per_owner_max` | Engine-memory unchanged | applicable account exists, but borrowed source contribution is exactly zero |
-| `retained_source_bytes_global_max` | Engine-memory unchanged | applicable account exists, but borrowed source contribution is exactly zero |
-| `admission_temporary_bytes_per_operation_max` | Engine-memory unchanged | required `Some` in checked Consumer policy |
-| `admission_temporary_bytes_global_max` | Engine-memory unchanged | required `Some` in checked Consumer policy |
+| `extension_bytes_max` | RawJson-only | no encoded-byte proxy; extension growth bounded by typed structural/string rows |
+| `generated_effective_document_bytes_max` | Derived-only | only if effective-document representation is actually materialized; first proof does not materialize it |
+| `retained_source_bytes_per_owner_max` | Engine-memory unchanged | account exists; borrowed source contribution is exactly zero |
+| `retained_source_bytes_global_max` | Engine-memory unchanged | account exists; borrowed source contribution is exactly zero |
+| `admission_temporary_bytes_per_operation_max` | Engine-memory unchanged | required `Some` in checked policy |
+| `admission_temporary_bytes_global_max` | Engine-memory unchanged | required `Some` |
 | `peak_live_bytes_per_admission_max` | Engine-memory unchanged | required `Some` |
 | `admission_peak_live_bytes_global_max` | Engine-memory unchanged | required `Some` |
 | `engine_live_bytes_global_max` | Engine-memory unchanged | required `Some` |
@@ -98,54 +96,52 @@ Legend:
 | `compiled_plan_bytes_max` | Engine-memory unchanged | required for Planning draft/artifact reservation |
 | `compiled_runtime_bytes_per_thing_max` | Engine-memory unchanged | required when Planning/runtime reservation begins |
 | `compiled_runtime_bytes_global_max` | Engine-memory unchanged | required when Planning/runtime reservation begins |
-| `validator_cache_bytes_per_owner_max` | Inactive first proof | no validator cache is activated |
-| `validator_cache_bytes_global_max` | Inactive first proof | no validator cache is activated |
+| `validator_cache_bytes_per_owner_max` | Inactive first proof | no validator cache activated |
+| `validator_cache_bytes_global_max` | Inactive first proof | no validator cache activated |
 | `json_nesting_depth_max` | Typed replacement | RawJson-only; typed uses `typed_td_nesting_depth_max` |
 | `json_members_per_object_max` | Typed replacement | RawJson-only; typed uses `typed_td_members_per_map_max` |
 | `json_array_items_max` | Typed replacement | RawJson-only; typed uses `typed_td_items_per_sequence_max` |
 | `json_value_nodes_per_document_max` | Typed replacement | RawJson-only; typed uses `typed_td_value_nodes_per_thing_max` |
-| `affordances_per_thing_max` | Logical-TD unchanged | required `Some`; counts typed Property/Action/Event affordances |
-| `forms_per_context_max` | Logical-TD unchanged | required `Some`; applies to each typed form-owning context |
-| `forms_per_thing_max` | Logical-TD unchanged | required `Some`; total typed forms in one Thing |
-| `additional_responses_per_form_max` | Logical-TD unchanged | required for resource census only; does not activate broad response behavior |
-| `uri_variables_per_form_max` | Logical-TD unchanged | required `Some` |
-| `schema_nodes_per_document_max` | Logical-TD unchanged | required `Some`; semantic unit remains one logical typed `DataSchema` node in the TD, independent of source encoding |
-| `schema_composition_depth_max` | Logical-TD unchanged | required `Some` |
-| `schema_reference_edges_per_document_max` | Logical-TD unchanged | required `Some`; logical TD schema-reference edge count |
-| `document_validation_work_units_max` | Typed replacement | remains for its existing document path; typed admission uses `typed_td_admission_work_units_max` |
-| `uri_template_source_bytes_max` | Logical-TD unchanged | required when the selected typed Form contains a URI template source |
+| `affordances_per_thing_max` | Logical-TD unchanged | required; counts typed Property/Action/Event affordances |
+| `forms_per_context_max` | Logical-TD unchanged | required for each typed form-owning context |
+| `forms_per_thing_max` | Logical-TD unchanged | required total typed forms per Thing |
+| `additional_responses_per_form_max` | Logical-TD unchanged | resource census only; does not activate broad additional-response behavior |
+| `uri_variables_per_form_max` | Logical-TD unchanged | required |
+| `schema_nodes_per_document_max` | Logical-TD unchanged | logical typed `DataSchema` nodes; representation-independent unit |
+| `schema_composition_depth_max` | Logical-TD unchanged | required |
+| `schema_reference_edges_per_document_max` | Logical-TD unchanged | logical typed schema-reference edges |
+| `document_validation_work_units_max` | Typed replacement | remains document-path authority; typed uses `typed_td_admission_work_units_max` |
+| `uri_template_source_bytes_max` | Logical-TD unchanged | required when selected typed Form contains template source |
 | `uri_template_variables_max` | Logical-TD unchanged | required when URI-template variables are compiled |
-| `form_binding_candidates_per_operation_max` | Logical Planning unchanged | required by the first Planning candidate bound; not a source byte/shape proxy |
-| `things_global_max` | Engine/runtime unchanged | checked at composition/registry admission, not charged by TD traversal itself |
-| `bindings_global_max` | Engine/runtime unchanged | checked by composition/registration ownership, not reinterpreted as TD shape |
+| `form_binding_candidates_per_operation_max` | Logical Planning unchanged | required candidate bound; not a source-shape proxy |
+| `things_global_max` | Engine/runtime unchanged | composition/registry authority; not charged as TD traversal shape |
+| `bindings_global_max` | Engine/runtime unchanged | registration authority; not reinterpreted as TD shape |
 
-### New typed-input rows in the next schema revision
+Rows belonging only to payload/codec, Directory/query, subscriptions/emission, cleanup, cache/lazy planning, resolver, Producer route state, or later inactive capability families retain their existing semantics and are not activated by 0063.
 
-The minimal additive typed rows are:
+### New typed-input rows
 
 | New field | Unit | Scope | Meaning |
 | --- | --- | --- | --- |
-| `typed_td_nesting_depth_max` | depth | per-thing | maximum nested typed TD/container/extension-value depth traversed by census |
-| `typed_td_members_per_map_max` | items | per-map | maximum key/value entries in any typed map or extension object |
-| `typed_td_items_per_sequence_max` | items | per-sequence | maximum elements in any typed sequence or extension array |
-| `typed_td_value_nodes_per_thing_max` | nodes | per-thing | total typed TD/container/extension value nodes visited by census |
-| `typed_td_string_bytes_per_thing_max` | bytes | per-thing | sum of UTF-8 bytes of typed strings visited by census; no serialization overhead |
-| `typed_td_admission_work_units_max` | items | per-admission | cumulative `WorkClass::TypedTdAdmissionItems` lifetime allowance |
+| `typed_td_nesting_depth_max` | depth | per-thing | max nested typed TD/container/extension-value depth traversed by census |
+| `typed_td_members_per_map_max` | items | per-map | max entries in any typed map or extension object |
+| `typed_td_items_per_sequence_max` | items | per-sequence | max elements in any typed sequence or extension array |
+| `typed_td_value_nodes_per_thing_max` | nodes | per-thing | total typed/container/extension value nodes visited by census |
+| `typed_td_string_bytes_per_thing_max` | bytes | per-thing | sum of UTF-8 bytes of typed strings visited; no serialization overhead |
+| `typed_td_admission_work_units_max` | items | per-admission | cumulative `TypedTdAdmissionItems` lifetime allowance |
 
-Nested `serde_json::Value` extension data consumes the typed depth/map/sequence/node/string resources. That is resource census only; it does not claim extension semantic validation.
+Nested extension `serde_json::Value` consumes typed depth/map/sequence/node/string resources. That remains resource census, not extension semantic validation.
 
 ## 4. Complete checked Consumer policy projection
 
-The first-proof policy is not `ResourceLimits`. It is a checked immutable projection produced only after representation/cell/profile applicability has been validated.
-
-Conceptual exact field set:
+The first-proof authority is a checked immutable projection, not raw `ResourceLimits`:
 
 ```text
 TypedThingBorrowedConsumerPolicyV1 {
   schema_revision,
   profile_id,
   profile_value_digest,
-  execution_cell,                    // Host | ApplicationStatic
+  execution_cell, // Host | ApplicationStatic
 
   typed_td_nesting_depth_max,
   typed_td_members_per_map_max,
@@ -175,115 +171,98 @@ TypedThingBorrowedConsumerPolicyV1 {
   compiled_plan_bytes_max,
   compiled_runtime_bytes_per_thing_max,
   compiled_runtime_bytes_global_max,
-  retained_source_bytes_per_owner_max,   // account exists; borrowed contribution = 0
-  retained_source_bytes_global_max,      // account exists; borrowed contribution = 0
+  retained_source_bytes_per_owner_max,
+  retained_source_bytes_global_max,
 }
 ```
 
 Construction rules:
 
-1. bind exact revised schema identity, `consumer` role, `Consumer Property Read one-shot`, execution cell, `TypedThingBorrowed`, and profile origin/value digest first;
-2. every field listed above must resolve to `Some(limit)` under that applicability set;
-3. all RawJson-only fields (`document_bytes_max`, `string_bytes_max`, `extension_bytes_max`, `json_*`, existing `document_validation_work_units_max`) must be `None` / NA for this typed projection;
-4. validator-cache fields remain outside the first-proof projection because validator caching is inactive;
-5. zero values retain the row's declared disabled/rendezvous semantics and are not converted to unbounded values;
-6. after successful construction, the projection contains no `Option<u64>` for an applicable limit and cannot switch schema/profile/cell/representation while an admission is live.
+1. bind exact revised schema identity, `consumer` role, Consumer Property Read one-shot domain, execution cell, `TypedThingBorrowed`, and profile origin/value digest first;
+2. every field above must resolve to `Some(limit)` under that applicability set;
+3. RawJson-only fields (`document_bytes_max`, `string_bytes_max`, `extension_bytes_max`, `json_*`, and existing `document_validation_work_units_max`) must be NA for this typed projection;
+4. validator-cache fields remain outside first proof because caching is inactive;
+5. zero retains each row's declared zero semantics and never means unbounded; and
+6. after construction, applicable limits are not `Option<u64>` and schema/profile/cell/representation cannot rotate while admission is live.
 
-A raw `ResourceLimits` value with any illegal applicability combination cannot produce this handle and therefore cannot start TD census.
+Raw `ResourceLimits` with illegal applicability cannot produce this policy and cannot start TD census.
 
 ## 5. Concrete Stage-A Host/static physical storage definitions
 
-The executable fixture defines two real `#[repr(C)]` enclosing types:
+The executable fixture defines two real `#[repr(C)]` enclosing models:
 
 ```text
 HostAdmissionStorage<'td, 'reg>
 StaticAdmissionStorage<'td, 'reg>
 ```
 
-Both contain actual borrowed source/snapshot pointers, cancellation generation, fixed state storage, one `FailureSlot`, accounting storage, and compiler-bound storage. The Host and application-static types deliberately have different state capacity so their layouts are measured independently.
+Both contain actual borrowed source/snapshot pointers, cancellation identity, fixed state region, one `FailureSlot`, accounting storage, and compiler-bound storage. Host and static have deliberately different state capacity and are measured independently.
 
-`FailureSlot` is a real `union` whose alternatives are:
+`FailureSlot` is a real union whose alternatives include fixed `ValidationIssue` and actual `CoreError`; therefore its size/alignment is the concrete maximum required by those modeled fixed carriers on the compiled target, not a guessed extra allocation.
 
-```text
-ManuallyDrop<ValidationIssue>
-ManuallyDrop<CoreError>
-```
+For each enclosing type the fixture computes `size_of`, `align_of`, and `offset_of` and partitions one enclosing allocation/exclusive static slot into five contiguous non-overlapping regions:
 
-Therefore its size/alignment is the actual maximum required by those two fixed failure carriers on the compiled target; it is not a guessed `N` and not a second allocation.
+1. structural — tag, borrowed pointers, cancellation identity, and leading/interstitial padding before state;
+2. state — admission typestate/cursor region plus padding up to failure;
+3. diagnostic — real `FailureSlot` plus padding up to accounting;
+4. accounting — accounting owner data plus padding up to compiler state;
+5. compiler — compiler reservations/lifetime work plus trailing padding.
 
-### Physical attribution rule
-
-For each concrete enclosing type, the fixture computes:
-
-```text
-total_size = size_of::<EnclosingStorage>()
-alignment  = align_of::<EnclosingStorage>()
-```
-
-and uses `offset_of!` to partition the one enclosing allocation/slot into exactly five contiguous non-overlapping regions:
-
-1. `structural = [0, state_offset)` — tag, borrowed pointers, cancellation identity, and all leading/interstitial padding before state;
-2. `state = [state_offset, failure_offset)` — current admission typestate/cursor region plus padding up to failure;
-3. `diagnostic = [failure_offset, accounting_offset)` — the real `FailureSlot` region plus any padding immediately following it;
-4. `accounting = [accounting_offset, compiler_offset)` — local/global accounting owner data plus padding up to compiler state;
-5. `compiler = [compiler_offset, total_size)` — compiler reservations/lifetime work plus trailing padding.
-
-The fixture asserts the ranges start at zero, touch without gaps/overlap, and end exactly at `total_size`.
+The fixture asserts the regions start at zero, touch without gaps/overlap, and end exactly at total enclosing size.
 
 Consequences:
 
-- every physical byte in the enclosing allocation/slot has exactly one attribution owner;
+- every byte has one attribution owner;
 - padding cannot disappear or be double-counted;
-- diagnostic bytes correspond to an actual region of the enclosing storage;
-- current/peak live accounting charges the enclosing storage once;
-- `largest_contiguous_allocation_bytes_max` compares against `total_size` for the enclosing Host allocation/static exclusive slot, not a sum of logical field sizes; and
-- target-specific ABI differences are legitimate: Stage C records actual Host/static production layouts separately rather than freezing one cross-target numeric size in this investigation document.
+- diagnostic attribution names actual storage;
+- current/peak live charges the enclosing storage once; and
+- `largest_contiguous_allocation_bytes_max` compares with the whole enclosing Host allocation/static exclusive slot, not a sum of field sizes.
 
-The Stage-A fixture is a constructibility model, not the production layout. Stage B must migrate the accepted attribution rule to the actual Servient storage types before implementation admission; Stage C verifies those production layouts.
+These are Stage-A constructibility models, not production Servient layouts. Stage B migrates the accepted rule to the actual storage; Stage C verifies target-specific production layouts.
 
-## 6. Constructibility fixture coverage
+## 6. Current-head executable fixture coverage
 
-`tools/design-check/tests/consumer_admission_stage_a.rs` provides current-head executable model evidence for:
+`planning/tests/consumer_admission_stage_a.rs` demonstrates:
 
-| Stage-A property | Fixture |
+| Stage-A property | Current-head proof |
 | --- | --- |
-| borrowed external TD can coexist with retained traversal iterators without self-reference | `borrowed_td_cursor_is_constructible_without_source_ownership` |
-| one opaque lease binds `PlanId` + `PlanSetGeneration` | `build_lease_binds_plan_id_and_plan_set_generation_together` |
-| snapshot ordinal and diagnostic ordinal remain distinct | `ordinal_domains_remain_distinct_and_same_entry_derives_compiler_identity` |
-| equal-compatibility registrations cannot inject an independent compiler identity; selected compiler facts come from the exact snapshot entry | same ordinal/same-entry fixture; competing entry receives zero `bounds/start` calls |
-| compiler bounds are obtained exactly once per attempt and memory rejection occurs before compiler start | `compiler_bounds_are_reserved_before_start_and_owned_after_entry` |
-| captured compiler lifetime work survives entry | same bounds fixture |
-| compiler lifetime + current step charge is failure-atomic and step replenishment cannot reset lifetime | `compiler_pair_charge_is_atomic_and_step_replenishment_cannot_reset_lifetime` |
-| proposed typed-TD lifetime + current step charge has the same atomic semantics | `typed_td_pair_charge_has_the_same_failure_atomicity` |
-| Host/static enclosing layouts are concrete, separately measured, fully attributed, non-overlapping, and contain the real maximum fixed failure slot | `host_and_static_layouts_cover_one_enclosing_allocation_without_overlap` |
+| external borrowed TD cursor topology without source self-reference | borrowed cursor fixture |
+| one opaque lease binds `PlanId` + `PlanSetGeneration` | build-lease fixture |
+| snapshot ordinal and diagnostic ordinal are distinct | ordinal fixture uses `3` vs `17` |
+| selected identity/compiler facts come from the same snapshot entry despite equal-compatibility competitor | same-entry fixture; competitor receives zero `bounds/start` calls |
+| compiler bounds obtained before start and memory rejection prevents start | compiler-bounds reservation fixture |
+| complete compiler lifetime work survives Planning entry | same compiler-bounds fixture |
+| compiler lifetime + current step charge is failure-atomic and replenishment cannot reset lifetime | compiler pair-charge fixture |
+| proposed typed-TD lifetime + current step charge has same atomic semantics | typed-TD pair-charge fixture |
+| Host/static enclosing layouts are separately measured and fully/non-overlappingly attributed | layout fixture |
 
-This fixture intentionally does **not** claim production TD semantic traversal, publication, cancellation runtime behavior, global concurrency behavior, or final public API completion. Those remain Stage C after admission.
+The model intentionally does not claim production TD semantic traversal, publication, cancellation runtime behavior, concurrent global-account behavior, or final public API completion. Those are Stage C after admission.
 
-## 7. ADR-0013 impact disposition, including completed WP-300 Consumer tranche
+## 7. ADR-0013 impact disposition
 
-| Authority/tranche | Stage-A impact disposition | Required Stage-B action |
+| Authority/tranche | Stage-A disposition | Stage-B obligation |
 | --- | --- | --- |
-| Foundation resource schema / work budget substrate | affected | revise schema/applicability, append `TypedTdAdmissionItems`, add typed rows and atomic pair-charge/hierarchical accounting primitives under independent admission |
-| TD Basic validation substrate | affected | admit shared bounded Basic engine/cursor work; synchronous API later adapts over the same engine |
-| `WP-200-CONSUMER-PROPERTY-READ-PLANNING` | **must reopen** | replace the admitted raw Consumer Planning bypass with the sealed validated/lease/registration-derived contract; shared Producer API impact reviewed explicitly |
-| `WP-300-CONSUMER-PROPERTY-READ-BINDING` | **affected; reaffirmation required before 0063/0062 may rely on it** | re-run impact/evidence review against same-entry compiler sourcing. Current complete Host/static registration design already owns one registration identity and one compiler component in the same validated bundle, so 0063 does not presently require a WP-300 public/source change. If Stage-B migration discovers that a new accessor/ownership/API contract is required, ADR-0013 escalates this tranche from reaffirmation to reopen before implementation. |
-| WP-300 completion evidence `consumer-property-read-binding-execution` | affected | add/reaffirm evidence that the exact complete registration entry supplying `identity()` is also the entry supplying the compiler component consumed by sealed Planning; equal compatibility alone is insufficient |
-| future Consumer WP-400 Servient tranche | not yet admitted/complete | its later admission depends on migrated 0063 + 0062 prerequisites; there is no completed Consumer WP-400 tranche to reopen now |
-| shared Producer Planning surfaces | affected by WP-200 public API migration | explicit transitive compatibility/behavior disposition before WP-200 reimplementation; Producer behavior is not presumed unchanged |
-| `WP-100-CONSUMER-CALL-VALUES-VALIDATOR` | no direct semantic change from 0063 | remains predecessor evidence; broad response validator/codec domains are not activated |
+| Foundation resource schema/work/accounting | affected | revise schema/applicability; append `TypedTdAdmissionItems`; add typed rows and accepted atomic/hierarchical primitives under independent admission |
+| TD Basic validation substrate | affected | admit shared bounded Basic engine/cursor; synchronous API later adapts over same engine |
+| `WP-200-CONSUMER-PROPERTY-READ-PLANNING` | **must reopen** | replace raw admitted Consumer bypass with validated/lease/same-registration-derived contract; review shared Producer impact |
+| `WP-300-CONSUMER-PROPERTY-READ-BINDING` | **affected; explicit reaffirmation required** | re-review same-entry compiler sourcing. Existing complete registration design supports reaffirmation; if migration needs new Core public/source contract, escalate to reopen before implementation |
+| WP-300 evidence `consumer-property-read-binding-execution` | affected | prove exact complete registration entry supplying `identity()` is also the compiler-component source; compatibility equality alone is insufficient |
+| future Consumer WP-400 Servient tranche | not complete/admitted | later admission depends on migrated 0063 + 0062; nothing completed to reopen now |
+| shared Producer Planning surfaces | affected by WP-200 public migration | explicit transitive compatibility/behavior disposition |
+| `WP-100-CONSUMER-CALL-VALUES-VALIDATOR` | no direct semantic change | remains predecessor; broad response/codec domains stay inactive |
 
-The WP-300 disposition is intentionally specific: **the completed Consumer binding tranche cannot remain merely `impact_status = current` by assumption; it requires an explicit reaffirmation decision after the WP-200/0063 migration shape is accepted.** Its current complete-registration architecture is evidence for reaffirmation, not permission to skip impact review.
+WP-300 therefore cannot remain `impact_status = current` merely by assumption. It needs an explicit reaffirmation after accepted WP-200/0063 migration shape; current complete-registration architecture is evidence for reaffirmation, not permission to skip the review.
 
 ## 8. Stage-A closure boundary
 
-0063 may move from `DISCUSSING` to `DECIDED` only if an independent reviewer accepts all of the following together:
+0063 may move from `DISCUSSING` to `DECIDED` only if a fresh independent reviewer accepts the three current-head artifacts together and concludes:
 
-- the opaque unpublished build lease binds `PlanId` and `PlanSetGeneration` as one authority;
-- the compile/model fixture demonstrates the borrow/typestate/same-registration/bounds/work/layout topology at the reviewed head;
-- `TypedTdAdmissionItems` and its exact unit mapping are acceptable Foundation additions rather than a reinterpretation of `JsonSchemaNodes`;
-- the resource migration table is complete for first-proof document/input/admission rows and the checked policy projection has no unresolved applicability holes;
-- the Host/static layout attribution rule is physically coherent and falsifiable;
-- WP-200 reopening and WP-300 reaffirmation-required dispositions are acceptable under ADR-0013; and
-- no Stage-C runtime proof is being used as a prerequisite for the decision itself.
+- build lease binds `PlanId` and `PlanSetGeneration` as one authority;
+- compile/model evidence demonstrates borrow/typestate/same-registration/bounds/work/layout topology;
+- `TypedTdAdmissionItems` and its unit mapping are acceptable additions rather than reinterpretations;
+- resource migration and checked policy have no first-proof applicability holes;
+- Host/static physical attribution is coherent and falsifiable;
+- WP-200 reopening and WP-300 reaffirmation-required dispositions are correct under ADR-0013; and
+- no Stage-C runtime proof is being required before implementation is admitted.
 
-Acceptance of this Stage-A artifact still does not authorize production Rust implementation. Stage B authority migration and independent implementation admission remain mandatory.
+Acceptance of Stage A still does not authorize production Rust implementation. Stage-B authority migration and independent implementation admission remain mandatory.
