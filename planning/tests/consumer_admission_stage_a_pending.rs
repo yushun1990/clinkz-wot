@@ -1,17 +1,13 @@
 #![allow(dead_code)]
 
+use core::cell::Cell;
 use clinkz_wot_core::{PlanId, PlanSetGeneration};
 use clinkz_wot_foundation::{Generation, SlotIndex};
 use clinkz_wot_td::thing::Thing;
+use std::rc::Rc;
 
-/// Focused non-production Stage-A constructibility model for the exact
-/// substitution-resistance gap across Planning `Pending` boundaries.
-///
-/// The production API does not exist yet. This fixture demonstrates that a
-/// sealed wrapper can own the borrowed source, captured registration snapshot,
-/// selected entry, and one opaque PlanId + PlanSetGeneration lease, then move
-/// that same authority through every Planning step without accepting a fresh
-/// PlanBuildInput (or any replacement identity/source/snapshot argument).
+/// Focused non-production Stage-A constructibility model for substitution
+/// resistance across Planning `Pending` boundaries.
 mod pending_model {
     use super::*;
 
@@ -21,10 +17,11 @@ mod pending_model {
         plan_set_generation: PlanSetGeneration,
     }
 
-    /// Move-only authority. The raw pair is constructible only by the upstream
-    /// identity owner in this model; Planning receives the lease as one value.
+    #[must_use]
     pub struct UnpublishedPlanBuildLease {
         identity: BuildIdentity,
+        outstanding: Rc<Cell<u32>>,
+        active: bool,
     }
 
     impl UnpublishedPlanBuildLease {
@@ -35,12 +32,35 @@ mod pending_model {
         fn plan_set_generation(&self) -> PlanSetGeneration {
             self.identity.plan_set_generation
         }
+
+        fn settle(&mut self) {
+            if self.active {
+                self.outstanding.set(
+                    self.outstanding
+                        .get()
+                        .checked_sub(1)
+                        .expect("active lease has an outstanding reservation"),
+                );
+                self.active = false;
+            }
+        }
+
+        pub fn release(mut self) {
+            self.settle();
+        }
+    }
+
+    impl Drop for UnpublishedPlanBuildLease {
+        fn drop(&mut self) {
+            self.settle();
+        }
     }
 
     pub struct PlanSetIdentityAuthority {
         plan_set_generation: PlanSetGeneration,
         next_plan_slot: u32,
         next_plan_generation: Generation,
+        outstanding: Rc<Cell<u32>>,
     }
 
     impl PlanSetIdentityAuthority {
@@ -53,6 +73,7 @@ mod pending_model {
                 plan_set_generation,
                 next_plan_slot,
                 next_plan_generation,
+                outstanding: Rc::new(Cell::new(0)),
             }
         }
 
@@ -64,23 +85,27 @@ mod pending_model {
                 ),
                 plan_set_generation: self.plan_set_generation,
             };
-
             self.next_plan_slot = self
                 .next_plan_slot
                 .checked_add(1)
-                .expect("Stage-A fixture plan slots stay bounded");
+                .expect("fixture plan slots stay bounded");
             self.next_plan_generation = self
                 .next_plan_generation
                 .checked_next()
-                .expect("Stage-A fixture plan generations stay bounded");
+                .expect("fixture plan generations stay bounded");
+            self.outstanding.set(self.outstanding.get() + 1);
+            UnpublishedPlanBuildLease {
+                identity,
+                outstanding: Rc::clone(&self.outstanding),
+                active: true,
+            }
+        }
 
-            UnpublishedPlanBuildLease { identity }
+        pub fn outstanding(&self) -> u32 {
+            self.outstanding.get()
         }
     }
 
-    /// External immutable complete-registration snapshot stand-in. The fixture
-    /// only needs a stable entry identity because same-entry compiler/bounds
-    /// derivation is covered by consumer_admission_stage_a.rs.
     pub struct RegistrationSnapshot {
         entries: Vec<u32>,
     }
@@ -95,8 +120,6 @@ mod pending_model {
         }
     }
 
-    /// Validation has already completed. This state owns no caller-replaceable
-    /// Planning input; it only carries borrows and the selected snapshot entry.
     pub struct Validated<'td, 'reg> {
         source: &'td Thing,
         snapshot: &'reg RegistrationSnapshot,
@@ -108,25 +131,27 @@ mod pending_model {
             source: &'td Thing,
             snapshot: &'reg RegistrationSnapshot,
             selected_snapshot_ordinal: usize,
-        ) -> Result<Self, ()> {
-            snapshot.entry(selected_snapshot_ordinal).ok_or(())?;
-            Ok(Self {
+        ) -> Self {
+            Self {
                 source,
                 snapshot,
                 selected_snapshot_ordinal,
-            })
+            }
         }
 
-        /// Consumes Validated and the opaque build lease. No raw PlanId,
-        /// PlanSetGeneration, Thing, snapshot, or PlanBuildInput is accepted.
         pub fn enter_planning(
             self,
             lease: UnpublishedPlanBuildLease,
-        ) -> Result<Planning<'td, 'reg>, ()> {
-            let selected_registration = self
-                .snapshot
-                .entry(self.selected_snapshot_ordinal)
-                .ok_or(())?;
+        ) -> Result<Planning<'td, 'reg>, PlanningEntryRejection<'td, 'reg>> {
+            let selected_registration = match self.snapshot.entry(self.selected_snapshot_ordinal) {
+                Some(entry) => entry,
+                None => {
+                    return Err(PlanningEntryRejection {
+                        validated: self,
+                        lease,
+                    });
+                }
+            };
 
             Ok(Planning {
                 source: self.source,
@@ -139,9 +164,17 @@ mod pending_model {
         }
     }
 
-    /// Private call value reconstructed from authority already owned by the
-    /// linear Planning transaction. Callers can neither construct nor replace
-    /// this value at a Pending boundary.
+    pub struct PlanningEntryRejection<'td, 'reg> {
+        validated: Validated<'td, 'reg>,
+        lease: UnpublishedPlanBuildLease,
+    }
+
+    impl<'td, 'reg> PlanningEntryRejection<'td, 'reg> {
+        pub fn into_parts(self) -> (Validated<'td, 'reg>, UnpublishedPlanBuildLease) {
+            (self.validated, self.lease)
+        }
+    }
+
     struct EphemeralPlanBuildInput<'td, 'reg> {
         source: &'td Thing,
         snapshot: &'reg RegistrationSnapshot,
@@ -151,7 +184,6 @@ mod pending_model {
         selected_registration: u32,
     }
 
-    /// Linear Planning owner. Deliberately not Clone/Copy.
     pub struct Planning<'td, 'reg> {
         source: &'td Thing,
         snapshot: &'reg RegistrationSnapshot,
@@ -172,13 +204,12 @@ mod pending_model {
     }
 
     pub enum PlanningProgress<'td, 'reg> {
-        /// The transaction itself is moved into Pending. Resumption can only
-        /// consume this exact value; there is no step(input) substitution path.
         Pending {
             transaction: Planning<'td, 'reg>,
             observed: ObservedBuildInput,
         },
         Complete {
+            transaction: Planning<'td, 'reg>,
             observed: ObservedBuildInput,
         },
     }
@@ -195,9 +226,6 @@ mod pending_model {
             }
         }
 
-        /// One sealed Planning step. The method consumes self and accepts no
-        /// replacement source, registration, lease, PlanId, generation, or
-        /// PlanBuildInput. Pending therefore carries the only resumable owner.
         pub fn step(mut self) -> PlanningProgress<'td, 'reg> {
             let observed = {
                 let input = self.ephemeral_input();
@@ -214,16 +242,23 @@ mod pending_model {
             self.remaining_steps = self
                 .remaining_steps
                 .checked_sub(1)
-                .expect("Stage-A fixture has a fixed two-step compiler");
+                .expect("fixture has a fixed two-step compiler");
 
             if self.remaining_steps == 0 {
-                PlanningProgress::Complete { observed }
+                PlanningProgress::Complete {
+                    transaction: self,
+                    observed,
+                }
             } else {
                 PlanningProgress::Pending {
                     transaction: self,
                     observed,
                 }
             }
+        }
+
+        pub fn abort(self) -> UnpublishedPlanBuildLease {
+            self.lease
         }
     }
 }
@@ -232,8 +267,7 @@ mod pending_model {
 fn pending_step_preserves_one_owned_build_authority_without_input_substitution() {
     let thing = Thing::default();
     let snapshot = pending_model::RegistrationSnapshot::new(vec![101, 202]);
-    let validated = pending_model::Validated::new(&thing, &snapshot, 1)
-        .expect("selected registration exists");
+    let validated = pending_model::Validated::new(&thing, &snapshot, 1);
 
     let plan_set_generation =
         PlanSetGeneration::new(Generation::new(9).expect("nonzero generation"));
@@ -245,6 +279,7 @@ fn pending_step_preserves_one_owned_build_authority_without_input_substitution()
     let planning = validated
         .enter_planning(identity_authority.reserve())
         .expect("sealed Planning entry succeeds");
+    assert_eq!(identity_authority.outstanding(), 1);
 
     let (pending, first) = match planning.step() {
         pending_model::PlanningProgress::Pending {
@@ -252,14 +287,17 @@ fn pending_step_preserves_one_owned_build_authority_without_input_substitution()
             observed,
         } => (transaction, observed),
         pending_model::PlanningProgress::Complete { .. } => {
-            panic!("the first model step must remain Pending")
+            panic!("first model step must remain Pending")
         }
     };
 
-    let second = match pending.step() {
-        pending_model::PlanningProgress::Complete { observed } => observed,
+    let (complete, second) = match pending.step() {
+        pending_model::PlanningProgress::Complete {
+            transaction,
+            observed,
+        } => (transaction, observed),
         pending_model::PlanningProgress::Pending { .. } => {
-            panic!("the second model step must complete")
+            panic!("second model step must complete")
         }
     };
 
@@ -274,4 +312,27 @@ fn pending_step_preserves_one_owned_build_authority_without_input_substitution()
     assert_eq!(first.plan_set_generation, plan_set_generation);
     assert_eq!(first.selected_snapshot_ordinal, 1);
     assert_eq!(first.selected_registration, 202);
+
+    complete.abort().release();
+    assert_eq!(identity_authority.outstanding(), 0);
+}
+
+#[test]
+fn rejected_entry_returns_the_exact_lease_for_release() {
+    let thing = Thing::default();
+    let snapshot = pending_model::RegistrationSnapshot::new(vec![101]);
+    let validated = pending_model::Validated::new(&thing, &snapshot, 9);
+    let mut authority = pending_model::PlanSetIdentityAuthority::new(
+        PlanSetGeneration::new(Generation::new(3).unwrap()),
+        0,
+        Generation::new(2).unwrap(),
+    );
+
+    let rejection = validated
+        .enter_planning(authority.reserve())
+        .expect_err("missing selected registration must reject");
+    assert_eq!(authority.outstanding(), 1);
+    let (_validated, lease) = rejection.into_parts();
+    lease.release();
+    assert_eq!(authority.outstanding(), 0);
 }
