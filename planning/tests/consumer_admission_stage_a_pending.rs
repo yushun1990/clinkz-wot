@@ -276,9 +276,10 @@ fn pending_step_preserves_one_owned_build_authority_without_input_substitution()
         4,
         Generation::new(7).expect("nonzero generation"),
     );
-    let planning = validated
-        .enter_planning(identity_authority.reserve())
-        .expect("sealed Planning entry succeeds");
+    let planning = match validated.enter_planning(identity_authority.reserve()) {
+        Ok(planning) => planning,
+        Err(_) => panic!("sealed Planning entry must succeed"),
+    };
     assert_eq!(identity_authority.outstanding(), 1);
 
     let (pending, first) = match planning.step() {
@@ -328,9 +329,10 @@ fn rejected_entry_returns_the_exact_lease_for_release() {
         Generation::new(2).unwrap(),
     );
 
-    let rejection = validated
-        .enter_planning(authority.reserve())
-        .expect_err("missing selected registration must reject");
+    let rejection = match validated.enter_planning(authority.reserve()) {
+        Err(rejection) => rejection,
+        Ok(_) => panic!("missing selected registration must reject"),
+    };
     assert_eq!(authority.outstanding(), 1);
     let (_validated, lease) = rejection.into_parts();
     lease.release();
