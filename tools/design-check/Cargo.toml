@@ -6,3 +6,8 @@ publish = false
 
 [dependencies]
 toml_edit = "0.25"
+
+[dev-dependencies]
+clinkz-wot-core = { path = "../../core" }
+clinkz-wot-foundation = { path = "../../foundation" }
+clinkz-wot-td = { path = "../../td" }
