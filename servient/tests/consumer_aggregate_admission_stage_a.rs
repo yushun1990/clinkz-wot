@@ -129,8 +129,9 @@ mod stage_a {
                 .next_plan_set_generation
                 .checked_next()
                 .expect("fixture plan-set generation cannot wrap");
-            for generation in &mut state.next_plan_generations {
-                *generation = generation
+            for assignment in &self.assignments {
+                let slot = assignment.plan_id.slot().get() as usize;
+                state.next_plan_generations[slot] = state.next_plan_generations[slot]
                     .checked_next()
                     .expect("fixture plan generation cannot wrap");
             }
@@ -172,6 +173,10 @@ mod stage_a {
         }
 
         fn reclaim(mut self) {
+            self.reclaim_in_place();
+        }
+
+        fn reclaim_in_place(&mut self) {
             if !self.active {
                 return;
             }
@@ -182,8 +187,9 @@ mod stage_a {
                 .next_plan_set_generation
                 .checked_next()
                 .expect("fixture plan-set generation cannot wrap");
-            for generation in &mut state.next_plan_generations {
-                *generation = generation
+            for assignment in &self.assignments {
+                let slot = assignment.plan_id.slot().get() as usize;
+                state.next_plan_generations[slot] = state.next_plan_generations[slot]
                     .checked_next()
                     .expect("fixture plan generation cannot wrap");
             }
@@ -193,11 +199,7 @@ mod stage_a {
 
     impl Drop for FrozenIdentityOwner {
         fn drop(&mut self) {
-            if self.active {
-                let mut state = self.arena.0.borrow_mut();
-                state.frozen_outstanding = false;
-                self.active = false;
-            }
+            self.reclaim_in_place();
         }
     }
 
@@ -209,6 +211,7 @@ mod stage_a {
         artifact_ref_bytes: u64,
         binding_plan_ref_bytes: u64,
         target_index_bytes: u64,
+        diagnostic_bytes: u64,
     }
 
     impl MeasuredLedger {
@@ -219,6 +222,7 @@ mod stage_a {
                 + self.artifact_ref_bytes
                 + self.binding_plan_ref_bytes
                 + self.target_index_bytes
+                + self.diagnostic_bytes
         }
 
         fn fits_within(self, reserved: Self) -> bool {
@@ -228,6 +232,7 @@ mod stage_a {
                 && self.artifact_ref_bytes <= reserved.artifact_ref_bytes
                 && self.binding_plan_ref_bytes <= reserved.binding_plan_ref_bytes
                 && self.target_index_bytes <= reserved.target_index_bytes
+                && self.diagnostic_bytes <= reserved.diagnostic_bytes
         }
     }
 
@@ -476,7 +481,7 @@ mod stage_a {
                 return BindingCompilerStep::Failed(clinkz_wot_core::BindingCompilerFailure::new(
                     clinkz_wot_core::CoreError::Validation(
                         clinkz_wot_core::ErrorContext::new(
-                            clinkz_wot_core::ErrorPhase::Plan,
+                            clinkz_wot_core::ErrorPhase::Binding,
                             clinkz_wot_core::RetryClass::Never,
                         )
                         .with_plan(input.logical_plan().plan_id()),
@@ -548,6 +553,13 @@ mod stage_a {
         artifact_slot: u32,
     }
 
+    #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+    struct AggregateDiagnostic {
+        selected_registration_ordinal: u32,
+        declared_target_count: u32,
+        readable_coordinate_count: u32,
+    }
+
     struct OwnedCoordinate {
         target_index: usize,
         plan_set_generation: PlanSetGeneration,
@@ -563,7 +575,6 @@ mod stage_a {
         bounds: BindingCompilerBounds,
     }
 
-    #[derive(Default)]
     struct AggregateDraft {
         logical_plans: Vec<LogicalInteractionPlan>,
         candidates: Vec<BindingCandidate>,
@@ -571,13 +582,19 @@ mod stage_a {
         artifact_refs: Vec<BindingArtifactRef>,
         binding_plan_refs: Vec<BindingPlanRefEquivalent>,
         target_index: Vec<TargetProjection>,
+        diagnostic: AggregateDiagnostic,
     }
 
     impl AggregateDraft {
-        fn with_targets(target_index: Vec<TargetProjection>) -> Self {
+        fn with_targets(target_index: Vec<TargetProjection>, diagnostic: AggregateDiagnostic) -> Self {
             Self {
+                logical_plans: Vec::new(),
+                candidates: Vec::new(),
+                artifacts: Vec::new(),
+                artifact_refs: Vec::new(),
+                binding_plan_refs: Vec::new(),
                 target_index,
-                ..Self::default()
+                diagnostic,
             }
         }
 
@@ -611,6 +628,7 @@ mod stage_a {
                 binding_plan_ref_bytes: (self.binding_plan_refs.len()
                     * size_of::<BindingPlanRefEquivalent>()) as u64,
                 target_index_bytes,
+                diagnostic_bytes: size_of::<AggregateDiagnostic>() as u64,
             }
         }
 
@@ -625,6 +643,18 @@ mod stage_a {
             assert_eq!(self.logical_plans.len(), self.artifacts.len());
             assert_eq!(self.logical_plans.len(), self.artifact_refs.len());
             assert_eq!(self.logical_plans.len(), self.binding_plan_refs.len());
+            assert_eq!(
+                self.diagnostic.selected_registration_ordinal,
+                expected_pin.registration_ordinal
+            );
+            assert_eq!(
+                self.diagnostic.declared_target_count as usize,
+                self.target_index.len()
+            );
+            assert_eq!(
+                self.diagnostic.readable_coordinate_count as usize,
+                self.binding_plan_refs.len()
+            );
 
             for join in &self.binding_plan_refs {
                 let plan = &self.logical_plans[join.logical_plan_slot as usize];
@@ -807,13 +837,18 @@ mod stage_a {
                 .first()
                 .map(|coordinate| coordinate.plan_set_generation)
                 .expect("fixture has readable coordinates");
+            let diagnostic = AggregateDiagnostic {
+                selected_registration_ordinal: snapshot.candidate.registration_ordinal(),
+                declared_target_count: targets.len() as u32,
+                readable_coordinate_count: coordinates.len() as u32,
+            };
             let mut planning = Self {
                 _validated: validated,
                 snapshot,
                 plan_set_generation,
                 remaining: coordinates.into(),
                 current: None,
-                draft: AggregateDraft::with_targets(targets),
+                draft: AggregateDraft::with_targets(targets, diagnostic),
                 compiler_lifetime_remaining,
             };
             planning.start_next()?;
@@ -1150,6 +1185,7 @@ mod stage_a {
                     .iter()
                     .map(|target| (size_of::<TargetProjection>() + target.property_name.len()) as u64)
                     .sum(),
+                diagnostic_bytes: size_of::<AggregateDiagnostic>() as u64,
                 ..MeasuredLedger::default()
             };
             let mut cursor_peak = 0;
