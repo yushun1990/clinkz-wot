@@ -2,100 +2,119 @@
 
 Status: DISCUSSING support material for `0063-consumer-aggregate-admission-plan-set-authority.md`
 
-This note records exact current-authority conflicts and affected frozen surfaces. It is not an authoritative migration, work-package status change, or final specification.
+This note records the selected pre-decision reconciliation for normative ownership, runtime ownership, public no-bypass semantics, registration selection, and ADR-0013 impact. It is not an authoritative migration or work-package status change.
 
-## Plan-set ownership conflict map
+## Normative ownership and runtime ownership are distinct
 
-| Active source | Current claim | Reconciliation direction under 0063 candidate |
+The previous revision incorrectly described the opening sentence of `docs/spec/planning.md` as a crate/runtime ownership conflict. That was a category error.
+
+`docs/spec/planning.md` is and remains the registered normative owner of `PLAN-SET-001`. Normative ownership means that this specification defines the required plan-set semantics. It does **not** mean that `clinkz-wot-planning` owns the runtime plan-set record or lifecycle transaction.
+
+The selected reconciliation is therefore:
+
+| Active source | Current claim | Selected disposition under 0063 |
 | --- | --- | --- |
-| `docs/architecture/20-module-boundaries.md` responsibility map | Planning produces admitted-plan build output; Servient owns plan-set ownership, admission, cleanup | Keep |
-| `docs/architecture/20-module-boundaries.md` Planning boundary | Planning receives validated document/policy/resource/registration inputs and returns values/admitted footprints; it does not retain a Servient handle | Keep; clarify that resource inputs are non-authoritative admitted views, not the Servient reservation owner |
-| `docs/architecture/20-module-boundaries.md` Servient boundary | Servient owns the transaction that composes modules, registration snapshot, publication/retirement, cleanup reservation/status | Keep |
-| `docs/architecture/30-compiled-plan-lifecycle.md` | lifecycle state belongs to Servient record; Building owns document/policy/registration snapshot, admission transaction, compiler cursors, provisional artifacts | Keep; Building is a Servient-record state even when Planning owns a nested algorithm session/cursor |
-| `docs/spec/planning.md` opening sentence | Planning spec calls itself normative owner of compiled-plan-set publication and plan reclamation | Conflict; replace with material-construction / compiler-coordination ownership only |
-| `PLAN-SET-001` in `docs/spec/planning.md` | one Servient-owned aggregate compiled-plan-set record alone owns lifecycle, publication, pins, leases, cursors, accounting | Keep |
-| `docs/spec/planning.md` scope invariants | aggregate lifecycle state, pins, compiler cursors, lazy slots, reclamation cursors belong to Servient-owned plan-set record | Keep, but distinguish Servient-owned enclosing cursor/storage from Planning-owned algorithm state moved inside it |
-| `docs/spec/planning.md` ownership table | Planning owns construction/coordination/admitted build output; Servient owns build transaction, reservation, record, publication, draining, reclamation | Keep |
-| `docs/work-packages/WP-200-planning.md` | WP-200 output is complete immutable material for one unpublished Frozen plan-set draft; WP-400 owns the Servient record and every Building/Frozen/Published/Draining/Failed/Reclaimed transition | Keep and use as the work-package migration anchor |
-| `workspace/0062-consumer-plan-set-handoff-closure.md` | Planning is the missing aggregate predecessor; Servient owns reservation, lifecycle, publication, leases, drain, reclamation | Keep as investigation evidence; later reconcile/supersede its split-claim framing |
-| `docs/state-machines.toml` compiled-plan-set machine | owner record is `Servient CompiledPlanSetRecord` | Keep |
-| `docs/state-machines.toml` Building -> Frozen | transition owner is `PlanningBuildOwner` | Clarify: nested/private build subowner inside the Servient-owned record, not crate-level transaction/publication authority. Rename if needed to make this unambiguous. |
+| `docs/spec/planning.md` opening owner sentence | Planning specification normatively owns effective-form planning, compiler coordination, compiled-plan-set publication and reclamation semantics | **Keep normative ownership.** During migration clarify that this is specification-domain ownership, not `clinkz-wot-planning` runtime ownership. `PLAN-SET-001` stays registered here unless a separate deliberate authority migration says otherwise. |
+| `PLAN-SET-001` in `docs/spec/planning.md` | one Servient-owned aggregate compiled-plan-set record alone owns lifecycle, publication, pins, operation leases, cursors and accounting | **Keep unchanged in substance.** This is the runtime ownership rule implemented by Servient. |
+| `docs/spec/planning.md` ownership table | Planning owns construction/coordination/admitted output; Servient owns build transaction, reservation, record, publication, draining and reclamation | **Keep.** This is the exact normative/runtime split used by the candidate. |
+| ADR-0008 | explicit Servient-owned compiled-plan-set lifecycle; Planning owns shared algorithms and compiler coordination | **Keep.** 0063 refines the Consumer admission constructibility of this accepted decision; it does not reverse ADR-0008. |
+| `docs/architecture/20-module-boundaries.md` | Planning produces admitted build material; Servient owns plan-set admission/lifecycle/cleanup | **Keep.** |
+| `docs/architecture/30-compiled-plan-lifecycle.md` | lifecycle belongs to the Servient record; Building contains admission/build state | **Keep.** A nested Planning algorithm session may be stored inside Building without owning the lifecycle record. |
+| `docs/state-machines.toml` compiled-plan-set owner record | `Servient CompiledPlanSetRecord` | **Keep.** |
+| `docs/state-machines.toml` `Building -> Frozen` transition owner | `PlanningBuildOwner` | **Clarify during migration.** The transition linearizes inside the Servient-owned record. Rename the owner to an explicitly Servient-scoped build owner if required so it cannot be read as `clinkz-wot-planning` owning the lifecycle transition. |
+| `docs/work-packages/WP-200-planning.md` | outputs complete immutable material for an unpublished draft; WP-400 owns Servient lifecycle states | **Keep as the Planning package boundary, then update its Consumer tranche to aggregate construction if impact review reopens it.** |
+| `docs/work-packages/WP-400-servient.md` | Servient/StaticServient own startup registration snapshots, compiled-plan-set records, lifecycle transactions, cleanup and Consumer `consume` publication | **Keep as runtime implementation owner.** A future Consumer WP-400 tranche must consume the sealed aggregate draft plus the Servient-retained identity/resource/execution authority and must not reconstruct Planning input. |
+| `workspace/0062-consumer-plan-set-handoff-closure.md` | Planning is the missing predecessor while Servient owns reservation/lifecycle/publication | **Keep as investigation evidence; later reconcile or supersede its old claim split.** |
 
-### Selected ownership interpretation for review
+There is therefore no requirement-owner vacuum in the candidate: `docs/spec/planning.md` continues to own `PLAN-SET-001` normatively, while Servient owns its runtime record and transitions as already required by that same specification and ADR-0008.
 
-The candidate has one non-overlapping rule:
+## Selected runtime ownership interpretation
 
-- Servient owns the aggregate transaction and every reservation/lifecycle/publication/cleanup authority;
-- TD owns validation semantics/provenance;
-- Planning owns deterministic interpretation, preflight measurement, compiler coordination, build progress, and sealed immutable draft material;
-- a Planning algorithm cursor may physically live inside the Servient-owned Building record without transferring lifecycle authority to the Planning crate;
-- binding compilers own only their pure local compiler cursor/artifact transformations under declared bounds.
+The candidate has one non-overlapping runtime rule:
 
-## Frozen public Consumer Planning surface requiring disposition
+- Servient owns the aggregate transaction and every identity reservation, resource reservation, lifecycle, publication, pin, execution-owner retention, abort-settlement and reclamation authority;
+- TD owns validation semantics and exact validated provenance;
+- Planning owns deterministic aggregate interpretation, shape enumeration, compiler-bounds coordination, build progress, immutable indexes and sealed draft material;
+- a Planning cursor/session may physically live inside the Servient-owned Building record without transferring lifecycle authority to Planning;
+- binding compilers own only pure local cursor/artifact transformations under declared bounds.
 
-`docs/api-ownership.csv` currently freezes these Planning values as public Producer/Consumer API:
+## First-proof registration selection is closed
 
-| Surface | Current issue for admitted Consumer aggregate path | Candidate disposition question |
-| --- | --- | --- |
-| `PlanCompiler` | generic start/step surface can be driven outside Servient admission | retain only as algorithm SPI, split Consumer admitted entry, or narrow visibility/semantics |
-| `PropertyReadPlanCompiler` | public constructor/session represents one coordinate, not one aggregate Consumer plan set | Producer path may remain; Consumer admitted role needs aggregate replacement |
-| `PropertyReadPlanCompiler::consumer_call` | accepts raw `PlanId`, registration identity, registration ordinal and one target coordinate | cannot remain a second admitted Consumer authority; remove/split/trust-label for Consumer during WP-200 migration |
-| `PropertyReadBuildCursor` | public resumable cursor can be paired with generic build inputs | admitted Consumer resume must remain inside one captured aggregate session/transaction |
-| `PlanBuildInput` | public input carries raw TD/registration/generation values and is repeatably supplied | cannot itself certify Consumer validation/admission provenance; retain only for non-admitted/shared algorithm use or replace Consumer path |
-| `PlanBuildOutput` | public output is a data value that current narrow Consumer selection can consume | may remain data/test value only if Servient publication cannot accept it without a sealed draft/lease match; otherwise narrow/split constructor authority |
-| `PlanBuildIdentity` / `PlanBuildCursor` / `PlanBuildStep` / `PlanBuildFailure` | generic public Planning machinery shares Producer/Consumer roles | explicit role impact needed; do not break Producer merely to close Consumer authority |
-| `PlanFootprint` | public measurement value | likely retain as non-authoritative measurement, subject to aggregate footprint expansion |
-| `BindingCandidate`, `BindingArtifact*`, `PlanId`, `PlanSetGeneration` | public Core immutable values | retain as data identities; possession must not imply publication/execution authority |
+The first Consumer Property Read proof selects **exactly one eligible complete registration** from the immutable startup snapshot before any coordinate is compiled.
 
-The migration must distinguish **public data/algorithm values** from **authority-bearing admitted Consumer entry**. A public constructor is not automatically forbidden; it is forbidden only if a safe caller can use it to bypass validation provenance, Servient reservation, same-registration ownership, aggregate reconciliation, or publication gating.
+Eligibility is metadata-only and profile-specific:
 
-## Work-package impact map for independent review
+1. the complete registration has already passed its Core registration validation;
+2. it advertises Consumer Property Read capability; and
+3. it contains the execution half for the active profile (Host-erased for Host, application-static for the constrained/static profile).
 
-Machine-readable status remains unchanged while this topic is DISCUSSING.
+Selection performs no binding callback, no form-specific support probe, no wildcard probe and no protocol I/O.
 
-| Tranche/package | Current registered state | Candidate impact | Evidence question before status change |
+The outcome is exact:
+
+- zero eligible complete registrations -> structured no-eligible-registration admission failure;
+- exactly one -> that exact snapshot entry is captured for the whole aggregate transaction;
+- more than one -> structured ambiguous-registration admission failure.
+
+Registration order never resolves ambiguity. Once selected, the same entry supplies compiler/candidate identity and the persistent execution owner for every mandatory coordinate. A later bounds/build failure cannot trigger registration reselection.
+
+The snapshot ordinal is the positional coordinate used to retain the exact entry. `BindingRegistrationIdentity::diagnostic_ordinal()` remains diagnostic metadata and is never used as a snapshot index; the two values may differ.
+
+## Selected public no-bypass dispositions
+
+The no-bypass claim is scoped precisely: **only Servient may confer ClinkZ admitted Consumer plan-set publication/handle authority.** Public lower-layer algorithm/data/SPI values may remain directly usable, but manual composition of those values is not an admitted Servient handle and receives none of the Servient admission/publication guarantees.
+
+The migration dispositions are selected as follows:
+
+| Surface | Selected disposition |
+| --- | --- |
+| `Servient::consume` / `StaticServient` Consumer entry | Canonical admitted entry. Accepts ordinary TD/policy/profile inputs and drives the private aggregate transaction. It never accepts raw `PlanBuildOutput`, artifact envelopes/references, raw `PlanId`/`PlanSetGeneration`, or an externally assembled execution pin. |
+| Servient freeze/publish/install operations | Private lifecycle operations over the live Servient transaction/record only. No safe public method accepts externally built Planning/Core material as already admitted. |
+| `PlanCompiler` | Retain as a public lower-level Planning algorithm SPI where Producer/shared use requires it. Calling it does not create admission/publication authority. |
+| `PlanBuildInput`, `PlanBuildOutput`, `PlanBuildIdentity`, `PlanBuildCursor`, `PlanBuildStep`, `PlanBuildFailure`, `PlanFootprint` | Retain as public lower-level algorithm/data values where compatibility/shared Producer use requires them, but document them as non-authoritative. No Servient Consumer publication path accepts them as proof of validation or reservation. |
+| `PropertyReadPlanCompiler` / `PropertyReadBuildCursor` | Retain shared/legacy algorithm surface only as needed for compatibility and Producer behavior. They are not the admitted aggregate Consumer session. |
+| `PropertyReadPlanCompiler::consumer_call` | Legacy one-coordinate Consumer algorithm entry is excluded from the target engine path. Reopened WP-200 must either deprecate/remove this public Consumer convenience or retain it explicitly as non-admitted lower-level API; either way it cannot feed Servient publication. This compatibility choice no longer affects authority closure because Servient accepts neither branch. |
+| `select_consumer_property_read` | May remain a lower-level selector for legacy/test material; the admitted consumed handle selects only inside its Servient-owned Frozen/Published record. |
+| public Core `PlanId`, `PlanSetGeneration`, `BindingArtifact*`, `OutboundRequest` and binding execution traits | Retain as Core data/SPI. Possession or manual composition does not represent Servient admission. Direct low-level binding use is outside the admitted Servient guarantee boundary. |
+
+The authority invariant is therefore structural rather than based on making every lower-level Rust constructor private: no externally assembled value can be converted into a Published consumed generation because the required live Servient record, committed ledger, generation reservation and execution-owner pin are private lifecycle state.
+
+## Work-package and authority impact map
+
+Machine-readable package/tranche status remains unchanged while this topic is DISCUSSING.
+
+| Owner/tranche | Current state | Candidate impact | Required disposition before implementation |
 | --- | --- | --- | --- |
-| WP-000 | package complete | affected if Foundation public work/reservation primitives change | can the new generic work/lifetime/reservation primitives be an additive successor tranche, or do existing completed resource contracts become false? |
-| `WP-100-CONSUMER-CALL-VALUES-VALIDATOR` | complete/admitted/current | likely reaffirm | call values and response validation do not depend on aggregate build authority unless Core identity/request semantics change |
-| TD validation scope under WP-100 ownership | no matching completed Consumer admission tranche | new narrow predecessor likely required | exact Basic/census/provenance authority and resource/work contract must be registered without activating broad deferred validation domains |
-| `WP-200-CONSUMER-PROPERTY-READ-PLANNING` | complete/admitted/current | definitely affected; reopen leading hypothesis | frozen public single-coordinate Consumer API/output/evidence conflicts with aggregate admitted path; determine what Producer/shared evidence survives |
-| Producer WP-200 slices | completed where registered | presumed disjoint/reaffirm | prove Consumer API split does not change Producer algorithms/contracts |
-| `WP-300-CONSUMER-PROPERTY-READ-BINDING` | complete/admitted/current | definitely affected; scoped reopen leading hypothesis if Core public/source changes | same complete registration must supply compiler identity and persistent execution owner; no-bypass/pin evidence must be added without discarding valid call/response mechanics |
-| Producer WP-300 slices | completed where registered | presumed disjoint/reaffirm | prove complete-registration changes preserve Producer bundle/execution semantics |
-| WP-400 Consumer | not admitted | blocked | successor admission cannot start until upstream migrated authority and impact review pass |
-| Producer Property Read architecture gate | passed | not Consumer evidence | retain accepted Producer claim unless migration actually touches its contract/evidence |
+| ADR-0008 | Accepted | reaffirm | 0063 refines constructibility but preserves its Servient-owned lifecycle decision. |
+| Planning specification / `PLAN-SET-001` | active normative authority | amend wording/evidence only | keep requirement ownership in `docs/spec/planning.md`; clarify normative vs runtime ownership and aggregate Consumer algorithm contract. |
+| Servient lifecycle architecture | active | amend Consumer detail | preserve Servient runtime owner; add aggregate Consumer admission/identity/resource/execution-pin details. |
+| WP-000 | package complete | affected if Foundation work/resource primitives change | exact successor-vs-reopen decision after migration diff is known. |
+| `WP-100-CONSUMER-CALL-VALUES-VALIDATOR` | complete/admitted/current | reaffirm leading result | call values/response sealing are independent unless migration changes their Core identity contract. |
+| TD bounded Consumer validation/provenance | no matching narrow completed tranche | new narrow predecessor required | register exact typed structural census, work and provenance contract without activating broad deferred validation/cache/codec scope. |
+| `WP-200-CONSUMER-PROPERTY-READ-PLANNING` | complete/admitted/current | affected; reopen leading result | replace single-coordinate admitted Consumer proof with aggregate enumerate/bound/build/sealed-draft proof and record surviving Producer/shared evidence. |
+| Producer WP-200 slices | completed where registered | explicit reaffirm/disjoint evidence | Consumer migration must not silently alter Producer semantics. |
+| `WP-300-CONSUMER-PROPERTY-READ-BINDING` | complete/admitted/current | affected | reaffirm existing call/response mechanics; reopen only the Core registration/execution-pin/no-bypass parts if production source/public contracts must change. |
+| Producer WP-300 slices | completed where registered | explicit reaffirm/disjoint evidence | complete-registration migration must preserve Producer behavior. |
+| WP-400 Consumer slice | not admitted | must be rewritten before admission, not reopened | its eventual tranche consumes the migrated aggregate Planning result and private Servient authority; it remains blocked now. |
+| broad WP-400 package | not complete | no broad activation | 0063 does not activate broad scheduler/subscription/emission work. |
+| Producer Property Read architecture gate | passed | retain unless touched | it is not Consumer evidence, but remains valid if migration diff proves its contracts unchanged. |
 
-ADR-0013 requires every affected completed tranche to be reaffirmed or reopened with transitive dependents as applicable. This table is the hypothesis to review, not the status transition itself.
+ADR-0013 still requires exact reaffirm/reopen and transitive-dependent handling when the migration diff is admitted. This table selects the intended disposition boundary but does not perform those status changes.
 
-## Resource/work authority gaps to resolve
+## Work taxonomy closure direction
 
-Current Foundation `WorkClass` is vocabulary-neutral and currently exposes `JsonSchemaNodes`, codec bytes, `UriBytes`, `SecurityBranches`, `ProviderProbes`, `QueueOperations`, `BindingPolls`, `CleanupItems`, and `HandlerSteps`.
+Current Foundation `WorkClass` has no truthful class for generic typed-document traversal or Planning aggregate enumeration/index/reconciliation. The selected migration direction is additive vocabulary-neutral work accounting, not relabeling those operations as `JsonSchemaNodes`, `BindingPolls`, or `CleanupItems`.
 
-The aggregate Consumer candidate has work that does not truthfully fit an existing class:
+The first proof requires lifetime ceilings for:
 
-- generic typed-document structural traversal/census;
-- Planning coordinate enumeration;
-- candidate/index materialization;
-- aggregate reconciliation.
+- typed semantic document traversal/validation work;
+- total Planning aggregate enumeration/index/reconciliation work; and
+- aggregate compiler work across every mandatory coordinate.
 
-Therefore migration must choose additive vocabulary-neutral classes or another generic bounded-work representation. It must not relabel this work as `JsonSchemaNodes`, `BindingPolls`, or `CleanupItems` merely to reuse an existing counter.
-
-Separate lifetime ceilings are also required for:
-
-- total Planning progress in one Consumer admission; and
-- aggregate binding-compiler work across every mandatory coordinate.
-
-A per-step compiler cap remains useful but cannot substitute for either lifetime ceiling.
+Per-step budgets remain additional progress caps and never replenish those lifetime ceilings.
 
 ## 0062 reconciliation
 
-0062 remains correct on its established defect and ownership direction but its claim decomposition is no longer assumed correct.
+0062 remains correct about the missing aggregate handoff and Servient lifecycle ownership, but its previous decomposition is not preserved as architecture.
 
-If 0063 is accepted, 0062 must be re-evaluated against the aggregate transaction:
-
-- bounded validation provenance becomes the first phase of the same Servient admission owner;
-- aggregate Planning preflight/build becomes the middle algorithmic phase;
-- build-time complete-registration identity and the persistent execution owner must join before Frozen can be considered constructible;
-- the remaining local handoff, if any, is `sealed aggregate draft + Servient-retained reservation/identity/execution ownership`, not a single-plan container.
-
-If that leaves no independent local question, 0062 should be marked superseded during migration rather than artificially preserved as another design layer.
+If 0063 is accepted and migrated, 0062 must be reduced to the surviving handoff contract — sealed aggregate draft plus Servient-retained identity/resource/execution ownership — or marked superseded if that leaves no independent unresolved question.
