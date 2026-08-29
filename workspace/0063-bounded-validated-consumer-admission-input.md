@@ -6,474 +6,417 @@ Kind: implementation-discovered cross-domain admission prerequisite
 
 Priority: HIGH
 
-Target: establish a constructible, bounded `Thing -> validated Planning input` boundary for the v5.1 Consumer Property Read path without reactivating broad deferred validation/codec scope
+Target: establish a constructible bounded `Thing -> validated Consumer Planning` admission boundary for the v5.1 Consumer Property Read path without activating broad deferred validation/codec scope.
 
 ## Scope
 
-Workspace topic 0062 established that the missing Consumer plan-set handoff cannot be closed while Planning accepts an ordinary `&Thing` under an informal `validated_td` premise.
+Workspace topic 0062 established that WP-400 cannot consume the completed WP-200/WP-300 path while Planning still accepts an ordinary `&Thing` under an informal `validated_td` premise.
 
-This topic owns only the prerequisite needed to make that premise real:
+This topic owns only the prerequisite admission boundary:
 
-- one immutable borrowed typed source and one validated resource-policy projection;
-- one linear admission owner across validation and Planning;
-- one stable complete-registration snapshot for build-time Planning;
-- one sealed Planning authority derived from the exact selected registration entry and ordinal;
-- bounded typed-input census and Basic validation;
-- hierarchical local/global admission accounting;
-- atomic lifetime-plus-step work charging;
-- representation-specific physical accounting for the actual Host/static admission storage; and
-- the exact impact on the completed WP-200 Consumer Planning tranche.
+- one immutable typed source and one real validation provenance;
+- one linear validation-to-Planning owner across every `Pending` boundary;
+- checked Consumer resource-policy applicability;
+- typed-input resource-schema semantics;
+- bounded validation and binding-compiler work;
+- hierarchical admission accounting and physical Host/static storage accounting;
+- one stable complete-registration snapshot used consistently for compiler derivation;
+- the WP-200 public-contract impact required to remove the raw Consumer Planning bypass; and
+- the evidence/admission ordering required before implementation.
 
 This topic does **not** own:
 
-- persistent Consumer execution-registration pinning after publication;
-- the final aggregate Planning -> Servient plan-set material from 0062;
-- PlanId generation allocation;
-- final Host/static cancellation product API beyond the checks required while this admission is live;
+- persistent Consumer execution-registration pinning after plan-set publication;
+- the final aggregate Planning -> Servient plan-set handoff owned by 0062;
+- allocation of `PlanId` / plan-generation authority;
+- final Host/static product cancellation API;
 - Consumer binding execution;
-- WP-400 source implementation;
-- broad payload/schema validator compilation or codec reuse;
-- production Zenoh evidence; or
+- WP-400 implementation;
+- broad validator compilation/cache/codec reuse; or
 - the Consumer architecture-gate completion claim.
 
-## Current repository facts
+## Stable repository facts
 
-1. `Thing` is an ordinary cloneable value with public mutable fields. Deserialization returns an ordinary `Thing`; it does not establish durable semantic-validation provenance.
-2. `ThingBuilder::build()` performs current Basic validation but still returns the same ordinary `Thing` type.
-3. `Thing::validate_with_level(Basic)` performs current Thing/security/schema/affordance/Form/local-reference checks. `ExtensionMap::validate_with_level(...)` is currently a no-op, so Basic semantic validation does not interpret unknown extension JSON values.
-4. `PlanBuildInput::new(...)` accepts `&Thing`, an arbitrary registration snapshot reference, and a `PlanSetGeneration`; `PlanBuildInput` is `Clone + Copy`.
-5. `PlanCompiler::start(...)` and `PlanCompiler::step(...)` each receive `&self` plus a fresh `&PlanBuildInput`.
-6. `PropertyReadPlanCompiler` owns plan id, exact target, binding id/generation/configuration/compatibility, registration ordinal, candidate order, and role. Those build-defining facts are not encoded into `PropertyReadBuildCursor`.
-7. `PropertyReadPlanCompiler::registration(...)` selects by `registration_index` and currently validates only artifact compatibility before using that registration. Equal compatibility does not prove equal binding id, binding generation, or configuration digest.
-8. `BindingRegistrationIdentity` already names the complete binding id, binding generation, configuration digest, artifact compatibility, and diagnostic ordinal.
-9. `PlanCompiler`, `PropertyReadPlanCompiler`, `PropertyReadPlanCompiler::consumer_call`, `PlanBuildInput`, and related Planning types are frozen public API items in `docs/api-ownership.csv`.
-10. The accepted WP-200 Consumer tranche explicitly freezes `PropertyReadPlanCompiler::consumer_call(...)` as the public Consumer compiler entry and records the tranche as `complete` / `admitted` / `current` in `docs/work-packages/index.toml`.
-11. Current `Servient::consume(td: Thing)` performs neither v5 TD admission validation nor v5 resource accounting before creating legacy consumed state.
-12. Raw `ResourceLimits` is not by itself a validated role/profile/cell policy; active Foundation authority requires checked applicability and rejects illegal `None` values.
-13. `ADMIT-TXN-001` places validation in the reserve-build-publish transaction and requires bounded cancellation checkpoints.
-14. `ADMIT-MEM-001` requires representation-specific physical accounting for source/input, temporary, persistent document, persistent runtime, diagnostics, cleanup, current live bytes, peak simultaneously live bytes, and largest contiguous allocation.
-15. `AdmissionLedger` provides six operation-local account states and live/peak observations, but current authority also has parent/global ceilings, peak/contiguous ceilings, and per-admission work ceilings that require a broader composite owner.
-16. `WorkBudget::consume(...)` mutates one step-class counter only. It cannot atomically coordinate another lifetime counter by itself.
-17. The current resource schema's `document_bytes_max` and `json_*` fields describe raw/document JSON representation. A materialized `Thing` does not retain its original JSON representation.
-18. TD depends on Foundation while Core depends on TD. TD can own portable validation mechanics but must not own Core/Servient cancellation or publication state.
-19. Core structured errors are fixed-capacity values; admission does not need source-derived unbounded diagnostic strings.
-20. ADR-0019 did not activate broad `VALIDATE-COMPILE-001`, `VALIDATE-REUSE-001`, or `API-CODEC-001`.
+1. `Thing` is an ordinary cloneable/mutable public value. Deserialization returns `Thing`; it does not establish durable validation provenance.
+2. `ThingBuilder::build()` runs current Basic validation but still returns ordinary `Thing`.
+3. `Thing::validate_with_level(Basic)` is synchronous and unmetered. `ExtensionMap::validate_with_level(...)` is currently a no-op; Basic semantic validation does not traverse unknown extension semantics.
+4. `PlanBuildInput` is publicly constructible from raw `&Thing`, registration input, and `PlanSetGeneration`, and is `Clone + Copy`.
+5. `PlanCompiler::start/step` accept fresh input on each call.
+6. `PropertyReadPlanCompiler` stores build-defining plan/target/binding/configuration/compatibility/registration/candidate/role facts in `self`, not in the cursor.
+7. `PropertyReadPlanCompiler::consumer_call(...)`, `PlanCompiler`, and `PlanBuildInput` are frozen public Planning API items.
+8. Current registration lookup indexes the supplied registration snapshot and validates artifact compatibility, but does not by itself prove the indexed registration has the same binding id/generation/configuration used to construct the compiler.
+9. `BindingRegistrationIdentity::diagnostic_ordinal()` and `BindingCandidate::registration_ordinal()` are distinct concepts: the former is a stable diagnostic identity; the latter addresses one entry in the immutable registration snapshot.
+10. `BindingCompilerBounds` declares final artifact footprint, cursor bytes, temporary bytes, and a lifetime `WorkBudget`.
+11. Current Property Read Planning retains only the artifact bound from `BindingCompilerBounds`; compiler cursor/temp/lifetime-work bounds are not carried as an owned Planning admission authority.
+12. `WorkBudget` is a caller/driver step allowance. Its public `consume()` mutates one class only and cannot atomically coordinate another lifetime counter.
+13. `PlanId` is a generation-bearing slot identity distinct from `PlanSetGeneration`; neither is a proof of the other.
+14. Active Foundation authority requires distinct source/input, temporary, persistent-document, persistent-runtime, diagnostic, and cleanup accounting plus current/peak/contiguous physical accounting.
+15. Existing `AdmissionLedger` is not by itself the whole local/global/hierarchical admission authority.
+16. Raw `ResourceLimits` is not a validated profile/cell/representation policy merely because it was retained.
+17. Current raw document/JSON resource identities cannot silently acquire typed-Rust `Thing` semantics.
+18. Core structured errors are fixed-capacity, but physical admission accounting must describe the concrete enclosing Host/static storage rather than an abstract `size_of::<Error>()` charge.
+19. ADR-0019 did not activate broad `VALIDATE-COMPILE-001`, `VALIDATE-REUSE-001`, or `API-CODEC-001`.
 
 ## Defect
 
-The current architecture permits several independent authorities to be combined after the fact:
+The current path has adjacent substitution and accounting gaps:
 
 ```text
-raw Thing
-  + public PlanBuildInput
-  + independently constructed PropertyReadPlanCompiler
-  + independently supplied registration snapshot
-  + independently supplied PlanSetGeneration
+ordinary Thing
+  -> raw PlanBuildInput
+  -> Planning trusts "validated_td"
+
+input A -> start -> Pending -> input B -> step
+
+compiler identity A
+  + registration snapshot entry B
+  -> compatibility-only acceptance can preserve an A/B mismatch
+
+compiler bounds
+  -> cursor/temp/lifetime-work declaration
+  -> current Planning retains only artifact bound
 ```
 
-That is not one admission transaction.
+A Servient wrapper around the existing public Consumer Planning surface cannot close all of these gaps because safe external callers could still enter the frozen raw Consumer Planning API directly.
 
-Even if validation becomes bounded, the existing public Consumer Planning surface still permits:
-
-```text
-validated source A + input A -> start -> Pending
-input B                    -> step
-
-compiler A -> start -> Pending
-compiler B -> step
-
-compiler identity from registration A
-registration slot B with equal compatibility
-```
-
-The resource side has the analogous problem if one semantic work unit mutates a lifetime allowance and a current step budget sequentially, or if fixed diagnostic bytes are charged without naming the actual physical allocation that contains them.
-
-The closure therefore needs one **linear Consumer admission transaction** whose Planning authority is derived from one exact captured registration entry rather than assembled from independent public pieces.
+The accepted boundary must therefore be linear from typed admission through Planning and must reopen the affected WP-200 Consumer public contract.
 
 ## Independent review history
 
 ### Review 1 — REQUEST CHANGES
 
-Found source/policy/account replacement across resumable validation, raw `ResourceLimits` authority, diagnostic bounding, typed-input applicability gaps, and corrected the false assumption that Basic validation traverses extension contents.
+Found source/policy/account substitution across validation `Pending`, raw `ResourceLimits` authority, unbounded diagnostic representation, typed-input applicability gaps, and corrected the ExtensionMap Basic-validation fact.
 
 ### Review 2 — REQUEST CHANGES
 
-Found repeatable validation-to-Planning authority, a self-referential owned-source cursor shape, mandatory typed-ingestion resource-schema revision, missing hierarchical/cumulative accounting, an unjustified variable diagnostic row, and non-executable Basic-validator equivalence.
+Found repeatable validation proof at Planning handoff, self-referential owned-source cursors, mandatory typed-ingestion schema revision, missing hierarchical/cumulative accounting, an unjustified variable diagnostic row, and non-executable Basic-validator equivalence.
 
 ### Review 3 — REQUEST CHANGES
 
-Found non-atomic lifetime/step work charging, compiler substitution across `Pending`, and a contradiction between fixed diagnostic storage and `AdmissionLedger::try_reserve_diagnostic(ResourceKind, ...)`.
+Found non-atomic lifetime/step validation-work charging, compiler substitution across Planning `Pending`, and fixed diagnostics still incorrectly routed through a `ResourceKind`-requiring reservation.
 
 ### Review 4 — REQUEST CHANGES
 
-Accepted the borrowed-source cursor, shared Basic engine, atomic work direction, and owned compiler direction, but found:
+Found compiler identity could be cross-wired with an equal-compatibility registration, registration snapshot/input ownership could self-reference, the frozen public raw Consumer Planning bypass lacked a final disposition, fixed diagnostic accounting lacked a physical enclosing representation, and one borrowed-source global-source test was vacuous.
 
-1. the compiler could still be constructed from registration A while the captured snapshot supplied registration B with equal compatibility;
-2. transaction-owned registration storage plus a stored `PlanBuildInput` borrowing it would recreate a movable self-reference;
-3. the frozen public raw Consumer Planning API remained an admitted bypass with no final disposition;
-4. fixed diagnostic accounting did not identify the real Host/static enclosing allocation and could double-count or undercount overlapping enum storage; and
-5. a concurrent global source-byte evidence item was inapplicable for borrowed input that intentionally charges zero retained-source bytes.
+### Review 5 — REQUEST CHANGES
+
+Found four remaining closure gaps:
+
+1. `BindingCompilerBounds` cursor/temp/lifetime-work declarations were still not owned/enforced by the sealed Planning authority;
+2. compiler construction required `PlanId` even though this topic does not own PlanId allocation authority;
+3. required evidence mixed pre-decision constructibility evidence with post-implementation runtime evidence, creating a circular governance dependency; and
+4. snapshot registration ordinal and diagnostic ordinal remained ambiguous.
 
 The topic remains `DISCUSSING`.
 
 ## Current candidate boundary
 
-The following is the only current investigation candidate. It is not implementation authority.
+The following is one candidate architecture for independent acceptance. It is not implementation admission.
 
-### 1. First proof uses caller-owned borrowed `Thing`
+### 1. First proof borrows caller-owned typed input
 
-The admitted first-proof source is `&'td Thing`.
+First-proof Consumer admission captures `&'td Thing` rather than taking ownership of an arbitrary Rust `Thing`.
 
-The transaction does not take ownership of an arbitrary by-value Rust `Thing`.
+Required consequences:
 
-Consequences:
+- safe mutation cannot coexist with the live admission borrow;
+- TD cursors may borrow stable external source storage without a movable self-reference;
+- caller-owned source allocation is not reclassified as engine-retained source memory;
+- typed structural/work limits still apply to traversal of the borrowed source; and
+- the borrow ends only after Planning has copied every immutable fact required beyond admission.
 
-- the source has a stable caller-owned address/lifetime for the admission;
-- ordinary Rust borrowing prevents safe source mutation while the admission is live;
-- caller-owned source allocations are not reclassified as engine-owned retained-source bytes;
-- all typed structural/work limits are still enforced while traversing the borrowed source;
-- every engine-owned cursor/index/accounting/planning allocation remains charged; and
-- the borrow ends only after Planning has copied all immutable facts needed beyond admission.
+The old by-value `Servient::consume(Thing)` shape is not an architectural constraint. A later convenience adapter may own/copy input only after a separately admitted physical-footprint rule exists.
 
-The old by-value `consume(Thing)` facade is not a first-proof architectural constraint. A future convenience adapter requires its own measured/accounted owned-input admission.
+### 2. Host/static composition owns the complete-registration snapshot; admission borrows it
 
-### 2. TD owns validation mechanics; Servient owns the composite transaction
+The registration snapshot is **not** stored by value inside a transaction that also stores references into it.
 
-TD owns:
+Host Servient or application-static composition owns one stable immutable complete-registration snapshot. A Consumer admission borrows that snapshot for its whole validation + Planning lifetime:
 
-- borrowed typed-source census/validation traversal;
-- an opaque borrowed cursor;
-- fixed-width `ValidationIssue` category/location;
-- the shared Basic semantic engine; and
-- a non-forgeable validated borrowed view after successful completion.
-
-TD does not own cancellation, registration snapshots, plan-set generation, global resource accounts, Planning publication, or Servient lifecycle.
-
-The Servient composition layer owns the composite linear transaction because it already composes TD, Foundation, Core, Planning, Host, and application-static lifecycles.
-
-### 3. The build-time registration snapshot is externally stable and borrowed
-
-The candidate now makes one constructible ownership choice.
-
-The Consumer admission transaction does **not** own a movable `R` and then store a `PlanBuildInput` borrowing that `R`.
-
-Instead:
-
-- Host Servient composition owns one immutable complete-registration snapshot for its startup composition lifetime;
-- application-static composition owns/provides the equivalent stable complete-registration snapshot storage;
-- the Consumer admission transaction borrows that snapshot for the whole validation + Planning lifetime; and
-- the snapshot cannot be replaced or mutated while the admission borrow is live.
-
-Conceptually:
-
-```rust
-ConsumerAdmissionTxn<'td, 'reg, State> {
-    source: &'td Thing,
-    registrations: &'reg CompleteRegistrationSnapshot,
-    policy: ValidatedConsumerPolicy,
-    accounting: ConsumerAdmissionAccounting,
-    plan_set_generation: PlanSetGeneration,
-    cancellation: AdmissionCancellationView,
-    state: State,
-}
+```text
+Host/static composition
+    owns CompleteRegistrationSnapshot
+             |
+             +---- immutable borrow ----> ConsumerAdmissionTxn<'reg>
 ```
 
-The transaction never stores a self-referential `PlanBuildInput` that borrows transaction-owned registration storage.
+Any use of the existing generic Planning API reconstructs an ephemeral `PlanBuildInput` for one call from the same source/view, same borrowed snapshot, and same captured generation/lease facts. No `PlanBuildInput` borrowing transaction-owned registration storage is persisted across calls.
 
-When the current generic Planning trait is used internally during migration, an **ephemeral** `PlanBuildInput` is reconstructed for each call from the same immutable borrowed source/view, the same borrowed snapshot, and the same frozen generation. It does not survive the call and cannot be supplied by an external caller on the admitted path.
+Persistent execution registration ownership after publication remains a separate 0062 prerequisite.
 
-This is build-time ownership only. Persistent execution-owner pinning after publication remains the separate prerequisite recorded by 0062.
+### 3. Snapshot ordinal and diagnostic ordinal are deliberately distinct domains
 
-### 4. Planning entry derives one sealed build authority from the exact snapshot entry
+The mapping is frozen as follows:
 
-`enter_planning(self, compiler)` is rejected because compiler construction is an independent substitution boundary.
+- **registration snapshot ordinal**: the index/slot of one exact entry in the captured immutable complete-registration snapshot. It is the value carried by `BindingCandidate::registration_ordinal()` and is used for build-time indexed registration lookup.
+- **diagnostic ordinal**: `BindingRegistrationIdentity::diagnostic_ordinal()`. It is a stable diagnostic/reporting identity and is never used as the registration snapshot index merely because both are `u32`.
 
-The admitted Consumer Planning transition instead derives its build authority internally from:
+They are not required to match.
 
-- the already-captured complete-registration snapshot;
-- the exact selected registration ordinal;
-- that entry's complete `BindingRegistrationIdentity`;
-- the exact property/Form coordinate;
-- the reserved plan-set generation; and
-- the deterministic first-proof candidate order.
+Required fixture: a valid registration at snapshot ordinal `3` with diagnostic ordinal `17` must build through snapshot entry `3`; no path may reinterpret `17` as the registration lookup ordinal.
+
+### 4. Planning receives a non-forgeable plan identity lease; this topic does not allocate PlanId
+
+This topic does not allocate `PlanId` and does not derive one from raw `PlanSetGeneration`.
+
+Before sealed Consumer Planning construction, the higher Servient/plan-set authority owned by the eventual 0062 composition supplies an opaque non-forgeable **plan identity lease** (name provisional). The lease proves ownership of exactly one reserved logical-plan identity for this unpublished plan-set build.
 
 Conceptually:
 
 ```text
-ConsumerAdmissionTxn<Validated>
-  -> select exact registration ordinal inside captured snapshot
-  -> read complete registration identity from that same entry
-  -> derive compiler/build authority from that entry
-  -> ConsumerAdmissionTxn<Planning {
-         authority,
-         cursor,
-       }>
+0062 / Servient plan-set identity authority
+       -> reserve unpublished plan identity
+       -> PlanIdentityLease
+
+0063 admission
+       + PlanIdentityLease
+       -> sealed Consumer Planning authority
 ```
 
-No public/external compiler object or separate `BindingRegistrationIdentity` argument is accepted by this transition.
+Required properties:
 
-The sealed Planning authority owns by move the exact compiler/build object it derived. The registration identity inside that compiler is therefore sourced from the same complete registration entry that supplies compiler execution.
+- external callers cannot forge the admitted lease from a raw `PlanId` or `PlanSetGeneration`;
+- the lease contains or exclusively authorizes the exact `PlanId` needed to construct the compiler/logical plan;
+- the lease is move-only or otherwise single-use for one unpublished plan build;
+- abort returns/releases the reservation under the owning plan-set authority;
+- successful freeze transfers the identity into the later 0062 plan-set lifecycle; and
+- 0063 does not freeze how plan slots/generations themselves are allocated.
 
-Before compiler `bounds`, `start`, or `step`, the admitted adapter requires full identity agreement with the captured entry: binding id, binding generation, configuration digest, artifact compatibility, and the reviewed ordinal relationship. Compatibility equality alone is insufficient.
+If 0062 chooses another equivalent non-forgeable reservation token, 0063 consumes that authority rather than duplicating it.
 
-A test with registration A and registration B having equal artifact compatibility but different binding id/generation/configuration must prove that an A/B cross-wire is impossible through the sealed constructor or is rejected before any compiler `bounds`/`start` work.
+### 5. Sealed Planning authority is derived atomically from one registration entry + one plan identity lease
 
-After Planning entry, outer `step` receives only the owned transaction plus bounded driver context. It receives neither a new compiler/build authority nor a new registration snapshot/input.
+The admitted transition accepts neither an external `PropertyReadPlanCompiler` nor an independent `BindingRegistrationIdentity`.
 
-### 5. WP-200 Consumer public contract must reopen; reaffirm-by-adapter is rejected
+It consumes:
 
-The review has established an issue in the completed public Consumer Planning contract itself, not only in a later Servient adapter.
+- validated Consumer admission typestate;
+- one exact snapshot registration ordinal;
+- the registration entry found at that ordinal in the already-captured snapshot;
+- that same entry's complete `BindingRegistrationIdentity`;
+- the exact property/Form coordinate;
+- deterministic first-proof candidate order; and
+- the non-forgeable `PlanIdentityLease`.
 
-The current WP-200 tranche freezes a public `PropertyReadPlanCompiler::consumer_call(...)` that accepts a separately supplied `BindingRegistrationIdentity`, while the generic public Planning input accepts a raw `&Thing` and independently supplied registration snapshot/generation.
+From those values it constructs one sealed Planning/build authority.
 
-Therefore this topic chooses the following impact disposition:
+Before any binding-compiler `bounds/start` progress, the sealed constructor verifies that build identity and registration execution come from the same complete registration entry. Full agreement includes binding id, binding generation, configuration digest, and artifact compatibility. Compatibility equality alone is insufficient.
 
-**`WP-200-CONSUMER-PROPERTY-READ-PLANNING` is affected and must reopen before migration/implementation of this boundary. Reaffirmation solely by adding a Servient wrapper is rejected.**
+Required negative fixture: two complete registrations with equal artifact compatibility but different binding id/generation/configuration are cross-wired; construction must fail before binding-compiler `bounds()` or `start()`.
 
-The migrated Consumer Planning public contract must ensure that no safe public Consumer call sequence can:
+### 6. BindingCompilerBounds is captured exactly once and becomes an owned Planning admission authority
 
-- construct admitted Consumer Planning directly from a raw unvalidated `&Thing`;
-- pair an independently supplied compiler identity with a different complete registration entry;
-- replace registration/generation input after `Pending`; or
-- resume a Consumer build with a different build authority.
+For the selected complete registration and exact compiler input, the sealed Planning authority calls binding-compiler `bounds()` exactly once before compiler `start()`.
 
-The exact shared-API migration is a WP-200 reopening decision, but the result cannot retain the existing raw Consumer bypass as another admitted Consumer entry.
+The returned `BindingCompilerBounds` is not reduced to only `artifact()`.
 
-Because `PlanCompiler`, `PlanBuildInput`, and `PropertyReadPlanCompiler` are shared Producer/Consumer public items, the WP-200 reopening must perform explicit Producer/shared/transitive impact review. Producer behavior is not presumed unaffected merely because this finding originated in the Consumer tranche.
+The sealed Planning state captures the complete declaration:
 
-The actual `index.toml`, WP-200 authority, API-ownership, evidence, and source changes occur only after this topic is accepted and the reopened tranche is independently admitted. This DISCUSSING PR records the required disposition; it does not silently rewrite completed authority.
+- artifact retained items/bytes;
+- compiler cursor bytes;
+- peak compiler temporary bytes; and
+- compiler lifetime work allowance by `WorkClass`.
 
-### 6. Typed validation cursor stays borrowed and non-self-referential
+Required ordering:
 
-TD validation progress borrows the external source, not engine-owned movable source storage.
+```text
+exact registration + exact compiler input
+  -> bounds() once
+  -> validate bounds are portable/allowed
+  -> reserve admitted cursor/temp/artifact memory against local+global/peak/contiguous authority
+  -> capture compiler lifetime work allowance
+  -> only then compiler.start()
+```
 
-One TD step performs only a bounded, pre-charged work unit or declared bounded group. TD does not receive Core cancellation types; the outer transaction checks cancellation before each bounded TD step and at required lifecycle boundaries.
+No compiler progress begins if the declared cursor/temp/artifact reservation cannot be admitted.
 
-If a safe borrowed cursor cannot cover a nested TD container without hidden rewalk or unbounded work, implementation stops and returns to this topic. Ordinal rewalk is not silently accepted because duplicated traversal would alter cumulative work under partitioning.
+The declared cursor/temp bounds remain owned until their respective lifetime boundaries and are reconciled/released deterministically on complete/failure/abort.
 
-### 7. Resource-schema revision is mandatory for `TypedThingBorrowed`
+### 7. Binding-compiler lifetime work and current step work use the same atomic pair semantics as validation
 
-The current raw JSON identities are not reused with typed semantics.
+Caller `WorkBudget` remains a per-step driver allowance. `BindingCompilerBounds::work()` supplies the separate lifetime compiler allowance.
 
-Closure requires a next Foundation resource-schema revision that adds ingestion-representation applicability and records a migration disposition for **every** document/input field.
+Every binding-compiler work debit is one composite operation:
+
+1. preflight the relevant remaining compiler-lifetime `WorkClass` units without mutation;
+2. preflight the same `WorkClass` units in the caller's current step budget without mutation;
+3. any failure leaves both unchanged;
+4. success commits both exactly once; and
+5. compiler work starts only after joint commit.
+
+A replenished caller step budget cannot restore or exceed the lifetime allowance declared by `BindingCompilerBounds`.
+
+Evidence must include zero/wrong-class failures on either side, exact success debit, replenished-step exhaustion, and partition equivalence.
+
+The Foundation primitive may be shared with admission validation work, but validation lifetime allowance and binding-compiler lifetime allowance remain distinct owners/ceilings.
+
+### 8. WP-200 Consumer public contract must reopen
+
+`WP-200-CONSUMER-PROPERTY-READ-PLANNING` is affected and must reopen before implementation migration. Reaffirmation solely through a later Servient wrapper is rejected.
+
+The migrated public Consumer Planning contract must make these sequences unavailable to safe external Consumer callers:
+
+- admitted Consumer Planning from raw unvalidated `&Thing`;
+- independent compiler identity + different registration entry;
+- fresh registration/generation input after `Pending`;
+- compiler A start + compiler B resume; and
+- raw caller-provided `PlanId`/generation values standing in for the non-forgeable plan identity reservation required by the admitted path.
+
+Because `PlanCompiler`, `PlanBuildInput`, and `PropertyReadPlanCompiler` are shared Producer/Consumer API items, the reopening includes explicit Producer/shared/transitive impact review. The exact shared API migration is decided in the reopened WP-200 tranche; it may preserve a low-level surface only if that surface is explicitly classified as non-admitted/legacy and cannot masquerade as the admitted Consumer contract.
+
+This DISCUSSING topic records the required reopening disposition; it does not itself mutate `index.toml` completion state or frozen API authority.
+
+### 9. TypedThingBorrowed requires a resource-schema revision and checked Consumer policy
+
+The next accepted resource-schema revision must add ingestion-representation applicability and disposition every existing document/input field.
 
 For `TypedThingBorrowed`:
 
-- `document_bytes_max` and existing `json_*` shape fields are RawJson-only and typed-nonapplicable;
-- typed ingestion receives distinct typed depth/map/array/node/string identities;
+- existing raw `document_bytes_max` / raw `json_*` identities are RawJson-only;
+- typed ingestion gets distinct typed depth/map/array/node/string identities;
 - nested extension `serde_json::Value` participates in typed resource census without gaining Basic semantic interpretation;
-- historical `string_bytes_max` / `extension_bytes_max` receive explicit migration dispositions rather than silent reinterpretation;
-- `generated_effective_document_bytes_max` remains derived-representation authority only when that representation is materialized;
-- `retained_source_bytes_*` remains engine-retained-source authority, so borrowed first-proof input contributes zero retained-source bytes; and
-- temporary/peak/runtime/contiguous and cumulative validation-work rows remain applicable where their semantics already match engine-owned admission work/state.
+- historical `string_bytes_max` / `extension_bytes_max` receive explicit migration dispositions;
+- `generated_effective_document_bytes_max` applies only to an actually materialized derived representation;
+- engine-retained-source bytes remain zero for borrowed first-proof input; and
+- applicable temporary/peak/runtime/contiguous and work ceilings remain enforced.
 
-### 8. A checked Consumer policy is captured before traversal
+Before traversal, composition must produce an immutable checked Consumer policy binding exact schema revision, role/domain, Host/static cell, ingestion representation, profile/origin, and every applicable local/global value with illegal `None` rejected.
 
-Raw `ResourceLimits` does not authorize admission.
+### 10. Admission accounting is hierarchical and representation-specific
 
-Composition first creates an immutable checked Consumer policy binding:
+The linear admission owns/borrows one composite accounting authority covering applicable local and parent/global temporary/runtime/peak/engine-live capacity, per-Thing/global compiled runtime, contiguous-allocation checks, cleanup, and lifetime work authorities.
 
-- resource-schema revision;
-- Consumer one-shot role/domain;
-- Host or application-static cell;
-- ingestion representation `TypedThingBorrowed`;
-- profile/application-defined origin and value digest; and
-- all applicable local/global values with illegal `None` rejected.
-
-The transaction captures that policy once and cannot rotate it after progress begins.
-
-### 9. Admission accounting is one hierarchical authority
-
-The transaction captures one move-only composite accounting authority covering applicable:
-
-- operation-local temporary/persistent-runtime/diagnostic/cleanup attribution;
-- parent/global temporary/peak/runtime accounts;
-- per-Thing and global compiled-runtime capacity when Planning begins;
-- engine-live/global peak authority;
-- largest contiguous allocation checks; and
-- cumulative per-admission validation work.
-
-Borrowed first-proof source contributes **zero engine-owned retained-source bytes** locally and globally.
-
-Hierarchical reservation is rollback-safe:
+Hierarchical reservation obeys:
 
 ```text
-preflight local + parent/global + peak + contiguous
-  -> any failure: no participating scope changes
-  -> all success: commit all applicable scopes
+preflight every participating local + parent/global + peak + contiguous ceiling
+  -> any failure: no account changes
+  -> all succeed: one deterministic commit
 ```
 
-Neither Host nor static profile has an implicit unbounded global scope.
+Borrowed first-proof source contributes zero engine-owned retained-source bytes locally and globally.
 
-### 10. Lifetime validation work and current step work are atomically charged
+### 11. Concrete Host/static admission storage defines physical fixed-footprint accounting
 
-`WorkBudget` remains the caller's current step allowance. The transaction also owns a monotonic lifetime allowance initialized from checked `document_validation_work_units_max`.
+Fixed failures are not charged as an abstract extra allocation.
 
-Foundation provides one composite operation that:
+Each execution profile defines the actual enclosing admission storage it owns/reserves. If a dedicated failure field is used, it must be a real non-overlapping region in that representation.
 
-1. preflights lifetime units without mutation;
-2. preflights the requested `WorkClass` in the current step budget without mutation;
-3. leaves both bit-for-bit unchanged if either check fails;
-4. commits both only after both checks succeed; and
-5. starts the bounded work only after joint commit.
+For each Host/static representation the layout record must identify:
 
-It must not emulate atomicity by consuming one public counter and attempting rollback of the other.
+- actual enclosing allocation / arena slot / exclusively reserved static slot;
+- concrete size and alignment;
+- non-overlapping byte attribution to logical accounts;
+- ownership of padding/structural overhead;
+- the real region capable of holding the largest fixed admission failure carrier;
+- current/peak live contribution; and
+- largest contiguous allocation measured once from the whole enclosing storage.
 
-Evidence includes zero/wrong-class failure on either side, exact one-unit success, and partition equivalence under replenished step budgets.
+One physical byte range cannot be charged twice simply because multiple logical states can inhabit it. Different Host/static layouts require separate evidence.
 
-The exact typed census/validation `WorkClass` still requires Foundation impact/admission; semantic reuse of `JsonSchemaNodes` is not assumed.
+### 12. TD owns one shared bounded Basic semantic engine
 
-### 11. Fixed failure storage is accounted from the actual enclosing Host/static representation
+TD owns the borrowed resumable Basic validation semantics and fixed-width validation issue location. Servient/Core lifecycle/cancellation/accounting stays above TD.
 
-The prior model of charging `N = size_of::<largest failure carrier>` as an abstract diagnostic reservation is insufficient because it does not prove what physical storage contains those bytes.
+Synchronous `Thing::validate_with_level(Basic)` must converge on the same semantic engine. During migration, differential fixtures prove success/failure and first deterministic issue agreement; once the synchronous API delegates to the shared engine, equivalence is structural.
 
-The first proof therefore requires an explicit concrete admission-storage representation for each execution profile.
+Extension resource census may traverse nested extension values while Basic semantic validation continues to treat `ExtensionMap::validate_with_level(...)` according to its current semantic contract.
 
-Conceptually the storage has a dedicated, non-overlapping fixed failure slot rather than reusing an overlapping state-enum payload:
+### 13. Cancellation is captured above TD
 
-```rust
-ConsumerAdmissionStorage<...> {
-    // source/snapshot are borrows, not owned source allocations
-    state: AdmissionStateStorage<...>,
-    failure_slot: MaybeUninit<ConsumerAdmissionFailure>,
-    // other explicit fixed fields
-}
-```
+The linear admission captures its Host/static cancellation source once. Outer admission checks cancellation before first traversal, before each bounded TD/Planning step, before reservation/reconciliation transitions, and immediately before publication-related transfer.
 
-Exact Rust layout is not frozen, but these accounting rules are:
+TD receives no Core cancellation type. The user-facing Host/static cancellation request API remains later lifecycle work.
 
-- **Host:** the engine identifies the actual allocation/arena slot that physically contains the admission storage and records its concrete `Layout` size/alignment;
-- **application-static:** the application provides/exclusively reserves the actual bounded slot/storage that physically contains the admission state, and the same representation-specific layout is recorded;
-- the fixed failure field is a real non-overlapping region of that enclosing storage, not an abstract second allocation and not overlapping cursor enum storage;
-- account attribution partitions real physical storage regions/fields; one byte range is not charged twice merely because different logical states may use it;
-- padding/structural overhead receives one explicit owner in the layout record rather than disappearing or being charged to multiple accounts;
-- current live accounting charges the enclosing physical storage exactly once;
-- diagnostic attribution names the actual dedicated failure-slot region;
-- largest contiguous allocation/exclusive reservation is measured once from the **whole enclosing Host allocation/static slot**, not by adding the diagnostic field as another allocation; and
-- if Host and static use different concrete layouts, each profile has its own measured layout evidence rather than assuming equal `size_of`.
+## Evidence and governance ordering
 
-Foundation's primitive is therefore a representation-specific **admission layout/base-footprint record**, not `try_reserve_diagnostic(ResourceKind, N)`.
+The previous candidate mixed design evidence and runtime completion evidence. This is replaced by three explicit stages.
 
-The higher layer supplies measured layout/account-region facts for the concrete storage type it owns; Foundation remains protocol-neutral and validates that account attribution is non-overlapping and consistent with the enclosing total/contiguous layout.
+### Stage A — evidence required before 0063 may become DECIDED
 
-`ConsumerAdmissionFailure` covers the actual largest fixed failure form that may occupy the dedicated slot, including structured Core limit errors and fixed validation issues.
+This stage proves architecture **constructibility**, not production completion. It may use type sketches, compile-only fixtures, deterministic model/unit proofs that do not create an admitted production path, existing-source inspection, and bounded layout calculations for proposed concrete storage types.
 
-If later work retains variable diagnostic collections or strings, that new variable resource must justify a real schema row/`ResourceKind`.
+Required before `DECIDED`:
 
-### 12. Basic validation has one semantic engine
+- demonstrate a safe borrowed TD cursor can represent Basic progress without self-reference or hidden uncharged rewalk;
+- demonstrate linear typestate APIs make source/policy/account/snapshot/cancellation/build-authority substitution unavailable across `Pending`;
+- demonstrate registration snapshot external ownership and ephemeral `PlanBuildInput` reconstruction are Rust-constructible;
+- demonstrate snapshot ordinal and diagnostic ordinal remain distinct, including nonzero unequal example;
+- demonstrate sealed registration-derived compiler construction rejects equal-compatibility A/B identity cross-wire before `bounds/start`;
+- define the non-forgeable `PlanIdentityLease` interface required from 0062 without choosing 0062's allocator implementation;
+- demonstrate complete `BindingCompilerBounds` ownership/reservation/work-lifetime semantics are constructible;
+- demonstrate atomic lifetime+step work debit semantics for validation and binding compiler;
+- define the resource-schema migration table and checked Consumer policy projection;
+- define concrete Host/static admission-storage representations sufficiently to prove non-overlapping physical attribution and contiguous-layout semantics;
+- define the WP-200 reopening/public API migration obligations; and
+- record ADR-0013 impact scope for Foundation, TD, Planning/WP-200, Servient, and shared Producer/Consumer API.
 
-The bounded TD admission validator and synchronous `Thing::validate_with_level(Basic)` must share one TD-owned Basic semantic engine/check graph.
+A bounded prototype is permitted only when explicitly labeled **non-production constructibility evidence** and excluded from admitted source paths/public API. It cannot be used to claim implementation completion.
 
-The incremental driver is the canonical traversal. The synchronous API becomes an adapter over the same engine and may expand the fixed issue location into authoring-friendly allocating `ValidateError` only outside the bounded Servient admission carrier.
+### Stage B — required before production implementation admission
 
-Migration differential tests prove success/failure and first deterministic issue agreement until the synchronous API delegates to the shared engine structurally.
+After 0063 is independently accepted as `DECIDED`, migration/admission must:
 
-### 13. Cancellation is owned above TD
+- reopen `WP-200-CONSUMER-PROPERTY-READ-PLANNING` formally;
+- perform shared Producer/Consumer API and evidence impact review;
+- migrate accepted Foundation resource-schema/policy/accounting/work authority;
+- migrate accepted TD validation authority;
+- migrate Planning public-contract authority;
+- establish the Servient admission owner/lifetimes/storage contract;
+- establish the exact plan-identity lease contract supplied by the 0062/Servient plan-set authority; and
+- record independent ADR-0013 admission for each affected production tranche before source implementation.
 
-The Servient-owned transaction captures the Host/static cancellation source once.
+### Stage C — post-implementation completion evidence
 
-The outer owner checks cancellation before the first TD step, before every bounded TD/Planning step, before admission reservation/reconciliation boundaries, and immediately before publication. TD receives no Core cancellation type.
+Only after admitted source implementation exists must completion evidence prove runtime/physical behavior, including:
 
-The final user-facing cancellation request API remains a later lifecycle projection.
-
-### 14. Consumer policy/accounting/snapshot owners survive independently of Producer setup
-
-Host Servient composition owns:
-
-- the validated Consumer policy;
-- Host parent/global resource accounts; and
-- the immutable complete-registration snapshot whose borrow outlives each Consumer admission.
-
-Application-static composition provides equivalent bounded policy/account/snapshot ownership before admission starts.
-
-None of these owners depend on a Producer Property Read registration merely to exist.
-
-### 15. Broad deferred validation/codec authority remains inactive
-
-This prerequisite does not activate validator compilation caches, payload-schema reuse, codec pipelines, or broad response validation.
-
-If independent review proves an inactive validation identity is unavoidable, this topic stops for narrow domain-entry rather than importing it implicitly.
-
-## Required authority impact
-
-Before implementation admission, accepted migration requires explicit ADR-0013 impact across:
-
-- **Foundation resource schema** — revised ingestion applicability and typed structural identities;
-- **Foundation policy projection** — checked Consumer role/profile/cell/ingestion authority;
-- **Foundation accounting** — hierarchical rollback-safe reservations, peak/contiguous enforcement, and representation-specific admission layout/base-footprint accounting;
-- **Foundation work** — atomic lifetime+step composite charge and accepted typed validation work class;
-- **TD validation** — borrowed resumable shared Basic engine and fixed issue location;
-- **Planning / WP-200** — reopen the completed Consumer tranche and its frozen public contract; remove the admitted raw Consumer bypass and bind build authority to the exact complete registration entry;
-- **shared Producer/Consumer Planning API** — explicit transitive impact because the currently frozen public items are shared;
-- **Servient composition** — linear transaction, borrowed snapshot/source lifetime, checked policy, accounting, cancellation, and concrete Host/static admission storage; and
-- **Consumer facade** — first proof is borrowed typed input; by-value convenience requires separate measured owned-input admission.
-
-Persistent execution-registration pinning after publication remains outside this claim.
-
-## Required evidence before DECIDED
-
-An accepted closure requires at least:
-
-- invalid deserialized/manually mutated `Thing` cannot enter admitted Consumer Planning;
-- first-proof admission borrows caller-owned `Thing` and safe mutation cannot coexist with the live transaction;
-- TD cursor is safe without self-reference or hidden uncharged rewalk;
-- source, policy, accounting owner, registration snapshot, generation, cancellation source, or Planning authority cannot be substituted after `Pending`;
-- the build-time complete-registration snapshot has a stable external Host/static owner and outlives the admission borrow;
-- no stored `PlanBuildInput` self-borrows transaction-owned registration storage;
-- ephemeral internal Planning inputs always reconstruct from the same source/snapshot/generation;
-- sealed Planning authority derives compiler identity and compiler execution from the **same** complete registration entry and ordinal;
-- two registrations with equal artifact compatibility but different binding id/generation/configuration cannot be cross-wired, and rejection occurs before compiler `bounds`/`start`;
-- compiler A cannot start and compiler B resume one admitted cursor;
-- the WP-200 Consumer public contract is formally reopened before implementation migration; reaffirm-by-Servient-wrapper is not used;
-- shared Producer/Consumer API and evidence impact is explicitly dispositioned;
-- revised schema dispositions every prior document/input row for RawJson, TypedThingBorrowed, derived runtime, or retirement/replacement;
-- typed structural identities bound extension JSON depth/map/array/node/string growth without claiming extension semantic validation;
-- raw `ResourceLimits` with illegal applicability cannot start traversal;
-- borrowed input leaves local/global retained-source byte accounts unchanged at zero;
-- concurrent borrowed admissions are tested against applicable **global temporary, peak, engine-live, and runtime** ceilings; a nonzero global source-byte exhaustion test is explicitly not required for this representation;
-- local success plus parent/global failure leaves no partial reservation;
-- peak and contiguous rejection occurs before physical allocation/reservation mutation;
-- lifetime=1 + step=0, lifetime=0 + step=1, and wrong-class failures leave both work counters unchanged;
-- successful composite work decrements both counters exactly once;
-- replenished step budgets cannot exceed the cumulative validation-work ceiling;
-- one large step and equivalent partitions produce the same semantic result and cumulative usage;
-- concrete Host admission storage layout is measured from the actual enclosing allocation/arena slot;
-- concrete static admission storage layout is measured from the actual exclusively reserved slot;
-- the fixed failure carrier occupies a real dedicated non-overlapping field/region;
-- account attribution plus padding ownership covers the measured enclosing storage without double counting;
-- largest contiguous measurement charges the enclosing allocation/slot once rather than summing field sizes;
-- the largest fixed failure slot covers structured Core limit error/context and `ValidationIssue` cases;
-- synchronous Basic validation shares the same semantic engine or migration differential evidence proves exact agreement;
-- Basic semantic validation does not falsely claim extension semantic traversal;
-- structural/work/local/global/peak/contiguous/semantic failures publish nothing and release private state idempotently;
-- cancellation across TD and Planning steps reaches unpublished failure/abort handling without replacing transaction ownership;
-- no complete source TD is retained by the first published Consumer plan set;
-- Host and static profiles prove the same validation/accounting semantics; and
-- ADR-0013 impact/admission records exist for every affected Foundation/TD/Planning/Servient tranche before implementation.
+- invalid typed Thing cannot enter admitted Consumer Planning;
+- safe source mutation is prevented for the live borrowed admission;
+- source/policy/snapshot/generation/lease/compiler/cancellation substitution cannot occur across `Pending`;
+- snapshot ordinal `3` and diagnostic ordinal `17` remain distinct and build uses snapshot entry `3`;
+- equal-compatibility A/B registration cross-wire fails before binding-compiler progress;
+- `BindingCompilerBounds` cursor/temp/artifact reservations are made before `start`, respected during progress, and released/reconciled on all terminal paths;
+- replenished step budgets cannot exceed validation or binding-compiler lifetime work allowances;
+- atomic pair-charge failure leaves both counters unchanged and partition equivalence holds;
+- raw ResourceLimits with illegal applicability cannot start traversal;
+- typed schema structural limits bound nested extension JSON structure without claiming extension semantic validation;
+- borrowed input leaves retained-source accounts at zero;
+- concurrent borrowed admissions enforce applicable global temporary/peak/engine-live/runtime ceilings (no nonzero source-byte exhaustion test is required for this representation);
+- hierarchical failure leaves no partial reservation;
+- actual Host and static enclosing storage layouts match their recorded physical attribution and contiguous measurements;
+- Basic synchronous/incremental semantic equivalence holds;
+- cancellation and every failure path publish nothing and release private ownership idempotently;
+- no complete source TD survives into the first published Consumer plan set; and
+- all reopened WP-200/shared/transitive evidence is current.
 
 ## Relationship to 0062
 
-0062 remains blocked while this topic is `OPEN` or `DISCUSSING`.
+0062 remains blocked while this topic is `DISCUSSING`.
 
-A DECIDED/MIGRATED outcome gives 0062 only these facts:
+An accepted/migrated 0063 gives 0062 only these facts:
 
-1. first-proof Consumer admission uses borrowed typed input and one linear Servient-owned transaction;
-2. build-time registration snapshot ownership/lifetime is stable and externally owned by Host/static composition;
-3. Consumer Planning authority is derived from one exact complete registration entry and cannot be independently cross-wired;
-4. WP-200 Consumer public Planning contract has reopened and migrated away from the admitted raw bypass;
-5. TD owns one shared bounded Basic engine while lifecycle/accounting stay above TD;
-6. lifetime and step work use one atomic Foundation charge;
-7. concrete Host/static admission storage has representation-specific physical accounting; and
-8. the exact revised Foundation policy/schema/work/accounting primitives and WP-200 impact disposition are authoritative.
+1. Consumer admission begins from borrowed immutable typed input under a checked policy;
+2. validation and Planning form one linear non-substitutable admission chain;
+3. Host/static composition owns the stable complete-registration snapshot;
+4. snapshot ordinal and diagnostic ordinal are distinct domains;
+5. sealed Planning derives binding compiler authority from one exact complete registration entry;
+6. complete `BindingCompilerBounds` memory/work declarations are owned and enforced;
+7. 0063 consumes, but does not allocate, one non-forgeable plan identity lease supplied by 0062/Servient plan-set authority;
+8. WP-200 Consumer public contract must reopen away from the raw admitted bypass;
+9. Foundation/TD/Planning/Servient migration obligations are explicit; and
+10. runtime completion evidence is performed only after independent implementation admission.
 
-0062 must not absorb this topic's validator, schema migration, Planning public-API reopening, or admission-storage/accounting design back into its local aggregate closure.
+0062 must not absorb 0063's validator, resource-schema migration, WP-200 reopening, or physical admission-storage design back into its local plan-set handoff topic.
 
-Consumer execution-registration pinning after publication remains a separate later claim.
+Persistent Consumer execution-registration pinning after publication remains the separate second prerequisite from 0062.
 
-## Merge condition
+## Merge / transition condition
 
-This document may merge while `DISCUSSING` only as an investigation record after independent review of the current candidate boundary.
+This document may squash-merge while `DISCUSSING` only as a durable investigation record.
 
-It may become `DECIDED` only after a fresh independent review accepts the borrowed-source validation model, stable external registration-snapshot lifetime, sealed same-registration Planning authority, mandatory WP-200 reopening, revised resource schema/policy, hierarchical accounting, atomic work charging, concrete Host/static physical storage accounting, and shared Basic engine.
+It may become `DECIDED` only after a fresh independent review accepts the Stage-A constructibility boundary, including complete binding-compiler bounds ownership, non-forgeable plan-identity lease dependency, explicit ordinal domains, WP-200 reopening disposition, typed policy/schema/accounting model, and concrete Host/static storage-accounting model.
 
-It becomes `MIGRATED` only after the accepted conclusion is projected into Foundation/TD/Planning/Servient authority and the reopened WP-200 plus all other affected tranches are independently admitted under ADR-0013. No Rust implementation is authorized by this workspace topic alone.
+It becomes `MIGRATED` only after the accepted conclusion is projected into the relevant Foundation/TD/Planning/Servient authority and ADR-0013 impact/admission records.
+
+No production Rust implementation is authorized by this workspace topic alone.
