@@ -1099,9 +1099,13 @@ fn build_lease_binds_both_identities_and_releases_on_rejection_abort_or_drop() {
     let rejected = stage_a::Validating::new(&thing, &snapshot, 0, 1, policy).validated();
     let lease = authority.reserve();
     assert_eq!(authority.outstanding(), 1);
-    let rejection = rejected
-        .enter_planning(lease, stage_a::AdmissionAccounting::too_small(policy))
-        .expect_err("compiler reservation must fail before start");
+    let rejection = match rejected.enter_planning(
+        lease,
+        stage_a::AdmissionAccounting::too_small(policy),
+    ) {
+        Err(rejection) => rejection,
+        Ok(_) => panic!("compiler reservation must fail before start"),
+    };
     let (_validated, lease) = rejection.into_parts();
     assert_eq!(authority.outstanding(), 1);
     lease.release();
@@ -1110,9 +1114,13 @@ fn build_lease_binds_both_identities_and_releases_on_rejection_abort_or_drop() {
 
     let validated = stage_a::Validating::new(&thing, &snapshot, 0, 1, policy).validated();
     let lease = authority.reserve();
-    let planning = validated
-        .enter_planning(lease, stage_a::AdmissionAccounting::from_policy(policy))
-        .expect("valid reservation enters Planning");
+    let planning = match validated.enter_planning(
+        lease,
+        stage_a::AdmissionAccounting::from_policy(policy),
+    ) {
+        Ok(planning) => planning,
+        Err(_) => panic!("valid reservation must enter Planning"),
+    };
     assert_eq!(authority.outstanding(), 1);
     planning.abort().release();
     assert_eq!(authority.outstanding(), 0);
@@ -1137,12 +1145,13 @@ fn ordinal_domains_and_same_registration_compiler_source_remain_distinct() {
     let policy = stage_a::CheckedPolicy::fixture();
     let validated = stage_a::Validating::new(&thing, &snapshot, 3, 1, policy).validated();
     let mut authority = plan_authority(1, 8, 2);
-    let planning = validated
-        .enter_planning(
-            authority.reserve(),
-            stage_a::AdmissionAccounting::from_policy(policy),
-        )
-        .expect("same-entry construction succeeds");
+    let planning = match validated.enter_planning(
+        authority.reserve(),
+        stage_a::AdmissionAccounting::from_policy(policy),
+    ) {
+        Ok(planning) => planning,
+        Err(_) => panic!("same-entry construction must succeed"),
+    };
 
     assert_eq!(planning.selected_snapshot_ordinal(), 3);
     assert_eq!(planning.selected_identity().diagnostic_ordinal(), 17);
@@ -1151,7 +1160,10 @@ fn ordinal_domains_and_same_registration_compiler_source_remain_distinct() {
     assert_eq!(snapshot.bounds_calls(3), 1);
     assert_eq!(snapshot.start_calls(0), 0);
     assert_eq!(snapshot.start_calls(3), 1);
-    assert_eq!(planning.plan_set_generation(), PlanSetGeneration::new(Generation::new(8).unwrap()));
+    assert_eq!(
+        planning.plan_set_generation(),
+        PlanSetGeneration::new(Generation::new(8).unwrap())
+    );
     assert_eq!(planning.plan_id().slot(), SlotIndex::new(2));
     planning.abort().release();
     assert_eq!(authority.outstanding(), 0);
@@ -1165,12 +1177,13 @@ fn compiler_work_reservation_wraps_the_real_spi_step_budget() {
     let policy = stage_a::CheckedPolicy::fixture();
     let validated = stage_a::Validating::new(&thing, &snapshot, 0, 1, policy).validated();
     let mut authority = plan_authority(2, 5, 1);
-    let mut planning = validated
-        .enter_planning(
-            authority.reserve(),
-            stage_a::AdmissionAccounting::from_policy(policy),
-        )
-        .expect("Planning entry succeeds");
+    let mut planning = match validated.enter_planning(
+        authority.reserve(),
+        stage_a::AdmissionAccounting::from_policy(policy),
+    ) {
+        Ok(planning) => planning,
+        Err(_) => panic!("Planning entry must succeed"),
+    };
 
     let mut empty = WorkBudget::new();
     assert!(planning.step_compiler(&mut empty).is_err());
