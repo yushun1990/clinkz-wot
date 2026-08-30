@@ -4,10 +4,13 @@ work_package = "WP-300"
 tranche = "WP-300-CONSUMER-PROPERTY-READ-BINDING"
 implementation_ref = "19fce672a98d56d3839fc9c21ad8b0a020dd7997"
 recorded_on = "2026-08-28"
-status = "passed"
+status = "superseded"
 evidence_key = "consumer-property-read-binding-execution"
 admission_review = "github-pr:54"
 implementation_review = "github-pr:53"
+impact_review = "github-pr:58"
+superseded_on = "2026-08-30"
+superseded_reason = "Host acceptance and synchronous static completion can each lose the live request before Core response validation; the prior evidence exercises invocation, cancellation, and validation separately rather than proving one no-bypass composed result-sealing path"
 
 requirement_ids = [
     "BIND-OUT-001",
@@ -36,7 +39,7 @@ coverage = [
     "validate_untrusted_binding_output derives all expected identities from the live request, delegates to the existing private WP-100 kernel, rejects every identity, selection, payload, status, role, and action-reference negative, and preserves opaque native status values from zero through u16::MAX",
     "an external Host client authored through clinkz_wot_core::binding::ClientBinding checks compatibility and exact artifact identity before acceptance, returns the exact request on rejection, returns an owned HostBindingCallBox before side effects, declares its immutable footprint and deadline, and produces terminal output",
     "Host cancellation covers pending settlement and late BindingCallSettlement::Returned output without discard, with the cancelled branch retaining explicit BindingCancellationDisposition::Complete cleanup truth",
-    "an external PollClientBinding uses ClientRequestSlot for synchronous, pending, terminal, rejected, zero-budget, cancellation, late-result, acknowledgement, clear, and next-generation reuse paths in no-default, async-no-std, and std cells",
+    "an external PollClientBinding exercises synchronous, pending, terminal, rejected, zero-budget, cancellation, late-result, acknowledgement, clear, and next-generation reuse paths; synchronous Ready leaves ClientRequestSlot vacant, and this historical evidence does not compose that output with Core validation",
     "one complete dual-role Host registration and one complete typed StaticBindingComponents server/client registration validate equal compiler, server, client, and artifact compatibility while the existing Producer-only Host and static constructor behavior remains valid",
     "Host and static client-compatibility mismatch and a static request-state lifetime declaration above the registration admitted ceiling are rejected by complete registration before publication or protocol work",
     "the Host call is necessarily static and the portable RequestState has no lifetime tied to the scoped start artifact borrow; external clients derive only bounded protocol-local state during construction, and OutboundRequest contains no per-call copy of resolved target, Form, content type, subprotocol, or artifact payload",
@@ -51,6 +54,7 @@ excluded_claims = [
     "subscription, observe, emission, collection, fallback, or broad retry semantics",
     "broad WP-300 completion",
     "legacy BindingRequest or legacy ClientBinding removal",
+    "Core-mediated no-bypass result sealing across Host and application-static execution",
 ]
 
 [[verification]]

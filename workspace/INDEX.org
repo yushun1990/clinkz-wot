@@ -32,7 +32,8 @@ Topics are retained after migration as decision history.
 
 ** DISCUSSING
 
-- [[file:0062-consumer-host-call-validation-handoff.md][0062 Consumer Host Call Validation Handoff]]
+- [[file:0062-consumer-binding-result-sealing.md][0062 Consumer Binding Result Sealing]]
+- [[file:0063-consumer-plan-set-handoff-closure.md][0063 Consumer Plan-Set Handoff Closure]]
 
 ** DECIDED
 
