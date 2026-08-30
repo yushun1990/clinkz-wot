@@ -1,220 +1,233 @@
 #![allow(dead_code)]
 
-use core::cell::Cell;
+//! Non-production Stage-A proof of the application-static cancellation owner
+//! topology proposed in workspace/0063.
+//!
+//! The real static root is driven through `&mut self`. Its live admission is
+//! therefore stored inside that root and is cancelled directly between
+//! bounded progress calls. No `Cell`, shared cancellation view, self-reference,
+//! or invented destroy generation is needed.
 
-/// Non-production Stage-A constructibility model for the application-static
-/// cancellation boundary in workspace/0063.
-///
-/// The first proof intentionally models only caller-driven Servient progress:
-/// `begin_destroy()` is the static cancellation request owner, admissions hold
-/// a read-only cancellation view, every progress step checks the request before
-/// semantic callbacks, and the first terminal cause is immutable.
-mod stage_a {
-    use super::*;
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum StaticLifecycle {
+    Active,
+    DestroyRequested,
+}
 
-    #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-    enum StaticLifecycle {
-        Active,
-        DestroyRequested,
-    }
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum BuildingPhase {
+    Compiling,
+    ReadyToFreeze,
+    FailedSettled,
+    Frozen,
+}
 
-    #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-    enum TerminalCause {
-        CancelledByDestroy { request_generation: u32 },
-        SemanticFailure,
-    }
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum TerminalCause {
+    CancelledByDestroy,
+    SemanticFailure,
+}
 
-    struct StaticServientOwner {
-        lifecycle: Cell<StaticLifecycle>,
-        destroy_generation: Cell<u32>,
-    }
+struct StaticAdmission {
+    phase: BuildingPhase,
+    first_cause: Option<TerminalCause>,
+    callback_calls: u32,
+    cursor_live: bool,
+    cursor_abort_calls: u32,
+    reservations_live: bool,
+}
 
-    impl StaticServientOwner {
-        fn new() -> Self {
-            Self {
-                lifecycle: Cell::new(StaticLifecycle::Active),
-                destroy_generation: Cell::new(0),
-            }
-        }
-
-        fn begin_destroy(&self) -> u32 {
-            if self.lifecycle.get() == StaticLifecycle::Active {
-                let next = self
-                    .destroy_generation
-                    .get()
-                    .checked_add(1)
-                    .expect("fixture destroy generation cannot overflow");
-                self.destroy_generation.set(next);
-                self.lifecycle.set(StaticLifecycle::DestroyRequested);
-            }
-            self.destroy_generation.get()
-        }
-
-        fn begin_admission(&self) -> Result<StaticCancellationView<'_>, TerminalCause> {
-            if self.lifecycle.get() == StaticLifecycle::DestroyRequested {
-                return Err(TerminalCause::CancelledByDestroy {
-                    request_generation: self.destroy_generation.get(),
-                });
-            }
-            Ok(StaticCancellationView {
-                owner: self,
-                captured_destroy_generation: self.destroy_generation.get(),
-            })
+impl StaticAdmission {
+    fn new() -> Self {
+        Self {
+            phase: BuildingPhase::Compiling,
+            first_cause: None,
+            callback_calls: 0,
+            cursor_live: true,
+            cursor_abort_calls: 0,
+            reservations_live: true,
         }
     }
 
-    #[derive(Clone, Copy)]
-    struct StaticCancellationView<'a> {
-        owner: &'a StaticServientOwner,
-        captured_destroy_generation: u32,
-    }
-
-    impl StaticCancellationView<'_> {
-        fn requested(self) -> Option<TerminalCause> {
-            let current = self.owner.destroy_generation.get();
-            if self.owner.lifecycle.get() == StaticLifecycle::DestroyRequested
-                && current != self.captured_destroy_generation
-            {
-                Some(TerminalCause::CancelledByDestroy {
-                    request_generation: current,
-                })
-            } else {
-                None
-            }
+    fn record_first_cause(&mut self, cause: TerminalCause) {
+        if self.first_cause.is_none() {
+            self.first_cause = Some(cause);
         }
     }
 
-    struct StaticAdmission<'a> {
-        cancellation: StaticCancellationView<'a>,
-        first_cause: Option<TerminalCause>,
-        callback_calls: u32,
-        frozen: bool,
+    fn settle_if_cancelled(&mut self, lifecycle: StaticLifecycle) -> bool {
+        if lifecycle == StaticLifecycle::DestroyRequested {
+            self.record_first_cause(TerminalCause::CancelledByDestroy);
+        }
+        if self.first_cause.is_none() {
+            return false;
+        }
+        if self.cursor_live {
+            self.cursor_live = false;
+            self.cursor_abort_calls += 1;
+        }
+        self.reservations_live = false;
+        self.phase = BuildingPhase::FailedSettled;
+        true
     }
+}
 
-    impl<'a> StaticAdmission<'a> {
-        fn new(cancellation: StaticCancellationView<'a>) -> Self {
-            Self {
-                cancellation,
-                first_cause: None,
-                callback_calls: 0,
-                frozen: false,
-            }
-        }
+struct StaticServientRoot {
+    lifecycle: StaticLifecycle,
+    admission: Option<StaticAdmission>,
+}
 
-        fn record_first_cause(&mut self, cause: TerminalCause) {
-            if self.first_cause.is_none() {
-                self.first_cause = Some(cause);
-            }
-        }
-
-        fn poll_cancellation(&mut self) -> bool {
-            if let Some(cause) = self.cancellation.requested() {
-                self.record_first_cause(cause);
-            }
-            self.first_cause.is_some()
-        }
-
-        /// Caller-driven static progress. Cancellation is linearized before
-        /// invoking any semantic callback in the step.
-        fn step(&mut self, semantic_failure: bool) {
-            if self.poll_cancellation() {
-                return;
-            }
-
-            self.callback_calls += 1;
-            if semantic_failure {
-                self.record_first_cause(TerminalCause::SemanticFailure);
-            }
-        }
-
-        /// The same cancellation source is checked immediately before the
-        /// unpublished Frozen transition.
-        fn try_freeze(&mut self) -> Result<(), TerminalCause> {
-            self.poll_cancellation();
-            if let Some(cause) = self.first_cause {
-                return Err(cause);
-            }
-            self.frozen = true;
-            Ok(())
+impl StaticServientRoot {
+    fn new() -> Self {
+        Self {
+            lifecycle: StaticLifecycle::Active,
+            admission: None,
         }
     }
 
-    #[test]
-    fn begin_destroy_is_the_static_admission_cancellation_owner() {
-        let owner = StaticServientOwner::new();
-        let view = owner.begin_admission().expect("active owner admits work");
-        let mut admission = StaticAdmission::new(view);
-
-        let request_generation = owner.begin_destroy();
-        admission.step(false);
-
-        assert_eq!(admission.callback_calls, 0);
-        assert_eq!(
-            admission.first_cause,
-            Some(TerminalCause::CancelledByDestroy { request_generation })
-        );
+    fn begin_admission(&mut self) -> Result<(), TerminalCause> {
+        if self.lifecycle == StaticLifecycle::DestroyRequested {
+            return Err(TerminalCause::CancelledByDestroy);
+        }
+        assert!(self.admission.is_none());
+        self.admission = Some(StaticAdmission::new());
+        Ok(())
     }
 
-    #[test]
-    fn first_terminal_cause_is_immutable() {
-        let owner = StaticServientOwner::new();
-        let view = owner.begin_admission().expect("active owner admits work");
-        let mut admission = StaticAdmission::new(view);
-
-        admission.step(true);
-        assert_eq!(admission.first_cause, Some(TerminalCause::SemanticFailure));
-
-        owner.begin_destroy();
-        admission.poll_cancellation();
-        assert_eq!(admission.first_cause, Some(TerminalCause::SemanticFailure));
+    /// Same ownership shape as the current application-static destruction
+    /// entry: the root is exclusively borrowed and mutates its child
+    /// transaction directly.
+    fn begin_destroy(&mut self) {
+        self.lifecycle = StaticLifecycle::DestroyRequested;
+        if let Some(admission) = self.admission.as_mut() {
+            admission.record_first_cause(TerminalCause::CancelledByDestroy);
+        }
     }
 
-    #[test]
-    fn destroy_between_steps_wins_before_the_next_callback() {
-        let owner = StaticServientOwner::new();
-        let view = owner.begin_admission().expect("active owner admits work");
-        let mut admission = StaticAdmission::new(view);
-
-        admission.step(false);
-        assert_eq!(admission.callback_calls, 1);
-
-        let request_generation = owner.begin_destroy();
-        admission.step(true);
-
-        assert_eq!(admission.callback_calls, 1);
-        assert_eq!(
-            admission.first_cause,
-            Some(TerminalCause::CancelledByDestroy { request_generation })
-        );
+    /// One caller-driven progress step checks the root-owned cancellation
+    /// state before making a semantic callback.
+    fn step(&mut self, semantic_failure: bool) {
+        let lifecycle = self.lifecycle;
+        let admission = self.admission.as_mut().expect("live admission");
+        if admission.settle_if_cancelled(lifecycle) {
+            return;
+        }
+        assert_eq!(admission.phase, BuildingPhase::Compiling);
+        admission.callback_calls += 1;
+        if semantic_failure {
+            admission.record_first_cause(TerminalCause::SemanticFailure);
+            admission.settle_if_cancelled(lifecycle);
+        }
     }
 
-    #[test]
-    fn cancellation_is_rechecked_immediately_before_freeze() {
-        let owner = StaticServientOwner::new();
-        let view = owner.begin_admission().expect("active owner admits work");
-        let mut admission = StaticAdmission::new(view);
-
-        owner.begin_destroy();
-        let result = admission.try_freeze();
-
-        assert!(matches!(
-            result,
-            Err(TerminalCause::CancelledByDestroy { .. })
-        ));
-        assert!(!admission.frozen);
+    fn mark_ready_to_freeze(&mut self) {
+        let admission = self.admission.as_mut().expect("live admission");
+        assert_eq!(admission.phase, BuildingPhase::Compiling);
+        admission.cursor_live = false;
+        admission.phase = BuildingPhase::ReadyToFreeze;
     }
 
-    #[test]
-    fn admission_cannot_start_after_destroy_is_requested() {
-        let owner = StaticServientOwner::new();
-        let request_generation = owner.begin_destroy();
-
-        let result = owner.begin_admission();
-        assert!(matches!(
-            result,
-            Err(TerminalCause::CancelledByDestroy {
-                request_generation: generation
-            }) if generation == request_generation
-        ));
+    /// Cancellation is checked again at the linearization point immediately
+    /// before unpublished ownership could become Frozen.
+    fn try_freeze(&mut self) -> Result<(), TerminalCause> {
+        let lifecycle = self.lifecycle;
+        let admission = self.admission.as_mut().expect("live admission");
+        if admission.settle_if_cancelled(lifecycle) {
+            return Err(admission.first_cause.expect("settled first cause"));
+        }
+        assert_eq!(admission.phase, BuildingPhase::ReadyToFreeze);
+        admission.phase = BuildingPhase::Frozen;
+        Ok(())
     }
+
+    fn admission(&self) -> &StaticAdmission {
+        self.admission.as_ref().expect("fixture admission")
+    }
+}
+
+#[test]
+fn destroy_between_steps_prevents_the_next_callback_and_settles_building() {
+    let mut root = StaticServientRoot::new();
+    root.begin_admission().expect("active root admits work");
+    root.step(false);
+    assert_eq!(root.admission().callback_calls, 1);
+
+    root.begin_destroy();
+    root.step(true);
+
+    let admission = root.admission();
+    assert_eq!(admission.callback_calls, 1);
+    assert_eq!(
+        admission.first_cause,
+        Some(TerminalCause::CancelledByDestroy)
+    );
+    assert_eq!(admission.cursor_abort_calls, 1);
+    assert!(!admission.cursor_live);
+    assert!(!admission.reservations_live);
+    assert_eq!(admission.phase, BuildingPhase::FailedSettled);
+}
+
+#[test]
+fn first_semantic_cause_survives_a_later_destroy_request() {
+    let mut root = StaticServientRoot::new();
+    root.begin_admission().expect("active root admits work");
+    root.step(true);
+    assert_eq!(
+        root.admission().first_cause,
+        Some(TerminalCause::SemanticFailure)
+    );
+
+    root.begin_destroy();
+    root.step(false);
+
+    let admission = root.admission();
+    assert_eq!(admission.first_cause, Some(TerminalCause::SemanticFailure));
+    assert_eq!(admission.callback_calls, 1);
+    assert_eq!(admission.cursor_abort_calls, 1);
+}
+
+#[test]
+fn destroy_is_rechecked_at_the_pre_frozen_linearization_point() {
+    let mut root = StaticServientRoot::new();
+    root.begin_admission().expect("active root admits work");
+    root.mark_ready_to_freeze();
+    root.begin_destroy();
+
+    assert_eq!(root.try_freeze(), Err(TerminalCause::CancelledByDestroy));
+    assert_eq!(root.admission().phase, BuildingPhase::FailedSettled);
+    assert!(!root.admission().reservations_live);
+}
+
+#[test]
+fn admission_cannot_start_after_exclusive_destroy_request() {
+    let mut root = StaticServientRoot::new();
+    root.begin_destroy();
+    assert_eq!(
+        root.begin_admission(),
+        Err(TerminalCause::CancelledByDestroy)
+    );
+    assert!(root.admission.is_none());
+}
+
+#[test]
+fn destroy_of_an_unpublished_frozen_aggregate_releases_its_persistent_owner() {
+    let mut root = StaticServientRoot::new();
+    root.begin_admission().expect("active root admits work");
+    root.mark_ready_to_freeze();
+    root.try_freeze()
+        .expect("fixture reaches unpublished Frozen");
+    assert_eq!(root.admission().phase, BuildingPhase::Frozen);
+    assert!(root.admission().reservations_live);
+
+    root.begin_destroy();
+    root.step(false);
+
+    let admission = root.admission();
+    assert_eq!(
+        admission.first_cause,
+        Some(TerminalCause::CancelledByDestroy)
+    );
+    assert_eq!(admission.phase, BuildingPhase::FailedSettled);
+    assert!(!admission.reservations_live);
+    assert_eq!(admission.cursor_abort_calls, 0);
 }

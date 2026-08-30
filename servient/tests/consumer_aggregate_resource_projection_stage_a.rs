@@ -23,17 +23,13 @@ fn classify(field: &str, kind: &str, roles: &str) -> Option<Disposition> {
 
     let disposition = match kind {
         "document" => match field {
-            "document_bytes_max"
-            | "string_bytes_max"
-            | "extension_bytes_max"
-            | "json_nesting_depth_max"
+            "document_bytes_max" | "string_bytes_max" | "extension_bytes_max" => Active,
+            "json_nesting_depth_max"
             | "json_members_per_object_max"
             | "json_array_items_max"
             | "json_value_nodes_per_document_max" => NotApplicable,
             "generated_effective_document_bytes_max" => ZeroContribution,
-            "retained_source_bytes_per_owner_max" | "retained_source_bytes_global_max" => {
-                ZeroContribution
-            }
+            "retained_source_bytes_per_owner_max" | "retained_source_bytes_global_max" => Active,
             "affordances_per_thing_max"
             | "forms_per_context_max"
             | "forms_per_thing_max"
@@ -110,8 +106,9 @@ fn classify(field: &str, kind: &str, roles: &str) -> Option<Disposition> {
             "cleanup_items_max"
             | "cleanup_bytes_max"
             | "cleanup_item_bytes_max"
-            | "cleanup_work_items_per_step_max" => Active,
-            "cleanup_retry_records_max" | "cleanup_retry_attempts_max" => ZeroContribution,
+            | "cleanup_work_items_per_step_max"
+            | "cleanup_retry_records_max"
+            | "cleanup_retry_attempts_max" => ZeroContribution,
             "cleanup_transfer_slots_global_max"
             | "cleanup_transfer_bytes_global_max"
             | "binding_cancel_buffer_bytes_per_call_max"
@@ -128,8 +125,9 @@ fn classify(field: &str, kind: &str, roles: &str) -> Option<Disposition> {
             _ => return None,
         },
         "resolver" => ZeroContribution,
-        "directory" | "discovery" | "query" | "response" | "emission" | "fanout"
-        | "handler" => NotApplicable,
+        "directory" | "discovery" | "query" | "response" | "emission" | "fanout" | "handler" => {
+            NotApplicable
+        }
         _ => return None,
     };
 
@@ -142,7 +140,9 @@ fn every_registered_resource_row_has_a_first_proof_disposition() {
     let mut lines = csv.lines();
     assert_eq!(
         lines.next(),
-        Some("field,resource_kind,unit,scope,capability_roles,zero_semantics,gateway_default_v1,directory_client_default_v1,benchmark_static_reference_v1,requirements")
+        Some(
+            "field,resource_kind,unit,scope,capability_roles,zero_semantics,gateway_default_v1,directory_client_default_v1,benchmark_static_reference_v1,requirements"
+        )
     );
 
     let mut rows = 0usize;
@@ -163,7 +163,10 @@ fn every_registered_resource_row_has_a_first_proof_disposition() {
         );
     }
 
-    assert_eq!(rows, 195, "schema growth must force this Stage-A map to be reviewed");
+    assert_eq!(
+        rows, 195,
+        "schema growth must force this Stage-A map to be reviewed"
+    );
     assert!(consumer_rows > 0);
 }
 
@@ -173,11 +176,19 @@ fn review_sensitive_rows_have_the_selected_dispositions() {
 
     assert_eq!(
         classify("string_bytes_max", "document", "all"),
-        Some(NotApplicable)
+        Some(Active)
     );
     assert_eq!(
         classify("extension_bytes_max", "document", "all"),
+        Some(Active)
+    );
+    assert_eq!(
+        classify("json_value_nodes_per_document_max", "document", "all"),
         Some(NotApplicable)
+    );
+    assert_eq!(
+        classify("retained_source_bytes_per_owner_max", "document", "all"),
+        Some(Active)
     );
     assert_eq!(
         classify(
@@ -185,6 +196,14 @@ fn review_sensitive_rows_have_the_selected_dispositions() {
             "plan",
             "producer|consumer"
         ),
+        Some(ZeroContribution)
+    );
+    assert_eq!(
+        classify("security_branches_per_plan_max", "security", "all"),
+        Some(Active)
+    );
+    assert_eq!(
+        classify("provider_probes_per_interaction_max", "security", "all"),
         Some(ZeroContribution)
     );
     assert_eq!(
@@ -204,6 +223,14 @@ fn review_sensitive_rows_have_the_selected_dispositions() {
         Some(ZeroContribution)
     );
     assert_eq!(
+        classify("cleanup_items_max", "cleanup", "all"),
+        Some(ZeroContribution)
+    );
+    assert_eq!(
+        classify("plan_pins_per_plan_set_max", "plan", "producer|consumer"),
+        Some(Deferred)
+    );
+    assert_eq!(
         classify(
             "cleanup_transfer_slots_global_max",
             "cleanup",
@@ -212,7 +239,11 @@ fn review_sensitive_rows_have_the_selected_dispositions() {
         Some(Deferred)
     );
     assert_eq!(
-        classify("durable_status_entries_per_binding_max", "status", "producer|consumer|directory-client"),
+        classify(
+            "durable_status_entries_per_binding_max",
+            "status",
+            "producer|consumer|directory-client"
+        ),
         Some(Deferred)
     );
 }

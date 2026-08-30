@@ -1,212 +1,205 @@
-# 0063 Consumer Aggregate Resource and Work Applicability
+# 0063 — Consumer aggregate resource/work applicability
 
-Status: DISCUSSING support material for `0063-consumer-aggregate-admission-plan-set-authority.md`
+Status: DISCUSSING
 
-This note selects the first-proof resource/work applicability rules. It does not change `docs/resource-limits.csv` or Foundation API. A migration must project these decisions into registered authority before implementation admission.
+This note is the scoped resource companion to workspace/0063. It classifies
+the existing `docs/resource-limits.csv` schema against the replacement
+Stage-A model. It neither changes that authoritative table nor proposes final
+limit names.
 
-First-proof boundary:
+## Accounting model
 
-- caller-owned borrowed typed `Thing`, not Raw JSON;
-- Consumer one-shot Property Read only;
-- deterministic no-material NoSec only;
-- exactly one eligible complete Consumer registration selected from immutable startup metadata;
-- eager aggregate plans/artifacts; no lazy/cache/fallback;
-- no protocol I/O before Frozen;
-- publication, pins and request execution occur later under WP-400.
+Consumer aggregate admission must preserve the six accepted admission-memory
+accounts rather than collapse them into "temporary" and "persistent":
 
-Every current resource row receives one of four meanings for this proof:
+1. retained source;
+2. temporary parse/validation/build;
+3. persistent effective document;
+4. persistent runtime material;
+5. diagnostic material; and
+6. cleanup state.
 
-- `Active`: enforced or reserved by aggregate admission;
-- `ZeroContribution`: the row is semantically relevant but this representation contributes exactly zero;
-- `Deferred`: belongs to the same captured runtime profile but is charged only after Frozen/Published;
-- `NotApplicable`: excluded capability/representation.
+It must also preserve total live bytes, peak live bytes, largest single
+allocation, and typed work. A reservation is owned by the Servient transaction
+until it is either committed into Frozen ownership or released during private
+failure settlement.
 
-There is no implicit fifth state.
+For direct typed input there is no parse buffer, but the owned `Thing` is still
+retained source while validation and planning borrow it. Its source charge is
+transferred into the transaction and released before Frozen.
 
-## 1. Typed structural limits: selected migration
+## Applicability terms
 
-The first proof **does not reinterpret the existing `json_*`, `string_bytes_max`, or `extension_bytes_max` rows as limits on an arbitrary directly constructed Rust `Thing`**.
+- **Active** — directly required by the first aggregate-admission proof.
+- **ZeroContribution** — the concept applies, but the first proof contributes a
+  measured zero and must not reserve invented storage.
+- **Deferred** — belongs to later runtime or multi-candidate work, not Stage A.
+- **NotApplicable** — tied to a different input representation or operation.
 
-The selected migration is additive: introduce a representation-neutral typed-semantic structural family for direct typed TD admission. Exact registered names may follow schema naming conventions, but the units are fixed by this decision:
+## Source and validation accounts
 
-- typed semantic node count per document;
-- typed semantic depth per document;
-- typed map entries per container;
-- typed sequence items per container;
-- UTF-8 bytes in semantic strings visited by the admitted validator/planner;
-- one lifetime work ceiling for typed semantic traversal/validation.
+| Existing family | Stage-A classification | Reason |
+|---|---|---|
+| `retained_source_bytes_*` | Active | The owned typed TD is live through validation and Planning, then released before Frozen. |
+| `document_bytes_max`, `string_bytes_max`, and `extension_bytes_max` | Active | They bound the transferred typed document and its owned semantic content, including extension material. |
+| `json_*` lexical/token/depth rows | NotApplicable | No JSON text parser participates in the direct typed-input path. A JSON convenience path must account for these before producing the validated typed value. |
+| affordance/form/additional-response, schema, URI-source, and security-shape rows | Active | Basic validation and the typed census must traverse these even when the narrow plan projection later discards them. |
+| `generated_effective_document_*` | ZeroContribution | Stage A does not synthesize or retain a second effective TD. |
+| admission temporary/peak rows plus engine-live and largest-allocation rows | Active | Validation traversal, coordinate projections, compiler cursors, and compiler temporaries have bounded lifetimes and measurable peaks. |
 
-Existing Raw/serialized-document rows remain unchanged for Raw JSON ingestion.
+The authoritative schema already contains several representation-neutral
+semantic caps, including strings, extensions, affordances, forms, schema
+nodes, security depth, and URI structure. It does not yet provide a complete
+typed-TD census contract or all needed categories. A later accepted design
+needs a coherent family covering at least:
 
-Consequences for current rows:
+- total owned string/blob bytes and largest owned value;
+- property, action, event, form, link, security-definition, schema-node, and
+  additional-response counts;
+- collection lengths and nesting depth; and
+- extension keys and values at every supported extension point.
 
-| Current row | Disposition | Decision |
-| --- | --- | --- |
-| `document_bytes_max` | `NotApplicable` | borrowed typed input has no canonical serialized source byte length |
-| `json_nesting_depth_max` | `NotApplicable` | Raw JSON representation limit; typed family replaces it for direct typed entry |
-| `json_members_per_object_max` | `NotApplicable` | same |
-| `json_array_items_max` | `NotApplicable` | same |
-| `json_value_nodes_per_document_max` | `NotApplicable` | same |
-| `string_bytes_max` | `NotApplicable` | keep existing source/serialized-document meaning; use new typed semantic-string ceiling for direct typed entry |
-| `extension_bytes_max` | `NotApplicable` | first proof does not traverse or retain extension payloads for Consumer Planning; caller-owned ignored extensions do not become engine admission work |
-| `affordances_per_thing_max` | `Active` | typed census before Planning |
-| `forms_per_context_max` | `Active` | typed census/effective-form bound |
-| `forms_per_thing_max` | `Active` | typed census and aggregate shape upper bound |
-| `additional_responses_per_form_max` | `Active` structural only | bounded Basic shape; deferred response-planning semantics remain inactive |
-| `uri_variables_per_form_max` | `Active` | typed census / URI-template bound |
-| `schema_nodes_per_document_max` | `Active` | semantic schema nodes visited by Basic validation |
-| `schema_composition_depth_max` | `Active` | semantic schema depth |
-| `schema_reference_edges_per_document_max` | `Active` | semantic schema reference edges |
-| `document_validation_work_units_max` | `Active` pending migration | retained as the policy ceiling but must map to the new vocabulary-neutral typed traversal work class/unit; it is not `JsonSchemaNodes` by fiat |
-| `generated_effective_document_bytes_max` | `ZeroContribution` | first proof materializes plan facts, not a second effective TD |
-| `remote_resolver_*` | `ZeroContribution` | no remote resolution |
+There is also no explicit retained-source document-count row. The first proof's
+exactly-one-document rule is therefore a transaction-shape invariant, while
+its bytes use the existing per-owner and global retained-source limits.
 
-Borrowed source memory is independent of structural work:
+Extensions are counted even when Consumer Property Read semantics do not
+inspect them. "Ignored by planning" is not equivalent to "free to validate,
+traverse, retain, or drop." The census is validation evidence and reservation
+input, not a second semantic TD model.
 
-- `retained_source_bytes_per_owner_max` -> `ZeroContribution(0)`;
-- `retained_source_bytes_global_max` -> `ZeroContribution(0)`.
+## Persistent aggregate accounts
 
-The immutable borrow remains a lifetime constraint even when engine-owned retained-source bytes are zero.
+| Aggregate category / current coverage | Stage-A classification | Frozen owner |
+|---|---|---|
+| `compiled_plan_bytes_max` and `logical_plan_bytes_per_thing_max` | Active | Sealed plans plus aggregate tables under one reconciled compiled-material ceiling. |
+| `form_binding_candidates_per_operation_max` | Active | Exactly one candidate per first-proof plan. |
+| `binding_artifacts_*` | Active | Admitted artifact envelopes and binding-declared retained payloads. |
+| `plan_sets_per_thing_max` and `plan_sets_global_max` | Active | Frozen aggregate identity owner. |
+| `plan_pins_*` | Deferred | Runtime handles pin only after publication; the unpublished Frozen proof has no operation pin. |
+| `compiled_runtime_bytes_*`, engine-live, peak, and largest-allocation rows | Active | Reconciled sum/peaks for all retained runtime material. |
+| `generated_effective_document_bytes_max` | ZeroContribution | No TD or effective-document clone survives sealing. |
+| binding registration limits | Active at registration/snapshot scope | Frozen retains the existing immutable snapshot owner; it does not charge a new registration copy or per-entry pin. |
 
-## 2. Registration selection and Thing capacity
+The current table has no separate byte/count rows for candidate records,
+artifact-reference records, runtime binding-plan references, target-index
+entries, or immutable diagnostics. Stage A includes all of them in the
+`compiled_plan_bytes_max`/compiled-runtime ledger rather than treating them as
+free. Independent review should decide whether that aggregate ceiling plus the
+largest-allocation limit is sufficient or whether stable sublimits are needed.
 
-The selected registration rule is exactly-one eligible complete registration. Selection reads only validated startup metadata; it performs no binding/contributor callback.
+Every retained string is charged exactly once by its final owner. Enumeration
+may borrow source strings while measuring them, but final plan construction
+must occur only after the shape reservation is held.
 
-| Row | Disposition | Decision |
-| --- | --- | --- |
-| `bindings_global_max` | `Active` structural ceiling | bounds the captured immutable startup snapshot scanned by narrow metadata selection; admission allocates no new binding |
-| `binding_and_contributor_probes_per_admission_max` | `ZeroContribution(0)` | no binding/contributor probe callback is invoked |
-| `wildcard_binding_and_contributor_probes_per_admission_max` | `ZeroContribution(0)` | wildcard probing is forbidden |
-| `things_global_max` | `Active` reservation | one consumed Thing/runtime-record capacity unit is reserved before Frozen so later publication cannot fail solely because Thing capacity was never admitted |
+## Compiler accounts
 
-Zero eligible registrations and multiple eligible registrations are structured admission failures. Registration order is not a tie-breaker.
+`BindingCompilerBounds` already separates:
 
-## 3. Admission physical memory
+- final artifact footprint;
+- cursor bytes;
+- peak temporary bytes; and
+- typed `WorkBudget`.
 
-These rows are `Active` during the aggregate transaction:
+Stage A first calls `bounds` on each final plan/candidate pair without making
+progress. It sums the declarations with checked arithmetic and reserves all
+four classes before the first `start`. Measured artifacts are admitted against
+their individual declaration and then against the transaction-wide persistent
+ledger.
 
-- `admission_temporary_bytes_per_operation_max`;
-- `admission_temporary_bytes_global_max`;
-- `peak_live_bytes_per_admission_max`;
-- `admission_peak_live_bytes_global_max`;
-- `engine_live_bytes_global_max`;
-- `largest_contiguous_allocation_bytes_max`;
-- `compiled_runtime_bytes_per_thing_max`;
-- `compiled_runtime_bytes_global_max`.
+Cursor and temporary charges return to zero before Frozen. An unpublished
+completed artifact remains charged while later coordinates compile. On
+failure, live cursors are aborted before their reservations are released;
+completed unpublished artifacts are dropped during the same private settlement.
 
-They account physically live engine-owned heap/arena state or exclusively reserved caller-owned static capacity exactly once. Logical field sizes are not double-counted as allocations.
+## Work applicability
 
-## 4. Plan-set and compiler rows
+The current typed `WorkBudget` classes remain authoritative. Stage A maps work
+as follows:
 
-`Active` before or at Frozen:
+| Work family | Stage-A use |
+|---|---|
+| `JsonSchemaNodes` | Schema validation only; it must not be relabelled as generic typed-TD or aggregate work. Parse work is zero for direct typed input. |
+| `UriBytes` and `SecurityBranches` | Target/default resolution and the explicit first-proof NoSec predicate. |
+| binding compiler classes | Per-coordinate bounded `step` progress. |
+| registration scan, property/form enumeration, material construction, index/seal, and join reconciliation | Required, but no current `WorkClass` accurately names these operations. This is an explicit predecessor gap. |
+| cleanup/reclaim classes | Cursor abort, unpublished material release, and later plan-set reclamation. |
+| call/response/decode classes | Deferred to runtime WP-400. |
+| fallback/multi-candidate selection classes | Deferred until PLAN-INDEX policy is admitted. |
 
-- `compiled_plan_bytes_max`;
-- `logical_plan_bytes_per_thing_max`;
-- `form_binding_candidates_per_operation_max`;
-- `plan_sets_per_thing_max`;
-- `plan_sets_global_max`;
-- `binding_artifacts_per_thing_max`;
-- `binding_artifacts_global_max`;
-- `binding_artifact_bytes_per_item_max`;
-- `binding_artifact_bytes_per_thing_max`;
-- `binding_artifact_bytes_global_max`;
-- `binding_compiler_cursor_bytes_per_item_max`;
-- `binding_compiler_cursor_bytes_global_max`;
-- `plan_compile_work_units_per_step_max`;
-- `plan_reclaim_bytes_per_step_max` for bounded abort/reclaim of provisional or Frozen material.
+Stage A must not mischarge the missing operations to `BindingPolls`,
+`CleanupItems`, or `JsonSchemaNodes`. A DECIDED migration needs one or more
+accurately named classes—at minimum separating representation-neutral document
+traversal from aggregate-plan build/reconcile work—before bounded production
+progress is constructible.
 
-`Deferred` until Published/runtime:
+## Reservation sequence
 
-- `plan_pins_per_plan_set_max`;
-- `plan_pins_global_max`.
+```text
+validated source charge transferred
+    -> reserve enumeration work + temporary ceiling
+    -> enumerate and measure exact coordinates
+    -> reserve plan-set slot + persistent shape ceiling
+    -> materialize final plans/candidates/targets
+    -> obtain compiler bounds from those exact values
+    -> reserve artifacts + cursors + compiler temporaries + typed work
+    -> start/step/admit artifacts
+    -> reconcile measured persistent ownership
+    -> release source + all temporary accounts
+    -> commit persistent ledger into Frozen
+```
 
-`NotApplicable` for the first eager proof:
+Each arrow is observable in the composite fixture. A compiler callback before
+compiler reservation, or final-plan allocation before shape reservation, is a
+constructibility failure.
 
-- all `lazy_plan_slots_*`;
-- all `lazy_artifact_*`;
-- all `cache_*` rows whose authority is `PLAN-CACHE-001`/`PLAN-LAZY-001`.
+## Cleanup and reclamation
 
-For each exact mandatory coordinate, current `BindingCompilerBounds` contributes final artifact footprint, cursor bytes, temporary bytes and typed lifetime work. Final PlanIds exist before `bounds`; all resource reservation occurs after every `bounds` succeeds and before any compiler `start`.
+For the current pure caller-owned compiler cursor, generic cleanup-operation
+record/byte rows make a **ZeroContribution** during pre-Frozen admission:
+`abort` consumes in-memory state synchronously and creates no external cleanup
+job. If a future compiler obtains an external resource, its SPI and resource
+declaration must change explicitly; Stage A must not assume that behavior.
 
-The schema still needs two first-proof lifetime ceilings before implementation:
+Plan-set reclamation remains **Active**. Frozen persistent charges stay live
+through `Published` and `Draining`, then are released under the existing
+bounded plan-reclaim work class before the generation can be reused.
 
-1. total Planning aggregate enumeration/index/reconciliation work per admission;
-2. aggregate compiler work summed across all mandatory coordinates.
+## Deferred runtime families
 
-The selected direction is additive Foundation-neutral work accounting. Per-step limits never replenish lifetime allowance.
+The following remain outside Stage A even though they are necessary for the
+later Consumer runtime:
 
-## 5. URI and security
+- concurrent call slots and queueing;
+- request/response buffers and codec state;
+- deadlines, cancellation after publication, and retry/fallback;
+- cache state and subscriptions; and
+- multi-candidate fairness or availability accounting.
 
-| Row | Disposition |
-| --- | --- |
-| `uri_template_source_bytes_max` | `Active` |
-| `uri_template_variables_max` | `Active` |
-| `expanded_uri_bytes_max` | `Deferred` to call-time unless immutable Planning material explicitly stores a bounded expansion result |
-| `security_expression_depth_max` | `Active` structural bound |
-| `security_branches_per_plan_max` | `Active` structural bound; semantic first-proof predicate still admits only deterministic NoSec/no branch choice |
-| `provider_probes_per_interaction_max` | `ZeroContribution(0)` during admission |
+They must not be charged to aggregate construction merely to make the resource
+table appear complete.
 
-No security row activates credentials/provider work in this proof.
+## Failure requirements
 
-## 6. Hierarchical accounting rows
+Every checked sum, multiplication, and representation conversion can fail
+before the corresponding allocation or compiler progress. Such failure records
+the first cause and enters private Building settlement. After settlement:
 
-`PERF-ACCOUNT-001` applies because aggregate reservation and reconcile use hierarchical resource accounts.
+- retained source is zero;
+- temporary validation/build memory is zero;
+- unpublished persistent runtime memory is zero;
+- compiler cursor and temporary memory is zero;
+- the snapshot lease is released;
+- no persistent ledger is committed; and
+- the unpublished plan-set generation is invalidated.
 
-| Row | Profile/disposition | Decision |
-| --- | --- | --- |
-| `accounting_batch_items_max` | `Active` | any batched atomic debit/release operation is bounded by this row |
-| `accounting_idle_items_max` | `ZeroContribution(0)` for admission | first-proof admission does not defer resource ownership into an idle accounting queue |
-| `accounting_reconcile_owners_per_step_max` | `Active` | bounds incremental owner reconciliation/rollback progress |
-| `accounting_reconcile_interval_millis_max` | `NotApplicable` to Consumer admission | registered only for gateway/directory-client periodic reconciliation, not this admission transition |
-| `accounting_reconcile_steps_max` | `Active` only where the selected profile supplies a value; otherwise schema-`NA` | bounds constrained/manual reconciliation completion; `NA` is not converted into an invented host limit |
+This is the resource meaning of authoritative `Building -> Failed`; it does
+not add a new public lifecycle state.
 
-The aggregate material fixture must retain a committed Frozen ledger/account state rather than decrementing every persistent reservation to zero at freeze.
+## Decision-time schema impact
 
-## 7. Diagnostics and status
-
-The current first-proof admission diagnostic is a bounded structured `CoreError`/fixed-width cause projection; it does not create durable binding status history.
-
-Therefore:
-
-- `durable_status_*` -> `Deferred` to runtime/status ownership, not Stage-A admission;
-- `binding_runtime_event_*` -> `Deferred` to runtime/status ownership;
-- no variable-sized diagnostic buffer is inferred from cleanup/status limits.
-
-If migration introduces variable-sized retained admission diagnostics, it must register an explicit bounded resource row rather than silently charging another family.
-
-## 8. Cleanup, retry and transfer
-
-Active during Stage-A failure/abort:
-
-- `cleanup_items_max`;
-- `cleanup_bytes_max`;
-- `cleanup_item_bytes_max`;
-- `cleanup_work_items_per_step_max`;
-- `plan_reclaim_bytes_per_step_max`.
-
-The current binding compiler cursor is pure in-memory planning state and `BindingCompilerExtension::abort(cursor)` has no protocol cleanup obligation. Consequently:
-
-- `cleanup_retry_records_max` -> `ZeroContribution(0)` for pre-Frozen aggregate admission;
-- `cleanup_retry_attempts_max` -> `ZeroContribution(0)`;
-- `cleanup_transfer_slots_global_max` -> `Deferred` to post-publication binding/call cleanup transfer;
-- `cleanup_transfer_bytes_global_max` -> `Deferred`;
-- binding cancel buffers / host call cleanup buffers -> `Deferred` to request execution.
-
-Partial aggregate success is still real provisional material: if coordinate N fails after earlier coordinates completed, those earlier logical plans/artifact envelopes/refs/index entries remain owned by `Aborting` until bounded release completes.
-
-## 9. Runtime binding/call/subscription/Producer domains
-
-The following are `Deferred` when they are Consumer runtime rows and `NotApplicable` when they are capability-exclusive outside this proof:
-
-- pending Consumer call counts, Host call bytes, binding request-slot state, binding poll temporary bytes, cancel buffers and wake/reactor resources -> `Deferred` until Published request execution;
-- subscriptions/collection subscription queues/drivers -> `NotApplicable`;
-- Producer handlers, in-flight responses, routes, route guards/readiness/ingress, endpoint reservations, emission/fanout -> `NotApplicable`;
-- Directory/discovery/query/watch/session/publication rows -> `NotApplicable`.
-
-## 10. Mechanical projection rule
-
-Migration must mechanically project `docs/resource-limits.csv` together with this map; it must not hand-copy a partial checked policy.
-
-The Stage-A coverage fixture classifies every current row with `consumer` or `all` applicability into `Active`, `ZeroContribution`, `Deferred`, or `NotApplicable` and fails on any unclassified row. Rows whose capability roles exclude Consumer are mechanically `NotApplicable` for this proof.
-
-For `Active`, `ZeroContribution`, and `Deferred`, profile `NA` is legal only when the registered schema marks that selected profile `NA`. No current active first-proof limit becomes unbounded merely because a field was omitted from a hand-maintained struct.
+A later DECIDED review should compare this projection row-by-row with
+`docs/resource-limits.csv`. The likely authoritative change is a typed,
+representation-neutral TD census/reservation family and any missing exact work
+classes revealed by that comparison. No schema change is made while this topic
+is `DISCUSSING`.
