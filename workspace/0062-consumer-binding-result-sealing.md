@@ -180,8 +180,8 @@ semantic boundary without pretending that every call occupies a slot:
 5. A validation failure remains a normal or late returned
    `Err(CoreError::Validation)` in the same terminal classification.
 6. Acknowledgement and clear are available to the installed runtime only after
-   a sealed terminal result or terminal cancellation disposition has been
-   retained. They cannot be used to discard an unvalidated success.
+   a sealed terminal result or an admitted terminal cancellation disposition
+   has been retained. They cannot be used to discard an unvalidated success.
 7. Slot reuse still occurs only after binding-private state drop in caller
    context, and zero-budget progress remains a no-op.
 
@@ -189,6 +189,36 @@ The static mediator may need a private sealing/disposition bit or equivalent
 linear carrier, but it does not duplicate the binding's request lifecycle
 state machine. Its retained/transient memory and work costs must be included in
 the registration's existing admitted resource accounts.
+
+### Static cleanup-transfer exclusion
+
+The active one-shot static Consumer boundary has no cleanup-transfer owner or
+target. Its caller-owned request slot is the manual cleanup owner. For request
+cancellation, the installed static runtime supplies a
+`CleanupPhaseContext::bind(...)` context whose `transfer_owner()` is `None`,
+not a Host-style `bind_with_transfer_owner(...)` context.
+
+`CleanupTransferRequest` has private fields and no direct public constructor.
+The only admitted derivation consumes the unchanged phase with a
+production-provided named owner through `try_into_transfer_request()`. For the
+static Consumer phase above, that call must return the unchanged phase as
+`Err(context)`. No authorized
+`BindingCancellationDisposition::TransferRequired` branch is therefore
+reachable for the live request. The runtime retains the slot and phase under
+manual progress until a sealed `Returned` value, `Complete`, or
+`ResidualExternalState` disposition.
+
+A raw authoring implementation could violate the SPI by discarding the
+supplied phase and manufacturing an unrelated one. Such a nominal value is not
+production-authorized transfer authority: the admitted static runtime has no
+owner or target that could accept it. It must not activate transfer machinery
+or permit the slot to be discarded.
+
+The correction must prove this reachability boundary; it must not add a static
+cleanup transfer reservation, `CleanupTransferEnvelope<ClientRequestSlot<_>>`,
+`CleanupTransferTarget`, executor, or new transfer state. The generic
+`BindingCallSettlement` spelling remains shared representation and does not by
+itself activate every variant for every profile.
 
 ## Frozen no-bypass boundary
 
@@ -223,9 +253,9 @@ constructible; the advertised static contract as a whole is not.
 ### Separately held public artifact reference or validation token
 
 Rejected because it lets the validation authority be separated or swapped
-between calls and makes normal, cancellation-late, and cleanup-transfer sealing
-a WP-400 convention. The private seal must remain paired with the accepted
-work object or the complete-registration static mediator.
+between calls and makes normal and cancellation-late sealing, plus Host cleanup
+transfer sealing, a WP-400 convention. The private seal must remain paired with
+the accepted Host work object or the complete-registration static mediator.
 
 ### Clone or reconstruct `OutboundRequest`
 
@@ -294,6 +324,9 @@ representations:
   classification and cleanup truth;
 - caller-interest drop and cleanup transfer retaining the complete Host call
   plus seal without duplication or loss;
+- static cancellation receiving no named transfer owner,
+  `try_into_transfer_request()` returning the unchanged phase, and no static
+  transfer envelope, target, or executor becoming reachable;
 - static acknowledgement/clear refusing to bypass an unsealed success and slot
   reuse only after a terminal disposition;
 - no installed raw Host or static client projection reachable by WP-400;

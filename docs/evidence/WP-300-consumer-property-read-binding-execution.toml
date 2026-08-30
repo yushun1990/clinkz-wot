@@ -55,6 +55,7 @@ excluded_claims = [
     "broad WP-300 completion",
     "legacy BindingRequest or legacy ClientBinding removal",
     "Core-mediated no-bypass result sealing across Host and application-static execution",
+    "application-static cleanup-transfer owner, envelope, target, or executor admission",
 ]
 
 [[verification]]
