@@ -39,6 +39,7 @@ pub use binding::{
     RouteReadinessOutcome, RouteReadinessSlot, RouteReservationIdentity, RouteResponseOpportunity,
     RouteTerminal, ServerResponseSlot, ServerRouteSlot, ServingActivationAuthority,
     StaticBindingComponents, StaticBindingRegistration, StaticBindingRegistrationInput,
+    StaticConsumerPropertyReadSlot,
 };
 #[cfg(feature = "std")]
 pub use binding::{
