@@ -555,29 +555,7 @@ fn check_tranche_registry(
             table_strings(tranche, "depends_on", "tranche dependency")?,
         );
     }
-    for (id, dependencies) in &graph {
-        for dependency in dependencies {
-            match tranche_state
-                .get(dependency)
-                .map(|(status, impact)| (status.as_str(), impact.as_str()))
-            {
-                Some((status, impact)) if tranche_dependency_available(status, impact) => {}
-                Some((status, impact)) => {
-                    return Err(format!(
-                        "tranche {id} depends on unavailable tranche {dependency} \
-                         ({status}, impact {impact})"
-                    ));
-                }
-                None => {
-                    return Err(format!(
-                        "tranche {id} depends on unknown tranche {dependency}"
-                    ));
-                }
-            }
-        }
-    }
-    check_dag(&graph, "tranche")?;
-    Ok(())
+    check_tranche_dependency_graph(&graph, &tranche_state)
 }
 
 fn valid_tranche_impact_state(status: &str, admission: &str, impact: &str) -> bool {
@@ -589,8 +567,55 @@ fn valid_tranche_impact_state(status: &str, admission: &str, impact: &str) -> bo
     }
 }
 
-fn tranche_dependency_available(status: &str, impact: &str) -> bool {
-    status == "complete" && impact == "current"
+fn check_tranche_dependency_graph(
+    graph: &BTreeMap<String, Vec<String>>,
+    tranche_state: &BTreeMap<String, (String, String)>,
+) -> Result<(), String> {
+    for (id, dependencies) in graph {
+        let (status, impact) = tranche_state
+            .get(id)
+            .ok_or_else(|| format!("tranche {id} has no lifecycle/impact state"))?;
+        for dependency in dependencies {
+            match tranche_state.get(dependency) {
+                Some((dependency_status, dependency_impact))
+                    if valid_tranche_dependency_edge(
+                        impact,
+                        dependency_status,
+                        dependency_impact,
+                    ) => {}
+                Some((dependency_status, dependency_impact)) => {
+                    return Err(format!(
+                        "tranche {id} ({status}, impact {impact}) cannot depend on tranche \
+                         {dependency} ({dependency_status}, impact {dependency_impact})"
+                    ));
+                }
+                None => {
+                    return Err(format!(
+                        "tranche {id} depends on unknown tranche {dependency}"
+                    ));
+                }
+            }
+        }
+    }
+    check_dag(graph, "tranche")
+}
+
+fn valid_tranche_dependency_edge(
+    dependent_impact: &str,
+    dependency_status: &str,
+    dependency_impact: &str,
+) -> bool {
+    match dependent_impact {
+        "current" => dependency_status == "complete" && dependency_impact == "current",
+        // These states preserve the pre-existing dependency graph while impact
+        // review or corrective work is active. They do not make either tranche
+        // executable or satisfy a current tranche's dependency.
+        "review-required" | "reopened" => matches!(
+            (dependency_status, dependency_impact),
+            ("complete", "current" | "review-required") | ("reopened", "reopened")
+        ),
+        _ => false,
+    }
 }
 
 fn check_dag(graph: &BTreeMap<String, Vec<String>>, context: &str) -> Result<(), String> {
@@ -845,7 +870,9 @@ fn set_difference(
 
 #[cfg(test)]
 mod tests {
-    use super::{tranche_dependency_available, valid_tranche_impact_state};
+    use std::collections::BTreeMap;
+
+    use super::{check_tranche_dependency_graph, valid_tranche_impact_state};
 
     #[test]
     fn tranche_impact_states_distinguish_current_review_and_reopening() {
@@ -877,9 +904,76 @@ mod tests {
     }
 
     #[test]
-    fn only_current_complete_tranches_satisfy_dependencies() {
-        assert!(tranche_dependency_available("complete", "current"));
-        assert!(!tranche_dependency_available("complete", "review-required"));
-        assert!(!tranche_dependency_available("reopened", "reopened"));
+    fn impact_graph_retains_transitively_non_current_dependencies() {
+        let graph = BTreeMap::from([
+            ("current-root".to_owned(), vec![]),
+            ("reopened-root".to_owned(), vec!["current-root".to_owned()]),
+            (
+                "reopened-dependent".to_owned(),
+                vec!["reopened-root".to_owned()],
+            ),
+            (
+                "review-on-reopened".to_owned(),
+                vec!["reopened-root".to_owned()],
+            ),
+            (
+                "review-on-review".to_owned(),
+                vec!["review-on-reopened".to_owned()],
+            ),
+        ]);
+        let states = BTreeMap::from([
+            (
+                "current-root".to_owned(),
+                ("complete".to_owned(), "current".to_owned()),
+            ),
+            (
+                "reopened-root".to_owned(),
+                ("reopened".to_owned(), "reopened".to_owned()),
+            ),
+            (
+                "reopened-dependent".to_owned(),
+                ("reopened".to_owned(), "reopened".to_owned()),
+            ),
+            (
+                "review-on-reopened".to_owned(),
+                ("complete".to_owned(), "review-required".to_owned()),
+            ),
+            (
+                "review-on-review".to_owned(),
+                ("complete".to_owned(), "review-required".to_owned()),
+            ),
+        ]);
+
+        assert!(check_tranche_dependency_graph(&graph, &states).is_ok());
+    }
+
+    #[test]
+    fn impact_graph_rejects_current_dependencies_on_non_current_tranches() {
+        for (dependency_status, dependency_impact) in
+            [("reopened", "reopened"), ("complete", "review-required")]
+        {
+            let graph = BTreeMap::from([
+                ("dependency".to_owned(), vec![]),
+                (
+                    "current-dependent".to_owned(),
+                    vec!["dependency".to_owned()],
+                ),
+            ]);
+            let states = BTreeMap::from([
+                (
+                    "dependency".to_owned(),
+                    (dependency_status.to_owned(), dependency_impact.to_owned()),
+                ),
+                (
+                    "current-dependent".to_owned(),
+                    ("complete".to_owned(), "current".to_owned()),
+                ),
+            ]);
+
+            let error = check_tranche_dependency_graph(&graph, &states)
+                .expect_err("a current tranche must reject a non-current dependency");
+            assert!(error.contains("current-dependent"));
+            assert!(error.contains("cannot depend on tranche dependency"));
+        }
     }
 }
