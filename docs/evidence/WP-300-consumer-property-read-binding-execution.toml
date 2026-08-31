@@ -2,15 +2,14 @@ schema_version = 1
 design_revision = "5.1"
 work_package = "WP-300"
 tranche = "WP-300-CONSUMER-PROPERTY-READ-BINDING"
-implementation_ref = "19fce672a98d56d3839fc9c21ad8b0a020dd7997"
-recorded_on = "2026-08-28"
-status = "superseded"
+implementation_ref = "0c7ec75a553f0b27858881564232b1c50107cc49"
+recorded_on = "2026-08-31"
+status = "passed"
 evidence_key = "consumer-property-read-binding-execution"
-admission_review = "github-pr:54"
-implementation_review = "github-pr:53"
-impact_review = "github-pr:58"
-superseded_on = "2026-08-30"
-superseded_reason = "Host acceptance and synchronous static completion can each lose the live request before Core response validation; the prior evidence exercises invocation, cancellation, and validation separately rather than proving one no-bypass composed result-sealing path"
+admission_review = "github-pr:59"
+implementation_review = "github-pr:60"
+replaces_implementation_ref = "19fce672a98d56d3839fc9c21ad8b0a020dd7997"
+replacement_reason = "the complete Host and application-static registration paths now retain Core-private validation authority across request transfer and seal every normal or cancellation-late successful result before exposure"
 
 requirement_ids = [
     "BIND-OUT-001",
@@ -33,19 +32,26 @@ production_paths = [
     "core/src/lib.rs",
 ]
 coverage = [
-    "OutboundRequest::property_read owns the exact Property target, ConsumerCall artifact reference, URI variables, and optional deadline and structurally rejects Thing, Action, Event, ConsumerSubscription, ProducerRoute, and ProducerPublication inputs",
-    "request binding id, binding generation, plan-set generation, and plan id accessors derive only from one private BindingArtifactRef while the public request exposes no TD, Form, InteractionOptions, provider, candidate, fallback, operation payload, or static resolved-target field",
-    "the implementation changes no security owner and adds no public security carrier; the admitted request is the no-binding-material baseline only",
-    "validate_untrusted_binding_output derives all expected identities from the live request, delegates to the existing private WP-100 kernel, rejects every identity, selection, payload, status, role, and action-reference negative, and preserves opaque native status values from zero through u16::MAX",
-    "an external Host client authored through clinkz_wot_core::binding::ClientBinding checks compatibility and exact artifact identity before acceptance, returns the exact request on rejection, returns an owned HostBindingCallBox before side effects, declares its immutable footprint and deadline, and produces terminal output",
-    "Host cancellation covers pending settlement and late BindingCallSettlement::Returned output without discard, with the cancelled branch retaining explicit BindingCancellationDisposition::Complete cleanup truth",
-    "an external PollClientBinding exercises synchronous, pending, terminal, rejected, zero-budget, cancellation, late-result, acknowledgement, clear, and next-generation reuse paths; synchronous Ready leaves ClientRequestSlot vacant, and this historical evidence does not compose that output with Core validation",
-    "one complete dual-role Host registration and one complete typed StaticBindingComponents server/client registration validate equal compiler, server, client, and artifact compatibility while the existing Producer-only Host and static constructor behavior remains valid",
-    "Host and static client-compatibility mismatch and a static request-state lifetime declaration above the registration admitted ceiling are rejected by complete registration before publication or protocol work",
-    "the Host call is necessarily static and the portable RequestState has no lifetime tied to the scoped start artifact borrow; external clients derive only bounded protocol-local state during construction, and OutboundRequest contains no per-call copy of resolved target, Form, content type, subprotocol, or artifact payload",
-    "the std plus async external test installs a poison legacy client for BindingRequest, supports, supports_with_thing, legacy async invoke, and subscribe; the target Host path succeeds with zero legacy calls and has no target-to-legacy conversion",
-    "external Host and static client implementations compile without a subscription associated type or method, and no target execution or evidence branch depends on inactive BIND-PROGRESS-001",
-    "authority validation, the locked workspace suite, focused external authoring tests, all three admitted Core feature cells, and the normal mainline pull-request validation pass",
+    "OutboundRequest::property_read retains the exact selected Property target, ConsumerCall artifact reference, URI variables, and optional deadline; the retained request tests continue to reject non-property targets and non-ConsumerCall artifacts",
+    "request binding id, binding generation, plan-set generation, and plan id accessors derive only from one private BindingArtifactRef while the public request exposes no TD, Form, InteractionOptions, provider, candidate, fallback, operation payload, or copied resolved-target field",
+    "the implementation changes no security owner and adds no public security carrier; the admitted request remains the no-binding-material baseline",
+    "validate_untrusted_binding_output derives expected identities from the live request and delegates to the existing private WP-100 kernel; the installed paths use the same kernel through a private non-Clone single-use seal rather than a second validator",
+    "an external Host client authored through clinkz_wot_core::binding::ClientBinding checks compatibility and exact artifact identity before acceptance, returns the exact request on rejection, returns an owned HostBindingCallBox before side effects, reports its immutable footprint and deadline, and covers successful, failed, pending-cancellation, and late-result exits",
+    "the complete Host registration validates binding id and generation, configuration, compatibility, plan-set generation, plan id, artifact slot, and ConsumerCall role before transfer, then exposes only a sealed call decorator and no raw installed-client projection",
+    "the Host decorator preserves binding errors, deadline behavior, cancellation classification, retry class, and cleanup disposition while validating normal Ok output and cancellation-late Returned(Ok(output)) inside their original branches",
+    "Host cleanup transfer acceptance and rejection move or return the complete decorated call with its underlying call, result seal, and immutable accounting still joined as one work object",
+    "an external PollClientBinding and ClientRequestSlot exercise synchronous Ready, pending, rejection, zero-budget, cancellation-late, acknowledgement, clear, and next-generation reuse behavior without a subscription member",
+    "the opaque StaticConsumerPropertyReadSlot becomes live for every accepted start, seals synchronous output from pre-transfer authority, seals pending normal and cancellation-late output against the exact live request, and permits clear and reuse only after complete-registration acknowledgement of terminal disposition",
+    "application-static cancellation receives a phase with no transfer owner, try_into_transfer_request returns that phase unchanged, and an author-fabricated TransferRequired value cannot release the installed slot or activate a transfer envelope, target, reservation, or executor",
+    "both installed representations accept valid output and reject binding-id, binding-generation, plan-id, response-selection, missing-metadata, missing-payload, non-Ok status, payload-role, and action-reference negatives after real request transfer; synchronous, pending, and cancellation-late exits are represented",
+    "one complete dual-role Host registration and one complete typed StaticBindingComponents registration validate equal compiler, server, client, and artifact compatibility, expose no raw installed Consumer execution projection, and preserve existing Producer-only registration APIs",
+    "client compatibility mismatch and an oversized complete static request carrier are rejected during complete registration before publication or protocol work",
+    "the Host call remains 'static and portable RequestState has no lifetime tied to the scoped artifact borrow; clients derive only bounded protocol-local state during construction and introduce no per-call copy of resolved target, Form, content type, subprotocol, or artifact payload",
+    "the target Host path succeeds with legacy BindingRequest, supports, supports_with_thing, legacy async invoke, and subscribe paths poisoned, proving zero target call edge or conversion to the retained legacy surface",
+    "raw Host and static traits remain public authoring SPIs without subscription members, while compile-fail no-bypass evidence proves installed complete registrations cannot project their private raw Consumer client to WP-400",
+    "the Host call reports the checked raw footprint plus fixed decorator and seal overhead; arithmetic overflow or admitted-ceiling overrun becomes an accepted Core error that retains the raw call and seal without polling",
+    "static complete-registration admission accounts the raw declared request lifetime plus the concrete complete Core slot layout, checks raw transient work against the declared ceiling, and records a zero Core validation transient delta because sealing moves and borrows fixed values without allocation or variable scratch",
+    "the locked workspace suite, focused no-default, async-no-std, and std Consumer tests, representative Core checks, authority validation, and pull-request mainline validation pass",
 ]
 excluded_claims = [
     "WP-400 Consumer execution or publication",
@@ -54,8 +60,7 @@ excluded_claims = [
     "subscription, observe, emission, collection, fallback, or broad retry semantics",
     "broad WP-300 completion",
     "legacy BindingRequest or legacy ClientBinding removal",
-    "Core-mediated no-bypass result sealing across Host and application-static execution",
-    "application-static cleanup-transfer owner, envelope, target, or executor admission",
+    "application-static cleanup-transfer owner, envelope, target, reservation, or executor admission",
 ]
 
 [[verification]]
@@ -79,6 +84,10 @@ command = "cargo test --locked -p clinkz-wot-core --no-default-features --featur
 status = "passed"
 
 [[verification]]
+command = "cargo test --locked -p clinkz-wot-core --all-features --doc"
+status = "passed"
+
+[[verification]]
 command = "cargo check --locked -p clinkz-wot-core --no-default-features"
 status = "passed"
 
@@ -91,6 +100,6 @@ command = "cargo check --locked -p clinkz-wot-core"
 status = "passed"
 
 [[verification]]
-command = "github-actions:mainline/validation@19fce672a98d56d3839fc9c21ad8b0a020dd7997"
+command = "github-actions:mainline/validation@0c7ec75a553f0b27858881564232b1c50107cc49"
 status = "passed"
-evidence = "github-actions-run:33137712095/job:98741367993"
+evidence = "github-actions-run:33359848559/job:99388959324"
