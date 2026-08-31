@@ -3,8 +3,8 @@
 use clinkz_wot_td::data_type::Operation;
 
 use crate::{
-    BindingGeneration, BindingId, CoreError, CoreResult, ErrorContext, ErrorPhase,
-    InteractionOutput, InteractionStatus, OutboundRequest, PlanId, ResponsePayloadRole,
+    BindingArtifactRef, BindingGeneration, BindingId, CoreError, CoreResult, ErrorContext,
+    ErrorPhase, InteractionOutput, InteractionStatus, OutboundRequest, PlanId, ResponsePayloadRole,
     ResponseSelection, RetryClass,
 };
 
@@ -22,6 +22,61 @@ pub fn validate_untrusted_binding_output(
         request.plan_id(),
         output,
     )
+}
+
+/// Private single-use authority for sealing one accepted Consumer result.
+///
+/// This is deliberately a projection of the selected call identity rather
+/// than a clone of [`OutboundRequest`]. Complete binding registrations create
+/// it immediately before transferring the request and never expose it to a
+/// binding author or runtime caller.
+pub(crate) struct ConsumerResultSeal {
+    artifact: BindingArtifactRef,
+}
+
+impl ConsumerResultSeal {
+    pub(crate) const fn from_request(request: &OutboundRequest) -> Self {
+        Self {
+            artifact: request.artifact(),
+        }
+    }
+
+    pub(crate) fn matches_request(&self, request: &OutboundRequest) -> bool {
+        self.artifact == request.artifact()
+    }
+
+    pub(crate) fn validate(self, output: InteractionOutput) -> CoreResult<InteractionOutput> {
+        let identity = self.artifact.identity();
+        validate_property_read_binding_output(
+            identity.binding_id(),
+            identity.binding_generation(),
+            identity.plan_id(),
+            output,
+        )
+    }
+
+    pub(crate) fn validate_against_request(
+        self,
+        request: &OutboundRequest,
+        output: InteractionOutput,
+    ) -> CoreResult<InteractionOutput> {
+        if self.matches_request(request) {
+            validate_untrusted_binding_output(request, output)
+        } else {
+            Err(self.validation_error(320, "accepted request identity changed"))
+        }
+    }
+
+    pub(crate) fn validation_error(&self, code: u16, cause: &str) -> CoreError {
+        let identity = self.artifact.identity();
+        CoreError::Validation(
+            ErrorContext::new(ErrorPhase::Validate, RetryClass::Never)
+                .with_operation(Operation::ReadProperty)
+                .with_plan(identity.plan_id())
+                .with_binding(identity.binding_id(), identity.binding_generation())
+                .with_redacted_cause(code, cause),
+        )
+    }
 }
 
 /// Validates the narrow Property Read response produced by a selected binding call.
