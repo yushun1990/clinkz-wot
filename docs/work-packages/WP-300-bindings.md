@@ -278,7 +278,21 @@ Minimum scope:
   the same accepted/rejected/terminal semantics;
 - pre-acceptance rejection returns the exact request; caller drop, cancellation,
   timeout, late result, and cleanup preserve one owner;
-- binding-origin success remains untrusted until Core validation.
+- every installed Host or constrained execution starts through its complete
+  registration, which derives private single-use validation authority before
+  moving the request;
+- the Host registration returns the existing call box around a thin sealing
+  decorator, while the constrained registration mediates one opaque complete
+  Consumer slot covering synchronous-ready, pending, and cancellation-late
+  results;
+- binding-origin success remains untrusted until Core validation in its
+  original normal or late-return terminal branch;
+- raw client traits and raw static request slots remain authoring SPIs, but an
+  installed registration exposes no raw Consumer component or acknowledgement
+  and clear bypass; and
+- Host transfer retains the decorated call, seal, and accounting together,
+  while the admitted static phase has no named transfer owner and introduces
+  no static cleanup-transfer machinery.
 
 Explicitly excluded:
 

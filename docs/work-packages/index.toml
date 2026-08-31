@@ -168,11 +168,9 @@ completion_evidence_path = "docs/evidence/WP-200-consumer-property-read-planning
 id = "WP-300-CONSUMER-PROPERTY-READ-BINDING"
 work_package = "WP-300"
 sequence = 310
-status = "reopened"
-admission_status = "candidate"
-impact_status = "reopened"
-impact_review = "github-pr:58"
-completion_evidence_disposition = "superseded"
+status = "planned"
+admission_status = "admitted"
+impact_status = "current"
 depends_on = ["WP-200-CONSUMER-PROPERTY-READ-PLANNING"]
 depends_on_packages = ["WP-000"]
 requirements = [
@@ -210,15 +208,31 @@ api_items = [
     "ClientBinding",
     "PollClientBinding",
     "ClientRequestSlot",
+    "StaticConsumerPropertyReadSlot",
     "HostBindingRegistrationInput",
     "HostBindingRegistration",
+    "host_binding_registration_start_consumer_property_read",
     "StaticBindingComponents",
     "StaticBindingRegistrationInput",
     "StaticBindingRegistration",
+    "static_consumer_property_read_slot_new",
+    "static_consumer_property_read_slot_is_vacant",
+    "static_binding_registration_start_consumer_property_read",
+    "static_binding_registration_poll_consumer_property_read",
+    "static_binding_registration_start_cancel_consumer_property_read",
+    "static_binding_registration_poll_cancel_consumer_property_read",
+    "static_binding_registration_acknowledge_consumer_property_read",
 ]
 state_machines = []
-resource_changes = []
-old_api_removals = []
+resource_changes = [
+    "BindingResourceDeclarations::admitted includes the Host seal/decorator and complete static Consumer slot",
+    "BindingResourceDeclarations::transient records the Core validation scratch delta",
+]
+old_api_removals = [
+    "host_binding_registration_client",
+    "static_binding_components_client",
+    "static_binding_components_client_mut",
+]
 performance_workloads = []
 implementation_paths = [
     "core/src/binding.rs",
@@ -233,6 +247,6 @@ pre_implementation_checks = [
     "cargo check --locked -p clinkz-wot-core --no-default-features --features async",
     "cargo check --locked -p clinkz-wot-core",
 ]
-admission_review = "github-pr:54"
+admission_review = "github-pr:pending"
 completion_evidence_keys = ["consumer-property-read-binding-execution"]
 completion_evidence_path = "docs/evidence/WP-300-consumer-property-read-binding-execution.toml"

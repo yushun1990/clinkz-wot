@@ -1,19 +1,18 @@
 # WP-300 Consumer Property Read Binding Admission
 
-Status: REOPENED under ADR-0013 impact review for design revision v5.1.
+Status: ADR-0013 readmission candidate for design revision v5.1.
 
 The prior admission froze only the first Consumer one-shot Binding tranche. It
 refined the broad retained WP-300 client surface for the active v5.1 Consumer
 Property Read proof and did not activate the later long-lived domain.
 
-The prior admission and completion evidence are no longer current. Independent
-review confirmed that Host acceptance and synchronous application-static
-completion can each make the selected request unavailable before the only
-admitted Core response validator can borrow it. The remaining sections record
-the superseded admission baseline and impact surface; they do not authorize
-production changes until Core-mediated result sealing, complete-registration
-no-bypass behavior, resource accounting, and replacement evidence are amended
-and independently readmitted.
+The prior completion evidence is superseded. Independent review confirmed that
+Host acceptance and synchronous application-static completion can each make
+the selected request unavailable before the only admitted Core response
+validator can borrow it. This corrected admission freezes Core-mediated result
+sealing, complete-registration no-bypass behavior, resource accounting, and
+replacement evidence for the same narrow tranche. It does not authorize source
+work until the exact readmission revision receives fresh independent review.
 
 ## Tranche
 
@@ -98,6 +97,15 @@ pub fn validate_untrusted_binding_output(
 
 The wrapper derives the expected binding id, binding generation, and plan id only from the live `OutboundRequest` and delegates to `validate_property_read_binding_output`. It adds no second validation algorithm and does not interpret protocol-native numeric status. No public caller may supply expected ids separately.
 
+An installed complete registration derives a private, non-`Clone`, single-use
+seal from the exact request immediately before transfer. The seal is a
+Core-private projection of the selected call identity, not a clone of the
+request, a public accepted-call token, or a caller-populated expected-id bag.
+Every normal or cancellation-late successful output consumes that authority or
+is checked against the exact live static slot request before leaving the
+registration. A validation failure remains an error in the same normal or
+`BindingCallSettlement::Returned` branch.
+
 ## Immutable artifact handoff
 
 A selected client constructor receives the exact admitted artifact envelope as a scoped read-only borrow together with the owned request. This borrow is necessary to keep static target/protocol facts behind the immutable compiled artifact rather than copying them into `OutboundRequest`.
@@ -128,6 +136,10 @@ pub trait ClientBinding: Send + Sync {
 
 There is no target `subscribe` method in this tranche. Constructor rejection is side-effect free and returns the exact request. Acceptance returns one owned `HostBindingCallBox` before the first protocol side effect. The existing `HostBindingCall` contract owns polling, immutable lifetime footprint, cancellation, late completion, deadline wake, settlement, and cleanup transfer; this tranche does not create a second host call state machine.
 
+This trait is the raw third-party authoring SPI. Installed runtime code does not
+receive it from a complete registration; the Host registration operation
+defined below wraps an accepted raw call with the Core result seal.
+
 The legacy `core::outbound::ClientBinding`, `BindingRequest`, `supports`, and `supports_with_thing` remain untouched for legitimate unmigrated capabilities. Target tests must poison those paths and still pass, proving zero target edge to them. The root `clinkz_wot_core::ClientBinding` export therefore remains legacy during this tranche; target third-party authors import `clinkz_wot_core::binding::ClientBinding`. A later staged legacy-removal tranche may switch the root export without changing this target trait.
 
 ## Constrained selected client path
@@ -149,7 +161,7 @@ impl<S> ClientRequestSlot<S> {
 }
 ```
 
-`initialize` is valid only for a vacant admitted slot. `clear` is valid only after terminal result/cancellation disposition has been retained by the caller and acknowledged. Reuse occurs only after state drop in caller context.
+`initialize` is valid only for a vacant admitted slot. `clear` is valid only after terminal result/cancellation disposition has been retained by the caller and acknowledged. Reuse occurs only after state drop in caller context. This raw slot remains available to binding authors but is not the installed runtime carrier.
 
 The request-only static trait is frozen to:
 
@@ -220,13 +232,38 @@ impl BindingRegistrationCapabilities {
 }
 ```
 
-For Host registration, `HostBindingRegistrationInput` gains a dual-role constructor that takes the existing server plus one target `Box<dyn clinkz_wot_core::binding::ClientBinding>`. Existing Producer-only `new(...)` remains source- and behavior-compatible. `HostBindingRegistration::new` validates that a dual-role input has both components, that compiler/server/client artifact compatibility equals the registration identity, and that the selected host execution/resource declarations are valid. It exposes:
+For Host registration, `HostBindingRegistrationInput` keeps the dual-role
+constructor that takes the existing server plus one target
+`Box<dyn clinkz_wot_core::binding::ClientBinding>`. Existing Producer-only
+`new(...)` remains source- and behavior-compatible.
+`HostBindingRegistration::new` validates that a dual-role input has both
+components, that compiler/server/client artifact compatibility equals the
+registration identity, and that the selected host execution/resource
+declarations are valid. The only installed Consumer execution projection is:
 
 ```rust
 impl HostBindingRegistration {
-    pub fn client(&self) -> Option<&dyn clinkz_wot_core::binding::ClientBinding>;
+    pub fn start_consumer_property_read(
+        &self,
+        request: OutboundRequest,
+        artifact: &BindingArtifactEnvelope<HostBindingArtifact>,
+    ) -> Result<
+        HostBindingCallBox<CoreResult<InteractionOutput>>,
+        BindingInputRejection<OutboundRequest>,
+    >;
 }
 ```
+
+Before moving the request, this method requires Consumer Property Read
+capability and checks all overlapping registration, request, and artifact
+identity: binding id/generation, configuration, compatibility, plan-set
+generation, plan id, and `ConsumerCall` role. Rejection returns the exact
+request. Acceptance wraps the existing raw `HostBindingCallBox` in one private
+decorator that delegates its lifecycle and intercepts only normal
+`Ok(InteractionOutput)` and late
+`BindingCallSettlement::Returned(Ok(InteractionOutput))`. The public return
+type stays the existing call box. `HostBindingRegistration::client()` is
+removed, so installation does not expose an unsealed alternative.
 
 For application-static registration, existing Producer-only `StaticBindingRegistrationInput<B>` and `StaticBindingRegistration<B>` source spelling remains valid. The dual-role path uses one typed server/client pair:
 
@@ -236,14 +273,122 @@ pub struct StaticBindingComponents<S, C> { /* private */ }
 impl<S, C> StaticBindingComponents<S, C> {
     pub const fn new(server: S, client: C) -> Self;
     pub const fn server(&self) -> &S;
-    pub const fn client(&self) -> &C;
-    pub fn client_mut(&mut self) -> &mut C;
 }
 ```
 
 where `S: PollServerBinding`, `C: PollClientBinding<Compiler = S::Compiler>`. The pair delegates the Producer server contract unchanged and gives the complete registration one typed Consumer component with the same compiler/artifact universe. `StaticBindingRegistrationInput<StaticBindingComponents<S, C>>` gains a dual-role constructor, and `StaticBindingRegistration<StaticBindingComponents<S, C>>` gains a dual-role validating constructor. Existing Producer-only `StaticBindingRegistration<B>::new` is unchanged.
 
-The dual-role validation requires Producer and Consumer Property Read capabilities, the existing selected static execution profile, one compiler identity, equal server/client artifact compatibility, valid existing resource/ingress declarations, and `client.request_state_layout()` fitting within the registration's admitted retained-resource ceiling. This tranche does not add client-only registration, subscription state, another compiler component, or an artifact side table.
+The installed static Consumer carrier and complete-registration operations are
+frozen to:
+
+```rust
+pub struct StaticConsumerPropertyReadSlot<S> { /* private */ }
+
+impl<S> StaticConsumerPropertyReadSlot<S> {
+    pub const fn new() -> Self;
+    pub const fn is_vacant(&self) -> bool;
+}
+
+impl<S, C> StaticBindingRegistration<StaticBindingComponents<S, C>>
+where
+    S: PollServerBinding,
+    C: PollClientBinding<Compiler = S::Compiler>,
+{
+    pub fn start_consumer_property_read(
+        &mut self,
+        request: OutboundRequest,
+        artifact: &BindingArtifactEnvelope<
+            <S::Compiler as BindingCompilerExtension>::Artifact,
+        >,
+        slot: &mut StaticConsumerPropertyReadSlot<C::RequestState>,
+        budget: &mut WorkBudget,
+    ) -> Result<
+        StartStatus<CoreResult<InteractionOutput>>,
+        BindingInputRejection<OutboundRequest>,
+    >;
+
+    pub fn poll_consumer_property_read(
+        &mut self,
+        cx: &mut Context<'_>,
+        slot: &mut StaticConsumerPropertyReadSlot<C::RequestState>,
+        budget: &mut WorkBudget,
+    ) -> Poll<CoreResult<InteractionOutput>>;
+
+    pub fn start_cancel_consumer_property_read(
+        &mut self,
+        cx: &mut Context<'_>,
+        cleanup: CleanupPhaseContext,
+        slot: &mut StaticConsumerPropertyReadSlot<C::RequestState>,
+        budget: &mut WorkBudget,
+    ) -> CoreResult<
+        StartStatus<BindingCallSettlement<CoreResult<InteractionOutput>>>,
+    >;
+
+    pub fn poll_cancel_consumer_property_read(
+        &mut self,
+        cx: &mut Context<'_>,
+        slot: &mut StaticConsumerPropertyReadSlot<C::RequestState>,
+        budget: &mut WorkBudget,
+    ) -> Poll<CoreResult<BindingCallSettlement<CoreResult<InteractionOutput>>>>;
+
+    pub fn acknowledge_consumer_property_read(
+        &mut self,
+        slot: &mut StaticConsumerPropertyReadSlot<C::RequestState>,
+    ) -> CoreResult<()>;
+}
+```
+
+The opaque slot privately contains the raw `ClientRequestSlot`, result seal,
+and the minimum disposition state needed to gate acknowledgement. It becomes
+live on every accepted start, including synchronous `Ready`, and becomes
+vacant only through the complete registration acknowledgement method. A
+synchronous success is sealed from the authority captured before
+`start_request`; pending normal and late-return successes are sealed against
+the exact request retained in the raw slot. Raw request/state/clear access is
+not projected. Acknowledgement calls the raw binding and then clears an
+occupied raw slot; a synchronous terminal with a vacant raw slot skips that
+callback and clears only the complete Core carrier.
+`StaticBindingComponents::client()` and `client_mut()` are
+removed; `StaticBindingRegistration::server_mut()` remains the Producer
+progress projection but cannot reveal the private Consumer component.
+
+The dual-role validation requires Producer and Consumer Property Read
+capabilities, the existing selected static execution profile, one compiler
+identity, equal server/client artifact compatibility, valid existing
+resource/ingress declarations, and the raw request state plus Core slot/seal
+layout fitting within the registration's admitted retained-resource ceiling.
+This tranche does not add client-only registration, subscription state,
+another compiler component, or an artifact side table.
+
+## Result-sealing resource and cleanup accounting
+
+The Host decorator reports the checked sum of the raw call lifetime footprint
+and fixed Core decorator/seal overhead. That sum, including arithmetic
+overflow, is checked against the existing admitted ceiling before the raw call
+is first polled. An overrun becomes an accepted-call Core error without
+claiming that the already-moved request was rejected. A Host cleanup offer
+transfers the entire decorated
+`HostBindingCallBox`; acceptance or rejection therefore cannot separate the
+underlying call, seal, or accounting.
+
+For static execution, registration validates the complete
+`StaticConsumerPropertyReadSlot<C::RequestState>` retained layout rather than
+only `C::request_state_layout()`. The existing
+`BindingResourceDeclarations::admitted` field owns those retained items/bytes.
+The validation kernel allocates no dynamic buffer or variable scratch; its
+fixed temporary delta is recorded in the existing `transient` declaration, and
+zero is permitted only when the implementation proves a zero delta. Sealing is
+one constant-time step within the same bounded callback quantum. No new
+resource field, pool, queue, or state machine is admitted.
+
+Static request cancellation receives only a
+`CleanupPhaseContext::bind(...)` phase whose `transfer_owner()` is `None`.
+`try_into_transfer_request()` therefore returns the unchanged phase. The
+complete static mediator never exposes `TransferRequired` as authorized
+runtime work and never releases the slot for a fabricated transfer request; it
+retains manual ownership until `Returned`, `Complete`, or
+`ResidualExternalState`. No static cleanup-transfer envelope, target,
+reservation, or executor enters this tranche.
 
 ## Ownership and cancellation rules
 
@@ -251,7 +396,7 @@ The dual-role validation requires Producer and Consumer Property Read capabiliti
 - The artifact borrow is checked before acceptance and cannot be retained.
 - Caller-interest drop never means call cleanup. The call/slot owner remains live until result, cancellation settlement, acknowledged transfer, or durable residual disposition.
 - Pre-acceptance rejection returns the exact `OutboundRequest`; it never rebuilds a request and never re-enters Planning.
-- Completion and cancellation race through the existing first-cause/settlement contract. A late successful output remains untrusted until `validate_untrusted_binding_output` succeeds.
+- Completion and cancellation race through the existing first-cause/settlement contract. A late successful output remains untrusted until the complete registration consumes its private seal through the existing Core kernel.
 - `BindingCallSettlement::Returned` is the only late-value branch. Cancellation cannot discard a late output or invent `NoSideEffect` after an unknown side effect.
 - No target path obtains `Thing`, raw `Form`, `InteractionOptions`, credential provider, legacy `BindingRequest`, `supports`, `supports_with_thing`, or a candidate-selection callback.
 
@@ -285,11 +430,10 @@ cargo check --locked -p clinkz-wot-core
 
 The evidence at
 `docs/evidence/WP-300-consumer-property-read-binding-execution.toml` is the
-superseded historical checkpoint. Before this tranche can be readmitted, this
-section and the affected Host/static execution projections must be amended from
-an independently accepted result-sealing decision. Before the reopened tranche
-becomes `complete`, replacement evidence must record the exact corrected
-implementation checkpoint and passing evidence for all of the following:
+superseded historical checkpoint. After this readmission is independently
+accepted and the corrected source is implemented, the tranche cannot become
+`complete` until replacement evidence records the exact implementation
+checkpoint and passing evidence for all of the following:
 
 - `OutboundRequest::property_read` exact positive construction plus rejection of non-property targets and non-`ConsumerCall` artifacts;
 - request accessors derive binding/plan generations from one artifact ref and expose no TD/Form/options/provider/fallback surface;
