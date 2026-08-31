@@ -35,4 +35,3 @@ tools/check-architecture-adrs.sh,architecture-decision-checker,non-normative-che
 tools/check-directory-client-scope.sh,directory-client-boundary-checker,non-normative-checker,5.0,1,docs/design.md
 tools/check-resource-limits.sh,resource-profile-checker,non-normative-checker,5.0,1,docs/design.md
 tools/check-legacy-api-absence.sh,removed-public-api-checker,non-normative-checker,5.0,1,docs/design.md
-tools/check-v5.1-authority.py,active-v5.1-authority-checker,non-normative-checker,5.1,1,docs/design.md
