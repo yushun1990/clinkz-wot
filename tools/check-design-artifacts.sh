@@ -34,7 +34,7 @@ while IFS=, read -r relative _role _normativity _revision _schema requirement_so
     fi
 done <"$registry"
 
-python3 "$root/tools/check-v5.1-authority.py"
+cargo test --locked --quiet --manifest-path "$root/tools/design-check/Cargo.toml" --test current_authority
 cargo run --locked --quiet --manifest-path "$root/tools/design-check/Cargo.toml" -- check
 "$root/tools/check-api-ownership.sh"
 "$root/tools/check-architecture-adrs.sh"
