@@ -1,8 +1,19 @@
 # WP-300 Consumer Property Read Binding Admission
 
-Status: ADR-0013 admission candidate for design revision v5.1.
+Status: REOPENED under ADR-0013 impact review for design revision v5.1.
 
-This document freezes only the first Consumer one-shot Binding tranche. It refines the broad retained WP-300 client surface for the active v5.1 Consumer Property Read proof and does not activate the later long-lived domain.
+The prior admission froze only the first Consumer one-shot Binding tranche. It
+refined the broad retained WP-300 client surface for the active v5.1 Consumer
+Property Read proof and did not activate the later long-lived domain.
+
+The prior admission and completion evidence are no longer current. Independent
+review confirmed that Host acceptance and synchronous application-static
+completion can each make the selected request unavailable before the only
+admitted Core response validator can borrow it. The remaining sections record
+the superseded admission baseline and impact surface; they do not authorize
+production changes until Core-mediated result sealing, complete-registration
+no-bypass behavior, resource accounting, and replacement evidence are amended
+and independently readmitted.
 
 ## Tranche
 
@@ -194,7 +205,7 @@ pub trait PollClientBinding {
 }
 ```
 
-`start_request` transfers the request only when accepted. Rejection returns the exact request and leaves the slot vacant. A synchronous completion is terminal without hidden retained protocol work. A pending start owns the request and state in the slot until terminal acknowledgement. Cancellation uses the existing `BindingCallSettlement` / `CleanupPhaseContext` semantics. A zero `BindingPolls` budget performs no binding callback or slot mutation. No subscription associated state or method is admitted.
+`start_request` transfers the request only when accepted. Rejection returns the exact request and leaves the slot vacant. A synchronous completion is terminal without hidden retained protocol work. A pending start owns the request and state in the slot until terminal acknowledgement. Cancellation uses the existing `BindingCallSettlement` / `CleanupPhaseContext` representation, but the active static Consumer slice supplies only `CleanupPhaseContext::bind(...)` with no named transfer owner. `CleanupTransferRequest` has private fields and no direct public constructor, while the admitted `try_into_transfer_request()` derivation returns a phase without an owner unchanged. No authorized `TransferRequired` branch is therefore reachable for a conforming static request call. The caller-owned slot remains the manual cleanup owner until `Returned`, `Complete`, or `ResidualExternalState`; no static cleanup-transfer envelope, target, or executor is admitted. A raw authoring implementation that fabricates an unrelated phase has not acquired production transfer authority and cannot activate an installed transfer path. A zero `BindingPolls` budget performs no binding callback or slot mutation. No subscription associated state or method is admitted.
 
 ## Complete registration projection
 
@@ -272,19 +283,31 @@ cargo check --locked -p clinkz-wot-core
 
 ## Completion evidence
 
-Before this tranche becomes `complete`, `docs/evidence/WP-300-consumer-property-read-binding-execution.toml` must record the exact implementation checkpoint and passing evidence for all of the following:
+The evidence at
+`docs/evidence/WP-300-consumer-property-read-binding-execution.toml` is the
+superseded historical checkpoint. Before this tranche can be readmitted, this
+section and the affected Host/static execution projections must be amended from
+an independently accepted result-sealing decision. Before the reopened tranche
+becomes `complete`, replacement evidence must record the exact corrected
+implementation checkpoint and passing evidence for all of the following:
 
 - `OutboundRequest::property_read` exact positive construction plus rejection of non-property targets and non-`ConsumerCall` artifacts;
 - request accessors derive binding/plan generations from one artifact ref and expose no TD/Form/options/provider/fallback surface;
 - no-security-material baseline only; no new public security carrier appears;
 - public `validate_untrusted_binding_output(&OutboundRequest, InteractionOutput)` delegates to the WP-100 kernel and rejects every existing identity/shape negative case while retaining opaque native status;
 - external Host authoring through `clinkz_wot_core::binding::ClientBinding`, including exact artifact/compatibility check, exact-request rejection, constructor-before-side-effect ownership, declared lifetime footprint, successful terminal output, timeout/cancellation, late-result retention, and cleanup settlement;
-- external static authoring through `PollClientBinding` and `ClientRequestSlot`, including accepted/pending/terminal/rejected cases, generation-safe slot reuse, zero-budget no-op, cancellation/late-result settlement, and acknowledgement before clear;
-- one dual-role Host complete registration and one dual-role static complete registration with equal compiler/server/client compatibility, plus regression of the existing Producer-only registration APIs;
+- the installable Host complete registration derives private validation authority before request transfer and exposes only a sealed runtime call path; normal and late `Returned` successes are validated without changing their terminal classification, and accepted/rejected cleanup transfer preserves the call, seal, and accounting as one work object;
+- external static authoring through `PollClientBinding` and `ClientRequestSlot`, including synchronous-ready, pending, rejected, zero-budget, cancellation-late, acknowledgement, clear, and generation-safe reuse behavior;
+- the installable static complete registration captures validation authority before `start_request`, seals synchronous-ready output immediately, seals pending normal and late output against the live slot request, and rejects acknowledgement/clear until the terminal value is sealed or cancellation has terminally disposed of the call;
+- application-static cancellation uses a phase with `transfer_owner() == None`, proves that `try_into_transfer_request()` returns the unchanged phase, and exposes no static request-slot transfer envelope, target, reservation, or executor;
+- valid success plus every binding id, binding generation, plan id, response selection, status, payload shape/role, and action-reference negative is exercised after real request transfer in both Host and static representations, including synchronous, pending, and cancellation-late exits;
+- one dual-role Host complete registration and one dual-role static complete registration with equal compiler/server/client compatibility, no raw installed-client execution projection, and regression of the existing Producer-only registration APIs;
 - a mismatched client compatibility or oversized static request state is rejected before publication or protocol work;
 - the scoped artifact borrow cannot be retained by the returned `'static` Host call or static request state and no per-call copy of resolved static target/form data is introduced;
 - target tests poison legacy `BindingRequest`, `supports`, `supports_with_thing`, and legacy async `ClientBinding::invoke`; the target path still succeeds and contains no conversion to those values;
 - target Host/static traits expose no subscription member and no implementation/evidence path depends on inactive `BIND-PROGRESS-001`;
+- public raw Host/static traits remain authoring SPIs, but WP-400 cannot obtain an unsealed call path from an installed complete registration;
+- the validation seal and any static mediation state have explicit retained/transient resource and work accounting;
 - `no-default`, `async-no-std`, and `std` cells pass; and
 - normal mainline CI passes.
 

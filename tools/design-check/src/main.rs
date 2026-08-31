@@ -234,8 +234,8 @@ fn expand_requirement(expression: &str) -> Result<Vec<String>, String> {
 fn check_work_packages(root: &Path) -> Result<(), String> {
     let relative = "docs/work-packages/index.toml";
     let document = parse_toml(root, relative)?;
-    if root_integer(&document, "schema_version", relative)? != 5 {
-        return Err(format!("{relative} is not work-package schema version 5"));
+    if root_integer(&document, "schema_version", relative)? != 6 {
+        return Err(format!("{relative} is not work-package schema version 6"));
     }
     require_root_string(&document, "design_revision", "5.1", relative)?;
     let packages = document
@@ -409,7 +409,7 @@ fn check_tranche_registry(
     }
 
     let mut graph = BTreeMap::new();
-    let mut tranche_status = BTreeMap::new();
+    let mut tranche_state = BTreeMap::new();
     for tranche in tranches {
         let id = table_string(tranche, "id", "tranche")?;
         if graph.contains_key(&id) {
@@ -417,20 +417,56 @@ fn check_tranche_registry(
         }
         let work_package = table_string(tranche, "work_package", &id)?;
         if !package_graph.contains_key(&work_package) {
-            return Err(format!("tranche {id} has unknown work package {work_package}"));
+            return Err(format!(
+                "tranche {id} has unknown work package {work_package}"
+            ));
         }
         let status = table_string(tranche, "status", &id)?;
-        if !matches!(status.as_str(), "planned" | "in-progress" | "complete") {
+        if !matches!(
+            status.as_str(),
+            "planned" | "in-progress" | "complete" | "reopened"
+        ) {
             return Err(format!("tranche {id} has invalid status {status:?}"));
         }
-        tranche_status.insert(id.clone(), status.clone());
         let admission_status = table_string(tranche, "admission_status", &id)?;
         if !matches!(admission_status.as_str(), "candidate" | "admitted") {
-            return Err(format!("tranche {id} has invalid admission status {admission_status:?}"));
+            return Err(format!(
+                "tranche {id} has invalid admission status {admission_status:?}"
+            ));
         }
-        if table_string(tranche, "impact_status", &id)? != "current" {
-            return Err(format!("tranche {id} does not have current impact status"));
+        let impact_status = table_string(tranche, "impact_status", &id)?;
+        if !matches!(
+            impact_status.as_str(),
+            "current" | "review-required" | "reopened"
+        ) {
+            return Err(format!(
+                "tranche {id} has invalid impact status {impact_status:?}"
+            ));
         }
+        if !valid_tranche_impact_state(&status, &admission_status, &impact_status) {
+            return Err(format!(
+                "tranche {id} has inconsistent lifecycle/admission/impact state \
+                 {status:?}/{admission_status:?}/{impact_status:?}"
+            ));
+        }
+        if impact_status != "current" {
+            if table_string(tranche, "impact_review", &id)?.is_empty() {
+                return Err(format!("tranche {id} has no impact review location"));
+            }
+            let disposition = table_string(tranche, "completion_evidence_disposition", &id)?;
+            let expected = if impact_status == "review-required" {
+                "under-review"
+            } else {
+                "superseded"
+            };
+            if disposition != expected {
+                return Err(format!(
+                    "tranche {id} has completion evidence disposition {disposition:?}; \
+                     expected {expected:?} for impact state {impact_status:?}"
+                ));
+            }
+        }
+        tranche_state.insert(id.clone(), (status.clone(), impact_status.clone()));
 
         for dependency in table_strings(tranche, "depends_on_packages", &id)? {
             match package_status.get(&dependency).map(String::as_str) {
@@ -440,19 +476,25 @@ fn check_tranche_registry(
                         "tranche {id} depends on incomplete package {dependency} ({state})"
                     ));
                 }
-                None => return Err(format!("tranche {id} depends on unknown package {dependency}")),
+                None => {
+                    return Err(format!(
+                        "tranche {id} depends on unknown package {dependency}"
+                    ));
+                }
             }
         }
         for requirement in table_strings(tranche, "requirements", &id)? {
             if !known_requirements.contains(&requirement) {
-                return Err(format!("tranche {id} references unknown requirement {requirement}"));
+                return Err(format!(
+                    "tranche {id} references unknown requirement {requirement}"
+                ));
             }
         }
         let feature_cells = table_strings(tranche, "feature_cells", &id)?;
         if feature_cells.is_empty()
-            || feature_cells.iter().any(|cell| {
-                !matches!(cell.as_str(), "no-default" | "async-no-std" | "std")
-            })
+            || feature_cells
+                .iter()
+                .any(|cell| !matches!(cell.as_str(), "no-default" | "async-no-std" | "std"))
         {
             return Err(format!("tranche {id} has invalid or empty feature cells"));
         }
@@ -475,7 +517,31 @@ fn check_tranche_registry(
             return Err(format!("tranche {id} has no completion evidence keys"));
         }
         let evidence_path = table_string(tranche, "completion_evidence_path", &id)?;
-        validate_relative_path(&evidence_path, &format!("tranche {id} completion evidence path"))?;
+        validate_relative_path(
+            &evidence_path,
+            &format!("tranche {id} completion evidence path"),
+        )?;
+        if matches!(status.as_str(), "complete" | "reopened") {
+            require_file(
+                root,
+                &evidence_path,
+                &format!("tranche {id} completion evidence"),
+            )?;
+            let evidence = parse_toml(root, &evidence_path)?;
+            require_root_string(&evidence, "tranche", &id, &evidence_path)?;
+            let evidence_status = root_string(&evidence, "status", &evidence_path)?;
+            let expected_evidence_status = if impact_status == "reopened" {
+                "superseded"
+            } else {
+                "passed"
+            };
+            if evidence_status != expected_evidence_status {
+                return Err(format!(
+                    "tranche {id} has {impact_status:?} impact but completion evidence \
+                     status {evidence_status:?}; expected {expected_evidence_status:?}"
+                ));
+            }
+        }
         for field in [
             "state_machines",
             "resource_changes",
@@ -484,23 +550,72 @@ fn check_tranche_registry(
         ] {
             let _ = table_strings(tranche, field, &id)?;
         }
-        graph.insert(id, table_strings(tranche, "depends_on", "tranche dependency")?);
+        graph.insert(
+            id,
+            table_strings(tranche, "depends_on", "tranche dependency")?,
+        );
     }
-    for (id, dependencies) in &graph {
+    check_tranche_dependency_graph(&graph, &tranche_state)
+}
+
+fn valid_tranche_impact_state(status: &str, admission: &str, impact: &str) -> bool {
+    match (status, admission, impact) {
+        ("reopened", "candidate", "reopened") | ("complete", "admitted", "review-required") => true,
+        ("reopened", _, _) | (_, _, "reopened" | "review-required") => false,
+        (_, _, "current") => true,
+        _ => false,
+    }
+}
+
+fn check_tranche_dependency_graph(
+    graph: &BTreeMap<String, Vec<String>>,
+    tranche_state: &BTreeMap<String, (String, String)>,
+) -> Result<(), String> {
+    for (id, dependencies) in graph {
+        let (status, impact) = tranche_state
+            .get(id)
+            .ok_or_else(|| format!("tranche {id} has no lifecycle/impact state"))?;
         for dependency in dependencies {
-            match tranche_status.get(dependency).map(String::as_str) {
-                Some("complete") => {}
-                Some(state) => {
+            match tranche_state.get(dependency) {
+                Some((dependency_status, dependency_impact))
+                    if valid_tranche_dependency_edge(
+                        impact,
+                        dependency_status,
+                        dependency_impact,
+                    ) => {}
+                Some((dependency_status, dependency_impact)) => {
                     return Err(format!(
-                        "tranche {id} depends on incomplete tranche {dependency} ({state})"
+                        "tranche {id} ({status}, impact {impact}) cannot depend on tranche \
+                         {dependency} ({dependency_status}, impact {dependency_impact})"
                     ));
                 }
-                None => return Err(format!("tranche {id} depends on unknown tranche {dependency}")),
+                None => {
+                    return Err(format!(
+                        "tranche {id} depends on unknown tranche {dependency}"
+                    ));
+                }
             }
         }
     }
-    check_dag(&graph, "tranche")?;
-    Ok(())
+    check_dag(graph, "tranche")
+}
+
+fn valid_tranche_dependency_edge(
+    dependent_impact: &str,
+    dependency_status: &str,
+    dependency_impact: &str,
+) -> bool {
+    match dependent_impact {
+        "current" => dependency_status == "complete" && dependency_impact == "current",
+        // These states preserve the pre-existing dependency graph while impact
+        // review or corrective work is active. They do not make either tranche
+        // executable or satisfy a current tranche's dependency.
+        "review-required" | "reopened" => matches!(
+            (dependency_status, dependency_impact),
+            ("complete", "current" | "review-required") | ("reopened", "reopened")
+        ),
+        _ => false,
+    }
 }
 
 fn check_dag(graph: &BTreeMap<String, Vec<String>>, context: &str) -> Result<(), String> {
@@ -751,4 +866,114 @@ fn set_difference(
     let missing: Vec<_> = left.difference(right).cloned().collect();
     let extra: Vec<_> = right.difference(left).cloned().collect();
     format!("{left_name} and {right_name} differ; missing={missing:?}, extra={extra:?}")
+}
+
+#[cfg(test)]
+mod tests {
+    use std::collections::BTreeMap;
+
+    use super::{check_tranche_dependency_graph, valid_tranche_impact_state};
+
+    #[test]
+    fn tranche_impact_states_distinguish_current_review_and_reopening() {
+        assert!(valid_tranche_impact_state(
+            "complete", "admitted", "current"
+        ));
+        assert!(valid_tranche_impact_state(
+            "complete",
+            "admitted",
+            "review-required"
+        ));
+        assert!(valid_tranche_impact_state(
+            "reopened",
+            "candidate",
+            "reopened"
+        ));
+
+        assert!(!valid_tranche_impact_state(
+            "reopened", "admitted", "reopened"
+        ));
+        assert!(!valid_tranche_impact_state(
+            "complete", "admitted", "reopened"
+        ));
+        assert!(!valid_tranche_impact_state(
+            "planned",
+            "candidate",
+            "review-required"
+        ));
+    }
+
+    #[test]
+    fn impact_graph_retains_transitively_non_current_dependencies() {
+        let graph = BTreeMap::from([
+            ("current-root".to_owned(), vec![]),
+            ("reopened-root".to_owned(), vec!["current-root".to_owned()]),
+            (
+                "reopened-dependent".to_owned(),
+                vec!["reopened-root".to_owned()],
+            ),
+            (
+                "review-on-reopened".to_owned(),
+                vec!["reopened-root".to_owned()],
+            ),
+            (
+                "review-on-review".to_owned(),
+                vec!["review-on-reopened".to_owned()],
+            ),
+        ]);
+        let states = BTreeMap::from([
+            (
+                "current-root".to_owned(),
+                ("complete".to_owned(), "current".to_owned()),
+            ),
+            (
+                "reopened-root".to_owned(),
+                ("reopened".to_owned(), "reopened".to_owned()),
+            ),
+            (
+                "reopened-dependent".to_owned(),
+                ("reopened".to_owned(), "reopened".to_owned()),
+            ),
+            (
+                "review-on-reopened".to_owned(),
+                ("complete".to_owned(), "review-required".to_owned()),
+            ),
+            (
+                "review-on-review".to_owned(),
+                ("complete".to_owned(), "review-required".to_owned()),
+            ),
+        ]);
+
+        assert!(check_tranche_dependency_graph(&graph, &states).is_ok());
+    }
+
+    #[test]
+    fn impact_graph_rejects_current_dependencies_on_non_current_tranches() {
+        for (dependency_status, dependency_impact) in
+            [("reopened", "reopened"), ("complete", "review-required")]
+        {
+            let graph = BTreeMap::from([
+                ("dependency".to_owned(), vec![]),
+                (
+                    "current-dependent".to_owned(),
+                    vec!["dependency".to_owned()],
+                ),
+            ]);
+            let states = BTreeMap::from([
+                (
+                    "dependency".to_owned(),
+                    (dependency_status.to_owned(), dependency_impact.to_owned()),
+                ),
+                (
+                    "current-dependent".to_owned(),
+                    ("complete".to_owned(), "current".to_owned()),
+                ),
+            ]);
+
+            let error = check_tranche_dependency_graph(&graph, &states)
+                .expect_err("a current tranche must reject a non-current dependency");
+            assert!(error.contains("current-dependent"));
+            assert!(error.contains("cannot depend on tranche dependency"));
+        }
+    }
 }
