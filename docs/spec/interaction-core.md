@@ -83,18 +83,32 @@ shape becomes `CoreError::Validation` while the same response opportunity
 remains available for exactly-once error delivery. No public constructor may
 place an unvalidated successful output in `RouteInboundResponse`.
 
-For the v5.1 Consumer Property Read candidate, Core also owns the narrow shared
+For the v5.1 Consumer Property Read slice, Core also owns the narrow shared
 binding-origin validation kernel. A client-binding success remains untrusted
-until the engine checks its `BindingResponseMetadata` against the live selected
-`OutboundRequest`: binding id, binding generation, and plan id MUST match; the
-first slice accepts only the compiled primary response branch. A successful
-Property Read then MUST have exactly one payload, `InteractionStatus::Ok`,
+until Core checks its `BindingResponseMetadata` against the exact selected
+call: binding id, binding generation, and plan id MUST match, and the first
+slice accepts only the compiled primary response branch. A successful Property
+Read then MUST have exactly one payload, `InteractionStatus::Ok`,
 `ResponsePayloadRole::Application`, and no `ActionInvocationRef`. The opaque
 protocol-native status value is provenance carried through this check; Core
 MUST NOT reinterpret the numeric value as HTTP or any other concrete protocol.
-Only after this validation may the `InteractionOutput` reach application code.
-Broad schema compilation, transcoding, additional-response tables, and
-validation-profile policy remain outside the v5.1 Consumer one-shot candidate.
+
+An installed complete registration derives a private, non-`Clone`, single-use
+result seal from the live `OutboundRequest` immediately before transferring the
+request to a binding. The Host registration keeps that seal inside the owned
+call decorator. The application-static registration keeps equivalent private
+authority in its complete caller-owned Consumer slot and may validate a live
+pending slot request directly. Synchronous, pending, normal, and
+cancellation-late successes MUST all pass the same Core kernel before leaving
+the registration. Validation failure replaces only the nominal success in the
+same normal or `BindingCallSettlement::Returned` branch; it does not become
+cancellation or erase cleanup truth. No public expected-identity token or
+caller-assembled id bag exists, and an installed registration exposes no raw
+client execution bypass.
+
+Only after this sealing may the `InteractionOutput` reach WP-400 or application
+code. Broad schema compilation, transcoding, additional-response tables, and
+validation-profile policy remain outside the v5.1 Consumer one-shot slice.
 
 These rules are intentionally operation-narrow. A later broad
 `InboundResponse` is a rename/generalization of the same linear carrier and

@@ -1,8 +1,8 @@
 # 0062 Consumer Binding Result Sealing
 
-Status: DISCUSSING
+Status: MIGRATED
 
-Kind: independently confirmed architecture correction candidate
+Kind: independently confirmed architecture correction
 
 Priority: HIGH
 
@@ -20,12 +20,13 @@ profile-neutral semantic rule implemented by two profile-appropriate physical
 carriers: every result from an installed Consumer binding is sealed by Core
 before it can reach WP-400 or application code.
 
-This topic remains non-authoritative while `DISCUSSING`. The confirmed defect
-does immediately trigger ADR-0013 impact handling: the affected completed
-WP-300 Consumer tranche is reopened and its prior evidence is superseded. That
-governance transition does not itself accept this correction design, admit
-production source, register or change an architecture gate, unblock WP-400, or
-change the v5.1 requirement set.
+PR #58 recorded the independently confirmed defect, reopened the affected
+WP-300 Consumer tranche, and superseded its prior evidence. The correction
+below is now projected into the Binding SPI, interaction and deployment
+architecture, API ownership matrix, and the WP-300 readmission record. Those
+authoritative artifacts, rather than this migrated investigation, govern the
+next implementation. The migration does not change an architecture gate,
+unblock WP-400, or change the v5.1 requirement set.
 
 The separate aggregate Planning -> Servient investigation is preserved in
 `workspace/0063-consumer-plan-set-handoff-closure.md`. Its unresolved questions
@@ -338,16 +339,14 @@ representations:
   legacy binding path, aggregate `consume(td)` claim, Consumer architecture
   gate claim, or production protocol claim.
 
-## Review and migration condition
+## Migration record
 
-A fresh independent architecture review must check the exact corrected diff,
-including the static synchronous counterexample, no-bypass installed API,
-WP-300 reopening projection, and separation of workspace 0063. Until that
-review accepts this boundary, the topic remains `DISCUSSING` and no production
-implementation is admitted.
-
-After acceptance, migration must amend the Binding SPI and interaction/API
-ownership projections, the WP-300 admission scope, complete-registration APIs,
-resource declarations, tests, and replacement evidence before source work
-starts. This document does not change any gate status or independently accept
-its own correction.
+The stable correction is migrated by the WP-300 Consumer result-sealing
+readmission change into `docs/spec/binding-spi.md`,
+`docs/spec/interaction-core.md`,
+`docs/architecture/40-protocol-binding-spi-and-deployment.md`,
+`docs/api-ownership.csv`, `docs/work-packages/WP-300-bindings.md`, and
+`docs/work-packages/WP-300-consumer-property-read-binding-admission.md`.
+That exact readmission revision still requires fresh independent review before
+production implementation starts. This migrated history does not independently
+accept its own correction or change any gate status.

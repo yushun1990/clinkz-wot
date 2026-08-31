@@ -203,6 +203,13 @@ client half, server half, form contributor, or runtime trait object. Component
 values may remain public for downstream construction and testing, but only the
 complete bundle is accepted by `ServientBuilder`.
 
+For the admitted v5.1 Consumer Property Read capability, installation also
+closes the result-validation boundary. Raw client traits and their raw static
+request slot remain public authoring SPIs, but the complete registration does
+not project a raw Consumer component. Every installed Consumer start and
+progress operation is mediated by Core, and Producer progress projections do
+not reveal the installed Consumer half.
+
 Every advertised capability is classified for each selected profile cell as
 runtime-supported in both profiles, host-only, constrained-only, compile-only,
 not applicable, or shared semantics with a profile-specific driver. These
@@ -1383,46 +1390,153 @@ and does not weaken rollback accounting.
 
 ## Client execution and subscriptions
 
-The host client component exposes `invoke` and, when the later long-lived domain
-is active, `subscribe`. Each accepts one owned `OutboundRequest` and returns an
-admitted `HostBindingCallBox` before its first protocol side effect. Unsupported
-operations reject without side effects.
-
-For the v5.1 Consumer one-shot candidate, only the Property Read `invoke`
-ownership path is admitted by the new authority. Subscription start/driver
-semantics remain deferred and cannot use this section as implementation
-authority merely because the retained forward-compatible surface is shown.
-
-The client constructor result types are exact. They place operational
-`CoreResult` inside `T`; route lifecycle calls do not, because every route
-terminal branch must carry a typed guard or cleanup successor.
+The raw Host client component is a public authoring SPI. For the v5.1 Consumer
+one-shot slice, only the Property Read ownership path below is admitted; the
+later long-lived `subscribe` surface remains deferred. The scoped artifact
+borrow cannot enter the returned call. Acceptance returns an owned call before
+the first protocol side effect, while rejection returns the exact request.
 
 ```rust
 pub trait ClientBinding: Send + Sync {
+    fn artifact_compatibility(&self) -> BindingArtifactCompatibility;
+
     fn invoke(
         &self,
         request: OutboundRequest,
+        artifact: &BindingArtifactEnvelope<HostBindingArtifact>,
     ) -> Result<
         HostBindingCallBox<CoreResult<InteractionOutput>>,
-        BindingInputRejection<OutboundRequest>,
-    >;
-
-    fn subscribe(
-        &self,
-        request: OutboundRequest,
-    ) -> Result<
-        HostBindingCallBox<CoreResult<HostSubscriptionStart>>,
         BindingInputRejection<OutboundRequest>,
     >;
 }
 ```
 
-`invoke` has one terminal untrusted binding-origin `InteractionOutput` or
-structured failure. The binding maps wire status and metadata; the Core-owned
-shared response validator then checks the live selected request, compiled
-primary Property Read response, and output shape before application delivery.
-Transport success is not automatically WoT success. Protocol retry remains
-binding-local and never reselects a form or repeats application behavior.
+Raw `invoke` has one terminal untrusted binding-origin `InteractionOutput` or
+structured failure. It exists so a third-party author can construct and test a
+component, but it is not the installed runtime projection. A validated Host
+bundle exposes instead:
+
+```rust
+impl HostBindingRegistration {
+    pub fn start_consumer_property_read(
+        &self,
+        request: OutboundRequest,
+        artifact: &BindingArtifactEnvelope<HostBindingArtifact>,
+    ) -> Result<
+        HostBindingCallBox<CoreResult<InteractionOutput>>,
+        BindingInputRejection<OutboundRequest>,
+    >;
+}
+```
+
+Before moving the request, this operation checks every overlapping
+registration/request/artifact identity and derives a private, non-`Clone`,
+single-use result seal. A pre-acceptance rejection returns the exact request.
+An accepted raw call is wrapped inside the existing `HostBindingCallBox`; no
+second call state machine or public seal type is introduced. The decorator
+delegates footprint, deadline, normal polling, and cancellation, intercepting
+only `Ok(InteractionOutput)` and
+`BindingCallSettlement::Returned(Ok(InteractionOutput))`. It consumes the seal
+through the existing Core validator and preserves the original normal versus
+late-return classification on validation failure. If cleanup transfer is
+offered, accepted, or rejected, the complete decorated call, unused seal, and
+combined accounting remain one work object.
+
+The raw static authoring SPI remains `PollClientBinding` with its
+`ClientRequestSlot<C::RequestState>`. Installed application-static execution
+uses a distinct opaque Core-owned carrier:
+
+```rust
+pub struct StaticConsumerPropertyReadSlot<S> { /* private */ }
+
+impl<S> StaticConsumerPropertyReadSlot<S> {
+    pub const fn new() -> Self;
+    pub const fn is_vacant(&self) -> bool;
+}
+
+impl<S, C> StaticBindingRegistration<StaticBindingComponents<S, C>>
+where
+    S: PollServerBinding,
+    C: PollClientBinding<Compiler = S::Compiler>,
+{
+    pub fn start_consumer_property_read(
+        &mut self,
+        request: OutboundRequest,
+        artifact: &BindingArtifactEnvelope<
+            <S::Compiler as BindingCompilerExtension>::Artifact,
+        >,
+        slot: &mut StaticConsumerPropertyReadSlot<C::RequestState>,
+        budget: &mut WorkBudget,
+    ) -> Result<
+        StartStatus<CoreResult<InteractionOutput>>,
+        BindingInputRejection<OutboundRequest>,
+    >;
+
+    pub fn poll_consumer_property_read(
+        &mut self,
+        cx: &mut Context<'_>,
+        slot: &mut StaticConsumerPropertyReadSlot<C::RequestState>,
+        budget: &mut WorkBudget,
+    ) -> Poll<CoreResult<InteractionOutput>>;
+
+    pub fn start_cancel_consumer_property_read(
+        &mut self,
+        cx: &mut Context<'_>,
+        cleanup: CleanupPhaseContext,
+        slot: &mut StaticConsumerPropertyReadSlot<C::RequestState>,
+        budget: &mut WorkBudget,
+    ) -> CoreResult<
+        StartStatus<BindingCallSettlement<CoreResult<InteractionOutput>>>,
+    >;
+
+    pub fn poll_cancel_consumer_property_read(
+        &mut self,
+        cx: &mut Context<'_>,
+        slot: &mut StaticConsumerPropertyReadSlot<C::RequestState>,
+        budget: &mut WorkBudget,
+    ) -> Poll<CoreResult<BindingCallSettlement<CoreResult<InteractionOutput>>>>;
+
+    pub fn acknowledge_consumer_property_read(
+        &mut self,
+        slot: &mut StaticConsumerPropertyReadSlot<C::RequestState>,
+    ) -> CoreResult<()>;
+}
+```
+
+The complete static slot privately owns the raw request slot, the validation
+authority needed by a synchronous `Ready` path, and only the disposition state
+needed to gate acknowledgement. `Ready(Ok(output))` is sealed immediately even
+when the raw slot remains vacant. A pending start is accepted only when the raw
+slot contains the exact moved request; normal and cancellation-late output is
+sealed against that live request before it is returned. The complete slot stays
+non-vacant from acceptance, including synchronous completion, until the
+registration acknowledges a sealed terminal result or terminal cancellation
+disposition. Acknowledgement invokes the raw binding acknowledgement and then
+clears the raw slot when a pending call occupied it; a synchronous terminal
+with no raw slot state skips that callback and clears only the Core carrier. No
+public `request`, `state_mut`, or `clear` projection exists on this installed
+carrier.
+
+Static cancellation accepts only the admitted caller-created
+`CleanupPhaseContext::bind(...)` phase with no named transfer owner. A
+conforming raw client therefore cannot derive `TransferRequired`. The mediator
+does not publish a fabricated transfer request or release its slot; it retains
+manual ownership until a returned value, complete cleanup, or durable residual
+disposition. No static transfer envelope, target, reservation, or executor is
+added by this slice.
+
+The binding maps wire status and metadata; Core then checks the selected call,
+compiled primary Property Read response, and output shape before application
+delivery. Transport success is not automatically WoT success. Protocol retry
+remains binding-local and never reselects a form or repeats application
+behavior. `HostBindingRegistration::client()`,
+`StaticBindingComponents::client()`, and
+`StaticBindingComponents::client_mut()` are removed. The Host `server()` and
+static Producer server projections remain available.
+
+When the later long-lived domain is admitted, its raw Host component may also
+expose `subscribe`; the following subscription semantics do not authorize that
+surface for the v5.1 one-shot tranche.
 
 `subscribe` succeeds only after start response validation and returns
 `HostSubscriptionStart` containing the exact engine-reserved metadata and one
@@ -1656,6 +1770,21 @@ cancellation and cleanup state. Shared payload leases are charged once to their
 owner and referenced by bounded leases; bindings do not evade the global ledger
 through unreported transport-library or reactor buffers. Temporary memory is
 charged while live but is not double-counted as lifetime storage.
+
+Consumer result sealing reuses these ledgers. For Host, the call's reported
+`BindingLifetimeFootprint` is the checked sum of the raw call and the fixed Core
+decorator/seal; arithmetic overflow or an admitted-ceiling overrun is rejected
+as an accepted-call Core error before the raw call is first polled, without
+misreporting a pre-acceptance request rejection. For application-static
+execution, registration validates the raw `RequestState` plus the complete
+Core slot, seal, and disposition storage against
+`BindingResourceDeclarations::admitted`.
+The validation kernel requires no dynamic allocation or variable scratch; its
+fixed temporary delta is recorded against
+`BindingResourceDeclarations::transient` (zero is valid only when the
+implementation proves a zero delta). Sealing is one constant-time step inside
+the same bounded callback quantum and creates no second work queue or resource
+pool.
 
 Zero never means unbounded. A disabled capability cannot be started. A
 declaration or actual footprint overrun is a binding contract violation and is

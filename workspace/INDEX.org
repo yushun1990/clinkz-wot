@@ -32,7 +32,6 @@ Topics are retained after migration as decision history.
 
 ** DISCUSSING
 
-- [[file:0062-consumer-binding-result-sealing.md][0062 Consumer Binding Result Sealing]]
 - [[file:0063-consumer-plan-set-handoff-closure.md][0063 Consumer Plan-Set Handoff Closure]]
 
 ** DECIDED
@@ -41,6 +40,7 @@ Topics are retained after migration as decision history.
 
 ** MIGRATED
 
+- [[file:0062-consumer-binding-result-sealing.md][0062 Consumer Binding Result Sealing]]
 - [[file:0001-architecture-overview.org][0001 Architecture Overview]]
 - [[file:0002-planning-context.org][0002 Planning Context]]
 - [[file:0003-subscription-source-attribution.org][0003 Subscription Source Attribution]]

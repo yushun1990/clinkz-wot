@@ -65,6 +65,31 @@ caller drop and late completion. Constrained calls use caller-owned typed slots
 with the same settlement semantics. Constructors are nonblocking and do not
 start a side effect until ownership and capacity have transferred.
 
+For installed v5.1 Consumer Property Read execution, the complete registration
+is also the mandatory Core-owned result-sealing boundary. It derives private
+single-use validation authority from the exact request before transfer and
+does not expose its raw client component. The Host representation returns the
+existing erased call box around a thin decorator that validates normal and
+late-returned successes. The application-static representation exposes a
+Core-private wrapper around the raw authoring slot; it validates synchronous
+ready output immediately and pending or cancellation-late output before
+terminal acknowledgement. Binding failures and cleanup classifications pass
+through unchanged.
+
+Raw `ClientBinding`, `PollClientBinding`, and `ClientRequestSlot` remain public
+authoring SPIs. They are not installed runtime projections. In particular,
+`HostBindingRegistration::client()` and the
+`StaticBindingRegistration::server_mut().client_mut()` path are absent from the
+installed Consumer surface. Producer progress remains available without
+revealing the Consumer component.
+
+Host and constrained execution share this semantic seal but not invented
+physical symmetry. A Host transfer envelope carries the complete decorated
+call, seal, and accounting. The admitted static request phase has no named
+transfer owner, so the caller-owned slot remains the manual cleanup owner;
+static result sealing introduces no transfer envelope, target, reservation, or
+executor.
+
 ## Server execution SPI
 
 The v1 server SPI is engine-orchestrated and route-scoped:
