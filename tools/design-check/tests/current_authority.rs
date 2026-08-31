@@ -148,7 +148,7 @@ fn current_authority_projection_is_exact() {
     for source in sources {
         let path = table_string(source, "path", "active_source");
         assert!(
-            !Path::new(&path).is_absolute() && !Path::new(&path).components().any(|part| matches!(part, std::path::Component::ParentDir)),
+            !Path::new(path).is_absolute() && !Path::new(path).components().any(|part| matches!(part, std::path::Component::ParentDir)),
             "invalid active_source path {path}"
         );
         let requirements = table_strings(source, "requirements", &format!("active_source {path}"));
@@ -158,10 +158,10 @@ fn current_authority_projection_is_exact() {
             requirements.len(),
             "active_source {path} expected_count does not match"
         );
-        if let Some(exact) = expected_source_counts.get(path.as_str()) {
+        if let Some(exact) = expected_source_counts.get(path) {
             assert_eq!(expected, *exact, "active_source {path} has wrong v5.1 active count");
         }
-        let text = fs::read_to_string(root.join(&path))
+        let text = fs::read_to_string(root.join(path))
             .unwrap_or_else(|error| panic!("cannot read active authority source {path}: {error}"));
         for requirement in requirements {
             assert!(active.contains(&requirement), "active_source {path} owns inactive requirement {requirement}");
