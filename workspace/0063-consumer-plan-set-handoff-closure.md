@@ -6,6 +6,9 @@ Kind: architecture decision and authority-migration proposal
 
 Decision baseline: `86e4c67628e16d59e70e9943978965e34744d714`
 
+Authority-migration boundary reassessment baseline:
+`c7bb2b602b900c087f2b50cf649af8562fd8bcbd`
+
 Target: the smallest WP-200 -> WP-400 handoff that can publish one v5.1
 Consumer Property Read generation without Servient TD interpretation or a
 second binding execution path
@@ -19,10 +22,12 @@ their proposed carriers, staging types, per-registration pins, reservation
 barriers, or fixture layouts are adopted by default.
 
 This workspace decision is not active implementation authority. Until the
-accepted conclusions are migrated into the registered specifications and work
-packages, it does not:
+accepted conclusions are migrated into the registered specifications, work
+packages, and mechanically coupled generated projections, it does not:
 
-- admit production source in Foundation, TD, Planning, Core, or Servient;
+- admit TD, Planning, Core, or Servient functional production source, or any
+  Foundation behavior beyond the exact schema-generated projection cohort
+  defined below;
 - reopen or supersede the completed WP-200 exact-coordinate tranche;
 - change the source or completion status of the finished WP-300 Consumer
   binding tranche; the selected migration instead requires one narrow
@@ -189,10 +194,11 @@ have to reserve both representations in peak-live accounting and is outside
 this decision.
 
 Typed TD traversal cannot be charged as parsed JSON merely because both inputs
-describe a document. Authority migration therefore adds one
+describe a document. Authority migration therefore registers one
 `WorkClass::DocumentNodes` counter for representation-neutral typed document
-validation/census. `JsonSchemaNodes` retains parsed-JSON/schema work and cannot
-be used for aggregate Planning. This is the smallest accurate validation-work
+validation/census; its Foundation implementation belongs to the WP-100
+predecessor. `JsonSchemaNodes` retains parsed-JSON/schema work and cannot be
+used for aggregate Planning. This is the smallest accurate validation-work
 split.
 
 The consumed generation retains the same validated Thing as an explicitly
@@ -555,9 +561,10 @@ separately.
 Host target lookup is a non-incremental bounded responsibility over the sorted
 target table and one addressed Form range. Application-static lookup consumes
 `PlanningItems` from its caller-supplied step budget. Neither form may hide a
-global plan, registration, or TD scan; authority migration must add a distinct
-lookup ceiling only if the existing affordance/Form limits cannot prove this
-bound on the executable representation.
+global plan, registration, or TD scan. A distinct lookup ceiling is outside the
+selected two-row migration and becomes a decision-boundary correction only if
+the existing affordance/Form limits cannot prove this bound on the executable
+representation.
 
 The sealed draft carries the completed ledger. Servient compares its generation
 and ledger to the held reservations and commits them; it does not rescan,
@@ -635,14 +642,16 @@ ownership/evidence boundaries:
 1. **WP-100 Consumer admission-primitives/validated-TD predecessor** — TD-owned
    Basic validation, move-only validated owner, conservative source
    footprint/census, bounded Host/static progress, cancellation,
-   `DocumentNodes`/`PlanningItems`, the two Consumer compile-total resource
-   rows, and the narrow ledger transfer if required by implementation.
+   `DocumentNodes`, and the narrow ledger transfer if required by
+   implementation. It does not implement aggregate Planning work or either
+   Consumer compile-total limit.
 2. **WP-200 Consumer aggregate draft** — deterministic preflight, one
    registration, all readable coordinates, NoSec predicate, dense shared
    generation, all-bounds-before-start admission, aggregate construction,
-   indexed lookup, non-resettable work remainders, exact ledger, cancellation,
-   and sealed TD-free draft. It depends on both the new WP-100 predecessor and
-   the completed exact-coordinate WP-200 tranche.
+   indexed lookup, `PlanningItems`, enforcement of both authority-projected
+   Consumer compile-total limits, non-resettable work remainders, exact ledger,
+   cancellation, and sealed TD-free draft. It depends on both the new WP-100
+   predecessor and the completed exact-coordinate WP-200 tranche.
 3. **`WP-300-CONSUMER-HOT-THING-IDENTITY`** — a narrow Core successor to the
    completed Consumer binding tranche. It replaces only the `OutboundRequest`
    Thing field/constructor/accessor with `ThingSlotId`, adds the generation
@@ -676,10 +685,49 @@ new successor's completion evidence; the prior evidence file remains immutable
 history and is not rewritten. No registration or result-sealing algorithm is
 reopened.
 
-## Authority-migration preparation
+## Authority-migration boundary
 
-One reviewed docs-only migration should project this decision into the existing
-owners before any new production source is admitted:
+The original `docs-only` classification is withdrawn. On the reassessment
+baseline, `docs/resource-limits.csv` is simultaneously the exhaustive normative
+resource-field/profile authority and a Cargo build input. Appending either
+selected row necessarily changes the generated public `ResourceKind`,
+`ResourceLimits` getters, complete named-profile arrays, and
+`RESOURCE_LIMIT_COUNT`. The current generator, Foundation projection test, and
+resource checker independently freeze the count at 195, while the checker also
+freezes the existing 56-field v4.9 suffix as the end of the schema. ADR-0015
+classifies a field-count change as source-visible even though all workspace
+crates rebuild together.
+
+The correct migration is therefore one reviewed **authority plus generated-
+projection** change. It has two inseparable cohorts:
+
+| Cohort | Exact boundary |
+| --- | --- |
+| Registered authority | The specifications, architecture documents, API ownership, resource schema/profile rows, work packages, tranche DAG, and completion-evidence contracts listed below. |
+| Mechanically required Foundation projection | `foundation/build.rs`, only the generated-schema count/profile assertions in `foundation/src/resource.rs`, `tools/check-resource-limits.sh`, and current-count/order wording in the affected work-package authority. The change must preserve the existing 195-field order as an immutable prefix and append the two selected rows in their reviewed order. |
+
+No generated Rust file is checked in, and no hand-maintained second field or
+profile table is permitted. The narrow source cohort exists only so the
+authority remains buildable and its generated API/profile projection is exact.
+It does not implement a validator, aggregate planner, reservation point,
+compiler barrier, lookup, request correction, or Servient lifecycle, and it is
+not completion evidence for any successor tranche. In particular,
+`foundation/src/budget.rs`, TD, Planning, Core, and Servient functional paths
+remain outside this migration. `DocumentNodes` lands with its WP-100 consumer;
+`PlanningItems` and enforcement of the two projected limits land with the
+WP-200 aggregate consumer.
+
+Deferring the CSV rows to a later implementation PR is not equivalent. It
+would leave the registered resource/API contract incomplete at tranche
+admission and would transfer the selected row order and named-profile values to
+an implementation task. Conversely, pulling the later work-class or
+enforcement consumers into this migration would combine different ownership,
+failure, and evidence boundaries merely because the schema projection is
+generated. The projection cohort is the exact exception; it does not erase the
+four implementation boundaries above.
+
+One reviewed migration should project this decision into the following owners
+before any successor functional source is admitted:
 
 | Owner | Required migration |
 | --- | --- |
@@ -692,17 +740,17 @@ owners before any new production source is admitted:
 | `docs/architecture/20-module-boundaries.md` | Project TD ownership of validated input, Planning ownership of the sealed draft, and Servient ownership of publication/runtime state. |
 | `docs/architecture/30-compiled-plan-lifecycle.md` | Project the `ThingSlotId`/record-slot/plan-set generation relation, source/registration retention, publication, drain, and reclaim rules. |
 | `docs/architecture/50-servient-runtime-lifecycle.md` | Project Host shared-registration ownership and static root ownership without merging their physical APIs. |
-| `docs/api-ownership.csv` | Update `OutboundRequest` ownership/signature and register only the exact ledger-transfer (if needed), validated-input, preflight/progress, aggregate-draft/selection, generated resource fields, and Servient facade items selected by the migration; do not pre-register a new plan-set identity, general indexes, or per-entry pins. |
-| `docs/resource-limits.csv` and named profiles | Append `consumer_binding_compile_work_units_per_plan_max` and `consumer_plan_compile_work_units_per_admission_max`; assign explicit finite Gateway/static values and Directory non-applicability, then project them through generated `ResourceLimits`/named profiles and schema-count/order validation. |
-| `docs/work-packages/WP-100-core.md` | Define the admission-primitives/typed-TD predecessor, the resource-row implementation paths, and its evidence boundary. |
-| `docs/work-packages/WP-200-planning.md` | Define the additive aggregate-draft tranche, crate-private coordinate-kernel reuse, all-bounds barrier, work-limit enforcement, and exact-compiler regression boundary. |
+| `docs/api-ownership.csv` | Update `OutboundRequest` ownership/signature and register only the exact ledger-transfer (if needed), validated-input, preflight/progress, aggregate-draft/selection, generated resource fields, and Servient facade items selected by the migration; the two generated resource accessors must identify their real generated path rather than remain `absent`; do not pre-register a new plan-set identity, general indexes, or per-entry pins. |
+| `docs/resource-limits.csv`, named profiles, and generated projection cohort | Append `consumer_binding_compile_work_units_per_plan_max` and `consumer_plan_compile_work_units_per_admission_max`; assign explicit finite Gateway/static values and Directory non-applicability; preserve the existing 195 rows as an exact prefix; and atomically update `foundation/build.rs`, the generated-schema assertions in `foundation/src/resource.rs`, and `tools/check-resource-limits.sh` so the 197-field `ResourceLimits`/named-profile projection builds and its new suffix is frozen. This is schema/API projection only, not runtime enforcement. |
+| `docs/work-packages/WP-100-core.md` | Define the admission-primitives/typed-TD predecessor, `DocumentNodes` implementation path, and evidence boundary; update current schema-count wording for the authority projection without rewriting historical 195-field completion evidence. |
+| `docs/work-packages/WP-200-planning.md` | Define the additive aggregate-draft tranche, `PlanningItems` implementation, crate-private coordinate-kernel reuse, all-bounds barrier, enforcement of both projected work limits, and exact-compiler regression boundary. |
 | `docs/work-packages/WP-300-bindings.md` and `docs/work-packages/WP-300-consumer-property-read-binding-admission.md` | Admit `WP-300-CONSUMER-HOT-THING-IDENTITY` as a successor whose only production path is `core/src/outbound.rs`; update request/binding tests and preserve complete-registration and result-sealing semantics. |
-| `docs/work-packages/WP-400-servient.md` | Define the later runtime tranche without admitting it in the decision PR. |
+| `docs/work-packages/WP-400-servient.md` | Define the later runtime tranche without admitting its functional source in the migration candidate. |
 | `docs/work-packages/index.toml` | Register the four exact tranche boundaries and make WP-400 depend on both the aggregate WP-200 tranche and the hot-Thing WP-300 correction. |
 | completion evidence | Keep `docs/evidence/WP-300-consumer-property-read-binding-execution.toml` immutable; require a distinct hot-Thing identity completion record that covers the corrected request schema and re-runs the sealing matrix. Require aggregate evidence to cover both work-limit rows and the no-start barrier. |
 
 `PLAN.md`, the active requirement count, the Producer Property Read gate, and
-the historical WP-300 completion record do not change in this decision PR. The
+the historical WP-300 completion record do not change in this migration. The
 authority migration may update the coarse Consumer dependency wording in
 `PLAN.md` only if the registered four-boundary DAG is otherwise ambiguous; it
 must not turn the roadmap into a tranche tracker. A new Consumer architecture
@@ -710,6 +758,27 @@ gate is registered only with the later WP-400 implementation/evidence
 candidate, not as empty ceremony during authority migration.
 
 ## Rejected alternatives
+
+### Edit the resource authority while keeping the migration docs-only
+
+Rejected. The CSV edit itself generates a changed public Foundation API and
+cannot pass the current 195-field generator, projection test, or suffix
+checker. Calling those source changes later implementation would create a
+known non-buildable or knowingly stale authority-to-projection interval.
+
+### Defer the resource rows and values to a successor implementation
+
+Rejected. The two scopes are part of the selected boundedness contract, and
+tranche admission must not leave their field identities, append order, or
+named-profile policy values for an implementation task to choose. The later
+WP-200 tranche enforces them but does not author their authority.
+
+### Pull later Consumer behavior into the migration
+
+Rejected. Updating the mechanically coupled generator and projection guards is
+necessary to make the resource authority exact; implementing work classes,
+validation, aggregate Planning, request identity, or Servient publication is
+not. Those changes have distinct owners and falsifiable completion evidence.
 
 ### Preserve #56 or #57 as the base design
 
@@ -798,6 +867,15 @@ with no second Servient reservation callback and only one live compiler cursor.
 Independent authority review and later implementation evidence must be able to
 falsify all of the following:
 
+- the migration leaves the original 195 resource rows in exact order, appends
+  exactly the two reviewed Consumer work-limit rows, and produces a buildable
+  197-field public Foundation schema with complete Gateway, Directory, and
+  static named-profile arrays;
+- the migration's count/order checks fail for deletion, reordering, profile
+  omission, an unexpected third suffix row, or a generated getter/profile
+  mismatch, without introducing a duplicate Rust-side schema;
+- no TD, Planning, Core, Servient, work-class, or resource-enforcement behavior
+  enters through the generated-projection exception;
 - no aggregate build can be entered with a raw `Thing` or forged validation
   proof;
 - validation/source footprint and work remain bounded under Host and static
@@ -857,8 +935,10 @@ falsify all of the following:
 ## Migration condition
 
 This topic is `DECIDED`, not `MIGRATED`. A fresh independent architecture
-review must accept the exact docs-only authority diff before the registered
-owners or tranche DAG change. Production implementation starts only after the
-corresponding predecessor/tranche admission review. Once every listed
-authoritative projection is accepted and merged, this topic may move to
-`MIGRATED`; it must not become a parallel current-state summary.
+review must accept the exact authority-plus-generated-projection diff before
+the registered owners, resource schema, generated Foundation surface, or
+tranche DAG change. No successor functional implementation belongs in that
+candidate. Production implementation starts only after the corresponding
+predecessor/tranche admission review. Once every listed authority and generated
+projection is accepted and merged, this topic may move to `MIGRATED`; it must
+not become a parallel current-state summary.
