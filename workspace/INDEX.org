@@ -32,11 +32,11 @@ Topics are retained after migration as decision history.
 
 ** DISCUSSING
 
-- [[file:0063-consumer-plan-set-handoff-closure.md][0063 Consumer Plan-Set Handoff Closure]]
+- None.
 
 ** DECIDED
 
-- None.
+- [[file:0063-consumer-plan-set-handoff-closure.md][0063 Consumer Plan-Set Handoff Closure]]
 
 ** MIGRATED
 
