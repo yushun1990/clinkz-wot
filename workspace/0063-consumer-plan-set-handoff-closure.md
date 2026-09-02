@@ -2,943 +2,591 @@
 
 Status: DECIDED
 
-Kind: architecture decision and authority-migration proposal
+Kind: architecture decision and executable migration/admission-path correction
 
-Decision baseline: `86e4c67628e16d59e70e9943978965e34744d714`
+Reassessment baseline: `a1029ae04fd24e1d38d58e0dc8378af192a8dd98`
 
-Authority-migration boundary reassessment baseline:
-`c7bb2b602b900c087f2b50cf649af8562fd8bcbd`
+Superseded decision baselines:
 
-Target: the smallest WP-200 -> WP-400 handoff that can publish one v5.1
-Consumer Property Read generation without Servient TD interpretation or a
-second binding execution path
+- `c7bb2b602b900c087f2b50cf649af8562fd8bcbd` (PR #62);
+- `76170bc1d6ae5551aa72c9ea0b5b5dab84acf61a` (PR #63 source commit).
 
-## Decision effect
+Target: the smallest end-to-end executable path from this `DECIDED` topic to
+one admitted and implemented v5.1 Consumer Property Read generation, without
+Servient TD interpretation, an unadmitted source exception, or a speculative
+future-tranche registry.
 
-This decision was reconstructed after PR #60 completed Core-mediated Consumer
-result sealing. It replaces the unresolved candidate set previously retained
-in this topic. Closed PRs #56 and #57 remain useful counterexamples, but none of
-their proposed carriers, staging types, per-registration pins, reservation
-barriers, or fixture layouts are adopted by default.
+## Reassessment verdict
 
-This workspace decision is not active implementation authority. Until the
-accepted conclusions are migrated into the registered specifications, work
-packages, and mechanically coupled generated projections, it does not:
+The prior 0063 direction is withdrawn where it required either:
 
-- admit TD, Planning, Core, or Servient functional production source, or any
-  Foundation behavior beyond the exact schema-generated projection cohort
-  defined below;
-- reopen or supersede the completed WP-200 exact-coordinate tranche;
-- change the source or completion status of the finished WP-300 Consumer
-  binding tranche; the selected migration instead requires one narrow
-  successor correction for its request identity;
-- admit WP-400 Consumer implementation;
-- register or pass the Consumer Property Read architecture gate; or
-- change the v5.1 requirement set or roadmap milestone state.
+- two new global resource-limit rows and an authority-plus-generated-source
+  migration outside any ADR-0013 tranche;
+- simultaneous registration of four future tranches whose predecessors were
+  not complete; or
+- a new hot-Thing-identity successor while the already completed WP-300
+  request tranche and its evidence remained current.
 
-No new design revision or ADR is required. The decision refines active
-`DOC-RUNTIME-001`, `ADMIT-TXN-001`, `ADMIT-MEM-001`,
-`CONSTRAINED-WORK-001`, `API-HOT-ID-001`, `PLAN-COST-003`,
-`PLAN-REQUEST-001`, `PLAN-SET-001`, `PLAN-ARTIFACT-001`, and the existing v5.1
-Consumer one-shot identities without reclassifying a requirement. The temporary
-one-registration first-slice restriction belongs in work-package authority,
-not in a durable cross-domain ADR.
+Those choices cannot form one legal path through current repository authority.
+PR #63 fixed the first observed docs-only migration failure, but its generated-
+projection exception exposed the next contradiction instead of closing the
+path.
 
-## Current facts that control the decision
+The minimum executable correction is:
 
-1. The completed WP-200 Consumer compiler deliberately owns one exact
-   `(property name, property-form index)` coordinate and returns one logical
-   plan, eager artifact envelope, and compact artifact reference. Its explicit
-   coordinate semantics remain correct and useful as a leaf compiler.
-2. `PlanBuildInput::new` still accepts `&Thing` under the name `validated_td`.
-   Neither its type nor its constructor proves Basic validation, source
-   footprint, resource applicability, or charged validation work.
-3. The current exact compiler uses `WorkClass::BindingPolls` as its only
-   progress allowance. That class correctly belongs to binding compiler/call
-   progress; it does not accurately name aggregate enumeration, material
-   construction, index sealing, or reconciliation.
-4. The completed WP-300 registration now exposes only Core-sealed Consumer
-   execution. Both Host and application-static paths validate complete
-   registration/request/artifact identity and preserve every normal and late
-   terminal result through Core validation.
-5. A complete Host registration already contains its compiler and live client
-   execution owner and is `Send + Sync` through its erased components. A
-   complete static registration already contains the matching concrete
-   compiler, server, client, and request-slot layout. No new WP-300 execution
-   pin is necessary.
-6. The current target Servient builder installs at most one complete Property
-   Read registration. General multi-binding Consumer indexing is not required
-   by the first v5.1 gate and `PLAN-INDEX-001` remains inactive.
-7. The current public `consume(Thing)` path is synchronous, retains the TD for
-   the application/legacy facade, and routes Property Read through legacy
-   call-time Form scanning. The target path must replace only the admitted
-   Property Read edge; unrelated legacy capability migration remains staged.
-8. The accepted plan-set lifecycle and its ownership split are already
-   sufficient: Planning owns semantic construction and an opaque sealed draft;
-   Servient owns reservation, generation, publication, pins, operations,
-   draining, and reclamation.
-9. `OutboundRequest` currently owns a `ThingId`, whose `Clone` performs a deep
-   `String` copy. The aggregate can retain the human-readable identity in its
-   immutable source/plan/diagnostic storage, but the repeated-call path cannot
-   construct the current request without cloning that static name. Core already
-   owns the fixed-width generation-bearing `ThingSlotId`; no new identity type
-   is needed.
-10. `plan_compile_work_units_per_step_max` limits only one caller-driven step.
-    A compiler-provided `BindingCompilerBounds::work` is not a policy ceiling:
-    without a profile-owned per-coordinate cap and an admission-lifetime total,
-    a fresh step budget can be supplied indefinitely and a declaration such as
-    `u64::MAX` remains nominally valid.
+1. keep the one-Thing, one-registration, all-readable-Property-Read aggregate;
+2. use the existing resource schema and add only the two missing `WorkClass`
+   discriminants through an admitted WP-100 source tranche;
+3. remove static human-readable Thing and target identities from
+   `OutboundRequest` rather than replacing `ThingId` with `ThingSlotId`;
+4. reopen and readmit the existing WP-300 Consumer binding tranche for that
+   public request correction;
+5. migrate architecture and work-package authority without registering new
+   future tranche nodes; and
+6. register each new tranche only when all of its predecessor nodes are
+   `complete/current`, exactly as ADR-0013 and the executable index checker
+   require; then
+7. register the Consumer architecture gate only after its source prerequisites
+   and aggregate fixtures exist, without replacing the already passed Producer
+   gate.
 
-These facts rule out both extremes: a singleton fixture coordinate cannot
-back the existing `read_property(name, options)` surface, while a general
-multi-binding capability index, fallback engine, lazy cache, or reusable
-registration-generation system would solve capabilities that the first slice
-does not need.
+This remains a v5.1 conformance correction under the already active
+`DOC-RUNTIME-001`, `ADMIT-MEM-001`, `CONSTRAINED-WORK-001`,
+`API-HOT-ID-001`, `PLAN-COST-003`, `PLAN-REQUEST-001`, `PLAN-SET-001`,
+`PLAN-ARTIFACT-001`, and `BIND-OUT-001` requirements. It does not activate a
+new requirement, design revision, operation family, general capability index,
+or fallback policy. No new ADR is required.
 
-The decisive executable boundary is the current
-`planning/src/{lib,property_read}.rs`,
-`core/src/{binding,binding_compiler,identity,outbound}.rs`,
-`foundation/src/budget.rs`, `docs/resource-limits.csv`,
-`servient/src/{builder,servient,handle,property_read}.rs`, and TD validation /
-default-resolution implementation, together with the passed
-`docs/evidence/WP-200-consumer-property-read-planning-selection.toml` and
-`docs/evidence/WP-300-consumer-property-read-binding-execution.toml` records.
-The authority boundary is `API-HOT-ID-001`, `PLAN-REQUEST-001`,
-`PLAN-SET-001`, `PLAN-ARTIFACT-001`, `PLAN-COST-003`,
-`ADMIT-TXN-001`, `ADMIT-MEM-001`, and `CONSTRAINED-WORK-001` as projected by
-the current Planning, runtime-safety, Foundation, and exact work-package
-documents. A historical proposal statement that cannot be derived from those
-sources has no weight in this decision.
+## Repository-grounded stop conditions
 
-## Selected boundary
+### Generated projection has no legal source owner
 
-The first Consumer aggregate is all readable Property Read coordinates from
-one Basic-validated owned `Thing`, compiled eagerly through exactly one
-complete Consumer-capable Property Read registration.
+`docs/resource-limits.csv` is both the exhaustive resource authority and a
+Cargo build input. Appending the two rows selected by PR #63 would necessarily
+change generated public Foundation API and named-profile arrays. PR #63
+therefore allowed changes to `foundation/build.rs`,
+`foundation/src/resource.rs`, and `tools/check-resource-limits.sh` while saying
+that the cohort was not implementation and was not completion evidence for any
+tranche.
+
+ADR-0013 instead states that every implementation change belongs to exactly
+one recorded tranche. The proposed Foundation/build changes alter generated
+product API, but none of the four proposed successor tranches owned them. The
+coupled resource checker merely tracks that source-visible schema mutation; it
+does not supply admission, predecessor closure, implementation paths, or
+completion evidence. A separate projection tranche would add a fifth boundary
+and still face a contract-before-code cycle around the authoritative CSV.
+
+The executable correction is to require no new resource field for this slice.
+The 195-field schema and its generated projection remain unchanged.
+
+### `index.toml` is not a future-work DAG
+
+The current tranche validator permits a `current` node to depend only on a
+`complete/current` tranche. This is not merely a checker limitation: ADR-0013
+condition 2 says an unimplemented predecessor contract cannot be used as if it
+were complete.
+
+The prior migration proposed registering WP-100, WP-200, WP-300, and WP-400
+future nodes together. The WP-200 node would depend on a planned WP-100 node,
+and WP-400 would depend on planned WP-200/WP-300 nodes. That graph is rejected
+by the current executable admission semantics and would be non-admissible even
+if the checker were weakened.
+
+`docs/work-packages/index.toml` is the registry of exact admission and current
+dependency truth, not a speculative planning manifest. Future technical
+boundaries may be defined in their owning work-package documents, but a new
+index node is added only by its own admission review after every predecessor is
+complete.
+
+### The current integration-gate registry is singular
+
+The current `index.toml` has one `integration_gate_manifest`, pointing to the
+passed v5.0 Producer `PROPERTY-READ-ARCHITECTURE` gate. The design checker also
+validates exactly that path, schema revision, design revision, id, and fixture
+set. Its dependency validation currently requires only a nonempty set of
+unique, known, `covered` entries with existing evidence; it does not freeze the
+Producer dependency-id set. Replacing the singular field with a Consumer
+manifest would erase the current Producer registration, while merely adding a
+second file would leave the Consumer gate unregistered and unchecked.
+
+ADR-0019 and `PLAN.md` deliberately say that the Consumer gate is not
+registered until its source prerequisites are assembled. The initial authority
+migration therefore leaves the singular Producer registration and checker
+unchanged. The later WP-400 source tranche predeclares and produces the
+cross-package Host/static fixture as completion evidence. Only after all
+component tranches are `complete/current` does a separate gate-registration
+candidate:
+
+- preserve the Producer manifest as the first registered gate;
+- evolve the work-package schema from the singular field to an ordered exact
+  manifest list and append `CONSUMER-PROPERTY-READ-ARCHITECTURE` in `ready`;
+- generalize the non-normative design checker to validate both manifests and
+  add manifest-specific exact dependency-id/evidence assertions rather than
+  replacing or weakening its Producer assertions;
+- register the new gate document/manifest in `docs/artifacts.csv` and update
+  the gate-registration statement in `docs/spec/README.md`; and
+- point only to already existing fixture and tranche evidence.
+
+That candidate is an isolated governance/checker projection. It contains no
+product source, generated API, fixture implementation, or tranche admission,
+and it grants no functional edit authority. This follows the repository's
+existing crate-level registration of `tools/design-check/Cargo.toml` as a
+`non-normative-checker`, not a generated product projection; the source file
+does not claim a separate artifact classification. The subsequent
+`ready -> passed` transition remains a separate status-only independent
+acceptance action under `PROJECT_GOVERNANCE.md`.
+
+### The completed WP-300 tranche cannot remain current
+
+The current `OutboundRequest` owns both a deep-cloned `ThingId` and an
+`AffordanceTarget`. The latter uses `Arc<str>`, but it is still a static target
+identity retained in the request. Active `API-HOT-ID-001` and
+`PLAN-REQUEST-001` require human-readable names to remain at API/admission or in
+immutable plan/diagnostic storage, and require static target data to remain
+behind the pinned plan/artifact reference.
+
+Changing that public request shape affects the completed
+`WP-300-CONSUMER-PROPERTY-READ-BINDING` tranche and its completion evidence.
+ADR-0013 requires an affected completed tranche to enter impact review and be
+reaffirmed or reopened. A new successor cannot silently supersede its public
+schema while the original node and evidence remain `current/passed`.
+
+The repository already exercised the correct recovery for result sealing:
+reopen the original node, supersede its evidence, independently readmit the
+corrected boundary, implement it, and replace completion evidence. The hot
+request correction uses the same path.
+
+### Workspace state was already inconsistent
+
+After PR #62, this file said `Status: DECIDED` while `workspace/INDEX.org`
+continued to list 0063 under `DISCUSSING`. This reassessment restores one
+workspace lifecycle classification. Workspace state does not authorize
+implementation, but its own index must not contradict the topic it indexes.
+
+## Minimum end-to-end technical boundary
+
+The first Consumer aggregate contains every effective Property Read coordinate
+from one owned Basic-validated `Thing`, compiled eagerly through exactly one
+finalized complete Consumer-capable Property Read registration.
 
 ```text
 owned Thing
-  -> Servient private Thing slot + plan-set generation + input envelope
-  -> TD-owned Basic validation + conservative source footprint
-  -> Planning preflight for the one-registration aggregate
-  -> Servient aggregate-capacity reservation
-  -> Planning materialization + all-coordinate compiler-bounds barrier
-  -> sequential eager compilation and aggregate seal
-  -> Servient Frozen record
-  -> one atomic Published consumed generation
+  -> Servient private admission record and conservative retained-source charge
+  -> TD-owned bounded Basic validation and representation-aware census
+  -> Planning deterministic preflight and compiler-bounds barrier
+  -> Servient persistent-runtime reservation
+  -> Planning eager materialization and compilation
+  -> Planning-owned sealed TD-free aggregate draft
+  -> Servient atomic publication with retained Thing and registration owner
 
 read_property(name, options)
-  -> plan-set lease carrying fixed-width ThingSlotId
-  -> Planning-owned target lookup in the sealed draft
-  -> exact plan/candidate/artifact selection
-  -> retained complete registration
-  -> OutboundRequest::property_read(ThingSlotId, ...)
-  -> Core-sealed Host/static WP-300 execution
-  -> terminal call settlement and plan-lease release
+  -> lease one published plan-set record
+  -> lookup the addressed property and selected Form row in that record
+  -> resolve one artifact and the retained complete registration
+  -> construct a name-free `OutboundRequest`
+  -> execute only the Core-sealed complete-registration path
+  -> settle the call and release the plan-set lease
 ```
 
-The aggregate is broader than the completed one-coordinate WP-200 output, but
-narrower than the general Planning design. It has no second binding candidate,
-automatic fallback, lazy artifact, cache, credential provider, subscription,
-collection operation, or production-protocol claim.
+The first slice has:
 
-The cross-crate semantic carrier graph has only three new owned values:
+- one Thing and one published consumed generation;
+- exactly one complete registration and registration ordinal `0`;
+- all declared properties represented in the lookup, including an empty range
+  for a property with no readable Form;
+- every effective readable Property Read Form compiled eagerly and retained in
+  original per-property Form order;
+- one eager `ConsumerCall` artifact per retained coordinate;
+- no partial publication: any validation, security, bounds, compiler, ledger,
+  cancellation, or seal failure fails the unpublished generation; and
+- a NoSec-only predicate: every retained coordinate must resolve to exactly one
+  local NoSec definition with no credential/provider or binding-carried
+  security material.
 
-| Handoff | Minimum owned value | Content and exclusion |
-| --- | --- | --- |
-| TD -> Planning/Servient | opaque `ValidatedThing` | The one Thing plus validation/census facts; no public unchecked constructor or mutable Thing projection. |
-| Planning preflight -> Servient reservation | opaque `ConsumerPropertyReadPreflight` | Checked shape and conservative reservation request; no TD borrow, registration owner, plan id, artifact, or runtime lease. |
-| Planning build -> Servient publication | opaque `ConsumerPropertyReadDraft<A>` | Sealed plans, targets, candidates, artifacts/refs, lookup, and exact ledger; no TD borrow, binding execution object, or publication state. |
+The aggregate does not activate multiple registrations, automatic fallback,
+lazy artifacts, caches, `PLAN-INDEX-001`, credentials, subscriptions,
+collections, emissions, production protocol behavior, or another operation.
 
-The preflight and build cursors are move-only progress values that return their
-owned partial state on `Pending`/failure; they are not additional lifecycle
-owners. After publication, lookup returns only a fixed selection containing
-the target value and generation-checked row/artifact/registration coordinates.
-The Servient resolves those coordinates while holding the plan-set lease; the
-selection does not copy an artifact payload or expose an unleased raw pointer.
-The lease supplies the existing `ThingSlotId`; neither the selection nor the
-request reconstructs it from a human-readable Thing name. `ThingSlotId` is an
-already-owned Core value, not a fourth semantic handoff carrier.
-Exact Rust spellings may be adjusted by the authority diff, but adding another
-semantic carrier requires a demonstrated ownership need.
+## Validated input and retained source
 
-## Validated input boundary
+`PlanBuildInput::new(&Thing, ...)` does not prove validation. The predecessor
+must therefore expose one TD-owned move-only validated input whose successful
+construction proves:
 
-The raw `&Thing` spelling is not an admissible aggregate handoff. The required
-predecessor output is an opaque move-only validated-Thing owner with these
-semantics:
+- ownership of the exact input `Thing`;
+- complete `ValidationLevel::Basic` validation;
+- checked structural limits for the typed representation;
+- a conservative representation-aware retained-source footprint and the
+  counts needed by Planning preflight;
+- bounded Host and application-static progress with cancellation; and
+- no public unchecked constructor or mutable raw-Thing projection.
 
-- it owns the exact `Thing` supplied to Consumer admission;
-- only the TD crate can construct the successful state;
-- construction proves `ValidationLevel::Basic` over the complete typed Thing;
-- construction records a conservative physical source footprint plus the
-  fixed-size counts/maxima needed to check every applicable current resource
-  row;
-- validation is resumable for the application-static profile and charges the
-  caller's unique `WorkBudget` before each typed document-node or schema-node
-  visit, using its matching work class;
-- Host `consume` may drive the same pure cursor synchronously within the
-  admitted maximum; it does not use a different validator;
-- cancellation or validation failure retains the first cause and releases or
-  returns the owned input without publishing any generation; and
-- after success, Planning receives only an immutable borrow of this validated
-  owner, never a raw `Thing` plus a caller assertion.
+The same owned Thing becomes the retained application/source view after
+publication. It is not cloned or normalized for accounting. Servient first
+reserves a conservative source envelope from the existing
+`retained_source_bytes_*`, document, peak-live, and largest-contiguous limits,
+then reconciles unused capacity after the TD-owned census. At freeze, one
+narrow checked `AdmissionLedger` operation reclassifies those same live bytes
+from source to persistent-document accounting. It checks the destination limit
+before changing either account and leaves `live_bytes`, peak-live bytes, and
+largest-contiguous allocation unchanged. Failure leaves the source charge and
+owned Thing available for ordinary rollback. This is an ownership-preserving
+account transfer, not a second reservation or a second Thing representation.
 
-The source footprint is representation-aware. Serialized length and
-`size_of::<Thing>()` are not sufficient for a caller-constructed value with
-heap capacity and associative-container overhead. The TD-owned census must
-either produce a proved conservative upper bound for the exact supported
-representation or reject admission; it does not normalize or clone the Thing
-merely to make accounting easier. Any future normalization alternative would
-have to reserve both representations in peak-live accounting and is outside
-this decision.
+Validation consumes a new appended `WorkClass::DocumentNodes`. Its
+non-resettable admission-lifetime allowance comes from the existing
+`document_validation_work_units_max`. Host may drive the same pure cursor to
+completion synchronously; application-static callers may resume it, but fresh
+per-step budgets cannot replace the cursor-owned lifetime remainder.
 
-Typed TD traversal cannot be charged as parsed JSON merely because both inputs
-describe a document. Authority migration therefore registers one
-`WorkClass::DocumentNodes` counter for representation-neutral typed document
-validation/census; its Foundation implementation belongs to the WP-100
-predecessor. `JsonSchemaNodes` retains parsed-JSON/schema work and cannot be
-used for aggregate Planning. This is the smallest accurate validation-work
-split.
+`DocumentNodes` covers only typed-document traversal not already owned by a
+more specific existing class. Typed schema-node visits remain
+`JsonSchemaNodes`; URI-template bytes and security branches remain `UriBytes`
+and `SecurityBranches`. One unit is not relabelled or double charged merely
+because it occurs during validation, and every class derives its allowance
+from its existing applicable resource limit.
 
-The consumed generation retains the same validated Thing as an explicitly
-charged source/application view. This preserves `thing_description()` and
-staged legacy capability compatibility without cloning the TD. The target
-Property Read lookup and execution path has no access edge back to that view.
-The Planning draft remains fully TD-lifetime-free. Later removal or reduction
-of retained source is a separate facade decision, not a prerequisite for the
-first gate.
+Basic TD validation currently permits an absent Thing ID, while the completed
+exact Planning leaf requires one. The Consumer preflight therefore preserves
+that existing distinction: a Basic-valid Thing without an ID is rejected
+before compiler bounds or `start`, rather than synthesizing an ID or changing
+Basic validation globally.
 
-This validated input is a smaller predecessor because its owner, failure
-boundary, and evidence differ from aggregate Planning and Servient runtime
-execution. It should be admitted and implemented before the aggregate WP-200
-tranche rather than hidden inside WP-400.
+## Aggregate construction, lookup, and work
 
-## Aggregate construction and lookup
+Planning owns both semantic enumeration and the sealed aggregate. It visits
+properties in the current `BTreeMap` key order, visits each property's Forms in
+retained source order, and applies TD-owned effective-operation defaulting.
+The preflight records checked target/coordinate counts, the exact one-
+registration projection, conservative allocation requirements, and the
+remaining deterministic work needed after reservation.
 
-Planning performs one deterministic preflight before Servient reserves final
-storage:
+After Servient reserves the declared persistent runtime envelope, Planning:
 
-1. Require the admitted human-readable Thing identity. Any owned `ThingId`
-   projections remain admission-time immutable plan or diagnostic data and are
-   fully accounted; they are never used to construct a per-call request.
-2. Visit `Thing::properties` in the existing `BTreeMap` key order.
-3. Visit each property's Forms in retained source order and use TD-owned
-   effective-operation defaulting.
-4. Retain every Form whose effective operations contain `ReadProperty`.
-5. Require at least one retained coordinate in the whole aggregate.
-6. Require the effective security of every retained coordinate to be exactly
-   one locally resolved `NoSec` definition with no credential/provider or
-   binding-carried material.
-7. Measure target rows, plan rows, owned strings, candidates, artifact
-   references, lookup material, diagnostics, bounds metadata, and
-   reconciliation state with checked arithmetic, and derive a checked upper
-   bound for every later phase's `PlanningItems` charges in this admission. The
-   cursor reduces the applicable phase bound as those charges occur, so the
-   all-compiler-bounds barrier compares only still-unperformed Planning work.
+1. materializes one logical plan and candidate for every readable coordinate;
+2. calls the pure compiler `bounds` operation exactly once for every
+   coordinate;
+3. rejects every non-`BindingPolls` compiler work declaration;
+4. requires each coordinate's declared `BindingPolls` total to be nonzero and
+   fit within the existing `plan_compile_work_units_per_step_max` value as a
+   deliberately conservative first-slice eligibility rule;
+5. completes the all-bounds barrier before the first compiler `start`;
+6. drives compilers sequentially with one non-resettable coordinate remainder;
+7. reconciles actual artifact and temporary footprints against the held
+   reservations; and
+8. seals one TD-lifetime-free aggregate draft.
 
-Every declared property receives one target entry with one shared
-`AffordanceTarget::Property` identity. A request clones that already-owned
-shared target identity; it does not allocate or copy the addressed name on the
-hot path. It also copies the plan lease's fixed-width `ThingSlotId`, never a
-`ThingId`. A property with no readable Form has an explicit empty plan range;
-lookup therefore distinguishes a
-missing property (`AffordanceMissing`) from an existing property with no
-readable Form (`NoFormSupportsOperation`) without consulting the TD. A TD with
-no readable Property Read coordinate fails admission and publishes no handle.
+Using `plan_compile_work_units_per_step_max` as a first-slice eligibility cap
+does not redefine that global field as a per-plan or per-admission resource.
+It means only that this narrow slice accepts compilers whose total work fits in
+one configured step quantum. The maximum aggregate compiler work is therefore
+checked `readable_coordinate_count * plan_compile_work_units_per_step_max`.
+The coordinate count is already bounded by `forms_per_context_max` and
+`forms_per_thing_max`.
 
-After reservation, Planning traverses the same immutable validated owner and
-materializes every logical plan and candidate before compiler progress begins.
-There is one final row per retained coordinate. Each row contains or resolves
-exactly:
+Pure enumeration, row construction, lookup sealing, reconciliation, and
+reclamation consume a new appended `WorkClass::PlanningItems`. Their lifetime
+is bounded structurally: a monotonic cursor visits each admitted property,
+Form, row, and artifact a fixed number of times. A replenished caller step
+budget permits later progress but cannot revisit completed state. The existing
+per-step ceiling bounds one call; structural maxima and cursor monotonicity
+bound the complete admission. No new global per-plan or per-admission work row
+is needed.
 
-- one `LogicalInteractionPlan`;
-- one `BindingCandidate` using registration ordinal `0` and candidate order
-  `0`;
-- one eager `ConsumerCall` artifact envelope;
-- one aggregate-local `BindingArtifactRef`; and
-- one compact plan/candidate/artifact join.
+The lookup contains one target row per declared property and a contiguous Form
+range per target. An omitted `form_index` selects the first readable row for
+that property. An explicit index must match an original Form-array index in the
+same property's range. A missing property returns `AffordanceMissing`; an
+existing property with an empty readable range returns
+`NoFormSupportsOperation`. Lookup never scans the TD, another target, or a
+registration collection.
 
-The existing exact-coordinate compiler remains the behavioral leaf, but the
-aggregate does not nest its current `PlanCompiler::step` state machine because
-that state machine calls `bounds` and `start` back-to-back. Planning instead
-extracts and reuses a crate-private coordinate-preparation kernel: both paths
-construct the same logical plan/candidate and use the same registration
-projection, while the aggregate can collect every `bounds` result before any
-`start`. This is an internal WP-200 refactor with regression evidence, not a
-second public compiler API or a change to exact-coordinate semantics.
+The exact-coordinate `PropertyReadPlanCompiler::consumer_call` remains the
+behavioral leaf. Aggregate implementation may extract a crate-private
+coordinate-preparation kernel so it can run the all-bounds barrier, but it must
+preserve the completed exact-coordinate semantics and regression evidence.
 
-The aggregate stores target rows in property-key order and plan rows contiguously
-in source Form order for each target. Omitted `form_index` selects the first
-row in the addressed non-empty range. An explicit `form_index` must equal an
-original Form-array index inside that addressed range. A sorted-table binary
-search (or an equivalent bounded static index) finds the target; only its own
-bounded Form range is then examined. Lookup never scans an unrelated target,
-the TD, or a registration collection.
+## Request, identity, and execution-owner correction
 
-Every readable coordinate is mandatory. Compiler rejection or failure for any
-one coordinate fails the entire unpublished aggregate. Publishing a successful
-subset, silently skipping a non-NoSec coordinate, or choosing an arbitrary
-first property is nonconforming.
+The first-slice request needs no human-readable Thing or target identity. The
+selected plan/artifact already owns the static target and protocol facts, while
+the Servient call owner retains the plan-set lease and runtime Thing slot.
 
-The Planning output is one opaque sealed Consumer Property Read draft. Its
-private physical layout may use parallel arrays or aggregate rows, but it must
-provide checked lookup/resolution operations and an exact `PlanFootprint`.
-Servient does not reconstruct candidates, rewrite artifact slots, rescan target
-names, or repeat the seal invariants.
-
-## Registration and execution-owner retention
-
-The finalized Servient contains exactly one complete target Property Read
-registration. The current builder's singular slot may be replaced before
-`build`; only its final value is installed. That construction-time replacement
-does not create a second registration ordinal or runtime replacement
-lifecycle. A target Consumer admission with no finalized registration fails
-without publication. Legacy binding collections may coexist for capabilities
-not yet migrated, but they are not part of the target snapshot and cannot be
-reached by target Property Read.
-
-The single complete registration is the one-element startup snapshot:
-
-- Planning receives its identity and compiler projection from that same owner;
-- explicit installation is the first-slice owner selection, so Planning does
-  not run a capability index or support probe; every exact compiler `bounds`
-  result must accept its materialized plan, and the complete set of bounds must
-  pass the aggregate work barrier before any compiler `start`;
-- every candidate records ordinal `0` plus binding id/generation,
-  configuration digest, compatibility, and candidate order `0`;
-- the Frozen record retains that complete registration owner for its entire
-  lifetime; and
-- execution resolves ordinal `0`, compares the complete candidate, plan,
-  artifact, request, and registration identities, then calls only the
-  WP-300 sealed complete-registration operation.
-
-No separately allocated `BindingRegistrationSnapshot` container is required
-for this slice: the retained link to the one complete registration is the
-entire snapshot semantics. There is no per-plan registration pin,
-selected-client token, public raw client projection, or runtime binding scan.
-
-For Host, the Servient startup configuration and every live consumed
-generation share one `Arc<HostBindingRegistration>`-equivalent owner. A call
-owner retains its plan-set lease; if cleanup ownership transfers, the complete
-decorated call and that lease transfer together.
-
-For application-static, one caller-owned root contains the concrete complete
-registration, aggregate record, build/reclaim cursor, and Consumer request
-slots. Plans and calls retain generation-bearing indices, not references into
-the root. Progress obtains short `&mut` borrows from the root, so the design
-requires no `Arc` ownership for the registration or plan-set record, no
-self-reference, and no interior-mutable registration pins. This does not
-redefine existing shared value fields such as the `Arc<str>` inside
-`AffordanceTarget`.
-
-## Identity and generation
-
-At Consumer admission entry, Servient reserves one private plan-set build slot
-and the next value from its Servient-local, non-wrapping Consumer
-`PlanSetGeneration` allocator before validation work. The slot/generation pair
-owns the input/validation ledger from its first charge and becomes the same
-record identity if publication succeeds; no separate admission generation is
-introduced. A plan-set generation is never issued to a second Consumer
-generation in the same Servient, including after validation, preflight, build,
-or publication failure and after reclamation. This decision does not replace
-the accepted Producer identity allocator; role and exact plan-set ownership
-keep the two paths distinct.
-
-```text
-AdmissionLedger.owner = (record slot, PlanSetGeneration.get())
-ThingSlotId.slot       = record slot
-ThingSlotId.generation = PlanSetGeneration.get()
-```
-
-The `ThingSlotId` is the fixed-width identity of this consumed Thing record.
-It is allocated once with the private record capability, retained by the
-published record/lease, and copied into calls. It is not derived from or looked
-up by `ThingId`. The human-readable `ThingId` remains only in admitted
-immutable source, plan, or diagnostic storage where the existing Core logical
-plan API requires it.
-
-Every plan id in that aggregate is derived, not independently allocated:
-
-```text
-PlanId.slot       = dense zero-based plan-row ordinal
-PlanId.generation = PlanSetGeneration.get()
-```
-
-The Rust wrappers remain distinct types; equality of their underlying
-generation values is an invariant of this aggregate, not interchangeability.
-All artifact identities, references, target ranges, selections, requests, and
-diagnostics resolve under the same retained plan-set owner.
-
-The narrow Core successor changes only the selected-request Thing field:
+The corrected request boundary is semantically:
 
 ```rust
 impl OutboundRequest {
     pub fn property_read(
-        thing_slot: ThingSlotId,
-        target: AffordanceTarget,
         artifact: BindingArtifactRef,
         uri_variables: BTreeMap<String, String>,
         deadline: Option<Deadline>,
     ) -> CoreResult<Self>;
-
-    pub const fn thing_slot(&self) -> ThingSlotId;
 }
 ```
 
-The constructor rejects a `thing_slot.generation()` that differs from
-`artifact.plan_set_generation().get()` and rejects an artifact whose
-`PlanId::generation()` differs from the same plan-set generation. It retains
-the existing Property target and `ConsumerCall` role checks. It has no
-`ThingId` parameter, field, accessor, conversion, or fallback lookup. Existing
-Host/static result sealing continues to derive binding and plan identity from
-the same artifact reference; no sealing algorithm or execution-owner API
-changes.
+It retains no `ThingId`, `ThingSlotId`, `AffordanceTarget`, TD, Form,
+`InteractionOptions`, registration owner, candidate list, or fallback
+authority. `operation()` remains fixed to `ReadProperty`; binding, binding
+generation, configuration, plan-set generation, plan id, compatibility, and
+role derive from the artifact reference. Construction rejects a non-
+`ConsumerCall` role and a `PlanId` generation that differs from the artifact's
+`PlanSetGeneration`.
 
-The exact plan-set owner/lease is still required before resolving a raw
-plan/artifact reference, but uniqueness does not rely only on that private
-pointer discipline: two Consumer generations in one Servient cannot
-accidentally produce equal artifact identities from the same dense plan slot
-and binding identity.
+Servient owns a separate generation-bearing `ThingSlotId` for the consumed
+record and a non-wrapping `PlanSetGeneration` for its plan set. Their generation
+values are not required to be equal. Dense `PlanId` slots use the plan-set
+generation, and all aggregate artifact identities resolve under the retained
+plan-set lease. The lease, not an accidental equality between unrelated
+allocators or globally unique numeric value, proves which record may resolve an
+artifact.
 
-Any failed admission spends its reserved plan-set generation. Terminal
-settlement releases the private Thing/record slot, and any reuse stamps that
-slot with a later plan-set generation. The storage slot has no second
-generation allocator: a private Host/static record capability is exactly the
-`ThingSlotId` whose generation equals the record's `PlanSetGeneration`.
-Consumer allocator exhaustion rejects new admission; it never wraps. A static
-root owns the same one counter and bounded record slots in caller-provided
-storage.
+For Host, the consumed record retains a shared owner of the one complete
+registration. For application-static, one caller-owned root retains the typed
+registration, aggregate record, progress state, and request slots. Both forms
+reach only `start_consumer_property_read` on the complete registration; raw
+client authoring SPIs remain unreachable from installed runtime state. The
+existing Core result-sealing algorithm and cleanup classifications are
+re-executed as replacement WP-300 evidence but are not redesigned.
 
-This removes the historical need for independent PlanId-generation and
-storage-slot-generation allocators while preserving stale-reference rejection.
+## Publication, cancellation, and reclamation
 
-## Reservation, resource, and work accounting
+Validation, preflight, bounds collection, compilation, and reconciliation are
+private unpublished phases. Cancellation is checked before external/compiler
+callbacks, at bounded pure-work intervals, and at the publication
+linearization point. A failure or cancellation fixes the first cause, starts no
+new compiler work, aborts the one live pure compiler cursor exactly once,
+releases every reservation idempotently, spends but never reuses the reserved
+plan-set generation, and returns no handle or partial lookup.
 
-The minimum transaction uses one semantic preflight/reservation barrier, not
-the two general-purpose barriers proposed in prior candidates:
+Successful Host publication atomically installs the complete record and returns
+the consumed handle. Application-static publication changes the caller-owned
+root to its published state only after the same seal and final cancellation
+check. The representations share semantic plans, lookup, requests, failures,
+and terminal outcomes, but do not need the same container, synchronization, or
+public progress API.
 
-```text
-reserve private build slot, plan-set generation, and generic input/validation envelope
-  -> validate and measure source
-  -> Planning preflight and exact aggregate shape
-  -> reserve persistent shape, compiler memory ceilings, and reclaim state
-  -> materialize all logical plans/candidates
-  -> collect and admit every compiler bound; no compiler has started
-  -> drive eager compilers sequentially
-  -> reconcile actual ledger and release unused capacity
-  -> seal -> Frozen
-  -> final cancellation check -> atomic publication
-```
-
-The private slot/generation owns the entry envelope, which is the existing
-admission safety boundary for an untrusted owned input and validation scratch;
-it is not a second Planning -> Servient shape handshake. An over-limit
-caller-constructed Thing is returned or dropped without registry publication,
-the private slot is released, and its generation remains spent. Successful
-census reconciles the conservative source charge before the aggregate
-reservation, and peak-live accounting keeps the retained source,
-validation/preflight scratch, and later final allocation overlap explicit.
-
-Final plan/index allocation cannot begin before the shape reservation. After
-all logical plans and candidates exist, Planning calls the pure `bounds`
-operation exactly once for every coordinate and stores its fixed metadata. It
-does not call any compiler `start` until the last coordinate has passed all of
-these checks:
-
-- artifact, cursor, and temporary declarations fit the already held per-item,
-  per-Thing, and applicable global ceilings;
-- every non-`BindingPolls` work counter is zero;
-- the declared `BindingPolls` count is nonzero and no greater than the
-  profile's Consumer per-coordinate compiler-work limit;
-- checked addition of all coordinate declarations does not overflow; and
-- that sum plus the preflight-proved upper bound for all remaining
-  `PlanningItems` fits the unspent profile-owned Consumer admission-work total.
-
-Failure at this barrier is a structured limit or compiler-contract error with
-zero `start` calls and zero published state. A compiler does not need a second
-Servient callback merely to reserve its exact declared memory amount; the
-transaction debits it from the already held aggregate ceilings. After the
-barrier, each stored declaration becomes that coordinate's non-resettable
-progress allowance. Limit diagnostics name the exact row, configured and
-requested/observed value, coordinate when applicable, and admission phase;
-checked-sum overflow is attributed to the admission-total row.
-
-The first slice obtains the memory ceilings without invoking a compiler:
-checked preflight counts reserve the configured worst-case retained-artifact
-ceiling for every coordinate and only one live compiler cursor/temporary
-ceiling because compilation is sequential. The later all-bounds barrier may
-release unused retained capacity, but it never requests more. This may
-conservatively reject an aggregate whose binding would have declared smaller
-artifacts, but it avoids a second Planning -> Servient handshake. A later
-tighter admission algorithm is not part of this decision.
-
-The ledger keeps these accounts distinct:
-
-- source/input: the one owned validated Thing and its validation facts;
-- phase temporary: validation/preflight state, the current compiler cursor,
-  compiler temporary ceiling, and bounded failure-settlement cursor;
-- persistent document: the explicitly retained Thing view after publication;
-- persistent runtime: plan-set record, targets, plans, candidates, joins,
-  artifacts, references, one registration-owner link, plan leases/pins, and
-  reclaim metadata;
-- diagnostics: the bounded first failure or selection diagnostic capacity; and
-- cleanup: only real post-acceptance call/cleanup owners. Pure pre-publication
-  compiler abort contributes zero external cleanup records.
-
-The unchanged owned Thing moves from the source account to the persistent-
-document account by checked ledger reclassification; it is not reserved as if
-a second copy existed. If the current `AdmissionLedger` cannot express that
-account transition without changing `live_bytes`, the WP-100 predecessor adds
-one narrow ownership-preserving transfer operation. The destination limit is
-checked before the source charge changes, and failure leaves the source charge
-and owned Thing available for ordinary rollback.
-
-Peak simultaneously live bytes and largest contiguous allocation are checked
-against the physical Host or static representation. Shared registration bytes
-are charged once at startup; each plan set charges only its registration-owner
-link and record slot, not a fictitious copy of the registration.
-
-The decision adds exactly two work classes, appended without changing existing
-discriminants:
-
-- `DocumentNodes` charges representation-neutral typed TD validation/census;
-- `PlanningItems` charges before each registration/target/Form visit
-  attributable to Planning, each pure compiler-bounds invocation, aggregate row
-  construction, lookup sealing, invariant reconciliation, budgeted immutable
-  lookup comparison, and plan-record reclamation.
-
-URI bytes, security branches, parsed JSON/schema nodes, and cleanup keep their
-existing classes. One actual binding compiler `step` callback is one
-`BindingPolls` unit; validation, Planning, cleanup, and schema work cannot be
-relabelled as binding polling.
-
-The existing bounded document/form counts and
-`document_validation_work_units_max` bound validation lifetime. They do not
-bound aggregate compilation, and a compiler's own declaration is evidence of
-need rather than policy authority. Authority migration therefore appends these
-two Consumer-only rows to the exhaustive resource schema:
-
-| Field | Scope | Enforced meaning |
-| --- | --- | --- |
-| `consumer_binding_compile_work_units_per_plan_max` | per-plan | Maximum `BindingPolls` a compiler may declare for one Consumer logical-plan/Form coordinate. |
-| `consumer_plan_compile_work_units_per_admission_max` | per-admission | Maximum combined `PlanningItems` and `BindingPolls` over the complete Consumer plan-set admission. |
-
-Both rows have `resource_kind=plan`, `unit=work-units`, Consumer applicability,
-disabled-zero semantics, finite nonzero values strictly below `u64::MAX` in
-`GatewayDefaultV1` and `BenchmarkStaticReferenceV1`, and `NA` in
-`DirectoryClientDefaultV1`. The authority migration must supply explicit
-reviewed values in both applicable profiles; a compiler declaration, omitted
-field, `None`, or a caller budget cannot supply or enlarge either value.
-
-`plan_compile_work_units_per_step_max` remains a third, orthogonal ceiling: it
-limits the sum of `PlanningItems` and `BindingPolls` charged by one aggregate
-`step` call. The cursor uses its deterministic current phase rather than a
-caller-selected split. A larger caller budget grants no more than this limit;
-zero applicable caller work returns `Pending` without a callback.
-
-The aggregate cursor owns the admission-total remainder plus one declared
-remainder for every coordinate. Before one Planning item, it checks and debits
-the caller's `PlanningItems`, the local step remainder, and the aggregate
-remainder. Before one compiler callback, it checks and debits the caller's
-`BindingPolls`, the local step remainder, the coordinate remainder, and the
-aggregate remainder, then supplies the compiler a fresh one-unit
-`BindingPolls` child budget. That child is created only after the unique caller
-budget has been debited, is non-refundable because the callback itself is the
-charged unit, and cannot authorize a second poll. This is a bounded partition,
-not a copied allowance.
-
-A compiler that remains `Pending` when its declared coordinate remainder is
-exhausted fails before another callback and its live cursor is aborted once.
-Unused declaration is discarded on completion. Repeated Host loop iterations
-or static calls may provide new per-step budgets, but they cannot replace the
-cursor-owned coordinate or admission remainders. Thus an at-limit declaration
-is constructible, an over-one declaration fails before every compiler `start`,
-and no number of per-step refills can turn synchronous `consume` into unbounded
-work. `plan_reclaim_bytes_per_step_max` continues to bound reclamation
-separately.
-
-Host target lookup is a non-incremental bounded responsibility over the sorted
-target table and one addressed Form range. Application-static lookup consumes
-`PlanningItems` from its caller-supplied step budget. Neither form may hide a
-global plan, registration, or TD scan. A distinct lookup ceiling is outside the
-selected two-row migration and becomes a decision-boundary correction only if
-the existing affordance/Form limits cannot prove this bound on the executable
-representation.
-
-The sealed draft carries the completed ledger. Servient compares its generation
-and ledger to the held reservations and commits them; it does not rescan,
-recount, remeasure, or reinterpret Planning output.
-
-Before one binding call is accepted, WP-400 must additionally reserve the
-operation slot, declared Host-call or static-slot footprint, result capacity,
-cleanup owner, deadline/cancellation state, and one plan pin. These runtime
-charges are not aggregate-build charges and remain owned by the later WP-400
-tranche.
-
-## Cancellation, failure, and publication
-
-Validation, preflight, materialization, compilation, reconciliation, and
-settlement are private `Building` phases. They do not add public plan-set
-states.
-
-Cancellation is checked before every external/compiler callback, at bounded
-Planning intervals, immediately before `Frozen`, and at the publication
-linearization point. On failure or cancellation, the transaction:
-
-1. retains the first cause;
-2. starts no new compiler work;
-3. passes the exact live cursor to its matching compiler `abort` once;
-4. drops completed unpublished artifacts and partial aggregate rows outside
-   Servient locks;
-5. releases source/temporary/persistent/diagnostic reservations idempotently;
-6. releases the registration and plan-set leases;
-7. releases the unpublished record slot while leaving its reserved plan-set
-   generation spent; and
-8. exposes only terminal `Failed`, with no handle or partial lookup entry.
-
-The Host first-slice `consume` remains a bounded synchronous construction call.
-Its only pre-return external cancellation source is Servient shutdown; there is
-no invented admission future or public cancellation token. The implementation
-checks the existing shared shutdown authority between bounded steps and before
-publication.
-
-The static root owns cancellation directly through its exclusive mutable
-control path. `begin_destroy()` or the equivalent pre-publication close records
-the first cause, and later `step` calls settle the owned transaction. It does
-not borrow an immutable cancellation view from itself and does not assume a
-Host shutdown object exists.
-
-After publication, handle/root close transitions the record to `Draining`
-before rejecting new plan pins. Already admitted Host call owners or static
-slots retain the generation through Core-sealed terminal settlement. Reclaim
-begins only when pins, calls, and cleanup owners are terminal and progresses
-under `PlanningItems` plus the configured reclaim-byte ceiling.
-
-## Host and static publication ownership
-
-Host publication installs one complete record into the consumed-generation
-registry and creates the returned handle in one exclusive transition. The
-handle and operation owners share the record; no reader can observe `Building`
-or `Frozen`. Registration/compiler/binding callbacks and artifact destruction
-run outside registry locks.
-
-Application-static publication changes the caller-owned root from `Frozen` to
-`Published` only after the same seal and final cancellation check. A returned
-generation token or facade is an index/generation capability into that root,
-not an independently owning pointer. The application supplies storage and
-drives progress explicitly.
-
-The two representations must produce equal semantic plans, selections,
-requests, failures, and terminal outcomes for equal inputs. They need not share
-the same container, cancellation primitive, synchronization mechanism, or
-public lifecycle API.
-
-## Required admission decomposition
-
-The architecture is decided, but implementation must be split at four real
-ownership/evidence boundaries:
-
-1. **WP-100 Consumer admission-primitives/validated-TD predecessor** — TD-owned
-   Basic validation, move-only validated owner, conservative source
-   footprint/census, bounded Host/static progress, cancellation,
-   `DocumentNodes`, and the narrow ledger transfer if required by
-   implementation. It does not implement aggregate Planning work or either
-   Consumer compile-total limit.
-2. **WP-200 Consumer aggregate draft** — deterministic preflight, one
-   registration, all readable coordinates, NoSec predicate, dense shared
-   generation, all-bounds-before-start admission, aggregate construction,
-   indexed lookup, `PlanningItems`, enforcement of both authority-projected
-   Consumer compile-total limits, non-resettable work remainders, exact ledger,
-   cancellation, and sealed TD-free draft. It depends on both the new WP-100
-   predecessor and the completed exact-coordinate WP-200 tranche.
-3. **`WP-300-CONSUMER-HOT-THING-IDENTITY`** — a narrow Core successor to the
-   completed Consumer binding tranche. It replaces only the `OutboundRequest`
-   Thing field/constructor/accessor with `ThingSlotId`, adds the generation
-   join checks, updates all three Core feature-cell request/binding tests, and
-   re-runs result-sealing regressions under `API-HOT-ID-001`,
-   `PLAN-REQUEST-001`, `PLAN-ARTIFACT-001`, and `BIND-OUT-001`. It needs no
-   Planning aggregate or Servient implementation and may complete independently
-   of items 1-2.
-4. **WP-400 Consumer Property Read runtime** — reservation, Thing/plan-set
-   owner, publication, handle/static facade, registration retention, call
-   owners, plan pins, Core-sealed execution, cancellation, drain, and reclaim.
-   It depends on both the new aggregate WP-200 tranche and the hot-Thing
-   identity correction; result sealing remains supplied by the completed
-   WP-300 Consumer binding tranche.
-
-This is not a reason to split 0063 into more unresolved architecture topics:
-the handoff semantics above are one coherent decision. The extra WP-300
-predecessor is nevertheless a real smaller implementation decision because
-the current public Core request type itself makes the desired hot path
-unconstructible, while its correction can be implemented and falsified without
-WP-200 aggregate or WP-400 lifecycle code. TD/Foundation and aggregate
-Planning likewise must not be hidden inside a monolithic WP-400 implementation.
-
-The completed `WP-200-CONSUMER-PROPERTY-READ-PLANNING` tranche remains current:
-its exact-coordinate output and immutable singleton selection are unchanged.
-The new aggregate is additive composition and must retain regression evidence.
-The completed `WP-300-CONSUMER-PROPERTY-READ-BINDING` tranche is reaffirmed for
-registration, ownership, cancellation settlement, and Core result sealing.
-Its historical `ThingId` request-field projection is superseded only by the
-new successor's completion evidence; the prior evidence file remains immutable
-history and is not rewritten. No registration or result-sealing algorithm is
-reopened.
+Close first stops new leases/calls, then drains already admitted calls and
+cleanup owners. Reclamation begins only after all leases, calls, and cleanup
+owners are terminal and progresses monotonically under `PlanningItems` and the
+existing `plan_reclaim_bytes_per_step_max`.
 
 ## Authority-migration boundary
 
-The original `docs-only` classification is withdrawn. On the reassessment
-baseline, `docs/resource-limits.csv` is simultaneously the exhaustive normative
-resource-field/profile authority and a Cargo build input. Appending either
-selected row necessarily changes the generated public `ResourceKind`,
-`ResourceLimits` getters, complete named-profile arrays, and
-`RESOURCE_LIMIT_COUNT`. The current generator, Foundation projection test, and
-resource checker independently freeze the count at 195, while the checker also
-freezes the existing 56-field v4.9 suffix as the end of the schema. ADR-0015
-classifies a field-count change as source-visible even though all workspace
-crates rebuild together.
+The next migration candidate is docs-only. It must contain no Rust source,
+resource CSV row, generated projection, functional test, or future tranche
+registration.
 
-The correct migration is therefore one reviewed **authority plus generated-
-projection** change. It has two inseparable cohorts:
-
-| Cohort | Exact boundary |
-| --- | --- |
-| Registered authority | The specifications, architecture documents, API ownership, resource schema/profile rows, work packages, tranche DAG, and completion-evidence contracts listed below. |
-| Mechanically required Foundation projection | `foundation/build.rs`, only the generated-schema count/profile assertions in `foundation/src/resource.rs`, `tools/check-resource-limits.sh`, and current-count/order wording in the affected work-package authority. The change must preserve the existing 195-field order as an immutable prefix and append the two selected rows in their reviewed order. |
-
-No generated Rust file is checked in, and no hand-maintained second field or
-profile table is permitted. The narrow source cohort exists only so the
-authority remains buildable and its generated API/profile projection is exact.
-It does not implement a validator, aggregate planner, reservation point,
-compiler barrier, lookup, request correction, or Servient lifecycle, and it is
-not completion evidence for any successor tranche. In particular,
-`foundation/src/budget.rs`, TD, Planning, Core, and Servient functional paths
-remain outside this migration. `DocumentNodes` lands with its WP-100 consumer;
-`PlanningItems` and enforcement of the two projected limits land with the
-WP-200 aggregate consumer.
-
-Deferring the CSV rows to a later implementation PR is not equivalent. It
-would leave the registered resource/API contract incomplete at tranche
-admission and would transfer the selected row order and named-profile values to
-an implementation task. Conversely, pulling the later work-class or
-enforcement consumers into this migration would combine different ownership,
-failure, and evidence boundaries merely because the schema projection is
-generated. The projection cohort is the exact exception; it does not erase the
-four implementation boundaries above.
-
-One reviewed migration should project this decision into the following owners
-before any successor functional source is admitted:
+It projects the decision into these authoritative owners:
 
 | Owner | Required migration |
 | --- | --- |
-| `docs/spec/foundation.md` | Add `DocumentNodes` and `PlanningItems` without changing existing discriminants, freeze the per-step/per-coordinate/per-admission hierarchy and one-unit pre-debited compiler partition, and freeze the narrow source-to-persistent ledger reclassification if current accounting cannot express it. |
-| `docs/spec/interaction-core.md` | Replace the Consumer request's human Thing name with `ThingSlotId`, require its generation join to the selected plan set/artifact, and retain the no-hot-name-copy invariant. |
-| `docs/spec/binding-spi.md` | Project the corrected selected-request signature through Host/static complete registrations while explicitly reaffirming the existing private result-sealing paths. |
-| `docs/spec/runtime-safety.md` | Freeze the move-only validated input, explicit retained-source charge, reserve-build-publish ordering, and profile-specific cancellation ownership. |
-| `docs/spec/planning.md` | Freeze the one-registration Consumer aggregate, deterministic coordinate set, target ranges, shared Thing/plan-set generation rule, all-bounds-before-start barrier, non-resettable coordinate/admission work totals, sealed draft, lookup, ledger, and no-subset failure semantics. |
-| `docs/architecture/10-primary-data-flows.md` | Project the exact Consumer admission and selected execution flow. |
-| `docs/architecture/20-module-boundaries.md` | Project TD ownership of validated input, Planning ownership of the sealed draft, and Servient ownership of publication/runtime state. |
-| `docs/architecture/30-compiled-plan-lifecycle.md` | Project the `ThingSlotId`/record-slot/plan-set generation relation, source/registration retention, publication, drain, and reclaim rules. |
-| `docs/architecture/50-servient-runtime-lifecycle.md` | Project Host shared-registration ownership and static root ownership without merging their physical APIs. |
-| `docs/api-ownership.csv` | Update `OutboundRequest` ownership/signature and register only the exact ledger-transfer (if needed), validated-input, preflight/progress, aggregate-draft/selection, generated resource fields, and Servient facade items selected by the migration; the two generated resource accessors must identify their real generated path rather than remain `absent`; do not pre-register a new plan-set identity, general indexes, or per-entry pins. |
-| `docs/resource-limits.csv`, named profiles, and generated projection cohort | Append `consumer_binding_compile_work_units_per_plan_max` and `consumer_plan_compile_work_units_per_admission_max`; assign explicit finite Gateway/static values and Directory non-applicability; preserve the existing 195 rows as an exact prefix; and atomically update `foundation/build.rs`, the generated-schema assertions in `foundation/src/resource.rs`, and `tools/check-resource-limits.sh` so the 197-field `ResourceLimits`/named-profile projection builds and its new suffix is frozen. This is schema/API projection only, not runtime enforcement. |
-| `docs/work-packages/WP-100-core.md` | Define the admission-primitives/typed-TD predecessor, `DocumentNodes` implementation path, and evidence boundary; update current schema-count wording for the authority projection without rewriting historical 195-field completion evidence. |
-| `docs/work-packages/WP-200-planning.md` | Define the additive aggregate-draft tranche, `PlanningItems` implementation, crate-private coordinate-kernel reuse, all-bounds barrier, enforcement of both projected work limits, and exact-compiler regression boundary. |
-| `docs/work-packages/WP-300-bindings.md` and `docs/work-packages/WP-300-consumer-property-read-binding-admission.md` | Admit `WP-300-CONSUMER-HOT-THING-IDENTITY` as a successor whose only production path is `core/src/outbound.rs`; update request/binding tests and preserve complete-registration and result-sealing semantics. |
-| `docs/work-packages/WP-400-servient.md` | Define the later runtime tranche without admitting its functional source in the migration candidate. |
-| `docs/work-packages/index.toml` | Register the four exact tranche boundaries and make WP-400 depend on both the aggregate WP-200 tranche and the hot-Thing WP-300 correction. |
-| completion evidence | Keep `docs/evidence/WP-300-consumer-property-read-binding-execution.toml` immutable; require a distinct hot-Thing identity completion record that covers the corrected request schema and re-runs the sealing matrix. Require aggregate evidence to cover both work-limit rows and the no-start barrier. |
+| `docs/spec/foundation.md` | Append `DocumentNodes` and `PlanningItems` without changing existing discriminants; bind validation lifetime to `document_validation_work_units_max`; freeze the narrow source-to-persistent-document ledger transfer; and record the structural/per-step derivation above without adding a resource row. |
+| `docs/spec/runtime-safety.md` | Freeze the owned Basic-validated Thing, retained-representation accounting, bounded profile-specific progress, and unpublished cancellation boundary. |
+| `docs/spec/planning.md` | Freeze the one-registration all-readable aggregate, deterministic lookup, all-bounds-before-start barrier, structurally bounded Planning work, sealed draft, and no-partial-publication rule. |
+| `docs/spec/interaction-core.md` | Require the first-slice `OutboundRequest` to carry no human-readable Thing or target identity and to reject a mismatched plan/plan-set generation. |
+| `docs/spec/binding-spi.md` | Project the name-free request through the existing complete Host/static registration paths and reaffirm Core-mediated result sealing. |
+| `docs/architecture/10-primary-data-flows.md` | Project validated input -> Planning aggregate -> Servient publication -> name-free selected execution. |
+| `docs/architecture/20-module-boundaries.md` | Project TD validation/census ownership, Planning semantic construction, and Servient reservation/publication ownership. |
+| `docs/architecture/30-compiled-plan-lifecycle.md` | Project independent Thing-slot and plan-set generations, plan-set lease resolution, retained source/registration, drain, and reclaim. |
+| `docs/architecture/50-servient-runtime-lifecycle.md` | Project Host shared-registration and application-static root ownership without merging their physical APIs. |
+| `docs/api-ownership.csv` | Project the new cross-crate `AdmissionLedger` source-to-persistent-document reclassification operation plus only the validated-input, aggregate preflight/draft/selection, and Servient facade items actually required; update the request contract and removal of `OutboundRequest::thing_id`/`target`; add no resource getter, general index, registration snapshot, or per-entry pin. |
+| `docs/work-packages/WP-100-core.md` | Define the unadmitted validated-Thing/work-class tranche and its exact Foundation/TD paths and evidence, including a Producer-gate impact disposition for the append-only `WorkClass::ALL` change. |
+| `docs/work-packages/WP-200-planning.md` | Define the unadmitted aggregate tranche, exact-coordinate regression boundary, existing-limit derivation, and evidence. |
+| `docs/work-packages/WP-300-bindings.md` and `docs/work-packages/WP-300-consumer-property-read-binding-admission.md` | Reopen the existing Consumer binding tranche for the name-free request correction and replacement evidence; record the removed constructor parameters and `thing_id`/`target` accessors in `old_api_removals`; require an explicit Producer-gate impact disposition before source because that gate registers `core/src/binding.rs` and full Core/Servient commands; do not create a successor id. |
+| `docs/work-packages/WP-400-servient.md` | Define the later unadmitted runtime tranche, its two exact predecessor boundaries, and the cross-package Host/static fixture source and assertions that its completion evidence must produce before gate registration. |
+| `docs/work-packages/index.toml` and current WP-300 evidence | Reopen only the already registered affected WP-300 node and mark its current evidence superseded, following the existing impact-review lifecycle. Register no new future node. |
 
-`PLAN.md`, the active requirement count, the Producer Property Read gate, and
-the historical WP-300 completion record do not change in this migration. The
-authority migration may update the coarse Consumer dependency wording in
-`PLAN.md` only if the registered four-boundary DAG is otherwise ambiguous; it
-must not turn the roadmap into a tranche tracker. A new Consumer architecture
-gate is registered only with the later WP-400 implementation/evidence
-candidate, not as empty ceremony during authority migration.
+The migration leaves unchanged:
+
+- `docs/resource-limits.csv` and all 195 generated resource fields;
+- `foundation/build.rs`, generated resource assertions, and
+  `tools/check-resource-limits.sh`;
+- the singular Producer `integration_gate_manifest`, its passed manifest, and
+  `docs/artifacts.csv`, `docs/spec/README.md`, and
+  `tools/design-check/src/main.rs`;
+- the active 65-requirement set and design revision;
+- ADR-0013, ADR-0015, and ADR-0019;
+- `PLAN.md` milestone/frontier state;
+- the completed WP-100 Consumer call-values tranche;
+- the completed exact-coordinate WP-200 tranche;
+- the Producer Property Read gate's current manifest/status. The migration
+  records, but does not pre-judge, mandatory impact reviews before both the
+  later request correction and WorkClass append. The former intersects its
+  registered `core/src/binding.rs` evidence and full Core/Servient commands;
+  the latter must prove its fixed `[u64; 10]` cleanup snapshot intentionally
+  covers the unchanged first ten `WorkClass::ALL` entries and that Producer
+  evidence never consumes the two appended Consumer classes; and
+- Consumer architecture-gate registration/status.
+
+After independent acceptance and merge of that exact docs-only migration, 0063
+may move to `MIGRATED`. Future admission and implementation state then belongs
+only to work-package authority, `index.toml`, source, evidence, Git/GitHub, and
+CI; this topic must not become a continuation log.
+
+## Executable tranche and admission path
+
+Future work-package documents may name all boundaries during migration, but
+`index.toml` materializes them only in this order:
+
+| Step | Registry action | Preconditions at the registered revision | Source/evidence boundary |
+| --- | --- | --- | --- |
+| 1A | Independently readmit the reopened `WP-300-CONSUMER-PROPERTY-READ-BINDING` node | Its existing WP-200 predecessor is `complete/current`; the migrated request contract, replacement evidence criteria, and Producer-gate impact-review boundary are complete | Correct `core/src/outbound.rs` and affected Core tests/projections; prove the removed parameters/accessors are absent; rerun the complete Host/static sealing matrix and every intersecting registered Producer-gate command/evidence; record the exact-head impact disposition and independently reopen the Producer gate before merge if its claim is invalidated; replace the superseded WP-300 evidence |
+| 1B | Register/admit `WP-100-CONSUMER-VALIDATED-THING` | WP-000 is complete; the migration is merged; pre-code checks and the Producer-gate WorkClass impact-review boundary are complete | Append the two work classes, add the narrow ledger account transfer, and implement TD-owned validated input/census in exact Foundation/TD paths; rerun the Producer fixture's ten-class cleanup-prefix regression; record the exact-head impact disposition and independently reopen the Producer gate before merge if invalidated; no resource-schema change |
+| 2 | Register/admit `WP-200-CONSUMER-PROPERTY-READ-AGGREGATE` | Step 1B and the existing exact-coordinate WP-200 tranche are both `complete/current` | Implement preflight, all-bounds barrier, aggregate draft, lookup, and structural work proof in Planning paths |
+| 3 | Register/admit `WP-400-CONSUMER-PROPERTY-READ-RUNTIME` | Step 1A and Step 2 are both `complete/current` | Implement Host/static reservation, publication, retained registration/source, name-free execution, drain, and reclaim in Servient paths; produce the predeclared cross-package Host/static fixture and completion evidence |
+| 4A | Register `CONSUMER-PROPERTY-READ-ARCHITECTURE` in `ready` through the isolated gate-registry/checker projection | Step 3 and every component tranche are `complete/current`, their completion evidence is `passed`, and the exact fixture source already exists | Preserve the passed Producer gate; atomically generalize the index/checker to two exact manifests; add only the Consumer gate document/manifest and artifact/spec registration; change no product or fixture source |
+| 4B | Independently accept the exact Consumer gate candidate | The registered `ready` head and every listed command/evidence pass | A separate reviewer-controlled status-only change moves `ready -> passed`; later real Host Zenoh remains separate WP-600 production evidence |
+
+Steps 1A and 1B may proceed independently after migration. Step 2 does not
+depend on the request correction. Step 3 is the first join and cannot be
+registered until both branches are complete. Step 4A registers no tranche and
+points only to already completed source/evidence. At no point does a current
+index node depend on a planned or in-progress predecessor.
+
+Each admission is a separate docs-only reviewed revision before its functional
+source. Each implementation stays within its recorded paths and produces the
+predeclared completion evidence before becoming complete. This is the existing
+ADR-0013 workflow; no new admission state or checker exception is needed.
+
+## Falsifiable closure boundary
+
+Authority review and later tranche evidence must be able to falsify all of the
+following:
+
+- the authority migration changes no production source, resource row,
+  generated resource projection, or new tranche registration;
+- `index.toml` accepts every intermediate state without weakening the rule that
+  a current dependency is `complete/current`;
+- the affected existing WP-300 node and evidence are not reported current while
+  their public request contract is superseded;
+- all existing WorkClass discriminants remain stable and only
+  `DocumentNodes`/`PlanningItems` are appended by the admitted WP-100 source;
+- the passed Producer gate remains current across the request correction only
+  if explicit impact review reaffirms every intersecting registered source and
+  command; otherwise an independent gate-control action reopens it before the
+  WP-300 source can merge;
+- it likewise remains current across the WorkClass append only if impact
+  review reaffirms its fixed ten-class cleanup evidence as the unchanged
+  prefix and the complete Producer fixture still passes; otherwise it is
+  independently reopened before the WP-100 source can merge;
+- typed schema, URI, and security validation work retains its existing work
+  class instead of being hidden in or double charged as `DocumentNodes`;
+- validation cannot be entered with an unchecked `Thing`, exceed its existing
+  structural/memory/work limits, or reset its lifetime budget across steps;
+- a Basic-valid Thing without an ID fails Consumer preflight before compiler
+  bounds or `start`;
+- source-to-persistent reclassification neither duplicates the Thing nor
+  changes total live/peak bytes, and a failed destination check leaves the
+  source charge intact;
+- no resource field, named-profile value, or generated getter is needed for
+  the complete first-slice bound;
+- no compiler starts until every coordinate has passed bounds and reservation;
+- zero or per-coordinate compiler work over the existing step ceiling fails
+  before every compiler `start`, and aggregate lifetime is bounded by checked
+  structural derivation;
+- lookup distinguishes missing property from no readable Form without TD or
+  registration scanning;
+- one failed coordinate publishes no subset;
+- `OutboundRequest` contains no `ThingId`, `ThingSlotId`,
+  `AffordanceTarget`, TD, Form, options, or other static human-readable target
+  data;
+- its removed constructor parameters and `thing_id`/`target` accessors cannot
+  compile and are recorded as old-API removals in the reopened tranche;
+- request/artifact/registration/plan-set identities and generations are checked
+  before protocol work;
+- installed execution can reach only the complete Core-sealed registration;
+- Host and static cancellation, late results, cleanup, and reclamation retain
+  the same semantic outcomes; and
+- no general multi-binding, fallback, lazy/cache, credential, subscription,
+  collection, emission, protocol-production, or milestone claim enters through
+  this path.
+
+The later gate boundary additionally proves that the passed Producer manifest
+remains registered unchanged, the Consumer manifest is appended in `ready`
+only after all component evidence exists, the checker validates both exact
+gates, and no gate fixture or product source is smuggled into registration or
+the status-only acceptance change.
 
 ## Rejected alternatives
 
-### Edit the resource authority while keeping the migration docs-only
+### Keep the PR #63 generated-projection exception
 
-Rejected. The CSV edit itself generates a changed public Foundation API and
-cannot pass the current 195-field generator, projection test, or suffix
-checker. Calling those source changes later implementation would create a
-known non-buildable or knowingly stale authority-to-projection interval.
+Rejected. It creates source changes with no ADR-0013 tranche, implementation
+path, or completion evidence and therefore does not close the admission path.
 
-### Defer the resource rows and values to a successor implementation
+### Add a fifth generated-resource projection tranche
 
-Rejected. The two scopes are part of the selected boundedness contract, and
-tranche admission must not leave their field identities, append order, or
-named-profile policy values for an implementation task to choose. The later
-WP-200 tranche enforces them but does not author their authority.
+Rejected. The two new rows are unnecessary for the first slice. A dedicated
+projection tranche would add ordering and evidence solely to support avoidable
+global configuration growth.
 
-### Pull later Consumer behavior into the migration
+### Weaken `index.toml` to register the future DAG
 
-Rejected. Updating the mechanically coupled generator and projection guards is
-necessary to make the resource authority exact; implementing work classes,
-validation, aggregate Planning, request identity, or Servient publication is
-not. Those changes have distinct owners and falsifiable completion evidence.
+Rejected. The current dependency rule implements ADR-0013's requirement that
+predecessors be complete. Allowing current candidate nodes to depend on future
+contracts would turn the admission registry into a second planning system and
+make its entries non-executable.
 
-### Preserve #56 or #57 as the base design
+### Replace the passed Producer gate with the Consumer gate
 
-Rejected. They use more stages and evidence-specific carriers than the current
-one-registration slice needs. In particular, a general registration snapshot,
-per-entry execution pin, independently allocated plan generations, two
-Servient-to-Planning reservation handshakes, or discarding the only TD view
-before the staged facade can use it are not required by current authority.
+Rejected. The singular current field and hard-coded checker do not make the
+Producer claim disposable. Gate registration must preserve that manifest and
+evolve to an exact two-manifest registry only after the Consumer prerequisites
+exist.
 
-### Publish one arbitrary or caller-hidden coordinate
+### Pre-register the Consumer gate during authority migration
 
-Rejected. The existing `read_property(name, options)` surface must distinguish
-all declared properties and explicit Form indexes without a TD scan. A
-singleton fixture would require an arbitrary build-time choice or a different
-public API and would not close the aggregate handoff.
+Rejected. ADR-0019 and `PLAN.md` deliberately defer registration until source
+prerequisites are assembled. Registering it early would recreate a speculative
+future graph; adding fixture source during later gate registration would also
+leave that source outside its predeclared WP-400 tranche.
 
-### Activate general multi-binding indexing or fallback
+### Keep two new resource rows but land them with WP-100 or WP-200
 
-Rejected. The target builder already has one complete registration and the
-first gate excludes multi-binding fairness, fallback, and `PLAN-INDEX-001`.
-Keeping only the finalized singular builder slot is smaller and explicit.
+Rejected. Existing document, structural, artifact, memory, and per-step limits
+already give a conservative finite bound. Moving the rows between tranches
+does not justify their global configuration/API cost.
 
-### Retain only artifact identity and look up a live binding later
+### Add `ThingSlotId` to `OutboundRequest`
 
-Rejected. Identity is not an execution owner. The exact complete registration
-must remain reachable for the generation lifetime; a later binding scan could
-select a different code/configuration owner.
+Rejected. The binding does not need a Thing-record lookup capability. The
+Servient call owner and plan-set lease already retain that lifecycle identity;
+adding it to the request creates a second join without removing the also-static
+target name.
 
-### Keep `ThingId` in `OutboundRequest` or make it reference counted
+### Preserve `ThingId` or `AffordanceTarget` because cloning is cheap enough
 
-Rejected. The owned `String` forces a deep copy per request. Changing the
-human-readable identity globally to `Arc` would avoid byte copies but still
-would not provide a stale-safe record/plan-set coordinate and would widen an
-unrelated Core identity representation. The existing `ThingSlotId` exactly
-matches the required fixed-width record capability; the human name remains in
-immutable admitted storage for API and diagnostics.
+Rejected. `ThingId` performs a deep string clone, while `AffordanceTarget`
+shares its string allocation; both remain static human-readable identity that
+active `API-HOT-ID-001` and `PLAN-REQUEST-001` place outside the request. The
+artifact/plan already owns the needed static facts.
 
-### Add a new Consumer plan-set reference type
+### Add a WP-300 hot-identity successor while retaining current evidence
 
-Rejected. The selected record already has one Thing slot and one
-`PlanSetGeneration`. Storing that same pair in another public wrapper would add
-an identity join without distinguishing another lifecycle owner.
+Rejected. A successor id cannot make a contradicted completed public request
+schema remain current. Reopen/readmit/replace is the existing repository
+recovery model.
 
-### Give every plan or registration an independent lifetime pin
+### Collapse all implementation into WP-400
 
-Rejected. One immutable plan-set owner and one complete-registration owner
-already dominate all selected rows. Per-entry pins duplicate lifetime state and
-are particularly harmful to static ownership.
+Rejected. TD validation/work primitives, Planning semantic construction, Core
+request conformance, and Servient lifecycle have different owners, source
+paths, predecessors, and falsifiable evidence.
 
-### Let Servient concatenate singleton outputs and build the lookup
+### Publish a singleton coordinate or a successful subset
 
-Rejected. That would make Servient interpret target/Form structure and repeat
-Planning invariants. Planning must return the already sealed aggregate draft.
-
-### Retain no TD at all in the first consumed generation
-
-Rejected for this staged slice. It would force an unrelated
-`thing_description()`/legacy-facade migration or a duplicate source copy.
-Explicitly retaining and charging the one owned validated Thing is simpler;
-the target Property Read path is still structurally unable to scan it.
-
-### Charge aggregate work as binding, cleanup, or schema work
-
-Rejected. `BindingPolls` remains binding progress, `CleanupItems` remains
-cleanup ownership, and `JsonSchemaNodes` remains parsed-JSON/schema work.
-`DocumentNodes` and `PlanningItems` are the minimum accurate additions because
-typed TD validation and aggregate plan construction have different owners and
-units.
-
-### Treat the per-step limit or compiler declaration as the total work bound
-
-Rejected. A per-step limit can be replenished indefinitely, while a compiler
-declaration is untrusted demand and can be `u64::MAX`. The two profile-owned
-total rows and cursor-owned remainders are required even though the current
-exact compiler normally needs one poll.
-
-### Start each coordinate immediately after obtaining its bounds
-
-Rejected. A later coordinate can make the checked sum overflow or exceed the
-admission total after earlier compilers have already started. Materializing the
-plans and storing their small bounds records permits one deterministic barrier
-with no second Servient reservation callback and only one live compiler cursor.
-
-## Falsifiable migration and implementation boundary
-
-Independent authority review and later implementation evidence must be able to
-falsify all of the following:
-
-- the migration leaves the original 195 resource rows in exact order, appends
-  exactly the two reviewed Consumer work-limit rows, and produces a buildable
-  197-field public Foundation schema with complete Gateway, Directory, and
-  static named-profile arrays;
-- the migration's count/order checks fail for deletion, reordering, profile
-  omission, an unexpected third suffix row, or a generated getter/profile
-  mismatch, without introducing a duplicate Rust-side schema;
-- no TD, Planning, Core, Servient, work-class, or resource-enforcement behavior
-  enters through the generated-projection exception;
-- no aggregate build can be entered with a raw `Thing` or forged validation
-  proof;
-- validation/source footprint and work remain bounded under Host and static
-  progress, including heap-capacity/container overhead, cancellation, and
-  one-over-limit inputs;
-- a multi-property, multi-readable-Form TD produces every coordinate in exact
-  key/Form order, including explicit empty target ranges;
-- a non-first property and non-first explicit Form index resolve without a TD
-  or registration scan;
-- zero total coordinates, non-NoSec effective security, no finalized target
-  registration, any attempt to expose more than the one finalized target
-  registration, any compiler failure, and every checked overflow publish
-  nothing;
-- validation, preflight, and build failures each spend their private
-  plan-set generation while releasing the reusable record slot;
-- the published record's `ThingSlotId` uses that record slot and the same
-  underlying generation as `PlanSetGeneration`; a mismatched Thing/artifact or
-  plan/artifact generation is rejected before binding acceptance;
-- plan ids are dense, use the plan-set generation, and become stale together
-  after failed-build settlement or reclamation without wraparound;
-- the public `OutboundRequest` construction/accessor surface accepts no
-  `ThingId`; repeated requests copy only `ThingSlotId` and the existing shared
-  target value, perform no human Thing-name allocation/clone, and retain every
-  existing Host/static result-sealing outcome;
-- compiler spies prove that all coordinates at their per-plan limit and the
-  aggregate admission limit can complete, while either limit plus one, a
-  `u64::MAX` declaration, or checked-sum overflow fails with zero compiler
-  `start` calls and zero publication;
-- a compiler that remains `Pending` after its admitted coordinate polls is
-  aborted exactly once, and repeated fresh per-step budgets cannot reset either
-  its coordinate remainder or the aggregate admission remainder;
-- no aggregate step consumes more than
-  `plan_compile_work_units_per_step_max` across `PlanningItems` and
-  `BindingPolls`; zero budget invokes no bounds/compiler callback, and changing
-  the valid step partition does not change the sealed output;
-- the sealed draft's plan/candidate/artifact/ref/target joins are one-to-one and
-  its completed ledger fits the held reservations;
-- source-to-persistent reclassification neither duplicates the Thing nor
-  changes total live bytes, and every failure restores exact account totals;
-- Servient performs no semantic recount or index construction after the draft
-  seal;
-- the complete Host registration survives builder/build-input destruction
-  through every call/cleanup owner, while static uses only caller-owned root
-  storage and generation-bearing indices;
-- the target lookup/selection type boundary accepts no `Thing`, Form, or
-  registration input, and the target path succeeds with legacy support probes,
-  raw installed client projection, and legacy `BindingRequest` poisoned;
-- cancellation before publication leaves no plan/artifact/source/registration
-  owner-link reservation, and cancellation after publication drains without
-  invalidating an admitted call's plan lease;
-- normal, binding-error, validation-error, cancellation, cancellation-late,
-  cleanup-transfer, static manual-cleanup, and terminal reclaim outcomes retain
-  the WP-300 sealing classifications; and
-- Host and static traces agree semantically while retaining their distinct
-  physical owners.
+Rejected. The existing `read_property(name, options)` facade addresses every
+declared property. A singleton or subset would require arbitrary hidden
+selection or call-time TD fallback and would not be the admitted consumed plan
+set.
 
 ## Migration condition
 
-This topic is `DECIDED`, not `MIGRATED`. A fresh independent architecture
-review must accept the exact authority-plus-generated-projection diff before
-the registered owners, resource schema, generated Foundation surface, or
-tranche DAG change. No successor functional implementation belongs in that
-candidate. Production implementation starts only after the corresponding
-predecessor/tranche admission review. Once every listed authority and generated
-projection is accepted and merged, this topic may move to `MIGRATED`; it must
-not become a parallel current-state summary.
+This topic remains `DECIDED`, not `MIGRATED`. A fresh independent architecture
+review must accept the exact docs-only authority migration described above.
+That candidate must neither carry generated/functional source nor pre-register
+new future tranches. Once the accepted authority, work-package decomposition,
+and existing WP-300 impact state are merged, this topic can move to
+`MIGRATED`; the first new source begins only after its own independently
+reviewed ADR-0013 admission.
