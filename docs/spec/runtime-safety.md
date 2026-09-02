@@ -54,6 +54,33 @@ private state is built before one publication transition, and every failure
 releases reservations idempotently. Cancellation is checked at bounded work
 intervals and before publication.
 
+For the first v5.1 Consumer Property Read admission, the input is one opaque,
+move-only TD-owned validated value. Successful construction owns the exact
+typed `Thing`, proves complete `ValidationLevel::Basic`, records checked
+structural limits and a conservative representation-aware retained-source
+census, and exposes neither an unchecked constructor nor mutable raw-Thing
+projection. Serialized length and `size_of::<Thing>()` alone are not a valid
+retained-footprint proof. Host and application-static profiles drive the same
+bounded pure validation cursor; Host may complete it synchronously, while the
+static profile resumes it with its retained lifetime allowance.
+
+The validated `Thing` remains the one retained application/source view after
+publication and is never cloned merely for accounting. Source-to-persistent-
+document reclassification preserves the same owned representation and total
+live/peak allocation truth. A Basic-valid Thing without an ID is rejected by
+Consumer preflight before persistent-capacity reservation, materialization,
+compiler bounds, or compiler start; the slice does not synthesize an identity
+or globally strengthen Basic validation.
+
+Validation, preflight, conservative persistent-capacity reservation,
+materialization, the all-coordinate bounds barrier, compilation,
+reconciliation, and the final cancellation check are unpublished phases.
+Cancellation is observed before external/compiler callbacks and at bounded
+pure-work intervals. Failure or cancellation fixes the first cause, starts no
+new compiler work, aborts the one live pure cursor at most once, releases all
+still-uncommitted reservations idempotently, spends the reserved generation,
+and publishes neither a handle nor a partial lookup.
+
 `HANDLE-DROP-001`: An explicit destroy operation is the only handle API that
 reports complete drain and cleanup. Dropping private draft state releases it
 synchronously. Dropping preparing or serving host state requests cancellation

@@ -4,12 +4,15 @@ work_package = "WP-300"
 tranche = "WP-300-CONSUMER-PROPERTY-READ-BINDING"
 implementation_ref = "0c7ec75a553f0b27858881564232b1c50107cc49"
 recorded_on = "2026-08-31"
-status = "passed"
+status = "superseded"
 evidence_key = "consumer-property-read-binding-execution"
 admission_review = "github-pr:59"
 implementation_review = "github-pr:60"
 replaces_implementation_ref = "19fce672a98d56d3839fc9c21ad8b0a020dd7997"
 replacement_reason = "the complete Host and application-static registration paths now retain Core-private validation authority across request transfer and seal every normal or cancellation-late successful result before exposure"
+impact_review = "github-pr:64"
+superseded_on = "2026-09-02"
+superseded_reason = "the completed request schema retains static human-readable Thing and target identities that the accepted 0063 aggregate path requires to remain behind the plan/artifact and runtime lease; the same tranche must remove those constructor inputs and accessors and re-execute its complete sealing evidence"
 
 requirement_ids = [
     "BIND-OUT-001",
@@ -54,6 +57,7 @@ coverage = [
     "the locked workspace suite, focused no-default, async-no-std, and std Consumer tests, representative Core checks, authority validation, and pull-request mainline validation pass",
 ]
 excluded_claims = [
+    "name-free OutboundRequest construction without ThingId or AffordanceTarget",
     "WP-400 Consumer execution or publication",
     "Consumer Property Read architecture-gate registration or completion",
     "real Zenoh or zenoh-pico Consumer execution",

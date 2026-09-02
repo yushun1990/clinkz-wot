@@ -734,6 +734,25 @@ MUST NOT retain an `InteractionOptions` back-reference or re-enter selection.
 This activation does not activate `BIND-PROGRESS-001`, subscriptions, lazy
 artifacts, broad fallback, or another operation family.
 
+For the first all-readable Property Read aggregate, the selected request is
+constructed from only `BindingArtifactRef`, resolved URI-variable values, and
+an optional deadline. It carries no `ThingId`, `ThingSlotId`,
+`AffordanceTarget`, or other static human-readable target identity. The
+artifact reference is the single source of binding/configuration,
+plan-set/plan, compatibility, role, and artifact-slot identity; a mismatched
+plan/plan-set generation or non-`ConsumerCall` role is rejected before binding
+work.
+
+Host and application-static execution continue to enter only the complete
+registration's `start_consumer_property_read` operation. The raw
+`ClientBinding`, `PollClientBinding`, and `ClientRequestSlot` surfaces remain
+authoring SPIs and are not projected from installed runtime state. The
+complete Host call decorator and static Consumer slot retain the existing
+Core-private result seal across request transfer, including synchronous,
+pending, normal, and cancellation-late success. Removing request names does
+not redesign response validation, settlement classification, or cleanup
+ownership; replacement WP-300 evidence must re-execute those invariants.
+
 Under ADR-0017, returning `BindingInputRejection<OutboundRequest>` never
 authorizes automatic candidate fallback. The binding has not accepted protocol
 work, but planning has already selected one candidate and security application

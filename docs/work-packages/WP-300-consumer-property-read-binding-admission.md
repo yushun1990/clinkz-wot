@@ -1,18 +1,24 @@
 # WP-300 Consumer Property Read Binding Admission
 
-Status: ADR-0013 readmission candidate for design revision v5.1.
+Status: REOPENED under ADR-0013 impact review for design revision v5.1.
 
 The prior admission froze only the first Consumer one-shot Binding tranche. It
 refined the broad retained WP-300 client surface for the active v5.1 Consumer
 Property Read proof and did not activate the later long-lived domain.
 
-The prior completion evidence is superseded. Independent review confirmed that
-Host acceptance and synchronous application-static completion can each make
-the selected request unavailable before the only admitted Core response
-validator can borrow it. This corrected admission freezes Core-mediated result
-sealing, complete-registration no-bypass behavior, resource accounting, and
-replacement evidence for the same narrow tranche. It does not authorize source
-work until the exact readmission revision receives fresh independent review.
+The first reopening corrected Core-mediated result sealing and was completed by
+the current Host/static no-bypass implementation and its replacement evidence.
+That completion is now superseded for a different reason: the public
+`OutboundRequest` still retains a deep-cloned `ThingId` and an
+`AffordanceTarget`, contrary to the active hot-identity and static-plan request
+authority needed by the all-readable aggregate. The same tranche is reopened;
+no successor id is created.
+
+This candidate removes those static human-readable identities while preserving
+the accepted complete-registration, result-sealing, cancellation, cleanup, and
+resource algorithms. It does not authorize source work until an exact
+readmission revision receives fresh independent review and the registered
+Producer Property Read gate receives the mandatory impact disposition below.
 
 ## Tranche
 
@@ -32,6 +38,7 @@ The affected active requirements are exactly:
 - `BIND-IO-001`;
 - `BIND-CALL-CANCEL-001`;
 - `BIND-HOST-CANCEL-001`;
+- `API-HOT-ID-001`;
 - `API-PAYLOAD-001`;
 - `PLAN-REQUEST-001`; and
 - `PLAN-ARTIFACT-001`.
@@ -58,15 +65,11 @@ The target request is one owned Property Read execution envelope. Its fields are
 ```rust
 impl OutboundRequest {
     pub fn property_read(
-        thing_id: ThingId,
-        target: AffordanceTarget,
         artifact: BindingArtifactRef,
         uri_variables: BTreeMap<String, String>,
         deadline: Option<Deadline>,
     ) -> CoreResult<Self>;
 
-    pub const fn thing_id(&self) -> &ThingId;
-    pub const fn target(&self) -> &AffordanceTarget;
     pub const fn operation(&self) -> Operation;
     pub const fn artifact(&self) -> BindingArtifactRef;
     pub const fn binding_id(&self) -> BindingId;
@@ -78,9 +81,24 @@ impl OutboundRequest {
 }
 ```
 
-`property_read` accepts only `AffordanceTarget::Property(_)` and only an artifact whose role is `BindingArtifactRole::ConsumerCall`; other targets or roles fail structurally before binding work. `operation()` is always `Operation::ReadProperty`. Binding, binding-generation, plan-set, and plan identities are derived from the captured `BindingArtifactRef`; they are not independently supplied fields that may disagree.
+`property_read` accepts only an artifact whose role is
+`BindingArtifactRole::ConsumerCall`; another role fails structurally before
+binding work. It also rejects a `PlanId` generation that differs from the
+artifact's `PlanSetGeneration`. `operation()` is always
+`Operation::ReadProperty`. Binding, binding-generation, configuration,
+plan-set, plan, compatibility, and role identities are derived from the
+captured `BindingArtifactRef`; they are not independently supplied fields that
+may disagree.
 
-The request contains no TD, raw `Form`, `Thing`, credential provider, mutable `InteractionOptions`, binding-support callback, candidate list, fallback policy, or legacy `BindingRequest`. It contains no operation payload in this read-only slice. URI variables and deadline are the only admitted call-varying target/control facts. The selected form index, resolved target, content type, subprotocol, response classification, and protocol-specific compiled facts remain owned by the immutable plan/artifact selected in WP-200 rather than being recopied into every request.
+The request contains no `ThingId`, `ThingSlotId`, `AffordanceTarget`, TD, raw
+`Form`, `Thing`, credential provider, mutable `InteractionOptions`, binding-
+support callback, candidate list, fallback policy, or legacy `BindingRequest`.
+It contains no operation payload in this read-only slice. URI variables and
+deadline are the only admitted call-varying target/control facts. Human-
+readable Thing/property identity, selected form index, resolved target,
+content type, subprotocol, response classification, and protocol-specific
+compiled facts remain owned by the immutable plan/artifact or diagnostics
+rather than being recopied into every request.
 
 A pre-acceptance `BindingInputRejection<OutboundRequest>` returns that exact owned request and never authorizes reselection or fallback.
 
@@ -414,6 +432,26 @@ This tranche does not implement or claim:
 - broad WP-300 completion;
 - removal of legacy `BindingRequest`, legacy outbound `ClientBinding`, or their legitimate unmigrated callers.
 
+## Reopening impact and old API removals
+
+This reopening changes no registration, binding-call, response-validation,
+cancellation, cleanup, or resource algorithm. It removes the `thing_id` and
+`target` parameters from `OutboundRequest::property_read`, and removes
+`OutboundRequest::thing_id` and `OutboundRequest::target`. Those exact four
+surface changes are recorded in `index.toml` `old_api_removals`; no
+`ThingSlotId` replacement, compatibility constructor, deprecated alias, or
+conversion is admitted.
+
+Before corrected source may merge, the exact implementation head must receive
+an explicit impact review against the passed Producer
+`PROPERTY-READ-ARCHITECTURE` manifest. Although the request correction is
+Consumer-only, the gate registers `core/src/binding.rs` evidence and full Core,
+Servient, fixture, and real-target commands that cross the same complete
+registration implementation. Every intersecting registered command/evidence
+must be rerun and the disposition recorded. If the claim is invalidated, a
+separate independent gate-control action must reopen it before source merges;
+the implementation author may not change gate status as part of the repair.
+
 ## Pre-implementation checks
 
 The following must pass at the admitted revision before implementation starts:
@@ -435,8 +473,9 @@ accepted and the corrected source is implemented, the tranche cannot become
 `complete` until replacement evidence records the exact implementation
 checkpoint and passing evidence for all of the following:
 
-- `OutboundRequest::property_read` exact positive construction plus rejection of non-property targets and non-`ConsumerCall` artifacts;
-- request accessors derive binding/plan generations from one artifact ref and expose no TD/Form/options/provider/fallback surface;
+- `OutboundRequest::property_read` exact name-free positive construction plus rejection of non-`ConsumerCall` artifacts and mismatched plan/plan-set generations;
+- compile-fail absence of the removed Thing/target constructor parameters and `thing_id`/`target` accessors, with no `ThingSlotId` replacement;
+- request accessors derive binding/configuration/plan generations and role from one artifact ref and expose no Thing/target/TD/Form/options/provider/fallback surface;
 - no-security-material baseline only; no new public security carrier appears;
 - public `validate_untrusted_binding_output(&OutboundRequest, InteractionOutput)` delegates to the WP-100 kernel and rejects every existing identity/shape negative case while retaining opaque native status;
 - external Host authoring through `clinkz_wot_core::binding::ClientBinding`, including exact artifact/compatibility check, exact-request rejection, constructor-before-side-effect ownership, declared lifetime footprint, successful terminal output, timeout/cancellation, late-result retention, and cleanup settlement;
@@ -452,6 +491,7 @@ checkpoint and passing evidence for all of the following:
 - target Host/static traits expose no subscription member and no implementation/evidence path depends on inactive `BIND-PROGRESS-001`;
 - public raw Host/static traits remain authoring SPIs, but WP-400 cannot obtain an unsealed call path from an installed complete registration;
 - the validation seal and any static mediation state have explicit retained/transient resource and work accounting;
+- the exact-head Producer-gate impact review reruns every intersecting registered source/command and records either reaffirmation or the required independent reopening;
 - `no-default`, `async-no-std`, and `std` cells pass; and
 - normal mainline CI passes.
 

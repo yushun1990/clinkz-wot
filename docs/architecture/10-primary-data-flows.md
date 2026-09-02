@@ -88,6 +88,36 @@ owner for already admitted work.
 8. Shared response validation maps transport metadata and payload into the WoT
    result or a structured error before application delivery.
 
+The first v5.1 Consumer Property Read aggregate is the narrower executable
+projection of that broad flow:
+
+```text
+owned Thing
+  -> TD-owned bounded Basic validation and representation-aware census
+  -> Planning deterministic one-registration/all-readable preflight
+  -> Servient conservative persistent-capacity reservation
+  -> Planning complete plan/candidate materialization
+  -> every compiler bounds evaluation
+  -> completed all-bounds-before-start barrier
+  -> sequential compiler start and eager compilation
+  -> Planning-owned sealed TD-free aggregate draft
+  -> Servient atomic publication with retained Thing and registration owner
+
+read_property(name, options)
+  -> lease the published plan set
+  -> resolve the addressed property/Form row and eager artifact
+  -> construct a name-free OutboundRequest
+  -> execute only the Core-sealed complete registration
+  -> settle the call and release the lease
+```
+
+Any validation, security, ledger, materialization, bounds, compilation,
+reconciliation, cancellation, or seal failure terminates the unpublished
+generation. In particular, materialization or bounds failure releases every
+still-uncommitted reservation and causes zero compiler `start` calls. The
+slice publishes neither a partial property/Form subset nor a handle whose
+lookup is incomplete.
+
 ADR-0017 permits fallback only before security commit and binding input:
 side-effect-free security inapplicability or an exact deterministic lazy
 compiler negative may skip one already admitted candidate in frozen order.

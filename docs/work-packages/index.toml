@@ -168,9 +168,11 @@ completion_evidence_path = "docs/evidence/WP-200-consumer-property-read-planning
 id = "WP-300-CONSUMER-PROPERTY-READ-BINDING"
 work_package = "WP-300"
 sequence = 310
-status = "complete"
-admission_status = "admitted"
-impact_status = "current"
+status = "reopened"
+admission_status = "candidate"
+impact_status = "reopened"
+impact_review = "github-pr:64"
+completion_evidence_disposition = "superseded"
 depends_on = ["WP-200-CONSUMER-PROPERTY-READ-PLANNING"]
 depends_on_packages = ["WP-000"]
 requirements = [
@@ -182,6 +184,7 @@ requirements = [
     "BIND-IO-001",
     "BIND-CALL-CANCEL-001",
     "BIND-HOST-CANCEL-001",
+    "API-HOT-ID-001",
     "API-PAYLOAD-001",
     "PLAN-REQUEST-001",
     "PLAN-ARTIFACT-001",
@@ -203,6 +206,7 @@ authoritative_artifacts = [
 ]
 api_items = [
     "OutboundRequest",
+    "outbound_request_property_read",
     "validate_untrusted_binding_output",
     "BindingRegistrationCapabilities",
     "ClientBinding",
@@ -232,6 +236,10 @@ old_api_removals = [
     "host_binding_registration_client",
     "static_binding_components_client",
     "static_binding_components_client_mut",
+    "outbound_request_property_read_thing_id_parameter",
+    "outbound_request_property_read_target_parameter",
+    "outbound_request_thing_id",
+    "outbound_request_target",
 ]
 performance_workloads = []
 implementation_paths = [
@@ -247,6 +255,6 @@ pre_implementation_checks = [
     "cargo check --locked -p clinkz-wot-core --no-default-features --features async",
     "cargo check --locked -p clinkz-wot-core",
 ]
-admission_review = "github-pr:59"
+admission_review = "github-pr:pending"
 completion_evidence_keys = ["consumer-property-read-binding-execution"]
 completion_evidence_path = "docs/evidence/WP-300-consumer-property-read-binding-execution.toml"

@@ -1162,6 +1162,75 @@ Consumer artifact. Activating `PLAN-REQUEST-001` does not activate
 `PLAN-LAZY-001`, `PLAN-CACHE-001`, `PLAN-INDEX-001`, or `PLAN-COST-002`, and the
 first Consumer gate MUST NOT depend on those deferred mechanisms.
 
+### First Consumer Property Read aggregate
+
+The first aggregate contains every effective readable Property Read Form from
+one owned Basic-validated `Thing` and exactly one finalized complete
+Consumer-capable Property Read registration. Properties are visited in the
+typed representation's `BTreeMap` key order; each property's Forms remain in
+source order, and TD-owned effective-operation defaulting determines whether a
+Form supports `ReadProperty`. Every declared property receives a lookup row,
+including an empty range when it has no readable Form. Every retained
+coordinate uses registration ordinal and candidate order zero, one eager
+`ConsumerCall` artifact, and no credential/provider or binding-carried security
+material; effective security must be exactly one locally resolved NoSec
+definition.
+
+Planning owns two opaque TD-lifetime-free aggregate values:
+
+- `ConsumerPropertyReadPreflight` records checked property/coordinate counts,
+  the exact one-registration projection, conservative capacity requirements,
+  and the structurally derived remaining `PlanningItems` work. It contains no
+  TD borrow, registration owner, plan id, artifact, or runtime lease.
+- `ConsumerPropertyReadDraft<A>` seals logical plans, candidates, eager
+  artifact envelopes/references, target ranges, deterministic lookup, and the
+  exact `PlanFootprint`. It contains no TD borrow, binding execution object,
+  publication state, or authority to rebuild indexes after handoff.
+
+Planning first preflights the validated owner. A Basic-valid Thing without an
+ID fails here, before capacity reservation, materialization, compiler bounds,
+or compiler start. Only after preflight succeeds does Servient reserve the
+conservative persistent-capacity envelope. Planning may then materialize one
+logical plan/candidate for every retained coordinate and evaluate each
+compiler's pure `bounds` operation exactly once.
+
+Every bound must declare only `WorkClass::BindingPolls`, with a nonzero total
+no greater than the existing `plan_compile_work_units_per_step_max`. All
+coordinate bounds must succeed and a completed all-bounds barrier must exist
+before the first compiler `start`. Compilers then run sequentially with one
+non-resettable coordinate remainder. The aggregate compiler-work maximum is the
+checked product of readable-coordinate count and that existing per-step value;
+the count is already bounded by `forms_per_context_max` and
+`forms_per_thing_max`. This narrow eligibility rule does not reinterpret the
+global field as a per-plan or per-admission limit and introduces no resource
+row.
+
+The persistent reservation remains uncommitted through materialization and
+bounds evaluation. Any failure there releases every still-uncommitted
+reservation, produces zero compiler `start` calls, and cannot enter
+publication. Compilation failure, reconciliation failure, cancellation, or a
+seal failure likewise fails the whole unpublished aggregate; no successful
+subset is published. The existing exact-coordinate
+`PropertyReadPlanCompiler::consumer_call` remains the behavioral leaf. A
+crate-private preparation kernel may be shared to support the barrier, but the
+completed exact-coordinate semantics and evidence remain unchanged.
+
+Lookup addresses one property row and only its contiguous readable-Form range.
+Omitted `form_index` selects the first readable row; an explicit index must
+equal an original Form-array index in the same range. A missing property is
+`AffordanceMissing`, while a present property with an empty range is
+`NoFormSupportsOperation`. Lookup scans neither the TD, another target, nor a
+registration collection. Its fixed selection resolves the plan, artifact, and
+retained complete registration only while the caller holds the matching
+plan-set lease.
+
+Aggregate enumeration, row construction, lookup sealing, reconciliation, and
+later reclamation consume `WorkClass::PlanningItems` through monotonic cursors.
+Existing structural maxima bound lifetime work, the existing step limits bound
+one call, and `plan_reclaim_bytes_per_step_max` bounds reclamation. The sealed
+draft is transferred once to Servient; Servient does not recount semantics,
+rewrite artifact slots, or construct a second lookup.
+
 ## Eager and lazy artifact policy
 
 The profile and complete registration determine which eligible Consumer

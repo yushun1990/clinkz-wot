@@ -261,6 +261,68 @@ commit and passing results for:
 Completion of this tranche does not claim WP-200, WP-300, WP-400, the Consumer
 Property Read architecture gate, or the complete broad WP-100 package.
 
+### Unadmitted successor boundary: `WP-100-CONSUMER-VALIDATED-THING`
+
+This document defines the technical boundary needed for later sequential
+ADR-0013 admission; it does not register or admit the tranche. A future
+docs-only admission may add this id to `index.toml` only after the authority
+migration is merged, WP-000 remains complete, and the pre-code/Producer-gate
+impact review below is independently accepted.
+
+The tranche owns exactly the append-only `WorkClass::DocumentNodes` and
+`WorkClass::PlanningItems` discriminants, the narrow
+`AdmissionLedger::reclassify_source_to_persistent_document` operation, and the
+TD-owned move-only `ValidatedThing` construction/census path. It is governed by
+`DOC-RUNTIME-001`, `ADMIT-MEM-001`, `ADMIT-TXN-001`,
+`CONSTRAINED-WORK-001`, `CONSTRAINED-PROGRESS-001`, and
+`CONSTRAINED-OWN-001`. Its only package predecessor is complete WP-000; it has
+no dependency on the completed Consumer call-values tranche.
+
+Permitted production paths are exactly:
+
+- `foundation/src/budget.rs`;
+- `foundation/src/resource.rs`;
+- `foundation/src/lib.rs`;
+- `td/src/validated.rs`;
+- `td/src/validate.rs`;
+- `td/src/thing.rs`; and
+- `td/src/lib.rs`.
+
+The active 195-field resource schema, `foundation/build.rs`, generated
+resource-profile assertions, and `tools/check-resource-limits.sh` are outside
+the tranche. All existing `WorkClass` discriminants and the first ten
+`WorkClass::ALL` entries remain unchanged; only `DocumentNodes` then
+`PlanningItems` are appended.
+
+Successful `ValidatedThing` construction owns the exact input `Thing`, proves
+complete Basic validation, records checked typed-structure counts and a
+conservative representation-aware retained-source footprint, and exposes no
+unchecked constructor or mutable raw-Thing projection. Host and static cells
+drive the same pure cursor. `DocumentNodes` has one non-resettable lifetime
+allowance derived from `document_validation_work_units_max`; schema, URI, and
+security work remain in their existing classes. The ledger reclassification
+checks destination capacity before atomically moving the same live bytes from
+source to persistent-document accounting and preserves live/peak/contiguous
+truth on both success and failure.
+
+Before source may merge, an exact-head impact review must run the complete
+passed Producer Property Read gate commands and specifically prove that the
+fixture's fixed `[u64; 10]` cleanup snapshot intentionally covers the unchanged
+first ten `WorkClass::ALL` entries and consumes neither appended Consumer
+class. If the registered Producer claim is invalidated, a separate independent
+gate-control change must reopen it before this source change merges; the
+implementation author may not pre-judge that status.
+
+The future completion evidence key is
+`consumer-validated-thing-work-classes`, at
+`docs/evidence/WP-100-consumer-validated-thing.toml`. It must cover both
+feature profiles, every Basic-validation/census limit boundary, cancellation
+and lifetime-budget non-reset, exact source-account retention on failed
+reclassification, unchanged total live/peak/contiguous accounting on success,
+stable WorkClass prefix/order, no resource-schema change, and the exact-head
+Producer-gate impact disposition. It claims no aggregate Planning,
+`OutboundRequest`, Servient runtime, or Consumer gate.
+
 ## Requirements
 
 - `CONCUR-LOCK-001`, `CONCUR-USER-001`, `CONCUR-LIN-001`, and `CONCUR-CRIT-001` govern lock

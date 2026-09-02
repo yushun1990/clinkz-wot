@@ -73,6 +73,14 @@ contain only protocol-specific data that cannot be shared. A binding compiler
 does not receive authority to reinterpret W3C defaults, choose a different
 operation, or access credentials.
 
+For the first Consumer Property Read aggregate, TD owns construction of the
+move-only Basic-validated `Thing`, representation-aware retained-source census,
+and effective-operation/security views. Planning owns deterministic preflight,
+complete plan/candidate materialization, evaluation of every compiler bound,
+the all-bounds-before-start barrier, sequential compilation, lookup sealing,
+and the TD-free aggregate draft. Planning never reserves Servient storage or
+publishes a runtime record.
+
 ## Servient boundaries
 
 Servient owns the transaction that composes modules. In particular it owns:
@@ -87,6 +95,15 @@ Servient owns the transaction that composes modules. In particular it owns:
 - host/static policy selection.
 
 It schedules binding SPI progress but does not implement protocol I/O.
+
+In that same first Consumer slice, Servient owns the conservative persistent-
+capacity reservation between Planning preflight and materialization, the
+source-to-persistent-document ledger reclassification, the independent
+Thing-slot and plan-set generation allocators, retention of the one complete
+registration and validated source, the final cancellation/seal check, atomic
+publication, plan-set leases, drain, and reclamation. It does not rescan the
+TD, repeat Planning's census, rebuild the lookup, or copy target names into the
+binding request.
 
 ## Binding boundaries
 
