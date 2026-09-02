@@ -174,9 +174,12 @@ finalized complete Consumer-capable Property Read registration.
 owned Thing
   -> Servient private admission record and conservative retained-source charge
   -> TD-owned bounded Basic validation and representation-aware census
-  -> Planning deterministic preflight and compiler-bounds barrier
-  -> Servient persistent-runtime reservation
-  -> Planning eager materialization and compilation
+  -> Planning deterministic preflight
+  -> Servient conservative persistent-capacity reservation
+  -> Planning eager plan and candidate materialization
+  -> Planning evaluation of every compiler bound
+  -> Planning completed all-bounds barrier
+  -> Planning compiler start and eager compilation
   -> Planning-owned sealed TD-free aggregate draft
   -> Servient atomic publication with retained Thing and registration owner
 
@@ -250,8 +253,9 @@ from its existing applicable resource limit.
 Basic TD validation currently permits an absent Thing ID, while the completed
 exact Planning leaf requires one. The Consumer preflight therefore preserves
 that existing distinction: a Basic-valid Thing without an ID is rejected
-before compiler bounds or `start`, rather than synthesizing an ID or changing
-Basic validation globally.
+before persistent-capacity reservation, plan materialization, compiler bounds,
+or `start`, rather than synthesizing an ID or changing Basic validation
+globally.
 
 ## Aggregate construction, lookup, and work
 
@@ -262,20 +266,30 @@ The preflight records checked target/coordinate counts, the exact one-
 registration projection, conservative allocation requirements, and the
 remaining deterministic work needed after reservation.
 
-After Servient reserves the declared persistent runtime envelope, Planning:
+Only after preflight succeeds does Servient conservatively reserve the declared
+persistent-capacity envelope. Only after that reservation succeeds does
+Planning:
 
 1. materializes one logical plan and candidate for every readable coordinate;
-2. calls the pure compiler `bounds` operation exactly once for every
-   coordinate;
+2. evaluates every coordinate's compiler bound by calling the pure compiler
+   `bounds` operation exactly once;
 3. rejects every non-`BindingPolls` compiler work declaration;
 4. requires each coordinate's declared `BindingPolls` total to be nonzero and
    fit within the existing `plan_compile_work_units_per_step_max` value as a
    deliberately conservative first-slice eligibility rule;
 5. completes the all-bounds barrier before the first compiler `start`;
-6. drives compilers sequentially with one non-resettable coordinate remainder;
+6. starts and drives compilers sequentially with one non-resettable coordinate
+   remainder;
 7. reconciles actual artifact and temporary footprints against the held
    reservations; and
 8. seals one TD-lifetime-free aggregate draft.
+
+The persistent-capacity reservation is still uncommitted during materialization
+and bounds evaluation. Any materialization or bounds failure releases every
+still-uncommitted reservation and terminates the unpublished admission before
+both the first compiler `start` and the publication path. No coordinate may
+cross into compiler execution merely because its own bound passed: every
+coordinate bound must pass and the all-bounds barrier must complete first.
 
 Using `plan_compile_work_units_per_step_max` as a first-slice eligibility cap
 does not redefine that global field as a per-plan or per-admission resource.
@@ -351,13 +365,17 @@ re-executed as replacement WP-300 evidence but are not redesigned.
 
 ## Publication, cancellation, and reclamation
 
-Validation, preflight, bounds collection, compilation, and reconciliation are
-private unpublished phases. Cancellation is checked before external/compiler
-callbacks, at bounded pure-work intervals, and at the publication
-linearization point. A failure or cancellation fixes the first cause, starts no
-new compiler work, aborts the one live pure compiler cursor exactly once,
-releases every reservation idempotently, spends but never reuses the reserved
-plan-set generation, and returns no handle or partial lookup.
+Validation, preflight, conservative persistent-capacity reservation, plan
+materialization, all compiler-bounds evaluation, the completed all-bounds
+barrier, compilation, and reconciliation are private unpublished phases.
+Cancellation is checked before external/compiler callbacks, at bounded pure-
+work intervals, and at the publication linearization point. A materialization
+or bounds failure releases every still-uncommitted reservation idempotently and
+returns with zero compiler `start` calls and no path to publication. Any failure
+or cancellation fixes the first cause, starts no new compiler work, aborts the
+one live pure compiler cursor, if any, exactly once, releases every remaining
+uncommitted reservation idempotently, spends but never reuses the reserved plan-
+set generation, and returns no handle or partial lookup.
 
 Successful Host publication atomically installs the complete record and returns
 the consumed handle. Application-static publication changes the caller-owned
@@ -383,18 +401,18 @@ It projects the decision into these authoritative owners:
 | --- | --- |
 | `docs/spec/foundation.md` | Append `DocumentNodes` and `PlanningItems` without changing existing discriminants; bind validation lifetime to `document_validation_work_units_max`; freeze the narrow source-to-persistent-document ledger transfer; and record the structural/per-step derivation above without adding a resource row. |
 | `docs/spec/runtime-safety.md` | Freeze the owned Basic-validated Thing, retained-representation accounting, bounded profile-specific progress, and unpublished cancellation boundary. |
-| `docs/spec/planning.md` | Freeze the one-registration all-readable aggregate, deterministic lookup, all-bounds-before-start barrier, structurally bounded Planning work, sealed draft, and no-partial-publication rule. |
+| `docs/spec/planning.md` | Freeze the one-registration all-readable aggregate, deterministic lookup, preflight-before-conservative-persistent-capacity-reservation and reservation-before-materialization order, all-coordinate bounds evaluation and completed all-bounds-before-start barrier, structurally bounded Planning work, sealed draft, rollback of every still-uncommitted reservation on materialization/bounds failure, and no-partial-publication rule. |
 | `docs/spec/interaction-core.md` | Require the first-slice `OutboundRequest` to carry no human-readable Thing or target identity and to reject a mismatched plan/plan-set generation. |
 | `docs/spec/binding-spi.md` | Project the name-free request through the existing complete Host/static registration paths and reaffirm Core-mediated result sealing. |
-| `docs/architecture/10-primary-data-flows.md` | Project validated input -> Planning aggregate -> Servient publication -> name-free selected execution. |
-| `docs/architecture/20-module-boundaries.md` | Project TD validation/census ownership, Planning semantic construction, and Servient reservation/publication ownership. |
+| `docs/architecture/10-primary-data-flows.md` | Project validated input -> preflight -> conservative persistent-capacity reservation -> plan materialization -> all compiler bounds -> completed all-bounds barrier -> compiler start/compilation -> Servient publication -> name-free selected execution. |
+| `docs/architecture/20-module-boundaries.md` | Project TD validation/census ownership, Planning preflight/materialization/bounds/barrier/compilation ownership, and the Servient-owned conservative persistent-capacity reservation between preflight and materialization plus final publication. |
 | `docs/architecture/30-compiled-plan-lifecycle.md` | Project independent Thing-slot and plan-set generations, plan-set lease resolution, retained source/registration, drain, and reclaim. |
 | `docs/architecture/50-servient-runtime-lifecycle.md` | Project Host shared-registration and application-static root ownership without merging their physical APIs. |
 | `docs/api-ownership.csv` | Project the new cross-crate `AdmissionLedger` source-to-persistent-document reclassification operation plus only the validated-input, aggregate preflight/draft/selection, and Servient facade items actually required; update the request contract and removal of `OutboundRequest::thing_id`/`target`; add no resource getter, general index, registration snapshot, or per-entry pin. |
 | `docs/work-packages/WP-100-core.md` | Define the unadmitted validated-Thing/work-class tranche and its exact Foundation/TD paths and evidence, including a Producer-gate impact disposition for the append-only `WorkClass::ALL` change. |
-| `docs/work-packages/WP-200-planning.md` | Define the unadmitted aggregate tranche, exact-coordinate regression boundary, existing-limit derivation, and evidence. |
+| `docs/work-packages/WP-200-planning.md` | Define the unadmitted aggregate tranche, reservation-gated materialization and all-bounds-before-start sequence, exact-coordinate regression boundary, existing-limit derivation, and evidence. |
 | `docs/work-packages/WP-300-bindings.md` and `docs/work-packages/WP-300-consumer-property-read-binding-admission.md` | Reopen the existing Consumer binding tranche for the name-free request correction and replacement evidence; record the removed constructor parameters and `thing_id`/`target` accessors in `old_api_removals`; require an explicit Producer-gate impact disposition before source because that gate registers `core/src/binding.rs` and full Core/Servient commands; do not create a successor id. |
-| `docs/work-packages/WP-400-servient.md` | Define the later unadmitted runtime tranche, its two exact predecessor boundaries, and the cross-package Host/static fixture source and assertions that its completion evidence must produce before gate registration. |
+| `docs/work-packages/WP-400-servient.md` | Define the later unadmitted runtime tranche, its two exact predecessor boundaries, the conservative persistent-capacity reservation between preflight and materialization, prepublication rollback, and the cross-package Host/static fixture source and assertions that its completion evidence must produce before gate registration. |
 | `docs/work-packages/index.toml` and current WP-300 evidence | Reopen only the already registered affected WP-300 node and mark its current evidence superseded, following the existing impact-review lifecycle. Register no new future node. |
 
 The migration leaves unchanged:
@@ -433,8 +451,8 @@ Future work-package documents may name all boundaries during migration, but
 | --- | --- | --- | --- |
 | 1A | Independently readmit the reopened `WP-300-CONSUMER-PROPERTY-READ-BINDING` node | Its existing WP-200 predecessor is `complete/current`; the migrated request contract, replacement evidence criteria, and Producer-gate impact-review boundary are complete | Correct `core/src/outbound.rs` and affected Core tests/projections; prove the removed parameters/accessors are absent; rerun the complete Host/static sealing matrix and every intersecting registered Producer-gate command/evidence; record the exact-head impact disposition and independently reopen the Producer gate before merge if its claim is invalidated; replace the superseded WP-300 evidence |
 | 1B | Register/admit `WP-100-CONSUMER-VALIDATED-THING` | WP-000 is complete; the migration is merged; pre-code checks and the Producer-gate WorkClass impact-review boundary are complete | Append the two work classes, add the narrow ledger account transfer, and implement TD-owned validated input/census in exact Foundation/TD paths; rerun the Producer fixture's ten-class cleanup-prefix regression; record the exact-head impact disposition and independently reopen the Producer gate before merge if invalidated; no resource-schema change |
-| 2 | Register/admit `WP-200-CONSUMER-PROPERTY-READ-AGGREGATE` | Step 1B and the existing exact-coordinate WP-200 tranche are both `complete/current` | Implement preflight, all-bounds barrier, aggregate draft, lookup, and structural work proof in Planning paths |
-| 3 | Register/admit `WP-400-CONSUMER-PROPERTY-READ-RUNTIME` | Step 1A and Step 2 are both `complete/current` | Implement Host/static reservation, publication, retained registration/source, name-free execution, drain, and reclaim in Servient paths; produce the predeclared cross-package Host/static fixture and completion evidence |
+| 2 | Register/admit `WP-200-CONSUMER-PROPERTY-READ-AGGREGATE` | Step 1B and the existing exact-coordinate WP-200 tranche are both `complete/current` | Implement preflight, reservation-gated complete plan materialization, all-coordinate bounds evaluation, the all-bounds-before-start barrier, aggregate draft, lookup, and structural work proof in Planning paths |
+| 3 | Register/admit `WP-400-CONSUMER-PROPERTY-READ-RUNTIME` | Step 1A and Step 2 are both `complete/current` | Implement Host/static conservative persistent-capacity reservation after preflight and before Planning materialization, prepublication rollback, publication, retained registration/source, name-free execution, drain, and reclaim in Servient paths; produce the predeclared cross-package Host/static fixture and completion evidence |
 | 4A | Register `CONSUMER-PROPERTY-READ-ARCHITECTURE` in `ready` through the isolated gate-registry/checker projection | Step 3 and every component tranche are `complete/current`, their completion evidence is `passed`, and the exact fixture source already exists | Preserve the passed Producer gate; atomically generalize the index/checker to two exact manifests; add only the Consumer gate document/manifest and artifact/spec registration; change no product or fixture source |
 | 4B | Independently accept the exact Consumer gate candidate | The registered `ready` head and every listed command/evidence pass | A separate reviewer-controlled status-only change moves `ready -> passed`; later real Host Zenoh remains separate WP-600 production evidence |
 
@@ -474,17 +492,23 @@ following:
   class instead of being hidden in or double charged as `DocumentNodes`;
 - validation cannot be entered with an unchecked `Thing`, exceed its existing
   structural/memory/work limits, or reset its lifetime budget across steps;
-- a Basic-valid Thing without an ID fails Consumer preflight before compiler
-  bounds or `start`;
+- a Basic-valid Thing without an ID fails Consumer preflight before persistent-
+  capacity reservation, plan materialization, compiler bounds, or `start`;
 - source-to-persistent reclassification neither duplicates the Thing nor
   changes total live/peak bytes, and a failed destination check leaves the
   source charge intact;
 - no resource field, named-profile value, or generated getter is needed for
   the complete first-slice bound;
-- no compiler starts until every coordinate has passed bounds and reservation;
-- zero or per-coordinate compiler work over the existing step ceiling fails
-  before every compiler `start`, and aggregate lifetime is bounded by checked
-  structural derivation;
+- the observed aggregate-admission order is exactly preflight, one conservative
+  persistent-capacity reservation, complete plan materialization, evaluation of
+  every coordinate's compiler bounds, completion of the all-bounds barrier, and
+  only then the first compiler `start`;
+- any materialization failure or bounds failure releases every still-uncommitted
+  reservation, produces zero compiler `start` calls, and cannot enter
+  publication;
+- zero or per-coordinate compiler work over the existing step ceiling fails in
+  bounds evaluation before the first compiler `start`, and aggregate lifetime
+  is bounded by checked structural derivation;
 - lookup distinguishes missing property from no readable Form without TD or
   registration scanning;
 - one failed coordinate publishes no subset;
