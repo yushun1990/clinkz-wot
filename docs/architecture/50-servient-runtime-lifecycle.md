@@ -111,6 +111,31 @@ Each interaction, call, or subscription pins the consumed plan generation. A
 handle drop prevents new selection, cancels or transfers outstanding operations,
 and releases the plan set only after every lease and cleanup owner is terminal.
 
+The first v5.1 Consumer Property Read runtime contains one validated retained
+Thing, one sealed all-readable aggregate, and one complete Consumer-capable
+Property Read registration. Planning preflight precedes Servient's conservative
+persistent-capacity reservation; that reservation precedes Planning
+materialization and the all-bounds-before-start barrier. Servient alone owns
+the final cancellation/seal check and the `BuildingPlans -> Published`
+linearization. Failure before it releases all unpublished reservations and
+returns no handle or partial lookup.
+
+Host and application-static forms share these semantics but not a physical
+container or progress API. Host startup and every live consumed record retain
+shared ownership of the one complete `HostBindingRegistration`; a call and any
+transferred cleanup owner retain the matching plan-set lease. The application-
+static form uses one caller-owned root containing the typed complete
+registration, aggregate record, build/reclaim progress, and request slots;
+short mutable borrows drive progress and no `Arc`, self-reference, interior-
+mutable registration pin, or erased Host container is required.
+
+Both forms resolve one eager artifact and call only the complete registration's
+sealed `start_consumer_property_read` path. The runtime keeps Thing/property
+names in API, retained source, plan, or diagnostics, never in
+`OutboundRequest`. Close rejects new leases/calls, drains existing calls and
+cleanup owners, and starts monotonic reclamation only after terminal ownership
+is proved.
+
 ## Scheduling and fairness
 
 Servient schedules ready work through maintained queues/cursors. A work step

@@ -141,6 +141,74 @@ Explicitly excluded:
 - scheduler-wide fairness beyond the separately owned WP-400 early checkpoint;
 - production Zenoh.
 
+### Unadmitted successor boundary: `WP-400-CONSUMER-PROPERTY-READ-RUNTIME`
+
+This future ADR-0013 tranche is defined but not registered or admitted. It may
+enter `index.toml` only when the reopened
+`WP-300-CONSUMER-PROPERTY-READ-BINDING` and
+`WP-200-CONSUMER-PROPERTY-READ-AGGREGATE` nodes are both
+`complete/current` with passed replacement/completion evidence.
+
+The tranche owns Host and application-static Consumer admission/runtime
+composition: conservative persistent-capacity reservation after Planning
+preflight and before materialization, source-to-persistent ledger transfer,
+independent Thing-slot and plan-set generations, retained validated source and
+one complete registration, final reconciliation/cancellation seal, atomic
+publication, plan-set leases, name-free request construction, Core-sealed
+execution, drain, and monotonic reclaim. It must not interpret TD semantics,
+rebuild Planning lookup material, expose raw client authoring SPIs, or merge
+the physical Host/static containers.
+
+Permitted product and cross-package fixture paths are exactly:
+
+- `servient/src/consumer_property_read.rs`;
+- `servient/src/lib.rs`;
+- `servient/tests/consumer_property_read.rs`;
+- `tools/architecture-fixtures/consumer-property-read-binding/Cargo.toml`;
+- `tools/architecture-fixtures/consumer-property-read-binding/src/lib.rs`;
+- `tools/architecture-fixtures/consumer-property-read-runner/Cargo.toml`;
+- `tools/architecture-fixtures/consumer-property-read-runner/src/lib.rs`;
+- `Cargo.toml`; and
+- `Cargo.lock`.
+
+Those new fixture packages are completion evidence produced by this tranche;
+they are not created later by gate registration. Host retains shared ownership
+of one complete registration and transfers the plan-set lease with any call or
+cleanup owner. The static caller-owned root retains the typed registration,
+aggregate, progress, and request slots directly. Both forms must produce equal
+plans, selections, name-free requests, failures, sealing outcomes, drain, and
+reclaim semantics without requiring equal public progress APIs.
+
+Every prepublication failure releases all uncommitted reservations and returns
+no handle or partial lookup. Close rejects new leases/calls before draining
+accepted work; retained source/registration/aggregate storage is reclaimed only
+after every call, lease, and cleanup owner is terminal. The runtime uses only
+the complete registration's sealed `start_consumer_property_read` path.
+
+The future completion evidence key is
+`consumer-property-read-runtime`, at
+`docs/evidence/WP-400-consumer-property-read-runtime.toml`. It must name the
+exact Host/static fixture source and cover admission order, rollback at every
+unpublished phase, independent generation allocators, lookup without TD or
+registration scans, absence of request names, complete-registration no-bypass,
+normal/cancellation-late response sealing, cleanup/lease transfer, drain, and
+zero retained source/plan/artifact/registration bytes after reclamation. It
+does not register or pass the Consumer architecture gate, and it is not real
+Zenoh production evidence.
+
+Only after this tranche and every component predecessor are
+`complete/current`, all completion evidence is `passed`, and the exact fixture
+source above exists may a separate docs-only candidate register
+`CONSUMER-PROPERTY-READ-ARCHITECTURE` in `ready`. That candidate must preserve
+the passed Producer manifest as the first registration, atomically evolve the
+singular index field to an ordered exact manifest list, append the Consumer
+manifest, generalize the non-normative checker with manifest-specific exact
+dependency/evidence assertions for both gates, and register only the new gate
+document/manifest in the artifact/spec indexes. It adds no product or fixture
+source and admits no tranche. Independent acceptance then uses a separate
+status-only `ready -> passed` change; real Host Zenoh remains later WP-600
+production evidence.
+
 ## Requirements
 
 - `LIFE-EXPOSE-001`

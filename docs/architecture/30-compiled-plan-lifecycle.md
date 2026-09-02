@@ -126,6 +126,29 @@ handle or mutates its cache. A future runtime replacement design must define
 explicit rebuild, cutover, lease, and cleanup semantics before adding such an
 API.
 
+For the first Consumer Property Read aggregate, the consumed record owns one
+generation-bearing `ThingSlotId` and one separately allocated non-wrapping
+`PlanSetGeneration`. Their generation values are not required to be equal and
+the two wrappers are never interchangeable. Dense `PlanId` slots use the plan-
+set generation; artifact references and aggregate lookup rows resolve only
+under a live lease for that exact plan-set record. The lease, rather than
+numeric coincidence or global uniqueness, proves which record may resolve an
+artifact.
+
+The published record retains the same validated source `Thing`, its reconciled
+ledger charge, the sealed TD-free aggregate, and the one finalized complete
+Consumer registration. Host records share ownership of that registration;
+application-static roots retain it directly. Neither representation creates a
+general registration snapshot, per-plan registration pin, or runtime binding
+scan for this slice.
+
+Starting close prevents new plan-set leases and binding calls. Existing calls,
+leases, and cleanup owners retain the record until terminal settlement.
+Reclamation begins only after all of them are terminal and advances
+monotonically under `WorkClass::PlanningItems` plus the existing
+`plan_reclaim_bytes_per_step_max`; only then may the plan set, registration
+owner, and retained source be released.
+
 ## Hot-path contract
 
 After publication, an interaction may inspect only the bounded candidate list

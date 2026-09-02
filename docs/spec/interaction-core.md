@@ -110,6 +110,28 @@ Only after this sealing may the `InteractionOutput` reach WP-400 or application
 code. Broad schema compilation, transcoding, additional-response tables, and
 validation-profile policy remain outside the v5.1 Consumer one-shot slice.
 
+The first aggregate correction makes the selected Property Read request
+name-free. Its semantic construction boundary is:
+
+```rust
+impl OutboundRequest {
+    pub fn property_read(
+        artifact: BindingArtifactRef,
+        uri_variables: BTreeMap<String, String>,
+        deadline: Option<Deadline>,
+    ) -> CoreResult<Self>;
+}
+```
+
+The request retains no `ThingId`, `ThingSlotId`, `AffordanceTarget`, TD, Form,
+`InteractionOptions`, registration owner, candidate list, or fallback
+authority. `operation()` is fixed to `ReadProperty`; binding identity and
+generation, configuration, plan-set generation, plan id, compatibility, and
+role derive from the one artifact reference. Construction rejects a role other
+than `ConsumerCall` and rejects a `PlanId` whose generation differs from the
+artifact's `PlanSetGeneration`. Human-readable Thing/property identity remains
+only at API/admission boundaries or in immutable plan/diagnostic storage.
+
 These rules are intentionally operation-narrow. A later broad
 `InboundResponse` is a rename/generalization of the same linear carrier and
 validation kernel after its operation families enter active authority, not an

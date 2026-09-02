@@ -242,6 +242,61 @@ implementation checkpoint and passing results for:
 Completion of this tranche does not claim broad WP-200 completion, WP-300,
 WP-400, or the Consumer Property Read architecture gate.
 
+### Unadmitted successor boundary: `WP-200-CONSUMER-PROPERTY-READ-AGGREGATE`
+
+This is a future sequential ADR-0013 boundary, not a registered or admitted
+tranche. It may enter `index.toml` only after both
+`WP-100-CONSUMER-VALIDATED-THING` and the existing
+`WP-200-CONSUMER-PROPERTY-READ-PLANNING` exact-coordinate tranche are
+`complete/current` with passed evidence.
+
+The tranche owns one-registration/all-readable preflight, conservative
+capacity requirements, complete plan/candidate materialization, evaluation of
+every compiler bound, the completed all-bounds-before-start barrier,
+sequential eager compilation, the sealed TD-free
+`ConsumerPropertyReadDraft`, deterministic property/Form lookup, exact
+`PlanFootprint`, and monotonic `PlanningItems` work/reclamation projections. It
+does not own persistent-capacity reservation, publication, the retained
+registration owner, call execution, or plan-set lifecycle state.
+
+Permitted production paths are exactly:
+
+- `planning/src/consumer_property_read.rs`;
+- `planning/src/property_read.rs`; and
+- `planning/src/lib.rs`.
+
+`planning/src/property_read.rs` may extract one crate-private coordinate-
+preparation kernel solely to preserve the completed exact-coordinate behavior
+while allowing all bounds to be collected before any compiler starts. Public
+`PropertyReadPlanCompiler::consumer_call` semantics and the existing completion
+evidence remain regression requirements, not superseded authority.
+
+The first slice visits property keys deterministically, retains Forms in source
+order, creates an empty range for a property without a readable Form, requires
+one local NoSec result for every retained coordinate, and uses only
+registration ordinal/candidate order zero. A Basic-valid Thing without an ID
+fails preflight. After Servient reports that the preflight reservation is held,
+Planning materializes every coordinate, calls each pure `bounds` exactly once,
+rejects non-`BindingPolls`, zero, over-step, and checked-product overflow, and
+completes the all-bounds barrier before the first `start`. Materialization or
+bounds failure returns the still-uncommitted reservation disposition and proves
+zero starts; no subset may be sealed.
+
+The tranche derives its complete bound only from existing document/Form,
+compiled-runtime, artifact, temporary, per-step, and reclaim limits. It adds no
+resource row, getter, capability index, lazy/cache state, fallback, credential,
+additional operation, or runtime registration snapshot.
+
+The future completion evidence key is
+`consumer-property-read-aggregate`, at
+`docs/evidence/WP-200-consumer-property-read-aggregate.toml`. Evidence must
+cover deterministic multi-property/multi-Form ordering, empty-vs-missing
+lookup, all-coordinate NoSec admission, every materialization/bounds negative
+with zero compiler starts and complete rollback, non-resettable compiler and
+Planning work, exact-coordinate regression, draft independence from TD and
+compiler inputs, Host/static parity, and the three Planning feature cells. It
+claims no WP-400 publication/execution or Consumer architecture gate.
+
 ## Requirements
 
 This package is governed by:

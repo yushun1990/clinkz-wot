@@ -143,6 +143,18 @@ Physically live engine-owned arena, pool, heap, or exclusively reserved
 caller-provided capacity is charged. Verification records which representation
 is measured. Rollback metadata MUST NOT duplicate the resources it protects.
 
+For the first v5.1 Consumer Property Read aggregate, the same owned typed
+`Thing` is both the validated admission input and the retained source view.
+Servient initially charges a conservative source envelope using the existing
+`retained_source_bytes_*`, document, peak-live, and largest-contiguous limits.
+After TD-owned validation and representation-aware census, one narrow checked
+`AdmissionLedger` operation reclassifies the same live bytes from the source
+account to persistent-document accounting. The operation checks destination
+capacity before changing either account; success changes neither total live
+bytes, peak-live bytes, nor largest-contiguous allocation, and failure leaves
+the source charge and owned value intact for rollback. It is an ownership-
+preserving account transfer, not a second reservation or a cloned document.
+
 ## Constrained storage
 
 `CONSTRAINED-STORAGE-001`: A constrained runtime uses caller-owned bounded
@@ -175,3 +187,28 @@ worst-case execution responsibility.
 Every consumer receives `&mut WorkBudget`; copying an allowance to restart
 fallback, probing, cleanup, handler work, or another step is nonconforming. A
 partition operation may exist only if it atomically debits the parent.
+
+The first Consumer aggregate requires two append-only `WorkClass`
+discriminants after the existing ten entries: `DocumentNodes` and
+`PlanningItems`. Existing discriminants and the first ten entries of
+`WorkClass::ALL` remain unchanged. Their source projection belongs to the
+separately admitted `WP-100-CONSUMER-VALIDATED-THING` tranche; this authority
+does not itself admit that source change.
+
+`DocumentNodes` charges only typed-document validation and census visits not
+already owned by a more specific class. Typed schema-node visits remain
+`JsonSchemaNodes`, URI-template bytes remain `UriBytes`, and security branches
+remain `SecurityBranches`; work is neither relabelled nor double charged merely
+because it occurs during validation. One validation owns a non-resettable
+lifetime remainder derived from the existing
+`document_validation_work_units_max`. Host may drive the same pure cursor to
+completion synchronously, while application-static callers may resume it;
+fresh per-step budgets do not replace that lifetime remainder.
+
+`PlanningItems` charges aggregate enumeration, row construction, lookup
+sealing, reconciliation, and reclamation. A monotonic cursor visits each
+admitted property, Form, plan row, and artifact a fixed number of times. The
+existing step limits bound one call, the existing document/Form maxima bound
+the complete admission, and `plan_reclaim_bytes_per_step_max` bounds
+reclamation. No new per-plan or per-admission resource row or generated getter
+is introduced for either work class.
