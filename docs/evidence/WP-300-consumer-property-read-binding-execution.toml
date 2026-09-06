@@ -144,3 +144,8 @@ status = "passed"
 [[verification]]
 command = "cargo test --locked -p clinkz-wot-protocol-bindings-zenoh --test target_property_read_feedback_probe -- --test-threads=1"
 status = "passed"
+
+[[verification]]
+command = "github-actions:mainline/validation@8b594fcc037ef86b11fef936d06b6f98900434ab"
+status = "passed"
+evidence = "github-actions-run:34014130044/job:101434905253"
