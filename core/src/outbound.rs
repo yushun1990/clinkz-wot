@@ -28,7 +28,7 @@ use crate::interaction::InteractionInput;
 use crate::{
     AffordanceTarget, BindingArtifactRef, BindingArtifactRole, BindingGeneration, BindingId,
     CoreError, CoreResult, Deadline, ErrorContext, ErrorPhase, PlanId, PlanSetGeneration,
-    RetryClass, ThingId,
+    RetryClass,
 };
 #[cfg(feature = "async")]
 use crate::{Subscription, interaction::InteractionOutput};
@@ -36,30 +36,69 @@ use crate::{Subscription, interaction::InteractionOutput};
 /// Owned execution envelope for one already-selected Consumer Property Read.
 ///
 /// Static target and protocol facts remain in the immutable binding artifact.
-/// This request carries only the selected identity plus call-varying URI
-/// variables and deadline intent; it contains no TD, Form, options, security
-/// provider, candidate list, or fallback authority.
+/// This request is name-free: it carries no `ThingId`, `ThingSlotId`, or
+/// `AffordanceTarget`. It holds only the selected artifact reference plus
+/// call-varying URI variables and deadline intent; it contains no TD, Form,
+/// options, security provider, candidate list, or fallback authority.
+/// Human-readable Thing/property identity remains only at API/admission
+/// boundaries or in immutable plan/diagnostic storage.
+///
+/// ```compile_fail
+/// # use clinkz_wot_core::OutboundRequest;
+/// # fn no_thing_identity(request: &OutboundRequest) {
+/// let _ = request.thing_id();
+/// # }
+/// ```
+///
+/// ```compile_fail
+/// # use clinkz_wot_core::OutboundRequest;
+/// # fn no_affordance_target(request: &OutboundRequest) {
+/// let _ = request.target();
+/// # }
+/// ```
 #[derive(Debug, Eq, PartialEq)]
 pub struct OutboundRequest {
-    thing_id: ThingId,
-    target: AffordanceTarget,
     artifact: BindingArtifactRef,
     uri_variables: BTreeMap<String, String>,
     deadline: Option<Deadline>,
 }
 
 impl OutboundRequest {
-    /// Constructs one structurally valid selected Property Read request.
+    /// Constructs one structurally valid selected name-free Property Read
+    /// request.
+    ///
+    /// Binding, binding-generation, configuration, plan-set, plan,
+    /// compatibility, and role identities derive from the captured artifact
+    /// reference; they are not independently supplied fields that may
+    /// disagree. Construction fails when the artifact is not a `ConsumerCall`
+    /// artifact or when the plan id's generation differs from the artifact's
+    /// plan-set generation.
+    ///
+    /// ```compile_fail
+    /// # use std::collections::BTreeMap;
+    /// # use clinkz_wot_core::{AffordanceTarget, BindingArtifactRef, OutboundRequest, ThingId};
+    /// # fn no_legacy_constructor_shape(
+    /// #     thing_id: ThingId,
+    /// #     target: AffordanceTarget,
+    /// #     artifact: BindingArtifactRef,
+    /// # ) -> clinkz_wot_core::CoreResult<OutboundRequest> {
+    /// OutboundRequest::property_read(
+    ///     thing_id,
+    ///     target,
+    ///     artifact,
+    ///     BTreeMap::new(),
+    ///     None,
+    /// )
+    /// # }
+    /// ```
     pub fn property_read(
-        thing_id: ThingId,
-        target: AffordanceTarget,
         artifact: BindingArtifactRef,
         uri_variables: BTreeMap<String, String>,
         deadline: Option<Deadline>,
     ) -> CoreResult<Self> {
         let identity = artifact.identity();
-        if !matches!(&target, AffordanceTarget::Property(_))
-            || identity.role() != BindingArtifactRole::ConsumerCall
+        if identity.role() != BindingArtifactRole::ConsumerCall
+            || identity.plan_id().generation() != identity.plan_set_generation().get()
         {
             return Err(CoreError::Validation(
                 ErrorContext::new(ErrorPhase::Admission, RetryClass::Never)
@@ -70,22 +109,10 @@ impl OutboundRequest {
         }
 
         Ok(Self {
-            thing_id,
-            target,
             artifact,
             uri_variables,
             deadline,
         })
-    }
-
-    /// Returns the selected Thing identity.
-    pub const fn thing_id(&self) -> &ThingId {
-        &self.thing_id
-    }
-
-    /// Returns the selected Property affordance target.
-    pub const fn target(&self) -> &AffordanceTarget {
-        &self.target
     }
 
     /// Returns the operation frozen by this request constructor.

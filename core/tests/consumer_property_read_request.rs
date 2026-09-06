@@ -1,11 +1,11 @@
-use std::{collections::BTreeMap, sync::Arc};
+use std::collections::BTreeMap;
 
 use clinkz_wot_core::{
-    ActionInvocationRef, AffordanceTarget, BindingArtifactCompatibility, BindingArtifactIdentity,
-    BindingArtifactRef, BindingArtifactRole, BindingConfigurationDigest, BindingGeneration,
-    BindingId, BindingResponseMetadata, CoreError, Deadline, InteractionOutput,
-    InteractionOutputMetadata, InteractionStatus, Payload, PlanId, PlanSetGeneration,
-    ResponsePayloadRole, ThingId, validate_untrusted_binding_output,
+    ActionInvocationRef, BindingArtifactCompatibility, BindingArtifactIdentity, BindingArtifactRef,
+    BindingArtifactRole, BindingConfigurationDigest, BindingGeneration, BindingId,
+    BindingResponseMetadata, CoreError, Deadline, InteractionOutput, InteractionOutputMetadata,
+    InteractionStatus, Payload, PlanId, PlanSetGeneration, ResponsePayloadRole,
+    validate_untrusted_binding_output,
 };
 use clinkz_wot_foundation::{
     ClockId, GatewayDefaultV1, Generation, MonotonicInstant, ResourceKind, SlotIndex,
@@ -36,17 +36,34 @@ fn artifact_ref(role: BindingArtifactRole) -> BindingArtifactRef {
     )
 }
 
+/// A reference whose plan id belongs to a different plan-set generation.
+fn generation_mismatched_artifact_ref() -> BindingArtifactRef {
+    let next_plan_set = PlanSetGeneration::INITIAL
+        .checked_next()
+        .expect("a second plan-set generation exists");
+    BindingArtifactRef::new(
+        BindingArtifactIdentity::new(
+            next_plan_set,
+            plan_id(13),
+            BINDING_ID,
+            BINDING_GENERATION,
+            BindingConfigurationDigest::new([17; 32]),
+            COMPATIBILITY,
+            BindingArtifactRole::ConsumerCall,
+        ),
+        SlotIndex::new(19),
+    )
+}
+
 fn request() -> clinkz_wot_core::OutboundRequest {
     let mut uri_variables = BTreeMap::new();
     uri_variables.insert(String::from("room"), String::from("west"));
     clinkz_wot_core::OutboundRequest::property_read(
-        ThingId::from("urn:test:consumer"),
-        AffordanceTarget::Property(Arc::from("temperature")),
         artifact_ref(BindingArtifactRole::ConsumerCall),
         uri_variables,
         Some(Deadline::at(MonotonicInstant::new(ClockId::new(3), 29))),
     )
-    .expect("the exact Property Read request is admitted")
+    .expect("the exact name-free Property Read request is admitted")
 }
 
 fn payload() -> Payload {
@@ -90,14 +107,9 @@ fn assert_validation_failure(
 }
 
 #[test]
-fn property_read_request_owns_only_selected_and_call_varying_facts() {
+fn property_read_request_owns_only_name_free_selected_and_call_varying_facts() {
     let request = request();
 
-    assert_eq!(request.thing_id().as_str(), "urn:test:consumer");
-    assert_eq!(
-        request.target(),
-        &AffordanceTarget::Property(Arc::from("temperature"))
-    );
     assert_eq!(request.operation(), Operation::ReadProperty);
     assert_eq!(
         request.artifact(),
@@ -115,31 +127,13 @@ fn property_read_request_owns_only_selected_and_call_varying_facts() {
 }
 
 #[test]
-fn request_rejects_non_property_targets_and_non_consumer_artifacts() {
-    for target in [
-        AffordanceTarget::Thing,
-        AffordanceTarget::Action(Arc::from("calibrate")),
-        AffordanceTarget::Event(Arc::from("alarm")),
-    ] {
-        let error = clinkz_wot_core::OutboundRequest::property_read(
-            ThingId::from("urn:test:consumer"),
-            target,
-            artifact_ref(BindingArtifactRole::ConsumerCall),
-            BTreeMap::new(),
-            None,
-        )
-        .expect_err("a non-property target is structurally invalid");
-        assert!(matches!(error, CoreError::Validation(_)));
-    }
-
+fn request_rejects_non_consumer_artifacts_and_generation_mismatches() {
     for role in [
         BindingArtifactRole::ConsumerSubscription,
         BindingArtifactRole::ProducerRoute,
         BindingArtifactRole::ProducerPublication,
     ] {
         let error = clinkz_wot_core::OutboundRequest::property_read(
-            ThingId::from("urn:test:consumer"),
-            AffordanceTarget::Property(Arc::from("temperature")),
             artifact_ref(role),
             BTreeMap::new(),
             None,
@@ -147,6 +141,14 @@ fn request_rejects_non_property_targets_and_non_consumer_artifacts() {
         .expect_err("only ConsumerCall artifacts are admitted");
         assert!(matches!(error, CoreError::Validation(_)));
     }
+
+    let error = clinkz_wot_core::OutboundRequest::property_read(
+        generation_mismatched_artifact_ref(),
+        BTreeMap::new(),
+        None,
+    )
+    .expect_err("a plan id from another plan-set generation is structurally invalid");
+    assert!(matches!(error, CoreError::Validation(_)));
 }
 
 #[test]
