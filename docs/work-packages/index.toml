@@ -168,11 +168,9 @@ completion_evidence_path = "docs/evidence/WP-200-consumer-property-read-planning
 id = "WP-300-CONSUMER-PROPERTY-READ-BINDING"
 work_package = "WP-300"
 sequence = 310
-status = "reopened"
-admission_status = "candidate"
-impact_status = "reopened"
-impact_review = "github-pr:64"
-completion_evidence_disposition = "superseded"
+status = "planned"
+admission_status = "admitted"
+impact_status = "current"
 depends_on = ["WP-200-CONSUMER-PROPERTY-READ-PLANNING"]
 depends_on_packages = ["WP-000"]
 requirements = [
@@ -255,6 +253,6 @@ pre_implementation_checks = [
     "cargo check --locked -p clinkz-wot-core --no-default-features --features async",
     "cargo check --locked -p clinkz-wot-core",
 ]
-admission_review = "github-pr:pending"
+admission_review = "github-pr:66"
 completion_evidence_keys = ["consumer-property-read-binding-execution"]
 completion_evidence_path = "docs/evidence/WP-300-consumer-property-read-binding-execution.toml"

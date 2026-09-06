@@ -36,10 +36,11 @@ Topics are retained after migration as decision history.
 
 ** DECIDED
 
-- [[file:0063-consumer-plan-set-handoff-closure.md][0063 Consumer Plan-Set Handoff Closure]]
+- None.
 
 ** MIGRATED
 
+- [[file:0063-consumer-plan-set-handoff-closure.md][0063 Consumer Plan-Set Handoff Closure]]
 - [[file:0062-consumer-binding-result-sealing.md][0062 Consumer Binding Result Sealing]]
 - [[file:0001-architecture-overview.org][0001 Architecture Overview]]
 - [[file:0002-planning-context.org][0002 Planning Context]]

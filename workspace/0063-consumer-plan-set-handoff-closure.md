@@ -1,6 +1,6 @@
 # 0063 Consumer Plan-Set Handoff Closure
 
-Status: DECIDED
+Status: MIGRATED
 
 Kind: architecture decision and executable migration/admission-path correction
 
@@ -605,12 +605,15 @@ declared property. A singleton or subset would require arbitrary hidden
 selection or call-time TD fallback and would not be the admitted consumed plan
 set.
 
-## Migration condition
+## Migration record
 
-This topic remains `DECIDED`, not `MIGRATED`. A fresh independent architecture
-review must accept the exact docs-only authority migration described above.
-That candidate must neither carry generated/functional source nor pre-register
-new future tranches. Once the accepted authority, work-package decomposition,
-and existing WP-300 impact state are merged, this topic can move to
-`MIGRATED`; the first new source begins only after its own independently
-reviewed ADR-0013 admission.
+The independently accepted docs-only authority migration is present in the
+specification, architecture, API-ownership, and work-package owners listed
+above. It changed no generated or functional source, registered no future
+tranche, preserved the Producer gate, and reopened only the affected existing
+WP-300 tranche and its evidence. This topic is therefore `MIGRATED`.
+
+Future admission, implementation, evidence, and gate state belongs only to the
+authoritative work-package registry and documents, source, tests, Git/GitHub,
+and CI. The first new source still requires its own independently reviewed
+ADR-0013 admission; this migrated topic grants no implementation authority.

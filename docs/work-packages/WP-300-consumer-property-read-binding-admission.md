@@ -1,6 +1,6 @@
 # WP-300 Consumer Property Read Binding Admission
 
-Status: REOPENED under ADR-0013 impact review for design revision v5.1.
+Status: ADR-0013 readmission candidate for design revision v5.1.
 
 The prior admission froze only the first Consumer one-shot Binding tranche. It
 refined the broad retained WP-300 client surface for the active v5.1 Consumer
@@ -16,9 +16,11 @@ no successor id is created.
 
 This candidate removes those static human-readable identities while preserving
 the accepted complete-registration, result-sealing, cancellation, cleanup, and
-resource algorithms. It does not authorize source work until an exact
-readmission revision receives fresh independent review and the registered
-Producer Property Read gate receives the mandatory impact disposition below.
+resource algorithms. It authorizes no source work unless this exact readmission
+revision receives fresh independent review and is merged. The corrected
+implementation head must then receive the mandatory Producer Property Read
+gate impact disposition below before its source may merge or the tranche may
+return to `complete/current`.
 
 ## Tranche
 
