@@ -269,7 +269,14 @@ ADR-0013 tranche; the reviewed admission record is
 which registers the id in `index.toml` and records the pre-code checks and
 Producer-gate impact-review boundary. That docs-only admission was accepted
 only after the authority migration was merged, WP-000 remained complete, and
-the pre-code/Producer-gate impact review below was independently accepted.
+the pre-code/Producer-gate impact review below was independently accepted. Its
+permitted-path set was amended once, by the independently accepted ADR-0013
+impact correction (github-pr:70), after the in-progress implementation
+(github-pr:69) proved that no conservative representation-aware retained
+footprint for `Thing.context` is computable without observing the private
+`Context.entries` buffers; the correction admits the single read-only
+`pub(crate)` Context-entry inspection seam in `td/src/components/context.rs`
+and nothing else.
 
 The tranche owns exactly the append-only `WorkClass::DocumentNodes` and
 `WorkClass::PlanningItems` discriminants, the narrow
@@ -287,14 +294,20 @@ Permitted production paths are exactly:
 - `foundation/src/lib.rs`;
 - `td/src/validated.rs`;
 - `td/src/validate.rs`;
-- `td/src/thing.rs`; and
-- `td/src/lib.rs`.
+- `td/src/thing.rs`;
+- `td/src/lib.rs`; and
+- `td/src/components/context.rs` (read-only `pub(crate)` Context-entry
+  inspection seam only).
 
-The active 195-field resource schema, `foundation/build.rs`, generated
-resource-profile assertions, and `tools/check-resource-limits.sh` are outside
-the tranche. All existing `WorkClass` discriminants and the first ten
-`WorkClass::ALL` entries remain unchanged; only `DocumentNodes` then
-`PlanningItems` are appended.
+The `context.rs` path admits only the single read-only `pub(crate)`
+Context-entry inspection seam required for the conservative capacity-aware
+`retained_source_bytes()` census of `Thing.context`; it authorizes no other
+`td/src/components/**` edit and no `Context`, builder, serialization, or
+Basic-validation semantic change. The active 195-field resource schema,
+`foundation/build.rs`, generated resource-profile assertions, and
+`tools/check-resource-limits.sh` are outside the tranche. All existing
+`WorkClass` discriminants and the first ten `WorkClass::ALL` entries remain
+unchanged; only `DocumentNodes` then `PlanningItems` are appended.
 
 Successful `ValidatedThing` construction owns the exact input `Thing`, proves
 complete Basic validation, records checked typed-structure counts and a
