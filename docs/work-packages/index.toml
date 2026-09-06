@@ -148,8 +148,14 @@ api_items = [
     "WorkClass::PlanningItems",
     "AdmissionLedger::reclassify_source_to_persistent_document",
     "ValidatedThingCursor",
+    "validated_thing_cursor_new",
+    "validated_thing_cursor_step",
     "ValidatedThingStep",
     "ValidatedThing",
+    "validated_thing_thing",
+    "validated_thing_retained_source_bytes",
+    "validated_thing_property_count",
+    "validated_thing_readable_property_form_count",
 ]
 state_machines = []
 resource_changes = [
