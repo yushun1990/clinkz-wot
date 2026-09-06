@@ -146,6 +146,6 @@ command = "cargo test --locked -p clinkz-wot-protocol-bindings-zenoh --test targ
 status = "passed"
 
 [[verification]]
-command = "github-actions:mainline/validation@8b594fcc037ef86b11fef936d06b6f98900434ab"
+command = "github-actions:mainline/validation@c4a0bc98c19ce87c9471f44b7bb5b5473d942e06"
 status = "passed"
 evidence = "github-actions-run:34014130044/job:101434905253"
