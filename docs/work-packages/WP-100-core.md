@@ -261,13 +261,15 @@ commit and passing results for:
 Completion of this tranche does not claim WP-200, WP-300, WP-400, the Consumer
 Property Read architecture gate, or the complete broad WP-100 package.
 
-### Unadmitted successor boundary: `WP-100-CONSUMER-VALIDATED-THING`
+### Successor boundary: `WP-100-CONSUMER-VALIDATED-THING`
 
-This document defines the technical boundary needed for later sequential
-ADR-0013 admission; it does not register or admit the tranche. A future
-docs-only admission may add this id to `index.toml` only after the authority
-migration is merged, WP-000 remains complete, and the pre-code/Producer-gate
-impact review below is independently accepted.
+This document defines the technical boundary for this sequentially admitted
+ADR-0013 tranche; the reviewed admission record is
+[`WP-100-consumer-validated-thing-admission.md`](WP-100-consumer-validated-thing-admission.md),
+which registers the id in `index.toml` and records the pre-code checks and
+Producer-gate impact-review boundary. That docs-only admission was accepted
+only after the authority migration was merged, WP-000 remained complete, and
+the pre-code/Producer-gate impact review below was independently accepted.
 
 The tranche owns exactly the append-only `WorkClass::DocumentNodes` and
 `WorkClass::PlanningItems` discriminants, the narrow
@@ -313,8 +315,7 @@ class. If the registered Producer claim is invalidated, a separate independent
 gate-control change must reopen it before this source change merges; the
 implementation author may not pre-judge that status.
 
-The future completion evidence key is
-`consumer-validated-thing-work-classes`, at
+The completion evidence key is `consumer-validated-thing-work-classes`, at
 `docs/evidence/WP-100-consumer-validated-thing.toml`. It must cover both
 feature profiles, every Basic-validation/census limit boundary, cancellation
 and lifetime-budget non-reset, exact source-account retention on failed
