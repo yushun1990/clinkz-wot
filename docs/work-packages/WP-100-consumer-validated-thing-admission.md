@@ -2,20 +2,19 @@
 
 Status: ADMITTED under ADR-0013 for design revision v5.1 by the independent
 acceptance of this exact docs-only revision. This revision registers the
-tranche and records its pre-code checks and Producer-gate impact-review
-boundary; it changes and authorizes no production source by itself. The first
-permitted functional change is a separate implementation revision on this
-admission, producing the completion evidence defined below.
+tranche, freezes its public construction/progress boundary, and records its
+pre-code checks and Producer-gate impact-review boundary; it changes and
+authorizes no production source by itself. The first permitted functional
+change is a separate implementation revision on this admission, producing the
+completion evidence defined below.
 
 This is the Step 1B registration of the migrated `0063` Consumer Plan-Set
 Handoff Closure decision. Its technical boundary was projected during the
-authority migration into `WP-100-core.md` ("Successor boundary:
-`WP-100-CONSUMER-VALIDATED-THING`"), `docs/spec/foundation.md`,
+authority migration into `WP-100-core.md`, `docs/spec/foundation.md`,
 `docs/spec/runtime-safety.md`, `docs/architecture/10-primary-data-flows.md`,
-and `docs/architecture/20-module-boundaries.md`; the public API projection is
-already recorded in `docs/api-ownership.csv` as absent `add` rows. This
-admission freezes none of those contracts differently; it adds the missing
-tranche registration and reviewed record required by ADR-0013.
+and `docs/architecture/20-module-boundaries.md`. This admission does not alter
+that architecture; it closes the exact public TD/Foundation contract needed so
+implementation does not choose a cross-crate API implicitly.
 
 ## Tranche
 
@@ -40,29 +39,22 @@ The tranche has no dependency on the completed
 `WP-100-CONSUMER-CALL-VALUES-VALIDATOR`,
 `WP-200-CONSUMER-PROPERTY-READ-PLANNING`, or
 `WP-300-CONSUMER-PROPERTY-READ-BINDING` tranches. Step 1A of the migrated
-sequence (the WP-300 name-free request readmission and its replacement
-evidence, PR #67) is complete and disjoint from this tranche's paths and
+sequence is complete and disjoint from this tranche's source paths and
 requirements; neither direction depends on the other.
 
 ## Admission preconditions
 
-All ADR-0013 admission conditions were verified at this revision:
+All ADR-0013 admission conditions must hold on the accepted revision:
 
-1. `WP-000` is `complete` in `docs/work-packages/index.toml`; the package DAG,
-   backbone ownership, and dependency direction needed here are stable.
-2. The authority migration is merged and `0063` is `MIGRATED`. No
+1. `WP-000` is `complete` in `docs/work-packages/index.toml`.
+2. The authority migration is merged and `0063` is `MIGRATED`; no
    `OPEN`/`DISCUSSING`/`DECIDED` workspace topic intersects this scope.
-3. The requirement and artifact scope is closed: every behavior above is
-   owned by the six indexed requirements, the spec/architecture projections
-   named in the header, and the existing `docs/api-ownership.csv` rows
-   `AdmissionLedger::reclassify_source_to_persistent_document` and
-   `ValidatedThing` (both `absent`/`add`/`frozen`). No new API-ownership row
-   is needed or added by this admission.
-4. Every executable pre-code check passes at the recorded head (below).
-5. The Producer Property Read gate WorkClass impact-review boundary is
-   complete and recorded below.
-6. Completion evidence identity, cells, and acceptance criteria are defined
-   below before any implementation begins.
+3. Requirement, artifact, public API, resource, ownership, and progress scope
+   is closed by this record plus its indexed authoritative artifacts.
+4. Every executable pre-code check below passes.
+5. The Producer Property Read gate WorkClass impact-review boundary is closed.
+6. Completion-evidence identity, cells, and acceptance criteria are defined
+   before implementation begins.
 
 ## Owned boundary
 
@@ -71,40 +63,159 @@ The tranche owns exactly three production changes:
 1. **Append-only `WorkClass` discriminants.** `WorkClass::DocumentNodes` then
    `WorkClass::PlanningItems` are appended after `WorkClass::HandlerSteps`
    (discriminants `10` and `11`); `WORK_CLASS_COUNT` grows from ten to twelve;
-   `WorkClass::ALL` grows to `[Self; 12]`; `WorkBudget`'s private counter
-   array grows to `[u64; 12]` with both new counters defaulting to zero. All
-   existing discriminants, the first ten `WorkClass::ALL` entries, and every
-   existing `WorkBudget` construction/charge semantic are unchanged.
-   `DocumentNodes` charges only typed-document validation and census visits
-   not already owned by a more specific class (schema-node visits, URI
-   bytes, and security branches stay `JsonSchemaNodes`, `UriBytes`, and
-   `SecurityBranches`; no unit is relabelled or double charged); its one
-   non-resettable admission-lifetime allowance derives from the existing
-   `document_validation_work_units_max`. `PlanningItems` is admitted here as
-   a discriminant only; no code path outside this tranche may charge it yet.
-2. **The narrow ledger account transfer.** One new checked
-   `AdmissionLedger` operation,
-   `reclassify_source_to_persistent_document`, moves the same already-live
-   source bytes into persistent-document accounting: it checks the
-   persistent-document destination limit before changing either account,
-   changes `live_bytes`, `peak_live_bytes`, and
-   `largest_contiguous_allocation` not at all, and on a failed destination
-   check leaves the source charge and the owned representation intact for
-   ordinary rollback. It is an ownership-preserving reclassification, not a
-   second reservation and not a second Thing representation.
-3. **The TD-owned move-only validated input/census path.** A new
-   `td`-owned `ValidatedThing` whose successful construction proves:
-   ownership of the exact input `Thing`; complete `ValidationLevel::Basic`
-   validation; checked structural limits for the typed representation; a
-   conservative representation-aware retained-source footprint plus the
-   counts needed by later Planning preflight; and bounded Host and
-   application-static progress with cancellation through the same pure
-   cursor, whose `DocumentNodes` lifetime remainder cannot be reset by fresh
-   per-step budgets. It exposes no public unchecked constructor and no
-   mutable raw-`Thing` projection. A Basic-valid `Thing` without an ID
-   remains constructible here; its preflight rejection belongs to the later
-   aggregate/runtime tranches, and this tranche neither strengthens Basic
-   validation globally nor synthesizes an identity.
+   `WorkClass::ALL` grows to `[Self; 12]`; `WorkBudget`'s private counter array
+   grows to `[u64; 12]` with both new counters defaulting to zero. Every
+   existing discriminant and the first ten entries remain unchanged.
+   `DocumentNodes` charges only typed-document validation/census work not
+   already owned by a more specific class. Schema nodes remain
+   `JsonSchemaNodes`, URI-template bytes remain `UriBytes`, and security
+   branches remain `SecurityBranches`; work is not relabelled or double
+   charged. Its non-resettable admission-lifetime allowance derives from the
+   existing `document_validation_work_units_max`. `PlanningItems` is admitted
+   here as a discriminant only; no Planning code charges it in this tranche.
+2. **The narrow ledger account transfer.** One checked
+   `AdmissionLedger::reclassify_source_to_persistent_document` operation moves
+   already-live source bytes to persistent-document accounting without a
+   second reservation or cloned representation.
+3. **The TD-owned move-only validated input/census path.** TD owns one linear
+   validation cursor that consumes the exact input `Thing`, performs complete
+   Basic validation plus bounded representation-aware census, and can complete
+   as one move-only `ValidatedThing`. Host and application-static callers drive
+   exactly the same cursor contract.
+
+## Frozen Foundation transfer API
+
+The exact additive Foundation method is:
+
+```rust
+impl AdmissionLedger {
+    pub fn reclassify_source_to_persistent_document(&mut self, bytes: u64) -> bool;
+}
+```
+
+The method operates only on already committed ledger account charges. It
+returns `false` without mutation when the source account contains fewer than
+`bytes`, when destination addition overflows, or when the resulting
+persistent-document usage would exceed its destination account limit. On
+success it subtracts exactly `bytes` from source usage, adds exactly `bytes` to
+persistent-document usage, updates only the destination account's own peak as
+applicable, and leaves aggregate `live_bytes`, `peak_live_bytes`, and
+`largest_contiguous_allocation` unchanged. `bytes == 0` succeeds without
+changing any counter. It performs no allocation and creates no reservation or
+new ownership token.
+
+## Frozen TD validation/progress API
+
+TD MUST NOT depend on Core progress/status types. The Step 1B public progress
+surface is exactly the following protocol-neutral TD/Foundation contract:
+
+```rust
+use clinkz_wot_foundation::{ResourceKind, ResourceLimits, WorkBudget};
+
+pub struct ValidatedThingCursor {
+    /* private fields */
+}
+
+pub enum ValidatedThingStep {
+    Pending(ValidatedThingCursor),
+    Complete(ValidatedThing),
+    Invalid {
+        thing: Thing,
+        error: ValidateError,
+    },
+    Limit {
+        thing: Thing,
+        kind: ResourceKind,
+        configured: Option<u64>,
+        observed: Option<u64>,
+    },
+    Cancelled(Thing),
+}
+
+impl ValidatedThingCursor {
+    pub fn new(thing: Thing, limits: &ResourceLimits) -> Self;
+
+    pub fn step(
+        self,
+        budget: &mut WorkBudget,
+        cancel_requested: bool,
+    ) -> ValidatedThingStep;
+}
+
+impl ValidatedThing {
+    pub fn thing(&self) -> &Thing;
+    pub const fn retained_source_bytes(&self) -> u64;
+    pub const fn property_count(&self) -> u64;
+    pub const fn readable_property_form_count(&self) -> u64;
+}
+```
+
+`ValidatedThingCursor` and `ValidatedThing` implement neither `Clone` nor
+`Copy`. `ValidatedThingStep` is linear because every nonterminal continuation
+owns the unique cursor and every terminal variant owns either the resulting
+`ValidatedThing` or the exact original `Thing`. No public API exposes a mutable
+raw `Thing` while validation is in progress or after success.
+
+`ValidatedThingCursor::new` moves the exact `Thing` and captures only the fixed
+set of scalar limits required by this validation/census path. It performs no TD
+traversal, Basic validation, variable-size allocation, or other externally
+influenced work. Missing required applicable limits are not interpreted as
+unbounded; the first step that establishes that condition terminates as
+`ValidatedThingStep::Limit` with the corresponding `ResourceKind` and
+`configured = None`.
+
+`step` is the only progress operation. It consumes the prior cursor, so a
+caller cannot duplicate or resume an older state. The rules are:
+
+- `cancel_requested == true` is observed before new traversal work and returns
+  `Cancelled` with the exact owned `Thing`, including at zero work budget;
+- otherwise every externally influenced unit is charged before it starts;
+- insufficient caller-supplied per-step budget returns `Pending` with the
+  unique continuation and does not perform the rejected unit;
+- a generic typed-document visit requires both one caller-supplied
+  `WorkClass::DocumentNodes` unit and one unit from the cursor-owned lifetime
+  remainder captured from `document_validation_work_units_max`; a fresh
+  `WorkBudget` never resets that remainder;
+- schema, URI, and security work consume their existing classes rather than a
+  second `DocumentNodes` charge;
+- semantic Basic-validation failure returns `Invalid` with the original Thing
+  and existing `ValidateError` taxonomy;
+- structural/resource/lifetime-work failure returns `Limit` with the exact
+  resource field, configured ceiling when present, and safely known observed
+  amount when one exists; and
+- only complete Basic validation plus complete census can return `Complete`.
+
+Host execution is a convenience policy above this API: it may repeatedly call
+the same `step` contract with replenished per-step budgets until terminal.
+Application-static execution stores the returned cursor and resumes it later.
+TD defines no second host-only validation algorithm, boxed future, executor, or
+Core adapter in this tranche.
+
+The successful `ValidatedThing` records private checked structural census state
+and exposes only the four accessors above. Their exact meanings are:
+
+- `thing()` borrows the same exact owned typed Thing; there is no mutable
+  projection and no second normalized/canonical Thing;
+- `retained_source_bytes()` is the conservative representation-aware retained
+  footprint of that exact owned Thing. Serialized length alone and
+  `size_of::<Thing>()` alone are insufficient proofs;
+- `property_count()` is the number of declared Property affordance entries,
+  including properties that have no readable Form; and
+- `readable_property_form_count()` is the checked number of Property Forms
+  whose TD-owned effective operation set includes `ReadProperty`, after TD
+  defaulting and without changing original Form order or indices.
+
+Other validation counters needed only to enforce structural limits remain
+private. Later Planning may borrow `thing()` plus the two public counts to run
+its own deterministic `PlanningItems` preflight; it does not receive a mutable
+Thing, an unchecked cursor, a prebuilt plan row, or a TD-owned Planning policy.
+The `ValidatedThing` itself is the move-only ownership handoff and may be
+retained by Servient after publication; no `into_thing` escape is admitted in
+this tranche.
+
+A Basic-valid Thing without an ID can reach `Complete`. ID absence remains a
+later Consumer preflight rejection and is neither synthesized nor globally
+added to Basic validation here.
 
 ## Permitted production paths
 
@@ -139,83 +250,51 @@ Outside the tranche, and unchanged by it:
 
 This tranche does not implement or claim:
 
-- aggregate Planning preflight, materialization, bounds, barrier, lookup, or
-  draft (the later `WP-200-CONSUMER-PROPERTY-READ-AGGREGATE` boundary);
-- any Servient reservation/publication/execution/lifecycle work (the later
-  `WP-400` boundary);
-- any `OutboundRequest` or Core binding change (none is needed; the completed
-  name-free WP-300 tranche remains current);
+- aggregate Planning preflight/materialization/bounds/barrier/lookup/draft;
+- Servient reservation/publication/execution/lifecycle work;
+- `OutboundRequest` or Core binding changes;
 - Consumer architecture-gate registration or any second manifest;
 - any resource row, named-profile value, generated getter, or resource-schema
   change;
-- renumbering, inserting before, or reordering any existing work class;
-- global Basic-validation strengthening, ID synthesis, or TD representation
-  normalization for accounting;
-- any charge of `PlanningItems` outside this tranche's own admitted paths;
-- registration of any future tranche in `index.toml`; and
+- renumbering/inserting/reordering an existing work class;
+- global Basic-validation strengthening or ID synthesis;
+- TD normalization or clone-for-accounting;
+- any charge of `PlanningItems` by Planning/Servient code;
+- a second host-specific validation path, async executor, or Core dependency;
+- registration of any future tranche; or
 - broad WP-100 completion.
 
-## Producer Property Read gate impact review (WorkClass append)
+## Producer Property Read gate impact review
 
-`docs/work-packages/property-read-architecture-gate.toml` registers the
-passed v5.0 Producer `PROPERTY-READ-ARCHITECTURE` gate. The append-only
-`WorkClass` change intersects its registered evidence and commands, so an
-explicit impact review is mandatory before the WP-100 source may merge. The
-pre-code half of that review is recorded here; the exact-head disposition is
-mandatory completion evidence.
+`docs/work-packages/property-read-architecture-gate.toml` registers the passed
+v5.0 Producer `PROPERTY-READ-ARCHITECTURE` gate. The append-only WorkClass
+change intersects registered evidence, so the exact implementation head must
+rerun every registered command before source merge.
 
-Structural findings at the pre-code head:
+The pre-code structural findings are:
 
-1. The only fixed-width work projection in the registered evidence is
-   `CleanupContextEvidence::work: [u64; 10]` in
-   `tools/architecture-fixtures/property-read-binding/src/lib.rs`, populated
-   by `core::array::from_fn` reading `WorkClass::ALL[index]` for indices
-   `0..10`. It therefore snapshots exactly the unchanged first ten entries;
-   after the append it still compiles, still reads only indices `0..10`, and
-   consumes neither appended class. The fixed width is the intentional
-   ten-class cleanup prefix, not an accidental `WorkClass::ALL` width
-   dependency.
-2. The Producer fixture and runner directly consume only
-   `WorkClass::BindingPolls` and `WorkClass::CleanupItems`. No registered
-   Producer evidence source or command references `DocumentNodes` or
-   `PlanningItems`.
-3. `compiler_work_is_portable` in `planning/src/property_read.rs` iterates
-   every `WorkClass::ALL` entry. For every budget value constructible from
-   the existing public API the appended counters are zero, so its result is
-   unchanged; after the append it can only newly reject a budget that
-   declares one of the appended classes, which is exactly the conservative
-   direction the completed exact-coordinate tranche already requires.
-4. The only `WorkClass::ALL` width assertion in production source is
-   foundation's own in-file unit test
-   `handler_steps_are_appended_and_independently_budgeted`, inside this
-   tranche's permitted `foundation/src/budget.rs` path; updating its length
-   expectation to twelve with prefix/order assertions is part of the
-   admitted source change, not a gate-evidence change.
-5. `WorkBudget`'s counter array is private with no external fixed-width
-   dependency: no other `[u64; 10]`, `WORK_CLASS_COUNT`, or `WorkClass::ALL`
-   indexing exists outside `foundation/src/budget.rs` and the two points
-   above.
+1. `CleanupContextEvidence::work: [u64; 10]` intentionally snapshots indices
+   `0..10` of `WorkClass::ALL`, so appending entries 10 and 11 preserves the
+   exact cleanup prefix.
+2. Producer fixture/runner work uses only `BindingPolls` and `CleanupItems`.
+3. `compiler_work_is_portable` iterates all classes, but every pre-existing
+   budget has zero in appended counters; the append can only conservatively
+   reject a future budget that declares those classes.
+4. The only production width assertion is Foundation's in-file WorkClass test,
+   inside the permitted `foundation/src/budget.rs` path.
+5. `WorkBudget`'s counter array is private; no other registered source owns a
+   ten-wide complete WorkBudget representation.
 
-Baseline rerun: every command registered in the gate manifest passed at
-pre-code head `0f9db3ed86f556d581a750b4ed32cc1deb7acae4` (all ten
-`test_commands`, including the complete fixture, runner, Servient, Core,
-Planning, and real-target Zenoh probe commands).
-
-Disposition: the append-only change cannot invalidate the registered
-Producer claim, whose cleanup evidence intentionally pins the unchanged
-ten-class prefix; the gate remains `passed` and current at this head. This
-pre-code disposition does not pre-judge the implementation head: before the
-WP-100 source change may merge, the implementation must rerun every
-registered command at the exact implementation head, record that disposition
-in the completion evidence, and—if any registered claim is invalidated
-there—stop before merge while a separate independent gate-control change
-reopens the gate. The implementation author may not change gate status as
-part of the repair.
+Every command registered in the Producer gate manifest passed at pre-code head
+`0f9db3ed86f556d581a750b4ed32cc1deb7acae4`. The pre-code disposition is
+reaffirmed. Before source merge, implementation must rerun the complete gate at
+the exact implementation head and record either reaffirmation or stop for an
+independent gate-control reopening. The implementation author may not change
+gate status as part of source repair.
 
 ## Pre-implementation checks
 
-The following passed at the recorded pre-code head (same Rust tree as this
-docs-only revision):
+The following passed at the recorded pre-code head:
 
 ```text
 tools/check-design-artifacts.sh
@@ -231,30 +310,39 @@ cargo check --locked -p clinkz-wot-td
 
 The evidence key is `consumer-validated-thing-work-classes` at
 `docs/evidence/WP-100-consumer-validated-thing.toml`. Before the tranche
-becomes complete, that evidence must record the exact implementation commit
-and passing results for:
+becomes complete, evidence must record the exact implementation commit and
+passing proof for:
 
-- stable `WorkClass` discriminant order: the ten existing entries and
-  discriminants unchanged, `DocumentNodes` then `PlanningItems` appended;
-- both feature profiles driving the same pure validation cursor, including
-  cancellation and proof that a fresh per-step budget cannot reset the
-  `DocumentNodes` lifetime remainder;
-- every Basic-validation and census limit boundary (structural limits,
-  retained-source footprint, and work exhaustion);
-- exact source-account retention on a failed destination check, and
-  unchanged total `live_bytes`/`peak_live_bytes`/
-  `largest_contiguous_allocation` on successful reclassification;
-- proof that schema, URI, and security validation work remains in its
-  existing classes and is not double charged as `DocumentNodes`;
-- proof of no unchecked `Thing` entry, no mutable raw-`Thing` projection,
-  and no ID-less Basic-valid `Thing` rejection inside this tranche;
-- proof that `docs/resource-limits.csv`, the generated projection, and
-  `tools/check-resource-limits.sh` are unchanged;
-- the exact-head Producer-gate impact disposition rerunning every registered
-  command and either reaffirming the passed claim or stopping before merge
-  for independent gate reopening; and
-- normal mainline CI passing.
+- stable WorkClass prefix/discriminants with `DocumentNodes` then
+  `PlanningItems` appended;
+- exact compilation of the frozen ledger and TD public signatures above;
+- cursor/step linearity, including compile-fail proof that cursor and validated
+  output are not Clone/Copy and that no mutable/raw mid-progress Thing
+  projection exists;
+- cancellation returning the exact Thing before new work, including zero
+  budget;
+- Pending retaining the unique cursor with no hidden progress when the next
+  required per-step class has insufficient budget;
+- a fresh per-step budget not resetting the cursor-owned DocumentNodes
+  lifetime remainder;
+- complete Basic-validation positive/negative cases using the existing
+  `ValidateError` taxonomy;
+- every structural/resource limit boundary, including missing applicable
+  limits and safely known observed values in `ValidatedThingStep::Limit`;
+- retained-source footprint/count correctness, including properties with empty
+  readable ranges and effective ReadProperty defaulting;
+- schema/URI/security work remaining in existing work classes without double
+  charging;
+- ID-less Basic-valid Thing completion;
+- exact source-account retention on failed reclassification, destination
+  account peak behavior, and unchanged aggregate live/peak/contiguous values on
+  success;
+- unchanged `docs/resource-limits.csv`, generated projection,
+  `foundation/build.rs`, and `tools/check-resource-limits.sh`;
+- exact-head Producer-gate impact disposition rerunning every registered
+  command; and
+- normal mainline CI.
 
 The evidence must not claim aggregate Planning, `OutboundRequest`, Servient
-runtime, the Consumer architecture gate, any future-tranche registration, or
-broad WP-100 completion.
+runtime, Consumer gate registration, any future tranche, or broad WP-100
+completion.
