@@ -112,6 +112,72 @@ completion_evidence_keys = ["consumer-call-values-response-validation"]
 completion_evidence_path = "docs/evidence/WP-100-consumer-call-values-response-validation.toml"
 
 [[tranche]]
+id = "WP-100-CONSUMER-VALIDATED-THING"
+work_package = "WP-100"
+sequence = 170
+status = "planned"
+admission_status = "admitted"
+impact_status = "current"
+depends_on = []
+depends_on_packages = ["WP-000"]
+requirements = [
+    "DOC-RUNTIME-001",
+    "ADMIT-MEM-001",
+    "ADMIT-TXN-001",
+    "CONSTRAINED-WORK-001",
+    "CONSTRAINED-PROGRESS-001",
+    "CONSTRAINED-OWN-001",
+]
+owner_packages = ["clinkz-wot-foundation", "clinkz-wot-td"]
+feature_cells = ["no-default", "async-no-std", "std"]
+authoritative_artifacts = [
+    "docs/ADRs/0013-work-package-scoped-implementation-admission.org",
+    "docs/ADRs/0019-consumer-one-shot-authority-entry.org",
+    "docs/api-ownership.csv",
+    "docs/architecture/10-primary-data-flows.md",
+    "docs/architecture/20-module-boundaries.md",
+    "docs/requirements.csv",
+    "docs/spec/foundation.md",
+    "docs/spec/runtime-safety.md",
+    "docs/work-packages/WP-100-consumer-validated-thing-admission.md",
+    "docs/work-packages/WP-100-core.md",
+    "docs/work-packages/index.toml",
+]
+api_items = [
+    "WorkClass::DocumentNodes",
+    "WorkClass::PlanningItems",
+    "AdmissionLedger::reclassify_source_to_persistent_document",
+    "ValidatedThing",
+]
+state_machines = []
+resource_changes = [
+    "WorkClass::ALL grows from ten to twelve entries by appending DocumentNodes and PlanningItems only; the 195-field resource schema, named profiles, generated projection, and resource-limits.csv rows are unchanged",
+]
+old_api_removals = []
+performance_workloads = []
+implementation_paths = [
+    "foundation/src/budget.rs",
+    "foundation/src/resource.rs",
+    "foundation/src/lib.rs",
+    "td/src/validated.rs",
+    "td/src/validate.rs",
+    "td/src/thing.rs",
+    "td/src/lib.rs",
+]
+pre_implementation_checks = [
+    "tools/check-design-artifacts.sh",
+    "cargo test --workspace --locked",
+    "cargo check --locked -p clinkz-wot-foundation --no-default-features",
+    "cargo check --locked -p clinkz-wot-foundation --no-default-features --features async",
+    "cargo check --locked -p clinkz-wot-foundation",
+    "cargo check --locked -p clinkz-wot-td --no-default-features",
+    "cargo check --locked -p clinkz-wot-td",
+]
+admission_review = "github-pr:pending"
+completion_evidence_keys = ["consumer-validated-thing-work-classes"]
+completion_evidence_path = "docs/evidence/WP-100-consumer-validated-thing.toml"
+
+[[tranche]]
 id = "WP-200-CONSUMER-PROPERTY-READ-PLANNING"
 work_package = "WP-200"
 sequence = 210
