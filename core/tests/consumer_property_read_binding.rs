@@ -10,7 +10,7 @@ use std::{
 };
 
 use clinkz_wot_core::{
-    AffordanceTarget, BindingArtifact, BindingArtifactCompatibility, BindingArtifactEnvelope,
+    BindingArtifact, BindingArtifactCompatibility, BindingArtifactEnvelope,
     BindingArtifactFootprint, BindingArtifactIdentity, BindingArtifactRef, BindingArtifactRole,
     BindingCallSettlement, BindingCancellationDisposition, BindingCompilerBounds,
     BindingCompilerExtension, BindingCompilerInput, BindingCompilerOutput, BindingCompilerStep,
@@ -169,8 +169,6 @@ fn request(plan_slot: u32) -> OutboundRequest {
     let mut uri_variables = BTreeMap::new();
     uri_variables.insert(String::from("room"), String::from("west"));
     OutboundRequest::property_read(
-        ThingId::from("urn:test:consumer-binding"),
-        AffordanceTarget::Property(Arc::from("temperature")),
         artifact_ref(plan_slot),
         uri_variables,
         Some(Deadline::at(MonotonicInstant::new(ClockId::new(5), 101))),
