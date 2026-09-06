@@ -2,17 +2,17 @@ schema_version = 1
 design_revision = "5.1"
 work_package = "WP-300"
 tranche = "WP-300-CONSUMER-PROPERTY-READ-BINDING"
-implementation_ref = "0c7ec75a553f0b27858881564232b1c50107cc49"
-recorded_on = "2026-08-31"
-status = "superseded"
+implementation_ref = "8b594fcc037ef86b11fef936d06b6f98900434ab"
+recorded_on = "2026-09-06"
+status = "passed"
 evidence_key = "consumer-property-read-binding-execution"
-admission_review = "github-pr:59"
-implementation_review = "github-pr:60"
-replaces_implementation_ref = "19fce672a98d56d3839fc9c21ad8b0a020dd7997"
-replacement_reason = "the complete Host and application-static registration paths now retain Core-private validation authority across request transfer and seal every normal or cancellation-late successful result before exposure"
-impact_review = "github-pr:64"
-superseded_on = "2026-09-02"
-superseded_reason = "the completed request schema retains static human-readable Thing and target identities that the accepted 0063 aggregate path requires to remain behind the plan/artifact and runtime lease; the same tranche must remove those constructor inputs and accessors and re-execute its complete sealing evidence"
+admission_review = "github-pr:66"
+implementation_review = "github-pr:pending"
+replaces_implementation_ref = "0c7ec75a553f0b27858881564232b1c50107cc49"
+replacement_reason = "the completed request schema retained static human-readable Thing and target identities that the accepted 0063 aggregate path requires to remain behind the plan/artifact and runtime lease; the corrected request is name-free and re-executes the complete sealing evidence"
+impact_review = "github-pr:pending"
+impact_disposition = "reaffirmed"
+impact_disposition_reason = "the name-free request correction changes no registration, binding-call, response-validation, cancellation, cleanup, or resource algorithm; every registered PROPERTY-READ-ARCHITECTURE command was rerun at the exact implementation head and passed, so the passed Producer gate claim remains valid and no independent reopening is required"
 
 requirement_ids = [
     "BIND-OUT-001",
@@ -23,6 +23,7 @@ requirement_ids = [
     "BIND-IO-001",
     "BIND-CALL-CANCEL-001",
     "BIND-HOST-CANCEL-001",
+    "API-HOT-ID-001",
     "API-PAYLOAD-001",
     "PLAN-REQUEST-001",
     "PLAN-ARTIFACT-001",
@@ -35,8 +36,9 @@ production_paths = [
     "core/src/lib.rs",
 ]
 coverage = [
-    "OutboundRequest::property_read retains the exact selected Property target, ConsumerCall artifact reference, URI variables, and optional deadline; the retained request tests continue to reject non-property targets and non-ConsumerCall artifacts",
-    "request binding id, binding generation, plan-set generation, and plan id accessors derive only from one private BindingArtifactRef while the public request exposes no TD, Form, InteractionOptions, provider, candidate, fallback, operation payload, or copied resolved-target field",
+    "OutboundRequest::property_read constructs the exact name-free request from one ConsumerCall artifact reference plus URI variables and optional deadline; construction rejects non-ConsumerCall artifacts and a plan id whose generation differs from the artifact's plan-set generation",
+    "compile-fail evidence proves the removed ThingId and AffordanceTarget constructor parameters and the thing_id and target accessors stay absent, with no ThingSlotId replacement",
+    "request binding id, binding generation, plan-set generation, and plan id accessors derive only from one private BindingArtifactRef while the public request exposes no Thing, target, TD, Form, InteractionOptions, provider, candidate, fallback, operation payload, or copied resolved-target field",
     "the implementation changes no security owner and adds no public security carrier; the admitted request remains the no-binding-material baseline",
     "validate_untrusted_binding_output derives expected identities from the live request and delegates to the existing private WP-100 kernel; the installed paths use the same kernel through a private non-Clone single-use seal rather than a second validator",
     "an external Host client authored through clinkz_wot_core::binding::ClientBinding checks compatibility and exact artifact identity before acceptance, returns the exact request on rejection, returns an owned HostBindingCallBox before side effects, reports its immutable footprint and deadline, and covers successful, failed, pending-cancellation, and late-result exits",
@@ -54,10 +56,10 @@ coverage = [
     "raw Host and static traits remain public authoring SPIs without subscription members, while compile-fail no-bypass evidence proves installed complete registrations cannot project their private raw Consumer client to WP-400",
     "the Host call reports the checked raw footprint plus fixed decorator and seal overhead; arithmetic overflow or admitted-ceiling overrun becomes an accepted Core error that retains the raw call and seal without polling",
     "static complete-registration admission accounts the raw declared request lifetime plus the concrete complete Core slot layout, checks raw transient work against the declared ceiling, and records a zero Core validation transient delta because sealing moves and borrows fixed values without allocation or variable scratch",
+    "the exact-head Producer-gate impact review reran every intersecting registered source and command of the passed PROPERTY-READ-ARCHITECTURE manifest and recorded reaffirmation without changing gate status",
     "the locked workspace suite, focused no-default, async-no-std, and std Consumer tests, representative Core checks, authority validation, and pull-request mainline validation pass",
 ]
 excluded_claims = [
-    "name-free OutboundRequest construction without ThingId or AffordanceTarget",
     "WP-400 Consumer execution or publication",
     "Consumer Property Read architecture-gate registration or completion",
     "real Zenoh or zenoh-pico Consumer execution",
@@ -104,6 +106,41 @@ command = "cargo check --locked -p clinkz-wot-core"
 status = "passed"
 
 [[verification]]
-command = "github-actions:mainline/validation@0c7ec75a553f0b27858881564232b1c50107cc49"
+command = "cargo test --locked -p clinkz-wot-core"
 status = "passed"
-evidence = "github-actions-run:33359848559/job:99388959324"
+
+[[verification]]
+command = "cargo test --locked -p clinkz-wot-planning"
+status = "passed"
+
+[[verification]]
+command = "cargo test --locked -p clinkz-wot-servient --test property_read"
+status = "passed"
+
+[[verification]]
+command = "cargo test --locked -p clinkz-wot-servient --lib"
+status = "passed"
+
+[[verification]]
+command = "cargo test --locked -p clinkz-wot-servient --no-default-features --test property_read"
+status = "passed"
+
+[[verification]]
+command = "cargo check --locked -p clinkz-wot-property-read-binding-fixture --no-default-features"
+status = "passed"
+
+[[verification]]
+command = "cargo test --locked -p clinkz-wot-property-read-binding-fixture"
+status = "passed"
+
+[[verification]]
+command = "cargo check --locked -p clinkz-wot-property-read-architecture-runner --no-default-features --features async"
+status = "passed"
+
+[[verification]]
+command = "cargo test --locked -p clinkz-wot-property-read-architecture-runner"
+status = "passed"
+
+[[verification]]
+command = "cargo test --locked -p clinkz-wot-protocol-bindings-zenoh --test target_property_read_feedback_probe -- --test-threads=1"
+status = "passed"

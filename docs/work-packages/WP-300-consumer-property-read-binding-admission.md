@@ -1,6 +1,8 @@
 # WP-300 Consumer Property Read Binding Admission
 
-Status: ADR-0013 readmission candidate for design revision v5.1.
+Status: READMITTED under ADR-0013 for design revision v5.1; implementation
+complete with replacement evidence and a reaffirmed Producer gate impact
+disposition.
 
 The prior admission froze only the first Consumer one-shot Binding tranche. It
 refined the broad retained WP-300 client surface for the active v5.1 Consumer
