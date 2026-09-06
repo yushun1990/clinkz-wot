@@ -185,6 +185,39 @@ caller cannot duplicate or resume an older state. The rules are:
   amount when one exists; and
 - only complete Basic validation plus complete census can return `Complete`.
 
+### Single Basic-validation authority and bounded bulk phase
+
+The existing `Validate for Thing` implementation remains the sole semantic
+owner of Basic-validation rules. This tranche MUST NOT duplicate the recursive
+Basic rules from `components/data_schema.rs`, affordance, Form, or security
+modules inside `validated.rs` merely to make them resumable; those component
+files remain outside the admitted production paths.
+
+The cursor therefore has an explicit two-part private execution strategy:
+
+1. an incremental census phase walks the typed representation under the
+   caller's per-step `WorkBudget`, enforces the applicable structural limits,
+   records the retained-source/count census, and computes the complete work
+   charge required by the existing Basic semantic pass; then
+2. a Basic semantic phase runs only after one `step` can pre-charge that
+   complete already-bounded semantic-pass work from the caller budget and the
+   cursor-owned lifetime remainder. If the complete charge is unavailable,
+   `step` returns `Pending` without entering `Thing::validate_with_level`.
+   After the charge succeeds, the cursor calls the existing
+   `Thing::validate_with_level(ValidationLevel::Basic)` exactly once and maps
+   its result to `Complete` or `Invalid`.
+
+The semantic phase is deliberately a bounded bulk phase, not a hidden
+unbounded traversal: the preceding census has already proved all structural
+maxima and the complete pass charge, and `document_validation_work_units_max`
+remains the non-resettable admission-lifetime ceiling. Cancellation is checked
+immediately before this bulk phase. No component validation implementation is
+edited, no second semantic validator is introduced, and no existing Basic
+rule may be widened or narrowed by the census. If implementation cannot prove
+a complete conservative pre-charge for the existing Basic pass without
+changing a component validation source, it MUST stop and return this admission
+to impact review rather than widening the permitted paths or copying the rules.
+
 Host execution is a convenience policy above this API: it may repeatedly call
 the same `step` contract with replenished per-step budgets until terminal.
 Application-static execution stores the returned cursor and resumes it later.
@@ -238,6 +271,7 @@ Outside the tranche, and unchanged by it:
 - `docs/resource-limits.csv` and all 195 generated resource fields;
 - `foundation/build.rs`, generated resource-profile assertions, and
   `tools/check-resource-limits.sh`;
+- `td/src/components/**` Basic-validation implementations;
 - every existing `WorkClass` discriminant value and the first ten
   `WorkClass::ALL` entries;
 - the singular passed Producer `integration_gate_manifest` and
@@ -260,6 +294,7 @@ This tranche does not implement or claim:
 - global Basic-validation strengthening or ID synthesis;
 - TD normalization or clone-for-accounting;
 - any charge of `PlanningItems` by Planning/Servient code;
+- a second Basic semantic validator or edits to `td/src/components/**`;
 - a second host-specific validation path, async executor, or Core dependency;
 - registration of any future tranche; or
 - broad WP-100 completion.
@@ -320,13 +355,15 @@ passing proof for:
   output are not Clone/Copy and that no mutable/raw mid-progress Thing
   projection exists;
 - cancellation returning the exact Thing before new work, including zero
-  budget;
+  budget and immediately before the Basic bulk phase;
 - Pending retaining the unique cursor with no hidden progress when the next
-  required per-step class has insufficient budget;
+  required per-step class or complete Basic-pass pre-charge has insufficient
+  budget;
 - a fresh per-step budget not resetting the cursor-owned DocumentNodes
   lifetime remainder;
-- complete Basic-validation positive/negative cases using the existing
-  `ValidateError` taxonomy;
+- complete Basic-validation positive/negative parity with the existing
+  `Thing::validate_with_level(ValidationLevel::Basic)` path, proving the cursor
+  introduces no second semantic validator;
 - every structural/resource limit boundary, including missing applicable
   limits and safely known observed values in `ValidatedThingStep::Limit`;
 - retained-source footprint/count correctness, including properties with empty
@@ -338,7 +375,8 @@ passing proof for:
   account peak behavior, and unchanged aggregate live/peak/contiguous values on
   success;
 - unchanged `docs/resource-limits.csv`, generated projection,
-  `foundation/build.rs`, and `tools/check-resource-limits.sh`;
+  `foundation/build.rs`, `tools/check-resource-limits.sh`, and
+  `td/src/components/**`;
 - exact-head Producer-gate impact disposition rerunning every registered
   command; and
 - normal mainline CI.
