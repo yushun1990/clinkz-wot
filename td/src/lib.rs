@@ -130,10 +130,8 @@ pub mod td_defaults;
 pub mod thing;
 pub mod thing_model;
 pub mod validate;
-mod validated;
 pub use core::data_type;
 pub use core::data_type::AbsoluteUri;
-pub use validated::{ValidatedThing, ValidatedThingCursor, ValidatedThingStep};
 
 mod components;
 mod flat;
