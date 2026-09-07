@@ -171,6 +171,7 @@ implementation_paths = [
     "td/src/validate.rs",
     "td/src/thing.rs",
     "td/src/lib.rs",
+    "td/src/components/context.rs",
 ]
 pre_implementation_checks = [
     "tools/check-design-artifacts.sh",
@@ -181,7 +182,7 @@ pre_implementation_checks = [
     "cargo check --locked -p clinkz-wot-td --no-default-features",
     "cargo check --locked -p clinkz-wot-td",
 ]
-admission_review = "github-pr:68"
+admission_review = "github-pr:70"
 completion_evidence_keys = ["consumer-validated-thing-work-classes"]
 completion_evidence_path = "docs/evidence/WP-100-consumer-validated-thing.toml"
 

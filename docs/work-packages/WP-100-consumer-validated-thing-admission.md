@@ -1,12 +1,38 @@
 # WP-100 Consumer Validated Thing Admission
 
 Status: ADMITTED under ADR-0013 for design revision v5.1 by the independent
-acceptance of this exact docs-only revision. This revision registers the
-tranche, freezes its public construction/progress boundary, and records its
-pre-code checks and Producer-gate impact-review boundary; it changes and
-authorizes no production source by itself. The first permitted functional
-change is a separate implementation revision on this admission, producing the
-completion evidence defined below.
+acceptance of the registering docs-only revision (github-pr:68), as amended
+once by the impact correction recorded below (github-pr:70). This record
+registers the tranche, freezes its public construction/progress boundary, and
+records its pre-code checks and Producer-gate impact-review boundary; it
+changes and authorizes no production source by itself. The first permitted
+functional change is a separate implementation revision on this admission,
+producing the completion evidence defined below.
+
+ADR-0013 impact correction (accepted at github-pr:70): the in-progress
+implementation (github-pr:69) proved that the frozen conservative
+representation-aware `retained_source_bytes()` contract is not computable for
+`Thing.context` inside the originally permitted production paths.
+`Context.entries` is private with no accessor; `ContextBuilder::object`/`pair`
+(`td/src/components/context.rs:153,159`) can inject caller-owned
+`serde_json::Value` buffers with arbitrary reserved capacity into it, and the
+public `ContextBuilder::uri`/`with_1_0_compatibility` path can grow the backing
+`Vec` before retaining only the two standard entries without releasing that
+capacity. Both forms are reachable into `Thing` through the public
+`ThingBuilder::context`
+(`td/src/thing.rs:448`); and every measurement available on the permitted
+paths (serialized length, serde data-model counts, `size_of::<Thing>()`) is a
+function of content, not of either retained capacity, so both are invisible to
+all of them. Implementation correctly stopped at the permitted-path boundary
+rather than widening paths itself or shipping a non-conservative census. This
+correction amends the admission by adding exactly one narrowly scoped
+production path, `td/src/components/context.rs`, which may gain only the
+single read-only `pub(crate)` Context-entry storage inspection seam defined
+under "Permitted production paths". The frozen `ValidatedThingCursor` /
+`ValidatedThingStep` / `ValidatedThing` public API, the bounded Basic
+bulk-phase strategy and its single `Thing::validate_with_level` authority, the
+195-field resource schema, and the Step 2 boundary of the migrated `0063`
+sequence are unchanged by this correction.
 
 This is the Step 1B registration of the migrated `0063` Consumer Plan-Set
 Handoff Closure decision. Its technical boundary was projected during the
@@ -81,7 +107,12 @@ The tranche owns exactly three production changes:
    validation cursor that consumes the exact input `Thing`, performs complete
    Basic validation plus bounded representation-aware census, and can complete
    as one move-only `ValidatedThing`. Host and application-static callers drive
-   exactly the same cursor contract.
+   exactly the same cursor contract. The census's conservative
+   `retained_source_bytes()` accounting for `Thing.context` reads the retained
+   entry buffers and their backing `Vec` capacity through the single read-only
+   `pub(crate)` Context-entry storage inspection seam admitted in
+   `td/src/components/context.rs` below; no other component change is owned or
+   permitted.
 
 ## Frozen Foundation transfer API
 
@@ -259,19 +290,35 @@ Production implementation may change exactly:
 - `foundation/src/lib.rs`;
 - `td/src/validated.rs` (new);
 - `td/src/validate.rs`;
-- `td/src/thing.rs`; and
-- `td/src/lib.rs`.
+- `td/src/thing.rs`;
+- `td/src/lib.rs`; and
+- `td/src/components/context.rs` (inspection seam only, defined below).
 
 Tests and the registered completion-evidence file may be added outside those
 production paths. A required production change elsewhere stops implementation
 and returns the tranche to impact review.
+
+`td/src/components/context.rs` is admitted by the impact correction above for
+exactly one narrow change: a single read-only `pub(crate)` Context-entry
+storage inspection seam on `Context` that exposes both a borrowed per-entry
+view and the retained capacity of its backing `Vec` — for example one accessor
+returning `(&[ContextEntry], usize)` or an equivalent read-only view. This lets
+the census in `td/src/validated.rs` observe the retained entry buffers and
+compute the conservative capacity-aware `Thing.context` footprint, including
+the entry container itself. The seam adds no public item and changes no
+existing field or method behavior, `Serialize`/`Deserialize`/`Default`
+behavior, builder behavior, or validation rule of `Context` or
+`ContextBuilder`. It is the only permitted change to any
+`td/src/components/**` file in this tranche.
 
 Outside the tranche, and unchanged by it:
 
 - `docs/resource-limits.csv` and all 195 generated resource fields;
 - `foundation/build.rs`, generated resource-profile assertions, and
   `tools/check-resource-limits.sh`;
-- `td/src/components/**` Basic-validation implementations;
+- `td/src/components/**` Basic-validation and serialization implementations,
+  with `td/src/components/context.rs` changed only by the single admitted
+  read-only `pub(crate)` inspection seam;
 - every existing `WorkClass` discriminant value and the first ten
   `WorkClass::ALL` entries;
 - the singular passed Producer `integration_gate_manifest` and
@@ -294,7 +341,9 @@ This tranche does not implement or claim:
 - global Basic-validation strengthening or ID synthesis;
 - TD normalization or clone-for-accounting;
 - any charge of `PlanningItems` by Planning/Servient code;
-- a second Basic semantic validator or edits to `td/src/components/**`;
+- a second Basic semantic validator or edits to `td/src/components/**` other
+  than the single read-only `pub(crate)` Context-entry storage inspection seam
+  in `td/src/components/context.rs`;
 - a second host-specific validation path, async executor, or Core dependency;
 - registration of any future tranche; or
 - broad WP-100 completion.
@@ -367,7 +416,11 @@ passing proof for:
 - every structural/resource limit boundary, including missing applicable
   limits and safely known observed values in `ValidatedThingStep::Limit`;
 - retained-source footprint/count correctness, including properties with empty
-  readable ranges and effective ReadProperty defaulting;
+  readable ranges and effective ReadProperty defaulting, and conservatism of
+  the `Thing.context` footprint against both caller-over-reserved entry buffers
+  and an over-capacity backing `Vec` produced by growing entries before
+  `with_1_0_compatibility`; content-based serialized length and a slice-only
+  entry view must demonstrably under-report these respective cases;
 - schema/URI/security work remaining in existing work classes without double
   charging;
 - ID-less Basic-valid Thing completion;
@@ -376,7 +429,12 @@ passing proof for:
   success;
 - unchanged `docs/resource-limits.csv`, generated projection,
   `foundation/build.rs`, `tools/check-resource-limits.sh`, and
-  `td/src/components/**`;
+  `td/src/components/**` except the single admitted seam;
+- the `td/src/components/context.rs` diff being exactly one read-only
+  `pub(crate)` Context-entry storage inspection seam exposing the borrowed
+  entries and backing `Vec` capacity, adding no public API and changing no
+  `Context`/`ContextBuilder` construction, serialization, or Basic-validation
+  behavior; and
 - exact-head Producer-gate impact disposition rerunning every registered
   command; and
 - normal mainline CI.
