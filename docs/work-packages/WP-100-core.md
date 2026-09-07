@@ -274,9 +274,9 @@ permitted-path set was amended once, by the independently accepted ADR-0013
 impact correction (github-pr:70), after the in-progress implementation
 (github-pr:69) proved that no conservative representation-aware retained
 footprint for `Thing.context` is computable without observing the private
-`Context.entries` buffers; the correction admits the single read-only
-`pub(crate)` Context-entry inspection seam in `td/src/components/context.rs`
-and nothing else.
+`Context.entries` buffers and the retained capacity of their backing `Vec`;
+the correction admits the single read-only `pub(crate)` Context-entry storage
+inspection seam in `td/src/components/context.rs` and nothing else.
 
 The tranche owns exactly the append-only `WorkClass::DocumentNodes` and
 `WorkClass::PlanningItems` discriminants, the narrow
@@ -296,11 +296,12 @@ Permitted production paths are exactly:
 - `td/src/validate.rs`;
 - `td/src/thing.rs`;
 - `td/src/lib.rs`; and
-- `td/src/components/context.rs` (read-only `pub(crate)` Context-entry
+- `td/src/components/context.rs` (read-only `pub(crate)` Context-entry storage
   inspection seam only).
 
 The `context.rs` path admits only the single read-only `pub(crate)`
-Context-entry inspection seam required for the conservative capacity-aware
+Context-entry storage inspection seam exposing borrowed entries and their
+backing `Vec` capacity, as required for the conservative capacity-aware
 `retained_source_bytes()` census of `Thing.context`; it authorizes no other
 `td/src/components/**` edit and no `Context`, builder, serialization, or
 Basic-validation semantic change. The active 195-field resource schema,
