@@ -2,7 +2,7 @@
 
 use core::fmt;
 
-const WORK_CLASS_COUNT: usize = 10;
+const WORK_CLASS_COUNT: usize = 12;
 
 /// A class of incremental engine work with its own counter.
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
@@ -28,6 +28,15 @@ pub enum WorkClass {
     CleanupItems,
     /// Bounded handler start, step, cancel, or adapter-poll work.
     HandlerSteps = 9,
+    /// Generic typed-document validation and census visits not already
+    /// owned by a more specific class. Typed schema-node visits remain
+    /// `JsonSchemaNodes`, URI-template bytes remain `UriBytes`, and
+    /// security branches remain `SecurityBranches`.
+    DocumentNodes = 10,
+    /// Aggregate planning enumeration, row construction, lookup sealing,
+    /// reconciliation, and reclamation work. Admitted as a discriminant
+    /// only; no Planning code charges it yet.
+    PlanningItems = 11,
 }
 
 impl WorkClass {
@@ -43,6 +52,8 @@ impl WorkClass {
         Self::BindingPolls,
         Self::CleanupItems,
         Self::HandlerSteps,
+        Self::DocumentNodes,
+        Self::PlanningItems,
     ];
 
     const fn index(self) -> usize {
@@ -177,12 +188,55 @@ mod tests {
     #[test]
     fn handler_steps_are_appended_and_independently_budgeted() {
         assert_eq!(WorkClass::HandlerSteps as u8, 9);
-        assert_eq!(WorkClass::ALL.len(), 10);
         assert_eq!(WorkClass::ALL[9], WorkClass::HandlerSteps);
 
         let mut budget = WorkBudget::new().with_remaining(WorkClass::HandlerSteps, 2);
         assert_eq!(budget.consume(WorkClass::HandlerSteps, 1), Ok(()));
         assert_eq!(budget.remaining(WorkClass::HandlerSteps), 1);
         assert_eq!(budget.remaining(WorkClass::CleanupItems), 0);
+    }
+
+    #[test]
+    fn consumer_document_and_planning_classes_are_append_only() {
+        // The pre-existing ten discriminants and the first ten `ALL` entries
+        // stay exactly stable; DocumentNodes then PlanningItems are appended.
+        assert_eq!(WorkClass::DocumentNodes as u8, 10);
+        assert_eq!(WorkClass::PlanningItems as u8, 11);
+        assert_eq!(WorkClass::ALL.len(), 12);
+        assert_eq!(WorkClass::ALL[10], WorkClass::DocumentNodes);
+        assert_eq!(WorkClass::ALL[11], WorkClass::PlanningItems);
+        let prefix = [
+            WorkClass::JsonSchemaNodes,
+            WorkClass::CodecInputBytes,
+            WorkClass::CodecOutputBytes,
+            WorkClass::UriBytes,
+            WorkClass::SecurityBranches,
+            WorkClass::ProviderProbes,
+            WorkClass::QueueOperations,
+            WorkClass::BindingPolls,
+            WorkClass::CleanupItems,
+            WorkClass::HandlerSteps,
+        ];
+        for (index, class) in prefix.into_iter().enumerate() {
+            assert_eq!(WorkClass::ALL[index], class);
+            assert_eq!(class as u8, index as u8);
+        }
+
+        // Both appended counters default to zero in a fresh budget.
+        let mut budget = WorkBudget::new();
+        assert_eq!(budget.remaining(WorkClass::DocumentNodes), 0);
+        assert_eq!(budget.remaining(WorkClass::PlanningItems), 0);
+        assert!(budget.is_exhausted());
+        budget.set_remaining(WorkClass::DocumentNodes, 3);
+        assert_eq!(budget.remaining(WorkClass::DocumentNodes), 3);
+        assert_eq!(
+            budget.consume(WorkClass::DocumentNodes, 4),
+            Err(super::BudgetExceeded {
+                class: WorkClass::DocumentNodes,
+                requested: 4,
+                remaining: 3
+            })
+        );
+        assert_eq!(budget.remaining(WorkClass::PlanningItems), 0);
     }
 }
