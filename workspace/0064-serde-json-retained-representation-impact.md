@@ -1,6 +1,6 @@
 # 0064 serde_json Retained Representation Impact
 
-Status: OPEN
+Status: MIGRATED
 
 Kind: ADR-0013 implementation-impact review and representation-authority
 decision
@@ -9,15 +9,18 @@ Finding baseline: `14ececaf847e7eb68446813c5469c486d8cfb41f`
 
 Review location: github-pr:71
 
+Resolution/readmission review: github-pr:72
+
 ## Question
 
 What enforceable representation boundary lets the Consumer retain the exact
 original public `Thing` while computing a conservative footprint for every
 reachable owned buffer under legal downstream Cargo feature unification?
 
-This question blocks readmission of `WP-100-CONSUMER-VALIDATED-THING`. It does
-not reopen the Foundation-owned changes merged by github-pr:69, the passed
-Producer Property Read architecture gate, or any WP-200 Step 2 work.
+This question blocked readmission of `WP-100-CONSUMER-VALIDATED-THING` after
+github-pr:71. Its migrated resolution does not reopen the Foundation-owned
+changes merged by github-pr:69, the passed Producer Property Read architecture
+gate, or any WP-200 Step 2 work.
 
 ## Falsifying evidence
 
@@ -80,15 +83,58 @@ class but must be included in any replacement admission evidence:
    is only viable if the restriction is enforceable, realistic for extension
    data, and deliberately specified as observable behavior.
 
-No direction is selected here. The implementation candidate cannot choose
-among them implicitly.
+## Decision
+
+Select direction 1 as a representation guard, not as an unenforceable Cargo
+feature declaration:
+
+- pin the TD package dependency to exactly `serde_json 1.0.149`;
+- require at compile time that `Map<String, Value>` has the same wrapper size
+  as `BTreeMap<String, Value>` in that locked source and that Number does not
+  require drop;
+- treat guard failure as an unsupported TD build, with diagnostics naming the
+  `preserve_order`/IndexMap and `arbitrary_precision`/String-backed causes; and
+- retain the existing content-plus-BTree allocation envelope and scalar Number
+  accounting only after those representation guards have compiled.
+
+The guards do not infer byte counts from `size_of`. They prevent a build whose
+private representation invalidates the independently reviewed accounting
+model. A scratch external crate against the locked version proved the default
+cell compiles, `preserve_order` fails the Map guard, and
+`arbitrary_precision` fails the Number guard. Completion evidence must repeat
+those cases against the real TD crate, including the combined feature cell.
+
+Directions 2 and 3 are rejected for this tranche. The locked serde_json
+version does not expose Map or Number capacity, a fork would split the public
+Value type's package identity for ordinary downstream users, and a new tracked
+or canonical JSON/Thing ingestion API would expand the public ownership
+contract. Unsafe private-layout or allocator probing is not portable
+authority.
+
+Direction 4 is rejected as a runtime policy because blanket rejection of
+otherwise valid object/number-containing Things would be both late and
+disproportionate; an unsupported representation is rejected when compiling TD
+instead.
+
+The progress findings are resolved independently of representation. Explicit
+Form operations become charged iterator tasks that accumulate ReadProperty
+membership without a prior whole-slice scan. Security roots and combo children
+become charged borrowed-iterator/reference tasks rather than an eagerly copied
+pending batch. Both reuse the existing admitted work classes.
+
+This conclusion is migrated into
+`docs/work-packages/WP-100-consumer-validated-thing-admission.md`,
+`docs/work-packages/WP-100-core.md`, and `docs/spec/runtime-safety.md`. It is a
+readmission candidate until independently accepted; migration does not itself
+authorize production work.
 
 ## Readmission boundary
 
-Before implementation resumes, the selected conclusion must be migrated into
-the authoritative dependency/API/resource owners and the admission record,
-then independently reviewed. Pre-code checks and completion criteria must
-include downstream feature-unified fixtures covering:
+The selected conclusion is now migrated into the authoritative
+dependency/API/resource owners and the admission record. Before implementation
+resumes, an independent review must accept that exact docs-only revision and
+the tranche must transition from `candidate` to `admitted`. Completion
+criteria include downstream feature-unified fixtures covering:
 
 - compact and heavily over-capacity JSON maps with equal content;
 - short, long, and spare-capacity arbitrary-precision Numbers;

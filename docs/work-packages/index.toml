@@ -119,7 +119,7 @@ status = "planned"
 admission_status = "candidate"
 impact_status = "current"
 impact_review = "github-pr:71"
-impact_disposition = "admission-withdrawn"
+impact_disposition = "correction-proposed"
 depends_on = []
 depends_on_packages = ["WP-000"]
 requirements = [
@@ -166,6 +166,7 @@ resource_changes = [
 old_api_removals = []
 performance_workloads = []
 implementation_paths = [
+    "td/Cargo.toml",
     "foundation/src/budget.rs",
     "foundation/src/resource.rs",
     "foundation/src/lib.rs",
@@ -184,7 +185,7 @@ pre_implementation_checks = [
     "cargo check --locked -p clinkz-wot-td --no-default-features",
     "cargo check --locked -p clinkz-wot-td",
 ]
-admission_review = "github-pr:70"
+admission_review = "github-pr:72"
 completion_evidence_keys = ["consumer-validated-thing-work-classes"]
 completion_evidence_path = "docs/evidence/WP-100-consumer-validated-thing.toml"
 

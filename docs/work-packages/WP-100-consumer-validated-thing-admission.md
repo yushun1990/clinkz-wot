@@ -1,12 +1,15 @@
 # WP-100 Consumer Validated Thing Admission
 
-Status: IMPACT REVIEW; ADMISSION WITHDRAWN on 2026-09-07 after independent
-review of implementation candidate github-pr:71 at exact head
-`14ececaf847e7eb68446813c5469c486d8cfb41f` falsified the retained-source and
-bounded-progress completion claims. Under ADR-0013, this affected admitted
-tranche returns to `planned` / `candidate`; this record does not authorize
-continued production implementation or merge until corrective authority,
-checks, and an independent readmission review pass.
+Status: READMISSION CANDIDATE under ADR-0013. Independent review of
+implementation candidate github-pr:71 at exact head
+`14ececaf847e7eb68446813c5469c486d8cfb41f` correctly falsified the prior
+retained-source and bounded-progress completion claims and withdrew admission.
+The representation and progress corrections below now close the proposed
+authority boundary, but the tranche remains `planned` / `candidate`: no
+production implementation may resume until an independent review accepts this
+exact docs-only revision and the admission transition is recorded.
+
+Readmission review location: github-pr:72.
 
 The admission below was established by github-pr:68 and amended by
 github-pr:70. It remains the historical frozen boundary that the rejected
@@ -44,15 +47,58 @@ bulk-expanded before their per-branch `SecurityBranches` charges. These local
 scheduling defects must be repaired and tested after readmission, but fixing
 them cannot resolve the representation-authority blocker.
 
-The open design question and readmission boundary are recorded in
-`workspace/0064-serde-json-retained-representation-impact.md`. Impact review
-must select and project an enforceable dependency-feature/representation
-inspection boundary, or deliberately change the exact-source contract, before
-implementation resumes. The rejected `passed` completion evidence is removed;
-github-pr:71 remains the impact-review location and non-mergeable reproducer.
-The passed Producer Property Read architecture gate remains current because
-its exact ten registered commands still pass and its paths use neither new
-WorkClass.
+The rejected `passed` completion evidence is removed. Github-pr:71 is the
+merged impact-review checkpoint, while its reviewed implementation head above
+remains the exact rejected reproducer. The passed Producer Property Read
+architecture gate remains current because its exact ten registered commands
+still pass and its paths use neither new WorkClass.
+
+## Representation and progress correction proposed for readmission
+
+Impact review selects a constrained, compile-time-enforced dependency
+representation surface. It does not add private-layout inspection, normalize
+the Thing, or weaken retained-footprint truth:
+
+1. the TD package dependency is pinned to exactly `serde_json 1.0.149`, whose
+   default `Map<String, Value>` backing is `BTreeMap` and whose default Number
+   representation is a scalar enum with no owned buffer;
+2. `td/src/validated.rs` contains compile-time representation guards requiring
+   `size_of::<serde_json::Map<String, Value>>() ==
+   size_of::<BTreeMap<String, Value>>()` and
+   `!needs_drop::<serde_json::Number>()`;
+3. downstream feature unification that enables `preserve_order` changes Map to
+   IndexMap and fails the first guard; enabling `arbitrary_precision` changes
+   Number to an owned String representation and fails the second guard; and
+4. the diagnostics identify both unsupported serde_json representations and
+   the retained-source reason. No runtime input can enter the cursor under an
+   unaccountable representation.
+
+The guards are compatibility checks, not footprint estimates. The accepted
+default Map remains accounted as its BTreeMap allocation envelope, while the
+accepted default Number has no reachable owned allocation. Any serde_json
+version change, removal or weakening of either guard, or newly reachable
+allocation behind the accepted representation returns this tranche to impact
+review. Other serde_json features are outside this decision unless they alter
+one of these two guarded retained representations.
+
+The progress correction remains within `td/src/validated.rs` and the existing
+work classes. Explicit Property Form operations are advanced one operation at
+a time under `DocumentNodes`; ReadProperty membership is accumulated in that
+charged task rather than by calling a whole-slice membership scan. Defaulted
+Property operations remain the existing constant TD default. Security roots
+and combo children are advanced one reference at a time under
+`SecurityBranches`; borrowed iterators may be retained as cursor tasks, but no
+externally sized root/child batch is copied or enqueued before the next branch
+charge. These changes do not alter the frozen public API, Basic semantic
+authority, counts, ordering, or terminal ownership.
+
+The selected conclusion is migrated from
+`workspace/0064-serde-json-retained-representation-impact.md` into this record,
+`docs/spec/runtime-safety.md`, and `WP-100-core.md`. A forked serde_json,
+unsafe/private-layout access, allocator introspection, clone/normalization,
+runtime feature probing, and blanket runtime rejection of otherwise supported
+Things are rejected as either non-portable, insufficient, or a larger
+ownership/API change than this tranche requires.
 
 ADR-0013 impact correction (accepted at github-pr:70): the in-progress
 implementation (github-pr:69) proved that the frozen conservative
@@ -129,7 +175,7 @@ All ADR-0013 admission conditions must hold on the accepted revision:
 
 ## Owned boundary
 
-The tranche owns exactly three production changes:
+The tranche owns exactly four production changes:
 
 1. **Append-only `WorkClass` discriminants.** `WorkClass::DocumentNodes` then
    `WorkClass::PlanningItems` are appended after `WorkClass::HandlerSteps`
@@ -158,6 +204,12 @@ The tranche owns exactly three production changes:
    `pub(crate)` Context-entry storage inspection seam admitted in
    `td/src/components/context.rs` below; no other component change is owned or
    permitted.
+4. **The enforceable serde_json representation boundary.** `td/Cargo.toml`
+   pins serde_json exactly to `1.0.149`, and the TD validation module rejects
+   at compile time any unified dependency representation inconsistent with the
+   default BTreeMap-backed Map or allocation-free scalar Number. This changes
+   no serde_json value, parser, serializer, or TD runtime behavior in supported
+   builds.
 
 ## Frozen Foundation transfer API
 
@@ -330,6 +382,7 @@ added to Basic validation here.
 
 Production implementation may change exactly:
 
+- `td/Cargo.toml` (the serde_json exact-version pin only);
 - `foundation/src/budget.rs`;
 - `foundation/src/resource.rs`;
 - `foundation/src/lib.rs`;
@@ -385,6 +438,9 @@ This tranche does not implement or claim:
 - renumbering/inserting/reordering an existing work class;
 - global Basic-validation strengthening or ID synthesis;
 - TD normalization or clone-for-accounting;
+- serde_json forking, private-layout/allocator inspection, runtime feature
+  probing, or support for the `preserve_order` and `arbitrary_precision`
+  representations in the same resolved TD dependency graph;
 - any charge of `PlanningItems` by Planning/Servient code;
 - a second Basic semantic validator or edits to `td/src/components/**` other
   than the single read-only `pub(crate)` Context-entry storage inspection seam
@@ -435,6 +491,14 @@ cargo check --locked -p clinkz-wot-td --no-default-features
 cargo check --locked -p clinkz-wot-td
 ```
 
+The complete list was rerun and passed at the readmission baseline
+`4f596053ddc6d1918f7b1c3b553dcdb8a8d0a883`. A separate external compile
+prototype against serde_json `1.0.149` also proved that the proposed guards
+accept the default representation and reject `preserve_order` and
+`arbitrary_precision` independently. That prototype establishes constructible
+pre-code mechanics only; the required external TD feature-unification fixture
+remains completion evidence for the implementation revision.
+
 ## Completion evidence
 
 The evidence key is `consumer-validated-thing-work-classes` at
@@ -460,6 +524,10 @@ passing proof for:
   introduces no second semantic validator;
 - every structural/resource limit boundary, including missing applicable
   limits and safely known observed values in `ValidatedThingStep::Limit`;
+- the TD manifest pinning exactly `serde_json 1.0.149`, supported
+  default/no-default TD cells compiling, and external downstream fixtures
+  enabling `preserve_order`, `arbitrary_precision`, or both failing TD
+  compilation at the corresponding named representation guard;
 - retained-source footprint/count correctness, including properties with empty
   readable ranges and effective ReadProperty defaulting, and conservatism of
   the `Thing.context` footprint against both caller-over-reserved entry buffers
@@ -468,6 +536,12 @@ passing proof for:
   entry view must demonstrably under-report these respective cases;
 - schema/URI/security work remaining in existing work classes without double
   charging;
+- an explicit Property Form operation list requiring one `DocumentNodes` unit
+  per inspected operation, with no whole-list ReadProperty scan before those
+  charges, and defaulted operations preserving the existing TD default;
+- security roots and combo children requiring one `SecurityBranches` unit per
+  advanced reference, with no externally sized batch copy or enqueue before
+  those charges;
 - ID-less Basic-valid Thing completion;
 - exact source-account retention on failed reclassification, destination
   account peak behavior, and unchanged aggregate live/peak/contiguous values on
