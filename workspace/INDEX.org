@@ -28,7 +28,7 @@ Topics are retained after migration as decision history.
 
 ** OPEN
 
-- None.
+- [[file:0064-serde-json-retained-representation-impact.md][0064 serde_json Retained Representation Impact]]
 
 ** DISCUSSING
 
