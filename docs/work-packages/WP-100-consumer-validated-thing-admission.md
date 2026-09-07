@@ -1,23 +1,25 @@
 # WP-100 Consumer Validated Thing Admission
 
-Status: READMISSION CANDIDATE under ADR-0013. Independent review of
-implementation candidate github-pr:71 at exact head
-`14ececaf847e7eb68446813c5469c486d8cfb41f` correctly falsified the prior
-retained-source and bounded-progress completion claims and withdrew admission.
-The representation and progress corrections below now close the proposed
-authority boundary, but the tranche remains `planned` / `candidate`: no
-production implementation may resume until an independent review accepts this
-exact docs-only revision and the admission transition is recorded.
+Status: ADMITTED under ADR-0013 for design revision v5.1. Github-pr:72
+independently reviewed and accepted the exact readmission revision at
+`30186a4b9098e8c35f02df1dd75868ea9b4eb3b4` after github-pr:71 correctly
+falsified the prior retained-source and bounded-progress completion claims.
+This admission-only transition records that the representation and progress
+correction below is accepted and moves the tranche from `planned` / `candidate`
+to `planned` / `admitted`. Production implementation may now begin only within
+the permitted paths and completion-evidence contract frozen by github-pr:72.
+The tranche remains incomplete; this transition creates no completion evidence
+and makes no architecture-gate claim.
 
 Readmission review location: github-pr:72.
 
-The admission below was established by github-pr:68 and amended by
-github-pr:70. It remains the historical frozen boundary that the rejected
-candidate attempted to implement, not current implementation authority.
-Foundation changes already merged by github-pr:69 remain current and are not
-reopened by this finding. The github-pr:70 Context seam correction remains the
-only previously permitted component-path change, but it is insufficient to
-make every reachable `serde_json::Value` retained allocation observable.
+The original admission was established by github-pr:68, amended by
+github-pr:70, and withdrawn after github-pr:71. Github-pr:72 restores current
+implementation authority only with the correction below. Foundation changes
+already merged by github-pr:69 remain current and are not reopened. The
+github-pr:70 Context seam correction remains the only permitted component-path
+change and is now combined with the github-pr:72 representation boundary and
+incremental-progress correction.
 
 ## 2026-09-07 impact finding
 
@@ -53,7 +55,7 @@ remains the exact rejected reproducer. The passed Producer Property Read
 architecture gate remains current because its exact ten registered commands
 still pass and its paths use neither new WorkClass.
 
-## Representation and progress correction proposed for readmission
+## Representation and progress correction accepted for readmission
 
 Impact review selects a constrained, compile-time-enforced dependency
 representation surface. It does not add private-layout inspection, normalize
@@ -161,7 +163,8 @@ requirements; neither direction depends on the other.
 
 ## Admission preconditions
 
-All ADR-0013 admission conditions must hold on the accepted revision:
+All ADR-0013 admission conditions hold on the exact revision independently
+accepted by github-pr:72:
 
 1. `WP-000` is `complete` in `docs/work-packages/index.toml`.
 2. The authority migration is merged and `0063` is `MIGRATED`; no
