@@ -1,13 +1,58 @@
 # WP-100 Consumer Validated Thing Admission
 
-Status: ADMITTED under ADR-0013 for design revision v5.1 by the independent
-acceptance of the registering docs-only revision (github-pr:68), as amended
-once by the impact correction recorded below (github-pr:70). This record
-registers the tranche, freezes its public construction/progress boundary, and
-records its pre-code checks and Producer-gate impact-review boundary; it
-changes and authorizes no production source by itself. The first permitted
-functional change is a separate implementation revision on this admission,
-producing the completion evidence defined below.
+Status: IMPACT REVIEW; ADMISSION WITHDRAWN on 2026-09-07 after independent
+review of implementation candidate github-pr:71 at exact head
+`14ececaf847e7eb68446813c5469c486d8cfb41f` falsified the retained-source and
+bounded-progress completion claims. Under ADR-0013, this affected admitted
+tranche returns to `planned` / `candidate`; this record does not authorize
+continued production implementation or merge until corrective authority,
+checks, and an independent readmission review pass.
+
+The admission below was established by github-pr:68 and amended by
+github-pr:70. It remains the historical frozen boundary that the rejected
+candidate attempted to implement, not current implementation authority.
+Foundation changes already merged by github-pr:69 remain current and are not
+reopened by this finding. The github-pr:70 Context seam correction remains the
+only previously permitted component-path change, but it is insufficient to
+make every reachable `serde_json::Value` retained allocation observable.
+
+## 2026-09-07 impact finding
+
+Ordinary downstream Cargo feature unification can enable the following legal
+representations in the same locked `serde_json 1.0.149` package used by TD:
+
+- with `preserve_order`, `serde_json::Map` is backed by `IndexMap`, but exposes
+  no capacity inspection. A one-entry `Map::new()` and a one-entry
+  `Map::with_capacity(16_384)` therefore receive the same candidate census
+  despite materially different retained backing capacity;
+- with `arbitrary_precision`, `serde_json::Number` owns a private `String`,
+  including caller-controlled content and spare capacity through the public
+  representation, but the candidate treats every Number as allocation-free.
+
+A downstream reproducer using both features against the exact reviewed head
+reported 9309 bytes for both compact and over-capacity Maps, and 8108 bytes for
+both one-digit and 16,384-digit Numbers. The absolute totals depend on the
+surrounding Thing; equality within each pair proves that the candidate cannot
+observe the retained allocations. Serialized length and `size_of` do not
+repair the missing capacity authority. Cloning, normalizing, or shrinking the
+input would violate the frozen exact-original-Thing ownership contract.
+
+The same review found two additional charge-before-work violations inside the
+otherwise permitted TD path: explicit `form.op` is scanned before its
+per-operation `DocumentNodes` charges, and security roots/combo children are
+bulk-expanded before their per-branch `SecurityBranches` charges. These local
+scheduling defects must be repaired and tested after readmission, but fixing
+them cannot resolve the representation-authority blocker.
+
+The open design question and readmission boundary are recorded in
+`workspace/0064-serde-json-retained-representation-impact.md`. Impact review
+must select and project an enforceable dependency-feature/representation
+inspection boundary, or deliberately change the exact-source contract, before
+implementation resumes. The rejected `passed` completion evidence is removed;
+github-pr:71 remains the impact-review location and non-mergeable reproducer.
+The passed Producer Property Read architecture gate remains current because
+its exact ten registered commands still pass and its paths use neither new
+WorkClass.
 
 ADR-0013 impact correction (accepted at github-pr:70): the in-progress
 implementation (github-pr:69) proved that the frozen conservative
