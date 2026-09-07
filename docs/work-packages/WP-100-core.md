@@ -278,6 +278,19 @@ footprint for `Thing.context` is computable without observing the private
 the correction admits the single read-only `pub(crate)` Context-entry storage
 inspection seam in `td/src/components/context.rs` and nothing else.
 
+Independent review of the first completion candidate at
+`14ececaf847e7eb68446813c5469c486d8cfb41f` then proved that downstream
+serde_json feature unification could replace Map with an opaque-capacity
+IndexMap or Number with an opaque String, and found uncharged whole-list Form
+operation and security-expression setup work. Github-pr:71 withdrew admission.
+Readmission keeps the exact-Thing contract and selects a smaller enforceable
+boundary: pin TD's serde_json dependency exactly to `1.0.149`, compile only
+when Map matches the locked BTreeMap representation and Number is
+allocation-free, and make the two list traversals incremental under their
+existing work classes. Unsupported `preserve_order` and
+`arbitrary_precision` representations fail compilation rather than reaching
+runtime census.
+
 The tranche owns exactly the append-only `WorkClass::DocumentNodes` and
 `WorkClass::PlanningItems` discriminants, the narrow
 `AdmissionLedger::reclassify_source_to_persistent_document` operation, and the
@@ -289,6 +302,7 @@ no dependency on the completed Consumer call-values tranche.
 
 Permitted production paths are exactly:
 
+- `td/Cargo.toml` (serde_json exact-version pin only);
 - `foundation/src/budget.rs`;
 - `foundation/src/resource.rs`;
 - `foundation/src/lib.rs`;
@@ -321,6 +335,21 @@ checks destination capacity before atomically moving the same live bytes from
 source to persistent-document accounting and preserves live/peak/contiguous
 truth on both success and failure.
 
+The serde_json representation guards live in `td/src/validated.rs`. The Map
+guard compares only the locked wrapper representation with
+`BTreeMap<String, Value>` and the Number guard requires `needs_drop` to remain
+false. They are compile-time compatibility gates, not retained-byte estimates.
+Completion evidence must compile the supported TD cells and externally prove
+that downstream `preserve_order`, `arbitrary_precision`, and combined feature
+unification each fail with the intended guard diagnostic.
+
+Deriving `readable_property_form_count` from an explicit operation list is a
+per-operation `DocumentNodes` task; it performs no prior slice-wide scan.
+Security-expression roots and combo children are per-reference
+`SecurityBranches` tasks and are not batch-expanded before charging. Default
+Property Form operations continue to use the existing TD default, and no
+schema/URI/security work is relabelled or double charged.
+
 Before source may merge, an exact-head impact review must run the complete
 passed Producer Property Read gate commands and specifically prove that the
 fixture's fixed `[u64; 10]` cleanup snapshot intentionally covers the unchanged
@@ -335,7 +364,10 @@ feature profiles, every Basic-validation/census limit boundary, cancellation
 and lifetime-budget non-reset, exact source-account retention on failed
 reclassification, unchanged total live/peak/contiguous accounting on success,
 stable WorkClass prefix/order, no resource-schema change, and the exact-head
-Producer-gate impact disposition. It claims no aggregate Planning,
+Producer-gate impact disposition. It also covers the exact serde_json pin,
+positive supported-representation cells, negative downstream representation
+feature cells, and charge-before-scan progress for explicit Form operations
+and security-expression roots/children. It claims no aggregate Planning,
 `OutboundRequest`, Servient runtime, or Consumer gate.
 
 ## Requirements

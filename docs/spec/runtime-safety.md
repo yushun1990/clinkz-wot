@@ -64,6 +64,25 @@ retained-footprint proof. Host and application-static profiles drive the same
 bounded pure validation cursor; Host may complete it synchronously, while the
 static profile resumes it with its retained lifetime allowance.
 
+This retained-source path supports TD's exactly pinned `serde_json 1.0.149`
+default retained representations: BTreeMap-backed `Map<String, Value>` and the
+allocation-free scalar Number. Because Cargo feature unification can otherwise
+replace those private representations, the TD validation module has
+compile-time guards requiring the Map wrapper to have the locked BTreeMap
+representation size and Number not to require drop. Unified
+`preserve_order`/IndexMap or `arbitrary_precision`/String-backed builds fail TD
+compilation with an explicit retained-source diagnostic; they are not runtime
+inputs that can bypass census. These guards select a supported representation
+and are never used as byte-count approximations. Changing the exact serde_json
+version or either guarded representation requires impact review.
+
+Every explicit Property Form operation is inspected only after its own
+`DocumentNodes` charge. Every security-expression root or combo child is
+advanced only after its own `SecurityBranches` charge. No whole operation list
+is scanned and no externally sized security batch is copied or enqueued ahead
+of those charges. These progress rules also constrain work used only to derive
+the retained readable-Form count; they do not duplicate Basic validation.
+
 The validated `Thing` remains the one retained application/source view after
 publication and is never cloned merely for accounting. Source-to-persistent-
 document reclassification preserves the same owned representation and total

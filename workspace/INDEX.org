@@ -28,7 +28,7 @@ Topics are retained after migration as decision history.
 
 ** OPEN
 
-- [[file:0064-serde-json-retained-representation-impact.md][0064 serde_json Retained Representation Impact]]
+- None.
 
 ** DISCUSSING
 
@@ -40,6 +40,7 @@ Topics are retained after migration as decision history.
 
 ** MIGRATED
 
+- [[file:0064-serde-json-retained-representation-impact.md][0064 serde_json Retained Representation Impact]]
 - [[file:0063-consumer-plan-set-handoff-closure.md][0063 Consumer Plan-Set Handoff Closure]]
 - [[file:0062-consumer-binding-result-sealing.md][0062 Consumer Binding Result Sealing]]
 - [[file:0001-architecture-overview.org][0001 Architecture Overview]]
