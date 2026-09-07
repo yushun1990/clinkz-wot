@@ -434,6 +434,40 @@ impl AdmissionLedger {
         self.release(CLEANUP, bytes)
     }
 
+    /// Moves already-committed source bytes to persistent-document
+    /// accounting without a second reservation or a cloned representation.
+    ///
+    /// The operation acts only on committed ledger account charges. It
+    /// returns `false` without mutating any account when the source account
+    /// contains fewer than `bytes`, when adding `bytes` to the
+    /// persistent-document account would overflow, or when the result would
+    /// exceed that account's limit. On success it subtracts exactly `bytes`
+    /// from source usage, adds exactly `bytes` to persistent-document usage,
+    /// and updates only the destination account's own peak as applicable.
+    /// Aggregate `live_bytes`, `peak_live_bytes`, and
+    /// `largest_contiguous_allocation` never change, because the same live
+    /// bytes are transferred between accounts. `bytes == 0` succeeds without
+    /// changing any counter. The method performs no allocation and creates
+    /// no reservation or new ownership token.
+    pub fn reclassify_source_to_persistent_document(&mut self, bytes: u64) -> bool {
+        if self.accounts[SOURCE].used < bytes {
+            return false;
+        }
+        let Some(destination_used) = self.accounts[PERSISTENT_DOCUMENT].used.checked_add(bytes)
+        else {
+            return false;
+        };
+        if destination_used > self.accounts[PERSISTENT_DOCUMENT].limit {
+            return false;
+        }
+        self.accounts[SOURCE].used -= bytes;
+        self.accounts[PERSISTENT_DOCUMENT].used = destination_used;
+        self.accounts[PERSISTENT_DOCUMENT].peak = self.accounts[PERSISTENT_DOCUMENT]
+            .peak
+            .max(destination_used);
+        true
+    }
+
     /// Returns the current sum of all account bytes.
     pub const fn live_bytes(&self) -> u64 {
         self.live_bytes
@@ -752,5 +786,141 @@ mod tests {
         assert_eq!(ledger.largest_contiguous_allocation(), 60);
         assert!(ledger.release_source(40));
         assert_eq!(ledger.live_bytes(), 0);
+    }
+
+    #[test]
+    fn reclassification_moves_committed_bytes_and_preserves_aggregates() {
+        let mut ledger = AdmissionLedger::new(
+            SlotIndex::new(1),
+            Generation::INITIAL,
+            100,
+            100,
+            80,
+            100,
+            100,
+            100,
+        );
+        ledger
+            .try_reserve_source(ResourceKind::DocumentBytesMax, 50)
+            .expect("source reservation fits")
+            .commit();
+        ledger
+            .try_reserve_persistent_document(ResourceKind::DocumentBytesMax, 30)
+            .expect("destination already holds committed bytes")
+            .commit();
+        let live_before = ledger.live_bytes();
+        let peak_before = ledger.peak_live_bytes();
+        let contiguous_before = ledger.largest_contiguous_allocation();
+
+        assert!(ledger.reclassify_source_to_persistent_document(50));
+
+        assert_eq!(ledger.live_bytes(), live_before);
+        assert_eq!(ledger.peak_live_bytes(), peak_before);
+        assert_eq!(ledger.largest_contiguous_allocation(), contiguous_before);
+        // Source retains nothing; destination holds both charges and updated
+        // only its own peak.
+        assert!(!ledger.reclassify_source_to_persistent_document(1));
+        assert_eq!(ledger.live_bytes(), 80);
+    }
+
+    #[test]
+    fn reclassification_updates_only_the_destination_peak() {
+        use super::{PERSISTENT_DOCUMENT, SOURCE};
+
+        let mut ledger = AdmissionLedger::new(
+            SlotIndex::new(2),
+            Generation::INITIAL,
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+        );
+        ledger
+            .try_reserve_source(ResourceKind::DocumentBytesMax, 20)
+            .expect("source reservation fits")
+            .commit();
+        ledger
+            .try_reserve_persistent_document(ResourceKind::DocumentBytesMax, 10)
+            .expect("destination peak seeded at 10")
+            .commit();
+        ledger.release_persistent_document(10);
+        let source_peak_before = ledger.accounts[SOURCE].peak;
+        let destination_peak_before = ledger.accounts[PERSISTENT_DOCUMENT].peak;
+
+        assert!(ledger.reclassify_source_to_persistent_document(20));
+
+        // The destination's own peak rises to the new usage; the source
+        // account's peak and aggregate truth are untouched by the transfer.
+        assert_eq!(ledger.accounts[PERSISTENT_DOCUMENT].peak, 20);
+        assert!(ledger.accounts[PERSISTENT_DOCUMENT].peak > destination_peak_before);
+        assert_eq!(ledger.accounts[SOURCE].peak, source_peak_before);
+        assert_eq!(ledger.peak_live_bytes(), 30);
+    }
+
+    #[test]
+    fn failed_reclassification_retains_the_exact_source_charge() {
+        let mut ledger = AdmissionLedger::new(
+            SlotIndex::new(3),
+            Generation::INITIAL,
+            100,
+            100,
+            40,
+            100,
+            100,
+            100,
+        );
+        ledger
+            .try_reserve_source(ResourceKind::DocumentBytesMax, 30)
+            .expect("source reservation fits")
+            .commit();
+        ledger
+            .try_reserve_persistent_document(ResourceKind::DocumentBytesMax, 20)
+            .expect("destination reservation fits")
+            .commit();
+
+        // Destination capacity (40) cannot accept the full 30-byte transfer.
+        assert!(!ledger.reclassify_source_to_persistent_document(30));
+
+        // The source charge and every other observable stays exactly intact.
+        assert!(ledger.release_source(30));
+        assert!(ledger.release_persistent_document(20));
+        assert_eq!(ledger.live_bytes(), 0);
+
+        // An under-filled source account is also rejected without mutation.
+        ledger
+            .try_reserve_source(ResourceKind::DocumentBytesMax, 5)
+            .expect("source reservation fits")
+            .commit();
+        let live_before = ledger.live_bytes();
+        assert!(!ledger.reclassify_source_to_persistent_document(6));
+        assert_eq!(ledger.live_bytes(), live_before);
+        assert!(ledger.release_source(5));
+    }
+
+    #[test]
+    fn zero_byte_reclassification_succeeds_without_counter_changes() {
+        let mut ledger = AdmissionLedger::new(
+            SlotIndex::new(4),
+            Generation::INITIAL,
+            10,
+            10,
+            10,
+            10,
+            10,
+            10,
+        );
+        ledger
+            .try_reserve_persistent_document(ResourceKind::DocumentBytesMax, 10)
+            .expect("destination filled to its limit")
+            .commit();
+        let peak_before = ledger.peak_live_bytes();
+
+        // Zero bytes succeeds even with an exhausted source account and a
+        // destination at its limit, and changes no counter.
+        assert!(ledger.reclassify_source_to_persistent_document(0));
+        assert_eq!(ledger.live_bytes(), 10);
+        assert_eq!(ledger.peak_live_bytes(), peak_before);
     }
 }
