@@ -283,11 +283,15 @@ Independent review of the first completion candidate at
 serde_json feature unification could replace Map with an opaque-capacity
 IndexMap or Number with an opaque String, and found uncharged whole-list Form
 operation and security-expression setup work. Github-pr:71 withdrew admission.
-Readmission keeps the exact-Thing contract and selects a smaller enforceable
-boundary: pin TD's serde_json dependency exactly to `1.0.149`, compile only
-when Map matches the locked BTreeMap representation and Number is
-allocation-free, and make the two list traversals incremental under their
-existing work classes. Unsupported `preserve_order` and
+Github-pr:72 independently accepted the corrected readmission boundary, and
+the subsequent admission-only transition restored the tranche as `planned` /
+`admitted`. Production implementation may now proceed only within the paths
+and completion-evidence contract frozen by that review; the tranche remains
+incomplete. The accepted correction keeps the exact-Thing contract and selects
+a smaller enforceable boundary: pin TD's serde_json dependency exactly to
+`1.0.149`, compile only when Map matches the locked BTreeMap representation and
+Number is allocation-free, and make the two list traversals incremental under
+their existing work classes. Unsupported `preserve_order` and
 `arbitrary_precision` representations fail compilation rather than reaching
 runtime census.
 
