@@ -185,7 +185,7 @@ pre_implementation_checks = [
     "cargo check --locked -p clinkz-wot-td --no-default-features",
     "cargo check --locked -p clinkz-wot-td",
 ]
-admission_review = "github-pr:70"
+admission_review = "github-pr:72"
 completion_evidence_keys = ["consumer-validated-thing-work-classes"]
 completion_evidence_path = "docs/evidence/WP-100-consumer-validated-thing.toml"
 

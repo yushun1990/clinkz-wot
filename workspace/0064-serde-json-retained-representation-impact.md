@@ -9,6 +9,8 @@ Finding baseline: `14ececaf847e7eb68446813c5469c486d8cfb41f`
 
 Review location: github-pr:71
 
+Resolution/readmission review: github-pr:72
+
 ## Question
 
 What enforceable representation boundary lets the Consumer retain the exact

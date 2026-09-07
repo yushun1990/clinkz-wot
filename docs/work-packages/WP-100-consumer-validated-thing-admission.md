@@ -9,6 +9,8 @@ authority boundary, but the tranche remains `planned` / `candidate`: no
 production implementation may resume until an independent review accepts this
 exact docs-only revision and the admission transition is recorded.
 
+Readmission review location: github-pr:72.
+
 The admission below was established by github-pr:68 and amended by
 github-pr:70. It remains the historical frozen boundary that the rejected
 candidate attempted to implement, not current implementation authority.
