@@ -1,0 +1,161 @@
+schema_version = 1
+design_revision = "5.1"
+work_package = "WP-100"
+tranche = "WP-100-CONSUMER-VALIDATED-THING"
+implementation_ref = "dddc00b6c069c8c2ad2fa204058412e1ed597da2"
+foundation_ref = "6f8dad5348595bba722c134551ebed2b311866a8"
+context_impact_correction_ref = "c7c6fa6284358a85ab6aff5d60d48cf940f1fd6b"
+representation_readmission_ref = "a213949d1bb85066d59f1d509238e6726fd4f001"
+representation_readmission_review_ref = "30186a4b9098e8c35f02df1dd75868ea9b4eb3b4"
+admission_transition_ref = "61e4c3e4ca6d4bed52700dcc6a1e9bff60550b45"
+recorded_on = "2026-09-08"
+status = "passed"
+evidence_key = "consumer-validated-thing-work-classes"
+admission_review = "github-pr:72"
+completion_candidate = "github-pr:74"
+independent_acceptance = "pending-review"
+impact_review = "github-pr:71"
+impact_disposition = "reaffirmed"
+impact_disposition_reason = "all ten commands registered by the passed Producer PROPERTY-READ-ARCHITECTURE manifest were rerun at exact implementation head dddc00b6c069c8c2ad2fa204058412e1ed597da2 and passed; the existing first-ten WorkClass prefix is unchanged, Producer paths consume neither appended Consumer class, and the fixed ten-class cleanup snapshot remains exact, so the passed Producer gate remains valid without a status change"
+
+requirement_ids = [
+    "DOC-RUNTIME-001",
+    "ADMIT-MEM-001",
+    "ADMIT-TXN-001",
+    "CONSTRAINED-WORK-001",
+    "CONSTRAINED-PROGRESS-001",
+    "CONSTRAINED-OWN-001",
+]
+compilation_cells = ["no-default", "async-no-std", "std"]
+production_paths = [
+    "td/Cargo.toml",
+    "foundation/src/budget.rs",
+    "foundation/src/resource.rs",
+    "foundation/src/lib.rs",
+    "td/src/validated.rs",
+    "td/src/lib.rs",
+    "td/src/components/context.rs",
+]
+coverage = [
+    "the Foundation implementation merged by PR 69 remains unchanged: the first ten WorkClass discriminants and entries are stable, DocumentNodes and PlanningItems are exactly 10 and 11 with independent zero-default counters, and this TD tranche never charges PlanningItems",
+    "AdmissionLedger::reclassify_source_to_persistent_document preserves the exact live source charge on insufficient source, destination overflow, or destination-limit failure; success moves only the selected account usage, updates only the destination peak when applicable, and leaves aggregate live, peak-live, and largest-contiguous values unchanged, including the zero-byte case",
+    "the root TD exports compile with the frozen ValidatedThingCursor::new, ValidatedThingCursor::step, ValidatedThing::thing, retained_source_bytes, property_count, and readable_property_form_count signatures and the exact Pending, Complete, Invalid, Limit, and Cancelled ownership surface",
+    "compile-fail doctests prove ValidatedThingCursor and ValidatedThing are neither Clone nor Copy and expose no mutable raw Thing projection during progress or after success",
+    "the cursor moves and retains the exact original Thing without normalization or an accounting clone; allocation-pointer identity is preserved through Complete, Invalid, Limit, zero-budget Cancelled, cancellation immediately before Basic validation, and successful nested JSON Vec and String retention",
+    "zero or insufficient caller work returns the unique Pending continuation without executing the rejected unit; cancellation wins before new work, complete Basic-phase charges are atomic across all four used work classes, and a fresh WorkBudget cannot reset the cursor-owned DocumentNodes lifetime remainder",
+    "the incremental census proves a complete conservative semantic charge before invoking exactly one existing Thing::validate_with_level(ValidationLevel::Basic) pass; positive and negative parity tests preserve that sole semantic authority and introduce no second TD validator",
+    "exact and rejecting boundary tests cover retained document bytes, cumulative string and extension bytes, largest contiguous allocation, every JSON member/array/depth/node ceiling, affordance and Form counts, additional responses, URI variables, schema nodes/depth/edges, document lifetime work, security depth/aggregate branches, and URI-template bytes/variables; a missing applicable limit terminates before work",
+    "td/Cargo.toml pins exactly serde_json 1.0.149 and unconditional const guards require the default BTreeMap-sized Map wrapper and allocation-free Number representation; the supported TD default/no-default cells compile",
+    "an external locked downstream fixture preserves the PR 71 over-capacity Map and long-number counterexamples and proves that preserve_order, arbitrary_precision, and their combined feature-unification cells all fail TD compilation at the corresponding named retained-source representation guards",
+    "retained_source_bytes starts with the exact inline Thing representation and conservatively accounts every reachable owned allocation: actual String and Vec capacities, nested reserved JSON Vec and String buffers, the accepted default serde_json Map BTree envelope, typed schema/Form/security storage, and allocation-free default Numbers",
+    "the sole Context component seam returns only a borrowed entry slice plus backing Vec capacity; tests separately prove caller-over-reserved nested Context buffers and grow-then-with_1_0_compatibility backing capacity exceed serialized-equivalent compact inputs, while the exact buffers remain owned by the returned Thing",
+    "property_count includes declared properties without Forms; readable_property_form_count uses the existing TD default for omitted operations, including writeOnly default exclusion, and counts each explicit Property Form only after its operation iterator completes",
+    "the explicit Property Form progress fixture starts with a four-operation borrowed iterator, proves zero DocumentNodes leaves iterator and count unchanged, proves each single charge advances exactly one operation, and publishes the readable count only after the charged ReadProperty operation completes the list; no explicit whole-slice membership scan exists",
+    "the security progress fixture starts with eight borrowed roots, proves zero SecurityBranches leaves all eight unchanged and one charge advances exactly one root, then separately proves a combo root installs only borrowed child iterators after its charge and each later charge advances exactly one child; no externally sized root or child batch is copied or expanded before charge",
+    "schema and JSON census work remains JsonSchemaNodes, URI-template scanning remains UriBytes, security reference and expression work remains SecurityBranches, and only remaining typed visits use DocumentNodes, without relabelling or double charging work",
+    "a Basic-valid Thing without an id reaches Complete unchanged",
+    "docs/resource-limits.csv remains at 195 fields and its generated projection, foundation/build.rs, tools/check-resource-limits.sh, td/src/validate.rs, and td/src/thing.rs are unchanged; the only td/src/components change is the admitted read-only pub(crate) Context storage seam",
+    "the exact implementation head passes design authority validation, the locked workspace suite, focused TD std/no-default tests, move-only doctests, clippy, Foundation no-default/async-no-std/std cells, TD no-default/std cells, the representation fixture, every Producer gate command, and normal mainline CI",
+]
+excluded_claims = [
+    "WP-200-CONSUMER-PROPERTY-READ-AGGREGATE or any aggregate Planning preflight, materialization, bounds barrier, lookup, draft, or compilation",
+    "PlanningItems charging",
+    "Servient reservation, publication, execution, lifecycle, or retained registration",
+    "OutboundRequest or Core binding changes",
+    "Consumer Property Read architecture-gate registration or acceptance",
+    "resource-schema, named-profile, generated-getter, or Basic-validation rule changes",
+    "WP-400, WP-600, broad WP-100 completion, or any successor-tranche admission",
+]
+
+[[verification]]
+command = "tools/check-design-artifacts.sh"
+status = "passed"
+
+[[verification]]
+command = "cargo test --workspace --locked"
+status = "passed"
+
+[[verification]]
+command = "tools/check-wp100-validated-thing-serde-representation.sh"
+status = "passed"
+
+[[verification]]
+command = "cargo test --locked -p clinkz-wot-td --lib --test validated_thing_test"
+status = "passed"
+
+[[verification]]
+command = "cargo test --locked -p clinkz-wot-td --no-default-features --lib --test validated_thing_test"
+status = "passed"
+
+[[verification]]
+command = "cargo test --locked -p clinkz-wot-td --doc"
+status = "passed"
+
+[[verification]]
+command = "cargo clippy --locked -p clinkz-wot-td --all-targets -- -D warnings"
+status = "passed"
+
+[[verification]]
+command = "cargo check --locked -p clinkz-wot-foundation --no-default-features"
+status = "passed"
+
+[[verification]]
+command = "cargo check --locked -p clinkz-wot-foundation --no-default-features --features async"
+status = "passed"
+
+[[verification]]
+command = "cargo check --locked -p clinkz-wot-foundation"
+status = "passed"
+
+[[verification]]
+command = "cargo check --locked -p clinkz-wot-td --no-default-features"
+status = "passed"
+
+[[verification]]
+command = "cargo check --locked -p clinkz-wot-td"
+status = "passed"
+
+[[verification]]
+command = "cargo test --locked -p clinkz-wot-core"
+status = "passed"
+
+[[verification]]
+command = "cargo test --locked -p clinkz-wot-planning"
+status = "passed"
+
+[[verification]]
+command = "cargo test --locked -p clinkz-wot-servient --test property_read"
+status = "passed"
+
+[[verification]]
+command = "cargo test --locked -p clinkz-wot-servient --lib"
+status = "passed"
+
+[[verification]]
+command = "cargo test --locked -p clinkz-wot-servient --no-default-features --test property_read"
+status = "passed"
+
+[[verification]]
+command = "cargo check --locked -p clinkz-wot-property-read-binding-fixture --no-default-features"
+status = "passed"
+
+[[verification]]
+command = "cargo test --locked -p clinkz-wot-property-read-binding-fixture"
+status = "passed"
+
+[[verification]]
+command = "cargo check --locked -p clinkz-wot-property-read-architecture-runner --no-default-features --features async"
+status = "passed"
+
+[[verification]]
+command = "cargo test --locked -p clinkz-wot-property-read-architecture-runner"
+status = "passed"
+
+[[verification]]
+command = "cargo test --locked -p clinkz-wot-protocol-bindings-zenoh --test target_property_read_feedback_probe -- --test-threads=1"
+status = "passed"
+
+[[verification]]
+command = "github-actions:mainline/validation@dddc00b6c069c8c2ad2fa204058412e1ed597da2"
+status = "passed"
+evidence = "github-actions-run:34190732268/job:101948086793"

@@ -33,13 +33,12 @@ active task session; they are not stored in this roadmap.
 ## Roadmap Frontier
 
 The v5.1 Consumer one-shot authority is active. The domain-entry review is
-complete, and the first WP-100 Consumer source tranche is complete. The next
-WP-100 validated-Thing source tranche is admitted under ADR-0013 after PR #72
-independently accepted its retained-representation and bounded-progress
-readmission correction. Production implementation may proceed only within that
-reviewed tranche boundary; the tranche remains incomplete. The Consumer
-architecture gate is not registered until its source prerequisites are
-assembled. All six
+complete, and the first two WP-100 Consumer source tranches are complete. The
+validated-Thing tranche remains bounded by the ADR-0013 readmission that PR #72
+independently accepted, including its retained-representation and incremental-
+progress correction; its completion makes no aggregate Planning or Consumer
+architecture-gate claim. The Consumer architecture gate is not registered
+until its source prerequisites are assembled. All six
 narrow Producer Property Read tranches and D48's
 generic transition-validation convergence are integrated. The aggregate
 `PROPERTY-READ-ARCHITECTURE` implementation and registered external mock

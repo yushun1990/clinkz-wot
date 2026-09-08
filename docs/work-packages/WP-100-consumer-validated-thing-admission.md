@@ -1,15 +1,17 @@
 # WP-100 Consumer Validated Thing Admission
 
-Status: ADMITTED under ADR-0013 for design revision v5.1. Github-pr:72
-independently reviewed and accepted the exact readmission revision at
-`30186a4b9098e8c35f02df1dd75868ea9b4eb3b4` after github-pr:71 correctly
-falsified the prior retained-source and bounded-progress completion claims.
-This admission-only transition records that the representation and progress
-correction below is accepted and moves the tranche from `planned` / `candidate`
-to `planned` / `admitted`. Production implementation may now begin only within
-the permitted paths and completion-evidence contract frozen by github-pr:72.
-The tranche remains incomplete; this transition creates no completion evidence
-and makes no architecture-gate claim.
+Status: ADMITTED under ADR-0013 for design revision v5.1; implementation
+complete with current evidence and a reaffirmed Producer gate impact
+disposition. Github-pr:72 independently reviewed and accepted the exact
+readmission revision at `30186a4b9098e8c35f02df1dd75868ea9b4eb3b4`
+after github-pr:71 correctly falsified the prior retained-source and
+bounded-progress completion claims.
+The admission-only transition recorded that the representation and progress
+correction below was accepted and moved the tranche from `planned` / `candidate`
+to `planned` / `admitted`. The completed implementation remains within the
+permitted paths and completion-evidence contract frozen by github-pr:72. Its
+evidence is `docs/evidence/WP-100-consumer-validated-thing.toml`; completion
+makes no architecture-gate claim.
 
 Readmission review location: github-pr:72.
 
