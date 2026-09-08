@@ -39,6 +39,9 @@ jobs:
       - name: Validate current technical authority
         run: tools/check-design-artifacts.sh
 
+      - name: Validate WP-100 serde representation boundary
+        run: tools/check-wp100-validated-thing-serde-representation.sh
+
       - name: Run locked workspace tests
         run: cargo test --workspace --locked
 

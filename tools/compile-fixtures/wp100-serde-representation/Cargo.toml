@@ -1,0 +1,17 @@
+[package]
+name = "clinkz-wot-td-serde-representation-fixture"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+clinkz-wot-td = { path = "../../../td", default-features = false }
+serde_json = { version = "=1.0.149", features = ["alloc"], default-features = false }
+
+[features]
+default = []
+std = ["clinkz-wot-td/std", "serde_json/std"]
+preserve-order = ["serde_json/preserve_order"]
+arbitrary-precision = ["serde_json/arbitrary_precision"]
+
+[workspace]

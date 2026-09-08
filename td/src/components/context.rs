@@ -20,6 +20,11 @@ pub struct Context {
 }
 
 impl Context {
+    /// Returns the retained entry storage for crate-internal resource census.
+    pub(crate) fn entry_storage(&self) -> (&[ContextEntry], usize) {
+        (self.entries.as_slice(), self.entries.capacity())
+    }
+
     /// Create a standard WoT 1.1 Context.
     /// By default, it contains only the 1.1 URI.
     pub fn new() -> Self {
