@@ -1,0 +1,8 @@
+[agents]
+# ClinkZ-WoT normally progresses serially. Subagents are opt-in for bounded,
+# independent, read-heavy work where delegation materially helps.
+enabled = false
+
+# If agents are explicitly enabled for a run, cap fan-out to avoid unbounded
+# coordination and context cost.
+max_concurrent_threads_per_session = 2
