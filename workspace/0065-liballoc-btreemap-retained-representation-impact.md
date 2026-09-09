@@ -319,10 +319,12 @@ the original pointer graph after normalization work has begun. The exact
 terminal spelling is frozen during authority migration together with its
 rollback and conversion-peak proof.
 
-The serde_json exact pin and the `preserve_order` / `arbitrary_precision`
-compile failures are no longer part of the selected product boundary. Legal
-feature unification is accepted as input and normalized through stable semantic
-APIs. The crate follows an ordinary declared stable-Rust/MSRV and semver
+The serde_json exact pin and the prior representation-guard compile failures
+for Host `preserve_order` / `arbitrary_precision` are no longer part of the
+selected product boundary. Legal feature unification is accepted as input and
+normalized through stable semantic APIs within each profile-supported feature
+graph; this does not require a `std`-only upstream feature to compile under
+`no_std`. The crate follows an ordinary declared stable-Rust/MSRV and semver
 dependency policy; it does not compile-guard an exact rustc/liballoc source or
 supported-target layout.
 
@@ -442,9 +444,13 @@ diagnostics, cleanup, and work-budget owners cover the full admission flow when
 each physical allocation is reserved by its actual checked `Layout`.
 
 The migrated authority accepts ordinary legal serde_json feature unification
-and freezes Host plus real `thumbv7em-none-eabihf` `no_std + alloc` evidence. It
-does not encode private liballoc layout. ADR-0013's separate readmission and
-ADR-0019's Consumer sequence remain unchanged.
+within each profile-supported graph. It freezes Host base/default,
+`preserve_order`, `arbitrary_precision`, and combined evidence, plus real
+`thumbv7em-none-eabihf` base `no_std + alloc` and `arbitrary_precision`
+evidence. In the resolved serde_json 1.0.149 graph, `preserve_order` enables
+`std`, so it and combined are not constrained-profile cells. This support
+matrix does not encode private liballoc layout. ADR-0013's separate readmission
+and ADR-0019's Consumer sequence remain unchanged.
 
 ## Readmission evidence required before production work
 
@@ -462,9 +468,10 @@ have independent acceptance and executable pre-code evidence for:
 - a fixed semantic-equivalence corpus covering known fields, optional
   distinctions, Context ordering, Form ordering/indices, nested extensions,
   long strings, and lossless numbers;
-- supported Host and real `no_std + alloc` compilation plans using ordinary
-  stable toolchains, plus downstream `preserve_order`, `arbitrary_precision`,
-  and combined feature cells that are expected to succeed rather than fail;
+- supported compilation plans using ordinary stable toolchains: Host
+  base/default, `preserve_order`, `arbitrary_precision`, and combined; real
+  `thumbv7em-none-eabihf` base `no_std + alloc` and `arbitrary_precision`; all
+  listed cells are expected to succeed;
 - zero-budget/no-progress, non-resettable lifetime-work, cancellation, and
   rollback contracts for normalization as well as Basic validation;
 - exact source/temporary/peak/contiguous reservation order using current
@@ -485,12 +492,14 @@ passing results that can falsify the new boundary:
    After normalization and destruction of the input Things, both semantic
    outputs must have equal snapshot footprints, and allocator-observed live
    requested bytes for each snapshot must not exceed its report.
-2. Re-run compact versus capacity-16,384 serde Maps and short versus long /
-   spare-capacity arbitrary-precision Numbers under `preserve_order`,
-   `arbitrary_precision`, and combined downstream unification. All supported
-   cells must compile; output footprints must follow normalized semantic
-   content, not caller spare capacity, and allocator-observed retained bytes
-   must be covered.
+2. Re-run compact versus capacity-16,384 serde Maps and, where
+   `arbitrary_precision` is enabled, short versus long / spare-capacity Numbers
+   across Host base/default, `preserve_order`, `arbitrary_precision`, and
+   combined downstream unification, plus real `thumbv7em-none-eabihf` base
+   `no_std + alloc` and `arbitrary_precision`. All listed supported cells must
+   compile; output footprints must follow normalized semantic content, not
+   caller spare capacity, and allocator-observed retained bytes must be
+   covered.
 3. Cover every typed map and every public nested extension-`Value` reachability
    path, with source inspection proving that a completed snapshot owns no
    opaque standard/serde allocation graph.

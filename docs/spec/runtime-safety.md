@@ -87,10 +87,16 @@ traversal arena; grow and seal overlap is explicit and charged. Therefore
 terminal cleanup drops a bounded fixed allocation set instead of recursively
 destroying one owned value per input depth.
 
-The path accepts ordinary legal serde_json feature unification. Default,
-`preserve_order`, `arbitrary_precision`, and combined graphs must all compile
-and normalize through stable semantic APIs. Exact serde_json, rustc, liballoc,
-target layout, and private allocator behavior are not compatibility authority.
+The path accepts ordinary legal serde_json feature unification within the
+feature graphs supported by each profile; this compatibility requirement does
+not require a `std`-only upstream feature to compile in a `no_std` profile.
+Host supports the base/default, `preserve_order`, `arbitrary_precision`, and
+combined graphs. The real `thumbv7em-none-eabihf` `no_std + alloc` profile
+supports the base `no_std + alloc` and `arbitrary_precision` graphs. In the
+resolved serde_json 1.0.149 graph, `preserve_order` enables `std`, so it and the
+combined graph are not supported constrained-profile cells. Exact serde_json,
+rustc, liballoc, target layout, and private allocator behavior are not
+compatibility authority.
 
 Every explicit Property Form operation and every normalized map-sort
 comparison advances only after its own `DocumentNodes` charge. Every

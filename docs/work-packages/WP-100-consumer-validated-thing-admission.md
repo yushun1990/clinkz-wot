@@ -517,19 +517,25 @@ category, together with its phase and numeric coordinate where applicable.
 
 The product boundary follows the workspace semver dependency and ordinary
 stable Rust/MSRV policy. It does not pin exact serde_json source, rustc,
-liballoc, target layout, or allocator internals. Legal downstream
-`preserve_order`, `arbitrary_precision`, and combined serde_json feature
-unification must compile and normalize through stable public semantic APIs.
-Object storage order and caller capacity disappear; arbitrary-precision number
-content remains lossless.
+liballoc, target layout, or allocator internals. Legal downstream serde_json
+feature unification must compile and normalize through stable public semantic
+APIs when the resulting graph is supported by the selected profile. This
+compatibility requirement does not require a `std`-only upstream feature to
+compile in a `no_std` profile. Object storage order and caller capacity
+disappear; arbitrary-precision number content remains lossless.
 
 The required compatibility cells are:
 
-- Host `x86_64-unknown-linux-gnu`: TD default, `preserve_order`,
+- Host `x86_64-unknown-linux-gnu`: TD base/default, `preserve_order`,
   `arbitrary_precision`, and combined feature graphs;
-- real `no_std + alloc` `thumbv7em-none-eabihf`: the same four feature graphs
-  using a fixture allocator and no host runtime; and
+- real `no_std + alloc` `thumbv7em-none-eabihf`: the base `no_std + alloc` and
+  `arbitrary_precision` feature graphs, using a fixture allocator and no host
+  runtime; and
 - the repository `no-default`, `async-no-std`, and `std` package cells.
+
+In the resolved serde_json 1.0.149 graph, `preserve_order` enables `std`.
+Therefore `preserve_order` and the combined graph are Host cells, not supported
+graphs for the real constrained profile.
 
 The same cursor algorithms, semantic outcomes, footprint formulas, and public
 views apply on Host and `no_std + alloc`. Pointer width and allocator overhead
@@ -610,9 +616,11 @@ An independent exact-head review must accept all of the following before any
    inspect raw/resolved URI and content metadata, apply effective operations,
    resolve effective security to NoSec, and retain original Form indices,
    without `&Thing`, snapshot parsing, allocation, or copied TD rules.
-5. Host and real `thumbv7em-none-eabihf` `no_std + alloc` compile prototypes for
-   default, `preserve_order`, `arbitrary_precision`, and combined serde_json
-   feature unification, all expected to succeed.
+5. Compile prototypes for every supported serde_json feature graph: Host
+   base/default, `preserve_order`, `arbitrary_precision`, and combined; real
+   `thumbv7em-none-eabihf` base `no_std + alloc` and `arbitrary_precision`. All
+   listed cells are expected to succeed; `preserve_order` and combined are not
+   constrained-profile cells because the upstream feature enables `std`.
 6. Exact progress traces for Basic validation, typed/direct decode,
    normalization, sorting, URI/string/number handling, seal, diagnostics,
    cancellation, every rollback cause, zero-budget no-progress, lifetime-
@@ -638,9 +646,12 @@ It must prove:
 1. Fresh-empty and retained-empty-root BTreeMap inputs normalize to semantically
    equal outputs with equal retained footprints; allocator-observed live arena
    requests do not exceed the report and return to baseline on owner drop.
-2. Compact and over-capacity serde Maps and short, long, and spare-capacity
-   arbitrary-precision Numbers pass in all legal feature graphs; normalized
-   footprints follow semantic content rather than caller capacity/history.
+2. Compact and over-capacity serde Maps and, where `arbitrary_precision` is
+   enabled, short, long, and spare-capacity Numbers pass in every supported
+   feature graph: Host base/default, `preserve_order`, `arbitrary_precision`,
+   and combined; real `thumbv7em-none-eabihf` base `no_std + alloc` and
+   `arbitrary_precision`. Normalized footprints follow semantic content rather
+   than caller capacity/history.
 3. Every typed map and nested extension reachability path enters only the three
    retained arenas, and successful source inspection finds no opaque standard
    or serde allocation graph.

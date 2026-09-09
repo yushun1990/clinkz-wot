@@ -258,7 +258,11 @@ pre_implementation_checks = [
     "cargo check --locked -p clinkz-wot-foundation",
     "cargo check --locked -p clinkz-wot-td --no-default-features",
     "cargo check --locked -p clinkz-wot-td",
+    "cargo check --locked -p clinkz-wot-td --features serde_json/preserve_order",
+    "cargo check --locked -p clinkz-wot-td --features serde_json/arbitrary_precision",
+    "cargo check --locked -p clinkz-wot-td --features serde_json/preserve_order,serde_json/arbitrary_precision",
     "cargo check --locked --target thumbv7em-none-eabihf -p clinkz-wot-td --no-default-features",
+    "cargo check --locked --target thumbv7em-none-eabihf -p clinkz-wot-td --no-default-features --features serde_json/arbitrary_precision",
 ]
 admission_review = "required-after-authority-migration"
 completion_evidence_keys = ["consumer-normalized-validated-thing"]
