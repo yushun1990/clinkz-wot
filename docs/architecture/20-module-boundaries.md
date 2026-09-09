@@ -35,9 +35,9 @@ only the umbrella is expected to compose every selected public crate.
 | Layer | Owns | Produces | Must not own |
 | --- | --- | --- | --- |
 | `clinkz-wot-foundation` | Resource reservations, work budgets, monotonic time, generations, profile-independent accounting | Bounded primitive values | TD vocabulary, interaction semantics, plans, registries, queues, protocol behavior |
-| `clinkz-wot-td` | Lossless TD/TM models, builders, Serde, W3C defaults, validation, URI values | Validated documents and pure views | Form/binding selection, runtime caches, transport behavior |
+| `clinkz-wot-td` | Lossless TD/TM models, builders, Serde, one Basic/default/security semantic kernel, normalized retained storage and URI values | Validated normalized owners and storage-independent pure views | Form/binding selection, runtime caches, transport behavior |
 | `clinkz-wot-core` | Protocol-neutral IDs, errors, payloads, handlers, security/codec contracts, immutable plan values, binding SPI values/traits, lifecycle outcomes | Semantic values and execution contracts | Application handles, plan compiler algorithms, global schedulers, universal subscription queues, protocol I/O |
-| `clinkz-wot-planning` | Effective-form resolution, capability indexes, logical-plan construction, binding compiler coordination, URI templates | Admitted-plan build output | Binding execution, Servient registries, runtime queues, concrete protocol I/O |
+| `clinkz-wot-planning` | Candidate/Form selection from TD-owned semantic inputs, capability indexes, logical-plan construction, binding compiler coordination, URI-template compilation | Admitted-plan build output | TD Basic/default/security reinterpretation, binding execution, Servient registries, runtime queues, concrete protocol I/O |
 | `clinkz-wot-servient` | Application facade, registration snapshot, plan-set ownership, admission, handler/security orchestration, route lifecycle, scheduling, cleanup, status | Produced/consumed handles and runtime events | Protocol syntax, transport I/O, TD reparsing, implicit Directory service |
 | `clinkz-wot-discovery` | Discovery/Directory client values, sessions, watches, publisher client, source envelopes | Source-bearing TD documents and client progress | Directory service, storage backend, server query/redaction policy, endpoint hosting |
 | Concrete binding crate | Compiler extension, capability declaration, protocol route/client artifacts, I/O, correlation, native flow control/multiplexing, auth extraction, cleanup | Complete binding registration bundle | Servient registry, handlers, shared TD defaulting, cross-binding scheduling, hidden unbounded tasks |
@@ -73,9 +73,19 @@ contain only protocol-specific data that cannot be shared. A binding compiler
 does not receive authority to reinterpret W3C defaults, choose a different
 operation, or access credentials.
 
-For the first Consumer Property Read aggregate, TD owns construction of the
-move-only Basic-validated `Thing`, representation-aware retained-source census,
-and effective-operation/security views. Planning owns deterministic preflight,
+For the first Consumer Property Read aggregate, TD owns both legal entries into
+one move-only `ValidatedThing`: a borrowed typed-`Thing` compatibility cursor
+with an additional-peak guarantee and a strict project-owned JSON
+builder/decoder with an absolute engine-owned input-through-retention
+guarantee. TD owns the single Basic/default/URI/security semantic kernel, typed
+fieldwise equivalence, the private normalized node/edge/byte snapshot, its
+structured allocation footprint, and terminal normalization rollback.
+
+Planning borrows only `ValidatedThingView`. It receives deterministic Property
+iteration/lookup, Property ordinal, original Form indices, raw and resolved URI,
+content metadata, effective operations/security, and security-definition scheme
+lookup. It does not receive `&Thing`, parse a snapshot, reconstruct a TD, or
+duplicate Basic/default/security rules. Planning owns deterministic preflight,
 complete plan/candidate materialization, evaluation of every compiler bound,
 the all-bounds-before-start barrier, sequential compilation, lookup sealing,
 and the TD-free aggregate draft. Planning never reserves Servient storage or
@@ -98,12 +108,14 @@ It schedules binding SPI progress but does not implement protocol I/O.
 
 In that same first Consumer slice, Servient owns the conservative persistent-
 capacity reservation between Planning preflight and materialization, the
-source-to-persistent-document ledger reclassification, the independent
-Thing-slot and plan-set generation allocators, retention of the one complete
-registration and validated source, the final cancellation/seal check, atomic
-publication, plan-set leases, drain, and reclamation. It does not rescan the
-TD, repeat Planning's census, rebuild the lookup, or copy target names into the
-binding request.
+source-to-persistent-document ledger reclassification of exact sealed-arena
+requested bytes, the independent Thing-slot and plan-set generation
+allocators, retention of the one normalized `ValidatedThing` and complete
+registration, the final cancellation/seal check, atomic publication, plan-set
+leases, drain, and reclamation. It preserves the structured footprint and does
+not reinterpret aggregate capacity as a contiguous allocation. It does not
+rescan or reconstruct the TD, repeat semantic/default/security work, rebuild
+the lookup, or copy target names into the binding request.
 
 ## Binding boundaries
 

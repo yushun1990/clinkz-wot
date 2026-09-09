@@ -135,19 +135,27 @@ under a live lease for that exact plan-set record. The lease, rather than
 numeric coincidence or global uniqueness, proves which record may resolve an
 artifact.
 
-The published record retains the same validated source `Thing`, its reconciled
-ledger charge, the sealed TD-free aggregate, and the one finalized complete
-Consumer registration. Host records share ownership of that registration;
-application-static roots retain it directly. Neither representation creates a
-general registration snapshot, per-plan registration pin, or runtime binding
-scan for this slice.
+For this aggregate, Planning borrows only `ValidatedThingView`, emits the sealed
+TD-free aggregate draft, and neither owns nor reconstructs the source. The
+published Servient record retains the one move-only normalized
+`ValidatedThing` owner, including its private exact-length node/edge/byte
+snapshot, structured footprint, counts, and admission ledger, together with
+the sealed aggregate and one finalized complete Consumer registration. After
+the destination-capacity check, Servient reclassifies exactly the snapshot's
+requested allocation bytes from source to persistent-document accounting;
+this changes neither the physical allocations nor the distinct footprint
+facts. Host records share ownership of the registration; application-static
+roots retain it directly. Neither representation creates a general
+registration snapshot, per-plan registration pin, or runtime binding scan for
+this slice.
 
 Starting close prevents new plan-set leases and binding calls. Existing calls,
 leases, and cleanup owners retain the record until terminal settlement.
 Reclamation begins only after all of them are terminal and advances
 monotonically under `WorkClass::PlanningItems` plus the existing
 `plan_reclaim_bytes_per_step_max`; only then may the plan set, registration
-owner, and retained source be released.
+owner, and normalized `ValidatedThing` owner be released, reclaiming its fixed
+sealed-arena allocation set and ledger charge.
 
 ## Hot-path contract
 

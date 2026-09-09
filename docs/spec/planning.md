@@ -106,15 +106,21 @@ policy MUST remain visible in immutable diagnostics.
 
 ## Scope and invariants
 
-Planning starts from a validated TD view or produced-Thing draft plus immutable
-policy and registration snapshots. It ends with an admitted immutable plan set.
+Planning starts from a TD-owned validated semantic view or produced-Thing draft
+plus immutable policy and registration snapshots. For the normalized Consumer
+retained-source path that view is `ValidatedThingView`; Planning never receives
+the private snapshot or a reconstructed `Thing`. It ends with an admitted
+immutable plan set.
 The following invariants apply to every profile:
 
-- Planning applies the pure TD default rules supplied by `clinkz-wot-td`; it
-  does not copy those rules into a binding.
-- `base` resolution, operation defaulting, effective security inheritance,
-  URI-template compilation, form identity, and candidate ordering happen once
-  in shared planning.
+- Planning consumes TD-owned default/effective results. The completed direct-
+  `Thing` leaf calls the pure `clinkz-wot-td::td_defaults` helpers; the future
+  normalized Consumer aggregate reads the same authority through
+  `ValidatedThingView`. Planning does not copy those rules into its own walker
+  or a binding.
+- `base` resolution, operation defaulting, and effective-security inheritance
+  happen once in TD semantic authority for the normalized path. URI-template
+  compilation, form identity, and candidate ordering happen once in Planning.
 - A binding compiler receives one already resolved and already selected
   candidate. It cannot select another form, operation, security expression, or
   binding owner.
@@ -941,6 +947,14 @@ pub trait PlanCompiler<R: ?Sized> {
 }
 ```
 
+This frozen `PlanBuildInput<&Thing>` shape remains the completed exact-
+coordinate Producer/Consumer leaf contract and its existing evidence remains
+current. It is not the input contract for the later all-readable Consumer
+aggregate. That successor must adapt the same behavioral leaf to TD's
+`ValidatedThingView` before it enters source admission; it may not obtain
+`&Thing` by reconstructing one from the normalized owner. This authority
+migration changes no existing Planning source or completed tranche status.
+
 `PlanBuildOutput<A>` owns a bounded collection of
 `LogicalInteractionPlan`, `BindingArtifactEnvelope<A>`, and
 `BindingArtifactRef` values and provides slice accessors plus consuming
@@ -1165,16 +1179,18 @@ first Consumer gate MUST NOT depend on those deferred mechanisms.
 ### First Consumer Property Read aggregate
 
 The first aggregate contains every effective readable Property Read Form from
-one owned Basic-validated `Thing` and exactly one finalized complete
-Consumer-capable Property Read registration. Properties are visited in the
-typed representation's `BTreeMap` key order; each property's Forms remain in
-source order, and TD-owned effective-operation defaulting determines whether a
-Form supports `ReadProperty`. Every declared property receives a lookup row,
-including an empty range when it has no readable Form. Every retained
-coordinate uses registration ordinal and candidate order zero, one eager
-`ConsumerCall` artifact, and no credential/provider or binding-carried security
-material; effective security must be exactly one locally resolved NoSec
-definition.
+one borrowed `ValidatedThingView` and exactly one finalized complete Consumer-
+capable Property Read registration. Properties are visited by the view's
+deterministic normalized key-order ordinal; each property's Forms retain their
+original array indices. TD-owned view queries supply raw and resolved Form URI,
+content type/coding, subprotocol/scopes, effective-operation defaulting, and
+effective-security inheritance plus security-definition scheme lookup.
+Planning neither parses snapshot storage nor copies those rules. Every declared
+property receives a lookup row, including an empty range when it has no readable
+Form. Every retained coordinate uses registration ordinal and candidate order
+zero, one eager `ConsumerCall` artifact, and no credential/provider or binding-
+carried security material; effective security must be exactly one TD-resolved
+NoSec definition.
 
 Planning owns two opaque TD-lifetime-free aggregate values:
 
@@ -1187,12 +1203,14 @@ Planning owns two opaque TD-lifetime-free aggregate values:
   exact `PlanFootprint`. It contains no TD borrow, binding execution object,
   publication state, or authority to rebuild indexes after handoff.
 
-Planning first preflights the validated owner. A Basic-valid Thing without an
-ID fails here, before capacity reservation, materialization, compiler bounds,
-or compiler start. Only after preflight succeeds does Servient reserve the
-conservative persistent-capacity envelope. Planning may then materialize one
-logical plan/candidate for every retained coordinate and evaluate each
-compiler's pure `bounds` operation exactly once.
+Planning first preflights the validated view. A Basic-valid semantic value
+without an ID fails here, before capacity reservation, materialization,
+compiler bounds, or compiler start. Only after preflight succeeds does Servient
+reserve the conservative persistent-capacity envelope. Planning may then
+materialize one logical plan/candidate for every retained coordinate and
+evaluate each compiler's pure `bounds` operation exactly once. The preflight
+and draft borrow no raw `Thing`, snapshot arena, or storage offset; owned output
+remains usable after the validated owner and view are gone.
 
 Every bound must declare only `WorkClass::BindingPolls`, with a nonzero total
 no greater than the existing `plan_compile_work_units_per_step_max`. All

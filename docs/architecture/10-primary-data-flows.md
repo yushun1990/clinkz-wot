@@ -92,8 +92,10 @@ The first v5.1 Consumer Property Read aggregate is the narrower executable
 projection of that broad flow:
 
 ```text
-owned Thing
-  -> TD-owned bounded Basic validation and representation-aware census
+borrowed compatibility Thing or strict project-owned JSON builder/decoder
+  -> TD-owned bounded Basic validation + typed semantic normalization
+  -> move-only ValidatedThing { private sealed snapshot, structured footprint }
+  -> Planning borrows only the allocation-free TD semantic view
   -> Planning deterministic one-registration/all-readable preflight
   -> Servient conservative persistent-capacity reservation
   -> Planning complete plan/candidate materialization
@@ -101,7 +103,8 @@ owned Thing
   -> completed all-bounds-before-start barrier
   -> sequential compiler start and eager compilation
   -> Planning-owned sealed TD-free aggregate draft
-  -> Servient atomic publication with retained Thing and registration owner
+  -> Servient source-account reclassification and atomic publication with one
+     normalized ValidatedThing owner and one registration owner
 
 read_property(name, options)
   -> lease the published plan set
@@ -110,6 +113,22 @@ read_property(name, options)
   -> execute only the Core-sealed complete registration
   -> settle the call and release the lease
 ```
+
+The compatibility entry leaves the caller's opaque `Thing` graph outside the
+engine's absolute memory claim and accounts the exact additional project-owned
+conversion peak. The strict builder/decoder accounts engine-owned storage from
+its first allocation through retention. Both produce the same normalized
+snapshot, semantic view, Basic/default/security results, counts, and terminal
+outcomes. No successful owner retains or reconstructs a raw `Thing`.
+
+The TD view supplies deterministic Property iteration/lookup, Property
+ordinal, original Form index, raw and resolved URI, content metadata, effective
+operations/security, and security-definition scheme lookup. Planning neither
+parses retained storage nor repeats Basic/default/security rules. The snapshot
+has exact-length node, edge, and byte arenas; allocation count, total requested
+bytes, largest actual request, temporary peak, and additional conversion peak
+remain distinct through Servient handoff. Aggregate capacity is not a physical
+contiguous allocation.
 
 Any validation, security, ledger, materialization, bounds, compilation,
 reconciliation, cancellation, or seal failure terminates the unpublished

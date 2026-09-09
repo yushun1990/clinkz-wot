@@ -143,17 +143,81 @@ Physically live engine-owned arena, pool, heap, or exclusively reserved
 caller-provided capacity is charged. Verification records which representation
 is measured. Rollback metadata MUST NOT duplicate the resources it protects.
 
-For the first v5.1 Consumer Property Read aggregate, the same owned typed
-`Thing` is both the validated admission input and the retained source view.
-Servient initially charges a conservative source envelope using the existing
-`retained_source_bytes_*`, document, peak-live, and largest-contiguous limits.
-After TD-owned validation and representation-aware census, one narrow checked
-`AdmissionLedger` operation reclassifies the same live bytes from the source
-account to persistent-document accounting. The operation checks destination
-capacity before changing either account; success changes neither total live
-bytes, peak-live bytes, nor largest-contiguous allocation, and failure leaves
-the source charge and owned value intact for rollback. It is an ownership-
-preserving account transfer, not a second reservation or a cloned document.
+For the first v5.1 Consumer Property Read aggregate, TD constructs a normalized
+retained snapshot with three possible exact-length allocations: node, edge,
+and byte arenas. Its structured footprint keeps five values distinct:
+
+- total requested bytes of the live sealed arenas;
+- count of their non-empty allocations;
+- largest actual single allocation request across build, grow, seal, and final
+  retention;
+- peak simultaneously live temporary requested bytes; and
+- peak simultaneously live project-owned bytes added by conversion over the
+  selected entry baseline, including old/new grow or seal overlap.
+
+An `AdmissionLedger::try_reserve_source` or `try_reserve_temporary` call for
+this path corresponds to one actual checked `Layout` request. Callers MUST NOT
+reserve an aggregate footprint through one such call and thereby report it as
+a physical contiguous allocation. Account usage and peak-live values sum the
+individually reserved requests; largest-contiguous observes their maximum.
+The existing `retained_source_bytes_*`, `admission_temporary_bytes_*`,
+`peak_live_bytes_per_admission_max`,
+`admission_peak_live_bytes_global_max`, and
+`largest_contiguous_allocation_bytes_max` rows therefore remain sufficient.
+Allocation count is bounded by the frozen arena catalog and needs no new global
+resource field.
+
+`AdmissionLedger` is the generation-bearing per-owner/per-admission physical
+account; it records local live, peak, and largest-request facts but is not by
+itself the concurrent global aggregator. The admission coordinator owns the
+corresponding parent/global allowances under existing `ResourceAccount` and
+Servient resource-account authority. It caps the child operation before TD
+entry, retains that outer reservation while the cursor is live, reconciles it
+from the exact footprint on `Complete`, and releases it on every other terminal
+or cursor abandonment. No callback or allocation occurs between outer
+reservation and child-ledger ownership transfer. Implementing that coordinator
+belongs to the later Servient tranche; this migration changes its contract but
+does not advance it.
+
+The arbitrary-`Thing` compatibility entry borrows a pre-existing typed value.
+Foundation can guarantee only the additional project-owned conversion peak
+over that entry baseline; it cannot retroactively charge caller allocation
+history. The strict project-owned JSON builder/decoder begins accounting at its
+first controlled allocation and provides an absolute engine-owned input-
+processing-through-retention bound. Its borrowed input buffer remains caller
+capacity but its length and processing work are bounded. The two entries use
+the same source/temporary accounts and snapshot representation; this guarantee
+difference is not hidden by one ambiguous peak scalar.
+
+Inline `ValidatedThing` and Servient record capacity is not an allocation
+request and remains in its owning slot/runtime capacity. It is not folded into
+largest-contiguous. Allocator-private headers, bins, and rounding require a
+separate allocator-specific surcharge if a profile chooses to govern them.
+
+After TD-owned Basic validation, normalization, semantic-equivalence checking,
+and exact-length seal, the completed owner keeps one `AdmissionLedger`. The
+existing checked reclassification operation moves exactly the snapshot's total
+requested bytes from source to persistent-document accounting after checking
+destination capacity. Success changes no physical allocation, allocation
+count, total live bytes, conversion peak, or largest actual request. Failure
+leaves the source charge and normalized owner intact for rollback. It is an
+account-classification transfer, not a second reservation, clone, or arena
+allocation.
+
+Normalization reserves in this order: check structural and lifetime-work
+bounds; charge each work/byte unit before processing; check final or current
+build capacity; check the source/temporary account, operation/global peak, and
+actual contiguous request; precharge one `CleanupItems` unit for the live
+allocation; reserve the exact checked `Layout`; then allocate. A grow or seal
+reserves the replacement while the old allocation remains live and releases
+the old charge only after successful transfer. Invalid input, Basic invalidity,
+limit, cancellation, allocation/arithmetic failure, or equivalence failure
+fixes the first cause and releases all partial account charges before exposing
+a terminal. This tranche retains only a fixed inline invalid/limit/conversion
+diagnostic (category, phase, and numeric coordinate), so its diagnostic account
+stays at zero and no diagnostic allocation or resource row is required. The
+existing allocation-owning public `ValidateError` adapter is not used as the
+normalization terminal.
 
 ## Constrained storage
 
@@ -195,15 +259,32 @@ discriminants after the existing ten entries: `DocumentNodes` and
 separately admitted `WP-100-CONSUMER-VALIDATED-THING` tranche; this authority
 does not itself admit that source change.
 
-`DocumentNodes` charges only typed-document validation and census visits not
+`DocumentNodes` charges generic typed-document validation, normalization,
+semantic-equivalence, map-sort comparisons/moves, and structural visits not
 already owned by a more specific class. Typed schema-node visits remain
-`JsonSchemaNodes`, URI-template bytes remain `UriBytes`, and security branches
-remain `SecurityBranches`; work is neither relabelled nor double charged merely
-because it occurs during validation. One validation owns a non-resettable
-lifetime remainder derived from the existing
-`document_validation_work_units_max`. Host may drive the same pure cursor to
-completion synchronously, while application-static callers may resume it;
-fresh per-step budgets do not replace that lifetime remainder.
+`JsonSchemaNodes`; strict JSON bytes and typed source bytes read remain
+`CodecInputBytes`; normalized bytes emitted or copied remain
+`CodecOutputBytes`; URI bytes remain `UriBytes`; security branches remain
+`SecurityBranches`; and destruction of one live arena consumes a prepaid
+`CleanupItems` unit. Work is neither
+relabelled nor double charged merely because it occurs during normalization.
+Every accepted class-specific unit also consumes one unit from a shared
+non-resettable lifetime remainder derived from the existing
+`document_validation_work_units_max`; byte classes consume one unit per byte.
+Prepaid cleanup consumes both units before its allocation becomes live. Host
+may drive the same pure cursor to completion synchronously, while application-
+static callers resume it; fresh per-step budgets do not replace that lifetime
+remainder. Exhausting it is a resource limit, not Basic invalidity.
+
+The normalized node and edge elements own no nested allocation or recursive
+drop. The exhaustive three-retained/four-temporary allocation catalog makes
+terminal release fixed and bounded independently of document depth. Deep input
+rejection MUST NOT perform an uncharged recursive `Thing`, map, vector, JSON,
+or task-tree drop inside TD. Compatibility input destruction remains with its
+borrowed caller. Dropping an unpublished cursor may only consume its prepaid
+fixed-allocation cleanup and release its owned ledger; any future fallible or
+unbounded destruction requires an explicit cleanup owner and architecture
+review.
 
 `PlanningItems` charges aggregate enumeration, row construction, lookup
 sealing, reconciliation, and reclamation. A monotonic cursor visits each

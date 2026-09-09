@@ -1,6 +1,6 @@
 # 0065 liballoc BTreeMap Retained Representation Impact
 
-Status: DECIDED
+Status: MIGRATED
 
 Kind: ADR-0013 implementation-impact review and retained-representation
 architecture decision
@@ -15,6 +15,8 @@ Impact review location: github-pr:75
 
 Decision review location: github-pr:76
 
+Authority migration review location: github-pr:78
+
 ## Question
 
 What stable, explicit, and verifiable retained representation can preserve the
@@ -22,11 +24,11 @@ same TD semantics while supporting provable resource admission on ordinary
 stable Rust, Host, and `no_std + alloc`, without making caller allocation
 history or private liballoc layout part of the product contract?
 
-This topic now selects an architecture direction. It remains a non-authoritative
-workspace decision until the conclusion is migrated into every affected
-authority and independently accepted. It does not authorize production Rust,
-readmit the tranche, produce completion evidence, or make any WP-100, Consumer
-architecture-gate, or successor-tranche claim.
+This topic selected the normalized retained-snapshot direction. The conclusion
+is now migrated into its authoritative owners, whose exact contracts supersede
+this historical workspace explanation. Migration does not authorize production
+Rust, readmit the tranche, produce completion evidence, or make any WP-100,
+Consumer architecture-gate, or successor-tranche claim.
 
 ## Impact finding
 
@@ -317,10 +319,12 @@ the original pointer graph after normalization work has begun. The exact
 terminal spelling is frozen during authority migration together with its
 rollback and conversion-peak proof.
 
-The serde_json exact pin and the `preserve_order` / `arbitrary_precision`
-compile failures are no longer part of the selected product boundary. Legal
-feature unification is accepted as input and normalized through stable semantic
-APIs. The crate follows an ordinary declared stable-Rust/MSRV and semver
+The serde_json exact pin and the prior representation-guard compile failures
+for Host `preserve_order` / `arbitrary_precision` are no longer part of the
+selected product boundary. Legal feature unification is accepted as input and
+normalized through stable semantic APIs within each profile-supported feature
+graph; this does not require a `std`-only upstream feature to compile under
+`no_std`. The crate follows an ordinary declared stable-Rust/MSRV and semver
 dependency policy; it does not compile-guard an exact rustc/liballoc source or
 supported-target layout.
 
@@ -411,51 +415,42 @@ is not conservative proof.
 - weakening the evidence wording while continuing to enforce a physical byte
   ceiling from content-only census.
 
-## Required authority migration
+## Authority migration record
 
-This `DECIDED` topic is not implementation authority. A later docs-only
-migration must update, at minimum:
+The docs-only authority migration projects the decision into:
 
-- `docs/spec/runtime-safety.md`: replace exact-Thing/serde-guard retention with
-  semantic-equivalence, normalized snapshot, and no-raw-Thing publication
-  rules;
-- `docs/spec/foundation.md`: define requested-layout accounting, source versus
-  temporary normalization accounts, additional-peak baseline, strict
-  project-owned input construction, reconciliation, and reclassification;
-- `docs/work-packages/WP-100-core.md`: replace the successor API/storage/work
-  boundary and enumerate all legitimate TD implementation paths;
-- `docs/work-packages/WP-100-consumer-validated-thing-admission.md`: supersede
-  the github-pr:72 representation correction, freeze the exact public terminal
-  and view/footprint APIs, supported cells, conversion phases, permitted paths,
-  and evidence identities;
-- `docs/api-ownership.csv`: remove the exact `validated_thing_thing` projection
-  and register the storage-independent view, structured footprint, and any
-  strict source-builder/conversion surface actually selected;
-- `docs/architecture/10-primary-data-flows.md` and
-  `docs/architecture/20-module-boundaries.md`: replace the exact retained Thing
-  in the Consumer flow with TD normalization, the semantic view, and one
-  Servient-owned snapshot;
-- `docs/work-packages/index.toml`: update authoritative artifacts, API items,
-  implementation paths, checks, evidence key/path, and the independently
-  reviewed readmission revision while leaving the tranche `candidate` until a
-  separate admission-only transition;
-- `docs/requirements.csv` only if the registered evidence projection or owner
-  path changes; this decision refines existing `DOC-RUNTIME-001`,
-  `ADMIT-MEM-001`, `ADMIT-TXN-001`, and constrained-work/ownership identities
-  rather than activating a new requirement.
+- `docs/work-packages/WP-100-consumer-validated-thing-admission.md` for the
+  exact API, private allocation catalog, phases, reservation order, supported
+  cells, implementation paths, and pre/post-code evidence boundaries;
+- `docs/spec/runtime-safety.md`, `docs/spec/foundation.md`,
+  `docs/api-ownership.csv`, and `docs/state-machines.toml` for typed semantic
+  equivalence, complete resource responsibility, footprint categories,
+  terminal ownership, rollback, and cleanup;
+- `docs/architecture/10-primary-data-flows.md`,
+  `docs/architecture/20-module-boundaries.md`, and
+  `docs/architecture/50-servient-runtime-lifecycle.md` for the one normalized
+  owner and its TD/Planning/Servient handoffs;
+- `docs/spec/planning.md`, `docs/work-packages/WP-200-planning.md`, and
+  `docs/work-packages/WP-400-servient.md` for the downstream contract impact
+  without advancing either work package; and
+- `docs/work-packages/WP-100-core.md`, `docs/work-packages/index.toml`, and
+  `PLAN.md` for the exact candidate boundary and durable roadmap frontier.
 
-This decision PR corrects `PLAN.md` only to the coarse current fact that PR #75
-withdrew admission and that a workspace decision is not implementation
-authority. A later migration changes the roadmap again only if its durable
-frontier changes. ADR-0013's impact/readmission process and ADR-0019's Consumer
-one-shot sequence remain applicable and need no semantic amendment for this
-storage decision.
+The audit found no changed requirement identity or evidence projection in
+`docs/requirements.csv`, and no missing resource row or `WorkClass` in
+`docs/resource-limits.csv`; both remain unchanged authority. Existing retained
+source, admission temporary, live-peak, largest-contiguous-request,
+diagnostics, cleanup, and work-budget owners cover the full admission flow when
+each physical allocation is reserved by its actual checked `Layout`.
 
-The migration must explicitly review the ordinary stable-Rust/MSRV policy,
-serde_json semver/features, Host target, and at least one real `no_std + alloc`
-target. It must not encode exact liballoc layout as compatibility authority. The
-existing resource rows appear sufficient; adding a field or work class requires
-a concrete falsifiable gap rather than being assumed by this decision.
+The migrated authority accepts ordinary legal serde_json feature unification
+within each profile-supported graph. It freezes Host base/default,
+`preserve_order`, `arbitrary_precision`, and combined evidence, plus real
+`thumbv7em-none-eabihf` base `no_std + alloc` and `arbitrary_precision`
+evidence. In the resolved serde_json 1.0.149 graph, `preserve_order` enables
+`std`, so it and combined are not constrained-profile cells. This support
+matrix does not encode private liballoc layout. ADR-0013's separate readmission
+and ADR-0019's Consumer sequence remain unchanged.
 
 ## Readmission evidence required before production work
 
@@ -473,9 +468,10 @@ have independent acceptance and executable pre-code evidence for:
 - a fixed semantic-equivalence corpus covering known fields, optional
   distinctions, Context ordering, Form ordering/indices, nested extensions,
   long strings, and lossless numbers;
-- supported Host and real `no_std + alloc` compilation plans using ordinary
-  stable toolchains, plus downstream `preserve_order`, `arbitrary_precision`,
-  and combined feature cells that are expected to succeed rather than fail;
+- supported compilation plans using ordinary stable toolchains: Host
+  base/default, `preserve_order`, `arbitrary_precision`, and combined; real
+  `thumbv7em-none-eabihf` base `no_std + alloc` and `arbitrary_precision`; all
+  listed cells are expected to succeed;
 - zero-budget/no-progress, non-resettable lifetime-work, cancellation, and
   rollback contracts for normalization as well as Basic validation;
 - exact source/temporary/peak/contiguous reservation order using current
@@ -496,12 +492,14 @@ passing results that can falsify the new boundary:
    After normalization and destruction of the input Things, both semantic
    outputs must have equal snapshot footprints, and allocator-observed live
    requested bytes for each snapshot must not exceed its report.
-2. Re-run compact versus capacity-16,384 serde Maps and short versus long /
-   spare-capacity arbitrary-precision Numbers under `preserve_order`,
-   `arbitrary_precision`, and combined downstream unification. All supported
-   cells must compile; output footprints must follow normalized semantic
-   content, not caller spare capacity, and allocator-observed retained bytes
-   must be covered.
+2. Re-run compact versus capacity-16,384 serde Maps and, where
+   `arbitrary_precision` is enabled, short versus long / spare-capacity Numbers
+   across Host base/default, `preserve_order`, `arbitrary_precision`, and
+   combined downstream unification, plus real `thumbv7em-none-eabihf` base
+   `no_std + alloc` and `arbitrary_precision`. All listed supported cells must
+   compile; output footprints must follow normalized semantic content, not
+   caller spare capacity, and allocator-observed retained bytes must be
+   covered.
 3. Cover every typed map and every public nested extension-`Value` reachability
    path, with source inspection proving that a completed snapshot owns no
    opaque standard/serde allocation graph.

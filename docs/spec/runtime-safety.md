@@ -54,51 +54,97 @@ private state is built before one publication transition, and every failure
 releases reservations idempotently. Cancellation is checked at bounded work
 intervals and before publication.
 
-For the first v5.1 Consumer Property Read admission, the input is one opaque,
-move-only TD-owned validated value. Successful construction owns the exact
-typed `Thing`, proves complete `ValidationLevel::Basic`, records checked
-structural limits and a conservative representation-aware retained-source
-census, and exposes neither an unchecked constructor nor mutable raw-Thing
-projection. Serialized length and `size_of::<Thing>()` alone are not a valid
-retained-footprint proof. Host and application-static profiles drive the same
-bounded pure validation cursor; Host may complete it synchronously, while the
-static profile resumes it with its retained lifetime allowance.
+For the first v5.1 Consumer Property Read admission, successful construction
+owns one move-only TD `ValidatedThing` whose physical source is a private,
+immutable, project-controlled normalized snapshot. It owns no caller `Thing`,
+opaque standard/serde container, caller spare capacity, or input borrow. It
+proves complete `ValidationLevel::Basic`, typed fieldwise semantic equivalence
+for the compatibility entry, checked structural counts, and an exhaustive
+requested-allocation footprint. No unchecked constructor, `&Thing`, mutable
+view, raw arena, or storage offset is public.
 
-This retained-source path supports TD's exactly pinned `serde_json 1.0.149`
-default retained representations: BTreeMap-backed `Map<String, Value>` and the
-allocation-free scalar Number. Because Cargo feature unification can otherwise
-replace those private representations, the TD validation module has
-compile-time guards requiring the Map wrapper to have the locked BTreeMap
-representation size and Number not to require drop. Unified
-`preserve_order`/IndexMap or `arbitrary_precision`/String-backed builds fail TD
-compilation with an explicit retained-source diagnostic; they are not runtime
-inputs that can bypass census. These guards select a supported representation
-and are never used as byte-count approximations. Changing the exact serde_json
-version or either guarded representation requires impact review.
+Compatibility conversion borrows a typed `Thing` and provides an exact
+additional project-owned peak over the pre-existing caller baseline. The
+strict project-owned JSON builder/decoder charges every engine-owned
+allocation from first input processing through retained completion and provides
+the absolute engine-owned admission path required by application-static users.
+Both drive the same bounded cursor, normalized representation, TD semantic
+kernel, terminal model, and view; Host may drive it synchronously while a
+static caller resumes it.
 
-Every explicit Property Form operation is inspected only after its own
-`DocumentNodes` charge. Every security-expression root or combo child is
-advanced only after its own `SecurityBranches` charge. No whole operation list
-is scanned and no externally sized security batch is copied or enqueued ahead
-of those charges. These progress rules also constrain work used only to derive
-the retained readable-Form count; they do not duplicate Basic validation.
+Semantic equivalence is defined over the typed `Thing` model: all known fields
+and optional distinctions, ordered sequences and original Form indices, map
+associations, string/URI content, and nested extension values including
+lossless numbers. The compatibility path traverses typed fields directly. It
+MUST NOT serialize and deserialize the `Thing`, use serialized length as the
+equivalence oracle, or reject a Basic-valid typed value because a serializer is
+stricter than Basic validation.
 
-The validated `Thing` remains the one retained application/source view after
-publication and is never cloned merely for accounting. Source-to-persistent-
-document reclassification preserves the same owned representation and total
-live/peak allocation truth. A Basic-valid Thing without an ID is rejected by
-Consumer preflight before persistent-capacity reservation, materialization,
-compiler bounds, or compiler start; the slice does not synthesize an identity
-or globally strengthen Basic validation.
+The retained snapshot has exactly three possible exact-length allocations: a
+typed node arena, an edge/range arena, and a byte arena. Its nodes own no nested
+allocation. Build storage is limited to mutable node/edge/byte arenas and one
+traversal arena; grow and seal overlap is explicit and charged. Therefore
+terminal cleanup drops a bounded fixed allocation set instead of recursively
+destroying one owned value per input depth.
 
-Validation, preflight, conservative persistent-capacity reservation,
+The path accepts ordinary legal serde_json feature unification within the
+feature graphs supported by each profile; this compatibility requirement does
+not require a `std`-only upstream feature to compile in a `no_std` profile.
+Host supports the base/default, `preserve_order`, `arbitrary_precision`, and
+combined graphs. The real `thumbv7em-none-eabihf` `no_std + alloc` profile
+supports the base `no_std + alloc` and `arbitrary_precision` graphs. In the
+resolved serde_json 1.0.149 graph, `preserve_order` enables `std`, so it and the
+combined graph are not supported constrained-profile cells. Exact serde_json,
+rustc, liballoc, target layout, and private allocator behavior are not
+compatibility authority.
+
+Every explicit Property Form operation and every normalized map-sort
+comparison advances only after its own `DocumentNodes` charge. Every
+security-expression root or combo child advances only after its own
+`SecurityBranches` charge. String/number/URI bytes and strict JSON input bytes
+are charged before copy, formatting, resolution, or decode. No whole list,
+batch, serializer output, recursive task tree, or sort scratch allocation is
+created first. These progress rules derive the retained readable-Form count and
+normalized storage without duplicating Basic validation.
+
+One TD-owned storage-neutral semantic kernel is the Basic/default/URI/security
+authority for both `Thing` and normalized snapshot adapters. The allocation-
+free `ValidatedThingView` exposes identity, deterministic Property iteration
+and lookup, Property ordinal, original Form index, raw and resolved URI,
+content metadata, effective operations/security, and security-definition
+scheme lookup. Planning MUST NOT reconstruct a `Thing`, parse the snapshot, or
+copy those rules.
+
+The normalized `ValidatedThing` remains the one retained application/source
+owner after publication. Source-to-persistent-document reclassification moves
+only the sealed arenas' total requested bytes and preserves physical storage,
+allocation count, live/peak truth, and largest actual request. Aggregate
+capacity reservation is never treated as a contiguous physical allocation. A
+Basic-valid semantic value without an ID is rejected by Consumer preflight
+before persistent-capacity reservation, materialization, compiler bounds, or
+compiler start; the slice does not synthesize identity or strengthen Basic
+validation.
+
+Input inspection, Basic validation, normalization, seal, semantic-equivalence
+comparison, Planning preflight, conservative persistent-capacity reservation,
 materialization, the all-coordinate bounds barrier, compilation,
 reconciliation, and the final cancellation check are unpublished phases.
-Cancellation is observed before external/compiler callbacks and at bounded
-pure-work intervals. Failure or cancellation fixes the first cause, starts no
-new compiler work, aborts the one live pure cursor at most once, releases all
+Cancellation is observed before work and callbacks and at bounded intervals.
+Invalid, limit, cancellation, and conversion failure first enter the registered
+normalization rollback state. The first cause remains immutable; no terminal is
+returned until every partial project allocation and ledger reservation is
+released. Precharged fixed-allocation cursor drop is the only implicit cleanup
+and performs no recursive semantic destruction. Later aggregate failure starts
+no new compiler work, aborts the one live pure cursor at most once, releases all
 still-uncommitted reservations idempotently, spends the reserved generation,
 and publishes neither a handle nor a partial lookup.
+
+The normalization terminal never owns the existing allocation-bearing,
+recursive `ValidateError`. It stores a fixed inline invalid category, cause
+phase, and optional input-byte or semantic-node coordinate. The public
+`Thing::validate_with_level` adapter retains its established error surface, but
+both adapters receive acceptance/rejection from the same TD Basic rule kernel.
+Changing the diagnostic sink cannot narrow or widen the Basic-valid set.
 
 `HANDLE-DROP-001`: An explicit destroy operation is the only handle API that
 reports complete drain and cleanup. Dropping private draft state releases it

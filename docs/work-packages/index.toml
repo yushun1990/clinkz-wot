@@ -119,7 +119,9 @@ status = "planned"
 admission_status = "candidate"
 impact_status = "current"
 impact_review = "github-pr:75"
-impact_disposition = "admission-withdrawn"
+impact_disposition = "normalized-retained-snapshot-authority-migrated"
+decision_review = "github-pr:76"
+authority_migration_review = "github-pr:78"
 depends_on = []
 depends_on_packages = ["WP-000"]
 requirements = [
@@ -138,43 +140,115 @@ authoritative_artifacts = [
     "docs/api-ownership.csv",
     "docs/architecture/10-primary-data-flows.md",
     "docs/architecture/20-module-boundaries.md",
+    "docs/architecture/50-servient-runtime-lifecycle.md",
     "docs/requirements.csv",
+    "docs/resource-limits.csv",
     "docs/spec/foundation.md",
+    "docs/spec/planning.md",
     "docs/spec/runtime-safety.md",
+    "docs/state-machines.toml",
     "docs/work-packages/WP-100-consumer-validated-thing-admission.md",
     "docs/work-packages/WP-100-core.md",
+    "docs/work-packages/WP-200-planning.md",
+    "docs/work-packages/WP-400-servient.md",
     "docs/work-packages/index.toml",
 ]
 api_items = [
-    "WorkClass::DocumentNodes",
-    "WorkClass::PlanningItems",
-    "AdmissionLedger::reclassify_source_to_persistent_document",
-    "ValidatedThingCursor",
-    "validated_thing_cursor_new",
-    "validated_thing_cursor_step",
-    "ValidatedThingStep",
+    "WorkClass",
+    "AdmissionLedger",
+    "admission_ledger_reclassify_source_to_persistent_document",
     "ValidatedThing",
-    "validated_thing_thing",
+    "ValidatedThingCursor",
+    "ValidatedThingBuilder",
+    "ValidatedThingProgress",
+    "ValidatedThingPhase",
+    "ValidatedThingInvalidKind",
+    "ValidatedThingInvalid",
+    "ValidatedThingLimit",
+    "ValidatedThingConversionErrorKind",
+    "ValidatedThingConversionError",
+    "ValidatedThingFootprint",
+    "ValidatedThingView",
+    "ValidatedPropertyView",
+    "ValidatedFormView",
+    "ValidatedSecuritySchemeView",
+    "ValidatedFormHref",
+    "ValidatedFormHrefError",
+    "validated_thing_cursor_from_thing",
+    "validated_thing_builder_from_json",
+    "validated_thing_cursor_step",
+    "validated_thing_builder_step",
+    "validated_thing_view",
+    "validated_thing_footprint",
+    "validated_thing_reclassify_source_to_persistent_document",
     "validated_thing_retained_source_bytes",
     "validated_thing_property_count",
     "validated_thing_readable_property_form_count",
+    "validated_thing_invalid_kind",
+    "validated_thing_invalid_phase",
+    "validated_thing_invalid_input_offset",
+    "validated_thing_invalid_node_ordinal",
+    "validated_thing_conversion_error_kind",
+    "validated_thing_conversion_error_phase",
+    "validated_thing_conversion_error_requested_bytes",
+    "validated_thing_limit_kind",
+    "validated_thing_limit_configured",
+    "validated_thing_limit_observed",
+    "validated_thing_limit_phase",
+    "validated_thing_footprint_retained_requested_bytes",
+    "validated_thing_footprint_retained_allocation_count",
+    "validated_thing_footprint_largest_allocation_request_bytes",
+    "validated_thing_footprint_peak_temporary_requested_bytes",
+    "validated_thing_footprint_additional_conversion_peak_bytes",
+    "validated_thing_view_id",
+    "validated_thing_view_property",
+    "validated_thing_view_properties",
+    "validated_thing_view_security_definition",
+    "validated_property_view_ordinal",
+    "validated_property_view_name",
+    "validated_property_view_form",
+    "validated_property_view_forms",
+    "validated_form_view_original_index",
+    "validated_form_view_href",
+    "validated_form_view_resolved_href",
+    "validated_form_view_content_type",
+    "validated_form_view_content_coding",
+    "validated_form_view_subprotocol",
+    "validated_form_view_scopes",
+    "validated_form_view_effective_operations",
+    "validated_form_view_effective_security",
+    "validated_security_scheme_view_name",
+    "validated_security_scheme_view_scheme",
 ]
-state_machines = []
+state_machines = ["validated-thing-normalization"]
 resource_changes = [
-    "WorkClass::ALL grows from ten to twelve entries by appending DocumentNodes and PlanningItems only; the 195-field resource schema, named profiles, generated projection, and resource-limits.csv rows are unchanged",
+    "No resource row or WorkClass changes: retained source, temporary admission, per-admission/global peak, largest actual contiguous request, diagnostics, and existing work classes already own the normalized admission flow",
+    "Each Foundation ledger reservation corresponds to one actual checked allocation Layout; aggregate retained or peak footprints are sums/observations and are never submitted as a physical contiguous allocation",
 ]
-old_api_removals = []
+old_api_removals = [
+    "validated_thing_cursor_new",
+    "ValidatedThingStep",
+    "validated_thing_thing",
+]
 performance_workloads = []
 implementation_paths = [
-    "td/Cargo.toml",
-    "foundation/src/budget.rs",
-    "foundation/src/resource.rs",
-    "foundation/src/lib.rs",
     "td/src/validated.rs",
     "td/src/validate.rs",
+    "td/src/td_defaults.rs",
     "td/src/thing.rs",
+    "td/src/flat.rs",
     "td/src/lib.rs",
+    "td/src/components/affordance.rs",
     "td/src/components/context.rs",
+    "td/src/components/data_schema.rs",
+    "td/src/components/form.rs",
+    "td/src/components/link.rs",
+    "td/src/components/security_scheme.rs",
+    "td/src/core/data_type.rs",
+    "td/src/core/data_type/metadata.rs",
+    "td/src/core/data_type/response.rs",
+    "td/src/core/data_type/uri.rs",
+    "td/src/core/data_type/version.rs",
 ]
 pre_implementation_checks = [
     "tools/check-design-artifacts.sh",
@@ -184,10 +258,15 @@ pre_implementation_checks = [
     "cargo check --locked -p clinkz-wot-foundation",
     "cargo check --locked -p clinkz-wot-td --no-default-features",
     "cargo check --locked -p clinkz-wot-td",
+    "cargo check --locked -p clinkz-wot-td --features serde_json/preserve_order",
+    "cargo check --locked -p clinkz-wot-td --features serde_json/arbitrary_precision",
+    "cargo check --locked -p clinkz-wot-td --features serde_json/preserve_order,serde_json/arbitrary_precision",
+    "cargo check --locked --target thumbv7em-none-eabihf -p clinkz-wot-td --no-default-features",
+    "cargo check --locked --target thumbv7em-none-eabihf -p clinkz-wot-td --no-default-features --features serde_json/arbitrary_precision",
 ]
-admission_review = "github-pr:72"
-completion_evidence_keys = ["consumer-validated-thing-work-classes"]
-completion_evidence_path = "docs/evidence/WP-100-consumer-validated-thing.toml"
+admission_review = "required-after-authority-migration"
+completion_evidence_keys = ["consumer-normalized-validated-thing"]
+completion_evidence_path = "docs/evidence/WP-100-consumer-normalized-validated-thing.toml"
 
 [[tranche]]
 id = "WP-200-CONSUMER-PROPERTY-READ-PLANNING"
