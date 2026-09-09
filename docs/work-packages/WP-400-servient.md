@@ -152,12 +152,26 @@ enter `index.toml` only when the reopened
 The tranche owns Host and application-static Consumer admission/runtime
 composition: conservative persistent-capacity reservation after Planning
 preflight and before materialization, source-to-persistent ledger transfer,
-independent Thing-slot and plan-set generations, retained validated source and
-one complete registration, final reconciliation/cancellation seal, atomic
-publication, plan-set leases, name-free request construction, Core-sealed
-execution, drain, and monotonic reclaim. It must not interpret TD semantics,
-rebuild Planning lookup material, expose raw client authoring SPIs, or merge
-the physical Host/static containers.
+independent Thing-slot and plan-set generations, one normalized
+`ValidatedThing` and one complete registration, final reconciliation/
+cancellation seal, atomic publication, plan-set leases, name-free request
+construction, Core-sealed execution, drain, and monotonic reclaim. The retained
+owner carries TD's structured source footprint and ledger. Servient
+reclassifies only exact sealed-arena requested bytes after the destination
+check; it does not turn an aggregate capacity reservation into a contiguous
+allocation observation or discard allocation-count/temporary/conversion-peak
+facts. It must not interpret TD semantics, reconstruct `Thing`, parse snapshot
+storage, rebuild Planning lookup material, expose raw client authoring SPIs, or
+merge the physical Host/static containers.
+
+Before either TD entry, the future admission coordinator reserves the
+applicable parent/global source, temporary, and live-peak allowance and caps the
+child `AdmissionLedger` from the same immutable profile. That outer owner stays
+paired with the normalization cursor: every invalid/limit/cancel/conversion or
+drop path releases it, while `Complete` reconciles it to the structured
+footprint and transfers the retained-source allowance with `ValidatedThing`.
+This authority migration freezes that later WP-400 obligation without changing
+this work package's status, paths, evidence, or admission.
 
 Permitted product and cross-package fixture paths are exactly:
 
@@ -180,10 +194,12 @@ plans, selections, name-free requests, failures, sealing outcomes, drain, and
 reclaim semantics without requiring equal public progress APIs.
 
 Every prepublication failure releases all uncommitted reservations and returns
-no handle or partial lookup. Close rejects new leases/calls before draining
-accepted work; retained source/registration/aggregate storage is reclaimed only
-after every call, lease, and cleanup owner is terminal. The runtime uses only
-the complete registration's sealed `start_consumer_property_read` path.
+no handle or partial lookup. Normalization invalid/limit/cancel/conversion
+terminals have already completed TD-owned rollback before this future tranche
+can receive them. Close rejects new leases/calls before draining accepted work;
+normalized source/registration/aggregate storage is reclaimed only after every
+call, lease, and cleanup owner is terminal. The runtime uses only the complete
+registration's sealed `start_consumer_property_read` path.
 
 The future completion evidence key is
 `consumer-property-read-runtime`, at

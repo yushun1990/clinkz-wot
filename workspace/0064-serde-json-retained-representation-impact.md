@@ -11,6 +11,11 @@ Review location: github-pr:71
 
 Resolution/readmission review: github-pr:72
 
+Superseded retained-representation authority: workspace topic 0065 and its
+normalized retained-snapshot authority migration. This file remains the
+historical record of the github-pr:72 representation guard and no longer
+describes the current Consumer retained-storage contract.
+
 ## Question
 
 What enforceable representation boundary lets the Consumer retain the exact

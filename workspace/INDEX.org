@@ -36,10 +36,11 @@ Topics are retained after migration as decision history.
 
 ** DECIDED
 
-- [[file:0065-liballoc-btreemap-retained-representation-impact.md][0065 liballoc BTreeMap Retained Representation Impact]]
+- None.
 
 ** MIGRATED
 
+- [[file:0065-liballoc-btreemap-retained-representation-impact.md][0065 liballoc BTreeMap Retained Representation Impact]]
 - [[file:0064-serde-json-retained-representation-impact.md][0064 serde_json Retained Representation Impact]]
 - [[file:0063-consumer-plan-set-handoff-closure.md][0063 Consumer Plan-Set Handoff Closure]]
 - [[file:0062-consumer-binding-result-sealing.md][0062 Consumer Binding Result Sealing]]

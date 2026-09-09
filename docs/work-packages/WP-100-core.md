@@ -266,113 +266,71 @@ Property Read architecture gate, or the complete broad WP-100 package.
 This document defines the technical boundary for this sequentially admitted
 ADR-0013 tranche; the reviewed admission record is
 [`WP-100-consumer-validated-thing-admission.md`](WP-100-consumer-validated-thing-admission.md),
-which registers the id in `index.toml` and records the pre-code checks and
-Producer-gate impact-review boundary. That docs-only admission was accepted
-only after the authority migration was merged, WP-000 remained complete, and
-the pre-code/Producer-gate impact review below was independently accepted. Its
-permitted-path set was amended once, by the independently accepted ADR-0013
-impact correction (github-pr:70), after the in-progress implementation
-(github-pr:69) proved that no conservative representation-aware retained
-footprint for `Thing.context` is computable without observing the private
-`Context.entries` buffers and the retained capacity of their backing `Vec`;
-the correction admits the single read-only `pub(crate)` Context-entry storage
-inspection seam in `td/src/components/context.rs` and nothing else.
+which registers the id in `index.toml` and freezes its exact API, storage,
+resource, terminal, supported-cell, permitted-path, readmission, and completion
+evidence contracts. Workspace topic 0065 supersedes the prior exact-caller-
+`Thing` and serde/liballoc representation boundary. The tranche remains
+`planned` / `candidate` / `current`; production implementation is forbidden
+until a separate independent readmission and admission-only transition.
 
-Independent review of the first completion candidate at
-`14ececaf847e7eb68446813c5469c486d8cfb41f` then proved that downstream
-serde_json feature unification could replace Map with an opaque-capacity
-IndexMap or Number with an opaque String, and found uncharged whole-list Form
-operation and security-expression setup work. Github-pr:71 withdrew admission.
-Github-pr:72 independently accepted the corrected readmission boundary, and
-the subsequent admission-only transition restored the tranche as `planned` /
-`admitted`. Production implementation may now proceed only within the paths
-and completion-evidence contract frozen by that review; the tranche remains
-incomplete. The accepted correction keeps the exact-Thing contract and selects
-a smaller enforceable boundary: pin TD's serde_json dependency exactly to
-`1.0.149`, compile only when Map matches the locked BTreeMap representation and
-Number is allocation-free, and make the two list traversals incremental under
-their existing work classes. Unsupported `preserve_order` and
-`arbitrary_precision` representations fail compilation rather than reaching
-runtime census.
+The replacement boundary retains `Thing` as the public authoring/interchange
+value but makes successful `ValidatedThing` own only a private normalized
+snapshot. The snapshot has exact-length node, edge/range, and byte arenas; no
+completed owner retains `Thing`, BTreeMap/serde allocation state, caller spare
+capacity, or an input borrow. Its structured footprint distinguishes retained
+requested bytes, retained allocation count, largest actual allocation request,
+temporary peak, and additional conversion peak. Every ledger reservation maps
+to one actual checked `Layout`; aggregate capacity is never reported as a
+contiguous allocation.
 
-The tranche owns exactly the append-only `WorkClass::DocumentNodes` and
-`WorkClass::PlanningItems` discriminants, the narrow
-`AdmissionLedger::reclassify_source_to_persistent_document` operation, and the
-TD-owned move-only `ValidatedThing` construction/census path. It is governed by
-`DOC-RUNTIME-001`, `ADMIT-MEM-001`, `ADMIT-TXN-001`,
-`CONSTRAINED-WORK-001`, `CONSTRAINED-PROGRESS-001`, and
-`CONSTRAINED-OWN-001`. Its only package predecessor is complete WP-000; it has
-no dependency on the completed Consumer call-values tranche.
+The public compatibility cursor borrows `&Thing` and guarantees the exact
+additional project-owned peak over that caller baseline. The strict public JSON
+builder/decoder accounts all engine-owned allocations from first processing
+through retention and supplies the absolute application-static entry. Both use
+one TD-owned storage-neutral Basic/default/URI/security kernel and the same
+normalization, semantic view, state machine, footprint, and terminal outcomes.
+Typed semantic equivalence is fieldwise over the `Thing` data model; Thing JSON
+serialize/deserialize round-trip is forbidden because serializer strictness may
+not narrow Basic-valid compatibility input.
 
-Permitted production paths are exactly:
+The frozen `ValidatedThingView` supplies allocation-free identity, Property
+iteration/lookup and ordinal, original Form indices, raw/resolved URI, content
+metadata, effective operations/security, and security-definition scheme
+lookup. Planning receives that view rather than `&Thing`, a snapshot parser, or
+duplicated semantic rules. This updates the future WP-200 aggregate input
+contract without changing existing exact-coordinate source, evidence, or
+status.
 
-- `td/Cargo.toml` (serde_json exact-version pin only);
-- `foundation/src/budget.rs`;
-- `foundation/src/resource.rs`;
-- `foundation/src/lib.rs`;
-- `td/src/validated.rs`;
-- `td/src/validate.rs`;
-- `td/src/thing.rs`;
-- `td/src/lib.rs`; and
-- `td/src/components/context.rs` (read-only `pub(crate)` Context-entry storage
-  inspection seam only).
+The existing WorkClass prefix and all twelve current discriminants stay
+unchanged. `DocumentNodes` covers generic validation/normalization/equivalence
+and allocation-free map-sort work; schema, strict input bytes, URI, security,
+and arena cleanup stay respectively in `JsonSchemaNodes`, `CodecInputBytes`,
+`UriBytes`, `SecurityBranches`, and prepaid `CleanupItems`; normalized byte
+copy/emission uses `CodecOutputBytes`. Existing resource rows cover source,
+temporary, peak, largest actual request, and the fixed cleanup-item count.
+Inline first-cause diagnostics and fixed cleanup metadata allocate no bytes, so
+their ledger accounts stay zero. No new row, account, getter, or WorkClass is
+admitted.
 
-The `context.rs` path admits only the single read-only `pub(crate)`
-Context-entry storage inspection seam exposing borrowed entries and their
-backing `Vec` capacity, as required for the conservative capacity-aware
-`retained_source_bytes()` census of `Thing.context`; it authorizes no other
-`td/src/components/**` edit and no `Context`, builder, serialization, or
-Basic-validation semantic change. The active 195-field resource schema,
-`foundation/build.rs`, generated resource-profile assertions, and
-`tools/check-resource-limits.sh` are outside the tranche. All existing
-`WorkClass` discriminants and the first ten `WorkClass::ALL` entries remain
-unchanged; only `DocumentNodes` then `PlanningItems` are appended.
+Invalid, limit, cancellation, and conversion failures fix their first cause and
+enter registered rollback before becoming terminal. Partial arenas contain no
+nested owners and are released as a fixed bounded allocation set. Deep input
+rejection and cursor drop cannot hide a recursive unbudgeted destructor. The
+compatibility input remains caller-owned and borrowed.
 
-Successful `ValidatedThing` construction owns the exact input `Thing`, proves
-complete Basic validation, records checked typed-structure counts and a
-conservative representation-aware retained-source footprint, and exposes no
-unchecked constructor or mutable raw-Thing projection. Host and static cells
-drive the same pure cursor. `DocumentNodes` has one non-resettable lifetime
-allowance derived from `document_validation_work_units_max`; schema, URI, and
-security work remain in their existing classes. The ledger reclassification
-checks destination capacity before atomically moving the same live bytes from
-source to persistent-document accounting and preserves live/peak/contiguous
-truth on both success and failure.
+Legal `preserve_order`, `arbitrary_precision`, and combined serde_json feature
+unification are supported under ordinary semver/MSRV policy. Required evidence
+uses Host and real `thumbv7em-none-eabihf` `no_std + alloc` cells. Exact
+serde_json, rustc, liballoc, target layout, and allocator internals are no
+longer compatibility authority.
 
-The serde_json representation guards live in `td/src/validated.rs`. The Map
-guard compares only the locked wrapper representation with
-`BTreeMap<String, Value>` and the Number guard requires `needs_drop` to remain
-false. They are compile-time compatibility gates, not retained-byte estimates.
-Completion evidence must compile the supported TD cells and externally prove
-that downstream `preserve_order`, `arbitrary_precision`, and combined feature
-unification each fail with the intended guard diagnostic.
-
-Deriving `readable_property_form_count` from an explicit operation list is a
-per-operation `DocumentNodes` task; it performs no prior slice-wide scan.
-Security-expression roots and combo children are per-reference
-`SecurityBranches` tasks and are not batch-expanded before charging. Default
-Property Form operations continue to use the existing TD default, and no
-schema/URI/security work is relabelled or double charged.
-
-Before source may merge, an exact-head impact review must run the complete
-passed Producer Property Read gate commands and specifically prove that the
-fixture's fixed `[u64; 10]` cleanup snapshot intentionally covers the unchanged
-first ten `WorkClass::ALL` entries and consumes neither appended Consumer
-class. If the registered Producer claim is invalidated, a separate independent
-gate-control change must reopen it before this source change merges; the
-implementation author may not pre-judge that status.
-
-The completion evidence key is `consumer-validated-thing-work-classes`, at
-`docs/evidence/WP-100-consumer-validated-thing.toml`. It must cover both
-feature profiles, every Basic-validation/census limit boundary, cancellation
-and lifetime-budget non-reset, exact source-account retention on failed
-reclassification, unchanged total live/peak/contiguous accounting on success,
-stable WorkClass prefix/order, no resource-schema change, and the exact-head
-Producer-gate impact disposition. It also covers the exact serde_json pin,
-positive supported-representation cells, negative downstream representation
-feature cells, and charge-before-scan progress for explicit Form operations
-and security-expression roots/children. It claims no aggregate Planning,
-`OutboundRequest`, Servient runtime, or Consumer gate.
+The admission record is the sole detailed owner of exact signatures, the
+three-retained/four-temporary allocation-site catalog, normalization/build/seal
+ordering, permitted future TD paths, pre-readmission evidence, and post-code
+completion evidence. That evidence key is
+`consumer-normalized-validated-thing`; it claims no aggregate Planning,
+Servient runtime, Consumer gate, successor operation, or broad WP-100
+completion.
 
 ## Requirements
 

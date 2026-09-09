@@ -7400,3 +7400,368 @@ owner = "DirectoryCleanupOwner"
 linearization = "backend cancellation reaches terminal"
 outcome = "Cancelled"
 retryability = "terminal"
+
+[[machine]]
+id = "validated-thing-normalization"
+requirements = [
+    "DOC-RUNTIME-001",
+    "ADMIT-MEM-001",
+    "ADMIT-TXN-001",
+    "CONSTRAINED-WORK-001",
+    "CONSTRAINED-PROGRESS-001",
+    "CONSTRAINED-OWN-001",
+]
+initial = "Input"
+states = [
+    "Input",
+    "Validation",
+    "Normalization",
+    "Seal",
+    "Equivalence",
+    "Rollback",
+    "Complete",
+    "Invalid",
+    "Limit",
+    "Cancelled",
+    "ConversionFailed",
+    "Abandoned",
+]
+terminal = [
+    "Complete",
+    "Invalid",
+    "Limit",
+    "Cancelled",
+    "ConversionFailed",
+    "Abandoned",
+]
+required_events = [
+    "Input:budget_exhausted",
+    "Validation:budget_exhausted",
+    "Normalization:budget_exhausted",
+    "Seal:budget_exhausted",
+    "Equivalence:budget_exhausted",
+    "Rollback:budget_exhausted",
+    "Input:cancel",
+    "Validation:cancel",
+    "Normalization:cancel",
+    "Seal:cancel",
+    "Equivalence:cancel",
+    "Input:drop",
+    "Validation:drop",
+    "Normalization:drop",
+    "Seal:drop",
+    "Equivalence:drop",
+    "Rollback:drop",
+]
+entry_contract = "ValidatedThingCursor borrows a typed Thing and owns only additional project allocations; ValidatedThingBuilder borrows JSON bytes and owns every controlled decode-through-retention allocation from the first request"
+first_cause_contract = "The first invalid, limit, cancellation, conversion, or drop cause is immutable; later observations cannot replace its diagnostic or resource coordinates"
+publication_contract = "Only Complete publishes one move-only ValidatedThing after typed semantic equivalence and complete rollback-inapplicability are established"
+resource_contract = "Each actual checked allocation Layout is reserved before allocation; source, temporary, live peak, largest actual request, diagnostics, and reclassification remain distinct observations/accounts"
+work_contract = "Input decoding, Basic validation, default/security/operation interpretation, counting, sorting, string/number/URI handling, normalization, seal overlap, fixed diagnostic capture, rollback, and destruction consume their existing WorkClass plus one shared non-resettable document-validation lifetime unit before the corresponding work"
+drop_contract = "Cursor drop executes only prepaid fixed allocation-catalog cleanup over trivially destructible arenas; no nested collection or recursive semantic drop can bypass bounded CleanupItems work"
+
+[[machine.transition]]
+from = "Input"
+event = "input_complete"
+to = "Validation"
+owner = "TD normalization cursor"
+linearization = "all strict-entry input units are decoded and charged, or the compatibility semantic root is ready"
+outcome = "validation-ready"
+retryability = "resume-with-same-cursor"
+
+[[machine.transition]]
+from = "Validation"
+event = "basic_valid"
+to = "Normalization"
+owner = "TD Basic semantic authority"
+linearization = "the single storage-neutral Basic/default/security rule kernel accepts the typed semantic input"
+outcome = "normalization-ready"
+retryability = "resume-with-same-cursor"
+
+[[machine.transition]]
+from = "Normalization"
+event = "normalization_complete"
+to = "Seal"
+owner = "TD normalization cursor"
+linearization = "all semantic nodes, edges, bytes, indices, URI values, operations, and security references are charged and emitted"
+outcome = "seal-ready"
+retryability = "resume-with-same-cursor"
+
+[[machine.transition]]
+from = "Seal"
+event = "seal_complete"
+to = "Equivalence"
+owner = "TD normalization cursor"
+linearization = "exact node, edge, and byte arenas replace mutable capacity after reserving old/new overlap"
+outcome = "equivalence-ready"
+retryability = "resume-with-same-cursor"
+
+[[machine.transition]]
+from = "Equivalence"
+event = "semantic_equivalence_complete"
+to = "Complete"
+owner = "TD semantic authority"
+linearization = "fieldwise typed Thing equivalence is established without serialization or deserialization"
+outcome = "validated-thing-published"
+retryability = "terminal"
+
+[[machine.transition]]
+from = "Input"
+event = "budget_exhausted"
+to = "Input"
+owner = "TD normalization cursor"
+linearization = "return Pending before input work without its existing-class charge"
+outcome = "pending"
+retryability = "resume-with-same-cursor"
+
+[[machine.transition]]
+from = "Validation"
+event = "budget_exhausted"
+to = "Validation"
+owner = "TD normalization cursor"
+linearization = "return Pending before semantic validation work without its existing-class charge"
+outcome = "pending"
+retryability = "resume-with-same-cursor"
+
+[[machine.transition]]
+from = "Normalization"
+event = "budget_exhausted"
+to = "Normalization"
+owner = "TD normalization cursor"
+linearization = "return Pending before normalization work without its existing-class charge"
+outcome = "pending"
+retryability = "resume-with-same-cursor"
+
+[[machine.transition]]
+from = "Seal"
+event = "budget_exhausted"
+to = "Seal"
+owner = "TD normalization cursor"
+linearization = "return Pending before seal work without its existing-class charge"
+outcome = "pending"
+retryability = "resume-with-same-cursor"
+
+[[machine.transition]]
+from = "Equivalence"
+event = "budget_exhausted"
+to = "Equivalence"
+owner = "TD normalization cursor"
+linearization = "return Pending before semantic comparison work without its existing-class charge"
+outcome = "pending"
+retryability = "resume-with-same-cursor"
+
+[[machine.transition]]
+from = "Rollback"
+event = "budget_exhausted"
+to = "Rollback"
+owner = "TD rollback cursor"
+linearization = "return Pending before the next charged destruction or reservation-release unit"
+outcome = "rollback-pending"
+retryability = "resume-with-same-cursor"
+
+[[machine.transition]]
+from = "Input"
+event = "invalid"
+to = "Rollback"
+owner = "TD normalization cursor"
+linearization = "retain the first input diagnostic before cleanup"
+outcome = "rollback-invalid"
+retryability = "cleanup-required"
+
+[[machine.transition]]
+from = "Validation"
+event = "invalid"
+to = "Rollback"
+owner = "TD Basic semantic authority"
+linearization = "retain the first Basic diagnostic before cleanup"
+outcome = "rollback-invalid"
+retryability = "cleanup-required"
+
+[[machine.transition]]
+from = "Equivalence"
+event = "semantic_mismatch"
+to = "Rollback"
+owner = "TD semantic authority"
+linearization = "retain SemanticMismatch before cleanup"
+outcome = "rollback-conversion-failure"
+retryability = "cleanup-required"
+
+[[machine.transition]]
+from = "Input"
+event = "limit_or_conversion_failure"
+to = "Rollback"
+owner = "TD normalization cursor"
+linearization = "retain the first exact resource or conversion cause before cleanup"
+outcome = "rollback-required"
+retryability = "cleanup-required"
+
+[[machine.transition]]
+from = "Validation"
+event = "limit_or_conversion_failure"
+to = "Rollback"
+owner = "TD normalization cursor"
+linearization = "retain the first exact resource or conversion cause before cleanup"
+outcome = "rollback-required"
+retryability = "cleanup-required"
+
+[[machine.transition]]
+from = "Normalization"
+event = "limit_or_conversion_failure"
+to = "Rollback"
+owner = "TD normalization cursor"
+linearization = "retain the first exact resource or conversion cause before cleanup"
+outcome = "rollback-required"
+retryability = "cleanup-required"
+
+[[machine.transition]]
+from = "Seal"
+event = "limit_or_conversion_failure"
+to = "Rollback"
+owner = "TD normalization cursor"
+linearization = "retain the first exact resource or conversion cause before cleanup"
+outcome = "rollback-required"
+retryability = "cleanup-required"
+
+[[machine.transition]]
+from = "Equivalence"
+event = "limit_or_conversion_failure"
+to = "Rollback"
+owner = "TD normalization cursor"
+linearization = "retain the first exact resource or conversion cause before cleanup"
+outcome = "rollback-required"
+retryability = "cleanup-required"
+
+[[machine.transition]]
+from = "Input"
+event = "cancel"
+to = "Rollback"
+owner = "TD normalization cursor"
+linearization = "retain cancellation as first cause before cleanup"
+outcome = "rollback-cancelled"
+retryability = "cleanup-required"
+
+[[machine.transition]]
+from = "Validation"
+event = "cancel"
+to = "Rollback"
+owner = "TD normalization cursor"
+linearization = "retain cancellation as first cause before cleanup"
+outcome = "rollback-cancelled"
+retryability = "cleanup-required"
+
+[[machine.transition]]
+from = "Normalization"
+event = "cancel"
+to = "Rollback"
+owner = "TD normalization cursor"
+linearization = "retain cancellation as first cause before cleanup"
+outcome = "rollback-cancelled"
+retryability = "cleanup-required"
+
+[[machine.transition]]
+from = "Seal"
+event = "cancel"
+to = "Rollback"
+owner = "TD normalization cursor"
+linearization = "retain cancellation as first cause before cleanup"
+outcome = "rollback-cancelled"
+retryability = "cleanup-required"
+
+[[machine.transition]]
+from = "Equivalence"
+event = "cancel"
+to = "Rollback"
+owner = "TD normalization cursor"
+linearization = "retain cancellation as first cause before cleanup"
+outcome = "rollback-cancelled"
+retryability = "cleanup-required"
+
+[[machine.transition]]
+from = "Rollback"
+event = "finish_invalid"
+to = "Invalid"
+owner = "TD rollback cursor"
+linearization = "all partial storage and reservations are released before exposing the retained invalid cause"
+outcome = "invalid"
+retryability = "terminal"
+
+[[machine.transition]]
+from = "Rollback"
+event = "finish_limit"
+to = "Limit"
+owner = "TD rollback cursor"
+linearization = "all partial storage and reservations are released before exposing exact limit coordinates"
+outcome = "limit"
+retryability = "terminal"
+
+[[machine.transition]]
+from = "Rollback"
+event = "finish_cancelled"
+to = "Cancelled"
+owner = "TD rollback cursor"
+linearization = "all partial storage and reservations are released before exposing cancellation"
+outcome = "cancelled"
+retryability = "terminal"
+
+[[machine.transition]]
+from = "Rollback"
+event = "finish_conversion_failure"
+to = "ConversionFailed"
+owner = "TD rollback cursor"
+linearization = "all partial storage and reservations are released before exposing the retained conversion cause"
+outcome = "conversion-failed"
+retryability = "terminal"
+
+[[machine.transition]]
+from = "Input"
+event = "drop"
+to = "Abandoned"
+owner = "ValidatedThing cursor Drop"
+linearization = "prepaid fixed allocation-catalog cleanup completes before Drop returns"
+outcome = "abandoned-clean"
+retryability = "terminal"
+
+[[machine.transition]]
+from = "Validation"
+event = "drop"
+to = "Abandoned"
+owner = "ValidatedThing cursor Drop"
+linearization = "prepaid fixed allocation-catalog cleanup completes before Drop returns"
+outcome = "abandoned-clean"
+retryability = "terminal"
+
+[[machine.transition]]
+from = "Normalization"
+event = "drop"
+to = "Abandoned"
+owner = "ValidatedThing cursor Drop"
+linearization = "prepaid fixed allocation-catalog cleanup completes before Drop returns"
+outcome = "abandoned-clean"
+retryability = "terminal"
+
+[[machine.transition]]
+from = "Seal"
+event = "drop"
+to = "Abandoned"
+owner = "ValidatedThing cursor Drop"
+linearization = "prepaid fixed allocation-catalog cleanup completes before Drop returns"
+outcome = "abandoned-clean"
+retryability = "terminal"
+
+[[machine.transition]]
+from = "Equivalence"
+event = "drop"
+to = "Abandoned"
+owner = "ValidatedThing cursor Drop"
+linearization = "prepaid fixed allocation-catalog cleanup completes before Drop returns"
+outcome = "abandoned-clean"
+retryability = "terminal"
+
+[[machine.transition]]
+from = "Rollback"
+event = "drop"
+to = "Abandoned"
+owner = "ValidatedThing cursor Drop"
+linearization = "prepaid fixed allocation-catalog cleanup completes before Drop returns without recursive semantic destruction"
+outcome = "abandoned-clean"
+retryability = "terminal"

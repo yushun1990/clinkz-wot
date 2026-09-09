@@ -259,6 +259,17 @@ sequential eager compilation, the sealed TD-free
 does not own persistent-capacity reservation, publication, the retained
 registration owner, call execution, or plan-set lifecycle state.
 
+Workspace topic 0065 changes this future aggregate's input authority without
+advancing or admitting it. It must borrow TD's storage-independent
+`ValidatedThingView`, not `&Thing`. The view supplies deterministic Property
+ordinal/name iteration and lookup, original Form indices, raw/resolved URI,
+content metadata, effective operations/security, and security-definition
+scheme lookup. Planning must not reconstruct a `Thing`, parse normalized
+storage, or copy Basic/default/URI/security rules. The already completed exact-
+coordinate `PropertyReadPlanCompiler` behavior and evidence remain regression
+authority; adapting that leaf to the view belongs to this future aggregate
+tranche and changes no current WP-200 status.
+
 Permitted production paths are exactly:
 
 - `planning/src/consumer_property_read.rs`;
@@ -271,16 +282,17 @@ while allowing all bounds to be collected before any compiler starts. Public
 `PropertyReadPlanCompiler::consumer_call` semantics and the existing completion
 evidence remain regression requirements, not superseded authority.
 
-The first slice visits property keys deterministically, retains Forms in source
-order, creates an empty range for a property without a readable Form, requires
-one local NoSec result for every retained coordinate, and uses only
-registration ordinal/candidate order zero. A Basic-valid Thing without an ID
-fails preflight. After Servient reports that the preflight reservation is held,
-Planning materializes every coordinate, calls each pure `bounds` exactly once,
-rejects non-`BindingPolls`, zero, over-step, and checked-product overflow, and
-completes the all-bounds barrier before the first `start`. Materialization or
-bounds failure returns the still-uncommitted reservation disposition and proves
-zero starts; no subset may be sealed.
+The first slice visits the view's property keys deterministically, retains each
+Form's original source index, creates an empty range for a property without a
+readable Form, requires one TD-resolved NoSec result for every retained
+coordinate, and uses only registration ordinal/candidate order zero. A Basic-
+valid semantic value without an ID fails preflight. After Servient reports that
+the preflight reservation is held, Planning materializes every coordinate,
+calls each pure `bounds` exactly once, rejects non-`BindingPolls`, zero, over-
+step, and checked-product overflow, and completes the all-bounds barrier before
+the first `start`. Materialization or bounds failure returns the still-
+uncommitted reservation disposition and proves zero starts; no subset may be
+sealed.
 
 The tranche derives its complete bound only from existing document/Form,
 compiled-runtime, artifact, temporary, per-step, and reclaim limits. It adds no
