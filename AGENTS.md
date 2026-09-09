@@ -14,7 +14,7 @@ Use each artifact for one durable responsibility:
 | Artifact | Responsibility |
 |---|---|
 | `AGENTS.md` | Stable AI operating rules |
-| `PROJECT_GOVERNANCE.md` | Project progression, task-session, review, and collaboration rules |
+| `PROJECT_GOVERNANCE.md` | Project progression, task-session, review, collaboration, and current model-allocation policy |
 | `ARCHITECTURE_GOVERNANCE.md` | Technical convergence, architecture authority, and design change control |
 | `PLAN.md` | Durable roadmap, milestones, dependencies, objectives, and coarse progress |
 | `docs/` | Accepted technical decisions, specifications, and work packages |
@@ -50,13 +50,23 @@ back to the Owner. Ask the Owner only when the choice genuinely depends on a
 product goal, external commitment, real-world constraint, or unacceptable
 trade-off.
 
-## Task Sessions
+## Task Sessions and Phase Boundaries
 
 Prefer one conversation for one natural major engineering task or decision
 node. Keep the conversation while the same technical objective, evidence
 boundary, and implementation truth remain coherent. Start a fresh conversation
 when moving to a materially different task node or when independent review is
 required.
+
+For architecture-sensitive work, preserve the project sequence rather than
+optimizing for agent concurrency:
+
+    audit -> freeze -> implement -> independent review -> close/reopen
+
+Do not overlap these phases merely because the tooling can run them in
+parallel. Implementation must not begin before the applicable architecture or
+authority decision is sufficiently settled. Independent review must use a fresh
+context rather than inheriting the implementation conversation's conclusion.
 
 At the start of substantial work:
 
@@ -77,51 +87,77 @@ memory by creating or expanding a repository state file.
 
 ## Capability Allocation
 
-Model/profile names are an operational compute choice, not repository roles.
-Do not encode a permanent Max/High organization into project state.
+Model choice is an operational compute policy, not architecture authority. The
+current baseline is deliberately explicit so routine sessions do not silently
+change review strength. It may be revised as model capability, economics, or
+product controls change without changing technical authority already owned by
+repository artifacts.
 
-Use High or XHigh by default when the technical objective and architecture are
-already sufficiently clear. The implementation model owns ordinary local
-planning, code changes, tests, debugging, and evidence collection inside the
-accepted technical boundary.
+Current allocation:
 
-Escalate to Max when at least one decision boundary is present:
+- **Implementation:** GPT-5.6 Sol XHigh is the normal implementation profile.
+  It owns local decomposition, edits, tests, debugging, and evidence collection
+  inside an already accepted technical boundary.
+- **Independent review:** GPT-5.6 Sol Max is the normal acceptance/review
+  profile. Review must reconstruct the claim from repository authority, the
+  exact diff, and executable evidence.
+- **Major milestone architecture audit:** GPT-6 Astra XHigh is used for
+  consequential milestone-level architecture challenges where local reasoning
+  may share a blind spot or where architecture authority is about to be
+  frozen/re-frozen.
+- **Project-level major-node global design audit:** GPT-6 Astra Max is reserved
+  for low-frequency, repository-wide design audits at major project nodes,
+  major architecture convergence points, or similarly consequential global
+  decisions.
+- **GLM:** use only for narrow, precise, detail-heavy tasks with an explicit
+  scope and falsifiable acceptance boundary. GLM does not own architecture
+  authority, gate acceptance, ambiguous cross-cutting design decisions, or
+  project-level convergence judgments.
 
-- it is unclear what the next valuable engineering objective should be;
-- the correct architecture, public API, ownership, lifecycle, or protocol
-  boundary is materially uncertain;
-- implementation evidence falsifies an assumption behind the current design;
-- a milestone, architecture gate, major migration, or release-readiness claim
-  requires higher-order judgment.
+Do not downgrade an assigned review/audit tier merely because a cheaper model
+can produce a plausible answer. Conversely, do not invoke Astra for routine
+implementation or ordinary review when the required judgment belongs to Sol.
 
-Max is used to reduce technical uncertainty, not to micromanage implementation.
-It should state the technical conclusion, relevant constraints, and falsifiable
-completion boundary at the detail needed for execution; it does not need to
-write a long step-by-step worker plan when High/XHigh can derive normal
-implementation mechanics safely.
+## Single-Agent Default
 
-For architecture-sensitive or unusually consequential work, ChatGPT may supply
-an independent pre-implementation challenge. Ultra is reserved for low-frequency
-repository-wide audits at major architecture, milestone, or release boundaries.
-These are independent viewpoints, not durable repository offices.
+The normal ClinkZ-WoT workflow uses one primary agent. Multi-agent orchestration
+is disabled by default in project Codex configuration.
+
+Subagents are an exception, not a default decomposition technique. Enable them
+only when a task contains bounded, independent, predominantly read-heavy
+reconnaissance whose combined result can be reduced to small evidence for the
+primary agent. Do not use subagents to:
+
+- overlap audit, freeze, implementation, or review phases;
+- create competing architecture authorities;
+- parallelize write-heavy changes across a shared design boundary;
+- replace a fresh independent review session; or
+- preserve conversational memory.
+
+If subagents are explicitly enabled, the primary agent remains the sole
+integration and decision authority for that task.
 
 ## Review Independence
 
 Ordinary local or clearly specified work may be accepted from the applicable
-code review, tests, CI, and repository evidence without a separate Max cycle.
+code review, tests, CI, and repository evidence when no independent gate is
+required by project governance.
 
-Use a fresh Max context for independent acceptance when the change affects
-public API, architecture, ownership/lifecycle invariants, protocol-neutral
-boundaries, major gates, milestone closure, or release readiness. The reviewer
-must reconstruct the claim from repository authority, the exact diff, and
-executable evidence rather than inherit the implementation conversation's
-conclusions.
+When independent acceptance is required, use a fresh **Sol Max** context. The
+reviewer must reconstruct the intended result from repository authority, the
+exact reviewed diff, and executable evidence rather than inherit the
+implementation conversation's summary or conclusions.
+
+Major milestone architecture audits and project-level global design audits use
+the Astra tiers defined above. They challenge or validate architecture; they do
+not become a second durable project authority. Accepted results must migrate to
+the artifact that actually owns the decision.
 
 ## PLAN and Current State
 
 `PLAN.md` records durable roadmap facts only. It must not become a session log,
-current-task database, PR tracker, execution checklist, or architecture
-specification.
+current-task database, PR tracker, execution checklist, model-status file, or
+architecture specification.
 
 Current state is discovered from the repository and remote system:
 
@@ -147,8 +183,8 @@ Workspace topics progress through:
 A workspace topic may record Owner questions or model findings, but neither
 predetermines the answer. AI investigates alternatives and repository evidence.
 When a conclusion is stable, migrate it to the proper specification, ADR,
-architecture document, work-package record, code, or test. Do not copy the
-same conclusion into multiple current-state documents.
+architecture document, work-package record, code, or test. Do not copy the same
+conclusion into multiple current-state documents.
 
 ## Implementation Judgment
 
@@ -159,9 +195,9 @@ same conclusion into multiple current-state documents.
   disproportionate validation cost as design evidence.
 - Do not silently diverge from accepted architecture. If implementation proves
   the accepted boundary wrong or unconstructible, preserve the smallest useful
-  reproduction and escalate the decision instead of hiding it behind a
+  reproduction and reopen/escalate the decision instead of hiding it behind a
   workaround.
-- High/XHigh may change local mechanics, file structure, helper decomposition,
+- Sol XHigh may change local mechanics, file structure, helper decomposition,
   tests, and debugging approach when those choices do not alter accepted
   semantics, public API, ownership, lifecycle, resource, or evidence truth.
 - Preserve unrelated work.
@@ -197,3 +233,6 @@ Repository governance exists to preserve durable truth and constrain material
 risk. It must not attempt to simulate model memory, serialize conversation
 state, or create a second project-management system beside Git, GitHub, tests,
 and the authoritative technical documents.
+
+The repository owns truth; the selected model supplies compute; the current
+session is disposable working memory.
