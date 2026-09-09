@@ -1,25 +1,74 @@
 # WP-100 Consumer Validated Thing Admission
 
-Status: ADMITTED under ADR-0013 for design revision v5.1. Github-pr:72
-independently reviewed and accepted the exact readmission revision at
-`30186a4b9098e8c35f02df1dd75868ea9b4eb3b4` after github-pr:71 correctly
-falsified the prior retained-source and bounded-progress completion claims.
-This admission-only transition records that the representation and progress
-correction below is accepted and moves the tranche from `planned` / `candidate`
-to `planned` / `admitted`. Production implementation may now begin only within
-the permitted paths and completion-evidence contract frozen by github-pr:72.
-The tranche remains incomplete; this transition creates no completion evidence
-and makes no architecture-gate claim.
+Status: IMPACT REVIEW; ADMISSION WITHDRAWN on 2026-09-09 after independent
+review of implementation candidate github-pr:74 at exact head
+`339314686fb3dede6249f615bb99765dafe57548` falsified the conservative
+retained-source completion claim. Under ADR-0013, this affected admitted
+tranche remains `planned` and returns from `admitted` to `candidate`. This
+record does not authorize production implementation or merge until workspace
+topic 0065 reaches a migrated correction, the correction receives independent
+readmission review, and a separate admission-only transition succeeds.
 
-Readmission review location: github-pr:72.
+Current impact-review location: github-pr:75.
+Prior readmission review location: github-pr:72.
 
 The original admission was established by github-pr:68, amended by
-github-pr:70, and withdrawn after github-pr:71. Github-pr:72 restores current
-implementation authority only with the correction below. Foundation changes
-already merged by github-pr:69 remain current and are not reopened. The
-github-pr:70 Context seam correction remains the only permitted component-path
-change and is now combined with the github-pr:72 representation boundary and
-incremental-progress correction.
+github-pr:70, and withdrawn after github-pr:71. Github-pr:72 then established
+the historical serde_json representation and progress correction below, and
+github-pr:73 admitted it. Github-pr:74 was never merged: its production Rust,
+branch-only `passed` evidence, `complete` tranche state, and PLAN completion
+text never entered master and are not being reverted by this impact review.
+Foundation changes already merged by github-pr:69 remain current and are not
+reopened. The github-pr:70 Context seam remains current Foundation/TD history,
+but no continued validated-Thing implementation authority is inferred from it.
+
+## 2026-09-09 liballoc BTreeMap representation impact finding
+
+Independent review of github-pr:74 found that
+`td/src/validated.rs::btree_allocation_bytes()` hard-codes private Rust
+`alloc::collections::BTreeMap` implementation assumptions: eleven key/value
+slots per node, five minimum keys in a non-root node, and a derived node
+overhead. Github-pr:72 pinned and guarded the serde_json Map/Number selection,
+but neither that decision nor the guards freeze the Rust/liballoc node
+representation, supported-target layouts, allocation-retention behavior, or
+toolchain identity on which this envelope depends. The Map guard compares only
+the outer wrapper size with `BTreeMap<String, Value>`; changes behind that
+outer value can leave the guard passing.
+
+The gap is constructible on the exact toolchain used by current CI, without a
+future liballoc change. Rust 1.95.0 may represent an empty BTreeMap either with
+no root or with a retained empty leaf root after the last entry is removed.
+The github-pr:74 function returns zero BTree allocation bytes whenever
+`length == 0`, so it cannot distinguish those states.
+
+An external exact-head probe on rustc 1.95.0
+(`59807616e1fa2540724bfbac14d7976d7e4a3860`,
+`x86_64-unknown-linux-gnu`) retained 1,024 nested
+`serde_json::Map<String, Value>` values after inserting and removing their sole
+entry. A custom counting allocator measured requested live heap bytes after
+successful validation and verified that dropping the returned value restored
+the baseline. Fresh-empty and retained-root inputs both reported
+`retained_source_bytes() == 40,436`; their measured live heap was respectively
+39,372 and 686,540 bytes. The unreported difference was 647,168 bytes, exactly
+1,024 retained 632-byte leaf allocations. With
+`retained_source_bytes_per_owner_max = 65,536`, the retained-root Thing still
+reached `Complete` with the reported 40,436 bytes although measured live heap
+alone exceeded the ceiling.
+
+The serde_json representation checker, the focused TD tests, and github-pr:74
+mainline CI all passed at this head. They distinguish IndexMap and
+String-backed Number feature unification, and test visible String/Vec
+capacities, but do not observe BTreeMap node allocations or prove a bound over
+construction and deletion histories. Therefore the github-pr:74 branch-only
+claim that the census conservatively accounts every reachable owned allocation
+is false. No completion evidence is admitted or produced by this withdrawal.
+
+Workspace topic `0065-liballoc-btreemap-retained-representation-impact.md`
+owns the open architecture question. It must compare an exact
+rustc/liballoc-and-target representation freeze, a project-owned observable
+map representation, a deliberate exact-original/retained-source contract
+change, and any genuinely private-layout-independent conservative accounting
+method. This finding does not select among them.
 
 ## 2026-09-07 impact finding
 
