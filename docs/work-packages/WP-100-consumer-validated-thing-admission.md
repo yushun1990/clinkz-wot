@@ -8,6 +8,8 @@ WP-200/WP-400 implementation, or a Consumer architecture gate.
 
 Decision review: github-pr:76.
 
+Authority migration review: github-pr:78.
+
 The prior exact-caller-`Thing`, serde_json representation-guard boundary
 accepted by github-pr:72 is superseded. Github-pr:75 remains the impact review
 that withdrew admission after github-pr:74's private-liballoc accounting was

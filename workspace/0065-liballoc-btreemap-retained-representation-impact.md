@@ -15,7 +15,7 @@ Impact review location: github-pr:75
 
 Decision review location: github-pr:76
 
-Authority migration review location: github-pr:pending
+Authority migration review location: github-pr:78
 
 ## Question
 
