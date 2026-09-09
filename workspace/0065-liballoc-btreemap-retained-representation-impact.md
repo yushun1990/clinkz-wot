@@ -13,7 +13,7 @@ Blocked candidate: github-pr:74 (closed without merge)
 
 Impact review location: github-pr:75
 
-Decision review location: pending
+Decision review location: github-pr:76
 
 ## Question
 
