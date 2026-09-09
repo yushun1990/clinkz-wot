@@ -28,7 +28,7 @@ Topics are retained after migration as decision history.
 
 ** OPEN
 
-- [[file:0065-liballoc-btreemap-retained-representation-impact.md][0065 liballoc BTreeMap Retained Representation Impact]]
+- None.
 
 ** DISCUSSING
 
@@ -36,7 +36,7 @@ Topics are retained after migration as decision history.
 
 ** DECIDED
 
-- None.
+- [[file:0065-liballoc-btreemap-retained-representation-impact.md][0065 liballoc BTreeMap Retained Representation Impact]]
 
 ** MIGRATED
 
