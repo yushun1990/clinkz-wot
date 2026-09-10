@@ -3,6 +3,9 @@
 
 use std::cell::Cell;
 
+#[cfg(test)]
+mod cancellation;
+
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 struct Trace {
     reads: usize,
@@ -64,7 +67,7 @@ mod tests {
     };
     use serde_json::{Number, Value};
 
-    fn lexical(number: &Number) -> (observed::decimal::Decimal, Trace) {
+    pub(super) fn lexical(number: &Number) -> (observed::decimal::Decimal, Trace) {
         let bytes = number.as_str().as_bytes();
         BASE.with(|base| base.set(bytes.as_ptr() as usize));
         TRACE.with(|trace| trace.set(Trace::default()));
@@ -82,6 +85,10 @@ mod tests {
     }
 
     fn thing(number: Number) -> Thing {
+        thing_with_maximum(number, Number::from(2))
+    }
+
+    pub(super) fn thing_with_maximum(number: Number, maximum: Number) -> Thing {
         let mut thing: Thing = serde_json::from_str(
             r#"{"@context":"https://www.w3.org/2022/wot/td/v1.1","title":"numeric probe","security":["none"],"securityDefinitions":{"none":{"scheme":"nosec"}},"schemaDefinitions":{"probe":{"type":"string"}}}"#,
         ).unwrap();
@@ -103,7 +110,7 @@ mod tests {
         schema
             ._context
             ._extra_fields
-            .insert("maximum".into(), Value::from(2));
+            .insert("maximum".into(), Value::Number(maximum));
         thing
     }
 
