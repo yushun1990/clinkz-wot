@@ -1,0 +1,12 @@
+[package]
+name = "validated-thing-number-boundary-probe"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[workspace]
+
+[dependencies]
+clinkz-wot-td = { path = "../../../td" }
+clinkz-wot-foundation = { path = "../../../foundation" }
+serde_json = { version = "1.0", features = ["arbitrary_precision"] }
