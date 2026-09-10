@@ -10,6 +10,10 @@ Decision review: github-pr:76.
 
 Authority migration review: github-pr:78.
 
+Shared RFC3339 decode amendment: [workspace impact review 0066](../../workspace/0066-shared-rfc3339-decode-impact.md),
+based on github-pr:79. The frozen decoder contract below and its permitted
+future source path amend the migrated boundary without readmitting it.
+
 The prior exact-caller-`Thing`, serde_json representation-guard boundary
 accepted by github-pr:72 is superseded. Github-pr:75 remains the impact review
 that withdrew admission after github-pr:74's private-liballoc accounting was
@@ -276,6 +280,95 @@ The strict entry is the only direct builder/decoder source admitted here.
 Adding a second strict format or a field-by-field public builder requires its
 own impact review. Host callers may use either entry. Application-static
 callers requiring an absolute engine-owned bound use `from_json`.
+
+## Shared resumable RFC3339 decode
+
+`td/src/rfc3339.rs` remains the single private semantic owner of `created` and
+`modified` lexical decoding to `time::OffsetDateTime`. After separate
+readmission, extraction may replace its synchronous parser internals with one
+resumable decoder used by both the existing serde adapter and strict JSON
+entry. Grammar, component range checks, fractional precision, offset handling,
+and complete-input rejection must have one rule implementation. A second
+parser in `validated.rs`, a shortened-prefix parser, or module rerouting that
+orphans the current owner is not permitted. Private helper signatures and
+decomposition remain implementation choices; no public decoder API is added.
+
+### Entry and progress responsibility
+
+- Ordinary serde deserialization drives that same decoder synchronously to
+  completion and preserves its existing return/error behavior. It acquires no
+  `WorkBudget` parameter, admission guarantee, or new input limit. Its caller
+  retains external worst-case input/work responsibility; this adapter cannot
+  be used as a bounded strict-builder shortcut.
+- `ValidatedThingBuilder::from_json` remains a fixed-work constructor. During
+  `step`, the strict builder owns the decoder continuation, borrowed-input
+  position, first cause, per-step `&mut WorkBudget`, and the one non-resettable
+  `document_validation_work_units_max` remainder. The decoder owns parse
+  semantics and resumable scalar state; it cannot create/reset an allowance or
+  perform an externally sized scan outside its caller's charged step.
+- `ValidatedThingCursor::from_thing` receives already typed timestamps. It
+  inspects/copies/compares those fixed-size values under the existing generic
+  field charges; it does not format them, reparse them, or reject a Basic-valid
+  typed value because its spelling would fail a serializer or lexical parser.
+
+Strict decoding charges `CodecInputBytes` and the shared lifetime remainder
+before each input-byte processing unit, with existing structural charges for
+field/node visits. JSON unescaping and date decoding must compose resumably:
+an already charged byte may feed bounded decoder state directly; a separate
+scan of decoded bytes must carry its own byte charges. A cached lookahead is
+fixed state, not permission for an uncharged rescan. Work is not double charged
+merely for crossing a helper boundary, and the counterexample's instrumented
+read count is not a new WorkClass formula. Emitted/copied arena bytes retain
+their existing `CodecOutputBytes` charges.
+
+The continuation must resume inside arbitrarily long fractional seconds and
+at delimiters, offsets, and end-of-input, including late-invalid suffixes.
+Exhausting the current step allowance yields `Pending` before the uncharged
+unit; repeated sufficient small allowances advance without restarting the
+prefix. Zero allowance permits no decode progress. Exhausting the lifetime
+remainder produces the existing resource `Limit` through rollback, never a
+syntax/Basic rejection. Cancellation uses the existing bounded checks,
+first-cause preservation, and rollback contract. Node-only charging, an atomic
+whole-parser precharge, accumulating credits across steps for a final bulk
+scan, and uncharged finish/error scans do not satisfy this contract. Fixed
+component finalization must belong to bounded charged progress, not an
+unaccounted terminal helper.
+
+### Semantic and storage preservation
+
+The oracle is existing TD decoding behavior, including its accepted subset
+and extensions, not a newly selected RFC profile. Preserve four-digit years;
+`T`, `t`, or space date/time separators; `Z`/`z`; signed offsets with optional
+seconds; the current calendar/time/offset range checks; and full-input syntax,
+out-of-range, and trailing-input rejection behavior. Fractions require at
+least one digit, pad fewer than nine digits to nanoseconds, truncate numerical
+contribution after nine, and still inspect every remaining digit and suffix.
+No lexical fraction-length cap, new rounding, timezone normalization, or
+Basic-validity restriction is introduced. `OffsetDateTime` component,
+nanosecond, and offset results and existing serde error classification/text
+remain equivalent. Serialization and formatting behavior remain unchanged.
+Strict-entry failures use the already frozen inline diagnostics; they do not
+allocate serde error strings.
+
+Decoder state is fixed-size inline scalar state: phase, checked position,
+bounded component/precision accumulators, optional cached input unit, and
+fixed result/error data. Fraction precision accumulation saturates after nine
+digits while input position continues monotonically; no fraction-sized counter
+or buffer is needed. State may reference only the builder's existing borrowed
+input or charged build arenas and is never retained as an input borrow in the
+completed snapshot. JSON escape state is likewise fixed; any materialized
+decoded bytes belong to the existing charged byte-build arena. No new string,
+vector, map, scratch arena, recursive task, diagnostic, or cleanup allocation
+category is permitted. Inline state belongs to its existing cursor/owner
+capacity, not an invented physical allocation request. The three retained /
+four temporary allocation catalog and prepaid bounded release remain intact.
+
+This amendment resolves only the source-boundary omission. Readmission item 6
+still requires executable shared-decoder traces, and items 2, 3, 5, and 7 still
+require allocation, typed parity, supported-cell, and resource proof covering
+this extraction. None of the eight items is completed here. A required new
+WorkClass, resource row/account, public API, allocation category, or broader
+ownership/lifecycle change stops work for a new impact review.
 
 ## Frozen footprint and semantic view
 
@@ -553,6 +646,8 @@ only:
 - `td/src/td_defaults.rs` (shared storage-neutral default/security queries);
 - `td/src/thing.rs` and `td/src/lib.rs` (Thing adapter and public exports);
 - `td/src/flat.rs` (shared typed field decoding used by the strict JSON entry);
+- `td/src/rfc3339.rs` (the shared resumable date decoder and its synchronous
+  serde adapter, limited to the contract above);
 - `td/src/components/affordance.rs`;
 - `td/src/components/context.rs`;
 - `td/src/components/data_schema.rs`;
