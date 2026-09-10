@@ -40,6 +40,7 @@ Topics are retained after migration as decision history.
 
 ** MIGRATED
 
+- [[file:0066-shared-rfc3339-decode-impact.md][0066 Shared RFC3339 Decode Impact]]
 - [[file:0065-liballoc-btreemap-retained-representation-impact.md][0065 liballoc BTreeMap Retained Representation Impact]]
 - [[file:0064-serde-json-retained-representation-impact.md][0064 serde_json Retained Representation Impact]]
 - [[file:0063-consumer-plan-set-handoff-closure.md][0063 Consumer Plan-Set Handoff Closure]]
