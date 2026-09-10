@@ -6,6 +6,10 @@ Basic-validation part of pre-readmission item 6, with implications for typed
 parity (item 3) in a required `arbitrary_precision` graph (item 5).
 The tranche stays `planned` / `candidate` / `current`.
 
+The [decimal-cancellation follow-up](#decimal-cancellation-follow-up) below
+adds a second blocker after github-pr:81: a bounded, exact-value reduction
+does not necessarily preserve the actual stable query or Basic acceptance.
+
 Authority examined: the admission record at master commit
 `8f958b5413e2c26406ab4aac0da4fda9ff6b6495`, including the shared RFC3339
 amendment from github-pr:80. That amendment addresses date decoding. This
@@ -183,3 +187,140 @@ evidence, or the passed Producer Property Read gate. It does not falsify any
 of those claims. Their full registered commands are not asserted re-executed
 by this fixture. There is no future completion evidence manifest and no claim
 that all eight pre-readmission obligations have been satisfied.
+
+
+## Decimal-cancellation follow-up
+
+Baseline: master `a268f5794a3b96c562de98eaaf5996e081fca7a5` (github-pr:81).
+The original four tests and their counterexample remain intact. Two tests in
+[`src/cancellation.rs`](src/cancellation.rs) investigate the simpler proposed
+alternative: scan incrementally, preserve lossless source text separately, and
+compute the float projection from the exact decimal value using bounded state.
+The witness isolates exponent cancellation before any general rounding
+algorithm is needed. It is not a production normalizer or a complete Number
+parser.
+
+For positive integer `n`, both of these legal decimal spellings have exact
+mathematical value one:
+
+```text
+I(n) = "1" + "0" repeated n times + "e-" + decimal(n)
+F(n) = "0." + "0" repeated (n-1) times + "1e+" + decimal(n)
+```
+
+They denote respectively `10^n * 10^-n` and `10^-n * 10^n`. Public
+`serde_json::from_str::<Number>` accepts them and retains the spelling in the
+required arbitrary-precision graph. No unchecked construction is involved.
+On the recorded rustc 1.95.0 / serde_json 1.0.149 Host graph:
+
+| Input | Bytes | Actual `Number::as_f64()` | Exact-value projection | Actual Basic | Basic using exact-value projection |
+| --- | ---: | --- | --- | --- | --- |
+| `I(655359)` | 655368 | `Some(1.0)` | `Some(1.0)` | reject | reject |
+| `F(655359)` | 655369 | `Some(1.0)` | `Some(1.0)` | reject | reject |
+| `I(655360)` | 655369 | `None` | `Some(1.0)` | accept | reject |
+| `F(655360)` | 655370 | `Some(0.0)` | `Some(1.0)` | accept | reject |
+
+Each actual Basic result comes from the public TD validator with the tested
+Number as a StringSchema extension `minimum` and `maximum = 0.5`. The
+comparison column calls that same validator with `Number::from(1)` as minimum;
+it is a semantic oracle for the proposed cached float value, not a normalized
+snapshot or an equality claim between the two Numbers. Basic's existing
+optional numeric bounds skip a minimum whose query returns `None`; a zero
+minimum passes. A minimum of one rejects as `InvalidSchema`. The test copies
+no Basic rule body. Keeping original lossless bytes alongside an incorrect
+cached projection would still produce this comparison mismatch.
+
+The installed lexical observer explains the discrepancy. `parse_scientific`
+updates its exponent only while the accumulated value is below `0x10000`.
+For exponent digits `655359`, the accumulator reaches `65535` before the last
+digit and then reaches `655359`. For `655360`, it reaches `65536` before the
+last digit, which is consumed without updating the accumulator. Cancellation
+against the mantissa length is therefore different. The observed resulting
+lexical exponents are `-18`, `0`, `589806`, and `-589824` in table order;
+observed lexical byte reads are `655399`, `1310749`, `655400`, and `1310751`.
+The real public query produces positive infinity (filtered to `None`) or
+positive zero in the two counterexamples. This source observation neither
+pins those private rules as product authority nor replaces the actual-query
+oracle. A future compiler changing this behavior should fail this finding's
+explicit assertions and trigger re-evaluation, not force the product to keep
+an old compiler.
+
+### Bounded restricted witness and resource scope
+
+`UnitFold` recognizes only positive unit-valued powers of ten from an already
+parsed Number's borrowed stable `as_str()` content. It counts trailing and
+fractional digits and accumulates the explicit exponent with checked scalar
+arithmetic. Their final sum proves the exact value is one. `OutsideWitness`
+means only that this restricted recognizer supplies no proof; it is not TD
+syntax/Basic invalidity. No general integer, float-rounding, or strict JSON
+parser claim is made.
+
+The fold consumes one actual Foundation `CodecInputBytes` unit and one shared
+lifetime unit before each byte observation. It stores continuation between
+steps and does not run `as_f64`, Display, serde, a full-string query, or a
+rescan in a charged step. At allowances 1, 7, and 128, tests assert exact byte
+charges and `ceil(input_bytes / allowance)` productive calls. Interleaved zero
+budgets preserve every cursor field. Fresh budgets cannot replenish lifetime;
+exhaustion fixes `Limit`. Cancellation at every byte boundary of the short
+`100000e-5` witness fixes `Cancelled`, and subsequent calls cannot replace
+that first terminal cause. Final constant scalar arithmetic belongs to the
+last charged byte. No work credits are accumulated for a later bulk call.
+
+The restricted fold has a borrowed slice and fixed scalars only: 64 inline
+bytes on this Host and no heap allocation sites or destructor. Its own
+terminal/drop work requires no arena release, diagnostic allocation, or
+cleanup record. This is a source-audited statement about the restricted fold,
+not allocator instrumentation of the full probe. Input construction, real
+Number parsing, original Basic validation/error allocation, and the lexical
+source observer are deliberately outside the fold as setup/oracles. No
+retained arena, lossless byte-copy path, ledger, peak/contiguous reservation,
+Servient inline owner, or complete cleanup proof is implemented or claimed.
+The inputs are below the existing Host default `document_bytes_max` of
+1,048,576; the restricted scan is also below its default validation-work
+allowance. Full normalization costs are not inferred from that narrow scan.
+Resource limits may reject work normally, but this finding supplies no reason
+to impose a new lexical cap or classify these Numbers as Basic-invalid.
+
+### Result and stop boundary
+
+There is a concrete impossibility for **exact-value-only** float projection
+under the observed existing query semantics: `Number::from(1)` and each long
+counterexample have the same exact rational value but different public float
+projections. No algorithm depending solely on that rational value can match
+all three. This falsifies value-preserving decimal compaction followed by
+correct rounding as a sufficient replacement for the frozen query route,
+even if it retains lossless source text separately and meets bounded progress.
+It does **not** prove that every lexeme-aware resumable projection is
+impossible. In particular, no such complete algorithm has been constructed
+or accepted by this fixture.
+
+The investigation stops without an authority migration. There is no positive
+proof satisfying semantics, progress, resources, and supported features
+together, so numeric boundary closure cannot be claimed. The general
+rounding corpus, feature-neutral access to Number content, strict-entry
+projection, and complete resource/target proof remain unresolved. Silently
+substituting mathematically correct parsing would change existing Basic
+acceptance. Freezing the observed private exponent threshold, copying
+libcore into production, restricting supported compiler/serde graphs, or
+allowing an uninterruptible original query would require a different boundary;
+none is used to rescue this candidate. A future proposal must preserve actual
+observable semantics across the supported policy or deliberately revisit
+that policy through its authority owner.
+
+The eight-item coverage table above remains unchanged: this adds a narrow
+item-3 semantic counterexample and restricted item-6 progress trace, not a
+completed item. Production Rust, authority, admission, resource schema,
+public API, work-package statuses, and gate states are untouched. The shared
+RFC3339 direction and prior Foundation/Context/Producer evidence are not
+falsified by this numeric finding; their full validation is not claimed here.
+
+Reproduce just the new finding (same rust-src requirement and locked Host
+arbitrary-precision graph as the original fixture):
+
+```sh
+cargo test --locked --manifest-path tools/architecture-fixtures/validated-thing-number-boundary/Cargo.toml cancellation:: -- --nocapture
+```
+
+The full fixture command above runs all six tests. Mainline CI does not run
+this standalone observation fixture; green mainline CI is not a substitute
+for this explicit reproduction command or independent acceptance.
