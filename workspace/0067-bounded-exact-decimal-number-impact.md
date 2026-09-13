@@ -6,6 +6,8 @@ Kind: ADR-0013 scoped implementation-impact review / TD semantic authority amend
 
 Evidence baseline: master `c7bce96` (github-pr:81 and github-pr:82).
 
+Impact and authority amendment review location: github-pr:83.
+
 ## Finding and decision
 
 The [Number boundary fixture](../tools/architecture-fixtures/validated-thing-number-boundary/README.md)

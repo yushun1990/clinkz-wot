@@ -10,6 +10,9 @@ Decision review: github-pr:76.
 
 Authority migration review: github-pr:78.
 
+Exact-decimal amendment review location: github-pr:83 (independent acceptance
+pending).
+
 Shared RFC3339 decode amendment: [workspace impact review 0066](../../workspace/0066-shared-rfc3339-decode-impact.md),
 based on github-pr:79. The frozen decoder contract below and its permitted
 future source path amend the migrated boundary without readmitting it.
