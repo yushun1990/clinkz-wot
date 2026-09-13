@@ -1,0 +1,10 @@
+[package]
+name = "validated-thing-feature-access-unifier"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+validated-thing-feature-access-borrow = { path = "../borrow" }
+validated-thing-feature-access-portable = { path = "../portable" }
+serde_json = { version = "1.0", default-features = false, features = ["alloc", "arbitrary_precision"] }

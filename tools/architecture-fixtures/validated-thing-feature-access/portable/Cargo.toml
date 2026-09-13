@@ -1,0 +1,9 @@
+[package]
+name = "validated-thing-feature-access-portable"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+serde = { version = "1.0", default-features = false }
+serde_json = { version = "1.0", default-features = false, features = ["alloc"] }
