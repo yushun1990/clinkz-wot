@@ -115,6 +115,18 @@ content metadata, effective operations/security, and security-definition
 scheme lookup. Planning MUST NOT reconstruct a `Thing`, parse the snapshot, or
 copy those rules.
 
+The planned Consumer boundary amends only Basic's five numeric schema-extension
+predicates (`minimum`, `exclusiveMinimum`, `maximum`, `exclusiveMaximum`, and
+`multipleOf`) to compare legal `serde_json::Number` values as exact finite
+decimals in that single TD kernel. The public Thing adapter and both future
+admission entries must agree on the amended rule. This deliberately changes
+current float-projection acceptance for some Numbers; it does not change
+Number syntax, other Basic rules, or the validated view. Cursor comparison
+remains resumable, byte-charged, and cancellable under the existing work and
+resource policy. The detailed rule and its readmission proof belong solely to
+the WP-100 validated-Thing admission record; current production Rust has not
+implemented it.
+
 The normalized `ValidatedThing` remains the one retained application/source
 owner after publication. Source-to-persistent-document reclassification moves
 only the sealed arenas' total requested bytes and preserves physical storage,

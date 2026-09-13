@@ -10,9 +10,18 @@ Decision review: github-pr:76.
 
 Authority migration review: github-pr:78.
 
+Exact-decimal amendment review location: github-pr:83 (independent acceptance
+pending).
+
 Shared RFC3339 decode amendment: [workspace impact review 0066](../../workspace/0066-shared-rfc3339-decode-impact.md),
 based on github-pr:79. The frozen decoder contract below and its permitted
 future source path amend the migrated boundary without readmitting it.
+
+Bounded exact-decimal Number amendment: [workspace impact review 0067](../../workspace/0067-bounded-exact-decimal-number-impact.md),
+based on github-pr:81 and github-pr:82. It deliberately replaces the frozen
+stable-float-query direction for the five Basic numeric extension predicates.
+Current production Rust still uses `as_f64`; this is future authority, not a
+claim that the new semantics are implemented or readmitted.
 
 The prior exact-caller-`Thing`, serde_json representation-guard boundary
 accepted by github-pr:72 is superseded. Github-pr:75 remains the impact review
@@ -107,19 +116,28 @@ Semantic equivalence is fieldwise equivalence of the typed `Thing` data model:
 - nested extension null, boolean, string, array, object, and number values are
   equal without floating-point coercion; and
 - the same TD-owned Basic, default-operation, URI-resolution, and security-
-  inheritance rules produce the same result.
+  inheritance rules produce the same result under the amended future Basic
+  rule. The five numeric extension predicates are an explicit semantic change
+  from current production Basic; current `as_f64` acceptance is not the oracle
+  for those predicates.
 
-Strings are copied from stable `str` content, never capacity. Integers and
-representable floating numbers are captured from stable typed Number queries;
-otherwise Number's stable display implementation writes directly into the
-charged byte arena. That operation is not Thing/JSON serialization and may not
-allocate an intermediate `String`. The normalized numeric form must preserve
-the typed `serde_json::Number` value accepted in the resolved feature graph.
+Strings are copied from stable `str` content, never capacity. Number content
+is captured losslessly from the typed `serde_json::Number` through stable public
+access in the resolved feature graph, with every source/emitted byte charged.
+The arbitrary-precision graph may borrow its public decimal text; other
+graphs may use a proved bounded public formatting path. Neither a whole
+`as_f64` query over input-sized text nor an uninterruptible whole-Number
+Display call on that text is a charged cursor primitive. No intermediate
+`String`, second owned Number, or serializer output may be allocated. The
+normalized form preserves the typed Number and its lossless content; arithmetic
+equality used by Basic does not collapse distinct typed/lexical Number values
+for fieldwise equivalence.
 
 One private storage-neutral TD semantic-access kernel is shared by the public
 `Thing` adapter and normalized snapshot adapter. The existing Basic rule set,
 default-operation rules, URI rules, and security-reference/inheritance rules
-remain TD-owned and singular. Compatibility conversion runs Basic validation
+remain TD-owned and singular, subject only to the numeric amendment below.
+After implementation, compatibility conversion runs the amended Basic rules
 against the typed input adapter and proves fieldwise equivalence with the
 snapshot. The strict builder validates its completed snapshot through the same
 rule kernel. The existing public `Thing::validate_with_level` adapter may still
@@ -127,6 +145,65 @@ materialize its established `ValidateError`; the normalization adapter instead
 captures the same kernel's first rejection in the fixed inline
 `ValidatedThingInvalid`. Neither path copies semantic rules into the normalizer
 or Planning, and the diagnostic sink cannot change which inputs Basic accepts.
+
+## Bounded exact-decimal Number semantics
+
+The future TD Basic rule treats each `serde_json::Value::Number` in schema
+extension fields named `minimum`, `exclusiveMinimum`, `maximum`,
+`exclusiveMaximum`, or `multipleOf` as an exact finite decimal value. Its
+decimal digits, sign, fraction position, and optional signed exponent determine
+the mathematical value `sign * coefficient * 10^exponent`. Leading/trailing
+zeroes and exponent spelling do not change arithmetic value; positive and
+negative zero compare equally. The rule neither rounds through binary float
+nor treats an overflow, underflow, long exponent, or failed float projection
+as an absent bound. Legal Number syntax remains legal; an ordinary configured
+resource limit can terminate admission as `Limit`, not `InvalidSchema`.
+
+The four bound fields retain their current pairwise order checks and field
+presence behavior, but compare exact decimal values when the extension value
+is a Number. A non-Number extension value remains ignored for that numeric
+predicate as before. `multipleOf` retains its current Basic predicate of
+strict positivity when it is a Number; this amendment does not add divisibility
+validation. These checks still run on every schema variant's context, including
+non-numeric variants. Typed `NumberSchema`/`IntegerSchema` fields retain their
+current public types and comparisons; no binary-float conversion is added to
+or removed from those typed-field rules.
+
+For a typed compatibility input, the decimal source is the Number's stable
+public representation in the resolved serde_json feature graph, not its private
+storage, caller capacity, or an invented canonicalization. The strict JSON
+entry must derive the same value that the corresponding typed Number in that
+graph would expose, while preserving the strict decoder's accepted syntax and
+the snapshot's lossless Number content. If ordinary parsing in a graph changes
+the typed Number's presentation, both entries compare that resulting typed
+value; raw input spelling alone must not create a different Basic rule. The
+semantic corpus must include spelling variants, signed zero, large coefficients
+and exponents, rounded base-graph Numbers, and the #81/#82 witnesses across the
+supported cells. It must record the intentional differences from today's
+`as_f64` Basic result, not label them parity failures.
+
+The decimal inspection and comparison are private, resumable TD-kernel work.
+They may hold only fixed inline scalar continuation, positions/ranges into the
+borrowed input or already charged byte arena, and the existing traversal
+frames. No unbounded exponent accumulator, input-sized scratch, bigint, nested
+owned Number, or fifth temporary allocation site is admitted. A full-string
+parse, `as_f64`, reentrant Display, or comparator rescan may not hide work in
+one charged node. Every inspected Number byte and every repeated comparison
+pass consumes `CodecInputBytes` plus the same non-resettable lifetime unit
+before access; structural visits retain their existing `JsonSchemaNodes` and
+`DocumentNodes` charges. Zero budget makes no numeric progress, positive small
+budgets resume without replaying an uncharged prefix, and cancellation remains
+bounded with first-cause rollback. Exact comparison may use several charged
+passes; the full source-level prototype must establish a finite work bound,
+fixed state, and absence of an uncharged bulk finish in every supported graph.
+
+Ordinary public `Thing::validate_with_level(Basic)` remains synchronous and
+keeps its existing signature and error category. It will share the amended TD
+rule and its caller remains responsible for externally sized synchronous work.
+The cursor and strict builder alone offer budgeted, cancellable admission; the
+synchronous adapter is not a shortcut inside either charged step. This is a
+deliberate change in Basic acceptance for affected numeric extensions. No
+other Basic, default, URI, security, serialization, or public API rule changes.
 
 ## Frozen public API
 
@@ -518,11 +595,11 @@ cursor helper but may not move work or allocation outside this table.
 | --- | --- | --- |
 | Strict JSON token and typed-field decode | `CodecInputBytes` per consumed input byte plus the applicable structural/specific class | mutable node/edge/byte build arenas are `admission_temporary_bytes_*`; the borrowed input buffer is caller-owned and bounded by `document_bytes_max` |
 | Compatibility typed-field inspection | `DocumentNodes` per generic field/node; `CodecInputBytes` per string/number byte read | traversal frames use the one temporary frame arena; the borrowed `Thing` graph is the entry baseline |
-| Basic validation | `DocumentNodes` per generic node, `JsonSchemaNodes` per schema node, `UriBytes` per URI byte, and `SecurityBranches` per root/child/reference | no allocation in the normalization adapter; the first failure is fixed inline |
+| Basic validation | `DocumentNodes` per generic node, `JsonSchemaNodes` per schema node, `CodecInputBytes` per numeric extension byte inspected (including charged comparison passes), `UriBytes` per URI byte, and `SecurityBranches` per root/child/reference | no allocation in the normalization adapter; the first failure is fixed inline |
 | Defaults, effective operations, and security inheritance/lookup | `DocumentNodes` per Form/default/operation item and `SecurityBranches` per security branch/reference | no allocation; cached resolved results use already counted node/edge/byte arena entries |
 | Checked counts and range/offset calculation | applicable structural class per visited item | fixed cursor scalars only; overflow records fixed `CheckedArithmetic` and enters rollback |
 | Deterministic map ordering | `DocumentNodes` per comparison/move and `CodecInputBytes` per compared key byte | resumable in-place sort; no map or sort-scratch allocation |
-| String and lossless number normalization | `CodecInputBytes` per source byte and `CodecOutputBytes` per emitted byte | current byte-build or exact retained byte arena; no intermediate `String` or serializer output |
+| String and lossless number normalization | `CodecInputBytes` per source byte and `CodecOutputBytes` per emitted byte; exact-decimal Basic comparisons separately charge every inspection | current byte-build or exact retained byte arena; no intermediate `String`, owned Number, or serializer output |
 | URI parse/resolution and copied URI output | `UriBytes` per source/output byte, plus `CodecOutputBytes` for retained bytes | byte arena only; no URI-owned nested allocation survives emission |
 | Node/edge normalization and grow copies | `DocumentNodes` per emitted or copied element; byte copies retain their byte charges | one mutable arena allocation per category at a time, with charged old/new overlap during growth |
 | Seal | `DocumentNodes` per node/edge copied and `CodecInputBytes`/`CodecOutputBytes` per byte copied | reserve each exact retained arena as source while its temporary predecessor remains live; release predecessor only after transfer |
@@ -540,6 +617,8 @@ reach a resource `Limit` even when a semantic/byte structural ceiling still
 fits, without reclassifying that input as Basic-invalid. The table covers both
 entries; the difference between them is the baseline described by their public
 guarantees, not an uncharged helper path.
+The old stable `Number::as_f64` query and an exact-value-to-`f64` projection are
+not accepted cursor work or Basic comparison semantics.
 
 ## Normalization, reservation, and seal order
 
@@ -661,9 +740,13 @@ only:
 - `td/src/core/data_type/version.rs`.
 
 Changes outside `td/src/validated.rs` may only extract storage-neutral semantic
-access/decoding used by both existing `Thing` behavior and the normalized
-snapshot. They may not change public `Thing` fields, builders, serialization,
-deserialization, Basic-valid input set, defaults, or URI/security semantics.
+access/decoding used by both `Thing` behavior and the normalized snapshot,
+plus the explicitly amended exact-decimal Basic predicate in the existing TD
+semantic owner. They may not change public `Thing` fields, builders,
+serialization, deserialization, other Basic-valid input sets, defaults, or
+URI/security semantics. The five numeric extension predicates are the sole
+authorized Basic acceptance change and must reach the public Thing adapter
+and both admission entries together.
 Tests, external compile fixtures, and the registered future evidence file may
 be added outside those production paths. A required production change outside
 this list returns the tranche to impact review.
@@ -687,7 +770,8 @@ This migration and the later WP-100 tranche do not implement or claim:
 - WP-200 or WP-400 admission/status/evidence changes;
 - Consumer architecture-gate registration;
 - any resource row, generated getter, or new work class;
-- global Basic-validation strengthening or Consumer ID synthesis; or
+- any Basic-validation change beyond the five exact-decimal numeric extension
+  predicates, or Consumer ID synthesis; or
 - another operation family, strict input format, or broad WP-100 completion.
 
 ## Evidence required before separate readmission
@@ -706,6 +790,11 @@ An independent exact-head review must accept all of the following before any
    associations, nested extension values, long strings, and lossless numbers.
    It must include a Basic-valid typed `Thing` that cannot complete the chosen
    serializer path and prove compatibility normalization still accepts it.
+   For the five amended numeric extension predicates, use the stated exact
+   decimal oracle, show public Thing/compatibility/strict-entry agreement in
+   each supported graph, and record the deliberate delta from current `as_f64`
+   Basic acceptance, including both #82 cancellation forms and #81 long
+   exponents. Preserve all unaffected Basic results.
 4. An external Planning contract fixture that uses only
    `ValidatedThingView` to enumerate a non-first Property/Form coordinate,
    inspect raw/resolved URI and content metadata, apply effective operations,
@@ -719,7 +808,10 @@ An independent exact-head review must accept all of the following before any
 6. Exact progress traces for Basic validation, typed/direct decode,
    normalization, sorting, URI/string/number handling, seal, diagnostics,
    cancellation, every rollback cause, zero-budget no-progress, lifetime-
-   budget non-reset, and prepaid bounded cursor drop.
+   budget non-reset, and prepaid bounded cursor drop. Number traces must cover
+   public Number access, repeated exact-comparison passes, small positive and
+   zero budgets, late distinguishing digits, huge exponents, first-cause
+   cancellation, and no synchronous float/Display bulk operation in a step.
 7. A resource proof mapping source, temporary, peak, actual contiguous request,
    diagnostics, cleanup, reclassification, and inline Servient-owner capacity
    to existing authority without treating aggregate capacity as one allocation.

@@ -293,6 +293,13 @@ Typed semantic equivalence is fieldwise over the `Thing` data model; Thing JSON
 serialize/deserialize round-trip is forbidden because serializer strictness may
 not narrow Basic-valid compatibility input.
 
+The planned Basic kernel deliberately replaces float projection for the five
+numeric schema-extension predicates with bounded exact-decimal comparison.
+The public Thing validator and both future admission entries share that rule;
+lossless typed Number equivalence remains distinct from arithmetic equality.
+This is a future semantic amendment, not current Rust behavior or readmission.
+The admission record owns its exact contract and proof burden.
+
 The frozen `ValidatedThingView` supplies allocation-free identity, Property
 iteration/lookup and ordinal, original Form indices, raw/resolved URI, content
 metadata, effective operations/security, and security-definition scheme
