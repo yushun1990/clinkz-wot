@@ -1,0 +1,14 @@
+[package]
+name = "validated-thing-feature-access-borrow"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+clinkz-wot-td = { path = "../../../../td", default-features = false }
+serde_json = { version = "1.0", default-features = false, features = ["alloc"] }
+
+[features]
+# Deliberately not forwarded. A dependent's serde_json feature does not set
+# the corresponding feature on this TD-like package.
+arbitrary_precision = []
