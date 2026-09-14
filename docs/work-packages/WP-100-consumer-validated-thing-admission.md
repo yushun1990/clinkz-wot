@@ -29,6 +29,9 @@ TD capability and synchronous base responsibility below replace the prior
 scalar-serde bounded-admission requirement. No production feature or Rust is
 implemented by this authority migration.
 
+Number feature-boundary review location: github-pr:85 (independent acceptance
+pending).
+
 The prior exact-caller-`Thing`, serde_json representation-guard boundary
 accepted by github-pr:72 is superseded. Github-pr:75 remains the impact review
 that withdrew admission after github-pr:74's private-liballoc accounting was
@@ -214,7 +217,8 @@ externally sized synchronous work.
 The cursor and strict builder alone offer budgeted, cancellable admission; the
 synchronous adapter is not a shortcut inside either charged step. This is a
 deliberate change in Basic acceptance for affected numeric extensions. No
-other Basic, default, URI, security, serialization, or public API rule changes.
+other Basic, default, URI, security, or serialization rules change. The public
+availability amendment is stated separately below.
 
 ### Synchronous base-graph responsibility
 
