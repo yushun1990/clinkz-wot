@@ -268,8 +268,8 @@ already owned by a more specific class. Typed schema-node visits remain
 `SecurityBranches`; and destruction of one live arena consumes a prepaid
 `CleanupItems` unit. Work is neither
 relabelled nor double charged merely because it occurs during normalization.
-The planned TD exact-decimal Basic predicate charges every Number byte it
-inspects, including repeated comparison passes, as `CodecInputBytes` under the
+During admission, the planned TD exact-decimal Basic predicate charges every
+Number byte inspected, including repeated comparison passes, as `CodecInputBytes` under the
 same lifetime remainder. This is a work classification, not a new Foundation
 numeric rule, WorkClass, resource row, or admission of that predicate.
 Every accepted class-specific unit also consumes one unit from a shared

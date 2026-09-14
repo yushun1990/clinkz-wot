@@ -81,6 +81,12 @@ guarantee. TD owns the single Basic/default/URI/security semantic kernel, typed
 fieldwise equivalence, the private normalized node/edge/byte snapshot, its
 structured allocation footprint, and terminal normalization rollback.
 
+The future validated surface requires opt-in TD `validated-thing`; its
+dependency boundary and supported graphs belong to the WP-100 validated-Thing
+admission record. Ordinary TD APIs and amended synchronous Basic remain
+available without it. Future Planning/Servient users of the surface must
+request the capability explicitly in their own admitted manifest changes.
+
 Planning borrows only `ValidatedThingView`. It receives deterministic Property
 iteration/lookup, Property ordinal, original Form indices, raw and resolved URI,
 content metadata, effective operations/security, and security-definition scheme

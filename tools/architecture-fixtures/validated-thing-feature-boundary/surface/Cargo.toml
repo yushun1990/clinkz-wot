@@ -1,0 +1,16 @@
+[package]
+name = "number-boundary-surface"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+number-boundary-td-prototype = { path = "../td-boundary", default-features = false }
+number-boundary-downstream = { path = "../downstream", default-features = false }
+
+[features]
+default = []
+# Enable the direct dependency's capability via a sibling.
+capability = ["number-boundary-downstream/validated-thing"]
+ap = ["number-boundary-downstream/ap"]
+order = ["number-boundary-downstream/order"]

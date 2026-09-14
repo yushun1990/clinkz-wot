@@ -118,10 +118,10 @@ sequence = 170
 status = "planned"
 admission_status = "candidate"
 impact_status = "current"
-impact_review = "workspace/0067-bounded-exact-decimal-number-impact.md"
-impact_disposition = "bounded-exact-decimal-number-authority-amended-without-readmission"
+impact_review = "workspace/0068-number-feature-boundary-impact.md"
+impact_disposition = "explicit-number-feature-boundary-and-base-basic-authority-migrated-without-readmission"
 decision_review = "github-pr:76"
-authority_migration_review = "github-pr:83"
+authority_migration_review = "github-pr:85"
 depends_on = []
 depends_on_packages = ["WP-000"]
 requirements = [
@@ -232,6 +232,7 @@ old_api_removals = [
 ]
 performance_workloads = []
 implementation_paths = [
+    "td/Cargo.toml",
     "td/src/validated.rs",
     "td/src/validate.rs",
     "td/src/td_defaults.rs",
@@ -252,6 +253,7 @@ implementation_paths = [
     "td/src/core/data_type/version.rs",
 ]
 pre_implementation_checks = [
+    "python3 tools/architecture-fixtures/validated-thing-feature-boundary/check.py",
     "tools/check-design-artifacts.sh",
     "cargo test --workspace --locked",
     "cargo check --locked -p clinkz-wot-foundation --no-default-features",

@@ -23,6 +23,15 @@ stable-float-query direction for the five Basic numeric extension predicates.
 Current production Rust still uses `as_f64`; this is future authority, not a
 claim that the new semantics are implemented or readmitted.
 
+Number feature-boundary amendment: [workspace impact review 0068](../../workspace/0068-number-feature-boundary-impact.md),
+based on github-pr:84 and the standalone feature-graph prototype. The explicit
+TD capability and synchronous base responsibility below replace the prior
+scalar-serde bounded-admission requirement. No production feature or Rust is
+implemented by this authority migration.
+
+Number feature-boundary review location: github-pr:85 (independent acceptance
+pending).
+
 The prior exact-caller-`Thing`, serde_json representation-guard boundary
 accepted by github-pr:72 is superseded. Github-pr:75 remains the impact review
 that withdrew admission after github-pr:74's private-liballoc accounting was
@@ -39,7 +48,8 @@ status, and PLAN text never entered master.
 - predecessor tranches: none
 - package dependency: `WP-000` (complete)
 - owner packages: `clinkz-wot-foundation`, `clinkz-wot-td`
-- feature cells: `no-default`, `async-no-std`, `std`
+- feature cells: `no-default`, `async-no-std`, `std`, each with the explicit
+  TD `validated-thing` capability for the frozen validated surface
 - admission state: `planned` / `candidate` / `current`
 - future completion evidence key: `consumer-normalized-validated-thing`
 
@@ -122,10 +132,11 @@ Semantic equivalence is fieldwise equivalence of the typed `Thing` data model:
   for those predicates.
 
 Strings are copied from stable `str` content, never capacity. Number content
-is captured losslessly from the typed `serde_json::Number` through stable public
-access in the resolved feature graph, with every source/emitted byte charged.
-The arbitrary-precision graph may borrow its public decimal text; other
-graphs may use a proved bounded public formatting path. Neither a whole
+is captured losslessly through public `Number::as_str()`: the explicit TD
+`validated-thing` capability guarantees `serde_json/arbitrary_precision` in
+every bounded-admission graph. Every source/emitted byte is charged. No scalar
+formatting branch, dependency-feature detection, or private serde callback
+representation is used. Neither a whole
 `as_f64` query over input-sized text nor an uninterruptible whole-Number
 Display call on that text is a charged cursor primitive. No intermediate
 `String`, second owned Number, or serializer output may be allocated. The
@@ -178,8 +189,10 @@ the snapshot's lossless Number content. If ordinary parsing in a graph changes
 the typed Number's presentation, both entries compare that resulting typed
 value; raw input spelling alone must not create a different Basic rule. The
 semantic corpus must include spelling variants, signed zero, large coefficients
-and exponents, rounded base-graph Numbers, and the #81/#82 witnesses across the
-supported cells. It must record the intentional differences from today's
+and exponents, base synchronous Numbers including prior parsing rounding, and
+the #81/#82 witnesses wherever constructible. A capability-off graph has no
+strict/compatibility admission entry; it still has the same exact-decimal Basic
+rule over the typed public representation. The corpus must record differences from today's
 `as_f64` Basic result, not label them parity failures.
 
 The decimal inspection and comparison are private, resumable TD-kernel work.
@@ -199,15 +212,59 @@ fixed state, and absence of an uncharged bulk finish in every supported graph.
 
 Ordinary public `Thing::validate_with_level(Basic)` remains synchronous and
 keeps its existing signature and error category. It will share the amended TD
-rule and its caller remains responsible for externally sized synchronous work.
+rule with or without the capability, and its caller remains responsible for
+externally sized synchronous work.
 The cursor and strict builder alone offer budgeted, cancellable admission; the
 synchronous adapter is not a shortcut inside either charged step. This is a
 deliberate change in Basic acceptance for affected numeric extensions. No
-other Basic, default, URI, security, serialization, or public API rule changes.
+other Basic, default, URI, security, or serialization rules change. The public
+availability amendment is stated separately below.
+
+### Synchronous base-graph responsibility
+
+Without `td/validated-thing`, public Thing and schema `Validate` adapters
+remain available and must implement all five amended predicates in the same
+TD-owned kernel. They may not retain `as_f64` semantics, skip a Number after
+failed projection, or require the capability to obtain exact Basic. This
+includes all four existing lower/upper pairings, non-Number-as-absent behavior,
+`multipleOf > 0`, and extensions on every schema variant. Typed numeric fields
+retain their current comparisons. No feature-dependent second Basic rule is
+authorized.
+
+The synchronous source adapter drives public Number Display into a streaming
+`core::fmt::Write` sink. It consumes the complete decimal representation
+independently of callback partitioning and supplies the same private kernel's
+inspection/comparison passes. The adapter retains fixed scalar state; it does
+not materialize Number-sized output, a serializer buffer, or a second Number.
+Re-driving Display for comparison passes remains synchronous work. Neither
+Display latency nor callback size has a bounded-step guarantee, even with the
+local TD capability off: downstream may independently enable AP. No private
+storage, token names, callback shapes, or build-script feature detection is
+permitted. With the capability on, the public validator may drive the borrowed
+text adapter synchronously; both adapters must yield the same exact value to
+one kernel.
+
+Before readmission the full source prototype must establish finite, fixed-state
+comparison passes for synchronous Display as well as charged borrowed-text
+admission, with no new allocation category or input cap. This is part of items
+3 and 6, not an obligation delegated to an unrelated tranche. The feature
+prototype establishes source delivery and shared exact positivity, not the full
+comparison kernel. For example, extension bounds
+`9007199254740993 > 9007199254740992` must reject even in a base graph where
+today's float comparison accepts. Conversely, `1e-4000` already parsed as typed
+zero in a base graph stays zero; no discarded pre-parse lexeme is recovered.
+
+Implement the five-predicate amendment for public Thing/schema validation in
+every supported graph and both admission entries in capability graphs together
+after separate readmission. Neither this migration nor a future split may
+leave base Basic on the historical rule while claiming the amendment complete.
 
 ## Frozen public API
 
-TD does not depend on Core progress or error types. The public replacement
+TD does not depend on Core progress or error types. Every replacement item,
+including views, diagnostics and methods, requires `td/validated-thing` in
+each profile. Signatures, ownership and terminal behavior stay unchanged;
+capability availability is the only public-surface delta. The replacement
 surface is:
 
 ```rust
@@ -687,38 +744,67 @@ category, together with its phase and numeric coordinate where applicable.
 
 ## Legal serde feature unification and supported cells
 
-The product boundary follows the workspace semver dependency and ordinary
-stable Rust/MSRV policy. It does not pin exact serde_json source, rustc,
-liballoc, target layout, or allocator internals. Legal downstream serde_json
-feature unification must compile and normalize through stable public semantic
-APIs when the resulting graph is supported by the selected profile. This
-compatibility requirement does not require a `std`-only upstream feature to
-compile in a `no_std` profile. Object storage order and caller capacity
-disappear; arbitrary-precision number content remains lossless.
+The product boundary uses stable public dependencies under ordinary semver and
+Rust/MSRV policy. It does not pin exact dependency source, rustc, liballoc,
+target layout, or allocator internals. Future TD declares the verified public
+API floor `serde_json = "1.0.149"` (a caret requirement allowing compatible
+upgrades, not `=1.0.149`), preserving `default-features = false` and the
+existing `alloc` / `raw_value` features. This TD-local declaration replaces
+workspace inheritance; the workspace's other dependency declarations need no
+edit. No claim is made that this is the earliest release containing the API.
+The fixture lock is reproducibility evidence, not the compatibility boundary.
 
-The required compatibility cells are:
+The future TD manifest adds this explicit opt-in edge:
 
-- Host `x86_64-unknown-linux-gnu`: TD base/default, `preserve_order`,
-  `arbitrary_precision`, and combined feature graphs;
-- real `no_std + alloc` `thumbv7em-none-eabihf`: the base `no_std + alloc` and
-  `arbitrary_precision` feature graphs, using a fixture allocator and no host
-  runtime; and
-- the repository `no-default`, `async-no-std`, and `std` package cells.
+```toml
+[features]
+validated-thing = ["serde_json/arbitrary_precision"]
+```
 
-In the resolved serde_json 1.0.149 graph, `preserve_order` enables `std`.
-Therefore `preserve_order` and the combined graph are Host cells, not supported
-graphs for the real constrained profile.
+TD default/std feature sets do not change. The feature gates the entire frozen
+validated surface. Enabling only serde AP downstream cannot enable it. If a
+normal sibling dependency enables the TD capability, Cargo unifies it and the
+serde edge for users of that TD package instance. Future consumers of the
+validated view must explicitly request the capability in their own admitted
+manifest changes; ambient workspace unification is insufficient.
 
-The same cursor algorithms, semantic outcomes, footprint formulas, and public
-views apply on Host and `no_std + alloc`. Pointer width and allocator overhead
-may change physical evidence, but no pointer-width atomics, global counting
-allocator, or host executor enters the TD contract.
+Required requested/resolved graphs are:
+
+| Profile / downstream serde request | Capability off: ordinary TD and synchronous Basic | Capability on: full validated surface and Basic |
+| --- | --- | --- |
+| Host base/default | base serde | AP serde |
+| Host `preserve_order` | order serde | AP + order serde |
+| Host `arbitrary_precision` | AP serde; validated surface absent | AP serde |
+| Host combined | AP + order; validated surface absent | AP + order serde |
+| real `thumbv7em-none-eabihf` base `no_std + alloc` | base serde | AP + alloc |
+| real target with downstream AP | AP + alloc; validated surface absent | AP + alloc |
+
+Every positive cell must compile. Host runtime tests also cover no-default and
+Foundation async-no-std composition with capability off/on. Real target
+compilation covers those no-std compositions; TD gains no async feature.
+Independent negative imports prove absence under serde-only unification;
+positive imports prove sibling TD-capability activation. Select each graph in
+a separate Cargo invocation, and inspect resolved features. API-ownership cells
+use `profile+validated-thing`; tranche `feature_cells` retains the orthogonal
+profile axis.
+
+In the resolved dependency `preserve_order` enables std, so it and combined
+are Host-only. Legal feature unification does not require an upstream std-only
+feature to compile under no_std. Both profiles use the same bounded algorithms,
+footprint formulas and views with the capability on; pointer width may change
+physical evidence without introducing atomics, a Host executor or a global
+allocator contract. Ordinary parsing across base and AP graphs may produce
+different typed Numbers; parity compares the resolved typed value, not an
+invented graph-invariant parsing result. Object storage order and caller
+capacity remain non-semantic; retained Number content remains lossless.
 
 ## Permitted future implementation paths
 
 After a separate accepted readmission, production implementation may change
 only:
 
+- `td/Cargo.toml` (only the explicit capability edge and semver API floor
+  above; no default/std change, exact-version pin, fork or unrelated feature);
 - `td/src/validated.rs` (new normalized owner, cursor, builder, view, footprint,
   and allocation catalog);
 - `td/src/validate.rs` (the shared storage-neutral Basic rule kernel);
@@ -739,7 +825,8 @@ only:
 - `td/src/core/data_type/uri.rs`; and
 - `td/src/core/data_type/version.rs`.
 
-Changes outside `td/src/validated.rs` may only extract storage-neutral semantic
+Apart from the explicit manifest boundary and capability-gated exports,
+changes outside `td/src/validated.rs` may only extract storage-neutral semantic
 access/decoding used by both `Thing` behavior and the normalized snapshot,
 plus the explicitly amended exact-decimal Basic predicate in the existing TD
 semantic owner. They may not change public `Thing` fields, builders,
@@ -792,7 +879,8 @@ An independent exact-head review must accept all of the following before any
    serializer path and prove compatibility normalization still accepts it.
    For the five amended numeric extension predicates, use the stated exact
    decimal oracle, show public Thing/compatibility/strict-entry agreement in
-   each supported graph, and record the deliberate delta from current `as_f64`
+   every capability graph, amended synchronous Basic in every ordinary TD graph
+   (including downstream AP with capability off), and the delta from `as_f64`
    Basic acceptance, including both #82 cancellation forms and #81 long
    exponents. Preserve all unaffected Basic results.
 4. An external Planning contract fixture that uses only
@@ -800,11 +888,12 @@ An independent exact-head review must accept all of the following before any
    inspect raw/resolved URI and content metadata, apply effective operations,
    resolve effective security to NoSec, and retain original Form indices,
    without `&Thing`, snapshot parsing, allocation, or copied TD rules.
-5. Compile prototypes for every supported serde_json feature graph: Host
-   base/default, `preserve_order`, `arbitrary_precision`, and combined; real
-   `thumbv7em-none-eabihf` base `no_std + alloc` and `arbitrary_precision`. All
-   listed cells are expected to succeed; `preserve_order` and combined are not
-   constrained-profile cells because the upstream feature enables `std`.
+5. Compile full prototypes for the entire capability off/on matrix above,
+   including actual thumb target, serde-only downstream and sibling-capability
+   unification, and negative public-surface fixtures. Repeat source-access
+   evidence with all frozen signatures and the complete construction model;
+   the feature prototype alone does not complete this item. Order/combined
+   remain Host-only because the upstream feature enables std.
 6. Exact progress traces for Basic validation, typed/direct decode,
    normalization, sorting, URI/string/number handling, seal, diagnostics,
    cancellation, every rollback cause, zero-budget no-progress, lifetime-
@@ -833,12 +922,12 @@ It must prove:
 1. Fresh-empty and retained-empty-root BTreeMap inputs normalize to semantically
    equal outputs with equal retained footprints; allocator-observed live arena
    requests do not exceed the report and return to baseline on owner drop.
-2. Compact and over-capacity serde Maps and, where `arbitrary_precision` is
-   enabled, short, long, and spare-capacity Numbers pass in every supported
-   feature graph: Host base/default, `preserve_order`, `arbitrary_precision`,
-   and combined; real `thumbv7em-none-eabihf` base `no_std + alloc` and
-   `arbitrary_precision`. Normalized footprints follow semantic content rather
-   than caller capacity/history.
+2. Compact and over-capacity Maps plus short, long and spare-capacity Numbers
+   normalize in every capability-on graph above. All resolve AP; a base-request
+   capability cell is not scalar-serde normalization evidence. Separately
+   preserve ordinary TD API availability and prove amended synchronous Basic
+   in every capability-off cell, including downstream AP. Normalized footprints
+   follow semantic content rather than caller capacity/history.
 3. Every typed map and nested extension reachability path enters only the three
    retained arenas, and successful source inspection finds no opaque standard
    or serde allocation graph.
