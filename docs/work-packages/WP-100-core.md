@@ -16,13 +16,14 @@ traits, Servient lifecycle orchestration, Directory clients, or concrete protoco
 and WP-300 consume the values and callback invariants established here.
 
 The shared `ResourceKind` schema preserves an immutable 139-field prefix and
-an exact 56-field planning and Protocol Binding resource projection. The
-active schema has 195 fields, and its named profiles, generated schema,
-snapshots, and boundary tests cover the complete layout. `WorkClass::HandlerSteps`
-and the three Core pending-work variants are part of that schema. ADR-0015 also
-removes implicit copying from `ResourceLimits`, changes
-`StaticResourceProfile` to expose a static reference, and makes `WorkBudget`
-nonduplicable.
+the exact 56-field planning and Protocol Binding projection at indices
+`139..=194`. The bounded-atomic WP-100 Number migration appends
+`number_lexeme_bytes_max` at index 195, so the active schema has 196 fields.
+Named profiles, the generated schema, snapshots, and boundary tests must cover
+the complete layout. `WorkClass::HandlerSteps` and the three Core pending-work
+variants remain part of the existing work schema. ADR-0015 also removes
+implicit copying from `ResourceLimits`, changes `StaticResourceProfile` to
+expose a static reference, and makes `WorkBudget` nonduplicable.
 
 The narrow Property Read handler boundary is exactly the additive synchronous
 `ReadPropertyHandler` trait in `core/src/handler.rs` and its Core-root
@@ -269,9 +270,13 @@ ADR-0013 tranche; the reviewed admission record is
 which registers the id in `index.toml` and freezes its exact API, storage,
 resource, terminal, supported-cell, permitted-path, readmission, and completion
 evidence contracts. Workspace topic 0065 supersedes the prior exact-caller-
-`Thing` and serde/liballoc representation boundary. The tranche remains
-`planned` / `candidate` / `current`; production implementation is forbidden
-until a separate independent readmission and admission-only transition.
+`Thing` and serde/liballoc representation boundary. Workspace topic 0069,
+`docs/amendments/WP-100-bounded-atomic-number-v1.md`, and migration record 0070
+supersede the affected exact-decimal / byte-resumable Number clauses from 0067
+and 0068 while preserving 0068's AP lexical-access feature boundary. The
+tranche remains `planned` / `candidate` / `current`; production implementation
+is forbidden until a separate independent readmission and admission-only
+transition.
 
 The replacement boundary retains `Thing` as the public authoring/interchange
 value but makes successful `ValidatedThing` own only a private normalized
@@ -293,13 +298,20 @@ Typed semantic equivalence is fieldwise over the `Thing` data model; Thing JSON
 serialize/deserialize round-trip is forbidden because serializer strictness may
 not narrow Basic-valid compatibility input.
 
-The planned Basic kernel deliberately replaces float projection for the five
-numeric schema-extension predicates with bounded exact-decimal comparison.
-The public Thing validator (including ordinary base graphs) and both future
-admission entries share that rule;
-lossless typed Number equivalence remains distinct from arithmetic equality.
-This is a future semantic amendment, not current Rust behavior or readmission.
-The admission record owns its exact contract and proof burden.
+The planned Basic kernel keeps existing typed `NumberSchema` `f64` and
+`IntegerSchema` `i64` behavior unchanged. Only the five numeric
+`serde_json::Value::Number` schema-extension predicates use the amended
+bounded-binary64 rule. Bounded admission first applies the append-only
+`number_lexeme_bytes_max` resource, whose project hard ceiling is 256 bytes and
+which profiles may lower but not raise. Opaque within-ceiling Numbers remain
+losslessly retained even if they cannot project to finite `f64`. For the five
+predicates, failed/non-finite public float projection is `InvalidSchema` rather
+than an absent bound; binary64 rounding is deliberate. Numeric projection is a
+precharged bounded atomic operation with cancellation before/after it rather
+than byte-resumable exact-decimal arithmetic. The public Thing validator and
+both future admission entries share the Basic acceptance rule; only bounded
+admission exposes the lexical resource `Limit`. The admission record owns the
+exact contract and proof burden.
 
 The frozen `ValidatedThingView` supplies allocation-free identity, Property
 iteration/lookup and ordinal, original Form indices, raw/resolved URI, content
@@ -314,11 +326,12 @@ unchanged. `DocumentNodes` covers generic validation/normalization/equivalence
 and allocation-free map-sort work; schema, strict input bytes, URI, security,
 and arena cleanup stay respectively in `JsonSchemaNodes`, `CodecInputBytes`,
 `UriBytes`, `SecurityBranches`, and prepaid `CleanupItems`; normalized byte
-copy/emission uses `CodecOutputBytes`. Existing resource rows cover source,
-temporary, peak, largest actual request, and the fixed cleanup-item count.
-Inline first-cause diagnostics and fixed cleanup metadata allocate no bytes, so
-their ledger accounts stay zero. No new row, account, getter, or WorkClass is
-admitted.
+copy/emission uses `CodecOutputBytes`. Existing rows continue to cover source,
+temporary, peak, largest actual request, and fixed cleanup-item capacity. This
+migration adds exactly one append-only per-Number resource row,
+`number_lexeme_bytes_max`; it adds no ledger account or WorkClass. Inline
+first-cause diagnostics and fixed cleanup metadata allocate no bytes, so their
+ledger accounts stay zero.
 
 Invalid, limit, cancellation, and conversion failures fix their first cause and
 enter registered rollback before becoming terminal. Partial arenas contain no
@@ -333,10 +346,12 @@ admission record owns the semver API floor and off/on capability matrix for
 Host base/order/AP/combined, actual thumb base/AP, and downstream unification.
 Capability-off graphs retain ordinary TD APIs and amended synchronous Basic;
 they do not expose bounded admission. Capability-on graphs borrow public
-Number text. The synchronous Display adapter has no bounded-step claim and
-cannot enter admission work. Order/combined remain Host-only because they
-enable std. Exact dependency source, rustc, liballoc, target layout, private
-callbacks and allocator internals are not compatibility authority.
+Number text to enforce the lexical resource boundary and retain Numbers
+losslessly. AP is lexical-access authority, not arbitrary-precision arithmetic
+authority. No Display-driven exact-decimal comparison path remains. Order/
+combined remain Host-only because they enable std. Exact dependency source,
+rustc, liballoc, target layout, private callbacks and allocator internals are
+not compatibility authority.
 
 The admission record is the sole detailed owner of exact signatures, the
 three-retained/four-temporary allocation-site catalog, normalization/build/seal
@@ -365,7 +380,7 @@ completion.
   retry advice, deadlines, and bounded cleanup diagnostics.
 - `CONSTRAINED-PROGRESS-001`, `CONSTRAINED-OWN-001`, and `CONSTRAINED-WORK-001` govern core
   status values and bounded incremental codec/security progress.
-- `RES-LIMIT-001`, `RES-PROFILE-001`, and `API-RESOURCE-001` govern the additive handler-limit
+- `RES-LIMIT-001`, `RES-PROFILE-001`, and `API-RESOURCE-001` govern the additive resource-limit
   schema, exact named-profile values, and generated foundation surface required by this package.
 - `PLAN-SET-001`, `PLAN-ARTIFACT-001`, `BIND-ROUTE-001`, `BIND-STORAGE-001`,
   `BIND-MEM-001`, `BIND-DELIVERY-001`, and `BIND-CALL-CANCEL-001` govern the
@@ -417,17 +432,18 @@ Implement the frozen `clinkz_wot_core` surface in these groups:
   `CredentialStore`, credential probe/lease/generation values, and `EffectiveSecurityPlan`.
 
 The foundation schema is generated from `docs/resource-limits.csv`. Indices
-`0..=138` are the immutable prefix. Indices `139..=194` are exactly the 18 compiled-plan-set and
-artifact limits followed by the 38 route, ingress, host-call, subscription,
-typed-slot, temporary-poll, response, cancellation, cleanup-transfer, wake,
-and reactor-queue limits. Gateway and
-static-reference values are finite and nonzero for every appended field; all
-56 fields are `NA` for `DirectoryClientDefaultV1`. The three feature-cell
-compile tests, profile snapshots, and exact/one-over boundary tests cover the
-generated surface. Every bounded handler `start`, `step`, `cancel`, or constrained adapter
-poll charges its caller-supplied counter before work begins. The generated surface must
-not create a duplicate Rust-side resource schema or change the downward
-dependency graph.
+`0..=138` remain the immutable prefix. Indices `139..=194` remain exactly the
+18 compiled-plan-set/artifact limits followed by the 38 route, ingress,
+host-call, subscription, typed-slot, temporary-poll, response, cancellation,
+cleanup-transfer, wake, and reactor-queue limits. Index 195 appends
+`number_lexeme_bytes_max` for WP-100 bounded admission, with named values
+256/256/64 for gateway/directory-client/benchmark-static-reference. The active
+schema therefore has 196 fields while preserving every prior numeric identity.
+The three feature-cell compile tests, profile snapshots, and exact/one-over
+boundary tests cover the generated surface. Every bounded handler `start`,
+`step`, `cancel`, or constrained adapter poll charges its caller-supplied
+counter before work begins. The generated surface must not create a duplicate
+Rust-side resource schema or change the downward dependency graph.
 
 `ResourceLimits` remains explicitly `Clone` for startup customization but is
 not `Copy`. `StaticResourceProfile::LIMITS` and `limits()` return
@@ -435,11 +451,11 @@ not `Copy`. `StaticResourceProfile::LIMITS` and `limits()` return
 `WorkBudget` implements neither `Clone` nor `Copy`, and every progress API
 consumes one unique value through `&mut WorkBudget`. Update the no-std surface
 fixture so it retains references rather than returning three complete profile
-arrays by value. Do not freeze the observed 3,120-byte/80-byte layouts as ABI;
-test the ownership and reference contracts instead. A dependency-free
-compile-time ambiguity assertion must prove `ResourceLimits: Clone + !Copy`,
-`WorkBudget: !Clone + !Copy`, and the exact `&'static ResourceLimits` profile
-accessor types; checking only a derive line is insufficient.
+arrays by value. Do not freeze observed layouts as ABI; test the ownership and
+reference contracts instead. A dependency-free compile-time ambiguity
+assertion must prove `ResourceLimits: Clone + !Copy`, `WorkBudget: !Clone +
+!Copy`, and the exact `&'static ResourceLimits` profile accessor types;
+checking only a derive line is insufficient.
 
 Preserve only `CoreResult`, `ThingId`, and `PrincipalId` in place as allowed by the ownership
 matrix. Preserve the public name and variants of `AffordanceTarget`, but replace its
@@ -557,9 +573,9 @@ Owning-crate unit, integration, compile-fail, snapshot, and workload tests
 cover these technical invariants:
 
 - `handler-foundation-refresh` for the immutable 139-field prefix, exact
-  56-field planning and binding suffix, all named-profile values including `NA`,
-  `WorkClass::HandlerSteps`, generated snapshots, boundaries, and three feature
-  cells;
+  56-field planning/binding suffix, the appended `number_lexeme_bytes_max`, all
+  named-profile values including `NA`, `WorkClass::HandlerSteps`, generated
+  snapshots, boundaries, and three feature cells;
 - `handler-value-primitives` for the five admitted passive portable values, exact derive
   and ownership contracts, three Core feature cells, dependency-free negative
   trait assertions, and handler-redacted static-registration diagnostics;
@@ -617,8 +633,9 @@ all public error and debug representations.
   cancellation, replacement during dispatch, and reentrant handler operations.
 ## Completion Conditions
 
-- Generated schemas and snapshots contain the unchanged 139-field prefix and
-  exact 56-field planning and binding suffix for 195 fields total, plus
+- Generated schemas and snapshots contain the unchanged 139-field prefix,
+  exact 56-field planning/binding suffix, and appended
+  `number_lexeme_bytes_max` for 196 fields total, plus
   `WorkClass::HandlerSteps` and the three Core pending-work variants, with no
   duplicate resource schema.
 - Every WP-100 ownership item exists at its frozen path in each applicable feature cell, and
