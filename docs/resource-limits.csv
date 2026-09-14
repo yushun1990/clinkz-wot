@@ -55,7 +55,7 @@ watchers_global_max,directory,items,global,directory-client,disabled,8192,8192,N
 subscriptions_per_thing_max,subscription,items,per-thing,producer|consumer,disabled,1024,NA,256,RES-LIMIT-001
 subscriptions_global_max,subscription,items,global,producer|consumer,disabled,65536,NA,256,RES-LIMIT-001
 discovery_processes_per_principal_max,discovery,items,per-principal,directory-client,disabled,16,16,NA,RES-LIMIT-001
-discovery_processes_global_max,discovery,items,global,directory-client,disabled,1024,1024,NA,RES-LIMIT-001
+discovery_processes_global_max,directory,items,global,directory-client,disabled,1024,1024,NA,RES-LIMIT-001
 binding_and_contributor_probes_per_admission_max,plan,probes,per-admission,producer|consumer,disabled,16384,NA,1024,RES-LIMIT-001|PLAN-INDEX-001
 wildcard_binding_and_contributor_probes_per_admission_max,plan,probes,per-admission,producer|consumer,disabled,64,NA,16,RES-LIMIT-001|PLAN-INDEX-001
 lazy_plan_slots_per_thing_max,cache,slots,per-thing,producer|consumer,disabled,32,NA,8,RES-LIMIT-001|PLAN-LAZY-001
@@ -194,3 +194,4 @@ cleanup_transfer_bytes_global_max,cleanup,bytes,global,producer|consumer,disable
 binding_wake_leases_global_max,binding,leases,global,producer|consumer,disabled,262144,NA,1024,RES-LIMIT-001|BIND-ROUTE-001|BIND-MEM-001
 binding_reactor_queue_items_per_binding_max,queue,items,per-binding,producer|consumer,disabled,65536,NA,64,RES-LIMIT-001|BIND-MEM-001
 binding_reactor_queue_bytes_per_binding_max,queue,bytes,per-binding,producer|consumer,disabled,268435456,NA,65536,RES-LIMIT-001|BIND-MEM-001
+number_lexeme_bytes_max,document,bytes,per-item,all,disabled,256,256,64,RES-LIMIT-001|CONSTRAINED-WORK-001
