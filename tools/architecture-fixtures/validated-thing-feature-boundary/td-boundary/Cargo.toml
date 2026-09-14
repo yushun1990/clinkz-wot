@@ -1,0 +1,17 @@
+[package]
+name = "number-boundary-td-prototype"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+clinkz-wot-td = { path = "../../../../td", default-features = false }
+clinkz-wot-foundation = { path = "../../../../foundation", default-features = false }
+serde_json = { version = "1.0.149", default-features = false, features = ["alloc", "raw_value"] }
+
+[features]
+default = ["std"]
+std = ["clinkz-wot-td/std", "clinkz-wot-foundation/std", "serde_json/std"]
+async = ["clinkz-wot-foundation/async"]
+# Model the future TD feature edge, without changing the production manifest.
+validated-thing = ["serde_json/arbitrary_precision"]

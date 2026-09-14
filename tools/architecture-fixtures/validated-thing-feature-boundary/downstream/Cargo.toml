@@ -1,0 +1,20 @@
+[package]
+name = "number-boundary-downstream"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+number-boundary-td-prototype = { path = "../td-boundary", default-features = false }
+clinkz-wot-td = { path = "../../../../td", default-features = false }
+clinkz-wot-foundation = { path = "../../../../foundation", default-features = false }
+serde_json = { version = "1.0", default-features = false, features = ["alloc"] }
+
+[features]
+default = ["std"]
+std = ["number-boundary-td-prototype/std", "clinkz-wot-td/std", "serde_json/std"]
+async = ["number-boundary-td-prototype/async"]
+validated-thing = ["number-boundary-td-prototype/validated-thing"]
+# Deliberately do not forward the TD capability.
+ap = ["serde_json/arbitrary_precision"]
+order = ["serde_json/preserve_order"]

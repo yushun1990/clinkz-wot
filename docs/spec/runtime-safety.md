@@ -87,16 +87,17 @@ traversal arena; grow and seal overlap is explicit and charged. Therefore
 terminal cleanup drops a bounded fixed allocation set instead of recursively
 destroying one owned value per input depth.
 
-The path accepts ordinary legal serde_json feature unification within the
-feature graphs supported by each profile; this compatibility requirement does
-not require a `std`-only upstream feature to compile in a `no_std` profile.
-Host supports the base/default, `preserve_order`, `arbitrary_precision`, and
-combined graphs. The real `thumbv7em-none-eabihf` `no_std + alloc` profile
-supports the base `no_std + alloc` and `arbitrary_precision` graphs. In the
-resolved serde_json 1.0.149 graph, `preserve_order` enables `std`, so it and the
-combined graph are not supported constrained-profile cells. Exact serde_json,
-rustc, liballoc, target layout, and private allocator behavior are not
-compatibility authority.
+The future normalized surface requires opt-in `td/validated-thing`, forwarding
+`serde_json/arbitrary_precision`. Every bounded path uses public borrowed
+Number text. Ordinary TD base/default APIs and amended synchronous Basic
+remain available without it; downstream serde features alone do not expose the
+validated surface. The admission record owns the semver API floor and complete
+off/on capability matrix: Host base/order/AP/combined requests, actual thumb
+base/AP requests, and sibling dependency activation. A base-request capability
+cell resolves AP, not scalar serde. Order/combined remain Host-only because
+they enable std. Exact dependency source, rustc, liballoc, target layout,
+private callbacks and allocator behavior are not compatibility authority.
+Default TD feature sets remain unchanged.
 
 Every explicit Property Form operation and every normalized map-sort
 comparison advances only after its own `DocumentNodes` charge. Every
@@ -119,7 +120,11 @@ The planned Consumer boundary amends only Basic's five numeric schema-extension
 predicates (`minimum`, `exclusiveMinimum`, `maximum`, `exclusiveMaximum`, and
 `multipleOf`) to compare legal `serde_json::Number` values as exact finite
 decimals in that single TD kernel. The public Thing adapter and both future
-admission entries must agree on the amended rule. This deliberately changes
+admission entries must agree on the amended rule. Synchronous Basic must also
+migrate in capability-off graphs; its public Display source supplies the same
+TD kernel with caller-owned synchronous work responsibility and no
+Number-sized adapter output. Display may never enter a charged admission step.
+This deliberately changes
 current float-projection acceptance for some Numbers; it does not change
 Number syntax, other Basic rules, or the validated view. Cursor comparison
 remains resumable, byte-charged, and cancellable under the existing work and

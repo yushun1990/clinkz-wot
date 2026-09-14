@@ -295,7 +295,8 @@ not narrow Basic-valid compatibility input.
 
 The planned Basic kernel deliberately replaces float projection for the five
 numeric schema-extension predicates with bounded exact-decimal comparison.
-The public Thing validator and both future admission entries share that rule;
+The public Thing validator (including ordinary base graphs) and both future
+admission entries share that rule;
 lossless typed Number equivalence remains distinct from arithmetic equality.
 This is a future semantic amendment, not current Rust behavior or readmission.
 The admission record owns its exact contract and proof burden.
@@ -325,16 +326,17 @@ nested owners and are released as a fixed bounded allocation set. Deep input
 rejection and cursor drop cannot hide a recursive unbudgeted destructor. The
 compatibility input remains caller-owned and borrowed.
 
-Legal serde_json feature unification is supported under ordinary semver/MSRV
-policy within each profile's supported graph. Required evidence covers Host
-base/default, `preserve_order`, `arbitrary_precision`, and combined cells, plus
-real `thumbv7em-none-eabihf` base `no_std + alloc` and
-`arbitrary_precision` cells. In the resolved serde_json 1.0.149 graph,
-`preserve_order` enables `std`; neither it nor the combined graph is therefore
-a constrained-profile cell. Compatibility with legal feature unification does
-not require a `std`-only upstream feature to compile under `no_std`. Exact
-serde_json, rustc, liballoc, target layout, and allocator internals are no
-longer compatibility authority.
+Legal serde_json feature unification remains supported under ordinary
+semver/MSRV policy. The future validated surface requires opt-in
+`td/validated-thing`, forwarding AP; ordinary TD defaults stay unchanged. The
+admission record owns the semver API floor and off/on capability matrix for
+Host base/order/AP/combined, actual thumb base/AP, and downstream unification.
+Capability-off graphs retain ordinary TD APIs and amended synchronous Basic;
+they do not expose bounded admission. Capability-on graphs borrow public
+Number text. The synchronous Display adapter has no bounded-step claim and
+cannot enter admission work. Order/combined remain Host-only because they
+enable std. Exact dependency source, rustc, liballoc, target layout, private
+callbacks and allocator internals are not compatibility authority.
 
 The admission record is the sole detailed owner of exact signatures, the
 three-retained/four-temporary allocation-site catalog, normalization/build/seal

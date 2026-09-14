@@ -27,6 +27,7 @@ jobs:
         uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4
         with:
           toolchain: 1.95.0
+          targets: thumbv7em-none-eabihf
 
       - name: Check pull-request diff hygiene
         if: github.event_name == 'pull_request'
@@ -41,6 +42,9 @@ jobs:
 
       - name: Run locked workspace tests
         run: cargo test --workspace --locked
+
+      - name: Check Number feature boundary prototype
+        run: python3 tools/architecture-fixtures/validated-thing-feature-boundary/check.py
 
       - name: Run no-default Property Read integration tests
         run: cargo test --locked -p clinkz-wot-servient --no-default-features --test property_read

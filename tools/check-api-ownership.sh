@@ -23,6 +23,9 @@ awk -F, '
         migrations["relocate"] = migrations["remove"] = 1
         compilation["no-default"] = compilation["async-no-std"] = compilation["std"] = 1
         compilation["std-async"] = 1
+        compilation["no-default+validated-thing"] = 1
+        compilation["async-no-std+validated-thing"] = 1
+        compilation["std+validated-thing"] = 1
         execution["all"] = execution["manual-poll"] = execution["host-async"] = 1
         resources["all"] = resources["application-static"] = 1
         resources["gateway-default-v1"] = resources["directory-client-default-v1"] = 1
