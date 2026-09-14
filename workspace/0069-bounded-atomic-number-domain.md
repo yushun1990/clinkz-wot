@@ -213,3 +213,7 @@ If final exact-head review rejects the corrected bounded-atomic boundary, keep
 current authority and return to impact review. If it accepts it, perform a
 separate docs-only authority migration that explicitly supersedes the affected
 numeric authority before resuming WP-100 implementation.
+
+Final exact-head review should therefore verify only the correction above, not
+re-litigate the already accepted motivation unless the correction itself
+reveals a new blocker.
