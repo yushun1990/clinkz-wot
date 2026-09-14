@@ -111,6 +111,14 @@ declared scopes. `NA` means typed non-applicability. Omission, `inherit`, and
 `unbounded` are invalid. Zero disables a resource unless the schema explicitly
 declares rendezvous capacity; zero never means unbounded.
 
+For `WP-100-CONSUMER-VALIDATED-THING`, the append-only
+`number_lexeme_bytes_max` row is a per-Number admission resource. Its project
+hard maximum is 256 bytes: named or application-defined profiles may lower the
+configured value but MUST NOT raise it above 256. The row bounds one Number
+lexeme before bounded numeric projection or lossless retained copying. It does
+not declare every JSON Number to be binary64 and does not replace aggregate
+document/source/work limits.
+
 `RES-LIMIT-002`: A resource-policy violation MUST stop before rejected work or
 externally reachable publication and return a structured limit category naming
 the resource, configured limit, safely known requested or observed amount, and
@@ -244,8 +252,8 @@ applicable JSON/schema nodes, exact codec bytes, URI bytes, security branches,
 provider probes, queue operations, binding progress, cleanup, and handler or
 adapter progress. Work is charged before it starts. A step MUST NOT hide an
 unbounded decode, collection walk, target expansion, or unrelated queue drain.
-Non-incremental calls declare their maximum admitted input and external
-worst-case execution responsibility.
+A non-incremental operation is conforming only when its maximum admitted input
+is explicit and its complete work/lifetime debit succeeds before it starts.
 
 `WorkBudget` is uniquely mutated and implements neither `Copy` nor `Clone`.
 Every consumer receives `&mut WorkBudget`; copying an allowance to restart
@@ -266,12 +274,21 @@ already owned by a more specific class. Typed schema-node visits remain
 `CodecInputBytes`; normalized bytes emitted or copied remain
 `CodecOutputBytes`; URI bytes remain `UriBytes`; security branches remain
 `SecurityBranches`; and destruction of one live arena consumes a prepaid
-`CleanupItems` unit. Work is neither
-relabelled nor double charged merely because it occurs during normalization.
-During admission, the planned TD exact-decimal Basic predicate charges every
-Number byte inspected, including repeated comparison passes, as `CodecInputBytes` under the
-same lifetime remainder. This is a work classification, not a new Foundation
-numeric rule, WorkClass, resource row, or admission of that predicate.
+`CleanupItems` unit. Work is neither relabelled nor double charged merely
+because it occurs during normalization.
+
+For bounded admission, JSON Number lexing, borrowed lexical inspection, and
+lossless copying remain byte-charged work. When one of the five TD Basic
+`serde_json::Value::Number` predicates needs a numeric projection, the lexeme
+length `n` is already known and is bounded by the configured
+`number_lexeme_bytes_max <= 256`. Before the atomic projection starts, the
+cursor debits all `n` `CodecInputBytes` units from the current step budget and
+the same `n` units from the shared non-resettable lifetime remainder. If the
+current step budget is insufficient, the operation makes no numeric progress
+and remains pending; if the lifetime remainder is insufficient, it terminates
+as the existing resource limit. A repeated projection incurs the same debit
+again. No new WorkClass is introduced for numeric projection.
+
 Every accepted class-specific unit also consumes one unit from a shared
 non-resettable lifetime remainder derived from the existing
 `document_validation_work_units_max`; byte classes consume one unit per byte.
