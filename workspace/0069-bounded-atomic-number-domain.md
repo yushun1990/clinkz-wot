@@ -1,15 +1,19 @@
 # 0069 Bounded Atomic Number Domain
 
-Status: PROPOSAL / REVIEW REQUIRED
+Status: PROPOSAL / REVIEW CORRECTION APPLIED
 
 Kind: ADR-0013 scoped impact proposal for `WP-100-CONSUMER-VALIDATED-THING`
 
 Baseline: current `master` after github-pr:85.
 
-This proposal does **not** change authoritative Basic semantics, readmit the
-tranche, authorize production Rust, or supersede workspace topics 0067/0068.
-It asks whether their unbounded exact-decimal/resumable-Number direction solved
-a stronger problem than ClinkZ-WoT actually needs to support.
+Initial proposal exact head: `6e2c89282e828394fd83e5827a68d2262bd4e65d`.
+
+Independent review of that exact head accepted the bounded-atomic direction with
+one required correction: binary64 is a WP-100 **computation-domain** boundary,
+not a claim that every WoT/JSON Number must project to finite `f64`. This
+revision applies that correction. It still does **not** change authoritative
+Basic semantics, readmit the tranche, authorize production Rust, or supersede
+workspace topics 0067/0068.
 
 ## Problem
 
@@ -24,74 +28,152 @@ capability.
 
 The open product question is earlier than those implementation choices:
 
-> Must a general-purpose WoT runtime admit arbitrary-length JSON Number text
-> and arbitrary-precision decimal values into its bounded runtime domain?
+> Must a general-purpose WoT runtime admit arbitrary-length Number text and
+> make every numerically represented JSON value part of an arbitrary-precision
+> computation domain merely so bounded admission can inspect it?
 
 For ClinkZ-WoT the proposed answer is **no**. A constrained runtime already
 rejects otherwise syntactically legal documents when they exceed admitted
-memory, work, depth, URI, or structural limits. Numeric input should have an
-explicit admitted domain as well. Requiring byte-level resumability solely so a
-single Number may contain hundreds of thousands of characters appears to turn
-a resource-policy case into a general arbitrary-precision numeric engine.
+memory, work, depth, URI, or structural limits. Numeric text should have an
+explicit admitted resource bound as well. Requiring byte-level resumability
+solely so one Number may contain hundreds of thousands of characters turns a
+resource-policy case into a general arbitrary-precision arithmetic problem.
+
+This does **not** mean every Number is a binary64 value. The existing TD model
+already distinguishes computational numeric fields from opaque JSON values:
+
+- typed `NumberSchema` bounds use `f64`;
+- typed `IntegerSchema` bounds use `i64`;
+- extension/document values such as `const`, `default`, and nested JSON values
+  remain `serde_json::Value` and may need lossless retention without any Basic
+  arithmetic projection.
+
+A short AP-backed value such as `const: 1e309` is therefore not invalid merely
+because it has no finite `f64` projection. If Basic does not compute with that
+value, normalized admission preserves it losslessly subject to ordinary
+resource limits.
 
 ## Candidate direction
 
-Treat numeric work as a **bounded atomic operation**, not as intrinsically
-byte-resumable work.
+Treat the numeric comparisons that WP-100 actually computes as **bounded atomic
+operations**, while preserving non-computational Number values losslessly.
 
-1. The ordinary WoT numeric computation domain is finite IEEE-754 binary64
-   (`f64`) unless a future specialized profile explicitly introduces a wider
-   numeric type.
-2. Admission defines an explicit maximum Number lexical size for any operation
-   that must inspect textual Number content. The exact value and whether it is
-   profile-configurable are review questions; this proposal deliberately does
-   not guess a constant.
-3. A Number whose textual representation exceeds that bound is not declared
-   invalid JSON or mathematically invalid. Bounded admission terminates with a
-   resource/domain limit before invoking an input-sized numeric conversion.
-4. Once the Number is within the admitted lexical bound, conversion and the
-   corresponding bound comparison may execute atomically. Work may be charged
-   for the admitted Number before the call; cancellation is checked before and
-   after the atomic operation. The lexical ceiling supplies the missing worst-
-   case cancellation/work interval that github-pr:81 correctly found absent.
-5. A numeric value that cannot be represented as a finite binary64 value is
-   outside the ordinary WoT numeric domain. Review must decide whether this is
-   expressed by Basic `InvalidSchema`, by an admission-domain terminal, or by an
-   existing resource-limit category; it must not be silently treated as an
-   absent bound merely because `as_f64()` returns `None`.
-6. Normal binary64 rounding is part of the selected numeric domain. Values such
-   as `9007199254740993` need not acquire arbitrary-precision semantics merely
-   because their mathematical integer value is distinguishable beyond binary64
-   precision. If a use case requires such precision, it belongs to a
-   specialized numeric system/profile rather than the generic WoT runtime.
+1. The generic numeric computation domain for typed `NumberSchema` floating
+   bounds and the five Basic numeric extension predicates
+   (`minimum`, `exclusiveMinimum`, `maximum`, `exclusiveMaximum`, and
+   `multipleOf`) is finite IEEE-754 binary64 unless a future specialized
+   profile explicitly introduces a wider numeric computation type. Existing
+   typed `IntegerSchema` comparisons remain `i64`; opaque JSON Number values do
+   not acquire an `f64` requirement merely by being Numbers.
+2. Admission defines one explicit hard maximum Number lexical size. Profiles
+   may lower this ceiling but may not raise it beyond the project-wide atomic
+   bound. The exact constant and justified atomic work quantum must be frozen by
+   the authority migration rather than guessed by this proposal.
+3. The lexical ceiling applies before input-sized numeric conversion. A Number
+   whose representation exceeds it is not declared invalid JSON or
+   mathematically invalid; bounded admission terminates with a truthful named
+   resource `Limit`. Strict JSON admission charges/checks the Number token as it
+   is lexed. Typed-`Thing` compatibility checks borrowed public Number text.
+4. A Number at or below the ceiling may still be retained losslessly when no
+   arithmetic rule uses it, including values outside finite binary64 range.
+   `td/validated-thing -> serde_json/arbitrary_precision` remains useful for
+   stable borrowed lossless Number text and feature-graph consistency; it is
+   not a promise of arbitrary-precision arithmetic.
+5. Before an atomic conversion/comparison starts, the cursor must debit its
+   full bounded work quantum and corresponding non-resettable lifetime
+   allowance. If the current step budget is insufficient, it returns `Pending`
+   without starting that atomic operation. Cancellation is checked before and
+   after it. The hard lexical ceiling therefore supplies an explicit worst-case
+   cancellation latency and work interval.
+6. When one of the five Basic predicates requires a floating projection, an
+   at-or-below-ceiling Number whose finite binary64 projection fails is
+   `InvalidSchema`; it is never silently treated as an absent bound. Normal
+   binary64 rounding is part of this selected computation domain. Values such
+   as `9007199254740993` do not acquire arbitrary-precision comparison semantics
+   merely because their mathematical integer value exceeds binary64 exact
+   integer precision.
+7. Typed integer comparison semantics remain unchanged. Lossless normalized
+   storage also remains distinct from arithmetic projection: retaining exact
+   Number text does not imply exact-decimal Basic arithmetic.
 
-This proposal distinguishes two independent questions that topics 0067/0068
+This proposal distinguishes three independent questions that topics 0067/0068
 currently couple:
 
-- **semantic domain:** what numeric values does the generic WoT runtime promise
-  to compute exactly enough for its declared type; and
+- **storage domain:** which legal typed/JSON Number values the normalized
+  snapshot preserves losslessly;
+- **computation domain:** which numeric representation a particular TD rule uses
+  when it actually performs arithmetic/comparison; and
 - **execution grain:** what bounded operation may run atomically between two
   cancellation points.
 
-A bounded atomic operation is compatible with `CONSTRAINED-PROGRESS-001` if its
-worst-case input size is explicitly bounded. Resumability is required when an
-operation's admitted worst-case cost exceeds the selected atomic-work bound,
-not merely because its implementation loops over bytes internally.
+A bounded atomic operation is compatible with `CONSTRAINED-PROGRESS-001` when
+its worst-case input size and full work debit are known before it starts.
+Resumability is required when an operation's admitted worst-case cost exceeds
+the selected atomic-work bound, not merely because its implementation loops
+over bytes internally.
+
+JSON lexing, lossless Number-byte capture, and other input-sized copying remain
+ordinary charged/resumable work. The proposal changes only the need to make the
+**conversion/comparison itself** byte-resumable once its source is below the
+hard atomic ceiling.
+
+## Independent review result on the initial exact head
+
+The independent review of `6e2c89282e828394fd83e5827a68d2262bd4e65d`
+found the bounded atomic direction sound for WP-100 numeric comparisons, with
+this revision's storage/computation distinction required.
+
+The review also established the following migration constraints:
+
+- github-pr:81 and github-pr:82 prove that unbounded `as_f64()` cannot be cursor
+  work; they do not prove byte-level resumability is required after a small hard
+  lexical cap;
+- strict decode can charge/check Number token length before conversion, while
+  typed compatibility can use borrowed `Number::as_str()` under the existing
+  `td/validated-thing -> arbitrary_precision` capability;
+- the current small-positive-budget Number guarantee must be replaced: a step
+  with insufficient budget for one atomic numeric operation may return
+  `Pending` with no numeric progress;
+- the authority migration must state the bounded cancellation latency implied
+  by the chosen hard ceiling and work quantum;
+- github-pr:81/github-pr:82 long-Number cases remain useful as negative
+  limit-boundary witnesses, while github-pr:84/github-pr:85's public-access
+  findings remain relevant;
+- the normalized snapshot, public signatures, typed integer comparisons, opaque
+  JSON-value retention, unrelated Basic rules, and existing gates do not
+  change.
+
+Because this revision changes the reviewed exact head, a final exact-head
+acceptance still belongs to review before this proposal is merged or migrated.
 
 ## Consequences if accepted
 
-Acceptance would require a new authority migration rather than editing this
-proposal in place. That migration should reassess, not automatically preserve,
-the following parts of the current 0067/0068 direction:
+Acceptance requires a separate authority migration rather than treating this
+proposal as authority. That migration should explicitly supersede only the
+affected parts of topics 0067/0068 and preserve 0068's AP access/feature-matrix
+finding.
 
-- the exact finite-decimal amendment for the five Basic extension predicates;
-- byte-resumable multi-pass decimal comparison;
-- per-byte cancellation/progress obligations for Number comparison;
-- synchronous Display-driven exact-decimal comparison in capability-off Basic;
-- `serde_json/arbitrary_precision` as a semantic requirement rather than, at
-  most, a stable lexical-access mechanism for bounded admission; and
-- the #81/#82 pathological long-Number witnesses as required supported values
-  rather than negative resource-boundary tests.
+At minimum it must:
+
+- replace the admission record's exact-decimal rule, synchronous Display
+  comparison, Number work table, and affected portions of pre-readmission items
+  3 and 6;
+- define an append-only named per-Number lexical resource limit, with one hard
+  project ceiling that profiles may lower but not raise, plus a justified
+  atomic work quantum;
+- classify over-ceiling Number text as `Limit`, and a within-ceiling Number used
+  by one of the five Basic predicates whose finite binary64 projection fails as
+  `InvalidSchema`;
+- preserve lossless storage of within-ceiling opaque Numbers even when they are
+  outside finite binary64 range;
+- retain `td/validated-thing -> serde_json/arbitrary_precision` only as the
+  stable lexical-access capability unless another independent requirement
+  justifies broader semantics;
+- update the corresponding runtime-safety, Foundation work rule, WP-100 core,
+  resource schema, and tranche-index projections; and
+- require threshold, rounding, short-overflow, strict/typed parity, insufficient
+  budget, atomic cancellation-latency, Host/thumb, and lossless opaque-Number
+  evidence before any later readmission.
 
 The proposal does **not** reopen the normalized retained-snapshot decision from
 0065. Project-owned retained arenas, allocation accounting, rollback,
@@ -100,35 +182,26 @@ rest of WP-100 remain independent of this numeric execution-grain question.
 
 It also does not imply that every library call is automatically an acceptable
 atomic primitive. An atomic operation must have an admitted worst-case input
-bound small enough for the supported constrained profiles, and that bound must
-be enforceable before the operation begins.
+bound small enough for the supported constrained profiles, and its complete
+work/lifetime cost must be enforceable before the operation begins.
 
-## Review questions
+## Remaining review questions
 
-An independent review should try to falsify this direction before any authority
-migration:
+A final exact-head review should focus only on whether this corrected boundary
+is coherent:
 
-1. Is a bounded binary64 numeric domain consistent with the actual W3C WoT TD
-   numeric contract and the project's existing public typed model?
-2. Can strict JSON admission enforce a per-Number lexical ceiling before any
-   unbounded numeric conversion occurs?
-3. Can typed-`Thing` compatibility admission enforce the same ceiling using
-   stable public `serde_json::Number` APIs across the supported feature graphs,
-   without reviving private-layout authority?
-4. Does a precharged bounded atomic numeric conversion satisfy the actual
-   intent of `CONSTRAINED-WORK-001`, `CONSTRAINED-PROGRESS-001`, and
-   `ADMIT-TXN-001`, or is byte-level resumability genuinely required by a
-   product requirement rather than by the current wording?
-5. What terminal should distinguish (a) syntactically legal but over-limit
-   Number text from (b) a value outside the supported finite-binary64 domain?
-6. Does keeping binary64 rounding preserve a coherent Basic contract, and what
-   deliberate delta from current `None`-as-absent behavior is necessary?
-7. If `td/validated-thing -> serde_json/arbitrary_precision` is still useful
-   solely for stable borrowed lexical access, can that capability be retained
-   without making arbitrary precision part of the accepted numeric domain?
-8. Which 0067/0068 evidence and fixtures remain useful as negative boundary
-   tests, and which obligations disappear if the bounded atomic model is
-   accepted?
+1. Is the storage/computation split faithful to the current typed TD model and
+   actual WoT contract?
+2. Is one hard append-only Number lexical limit, lowerable by profiles but not
+   raisable, sufficient to bound atomic conversion/cancellation without
+   imposing binary64 semantics on opaque Numbers?
+3. Is `Limit` for over-ceiling Number text and `InvalidSchema` only for a
+   within-ceiling value that a Basic predicate must project but cannot project
+   to finite binary64 the correct terminal split?
+4. Can the existing AP capability safely remain as a lexical-access mechanism
+   without recreating an arbitrary-precision arithmetic promise?
+5. Is any product requirement left that still forces numeric
+   conversion/comparison itself to be byte-resumable?
 
 ## Stop condition
 
@@ -136,8 +209,7 @@ Do not implement production Rust, change Basic semantics, alter resource rows,
 remove the current feature capability, or readmit `WP-100-CONSUMER-VALIDATED-THING`
 from this proposal alone.
 
-If independent review finds that arbitrary-length exact-decimal support is an
-actual WoT/product requirement, keep the current authority and continue the
-0067/0068 constructibility proof. If not, perform a separate docs-only
-migration that explicitly supersedes the affected numeric authority before
-resuming WP-100 implementation.
+If final exact-head review rejects the corrected bounded-atomic boundary, keep
+current authority and return to impact review. If it accepts it, perform a
+separate docs-only authority migration that explicitly supersedes the affected
+numeric authority before resuming WP-100 implementation.
