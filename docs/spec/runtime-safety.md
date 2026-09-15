@@ -33,6 +33,10 @@ of transitions and typed work, returns at most one value plus exact pending or
 terminal state, and makes no hidden progress at zero budget. Cleanup has
 reserved bounded capacity. When that capacity is full, ownership remains with
 an explicit bounded operation or cleanup-pending handle; it is never dropped.
+A non-incremental operation is conforming when its admitted worst-case input is
+explicitly bounded and its complete work/lifetime debit succeeds before the
+operation starts; bounded progress does not require a cancellation point inside
+every byte loop of such an atomic operation.
 
 `CONSTRAINED-OWN-001`: Constrained handles use lifetimes, unique ownership, or
 generation-bearing table references and MUST NOT require `Arc` or pointer-width
@@ -118,19 +122,40 @@ copy those rules.
 
 The planned Consumer boundary amends only Basic's five numeric schema-extension
 predicates (`minimum`, `exclusiveMinimum`, `maximum`, `exclusiveMaximum`, and
-`multipleOf`) to compare legal `serde_json::Number` values as exact finite
-decimals in that single TD kernel. The public Thing adapter and both future
-admission entries must agree on the amended rule. Synchronous Basic must also
-migrate in capability-off graphs; its public Display source supplies the same
-TD kernel with caller-owned synchronous work responsibility and no
-Number-sized adapter output. Display may never enter a charged admission step.
-This deliberately changes
-current float-projection acceptance for some Numbers; it does not change
-Number syntax, other Basic rules, or the validated view. Cursor comparison
-remains resumable, byte-charged, and cancellable under the existing work and
-resource policy. The detailed rule and its readmission proof belong solely to
-the WP-100 validated-Thing admission record; current production Rust has not
-implemented it.
+`multipleOf`) over `serde_json::Value::Number`. Bounded admission first applies
+the named `number_lexeme_bytes_max` resource boundary, whose project hard
+ceiling is 256 bytes and which profiles may lower but not raise. It applies to
+Consumer `+validated-thing`; Directory-client is `NA`. A configured limit `L`
+rejects strict input at Number byte `L + 1` before copying that byte or finishing
+the scan; typed input checks borrowed length first. Zero disables Number
+admission, including opaque Numbers. Over-ceiling Number text is `Limit`;
+within-ceiling opaque Numbers remain losslessly
+retained even when they cannot project to finite `f64`.
+
+Existing typed `NumberSchema` `f64` behavior and typed `IntegerSchema` `i64`
+behavior remain unchanged. For the five extension predicates only, a Number is
+projected through stable public `Number::as_f64()` semantics; failed or
+non-finite projection is `InvalidSchema` rather than an absent bound, while
+non-Number values remain absent as before. Binary64 rounding is deliberate for
+those predicates. `multipleOf` retains only its current strict-positivity rule.
+The public Thing adapter and both future admission entries share this Basic
+acceptance rule.
+
+JSON lexing and lossless Number-byte capture remain byte-charged/resumable.
+After the lexical ceiling is known, one numeric projection is a bounded atomic
+operation: the cursor debits the Number's complete `CodecInputBytes` cost and
+the same non-resettable lifetime allowance before it starts. Insufficient
+current step budget returns `Pending` with no numeric progress; insufficient
+lifetime allowance returns `Limit`. Cancellation is checked immediately before
+and after the at-most-256-byte projection. The constrained latency and stack
+acceptance workload in the Number amendment must pass before readmission;
+finite input length alone is not evidence of tolerable cancellation latency.
+A repeated projection is charged again. The explicit AP feature remains
+lexical-access authority, not an
+arbitrary-precision arithmetic promise. The detailed rule and readmission proof
+belong to the WP-100 validated-Thing admission record and
+`docs/amendments/WP-100-bounded-atomic-number-v1.md`; current production Rust
+has not implemented it.
 
 The normalized `ValidatedThing` remains the one retained application/source
 owner after publication. Source-to-persistent-document reclassification moves

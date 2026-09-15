@@ -194,3 +194,4 @@ cleanup_transfer_bytes_global_max,cleanup,bytes,global,producer|consumer,disable
 binding_wake_leases_global_max,binding,leases,global,producer|consumer,disabled,262144,NA,1024,RES-LIMIT-001|BIND-ROUTE-001|BIND-MEM-001
 binding_reactor_queue_items_per_binding_max,queue,items,per-binding,producer|consumer,disabled,65536,NA,64,RES-LIMIT-001|BIND-MEM-001
 binding_reactor_queue_bytes_per_binding_max,queue,bytes,per-binding,producer|consumer,disabled,268435456,NA,65536,RES-LIMIT-001|BIND-MEM-001
+number_lexeme_bytes_max,document,bytes,per-item,consumer,disabled,256,NA,64,RES-LIMIT-001|CONSTRAINED-WORK-001

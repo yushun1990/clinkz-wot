@@ -1,12 +1,26 @@
 # 0067 Bounded Exact-Decimal Number Impact
 
-Status: MIGRATED
+Status: SUPERSEDED IN PART BY 0069/0070
 
 Kind: ADR-0013 scoped implementation-impact review / TD semantic authority amendment
 
 Evidence baseline: master `c7bce96` (github-pr:81 and github-pr:82).
 
 Impact and authority amendment review location: github-pr:83.
+
+Supersession: github-pr:86 accepted workspace topic 0069's bounded-atomic
+Number direction. Workspace topic 0070 and
+`docs/amendments/WP-100-bounded-atomic-number-v1.md` supersede this topic's
+exact finite-decimal Basic arithmetic, byte-resumable comparator, and related
+progress/readmission obligations. The #81/#82 counterexamples remain current
+evidence that an **unbounded** `Number::as_f64()` call cannot be hidden inside
+a bounded cursor step and that private parser quirks must not become product
+semantics. They are now negative resource-boundary witnesses rather than a
+requirement to support arbitrary-length exact-decimal arithmetic.
+
+The material below is retained as historical decision/evidence context. Where
+it conflicts with 0069/0070 or the bounded-atomic amendment, the newer
+authority wins.
 
 ## Finding and decision
 
@@ -19,85 +33,51 @@ current Basic result: legal spellings of mathematical one return `None` or
 `Some(0.0)` from the observed query. Existing Basic validation can accept
 those bounds where an exact comparison rejects them.
 
-The selected direction is **exact finite decimal value** for the TD Basic
-predicates that inspect `serde_json::Value::Number` in schema extension fields.
-This deliberately revises their current float-projection acceptance; it does
-not claim parity with the present `as_f64` implementation. The future public
-`Thing::validate_with_level(Basic)` adapter and both `ValidatedThing` entries
-must use the same TD-owned rule. The source Number remains lossless and typed
-fieldwise equivalence remains separate from arithmetic equality.
+The selected direction at this historical review was **exact finite decimal
+value** for the TD Basic predicates that inspect `serde_json::Value::Number` in
+schema extension fields. That selection is no longer current where superseded
+above. The source Number remains lossless and typed fieldwise equivalence
+remains separate from arithmetic equality.
 
-This is a planned semantic contract, not current production behavior. The
-tranche stays `planned` / `candidate` / `current`. The exact rule and progress
-responsibility are owned by the amended [admission record](../docs/work-packages/WP-100-consumer-validated-thing-admission.md),
-not repeated here.
-No new ADR is needed for this scoped amendment: TD keeps the existing Basic
-owner and public signatures, and Foundation, Planning, and Servient retain
-their existing resource and lifecycle responsibilities. Independent review of
-the semantic change is still required before readmission.
+This was a planned semantic contract, not production behavior. The tranche
+remains `planned` / `candidate` / `current`; the current detailed owner is the
+amended [admission record](../docs/work-packages/WP-100-consumer-validated-thing-admission.md).
 
 ## Alternatives and impact boundary
 
-| Alternative | Disposition |
-| --- | --- |
-| Keep `as_f64` and charge its containing node or precharge the whole query | Rejected: the stable call has no internal continuation and no bounded cancellation interval. |
-| Preserve the observed float result with a lexeme-aware resumable clone of private parsing | Rejected: it would make rustc/serde implementation quirks product semantics across supported versions. |
-| Fold to exact decimal, then produce a correctly rounded `f64` | Rejected: exact-value-only float projection fails the cancellation witnesses and still introduces rounding for Basic comparisons. |
-| Compare exact decimal values in one resumable TD semantic kernel | Selected: it gives one version-independent meaning to legal finite decimal Numbers without an input-length cap or a second validation owner. Constructibility and resource proof remain required before readmission. |
+The table records the state at the time of #83. Its exact-decimal selection is
+historical after 0069/0070.
 
-The change affects the Basic result for numeric `minimum`, `exclusiveMinimum`,
-`maximum`, `exclusiveMaximum`, and `multipleOf` extension fields, including
-extensions on non-numeric schema variants that current validation inspects.
-It does not change Number syntax, parsing acceptance, typed `NumberSchema` /
-`IntegerSchema` field types or comparisons, JSON serialization, default
-operations, URI/security rules, or the public method signatures and error
-categories. Existing `Thing` behavior is the historical oracle for unaffected
-rules, but no longer the oracle for these five predicates.
+| Alternative | Historical disposition |
+| --- | --- |
+| Keep unbounded `as_f64` and charge its containing node or precharge the whole query | Rejected: without an input cap the stable call has no bounded cancellation interval. |
+| Preserve the observed float result with a lexeme-aware resumable clone of private parsing | Rejected: it would make rustc/serde implementation quirks product semantics across supported versions. |
+| Fold to exact decimal, then produce a correctly rounded `f64` | Rejected at #83 because it did not preserve every pathological historical result. |
+| Compare exact decimal values in one resumable TD semantic kernel | Selected at #83; superseded by the later bounded-atomic finite-binary64 predicate boundary. |
+
+The finding concerned numeric `minimum`, `exclusiveMinimum`, `maximum`,
+`exclusiveMaximum`, and `multipleOf` extension fields, including extensions on
+non-numeric schema variants that current validation inspects. It did not change
+Number syntax, parsing acceptance, typed `NumberSchema` / `IntegerSchema`
+field types or comparisons, JSON serialization, default operations,
+URI/security rules, or public method signatures/error categories.
 
 The affected requirement set remains `DOC-RUNTIME-001`, `ADMIT-MEM-001`,
 `ADMIT-TXN-001`, `CONSTRAINED-WORK-001`, `CONSTRAINED-PROGRESS-001`, and
-`CONSTRAINED-OWN-001`. The TD semantic owner already includes
-`td/src/components/data_schema.rs` and `td/src/validate.rs` in the permitted
-future paths. No Foundation method, WorkClass, resource row/account, allocation
-category, state transition, Planning input, Servient owner, or public API item
-is added. The three retained/four temporary arena catalog still owns number
-bytes and fixed continuation state; whether that suffices must be falsified by
-the source-level prototype and full resource proof, not assumed from this
-document.
-
-`docs/spec/runtime-safety.md` and `docs/work-packages/WP-100-core.md` receive
-the cross-domain projection. `docs/work-packages/index.toml` registers this
-current impact disposition while preserving `planned` / `candidate` /
-`current`, the existing APIs, requirements, dependencies, paths, evidence key,
-and separate readmission review. `docs/api-ownership.csv`,
-`docs/resource-limits.csv`, Foundation's work/ledger contract,
-`docs/state-machines.toml`, architecture 10/20/30/50, WP-200/WP-400, and
-`PLAN.md` need no shape or roadmap change: TD still owns Basic, Planning still
-consumes the same validated view, and Servient still owns admission/publication.
-This is an impact finding, not a runtime reaffirmation of those artifacts.
+`CONSTRAINED-OWN-001`. The current 0070 migration adds exactly one named
+`number_lexeme_bytes_max` resource row but still adds no new WorkClass, ledger
+account, allocation category, lifecycle state, Planning input, or Servient
+owner.
 
 ## Evidence and stop condition
 
-The #81/#82 fixture remains evidence against the **current** stable query
-and against an exact-value-only float substitute; its Basic parity assertions
-are historical counterexamples, not the future acceptance oracle. Its
-restricted `UnitFold` proves only a narrow progress and cancellation witness.
-The #79 RFC3339 finding and #80 date amendment remain independent.
+The #81/#82 fixture remains evidence against the **unbounded** stable query and
+against cloning private parser behavior as product semantics. Under the newer
+bounded-atomic authority, very long Number witnesses are expected to hit the
+named lexical `Limit`; short values still test deliberate binary64 rounding and
+projection-failure behavior.
 
-All eight pre-readmission items remain required and incomplete as a set. In
-particular, item 3 must now prove the deliberate Basic semantic delta and
-shared-adapter parity, and items 2, 5, 6, and 7 must prove bounded Number
-access, supported feature/target behavior, progress, cancellation, and
-physical resource sufficiency. Item 8 still requires later reaffirmation of
-prior evidence at the exact future source boundary. This review completes
-none of them; it creates no completion evidence manifest and readmits no
-tranche. The passed Producer Property Read gate and completed WP-200/WP-300
-evidence are not changed or rerun by a docs migration.
-
-If a construction requires a new public Number API, a production path outside
-the permitted list, a new WorkClass/resource/account/allocation category, a
-different Basic owner, or a changed lifecycle/Planning/Servient boundary,
-stop and open another impact review before implementation. An inability to
-prove exact decimal semantics for every supported graph is a readmission
-blocker; silently falling back to `as_f64`, rejecting legal Number syntax, or
-changing the supported graph is not authorized.
+All eight pre-readmission items remain required and incomplete as a set. Their
+current numeric obligations are defined only by the admission record, topic
+0070, and the bounded-atomic amendment. This historical review creates no
+completion evidence and readmits no tranche.

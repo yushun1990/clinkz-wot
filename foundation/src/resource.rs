@@ -633,7 +633,7 @@ mod tests {
 
     #[test]
     fn generated_profiles_cover_every_schema_field() {
-        assert_eq!(RESOURCE_LIMIT_COUNT, 195);
+        assert_eq!(RESOURCE_LIMIT_COUNT, 196);
         assert_eq!(ResourceKind::ALL.len(), RESOURCE_LIMIT_COUNT);
         assert_eq!(GatewayDefaultV1::ID, ResourceProfileId::GATEWAY_DEFAULT_V1);
         assert_eq!(
@@ -679,6 +679,33 @@ mod tests {
         assert_eq!(
             BenchmarkStaticReferenceV1::LIMITS.additional_responses_per_form_max(),
             Some(16)
+        );
+    }
+
+    #[test]
+    fn number_lexeme_schema_projection_is_consumer_only() {
+        let kind = ResourceKind::NumberLexemeBytesMax;
+        assert_eq!(kind.index(), 195);
+        assert_eq!(ResourceKind::ALL[195], kind);
+        assert_eq!(kind.field_name(), "number_lexeme_bytes_max");
+        assert_eq!(kind.category(), "document");
+        assert_eq!(kind.unit(), "bytes");
+        assert_eq!(kind.scope(), "per-item");
+        assert_eq!(kind.capability_roles(), "consumer");
+        assert_eq!(kind.zero_semantics(), "disabled");
+        for (limits, expected) in [
+            (GatewayDefaultV1::LIMITS, Some(256)),
+            (DirectoryClientDefaultV1::LIMITS, None),
+            (BenchmarkStaticReferenceV1::LIMITS, Some(64)),
+        ] {
+            assert_eq!(limits.get(kind), expected);
+            assert_eq!(limits.number_lexeme_bytes_max(), expected);
+        }
+        // The append must not reinterpret an existing public identity.
+        assert_eq!(ResourceKind::DiscoveryProcessesGlobalMax.index(), 56);
+        assert_eq!(
+            ResourceKind::DiscoveryProcessesGlobalMax.category(),
+            "discovery"
         );
     }
 

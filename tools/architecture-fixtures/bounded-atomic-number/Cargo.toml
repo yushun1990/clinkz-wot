@@ -1,0 +1,18 @@
+[package]
+name = "bounded-atomic-number-probe"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[workspace]
+
+[dependencies]
+clinkz-wot-foundation = { path = "../../../foundation", default-features = false }
+serde_json = { version = "1.0.149", default-features = false, features = ["alloc", "arbitrary_precision"] }
+
+[profile.release]
+opt-level = 3
+debug = 2
+lto = false
+codegen-units = 1
+panic = "abort"
