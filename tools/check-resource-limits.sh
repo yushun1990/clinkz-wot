@@ -67,6 +67,18 @@ if [[ "$actual_field_count" -ne "$expected_field_count" ]]; then
     exit 1
 fi
 
+# Freeze the complete original schema, not just a suffix of field names.
+# Baseline: d4cf245eb1bf79e607c4851bba4b16a58e83a04e:docs/resource-limits.csv.
+# Hash includes the header, every column of indices 0..194, row order, and LF.
+# A change to this digest requires an explicit schema revision/migration under
+# docs/spec/foundation.md; an append-only addition leaves it unchanged.
+frozen_prefix_sha256=65e3edbcfbbc38b8fe16b4efd5db92d7964fc653ad71cc8e747ff056fe3b519e
+actual_prefix_sha256=$(head -n 196 "$schema" | sha256sum | cut -d' ' -f1)
+if [[ "$actual_prefix_sha256" != "$frozen_prefix_sha256" ]]; then
+    echo "resource limit check: frozen metadata at indices 0..194 changed; explicit schema migration required" >&2
+    exit 1
+fi
+
 v49_fields=(
     plan_sets_per_thing_max
     plan_sets_global_max
@@ -147,8 +159,8 @@ done
 if ! awk -F, '
     NR == 197 && $1 == "number_lexeme_bytes_max" \
         && $2 == "document" && $3 == "bytes" && $4 == "per-item" \
-        && $5 == "all" && $6 == "disabled" \
-        && $7 == "256" && $8 == "256" && $9 == "64" \
+        && $5 == "consumer" && $6 == "disabled" \
+        && $7 == "256" && $8 == "NA" && $9 == "64" \
         && $10 ~ /(^|\|)RES-LIMIT-001(\||$)/ \
         && $10 ~ /(^|\|)CONSTRAINED-WORK-001(\||$)/ { found = 1 }
     END { exit !found }

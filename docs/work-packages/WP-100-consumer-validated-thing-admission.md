@@ -161,11 +161,13 @@ lossless retention or numeric projection:
 
 - `number_lexeme_bytes_max` is a named per-item byte limit;
 - the project hard ceiling is 256 bytes;
-- gateway and directory-client named profiles use 256; the benchmark static
-  reference profile uses 64;
+- the Consumer `+validated-thing` owner uses gateway 256 and benchmark static
+  reference 64; directory-client is `NA` because it has no validation owner;
 - profiles may lower but may not raise the project hard ceiling;
-- strict JSON decoding returns `Limit` as soon as byte 257 of one Number token
-  is observed, without finishing an unbounded scan; and
+- for configured `L` in `0..=256`, strict JSON decoding returns `Limit` as soon
+  as byte `L + 1` of one Number token is observed, before copying that byte or
+  finishing the scan (64/65 and 256/257 respectively); zero rejects the first
+  Number byte, including opaque Numbers; and
 - typed compatibility admission checks borrowed `Number::as_str().len()` before
   projection or lossless copy.
 
@@ -205,7 +207,7 @@ JSON lexing, lossless Number-byte capture, and byte copying remain ordinary
 charged/resumable work. Numeric projection/comparison after the lexical bound is
 one bounded atomic operation.
 
-For one Number lexeme of length `n`, with `n <= 256`, before projection starts:
+For one Number lexeme of length `n`, with `0 < n <= L <= 256`, before projection starts:
 
 1. debit `n` `CodecInputBytes` units from the current `WorkBudget`;
 2. debit the same `n` units from the shared non-resettable admission lifetime
@@ -218,9 +220,9 @@ For one Number lexeme of length `n`, with `n <= 256`, before projection starts:
    containing schema-node charge.
 
 Thus one uninterrupted numeric projection has a hard <=256-byte input bound.
-`CONSTRAINED-PROGRESS-001` requires this bounded cancellation/work interval; it
-does not require a cancellation point inside every byte loop of a bounded
-library call. Zero budget still makes no numeric progress. If a Number must be
+`CONSTRAINED-PROGRESS-001` also requires the constrained latency/stack workload
+declared by the Number amendment to pass; input finiteness alone is not that
+evidence. Zero budget still makes no numeric progress. If a Number must be
 projected again, the repeated projection is charged again; no rescan is free.
 
 Ordinary public `Thing::validate_with_level(Basic)` remains synchronous and
@@ -245,7 +247,8 @@ same projection semantics. These adapters must agree on Basic acceptance for
 values that reach the predicate; only bounded admission can terminate earlier
 with the lexical `Limit`.
 
-Before readmission, numeric evidence must cover 255/256/257-byte thresholds,
+Before readmission, numeric evidence must cover configured `L - 1`/`L`/`L + 1`
+thresholds, including 63/64/65 and 255/256/257, zero-disabled first-byte rejection,
 short overflow such as predicate `1e309`, binary64 rounding near exact-integer
 precision, ordinary underflow behavior in each resolved graph, repeated
 projection charging, zero/small budgets, step-budget `Pending`, lifetime
@@ -897,12 +900,16 @@ An independent exact-head review must accept all of the following before any
    normalization, sorting, URI/string/number handling, seal, diagnostics,
    cancellation, every rollback cause, zero-budget no-progress, lifetime-
    budget non-reset, and prepaid bounded cursor drop. Number traces must cover
-   255/256/257-byte thresholds; strict over-limit stop without a finishing
+   configured `L - 1`/`L`/`L + 1` thresholds, including 63/64/65 and 255/256/257,
+   zero-disabled first-byte rejection; strict over-limit stop without a finishing
    scan; typed AP length check before projection/copy; short failed projection;
    rounding; repeated projection charging; step-budget `Pending`; lifetime
    `Limit`; cancellation immediately before/after one <=256-byte atomic
-   projection; and #81/#82 long witnesses as resource-limit cases rather than
-   successful comparisons.
+   projection; the amendment's declared Cortex-M4 public-projection workload
+   with accepted maximum cycle and stack results, including slower fallback
+   coverage; and #81/#82 long witnesses as resource-limit cases rather than
+   successful comparisons. A host run or thumb compile alone does not complete
+   this item.
 7. A resource proof mapping source, temporary, peak, actual contiguous request,
    diagnostics, cleanup, reclassification, the new per-Number lexical limit,
    and inline Servient-owner capacity to authority without treating aggregate

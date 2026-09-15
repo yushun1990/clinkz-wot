@@ -29,20 +29,30 @@ separate concerns.
 ## Hard lexical resource boundary
 
 Bounded admission has one named per-Number lexical limit:
-`number_lexeme_bytes_max`.
+`number_lexeme_bytes_max`. Its owner is the Consumer role's
+`+validated-thing` admission surface. The row is provisional authority input
+until that owner is implemented; generated getters do not enforce admission.
 
 - project hard maximum: **256 bytes**;
 - gateway profile: 256 bytes;
-- directory-client profile: 256 bytes;
+- directory-client profile: `NA` (no Directory-client validation owner);
 - benchmark static reference profile: 64 bytes;
 - profiles may lower the value but may not raise it above 256;
 - zero disables Number admission under the normal disabled-resource rule.
 
+Let `L` be the configured value, validated in `0..=256` before admission.
 The limit is checked before any input-sized numeric projection. Strict JSON
-admission stops as `Limit` when byte 257 of one Number token is observed. Typed
-compatibility admission uses borrowed public `Number::as_str()` under the
+admission stops as `Limit` when byte `L + 1` of one Number token is observed,
+before copying that byte or finishing the token scan. Thus the boundary is
+64/65 for the benchmark profile and 256/257 at the hard maximum. At `L = 0`,
+the first Number byte returns `Limit`; a document with no Numbers is not
+rejected by this resource. Typed compatibility admission uses borrowed public
+`Number::as_str()` under the
 explicit `td/validated-thing -> serde_json/arbitrary_precision` capability and
-checks its length before projection or lossless copy.
+checks `as_str().len() <= L` before projection or lossless copy. A value above
+256 is invalid configuration, not a per-input `Limit`. This validation belongs
+to the future owning builder; raw Foundation `ResourceLimits` remains low-level
+assembly and is not that builder.
 
 Over-ceiling Number text is a resource `Limit`, not `InvalidSchema` and not a
 claim that the JSON syntax is invalid.
@@ -98,7 +108,7 @@ JSON tokenization, lossless Number-byte capture, and byte copying remain
 ordinary charged/resumable work. Numeric projection/comparison after the hard
 lexical boundary is a bounded atomic operation.
 
-For one projection of a Number with lexical length `n`, where `n <= 256`:
+For one projection of a Number with lexical length `n`, where `0 < n <= L <= 256`:
 
 - debit `n` `CodecInputBytes` units from the current step budget before
   projection starts;
@@ -111,10 +121,16 @@ For one projection of a Number with lexical length `n`, where `n <= 256`:
 - perform only constant-size scalar comparison after projection under the
   containing schema-node charge.
 
-The maximum uninterrupted numeric projection therefore consumes a Number of at
-most 256 lexical bytes. `CONSTRAINED-PROGRESS-001` requires this bounded atomic
-interval; it does not require a cancellation point inside every byte loop of a
-bounded library call.
+The maximum uninterrupted numeric projection consumes a Number of at most 256
+lexical bytes. Input finiteness alone does not establish acceptable latency or
+stack use. The [constrained atomic Number workload](../../tools/architecture-fixtures/bounded-atomic-number/README.md#constrained-acceptance-workload)
+defines the falsifiable target acceptance boundary for
+`CONSTRAINED-PROGRESS-001`: every measured projection interval on the declared
+168 MHz Cortex-M4 must fit 168,000 cycles (1 ms), with at most 4,096 additional
+stack bytes including callees. This is an admission requirement, not a measured
+result. The 256 ceiling remains a candidate until this workload passes and its
+evidence is independently accepted. Failure requires reopening the ceiling or
+projection decision, not increasing these budgets silently.
 
 If a Number must be projected again, the repeated projection is charged again.
 No replayed scan is free merely because the source is already retained.
@@ -138,7 +154,8 @@ remain unchanged.
 The full WP-100 pre-readmission set remains required. Numeric evidence must now
 include:
 
-- 255/256/257-byte lexical threshold cases;
+- configured `L - 1`/`L`/`L + 1` thresholds for nonzero `L`, including
+  63/64/65 and 255/256/257, plus zero-disabled first-byte rejection;
 - over-ceiling strict input returning `Limit` without finishing an unbounded
   token scan;
 - typed AP-backed length check before projection/copy;
@@ -154,7 +171,8 @@ include:
 - insufficient lifetime remainder -> `Limit` before work;
 - zero-budget no-progress;
 - repeated projection charging;
-- one <=256-byte bounded cancellation interval; and
+- one <=256-byte bounded cancellation interval satisfying the declared
+  constrained latency/stack workload, including slower fallback inputs; and
 - Host plus real constrained/thumb coverage.
 
 The #81/#82 very long Number witnesses become negative resource-boundary tests,
@@ -178,6 +196,7 @@ four-temporary arena design, rollback and accounting, storage-independent
 `ValidatedThingView`, public signatures, the explicit AP capability boundary,
 and existing feature/target matrices.
 
-The tranche remains `planned` / `candidate` / `current`. A later independent
-exact-head authority review and a separate `candidate -> admitted` transition
-are still required before production implementation.
+The tranche remains `planned` / `candidate` / `current`. Independent exact-head
+authority review, completion and independent acceptance of all eight
+pre-readmission evidence items, and only then a separate docs-only
+`candidate -> admitted` transition are required before production implementation.

@@ -437,8 +437,12 @@ The foundation schema is generated from `docs/resource-limits.csv`. Indices
 host-call, subscription, typed-slot, temporary-poll, response, cancellation,
 cleanup-transfer, wake, and reactor-queue limits. Index 195 appends
 `number_lexeme_bytes_max` for WP-100 bounded admission, with named values
-256/256/64 for gateway/directory-client/benchmark-static-reference. The active
-schema therefore has 196 fields while preserving every prior numeric identity.
+256/NA/64 for gateway/directory-client/benchmark-static-reference; the owner is
+Consumer `+validated-thing`. Lower profiles enforce their configured limit
+(`L + 1` first-excess-byte rejection, including zero-disabled).
+The amendment's constrained latency/stack workload remains required before
+readmission. The active schema therefore has 196 fields while preserving every
+prior numeric identity.
 The three feature-cell compile tests, profile snapshots, and exact/one-over
 boundary tests cover the generated surface. Every bounded handler `start`,
 `step`, `cancel`, or constrained adapter poll charges its caller-supplied

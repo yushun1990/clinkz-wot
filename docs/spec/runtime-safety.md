@@ -124,8 +124,12 @@ The planned Consumer boundary amends only Basic's five numeric schema-extension
 predicates (`minimum`, `exclusiveMinimum`, `maximum`, `exclusiveMaximum`, and
 `multipleOf`) over `serde_json::Value::Number`. Bounded admission first applies
 the named `number_lexeme_bytes_max` resource boundary, whose project hard
-ceiling is 256 bytes and which profiles may lower but not raise. Over-ceiling
-Number text is `Limit`; within-ceiling opaque Numbers remain losslessly
+ceiling is 256 bytes and which profiles may lower but not raise. It applies to
+Consumer `+validated-thing`; Directory-client is `NA`. A configured limit `L`
+rejects strict input at Number byte `L + 1` before copying that byte or finishing
+the scan; typed input checks borrowed length first. Zero disables Number
+admission, including opaque Numbers. Over-ceiling Number text is `Limit`;
+within-ceiling opaque Numbers remain losslessly
 retained even when they cannot project to finite `f64`.
 
 Existing typed `NumberSchema` `f64` behavior and typed `IntegerSchema` `i64`
@@ -143,8 +147,11 @@ operation: the cursor debits the Number's complete `CodecInputBytes` cost and
 the same non-resettable lifetime allowance before it starts. Insufficient
 current step budget returns `Pending` with no numeric progress; insufficient
 lifetime allowance returns `Limit`. Cancellation is checked immediately before
-and after the at-most-256-byte projection. A repeated projection is charged
-again. The explicit AP feature remains lexical-access authority, not an
+and after the at-most-256-byte projection. The constrained latency and stack
+acceptance workload in the Number amendment must pass before readmission;
+finite input length alone is not evidence of tolerable cancellation latency.
+A repeated projection is charged again. The explicit AP feature remains
+lexical-access authority, not an
 arbitrary-precision arithmetic promise. The detailed rule and readmission proof
 belong to the WP-100 validated-Thing admission record and
 `docs/amendments/WP-100-bounded-atomic-number-v1.md`; current production Rust

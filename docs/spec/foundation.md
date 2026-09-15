@@ -112,12 +112,21 @@ declared scopes. `NA` means typed non-applicability. Omission, `inherit`, and
 declares rendezvous capacity; zero never means unbounded.
 
 For `WP-100-CONSUMER-VALIDATED-THING`, the append-only
-`number_lexeme_bytes_max` row is a per-Number admission resource. Its project
-hard maximum is 256 bytes: named or application-defined profiles may lower the
+`number_lexeme_bytes_max` row is a per-Number Consumer `+validated-thing`
+admission resource, with named profile projection 256/NA/64 for
+gateway/directory-client/benchmark-static-reference. There is no Directory-client
+validation owner for this row. It is provisional until its Consumer owner is
+implemented; generated schema plumbing alone makes no runtime-enforcement claim.
+Its project hard maximum is 256 bytes: named or application-defined profiles may lower the
 configured value but MUST NOT raise it above 256. The row bounds one Number
 lexeme before bounded numeric projection or lossless retained copying. It does
 not declare every JSON Number to be binary64 and does not replace aggregate
-document/source/work limits.
+document/source/work limits. For a configured `L` in `0..=256`, strict admission
+rejects at the first excess Number byte (`L + 1`) without finishing the scan or
+copying the rejected byte; typed admission checks borrowed lexical length before
+projection/copy. Zero rejects the first Number byte, and 64 admits a 64-byte
+Number but rejects at byte 65. The future owning builder validates the hard
+maximum; raw `ResourceLimits` construction remains low-level assembly.
 
 `RES-LIMIT-002`: A resource-policy violation MUST stop before rejected work or
 externally reachable publication and return a structured limit category naming

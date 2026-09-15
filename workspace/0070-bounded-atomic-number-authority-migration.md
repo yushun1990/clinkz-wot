@@ -26,12 +26,15 @@ The selected boundary is:
    Number retained or inspected by bounded `ValidatedThing` admission.
 2. The project-wide hard ceiling is **256 bytes per Number lexeme**. A profile
    may configure a smaller value but MUST NOT configure a larger one. The
-   initial named-profile projection is 256 bytes for gateway, 256 bytes for
+   initial named-profile projection is 256 bytes for gateway, `NA` for
    directory-client, and 64 bytes for the benchmark static reference profile.
-3. A strict JSON Number that reaches byte 257 before the token ends terminates
-   bounded admission as `Limit`; the decoder need not finish scanning the
-   token. A typed compatibility input checks borrowed `Number::as_str()` length
-   under `td/validated-thing -> serde_json/arbitrary_precision` before any
+   Its owner is Consumer `+validated-thing`; no Directory validation path owns it.
+3. With configured limit `L` in `0..=256`, a strict JSON Number that reaches
+   byte `L + 1` before the token ends terminates bounded admission as `Limit`
+   before copying that byte; the decoder does not finish scanning the token.
+   This includes 64/65, 256/257, and first-byte rejection when zero disables
+   Number admission. A typed compatibility input checks borrowed
+   `Number::as_str()` length under `td/validated-thing -> serde_json/arbitrary_precision` before any
    numeric projection or lossless copy.
 4. Within the configured lexical ceiling, opaque Numbers such as `const`,
    `default`, and nested extension values remain losslessly retained even when
@@ -52,12 +55,18 @@ The selected boundary is:
    quirks beyond the stable public projection contract, and does not promise
    arbitrary-precision arithmetic merely because AP preserves lexical text.
 
-The 256-byte ceiling is deliberately much larger than any ordinary binary64
-spelling while still small enough to make one public float projection an
-acceptable bounded atomic operation on constrained targets. It also permits
-useful exact opaque numeric constants without turning the general runtime into
-an arbitrary-precision numerical system. A later specialized numeric profile
-must open a new impact review rather than raise this ceiling.
+The 256-byte candidate permits useful exact opaque numeric constants as well
+as ordinary binary64 spellings. The original assertion that this is "small
+enough" did not justify its cancellation latency: Rust's public float parser
+can enter a slower fallback with a 768-digit buffer even on shorter input.
+Lexeme length bounds input, not cycles or stack. The correction supplies a
+[declared constrained workload and non-production probe](../tools/architecture-fixtures/bounded-atomic-number/README.md)
+with adversarial public projections, explicit cycle/stack rejection bounds,
+and measurement instructions. The amendment owns the acceptance requirement.
+256 remains a candidate ceiling until target results pass independent review;
+neither a host result nor a thumb compile establishes target tolerability.
+A failed bound reopens this choice; a later specialized numeric profile also
+requires impact review rather than silently raising the ceiling.
 
 ## Work, progress, and cancellation
 
@@ -67,7 +76,7 @@ numeric projection/comparison ceases to be byte-resumable.
 
 For one atomic numeric projection:
 
-- the source lexeme length `n` is known first and satisfies `0 < n <= 256`;
+- the source lexeme length `n` is known first and satisfies `0 < n <= L <= 256`;
 - before starting, the cursor debits `n` `CodecInputBytes` units from the
   current `WorkBudget` and the same `n` units from the non-resettable admission
   lifetime remainder;
@@ -80,9 +89,9 @@ For one atomic numeric projection:
   work under the containing schema-node charge.
 
 Thus one cancellation interval may contain at most one <=256-byte numeric
-projection. `CONSTRAINED-PROGRESS-001` requires a bounded interval, not a
-cancellation point inside every library loop. Zero budget still makes no
-progress, and no work begins before its complete debit.
+projection. `CONSTRAINED-PROGRESS-001` requires the declared latency and stack
+acceptance workload to pass as well as this lexical bound. Zero budget still
+makes no progress, and no work begins before its complete debit.
 
 Repeated projection of the same Number, if an implementation cannot retain a
 scalar projection in fixed inline state, must debit the same bounded cost each
@@ -142,7 +151,7 @@ matrix.
 
 The authority migration reserves one append-only resource field:
 
-`number_lexeme_bytes_max, document, bytes, per-item, all, disabled, 256, 256, 64`
+`number_lexeme_bytes_max, document, bytes, per-item, consumer, disabled, 256, NA, 64`
 
 The generated `ResourceKind`/getter is implementation plumbing and does not by
 itself readmit WP-100. The configured value MUST be in `0..=256`; zero disables
@@ -174,13 +183,14 @@ Item 3 must prove:
 
 Item 6 must prove:
 
-- exact threshold behavior at 255, 256, and 257 lexical bytes;
+- exact configured `L - 1`/`L`/`L + 1` thresholds, including 63/64/65 and
+  255/256/257 lexical bytes, and first-byte rejection for zero-disabled;
 - strict decode stops over-ceiling input without an unbounded finishing scan;
 - typed AP-backed length checking precedes conversion/copy;
 - insufficient current step budget returns `Pending` without starting;
 - insufficient lifetime allowance returns `Limit` without starting;
 - a started atomic projection is fully precharged and has one <=256-byte
-  cancellation interval;
+  cancellation interval with accepted target cycle/stack workload results;
 - zero budget makes no numeric progress;
 - repeated projections are charged each time;
 - short overflow/underflow/rounding boundary cases have deliberate results;
