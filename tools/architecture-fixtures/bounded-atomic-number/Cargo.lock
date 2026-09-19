@@ -11,6 +11,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "bounded-atomic-number-stm32f407-runner"
+version = "0.0.0"
+dependencies = [
+ "bounded-atomic-number-probe",
+ "serde_json",
+]
+
+[[package]]
 name = "clinkz-wot-foundation"
 version = "0.1.0"
 

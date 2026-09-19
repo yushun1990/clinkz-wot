@@ -9,6 +9,7 @@ use core::hint::black_box;
 use serde_json::Number;
 
 pub const HARD_MAX: usize = 256;
+pub const WORKLOAD_CASES: usize = 12_844;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Rejection {
@@ -244,7 +245,9 @@ mod tests {
     fn corpus_uses_public_ap_numbers_and_covers_every_admitted_length() {
         let mut lengths = [false; HARD_MAX + 1];
         let mut ties = 0;
+        let mut cases = 0;
         for_each_case(|family, text| {
+            cases += 1;
             assert!((1..=HARD_MAX).contains(&text.len()));
             lengths[text.len()] = true;
             let number: Number = serde_json::from_str(text).unwrap();
@@ -269,6 +272,7 @@ mod tests {
         });
         assert!(lengths[1..].iter().all(|present| *present));
         assert!(ties > 0);
+        assert_eq!(cases, WORKLOAD_CASES);
         assert_eq!(
             GatewayDefaultV1::LIMITS.number_lexeme_bytes_max(),
             Some(HARD_MAX as u64)

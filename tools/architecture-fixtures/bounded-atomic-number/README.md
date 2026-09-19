@@ -124,3 +124,90 @@ select and remeasure a smaller hard ceiling or reopen the projection design;
 do not relax the budget or call 256 justified merely because it is finite.
 The migration declares this workload; target results and all eight accepted
 pre-readmission items remain required before a separate admission transition.
+
+## STM32F407G-DISC1 runner
+
+`board-runner/` is the bare-metal measurement implementation for the declared
+workload. It is a non-production workspace member and depends on this probe's
+unchanged `project` entry and corpus. It configures the STM32F407VGT6 from the
+board's 8 MHz HSE to 168 MHz, enables five flash wait states plus prefetch and
+the instruction/data caches, and records the resulting RCC/FLASH registers.
+Code executes from flash; allocation state and the measured stacks are in the
+128 KiB SRAM; the runner's ordinary stack is in CCM.
+
+The uninstrumented parser-cost sequence masks interrupts and records a
+cold-first sample after resetting both flash caches, 100 warmups, every one of
+1,000 measured DWT samples, and an extra complementary stack-paint invocation.
+The measured projection runs on an aligned PSP stack with 8 KiB of paint and a
+256-byte no-access MPU guard. Patterns `0xa55a6996` and `0x5aa59669` are applied
+before separate invocations. Allocation calls, projection identity, baseline
+PSP, both watermarks, the guard, and every cycle sample are recorded.
+
+The declared application IRQ load is one TIM2 update interrupt per projection.
+TIM2 runs at 84 MHz with `ARR=32`; its ISR asserts cancellation and timestamps
+entry/exit. The loaded sequence repeats 100 warmups and 1,000 samples, records
+the assertion delay and post-assertion return latency for every sample, and
+uses a separate painted/guarded MSP stack so interrupt depth is not hidden in
+the parser watermark. This synthetic load is only the declaration required by
+this probe. It does not establish a particular application's schedulability.
+
+The target streams newline-delimited raw JSON through semihosting. There are
+12,844 corpus cases and two 1,000-sample sequences per case, so expect a long
+run and a large raw file. Do not interrupt a measurement run; a stream without
+the exact terminal record is invalid.
+
+### Prepare, cover, and measure
+
+Prerequisites are the installed `thumbv7em-none-eabihf` target, `probe-rs`,
+Python 3, and an ARM-capable disassembler. The runner prefers
+`llvm-tools-preview`, then `arm-none-eabi-objdump`, and finally GDB:
+
+```sh
+rustup component add llvm-tools-preview # recommended when available
+```
+
+Run from the repository root. Use a new or empty artifact directory outside
+the source tree, and replace `MB997-REVISION` with the exact revision printed
+on the board:
+
+```sh
+runner=tools/architecture-fixtures/bounded-atomic-number/board-runner/run-board.sh
+artifacts=/tmp/WP100-ATOMIC-NUMBER-M4-v1
+
+"$runner" prepare "$artifacts" MB997-REVISION
+```
+
+The same measured ELF has a USER-button-selected coverage mode. Hold the blue
+USER button before running the next command and keep it held until profiling
+has started. The runner repeatedly projects the 256-byte exact-halfway case so
+the profiler can show `parse_long_mantissa` or a `dec2flt/slow.rs` frame/line:
+
+```sh
+"$runner" coverage "$artifacts"
+```
+
+If the fallback is not sampled in the default ten seconds, repeat coverage as
+`WP100_COVERAGE_SECONDS=30 "$runner" coverage "$artifacts"`.
+
+Release the USER button, then run the complete measurement. If more than one
+debug probe is attached, prefix these commands with the selector reported by
+`probe-rs list`, for example `WP100_PROBE=0483:374b:SERIAL`.
+
+```sh
+"$runner" measure "$artifacts"
+"$runner" bundle "$artifacts"
+```
+
+`measure` returns status 2 when complete evidence falsifies a bound or coverage
+condition, but preserves all output. Run `bundle` in either case. The bundle
+contains the raw JSONL, validation summary, same-ELF slow-path profile, ELF,
+linker map, ARM disassembly, DWARF frame dump, resolved features,
+toolchain/probe versions, board revision, Git head/status, commands, digests,
+and probe logs. Return the `.tar.gz` and adjacent `.sha256` for independent
+review. Watermarks are not accepted alone: the ELF/map/disassembly/frame data
+must be reviewed for reserved but untouched frames before treating the maximum
+as conservative.
+
+Neither a locally valid bundle nor a passing measurement admits WP-100. It is
+raw candidate evidence for independent review of the existing pre-readmission
+set.

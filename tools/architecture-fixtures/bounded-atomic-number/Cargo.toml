@@ -5,6 +5,9 @@ edition = "2024"
 publish = false
 
 [workspace]
+members = ["board-runner"]
+default-members = ["."]
+resolver = "3"
 
 [dependencies]
 clinkz-wot-foundation = { path = "../../../foundation", default-features = false }

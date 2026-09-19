@@ -1,0 +1,16 @@
+[package]
+name = "bounded-atomic-number-stm32f407-runner"
+version = "0.0.0"
+edition = "2024"
+publish = false
+build = "build.rs"
+
+[[bin]]
+name = "wp100-atomic-number-m4"
+path = "src/main.rs"
+test = false
+bench = false
+
+[dependencies]
+bounded-atomic-number-probe = { path = ".." }
+serde_json = { version = "1.0.149", default-features = false, features = ["alloc", "arbitrary_precision"] }
