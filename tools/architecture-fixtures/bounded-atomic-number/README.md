@@ -195,12 +195,18 @@ trace instead of that broken subcommand. It verifies and downloads the ELF
 without resetting, waits for operator confirmation that the blue USER button
 is held, performs a dedicated reset so the firmware selects coverage mode at
 boot, and then attaches `probe-rs gdb` without another flash or reset. A GDB
-hardware breakpoint at `dec2flt/slow.rs:39` records
-`WP100_SLOW_FALLBACK_HIT`, the selected frame, and its backtrace. Breakpoint
-resolution alone is not accepted as runtime coverage.
+Python command file creates a hardware breakpoint at `dec2flt/slow.rs:39` and
+listens for GDB stop events. It writes the dedicated JSON coverage trace only
+when that exact breakpoint is reported in a `BreakpointEvent` and the stopped
+PC equals one of the breakpoint addresses resolved from `firmware.elf`. The
+record also carries the ELF SHA-256; coverage and measurement rehash the ELF
+against both that record and the digest captured by `prepare`. Breakpoint
+resolution, combined probe-rs/GDB output, and unrelated stops are not accepted
+as runtime coverage.
 
 Run coverage and follow its prompt. Hold the USER button before pressing Enter
-and keep it held until `WP100_SLOW_FALLBACK_HIT` appears:
+and keep it held until the debugger reports a confirmed hardware-breakpoint
+hit:
 
 ```sh
 "$runner" coverage "$artifacts"

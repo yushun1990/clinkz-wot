@@ -18,7 +18,8 @@ EXPECTED_SAMPLES = 1_000
 EXPECTED_WARMUPS = 100
 EXPECTED_CYCLE_LIMIT = 168_000
 EXPECTED_STACK_LIMIT = 4_096
-COVERAGE_HIT_MARKER = "WP100_SLOW_FALLBACK_HIT"
+COVERAGE_SCHEMA = "wp100-slow-fallback-gdb-v1"
+COVERAGE_LOCATION = "library/core/src/num/dec2flt/slow.rs:39"
 
 
 class InvalidEvidence(Exception):
@@ -63,6 +64,63 @@ def require_cancellation_in_interval(cycles: int, latency: int, context: str) ->
     require(latency <= cycles, f"{context} cancellation is outside the measured projection interval")
 
 
+def file_sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as source:
+        for chunk in iter(lambda: source.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def validate_coverage(coverage_path: Path, firmware_path: Path) -> dict[str, object]:
+    lines = [line for line in coverage_path.read_text(encoding="utf-8").splitlines() if line]
+    require(len(lines) == 1, "coverage trace is not one machine-readable breakpoint record")
+    try:
+        record = json.loads(lines[0])
+    except json.JSONDecodeError as error:
+        raise InvalidEvidence(f"coverage trace is not valid JSON: {error}") from error
+
+    require(isinstance(record, dict), "coverage trace is not a JSON object")
+    require(record.get("schema") == COVERAGE_SCHEMA, "coverage trace schema mismatch")
+    firmware_sha256 = file_sha256(firmware_path)
+    require(
+        record.get("firmware_sha256") == firmware_sha256,
+        "coverage trace firmware identity does not match firmware.elf",
+    )
+
+    breakpoint = record.get("breakpoint")
+    require(isinstance(breakpoint, dict), "coverage trace breakpoint is missing")
+    breakpoint_number = breakpoint.get("number")
+    require(
+        is_integer(breakpoint_number) and breakpoint_number > 0,
+        "coverage trace breakpoint number is invalid",
+    )
+    require(breakpoint.get("kind") == "hardware", "coverage trace breakpoint is not hardware")
+    require(
+        breakpoint.get("location") == COVERAGE_LOCATION,
+        "coverage trace breakpoint location mismatch",
+    )
+    addresses = breakpoint.get("resolved_addresses")
+    require(
+        isinstance(addresses, list) and bool(addresses),
+        "coverage trace has no resolved breakpoint address",
+    )
+    require(
+        all(isinstance(address, str) and re.fullmatch(r"0x[0-9a-f]+", address) for address in addresses),
+        "coverage trace has an invalid resolved breakpoint address",
+    )
+
+    stop = record.get("stop")
+    require(isinstance(stop, dict), "coverage trace stop is missing")
+    require(stop.get("reason") == "breakpoint-hit", "coverage trace stop is not a breakpoint hit")
+    require(
+        stop.get("breakpoint_number") == breakpoint_number,
+        "coverage trace stopped at a different breakpoint",
+    )
+    require(stop.get("pc") in addresses, "coverage trace PC is not a resolved breakpoint address")
+    return record
+
+
 def load_record(line: str, line_number: int) -> dict[str, object]:
     try:
         value = json.loads(line)
@@ -72,7 +130,9 @@ def load_record(line: str, line_number: int) -> dict[str, object]:
     return value
 
 
-def validate(raw_path: Path, coverage_path: Path | None) -> tuple[dict[str, object], bool]:
+def validate(
+    raw_path: Path, coverage_path: Path | None, firmware_path: Path | None
+) -> tuple[dict[str, object], bool]:
     digest = hashlib.sha256()
     lengths: set[int] = set()
     families: set[str] = set()
@@ -324,17 +384,14 @@ def validate(raw_path: Path, coverage_path: Path | None) -> tuple[dict[str, obje
 
     coverage_confirmed = False
     coverage_sha256 = None
+    coverage_firmware_sha256 = None
     if coverage_path is not None:
         coverage = coverage_path.read_bytes()
         coverage_sha256 = hashlib.sha256(coverage).hexdigest()
-        coverage_text = coverage.decode("utf-8", errors="replace")
-        coverage_confirmed = COVERAGE_HIT_MARKER in coverage_text and (
-            "parse_long_mantissa" in coverage_text or "dec2flt/slow.rs" in coverage_text
-        )
-        require(
-            coverage_confirmed,
-            "coverage trace does not show a confirmed slow-fallback breakpoint hit",
-        )
+        require(firmware_path is not None, "firmware.elf is required with a coverage trace")
+        coverage_record = validate_coverage(coverage_path, firmware_path)
+        coverage_firmware_sha256 = coverage_record["firmware_sha256"]
+        coverage_confirmed = True
 
     accepted_bounds = reported_failed_cases == 0
     summary: dict[str, object] = {
@@ -342,6 +399,7 @@ def validate(raw_path: Path, coverage_path: Path | None) -> tuple[dict[str, obje
         "workload_id": EXPECTED_WORKLOAD,
         "raw_sha256": digest.hexdigest(),
         "coverage_sha256": coverage_sha256,
+        "coverage_firmware_sha256": coverage_firmware_sha256,
         "coverage_slow_fallback_confirmed": coverage_confirmed,
         "case_count": case_count,
         "family_count": len(families),
@@ -362,13 +420,22 @@ def validate(raw_path: Path, coverage_path: Path | None) -> tuple[dict[str, obje
 
 def main() -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("raw", type=Path)
+    parser.add_argument("raw", nargs="?", type=Path)
     parser.add_argument("--coverage", type=Path)
+    parser.add_argument("--coverage-only", action="store_true")
+    parser.add_argument("--firmware", type=Path)
     parser.add_argument("--summary", type=Path)
     arguments = parser.parse_args()
 
     try:
-        summary, passed = validate(arguments.raw, arguments.coverage)
+        if arguments.coverage_only:
+            require(arguments.coverage is not None, "--coverage-only requires --coverage")
+            require(arguments.firmware is not None, "--coverage-only requires --firmware")
+            coverage = validate_coverage(arguments.coverage, arguments.firmware)
+            sys.stdout.write(json.dumps(coverage, indent=2, sort_keys=True) + "\n")
+            return 0
+        require(arguments.raw is not None, "raw evidence path is required")
+        summary, passed = validate(arguments.raw, arguments.coverage, arguments.firmware)
     except (InvalidEvidence, OSError) as error:
         print(f"invalid evidence: {error}", file=sys.stderr)
         return 1

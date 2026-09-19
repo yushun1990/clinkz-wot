@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import tempfile
 import unittest
@@ -100,24 +101,44 @@ def case(index: int) -> dict[str, object]:
 @patch.object(validate, "EXPECTED_SAMPLES", 2)
 @patch.object(validate, "EXPECTED_WARMUPS", 1)
 class ValidatorTests(unittest.TestCase):
+    def coverage_record(self, firmware: Path) -> dict[str, object]:
+        firmware_sha256 = hashlib.sha256(firmware.read_bytes()).hexdigest()
+        return {
+            "schema": validate.COVERAGE_SCHEMA,
+            "firmware_sha256": firmware_sha256,
+            "breakpoint": {
+                "number": 1,
+                "kind": "hardware",
+                "location": validate.COVERAGE_LOCATION,
+                "resolved_addresses": ["0x080144b0"],
+            },
+            "stop": {
+                "reason": "breakpoint-hit",
+                "breakpoint_number": 1,
+                "pc": "0x080144b0",
+            },
+        }
+
     def write_evidence(
         self,
         directory: Path,
         records: list[dict[str, object]],
         coverage_text: str | None = None,
-    ) -> tuple[Path, Path]:
+    ) -> tuple[Path, Path, Path]:
         raw = directory / "raw.jsonl"
         raw.write_text(
             "".join(json.dumps(record, separators=(",", ":")) + "\n" for record in records),
             encoding="utf-8",
         )
+        firmware = directory / "firmware.elf"
+        firmware.write_bytes(b"exact prepared ELF fixture")
         coverage = directory / "coverage.txt"
         coverage.write_text(
             coverage_text
-            or f"{validate.COVERAGE_HIT_MARKER}\ncore/src/num/dec2flt/slow.rs\n",
+            or json.dumps(self.coverage_record(firmware), separators=(",", ":")) + "\n",
             encoding="utf-8",
         )
-        return raw, coverage
+        return raw, coverage, firmware
 
     def validate_case(
         self, first_case: dict[str, object], coverage_text: str | None = None
@@ -134,8 +155,10 @@ class ValidatorTests(unittest.TestCase):
             }
         )
         with tempfile.TemporaryDirectory() as temporary:
-            raw, coverage = self.write_evidence(Path(temporary), records, coverage_text)
-            return validate.validate(raw, coverage)
+            raw, coverage, firmware = self.write_evidence(
+                Path(temporary), records, coverage_text
+            )
+            return validate.validate(raw, coverage, firmware)
 
     def test_accepts_complete_consistent_candidate(self) -> None:
         summary, passed = self.validate_case(case(0))
@@ -146,8 +169,36 @@ class ValidatorTests(unittest.TestCase):
         self.assertEqual(summary["cancellation_latency_max_cycles"], 8)
         self.assertEqual(summary["cancellation_assertion_delay_max_cycles"], 16)
 
-    def test_rejects_breakpoint_location_without_runtime_hit_marker(self) -> None:
-        with self.assertRaisesRegex(validate.InvalidEvidence, "confirmed slow-fallback"):
+    def test_rejects_echoed_gdb_command_arguments(self) -> None:
+        echoed = (
+            'Spawning Command { std: "gdb", args: ["-ex", '
+            '"printf \\"WP100_SLOW_FALLBACK_HIT\\\\n\\"", '
+            '"hbreak library/core/src/num/dec2flt/slow.rs:39"] }\n'
+        )
+        with self.assertRaisesRegex(validate.InvalidEvidence, "valid JSON"):
+            self.validate_case(case(0), echoed)
+
+    def test_rejects_unrelated_stop_even_with_old_marker_and_location(self) -> None:
+        unrelated = (
+            "Program received signal SIGTRAP, Trace/breakpoint trap.\n"
+            "WP100_SLOW_FALLBACK_HIT\n"
+            "library/core/src/num/dec2flt/slow.rs:39\n"
+        )
+        with self.assertRaisesRegex(validate.InvalidEvidence, "machine-readable"):
+            self.validate_case(case(0), unrelated)
+
+    def test_rejects_structured_record_for_a_different_breakpoint(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            firmware = Path(temporary) / "firmware.elf"
+            firmware.write_bytes(b"exact prepared ELF fixture")
+            record = self.coverage_record(firmware)
+            record["stop"]["breakpoint_number"] = 2
+            coverage_text = json.dumps(record, separators=(",", ":")) + "\n"
+        with self.assertRaisesRegex(validate.InvalidEvidence, "different breakpoint"):
+            self.validate_case(case(0), coverage_text)
+
+    def test_rejects_breakpoint_location_without_runtime_hit_record(self) -> None:
+        with self.assertRaisesRegex(validate.InvalidEvidence, "valid JSON"):
             self.validate_case(case(0), "core/src/num/dec2flt/slow.rs\n")
 
     def test_rejects_inconsistent_raw_maximum(self) -> None:

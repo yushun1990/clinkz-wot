@@ -20,7 +20,7 @@ usage:
 Set WP100_PROBE to a probe-rs selector when more than one probe is attached.
 Set WP100_COVERAGE_SECONDS to extend the default 10-second debugger timeout.
 The coverage command requires the blue USER button to be held from reset until
-the debugger reports WP100_SLOW_FALLBACK_HIT.
+the debugger reports a confirmed slow-fallback hardware-breakpoint hit.
 EOF
 }
 
@@ -52,41 +52,140 @@ require_probe_rs_version() {
     fi
 }
 
+prepared_firmware_sha256() {
+    local artifact_dir="$1"
+    local recorded actual
+    if [[ ! -f "$artifact_dir/firmware.sha256" ]]; then
+        echo "prepared firmware digest is missing: $artifact_dir/firmware.sha256" >&2
+        exit 1
+    fi
+    read -r recorded _ < "$artifact_dir/firmware.sha256"
+    if [[ ! "$recorded" =~ ^[0-9a-f]{64}$ ]]; then
+        echo "prepared firmware digest is invalid: $artifact_dir/firmware.sha256" >&2
+        exit 1
+    fi
+    actual="$(sha256sum "$artifact_dir/firmware.elf")"
+    actual="${actual%% *}"
+    if [[ "$actual" != "$recorded" ]]; then
+        echo "firmware.elf differs from the exact prepared artifact" >&2
+        echo "prepared: $recorded" >&2
+        echo "current:  $actual" >&2
+        exit 1
+    fi
+    printf '%s\n' "$actual"
+}
+
 require_coverage_trace() {
-    local coverage_file="$1"
-    if [[ ! -f "$coverage_file" ]] \
-        || ! grep -Fq 'WP100_SLOW_FALLBACK_HIT' "$coverage_file" \
-        || ! grep -Eq 'parse_long_mantissa|dec2flt/slow.rs' "$coverage_file"; then
+    local artifact_dir="$1"
+    prepared_firmware_sha256 "$artifact_dir" >/dev/null
+    if ! python3 "$script_dir/validate.py" \
+        --coverage-only \
+        --coverage "$artifact_dir/slow-fallback-coverage.txt" \
+        --firmware "$artifact_dir/firmware.elf" >/dev/null; then
         echo "coverage trace does not contain a confirmed slow-fallback breakpoint hit" >&2
         exit 1
     fi
+}
+
+write_coverage_gdb_script() {
+    local artifact_dir="$1"
+    cat > "$artifact_dir/slow-fallback.gdb" <<'EOF'
+set pagination off
+set confirm off
+set breakpoint pending off
+python
+import hashlib
+import json
+import os
+import gdb
+
+coverage_path = os.environ["WP100_COVERAGE_TRACE"]
+firmware_path = os.environ["WP100_FIRMWARE_PATH"]
+firmware_sha256 = os.environ["WP100_FIRMWARE_SHA256"]
+with open(firmware_path, "rb") as source:
+    actual_sha256 = hashlib.sha256(source.read()).hexdigest()
+if actual_sha256 != firmware_sha256:
+    raise gdb.GdbError("firmware.elf changed before the debugger attached")
+
+breakpoint_location = "library/core/src/num/dec2flt/slow.rs:39"
+breakpoint = gdb.Breakpoint(
+    breakpoint_location,
+    type=gdb.BP_HARDWARE_BREAKPOINT,
+    internal=False,
+)
+resolved_addresses = sorted(
+    {
+        int(location.address)
+        for location in breakpoint.locations
+        if location.enabled and location.address is not None
+    }
+)
+if not resolved_addresses:
+    raise gdb.GdbError("slow-fallback hardware breakpoint did not resolve")
+
+state = {}
+
+def record_target_breakpoint_stop(event):
+    if not isinstance(event, gdb.BreakpointEvent) or breakpoint not in event.breakpoints:
+        return
+    pc = int(gdb.selected_frame().pc())
+    if pc not in resolved_addresses:
+        return
+    state["record"] = {
+        "schema": "wp100-slow-fallback-gdb-v1",
+        "firmware_sha256": firmware_sha256,
+        "breakpoint": {
+            "number": breakpoint.number,
+            "kind": "hardware",
+            "location": breakpoint_location,
+            "resolved_addresses": [f"0x{address:08x}" for address in resolved_addresses],
+        },
+        "stop": {
+            "reason": "breakpoint-hit",
+            "breakpoint_number": breakpoint.number,
+            "pc": f"0x{pc:08x}",
+        },
+    }
+
+gdb.events.stop.connect(record_target_breakpoint_stop)
+try:
+    gdb.execute("continue")
+finally:
+    gdb.events.stop.disconnect(record_target_breakpoint_stop)
+
+if "record" not in state:
+    raise gdb.GdbError("target did not stop at the slow-fallback hardware breakpoint")
+with open(coverage_path, "w", encoding="utf-8") as destination:
+    json.dump(state["record"], destination, separators=(",", ":"), sort_keys=True)
+    destination.write("\n")
+gdb.write("confirmed slow-fallback hardware-breakpoint hit\n")
+gdb.execute("quit 0")
+end
+EOF
 }
 
 write_commands() {
     local artifact_dir="$1"
     local coverage_seconds="$2"
     local gdb_command="$3"
+    local firmware_sha256="$4"
     {
         printf 'cargo build --release --locked --offline --target %q --manifest-path %q\n' \
             "$target" "$manifest"
         printf 'probe-rs download'
         printf ' %q' "${probe_args[@]}" --verify "$artifact_dir/firmware.elf"
         printf '\n'
-        printf '# Hold the blue USER button before reset and through WP100_SLOW_FALLBACK_HIT.\n'
+        printf '# Hold the blue USER button before reset and until the breakpoint hit is confirmed.\n'
         printf 'probe-rs reset'
         printf ' %q' "${probe_args[@]}"
         printf '\n'
+        printf 'WP100_COVERAGE_TRACE=%q WP100_FIRMWARE_PATH=%q WP100_FIRMWARE_SHA256=%q ' \
+            "$artifact_dir/slow-fallback-coverage.txt" "$artifact_dir/firmware.elf" \
+            "$firmware_sha256"
         printf 'timeout --foreground %q probe-rs gdb' "${coverage_seconds}s"
         printf ' %q' "${probe_args[@]}" --gdb "$gdb_command" "$artifact_dir/firmware.elf" -- \
             --batch -q \
-            -ex 'set pagination off' \
-            -ex 'set confirm off' \
-            -ex 'hbreak library/core/src/num/dec2flt/slow.rs:39' \
-            -ex continue \
-            -ex 'printf "WP100_SLOW_FALLBACK_HIT\n"' \
-            -ex frame \
-            -ex bt \
-            -ex quit
+            -x "$artifact_dir/slow-fallback.gdb"
         printf '\n'
         printf '# Release the blue USER button before measurement.\n'
         printf 'probe-rs run'
@@ -196,6 +295,7 @@ prepare() {
     sha256sum "$artifact_dir/firmware.elf" > "$artifact_dir/firmware.sha256"
     sha256sum "$artifact_dir/firmware.map" > "$artifact_dir/linker-map.sha256"
     sha256sum "$artifact_dir/firmware.disassembly.txt" > "$artifact_dir/disassembly.sha256"
+    write_coverage_gdb_script "$artifact_dir"
 
     cat > "$artifact_dir/run-metadata.json" <<EOF
 {
@@ -220,15 +320,16 @@ prepare() {
   "admission_claim": false
 }
 EOF
-    write_commands "$artifact_dir" 10 gdb
+    write_commands "$artifact_dir" 10 gdb "$(prepared_firmware_sha256 "$artifact_dir")"
     echo "prepared $artifact_dir"
 }
 
 coverage() {
-    local artifact_dir coverage_seconds gdb_command breakpoint_check coverage_status
+    local artifact_dir coverage_seconds gdb_command breakpoint_check coverage_status firmware_sha256
     artifact_dir="$(realpath "$1")"
     require_artifact_dir "$artifact_dir"
     require_probe_rs_version "$artifact_dir"
+    firmware_sha256="$(prepared_firmware_sha256 "$artifact_dir")"
     coverage_seconds="${WP100_COVERAGE_SECONDS:-10}"
     if [[ ! "$coverage_seconds" =~ ^[1-9][0-9]*$ ]]; then
         echo "WP100_COVERAGE_SECONDS must be a positive integer" >&2
@@ -255,33 +356,31 @@ coverage() {
     "$gdb_command" --version > "$artifact_dir/gdb-version.txt"
     git -C "$repo_dir" rev-parse HEAD > "$artifact_dir/coverage-runner-git-head.txt"
     git -C "$repo_dir" status --short --branch > "$artifact_dir/coverage-runner-git-status.txt"
-    write_commands "$artifact_dir" "$coverage_seconds" "$gdb_command"
+    write_coverage_gdb_script "$artifact_dir"
+    write_commands "$artifact_dir" "$coverage_seconds" "$gdb_command" "$firmware_sha256"
 
     probe-rs download "${probe_args[@]}" --verify "$artifact_dir/firmware.elf"
-    echo "Hold the blue USER button now and keep it held through WP100_SLOW_FALLBACK_HIT." >&2
+    echo "Hold the blue USER button now and keep it held until the breakpoint hit is confirmed." >&2
     read -r -p "Press Enter when the USER button is held: "
     probe-rs reset "${probe_args[@]}"
+    : > "$artifact_dir/slow-fallback-coverage.txt"
     set +e
+    WP100_COVERAGE_TRACE="$artifact_dir/slow-fallback-coverage.txt" \
+    WP100_FIRMWARE_PATH="$artifact_dir/firmware.elf" \
+    WP100_FIRMWARE_SHA256="$firmware_sha256" \
     timeout --foreground "${coverage_seconds}s" \
         probe-rs gdb "${probe_args[@]}" --gdb "$gdb_command" \
         "$artifact_dir/firmware.elf" -- \
         --batch -q \
-        -ex 'set pagination off' \
-        -ex 'set confirm off' \
-        -ex 'hbreak library/core/src/num/dec2flt/slow.rs:39' \
-        -ex continue \
-        -ex 'printf "WP100_SLOW_FALLBACK_HIT\n"' \
-        -ex frame \
-        -ex bt \
-        -ex quit \
-        2>&1 | tee "$artifact_dir/slow-fallback-coverage.txt"
+        -x "$artifact_dir/slow-fallback.gdb" \
+        2>&1 | tee "$artifact_dir/slow-fallback-debugger.log"
     coverage_status=${PIPESTATUS[0]}
     set -e
     if [[ $coverage_status -ne 0 ]]; then
         echo "coverage debugger trace failed or timed out; output was preserved" >&2
         return 2
     fi
-    require_coverage_trace "$artifact_dir/slow-fallback-coverage.txt"
+    require_coverage_trace "$artifact_dir"
     sha256sum "$artifact_dir/slow-fallback-coverage.txt" > "$artifact_dir/coverage.sha256"
 }
 
@@ -290,7 +389,7 @@ measure() {
     artifact_dir="$(realpath "$1")"
     require_artifact_dir "$artifact_dir"
     require_probe_rs_version "$artifact_dir"
-    require_coverage_trace "$artifact_dir/slow-fallback-coverage.txt"
+    require_coverage_trace "$artifact_dir"
     echo "Release the blue USER button before measurement reset." >&2
     probe-rs list > "$artifact_dir/probe-list.txt"
     set +e
@@ -303,6 +402,7 @@ measure() {
     set +e
     python3 "$script_dir/validate.py" "$artifact_dir/raw.jsonl" \
         --coverage "$artifact_dir/slow-fallback-coverage.txt" \
+        --firmware "$artifact_dir/firmware.elf" \
         --summary "$artifact_dir/summary.json" | tee "$artifact_dir/validation.log"
     local validation_status=${PIPESTATUS[0]}
     set -e
@@ -320,6 +420,7 @@ validate() {
     require_artifact_dir "$artifact_dir"
     python3 "$script_dir/validate.py" "$artifact_dir/raw.jsonl" \
         --coverage "$artifact_dir/slow-fallback-coverage.txt" \
+        --firmware "$artifact_dir/firmware.elf" \
         --summary "$artifact_dir/summary.json"
 }
 
