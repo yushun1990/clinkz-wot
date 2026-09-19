@@ -18,9 +18,9 @@ usage:
   run-board.sh bundle ARTIFACT_DIR
 
 Set WP100_PROBE to a probe-rs selector when more than one probe is attached.
-Set WP100_COVERAGE_SECONDS to extend the default 10-second profile.
+Set WP100_COVERAGE_SECONDS to extend the default 10-second debugger timeout.
 The coverage command requires the blue USER button to be held from reset until
-the profiler has entered the repeated halfway-case projection loop.
+the debugger reports WP100_SLOW_FALLBACK_HIT.
 EOF
 }
 
@@ -29,6 +29,72 @@ require_artifact_dir() {
         echo "artifact directory does not exist: $1" >&2
         exit 1
     fi
+}
+
+require_probe_rs_version() {
+    local artifact_dir="$1"
+    local expected_version actual_version
+    if [[ ! -f "$artifact_dir/probe-rs-version.txt" ]]; then
+        echo "prepared probe-rs version is missing: $artifact_dir/probe-rs-version.txt" >&2
+        exit 1
+    fi
+    expected_version="$(<"$artifact_dir/probe-rs-version.txt")"
+    actual_version="$(probe-rs --version)"
+    if [[ "$expected_version" != "probe-rs 0.32.0 (git commit: 48f5e4d)" ]]; then
+        echo "coverage requires artifacts prepared with probe-rs 0.32.0 (48f5e4d); found: $expected_version" >&2
+        exit 1
+    fi
+    if [[ "$actual_version" != "$expected_version" ]]; then
+        echo "probe-rs version differs from the prepared artifact" >&2
+        echo "prepared: $expected_version" >&2
+        echo "current:  $actual_version" >&2
+        exit 1
+    fi
+}
+
+require_coverage_trace() {
+    local coverage_file="$1"
+    if [[ ! -f "$coverage_file" ]] \
+        || ! grep -Fq 'WP100_SLOW_FALLBACK_HIT' "$coverage_file" \
+        || ! grep -Eq 'parse_long_mantissa|dec2flt/slow.rs' "$coverage_file"; then
+        echo "coverage trace does not contain a confirmed slow-fallback breakpoint hit" >&2
+        exit 1
+    fi
+}
+
+write_commands() {
+    local artifact_dir="$1"
+    local coverage_seconds="$2"
+    local gdb_command="$3"
+    {
+        printf 'cargo build --release --locked --offline --target %q --manifest-path %q\n' \
+            "$target" "$manifest"
+        printf 'probe-rs download'
+        printf ' %q' "${probe_args[@]}" --verify "$artifact_dir/firmware.elf"
+        printf '\n'
+        printf '# Hold the blue USER button before reset and through WP100_SLOW_FALLBACK_HIT.\n'
+        printf 'probe-rs reset'
+        printf ' %q' "${probe_args[@]}"
+        printf '\n'
+        printf 'timeout --foreground %q probe-rs gdb' "${coverage_seconds}s"
+        printf ' %q' "${probe_args[@]}" --gdb "$gdb_command" "$artifact_dir/firmware.elf" -- \
+            --batch -q \
+            -ex 'set pagination off' \
+            -ex 'set confirm off' \
+            -ex 'hbreak library/core/src/num/dec2flt/slow.rs:39' \
+            -ex continue \
+            -ex 'printf "WP100_SLOW_FALLBACK_HIT\n"' \
+            -ex frame \
+            -ex bt \
+            -ex quit
+        printf '\n'
+        printf '# Release the blue USER button before measurement.\n'
+        printf 'probe-rs run'
+        printf ' %q' "${probe_args[@]}" --verify \
+            --target-output-file "semihosting:stdout=$artifact_dir/raw.jsonl" \
+            "$artifact_dir/firmware.elf"
+        printf '\n'
+    } > "$artifact_dir/commands.txt"
 }
 
 record_disassembler_diagnostics() {
@@ -154,31 +220,68 @@ prepare() {
   "admission_claim": false
 }
 EOF
-    cat > "$artifact_dir/commands.txt" <<EOF
-cargo build --release --locked --offline --target $target --manifest-path $manifest
-probe-rs profile --chip STM32F407VG --protocol swd --duration 10 --flash --reset firmware.elf flat --line-info --limit 200 naive
-probe-rs run --chip STM32F407VG --protocol swd --verify --target-output-file semihosting:stdout=raw.jsonl firmware.elf
-EOF
+    write_commands "$artifact_dir" 10 gdb
     echo "prepared $artifact_dir"
 }
 
 coverage() {
-    local artifact_dir coverage_seconds
+    local artifact_dir coverage_seconds gdb_command breakpoint_check coverage_status
     artifact_dir="$(realpath "$1")"
     require_artifact_dir "$artifact_dir"
+    require_probe_rs_version "$artifact_dir"
     coverage_seconds="${WP100_COVERAGE_SECONDS:-10}"
     if [[ ! "$coverage_seconds" =~ ^[1-9][0-9]*$ ]]; then
         echo "WP100_COVERAGE_SECONDS must be a positive integer" >&2
         exit 1
     fi
-    echo "Hold the blue USER button now and keep it held until profiling starts." >&2
-    probe-rs profile "${probe_args[@]}" --duration "$coverage_seconds" --flash --reset \
-        "$artifact_dir/firmware.elf" flat --line-info --limit 200 naive \
-        2>&1 | tee "$artifact_dir/slow-fallback-coverage.txt"
-    if ! grep -Eq 'parse_long_mantissa|dec2flt/slow.rs' "$artifact_dir/slow-fallback-coverage.txt"; then
-        echo "coverage did not observe the slow fallback; repeat with WP100_COVERAGE_SECONDS increased" >&2
-        exit 2
+    gdb_command="$(command -v gdb || true)"
+    if [[ -z "$gdb_command" ]]; then
+        echo "GDB is required for the probe-rs 0.32.0 slow-fallback coverage trace" >&2
+        exit 1
     fi
+    breakpoint_check="$(mktemp)"
+    if ! "$gdb_command" -q -batch "$artifact_dir/firmware.elf" \
+        -ex 'set architecture arm' \
+        -ex 'break library/core/src/num/dec2flt/slow.rs:39' \
+        -ex 'info breakpoints' > "$breakpoint_check" 2>&1 \
+        || ! grep -Eq 'parse_long_mantissa|dec2flt/slow.rs' "$breakpoint_check"; then
+        cat "$breakpoint_check" >&2
+        rm "$breakpoint_check"
+        echo "GDB could not resolve the slow-fallback source breakpoint in firmware.elf" >&2
+        exit 1
+    fi
+    mv "$breakpoint_check" "$artifact_dir/slow-fallback-breakpoint.txt"
+    probe-rs --version > "$artifact_dir/coverage-probe-rs-version.txt"
+    "$gdb_command" --version > "$artifact_dir/gdb-version.txt"
+    git -C "$repo_dir" rev-parse HEAD > "$artifact_dir/coverage-runner-git-head.txt"
+    git -C "$repo_dir" status --short --branch > "$artifact_dir/coverage-runner-git-status.txt"
+    write_commands "$artifact_dir" "$coverage_seconds" "$gdb_command"
+
+    probe-rs download "${probe_args[@]}" --verify "$artifact_dir/firmware.elf"
+    echo "Hold the blue USER button now and keep it held through WP100_SLOW_FALLBACK_HIT." >&2
+    read -r -p "Press Enter when the USER button is held: "
+    probe-rs reset "${probe_args[@]}"
+    set +e
+    timeout --foreground "${coverage_seconds}s" \
+        probe-rs gdb "${probe_args[@]}" --gdb "$gdb_command" \
+        "$artifact_dir/firmware.elf" -- \
+        --batch -q \
+        -ex 'set pagination off' \
+        -ex 'set confirm off' \
+        -ex 'hbreak library/core/src/num/dec2flt/slow.rs:39' \
+        -ex continue \
+        -ex 'printf "WP100_SLOW_FALLBACK_HIT\n"' \
+        -ex frame \
+        -ex bt \
+        -ex quit \
+        2>&1 | tee "$artifact_dir/slow-fallback-coverage.txt"
+    coverage_status=${PIPESTATUS[0]}
+    set -e
+    if [[ $coverage_status -ne 0 ]]; then
+        echo "coverage debugger trace failed or timed out; output was preserved" >&2
+        return 2
+    fi
+    require_coverage_trace "$artifact_dir/slow-fallback-coverage.txt"
     sha256sum "$artifact_dir/slow-fallback-coverage.txt" > "$artifact_dir/coverage.sha256"
 }
 
@@ -186,10 +289,8 @@ measure() {
     local artifact_dir
     artifact_dir="$(realpath "$1")"
     require_artifact_dir "$artifact_dir"
-    if [[ ! -f "$artifact_dir/slow-fallback-coverage.txt" ]]; then
-        echo "run the same-ELF coverage step first" >&2
-        exit 1
-    fi
+    require_probe_rs_version "$artifact_dir"
+    require_coverage_trace "$artifact_dir/slow-fallback-coverage.txt"
     echo "Release the blue USER button before measurement reset." >&2
     probe-rs list > "$artifact_dir/probe-list.txt"
     set +e

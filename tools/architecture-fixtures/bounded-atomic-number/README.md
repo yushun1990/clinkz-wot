@@ -166,8 +166,9 @@ the exact terminal record is invalid.
 
 ### Prepare, cover, and measure
 
-Prerequisites are the installed `thumbv7em-none-eabihf` target, `probe-rs`,
-Python 3, and an ARM-capable disassembler. The runner prefers
+Prerequisites are the installed `thumbv7em-none-eabihf` target, the release
+`probe-rs 0.32.0 (48f5e4d)`, GDB, Python 3, and an ARM-capable disassembler.
+The runner prefers
 `llvm-tools-preview`, then `arm-none-eabi-objdump`, and finally GDB:
 
 ```sh
@@ -185,16 +186,27 @@ artifacts=/tmp/WP100-ATOMIC-NUMBER-M4-v1
 "$runner" prepare "$artifacts" MB997-REVISION
 ```
 
-The same measured ELF has a USER-button-selected coverage mode. Hold the blue
-USER button before running the next command and keep it held until profiling
-has started. The runner repeatedly projects the 256-byte exact-halfway case so
-the profiler can show `parse_long_mantissa` or a `dec2flt/slow.rs` frame/line:
+The same measured ELF has a USER-button-selected coverage mode. `probe-rs 0.32.0`
+cannot parse its `profile` subcommand: `ProfileCmd` flattens the run
+download options, so both structures expose `--reset`; invoking `profile`
+with or without its flash/reset flags fails before attaching with a missing
+`reset` argument. The runner therefore uses the workload's permitted debugger
+trace instead of that broken subcommand. It verifies and downloads the ELF
+without resetting, waits for operator confirmation that the blue USER button
+is held, performs a dedicated reset so the firmware selects coverage mode at
+boot, and then attaches `probe-rs gdb` without another flash or reset. A GDB
+hardware breakpoint at `dec2flt/slow.rs:39` records
+`WP100_SLOW_FALLBACK_HIT`, the selected frame, and its backtrace. Breakpoint
+resolution alone is not accepted as runtime coverage.
+
+Run coverage and follow its prompt. Hold the USER button before pressing Enter
+and keep it held until `WP100_SLOW_FALLBACK_HIT` appears:
 
 ```sh
 "$runner" coverage "$artifacts"
 ```
 
-If the fallback is not sampled in the default ten seconds, repeat coverage as
+If the breakpoint is not reached in the default ten seconds, repeat coverage as
 `WP100_COVERAGE_SECONDS=30 "$runner" coverage "$artifacts"`.
 
 Release the USER button, then run the complete measurement. If more than one
@@ -208,13 +220,13 @@ debug probe is attached, prefix these commands with the selector reported by
 
 `measure` returns status 2 when complete evidence falsifies a bound or coverage
 condition, but preserves all output. Run `bundle` in either case. The bundle
-contains the raw JSONL, validation summary, same-ELF slow-path profile, ELF,
-linker map, ARM disassembly, DWARF frame dump, resolved features,
-toolchain/probe versions, board revision, Git head/status, commands, digests,
-and probe logs. Return the `.tar.gz` and adjacent `.sha256` for independent
-review. Watermarks are not accepted alone: the ELF/map/disassembly/frame data
-must be reviewed for reserved but untouched frames before treating the maximum
-as conservative.
+contains the raw JSONL, validation summary, same-ELF slow-path debugger trace,
+ELF, linker map, ARM disassembly, DWARF frame dump, resolved features,
+toolchain/probe/GDB versions, board revision, build and coverage-runner Git
+head/status, generated commands, digests, and probe logs. Return the `.tar.gz`
+and adjacent `.sha256` for independent review. Watermarks are not accepted
+alone: the ELF/map/disassembly/frame data must be reviewed for reserved but
+untouched frames before treating the maximum as conservative.
 
 `run-metadata.json` records build/board configuration only. Runtime evidence
 is owned by the complete raw stream, probe exit status, and validation summary;

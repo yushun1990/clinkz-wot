@@ -18,6 +18,7 @@ EXPECTED_SAMPLES = 1_000
 EXPECTED_WARMUPS = 100
 EXPECTED_CYCLE_LIMIT = 168_000
 EXPECTED_STACK_LIMIT = 4_096
+COVERAGE_HIT_MARKER = "WP100_SLOW_FALLBACK_HIT"
 
 
 class InvalidEvidence(Exception):
@@ -327,8 +328,13 @@ def validate(raw_path: Path, coverage_path: Path | None) -> tuple[dict[str, obje
         coverage = coverage_path.read_bytes()
         coverage_sha256 = hashlib.sha256(coverage).hexdigest()
         coverage_text = coverage.decode("utf-8", errors="replace")
-        coverage_confirmed = "parse_long_mantissa" in coverage_text or "dec2flt/slow.rs" in coverage_text
-        require(coverage_confirmed, "coverage trace does not show the slow fallback")
+        coverage_confirmed = COVERAGE_HIT_MARKER in coverage_text and (
+            "parse_long_mantissa" in coverage_text or "dec2flt/slow.rs" in coverage_text
+        )
+        require(
+            coverage_confirmed,
+            "coverage trace does not show a confirmed slow-fallback breakpoint hit",
+        )
 
     accepted_bounds = reported_failed_cases == 0
     summary: dict[str, object] = {

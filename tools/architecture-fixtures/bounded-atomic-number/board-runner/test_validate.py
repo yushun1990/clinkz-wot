@@ -100,17 +100,28 @@ def case(index: int) -> dict[str, object]:
 @patch.object(validate, "EXPECTED_SAMPLES", 2)
 @patch.object(validate, "EXPECTED_WARMUPS", 1)
 class ValidatorTests(unittest.TestCase):
-    def write_evidence(self, directory: Path, records: list[dict[str, object]]) -> tuple[Path, Path]:
+    def write_evidence(
+        self,
+        directory: Path,
+        records: list[dict[str, object]],
+        coverage_text: str | None = None,
+    ) -> tuple[Path, Path]:
         raw = directory / "raw.jsonl"
         raw.write_text(
             "".join(json.dumps(record, separators=(",", ":")) + "\n" for record in records),
             encoding="utf-8",
         )
         coverage = directory / "coverage.txt"
-        coverage.write_text("core/src/num/dec2flt/slow.rs\n", encoding="utf-8")
+        coverage.write_text(
+            coverage_text
+            or f"{validate.COVERAGE_HIT_MARKER}\ncore/src/num/dec2flt/slow.rs\n",
+            encoding="utf-8",
+        )
         return raw, coverage
 
-    def validate_case(self, first_case: dict[str, object]) -> tuple[dict[str, object], bool]:
+    def validate_case(
+        self, first_case: dict[str, object], coverage_text: str | None = None
+    ) -> tuple[dict[str, object], bool]:
         records = [run_start(), *(case(index) for index in range(256))]
         records[1] = first_case
         records.append(
@@ -123,7 +134,7 @@ class ValidatorTests(unittest.TestCase):
             }
         )
         with tempfile.TemporaryDirectory() as temporary:
-            raw, coverage = self.write_evidence(Path(temporary), records)
+            raw, coverage = self.write_evidence(Path(temporary), records, coverage_text)
             return validate.validate(raw, coverage)
 
     def test_accepts_complete_consistent_candidate(self) -> None:
@@ -134,6 +145,10 @@ class ValidatorTests(unittest.TestCase):
         self.assertFalse(summary["admission_claim"])
         self.assertEqual(summary["cancellation_latency_max_cycles"], 8)
         self.assertEqual(summary["cancellation_assertion_delay_max_cycles"], 16)
+
+    def test_rejects_breakpoint_location_without_runtime_hit_marker(self) -> None:
+        with self.assertRaisesRegex(validate.InvalidEvidence, "confirmed slow-fallback"):
+            self.validate_case(case(0), "core/src/num/dec2flt/slow.rs\n")
 
     def test_rejects_inconsistent_raw_maximum(self) -> None:
         record = case(0)
