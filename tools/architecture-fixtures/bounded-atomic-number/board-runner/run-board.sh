@@ -151,7 +151,6 @@ prepare() {
     "codegen_units": 1,
     "panic": "abort"
   },
-  "hardware_results_recorded": false,
   "admission_claim": false
 }
 EOF

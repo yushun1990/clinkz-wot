@@ -70,11 +70,15 @@ def case(index: int) -> dict[str, object]:
         },
         "irq_loaded": {
             "cold_cycles": 14,
+            "cold_cancellation_assertion_delay_cycles": 14,
+            "cold_cancellation_latency_cycles": 7,
             "stack_pattern_b_cycles": 17,
+            "stack_pattern_b_cancellation_assertion_delay_cycles": 16,
+            "stack_pattern_b_cancellation_latency_cycles": 8,
             "max_cycles": 17,
             "allocation_calls": 0,
-            "cancellation_observed": 1,
-            "cancellation_expected": 1,
+            "cancellation_observed": 5,
+            "cancellation_expected": 5,
             "stack_pattern_a_project_depth_bytes": 110,
             "stack_pattern_b_project_depth_bytes": 112,
             "project_stack_watermark_conservative_depth_bytes": 112,
@@ -82,7 +86,7 @@ def case(index: int) -> dict[str, object]:
             "stack_pattern_b_interrupt_depth_bytes": 36,
             "interrupt_stack_watermark_conservative_depth_bytes": 36,
             "samples": [15, 16],
-            "cancellation_assertion_delay_cycles": [2, 2],
+            "cancellation_assertion_delay_cycles": [12, 12],
             "cancellation_latency_cycles": [5, 6],
         },
         "result_mismatches": 0,
@@ -92,6 +96,9 @@ def case(index: int) -> dict[str, object]:
     }
 
 
+@patch.object(validate, "EXPECTED_CASES", 256)
+@patch.object(validate, "EXPECTED_SAMPLES", 2)
+@patch.object(validate, "EXPECTED_WARMUPS", 1)
 class ValidatorTests(unittest.TestCase):
     def write_evidence(self, directory: Path, records: list[dict[str, object]]) -> tuple[Path, Path]:
         raw = directory / "raw.jsonl"
@@ -103,11 +110,9 @@ class ValidatorTests(unittest.TestCase):
         coverage.write_text("core/src/num/dec2flt/slow.rs\n", encoding="utf-8")
         return raw, coverage
 
-    @patch.object(validate, "EXPECTED_CASES", 256)
-    @patch.object(validate, "EXPECTED_SAMPLES", 2)
-    @patch.object(validate, "EXPECTED_WARMUPS", 1)
-    def test_accepts_complete_consistent_candidate(self) -> None:
+    def validate_case(self, first_case: dict[str, object]) -> tuple[dict[str, object], bool]:
         records = [run_start(), *(case(index) for index in range(256))]
+        records[1] = first_case
         records.append(
             {
                 "record": "run_end",
@@ -119,31 +124,125 @@ class ValidatorTests(unittest.TestCase):
         )
         with tempfile.TemporaryDirectory() as temporary:
             raw, coverage = self.write_evidence(Path(temporary), records)
-            summary, passed = validate.validate(raw, coverage)
+            return validate.validate(raw, coverage)
+
+    def test_accepts_complete_consistent_candidate(self) -> None:
+        summary, passed = self.validate_case(case(0))
         self.assertTrue(passed)
         self.assertEqual(summary["case_count"], 256)
         self.assertEqual(summary["status"], "candidate-passed")
         self.assertFalse(summary["admission_claim"])
+        self.assertEqual(summary["cancellation_latency_max_cycles"], 8)
+        self.assertEqual(summary["cancellation_assertion_delay_max_cycles"], 16)
 
-    @patch.object(validate, "EXPECTED_CASES", 256)
-    @patch.object(validate, "EXPECTED_SAMPLES", 2)
-    @patch.object(validate, "EXPECTED_WARMUPS", 1)
     def test_rejects_inconsistent_raw_maximum(self) -> None:
-        records = [run_start(), *(case(index) for index in range(256))]
-        records[1]["masked"]["max_cycles"] = 11
-        records.append(
-            {
-                "record": "run_end",
-                "workload_id": validate.EXPECTED_WORKLOAD,
-                "case_count": 256,
-                "failed_cases": 0,
-                "complete": True,
-            }
+        record = case(0)
+        record["masked"]["max_cycles"] = 11
+        with self.assertRaisesRegex(validate.InvalidEvidence, "masked max mismatch"):
+            self.validate_case(record)
+
+    def set_irq_interval(
+        self, record: dict[str, object], form: str, start: int, stop: int, irq: int
+    ) -> None:
+        loaded = record["irq_loaded"]
+        cycles = (stop - start) & 0xFFFFFFFF
+        latency = (stop - irq) & 0xFFFFFFFF
+        delay = (irq - (start - 10)) & 0xFFFFFFFF
+        if form == "sample":
+            loaded["samples"][0] = cycles
+            loaded["cancellation_assertion_delay_cycles"][0] = delay
+            # Firmware serializes its u32::MAX sentinel as null in arrays.
+            loaded["cancellation_latency_cycles"][0] = None if latency == 0xFFFFFFFF else latency
+        else:
+            loaded[f"{form}_cycles"] = cycles
+            loaded[f"{form}_cancellation_assertion_delay_cycles"] = delay
+            loaded[f"{form}_cancellation_latency_cycles"] = latency
+        loaded["max_cycles"] = max(
+            loaded["cold_cycles"], loaded["stack_pattern_b_cycles"], *loaded["samples"]
         )
-        with tempfile.TemporaryDirectory() as temporary:
-            raw, coverage = self.write_evidence(Path(temporary), records)
-            with self.assertRaisesRegex(validate.InvalidEvidence, "masked max mismatch"):
-                validate.validate(raw, coverage)
+
+    def test_rejects_irq_outside_each_measured_interval(self) -> None:
+        for form in ("sample", "cold", "stack_pattern_b"):
+            # Before start can have a plausible latency smaller than case max;
+            # after stop wraps even though cancellation_observed is complete.
+            for start in (100, 0xFFFFFFF8):
+                stop = (start + 15) & 0xFFFFFFFF
+                outside_irqs = (start - 1, stop + 1, stop + 2)
+                for irq in (value & 0xFFFFFFFF for value in outside_irqs):
+                    with self.subTest(form=form, start=start, irq=irq):
+                        record = case(0)
+                        self.set_irq_interval(record, form, start, stop, irq)
+                        with self.assertRaises(validate.InvalidEvidence):
+                            self.validate_case(record)
+
+    def test_accepts_irq_inside_each_interval_including_counter_wrap(self) -> None:
+        for form in ("sample", "cold", "stack_pattern_b"):
+            for start in (100, 0xFFFFFFF8):
+                stop = (start + 15) & 0xFFFFFFFF
+                for offset in (0, 7, 15):
+                    with self.subTest(form=form, start=start, offset=offset):
+                        record = case(0)
+                        self.set_irq_interval(record, form, start, stop, (start + offset) & 0xFFFFFFFF)
+                        _, passed = self.validate_case(record)
+                        self.assertTrue(passed)
+
+    def test_requires_valid_cold_and_stack_b_cancellation_fields(self) -> None:
+        for form in ("cold", "stack_pattern_b"):
+            for suffix in ("cancellation_assertion_delay_cycles", "cancellation_latency_cycles"):
+                field = f"{form}_{suffix}"
+                for invalid in (None, True, -1, 1.5, "7", 0xFFFFFFFF, 0x100000000, "missing"):
+                    with self.subTest(field=field, invalid=invalid):
+                        record = case(0)
+                        if invalid == "missing":
+                            del record["irq_loaded"][field]
+                        else:
+                            record["irq_loaded"][field] = invalid
+                        with self.assertRaises(validate.InvalidEvidence):
+                            self.validate_case(record)
+
+    def test_rejects_invalid_sample_cancellation_fields(self) -> None:
+        for field in ("cancellation_assertion_delay_cycles", "cancellation_latency_cycles"):
+            for invalid in (None, True, -1, 1.5, "7", 0xFFFFFFFF, 0x100000000):
+                with self.subTest(field=field, invalid=invalid):
+                    record = case(0)
+                    record["irq_loaded"][field][1] = invalid
+                    with self.assertRaises(validate.InvalidEvidence):
+                        self.validate_case(record)
+
+    def test_rejects_inflated_duration_hiding_wrapped_latency(self) -> None:
+        for form in ("sample", "cold", "stack_pattern_b"):
+            with self.subTest(form=form):
+                record = case(0)
+                self.set_irq_interval(record, form, 100, 115, 117)
+                loaded = record["irq_loaded"]
+                if form == "sample":
+                    loaded["samples"][0] = 0x100000000
+                else:
+                    loaded[f"{form}_cycles"] = 0x100000000
+                loaded["max_cycles"] = 0x100000000
+                with self.assertRaises(validate.InvalidEvidence):
+                    self.validate_case(record)
+
+    def test_requires_exact_cancellation_observation_count(self) -> None:
+        invalid_counts = ((0, 0), (4, 4), (6, 6), (4, 5), (None, None), (True, True), (5.0, 5.0))
+        for observed, expected in invalid_counts:
+            with self.subTest(observed=observed, expected=expected):
+                record = case(0)
+                record["irq_loaded"]["cancellation_observed"] = observed
+                record["irq_loaded"]["cancellation_expected"] = expected
+                with self.assertRaisesRegex(validate.InvalidEvidence, "cancellation"):
+                    self.validate_case(record)
+
+    def test_summary_includes_cold_and_stack_b_cancellation_maxima(self) -> None:
+        for form in ("cold", "stack_pattern_b"):
+            with self.subTest(form=form):
+                record = case(0)
+                record["irq_loaded"][f"{form}_cancellation_assertion_delay_cycles"] = 20
+                record["irq_loaded"][f"{form}_cancellation_latency_cycles"] = 12
+                summary, passed = self.validate_case(record)
+                self.assertTrue(passed)
+                self.assertEqual(summary["cancellation_assertion_delay_max_cycles"], 20)
+                self.assertEqual(summary["cancellation_latency_max_cycles"], 12)
 
 
 if __name__ == "__main__":

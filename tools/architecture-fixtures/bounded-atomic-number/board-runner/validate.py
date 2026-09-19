@@ -38,14 +38,28 @@ def nonnegative_integer(value: object, context: str) -> int:
     return value
 
 
+def cycle_sample(value: object, context: str) -> int:
+    value = nonnegative_integer(value, context)
+    # Firmware uses u32::MAX as a missing-measurement sentinel (null in arrays).
+    require(value < 0xFFFFFFFF, f"{context} is not a valid u32 cycle sample")
+    return value
+
+
 def integer_samples(value: object, context: str) -> list[int]:
     require(isinstance(value, list), f"{context} is not an array")
     require(len(value) == EXPECTED_SAMPLES, f"{context} has {len(value)} samples")
     require(
-        all(is_integer(sample) and sample >= 0 for sample in value),
+        all(is_integer(sample) and 0 <= sample < 0xFFFFFFFF for sample in value),
         f"{context} contains a missing or invalid sample",
     )
     return value
+
+
+def require_cancellation_in_interval(cycles: int, latency: int, context: str) -> None:
+    # With the workload's single-wrap interval, (stop - irq) mod 2^32 must
+    # fit inside (stop - start) mod 2^32. An IRQ before start exceeds cycles;
+    # one after stop wraps to a large value. Observation alone proves neither.
+    require(latency <= cycles, f"{context} cancellation is outside the measured projection interval")
 
 
 def load_record(line: str, line_number: int) -> dict[str, object]:
@@ -193,9 +207,13 @@ def validate(raw_path: Path, coverage_path: Path | None) -> tuple[dict[str, obje
                     irq.get("cancellation_latency_cycles"),
                     f"case {case_count} cancellation latencies",
                 )
+                for sample_index, (cycles, latency) in enumerate(zip(irq_samples, cancellation_latencies)):
+                    require_cancellation_in_interval(
+                        cycles, latency, f"case {case_count} IRQ sample {sample_index}"
+                    )
 
-                cold = nonnegative_integer(masked.get("cold_cycles"), f"case {case_count} masked cold sample")
-                stack_b_cycles = nonnegative_integer(
+                cold = cycle_sample(masked.get("cold_cycles"), f"case {case_count} masked cold sample")
+                stack_b_cycles = cycle_sample(
                     masked.get("stack_pattern_b_cycles"), f"case {case_count} masked stack-B sample"
                 )
                 actual_masked_max = max(cold, stack_b_cycles, *masked_samples)
@@ -211,9 +229,13 @@ def validate(raw_path: Path, coverage_path: Path | None) -> tuple[dict[str, obje
                 require(stack_max == max(stack_a, stack_b), f"case {case_count} stack max mismatch")
 
                 require(irq.get("allocation_calls") == 0, f"case {case_count} allocated with IRQ load")
+                expected_cancellations = EXPECTED_WARMUPS + EXPECTED_SAMPLES + 2
                 require(
-                    irq.get("cancellation_observed") == irq.get("cancellation_expected"),
-                    f"case {case_count} missed a cancellation assertion",
+                    all(
+                        is_integer(irq.get(field)) and irq[field] == expected_cancellations
+                        for field in ("cancellation_observed", "cancellation_expected")
+                    ),
+                    f"case {case_count} cancellation observation count mismatch",
                 )
                 require(record.get("result_mismatches") == 0, f"case {case_count} result mismatch")
                 require(record.get("guard_ok") is True, f"case {case_count} damaged a stack guard")
@@ -222,14 +244,25 @@ def validate(raw_path: Path, coverage_path: Path | None) -> tuple[dict[str, obje
                     f"case {case_count} has an uncertain stack watermark",
                 )
 
-                irq_cold = nonnegative_integer(
+                irq_cold = cycle_sample(
                     irq.get("cold_cycles"), f"case {case_count} IRQ cold sample"
                 )
-                irq_stack_b_cycles = nonnegative_integer(
+                irq_stack_b_cycles = cycle_sample(
                     irq.get("stack_pattern_b_cycles"), f"case {case_count} IRQ stack-B sample"
                 )
                 actual_irq_max = max(irq_cold, irq_stack_b_cycles, *irq_samples)
                 require(irq.get("max_cycles") == actual_irq_max, f"case {case_count} IRQ max mismatch")
+                for form, cycles in (("cold", irq_cold), ("stack_pattern_b", irq_stack_b_cycles)):
+                    context = f"case {case_count} IRQ {form}"
+                    delay = cycle_sample(
+                        irq.get(f"{form}_cancellation_assertion_delay_cycles"), f"{context} assertion delay"
+                    )
+                    latency = cycle_sample(
+                        irq.get(f"{form}_cancellation_latency_cycles"), f"{context} cancellation latency"
+                    )
+                    require_cancellation_in_interval(cycles, latency, context)
+                    assertion_delays.append(delay)
+                    cancellation_latencies.append(latency)
 
                 masked_cycle_max = max(masked_cycle_max, actual_masked_max)
                 masked_stack_max = max(masked_stack_max, stack_max)

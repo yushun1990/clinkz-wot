@@ -151,6 +151,14 @@ uses a separate painted/guarded MSP stack so interrupt depth is not hidden in
 the parser watermark. This synthetic load is only the declaration required by
 this probe. It does not establish a particular application's schedulability.
 
+The host validator requires each recorded IRQ cancellation latency to fit
+inside its own measured projection duration, including cold-first and the
+complementary stack-paint invocation. Both durations use wrapping CYCCNT
+subtraction: an IRQ timestamp before start or after stop cannot pass merely
+because the cancellation flag was observed later. Missing/sentinel timing
+fields fail validation. Cancellation maxima include all three measured forms;
+the observation count also includes warmups, whose timings are not reported.
+
 The target streams newline-delimited raw JSON through semihosting. There are
 12,844 corpus cases and two 1,000-sample sequences per case, so expect a long
 run and a large raw file. Do not interrupt a measurement run; a stream without
@@ -207,6 +215,10 @@ and probe logs. Return the `.tar.gz` and adjacent `.sha256` for independent
 review. Watermarks are not accepted alone: the ELF/map/disassembly/frame data
 must be reviewed for reserved but untouched frames before treating the maximum
 as conservative.
+
+`run-metadata.json` records build/board configuration only. Runtime evidence
+is owned by the complete raw stream, probe exit status, and validation summary;
+preparing or bundling artifacts does not claim that hardware results exist.
 
 Neither a locally valid bundle nor a passing measurement admits WP-100. It is
 raw candidate evidence for independent review of the existing pre-readmission
