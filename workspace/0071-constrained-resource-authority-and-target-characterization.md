@@ -22,11 +22,16 @@ validation, probe-rs 0.32.0 profiling behavior, and debugger coverage
 false-positive paths.
 
 That cost is evidence that the project may be answering the wrong authority
-question. The repository already states in `PROFILE-AXIS-001` that compilation
-environment, hardware target, execution model, resource policy, and capability
-role are independent axes. A generic Consumer readmission requirement tied to
-one Cortex-M4 target may therefore be coupling layers that the architecture
-intends to keep separate.
+question. `PROFILE-AXIS-001` defines four independent requirement axes:
+compilation environment, execution model, resource profile, and capability
+role; it separately states that a compilation environment does not imply a
+hardware target. It does not itself prohibit a target-specific acceptance
+gate. `CONSTRAINED-PROGRESS-001` already permits a non-incremental operation
+when its admitted worst-case input is explicitly bounded and its complete
+work/lifetime debit succeeds before execution. The narrower question here is
+what additional invariant the Number-specific Cortex-M4 cycle/stack gate proves,
+and why that extra evidence must be a prerequisite for the relevant Consumer
+readmission rather than target/profile characterization.
 
 This topic reopens that boundary. It does not assume that the current STM32
 requirement is wrong, and it does not assume that it must be preserved merely
@@ -54,17 +59,24 @@ Determine, from current repository authority and realistic product roles:
    choice? If a project-wide ceiling remains necessary, identify the invariant
    that requires it.
 
-5. Does `CONSTRAINED-PROGRESS-001` require a universal target-specific deadline
-   for each atomic operation, or only a structurally bounded operation with a
-   complete precharge and explicit cancellation interval?
+5. What additional property, beyond the already-frozen
+   `CONSTRAINED-PROGRESS-001` atomic-operation rule, does the Number-specific
+   physical measurement establish? Identify the concrete safety or admission
+   invariant that the cycle/stack result proves and the generic bounded,
+   completely precharged rule does not.
 
-6. Does the current WP-100 Cortex-M4 168,000-cycle / 4,096-byte readmission gate
-   violate or overconstrain `PROFILE-AXIS-001` by binding a generic Consumer
-   capability to one hardware target?
+6. Why, if at all, must the current WP-100 Cortex-M4 168,000-cycle / 4,096-byte
+   gate be a prerequisite for every relevant Consumer readmission rather than
+   target/product characterization or profile-specific evidence? Do not infer
+   either answer from `PROFILE-AXIS-001`; identify the actual dependency that
+   would require the gate at that scope.
 
 7. Which capability roles are realistically expected on small MCUs? Do not infer
    that `no_std + alloc` implies a full Consumer/Servient role. Evaluate
    Producer/server, Consumer, gateway, and other supported roles separately.
+   Role applicability remains independent of resource-profile values. Preserve
+   the existing thumb capability-on compile commitment while deciding which
+   roles are realistic deployment choices.
 
 8. What empirical measurements are actually required before correcting
    authority? Do not perform a broad STM32/ESP32/Linux survey by default.
@@ -87,12 +99,20 @@ coupled:
    - complete work accounting;
    - progress and cancellation invariants.
 
-2. **Resource-profile policy**
-   - concrete capacity limits;
-   - enabled/disabled capabilities;
+2. **Capability-role applicability**
+   - which Producer, Consumer, gateway, or other roles are supported or selected;
+   - compile/support obligations for each role, including the existing thumb
+     capability-on cell;
+   - role selection is not inferred from compilation environment or resource
+     profile.
+
+3. **Resource-profile policy**
+   - concrete capacity limits for an already selected role;
+   - permitted zero capacities constrain resource availability within that role
+     without redefining the role or feature-support contract;
    - deployment-specific resource contracts.
 
-3. **Target/product characterization**
+4. **Target/product characterization**
    - measured cycles or latency;
    - stack and memory margins;
    - target-specific implementation viability;
@@ -151,6 +171,8 @@ explicitly owned by the correct layer.
 The decision must state:
 
 - which current WP-100 Number requirements remain core authority;
+- which statements belong to capability-role applicability independently of
+  profile values;
 - which move to resource-profile policy;
 - which become target/product characterization;
 - whether any additional empirical evidence is prerequisite to migration;
