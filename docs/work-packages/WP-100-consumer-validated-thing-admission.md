@@ -239,6 +239,10 @@ available and must implement the same five-predicate binary64 Basic rule. They
 must not silently skip a Number after failed projection. They do not need
 lossless borrowed lexical access merely to perform this synchronous Basic rule,
 and no Display-driven exact-decimal comparator is authorized.
+The shared rule must distinguish a non-Number value from a Number whose public
+`as_f64()` projection fails or is non-finite; an optional `Value::as_f64()`
+result alone cannot make that distinction. This applies in base, downstream-AP,
+and capability-on graphs.
 
 Capability-off public Basic therefore uses the stable public Number projection
 available in its resolved serde graph. Capability-on bounded admission uses
@@ -786,6 +790,12 @@ positive imports prove sibling TD-capability activation. Select each graph in
 a separate Cargo invocation, and inspect resolved features. API-ownership cells
 use `profile+validated-thing`; tranche `feature_cells` retains the orthogonal
 profile axis.
+
+The [non-production feature-graph prototype](../../tools/architecture-fixtures/validated-thing-feature-boundary/README.md)
+exercises these requested/resolved graphs and the selected public Number
+projection. Its current-code Basic oracle identifies the AP failed-projection
+delta. It does not implement the future shared Basic kernel or complete a
+pre-readmission evidence item.
 
 In the resolved dependency `preserve_order` enables std, so it and combined
 are Host-only. Legal feature unification does not require an upstream std-only

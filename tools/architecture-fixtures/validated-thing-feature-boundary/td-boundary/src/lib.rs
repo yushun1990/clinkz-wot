@@ -1,24 +1,26 @@
 #![no_std]
 
-use core::fmt::{self, Write};
-use serde_json::Number;
+use serde_json::Value;
 
 pub const LOCAL_VALIDATED_THING: bool = cfg!(feature = "validated-thing");
 
-/// Synchronous source adapter. No latency or callback-partition assumption.
-/// The sink retains no callback borrow and allocates no output. Re-driving
-/// Display for a comparison pass is synchronous work too.
-pub fn synchronous_decimal(number: &Number, mut byte: impl FnMut(u8)) -> fmt::Result {
-    struct Sink<F>(F);
-    impl<F: FnMut(u8)> Write for Sink<F> {
-        fn write_str(&mut self, text: &str) -> fmt::Result {
-            for byte in text.bytes() {
-                (self.0)(byte);
-            }
-            Ok(())
-        }
+/// Selected synchronous Basic projection for the five extension predicates.
+/// A JSON Number with no finite public projection is invalid, not absent.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum PredicateNumber {
+    Absent,
+    Finite(f64),
+    Invalid,
+}
+
+pub fn predicate_number(value: Option<&Value>) -> PredicateNumber {
+    let Some(number) = value.and_then(Value::as_number) else {
+        return PredicateNumber::Absent;
+    };
+    match number.as_f64().filter(|value| value.is_finite()) {
+        Some(value) => PredicateNumber::Finite(value),
+        None => PredicateNumber::Invalid,
     }
-    write!(Sink(&mut byte), "{number}")
 }
 
 // Dependency AP alone cannot expose this module. This is not a mock of the
@@ -27,6 +29,8 @@ pub fn synchronous_decimal(number: &Number, mut byte: impl FnMut(u8)) -> fmt::Re
 pub mod bounded {
     use clinkz_wot_foundation::{WorkBudget, WorkClass};
     use serde_json::Number;
+
+    use super::PredicateNumber;
 
     pub fn decimal(number: &Number) -> &str {
         number.as_str()
@@ -38,6 +42,54 @@ pub mod bounded {
         Complete,
         Limit,
         Cancelled,
+    }
+
+    /// One precharged projection witness, not a production admission cursor.
+    /// The caller must have already identified a Number used by a predicate.
+    #[derive(Clone, Copy, Debug, PartialEq)]
+    pub enum ProjectionProgress {
+        Pending,
+        Limit,
+        Cancelled,
+        InvalidConfiguration,
+        Complete(PredicateNumber),
+    }
+
+    pub fn project(
+        number: &Number,
+        ceiling: usize,
+        budget: &mut WorkBudget,
+        lifetime: &mut u64,
+        mut cancelled: impl FnMut() -> bool,
+    ) -> ProjectionProgress {
+        let length = decimal(number).len();
+        if ceiling > 256 {
+            return ProjectionProgress::InvalidConfiguration;
+        }
+        if length > ceiling {
+            return ProjectionProgress::Limit;
+        }
+        let charge = length as u64;
+        if budget.remaining(WorkClass::CodecInputBytes) < charge {
+            return ProjectionProgress::Pending;
+        }
+        if *lifetime < charge {
+            return ProjectionProgress::Limit;
+        }
+        if cancelled() {
+            return ProjectionProgress::Cancelled;
+        }
+        budget.consume(WorkClass::CodecInputBytes, charge).unwrap();
+        *lifetime -= charge;
+        let result = match number.as_f64().filter(|value| value.is_finite()) {
+            Some(value) => PredicateNumber::Finite(value),
+            None => PredicateNumber::Invalid,
+        };
+        if cancelled() {
+            ProjectionProgress::Cancelled
+        } else {
+            ProjectionProgress::Complete(result)
+        }
     }
 
     /// Source-access witness, not a comparator or admission cursor.

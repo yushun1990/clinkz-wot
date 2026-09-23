@@ -1,9 +1,10 @@
 # Number feature-boundary prototype
 
-Non-production impact evidence against master `8dd8973` (#84). The selected
-future boundary belongs to the WP-100 validated-Thing admission record. This
-standalone workspace models it without changing production TD or exporting a
-ValidatedThing production cursor.
+Non-production impact evidence originating from master `8dd8973` (#84), now
+aligned with the bounded-atomic Number authority merged through #87. The
+selected future boundary belongs to the WP-100 validated-Thing admission
+record. This standalone workspace models it without changing production TD
+or exporting a ValidatedThing production cursor.
 
 ## Reproduce
 
@@ -21,7 +22,7 @@ The matrix's normal-dependency feature assertions accompany every result.
 
 | Family | Cells | Execution |
 | --- | ---: | --- |
-| Host base/order/AP/combined × capability off/on | 8 | Source, typed parsing, actual current TD Basic witness, positivity; charged scan when on |
+| Host base/order/AP/combined × capability off/on | 8 | Public finite-binary64 predicate projection, actual current TD Basic witness; borrowed source and precharged projection when on |
 | Host no-default/async × capability off/on | 4 | Same runtime tests, no TD/serde std feature |
 | thumb base/AP × async off/on × capability off/on | 8 | Actual no-std target library compilation |
 | Host base/AP/order/combined × absent/sibling capability | 8 | Gated import E0432 or successful import |
@@ -42,36 +43,44 @@ but can enable the capability through a sibling, exposing the distinction
 between dependency-feature unification and a local capability cfg.
 
 The public foundations are [Cargo dependency features and unification](https://doc.rust-lang.org/cargo/reference/features.html#dependency-features),
-AP-gated `Number::as_str` in [serde_json's published API source](https://docs.rs/serde_json/1.0.149/src/serde_json/number.rs.html),
-and public Number Display / core::fmt::Write for synchronous decimal delivery.
+AP-gated `Number::as_str`, and graph-local `Number::as_f64` in
+[serde_json's published API source](https://docs.rs/serde_json/1.0.149/src/serde_json/number.rs.html).
 The fixture reads no dependency source, private tokens, Serialize callback
-shapes, capacity or layout. A formatting sink accepts arbitrary callback
-partitioning; it cannot call an externally sized callback one bounded unit.
+shapes, capacity or layout. The synchronous Basic projection uses only
+`Value::as_number`, `Number::as_f64`, and `f64::is_finite` in every graph.
+It classifies non-Numbers as absent and a failed/non-finite Number projection
+as invalid. Binary64 rounding is intentional.
 
-`synchronous_decimal` streams Display without project-owned output. Fixed-state
-`Positivity` consumes those bytes and the charged borrowed-text scan feeds the
-same consumer. Tests collect byte vectors only as assertion oracles outside
-the adapters. They compare every AP byte with the public borrow, cover
-65,540-byte text, huge negative exponents, signed zero, both #82 cancellation
-spellings, and base parsing rounding. Display has no step-latency guarantee and
-is never called by Scan.
+Actual existing public TD Basic runs for all four bound pairings on a String
+schema. It accepts lower 9007199254740993 with upper 9007199254740992 in
+base and AP graphs; the selected binary64 rule also accepts them after
+rounding. An independent integer comparison remains a storage-distinction
+witness, not the selected Basic oracle. Current AP TD Basic also silently
+accepts a short `1e309` at each of the five extension predicates because
+projection failure becomes absence. The selected shared Basic rule must
+instead return `InvalidSchema` in both public Basic and future bounded
+admission. Other
+tested Basic cases retain their outcomes, including non-Number absence.
+Base graph ordinary public Basic does not require borrowed lexical access,
+and it remains synchronous.
 
-Actual existing TD Basic is executed for all four bound pairings on a String
-schema. It currently accepts lower 9007199254740993 with upper 9007199254740992,
-although an independent exact integer oracle rejects. Base synchronous Basic
-must therefore migrate too. Underflow already lost by base Number parsing is
-typed zero, not an opportunity to recover a discarded input lexeme.
+With the capability on, `Scan` still demonstrates borrowed source delivery
+under existing byte work and lifetime accounting. `project` witnesses the
+separate bounded-atomic step: check the <=256 lexical ceiling, precharge
+`CodecInputBytes` against step and lifetime, then run the public projection
+between two cancellation checks. Typed-borrow checks cover 64/65 and 256/257
+bytes. This is a narrow source/feature witness, not strict tokenization or
+an admitted cursor.
 
 ## Limits
 
-Scan only witnesses public byte access with a borrowed slice, fixed state,
-existing WorkBudget and non-resettable lifetime. It charges before observation
-and tests zero/small steps, exhaustion and sticky first cause. It does not
-model normalized storage, comparisons, strict decoding, ledger or rollback.
-Positivity is one predicate; the full arbitrary-exponent comparison kernel and
-its synchronous/charged adapters remain required before readmission.
+Scan witnesses public byte access with a borrowed slice, fixed state, existing
+WorkBudget and a non-resettable lifetime. The atomic witness does not prove
+the target's 1 ms / 4,096-byte stack workload, strict JSON over-ceiling early
+stop, normalized storage, complete Basic comparison traversal, ledger, or
+rollback. The full pre-readmission evidence set remains required.
 
-This supplies a feature decision, not completion of any of the eight
+This reconciles the selected feature decision, not completion of any of the eight
 pre-readmission items, gate acceptance or production permission. #84 remains
 historical evidence against the replaced boundary. The current work-package
 states and public signature/resource constraints remain intact.
