@@ -1,77 +1,33 @@
 #![no_std]
 
-use number_boundary_td_prototype::synchronous_decimal;
-use serde_json::Number;
-
-/// One exact predicate to exercise a shared semantic consumer, not a full
-/// five-predicate Basic kernel. Exponent size does not change positivity.
-#[derive(Default)]
-pub struct Positivity {
-    negative: bool,
-    exponent: bool,
-    nonzero: bool,
-}
-impl Positivity {
-    pub fn byte(&mut self, byte: u8) {
-        match byte {
-            b'-' if !self.exponent => self.negative = true,
-            b'e' | b'E' => self.exponent = true,
-            b'1'..=b'9' if !self.exponent => self.nonzero = true,
-            _ => (),
-        }
-    }
-    pub fn positive(&self) -> bool {
-        self.nonzero && !self.negative
-    }
-}
-pub fn synchronous_positive(number: &Number) -> bool {
-    let mut kernel = Positivity::default();
-    synchronous_decimal(number, |b| kernel.byte(b)).unwrap();
-    kernel.positive()
-}
-
 #[cfg(test)]
 mod tests {
     extern crate alloc;
-    use super::*;
-    use alloc::{format, string::ToString, vec::Vec};
+
+    #[cfg(not(any(feature = "ap", feature = "validated-thing")))]
+    use alloc::string::ToString;
+    use alloc::{format, vec::Vec};
     use clinkz_wot_td::{
         data_schema::DataSchema,
         thing::Thing,
         validate::{Validate, ValidationLevel},
     };
+    use number_boundary_td_prototype::{PredicateNumber, predicate_number};
+    use serde_json::{Number, Value};
 
-    fn corpus() -> Vec<(Number, bool)> {
-        let mut values = Vec::new();
-        for text in [
-            "0",
-            "-0",
-            "-0.0",
-            "1.00",
-            "10e-1",
-            "-1.25",
-            "9007199254740993.0000000000000000000001",
-            "5e-324",
-            "18446744073709551615",
-        ] {
-            values.push((text.parse().unwrap(), !text.starts_with('-') && text != "0"));
-        }
-        // Use only public parsing and Numbers constructible in this graph.
-        #[cfg(any(feature = "ap", feature = "validated-thing"))]
-        for text in [
-            format!("1e+{}1", "0".repeat(65_536)),
-            format!("1e-{}1", "9".repeat(4096)),
-            format!("1{}e-4096", "0".repeat(4096)),
-            format!("0.{}1e4097", "0".repeat(4096)),
-            format!("-0e+{}1", "9".repeat(4096)),
-        ] {
-            values.push((text.parse().unwrap(), !text.starts_with('-')));
-        }
-        values
+    fn thing(fields: &str) -> Thing {
+        let input = format!(
+            r#"{{"@context":"https://www.w3.org/2022/wot/td/v1.1","title":"probe","security":["none"],"securityDefinitions":{{"none":{{"scheme":"nosec"}}}},"schemaDefinitions":{{"probe":{{"type":"string",{fields}}}}}}}"#
+        );
+        serde_json::from_str(&input).unwrap()
+    }
+
+    fn basic(thing: &Thing) -> bool {
+        thing.validate_with_level(ValidationLevel::Basic).is_ok()
     }
 
     #[test]
-    fn capability_is_not_inferred_from_dependency_features() {
+    fn local_capability_is_not_inferred_from_dependency_features() {
         assert_eq!(
             number_boundary_td_prototype::LOCAL_VALIDATED_THING,
             cfg!(feature = "validated-thing")
@@ -87,110 +43,206 @@ mod tests {
     }
 
     #[test]
-    fn sync_source_and_positivity_work_in_every_graph() {
-        for (number, positive) in corpus() {
-            let mut emitted = Vec::new(); // assertion storage outside adapter
-            synchronous_decimal(&number, |b| emitted.push(b)).unwrap();
-            assert_eq!(emitted, number.to_string().as_bytes());
-            #[cfg(any(feature = "ap", feature = "validated-thing"))]
-            assert_eq!(emitted, number.as_str().as_bytes());
-            assert_eq!(synchronous_positive(&number), positive);
+    fn selected_public_basic_projection_works_without_capability() {
+        assert_eq!(predicate_number(None), PredicateNumber::Absent);
+        for text in ["null", "true", "\"1\"", "[]", "{}"] {
+            let value: Value = serde_json::from_str(text).unwrap();
+            assert_eq!(predicate_number(Some(&value)), PredicateNumber::Absent);
+        }
+        for (text, expected) in [
+            ("0", 0.0),
+            ("-0.0", -0.0),
+            ("1", 1.0),
+            ("2.5", 2.5),
+            ("9007199254740993", 9007199254740992.0),
+        ] {
+            let value: Value = serde_json::from_str(text).unwrap();
+            assert_eq!(
+                predicate_number(Some(&value)),
+                PredicateNumber::Finite(expected)
+            );
+        }
+        let tiny: Value = serde_json::from_str("1e-4000").unwrap();
+        assert_eq!(predicate_number(Some(&tiny)), PredicateNumber::Finite(0.0));
+        #[cfg(any(feature = "ap", feature = "validated-thing"))]
+        {
+            let overflow: Value = serde_json::from_str("1e309").unwrap();
+            assert_eq!(predicate_number(Some(&overflow)), PredicateNumber::Invalid);
         }
     }
 
     #[test]
-    fn current_td_basic_exposes_the_required_base_semantic_delta() {
-        // All four bound pairings apply even to non-numeric schema variants.
-        // Base Numbers can retain distinct integers which as_f64 collapses.
+    fn actual_synchronous_td_basic_base_rule_and_required_delta() {
+        // All four bound pairings use binary64 rounding in the selected rule.
         for lower in ["minimum", "exclusiveMinimum"] {
             for upper in ["maximum", "exclusiveMaximum"] {
-                let input = format!(
-                    r#"{{"@context":"https://www.w3.org/2022/wot/td/v1.1","title":"probe","security":["none"],"securityDefinitions":{{"none":{{"scheme":"nosec"}}}},"schemaDefinitions":{{"probe":{{"type":"string","{lower}":9007199254740993,"{upper}":9007199254740992}}}}}}"#
-                );
-                let thing: Thing = serde_json::from_str(&input).unwrap();
-                thing.validate_with_level(ValidationLevel::Basic).unwrap();
-                let DataSchema::String(schema) =
-                    &thing.schema_definitions.as_ref().unwrap()["probe"]
+                let td = thing(&format!(
+                    "\"{lower}\":9007199254740993,\"{upper}\":9007199254740992"
+                ));
+                assert!(basic(&td));
+                let DataSchema::String(schema) = &td.schema_definitions.as_ref().unwrap()["probe"]
                 else {
                     panic!()
                 };
-                let a = schema._context._extra_fields[lower].as_number().unwrap();
-                let b = schema._context._extra_fields[upper].as_number().unwrap();
-                // Independent integer oracle for this witness only.
+                let a = &schema._context._extra_fields[lower];
+                let b = &schema._context._extra_fields[upper];
                 assert!(a.as_u64().unwrap() > b.as_u64().unwrap());
-                assert_eq!(a.to_string(), "9007199254740993");
-                assert_eq!(b.to_string(), "9007199254740992");
+                assert_eq!(predicate_number(Some(a)), predicate_number(Some(b)));
             }
         }
-        let tiny: Number = "1e-4000".parse().unwrap();
+        assert!(basic(&thing("\"multipleOf\":2.5")));
+        assert!(!basic(&thing("\"multipleOf\":0")));
+        assert!(!basic(&thing("\"multipleOf\":-1")));
+        assert!(basic(&thing("\"multipleOf\":\"not-a-number\"")));
+
+        // AP accepts a short Number that current TD Basic silently skips
+        // at each of the five extension predicates. Future shared Basic must
+        // return InvalidSchema for a failed Number projection.
         #[cfg(any(feature = "ap", feature = "validated-thing"))]
-        assert!(synchronous_positive(&tiny));
-        #[cfg(not(any(feature = "ap", feature = "validated-thing")))]
-        assert!(!synchronous_positive(&tiny)); // already rounded typed zero
+        {
+            for name in [
+                "minimum",
+                "exclusiveMinimum",
+                "maximum",
+                "exclusiveMaximum",
+                "multipleOf",
+            ] {
+                let td = thing(&format!("\"{name}\":1e309"));
+                assert!(basic(&td));
+                let DataSchema::String(schema) = &td.schema_definitions.as_ref().unwrap()["probe"]
+                else {
+                    panic!()
+                };
+                assert_eq!(
+                    predicate_number(schema._context._extra_fields.get(name)),
+                    PredicateNumber::Invalid
+                );
+            }
+        }
     }
 
     #[cfg(feature = "validated-thing")]
     #[test]
-    fn charged_source_matches_sync_and_keeps_terminal_first_cause() {
+    fn borrowed_lexeme_and_precharged_projection_are_capability_scoped() {
         use clinkz_wot_foundation::{WorkBudget, WorkClass};
-        use number_boundary_td_prototype::bounded::{Progress, Scan, decimal};
+        use number_boundary_td_prototype::bounded::{
+            Progress, ProjectionProgress, Scan, decimal, project,
+        };
+
         fn budget(n: u64) -> WorkBudget {
             WorkBudget::new().with_remaining(WorkClass::CodecInputBytes, n)
         }
-        for (number, positive) in corpus() {
-            let source = decimal(&number);
-            assert_eq!(source.as_ptr(), number.as_str().as_ptr());
-            for size in [1, 7, 128] {
-                let mut scan = Scan::new(&number, source.len() as u64);
-                let mut emitted = Vec::new();
-                let mut kernel = Positivity::default();
-                loop {
-                    let before = (scan.position, scan.lifetime);
-                    assert_eq!(
-                        scan.step(&mut budget(0), false, |_| panic!()),
-                        Progress::Pending
-                    );
-                    assert_eq!(before, (scan.position, scan.lifetime));
-                    let mut allowance = budget(size);
-                    let outcome = scan.step(&mut allowance, false, |b| {
-                        emitted.push(b);
-                        kernel.byte(b);
-                    });
-                    assert_eq!(
-                        scan.position - before.0,
-                        (size - allowance.remaining(WorkClass::CodecInputBytes)) as usize
-                    );
-                    if outcome == Progress::Complete {
-                        break;
-                    }
-                    assert_eq!(outcome, Progress::Pending);
-                }
-                assert_eq!(emitted, source.as_bytes());
-                assert_eq!(scan.lifetime, 0);
-                assert_eq!(kernel.positive(), positive);
+
+        let number: Number = "2.5".parse().unwrap();
+        let source = decimal(&number);
+        assert_eq!(source, "2.5");
+        assert_eq!(source.as_ptr(), number.as_str().as_ptr());
+        let mut scan = Scan::new(&number, 3);
+        let mut bytes = Vec::new();
+        assert_eq!(
+            scan.step(&mut budget(0), false, |_| panic!()),
+            Progress::Pending
+        );
+        assert_eq!(scan.position, 0);
+        assert_eq!(
+            scan.step(&mut budget(2), false, |byte| bytes.push(byte)),
+            Progress::Pending
+        );
+        assert_eq!(
+            scan.step(&mut budget(1), false, |byte| bytes.push(byte)),
+            Progress::Complete
+        );
+        assert_eq!(bytes, source.as_bytes());
+        assert_eq!(scan.lifetime, 0);
+
+        let mut lifetime = 3;
+        assert_eq!(
+            project(&number, 256, &mut budget(2), &mut lifetime, || false),
+            ProjectionProgress::Pending
+        );
+        assert_eq!(lifetime, 3);
+        assert_eq!(
+            project(&number, 256, &mut budget(3), &mut 2, || false),
+            ProjectionProgress::Limit
+        );
+        let mut allowance = budget(3);
+        let mut cancellation_checks = 0;
+        assert_eq!(
+            project(&number, 256, &mut allowance, &mut lifetime, || {
+                cancellation_checks += 1;
+                false
+            }),
+            ProjectionProgress::Complete(PredicateNumber::Finite(2.5))
+        );
+        assert_eq!(cancellation_checks, 2);
+        assert_eq!(allowance.remaining(WorkClass::CodecInputBytes), 0);
+        assert_eq!(lifetime, 0);
+
+        let mut lifetime = 3;
+        assert_eq!(
+            project(&number, 256, &mut budget(3), &mut lifetime, || true),
+            ProjectionProgress::Cancelled
+        );
+        assert_eq!(lifetime, 3);
+        let mut checks = 0;
+        let mut allowance = budget(3);
+        assert_eq!(
+            project(&number, 256, &mut allowance, &mut lifetime, || {
+                checks += 1;
+                checks == 2
+            }),
+            ProjectionProgress::Cancelled
+        );
+        assert_eq!(checks, 2);
+        assert_eq!(allowance.remaining(WorkClass::CodecInputBytes), 0);
+        assert_eq!(lifetime, 0);
+        let overflow: Number = "1e309".parse().unwrap();
+        let mut overflow_len = overflow.as_str().len() as u64;
+        assert_eq!(
+            project(
+                &overflow,
+                256,
+                &mut budget(overflow_len),
+                &mut overflow_len,
+                || false
+            ),
+            ProjectionProgress::Complete(PredicateNumber::Invalid)
+        );
+        assert_eq!(
+            project(&number, 0, &mut budget(3), &mut 3, || false),
+            ProjectionProgress::Limit
+        );
+        assert_eq!(
+            project(&number, 257, &mut budget(3), &mut 3, || false),
+            ProjectionProgress::InvalidConfiguration
+        );
+
+        // Typed public-borrow threshold; strict tokenization is out of scope.
+        for (ceiling, allowed, rejected) in [(64, 64, 65), (256, 256, 257)] {
+            for (length, result) in [
+                (
+                    allowed,
+                    ProjectionProgress::Complete(PredicateNumber::Finite(10.0)),
+                ),
+                (rejected, ProjectionProgress::Limit),
+            ] {
+                let spelling = format!("1e+{}1", "0".repeat(length - 4));
+                assert_eq!(spelling.len(), length);
+                let number: Number = spelling.parse().unwrap();
+                assert_eq!(decimal(&number).len(), length);
+                let mut lifetime = length as u64;
                 assert_eq!(
-                    scan.step(&mut budget(1), true, |_| panic!()),
-                    Progress::Complete
+                    project(
+                        &number,
+                        ceiling,
+                        &mut budget(length as u64),
+                        &mut lifetime,
+                        || false
+                    ),
+                    result
                 );
+                assert_eq!(lifetime, if length <= ceiling { 0 } else { length as u64 });
             }
-            let mut scan = Scan::new(&number, 0);
-            assert_eq!(
-                scan.step(&mut budget(1), false, |_| panic!()),
-                Progress::Limit
-            );
-            assert_eq!(
-                scan.step(&mut budget(1), true, |_| panic!()),
-                Progress::Limit
-            );
-            let mut scan = Scan::new(&number, 1);
-            assert_eq!(
-                scan.step(&mut budget(0), true, |_| panic!()),
-                Progress::Cancelled
-            );
-            assert_eq!(
-                scan.step(&mut budget(128), false, |_| panic!()),
-                Progress::Cancelled
-            );
         }
     }
 }

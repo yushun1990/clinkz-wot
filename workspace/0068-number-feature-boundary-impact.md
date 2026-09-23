@@ -18,6 +18,24 @@ admission requires explicit `td/validated-thing -> serde_json/arbitrary_precisio
 so it can borrow stable lossless Number text before enforcing the lexical
 resource ceiling and retaining Number content.
 
+## Post-migration feature-graph reconciliation
+
+Rechecked against master `eef33475c33538e92e53e8155d47dfba39ff93bf` after
+the bounded-atomic authority migration. The selected feature edge, serde API
+floor, supported Host/thumb/downstream graphs, and six affected requirements
+remain unchanged. The executable fixture now tests the selected public
+finite-binary64 Basic projection in every Host graph and the capability-gated
+borrowed text plus precharged atomic projection witness. Its old
+Display/Positivity path was evidence for a superseded arithmetic rule.
+
+The impact remains scoped to the existing TD feature declaration and shared
+five-predicate Basic correction in the later admitted implementation. This
+reconciliation adds no production manifest/Rust change, public API signature,
+resource row, WorkClass, account, graph cell, predecessor reopening, or
+admission transition. In particular, a failed `Number::as_f64()` query must be
+distinguished from a non-Number extension value in capability-off public Basic
+as well as capability-on paths.
+
 ## Finding and selection
 
 #84 falsified direct `Number::as_str()` in a scalar-serde graph, showed that
@@ -75,9 +93,15 @@ The affected requirements remain exactly `DOC-RUNTIME-001`, `ADMIT-MEM-001`,
 
 The 32-cell matrix remains current evidence for public source delivery, resolved
 features, downstream serde-only negative imports and sibling-capability positive
-imports on Host and actual thumb. It does **not** prove the later bounded
-numeric algorithm, arena/resource model, frozen signatures, rollback, or
-runtime allocator behavior.
+imports on Host and actual thumb. After the bounded-atomic authority migration,
+the prototype's Host cells exercise public finite-binary64 projection in all
+resolved graphs, including capability-off synchronous Basic. Its earlier
+Display/Positivity witness has been retired: exact-decimal Basic arithmetic is
+no longer the selected rule. The prototype demonstrates the existing TD Basic
+base-graph rounding behavior and the AP short-overflow skip that future shared
+Basic must correct. It does **not** prove the full bounded numeric algorithm,
+arena/resource model, frozen signatures, rollback, or runtime allocator
+behavior.
 
 None of the eight pre-readmission items is declared complete. Their current
 numeric obligations are defined by the admission record, workspace 0070, and
