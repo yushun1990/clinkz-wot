@@ -126,6 +126,7 @@ depends_on = []
 depends_on_packages = ["WP-000"]
 requirements = [
     "DOC-RUNTIME-001",
+    "RES-LIMIT-001",
     "ADMIT-MEM-001",
     "ADMIT-TXN-001",
     "CONSTRAINED-WORK-001",

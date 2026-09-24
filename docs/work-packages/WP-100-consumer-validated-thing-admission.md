@@ -53,6 +53,7 @@ status, and PLAN text never entered master.
 The affected active requirements remain exactly:
 
 - `DOC-RUNTIME-001`;
+- `RES-LIMIT-001`;
 - `ADMIT-MEM-001`;
 - `ADMIT-TXN-001`;
 - `CONSTRAINED-WORK-001`;
