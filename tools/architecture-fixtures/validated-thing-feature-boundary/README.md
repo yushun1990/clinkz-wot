@@ -64,22 +64,34 @@ tested Basic cases retain their outcomes, including non-Number absence.
 Base graph ordinary public Basic does not require borrowed lexical access,
 and it remains synchronous.
 
-With the capability on, `Scan` still demonstrates borrowed source delivery
-under existing byte work and lifetime accounting. `project` witnesses the
-separate bounded-atomic step using this fixture's 256-byte profile value:
-check the configured lexical limit, precharge `CodecInputBytes` against step
-and lifetime, then run the public projection
-between two cancellation checks. Typed-borrow checks cover 64/65 and 256/257
-bytes. This is a narrow source/feature witness, not strict tokenization or
-an admitted cursor.
+With the capability on, `Scan` demonstrates borrowed source delivery under
+existing byte work and lifetime accounting. `NumberStepConfig::try_from_limits`
+checks the two fields consumed by this narrow Number step before `project` can
+run: the document validation lifetime-work ceiling and the per-Number lexical
+limit. Its supported maximum is the smaller of the work ceiling and the
+prototype's `usize` input index. The gateway 256 and benchmark 64 values pass;
+the Directory-client Number `NA` and a finite value above this step's maximum
+produce configuration errors with resource coordinates. The benchmark's
+unrelated Host Consumer `NA` does not block this narrow projection. A selected
+257-byte value also passes, so 256 is a profile value rather than a universal
+implementation maximum. No configuration error is a `ProjectionProgress`
+variant, and `project` takes only the checked opaque config.
+
+`project` checks the borrowed typed lexeme length before the atomic numeric
+query, precharges `CodecInputBytes` against step and lifetime, and checks
+cancellation on both sides. Tests cover 63/64/65 and 255/256/257, zero, step
+and lifetime shortages, repeated debit, and failed finite projection. This is
+a narrow source/feature witness, not strict tokenization or an admitted cursor.
 
 ## Limits
 
-Scan witnesses public byte access with a borrowed slice, fixed state, existing
-WorkBudget and a non-resettable lifetime. The atomic witness does not prove
-any target cycle/stack tolerance, strict JSON over-limit early
-stop, normalized storage, complete Basic comparison traversal, ledger, or
-rollback. The full pre-readmission evidence set remains required.
+The checked config proves only the Number-step portion of the future opaque
+`ValidatedThingAdmissionConfig`. The full projection must validate every field
+consumed by both admission entries and derive its supported maximum from their
+complete work and temporary-resource envelope. This fixture does not prove
+strict JSON over-limit early stop, target runtime behavior, normalized storage,
+the complete Basic comparison traversal, ledger, or rollback. The full
+pre-readmission evidence set remains required.
 
 This reconciles the selected feature decision, not completion of any of the eight
 pre-readmission items, gate acceptance or production permission. #84 remains
