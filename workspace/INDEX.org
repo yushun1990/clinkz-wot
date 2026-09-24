@@ -28,7 +28,7 @@ Topics are retained after migration as decision history.
 
 ** OPEN
 
-- None.
+- [[file:0071-constrained-resource-authority-and-target-characterization.md][0071 Constrained Resource Authority and Target Characterization]]
 
 ** DISCUSSING
 
