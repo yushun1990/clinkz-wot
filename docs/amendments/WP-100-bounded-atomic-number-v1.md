@@ -39,14 +39,25 @@ until that owner is implemented; generated getters do not enforce admission.
 - benchmark static reference profile: 64 bytes (provisional Consumer policy);
 - zero disables Number admission under the normal disabled-resource rule.
 
-Let `L` be the selected profile's finite per-Number limit. Before bounded
-admission, the owning builder must validate that `L` is supported by the
-selected projection implementation: its maximum input, complete step and
-lifetime debit, and temporary resource use must be representable and bounded
-within the selected resource policy. A larger application-defined value is not
-automatically admitted; an unsupported value is invalid configuration, not a
-per-input `Limit`. Raw Foundation `ResourceLimits` remains low-level assembly
-and is not that builder. There is no project-wide 256-byte maximum.
+Let `L` be the selected profile's finite per-Number limit. TD owns one opaque
+implementation-bound projection,
+`ValidatedThingAdmissionConfig::try_from_limits`. It validates that `L` and
+every applicable value required by this admission surface are present, then
+computes the prefix maximum `M` for which every lexical length through `M` is
+supported jointly by the selected projection implementation, representable
+complete step/lifetime debit, and bounded temporary resource envelope in the
+selected policy. A missing applicable value or `L > M` returns
+`ValidatedThingConfigError` before parent/global reservation,
+child-ledger construction or transfer, input inspection, and normalization
+state-machine entry. The two direct admission constructors accept only a
+successful `ValidatedThingAdmissionConfig`; the type has no unchecked public
+constructor, so a caller cannot bypass this validation with raw limits.
+
+A larger application-defined value is therefore not automatically admitted.
+Configuration failure is distinct from the per-input `Limit` produced after a
+valid configuration observes byte `L + 1`. Raw Foundation `ResourceLimits`
+remains low-level schema assembly and deliberately does not enforce this
+implementation-dependent bound. There is no project-wide 256-byte maximum.
 
 The limit is checked before any input-sized numeric projection. Strict JSON
 admission stops as `Limit` when byte `L + 1` of one Number token is observed,
@@ -156,6 +167,12 @@ remain unchanged.
 The full WP-100 pre-readmission set remains required. Numeric evidence must now
 include:
 
+- successful configuration projection of every applicable named Consumer
+  value; deterministic rejection of a Directory-client `NA` used as Consumer
+  configuration; and at least one finite application-defined `L > M` rejected
+  as `ValidatedThingConfigError` before allowance, ledger, input, or progress,
+  with no route through either direct constructor and no conversion to
+  per-input `Limit`;
 - configured `L - 1`/`L`/`L + 1` thresholds for nonzero `L`, including
   63/64/65 and 255/256/257, plus zero-disabled first-byte rejection;
 - over-limit strict input returning `Limit` without finishing an unbounded

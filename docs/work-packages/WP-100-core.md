@@ -314,6 +314,14 @@ both future admission entries share the Basic acceptance rule; only bounded
 admission exposes the lexical resource `Limit`. The admission record owns the
 exact contract and proof burden.
 
+TD's opaque `ValidatedThingAdmissionConfig::try_from_limits` projection is the
+mandatory pre-entry boundary for both future admission constructors. It rejects
+missing applicable values and implementation-unsupported `L` as
+`ValidatedThingConfigError` before allowance, ledger, input, or progress-state
+ownership; the constructors do not accept raw `ResourceLimits`. This
+configuration failure is outside the normalization machine and cannot be
+reported as a per-input lexical `Limit`.
+
 The frozen `ValidatedThingView` supplies allocation-free identity, Property
 iteration/lookup and ordinal, original Form indices, raw/resolved URI, content
 metadata, effective operations/security, and security-definition scheme
@@ -440,7 +448,10 @@ cleanup-transfer, wake, and reactor-queue limits. Index 195 appends
 `number_lexeme_bytes_max` for WP-100 bounded admission, with named values
 256/NA/64 for gateway/directory-client/benchmark-static-reference; the owner is
 Consumer `+validated-thing`. Each selected Consumer profile enforces its
-validated limit (`L + 1` first-excess-byte rejection, including zero-disabled).
+validated limit (`L + 1` first-excess-byte rejection, including zero-disabled)
+only after the TD configuration projection has accepted `L` against the
+implementation-supported atomic envelope. Raw Foundation construction remains
+schema-only and cannot bypass that projection.
 The M4 workload characterizes only a declared target/product claim and is not
 generic readmission evidence. The active schema therefore has 196 fields while
 preserving every prior numeric identity.

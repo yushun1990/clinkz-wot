@@ -7453,7 +7453,7 @@ required_events = [
     "Equivalence:drop",
     "Rollback:drop",
 ]
-entry_contract = "ValidatedThingCursor borrows a typed Thing and owns only additional project allocations; ValidatedThingBuilder borrows JSON bytes and owns every controlled decode-through-retention allocation from the first request"
+entry_contract = "The machine is entered only after TD successfully projects raw ResourceLimits through the sole opaque ValidatedThingAdmissionConfig constructor; missing or implementation-unsupported limits fail as pre-entry configuration errors, never as Limit. ValidatedThingCursor then borrows a typed Thing and owns only additional project allocations; ValidatedThingBuilder borrows JSON bytes and owns every controlled decode-through-retention allocation from the first request"
 first_cause_contract = "The first invalid, limit, cancellation, conversion, or drop cause is immutable; later observations cannot replace its diagnostic or resource coordinates"
 publication_contract = "Only Complete publishes one move-only ValidatedThing after typed semantic equivalence and complete rollback-inapplicability are established"
 resource_contract = "Each actual checked allocation Layout is reserved before allocation; source, temporary, live peak, largest actual request, diagnostics, and reclassification remain distinct observations/accounts"

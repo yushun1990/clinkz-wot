@@ -17,10 +17,16 @@ cargo fmt --manifest-path tools/architecture-fixtures/bounded-atomic-number/Carg
 
 The standalone lockfile resolves public serde_json AP access. The probe is
 `no_std + alloc`; no production TD feature or implementation is changed.
-Tests cover every configured limit 0..256, `L - 1`/`L`/`L + 1` for nonempty
-Numbers, first-excess-byte rejection without consuming an unbounded suffix,
-and typed AP length checking before projection. They also exercise opaque
-overflow preservation and resource-failure precedence over predicate failure.
+This fixture selects 256 as its own implementation-supported maximum rather
+than as a project-wide bound. Its configuration constructor rejects 257 and
+larger values before observing input, which models the required distinction
+between unsupported configuration and per-input resource failure. Full
+readmission evidence must apply that distinction through the frozen public TD
+configuration and direct-entry APIs. Tests cover every configured limit
+0..256, `L - 1`/`L`/`L + 1` for nonempty Numbers, first-excess-byte rejection
+without consuming an unbounded suffix, and typed AP length checking before
+projection. They also exercise opaque overflow preservation and resource-
+failure precedence over predicate failure.
 The byte-observation model receives Number bytes from a future lexer; it is
 not evidence of that lexer's syntax, budget, or cancellation implementation.
 

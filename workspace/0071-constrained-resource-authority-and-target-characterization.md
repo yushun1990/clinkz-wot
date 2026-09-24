@@ -349,6 +349,14 @@ field identity; no profile value, production behavior, or feature cell changed.
   byte work, cancellation checkpoints, and bounded diagnostics/cleanup. The
   admission record retains its semantic, resource, progress, and Host/thumb/
   downstream feature evidence obligations.
+- **Direct-entry boundary:** TD's sole opaque
+  `ValidatedThingAdmissionConfig::try_from_limits` projection performs the
+  implementation-dependent validation. Both direct admission constructors
+  require its successful result and no longer accept raw `ResourceLimits`.
+  Missing or unsupported values return `ValidatedThingConfigError` before
+  allowance, ledger, input, or normalization state; readmission evidence must
+  include a finite unsupported `L` and prove that it cannot become per-input
+  `Limit`.
 - **Profile policy:** 256 for gateway and 64 for the benchmark static reference
   remain provisional named Consumer capacities; Directory-client is `NA`
   because it has no validation owner. There is no project-wide 256 maximum.

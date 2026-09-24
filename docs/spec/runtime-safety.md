@@ -124,14 +124,18 @@ The planned Consumer boundary amends only Basic's five numeric schema-extension
 predicates (`minimum`, `exclusiveMinimum`, `maximum`, `exclusiveMaximum`, and
 `multipleOf`) over `serde_json::Value::Number`. Bounded admission first applies
 the named `number_lexeme_bytes_max` resource boundary. Its finite value is
-selected by the resource profile and validated against the chosen projection's
-atomic work and temporary-resource envelope before admission. It applies to
-Consumer `+validated-thing`; Directory-client is `NA`. A configured limit `L`
-rejects strict input at Number byte `L + 1` before copying that byte or finishing
-the scan; typed input checks borrowed length first. Zero disables Number
-admission, including opaque Numbers. Over-ceiling Number text is `Limit`;
-within-ceiling opaque Numbers remain losslessly
-retained even when they cannot project to finite `f64`.
+selected by the resource profile and projected through TD-owned
+`ValidatedThingAdmissionConfig::try_from_limits`, which validates it against
+the chosen projection's atomic work and temporary-resource envelope. The two
+direct admission constructors accept only that opaque successful projection;
+missing or unsupported values fail as `ValidatedThingConfigError` before the
+normalization machine exists and cannot appear as its per-input `Limit`
+terminal. The resource applies to Consumer `+validated-thing`;
+Directory-client is `NA`. A configured limit `L` rejects strict input at Number
+byte `L + 1` before copying that byte or finishing the scan; typed input checks
+borrowed length first. Zero disables Number admission, including opaque
+Numbers. Over-ceiling Number text is `Limit`; within-ceiling opaque Numbers
+remain losslessly retained even when they cannot project to finite `f64`.
 
 Existing typed `NumberSchema` `f64` behavior and typed `IntegerSchema` `i64`
 behavior remain unchanged. For the five extension predicates only, a Number is

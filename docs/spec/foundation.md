@@ -118,11 +118,20 @@ gateway/directory-client/benchmark-static-reference. There is no Directory-clien
 validation owner for this row. It is provisional until its Consumer owner is
 implemented; generated schema plumbing alone makes no runtime-enforcement claim.
 The 256 and 64 values are provisional named-profile capacities, not a
-project-wide maximum or target feasibility claim. The owning builder MUST
-validate a finite configured `L` against the selected implementation's
-representable complete atomic work debit and bounded temporary resource
-envelope before admission; unsupported values are invalid configuration. The
-row bounds one Number lexeme before bounded numeric projection or lossless
+project-wide maximum or target feasibility claim. The TD-owned
+`ValidatedThingAdmissionConfig::try_from_limits` projection MUST bind the
+Consumer applicability set and validate a finite configured `L` against the
+selected implementation's representable complete atomic work debit and bounded
+temporary resource envelope. It computes the prefix maximum `M` supported by
+the implementation and policy, for which every lexical length through `M` has
+that complete envelope; a missing applicable value or `L > M` returns a
+`ValidatedThingConfigError` before any parent/global allowance, child ledger,
+input inspection, or normalization state-machine entry. Both direct
+`ValidatedThing` admission constructors accept only the successful opaque
+projection, never raw `ResourceLimits`. Configuration rejection is therefore
+not a per-input `ValidatedThingProgress::Limit`.
+
+The row bounds one Number lexeme before bounded numeric projection or lossless
 retained copying. Zero disables Number admission within a selected Consumer
 role; it does not change role applicability or feature support. The row does
 not declare every JSON Number to be binary64 and does not replace aggregate
@@ -130,8 +139,9 @@ document/source/work limits. For a validated configured `L`, strict admission
 rejects at the first excess Number byte (`L + 1`) without finishing the scan or
 copying the rejected byte; typed admission checks borrowed lexical length before
 projection/copy. Zero rejects the first Number byte, and 64 admits a 64-byte
-Number but rejects at byte 65. The future owning builder validates the atomic
-envelope; raw `ResourceLimits` construction remains low-level assembly.
+Number but rejects at byte 65. Raw `ResourceLimits` construction validates only
+schema-level invariants and deliberately cannot validate this role- and
+implementation-dependent atomic envelope.
 
 `RES-LIMIT-002`: A resource-policy violation MUST stop before rejected work or
 externally reachable publication and return a structured limit category naming
