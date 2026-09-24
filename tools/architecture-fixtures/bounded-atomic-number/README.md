@@ -17,19 +17,27 @@ cargo fmt --manifest-path tools/architecture-fixtures/bounded-atomic-number/Carg
 
 The standalone lockfile resolves public serde_json AP access. The probe is
 `no_std + alloc`; no production TD feature or implementation is changed.
-Tests cover every configured limit 0..256, `L - 1`/`L`/`L + 1` for nonempty
-Numbers, first-excess-byte rejection without consuming an unbounded suffix,
-and typed AP length checking before projection. They also exercise opaque
-overflow preservation and resource-failure precedence over predicate failure.
+This fixture selects 256 as its own implementation-supported maximum rather
+than as a project-wide bound. Its configuration constructor rejects 257 and
+larger values before observing input, which models the required distinction
+between unsupported configuration and per-input resource failure. Full
+readmission evidence must apply that distinction through the frozen public TD
+configuration and direct-entry APIs. Tests cover every configured limit
+0..256, `L - 1`/`L`/`L + 1` for nonempty Numbers, first-excess-byte rejection
+without consuming an unbounded suffix, and typed AP length checking before
+projection. They also exercise opaque overflow preservation and resource-
+failure precedence over predicate failure.
 The byte-observation model receives Number bytes from a future lexer; it is
 not evidence of that lexer's syntax, budget, or cancellation implementation.
 
-## Constrained acceptance workload
+## Optional target characterization workload
 
-Workload identity: `WP100-ATOMIC-NUMBER-M4-v1`. This is a pre-readmission
-architecture probe, not a completed PERF-CS workload or a product benchmark.
-The amendment owns its mandatory cycle/stack acceptance limits. This section
-owns the corpus and measurement procedure used to falsify that candidate.
+Workload identity: `WP100-ATOMIC-NUMBER-M4-v1`. This is optional
+characterization of the named M4 build at the provisional gateway `L = 256`,
+not a generic WP-100 readmission item, completed PERF-CS workload, or claim
+that this board can host the full gateway profile. The following corpus and
+procedure support a separately declared target/product 1 ms parser-interval
+and 4 KiB additional-stack tolerance. No physical result has been accepted.
 
 Target: the STM32F407G-DISC1, Cortex-M4F r0p1, bare metal, fixed 168 MHz,
 128 KiB SRAM plus 64 KiB CCM, flash with five wait states, and DWT CYCCNT
@@ -38,7 +46,8 @@ prefetch settings, flash/SRAM code placement, clock verification, allocator,
 board revision, rustc `-Vv`, resolved Cargo features, lockfile digest, ELF
 digest, and linker map. Use the release options from this fixture's manifest
 in the board runner as well; a dependent crate's profile is not inherited.
-Other supported compiler/dependency graphs must satisfy the same bounds.
+Another build or profile needs its own characterization if it makes the same
+target/product promise.
 
 ### Cases and path coverage
 
@@ -46,8 +55,9 @@ Use `for_each_case` without pruning short or long inputs. It spans every
 length 1..256, including 63/64/65 and 255/256, both signs, long significands,
 long exponents with leading zeros, overflow/underflow, near-subnormal and
 normal boundaries, the finite maximum, and exact halfway values with decimal
-neighbors. Test 256 on this constrained target even though the named static
-profile is 64: application-defined Consumer profiles can select 256.
+neighbors. This workload tests 256 even though the named benchmark static
+reference profile is 64. It does not select or validate a complete Consumer
+resource profile for the board.
 
 The exact halfway spelling around 1 and its padded neighbors attack the
 ambiguous truncated-significand decision. In the inspected rustc 1.95.0 source,
@@ -99,28 +109,28 @@ parser semantics or a private API dependency in production.
 
 ### Pass, fail, and interpretation
 
-Every sample, including cold-first and slow-fallback cases, must meet the
-amendment's 168,000-cycle / 4,096-byte additional-stack bounds. No outlier
+To support the stated target/product tolerance, every sample, including
+cold-first and slow-fallback cases, must meet the 168,000-cycle / 4,096-byte
+additional-stack bounds. No outlier
 removal, average-only success, inferred cycles from a Host, or compile-only
 substitution is allowed. Report per case: family, exact lexeme, length,
 projection bits or rejection, cycles, stack high-water/conservative depth,
 allocation count, and build/runner fingerprints. Preserve raw results outside
 the source tree until an evidence artifact records the exact reviewed build.
 
-The 1 ms parser interval is an explicit engineering acceptance policy: it
+The 1 ms parser interval is a target/product tolerance: it
 leaves a cancellation checkpoint after each numeric projection instead of
 allowing several projections to consume a longer indivisible step. The stack
 allowance reserves at most 1/32 of the board's 128 KiB SRAM for this operation's
 additional call depth; caller frames, interrupt frames, heap, and other live
-state still require the complete item-7 resource proof. These budgets are not
-derived from `n` work units. Charging `n` controls scheduling/accounting;
-target measurements establish whether that charge can safely represent this
-atomic operation.
+state still require a complete deployment resource proof. These budgets are
+not derived from `n` work units. Charging `n` controls work accounting;
+measurements characterize the specified target interval and stack margin.
 
-Passing the declared workload supplies empirical evidence for retaining 256,
-not an exhaustive mathematical WCET proof. Independent review must judge the
-parser-path coverage and complete target resource evidence. If any bound fails,
-select and remeasure a smaller hard ceiling or reopen the projection design;
-do not relax the budget or call 256 justified merely because it is finite.
-The migration declares this workload; target results and all eight accepted
-pre-readmission items remain required before a separate admission transition.
+Passing this workload would support only the declared target/product tolerance,
+not an exhaustive mathematical WCET proof or a generic 256-byte ceiling.
+Independent review of a target claim must judge parser-path coverage and the
+complete deployment resource context. If a bound fails, revise that claim,
+profile, or projection implementation and remeasure as needed. Generic
+readmission still requires the semantic, resource, progress, and supported-cell
+evidence in the WP-100 admission record; it does not require this M4 result.

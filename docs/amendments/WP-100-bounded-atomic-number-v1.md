@@ -3,7 +3,8 @@
 Status: authority candidate for `WP-100-CONSUMER-VALIDATED-THING`; not admitted.
 
 Decision source: workspace topic 0069 / github-pr:86.
-Migration record: workspace topic 0070.
+Migration records: workspace topic 0070 (historical, github-pr:87); workspace
+topic 0071 (current resource-authority migration, github-pr:92).
 
 This amendment owns the WP-100 numeric boundary that supersedes the affected
 exact-decimal / byte-resumable clauses previously projected from workspace
@@ -33,33 +34,49 @@ Bounded admission has one named per-Number lexical limit:
 `+validated-thing` admission surface. The row is provisional authority input
 until that owner is implemented; generated getters do not enforce admission.
 
-- project hard maximum: **256 bytes**;
-- gateway profile: 256 bytes;
+- gateway profile: 256 bytes (provisional Consumer policy);
 - directory-client profile: `NA` (no Directory-client validation owner);
-- benchmark static reference profile: 64 bytes;
-- profiles may lower the value but may not raise it above 256;
+- benchmark static reference profile: 64 bytes (provisional Consumer policy);
 - zero disables Number admission under the normal disabled-resource rule.
 
-Let `L` be the configured value, validated in `0..=256` before admission.
+Let `L` be the selected profile's finite per-Number limit. TD owns one opaque
+implementation-bound projection,
+`ValidatedThingAdmissionConfig::try_from_limits`. It validates that `L` and
+every value consumed by this admission surface are present, then computes the
+prefix maximum `M` for which every lexical length through `M` is supported
+jointly by the selected projection implementation, representable complete
+step/lifetime debit, and bounded temporary resource envelope in the selected
+policy. It does not validate unrelated Consumer role or execution-cell fields;
+that complete applicability check belongs to the resource-profile owner. A
+missing required admission field or `L > M` returns
+`ValidatedThingConfigError` before parent/global reservation,
+child-ledger construction or transfer, input inspection, and normalization
+state-machine entry. The two direct admission constructors accept only a
+successful `ValidatedThingAdmissionConfig`; the type has no unchecked public
+constructor, so a caller cannot bypass this validation with raw limits.
+
+A larger application-defined value is therefore not automatically admitted.
+Configuration failure is distinct from the per-input `Limit` produced after a
+valid configuration observes byte `L + 1`. Raw Foundation `ResourceLimits`
+remains low-level schema assembly and deliberately does not enforce this
+implementation-dependent bound. There is no project-wide 256-byte maximum.
+
 The limit is checked before any input-sized numeric projection. Strict JSON
 admission stops as `Limit` when byte `L + 1` of one Number token is observed,
 before copying that byte or finishing the token scan. Thus the boundary is
-64/65 for the benchmark profile and 256/257 at the hard maximum. At `L = 0`,
+64/65 for the benchmark profile and 256/257 for the gateway profile. At `L = 0`,
 the first Number byte returns `Limit`; a document with no Numbers is not
 rejected by this resource. Typed compatibility admission uses borrowed public
 `Number::as_str()` under the
 explicit `td/validated-thing -> serde_json/arbitrary_precision` capability and
-checks `as_str().len() <= L` before projection or lossless copy. A value above
-256 is invalid configuration, not a per-input `Limit`. This validation belongs
-to the future owning builder; raw Foundation `ResourceLimits` remains low-level
-assembly and is not that builder.
+checks `as_str().len() <= L` before projection or lossless copy.
 
-Over-ceiling Number text is a resource `Limit`, not `InvalidSchema` and not a
+Over-limit Number text is a resource `Limit`, not `InvalidSchema` and not a
 claim that the JSON syntax is invalid.
 
 ## Storage domain
 
-Every at-or-below-ceiling Number that belongs in the normalized snapshot is
+Every within-limit Number that belongs in the normalized snapshot is
 retained losslessly in the project-owned byte arena. No finite-`f64` projection
 is required merely to retain a Number.
 
@@ -105,10 +122,10 @@ Resource admission and Basic semantic validity remain distinct.
 ## Atomic work and cancellation
 
 JSON tokenization, lossless Number-byte capture, and byte copying remain
-ordinary charged/resumable work. Numeric projection/comparison after the hard
-lexical boundary is a bounded atomic operation.
+ordinary charged/resumable work. Numeric projection/comparison after the
+configured lexical boundary is a bounded atomic operation.
 
-For one projection of a Number with lexical length `n`, where `0 < n <= L <= 256`:
+For one projection of a Number with lexical length `n`, where `0 < n <= L`:
 
 - debit `n` `CodecInputBytes` units from the current step budget before
   projection starts;
@@ -121,16 +138,14 @@ For one projection of a Number with lexical length `n`, where `0 < n <= L <= 256
 - perform only constant-size scalar comparison after projection under the
   containing schema-node charge.
 
-The maximum uninterrupted numeric projection consumes a Number of at most 256
-lexical bytes. Input finiteness alone does not establish acceptable latency or
-stack use. The [constrained atomic Number workload](../../tools/architecture-fixtures/bounded-atomic-number/README.md#constrained-acceptance-workload)
-defines the falsifiable target acceptance boundary for
-`CONSTRAINED-PROGRESS-001`: every measured projection interval on the declared
-168 MHz Cortex-M4 must fit 168,000 cycles (1 ms), with at most 4,096 additional
-stack bytes including callees. This is an admission requirement, not a measured
-result. The 256 ceiling remains a candidate until this workload passes and its
-evidence is independently accepted. Failure requires reopening the ceiling or
-projection decision, not increasing these budgets silently.
+One uninterrupted projection has the validated finite input bound `L`.
+`CONSTRAINED-PROGRESS-001` requires complete precharging and cancellation
+checkpoints around that operation; work units do not promise elapsed time or
+stack depth. The [M4 Number workload](../../tools/architecture-fixtures/bounded-atomic-number/README.md#optional-target-characterization-workload)
+can characterize a named target/product or calibrate a profile. Its
+168,000-cycle and 4,096-byte tolerances are not generic WP-100 admission gates.
+Any target or product making those promises must review measurements for its
+selected build and profile; failure revises that claim, profile, or algorithm.
 
 If a Number must be projected again, the repeated projection is charged again.
 No replayed scan is free merely because the source is already retained.
@@ -154,9 +169,18 @@ remain unchanged.
 The full WP-100 pre-readmission set remains required. Numeric evidence must now
 include:
 
+- successful configuration projection of the gateway and benchmark static
+  reference values, including benchmark success while unrelated Host Consumer
+  fields such as `pending_client_calls_per_binding_max` remain `NA`;
+  deterministic rejection of Directory-client `NA` specifically because
+  `number_lexeme_bytes_max` is required by this admission surface; and at least
+  one finite application-defined `L > M` rejected as
+  `ValidatedThingConfigError` before allowance, ledger, input, or progress,
+  with no route through either direct constructor and no conversion to
+  per-input `Limit`;
 - configured `L - 1`/`L`/`L + 1` thresholds for nonzero `L`, including
   63/64/65 and 255/256/257, plus zero-disabled first-byte rejection;
-- over-ceiling strict input returning `Limit` without finishing an unbounded
+- over-limit strict input returning `Limit` without finishing an unbounded
   token scan;
 - typed AP-backed length check before projection/copy;
 - opaque within-ceiling non-finite-projecting Numbers retained losslessly;
@@ -171,8 +195,9 @@ include:
 - insufficient lifetime remainder -> `Limit` before work;
 - zero-budget no-progress;
 - repeated projection charging;
-- one <=256-byte bounded cancellation interval satisfying the declared
-  constrained latency/stack workload, including slower fallback inputs; and
+- a finite, supported `L` with complete atomic debit and temporary-resource
+  envelope, cancellation checkpoints around one projection, and slower-path
+  coverage appropriate to the selected implementation; and
 - Host plus real constrained/thumb coverage.
 
 The #81/#82 very long Number witnesses become negative resource-boundary tests,

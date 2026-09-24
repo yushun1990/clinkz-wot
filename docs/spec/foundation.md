@@ -117,16 +117,41 @@ admission resource, with named profile projection 256/NA/64 for
 gateway/directory-client/benchmark-static-reference. There is no Directory-client
 validation owner for this row. It is provisional until its Consumer owner is
 implemented; generated schema plumbing alone makes no runtime-enforcement claim.
-Its project hard maximum is 256 bytes: named or application-defined profiles may lower the
-configured value but MUST NOT raise it above 256. The row bounds one Number
-lexeme before bounded numeric projection or lossless retained copying. It does
+The 256 and 64 values are provisional named-profile capacities, not a
+project-wide maximum or target feasibility claim. The TD-owned
+`ValidatedThingAdmissionConfig::try_from_limits` projection MUST bind only the
+fields consumed by `ValidatedThing` admission. It is an operation-local checked
+view, not the complete Consumer role/profile/execution-cell builder described
+above. It MUST NOT reject `None` in unrelated Consumer fields such as
+`pending_client_calls_per_binding_max`; the resource-profile owner separately
+validates complete role and execution-cell applicability. Thus the benchmark
+static reference profile remains a valid input to this projection despite its
+unrelated Host Consumer fields being `NA`. Success of this TD projection does
+not certify the complete `ResourceLimits` profile.
+
+Within the `ValidatedThing` admission-field catalog, the TD projection validates
+a finite configured `L` against the selected implementation's representable
+complete atomic work debit and bounded temporary resource envelope. It computes
+the prefix maximum `M` supported by the implementation and policy, for which
+every lexical length through `M` has that complete envelope; a missing required
+admission field or `L > M` returns a `ValidatedThingConfigError` before any
+parent/global allowance, child ledger, input inspection, or normalization
+state-machine entry. Both direct `ValidatedThing` admission constructors accept
+only the successful opaque projection, never raw `ResourceLimits`.
+Configuration rejection is therefore not a per-input
+`ValidatedThingProgress::Limit`.
+
+The row bounds one Number lexeme before bounded numeric projection or lossless
+retained copying. Zero disables Number admission within a selected Consumer
+role; it does not change role applicability or feature support. The row does
 not declare every JSON Number to be binary64 and does not replace aggregate
-document/source/work limits. For a configured `L` in `0..=256`, strict admission
+document/source/work limits. For a validated configured `L`, strict admission
 rejects at the first excess Number byte (`L + 1`) without finishing the scan or
 copying the rejected byte; typed admission checks borrowed lexical length before
 projection/copy. Zero rejects the first Number byte, and 64 admits a 64-byte
-Number but rejects at byte 65. The future owning builder validates the hard
-maximum; raw `ResourceLimits` construction remains low-level assembly.
+Number but rejects at byte 65. Raw `ResourceLimits` construction validates only
+schema-level invariants and deliberately cannot validate this role- and
+implementation-dependent atomic envelope.
 
 `RES-LIMIT-002`: A resource-policy violation MUST stop before rejected work or
 externally reachable publication and return a structured limit category naming
@@ -290,7 +315,7 @@ For bounded admission, JSON Number lexing, borrowed lexical inspection, and
 lossless copying remain byte-charged work. When one of the five TD Basic
 `serde_json::Value::Number` predicates needs a numeric projection, the lexeme
 length `n` is already known and is bounded by the configured
-`number_lexeme_bytes_max <= 256`. Before the atomic projection starts, the
+finite `number_lexeme_bytes_max`. Before the atomic projection starts, the
 cursor debits all `n` `CodecInputBytes` units from the current step budget and
 the same `n` units from the shared non-resettable lifetime remainder. If the
 current step budget is insufficient, the operation makes no numeric progress

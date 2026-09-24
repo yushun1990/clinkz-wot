@@ -66,8 +66,9 @@ and it remains synchronous.
 
 With the capability on, `Scan` still demonstrates borrowed source delivery
 under existing byte work and lifetime accounting. `project` witnesses the
-separate bounded-atomic step: check the <=256 lexical ceiling, precharge
-`CodecInputBytes` against step and lifetime, then run the public projection
+separate bounded-atomic step using this fixture's 256-byte profile value:
+check the configured lexical limit, precharge `CodecInputBytes` against step
+and lifetime, then run the public projection
 between two cancellation checks. Typed-borrow checks cover 64/65 and 256/257
 bytes. This is a narrow source/feature witness, not strict tokenization or
 an admitted cursor.
@@ -76,7 +77,7 @@ an admitted cursor.
 
 Scan witnesses public byte access with a borrowed slice, fixed state, existing
 WorkBudget and a non-resettable lifetime. The atomic witness does not prove
-the target's 1 ms / 4,096-byte stack workload, strict JSON over-ceiling early
+any target cycle/stack tolerance, strict JSON over-limit early
 stop, normalized storage, complete Basic comparison traversal, ledger, or
 rollback. The full pre-readmission evidence set remains required.
 

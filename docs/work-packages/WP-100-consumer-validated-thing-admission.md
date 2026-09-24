@@ -19,13 +19,15 @@ boundary and the explicit `validated-thing -> serde_json/arbitrary_precision`
 feature-access finding. Their exact-decimal / byte-resumable arithmetic clauses
 are superseded by [workspace topic 0069](../../workspace/0069-bounded-atomic-number-domain.md),
 the [bounded-atomic Number amendment](../amendments/WP-100-bounded-atomic-number-v1.md),
-and [workspace migration record 0070](../../workspace/0070-bounded-atomic-number-authority-migration.md).
+and [workspace migration record 0070](../../workspace/0070-bounded-atomic-number-authority-migration.md)
+(historical migration evidence, reviewed in github-pr:87).
+The current [resource-authority migration record 0071](../../workspace/0071-constrained-resource-authority-and-target-characterization.md)
+supersedes 0070's project-wide 256-byte and physical-M4 readmission clauses.
 The AP capability, semver floor, and Host/thumb/downstream feature matrix from
 0068 remain current; AP is lexical-access authority rather than an
 arbitrary-precision arithmetic promise.
 
-Bounded-atomic Number authority migration review location: github-pr:87
-(independent acceptance pending).
+Current bounded-atomic Number authority migration review location: github-pr:92.
 
 The prior exact-caller-`Thing`, serde_json representation-guard boundary
 accepted by github-pr:72 is superseded. Github-pr:75 remains the impact review
@@ -51,6 +53,7 @@ status, and PLAN text never entered master.
 The affected active requirements remain exactly:
 
 - `DOC-RUNTIME-001`;
+- `RES-LIMIT-001`;
 - `ADMIT-MEM-001`;
 - `ADMIT-TXN-001`;
 - `CONSTRAINED-WORK-001`;
@@ -58,9 +61,10 @@ The affected active requirements remain exactly:
 - `CONSTRAINED-OWN-001`.
 
 One append-only named resource-limit row is added by this authority migration:
-`number_lexeme_bytes_max`. It has a project hard maximum of 256 bytes; named
-profiles may lower it but no profile or application-defined configuration may
-raise it. No new `WorkClass`, ledger account, allocation category, or state
+`number_lexeme_bytes_max`. The named 256/64 values are provisional profile
+policy. Each selected Consumer profile must bind a finite value supported by
+its projection implementation and complete work/temporary-resource envelope.
+No new `WorkClass`, ledger account, allocation category, or state
 machine is required. The existing `DocumentNodes`, `JsonSchemaNodes`,
 `CodecInputBytes`, `CodecOutputBytes`, `UriBytes`, `SecurityBranches`, and
 `CleanupItems` classes cover the complete work described below.
@@ -136,8 +140,9 @@ every bounded-admission graph. Every source/emitted byte is charged. No scalar
 formatting branch, dependency-feature detection, or private serde callback
 representation is used. Before any bounded numeric projection, the borrowed
 Number lexeme is checked against the configured `number_lexeme_bytes_max`,
-which itself may not exceed 256. No intermediate `String`, second owned Number,
-or serializer output may be allocated. The normalized form preserves the typed
+which must be finite and validated for the selected projection implementation.
+No intermediate `String`, second owned Number, or serializer output may be
+allocated. The normalized form preserves the typed
 Number and its lossless content; arithmetic projection used by Basic does not
 collapse distinct typed/lexical Number values for fieldwise equivalence.
 
@@ -160,14 +165,19 @@ Bounded admission applies one per-Number lexical resource boundary before
 lossless retention or numeric projection:
 
 - `number_lexeme_bytes_max` is a named per-item byte limit;
-- the project hard ceiling is 256 bytes;
-- the Consumer `+validated-thing` owner uses gateway 256 and benchmark static
-  reference 64; directory-client is `NA` because it has no validation owner;
-- profiles may lower but may not raise the project hard ceiling;
-- for configured `L` in `0..=256`, strict JSON decoding returns `Limit` as soon
+- the Consumer `+validated-thing` owner uses provisional gateway 256 and
+  benchmark static reference 64 profile values; directory-client is `NA`
+  because it has no validation owner;
+- each selected profile's raw limits must first pass
+  `ValidatedThingAdmissionConfig::try_from_limits`; its opaque result is the
+  only value accepted by either direct admission entry; this projection checks
+  only fields consumed by `ValidatedThing` admission, and missing required or
+  finite implementation-unsupported `L` values fail before the progress machine
+  as configuration errors, not per-input `Limit`;
+- for validated `L`, strict JSON decoding returns `Limit` as soon
   as byte `L + 1` of one Number token is observed, before copying that byte or
-  finishing the scan (64/65 and 256/257 respectively); zero rejects the first
-  Number byte, including opaque Numbers; and
+  finishing the scan (64/65 and 256/257 for the named profiles); zero rejects
+  the first Number byte, including opaque Numbers; and
 - typed compatibility admission checks borrowed `Number::as_str().len()` before
   projection or lossless copy.
 
@@ -207,7 +217,7 @@ JSON lexing, lossless Number-byte capture, and byte copying remain ordinary
 charged/resumable work. Numeric projection/comparison after the lexical bound is
 one bounded atomic operation.
 
-For one Number lexeme of length `n`, with `0 < n <= L <= 256`, before projection starts:
+For one Number lexeme of length `n`, with `0 < n <= L`, before projection starts:
 
 1. debit `n` `CodecInputBytes` units from the current `WorkBudget`;
 2. debit the same `n` units from the shared non-resettable admission lifetime
@@ -219,10 +229,10 @@ For one Number lexeme of length `n`, with `0 < n <= L <= 256`, before projection
 6. perform only constant-size scalar comparison after projection under the
    containing schema-node charge.
 
-Thus one uninterrupted numeric projection has a hard <=256-byte input bound.
-`CONSTRAINED-PROGRESS-001` also requires the constrained latency/stack workload
-declared by the Number amendment to pass; input finiteness alone is not that
-evidence. Zero budget still makes no numeric progress. If a Number must be
+Thus one uninterrupted numeric projection has the selected profile's validated
+finite input bound. Cycle latency and stack margins for a particular target are
+product characterization, not generic admission conditions. Zero budget still
+makes no numeric progress. If a Number must be
 projected again, the repeated projection is charged again; no rescan is free.
 
 Ordinary public `Thing::validate_with_level(Basic)` remains synchronous and
@@ -256,7 +266,7 @@ thresholds, including 63/64/65 and 255/256/257, zero-disabled first-byte rejecti
 short overflow such as predicate `1e309`, binary64 rounding near exact-integer
 precision, ordinary underflow behavior in each resolved graph, repeated
 projection charging, zero/small budgets, step-budget `Pending`, lifetime
-`Limit`, cancellation around one <=256-byte atomic projection, and strict/typed
+`Limit`, cancellation around one at-most-`L`-byte atomic projection, and strict/typed
 parity wherever the same Number is constructible. The #81/#82 very long
 witnesses are now negative resource-boundary cases rather than values the
 runtime must successfully compare exactly.
@@ -265,9 +275,9 @@ runtime must successfully compare exactly.
 
 TD does not depend on Core progress or error types. Every replacement item,
 including views, diagnostics and methods, requires `td/validated-thing` in
-each profile. Signatures, ownership and terminal behavior stay unchanged;
-capability availability is the only public-surface delta. The replacement
-surface is:
+each profile. The replacement surface, including its pre-entry configuration
+projection, is frozen below. Configuration rejection does not add a progress
+terminal.
 
 ```rust
 use clinkz_wot_foundation::{AdmissionLedger, ResourceKind, ResourceLimits, WorkBudget};
@@ -278,6 +288,34 @@ pub struct ValidatedThingCursor<'a> {
 
 pub struct ValidatedThingBuilder<'a> {
     /* borrows JSON input; owns project-controlled decode/build state and ledger */
+}
+
+pub struct ValidatedThingAdmissionConfig {
+    /* opaque checked copy of the limits applicable to this admission surface */
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ValidatedThingConfigErrorKind {
+    MissingAdmissionLimit,
+    UnsupportedLimit,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct ValidatedThingConfigError {
+    /* error kind, ResourceKind, configured value, and optional supported maximum */
+}
+
+impl ValidatedThingConfigError {
+    pub const fn kind(&self) -> ValidatedThingConfigErrorKind;
+    pub const fn resource_kind(&self) -> ResourceKind;
+    pub const fn configured(&self) -> Option<u64>;
+    pub const fn supported_max(&self) -> Option<u64>;
+}
+
+impl ValidatedThingAdmissionConfig {
+    pub fn try_from_limits(
+        limits: &ResourceLimits,
+    ) -> Result<Self, ValidatedThingConfigError>;
 }
 
 #[must_use]
@@ -357,7 +395,7 @@ impl ValidatedThingConversionError {
 impl<'a> ValidatedThingCursor<'a> {
     pub fn from_thing(
         thing: &'a Thing,
-        limits: &ResourceLimits,
+        config: &ValidatedThingAdmissionConfig,
         ledger: AdmissionLedger,
     ) -> Self;
 
@@ -371,7 +409,7 @@ impl<'a> ValidatedThingCursor<'a> {
 impl<'a> ValidatedThingBuilder<'a> {
     pub fn from_json(
         input: &'a [u8],
-        limits: &ResourceLimits,
+        config: &ValidatedThingAdmissionConfig,
         ledger: AdmissionLedger,
     ) -> Self;
 
@@ -383,21 +421,57 @@ impl<'a> ValidatedThingBuilder<'a> {
 }
 ```
 
-Both entry constructors copy only their fixed applicable limit values and move
-one unpublished `AdmissionLedger`; they perform no externally influenced work
-or allocation. The two cursor types and `ValidatedThing` implement neither
-`Clone` nor `Copy`. There is no unchecked constructor, `thing()`, `into_thing`,
-mutable view, raw-arena view, or public storage offset.
+`ValidatedThingAdmissionConfig::try_from_limits` is the only public constructor
+for the opaque operation-local configuration projection. Its frozen admission-
+field catalog contains only `ResourceKind` values consumed by the two
+`ValidatedThing` entries and the normalization, work, allocation, and cleanup
+flow specified below. It is not derived from every schema row whose
+`capability_roles` contains `consumer`, and it does not validate complete role,
+profile, compilation-cell, or execution-model applicability. In particular,
+`pending_client_calls_per_binding_max` and the other Binding, Planning,
+subscription, emission, and Servient runtime fields are outside this catalog.
+The resource-profile owner performs that complete applicability validation at
+its own boundary.
 
-The moved ledger owns the per-owner/per-admission physical accounts. Before a
-constructor is called, the admission coordinator separately commits the
-applicable parent/global allowance and caps this operation from the same
-immutable `ResourceLimits`. That outer owner remains paired with the cursor,
+In fixed work over this narrower catalog, the projection rejects each required
+`None` as `MissingAdmissionLimit`; that error names the missing `ResourceKind`
+and reports `configured() == None` and `supported_max() == None`. Unrelated `NA`
+values are neither copied nor rejected, so the benchmark static reference
+profile can project its required 64-byte Number limit despite its Host-only
+Consumer fields being `NA`. For `number_lexeme_bytes_max`, the only
+implementation-dependent support check in this tranche, it computes the prefix
+maximum `M` for which every lexical length through `M` is supported jointly by
+the selected implementation's input representation, complete atomic
+step/lifetime debit, and the selected policy's bounded temporary-resource
+envelope. A finite `L > M` is `UnsupportedLimit`; its error names
+`ResourceKind::NumberLexemeBytesMax`, reports `configured() == Some(L)`, and
+reports `supported_max() == Some(M)`. The projection performs no allocation or
+input access. It returns before any parent/global allowance, child-ledger
+construction or transfer, or normalization state-machine entry.
+
+Both direct entry constructors accept only this successful projection, copy
+only its fixed admission-field values, and move one unpublished
+`AdmissionLedger`; they perform no externally influenced work or allocation.
+There is no public field or unchecked constructor with which to forge or bypass
+the projection. A configuration error therefore cannot be reported as
+`ValidatedThingProgress::Limit`: no cursor or progress value exists yet. The two
+cursor types and `ValidatedThing` implement neither `Clone` nor `Copy`. There is
+no unchecked admission constructor, `thing()`, `into_thing`, mutable view,
+raw-arena view, or public storage offset.
+
+The resource-profile owner first validates the complete selected role and
+execution-cell projection at its own boundary. For this operation, the admission
+coordinator then obtains `ValidatedThingAdmissionConfig` from the same immutable
+`ResourceLimits`; TD success does not certify the complete profile. Only after
+both checks succeed does the coordinator separately commit the applicable
+parent/global allowance, construct the child ledger from the same limits, and
+call one direct entry constructor. The moved ledger owns the per-owner/per-
+admission physical accounts. The outer owner remains paired with the cursor,
 reconciles from `ValidatedThingFootprint` on `Complete`, and releases on every
 other terminal or cursor drop. TD never treats the child ledger as a global
-aggregator. The future Servient implementation owns this pairing; external
-pre-code fixtures must provide an equivalent parent owner. This docs migration
-does not implement or admit that Servient work.
+aggregator. The future Servient implementation owns this pairing; external pre-
+code fixtures must provide an equivalent parent owner. This docs migration does
+not implement or admit that Servient work.
 
 `from_thing` is the compatibility entry. The input remains immutably borrowed
 until terminal progress and is never retained by `ValidatedThing`. Its resource
@@ -503,9 +577,10 @@ This amendment resolves only the source-boundary omission. Readmission item 6
 still requires executable shared-decoder traces, and items 2, 3, 5, and 7 still
 require allocation, typed parity, supported-cell, and resource proof covering
 this extraction. None of the eight items is completed here. A required new
-WorkClass, public API, allocation category, or broader ownership/lifecycle
-change stops work for a new impact review. The one `number_lexeme_bytes_max`
-resource row is the only newly authorized resource-schema addition.
+WorkClass, public API beyond the frozen pre-entry configuration and admission
+surface above, allocation category, or broader ownership/lifecycle change stops
+work for a new impact review. The one `number_lexeme_bytes_max` resource row is
+the only newly authorized resource-schema addition.
 
 ## Frozen footprint and semantic view
 
@@ -878,7 +953,11 @@ An independent exact-head review must accept all of the following before any
 
 1. Compile-only proof of every frozen public signature and compile-fail proof
    of the removed `new(Thing)`, `ValidatedThingStep`, `thing()`, mutable/raw
-   storage, and unchecked-construction surfaces.
+   storage, and unchecked-construction surfaces. It must prove that neither
+   direct entry accepts `&ResourceLimits`, that
+   `ValidatedThingAdmissionConfig::try_from_limits` is the only public
+   projection constructor, and that no configuration error can be injected into
+   `ValidatedThingProgress`.
 2. A source-level prototype of the three retained and four temporary allocation
    sites, checked formulas, grow/seal overlap, trivially destructible arena
    elements, and one-reservation-per-actual-`Layout` ledger ordering.
@@ -906,24 +985,37 @@ An independent exact-head review must accept all of the following before any
    evidence with all frozen signatures and the complete construction model;
    the feature prototype alone does not complete this item. Order/combined
    remain Host-only because the upstream feature enables std.
-6. Exact progress traces for Basic validation, typed/direct decode,
-   normalization, sorting, URI/string/number handling, seal, diagnostics,
-   cancellation, every rollback cause, zero-budget no-progress, lifetime-
-   budget non-reset, and prepaid bounded cursor drop. Number traces must cover
-   configured `L - 1`/`L`/`L + 1` thresholds, including 63/64/65 and 255/256/257,
-   zero-disabled first-byte rejection; strict over-limit stop without a finishing
-   scan; typed AP length check before projection/copy; short failed projection;
-   rounding; repeated projection charging; step-budget `Pending`; lifetime
-   `Limit`; cancellation immediately before/after one <=256-byte atomic
-   projection; the amendment's declared Cortex-M4 public-projection workload
-   with accepted maximum cycle and stack results, including slower fallback
-   coverage; and #81/#82 long witnesses as resource-limit cases rather than
-   successful comparisons. A host run or thumb compile alone does not complete
-   this item.
+6. Exact pre-entry configuration and progress traces for Basic validation,
+   typed/direct decode, normalization, sorting, URI/string/number handling,
+   seal, diagnostics, cancellation, every rollback cause, zero-budget
+   no-progress, lifetime-budget non-reset, and prepaid bounded cursor drop.
+   Configuration traces must accept the gateway 256 and benchmark static 64
+   values, prove that benchmark `NA` in unrelated Host Consumer fields including
+   `pending_client_calls_per_binding_max` is ignored by this projection, reject
+   Directory-client `NA` as `MissingAdmissionLimit` because the Number field
+   itself is admission-required, and reject at least one finite application-
+   defined `L > M` as `UnsupportedLimit`, with exact
+   resource/configured/supported coordinates. Both failures must precede parent
+   allowance, ledger construction or move, input observation, and state-machine
+   entry, and neither may surface as per-input `Limit`. Number progress traces
+   must cover configured `L - 1`/`L`/`L + 1` thresholds, including 63/64/65 and
+   255/256/257, zero-disabled first-byte rejection; strict over-limit stop
+   without a finishing scan; typed AP length check before projection/copy;
+   short failed projection; rounding; repeated projection charging; step-budget
+   `Pending`; lifetime `Limit`; cancellation immediately before/after one
+   projection at the selected finite `L`, with a supported atomic
+   work/temporary-resource envelope and slower projection-path coverage in the
+   chosen implementation; and #81/#82 long witnesses as resource-limit cases
+   rather than successful comparisons. A host run or thumb compile alone does
+   not complete the supported-cell evidence in item 5 or this progress proof;
+   physical M4 cycle/stack measurements are required only for a separately
+   declared target or product claim.
 7. A resource proof mapping source, temporary, peak, actual contiguous request,
    diagnostics, cleanup, reclassification, the new per-Number lexical limit,
    and inline Servient-owner capacity to authority without treating aggregate
-   capacity as one allocation.
+   capacity as one allocation. It must derive the selected implementation's
+   supported `M` from representable input/work and bounded temporary resources
+   rather than silently restoring 256 as a project-wide maximum.
 8. Reaffirmation that github-pr:69 Foundation behavior, github-pr:70's Context
    seam, the active resource schema plus the one appended Number field,
    completed WP-200/WP-300 evidence, and the passed Producer Property Read gate
@@ -962,7 +1054,11 @@ It must prove:
    every observed value and actual largest request fits its reservation.
 6. Below/equal/above and checked-arithmetic cases for every applicable source,
    temporary, peak, actual-contiguous, structural, diagnostic, cleanup,
-   lifetime-work, and `number_lexeme_bytes_max` boundary. Rejected allocation
+   lifetime-work, and `number_lexeme_bytes_max` boundary. Production evidence
+   repeats missing and finite-unsupported configuration rejection through the
+   sole opaque projection, proves unrelated Consumer `NA` values remain outside
+   its admission-field catalog, proves the direct entries cannot bypass it, and
+   keeps those failures outside `ValidatedThingProgress`. Rejected allocation
    or work never occurs first.
 7. Terminal ownership for invalid input, Basic invalidity, limit, cancellation,
    allocation/arithmetic/equivalence failure, and deep-input rejection, with no

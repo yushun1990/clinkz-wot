@@ -28,7 +28,7 @@ Topics are retained after migration as decision history.
 
 ** OPEN
 
-- [[file:0071-constrained-resource-authority-and-target-characterization.md][0071 Constrained Resource Authority and Target Characterization]]
+- None.
 
 ** DISCUSSING
 
@@ -40,6 +40,7 @@ Topics are retained after migration as decision history.
 
 ** MIGRATED
 
+- [[file:0071-constrained-resource-authority-and-target-characterization.md][0071 Constrained Resource Authority and Target Characterization]]
 - [[file:0066-shared-rfc3339-decode-impact.md][0066 Shared RFC3339 Decode Impact]]
 - [[file:0065-liballoc-btreemap-retained-representation-impact.md][0065 liballoc BTreeMap Retained Representation Impact]]
 - [[file:0064-serde-json-retained-representation-impact.md][0064 serde_json Retained Representation Impact]]
