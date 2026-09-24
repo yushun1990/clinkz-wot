@@ -27,7 +27,7 @@ pub fn predicate_number(value: Option<&Value>) -> PredicateNumber {
 // full frozen ValidatedThing public API.
 #[cfg(feature = "validated-thing")]
 pub mod bounded {
-    use clinkz_wot_foundation::{WorkBudget, WorkClass};
+    use clinkz_wot_foundation::{ResourceKind, ResourceLimits, WorkBudget, WorkClass};
     use serde_json::Number;
 
     use super::PredicateNumber;
@@ -51,22 +51,77 @@ pub mod bounded {
         Pending,
         Limit,
         Cancelled,
-        InvalidConfiguration,
         Complete(PredicateNumber),
+    }
+
+    /// Narrow Number-step witness. The eventual admission configuration must
+    /// also validate the other fields consumed by the complete TD conversion.
+    pub struct NumberStepConfig {
+        ceiling: usize,
+    }
+
+    #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+    pub enum ConfigErrorKind {
+        MissingAdmissionLimit,
+        UnsupportedLimit,
+    }
+
+    #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+    pub struct ConfigError {
+        pub kind: ConfigErrorKind,
+        pub resource_kind: ResourceKind,
+        pub configured: Option<u64>,
+        pub supported_max: Option<u64>,
+    }
+
+    impl NumberStepConfig {
+        pub fn try_from_limits(limits: &ResourceLimits) -> Result<Self, ConfigError> {
+            let work_kind = ResourceKind::DocumentValidationWorkUnitsMax;
+            let work = limits.get(work_kind).ok_or(ConfigError {
+                kind: ConfigErrorKind::MissingAdmissionLimit,
+                resource_kind: work_kind,
+                configured: None,
+                supported_max: None,
+            })?;
+            let number_kind = ResourceKind::NumberLexemeBytesMax;
+            let length = limits.get(number_kind).ok_or(ConfigError {
+                kind: ConfigErrorKind::MissingAdmissionLimit,
+                resource_kind: number_kind,
+                configured: None,
+                supported_max: None,
+            })?;
+
+            // This prototype's Number step can precharge only what its
+            // lifetime policy and input index can represent. The complete
+            // normalizer still needs to prove its temporary-resource bound.
+            let supported_max = work.min(usize::MAX as u64);
+            if length > supported_max {
+                return Err(ConfigError {
+                    kind: ConfigErrorKind::UnsupportedLimit,
+                    resource_kind: number_kind,
+                    configured: Some(length),
+                    supported_max: Some(supported_max),
+                });
+            }
+            Ok(Self {
+                ceiling: length as usize,
+            })
+        }
+
+        pub const fn ceiling(&self) -> usize {
+            self.ceiling
+        }
     }
 
     pub fn project(
         number: &Number,
-        ceiling: usize,
+        config: &NumberStepConfig,
         budget: &mut WorkBudget,
         lifetime: &mut u64,
         mut cancelled: impl FnMut() -> bool,
     ) -> ProjectionProgress {
         let length = decimal(number).len();
-        if ceiling > 256 {
-            return ProjectionProgress::InvalidConfiguration;
-        }
-        if length > ceiling {
+        if length > config.ceiling {
             return ProjectionProgress::Limit;
         }
         let charge = length as u64;

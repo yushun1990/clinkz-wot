@@ -123,10 +123,90 @@ mod tests {
 
     #[cfg(feature = "validated-thing")]
     #[test]
+    fn number_step_configuration_precedes_progress_and_has_profile_coordinates() {
+        use clinkz_wot_foundation::{
+            BenchmarkStaticReferenceV1, DirectoryClientDefaultV1, GatewayDefaultV1, ResourceKind,
+            StaticResourceProfile, WorkBudget, WorkClass,
+        };
+        use number_boundary_td_prototype::bounded::{
+            ConfigError, ConfigErrorKind, NumberStepConfig, ProjectionProgress, project,
+        };
+
+        assert_eq!(
+            NumberStepConfig::try_from_limits(GatewayDefaultV1::limits())
+                .unwrap()
+                .ceiling(),
+            256
+        );
+        // This profile has unrelated Host Consumer fields marked NA.
+        assert_eq!(
+            BenchmarkStaticReferenceV1::limits().pending_client_calls_per_binding_max(),
+            None
+        );
+        assert_eq!(
+            NumberStepConfig::try_from_limits(BenchmarkStaticReferenceV1::limits())
+                .unwrap()
+                .ceiling(),
+            64
+        );
+        assert_eq!(
+            NumberStepConfig::try_from_limits(DirectoryClientDefaultV1::limits()).err(),
+            Some(ConfigError {
+                kind: ConfigErrorKind::MissingAdmissionLimit,
+                resource_kind: ResourceKind::NumberLexemeBytesMax,
+                configured: None,
+                supported_max: None,
+            })
+        );
+        let work = GatewayDefaultV1::limits()
+            .document_validation_work_units_max()
+            .unwrap();
+        let unsupported = GatewayDefaultV1::limits()
+            .clone()
+            .with_limit(ResourceKind::NumberLexemeBytesMax, Some(work + 1));
+        assert_eq!(
+            NumberStepConfig::try_from_limits(&unsupported).err(),
+            Some(ConfigError {
+                kind: ConfigErrorKind::UnsupportedLimit,
+                resource_kind: ResourceKind::NumberLexemeBytesMax,
+                configured: Some(work + 1),
+                supported_max: Some(work),
+            })
+        );
+        let missing_work = GatewayDefaultV1::limits()
+            .clone()
+            .with_limit(ResourceKind::DocumentValidationWorkUnitsMax, None);
+        assert_eq!(
+            NumberStepConfig::try_from_limits(&missing_work)
+                .err()
+                .unwrap()
+                .resource_kind,
+            ResourceKind::DocumentValidationWorkUnitsMax
+        );
+
+        // The prototype has no universal 256-byte ceiling: a valid selected
+        // policy can pass a larger Number through this narrow step.
+        let larger = GatewayDefaultV1::limits()
+            .clone()
+            .with_limit(ResourceKind::NumberLexemeBytesMax, Some(257));
+        let config = NumberStepConfig::try_from_limits(&larger).unwrap();
+        let number: Number = format!("1e+{}1", "0".repeat(253)).parse().unwrap();
+        assert_eq!(number.as_str().len(), 257);
+        let mut budget = WorkBudget::new().with_remaining(WorkClass::CodecInputBytes, 257);
+        let mut lifetime = 257;
+        assert_eq!(
+            project(&number, &config, &mut budget, &mut lifetime, || false),
+            ProjectionProgress::Complete(PredicateNumber::Finite(10.0))
+        );
+    }
+
+    #[cfg(feature = "validated-thing")]
+    #[test]
     fn borrowed_lexeme_and_precharged_projection_are_capability_scoped() {
+        use clinkz_wot_foundation::{GatewayDefaultV1, StaticResourceProfile};
         use clinkz_wot_foundation::{WorkBudget, WorkClass};
         use number_boundary_td_prototype::bounded::{
-            Progress, ProjectionProgress, Scan, decimal, project,
+            NumberStepConfig, Progress, ProjectionProgress, Scan, decimal, project,
         };
 
         fn budget(n: u64) -> WorkBudget {
@@ -134,6 +214,7 @@ mod tests {
         }
 
         let number: Number = "2.5".parse().unwrap();
+        let config = NumberStepConfig::try_from_limits(GatewayDefaultV1::limits()).unwrap();
         let source = decimal(&number);
         assert_eq!(source, "2.5");
         assert_eq!(source.as_ptr(), number.as_str().as_ptr());
@@ -157,18 +238,18 @@ mod tests {
 
         let mut lifetime = 3;
         assert_eq!(
-            project(&number, 256, &mut budget(2), &mut lifetime, || false),
+            project(&number, &config, &mut budget(2), &mut lifetime, || false),
             ProjectionProgress::Pending
         );
         assert_eq!(lifetime, 3);
         assert_eq!(
-            project(&number, 256, &mut budget(3), &mut 2, || false),
+            project(&number, &config, &mut budget(3), &mut 2, || false),
             ProjectionProgress::Limit
         );
         let mut allowance = budget(3);
         let mut cancellation_checks = 0;
         assert_eq!(
-            project(&number, 256, &mut allowance, &mut lifetime, || {
+            project(&number, &config, &mut allowance, &mut lifetime, || {
                 cancellation_checks += 1;
                 false
             }),
@@ -180,14 +261,14 @@ mod tests {
 
         let mut lifetime = 3;
         assert_eq!(
-            project(&number, 256, &mut budget(3), &mut lifetime, || true),
+            project(&number, &config, &mut budget(3), &mut lifetime, || true),
             ProjectionProgress::Cancelled
         );
         assert_eq!(lifetime, 3);
         let mut checks = 0;
         let mut allowance = budget(3);
         assert_eq!(
-            project(&number, 256, &mut allowance, &mut lifetime, || {
+            project(&number, &config, &mut allowance, &mut lifetime, || {
                 checks += 1;
                 checks == 2
             }),
@@ -201,7 +282,7 @@ mod tests {
         assert_eq!(
             project(
                 &overflow,
-                256,
+                &config,
                 &mut budget(overflow_len),
                 &mut overflow_len,
                 || false
@@ -209,23 +290,34 @@ mod tests {
             ProjectionProgress::Complete(PredicateNumber::Invalid)
         );
         assert_eq!(
-            project(&number, 0, &mut budget(3), &mut 3, || false),
+            project(
+                &number,
+                &NumberStepConfig::try_from_limits(&GatewayDefaultV1::limits().clone().with_limit(
+                    clinkz_wot_foundation::ResourceKind::NumberLexemeBytesMax,
+                    Some(0),
+                ),)
+                .unwrap(),
+                &mut budget(3),
+                &mut 3,
+                || false,
+            ),
             ProjectionProgress::Limit
-        );
-        assert_eq!(
-            project(&number, 257, &mut budget(3), &mut 3, || false),
-            ProjectionProgress::InvalidConfiguration
         );
 
         // Typed public-borrow threshold; strict tokenization is out of scope.
-        for (ceiling, allowed, rejected) in [(64, 64, 65), (256, 256, 257)] {
-            for (length, result) in [
-                (
-                    allowed,
-                    ProjectionProgress::Complete(PredicateNumber::Finite(10.0)),
-                ),
-                (rejected, ProjectionProgress::Limit),
-            ] {
+        for ceiling in [64, 256] {
+            let config =
+                NumberStepConfig::try_from_limits(&GatewayDefaultV1::limits().clone().with_limit(
+                    clinkz_wot_foundation::ResourceKind::NumberLexemeBytesMax,
+                    Some(ceiling as u64),
+                ))
+                .unwrap();
+            for length in [ceiling - 1, ceiling, ceiling + 1] {
+                let result = if length <= ceiling {
+                    ProjectionProgress::Complete(PredicateNumber::Finite(10.0))
+                } else {
+                    ProjectionProgress::Limit
+                };
                 let spelling = format!("1e+{}1", "0".repeat(length - 4));
                 assert_eq!(spelling.len(), length);
                 let number: Number = spelling.parse().unwrap();
@@ -234,7 +326,7 @@ mod tests {
                 assert_eq!(
                     project(
                         &number,
-                        ceiling,
+                        &config,
                         &mut budget(length as u64),
                         &mut lifetime,
                         || false
@@ -243,6 +335,18 @@ mod tests {
                 );
                 assert_eq!(lifetime, if length <= ceiling { 0 } else { length as u64 });
             }
+        }
+
+        let config = NumberStepConfig::try_from_limits(GatewayDefaultV1::limits()).unwrap();
+        let mut lifetime = 6;
+        let mut allowance = budget(6);
+        for remaining in [3, 0] {
+            assert_eq!(
+                project(&number, &config, &mut allowance, &mut lifetime, || false),
+                ProjectionProgress::Complete(PredicateNumber::Finite(2.5))
+            );
+            assert_eq!(allowance.remaining(WorkClass::CodecInputBytes), remaining);
+            assert_eq!(lifetime, remaining);
         }
     }
 }
