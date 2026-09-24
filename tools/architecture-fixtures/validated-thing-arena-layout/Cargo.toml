@@ -1,0 +1,10 @@
+[package]
+name = "validated-thing-arena-layout-probe"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[workspace]
+
+[dependencies]
+clinkz-wot-foundation = { path = "../../../foundation", default-features = false }
