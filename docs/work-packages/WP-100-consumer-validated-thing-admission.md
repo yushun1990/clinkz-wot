@@ -19,14 +19,15 @@ boundary and the explicit `validated-thing -> serde_json/arbitrary_precision`
 feature-access finding. Their exact-decimal / byte-resumable arithmetic clauses
 are superseded by [workspace topic 0069](../../workspace/0069-bounded-atomic-number-domain.md),
 the [bounded-atomic Number amendment](../amendments/WP-100-bounded-atomic-number-v1.md),
-and [workspace migration record 0070](../../workspace/0070-bounded-atomic-number-authority-migration.md).
-The subsequent [resource-authority investigation 0071](../../workspace/0071-constrained-resource-authority-and-target-characterization.md)
+and [workspace migration record 0070](../../workspace/0070-bounded-atomic-number-authority-migration.md)
+(historical migration evidence, reviewed in github-pr:87).
+The current [resource-authority migration record 0071](../../workspace/0071-constrained-resource-authority-and-target-characterization.md)
 supersedes 0070's project-wide 256-byte and physical-M4 readmission clauses.
 The AP capability, semver floor, and Host/thumb/downstream feature matrix from
 0068 remain current; AP is lexical-access authority rather than an
 arbitrary-precision arithmetic promise.
 
-Bounded-atomic Number authority migration review location: github-pr:87.
+Current bounded-atomic Number authority migration review location: github-pr:92.
 
 The prior exact-caller-`Thing`, serde_json representation-guard boundary
 accepted by github-pr:72 is superseded. Github-pr:75 remains the impact review

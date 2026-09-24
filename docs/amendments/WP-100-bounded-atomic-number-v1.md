@@ -3,7 +3,8 @@
 Status: authority candidate for `WP-100-CONSUMER-VALIDATED-THING`; not admitted.
 
 Decision source: workspace topic 0069 / github-pr:86.
-Migration record: workspace topic 0070.
+Migration records: workspace topic 0070 (historical, github-pr:87); workspace
+topic 0071 (current resource-authority migration, github-pr:92).
 
 This amendment owns the WP-100 numeric boundary that supersedes the affected
 exact-decimal / byte-resumable clauses previously projected from workspace
