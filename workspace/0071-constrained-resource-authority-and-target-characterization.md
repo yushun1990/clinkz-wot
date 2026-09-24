@@ -353,10 +353,13 @@ field identity; no profile value, production behavior, or feature cell changed.
   `ValidatedThingAdmissionConfig::try_from_limits` projection performs the
   implementation-dependent validation. Both direct admission constructors
   require its successful result and no longer accept raw `ResourceLimits`.
-  Missing or unsupported values return `ValidatedThingConfigError` before
-  allowance, ledger, input, or normalization state; readmission evidence must
-  include a finite unsupported `L` and prove that it cannot become per-input
-  `Limit`.
+  The projection covers only fields consumed by `ValidatedThing` admission;
+  complete Consumer role and execution-cell applicability remains with the
+  resource-profile owner. Missing or unsupported admission values return
+  `ValidatedThingConfigError` before allowance, ledger, input, or normalization
+  state; readmission evidence must include benchmark success despite unrelated
+  Consumer `NA` and a finite unsupported `L` whose rejection cannot become
+  per-input `Limit`.
 - **Profile policy:** 256 for gateway and 64 for the benchmark static reference
   remain provisional named Consumer capacities; Directory-client is `NA`
   because it has no validation owner. There is no project-wide 256 maximum.

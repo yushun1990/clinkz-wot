@@ -42,11 +42,13 @@ until that owner is implemented; generated getters do not enforce admission.
 Let `L` be the selected profile's finite per-Number limit. TD owns one opaque
 implementation-bound projection,
 `ValidatedThingAdmissionConfig::try_from_limits`. It validates that `L` and
-every applicable value required by this admission surface are present, then
-computes the prefix maximum `M` for which every lexical length through `M` is
-supported jointly by the selected projection implementation, representable
-complete step/lifetime debit, and bounded temporary resource envelope in the
-selected policy. A missing applicable value or `L > M` returns
+every value consumed by this admission surface are present, then computes the
+prefix maximum `M` for which every lexical length through `M` is supported
+jointly by the selected projection implementation, representable complete
+step/lifetime debit, and bounded temporary resource envelope in the selected
+policy. It does not validate unrelated Consumer role or execution-cell fields;
+that complete applicability check belongs to the resource-profile owner. A
+missing required admission field or `L > M` returns
 `ValidatedThingConfigError` before parent/global reservation,
 child-ledger construction or transfer, input inspection, and normalization
 state-machine entry. The two direct admission constructors accept only a
@@ -167,10 +169,13 @@ remain unchanged.
 The full WP-100 pre-readmission set remains required. Numeric evidence must now
 include:
 
-- successful configuration projection of every applicable named Consumer
-  value; deterministic rejection of a Directory-client `NA` used as Consumer
-  configuration; and at least one finite application-defined `L > M` rejected
-  as `ValidatedThingConfigError` before allowance, ledger, input, or progress,
+- successful configuration projection of the gateway and benchmark static
+  reference values, including benchmark success while unrelated Host Consumer
+  fields such as `pending_client_calls_per_binding_max` remain `NA`;
+  deterministic rejection of Directory-client `NA` specifically because
+  `number_lexeme_bytes_max` is required by this admission surface; and at least
+  one finite application-defined `L > M` rejected as
+  `ValidatedThingConfigError` before allowance, ledger, input, or progress,
   with no route through either direct constructor and no conversion to
   per-input `Limit`;
 - configured `L - 1`/`L`/`L + 1` thresholds for nonzero `L`, including

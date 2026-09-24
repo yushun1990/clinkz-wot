@@ -119,17 +119,27 @@ validation owner for this row. It is provisional until its Consumer owner is
 implemented; generated schema plumbing alone makes no runtime-enforcement claim.
 The 256 and 64 values are provisional named-profile capacities, not a
 project-wide maximum or target feasibility claim. The TD-owned
-`ValidatedThingAdmissionConfig::try_from_limits` projection MUST bind the
-Consumer applicability set and validate a finite configured `L` against the
-selected implementation's representable complete atomic work debit and bounded
-temporary resource envelope. It computes the prefix maximum `M` supported by
-the implementation and policy, for which every lexical length through `M` has
-that complete envelope; a missing applicable value or `L > M` returns a
-`ValidatedThingConfigError` before any parent/global allowance, child ledger,
-input inspection, or normalization state-machine entry. Both direct
-`ValidatedThing` admission constructors accept only the successful opaque
-projection, never raw `ResourceLimits`. Configuration rejection is therefore
-not a per-input `ValidatedThingProgress::Limit`.
+`ValidatedThingAdmissionConfig::try_from_limits` projection MUST bind only the
+fields consumed by `ValidatedThing` admission. It is an operation-local checked
+view, not the complete Consumer role/profile/execution-cell builder described
+above. It MUST NOT reject `None` in unrelated Consumer fields such as
+`pending_client_calls_per_binding_max`; the resource-profile owner separately
+validates complete role and execution-cell applicability. Thus the benchmark
+static reference profile remains a valid input to this projection despite its
+unrelated Host Consumer fields being `NA`. Success of this TD projection does
+not certify the complete `ResourceLimits` profile.
+
+Within the `ValidatedThing` admission-field catalog, the TD projection validates
+a finite configured `L` against the selected implementation's representable
+complete atomic work debit and bounded temporary resource envelope. It computes
+the prefix maximum `M` supported by the implementation and policy, for which
+every lexical length through `M` has that complete envelope; a missing required
+admission field or `L > M` returns a `ValidatedThingConfigError` before any
+parent/global allowance, child ledger, input inspection, or normalization
+state-machine entry. Both direct `ValidatedThing` admission constructors accept
+only the successful opaque projection, never raw `ResourceLimits`.
+Configuration rejection is therefore not a per-input
+`ValidatedThingProgress::Limit`.
 
 The row bounds one Number lexeme before bounded numeric projection or lossless
 retained copying. Zero disables Number admission within a selected Consumer

@@ -169,9 +169,10 @@ lossless retention or numeric projection:
   because it has no validation owner;
 - each selected profile's raw limits must first pass
   `ValidatedThingAdmissionConfig::try_from_limits`; its opaque result is the
-  only value accepted by either direct admission entry, and missing or finite
-  implementation-unsupported `L` values fail before the progress machine as
-  configuration errors, not per-input `Limit`;
+  only value accepted by either direct admission entry; this projection checks
+  only fields consumed by `ValidatedThing` admission, and missing required or
+  finite implementation-unsupported `L` values fail before the progress machine
+  as configuration errors, not per-input `Limit`;
 - for validated `L`, strict JSON decoding returns `Limit` as soon
   as byte `L + 1` of one Number token is observed, before copying that byte or
   finishing the scan (64/65 and 256/257 for the named profiles); zero rejects
@@ -294,7 +295,7 @@ pub struct ValidatedThingAdmissionConfig {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ValidatedThingConfigErrorKind {
-    MissingApplicableLimit,
+    MissingAdmissionLimit,
     UnsupportedLimit,
 }
 
@@ -420,23 +421,35 @@ impl<'a> ValidatedThingBuilder<'a> {
 ```
 
 `ValidatedThingAdmissionConfig::try_from_limits` is the only public constructor
-for the opaque configuration projection. In fixed work over the frozen
-applicable-field catalog, it rejects each required `None` as
-`MissingApplicableLimit`; that error names the missing `ResourceKind` and
-reports `configured() == None` and `supported_max() == None`. For
-`number_lexeme_bytes_max`, the only implementation-dependent support check in
-this tranche, it computes the prefix maximum `M` for which every lexical length
-through `M` is supported jointly by the selected implementation's input
-representation, complete atomic step/lifetime debit, and the selected policy's
-bounded temporary-resource envelope. A finite `L > M` is `UnsupportedLimit`;
-its error names `ResourceKind::NumberLexemeBytesMax`, reports
-`configured() == Some(L)`, and reports `supported_max() == Some(M)`. The
-projection performs no allocation or input access. It returns before any
-parent/global allowance, child-ledger construction or transfer, or normalization
-state-machine entry.
+for the opaque operation-local configuration projection. Its frozen admission-
+field catalog contains only `ResourceKind` values consumed by the two
+`ValidatedThing` entries and the normalization, work, allocation, and cleanup
+flow specified below. It is not derived from every schema row whose
+`capability_roles` contains `consumer`, and it does not validate complete role,
+profile, compilation-cell, or execution-model applicability. In particular,
+`pending_client_calls_per_binding_max` and the other Binding, Planning,
+subscription, emission, and Servient runtime fields are outside this catalog.
+The resource-profile owner performs that complete applicability validation at
+its own boundary.
+
+In fixed work over this narrower catalog, the projection rejects each required
+`None` as `MissingAdmissionLimit`; that error names the missing `ResourceKind`
+and reports `configured() == None` and `supported_max() == None`. Unrelated `NA`
+values are neither copied nor rejected, so the benchmark static reference
+profile can project its required 64-byte Number limit despite its Host-only
+Consumer fields being `NA`. For `number_lexeme_bytes_max`, the only
+implementation-dependent support check in this tranche, it computes the prefix
+maximum `M` for which every lexical length through `M` is supported jointly by
+the selected implementation's input representation, complete atomic
+step/lifetime debit, and the selected policy's bounded temporary-resource
+envelope. A finite `L > M` is `UnsupportedLimit`; its error names
+`ResourceKind::NumberLexemeBytesMax`, reports `configured() == Some(L)`, and
+reports `supported_max() == Some(M)`. The projection performs no allocation or
+input access. It returns before any parent/global allowance, child-ledger
+construction or transfer, or normalization state-machine entry.
 
 Both direct entry constructors accept only this successful projection, copy
-only its fixed applicable limit values, and move one unpublished
+only its fixed admission-field values, and move one unpublished
 `AdmissionLedger`; they perform no externally influenced work or allocation.
 There is no public field or unchecked constructor with which to forge or bypass
 the projection. A configuration error therefore cannot be reported as
@@ -445,16 +458,19 @@ cursor types and `ValidatedThing` implement neither `Clone` nor `Copy`. There is
 no unchecked admission constructor, `thing()`, `into_thing`, mutable view,
 raw-arena view, or public storage offset.
 
-The admission coordinator first obtains `ValidatedThingAdmissionConfig` from
-the immutable `ResourceLimits`. Only after success does it separately commit
-the applicable parent/global allowance, construct the child ledger from the
-same limits, and call one direct entry constructor. The moved ledger owns the
-per-owner/per-admission physical accounts. The outer owner remains paired with
-the cursor, reconciles from `ValidatedThingFootprint` on `Complete`, and releases
-on every other terminal or cursor drop. TD never treats the child ledger as a
-global aggregator. The future Servient implementation owns this pairing;
-external pre-code fixtures must provide an equivalent parent owner. This docs
-migration does not implement or admit that Servient work.
+The resource-profile owner first validates the complete selected role and
+execution-cell projection at its own boundary. For this operation, the admission
+coordinator then obtains `ValidatedThingAdmissionConfig` from the same immutable
+`ResourceLimits`; TD success does not certify the complete profile. Only after
+both checks succeed does the coordinator separately commit the applicable
+parent/global allowance, construct the child ledger from the same limits, and
+call one direct entry constructor. The moved ledger owns the per-owner/per-
+admission physical accounts. The outer owner remains paired with the cursor,
+reconciles from `ValidatedThingFootprint` on `Complete`, and releases on every
+other terminal or cursor drop. TD never treats the child ledger as a global
+aggregator. The future Servient implementation owns this pairing; external pre-
+code fixtures must provide an equivalent parent owner. This docs migration does
+not implement or admit that Servient work.
 
 `from_thing` is the compatibility entry. The input remains immutably borrowed
 until terminal progress and is never retained by `ValidatedThing`. Its resource
@@ -972,9 +988,12 @@ An independent exact-head review must accept all of the following before any
    typed/direct decode, normalization, sorting, URI/string/number handling,
    seal, diagnostics, cancellation, every rollback cause, zero-budget
    no-progress, lifetime-budget non-reset, and prepaid bounded cursor drop.
-   Configuration traces must accept the applicable named 64 and 256 values,
-   reject Directory-client `NA` as `MissingApplicableLimit`, and reject at least
-   one finite application-defined `L > M` as `UnsupportedLimit`, with exact
+   Configuration traces must accept the gateway 256 and benchmark static 64
+   values, prove that benchmark `NA` in unrelated Host Consumer fields including
+   `pending_client_calls_per_binding_max` is ignored by this projection, reject
+   Directory-client `NA` as `MissingAdmissionLimit` because the Number field
+   itself is admission-required, and reject at least one finite application-
+   defined `L > M` as `UnsupportedLimit`, with exact
    resource/configured/supported coordinates. Both failures must precede parent
    allowance, ledger construction or move, input observation, and state-machine
    entry, and neither may surface as per-input `Limit`. Number progress traces
@@ -1036,9 +1055,10 @@ It must prove:
    temporary, peak, actual-contiguous, structural, diagnostic, cleanup,
    lifetime-work, and `number_lexeme_bytes_max` boundary. Production evidence
    repeats missing and finite-unsupported configuration rejection through the
-   sole opaque projection, proves the direct entries cannot bypass it, and keeps
-   those failures outside `ValidatedThingProgress`. Rejected allocation or work
-   never occurs first.
+   sole opaque projection, proves unrelated Consumer `NA` values remain outside
+   its admission-field catalog, proves the direct entries cannot bypass it, and
+   keeps those failures outside `ValidatedThingProgress`. Rejected allocation
+   or work never occurs first.
 7. Terminal ownership for invalid input, Basic invalidity, limit, cancellation,
    allocation/arithmetic/equivalence failure, and deep-input rejection, with no
    recursive unbudgeted drop and all ledger accounts returning to baseline.

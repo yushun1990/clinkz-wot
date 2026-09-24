@@ -316,11 +316,13 @@ exact contract and proof burden.
 
 TD's opaque `ValidatedThingAdmissionConfig::try_from_limits` projection is the
 mandatory pre-entry boundary for both future admission constructors. It rejects
-missing applicable values and implementation-unsupported `L` as
-`ValidatedThingConfigError` before allowance, ledger, input, or progress-state
-ownership; the constructors do not accept raw `ResourceLimits`. This
-configuration failure is outside the normalization machine and cannot be
-reported as a per-input lexical `Limit`.
+missing `ValidatedThing` admission-field values and implementation-unsupported
+`L` as `ValidatedThingConfigError` before allowance, ledger, input, or
+progress-state ownership; the constructors do not accept raw `ResourceLimits`.
+This configuration failure is outside the normalization machine and cannot be
+reported as a per-input lexical `Limit`. The projection does not validate
+unrelated Consumer role or execution-cell fields; complete profile
+applicability remains with the resource-profile owner.
 
 The frozen `ValidatedThingView` supplies allocation-free identity, Property
 iteration/lookup and ordinal, original Form indices, raw/resolved URI, content
