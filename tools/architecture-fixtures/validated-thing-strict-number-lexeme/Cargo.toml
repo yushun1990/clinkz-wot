@@ -1,0 +1,13 @@
+[package]
+name = "validated-thing-strict-number-lexeme-probe"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[workspace]
+
+[dependencies]
+clinkz-wot-foundation = { path = "../../../foundation", default-features = false }
+
+[dev-dependencies]
+serde_json = { version = "1.0.149", default-features = false, features = ["alloc", "arbitrary_precision"] }

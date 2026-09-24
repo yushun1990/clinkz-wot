@@ -56,6 +56,11 @@ jobs:
           cargo test --locked --manifest-path tools/architecture-fixtures/validated-thing-arena-layout/Cargo.toml
           cargo check --locked --target thumbv7em-none-eabihf --manifest-path tools/architecture-fixtures/validated-thing-arena-layout/Cargo.toml
 
+      - name: Check strict ValidatedThing Number lexeme boundary
+        run: |
+          cargo test --locked --manifest-path tools/architecture-fixtures/validated-thing-strict-number-lexeme/Cargo.toml
+          cargo check --locked --target thumbv7em-none-eabihf --manifest-path tools/architecture-fixtures/validated-thing-strict-number-lexeme/Cargo.toml
+
       - name: Run no-default Property Read integration tests
         run: cargo test --locked -p clinkz-wot-servient --no-default-features --test property_read
 
