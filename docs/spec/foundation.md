@@ -117,16 +117,21 @@ admission resource, with named profile projection 256/NA/64 for
 gateway/directory-client/benchmark-static-reference. There is no Directory-client
 validation owner for this row. It is provisional until its Consumer owner is
 implemented; generated schema plumbing alone makes no runtime-enforcement claim.
-Its project hard maximum is 256 bytes: named or application-defined profiles may lower the
-configured value but MUST NOT raise it above 256. The row bounds one Number
-lexeme before bounded numeric projection or lossless retained copying. It does
+The 256 and 64 values are provisional named-profile capacities, not a
+project-wide maximum or target feasibility claim. The owning builder MUST
+validate a finite configured `L` against the selected implementation's
+representable complete atomic work debit and bounded temporary resource
+envelope before admission; unsupported values are invalid configuration. The
+row bounds one Number lexeme before bounded numeric projection or lossless
+retained copying. Zero disables Number admission within a selected Consumer
+role; it does not change role applicability or feature support. The row does
 not declare every JSON Number to be binary64 and does not replace aggregate
-document/source/work limits. For a configured `L` in `0..=256`, strict admission
+document/source/work limits. For a validated configured `L`, strict admission
 rejects at the first excess Number byte (`L + 1`) without finishing the scan or
 copying the rejected byte; typed admission checks borrowed lexical length before
 projection/copy. Zero rejects the first Number byte, and 64 admits a 64-byte
-Number but rejects at byte 65. The future owning builder validates the hard
-maximum; raw `ResourceLimits` construction remains low-level assembly.
+Number but rejects at byte 65. The future owning builder validates the atomic
+envelope; raw `ResourceLimits` construction remains low-level assembly.
 
 `RES-LIMIT-002`: A resource-policy violation MUST stop before rejected work or
 externally reachable publication and return a structured limit category naming
@@ -290,7 +295,7 @@ For bounded admission, JSON Number lexing, borrowed lexical inspection, and
 lossless copying remain byte-charged work. When one of the five TD Basic
 `serde_json::Value::Number` predicates needs a numeric projection, the lexeme
 length `n` is already known and is bounded by the configured
-`number_lexeme_bytes_max <= 256`. Before the atomic projection starts, the
+finite `number_lexeme_bytes_max`. Before the atomic projection starts, the
 cursor debits all `n` `CodecInputBytes` units from the current step budget and
 the same `n` units from the shared non-resettable lifetime remainder. If the
 current step budget is insufficient, the operation makes no numeric progress

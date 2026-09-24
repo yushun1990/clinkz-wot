@@ -1,6 +1,6 @@
 # 0071 Constrained Resource Authority and Target Characterization
 
-Status: DISCUSSING — authority correction proposed; no migration or readmission
+Status: MIGRATED — ownership correction projected; no readmission
 
 Kind: architecture/resource-authority investigation
 
@@ -330,3 +330,44 @@ mandatory constraint belongs at its chosen layer.
 If the only justification for a generic requirement is performance observed or
 feared on one target class, keep the topic open and separate the target-specific
 claim from the generic runtime invariant.
+
+## Migration result
+
+The accepted investigation was projected into the Number amendment, Foundation
+and runtime-safety specifications, WP-100 core and Consumer admission records,
+the registered tranche resource-change description, and the two Number fixture
+READMEs. The historical 0070 record now points to this supersession. The
+resource CSV and generated code retain the named 256/NA/64 values and stable
+field identity; no profile value, production behavior, or feature cell changed.
+
+- **Core authority:** the Consumer owner must bind a finite, implementation-
+  supported per-Number `L` before bounded admission. It must prove a complete
+  representable atomic step/lifetime debit and bounded temporary-resource
+  envelope, reject an unsupported configuration, stop strict input at the
+  first excess byte, distinguish resource `Limit` from Basic invalidity, and
+  preserve lossless storage, shared binary64 predicate semantics, charged
+  byte work, cancellation checkpoints, and bounded diagnostics/cleanup. The
+  admission record retains its semantic, resource, progress, and Host/thumb/
+  downstream feature evidence obligations.
+- **Profile policy:** 256 for gateway and 64 for the benchmark static reference
+  remain provisional named Consumer capacities; Directory-client is `NA`
+  because it has no validation owner. There is no project-wide 256 maximum.
+  An application-defined value requires validation against its chosen
+  implementation and complete resource policy; the schema values alone do
+  not certify an MCU deployment. Zero constrains Number admission within a
+  selected role without changing role or feature support.
+- **Target/product characterization:** the M4 168,000-cycle / 4,096-byte
+  tolerance and its physical workload are optional evidence for a named claim
+  at a declared build and profile. They are no longer a generic WP-100
+  readmission prerequisite. The workload README retains a reusable corpus and
+  measurement procedure without asserting an accepted physical result.
+
+No hardware measurement was needed to resolve ownership. The independent
+resource-schema applicability/default-maturity work identified in topic 0047
+remains follow-up work; this migration did not reopen other capacity values.
+Readmission still requires separate independent acceptance of the eight
+evidence items, including an implementation-supported atomic envelope and the
+real thumb capability cell. PR #88 contains no accepted physical result and
+its board-runner evidence is no longer a required WP-100 gate; it may be
+closed separately without orphaning a required readmission item. Its branch
+can remain a reference for a later target-specific claim.

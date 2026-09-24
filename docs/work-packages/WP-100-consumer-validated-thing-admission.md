@@ -20,12 +20,13 @@ feature-access finding. Their exact-decimal / byte-resumable arithmetic clauses
 are superseded by [workspace topic 0069](../../workspace/0069-bounded-atomic-number-domain.md),
 the [bounded-atomic Number amendment](../amendments/WP-100-bounded-atomic-number-v1.md),
 and [workspace migration record 0070](../../workspace/0070-bounded-atomic-number-authority-migration.md).
+The subsequent [resource-authority investigation 0071](../../workspace/0071-constrained-resource-authority-and-target-characterization.md)
+supersedes 0070's project-wide 256-byte and physical-M4 readmission clauses.
 The AP capability, semver floor, and Host/thumb/downstream feature matrix from
 0068 remain current; AP is lexical-access authority rather than an
 arbitrary-precision arithmetic promise.
 
-Bounded-atomic Number authority migration review location: github-pr:87
-(independent acceptance pending).
+Bounded-atomic Number authority migration review location: github-pr:87.
 
 The prior exact-caller-`Thing`, serde_json representation-guard boundary
 accepted by github-pr:72 is superseded. Github-pr:75 remains the impact review
@@ -58,9 +59,10 @@ The affected active requirements remain exactly:
 - `CONSTRAINED-OWN-001`.
 
 One append-only named resource-limit row is added by this authority migration:
-`number_lexeme_bytes_max`. It has a project hard maximum of 256 bytes; named
-profiles may lower it but no profile or application-defined configuration may
-raise it. No new `WorkClass`, ledger account, allocation category, or state
+`number_lexeme_bytes_max`. The named 256/64 values are provisional profile
+policy. Each selected Consumer profile must bind a finite value supported by
+its projection implementation and complete work/temporary-resource envelope.
+No new `WorkClass`, ledger account, allocation category, or state
 machine is required. The existing `DocumentNodes`, `JsonSchemaNodes`,
 `CodecInputBytes`, `CodecOutputBytes`, `UriBytes`, `SecurityBranches`, and
 `CleanupItems` classes cover the complete work described below.
@@ -136,8 +138,9 @@ every bounded-admission graph. Every source/emitted byte is charged. No scalar
 formatting branch, dependency-feature detection, or private serde callback
 representation is used. Before any bounded numeric projection, the borrowed
 Number lexeme is checked against the configured `number_lexeme_bytes_max`,
-which itself may not exceed 256. No intermediate `String`, second owned Number,
-or serializer output may be allocated. The normalized form preserves the typed
+which must be finite and validated for the selected projection implementation.
+No intermediate `String`, second owned Number, or serializer output may be
+allocated. The normalized form preserves the typed
 Number and its lossless content; arithmetic projection used by Basic does not
 collapse distinct typed/lexical Number values for fieldwise equivalence.
 
@@ -160,14 +163,17 @@ Bounded admission applies one per-Number lexical resource boundary before
 lossless retention or numeric projection:
 
 - `number_lexeme_bytes_max` is a named per-item byte limit;
-- the project hard ceiling is 256 bytes;
-- the Consumer `+validated-thing` owner uses gateway 256 and benchmark static
-  reference 64; directory-client is `NA` because it has no validation owner;
-- profiles may lower but may not raise the project hard ceiling;
-- for configured `L` in `0..=256`, strict JSON decoding returns `Limit` as soon
+- the Consumer `+validated-thing` owner uses provisional gateway 256 and
+  benchmark static reference 64 profile values; directory-client is `NA`
+  because it has no validation owner;
+- each selected profile supplies a finite `L` validated before admission against
+  the chosen implementation's maximum atomic input, representable complete
+  step/lifetime debit, and bounded temporary-resource envelope; unsupported
+  values are invalid configuration, not per-input `Limit`;
+- for validated `L`, strict JSON decoding returns `Limit` as soon
   as byte `L + 1` of one Number token is observed, before copying that byte or
-  finishing the scan (64/65 and 256/257 respectively); zero rejects the first
-  Number byte, including opaque Numbers; and
+  finishing the scan (64/65 and 256/257 for the named profiles); zero rejects
+  the first Number byte, including opaque Numbers; and
 - typed compatibility admission checks borrowed `Number::as_str().len()` before
   projection or lossless copy.
 
@@ -207,7 +213,7 @@ JSON lexing, lossless Number-byte capture, and byte copying remain ordinary
 charged/resumable work. Numeric projection/comparison after the lexical bound is
 one bounded atomic operation.
 
-For one Number lexeme of length `n`, with `0 < n <= L <= 256`, before projection starts:
+For one Number lexeme of length `n`, with `0 < n <= L`, before projection starts:
 
 1. debit `n` `CodecInputBytes` units from the current `WorkBudget`;
 2. debit the same `n` units from the shared non-resettable admission lifetime
@@ -219,10 +225,10 @@ For one Number lexeme of length `n`, with `0 < n <= L <= 256`, before projection
 6. perform only constant-size scalar comparison after projection under the
    containing schema-node charge.
 
-Thus one uninterrupted numeric projection has a hard <=256-byte input bound.
-`CONSTRAINED-PROGRESS-001` also requires the constrained latency/stack workload
-declared by the Number amendment to pass; input finiteness alone is not that
-evidence. Zero budget still makes no numeric progress. If a Number must be
+Thus one uninterrupted numeric projection has the selected profile's validated
+finite input bound. Cycle latency and stack margins for a particular target are
+product characterization, not generic admission conditions. Zero budget still
+makes no numeric progress. If a Number must be
 projected again, the repeated projection is charged again; no rescan is free.
 
 Ordinary public `Thing::validate_with_level(Basic)` remains synchronous and
@@ -256,7 +262,7 @@ thresholds, including 63/64/65 and 255/256/257, zero-disabled first-byte rejecti
 short overflow such as predicate `1e309`, binary64 rounding near exact-integer
 precision, ordinary underflow behavior in each resolved graph, repeated
 projection charging, zero/small budgets, step-budget `Pending`, lifetime
-`Limit`, cancellation around one <=256-byte atomic projection, and strict/typed
+`Limit`, cancellation around one at-most-`L`-byte atomic projection, and strict/typed
 parity wherever the same Number is constructible. The #81/#82 very long
 witnesses are now negative resource-boundary cases rather than values the
 runtime must successfully compare exactly.
@@ -914,12 +920,14 @@ An independent exact-head review must accept all of the following before any
    zero-disabled first-byte rejection; strict over-limit stop without a finishing
    scan; typed AP length check before projection/copy; short failed projection;
    rounding; repeated projection charging; step-budget `Pending`; lifetime
-   `Limit`; cancellation immediately before/after one <=256-byte atomic
-   projection; the amendment's declared Cortex-M4 public-projection workload
-   with accepted maximum cycle and stack results, including slower fallback
-   coverage; and #81/#82 long witnesses as resource-limit cases rather than
+   `Limit`; cancellation immediately before/after one projection at the
+   selected finite `L`, with a supported atomic work/temporary-resource
+   envelope and slower projection-path coverage in the chosen implementation;
+   and #81/#82 long witnesses as resource-limit cases rather than
    successful comparisons. A host run or thumb compile alone does not complete
-   this item.
+   the supported-cell evidence in item 5 or this progress proof; physical M4
+   cycle/stack measurements are required only for a separately declared target
+   or product claim.
 7. A resource proof mapping source, temporary, peak, actual contiguous request,
    diagnostics, cleanup, reclassification, the new per-Number lexical limit,
    and inline Servient-owner capacity to authority without treating aggregate

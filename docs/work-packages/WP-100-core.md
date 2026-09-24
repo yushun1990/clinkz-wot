@@ -302,8 +302,9 @@ The planned Basic kernel keeps existing typed `NumberSchema` `f64` and
 `IntegerSchema` `i64` behavior unchanged. Only the five numeric
 `serde_json::Value::Number` schema-extension predicates use the amended
 bounded-binary64 rule. Bounded admission first applies the append-only
-`number_lexeme_bytes_max` resource, whose project hard ceiling is 256 bytes and
-which profiles may lower but not raise. Opaque within-ceiling Numbers remain
+`number_lexeme_bytes_max` resource with a finite, validated profile value.
+The named gateway 256 and benchmark static reference 64 values are provisional
+profile policy, not a project-wide maximum. Opaque within-limit Numbers remain
 losslessly retained even if they cannot project to finite `f64`. For the five
 predicates, failed/non-finite public float projection is `InvalidSchema` rather
 than an absent bound; binary64 rounding is deliberate. Numeric projection is a
@@ -438,11 +439,11 @@ host-call, subscription, typed-slot, temporary-poll, response, cancellation,
 cleanup-transfer, wake, and reactor-queue limits. Index 195 appends
 `number_lexeme_bytes_max` for WP-100 bounded admission, with named values
 256/NA/64 for gateway/directory-client/benchmark-static-reference; the owner is
-Consumer `+validated-thing`. Lower profiles enforce their configured limit
-(`L + 1` first-excess-byte rejection, including zero-disabled).
-The amendment's constrained latency/stack workload remains required before
-readmission. The active schema therefore has 196 fields while preserving every
-prior numeric identity.
+Consumer `+validated-thing`. Each selected Consumer profile enforces its
+validated limit (`L + 1` first-excess-byte rejection, including zero-disabled).
+The M4 workload characterizes only a declared target/product claim and is not
+generic readmission evidence. The active schema therefore has 196 fields while
+preserving every prior numeric identity.
 The three feature-cell compile tests, profile snapshots, and exact/one-over
 boundary tests cover the generated surface. Every bounded handler `start`,
 `step`, `cancel`, or constrained adapter poll charges its caller-supplied

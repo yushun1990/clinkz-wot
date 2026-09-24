@@ -223,7 +223,7 @@ api_items = [
 ]
 state_machines = ["validated-thing-normalization"]
 resource_changes = [
-    "Append number_lexeme_bytes_max as one Consumer +validated-thing per-Number document-byte ResourceKind at stable index 195; project hard ceiling 256 bytes, gateway 256, directory-client NA, benchmark-static-reference 64; reject at configured_limit + 1 including zero-disabled; the declared constrained latency/stack workload must pass before readmission",
+    "Append number_lexeme_bytes_max as one Consumer +validated-thing per-Number document-byte ResourceKind at stable index 195; provisional named-profile values gateway 256, directory-client NA, benchmark-static-reference 64; validate a finite, implementation-supported profile limit with complete atomic work and temporary-resource bounds before admission; reject at configured_limit + 1 including zero-disabled; target cycle/stack characterization is separate from generic readmission",
     "No new WorkClass or ledger account: numeric projection precharges existing CodecInputBytes against the current step budget and the shared non-resettable lifetime remainder before one bounded atomic projection",
     "Each Foundation ledger reservation still corresponds to one actual checked allocation Layout; aggregate retained or peak footprints are sums/observations and are never submitted as a physical contiguous allocation",
 ]

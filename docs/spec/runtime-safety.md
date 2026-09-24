@@ -123,8 +123,9 @@ copy those rules.
 The planned Consumer boundary amends only Basic's five numeric schema-extension
 predicates (`minimum`, `exclusiveMinimum`, `maximum`, `exclusiveMaximum`, and
 `multipleOf`) over `serde_json::Value::Number`. Bounded admission first applies
-the named `number_lexeme_bytes_max` resource boundary, whose project hard
-ceiling is 256 bytes and which profiles may lower but not raise. It applies to
+the named `number_lexeme_bytes_max` resource boundary. Its finite value is
+selected by the resource profile and validated against the chosen projection's
+atomic work and temporary-resource envelope before admission. It applies to
 Consumer `+validated-thing`; Directory-client is `NA`. A configured limit `L`
 rejects strict input at Number byte `L + 1` before copying that byte or finishing
 the scan; typed input checks borrowed length first. Zero disables Number
@@ -147,9 +148,9 @@ operation: the cursor debits the Number's complete `CodecInputBytes` cost and
 the same non-resettable lifetime allowance before it starts. Insufficient
 current step budget returns `Pending` with no numeric progress; insufficient
 lifetime allowance returns `Limit`. Cancellation is checked immediately before
-and after the at-most-256-byte projection. The constrained latency and stack
-acceptance workload in the Number amendment must pass before readmission;
-finite input length alone is not evidence of tolerable cancellation latency.
+and after the at-most-`L`-byte projection. This core rule does not promise a
+target cycle or stack margin; those require characterization for a named
+target/product profile.
 A repeated projection is charged again. The explicit AP feature remains
 lexical-access authority, not an
 arbitrary-precision arithmetic promise. The detailed rule and readmission proof

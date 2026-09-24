@@ -1,5 +1,10 @@
 # 0070 Bounded Atomic Number Authority Migration
 
+Historical migration record: the project-wide 256-byte ceiling and mandatory
+M4 readmission gate described here were superseded by the authority migration
+recorded in [topic 0071](0071-constrained-resource-authority-and-target-characterization.md).
+Current requirements live in the cited `docs/` owners.
+
 Status: AUTHORITY MIGRATION CANDIDATE / REVIEW REQUIRED
 
 Kind: ADR-0013 scoped implementation-impact migration for `WP-100-CONSUMER-VALIDATED-THING`
