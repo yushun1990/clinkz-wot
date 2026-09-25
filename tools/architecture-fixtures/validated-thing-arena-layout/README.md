@@ -70,3 +70,29 @@ semantic sharing, all structural/work charges, and real-target allocator
 observations remain separate pre-readmission obligations. A required fifth
 temporary allocation category or fourth retained category in the full
 conversion still returns the tranche to impact review.
+
+## Typed corpus storage slice
+
+`td/tests/support/normalized_snapshot_probe.rs` imports this arena source in
+TD's test-only `Context` child module. It uses the exact same input constructor
+as `td/tests/validated_thing_typed_corpus.rs`. The prototype walks typed
+`Thing`, `ContextEntry`, `Form`, and extension `Value` directly and seals one
+node, one edge, and one byte arena. Reserved contiguous edge ranges retain
+sequence indices and map key/value pairs. Byte ranges retain URI and string
+content and AP Number text. No snapshot element owns another allocation. The
+input `Thing` is outside the snapshot ownership boundary.
+
+Run `cargo test --locked -p clinkz-wot-td` from the repository root to execute
+both consumers of the fixed corpus. The TD test dependency selects serde
+arbitrary precision so borrowed `Number::as_str()` is available; the
+no-default library remains unchanged.
+
+The test-only placement allows inspection of private `Context.entries`
+without expanding the production Context or ValidatedThing API. The fixed
+headroom and recursive call stack are prototype mechanics; the full bounded
+cursor, traversal-frame use, all known fields/variants, allocation growth,
+sorted maps under `preserve_order`, work charging, URI/default/security queries,
+and a shared storage-neutral Basic kernel remain open. Existing Basic is used
+only while constructing the fixed typed input. The snapshot traversal does not
+copy a semantic rule or claim validation of the sealed snapshot. This is
+partial item-3 evidence, not readmission or item-3 completion.

@@ -182,6 +182,19 @@ impl Prototype {
     pub fn push_edge(&mut self, value: RetainedEdge) -> Result<(), Error> {
         self.build_edges.push(value)
     }
+    /// Fill an already initialized edge slot. This permits a parent to reserve
+    /// a contiguous range before visiting descendants, without an extra list.
+    pub fn set_edge(&mut self, index: usize, value: RetainedEdge) {
+        assert!(!self.sealed);
+        assert!(index < self.build_edges.length);
+        // SAFETY: the slot was initialized by push_edge and remains in the
+        // live build arena. RetainedEdge is Copy and has no owned contents.
+        unsafe { self.build_edges.pointer.as_ptr().add(index).write(value) };
+    }
+    pub fn build_node(&self, index: usize) -> RetainedNode {
+        assert!(!self.sealed);
+        self.build_nodes.as_slice()[index]
+    }
     pub fn push_byte(&mut self, value: u8) -> Result<(), Error> {
         self.build_bytes.push(value)
     }

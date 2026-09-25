@@ -19,6 +19,10 @@ pub struct Context {
     entries: Vec<ContextEntry>,
 }
 
+#[cfg(test)]
+#[path = "../../tests/support/normalized_snapshot_probe.rs"]
+mod normalized_snapshot_probe;
+
 impl Context {
     /// Create a standard WoT 1.1 Context.
     /// By default, it contains only the 1.1 URI.
