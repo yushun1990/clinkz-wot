@@ -5,7 +5,13 @@
 use super::ContextEntry;
 use crate as td_crate;
 use serde_json::Value;
-use td_crate::{data_schema::DataSchema, data_type::ExtensionMap, form::Form, thing::Thing};
+use td_crate::{
+    data_schema::DataSchema,
+    data_type::ExtensionMap,
+    form::Form,
+    thing::Thing,
+    validate::{Validate, ValidationLevel},
+};
 #[path = "../../../tools/architecture-fixtures/validated-thing-arena-layout/src/lib.rs"]
 #[allow(unused_attributes)]
 mod arena_layout;
@@ -491,7 +497,9 @@ fn typed_corpus_survives_sealed_snapshot() {
             assert_eq!(snapshot.kind(snapshot.child(edge.target, 2)), Kind::Absent);
             let ops = snapshot.child(edge.target, 3);
             for (op_index, op) in form.op.as_ref().unwrap().iter().enumerate() {
-                assert_eq!(snapshot.text(snapshot.child(ops, op_index)), op.as_str());
+                let op_edge = snapshot.edge(ops, op_index);
+                assert_eq!(op_edge.original_index as usize, op_index);
+                assert_eq!(snapshot.text(op_edge.target), op.as_str());
             }
         }
     }
@@ -519,6 +527,51 @@ fn typed_corpus_survives_sealed_snapshot() {
         "nosec"
     );
     assert_eq!(snapshot.arena.footprint().retained_allocation_count, 3);
+}
+
+#[test]
+fn property_form_operation_order_survives_snapshot() {
+    let original = typed_corpus_shared::typed_corpus();
+    original
+        .validate_with_level(ValidationLevel::Basic)
+        .unwrap();
+    let source_ops = original.properties.as_ref().unwrap()["zeta"]
+        ._interaction
+        .forms[0]
+        .op
+        .as_ref()
+        .unwrap();
+    assert_eq!(source_ops.len(), 2);
+    assert_ne!(source_ops[0], source_ops[1]);
+
+    let snapshot = Snapshot::normalize(&original);
+    let zeta = snapshot
+        .map_get(snapshot.child(snapshot.root, 8), "zeta")
+        .unwrap();
+    let first_form = snapshot.child(snapshot.child(zeta, 1), 0);
+    let stored_ops = snapshot.child(first_form, 3);
+    assert_eq!(snapshot.node(stored_ops).edge_count, 2);
+    for (index, op) in source_ops.iter().enumerate() {
+        let edge = snapshot.edge(stored_ops, index);
+        assert_eq!(edge.original_index as usize, index);
+        assert_eq!(snapshot.text(edge.target), op.as_str());
+    }
+
+    let mut swapped = original.clone();
+    swapped
+        .properties
+        .as_mut()
+        .unwrap()
+        .get_mut("zeta")
+        .unwrap()
+        ._interaction
+        .forms[0]
+        .op
+        .as_mut()
+        .unwrap()
+        .swap(0, 1);
+    swapped.validate_with_level(ValidationLevel::Basic).unwrap();
+    assert!(!snapshot.same(&Snapshot::normalize(&swapped)));
 }
 
 #[test]

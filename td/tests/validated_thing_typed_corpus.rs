@@ -9,6 +9,7 @@ use std::collections::BTreeMap;
 use clinkz_wot_td as td_crate;
 use clinkz_wot_td::{
     context::Context,
+    data_type::Operation,
     validate::{Validate, ValidationLevel},
 };
 #[path = "support/typed_corpus_shared.rs"]
@@ -47,6 +48,10 @@ fn typed_fields_define_order_presence_and_content_without_json_roundtrip() {
     assert_eq!(forms[1].href.as_str(), "zeta/second");
     assert_eq!(forms[0].content_type, "text/plain");
     assert_eq!(forms[1].content_type, "application/json");
+    assert_eq!(
+        forms[0].op.as_deref(),
+        Some([Operation::ReadProperty, Operation::WriteProperty].as_slice())
+    );
 
     let payload = &thing._extra_fields["ex:payload"];
     assert_eq!(payload["flag"], json!(true));

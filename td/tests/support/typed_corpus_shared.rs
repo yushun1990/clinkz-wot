@@ -24,7 +24,7 @@ pub const CORPUS: &str = r##"{
         "zeta": {
             "type": "string",
             "forms": [
-                { "href": "zeta/first", "op": "readproperty", "contentType": "text/plain" },
+                { "href": "zeta/first", "op": ["readproperty", "writeproperty"], "contentType": "text/plain" },
                 { "href": "zeta/second", "op": "readproperty" }
             ]
         },
