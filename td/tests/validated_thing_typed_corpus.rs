@@ -6,57 +6,16 @@
 
 use std::collections::BTreeMap;
 
+use clinkz_wot_td as td_crate;
 use clinkz_wot_td::{
     context::Context,
-    thing::Thing,
+    data_type::Operation,
     validate::{Validate, ValidationLevel},
 };
+#[path = "support/typed_corpus_shared.rs"]
+mod typed_corpus_shared;
 use serde_json::{Value, json};
-
-const CORPUS: &str = r##"{
-    "@context": [
-        "https://www.w3.org/2022/wot/td/v1.1",
-        { "ex": "https://example.org/ns#" },
-        "https://example.org/extra-context"
-    ],
-    "id": "urn:example:typed-corpus",
-    "title": "Typed corpus",
-    "titles": { "en": "Typed corpus", "fr": "Corpus typé" },
-    "support": "https://example.org/support",
-    "base": "https://example.org/things/",
-    "security": ["none"],
-    "securityDefinitions": { "none": { "scheme": "nosec" } },
-    "properties": {
-        "zeta": {
-            "type": "string",
-            "forms": [
-                { "href": "zeta/first", "op": "readproperty", "contentType": "text/plain" },
-                { "href": "zeta/second", "op": "readproperty" }
-            ]
-        },
-        "alpha": {
-            "type": "boolean",
-            "forms": [{ "href": "alpha", "op": "readproperty" }]
-        }
-    },
-    "forms": [],
-    "ex:payload": {
-        "flag": true,
-        "empty": null,
-        "items": ["first", { "left": "L", "right": "R" }]
-    }
-}"##;
-
-fn typed_corpus() -> Thing {
-    let mut thing: Thing = serde_json::from_str(CORPUS).expect("fixed TD input must decode");
-    thing
-        ._extra_fields
-        .insert("ex:long".into(), Value::String("λ".repeat(2_048)));
-    thing
-        .validate_with_level(ValidationLevel::Basic)
-        .expect("fixed typed corpus must pass Basic");
-    thing
-}
+use typed_corpus_shared::{serializer_failure_thing, typed_corpus};
 
 #[test]
 fn typed_fields_define_order_presence_and_content_without_json_roundtrip() {
@@ -89,6 +48,10 @@ fn typed_fields_define_order_presence_and_content_without_json_roundtrip() {
     assert_eq!(forms[1].href.as_str(), "zeta/second");
     assert_eq!(forms[0].content_type, "text/plain");
     assert_eq!(forms[1].content_type, "application/json");
+    assert_eq!(
+        forms[0].op.as_deref(),
+        Some([Operation::ReadProperty, Operation::WriteProperty].as_slice())
+    );
 
     let payload = &thing._extra_fields["ex:payload"];
     assert_eq!(payload["flag"], json!(true));
@@ -178,12 +141,7 @@ fn typed_mutations_distinguish_order_presence_and_map_association() {
 
 #[test]
 fn basic_valid_typed_thing_can_fail_its_serializer() {
-    let mut thing = typed_corpus();
-    thing.context =
-        serde_json::from_str::<Context>(r#"["https://example.org/extension-only"]"#).unwrap();
-    thing
-        .validate_with_level(ValidationLevel::Basic)
-        .expect("Basic does not require an official Context URI");
+    let thing = serializer_failure_thing();
     assert!(!thing.context.has_wot_context());
     let error =
         serde_json::to_vec(&thing).expect_err("Context serializer requires an official URI");
