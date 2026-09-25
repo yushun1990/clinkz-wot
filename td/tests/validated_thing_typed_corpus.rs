@@ -9,13 +9,38 @@ use std::collections::BTreeMap;
 use clinkz_wot_td as td_crate;
 use clinkz_wot_td::{
     context::Context,
+    data_schema::DataSchema,
     data_type::Operation,
     validate::{Validate, ValidationLevel},
 };
 #[path = "support/typed_corpus_shared.rs"]
 mod typed_corpus_shared;
 use serde_json::{Value, json};
-use typed_corpus_shared::{serializer_failure_thing, typed_corpus};
+use typed_corpus_shared::{nested_schema_corpus, serializer_failure_thing, typed_corpus};
+
+#[test]
+fn nested_schema_corpus_is_typed_and_basic_valid() {
+    let thing = nested_schema_corpus();
+    let DataSchema::Object(root) = &thing.properties.as_ref().unwrap()["alpha"]._schema else {
+        panic!("alpha must retain its Object variant");
+    };
+    assert_eq!(root.required.as_deref().unwrap(), ["samples"]);
+    let DataSchema::Array(samples) = &root.properties.as_ref().unwrap()["samples"] else {
+        panic!("samples must retain its Array variant");
+    };
+    let DataSchema::Object(reading) = &samples.items.as_ref().unwrap()[0] else {
+        panic!("first item must retain its Object variant");
+    };
+    assert_eq!(reading.required.as_deref().unwrap(), ["label", "level"]);
+    assert_eq!(
+        root._context._extra_fields["ex:opaque"]
+            .as_number()
+            .unwrap()
+            .as_str(),
+        "1e+309"
+    );
+    thing.validate_with_level(ValidationLevel::Basic).unwrap();
+}
 
 #[test]
 fn typed_fields_define_order_presence_and_content_without_json_roundtrip() {
