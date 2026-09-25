@@ -131,6 +131,38 @@ impl Build {
         );
     }
 
+    fn sort_object_sources(
+        &mut self,
+        map: u32,
+        values: &serde_json::Map<alloc::string::String, Value>,
+    ) {
+        let node = self.node_at(map);
+        assert_eq!(node.kind, Kind::Map as u32);
+        let first = node.first_edge as usize;
+        // Until emission, target is a source-member index. Sort these scalar
+        // slots before any child node or byte is emitted, so the whole sealed
+        // arena layout is independent of serde's map storage order. Source
+        // lookup uses the borrowed map and no owned key/value buffer.
+        for index in 0..values.len() {
+            self.put(node.first_edge, index, index.try_into().unwrap());
+        }
+        for index in 1..node.edge_count as usize {
+            let pivot = self.arena.build_edge(first + index);
+            let pivot_key = values.iter().nth(pivot.target as usize).unwrap().0;
+            let mut position = index;
+            while position > 0 {
+                let prior = self.arena.build_edge(first + position - 1);
+                let prior_key = values.iter().nth(prior.target as usize).unwrap().0;
+                if prior_key <= pivot_key {
+                    break;
+                }
+                self.arena.set_edge(first + position, prior);
+                position -= 1;
+            }
+            self.arena.set_edge(first + position, pivot);
+        }
+    }
+
     fn absent_or_text(&mut self, value: Option<&str>, kind: Kind) -> u32 {
         match value {
             Some(value) => self.text(kind, value),
@@ -433,7 +465,10 @@ impl Build {
             Value::Object(values) => {
                 let id = self.node(Kind::Map, values.len());
                 let first = self.node_at(id).first_edge;
-                for (index, (key, value)) in values.iter().enumerate() {
+                self.sort_object_sources(id, values);
+                for index in 0..values.len() {
+                    let source = self.arena.build_edge(first as usize + index).target;
+                    let (key, value) = values.iter().nth(source as usize).unwrap();
                     let entry = self.node(Kind::Entry, 2);
                     let pair = self.node_at(entry).first_edge;
                     let key = self.text(Kind::Str, key);
@@ -678,7 +713,9 @@ impl Snapshot {
         assert_eq!(self.kind(id), Kind::Map);
         let mut previous = None;
         for index in 0..self.node(id).edge_count as usize {
-            let entry = self.child(id, index);
+            let edge = self.edge(id, index);
+            assert_eq!(edge.original_index as usize, index);
+            let entry = edge.target;
             let key = self.text(self.child(entry, 0));
             if let Some(previous) = previous {
                 assert!(previous < key, "map keys must be sorted and unique");
@@ -973,6 +1010,7 @@ impl Snapshot {
             Value::Object(values) => {
                 assert_eq!(self.kind(id), Kind::Map);
                 assert_eq!(self.node(id).edge_count as usize, values.len());
+                self.assert_sorted_map(id);
                 for (key, value) in values {
                     self.assert_value(self.map_get(id, key).unwrap(), value);
                 }
@@ -1549,4 +1587,118 @@ fn nested_data_schema_survives_and_distinguishes_semantic_mutations() {
         !baseline.same(&Snapshot::normalize(&changed)),
         "opaque number lexeme"
     );
+}
+
+// Input construction is outside the snapshot allocation boundary. Reversing
+// each object's insertion history distinguishes IndexMap-backed serde JSON
+// from its BTreeMap-backed graph without changing any key/value association.
+fn json_object<const N: usize>(reverse: bool, entries: [(&str, Value); N]) -> Value {
+    let mut map = serde_json::Map::new();
+    if reverse {
+        for (key, value) in entries.into_iter().rev() {
+            map.insert(key.into(), value);
+        }
+    } else {
+        for (key, value) in entries {
+            map.insert(key.into(), value);
+        }
+    }
+    Value::Object(map)
+}
+
+fn nested_json(reverse: bool) -> Value {
+    let inner = json_object(
+        reverse,
+        [
+            ("z", Value::String("last".into())),
+            ("a", Value::Bool(true)),
+            ("é", Value::Null),
+        ],
+    );
+    let array_object = json_object(
+        reverse,
+        [
+            ("right", Value::String("R".into())),
+            ("left", Value::String("L".into())),
+        ],
+    );
+    json_object(
+        reverse,
+        [
+            ("nested", inner),
+            (
+                "ordered",
+                Value::Array(alloc::vec![
+                    Value::String("first".into()),
+                    array_object,
+                    Value::String("last".into()),
+                ]),
+            ),
+            (
+                "count",
+                serde_json::from_str("123456789012345678901234567890").unwrap(),
+            ),
+        ],
+    )
+}
+
+#[test]
+fn nested_json_objects_normalize_across_insertion_orders() {
+    let mut forward = typed_corpus_shared::typed_corpus();
+    forward
+        ._extra_fields
+        .insert("ex:canonical".into(), nested_json(false));
+    let mut reversed = typed_corpus_shared::typed_corpus();
+    reversed
+        ._extra_fields
+        .insert("ex:canonical".into(), nested_json(true));
+    forward.validate_with_level(ValidationLevel::Basic).unwrap();
+    reversed
+        .validate_with_level(ValidationLevel::Basic)
+        .unwrap();
+
+    let snapshot = Snapshot::normalize(&forward);
+    let reordered = Snapshot::normalize(&reversed);
+    assert!(snapshot.same(&reordered));
+    assert_eq!(snapshot.arena.footprint(), reordered.arena.footprint());
+    assert_eq!(snapshot.arena.footprint().retained_allocation_count, 3);
+    let object = snapshot
+        .map_get(snapshot.child(snapshot.root, 10), "ex:canonical")
+        .unwrap();
+    snapshot.assert_value(object, &forward._extra_fields["ex:canonical"]);
+    snapshot.assert_value(object, &reversed._extra_fields["ex:canonical"]);
+    let nested = snapshot.map_get(object, "nested").unwrap();
+    assert_eq!(
+        snapshot.kind(snapshot.map_get(nested, "a").unwrap()),
+        Kind::True
+    );
+    assert_eq!(
+        snapshot.text(snapshot.map_get(nested, "z").unwrap()),
+        "last"
+    );
+    assert_eq!(
+        snapshot.kind(snapshot.map_get(nested, "é").unwrap()),
+        Kind::Null
+    );
+    let ordered = snapshot.map_get(object, "ordered").unwrap();
+    assert_eq!(snapshot.text(snapshot.child(ordered, 0)), "first");
+    assert_eq!(snapshot.text(snapshot.child(ordered, 2)), "last");
+    let pair = snapshot.child(ordered, 1);
+    assert_eq!(snapshot.text(snapshot.map_get(pair, "left").unwrap()), "L");
+    assert_eq!(snapshot.text(snapshot.map_get(pair, "right").unwrap()), "R");
+    assert_eq!(
+        snapshot.text(snapshot.map_get(object, "count").unwrap()),
+        "123456789012345678901234567890"
+    );
+
+    let mut changed = reversed.clone();
+    changed._extra_fields.get_mut("ex:canonical").unwrap()["ordered"]
+        .as_array_mut()
+        .unwrap()
+        .swap(0, 2);
+    assert!(!snapshot.same(&Snapshot::normalize(&changed)));
+    let mut changed = reversed;
+    changed._extra_fields.get_mut("ex:canonical").unwrap()["nested"]["z"] =
+        Value::String("different".into());
+    assert!(!snapshot.same(&Snapshot::normalize(&changed)));
 }
