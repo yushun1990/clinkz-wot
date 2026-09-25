@@ -195,6 +195,10 @@ impl Prototype {
         assert!(!self.sealed);
         self.build_nodes.as_slice()[index]
     }
+    pub fn build_edge(&self, index: usize) -> RetainedEdge {
+        assert!(!self.sealed);
+        self.build_edges.as_slice()[index]
+    }
     pub fn push_byte(&mut self, value: u8) -> Result<(), Error> {
         self.build_bytes.push(value)
     }

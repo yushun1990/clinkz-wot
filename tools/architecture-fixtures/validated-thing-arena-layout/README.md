@@ -91,8 +91,37 @@ The test-only placement allows inspection of private `Context.entries`
 without expanding the production Context or ValidatedThing API. The fixed
 headroom and recursive call stack are prototype mechanics; the full bounded
 cursor, traversal-frame use, all known fields/variants, allocation growth,
-sorted maps under `preserve_order`, work charging, URI/default/security queries,
+work charging, URI/default/security queries,
 and a shared storage-neutral Basic kernel remain open. Existing Basic is used
 only while constructing the fixed typed input. The snapshot traversal does not
 copy a semantic rule or claim validation of the sealed snapshot. This is
 partial item-3 evidence, not readmission or item-3 completion.
+
+## Nested JSON Object ordering slice
+
+The snapshot probe now reserves each JSON Object's map edges, stores scalar
+source-member indices in those slots, and insertion-sorts the slots by key
+before emitting any child node or byte. Each sorted index selects its original
+key and value together. This keeps nested Object and Object-in-Array layouts
+identical across insertion histories, including `preserve_order`; Array and
+Form/Context sequence edges retain their original indices. The sort uses only
+scalar slots in the existing edge arena. Its input `Thing` and JSON maps are
+caller-owned, and no sort buffer or additional allocation category is added.
+The test checks full node/edge/byte equality, sorted keys, nested associations,
+array-order sensitivity, opaque Number text, equal footprints, and exactly
+three retained arena allocations.
+
+Run the probe in separate Host invocations:
+
+```sh
+cargo test --locked -p clinkz-wot-td --lib normalized_snapshot_probe
+cargo test --locked -p clinkz-wot-td --lib normalized_snapshot_probe --features serde_json/preserve_order
+cargo test --locked -p clinkz-wot-td --lib normalized_snapshot_probe --no-default-features
+```
+
+TD's test dependency enables AP in all three invocations, so the first is AP
+and the second is AP + order. The separate feature-boundary matrix checks Host
+base/order/AP/combined requests and actual resolved serde features; base and
+order without the validated capability remain ordinary TD/Basic graphs and do
+not run the AP-dependent snapshot probe. Exact work charging, bounded
+resumable sorting, and complete item-3 equivalence remain open.
