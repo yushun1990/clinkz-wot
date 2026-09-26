@@ -48,10 +48,31 @@ enum Kind {
     SchemaObject,
     SchemaString,
     SchemaNull,
+    Version,
     U32,
     F64,
     I64,
 }
+
+const ROOT_CONTEXT: usize = 0;
+const ROOT_ID: usize = 1;
+const ROOT_TITLE: usize = 2;
+const ROOT_TITLES: usize = 3;
+const ROOT_SUPPORT: usize = 4;
+const ROOT_BASE: usize = 5;
+const ROOT_SECURITY: usize = 6;
+const ROOT_SECURITY_DEFINITIONS: usize = 7;
+const ROOT_PROPERTIES: usize = 8;
+const ROOT_FORMS: usize = 9;
+const ROOT_EXTENSIONS: usize = 10;
+const ROOT_TAGS: usize = 11;
+const ROOT_DESCRIPTION: usize = 12;
+const ROOT_DESCRIPTIONS: usize = 13;
+const ROOT_VERSION: usize = 14;
+const ROOT_PROFILE: usize = 15;
+const ROOT_SCHEMA_DEFINITIONS: usize = 16;
+const ROOT_URI_VARIABLES: usize = 17;
+const ROOT_FIELD_COUNT: usize = 18;
 
 const EMPTY_EDGE: RetainedEdge = RetainedEdge {
     target: 0,
@@ -543,8 +564,23 @@ impl Build {
         }
     }
 
+    fn version(&mut self, version: Option<&td_crate::data_type::VersionInfo>) -> u32 {
+        let Some(version) = version else {
+            return self.node(Kind::Absent, 0);
+        };
+        let id = self.node(Kind::Version, 3);
+        let first = self.node_at(id).first_edge;
+        let instance = self.text(Kind::Str, &version.instance);
+        self.put(first, 0, instance);
+        let model = self.absent_or_text(version.model.as_deref(), Kind::Str);
+        self.put(first, 1, model);
+        let extensions = self.extensions(&version._extra_fields);
+        self.put(first, 2, extensions);
+        id
+    }
+
     fn thing(&mut self, thing: &Thing) -> u32 {
-        let id = self.node(Kind::Root, 11);
+        let id = self.node(Kind::Root, ROOT_FIELD_COUNT);
         let first = self.node_at(id).first_edge;
         let context = self.node(Kind::Context, thing.context.entries.len());
         let context_first = self.node_at(context).first_edge;
@@ -555,11 +591,11 @@ impl Build {
             };
             self.put(context_first, index, item);
         }
-        self.put(first, 0, context);
+        self.put(first, ROOT_CONTEXT, context);
         let value = self.absent_or_text(thing.id.as_ref().map(|v| v.as_str()), Kind::Uri);
-        self.put(first, 1, value);
+        self.put(first, ROOT_ID, value);
         let value = self.absent_or_text(thing._metadata.title.as_deref(), Kind::Str);
-        self.put(first, 2, value);
+        self.put(first, ROOT_TITLE, value);
         let titles = match thing._metadata.titles.as_ref() {
             None => self.node(Kind::Absent, 0),
             Some(titles) => {
@@ -578,18 +614,18 @@ impl Build {
                 id
             }
         };
-        self.put(first, 3, titles);
+        self.put(first, ROOT_TITLES, titles);
         let value = self.absent_or_text(thing.support.as_ref().map(|v| v.as_str()), Kind::Uri);
-        self.put(first, 4, value);
+        self.put(first, ROOT_SUPPORT, value);
         let value = self.absent_or_text(thing.base.as_ref().map(|v| v.as_str()), Kind::Uri);
-        self.put(first, 5, value);
+        self.put(first, ROOT_BASE, value);
         let security = self.node(Kind::Array, thing.security.len());
         let security_first = self.node_at(security).first_edge;
         for (index, name) in thing.security.iter().enumerate() {
             let item = self.text(Kind::Str, name);
             self.put(security_first, index, item);
         }
-        self.put(first, 6, security);
+        self.put(first, ROOT_SECURITY, security);
         let definitions = self.node(Kind::Map, thing.security_definitions.len());
         let definitions_first = self.node_at(definitions).first_edge;
         for (index, (name, scheme)) in thing.security_definitions.iter().enumerate() {
@@ -606,7 +642,7 @@ impl Build {
             self.put(pair, 1, scheme);
             self.put(definitions_first, index, entry);
         }
-        self.put(first, 7, definitions);
+        self.put(first, ROOT_SECURITY_DEFINITIONS, definitions);
         let properties = match thing.properties.as_ref() {
             None => self.node(Kind::Absent, 0),
             Some(properties) => {
@@ -629,11 +665,29 @@ impl Build {
                 id
             }
         };
-        self.put(first, 8, properties);
+        self.put(first, ROOT_PROPERTIES, properties);
         let forms = self.forms(thing.forms.as_deref());
-        self.put(first, 9, forms);
+        self.put(first, ROOT_FORMS, forms);
         let extras = self.extensions(&thing._extra_fields);
-        self.put(first, 10, extras);
+        self.put(first, ROOT_EXTENSIONS, extras);
+        let tags = self.sequence(thing._metadata.tags.as_deref(), |this, value| {
+            this.text(Kind::Str, value)
+        });
+        self.put(first, ROOT_TAGS, tags);
+        let description = self.absent_or_text(thing._metadata.description.as_deref(), Kind::Str);
+        self.put(first, ROOT_DESCRIPTION, description);
+        let descriptions = self.language_map(thing._metadata.descriptions.as_ref());
+        self.put(first, ROOT_DESCRIPTIONS, descriptions);
+        let version = self.version(thing.version.as_ref());
+        self.put(first, ROOT_VERSION, version);
+        let profile = self.sequence(thing.profile.as_deref(), |this, value| {
+            this.text(Kind::Uri, value.as_str())
+        });
+        self.put(first, ROOT_PROFILE, profile);
+        let schema_definitions = self.schema_map(thing.schema_definitions.as_ref());
+        self.put(first, ROOT_SCHEMA_DEFINITIONS, schema_definitions);
+        let uri_variables = self.schema_map(thing.uri_variables.as_ref());
+        self.put(first, ROOT_URI_VARIABLES, uri_variables);
         id
     }
 }
@@ -680,6 +734,7 @@ impl Snapshot {
             x if x == Kind::SchemaObject as u32 => Kind::SchemaObject,
             x if x == Kind::SchemaString as u32 => Kind::SchemaString,
             x if x == Kind::SchemaNull as u32 => Kind::SchemaNull,
+            x if x == Kind::Version as u32 => Kind::Version,
             x if x == Kind::U32 as u32 => Kind::U32,
             x if x == Kind::F64 as u32 => Kind::F64,
             x if x == Kind::I64 as u32 => Kind::I64,
@@ -1024,7 +1079,7 @@ fn typed_corpus_survives_sealed_snapshot() {
     let thing = typed_corpus_shared::typed_corpus();
     let snapshot = Snapshot::normalize(&thing);
     let root = snapshot.root;
-    let context = snapshot.child(root, 0);
+    let context = snapshot.child(root, ROOT_CONTEXT);
     assert_eq!(
         snapshot.node(context).edge_count as usize,
         thing.context.entries.len()
@@ -1045,26 +1100,26 @@ fn typed_corpus_survives_sealed_snapshot() {
         }
     }
     assert_eq!(
-        snapshot.text(snapshot.child(root, 1)),
+        snapshot.text(snapshot.child(root, ROOT_ID)),
         thing.id.as_ref().unwrap().as_str()
     );
     assert_eq!(
-        snapshot.text(snapshot.child(root, 2)),
+        snapshot.text(snapshot.child(root, ROOT_TITLE)),
         thing._metadata.title.as_deref().unwrap()
     );
-    let titles = snapshot.child(root, 3);
+    let titles = snapshot.child(root, ROOT_TITLES);
     for (lang, text) in thing._metadata.titles.as_ref().unwrap().as_map() {
         assert_eq!(snapshot.text(snapshot.map_get(titles, lang).unwrap()), text);
     }
     assert_eq!(
-        snapshot.text(snapshot.child(root, 4)),
+        snapshot.text(snapshot.child(root, ROOT_SUPPORT)),
         thing.support.as_ref().unwrap().as_str()
     );
     assert_eq!(
-        snapshot.text(snapshot.child(root, 5)),
+        snapshot.text(snapshot.child(root, ROOT_BASE)),
         thing.base.as_ref().unwrap().as_str()
     );
-    let security = snapshot.child(root, 6);
+    let security = snapshot.child(root, ROOT_SECURITY);
     assert_eq!(
         snapshot.node(security).edge_count as usize,
         thing.security.len()
@@ -1072,7 +1127,7 @@ fn typed_corpus_survives_sealed_snapshot() {
     for (index, name) in thing.security.iter().enumerate() {
         assert_eq!(snapshot.text(snapshot.child(security, index)), name);
     }
-    let properties = snapshot.child(root, 8);
+    let properties = snapshot.child(root, ROOT_PROPERTIES);
     for (name, property) in thing.properties.as_ref().unwrap() {
         let stored = snapshot.map_get(properties, name).unwrap();
         snapshot.assert_schema(snapshot.child(stored, 0), &property._schema);
@@ -1101,10 +1156,10 @@ fn typed_corpus_survives_sealed_snapshot() {
             }
         }
     }
-    let forms = snapshot.child(root, 9);
+    let forms = snapshot.child(root, ROOT_FORMS);
     assert_eq!(snapshot.kind(forms), Kind::Array);
     assert_eq!(snapshot.node(forms).edge_count, 0);
-    let extras = snapshot.child(root, 10);
+    let extras = snapshot.child(root, ROOT_EXTENSIONS);
     for (key, value) in &thing._extra_fields {
         snapshot.assert_value(snapshot.map_get(extras, key).unwrap(), value);
     }
@@ -1121,10 +1176,138 @@ fn typed_corpus_survives_sealed_snapshot() {
             .as_str()
     );
     assert_eq!(
-        snapshot.text(snapshot.map_get(snapshot.child(root, 7), "none").unwrap()),
+        snapshot.text(
+            snapshot
+                .map_get(snapshot.child(root, ROOT_SECURITY_DEFINITIONS), "none")
+                .unwrap()
+        ),
         "nosec"
     );
     assert_eq!(snapshot.arena.footprint().retained_allocation_count, 3);
+}
+
+#[test]
+fn remaining_root_fields_survive_and_distinguish_semantic_mutations() {
+    let thing = typed_corpus_shared::typed_corpus();
+    let snapshot = Snapshot::normalize(&thing);
+    let root = snapshot.root;
+
+    let tags = snapshot.child(root, ROOT_TAGS);
+    let source_tags = thing._metadata.tags.as_deref().unwrap();
+    assert_eq!(snapshot.node(tags).edge_count as usize, source_tags.len());
+    for (index, tag) in source_tags.iter().enumerate() {
+        let edge = snapshot.edge(tags, index);
+        assert_eq!(edge.original_index as usize, index);
+        assert_eq!(snapshot.text(edge.target), tag);
+    }
+    assert_eq!(
+        snapshot.text(snapshot.child(root, ROOT_DESCRIPTION)),
+        thing._metadata.description.as_deref().unwrap()
+    );
+    let descriptions = snapshot.child(root, ROOT_DESCRIPTIONS);
+    snapshot.assert_sorted_map(descriptions);
+    for (language, text) in thing._metadata.descriptions.as_ref().unwrap().as_map() {
+        assert_eq!(
+            snapshot.text(snapshot.map_get(descriptions, language).unwrap()),
+            text
+        );
+    }
+
+    let source_version = thing.version.as_ref().unwrap();
+    let version = snapshot.child(root, ROOT_VERSION);
+    assert_eq!(snapshot.kind(version), Kind::Version);
+    assert_eq!(
+        snapshot.text(snapshot.child(version, 0)),
+        source_version.instance
+    );
+    assert_eq!(
+        snapshot.text(snapshot.child(version, 1)),
+        source_version.model.as_deref().unwrap()
+    );
+    let version_extensions = snapshot.child(version, 2);
+    for (key, value) in &source_version._extra_fields {
+        snapshot.assert_value(snapshot.map_get(version_extensions, key).unwrap(), value);
+    }
+
+    let profile = snapshot.child(root, ROOT_PROFILE);
+    let source_profile = thing.profile.as_deref().unwrap();
+    assert_eq!(
+        snapshot.node(profile).edge_count as usize,
+        source_profile.len()
+    );
+    for (index, uri) in source_profile.iter().enumerate() {
+        let edge = snapshot.edge(profile, index);
+        assert_eq!(edge.original_index as usize, index);
+        assert_eq!(snapshot.kind(edge.target), Kind::Uri);
+        assert_eq!(snapshot.text(edge.target), uri.as_str());
+    }
+
+    for (root_field, source) in [
+        (
+            ROOT_SCHEMA_DEFINITIONS,
+            thing.schema_definitions.as_ref().unwrap(),
+        ),
+        (ROOT_URI_VARIABLES, thing.uri_variables.as_ref().unwrap()),
+    ] {
+        let stored = snapshot.child(root, root_field);
+        snapshot.assert_sorted_map(stored);
+        for (name, schema) in source {
+            snapshot.assert_schema(snapshot.map_get(stored, name).unwrap(), schema);
+        }
+    }
+    assert_eq!(snapshot.arena.footprint().retained_allocation_count, 3);
+
+    let mut changed = thing.clone();
+    changed._metadata.tags.as_mut().unwrap().swap(0, 1);
+    assert!(
+        !snapshot.same(&Snapshot::normalize(&changed)),
+        "metadata tag order"
+    );
+
+    let mut changed = thing.clone();
+    changed.profile.as_mut().unwrap().swap(0, 1);
+    changed.validate_with_level(ValidationLevel::Basic).unwrap();
+    assert!(
+        !snapshot.same(&Snapshot::normalize(&changed)),
+        "profile order"
+    );
+
+    let mut changed = thing.clone();
+    changed.version.as_mut().unwrap().model = None;
+    changed.validate_with_level(ValidationLevel::Basic).unwrap();
+    assert!(
+        !snapshot.same(&Snapshot::normalize(&changed)),
+        "version optional distinction"
+    );
+
+    let mut changed = thing.clone();
+    let definitions = changed.schema_definitions.as_mut().unwrap();
+    let mode = definitions.remove("mode").unwrap();
+    let threshold = definitions.remove("threshold").unwrap();
+    definitions.insert("mode".into(), threshold);
+    definitions.insert("threshold".into(), mode);
+    changed.validate_with_level(ValidationLevel::Basic).unwrap();
+    assert!(
+        !snapshot.same(&Snapshot::normalize(&changed)),
+        "schema name/value association"
+    );
+
+    let mut reordered = thing.clone();
+    let definitions = reordered.schema_definitions.take().unwrap();
+    reordered.schema_definitions = Some(definitions.into_iter().rev().collect());
+    assert!(
+        snapshot.same(&Snapshot::normalize(&reordered)),
+        "schema map insertion history is not semantic"
+    );
+
+    let mut changed = thing.clone();
+    changed.schema_definitions = Some(BTreeMap::new());
+    let present_empty = Snapshot::normalize(&changed);
+    changed.schema_definitions = None;
+    assert!(
+        !present_empty.same(&Snapshot::normalize(&changed)),
+        "absent vs present-empty schemaDefinitions"
+    );
 }
 
 #[test]
@@ -1144,7 +1327,7 @@ fn property_form_operation_order_survives_snapshot() {
 
     let snapshot = Snapshot::normalize(&original);
     let zeta = snapshot
-        .map_get(snapshot.child(snapshot.root, 8), "zeta")
+        .map_get(snapshot.child(snapshot.root, ROOT_PROPERTIES), "zeta")
         .unwrap();
     let first_form = snapshot.child(snapshot.child(zeta, 1), 0);
     let stored_ops = snapshot.child(first_form, 3);
@@ -1193,7 +1376,10 @@ fn typed_distinctions_and_serializer_failure() {
     let mut changed = thing.clone();
     changed.forms = None;
     let absent = Snapshot::normalize(&changed);
-    assert_eq!(absent.kind(absent.child(absent.root, 9)), Kind::Absent);
+    assert_eq!(
+        absent.kind(absent.child(absent.root, ROOT_FORMS)),
+        Kind::Absent
+    );
     assert!(!baseline.same(&absent));
     let mut changed = thing.clone();
     changed._extra_fields.get_mut("ex:payload").unwrap()["items"]
@@ -1217,13 +1403,13 @@ fn typed_distinctions_and_serializer_failure() {
     let failure = typed_corpus_shared::serializer_failure_thing();
     assert!(serde_json::to_vec(&failure).is_err());
     let accepted = Snapshot::normalize(&failure);
-    let context = accepted.child(accepted.root, 0);
+    let context = accepted.child(accepted.root, ROOT_CONTEXT);
     assert_eq!(
         accepted.text(accepted.child(context, 0)),
         "https://example.org/extension-only"
     );
     let zeta = accepted
-        .map_get(accepted.child(accepted.root, 8), "zeta")
+        .map_get(accepted.child(accepted.root, ROOT_PROPERTIES), "zeta")
         .unwrap();
     accepted.assert_schema(
         accepted.child(zeta, 0),
@@ -1235,7 +1421,7 @@ fn typed_distinctions_and_serializer_failure() {
 fn nested_data_schema_survives_and_distinguishes_semantic_mutations() {
     let thing = typed_corpus_shared::nested_schema_corpus();
     let baseline = Snapshot::normalize(&thing);
-    let properties = baseline.child(baseline.root, 8);
+    let properties = baseline.child(baseline.root, ROOT_PROPERTIES);
     let alpha = baseline.map_get(properties, "alpha").unwrap();
     let stored = baseline.child(alpha, 0);
     let schema = &thing.properties.as_ref().unwrap()["alpha"]._schema;
@@ -1663,7 +1849,10 @@ fn nested_json_objects_normalize_across_insertion_orders() {
     assert_eq!(snapshot.arena.footprint(), reordered.arena.footprint());
     assert_eq!(snapshot.arena.footprint().retained_allocation_count, 3);
     let object = snapshot
-        .map_get(snapshot.child(snapshot.root, 10), "ex:canonical")
+        .map_get(
+            snapshot.child(snapshot.root, ROOT_EXTENSIONS),
+            "ex:canonical",
+        )
         .unwrap();
     snapshot.assert_value(object, &forward._extra_fields["ex:canonical"]);
     snapshot.assert_value(object, &reversed._extra_fields["ex:canonical"]);
