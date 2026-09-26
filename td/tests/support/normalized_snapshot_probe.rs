@@ -10,7 +10,9 @@ use alloc::{collections::BTreeMap, string::String, vec::Vec};
 use serde_json::Value;
 use td_crate::{
     data_schema::DataSchema,
-    data_type::{ExtensionMap, Metadata, MultiLanguage},
+    data_type::{
+        AdditionalExpectedResponse, ExpectedResponse, ExtensionMap, Metadata, MultiLanguage,
+    },
     form::Form,
     thing::Thing,
     validate::{Validate, ValidationLevel},
@@ -49,6 +51,8 @@ enum Kind {
     SchemaString,
     SchemaNull,
     Version,
+    ExpectedResponse,
+    AdditionalResponse,
     U32,
     F64,
     I64,
@@ -73,6 +77,18 @@ const ROOT_PROFILE: usize = 15;
 const ROOT_SCHEMA_DEFINITIONS: usize = 16;
 const ROOT_URI_VARIABLES: usize = 17;
 const ROOT_FIELD_COUNT: usize = 18;
+
+const FORM_HREF: usize = 0;
+const FORM_CONTENT_TYPE: usize = 1;
+const FORM_CONTENT_CODING: usize = 2;
+const FORM_SECURITY: usize = 3;
+const FORM_SCOPES: usize = 4;
+const FORM_RESPONSE: usize = 5;
+const FORM_ADDITIONAL_RESPONSES: usize = 6;
+const FORM_SUBPROTOCOL: usize = 7;
+const FORM_OPERATIONS: usize = 8;
+const FORM_EXTENSIONS: usize = 9;
+const FORM_FIELD_COUNT: usize = 10;
 
 const EMPTY_EDGE: RetainedEdge = RetainedEdge {
     target: 0,
@@ -522,30 +538,72 @@ impl Build {
         id
     }
 
+    fn expected_response(&mut self, response: Option<&ExpectedResponse>) -> u32 {
+        let Some(response) = response else {
+            return self.node(Kind::Absent, 0);
+        };
+        let id = self.node(Kind::ExpectedResponse, 2);
+        let first = self.node_at(id).first_edge;
+        let content_type = self.text(Kind::Str, &response.content_type);
+        self.put(first, 0, content_type);
+        let extensions = self.extensions(&response._extra_fields);
+        self.put(first, 1, extensions);
+        id
+    }
+
+    fn additional_response(&mut self, response: &AdditionalExpectedResponse) -> u32 {
+        let id = self.node(Kind::AdditionalResponse, 4);
+        let first = self.node_at(id).first_edge;
+        let content_type = self.absent_or_text(response.content_type.as_deref(), Kind::Str);
+        self.put(first, 0, content_type);
+        let schema = self.absent_or_text(response.schema.as_deref(), Kind::Str);
+        self.put(first, 1, schema);
+        let success = self.node(
+            if response.success {
+                Kind::True
+            } else {
+                Kind::False
+            },
+            0,
+        );
+        self.put(first, 2, success);
+        let extensions = self.extensions(&response._extra_fields);
+        self.put(first, 3, extensions);
+        id
+    }
+
     fn form(&mut self, form: &Form) -> u32 {
-        let id = self.node(Kind::Form, 5);
+        let id = self.node(Kind::Form, FORM_FIELD_COUNT);
         let first = self.node_at(id).first_edge;
         let href = self.text(Kind::Uri, form.href.as_str());
-        self.put(first, 0, href);
+        self.put(first, FORM_HREF, href);
         let content_type = self.text(Kind::Str, &form.content_type);
-        self.put(first, 1, content_type);
+        self.put(first, FORM_CONTENT_TYPE, content_type);
         let coding = self.absent_or_text(form.content_coding.as_deref(), Kind::Str);
-        self.put(first, 2, coding);
-        let ops = match &form.op {
-            None => self.node(Kind::Absent, 0),
-            Some(ops) => {
-                let seq = self.node(Kind::Array, ops.len());
-                let seq_first = self.node_at(seq).first_edge;
-                for (index, op) in ops.iter().enumerate() {
-                    let item = self.text(Kind::Str, op.as_str());
-                    self.put(seq_first, index, item);
-                }
-                seq
-            }
-        };
-        self.put(first, 3, ops);
+        self.put(first, FORM_CONTENT_CODING, coding);
+        let security = self.sequence(form.security.as_deref(), |this, value| {
+            this.text(Kind::Str, value)
+        });
+        self.put(first, FORM_SECURITY, security);
+        let scopes = self.sequence(form.scopes.as_deref(), |this, value| {
+            this.text(Kind::Str, value)
+        });
+        self.put(first, FORM_SCOPES, scopes);
+        let response = self.expected_response(form.response.as_ref());
+        self.put(first, FORM_RESPONSE, response);
+        let additional_responses = self
+            .sequence(form.additional_responses.as_deref(), |this, response| {
+                this.additional_response(response)
+            });
+        self.put(first, FORM_ADDITIONAL_RESPONSES, additional_responses);
+        let subprotocol = self.absent_or_text(form.subprotocol.as_deref(), Kind::Str);
+        self.put(first, FORM_SUBPROTOCOL, subprotocol);
+        let operations = self.sequence(form.op.as_deref(), |this, operation| {
+            this.text(Kind::Str, operation.as_str())
+        });
+        self.put(first, FORM_OPERATIONS, operations);
         let extras = self.extensions(&form._extra_fields);
-        self.put(first, 4, extras);
+        self.put(first, FORM_EXTENSIONS, extras);
         id
     }
 
@@ -735,6 +793,8 @@ impl Snapshot {
             x if x == Kind::SchemaString as u32 => Kind::SchemaString,
             x if x == Kind::SchemaNull as u32 => Kind::SchemaNull,
             x if x == Kind::Version as u32 => Kind::Version,
+            x if x == Kind::ExpectedResponse as u32 => Kind::ExpectedResponse,
+            x if x == Kind::AdditionalResponse as u32 => Kind::AdditionalResponse,
             x if x == Kind::U32 as u32 => Kind::U32,
             x if x == Kind::F64 as u32 => Kind::F64,
             x if x == Kind::I64 as u32 => Kind::I64,
@@ -863,6 +923,76 @@ impl Snapshot {
             self.map_get(id, "descriptions").unwrap(),
             source.descriptions.as_ref(),
         );
+    }
+    fn assert_extensions(&self, id: u32, source: &ExtensionMap) {
+        assert_eq!(self.kind(id), Kind::Map);
+        self.assert_sorted_map(id);
+        assert_eq!(self.node(id).edge_count as usize, source.len());
+        for (key, value) in source {
+            self.assert_value(self.map_get(id, key).unwrap(), value);
+        }
+    }
+    fn assert_expected_response(&self, id: u32, source: Option<&ExpectedResponse>) {
+        let Some(source) = source else {
+            assert_eq!(self.kind(id), Kind::Absent);
+            return;
+        };
+        assert_eq!(self.kind(id), Kind::ExpectedResponse);
+        assert_eq!(self.text(self.child(id, 0)), source.content_type);
+        self.assert_extensions(self.child(id, 1), &source._extra_fields);
+    }
+    fn assert_additional_response(&self, id: u32, source: &AdditionalExpectedResponse) {
+        assert_eq!(self.kind(id), Kind::AdditionalResponse);
+        self.assert_optional_text(self.child(id, 0), source.content_type.as_deref());
+        self.assert_optional_text(self.child(id, 1), source.schema.as_deref());
+        assert_eq!(
+            self.kind(self.child(id, 2)),
+            if source.success {
+                Kind::True
+            } else {
+                Kind::False
+            }
+        );
+        self.assert_extensions(self.child(id, 3), &source._extra_fields);
+    }
+    fn assert_form(&self, id: u32, source: &Form) {
+        assert_eq!(self.kind(id), Kind::Form);
+        assert_eq!(self.kind(self.child(id, FORM_HREF)), Kind::Uri);
+        assert_eq!(self.text(self.child(id, FORM_HREF)), source.href.as_str());
+        assert_eq!(
+            self.text(self.child(id, FORM_CONTENT_TYPE)),
+            source.content_type
+        );
+        self.assert_optional_text(
+            self.child(id, FORM_CONTENT_CODING),
+            source.content_coding.as_deref(),
+        );
+        self.assert_sequence(
+            self.child(id, FORM_SECURITY),
+            source.security.as_deref(),
+            |snapshot, node, value| assert_eq!(snapshot.text(node), value),
+        );
+        self.assert_sequence(
+            self.child(id, FORM_SCOPES),
+            source.scopes.as_deref(),
+            |snapshot, node, value| assert_eq!(snapshot.text(node), value),
+        );
+        self.assert_expected_response(self.child(id, FORM_RESPONSE), source.response.as_ref());
+        self.assert_sequence(
+            self.child(id, FORM_ADDITIONAL_RESPONSES),
+            source.additional_responses.as_deref(),
+            |snapshot, node, response| snapshot.assert_additional_response(node, response),
+        );
+        self.assert_optional_text(
+            self.child(id, FORM_SUBPROTOCOL),
+            source.subprotocol.as_deref(),
+        );
+        self.assert_sequence(
+            self.child(id, FORM_OPERATIONS),
+            source.op.as_deref(),
+            |snapshot, node, operation| assert_eq!(snapshot.text(node), operation.as_str()),
+        );
+        self.assert_extensions(self.child(id, FORM_EXTENSIONS), &source._extra_fields);
     }
     fn assert_schema(&self, id: u32, source: &DataSchema) {
         assert_eq!(self.kind(id), Kind::Schema);
@@ -1139,21 +1269,7 @@ fn typed_corpus_survives_sealed_snapshot() {
         for (index, form) in property._interaction.forms.iter().enumerate() {
             let edge = snapshot.edge(forms, index);
             assert_eq!(edge.original_index as usize, index);
-            assert_eq!(
-                snapshot.text(snapshot.child(edge.target, 0)),
-                form.href.as_str()
-            );
-            assert_eq!(
-                snapshot.text(snapshot.child(edge.target, 1)),
-                form.content_type
-            );
-            assert_eq!(snapshot.kind(snapshot.child(edge.target, 2)), Kind::Absent);
-            let ops = snapshot.child(edge.target, 3);
-            for (op_index, op) in form.op.as_ref().unwrap().iter().enumerate() {
-                let op_edge = snapshot.edge(ops, op_index);
-                assert_eq!(op_edge.original_index as usize, op_index);
-                assert_eq!(snapshot.text(op_edge.target), op.as_str());
-            }
+            snapshot.assert_form(edge.target, form);
         }
     }
     let forms = snapshot.child(root, ROOT_FORMS);
@@ -1330,7 +1446,7 @@ fn property_form_operation_order_survives_snapshot() {
         .map_get(snapshot.child(snapshot.root, ROOT_PROPERTIES), "zeta")
         .unwrap();
     let first_form = snapshot.child(snapshot.child(zeta, 1), 0);
-    let stored_ops = snapshot.child(first_form, 3);
+    let stored_ops = snapshot.child(first_form, FORM_OPERATIONS);
     assert_eq!(snapshot.node(stored_ops).edge_count, 2);
     for (index, op) in source_ops.iter().enumerate() {
         let edge = snapshot.edge(stored_ops, index);
@@ -1353,6 +1469,157 @@ fn property_form_operation_order_survives_snapshot() {
         .swap(0, 1);
     swapped.validate_with_level(ValidationLevel::Basic).unwrap();
     assert!(!snapshot.same(&Snapshot::normalize(&swapped)));
+}
+
+#[test]
+fn complete_form_fields_survive_and_distinguish_semantic_mutations() {
+    fn rich_form(thing: &Thing) -> &Form {
+        &thing.properties.as_ref().unwrap()["zeta"]
+            ._interaction
+            .forms[0]
+    }
+
+    fn rich_form_mut(thing: &mut Thing) -> &mut Form {
+        &mut thing
+            .properties
+            .as_mut()
+            .unwrap()
+            .get_mut("zeta")
+            .unwrap()
+            ._interaction
+            .forms[0]
+    }
+
+    let thing = typed_corpus_shared::typed_corpus();
+    let baseline = Snapshot::normalize(&thing);
+    let zeta = baseline
+        .map_get(baseline.child(baseline.root, ROOT_PROPERTIES), "zeta")
+        .unwrap();
+    let forms = baseline.child(zeta, 1);
+    baseline.assert_form(baseline.child(forms, 0), rich_form(&thing));
+    baseline.assert_form(
+        baseline.child(forms, 1),
+        &thing.properties.as_ref().unwrap()["zeta"]
+            ._interaction
+            .forms[1],
+    );
+    assert_eq!(baseline.arena.footprint().retained_allocation_count, 3);
+
+    let mut changed = thing.clone();
+    rich_form_mut(&mut changed).content_type = "application/octet-stream".into();
+    assert!(
+        !baseline.same(&Snapshot::normalize(&changed)),
+        "content type"
+    );
+
+    let mut changed = thing.clone();
+    rich_form_mut(&mut changed).content_coding = None;
+    assert!(
+        !baseline.same(&Snapshot::normalize(&changed)),
+        "content coding optional distinction"
+    );
+
+    let mut changed = thing.clone();
+    rich_form_mut(&mut changed)
+        .security
+        .as_mut()
+        .unwrap()
+        .swap(0, 1);
+    changed.validate_with_level(ValidationLevel::Basic).unwrap();
+    assert!(
+        !baseline.same(&Snapshot::normalize(&changed)),
+        "security order"
+    );
+
+    let mut changed = thing.clone();
+    rich_form_mut(&mut changed)
+        .scopes
+        .as_mut()
+        .unwrap()
+        .swap(0, 1);
+    assert!(
+        !baseline.same(&Snapshot::normalize(&changed)),
+        "scope order"
+    );
+
+    let mut changed = thing.clone();
+    rich_form_mut(&mut changed)
+        .response
+        .as_mut()
+        .unwrap()
+        ._extra_fields
+        .insert(
+            "ex:responseHint".into(),
+            serde_json::json!({"compact": false}),
+        );
+    assert!(
+        !baseline.same(&Snapshot::normalize(&changed)),
+        "primary response extension"
+    );
+
+    let mut changed = thing.clone();
+    rich_form_mut(&mut changed)
+        .additional_responses
+        .as_mut()
+        .unwrap()
+        .swap(0, 1);
+    changed.validate_with_level(ValidationLevel::Basic).unwrap();
+    assert!(
+        !baseline.same(&Snapshot::normalize(&changed)),
+        "additional response order"
+    );
+
+    let mut changed = thing.clone();
+    rich_form_mut(&mut changed).subprotocol = None;
+    assert!(
+        !baseline.same(&Snapshot::normalize(&changed)),
+        "subprotocol optional distinction"
+    );
+
+    let mut changed = thing.clone();
+    rich_form_mut(&mut changed)
+        ._extra_fields
+        .insert("ex:formHint".into(), serde_json::json!({"priority": 2}));
+    assert!(
+        !baseline.same(&Snapshot::normalize(&changed)),
+        "Form extension"
+    );
+
+    let mut changed = thing.clone();
+    rich_form_mut(&mut changed).security = Some(Vec::new());
+    let present_empty = Snapshot::normalize(&changed);
+    rich_form_mut(&mut changed).security = None;
+    assert!(
+        !present_empty.same(&Snapshot::normalize(&changed)),
+        "absent vs present-empty security"
+    );
+
+    let mut changed = thing.clone();
+    rich_form_mut(&mut changed).scopes = Some(Vec::new());
+    let present_empty = Snapshot::normalize(&changed);
+    rich_form_mut(&mut changed).scopes = None;
+    assert!(
+        !present_empty.same(&Snapshot::normalize(&changed)),
+        "absent vs present-empty scopes"
+    );
+
+    let mut changed = thing.clone();
+    rich_form_mut(&mut changed).additional_responses = Some(Vec::new());
+    let present_empty = Snapshot::normalize(&changed);
+    rich_form_mut(&mut changed).additional_responses = None;
+    assert!(
+        !present_empty.same(&Snapshot::normalize(&changed)),
+        "absent vs present-empty additional responses"
+    );
+
+    let mut changed = thing.clone();
+    rich_form_mut(&mut changed).op = Some(Vec::new());
+    let present_empty = Snapshot::normalize(&changed);
+    rich_form_mut(&mut changed).op = None;
+    assert!(
+        !present_empty.same(&Snapshot::normalize(&changed)),
+        "absent vs present-empty operations"
+    );
 }
 
 #[test]
