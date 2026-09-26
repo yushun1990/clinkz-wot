@@ -42,12 +42,40 @@ pub const CORPUS: &str = r##"{
         "https://example.org/profiles/local"
     ],
     "security": ["none"],
-    "securityDefinitions": { "none": { "scheme": "nosec" } },
+    "securityDefinitions": {
+        "none": { "scheme": "nosec" },
+        "none_alt": { "scheme": "nosec" }
+    },
     "properties": {
         "zeta": {
             "type": "string",
             "forms": [
-                { "href": "zeta/first", "op": ["readproperty", "writeproperty"], "contentType": "text/plain" },
+                {
+                    "href": "zeta/first",
+                    "op": ["readproperty", "writeproperty"],
+                    "contentType": "text/plain",
+                    "contentCoding": "identity",
+                    "security": ["none", "none_alt"],
+                    "scopes": ["things.read", "things.audit"],
+                    "response": {
+                        "contentType": "application/cbor",
+                        "ex:responseHint": { "compact": true }
+                    },
+                    "additionalResponses": [
+                        {
+                            "contentType": "application/problem+json",
+                            "schema": "mode",
+                            "success": true,
+                            "ex:status": 202
+                        },
+                        {
+                            "schema": "threshold",
+                            "ex:status": 400
+                        }
+                    ],
+                    "subprotocol": "longpoll",
+                    "ex:formHint": { "priority": 1 }
+                },
                 { "href": "zeta/second", "op": "readproperty" }
             ]
         },

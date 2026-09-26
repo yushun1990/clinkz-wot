@@ -88,6 +88,36 @@ fn typed_fields_define_order_presence_and_content_without_json_roundtrip() {
     assert_eq!(forms[1].href.as_str(), "zeta/second");
     assert_eq!(forms[0].content_type, "text/plain");
     assert_eq!(forms[1].content_type, "application/json");
+    assert_eq!(forms[0].content_coding.as_deref(), Some("identity"));
+    assert_eq!(
+        forms[0].security.as_deref(),
+        Some(["none".into(), "none_alt".into()].as_slice())
+    );
+    assert_eq!(
+        forms[0].scopes.as_deref(),
+        Some(["things.read".into(), "things.audit".into()].as_slice())
+    );
+    assert_eq!(
+        forms[0].response.as_ref().unwrap().content_type,
+        "application/cbor"
+    );
+    assert_eq!(
+        forms[0].response.as_ref().unwrap()._extra_fields["ex:responseHint"]["compact"],
+        json!(true)
+    );
+    let additional = forms[0].additional_responses.as_ref().unwrap();
+    assert_eq!(additional.len(), 2);
+    assert_eq!(
+        additional[0].content_type.as_deref(),
+        Some("application/problem+json")
+    );
+    assert_eq!(additional[0].schema.as_deref(), Some("mode"));
+    assert!(additional[0].success);
+    assert_eq!(additional[1].content_type, None);
+    assert_eq!(additional[1].schema.as_deref(), Some("threshold"));
+    assert!(!additional[1].success);
+    assert_eq!(forms[0].subprotocol.as_deref(), Some("longpoll"));
+    assert_eq!(forms[0]._extra_fields["ex:formHint"]["priority"], json!(1));
     assert_eq!(
         forms[0].op.as_deref(),
         Some([Operation::ReadProperty, Operation::WriteProperty].as_slice())
@@ -153,6 +183,48 @@ fn typed_mutations_distinguish_order_presence_and_map_association() {
         .validate_with_level(ValidationLevel::Basic)
         .unwrap();
     assert_ne!(form_order, thing, "Form original indices are semantic");
+
+    let mut form_security_order = thing.clone();
+    form_security_order
+        .properties
+        .as_mut()
+        .unwrap()
+        .get_mut("zeta")
+        .unwrap()
+        ._interaction
+        .forms[0]
+        .security
+        .as_mut()
+        .unwrap()
+        .swap(0, 1);
+    form_security_order
+        .validate_with_level(ValidationLevel::Basic)
+        .unwrap();
+    assert_ne!(
+        form_security_order, thing,
+        "Form security order is semantic"
+    );
+
+    let mut additional_response_order = thing.clone();
+    additional_response_order
+        .properties
+        .as_mut()
+        .unwrap()
+        .get_mut("zeta")
+        .unwrap()
+        ._interaction
+        .forms[0]
+        .additional_responses
+        .as_mut()
+        .unwrap()
+        .swap(0, 1);
+    additional_response_order
+        .validate_with_level(ValidationLevel::Basic)
+        .unwrap();
+    assert_ne!(
+        additional_response_order, thing,
+        "additional response order is semantic"
+    );
 
     let mut absent_forms = thing.clone();
     absent_forms.forms = None;

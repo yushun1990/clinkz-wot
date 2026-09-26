@@ -109,10 +109,27 @@ values and present-empty schema maps, preserve schema key/value associations,
 and keep map insertion history non-semantic.
 
 This remains a corpus-scoped part of item 3. `created`/`modified`, Actions,
-Events, Links, complete Forms, all security variants, and affordance-level URI
-variables are not covered by this slice. The recursive fixed-headroom traversal
+Events, Links, all security variants, and affordance-level URI variables are
+not covered by this slice. The recursive fixed-headroom traversal
 also remains non-production and does not establish exact work charging,
 resumability, a shared semantic kernel, strict entry, or readmission.
+
+## Complete Form typed-storage slice
+
+The shared corpus now includes one rich Property Form and one minimal Form.
+The snapshot retains every current typed Form field: raw `href`, content type,
+optional content coding, ordered security names and scopes, primary response
+content and extensions, ordered additional responses with optional content
+type/schema and success state, subprotocol, ordered operations, and Form
+extensions. Expected-response and additional-response records use only scalar
+nodes, ranges, and normalized extension values in the same three arenas.
+
+Tests read both Forms back field by field, retain their original indices, and
+show that content, ordered lists, response/additional-response content,
+subprotocol, extensions, and absent-versus-present-empty distinctions affect
+the sealed snapshot. This proves typed storage only. Effective operation
+defaults, inherited/overridden security, resolved URI, and response-content
+defaults remain TD semantic-kernel work and are not copied into this probe.
 
 ## Nested JSON Object ordering slice
 
