@@ -61,6 +61,21 @@ fn typed_fields_define_order_presence_and_content_without_json_roundtrip() {
         thing._metadata.titles.as_ref().unwrap().get("fr").unwrap(),
         "Corpus typé"
     );
+    assert_eq!(
+        thing._metadata.tags.as_deref(),
+        Some(["Sensor".into(), "Thermometer".into()].as_slice())
+    );
+    assert_eq!(
+        thing._metadata.description.as_deref(),
+        Some("A fixed typed semantic corpus")
+    );
+    assert_eq!(
+        thing.version.as_ref().unwrap()._extra_fields["ex:build"]["channel"],
+        json!("evidence")
+    );
+    assert_eq!(thing.profile.as_ref().unwrap().len(), 2);
+    assert_eq!(thing.schema_definitions.as_ref().unwrap().len(), 2);
+    assert_eq!(thing.uri_variables.as_ref().unwrap().len(), 1);
     assert_eq!(thing.forms.as_ref().unwrap().len(), 0);
 
     let properties = thing.properties.as_ref().unwrap();
@@ -162,6 +177,34 @@ fn typed_mutations_distinguish_order_presence_and_map_association() {
         ._extra_fields
         .insert("ex:long".into(), Value::String("λ".repeat(2_047)));
     assert_ne!(long_content, thing);
+
+    let mut profile_order = thing.clone();
+    profile_order.profile.as_mut().unwrap().swap(0, 1);
+    profile_order
+        .validate_with_level(ValidationLevel::Basic)
+        .unwrap();
+    assert_ne!(profile_order, thing, "profile order is semantic");
+
+    let mut absent_version = thing.clone();
+    absent_version.version = None;
+    absent_version
+        .validate_with_level(ValidationLevel::Basic)
+        .unwrap();
+    assert_ne!(absent_version, thing, "None differs from Some(version)");
+
+    let mut schema_association = thing.clone();
+    let definitions = schema_association.schema_definitions.as_mut().unwrap();
+    let mode = definitions.remove("mode").unwrap();
+    let threshold = definitions.remove("threshold").unwrap();
+    definitions.insert("mode".into(), threshold);
+    definitions.insert("threshold".into(), mode);
+    schema_association
+        .validate_with_level(ValidationLevel::Basic)
+        .unwrap();
+    assert_ne!(
+        schema_association, thing,
+        "schema map associations are semantic"
+    );
 }
 
 #[test]

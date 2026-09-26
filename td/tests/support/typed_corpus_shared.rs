@@ -1,4 +1,4 @@
-//! Fixed typed input shared by the #96 tests and the snapshot prototype.
+//! Fixed typed input shared by the typed-corpus tests and snapshot prototype.
 
 extern crate alloc;
 use self::alloc::vec;
@@ -22,10 +22,25 @@ pub const CORPUS: &str = r##"{
         "https://example.org/extra-context"
     ],
     "id": "urn:example:typed-corpus",
+    "@type": ["Sensor", "Thermometer"],
     "title": "Typed corpus",
     "titles": { "en": "Typed corpus", "fr": "Corpus typé" },
+    "description": "A fixed typed semantic corpus",
+    "descriptions": {
+        "en": "A fixed typed semantic corpus",
+        "fr": "Un corpus sémantique typé fixe"
+    },
+    "version": {
+        "instance": "1.2.3",
+        "model": "temperature-model-v2",
+        "ex:build": { "channel": "evidence", "number": 17 }
+    },
     "support": "https://example.org/support",
     "base": "https://example.org/things/",
+    "profile": [
+        "https://www.w3.org/2022/wot/profile/http-basic/v1",
+        "https://example.org/profiles/local"
+    ],
     "security": ["none"],
     "securityDefinitions": { "none": { "scheme": "nosec" } },
     "properties": {
@@ -40,6 +55,13 @@ pub const CORPUS: &str = r##"{
             "type": "boolean",
             "forms": [{ "href": "alpha", "op": "readproperty" }]
         }
+    },
+    "schemaDefinitions": {
+        "mode": { "type": "string", "enum": ["auto", "manual"] },
+        "threshold": { "type": "number", "minimum": 0.25, "maximum": 9.5 }
+    },
+    "uriVariables": {
+        "tenant": { "type": "string", "minLength": 1, "maxLength": 32 }
     },
     "forms": [],
     "ex:payload": {

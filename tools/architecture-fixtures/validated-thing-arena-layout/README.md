@@ -97,6 +97,23 @@ only while constructing the fixed typed input. The snapshot traversal does not
 copy a semantic rule or claim validation of the sealed snapshot. This is
 partial item-3 evidence, not readmission or item-3 completion.
 
+## Remaining Thing root-field slice
+
+The shared typed corpus and snapshot probe also cover the root metadata fields
+`@type`, `description`, and `descriptions`; version instance/model/extensions;
+the ordered `profile` URI sequence; and the `schemaDefinitions` and
+`uriVariables` schema maps. The probe stores those values directly from the
+typed model in the same node, edge, and byte arenas. Tests read every included
+field back, preserve tag and profile order, distinguish absent from present
+values and present-empty schema maps, preserve schema key/value associations,
+and keep map insertion history non-semantic.
+
+This remains a corpus-scoped part of item 3. `created`/`modified`, Actions,
+Events, Links, complete Forms, all security variants, and affordance-level URI
+variables are not covered by this slice. The recursive fixed-headroom traversal
+also remains non-production and does not establish exact work charging,
+resumability, a shared semantic kernel, strict entry, or readmission.
+
 ## Nested JSON Object ordering slice
 
 The snapshot probe now reserves each JSON Object's map edges, stores scalar
