@@ -9,6 +9,7 @@ use crate as td_crate;
 use alloc::{collections::BTreeMap, string::String, vec::Vec};
 use serde_json::Value;
 use td_crate::{
+    affordance::PropertyAffordance,
     data_schema::DataSchema,
     data_type::{
         AdditionalExpectedResponse, ExpectedResponse, ExtensionMap, Metadata, MultiLanguage,
@@ -89,6 +90,12 @@ const FORM_SUBPROTOCOL: usize = 7;
 const FORM_OPERATIONS: usize = 8;
 const FORM_EXTENSIONS: usize = 9;
 const FORM_FIELD_COUNT: usize = 10;
+
+const PROPERTY_SCHEMA: usize = 0;
+const PROPERTY_FORMS: usize = 1;
+const PROPERTY_URI_VARIABLES: usize = 2;
+const PROPERTY_OBSERVABLE: usize = 3;
+const PROPERTY_FIELD_COUNT: usize = 4;
 
 const EMPTY_EDGE: RetainedEdge = RetainedEdge {
     target: 0,
@@ -711,12 +718,24 @@ impl Build {
                     let pair = self.node_at(entry).first_edge;
                     let key = self.text(Kind::Str, name);
                     self.put(pair, 0, key);
-                    let value = self.node(Kind::Property, 2);
+                    let value = self.node(Kind::Property, PROPERTY_FIELD_COUNT);
                     let property_first = self.node_at(value).first_edge;
                     let schema = self.schema(&property._schema);
-                    self.put(property_first, 0, schema);
+                    self.put(property_first, PROPERTY_SCHEMA, schema);
                     let forms = self.forms(Some(&property._interaction.forms));
-                    self.put(property_first, 1, forms);
+                    self.put(property_first, PROPERTY_FORMS, forms);
+                    let uri_variables =
+                        self.schema_map(property._interaction.uri_variables.as_ref());
+                    self.put(property_first, PROPERTY_URI_VARIABLES, uri_variables);
+                    let observable = self.node(
+                        if property.observable {
+                            Kind::True
+                        } else {
+                            Kind::False
+                        },
+                        0,
+                    );
+                    self.put(property_first, PROPERTY_OBSERVABLE, observable);
                     self.put(pair, 1, value);
                     self.put(start, index, entry);
                 }
@@ -994,6 +1013,39 @@ impl Snapshot {
         );
         self.assert_extensions(self.child(id, FORM_EXTENSIONS), &source._extra_fields);
     }
+    fn assert_schema_map(&self, id: u32, source: Option<&BTreeMap<String, DataSchema>>) {
+        let Some(source) = source else {
+            assert_eq!(self.kind(id), Kind::Absent);
+            return;
+        };
+        assert_eq!(self.kind(id), Kind::Map);
+        self.assert_sorted_map(id);
+        assert_eq!(self.node(id).edge_count as usize, source.len());
+        for (name, schema) in source {
+            self.assert_schema(self.map_get(id, name).unwrap(), schema);
+        }
+    }
+    fn assert_property(&self, id: u32, source: &PropertyAffordance) {
+        assert_eq!(self.kind(id), Kind::Property);
+        self.assert_schema(self.child(id, PROPERTY_SCHEMA), &source._schema);
+        self.assert_sequence(
+            self.child(id, PROPERTY_FORMS),
+            Some(source._interaction.forms.as_slice()),
+            |snapshot, node, form| snapshot.assert_form(node, form),
+        );
+        self.assert_schema_map(
+            self.child(id, PROPERTY_URI_VARIABLES),
+            source._interaction.uri_variables.as_ref(),
+        );
+        assert_eq!(
+            self.kind(self.child(id, PROPERTY_OBSERVABLE)),
+            if source.observable {
+                Kind::True
+            } else {
+                Kind::False
+            }
+        );
+    }
     fn assert_schema(&self, id: u32, source: &DataSchema) {
         assert_eq!(self.kind(id), Kind::Schema);
         let variant = self.child(id, 0);
@@ -1260,17 +1312,7 @@ fn typed_corpus_survives_sealed_snapshot() {
     let properties = snapshot.child(root, ROOT_PROPERTIES);
     for (name, property) in thing.properties.as_ref().unwrap() {
         let stored = snapshot.map_get(properties, name).unwrap();
-        snapshot.assert_schema(snapshot.child(stored, 0), &property._schema);
-        let forms = snapshot.child(stored, 1);
-        assert_eq!(
-            snapshot.node(forms).edge_count as usize,
-            property._interaction.forms.len()
-        );
-        for (index, form) in property._interaction.forms.iter().enumerate() {
-            let edge = snapshot.edge(forms, index);
-            assert_eq!(edge.original_index as usize, index);
-            snapshot.assert_form(edge.target, form);
-        }
+        snapshot.assert_property(stored, property);
     }
     let forms = snapshot.child(root, ROOT_FORMS);
     assert_eq!(snapshot.kind(forms), Kind::Array);
@@ -1445,7 +1487,7 @@ fn property_form_operation_order_survives_snapshot() {
     let zeta = snapshot
         .map_get(snapshot.child(snapshot.root, ROOT_PROPERTIES), "zeta")
         .unwrap();
-    let first_form = snapshot.child(snapshot.child(zeta, 1), 0);
+    let first_form = snapshot.child(snapshot.child(zeta, PROPERTY_FORMS), 0);
     let stored_ops = snapshot.child(first_form, FORM_OPERATIONS);
     assert_eq!(snapshot.node(stored_ops).edge_count, 2);
     for (index, op) in source_ops.iter().enumerate() {
@@ -1495,7 +1537,7 @@ fn complete_form_fields_survive_and_distinguish_semantic_mutations() {
     let zeta = baseline
         .map_get(baseline.child(baseline.root, ROOT_PROPERTIES), "zeta")
         .unwrap();
-    let forms = baseline.child(zeta, 1);
+    let forms = baseline.child(zeta, PROPERTY_FORMS);
     baseline.assert_form(baseline.child(forms, 0), rich_form(&thing));
     baseline.assert_form(
         baseline.child(forms, 1),
@@ -1623,6 +1665,72 @@ fn complete_form_fields_survive_and_distinguish_semantic_mutations() {
 }
 
 #[test]
+fn complete_property_fields_survive_and_distinguish_semantic_mutations() {
+    fn zeta_mut(thing: &mut Thing) -> &mut PropertyAffordance {
+        thing.properties.as_mut().unwrap().get_mut("zeta").unwrap()
+    }
+
+    let thing = typed_corpus_shared::typed_corpus();
+    let baseline = Snapshot::normalize(&thing);
+    let properties = baseline.child(baseline.root, ROOT_PROPERTIES);
+    baseline.assert_property(
+        baseline.map_get(properties, "zeta").unwrap(),
+        &thing.properties.as_ref().unwrap()["zeta"],
+    );
+    baseline.assert_property(
+        baseline.map_get(properties, "alpha").unwrap(),
+        &thing.properties.as_ref().unwrap()["alpha"],
+    );
+    assert_eq!(baseline.arena.footprint().retained_allocation_count, 3);
+
+    let mut changed = thing.clone();
+    zeta_mut(&mut changed).observable = false;
+    changed.validate_with_level(ValidationLevel::Basic).unwrap();
+    assert!(
+        !baseline.same(&Snapshot::normalize(&changed)),
+        "observable flag"
+    );
+
+    let mut changed = thing.clone();
+    let variables = zeta_mut(&mut changed)
+        ._interaction
+        .uri_variables
+        .as_mut()
+        .unwrap();
+    let locale = variables.remove("locale").unwrap();
+    let sample = variables.remove("sample").unwrap();
+    variables.insert("locale".into(), sample);
+    variables.insert("sample".into(), locale);
+    changed.validate_with_level(ValidationLevel::Basic).unwrap();
+    assert!(
+        !baseline.same(&Snapshot::normalize(&changed)),
+        "Property URI-variable key/value association"
+    );
+
+    let mut reordered = thing.clone();
+    let variables = zeta_mut(&mut reordered)
+        ._interaction
+        .uri_variables
+        .take()
+        .unwrap();
+    zeta_mut(&mut reordered)._interaction.uri_variables =
+        Some(variables.into_iter().rev().collect());
+    assert!(
+        baseline.same(&Snapshot::normalize(&reordered)),
+        "Property URI-variable map insertion history is not semantic"
+    );
+
+    let mut changed = thing.clone();
+    zeta_mut(&mut changed)._interaction.uri_variables = Some(BTreeMap::new());
+    let present_empty = Snapshot::normalize(&changed);
+    zeta_mut(&mut changed)._interaction.uri_variables = None;
+    assert!(
+        !present_empty.same(&Snapshot::normalize(&changed)),
+        "absent vs present-empty Property URI variables"
+    );
+}
+
+#[test]
 fn typed_distinctions_and_serializer_failure() {
     let thing = typed_corpus_shared::typed_corpus();
     let baseline = Snapshot::normalize(&thing);
@@ -1679,7 +1787,7 @@ fn typed_distinctions_and_serializer_failure() {
         .map_get(accepted.child(accepted.root, ROOT_PROPERTIES), "zeta")
         .unwrap();
     accepted.assert_schema(
-        accepted.child(zeta, 0),
+        accepted.child(zeta, PROPERTY_SCHEMA),
         &failure.properties.as_ref().unwrap()["zeta"]._schema,
     );
 }
@@ -1690,7 +1798,7 @@ fn nested_data_schema_survives_and_distinguishes_semantic_mutations() {
     let baseline = Snapshot::normalize(&thing);
     let properties = baseline.child(baseline.root, ROOT_PROPERTIES);
     let alpha = baseline.map_get(properties, "alpha").unwrap();
-    let stored = baseline.child(alpha, 0);
+    let stored = baseline.child(alpha, PROPERTY_SCHEMA);
     let schema = &thing.properties.as_ref().unwrap()["alpha"]._schema;
     baseline.assert_schema(stored, schema);
     assert_eq!(baseline.arena.footprint().retained_allocation_count, 3);
