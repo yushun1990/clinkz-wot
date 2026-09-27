@@ -9,7 +9,7 @@ use crate as td_crate;
 use alloc::{collections::BTreeMap, string::String, vec::Vec};
 use serde_json::Value;
 use td_crate::{
-    affordance::{ActionAffordance, PropertyAffordance},
+    affordance::{ActionAffordance, EventAffordance, PropertyAffordance},
     data_schema::DataSchema,
     data_type::{
         AdditionalExpectedResponse, ExpectedResponse, ExtensionMap, Metadata, MultiLanguage,
@@ -43,6 +43,7 @@ enum Kind {
     Number,
     Property,
     Action,
+    Event,
     Form,
     Schema,
     SchemaArray,
@@ -79,7 +80,8 @@ const ROOT_PROFILE: usize = 15;
 const ROOT_SCHEMA_DEFINITIONS: usize = 16;
 const ROOT_URI_VARIABLES: usize = 17;
 const ROOT_ACTIONS: usize = 18;
-const ROOT_FIELD_COUNT: usize = 19;
+const ROOT_EVENTS: usize = 19;
+const ROOT_FIELD_COUNT: usize = 20;
 
 const FORM_HREF: usize = 0;
 const FORM_CONTENT_TYPE: usize = 1;
@@ -110,6 +112,16 @@ const ACTION_SYNCHRONOUS: usize = 7;
 const ACTION_EXTENSIONS: usize = 8;
 const ACTION_FIELD_COUNT: usize = 9;
 
+const EVENT_METADATA: usize = 0;
+const EVENT_FORMS: usize = 1;
+const EVENT_URI_VARIABLES: usize = 2;
+const EVENT_SUBSCRIPTION: usize = 3;
+const EVENT_DATA: usize = 4;
+const EVENT_DATA_RESPONSE: usize = 5;
+const EVENT_CANCELLATION: usize = 6;
+const EVENT_EXTENSIONS: usize = 7;
+const EVENT_FIELD_COUNT: usize = 8;
+
 const EMPTY_EDGE: RetainedEdge = RetainedEdge {
     target: 0,
     original_index: 0,
@@ -127,8 +139,8 @@ impl Build {
         let mut arena = Prototype::new(1_000_000, 1_000_000, 2_000_000, 1_000_000);
         // Fixed headroom keeps this slice focused on semantic storage. The
         // arena fixture separately proves checked growth/seal accounting.
-        arena.grow_nodes(2_048).unwrap();
-        arena.grow_edges(4_096).unwrap();
+        arena.grow_nodes(4_096).unwrap();
+        arena.grow_edges(8_192).unwrap();
         arena.grow_bytes(32_768).unwrap();
         Self {
             arena,
@@ -684,6 +696,28 @@ impl Build {
         id
     }
 
+    fn event(&mut self, event: &EventAffordance) -> u32 {
+        let id = self.node(Kind::Event, EVENT_FIELD_COUNT);
+        let first = self.node_at(id).first_edge;
+        let metadata = self.metadata(&event._metadata);
+        self.put(first, EVENT_METADATA, metadata);
+        let forms = self.forms(Some(&event._interaction.forms));
+        self.put(first, EVENT_FORMS, forms);
+        let uri_variables = self.schema_map(event._interaction.uri_variables.as_ref());
+        self.put(first, EVENT_URI_VARIABLES, uri_variables);
+        let subscription = self.optional_schema(event.subscription.as_ref());
+        self.put(first, EVENT_SUBSCRIPTION, subscription);
+        let data = self.optional_schema(event.data.as_ref());
+        self.put(first, EVENT_DATA, data);
+        let data_response = self.optional_schema(event.data_response.as_ref());
+        self.put(first, EVENT_DATA_RESPONSE, data_response);
+        let cancellation = self.optional_schema(event.cancellation.as_ref());
+        self.put(first, EVENT_CANCELLATION, cancellation);
+        let extensions = self.extensions(&event._extra_fields);
+        self.put(first, EVENT_EXTENSIONS, extensions);
+        id
+    }
+
     fn version(&mut self, version: Option<&td_crate::data_type::VersionInfo>) -> u32 {
         let Some(version) = version else {
             return self.node(Kind::Absent, 0);
@@ -838,6 +872,24 @@ impl Build {
             }
         };
         self.put(first, ROOT_ACTIONS, actions);
+        let events = match thing.events.as_ref() {
+            None => self.node(Kind::Absent, 0),
+            Some(events) => {
+                let id = self.node(Kind::Map, events.len());
+                let start = self.node_at(id).first_edge;
+                for (index, (name, event)) in events.iter().enumerate() {
+                    let entry = self.node(Kind::Entry, 2);
+                    let pair = self.node_at(entry).first_edge;
+                    let key = self.text(Kind::Str, name);
+                    self.put(pair, 0, key);
+                    let value = self.event(event);
+                    self.put(pair, 1, value);
+                    self.put(start, index, entry);
+                }
+                id
+            }
+        };
+        self.put(first, ROOT_EVENTS, events);
         id
     }
 }
@@ -876,6 +928,7 @@ impl Snapshot {
             x if x == Kind::Number as u32 => Kind::Number,
             x if x == Kind::Property as u32 => Kind::Property,
             x if x == Kind::Action as u32 => Kind::Action,
+            x if x == Kind::Event as u32 => Kind::Event,
             x if x == Kind::Form as u32 => Kind::Form,
             x if x == Kind::Schema as u32 => Kind::Schema,
             x if x == Kind::SchemaArray as u32 => Kind::SchemaArray,
@@ -1165,6 +1218,31 @@ impl Snapshot {
         assert_eq!(self.kind(self.child(id, ACTION_SYNCHRONOUS)), Kind::Absent);
         self.assert_extensions(self.child(id, ACTION_EXTENSIONS), &source._extra_fields);
     }
+    fn assert_event(&self, id: u32, source: &EventAffordance) {
+        assert_eq!(self.kind(id), Kind::Event);
+        self.assert_metadata(self.child(id, EVENT_METADATA), &source._metadata);
+        self.assert_sequence(
+            self.child(id, EVENT_FORMS),
+            Some(source._interaction.forms.as_slice()),
+            |snapshot, node, form| snapshot.assert_form(node, form),
+        );
+        self.assert_schema_map(
+            self.child(id, EVENT_URI_VARIABLES),
+            source._interaction.uri_variables.as_ref(),
+        );
+        for (field, schema) in [
+            (EVENT_SUBSCRIPTION, source.subscription.as_ref()),
+            (EVENT_DATA, source.data.as_ref()),
+            (EVENT_DATA_RESPONSE, source.data_response.as_ref()),
+            (EVENT_CANCELLATION, source.cancellation.as_ref()),
+        ] {
+            match schema {
+                Some(schema) => self.assert_schema(self.child(id, field), schema),
+                None => assert_eq!(self.kind(self.child(id, field)), Kind::Absent),
+            }
+        }
+        self.assert_extensions(self.child(id, EVENT_EXTENSIONS), &source._extra_fields);
+    }
     fn assert_schema(&self, id: u32, source: &DataSchema) {
         assert_eq!(self.kind(id), Kind::Schema);
         let variant = self.child(id, 0);
@@ -1437,6 +1515,11 @@ fn typed_corpus_survives_sealed_snapshot() {
     for (name, action) in thing.actions.as_ref().unwrap() {
         let stored = snapshot.map_get(actions, name).unwrap();
         snapshot.assert_action(stored, action);
+    }
+    let events = snapshot.child(root, ROOT_EVENTS);
+    for (name, event) in thing.events.as_ref().unwrap() {
+        let stored = snapshot.map_get(events, name).unwrap();
+        snapshot.assert_event(stored, event);
     }
     let forms = snapshot.child(root, ROOT_FORMS);
     assert_eq!(snapshot.kind(forms), Kind::Array);
@@ -1981,6 +2064,125 @@ fn complete_action_fields_survive_and_distinguish_semantic_mutations() {
             "absent vs false Action synchronous"
         );
     }
+}
+
+#[test]
+fn complete_event_fields_survive_and_distinguish_semantic_mutations() {
+    fn zeta_mut(thing: &mut Thing) -> &mut EventAffordance {
+        thing.events.as_mut().unwrap().get_mut("zeta").unwrap()
+    }
+
+    let thing = typed_corpus_shared::typed_corpus();
+    let baseline = Snapshot::normalize(&thing);
+    let events = baseline.child(baseline.root, ROOT_EVENTS);
+    baseline.assert_event(
+        baseline.map_get(events, "zeta").unwrap(),
+        &thing.events.as_ref().unwrap()["zeta"],
+    );
+    baseline.assert_event(
+        baseline.map_get(events, "alpha").unwrap(),
+        &thing.events.as_ref().unwrap()["alpha"],
+    );
+    assert_eq!(baseline.arena.footprint().retained_allocation_count, 3);
+
+    let mut changed = thing.clone();
+    zeta_mut(&mut changed)
+        ._metadata
+        .tags
+        .as_mut()
+        .unwrap()
+        .swap(0, 1);
+    assert!(
+        !baseline.same(&Snapshot::normalize(&changed)),
+        "Event metadata tag order"
+    );
+
+    let mut changed = thing.clone();
+    zeta_mut(&mut changed)._interaction.forms.swap(0, 1);
+    changed.validate_with_level(ValidationLevel::Basic).unwrap();
+    assert!(
+        !baseline.same(&Snapshot::normalize(&changed)),
+        "Event Form order"
+    );
+
+    let mut changed = thing.clone();
+    zeta_mut(&mut changed).subscription = None;
+    changed.validate_with_level(ValidationLevel::Basic).unwrap();
+    assert!(
+        !baseline.same(&Snapshot::normalize(&changed)),
+        "Event subscription presence"
+    );
+
+    let mut changed = thing.clone();
+    zeta_mut(&mut changed).data = None;
+    changed.validate_with_level(ValidationLevel::Basic).unwrap();
+    assert!(
+        !baseline.same(&Snapshot::normalize(&changed)),
+        "Event data presence"
+    );
+
+    let mut changed = thing.clone();
+    zeta_mut(&mut changed).data_response = None;
+    changed.validate_with_level(ValidationLevel::Basic).unwrap();
+    assert!(
+        !baseline.same(&Snapshot::normalize(&changed)),
+        "Event dataResponse presence"
+    );
+
+    let mut changed = thing.clone();
+    zeta_mut(&mut changed).cancellation = None;
+    changed.validate_with_level(ValidationLevel::Basic).unwrap();
+    assert!(
+        !baseline.same(&Snapshot::normalize(&changed)),
+        "Event cancellation presence"
+    );
+
+    let mut changed = thing.clone();
+    zeta_mut(&mut changed)
+        ._extra_fields
+        .insert("ex:eventHint".into(), serde_json::json!({"priority": 4}));
+    assert!(
+        !baseline.same(&Snapshot::normalize(&changed)),
+        "Event extension"
+    );
+
+    let mut changed = thing.clone();
+    let variables = zeta_mut(&mut changed)
+        ._interaction
+        .uri_variables
+        .as_mut()
+        .unwrap();
+    let severity = variables.remove("severity").unwrap();
+    let window = variables.remove("window").unwrap();
+    variables.insert("severity".into(), window);
+    variables.insert("window".into(), severity);
+    changed.validate_with_level(ValidationLevel::Basic).unwrap();
+    assert!(
+        !baseline.same(&Snapshot::normalize(&changed)),
+        "Event URI-variable key/value association"
+    );
+
+    let mut reordered = thing.clone();
+    let variables = zeta_mut(&mut reordered)
+        ._interaction
+        .uri_variables
+        .take()
+        .unwrap();
+    zeta_mut(&mut reordered)._interaction.uri_variables =
+        Some(variables.into_iter().rev().collect());
+    assert!(
+        baseline.same(&Snapshot::normalize(&reordered)),
+        "Event URI-variable map insertion history is not semantic"
+    );
+
+    let mut changed = thing.clone();
+    zeta_mut(&mut changed)._interaction.uri_variables = Some(BTreeMap::new());
+    let present_empty = Snapshot::normalize(&changed);
+    zeta_mut(&mut changed)._interaction.uri_variables = None;
+    assert!(
+        !present_empty.same(&Snapshot::normalize(&changed)),
+        "absent vs present-empty Event URI variables"
+    );
 }
 
 #[test]

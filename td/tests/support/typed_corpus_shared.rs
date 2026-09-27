@@ -141,6 +141,66 @@ pub const CORPUS: &str = r##"{
             "forms": [{ "href": "actions/reset", "op": "invokeaction" }]
         }
     },
+    "events": {
+        "zeta": {
+            "@type": ["AlarmEvent", "TelemetryEvent"],
+            "title": "Alarm",
+            "titles": { "en": "Alarm", "fr": "Alarme" },
+            "description": "Reports alarm state changes",
+            "descriptions": {
+                "en": "Reports alarm state changes",
+                "fr": "Signale les changements d’alarme"
+            },
+            "uriVariables": {
+                "severity": {
+                    "type": "string",
+                    "enum": ["warning", "critical"],
+                    "default": "warning"
+                },
+                "window": { "type": "integer", "minimum": 1, "maximum": 60 }
+            },
+            "subscription": {
+                "type": "object",
+                "properties": {
+                    "threshold": { "type": "number", "minimum": 0.0 }
+                },
+                "required": ["threshold"]
+            },
+            "data": {
+                "type": "object",
+                "properties": {
+                    "active": { "type": "boolean" },
+                    "message": { "type": "string", "minLength": 1 }
+                },
+                "required": ["message"]
+            },
+            "dataResponse": {
+                "type": "string",
+                "enum": ["acknowledged", "retry"]
+            },
+            "cancellation": {
+                "type": "object",
+                "properties": {
+                    "reason": { "type": "string" }
+                },
+                "required": ["reason"]
+            },
+            "forms": [
+                {
+                    "href": "events/alarm/{severity}",
+                    "op": ["subscribeevent", "unsubscribeevent"],
+                    "contentType": "application/json",
+                    "security": ["none"],
+                    "scopes": ["things.observe"]
+                },
+                { "href": "events/alarm/stream", "op": "subscribeevent" }
+            ],
+            "ex:eventHint": { "priority": 3 }
+        },
+        "alpha": {
+            "forms": [{ "href": "events/status", "op": "subscribeevent" }]
+        }
+    },
     "schemaDefinitions": {
         "mode": { "type": "string", "enum": ["auto", "manual"] },
         "threshold": { "type": "number", "minimum": 0.25, "maximum": 9.5 }
