@@ -108,9 +108,8 @@ field back, preserve tag and profile order, distinguish absent from present
 values and present-empty schema maps, preserve schema key/value associations,
 and keep map insertion history non-semantic.
 
-This remains a corpus-scoped part of item 3. `created`/`modified` and all
-security variants are not covered by this slice. The recursive fixed-headroom
-traversal
+This remains a corpus-scoped part of item 3. Complete security-scheme typed
+storage is not covered by this slice. The recursive fixed-headroom traversal
 also remains non-production and does not establish exact work charging,
 resumability, a shared semantic kernel, strict entry, or readmission.
 
@@ -195,6 +194,24 @@ indices, distinguish each optional field and extension, preserve `hreflang`
 order, and distinguish absent from present-empty `hreflang` and root Link
 sequences. This is typed-storage evidence only; relation interpretation, URI
 resolution, language negotiation, effective security, and shared
+Basic/equivalence rules remain outside the prototype.
+
+## Complete timestamp typed-storage slice
+
+The shared corpus now includes both root `created` and `modified` timestamps,
+including leap-day, nanosecond, non-UTC offset-with-seconds, lowercase
+separator, space-separator, and lowercase-UTC spellings accepted by TD's
+existing private RFC3339 owner. The typed snapshot stores each resulting
+`OffsetDateTime` as fixed scalar year, month, day, hour, minute, second,
+nanosecond, and explicit offset-second fields in the same three arenas. It does
+not format or reparse the typed values.
+
+Tests read every retained component back and distinguish each timestamp's
+presence, local date/time and nanosecond changes, plus a same-instant value
+expressed with a different offset. Original lexical spelling and fractional
+digits beyond the typed nanosecond result are deliberately not retained by
+typed entry. This is storage evidence only: shared resumable RFC3339 decode,
+strict-entry progress/charging, lexical error parity, and shared
 Basic/equivalence rules remain outside the prototype.
 
 ## Nested JSON Object ordering slice
