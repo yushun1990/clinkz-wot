@@ -305,14 +305,15 @@ Legacy `BindingRequest` and raw-form selection may remain only for legitimate
 unmigrated capabilities. The Consumer Property Read target path must have zero
 edges to them.
 
-### Reopened existing tranche: name-free selected request
+### Historical reopening: completed name-free selected request
 
-`WP-300-CONSUMER-PROPERTY-READ-BINDING` is reopened under the existing
-ADR-0013 impact lifecycle; this is not a new successor tranche. The completed
+`WP-300-CONSUMER-PROPERTY-READ-BINDING` was reopened under the existing
+ADR-0013 impact lifecycle; no successor tranche was created. The completed
 Host/static registration, Core result seal, cancellation settlement, cleanup,
-and resource behavior remain authoritative, but the current completion
-evidence is superseded because `OutboundRequest` still retains static
-human-readable Thing and target identity.
+and resource behavior remained authoritative, but the earlier completion
+evidence was superseded because `OutboundRequest` then retained static
+human-readable Thing and target identity. The correction was readmitted in
+`github-pr:66` and completed in `github-pr:67` with replacement evidence.
 
 The corrected request constructor receives only `BindingArtifactRef`, URI
 variables, and optional deadline. It retains no `ThingId`, `ThingSlotId`,
@@ -324,19 +325,20 @@ or non-`ConsumerCall` role fails before protocol work.
 
 The permitted production paths remain exactly `core/src/binding.rs`,
 `core/src/outbound.rs`, `core/src/response.rs`, and `core/src/lib.rs`. The
-reopened tranche removes the old constructor's `thing_id`/`target` parameters
-and the `OutboundRequest::thing_id`/`target` accessors. It adds no compatibility
-bridge or `ThingSlotId` successor and does not redesign result sealing.
+reopened tranche removed the old constructor's `thing_id`/`target` parameters
+and the `OutboundRequest::thing_id`/`target` accessors. It added no compatibility
+bridge or `ThingSlotId` successor and did not redesign result sealing.
 
-Before corrected source may merge, an exact-head impact review must rerun every
-intersecting command/evidence in the passed Producer Property Read gate because
-that manifest registers `core/src/binding.rs` and full Core/Servient paths. If
-the claim is invalidated, a separate independent gate-control action reopens
-it before merge. Replacement evidence under the existing
-`consumer-property-read-binding-execution` key must re-execute the complete
-Host/static sealing and cleanup matrix, prove the removed API cannot compile,
-and record that gate disposition. The detailed candidate is owned by
-`WP-300-consumer-property-read-binding-admission.md`.
+The readmission required an exact-head impact review before source merge,
+rerunning every intersecting command/evidence in the passed Producer Property
+Read gate because that manifest registers `core/src/binding.rs` and full
+Core/Servient paths. Had the claim been invalidated, a separate independent
+gate-control action would have been required to reopen it before merge.
+[Replacement evidence](../evidence/WP-300-consumer-property-read-binding-execution.toml)
+under the existing `consumer-property-read-binding-execution` key records the
+complete Host/static sealing and cleanup matrix, compile-fail proof of the
+removed API, and a `reaffirmed` gate disposition. The detailed readmission
+boundary is owned by `WP-300-consumer-property-read-binding-admission.md`.
 
 ## Requirements
 

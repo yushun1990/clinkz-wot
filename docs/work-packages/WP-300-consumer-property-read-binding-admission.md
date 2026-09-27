@@ -8,21 +8,21 @@ The prior admission froze only the first Consumer one-shot Binding tranche. It
 refined the broad retained WP-300 client surface for the active v5.1 Consumer
 Property Read proof and did not activate the later long-lived domain.
 
-The first reopening corrected Core-mediated result sealing and was completed by
-the current Host/static no-bypass implementation and its replacement evidence.
-That completion is now superseded for a different reason: the public
-`OutboundRequest` still retains a deep-cloned `ThingId` and an
+The first reopening corrected Core-mediated result sealing and was completed in
+`github-pr:60` by the Host/static no-bypass implementation and its replacement
+evidence. That checkpoint was later superseded for a different reason: the
+then-public `OutboundRequest` retained a deep-cloned `ThingId` and an
 `AffordanceTarget`, contrary to the active hot-identity and static-plan request
-authority needed by the all-readable aggregate. The same tranche is reopened;
-no successor id is created.
+authority needed by the all-readable aggregate. The same tranche was reopened;
+no successor id was created.
 
-This candidate removes those static human-readable identities while preserving
-the accepted complete-registration, result-sealing, cancellation, cleanup, and
-resource algorithms. It authorizes no source work unless this exact readmission
-revision receives fresh independent review and is merged. The corrected
-implementation head must then receive the mandatory Producer Property Read
-gate impact disposition below before its source may merge or the tranche may
-return to `complete/current`.
+The name-free correction was readmitted in `github-pr:66` and completed in
+`github-pr:67`, preserving the accepted complete-registration, result-sealing,
+cancellation, cleanup, and resource algorithms. The readmission required fresh
+independent review and merge before source work, followed by the mandatory
+Producer Property Read gate impact disposition at the corrected implementation
+head before source merge and return to `complete/current`. The replacement
+evidence below records that completion and the reaffirmed gate disposition.
 
 ## Tranche
 
@@ -438,27 +438,30 @@ This tranche does not implement or claim:
 
 ## Reopening impact and old API removals
 
-This reopening changes no registration, binding-call, response-validation,
-cancellation, cleanup, or resource algorithm. It removes the `thing_id` and
-`target` parameters from `OutboundRequest::property_read`, and removes
+This reopening changed no registration, binding-call, response-validation,
+cancellation, cleanup, or resource algorithm. It removed the `thing_id` and
+`target` parameters from `OutboundRequest::property_read`, and removed
 `OutboundRequest::thing_id` and `OutboundRequest::target`. Those exact four
 surface changes are recorded in `index.toml` `old_api_removals`; no
 `ThingSlotId` replacement, compatibility constructor, deprecated alias, or
 conversion is admitted.
 
-Before corrected source may merge, the exact implementation head must receive
-an explicit impact review against the passed Producer
+The readmission required an explicit impact review at the exact implementation
+head before corrected source could merge, against the passed Producer
 `PROPERTY-READ-ARCHITECTURE` manifest. Although the request correction is
 Consumer-only, the gate registers `core/src/binding.rs` evidence and full Core,
 Servient, fixture, and real-target commands that cross the same complete
 registration implementation. Every intersecting registered command/evidence
-must be rerun and the disposition recorded. If the claim is invalidated, a
-separate independent gate-control action must reopen it before source merges;
-the implementation author may not change gate status as part of the repair.
+had to be rerun and the disposition recorded. If the claim had been invalidated,
+a separate independent gate-control action would have been required to reopen
+it before source merge; the implementation author could not change gate status
+as part of the repair. The replacement evidence records the reruns and a
+`reaffirmed` disposition; no Producer gate reopening was required.
 
 ## Pre-implementation checks
 
-The following must pass at the admitted revision before implementation starts:
+The readmission required the following checks to pass at the admitted revision
+before implementation started:
 
 ```text
 tools/check-design-artifacts.sh
@@ -470,12 +473,11 @@ cargo check --locked -p clinkz-wot-core
 
 ## Completion evidence
 
-The evidence at
-`docs/evidence/WP-300-consumer-property-read-binding-execution.toml` is the
-superseded historical checkpoint. After this readmission is independently
-accepted and the corrected source is implemented, the tranche cannot become
-`complete` until replacement evidence records the exact implementation
-checkpoint and passing evidence for all of the following:
+The replacement evidence at
+[`docs/evidence/WP-300-consumer-property-read-binding-execution.toml`](../evidence/WP-300-consumer-property-read-binding-execution.toml)
+records the completed name-free implementation checkpoint and supersedes the
+earlier result-sealing checkpoint identified by its `replaces_implementation_ref`.
+Completion required passing evidence for all of the following:
 
 - `OutboundRequest::property_read` exact name-free positive construction plus rejection of non-`ConsumerCall` artifacts and mismatched plan/plan-set generations;
 - compile-fail absence of the removed Thing/target constructor parameters and `thing_id`/`target` accessors, with no `ThingSlotId` replacement;
