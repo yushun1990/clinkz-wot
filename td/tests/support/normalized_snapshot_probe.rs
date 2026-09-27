@@ -9,7 +9,7 @@ use crate as td_crate;
 use alloc::{collections::BTreeMap, string::String, vec::Vec};
 use serde_json::Value;
 use td_crate::{
-    affordance::PropertyAffordance,
+    affordance::{ActionAffordance, PropertyAffordance},
     data_schema::DataSchema,
     data_type::{
         AdditionalExpectedResponse, ExpectedResponse, ExtensionMap, Metadata, MultiLanguage,
@@ -42,6 +42,7 @@ enum Kind {
     False,
     Number,
     Property,
+    Action,
     Form,
     Schema,
     SchemaArray,
@@ -77,7 +78,8 @@ const ROOT_VERSION: usize = 14;
 const ROOT_PROFILE: usize = 15;
 const ROOT_SCHEMA_DEFINITIONS: usize = 16;
 const ROOT_URI_VARIABLES: usize = 17;
-const ROOT_FIELD_COUNT: usize = 18;
+const ROOT_ACTIONS: usize = 18;
+const ROOT_FIELD_COUNT: usize = 19;
 
 const FORM_HREF: usize = 0;
 const FORM_CONTENT_TYPE: usize = 1;
@@ -96,6 +98,17 @@ const PROPERTY_FORMS: usize = 1;
 const PROPERTY_URI_VARIABLES: usize = 2;
 const PROPERTY_OBSERVABLE: usize = 3;
 const PROPERTY_FIELD_COUNT: usize = 4;
+
+const ACTION_METADATA: usize = 0;
+const ACTION_FORMS: usize = 1;
+const ACTION_URI_VARIABLES: usize = 2;
+const ACTION_INPUT: usize = 3;
+const ACTION_OUTPUT: usize = 4;
+const ACTION_SAFE: usize = 5;
+const ACTION_IDEMPOTENT: usize = 6;
+const ACTION_SYNCHRONOUS: usize = 7;
+const ACTION_EXTENSIONS: usize = 8;
+const ACTION_FIELD_COUNT: usize = 9;
 
 const EMPTY_EDGE: RetainedEdge = RetainedEdge {
     target: 0,
@@ -221,6 +234,14 @@ impl Build {
     fn optional_u32(&mut self, value: Option<u32>) -> u32 {
         match value {
             Some(v) => self.scalar_u32(v),
+            None => self.node(Kind::Absent, 0),
+        }
+    }
+
+    fn optional_bool(&mut self, value: Option<bool>) -> u32 {
+        match value {
+            Some(true) => self.node(Kind::True, 0),
+            Some(false) => self.node(Kind::False, 0),
             None => self.node(Kind::Absent, 0),
         }
     }
@@ -351,6 +372,13 @@ impl Build {
             self.put(first, index, entry);
         }
         id
+    }
+
+    fn optional_schema(&mut self, schema: Option<&DataSchema>) -> u32 {
+        match schema {
+            Some(schema) => self.schema(schema),
+            None => self.node(Kind::Absent, 0),
+        }
     }
 
     fn schema(&mut self, schema: &DataSchema) -> u32 {
@@ -629,6 +657,33 @@ impl Build {
         }
     }
 
+    fn action(&mut self, action: &ActionAffordance) -> u32 {
+        let id = self.node(Kind::Action, ACTION_FIELD_COUNT);
+        let first = self.node_at(id).first_edge;
+        let metadata = self.metadata(&action._metadata);
+        self.put(first, ACTION_METADATA, metadata);
+        let forms = self.forms(Some(&action._interaction.forms));
+        self.put(first, ACTION_FORMS, forms);
+        let uri_variables = self.schema_map(action._interaction.uri_variables.as_ref());
+        self.put(first, ACTION_URI_VARIABLES, uri_variables);
+        let input = self.optional_schema(action.input.as_ref());
+        self.put(first, ACTION_INPUT, input);
+        let output = self.optional_schema(action.output.as_ref());
+        self.put(first, ACTION_OUTPUT, output);
+        let safe = self.optional_bool(Some(action.safe));
+        self.put(first, ACTION_SAFE, safe);
+        let idempotent = self.optional_bool(Some(action.idempotent));
+        self.put(first, ACTION_IDEMPOTENT, idempotent);
+        #[cfg(feature = "td2-preview")]
+        let synchronous = self.optional_bool(action.synchronous);
+        #[cfg(not(feature = "td2-preview"))]
+        let synchronous = self.optional_bool(None);
+        self.put(first, ACTION_SYNCHRONOUS, synchronous);
+        let extensions = self.extensions(&action._extra_fields);
+        self.put(first, ACTION_EXTENSIONS, extensions);
+        id
+    }
+
     fn version(&mut self, version: Option<&td_crate::data_type::VersionInfo>) -> u32 {
         let Some(version) = version else {
             return self.node(Kind::Absent, 0);
@@ -765,6 +820,24 @@ impl Build {
         self.put(first, ROOT_SCHEMA_DEFINITIONS, schema_definitions);
         let uri_variables = self.schema_map(thing.uri_variables.as_ref());
         self.put(first, ROOT_URI_VARIABLES, uri_variables);
+        let actions = match thing.actions.as_ref() {
+            None => self.node(Kind::Absent, 0),
+            Some(actions) => {
+                let id = self.node(Kind::Map, actions.len());
+                let start = self.node_at(id).first_edge;
+                for (index, (name, action)) in actions.iter().enumerate() {
+                    let entry = self.node(Kind::Entry, 2);
+                    let pair = self.node_at(entry).first_edge;
+                    let key = self.text(Kind::Str, name);
+                    self.put(pair, 0, key);
+                    let value = self.action(action);
+                    self.put(pair, 1, value);
+                    self.put(start, index, entry);
+                }
+                id
+            }
+        };
+        self.put(first, ROOT_ACTIONS, actions);
         id
     }
 }
@@ -802,6 +875,7 @@ impl Snapshot {
             x if x == Kind::False as u32 => Kind::False,
             x if x == Kind::Number as u32 => Kind::Number,
             x if x == Kind::Property as u32 => Kind::Property,
+            x if x == Kind::Action as u32 => Kind::Action,
             x if x == Kind::Form as u32 => Kind::Form,
             x if x == Kind::Schema as u32 => Kind::Schema,
             x if x == Kind::SchemaArray as u32 => Kind::SchemaArray,
@@ -1045,6 +1119,51 @@ impl Snapshot {
                 Kind::False
             }
         );
+    }
+    fn assert_action(&self, id: u32, source: &ActionAffordance) {
+        assert_eq!(self.kind(id), Kind::Action);
+        self.assert_metadata(self.child(id, ACTION_METADATA), &source._metadata);
+        self.assert_sequence(
+            self.child(id, ACTION_FORMS),
+            Some(source._interaction.forms.as_slice()),
+            |snapshot, node, form| snapshot.assert_form(node, form),
+        );
+        self.assert_schema_map(
+            self.child(id, ACTION_URI_VARIABLES),
+            source._interaction.uri_variables.as_ref(),
+        );
+        match source.input.as_ref() {
+            Some(schema) => self.assert_schema(self.child(id, ACTION_INPUT), schema),
+            None => assert_eq!(self.kind(self.child(id, ACTION_INPUT)), Kind::Absent),
+        }
+        match source.output.as_ref() {
+            Some(schema) => self.assert_schema(self.child(id, ACTION_OUTPUT), schema),
+            None => assert_eq!(self.kind(self.child(id, ACTION_OUTPUT)), Kind::Absent),
+        }
+        assert_eq!(
+            self.kind(self.child(id, ACTION_SAFE)),
+            if source.safe { Kind::True } else { Kind::False }
+        );
+        assert_eq!(
+            self.kind(self.child(id, ACTION_IDEMPOTENT)),
+            if source.idempotent {
+                Kind::True
+            } else {
+                Kind::False
+            }
+        );
+        #[cfg(feature = "td2-preview")]
+        assert_eq!(
+            self.kind(self.child(id, ACTION_SYNCHRONOUS)),
+            match source.synchronous {
+                Some(true) => Kind::True,
+                Some(false) => Kind::False,
+                None => Kind::Absent,
+            }
+        );
+        #[cfg(not(feature = "td2-preview"))]
+        assert_eq!(self.kind(self.child(id, ACTION_SYNCHRONOUS)), Kind::Absent);
+        self.assert_extensions(self.child(id, ACTION_EXTENSIONS), &source._extra_fields);
     }
     fn assert_schema(&self, id: u32, source: &DataSchema) {
         assert_eq!(self.kind(id), Kind::Schema);
@@ -1313,6 +1432,11 @@ fn typed_corpus_survives_sealed_snapshot() {
     for (name, property) in thing.properties.as_ref().unwrap() {
         let stored = snapshot.map_get(properties, name).unwrap();
         snapshot.assert_property(stored, property);
+    }
+    let actions = snapshot.child(root, ROOT_ACTIONS);
+    for (name, action) in thing.actions.as_ref().unwrap() {
+        let stored = snapshot.map_get(actions, name).unwrap();
+        snapshot.assert_action(stored, action);
     }
     let forms = snapshot.child(root, ROOT_FORMS);
     assert_eq!(snapshot.kind(forms), Kind::Array);
@@ -1728,6 +1852,135 @@ fn complete_property_fields_survive_and_distinguish_semantic_mutations() {
         !present_empty.same(&Snapshot::normalize(&changed)),
         "absent vs present-empty Property URI variables"
     );
+}
+
+#[test]
+fn complete_action_fields_survive_and_distinguish_semantic_mutations() {
+    fn zeta_mut(thing: &mut Thing) -> &mut ActionAffordance {
+        thing.actions.as_mut().unwrap().get_mut("zeta").unwrap()
+    }
+
+    let thing = typed_corpus_shared::typed_corpus();
+    let baseline = Snapshot::normalize(&thing);
+    let actions = baseline.child(baseline.root, ROOT_ACTIONS);
+    baseline.assert_action(
+        baseline.map_get(actions, "zeta").unwrap(),
+        &thing.actions.as_ref().unwrap()["zeta"],
+    );
+    baseline.assert_action(
+        baseline.map_get(actions, "alpha").unwrap(),
+        &thing.actions.as_ref().unwrap()["alpha"],
+    );
+    assert_eq!(baseline.arena.footprint().retained_allocation_count, 3);
+
+    let mut changed = thing.clone();
+    zeta_mut(&mut changed)
+        ._metadata
+        .tags
+        .as_mut()
+        .unwrap()
+        .swap(0, 1);
+    assert!(
+        !baseline.same(&Snapshot::normalize(&changed)),
+        "Action metadata tag order"
+    );
+
+    let mut changed = thing.clone();
+    zeta_mut(&mut changed)._interaction.forms.swap(0, 1);
+    changed.validate_with_level(ValidationLevel::Basic).unwrap();
+    assert!(
+        !baseline.same(&Snapshot::normalize(&changed)),
+        "Action Form order"
+    );
+
+    let mut changed = thing.clone();
+    zeta_mut(&mut changed).input = None;
+    changed.validate_with_level(ValidationLevel::Basic).unwrap();
+    assert!(
+        !baseline.same(&Snapshot::normalize(&changed)),
+        "Action input presence"
+    );
+
+    let mut changed = thing.clone();
+    zeta_mut(&mut changed).output = None;
+    changed.validate_with_level(ValidationLevel::Basic).unwrap();
+    assert!(
+        !baseline.same(&Snapshot::normalize(&changed)),
+        "Action output presence"
+    );
+
+    let mut changed = thing.clone();
+    zeta_mut(&mut changed).safe = false;
+    assert!(
+        !baseline.same(&Snapshot::normalize(&changed)),
+        "Action safe flag"
+    );
+
+    let mut changed = thing.clone();
+    zeta_mut(&mut changed).idempotent = false;
+    assert!(
+        !baseline.same(&Snapshot::normalize(&changed)),
+        "Action idempotent flag"
+    );
+
+    let mut changed = thing.clone();
+    zeta_mut(&mut changed)
+        ._extra_fields
+        .insert("ex:actionHint".into(), serde_json::json!({"priority": 3}));
+    assert!(
+        !baseline.same(&Snapshot::normalize(&changed)),
+        "Action extension"
+    );
+
+    let mut changed = thing.clone();
+    let variables = zeta_mut(&mut changed)
+        ._interaction
+        .uri_variables
+        .as_mut()
+        .unwrap();
+    let attempt = variables.remove("attempt").unwrap();
+    let channel = variables.remove("channel").unwrap();
+    variables.insert("attempt".into(), channel);
+    variables.insert("channel".into(), attempt);
+    changed.validate_with_level(ValidationLevel::Basic).unwrap();
+    assert!(
+        !baseline.same(&Snapshot::normalize(&changed)),
+        "Action URI-variable key/value association"
+    );
+
+    let mut reordered = thing.clone();
+    let variables = zeta_mut(&mut reordered)
+        ._interaction
+        .uri_variables
+        .take()
+        .unwrap();
+    zeta_mut(&mut reordered)._interaction.uri_variables =
+        Some(variables.into_iter().rev().collect());
+    assert!(
+        baseline.same(&Snapshot::normalize(&reordered)),
+        "Action URI-variable map insertion history is not semantic"
+    );
+
+    let mut changed = thing.clone();
+    zeta_mut(&mut changed)._interaction.uri_variables = Some(BTreeMap::new());
+    let present_empty = Snapshot::normalize(&changed);
+    zeta_mut(&mut changed)._interaction.uri_variables = None;
+    assert!(
+        !present_empty.same(&Snapshot::normalize(&changed)),
+        "absent vs present-empty Action URI variables"
+    );
+
+    #[cfg(feature = "td2-preview")]
+    {
+        let mut changed = thing.clone();
+        zeta_mut(&mut changed).synchronous = Some(false);
+        let present_false = Snapshot::normalize(&changed);
+        zeta_mut(&mut changed).synchronous = None;
+        assert!(
+            !present_false.same(&Snapshot::normalize(&changed)),
+            "absent vs false Action synchronous"
+        );
+    }
 }
 
 #[test]

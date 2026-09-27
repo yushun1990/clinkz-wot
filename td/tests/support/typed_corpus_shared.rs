@@ -93,6 +93,54 @@ pub const CORPUS: &str = r##"{
             "forms": [{ "href": "alpha", "op": "readproperty" }]
         }
     },
+    "actions": {
+        "zeta": {
+            "@type": ["CalibrateAction", "MaintenanceAction"],
+            "title": "Calibrate",
+            "titles": { "en": "Calibrate", "fr": "Étalonner" },
+            "description": "Calibrate the sensor",
+            "descriptions": {
+                "en": "Calibrate the sensor",
+                "fr": "Étalonner le capteur"
+            },
+            "uriVariables": {
+                "attempt": { "type": "integer", "minimum": 1, "maximum": 3 },
+                "channel": {
+                    "type": "string",
+                    "enum": ["primary", "backup"],
+                    "default": "primary"
+                }
+            },
+            "input": {
+                "type": "object",
+                "properties": {
+                    "force": { "type": "boolean" },
+                    "offset": { "type": "number", "minimum": -5.0, "maximum": 5.0 }
+                },
+                "required": ["offset"]
+            },
+            "output": {
+                "type": "string",
+                "enum": ["accepted", "rejected"]
+            },
+            "safe": true,
+            "idempotent": true,
+            "forms": [
+                {
+                    "href": "actions/calibrate/{channel}",
+                    "op": ["invokeaction", "queryaction"],
+                    "contentType": "application/json",
+                    "security": ["none"],
+                    "scopes": ["things.write"]
+                },
+                { "href": "actions/calibrate/cancel", "op": "cancelaction" }
+            ],
+            "ex:actionHint": { "priority": 2 }
+        },
+        "alpha": {
+            "forms": [{ "href": "actions/reset", "op": "invokeaction" }]
+        }
+    },
     "schemaDefinitions": {
         "mode": { "type": "string", "enum": ["auto", "manual"] },
         "threshold": { "type": "number", "minimum": 0.25, "maximum": 9.5 }
@@ -111,6 +159,16 @@ pub const CORPUS: &str = r##"{
 
 pub fn typed_corpus() -> Thing {
     let mut thing: Thing = serde_json::from_str(CORPUS).expect("fixed TD input must decode");
+    #[cfg(feature = "td2-preview")]
+    {
+        thing
+            .actions
+            .as_mut()
+            .unwrap()
+            .get_mut("zeta")
+            .unwrap()
+            .synchronous = Some(true);
+    }
     thing
         ._extra_fields
         .insert("ex:long".into(), Value::String("λ".repeat(2_048)));
