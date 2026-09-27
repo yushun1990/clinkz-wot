@@ -49,6 +49,15 @@ pub const CORPUS: &str = r##"{
     "properties": {
         "zeta": {
             "type": "string",
+            "observable": true,
+            "uriVariables": {
+                "locale": {
+                    "type": "string",
+                    "enum": ["en", "fr"],
+                    "default": "en"
+                },
+                "sample": { "type": "integer", "minimum": 0 }
+            },
             "forms": [
                 {
                     "href": "zeta/first",

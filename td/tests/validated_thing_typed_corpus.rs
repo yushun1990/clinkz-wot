@@ -83,6 +83,20 @@ fn typed_fields_define_order_presence_and_content_without_json_roundtrip() {
         properties.keys().map(String::as_str).collect::<Vec<_>>(),
         ["alpha", "zeta"]
     );
+    assert!(properties["zeta"].observable);
+    assert_eq!(
+        properties["zeta"]
+            ._interaction
+            .uri_variables
+            .as_ref()
+            .unwrap()
+            .keys()
+            .map(String::as_str)
+            .collect::<Vec<_>>(),
+        ["locale", "sample"]
+    );
+    assert!(!properties["alpha"].observable);
+    assert!(properties["alpha"]._interaction.uri_variables.is_none());
     let forms = &properties["zeta"]._interaction.forms;
     assert_eq!(forms[0].href.as_str(), "zeta/first");
     assert_eq!(forms[1].href.as_str(), "zeta/second");
@@ -224,6 +238,22 @@ fn typed_mutations_distinguish_order_presence_and_map_association() {
     assert_ne!(
         additional_response_order, thing,
         "additional response order is semantic"
+    );
+
+    let mut property_observable = thing.clone();
+    property_observable
+        .properties
+        .as_mut()
+        .unwrap()
+        .get_mut("zeta")
+        .unwrap()
+        .observable = false;
+    property_observable
+        .validate_with_level(ValidationLevel::Basic)
+        .unwrap();
+    assert_ne!(
+        property_observable, thing,
+        "Property observable state is semantic"
     );
 
     let mut absent_forms = thing.clone();
