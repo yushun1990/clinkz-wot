@@ -108,9 +108,9 @@ field back, preserve tag and profile order, distinguish absent from present
 values and present-empty schema maps, preserve schema key/value associations,
 and keep map insertion history non-semantic.
 
-This remains a corpus-scoped part of item 3. `created`/`modified`, Events,
-Links, Event affordance-level URI variables, and all security variants are not
-covered by this slice. The recursive fixed-headroom traversal
+This remains a corpus-scoped part of item 3. `created`/`modified`, Links, and
+all security variants are not covered by this slice. The recursive
+fixed-headroom traversal
 also remains non-production and does not establish exact work charging,
 resumability, a shared semantic kernel, strict entry, or readmission.
 
@@ -163,6 +163,23 @@ associations, absent versus present-empty maps, and—under `td2-preview`—fals
 versus absent `synchronous`. BTreeMap insertion history remains non-semantic.
 This proves typed storage only; operation defaults, URI-template expansion,
 effective security, and shared Basic/equivalence rules remain outside the
+prototype.
+
+## Complete EventAffordance typed-storage slice
+
+The shared corpus now contains a rich Event and a minimal Event. The sealed
+snapshot retains all five metadata fields, the complete ordered Form list,
+affordance-level URI-variable schemas, optional `subscription`, `data`,
+`dataResponse`, and `cancellation` schemas, plus Event extension fields. Every
+schema reuses the same recursive DataSchema representation in the three sealed
+arenas.
+
+Tests read both Events back field by field and distinguish metadata/Form order,
+presence of each optional schema, extensions, URI-variable key/schema
+associations, and absent versus present-empty URI-variable maps. BTreeMap
+insertion history remains non-semantic. This is typed-storage evidence only;
+subscription lifecycle, event delivery, URI-template expansion, effective
+operations/security, and shared Basic/equivalence rules remain outside the
 prototype.
 
 ## Nested JSON Object ordering slice

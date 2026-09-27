@@ -183,6 +183,48 @@ fn typed_fields_define_order_presence_and_content_without_json_roundtrip() {
     #[cfg(feature = "td2-preview")]
     assert_eq!(minimal_action.synchronous, None);
 
+    let events = thing.events.as_ref().unwrap();
+    assert_eq!(
+        events.keys().map(String::as_str).collect::<Vec<_>>(),
+        ["alpha", "zeta"]
+    );
+    let rich_event = &events["zeta"];
+    assert_eq!(rich_event._metadata.title.as_deref(), Some("Alarm"));
+    assert_eq!(
+        rich_event._metadata.tags.as_deref(),
+        Some(["AlarmEvent".into(), "TelemetryEvent".into()].as_slice())
+    );
+    assert_eq!(
+        rich_event
+            ._interaction
+            .uri_variables
+            .as_ref()
+            .unwrap()
+            .keys()
+            .map(String::as_str)
+            .collect::<Vec<_>>(),
+        ["severity", "window"]
+    );
+    assert!(rich_event.subscription.is_some());
+    assert!(rich_event.data.is_some());
+    assert!(rich_event.data_response.is_some());
+    assert!(rich_event.cancellation.is_some());
+    assert_eq!(
+        rich_event._interaction.forms[0].op.as_deref(),
+        Some([Operation::SubscribeEvent, Operation::UnsubscribeEvent].as_slice())
+    );
+    assert_eq!(
+        rich_event._extra_fields["ex:eventHint"]["priority"],
+        json!(3)
+    );
+    let minimal_event = &events["alpha"];
+    assert!(minimal_event._metadata.title.is_none());
+    assert!(minimal_event._interaction.uri_variables.is_none());
+    assert!(minimal_event.subscription.is_none());
+    assert!(minimal_event.data.is_none());
+    assert!(minimal_event.data_response.is_none());
+    assert!(minimal_event.cancellation.is_none());
+
     let payload = &thing._extra_fields["ex:payload"];
     assert_eq!(payload["flag"], json!(true));
     assert!(payload["empty"].is_null());
@@ -314,6 +356,19 @@ fn typed_mutations_distinguish_order_presence_and_map_association() {
         .validate_with_level(ValidationLevel::Basic)
         .unwrap();
     assert_ne!(action_safe, thing, "Action safe state is semantic");
+
+    let mut event_data = thing.clone();
+    event_data
+        .events
+        .as_mut()
+        .unwrap()
+        .get_mut("zeta")
+        .unwrap()
+        .data = None;
+    event_data
+        .validate_with_level(ValidationLevel::Basic)
+        .unwrap();
+    assert_ne!(event_data, thing, "Event data presence is semantic");
 
     let mut absent_forms = thing.clone();
     absent_forms.forms = None;
