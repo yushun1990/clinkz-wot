@@ -201,6 +201,18 @@ pub const CORPUS: &str = r##"{
             "forms": [{ "href": "events/status", "op": "subscribeevent" }]
         }
     },
+    "links": [
+        {
+            "href": "docs/manual?edition=2",
+            "type": "application/pdf",
+            "rel": "service-doc",
+            "anchor": "https://example.org/things/typed-corpus",
+            "sizes": "16x16 32x32",
+            "hreflang": ["en", "fr"],
+            "ex:linkHint": { "priority": 4 }
+        },
+        { "href": "related/item" }
+    ],
     "schemaDefinitions": {
         "mode": { "type": "string", "enum": ["auto", "manual"] },
         "threshold": { "type": "number", "minimum": 0.25, "maximum": 9.5 }
