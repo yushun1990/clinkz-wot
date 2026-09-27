@@ -44,11 +44,13 @@ jobs:
         run: cargo test --workspace --locked
 
       # Workspace tests cover the default graph; the snapshot's JSON object
-      # canonicalization must also execute with the alternate serde map backend.
+      # canonicalization must also execute with the alternate serde map backend,
+      # and feature-gated typed fields need their own readback run.
       - name: Verify normalized snapshot feature variants
         run: |
           cargo test --locked -p clinkz-wot-td --lib normalized_snapshot_probe --no-default-features
           cargo test --locked -p clinkz-wot-td --lib normalized_snapshot_probe --features serde_json/preserve_order
+          cargo test --locked -p clinkz-wot-td --lib normalized_snapshot_probe --no-default-features --features td2-preview
 
       - name: Check Number feature boundary prototype
         run: python3 tools/architecture-fixtures/validated-thing-feature-boundary/check.py

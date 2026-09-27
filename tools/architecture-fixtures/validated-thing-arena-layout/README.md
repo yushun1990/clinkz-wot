@@ -108,9 +108,9 @@ field back, preserve tag and profile order, distinguish absent from present
 values and present-empty schema maps, preserve schema key/value associations,
 and keep map insertion history non-semantic.
 
-This remains a corpus-scoped part of item 3. `created`/`modified`, Actions,
-Events, Links, Action/Event affordance-level URI variables, and all security
-variants are not covered by this slice. The recursive fixed-headroom traversal
+This remains a corpus-scoped part of item 3. `created`/`modified`, Events,
+Links, Event affordance-level URI variables, and all security variants are not
+covered by this slice. The recursive fixed-headroom traversal
 also remains non-production and does not establish exact work charging,
 resumability, a shared semantic kernel, strict entry, or readmission.
 
@@ -147,6 +147,24 @@ typed-storage evidence only: URI template expansion, effective operations,
 effective security, and other shared semantic queries remain outside the
 prototype.
 
+## Complete ActionAffordance typed-storage slice
+
+The shared corpus now contains a rich Action and a minimal Action. The sealed
+snapshot retains all five metadata fields, the complete ordered Form list,
+affordance-level URI-variable schemas, optional input and output schemas,
+`safe` and `idempotent`, extension fields, and the optional `synchronous` state
+when `td2-preview` is enabled. The preview-disabled representation carries an
+explicit absent slot, so enabling the feature cannot silently reuse an
+unrelated extension path.
+
+Tests read both Actions back field by field and distinguish metadata/Form
+order, input/output presence, both flags, extensions, URI-variable
+associations, absent versus present-empty maps, and—under `td2-preview`—false
+versus absent `synchronous`. BTreeMap insertion history remains non-semantic.
+This proves typed storage only; operation defaults, URI-template expansion,
+effective security, and shared Basic/equivalence rules remain outside the
+prototype.
+
 ## Nested JSON Object ordering slice
 
 The snapshot probe now reserves each JSON Object's map edges, stores scalar
@@ -167,10 +185,12 @@ Run the probe in separate Host invocations:
 cargo test --locked -p clinkz-wot-td --lib normalized_snapshot_probe
 cargo test --locked -p clinkz-wot-td --lib normalized_snapshot_probe --features serde_json/preserve_order
 cargo test --locked -p clinkz-wot-td --lib normalized_snapshot_probe --no-default-features
+cargo test --locked -p clinkz-wot-td --lib normalized_snapshot_probe --no-default-features --features td2-preview
 ```
 
-TD's test dependency enables AP in all three invocations, so the first is AP
-and the second is AP + order. The separate feature-boundary matrix checks Host
+TD's test dependency enables AP in all four invocations, so the first is AP,
+the second is AP + order, and the last proves the preview-only Action field in
+the no-default graph. The separate feature-boundary matrix checks Host
 base/order/AP/combined requests and actual resolved serde features; base and
 order without the validated capability remain ordinary TD/Basic graphs and do
 not run the AP-dependent snapshot probe. Exact work charging, bounded

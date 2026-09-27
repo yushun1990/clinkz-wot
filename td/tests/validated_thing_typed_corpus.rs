@@ -137,6 +137,52 @@ fn typed_fields_define_order_presence_and_content_without_json_roundtrip() {
         Some([Operation::ReadProperty, Operation::WriteProperty].as_slice())
     );
 
+    let actions = thing.actions.as_ref().unwrap();
+    assert_eq!(
+        actions.keys().map(String::as_str).collect::<Vec<_>>(),
+        ["alpha", "zeta"]
+    );
+    let rich_action = &actions["zeta"];
+    assert_eq!(rich_action._metadata.title.as_deref(), Some("Calibrate"));
+    assert_eq!(
+        rich_action._metadata.tags.as_deref(),
+        Some(["CalibrateAction".into(), "MaintenanceAction".into()].as_slice())
+    );
+    assert_eq!(
+        rich_action
+            ._interaction
+            .uri_variables
+            .as_ref()
+            .unwrap()
+            .keys()
+            .map(String::as_str)
+            .collect::<Vec<_>>(),
+        ["attempt", "channel"]
+    );
+    assert!(rich_action.input.is_some());
+    assert!(rich_action.output.is_some());
+    assert!(rich_action.safe);
+    assert!(rich_action.idempotent);
+    #[cfg(feature = "td2-preview")]
+    assert_eq!(rich_action.synchronous, Some(true));
+    assert_eq!(
+        rich_action._interaction.forms[0].op.as_deref(),
+        Some([Operation::InvokeAction, Operation::QueryAction].as_slice())
+    );
+    assert_eq!(
+        rich_action._extra_fields["ex:actionHint"]["priority"],
+        json!(2)
+    );
+    let minimal_action = &actions["alpha"];
+    assert!(minimal_action._metadata.title.is_none());
+    assert!(minimal_action._interaction.uri_variables.is_none());
+    assert!(minimal_action.input.is_none());
+    assert!(minimal_action.output.is_none());
+    assert!(!minimal_action.safe);
+    assert!(!minimal_action.idempotent);
+    #[cfg(feature = "td2-preview")]
+    assert_eq!(minimal_action.synchronous, None);
+
     let payload = &thing._extra_fields["ex:payload"];
     assert_eq!(payload["flag"], json!(true));
     assert!(payload["empty"].is_null());
@@ -255,6 +301,19 @@ fn typed_mutations_distinguish_order_presence_and_map_association() {
         property_observable, thing,
         "Property observable state is semantic"
     );
+
+    let mut action_safe = thing.clone();
+    action_safe
+        .actions
+        .as_mut()
+        .unwrap()
+        .get_mut("zeta")
+        .unwrap()
+        .safe = false;
+    action_safe
+        .validate_with_level(ValidationLevel::Basic)
+        .unwrap();
+    assert_ne!(action_safe, thing, "Action safe state is semantic");
 
     let mut absent_forms = thing.clone();
     absent_forms.forms = None;
