@@ -19,6 +19,7 @@ use td_crate::{
     thing::Thing,
     validate::{Validate, ValidationLevel},
 };
+use time::OffsetDateTime;
 #[path = "../../../tools/architecture-fixtures/validated-thing-arena-layout/src/lib.rs"]
 #[allow(unused_attributes)]
 mod arena_layout;
@@ -46,6 +47,7 @@ enum Kind {
     Action,
     Event,
     Link,
+    DateTime,
     Form,
     Schema,
     SchemaArray,
@@ -84,7 +86,9 @@ const ROOT_URI_VARIABLES: usize = 17;
 const ROOT_ACTIONS: usize = 18;
 const ROOT_EVENTS: usize = 19;
 const ROOT_LINKS: usize = 20;
-const ROOT_FIELD_COUNT: usize = 21;
+const ROOT_CREATED: usize = 21;
+const ROOT_MODIFIED: usize = 22;
+const ROOT_FIELD_COUNT: usize = 23;
 
 const FORM_HREF: usize = 0;
 const FORM_CONTENT_TYPE: usize = 1;
@@ -133,6 +137,16 @@ const LINK_SIZES: usize = 4;
 const LINK_HREFLANG: usize = 5;
 const LINK_EXTENSIONS: usize = 6;
 const LINK_FIELD_COUNT: usize = 7;
+
+const DATETIME_YEAR: usize = 0;
+const DATETIME_MONTH: usize = 1;
+const DATETIME_DAY: usize = 2;
+const DATETIME_HOUR: usize = 3;
+const DATETIME_MINUTE: usize = 4;
+const DATETIME_SECOND: usize = 5;
+const DATETIME_NANOSECOND: usize = 6;
+const DATETIME_OFFSET_SECONDS: usize = 7;
+const DATETIME_FIELD_COUNT: usize = 8;
 
 const EMPTY_EDGE: RetainedEdge = RetainedEdge {
     target: 0,
@@ -255,6 +269,10 @@ impl Build {
         self.scalar_bits(Kind::U32, value as u64)
     }
 
+    fn scalar_i64(&mut self, value: i64) -> u32 {
+        self.scalar_bits(Kind::I64, value as u64)
+    }
+
     fn optional_u32(&mut self, value: Option<u32>) -> u32 {
         match value {
             Some(v) => self.scalar_u32(v),
@@ -299,7 +317,7 @@ impl Build {
 
     fn optional_i64(&mut self, value: Option<i64>) -> u32 {
         match value {
-            Some(v) => self.scalar_bits(Kind::I64, v as u64),
+            Some(v) => self.scalar_i64(v),
             None => self.node(Kind::Absent, 0),
         }
     }
@@ -752,6 +770,28 @@ impl Build {
         id
     }
 
+    fn datetime(&mut self, datetime: Option<&OffsetDateTime>) -> u32 {
+        let Some(datetime) = datetime else {
+            return self.node(Kind::Absent, 0);
+        };
+        let id = self.node(Kind::DateTime, DATETIME_FIELD_COUNT);
+        let first = self.node_at(id).first_edge;
+        let fields = [
+            self.scalar_i64(i64::from(datetime.year())),
+            self.scalar_u32(u32::from(datetime.month() as u8)),
+            self.scalar_u32(u32::from(datetime.day())),
+            self.scalar_u32(u32::from(datetime.hour())),
+            self.scalar_u32(u32::from(datetime.minute())),
+            self.scalar_u32(u32::from(datetime.second())),
+            self.scalar_u32(datetime.nanosecond()),
+            self.scalar_i64(i64::from(datetime.offset().whole_seconds())),
+        ];
+        for (index, field) in fields.into_iter().enumerate() {
+            self.put(first, index, field);
+        }
+        id
+    }
+
     fn version(&mut self, version: Option<&td_crate::data_type::VersionInfo>) -> u32 {
         let Some(version) = version else {
             return self.node(Kind::Absent, 0);
@@ -926,6 +966,10 @@ impl Build {
         self.put(first, ROOT_EVENTS, events);
         let links = self.sequence(thing.links.as_deref(), |this, link| this.link(link));
         self.put(first, ROOT_LINKS, links);
+        let created = self.datetime(thing.created.as_ref());
+        self.put(first, ROOT_CREATED, created);
+        let modified = self.datetime(thing.modified.as_ref());
+        self.put(first, ROOT_MODIFIED, modified);
         id
     }
 }
@@ -966,6 +1010,7 @@ impl Snapshot {
             x if x == Kind::Action as u32 => Kind::Action,
             x if x == Kind::Event as u32 => Kind::Event,
             x if x == Kind::Link as u32 => Kind::Link,
+            x if x == Kind::DateTime as u32 => Kind::DateTime,
             x if x == Kind::Form as u32 => Kind::Form,
             x if x == Kind::Schema as u32 => Kind::Schema,
             x if x == Kind::SchemaArray as u32 => Kind::SchemaArray,
@@ -1304,6 +1349,34 @@ impl Snapshot {
         );
         self.assert_extensions(self.child(id, LINK_EXTENSIONS), &source._extra_fields);
     }
+    fn assert_datetime(&self, id: u32, source: Option<&OffsetDateTime>) {
+        let Some(source) = source else {
+            assert_eq!(self.kind(id), Kind::Absent);
+            return;
+        };
+        assert_eq!(self.kind(id), Kind::DateTime);
+        let fields = [
+            (DATETIME_YEAR, Kind::I64, i64::from(source.year()) as u64),
+            (DATETIME_MONTH, Kind::U32, u64::from(source.month() as u8)),
+            (DATETIME_DAY, Kind::U32, u64::from(source.day())),
+            (DATETIME_HOUR, Kind::U32, u64::from(source.hour())),
+            (DATETIME_MINUTE, Kind::U32, u64::from(source.minute())),
+            (DATETIME_SECOND, Kind::U32, u64::from(source.second())),
+            (
+                DATETIME_NANOSECOND,
+                Kind::U32,
+                u64::from(source.nanosecond()),
+            ),
+            (
+                DATETIME_OFFSET_SECONDS,
+                Kind::I64,
+                i64::from(source.offset().whole_seconds()) as u64,
+            ),
+        ];
+        for (index, kind, value) in fields {
+            self.assert_bits(self.child(id, index), kind, Some(value));
+        }
+    }
     fn assert_schema(&self, id: u32, source: &DataSchema) {
         assert_eq!(self.kind(id), Kind::Schema);
         let variant = self.child(id, 0);
@@ -1588,6 +1661,8 @@ fn typed_corpus_survives_sealed_snapshot() {
         assert_eq!(edge.original_index as usize, index);
         snapshot.assert_link(edge.target, link);
     }
+    snapshot.assert_datetime(snapshot.child(root, ROOT_CREATED), thing.created.as_ref());
+    snapshot.assert_datetime(snapshot.child(root, ROOT_MODIFIED), thing.modified.as_ref());
     let forms = snapshot.child(root, ROOT_FORMS);
     assert_eq!(snapshot.kind(forms), Kind::Array);
     assert_eq!(snapshot.node(forms).edge_count, 0);
@@ -2343,6 +2418,70 @@ fn complete_link_fields_survive_and_distinguish_semantic_mutations() {
     assert!(
         !present_empty.same(&Snapshot::normalize(&changed)),
         "absent vs present-empty root links"
+    );
+}
+
+#[test]
+fn complete_timestamp_fields_survive_and_distinguish_typed_mutations() {
+    let thing = typed_corpus_shared::typed_corpus();
+    let baseline = Snapshot::normalize(&thing);
+    baseline.assert_datetime(
+        baseline.child(baseline.root, ROOT_CREATED),
+        thing.created.as_ref(),
+    );
+    baseline.assert_datetime(
+        baseline.child(baseline.root, ROOT_MODIFIED),
+        thing.modified.as_ref(),
+    );
+    assert_eq!(baseline.arena.footprint().retained_allocation_count, 3);
+
+    let mut changed = thing.clone();
+    changed.created = None;
+    assert!(
+        !baseline.same(&Snapshot::normalize(&changed)),
+        "created presence"
+    );
+
+    let mut changed = thing.clone();
+    changed.modified = None;
+    assert!(
+        !baseline.same(&Snapshot::normalize(&changed)),
+        "modified presence"
+    );
+
+    let mut changed = thing.clone();
+    changed.created = Some(
+        changed
+            .created
+            .unwrap()
+            .replace_second(57)
+            .expect("fixed second remains valid"),
+    );
+    assert!(
+        !baseline.same(&Snapshot::normalize(&changed)),
+        "calendar/time components"
+    );
+
+    let mut changed = thing.clone();
+    changed.modified = Some(
+        changed
+            .modified
+            .unwrap()
+            .replace_nanosecond(5)
+            .expect("fixed nanosecond remains valid"),
+    );
+    assert!(
+        !baseline.same(&Snapshot::normalize(&changed)),
+        "nanosecond component"
+    );
+
+    let mut changed = thing.clone();
+    let same_instant = changed.created.unwrap().to_offset(time::UtcOffset::UTC);
+    assert_eq!(same_instant, changed.created.unwrap());
+    changed.created = Some(same_instant);
+    assert!(
+        !baseline.same(&Snapshot::normalize(&changed)),
+        "explicit offset and local components survive even for the same instant"
     );
 }
 

@@ -45,6 +45,25 @@ fn nested_schema_corpus_is_typed_and_basic_valid() {
 #[test]
 fn typed_fields_define_order_presence_and_content_without_json_roundtrip() {
     let thing = typed_corpus();
+
+    let created = thing.created.as_ref().unwrap();
+    assert_eq!(created.year(), 2024);
+    assert_eq!(created.month() as u8, 2);
+    assert_eq!(created.day(), 29);
+    assert_eq!(created.hour(), 23);
+    assert_eq!(created.minute(), 59);
+    assert_eq!(created.second(), 58);
+    assert_eq!(created.nanosecond(), 123_456_789);
+    assert_eq!(created.offset().as_hms(), (-5, -30, -15));
+    let modified = thing.modified.as_ref().unwrap();
+    assert_eq!(modified.year(), 2024);
+    assert_eq!(modified.month() as u8, 3);
+    assert_eq!(modified.day(), 1);
+    assert_eq!(modified.hour(), 0);
+    assert_eq!(modified.minute(), 0);
+    assert_eq!(modified.second(), 1);
+    assert_eq!(modified.nanosecond(), 4);
+    assert_eq!(modified.offset().as_hms(), (0, 0, 0));
     assert_eq!(
         thing.id.as_ref().unwrap().as_str(),
         "urn:example:typed-corpus"
@@ -399,6 +418,20 @@ fn typed_mutations_distinguish_order_presence_and_map_association() {
         .validate_with_level(ValidationLevel::Basic)
         .unwrap();
     assert_ne!(link_order, thing, "Link order is semantic");
+
+    let mut absent_created = thing.clone();
+    absent_created.created = None;
+    absent_created
+        .validate_with_level(ValidationLevel::Basic)
+        .unwrap();
+    assert_ne!(absent_created, thing, "created presence is semantic");
+
+    let mut absent_modified = thing.clone();
+    absent_modified.modified = None;
+    absent_modified
+        .validate_with_level(ValidationLevel::Basic)
+        .unwrap();
+    assert_ne!(absent_modified, thing, "modified presence is semantic");
 
     let mut absent_forms = thing.clone();
     absent_forms.forms = None;

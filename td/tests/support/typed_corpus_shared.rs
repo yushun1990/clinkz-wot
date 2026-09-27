@@ -35,6 +35,8 @@ pub const CORPUS: &str = r##"{
         "model": "temperature-model-v2",
         "ex:build": { "channel": "evidence", "number": 17 }
     },
+    "created": "2024-02-29t23:59:58.123456789987-05:30:15",
+    "modified": "2024-03-01 00:00:01.000000004z",
     "support": "https://example.org/support",
     "base": "https://example.org/things/",
     "profile": [
