@@ -225,6 +225,29 @@ fn typed_fields_define_order_presence_and_content_without_json_roundtrip() {
     assert!(minimal_event.data_response.is_none());
     assert!(minimal_event.cancellation.is_none());
 
+    let links = thing.links.as_ref().unwrap();
+    assert_eq!(links.len(), 2);
+    assert_eq!(links[0].href.as_str(), "docs/manual?edition=2");
+    assert_eq!(links[0].content_type.as_deref(), Some("application/pdf"));
+    assert_eq!(links[0].rel.as_deref(), Some("service-doc"));
+    assert_eq!(
+        links[0].anchor.as_ref().unwrap().as_str(),
+        "https://example.org/things/typed-corpus"
+    );
+    assert_eq!(links[0].sizes.as_deref(), Some("16x16 32x32"));
+    assert_eq!(
+        links[0].hreflang.as_deref(),
+        Some(["en".into(), "fr".into()].as_slice())
+    );
+    assert_eq!(links[0]._extra_fields["ex:linkHint"]["priority"], json!(4));
+    assert_eq!(links[1].href.as_str(), "related/item");
+    assert!(links[1].content_type.is_none());
+    assert!(links[1].rel.is_none());
+    assert!(links[1].anchor.is_none());
+    assert!(links[1].sizes.is_none());
+    assert!(links[1].hreflang.is_none());
+    assert!(links[1]._extra_fields.is_empty());
+
     let payload = &thing._extra_fields["ex:payload"];
     assert_eq!(payload["flag"], json!(true));
     assert!(payload["empty"].is_null());
@@ -369,6 +392,13 @@ fn typed_mutations_distinguish_order_presence_and_map_association() {
         .validate_with_level(ValidationLevel::Basic)
         .unwrap();
     assert_ne!(event_data, thing, "Event data presence is semantic");
+
+    let mut link_order = thing.clone();
+    link_order.links.as_mut().unwrap().swap(0, 1);
+    link_order
+        .validate_with_level(ValidationLevel::Basic)
+        .unwrap();
+    assert_ne!(link_order, thing, "Link order is semantic");
 
     let mut absent_forms = thing.clone();
     absent_forms.forms = None;

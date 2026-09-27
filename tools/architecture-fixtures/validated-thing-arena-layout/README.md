@@ -108,9 +108,9 @@ field back, preserve tag and profile order, distinguish absent from present
 values and present-empty schema maps, preserve schema key/value associations,
 and keep map insertion history non-semantic.
 
-This remains a corpus-scoped part of item 3. `created`/`modified`, Links, and
-all security variants are not covered by this slice. The recursive
-fixed-headroom traversal
+This remains a corpus-scoped part of item 3. `created`/`modified` and all
+security variants are not covered by this slice. The recursive fixed-headroom
+traversal
 also remains non-production and does not establish exact work charging,
 resumability, a shared semantic kernel, strict entry, or readmission.
 
@@ -181,6 +181,21 @@ insertion history remains non-semantic. This is typed-storage evidence only;
 subscription lifecycle, event delivery, URI-template expansion, effective
 operations/security, and shared Basic/equivalence rules remain outside the
 prototype.
+
+## Complete Link typed-storage slice
+
+The shared corpus now contains a rich Link and a minimal Link in an ordered
+root `links` sequence. The sealed snapshot retains the required raw `href`,
+optional media type, relation, raw anchor, sizes, ordered `hreflang` values,
+and Link extension fields. URI references remain stored as their typed raw
+text; this slice does not resolve them against the Thing base.
+
+Tests read both Links back field by field, retain their original sequence
+indices, distinguish each optional field and extension, preserve `hreflang`
+order, and distinguish absent from present-empty `hreflang` and root Link
+sequences. This is typed-storage evidence only; relation interpretation, URI
+resolution, language negotiation, effective security, and shared
+Basic/equivalence rules remain outside the prototype.
 
 ## Nested JSON Object ordering slice
 

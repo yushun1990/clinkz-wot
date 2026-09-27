@@ -15,6 +15,7 @@ use td_crate::{
         AdditionalExpectedResponse, ExpectedResponse, ExtensionMap, Metadata, MultiLanguage,
     },
     form::Form,
+    link::Link,
     thing::Thing,
     validate::{Validate, ValidationLevel},
 };
@@ -44,6 +45,7 @@ enum Kind {
     Property,
     Action,
     Event,
+    Link,
     Form,
     Schema,
     SchemaArray,
@@ -81,7 +83,8 @@ const ROOT_SCHEMA_DEFINITIONS: usize = 16;
 const ROOT_URI_VARIABLES: usize = 17;
 const ROOT_ACTIONS: usize = 18;
 const ROOT_EVENTS: usize = 19;
-const ROOT_FIELD_COUNT: usize = 20;
+const ROOT_LINKS: usize = 20;
+const ROOT_FIELD_COUNT: usize = 21;
 
 const FORM_HREF: usize = 0;
 const FORM_CONTENT_TYPE: usize = 1;
@@ -121,6 +124,15 @@ const EVENT_DATA_RESPONSE: usize = 5;
 const EVENT_CANCELLATION: usize = 6;
 const EVENT_EXTENSIONS: usize = 7;
 const EVENT_FIELD_COUNT: usize = 8;
+
+const LINK_HREF: usize = 0;
+const LINK_CONTENT_TYPE: usize = 1;
+const LINK_REL: usize = 2;
+const LINK_ANCHOR: usize = 3;
+const LINK_SIZES: usize = 4;
+const LINK_HREFLANG: usize = 5;
+const LINK_EXTENSIONS: usize = 6;
+const LINK_FIELD_COUNT: usize = 7;
 
 const EMPTY_EDGE: RetainedEdge = RetainedEdge {
     target: 0,
@@ -718,6 +730,28 @@ impl Build {
         id
     }
 
+    fn link(&mut self, link: &Link) -> u32 {
+        let id = self.node(Kind::Link, LINK_FIELD_COUNT);
+        let first = self.node_at(id).first_edge;
+        let href = self.text(Kind::Uri, link.href.as_str());
+        self.put(first, LINK_HREF, href);
+        let content_type = self.absent_or_text(link.content_type.as_deref(), Kind::Str);
+        self.put(first, LINK_CONTENT_TYPE, content_type);
+        let rel = self.absent_or_text(link.rel.as_deref(), Kind::Str);
+        self.put(first, LINK_REL, rel);
+        let anchor = self.absent_or_text(link.anchor.as_ref().map(|v| v.as_str()), Kind::Uri);
+        self.put(first, LINK_ANCHOR, anchor);
+        let sizes = self.absent_or_text(link.sizes.as_deref(), Kind::Str);
+        self.put(first, LINK_SIZES, sizes);
+        let hreflang = self.sequence(link.hreflang.as_deref(), |this, value| {
+            this.text(Kind::Str, value)
+        });
+        self.put(first, LINK_HREFLANG, hreflang);
+        let extensions = self.extensions(&link._extra_fields);
+        self.put(first, LINK_EXTENSIONS, extensions);
+        id
+    }
+
     fn version(&mut self, version: Option<&td_crate::data_type::VersionInfo>) -> u32 {
         let Some(version) = version else {
             return self.node(Kind::Absent, 0);
@@ -890,6 +924,8 @@ impl Build {
             }
         };
         self.put(first, ROOT_EVENTS, events);
+        let links = self.sequence(thing.links.as_deref(), |this, link| this.link(link));
+        self.put(first, ROOT_LINKS, links);
         id
     }
 }
@@ -929,6 +965,7 @@ impl Snapshot {
             x if x == Kind::Property as u32 => Kind::Property,
             x if x == Kind::Action as u32 => Kind::Action,
             x if x == Kind::Event as u32 => Kind::Event,
+            x if x == Kind::Link as u32 => Kind::Link,
             x if x == Kind::Form as u32 => Kind::Form,
             x if x == Kind::Schema as u32 => Kind::Schema,
             x if x == Kind::SchemaArray as u32 => Kind::SchemaArray,
@@ -1243,6 +1280,30 @@ impl Snapshot {
         }
         self.assert_extensions(self.child(id, EVENT_EXTENSIONS), &source._extra_fields);
     }
+    fn assert_link(&self, id: u32, source: &Link) {
+        assert_eq!(self.kind(id), Kind::Link);
+        assert_eq!(self.kind(self.child(id, LINK_HREF)), Kind::Uri);
+        assert_eq!(self.text(self.child(id, LINK_HREF)), source.href.as_str());
+        self.assert_optional_text(
+            self.child(id, LINK_CONTENT_TYPE),
+            source.content_type.as_deref(),
+        );
+        self.assert_optional_text(self.child(id, LINK_REL), source.rel.as_deref());
+        match source.anchor.as_ref() {
+            Some(anchor) => {
+                assert_eq!(self.kind(self.child(id, LINK_ANCHOR)), Kind::Uri);
+                assert_eq!(self.text(self.child(id, LINK_ANCHOR)), anchor.as_str());
+            }
+            None => assert_eq!(self.kind(self.child(id, LINK_ANCHOR)), Kind::Absent),
+        }
+        self.assert_optional_text(self.child(id, LINK_SIZES), source.sizes.as_deref());
+        self.assert_sequence(
+            self.child(id, LINK_HREFLANG),
+            source.hreflang.as_deref(),
+            |snapshot, node, language| assert_eq!(snapshot.text(node), language),
+        );
+        self.assert_extensions(self.child(id, LINK_EXTENSIONS), &source._extra_fields);
+    }
     fn assert_schema(&self, id: u32, source: &DataSchema) {
         assert_eq!(self.kind(id), Kind::Schema);
         let variant = self.child(id, 0);
@@ -1520,6 +1581,12 @@ fn typed_corpus_survives_sealed_snapshot() {
     for (name, event) in thing.events.as_ref().unwrap() {
         let stored = snapshot.map_get(events, name).unwrap();
         snapshot.assert_event(stored, event);
+    }
+    let links = snapshot.child(root, ROOT_LINKS);
+    for (index, link) in thing.links.as_ref().unwrap().iter().enumerate() {
+        let edge = snapshot.edge(links, index);
+        assert_eq!(edge.original_index as usize, index);
+        snapshot.assert_link(edge.target, link);
     }
     let forms = snapshot.child(root, ROOT_FORMS);
     assert_eq!(snapshot.kind(forms), Kind::Array);
@@ -2182,6 +2249,100 @@ fn complete_event_fields_survive_and_distinguish_semantic_mutations() {
     assert!(
         !present_empty.same(&Snapshot::normalize(&changed)),
         "absent vs present-empty Event URI variables"
+    );
+}
+
+#[test]
+fn complete_link_fields_survive_and_distinguish_semantic_mutations() {
+    fn rich_link_mut(thing: &mut Thing) -> &mut Link {
+        &mut thing.links.as_mut().unwrap()[0]
+    }
+
+    let thing = typed_corpus_shared::typed_corpus();
+    let baseline = Snapshot::normalize(&thing);
+    let links = baseline.child(baseline.root, ROOT_LINKS);
+    baseline.assert_sequence(links, thing.links.as_deref(), |snapshot, node, link| {
+        snapshot.assert_link(node, link)
+    });
+    assert_eq!(baseline.arena.footprint().retained_allocation_count, 3);
+
+    let mut changed = thing.clone();
+    changed.links.as_mut().unwrap().swap(0, 1);
+    changed.validate_with_level(ValidationLevel::Basic).unwrap();
+    assert!(
+        !baseline.same(&Snapshot::normalize(&changed)),
+        "Link list order"
+    );
+
+    let mut changed = thing.clone();
+    let replacement = changed.links.as_ref().unwrap()[1].href.clone();
+    rich_link_mut(&mut changed).href = replacement;
+    assert!(!baseline.same(&Snapshot::normalize(&changed)), "Link href");
+
+    let mut changed = thing.clone();
+    rich_link_mut(&mut changed).content_type = None;
+    assert!(
+        !baseline.same(&Snapshot::normalize(&changed)),
+        "Link content type presence"
+    );
+
+    let mut changed = thing.clone();
+    rich_link_mut(&mut changed).rel = None;
+    assert!(
+        !baseline.same(&Snapshot::normalize(&changed)),
+        "Link relation presence"
+    );
+
+    let mut changed = thing.clone();
+    rich_link_mut(&mut changed).anchor = None;
+    assert!(
+        !baseline.same(&Snapshot::normalize(&changed)),
+        "Link anchor presence"
+    );
+
+    let mut changed = thing.clone();
+    rich_link_mut(&mut changed).sizes = None;
+    assert!(
+        !baseline.same(&Snapshot::normalize(&changed)),
+        "Link sizes presence"
+    );
+
+    let mut changed = thing.clone();
+    rich_link_mut(&mut changed)
+        .hreflang
+        .as_mut()
+        .unwrap()
+        .swap(0, 1);
+    assert!(
+        !baseline.same(&Snapshot::normalize(&changed)),
+        "Link hreflang order"
+    );
+
+    let mut changed = thing.clone();
+    rich_link_mut(&mut changed)
+        ._extra_fields
+        .insert("ex:linkHint".into(), serde_json::json!({"priority": 5}));
+    assert!(
+        !baseline.same(&Snapshot::normalize(&changed)),
+        "Link extension"
+    );
+
+    let mut changed = thing.clone();
+    rich_link_mut(&mut changed).hreflang = Some(Vec::new());
+    let present_empty = Snapshot::normalize(&changed);
+    rich_link_mut(&mut changed).hreflang = None;
+    assert!(
+        !present_empty.same(&Snapshot::normalize(&changed)),
+        "absent vs present-empty Link hreflang"
+    );
+
+    let mut changed = thing.clone();
+    changed.links = Some(Vec::new());
+    let present_empty = Snapshot::normalize(&changed);
+    changed.links = None;
+    assert!(
+        !present_empty.same(&Snapshot::normalize(&changed)),
+        "absent vs present-empty root links"
     );
 }
 
