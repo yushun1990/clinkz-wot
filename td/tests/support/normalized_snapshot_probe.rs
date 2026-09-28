@@ -29,6 +29,9 @@ use arena_layout::{Prototype, RetainedEdge, RetainedNode};
 #[path = "typed_corpus_shared.rs"]
 mod typed_corpus_shared;
 
+#[path = "semantic_kernel_probe.rs"]
+mod semantic_kernel_probe;
+
 #[repr(u32)]
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum Kind {

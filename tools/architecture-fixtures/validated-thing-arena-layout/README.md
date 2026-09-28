@@ -1,11 +1,12 @@
 # ValidatedThing arena layout prototype
 
-This is non-production source evidence for item 2 of
+This fixture library is non-production source evidence for item 2 of
 [`WP-100-CONSUMER-VALIDATED-THING`](../../../docs/work-packages/WP-100-consumer-validated-thing-admission.md#evidence-required-before-separate-readmission).
-It does not admit the tranche or implement typed TD conversion. The records
-contain only illustrative scalar ranges; the fixture deliberately does not
-claim complete semantic equivalence, work charging, cleanup prepayment, or a
-validated admission configuration.
+The TD test-only consumer is also partial item-3 evidence for typed storage and
+the narrow shared semantic-kernel slice described below. Neither admits the
+tranche nor implements production typed TD conversion. The prototype
+deliberately does not claim complete semantic equivalence, work charging,
+cleanup prepayment, or a validated admission configuration.
 
 ## Reproduce
 
@@ -66,10 +67,11 @@ This demonstrates that the frozen allocation catalog can be implemented using
 the current Foundation ledger without treating an aggregate as one physical
 request. It does not prove the complete TD `Thing` traversal fits that catalog.
 In particular, typed-field decoding, map ordering, URI resolution, Basic
-semantic sharing, all structural/work charges, and real-target allocator
-observations remain separate pre-readmission obligations. A required fifth
-temporary allocation category or fourth retained category in the full
-conversion still returns the tranche to impact review.
+semantic sharing beyond the narrow default/security slice below, all
+structural/work charges, and real-target allocator observations remain
+separate pre-readmission obligations. A required fifth temporary allocation
+category or fourth retained category in the full conversion still returns the
+tranche to impact review.
 
 ## Typed corpus storage slice
 
@@ -91,11 +93,10 @@ The test-only placement allows inspection of private `Context.entries`
 without expanding the production Context or ValidatedThing API. The fixed
 headroom and recursive call stack are prototype mechanics; the full bounded
 cursor, traversal-frame use, all known fields/variants, allocation growth,
-work charging, URI/default/security queries,
-and a shared storage-neutral Basic kernel remain open. Existing Basic is used
-only while constructing the fixed typed input. The snapshot traversal does not
-copy a semantic rule or claim validation of the sealed snapshot. This is
-partial item-3 evidence, not readmission or item-3 completion.
+work charging, URI queries, and complete storage-neutral Basic validation
+remain open. Existing Basic is used while constructing the fixed typed input
+and as the oracle for the narrow shared semantic slice. This is partial item-3
+evidence, not readmission or item-3 completion.
 
 ## Remaining Thing root-field slice
 
@@ -129,10 +130,10 @@ associations, normalize map insertion history, and still retain exactly three
 sealed allocations. No serializer round trip, opaque security object, nested
 owner, or new allocation category is introduced.
 
-This is typed-storage evidence only. Security reference validation, effective
-Thing/Form inheritance, Planning-facing security queries, shared Basic rules,
-exact work charging, resumability, and the strict builder remain outside this
-slice.
+This section remains typed-storage evidence. The test-only semantic slice below
+adds root/Form/combo name-reference checks, effective Thing/Form inheritance,
+and Planning-shaped scheme lookup. Complete SecurityScheme Basic validation,
+exact work charging, resumability, and the strict builder remain outside it.
 
 ## Complete Form typed-storage slice
 
@@ -147,9 +148,9 @@ nodes, ranges, and normalized extension values in the same three arenas.
 Tests read both Forms back field by field, retain their original indices, and
 show that content, ordered lists, response/additional-response content,
 subprotocol, extensions, and absent-versus-present-empty distinctions affect
-the sealed snapshot. This proves typed storage only. Effective operation
-defaults, inherited/overridden security, resolved URI, and response-content
-defaults remain TD semantic-kernel work and are not copied into this probe.
+the sealed snapshot. The test-only semantic slice below additionally exercises
+Property operation defaults and inherited/overridden security. Resolved URI
+and response-content defaults remain outside the probe.
 
 ## Complete PropertyAffordance typed-storage slice
 
@@ -162,10 +163,67 @@ DataSchema representation in the three sealed arenas.
 
 Tests read both Properties back field by field, distinguish the observable
 flag, preserve URI-variable key/schema associations, ignore BTreeMap insertion
-history, and distinguish absent from present-empty URI-variable maps. This is
-typed-storage evidence only: URI template expansion, effective operations,
-effective security, and other shared semantic queries remain outside the
-prototype.
+history, and distinguish absent from present-empty URI-variable maps. The
+narrow semantic slice below now covers effective Property operations and
+security; URI template expansion and other shared semantic queries remain
+outside the prototype.
+
+## Shared Property/default/security semantic-kernel slice
+
+`td/tests/support/semantic_kernel_probe.rs` is included only by the existing TD
+snapshot test module. It defines one private borrowed semantic-access contract,
+one adapter for the current typed `Thing`, and one adapter for the sealed
+node/edge/byte Snapshot. Adapter methods expose storage facts only. One shared
+rule implementation owns:
+
+- Property default operations for all `readOnly`/`writeOnly` combinations,
+  including the current neutral fallback for the Basic-invalid both-true case;
+- preservation of explicit operation order and explicit-empty operations;
+- Form security override, Thing security inheritance, and explicit-empty Form
+  security without accidental inheritance; and
+- required nonempty Thing security plus Thing, every Form, and combo
+  `oneOf`/`allOf` name-reference lookup.
+
+The typed adapter is checked against today's production `td_defaults` helpers
+and Basic validator. The same fixed typed corpus and semantic mutations are
+then run through both adapters. Positive and negative tests cover inherited,
+overridden, empty, and undefined names at Thing, Property Form, and combo
+definition sites. Borrowed effective-operation and effective-security iterators
+are `Clone + ExactSizeIterator` and preserve Property ordinal and original Form
+index. A local Planning-shaped probe enumerates a non-first Property/Form,
+filters `ReadProperty`, and resolves exactly one NoSec definition without
+receiving `&Thing`-specific fields or raw arena ranges.
+
+A thread-local Host counting allocator brackets only the completed query,
+reference-validation, fingerprint, and local Planning-probe intervals after
+both input representations exist. Both typed and Snapshot paths observe zero
+allocation calls and equal semantic summaries. This establishes an
+allocation-free implementation path for this narrow query slice; it is not a
+real-target allocator observation, work/stack bound, or claim that
+normalization allocates nothing.
+
+Run the focused proof with:
+
+```sh
+cargo test --locked -p clinkz-wot-td --lib semantic_kernel
+```
+
+The following remain explicitly unresolved and are not implemented by this
+slice:
+
+- complete Basic validation, including schema/affordance/security-scheme
+  constraints and complete first-error/diagnostic parity;
+- Form URI parsing and `base` resolution;
+- strict JSON decoding, strict-entry validation, and typed/direct decode
+  agreement;
+- resumable progress, work charging, lifetime/step budgets, cancellation, and
+  bounded rollback; and
+- the required external Planning fixture using the frozen public
+  `ValidatedThingView`. The local generic probe checks shape and information
+  sufficiency only; it cannot complete item 4.
+
+No production source, public API, allocation catalog, admission/status record,
+or prior evidence conclusion is changed.
 
 ## Complete ActionAffordance typed-storage slice
 
@@ -264,4 +322,5 @@ the no-default graph. The separate feature-boundary matrix checks Host
 base/order/AP/combined requests and actual resolved serde features; base and
 order without the validated capability remain ordinary TD/Basic graphs and do
 not run the AP-dependent snapshot probe. Exact work charging, bounded
-resumable sorting, and complete item-3 equivalence remain open.
+resumable sorting, complete Basic/URI/strict-decode equivalence, the external
+Planning fixture, and complete item-3 equivalence remain open.
