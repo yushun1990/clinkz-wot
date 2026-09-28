@@ -45,6 +45,7 @@ fn nested_schema_corpus_is_typed_and_basic_valid() {
 #[test]
 fn typed_fields_define_order_presence_and_content_without_json_roundtrip() {
     let thing = typed_corpus();
+    typed_corpus_shared::assert_complete_security_corpus(&thing);
 
     let created = thing.created.as_ref().unwrap();
     assert_eq!(created.year(), 2024);
