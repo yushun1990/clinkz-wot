@@ -108,10 +108,31 @@ field back, preserve tag and profile order, distinguish absent from present
 values and present-empty schema maps, preserve schema key/value associations,
 and keep map insertion history non-semantic.
 
-This remains a corpus-scoped part of item 3. Complete security-scheme typed
-storage is not covered by this slice. The recursive fixed-headroom traversal
-also remains non-production and does not establish exact work charging,
-resumability, a shared semantic kernel, strict entry, or readmission.
+This remains a corpus-scoped part of item 3. The recursive fixed-headroom
+traversal also remains non-production and does not establish exact work
+charging, resumability, a shared semantic kernel, strict entry, or readmission.
+
+## Complete SecurityScheme typed-storage slice
+
+The shared corpus now includes every current typed security variant: `nosec`,
+`auto`, `combo`, `basic`, `digest`, `apikey`, `bearer`, `psk`, and `oauth2`.
+It exercises the common semantic tags, description, multilingual descriptions,
+proxy, discriminator, and extension fields, plus every variant-specific field.
+The `combo` references and OAuth2 scopes retain source order; URI fields remain
+typed URI text; optional sequences distinguish absent from present-empty.
+
+The snapshot stores each variant discriminator, common context, and typed
+variant payload directly in the existing node, edge, and byte arenas. Tests
+read all fields back, distinguish representative mutations of every payload,
+preserve `oneOf`/`allOf` and scope order, keep definition key/value
+associations, normalize map insertion history, and still retain exactly three
+sealed allocations. No serializer round trip, opaque security object, nested
+owner, or new allocation category is introduced.
+
+This is typed-storage evidence only. Security reference validation, effective
+Thing/Form inheritance, Planning-facing security queries, shared Basic rules,
+exact work charging, resumability, and the strict builder remain outside this
+slice.
 
 ## Complete Form typed-storage slice
 

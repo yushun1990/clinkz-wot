@@ -10,6 +10,7 @@ use super::td_crate::{
         StringSchema,
     },
     data_type::MultiLanguage,
+    security_scheme::{Qop, SecurityLocation, SecurityScheme},
     thing::Thing,
     validate::{Validate, ValidationLevel},
 };
@@ -45,8 +46,49 @@ pub const CORPUS: &str = r##"{
     ],
     "security": ["none"],
     "securityDefinitions": {
-        "none": { "scheme": "nosec" },
-        "none_alt": { "scheme": "nosec" }
+        "none": {
+            "@type": ["PublicAccess", "AnonymousAccess"],
+            "description": "No credentials required",
+            "descriptions": {
+                "en": "No credentials required",
+                "fr": "Aucun justificatif requis"
+            },
+            "proxy": "https://proxy.example.org/security",
+            "scheme": "nosec",
+            "ex:securityHint": { "priority": 0 }
+        },
+        "none_alt": { "scheme": "nosec" },
+        "automatic": { "scheme": "auto" },
+        "combined": {
+            "scheme": "combo",
+            "oneOf": ["basic", "bearer"],
+            "allOf": ["api_key", "psk"]
+        },
+        "basic": { "scheme": "basic", "name": "account", "in": "cookie" },
+        "digest": {
+            "scheme": "digest",
+            "name": "digest-account",
+            "in": "uri",
+            "qop": "auth-int"
+        },
+        "api_key": { "scheme": "apikey", "name": "X-API-Key", "in": "header" },
+        "bearer": {
+            "scheme": "bearer",
+            "authorization": "https://auth.example.org/authorize",
+            "name": "access-token",
+            "alg": "RS256",
+            "format": "paseto",
+            "in": "body"
+        },
+        "psk": { "scheme": "psk", "identity": "sensor-17" },
+        "oauth": {
+            "scheme": "oauth2",
+            "authorization": "https://auth.example.org/oauth/authorize",
+            "token": "https://auth.example.org/oauth/token",
+            "refresh": "https://auth.example.org/oauth/refresh",
+            "scopes": ["things.read", "things.write"],
+            "flow": "code"
+        }
     },
     "properties": {
         "zeta": {
@@ -250,6 +292,106 @@ pub fn typed_corpus() -> Thing {
         .validate_with_level(ValidationLevel::Basic)
         .expect("fixed typed corpus must pass Basic");
     thing
+}
+
+pub fn assert_complete_security_corpus(thing: &Thing) {
+    let definitions = &thing.security_definitions;
+    assert_eq!(definitions.len(), 10);
+
+    let SecurityScheme::NoSec(none) = &definitions["none"] else {
+        panic!("none must retain its NoSec variant");
+    };
+    assert_eq!(
+        none._context.tags.as_deref(),
+        Some(["PublicAccess".into(), "AnonymousAccess".into()].as_slice())
+    );
+    assert_eq!(
+        none._context.description.as_deref(),
+        Some("No credentials required")
+    );
+    assert_eq!(
+        none._context
+            .descriptions
+            .as_ref()
+            .unwrap()
+            .get("fr")
+            .unwrap(),
+        "Aucun justificatif requis"
+    );
+    assert_eq!(
+        none._context.proxy.as_ref().unwrap().as_str(),
+        "https://proxy.example.org/security"
+    );
+    assert_eq!(
+        none._context._extra_fields["ex:securityHint"]["priority"],
+        serde_json::json!(0)
+    );
+
+    assert!(matches!(definitions["none_alt"], SecurityScheme::NoSec(_)));
+    assert!(matches!(definitions["automatic"], SecurityScheme::Auto(_)));
+
+    let SecurityScheme::Combo(combined) = &definitions["combined"] else {
+        panic!("combined must retain its Combo variant");
+    };
+    assert_eq!(combined.one_of, ["basic", "bearer"]);
+    assert_eq!(combined.all_of, ["api_key", "psk"]);
+
+    let SecurityScheme::Basic(basic) = &definitions["basic"] else {
+        panic!("basic must retain its Basic variant");
+    };
+    assert_eq!(basic.name.as_deref(), Some("account"));
+    assert_eq!(basic.location, SecurityLocation::Cookie);
+
+    let SecurityScheme::Digest(digest) = &definitions["digest"] else {
+        panic!("digest must retain its Digest variant");
+    };
+    assert_eq!(digest.name.as_deref(), Some("digest-account"));
+    assert_eq!(digest.location, SecurityLocation::Uri);
+    assert_eq!(digest.qop, Qop::AuthInt);
+
+    let SecurityScheme::APIKey(api_key) = &definitions["api_key"] else {
+        panic!("api_key must retain its APIKey variant");
+    };
+    assert_eq!(api_key.name.as_deref(), Some("X-API-Key"));
+    assert_eq!(api_key.location, SecurityLocation::Header);
+
+    let SecurityScheme::Bearer(bearer) = &definitions["bearer"] else {
+        panic!("bearer must retain its Bearer variant");
+    };
+    assert_eq!(
+        bearer.authorization.as_ref().unwrap().as_str(),
+        "https://auth.example.org/authorize"
+    );
+    assert_eq!(bearer.name.as_deref(), Some("access-token"));
+    assert_eq!(bearer.alg, "RS256");
+    assert_eq!(bearer.format, "paseto");
+    assert_eq!(bearer.location, SecurityLocation::Body);
+
+    let SecurityScheme::PSK(psk) = &definitions["psk"] else {
+        panic!("psk must retain its PSK variant");
+    };
+    assert_eq!(psk.identity.as_deref(), Some("sensor-17"));
+
+    let SecurityScheme::OAuth2(oauth) = &definitions["oauth"] else {
+        panic!("oauth must retain its OAuth2 variant");
+    };
+    assert_eq!(
+        oauth.authorization.as_ref().unwrap().as_str(),
+        "https://auth.example.org/oauth/authorize"
+    );
+    assert_eq!(
+        oauth.token.as_ref().unwrap().as_str(),
+        "https://auth.example.org/oauth/token"
+    );
+    assert_eq!(
+        oauth.refresh.as_ref().unwrap().as_str(),
+        "https://auth.example.org/oauth/refresh"
+    );
+    assert_eq!(
+        oauth.scopes.as_deref(),
+        Some(["things.read".into(), "things.write".into()].as_slice())
+    );
+    assert_eq!(oauth.flow, "code");
 }
 
 pub fn serializer_failure_thing() -> Thing {

@@ -16,6 +16,7 @@ use td_crate::{
     },
     form::Form,
     link::Link,
+    security_scheme::{Qop, SecurityLocation, SecurityScheme, SecuritySchemeContext},
     thing::Thing,
     validate::{Validate, ValidationLevel},
 };
@@ -60,6 +61,17 @@ enum Kind {
     Version,
     ExpectedResponse,
     AdditionalResponse,
+    SecurityScheme,
+    SecurityContext,
+    SecurityNoSec,
+    SecurityAuto,
+    SecurityCombo,
+    SecurityBasic,
+    SecurityDigest,
+    SecurityApiKey,
+    SecurityBearer,
+    SecurityPsk,
+    SecurityOAuth2,
     U32,
     F64,
     I64,
@@ -147,6 +159,18 @@ const DATETIME_SECOND: usize = 5;
 const DATETIME_NANOSECOND: usize = 6;
 const DATETIME_OFFSET_SECONDS: usize = 7;
 const DATETIME_FIELD_COUNT: usize = 8;
+
+const SECURITY_SCHEME_CONTEXT: usize = 0;
+const SECURITY_SCHEME_VARIANT: usize = 1;
+const SECURITY_SCHEME_FIELD_COUNT: usize = 2;
+
+const SECURITY_CONTEXT_TAGS: usize = 0;
+const SECURITY_CONTEXT_DESCRIPTION: usize = 1;
+const SECURITY_CONTEXT_DESCRIPTIONS: usize = 2;
+const SECURITY_CONTEXT_PROXY: usize = 3;
+const SECURITY_CONTEXT_SCHEME: usize = 4;
+const SECURITY_CONTEXT_EXTENSIONS: usize = 5;
+const SECURITY_CONTEXT_FIELD_COUNT: usize = 6;
 
 const EMPTY_EDGE: RetainedEdge = RetainedEdge {
     target: 0,
@@ -807,6 +831,143 @@ impl Build {
         id
     }
 
+    fn security_context(&mut self, context: &SecuritySchemeContext) -> u32 {
+        let id = self.node(Kind::SecurityContext, SECURITY_CONTEXT_FIELD_COUNT);
+        let first = self.node_at(id).first_edge;
+        let fields = [
+            self.sequence(context.tags.as_deref(), |this, tag| {
+                this.text(Kind::Str, tag)
+            }),
+            self.absent_or_text(context.description.as_deref(), Kind::Str),
+            self.language_map(context.descriptions.as_ref()),
+            self.absent_or_text(context.proxy.as_ref().map(|uri| uri.as_str()), Kind::Uri),
+            self.text(Kind::Str, &context.scheme),
+            self.extensions(&context._extra_fields),
+        ];
+        for (index, field) in fields.into_iter().enumerate() {
+            self.put(first, index, field);
+        }
+        id
+    }
+
+    fn security_location(&mut self, location: &SecurityLocation) -> u32 {
+        let value = match location {
+            SecurityLocation::Header => "header",
+            SecurityLocation::Query => "query",
+            SecurityLocation::Uri => "uri",
+            SecurityLocation::Body => "body",
+            SecurityLocation::Cookie => "cookie",
+            SecurityLocation::Auto => "auto",
+        };
+        self.text(Kind::Str, value)
+    }
+
+    fn security_scheme(&mut self, scheme: &SecurityScheme) -> u32 {
+        let id = self.node(Kind::SecurityScheme, SECURITY_SCHEME_FIELD_COUNT);
+        let first = self.node_at(id).first_edge;
+        let (context, variant) = match scheme {
+            SecurityScheme::NoSec(value) => (&value._context, self.node(Kind::SecurityNoSec, 0)),
+            SecurityScheme::Auto(value) => (&value._context, self.node(Kind::SecurityAuto, 0)),
+            SecurityScheme::Combo(value) => {
+                let variant = self.node(Kind::SecurityCombo, 2);
+                let at = self.node_at(variant).first_edge;
+                let one_of = self.sequence(Some(value.one_of.as_slice()), |this, name| {
+                    this.text(Kind::Str, name)
+                });
+                self.put(at, 0, one_of);
+                let all_of = self.sequence(Some(value.all_of.as_slice()), |this, name| {
+                    this.text(Kind::Str, name)
+                });
+                self.put(at, 1, all_of);
+                (&value._context, variant)
+            }
+            SecurityScheme::Basic(value) => {
+                let variant = self.node(Kind::SecurityBasic, 2);
+                let at = self.node_at(variant).first_edge;
+                let name = self.absent_or_text(value.name.as_deref(), Kind::Str);
+                self.put(at, 0, name);
+                let location = self.security_location(&value.location);
+                self.put(at, 1, location);
+                (&value._context, variant)
+            }
+            SecurityScheme::Digest(value) => {
+                let variant = self.node(Kind::SecurityDigest, 3);
+                let at = self.node_at(variant).first_edge;
+                let name = self.absent_or_text(value.name.as_deref(), Kind::Str);
+                self.put(at, 0, name);
+                let location = self.security_location(&value.location);
+                self.put(at, 1, location);
+                let qop = self.text(
+                    Kind::Str,
+                    match value.qop {
+                        Qop::Auth => "auth",
+                        Qop::AuthInt => "auth-int",
+                    },
+                );
+                self.put(at, 2, qop);
+                (&value._context, variant)
+            }
+            SecurityScheme::APIKey(value) => {
+                let variant = self.node(Kind::SecurityApiKey, 2);
+                let at = self.node_at(variant).first_edge;
+                let name = self.absent_or_text(value.name.as_deref(), Kind::Str);
+                self.put(at, 0, name);
+                let location = self.security_location(&value.location);
+                self.put(at, 1, location);
+                (&value._context, variant)
+            }
+            SecurityScheme::Bearer(value) => {
+                let variant = self.node(Kind::SecurityBearer, 5);
+                let at = self.node_at(variant).first_edge;
+                let fields = [
+                    self.absent_or_text(
+                        value.authorization.as_ref().map(|uri| uri.as_str()),
+                        Kind::Uri,
+                    ),
+                    self.absent_or_text(value.name.as_deref(), Kind::Str),
+                    self.text(Kind::Str, &value.alg),
+                    self.text(Kind::Str, &value.format),
+                    self.security_location(&value.location),
+                ];
+                for (index, field) in fields.into_iter().enumerate() {
+                    self.put(at, index, field);
+                }
+                (&value._context, variant)
+            }
+            SecurityScheme::PSK(value) => {
+                let variant = self.node(Kind::SecurityPsk, 1);
+                let at = self.node_at(variant).first_edge;
+                let identity = self.absent_or_text(value.identity.as_deref(), Kind::Str);
+                self.put(at, 0, identity);
+                (&value._context, variant)
+            }
+            SecurityScheme::OAuth2(value) => {
+                let variant = self.node(Kind::SecurityOAuth2, 5);
+                let at = self.node_at(variant).first_edge;
+                let fields = [
+                    self.absent_or_text(
+                        value.authorization.as_ref().map(|uri| uri.as_str()),
+                        Kind::Uri,
+                    ),
+                    self.absent_or_text(value.token.as_ref().map(|uri| uri.as_str()), Kind::Uri),
+                    self.absent_or_text(value.refresh.as_ref().map(|uri| uri.as_str()), Kind::Uri),
+                    self.sequence(value.scopes.as_deref(), |this, scope| {
+                        this.text(Kind::Str, scope)
+                    }),
+                    self.text(Kind::Str, &value.flow),
+                ];
+                for (index, field) in fields.into_iter().enumerate() {
+                    self.put(at, index, field);
+                }
+                (&value._context, variant)
+            }
+        };
+        let context = self.security_context(context);
+        self.put(first, SECURITY_SCHEME_CONTEXT, context);
+        self.put(first, SECURITY_SCHEME_VARIANT, variant);
+        id
+    }
+
     fn thing(&mut self, thing: &Thing) -> u32 {
         let id = self.node(Kind::Root, ROOT_FIELD_COUNT);
         let first = self.node_at(id).first_edge;
@@ -861,12 +1022,7 @@ impl Build {
             let pair = self.node_at(entry).first_edge;
             let key = self.text(Kind::Str, name);
             self.put(pair, 0, key);
-            let scheme = match scheme {
-                td_crate::security_scheme::SecurityScheme::NoSec(s) => {
-                    self.text(Kind::Str, &s._context.scheme)
-                }
-                _ => panic!("corpus-scoped probe: unhandled security variant"),
-            };
+            let scheme = self.security_scheme(scheme);
             self.put(pair, 1, scheme);
             self.put(definitions_first, index, entry);
         }
@@ -1023,6 +1179,17 @@ impl Snapshot {
             x if x == Kind::Version as u32 => Kind::Version,
             x if x == Kind::ExpectedResponse as u32 => Kind::ExpectedResponse,
             x if x == Kind::AdditionalResponse as u32 => Kind::AdditionalResponse,
+            x if x == Kind::SecurityScheme as u32 => Kind::SecurityScheme,
+            x if x == Kind::SecurityContext as u32 => Kind::SecurityContext,
+            x if x == Kind::SecurityNoSec as u32 => Kind::SecurityNoSec,
+            x if x == Kind::SecurityAuto as u32 => Kind::SecurityAuto,
+            x if x == Kind::SecurityCombo as u32 => Kind::SecurityCombo,
+            x if x == Kind::SecurityBasic as u32 => Kind::SecurityBasic,
+            x if x == Kind::SecurityDigest as u32 => Kind::SecurityDigest,
+            x if x == Kind::SecurityApiKey as u32 => Kind::SecurityApiKey,
+            x if x == Kind::SecurityBearer as u32 => Kind::SecurityBearer,
+            x if x == Kind::SecurityPsk as u32 => Kind::SecurityPsk,
+            x if x == Kind::SecurityOAuth2 as u32 => Kind::SecurityOAuth2,
             x if x == Kind::U32 as u32 => Kind::U32,
             x if x == Kind::F64 as u32 => Kind::F64,
             x if x == Kind::I64 as u32 => Kind::I64,
@@ -1079,6 +1246,159 @@ impl Snapshot {
                 assert_eq!(self.text(id), value);
             }
             None => assert_eq!(self.kind(id), Kind::Absent),
+        }
+    }
+    fn assert_optional_uri(&self, id: u32, value: Option<&str>) {
+        match value {
+            Some(value) => {
+                assert_eq!(self.kind(id), Kind::Uri);
+                assert_eq!(self.text(id), value);
+            }
+            None => assert_eq!(self.kind(id), Kind::Absent),
+        }
+    }
+    fn assert_language_map(&self, id: u32, value: Option<&MultiLanguage>) {
+        let Some(value) = value else {
+            assert_eq!(self.kind(id), Kind::Absent);
+            return;
+        };
+        assert_eq!(self.kind(id), Kind::Map);
+        self.assert_sorted_map(id);
+        assert_eq!(self.node(id).edge_count as usize, value.len());
+        for (language, text) in value.as_map() {
+            assert_eq!(self.text(self.map_get(id, language).unwrap()), text);
+        }
+    }
+    fn assert_security_context(&self, id: u32, context: &SecuritySchemeContext) {
+        assert_eq!(self.kind(id), Kind::SecurityContext);
+        self.assert_sequence(
+            self.child(id, SECURITY_CONTEXT_TAGS),
+            context.tags.as_deref(),
+            |snapshot, node, value| assert_eq!(snapshot.text(node), value),
+        );
+        self.assert_optional_text(
+            self.child(id, SECURITY_CONTEXT_DESCRIPTION),
+            context.description.as_deref(),
+        );
+        self.assert_language_map(
+            self.child(id, SECURITY_CONTEXT_DESCRIPTIONS),
+            context.descriptions.as_ref(),
+        );
+        self.assert_optional_uri(
+            self.child(id, SECURITY_CONTEXT_PROXY),
+            context.proxy.as_ref().map(|uri| uri.as_str()),
+        );
+        assert_eq!(
+            self.text(self.child(id, SECURITY_CONTEXT_SCHEME)),
+            context.scheme
+        );
+        self.assert_extensions(
+            self.child(id, SECURITY_CONTEXT_EXTENSIONS),
+            &context._extra_fields,
+        );
+    }
+    fn assert_security_location(&self, id: u32, location: &SecurityLocation) {
+        let expected = match location {
+            SecurityLocation::Header => "header",
+            SecurityLocation::Query => "query",
+            SecurityLocation::Uri => "uri",
+            SecurityLocation::Body => "body",
+            SecurityLocation::Cookie => "cookie",
+            SecurityLocation::Auto => "auto",
+        };
+        assert_eq!(self.text(id), expected);
+    }
+    fn assert_security_scheme(&self, id: u32, scheme: &SecurityScheme) {
+        assert_eq!(self.kind(id), Kind::SecurityScheme);
+        let context = self.child(id, SECURITY_SCHEME_CONTEXT);
+        let variant = self.child(id, SECURITY_SCHEME_VARIANT);
+        match scheme {
+            SecurityScheme::NoSec(value) => {
+                self.assert_security_context(context, &value._context);
+                assert_eq!(self.kind(variant), Kind::SecurityNoSec);
+            }
+            SecurityScheme::Auto(value) => {
+                self.assert_security_context(context, &value._context);
+                assert_eq!(self.kind(variant), Kind::SecurityAuto);
+            }
+            SecurityScheme::Combo(value) => {
+                self.assert_security_context(context, &value._context);
+                assert_eq!(self.kind(variant), Kind::SecurityCombo);
+                self.assert_sequence(
+                    self.child(variant, 0),
+                    Some(value.one_of.as_slice()),
+                    |snapshot, node, name| assert_eq!(snapshot.text(node), name),
+                );
+                self.assert_sequence(
+                    self.child(variant, 1),
+                    Some(value.all_of.as_slice()),
+                    |snapshot, node, name| assert_eq!(snapshot.text(node), name),
+                );
+            }
+            SecurityScheme::Basic(value) => {
+                self.assert_security_context(context, &value._context);
+                assert_eq!(self.kind(variant), Kind::SecurityBasic);
+                self.assert_optional_text(self.child(variant, 0), value.name.as_deref());
+                self.assert_security_location(self.child(variant, 1), &value.location);
+            }
+            SecurityScheme::Digest(value) => {
+                self.assert_security_context(context, &value._context);
+                assert_eq!(self.kind(variant), Kind::SecurityDigest);
+                self.assert_optional_text(self.child(variant, 0), value.name.as_deref());
+                self.assert_security_location(self.child(variant, 1), &value.location);
+                assert_eq!(
+                    self.text(self.child(variant, 2)),
+                    match value.qop {
+                        Qop::Auth => "auth",
+                        Qop::AuthInt => "auth-int",
+                    }
+                );
+            }
+            SecurityScheme::APIKey(value) => {
+                self.assert_security_context(context, &value._context);
+                assert_eq!(self.kind(variant), Kind::SecurityApiKey);
+                self.assert_optional_text(self.child(variant, 0), value.name.as_deref());
+                self.assert_security_location(self.child(variant, 1), &value.location);
+            }
+            SecurityScheme::Bearer(value) => {
+                self.assert_security_context(context, &value._context);
+                assert_eq!(self.kind(variant), Kind::SecurityBearer);
+                self.assert_optional_uri(
+                    self.child(variant, 0),
+                    value.authorization.as_ref().map(|uri| uri.as_str()),
+                );
+                self.assert_optional_text(self.child(variant, 1), value.name.as_deref());
+                assert_eq!(self.text(self.child(variant, 2)), value.alg);
+                assert_eq!(self.text(self.child(variant, 3)), value.format);
+                self.assert_security_location(self.child(variant, 4), &value.location);
+            }
+            SecurityScheme::PSK(value) => {
+                self.assert_security_context(context, &value._context);
+                assert_eq!(self.kind(variant), Kind::SecurityPsk);
+                self.assert_optional_text(self.child(variant, 0), value.identity.as_deref());
+            }
+            SecurityScheme::OAuth2(value) => {
+                self.assert_security_context(context, &value._context);
+                assert_eq!(self.kind(variant), Kind::SecurityOAuth2);
+                self.assert_optional_uri(
+                    self.child(variant, 0),
+                    value.authorization.as_ref().map(|uri| uri.as_str()),
+                );
+                self.assert_optional_uri(
+                    self.child(variant, 1),
+                    value.token.as_ref().map(|uri| uri.as_str()),
+                );
+                self.assert_optional_uri(
+                    self.child(variant, 2),
+                    value.refresh.as_ref().map(|uri| uri.as_str()),
+                );
+                self.assert_sequence(
+                    self.child(variant, 3),
+                    value.scopes.as_deref(),
+                    |snapshot, node, scope| assert_eq!(snapshot.text(node), scope),
+                );
+                assert_eq!(self.text(self.child(variant, 4)), value.flow);
+            }
         }
     }
     fn assert_optional_value(&self, id: u32, value: Option<&Value>) {
@@ -1682,15 +2002,237 @@ fn typed_corpus_survives_sealed_snapshot() {
             .unwrap()
             .as_str()
     );
-    assert_eq!(
-        snapshot.text(
-            snapshot
-                .map_get(snapshot.child(root, ROOT_SECURITY_DEFINITIONS), "none")
-                .unwrap()
-        ),
-        "nosec"
-    );
+    let security_definitions = snapshot.child(root, ROOT_SECURITY_DEFINITIONS);
+    snapshot.assert_sorted_map(security_definitions);
+    for (name, scheme) in &thing.security_definitions {
+        snapshot.assert_security_scheme(
+            snapshot.map_get(security_definitions, name).unwrap(),
+            scheme,
+        );
+    }
     assert_eq!(snapshot.arena.footprint().retained_allocation_count, 3);
+}
+
+#[test]
+fn complete_security_scheme_fields_survive_and_distinguish_semantic_mutations() {
+    fn scheme_mut<'a>(thing: &'a mut Thing, name: &str) -> &'a mut SecurityScheme {
+        thing.security_definitions.get_mut(name).unwrap()
+    }
+
+    let thing = typed_corpus_shared::typed_corpus();
+    typed_corpus_shared::assert_complete_security_corpus(&thing);
+    let baseline = Snapshot::normalize(&thing);
+    let definitions = baseline.child(baseline.root, ROOT_SECURITY_DEFINITIONS);
+    for (name, scheme) in &thing.security_definitions {
+        baseline.assert_security_scheme(baseline.map_get(definitions, name).unwrap(), scheme);
+    }
+    assert_eq!(baseline.arena.footprint().retained_allocation_count, 3);
+
+    let mut changed = thing.clone();
+    let SecurityScheme::NoSec(none) = scheme_mut(&mut changed, "none") else {
+        unreachable!()
+    };
+    none._context.tags.as_mut().unwrap().swap(0, 1);
+    assert!(
+        !baseline.same(&Snapshot::normalize(&changed)),
+        "security context tag order"
+    );
+
+    let mut changed = thing.clone();
+    let SecurityScheme::NoSec(none) = scheme_mut(&mut changed, "none") else {
+        unreachable!()
+    };
+    none._context.description = None;
+    assert!(
+        !baseline.same(&Snapshot::normalize(&changed)),
+        "security context description presence"
+    );
+
+    let mut changed = thing.clone();
+    let SecurityScheme::NoSec(none) = scheme_mut(&mut changed, "none") else {
+        unreachable!()
+    };
+    none._context
+        .descriptions
+        .as_mut()
+        .unwrap()
+        .add("fr", "Accès public");
+    assert!(
+        !baseline.same(&Snapshot::normalize(&changed)),
+        "security context multilingual description"
+    );
+
+    let mut changed = thing.clone();
+    let SecurityScheme::NoSec(none) = scheme_mut(&mut changed, "none") else {
+        unreachable!()
+    };
+    none._context.proxy = None;
+    assert!(
+        !baseline.same(&Snapshot::normalize(&changed)),
+        "security context proxy presence"
+    );
+
+    let mut changed = thing.clone();
+    let SecurityScheme::NoSec(none) = scheme_mut(&mut changed, "none") else {
+        unreachable!()
+    };
+    none._context.scheme = "auto".into();
+    assert!(
+        !baseline.same(&Snapshot::normalize(&changed)),
+        "typed scheme discriminator text"
+    );
+
+    let mut changed = thing.clone();
+    let SecurityScheme::NoSec(none) = scheme_mut(&mut changed, "none") else {
+        unreachable!()
+    };
+    none._context
+        ._extra_fields
+        .insert("ex:securityHint".into(), serde_json::json!({"priority": 1}));
+    assert!(
+        !baseline.same(&Snapshot::normalize(&changed)),
+        "security context extension"
+    );
+
+    let mut changed = thing.clone();
+    let SecurityScheme::Combo(combo) = scheme_mut(&mut changed, "combined") else {
+        unreachable!()
+    };
+    combo.one_of.swap(0, 1);
+    changed.validate_with_level(ValidationLevel::Basic).unwrap();
+    assert!(
+        !baseline.same(&Snapshot::normalize(&changed)),
+        "combo oneOf order"
+    );
+
+    let mut changed = thing.clone();
+    let SecurityScheme::Combo(combo) = scheme_mut(&mut changed, "combined") else {
+        unreachable!()
+    };
+    combo.all_of.swap(0, 1);
+    changed.validate_with_level(ValidationLevel::Basic).unwrap();
+    assert!(
+        !baseline.same(&Snapshot::normalize(&changed)),
+        "combo allOf order"
+    );
+
+    let mut changed = thing.clone();
+    let SecurityScheme::Basic(basic) = scheme_mut(&mut changed, "basic") else {
+        unreachable!()
+    };
+    basic.name = None;
+    assert!(
+        !baseline.same(&Snapshot::normalize(&changed)),
+        "basic name presence"
+    );
+
+    let mut changed = thing.clone();
+    let SecurityScheme::Basic(basic) = scheme_mut(&mut changed, "basic") else {
+        unreachable!()
+    };
+    basic.location = SecurityLocation::Auto;
+    changed.validate_with_level(ValidationLevel::Basic).unwrap();
+    assert!(
+        !baseline.same(&Snapshot::normalize(&changed)),
+        "basic location"
+    );
+
+    let mut changed = thing.clone();
+    let SecurityScheme::Digest(digest) = scheme_mut(&mut changed, "digest") else {
+        unreachable!()
+    };
+    digest.qop = Qop::Auth;
+    changed.validate_with_level(ValidationLevel::Basic).unwrap();
+    assert!(!baseline.same(&Snapshot::normalize(&changed)), "digest qop");
+
+    let mut changed = thing.clone();
+    let SecurityScheme::APIKey(api_key) = scheme_mut(&mut changed, "api_key") else {
+        unreachable!()
+    };
+    api_key.name = Some("api-key-query".into());
+    api_key.location = SecurityLocation::Query;
+    changed.validate_with_level(ValidationLevel::Basic).unwrap();
+    assert!(
+        !baseline.same(&Snapshot::normalize(&changed)),
+        "API key name and location"
+    );
+
+    let mut changed = thing.clone();
+    let SecurityScheme::Bearer(bearer) = scheme_mut(&mut changed, "bearer") else {
+        unreachable!()
+    };
+    bearer.authorization = None;
+    bearer.name = None;
+    bearer.alg = "ES256".into();
+    bearer.format = "jwt".into();
+    bearer.location = SecurityLocation::Header;
+    changed.validate_with_level(ValidationLevel::Basic).unwrap();
+    assert!(
+        !baseline.same(&Snapshot::normalize(&changed)),
+        "bearer optional and scalar fields"
+    );
+
+    let mut changed = thing.clone();
+    let SecurityScheme::PSK(psk) = scheme_mut(&mut changed, "psk") else {
+        unreachable!()
+    };
+    psk.identity = None;
+    changed.validate_with_level(ValidationLevel::Basic).unwrap();
+    assert!(
+        !baseline.same(&Snapshot::normalize(&changed)),
+        "PSK identity presence"
+    );
+
+    let mut changed = thing.clone();
+    let SecurityScheme::OAuth2(oauth) = scheme_mut(&mut changed, "oauth") else {
+        unreachable!()
+    };
+    core::mem::swap(&mut oauth.authorization, &mut oauth.token);
+    oauth.refresh = None;
+    oauth.scopes.as_mut().unwrap().swap(0, 1);
+    oauth.flow = "client".into();
+    changed.validate_with_level(ValidationLevel::Basic).unwrap();
+    assert!(
+        !baseline.same(&Snapshot::normalize(&changed)),
+        "OAuth2 endpoints, scope order, and flow"
+    );
+
+    let mut changed = thing.clone();
+    let SecurityScheme::OAuth2(oauth) = scheme_mut(&mut changed, "oauth") else {
+        unreachable!()
+    };
+    oauth.scopes = Some(Vec::new());
+    let present_empty = Snapshot::normalize(&changed);
+    let SecurityScheme::OAuth2(oauth) = scheme_mut(&mut changed, "oauth") else {
+        unreachable!()
+    };
+    oauth.scopes = None;
+    assert!(
+        !present_empty.same(&Snapshot::normalize(&changed)),
+        "absent vs present-empty OAuth2 scopes"
+    );
+
+    let mut changed = thing.clone();
+    let automatic = changed.security_definitions.remove("automatic").unwrap();
+    let basic = changed.security_definitions.remove("basic").unwrap();
+    changed
+        .security_definitions
+        .insert("automatic".into(), basic);
+    changed
+        .security_definitions
+        .insert("basic".into(), automatic);
+    changed.validate_with_level(ValidationLevel::Basic).unwrap();
+    assert!(
+        !baseline.same(&Snapshot::normalize(&changed)),
+        "security definition key/value association"
+    );
+
+    let mut reordered = thing.clone();
+    reordered.security_definitions = reordered.security_definitions.into_iter().rev().collect();
+    assert!(
+        baseline.same(&Snapshot::normalize(&reordered)),
+        "securityDefinitions insertion history is not semantic"
+    );
 }
 
 #[test]
