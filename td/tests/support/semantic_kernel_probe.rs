@@ -12,8 +12,8 @@ extern crate std;
 use super::{
     ACTION_FORMS, EVENT_FORMS, FORM_OPERATIONS, FORM_SECURITY, Kind, PROPERTY_FORMS,
     PROPERTY_SCHEMA, ROOT_ACTIONS, ROOT_EVENTS, ROOT_FORMS, ROOT_PROPERTIES, ROOT_SECURITY,
-    ROOT_SECURITY_DEFINITIONS, SECURITY_CONTEXT_SCHEME, SECURITY_SCHEME_CONTEXT,
-    SECURITY_SCHEME_VARIANT, Snapshot,
+    ROOT_SECURITY_DEFINITIONS, SECURITY_CONTEXT_EXTENSIONS, SECURITY_CONTEXT_SCHEME,
+    SECURITY_SCHEME_CONTEXT, SECURITY_SCHEME_VARIANT, Snapshot,
 };
 use crate::{
     affordance::PropertyAffordance,
@@ -115,11 +115,46 @@ struct ThingSecurityDefinition<'a> {
     definition: &'a SecurityScheme,
 }
 
+#[derive(Clone, Copy)]
+enum ThingSecurityNames<'a> {
+    Strings(&'a [String]),
+    JsonArray(&'a [serde_json::Value]),
+    JsonString(&'a str),
+    Empty,
+}
+
+fn thing_security_context(
+    definition: &SecurityScheme,
+) -> &crate::security_scheme::SecuritySchemeContext {
+    match definition {
+        SecurityScheme::NoSec(value) => &value._context,
+        SecurityScheme::Auto(value) => &value._context,
+        SecurityScheme::Combo(value) => &value._context,
+        SecurityScheme::Basic(value) => &value._context,
+        SecurityScheme::Digest(value) => &value._context,
+        SecurityScheme::APIKey(value) => &value._context,
+        SecurityScheme::Bearer(value) => &value._context,
+        SecurityScheme::PSK(value) => &value._context,
+        SecurityScheme::OAuth2(value) => &value._context,
+    }
+}
+
+fn thing_extension_security_names<'a>(
+    definition: &'a SecurityScheme,
+    field: &str,
+) -> ThingSecurityNames<'a> {
+    match thing_security_context(definition)._extra_fields.get(field) {
+        Some(serde_json::Value::Array(values)) => ThingSecurityNames::JsonArray(values),
+        Some(serde_json::Value::String(value)) => ThingSecurityNames::JsonString(value),
+        _ => ThingSecurityNames::Empty,
+    }
+}
+
 impl<'a> SemanticAccess<'a> for Thing {
     type Property = ThingProperty<'a>;
     type Form = &'a Form;
     type Operations = &'a [Operation];
-    type SecurityNames = &'a [String];
+    type SecurityNames = ThingSecurityNames<'a>;
     type SecurityDefinition = ThingSecurityDefinition<'a>;
 
     fn property_count(&'a self) -> usize {
@@ -164,19 +199,34 @@ impl<'a> SemanticAccess<'a> for Thing {
     }
 
     fn thing_security(&'a self) -> Self::SecurityNames {
-        &self.security
+        ThingSecurityNames::Strings(&self.security)
     }
 
     fn explicit_form_security(&'a self, form: Self::Form) -> Option<Self::SecurityNames> {
-        form.security.as_deref()
+        form.security.as_deref().map(ThingSecurityNames::Strings)
     }
 
     fn security_name_count(&'a self, names: Self::SecurityNames) -> usize {
-        names.len()
+        match names {
+            ThingSecurityNames::Strings(values) => values.len(),
+            ThingSecurityNames::JsonArray(values) => {
+                values.iter().filter(|value| value.is_string()).count()
+            }
+            ThingSecurityNames::JsonString(_) => 1,
+            ThingSecurityNames::Empty => 0,
+        }
     }
 
     fn security_name_at(&'a self, names: Self::SecurityNames, index: usize) -> Option<&'a str> {
-        names.get(index).map(String::as_str)
+        match names {
+            ThingSecurityNames::Strings(values) => values.get(index).map(String::as_str),
+            ThingSecurityNames::JsonArray(values) => values
+                .iter()
+                .filter_map(serde_json::Value::as_str)
+                .nth(index),
+            ThingSecurityNames::JsonString(value) => (index == 0).then_some(value),
+            ThingSecurityNames::Empty => None,
+        }
     }
 
     fn security_definition_count(&'a self) -> usize {
@@ -208,20 +258,20 @@ impl<'a> SemanticAccess<'a> for Thing {
         &'a self,
         definition: Self::SecurityDefinition,
     ) -> Option<Self::SecurityNames> {
-        match definition.definition {
-            SecurityScheme::Combo(combo) => Some(&combo.one_of),
-            _ => None,
-        }
+        Some(match definition.definition {
+            SecurityScheme::Combo(combo) => ThingSecurityNames::Strings(&combo.one_of),
+            definition => thing_extension_security_names(definition, "oneOf"),
+        })
     }
 
     fn security_definition_all_of(
         &'a self,
         definition: Self::SecurityDefinition,
     ) -> Option<Self::SecurityNames> {
-        match definition.definition {
-            SecurityScheme::Combo(combo) => Some(&combo.all_of),
-            _ => None,
-        }
+        Some(match definition.definition {
+            SecurityScheme::Combo(combo) => ThingSecurityNames::Strings(&combo.all_of),
+            definition => thing_extension_security_names(definition, "allOf"),
+        })
     }
 
     fn all_form_count(&'a self) -> usize {
@@ -316,6 +366,13 @@ struct SnapshotSecurityDefinition {
     definition: u32,
 }
 
+#[derive(Clone, Copy)]
+enum SnapshotSecurityNames {
+    Array(u32),
+    String(u32),
+    Empty,
+}
+
 impl Snapshot {
     fn optional_sequence(&self, node: u32) -> Option<u32> {
         match self.kind(node) {
@@ -350,6 +407,20 @@ impl Snapshot {
         let definitions = self.child(self.root, ROOT_SECURITY_DEFINITIONS);
         let (name, definition) = self.map_pair(definitions, index)?;
         Some(SnapshotSecurityDefinition { name, definition })
+    }
+
+    fn extension_security_names(
+        &self,
+        definition: SnapshotSecurityDefinition,
+        field: &str,
+    ) -> SnapshotSecurityNames {
+        let context = self.child(definition.definition, SECURITY_SCHEME_CONTEXT);
+        let extensions = self.child(context, SECURITY_CONTEXT_EXTENSIONS);
+        match self.map_get(extensions, field) {
+            Some(node) if self.kind(node) == Kind::Array => SnapshotSecurityNames::Array(node),
+            Some(node) if self.kind(node) == Kind::Str => SnapshotSecurityNames::String(node),
+            _ => SnapshotSecurityNames::Empty,
+        }
     }
 
     fn forms_in_map_count(&self, map: u32, forms_field: usize) -> usize {
@@ -391,7 +462,7 @@ impl<'a> SemanticAccess<'a> for Snapshot {
     type Property = SnapshotProperty;
     type Form = u32;
     type Operations = u32;
-    type SecurityNames = u32;
+    type SecurityNames = SnapshotSecurityNames;
     type SecurityDefinition = SnapshotSecurityDefinition;
 
     fn property_count(&'a self) -> usize {
@@ -442,19 +513,34 @@ impl<'a> SemanticAccess<'a> for Snapshot {
     }
 
     fn thing_security(&'a self) -> Self::SecurityNames {
-        self.child(self.root, ROOT_SECURITY)
+        SnapshotSecurityNames::Array(self.child(self.root, ROOT_SECURITY))
     }
 
     fn explicit_form_security(&'a self, form: Self::Form) -> Option<Self::SecurityNames> {
         self.optional_sequence(self.child(form, FORM_SECURITY))
+            .map(SnapshotSecurityNames::Array)
     }
 
     fn security_name_count(&'a self, names: Self::SecurityNames) -> usize {
-        self.sequence_len(names)
+        match names {
+            SnapshotSecurityNames::Array(node) => (0..self.sequence_len(node))
+                .filter(|&index| self.kind(self.child(node, index)) == Kind::Str)
+                .count(),
+            SnapshotSecurityNames::String(_) => 1,
+            SnapshotSecurityNames::Empty => 0,
+        }
     }
 
     fn security_name_at(&'a self, names: Self::SecurityNames, index: usize) -> Option<&'a str> {
-        (index < self.sequence_len(names)).then(|| self.text(self.child(names, index)))
+        match names {
+            SnapshotSecurityNames::Array(node) => (0..self.sequence_len(node))
+                .map(|item| self.child(node, item))
+                .filter(|&item| self.kind(item) == Kind::Str)
+                .nth(index)
+                .map(|item| self.text(item)),
+            SnapshotSecurityNames::String(node) => (index == 0).then(|| self.text(node)),
+            SnapshotSecurityNames::Empty => None,
+        }
     }
 
     fn security_definition_count(&'a self) -> usize {
@@ -487,7 +573,11 @@ impl<'a> SemanticAccess<'a> for Snapshot {
         definition: Self::SecurityDefinition,
     ) -> Option<Self::SecurityNames> {
         let variant = self.child(definition.definition, SECURITY_SCHEME_VARIANT);
-        (self.kind(variant) == Kind::SecurityCombo).then(|| self.child(variant, 0))
+        Some(if self.kind(variant) == Kind::SecurityCombo {
+            SnapshotSecurityNames::Array(self.child(variant, 0))
+        } else {
+            self.extension_security_names(definition, "oneOf")
+        })
     }
 
     fn security_definition_all_of(
@@ -495,7 +585,11 @@ impl<'a> SemanticAccess<'a> for Snapshot {
         definition: Self::SecurityDefinition,
     ) -> Option<Self::SecurityNames> {
         let variant = self.child(definition.definition, SECURITY_SCHEME_VARIANT);
-        (self.kind(variant) == Kind::SecurityCombo).then(|| self.child(variant, 1))
+        Some(if self.kind(variant) == Kind::SecurityCombo {
+            SnapshotSecurityNames::Array(self.child(variant, 1))
+        } else {
+            self.extension_security_names(definition, "allOf")
+        })
     }
 
     fn all_form_count(&'a self) -> usize {
@@ -1345,6 +1439,66 @@ fn semantic_kernel_security_inheritance_empty_override_and_reference_negatives()
         empty_root.validate_with_level(ValidationLevel::Basic),
         Err(ValidateError::MissingRequiredField(field)) if field == "security"
     ));
+}
+
+#[test]
+fn semantic_kernel_security_reference_dispatch_follows_mutable_scheme_discriminator() {
+    // Current Basic dispatches combo behavior from the mutable `scheme`
+    // discriminator. For a non-Combo Rust variant it reads oneOf/allOf from
+    // extension fields, so the storage adapters must not dispatch only on the
+    // enum variant that happened to carry the typed value.
+    let mut disguised_combo = super::typed_corpus_shared::typed_corpus();
+    let SecurityScheme::Auto(disguised) = disguised_combo
+        .security_definitions
+        .get_mut("automatic")
+        .unwrap()
+    else {
+        panic!("automatic must retain its Auto variant");
+    };
+    disguised._context.scheme = "combo".into();
+    disguised
+        ._context
+        ._extra_fields
+        .insert("oneOf".into(), serde_json::json!(["none", "none_alt"]));
+    disguised_combo
+        .validate_with_level(ValidationLevel::Basic)
+        .unwrap();
+    let snapshot = Snapshot::normalize(&disguised_combo);
+    assert_semantic_parity(&disguised_combo, &snapshot);
+    assert_eq!(validate_security_references(&snapshot), Ok(()));
+
+    let SecurityScheme::Auto(disguised) = disguised_combo
+        .security_definitions
+        .get_mut("automatic")
+        .unwrap()
+    else {
+        panic!("automatic must retain its Auto variant");
+    };
+    disguised._context._extra_fields.insert(
+        "oneOf".into(),
+        serde_json::json!(["none", "missing-disguised-combo"]),
+    );
+    let snapshot = Snapshot::normalize(&disguised_combo);
+    assert_semantic_parity(&disguised_combo, &snapshot);
+    assert!(matches!(
+        validate_security_references(&snapshot),
+        Err(SecurityRuleError::Undefined {
+            site: SecurityReferenceSite::SecurityDefinition {
+                group: DefinitionGroup::OneOf,
+                ..
+            },
+            reference: "missing-disguised-combo",
+        })
+    ));
+    assert_basic_invalid_reference(&disguised_combo, "missing-disguised-combo");
+
+    let (thing_rejected, thing_allocations) =
+        count_allocations(|| validate_security_references(&disguised_combo).is_err());
+    let (snapshot_rejected, snapshot_allocations) =
+        count_allocations(|| validate_security_references(&snapshot).is_err());
+    assert!(thing_rejected && snapshot_rejected);
+    assert_eq!(thing_allocations, 0);
+    assert_eq!(snapshot_allocations, 0);
 }
 
 #[test]

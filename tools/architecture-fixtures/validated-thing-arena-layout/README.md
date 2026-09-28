@@ -182,14 +182,18 @@ rule implementation owns:
 - Form security override, Thing security inheritance, and explicit-empty Form
   security without accidental inheritance; and
 - required nonempty Thing security plus Thing, every Form, and combo
-  `oneOf`/`allOf` name-reference lookup.
+  `oneOf`/`allOf` name-reference lookup. Combo reference lookup follows the
+  mutable typed `scheme` discriminator: a non-Combo Rust variant whose scheme
+  is `combo` reads `oneOf`/`allOf` from its extension fields, matching current
+  Basic behavior.
 
 The typed adapter is checked against today's production `td_defaults` helpers
 and Basic validator. The same fixed typed corpus and semantic mutations are
 then run through both adapters. Positive and negative tests cover inherited,
 overridden, empty, and undefined names at Thing, Property Form, and combo
-definition sites. Borrowed effective-operation and effective-security iterators
-are `Clone + ExactSizeIterator` and preserve Property ordinal and original Form
+definition sites, including a discriminator/enum-variant mismatch mutation.
+Borrowed effective-operation and effective-security iterators are
+`Clone + ExactSizeIterator` and preserve Property ordinal and original Form
 index. A local Planning-shaped probe enumerates a non-first Property/Form,
 filters `ReadProperty`, and resolves exactly one NoSec definition without
 receiving `&Thing`-specific fields or raw arena ranges.
