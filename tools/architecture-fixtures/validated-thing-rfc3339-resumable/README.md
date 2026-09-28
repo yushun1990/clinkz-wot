@@ -61,14 +61,24 @@ lifetime remainder. Before reading each source byte it requires and consumes:
 1. one current-step `CodecInputBytes` unit; and
 2. one unit from the cursor's lifetime remainder.
 
+An empty input has no charged source byte to own its EOF rejection. That
+standalone EOF transition therefore consumes one `CodecInputBytes` unit from
+the current step and one unit from the lifetime remainder before it returns a
+terminal JSON error. With either unit unavailable it returns `Pending` or
+`Limit` under the normal precedence. A non-empty token's EOF check remains
+fixed work owned by its last charged source byte.
+
 The cursor stores no step credit. A fresh budget therefore cannot pay earlier
-and trigger a later bulk scan. For `n` source bytes consumed in one step, the
-instrumented implementation performs exactly `n` JSON transitions, at most
-`4n` date-byte transitions (the maximum UTF-8 expansion of one completed JSON
-escape/scalar), and at most `n` fixed finalizations. Tests assert the conservative
-bound `json + date + finalization <= 6n` after every step. All inner loops have
-a fixed maximum of four; calendar/time/offset construction is fixed-size work
-performed while processing the charged closing quote.
+and trigger a later bulk scan. For `w` charged progress units in one step, the
+instrumented implementation consumes at most `w` source bytes, performs
+exactly one JSON transition per source byte, at most `4w` date-byte transitions
+(the maximum UTF-8 expansion of one completed JSON escape/scalar), and at most
+`w` fixed finalizations. Tests assert the conservative bound
+`json + date + finalization <= 6w` after every step. Ordinarily `w` equals the
+number of source bytes; the standalone empty-input EOF transition has `w = 1`
+and no source byte. All inner loops have a fixed maximum of four;
+calendar/time/offset construction is fixed-size work performed while
+processing the charged closing quote.
 
 Executable traces cover:
 
@@ -77,6 +87,9 @@ Executable traces cover:
 - zero budget with unchanged position, state, lifetime, and work trace;
 - pauses inside `\uXXXX`, surrogate-pair, UTF-8, fraction, delimiter, and offset
   state;
+- every continuation boundary of raw valid two-, three-, and four-byte UTF-8,
+  plus malformed continuation and overlong sequences, under one-byte
+  allowances;
 - a late `x` after 4,096 fraction digits and trailing data after a complete
   offset, with production error parity and no prefix acceptance;
 - valid and invalid JSON escape combinations compared with serde_json plus the
@@ -104,8 +117,9 @@ unfinished-cursor drop. The real thumb target compiles the same library.
 These results support the existing authority classification:
 
 - input work uses `CodecInputBytes` and the existing shared lifetime remainder;
-- date and JSON continuation state fits the existing inline cursor/owner
-  capacity;
+- date and JSON continuation state is fixed-size and allocation-free under the
+  fixture's measured Host bounds; no authoritative builder or Servient
+  inline-owner capacity is asserted;
 - the date seam needs no retained allocation, temporary allocation, diagnostic
   allocation, cleanup record, or new allocation category; and
 - dropping or cancelling this date-local cursor has no recursive or
@@ -171,7 +185,7 @@ that finding.
 | Item | Evidence supplied here | Status after this fixture |
 | ---: | --- | --- |
 | 1 | No production/public surface is added; no compile API fixture is supplied. | Not proved |
-| 2 | Date/JSON state is inline, allocation-free, non-dropping, and adds no fifth temporary or fourth retained category. | Partial; complete arenas/formulas/ledger order remain open |
+| 2 | Date/JSON state is fixed-size, allocation-free, non-dropping, and needs no separate temporary or retained allocation category; no concrete builder/Servient owner capacity is tested. | Partial; complete arenas/formulas/ledger order and owner capacity remain open |
 | 3 | Differential date values and exact error text, including long fractions and range/error precedence. | Partial; full typed semantic corpus and numeric predicates remain open |
 | 4 | None. | Not proved |
 | 5 | Host execution plus real thumb `no_std` compilation of this probe. | Partial; the full capability/feature matrix and target execution remain open |

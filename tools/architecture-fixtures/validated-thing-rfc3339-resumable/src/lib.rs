@@ -163,7 +163,24 @@ impl<'a> StrictDateCursor<'a> {
             }
         }
 
-        // Reaching token EOF without a closing quote is a bounded check owned
+        // Empty input has no charged predecessor to own its EOF rejection, so
+        // its fixed transition consumes one standalone unit from both work
+        // budgets before becoming terminal.
+        if self.input.is_empty() {
+            if budget.remaining(WorkClass::CodecInputBytes) == 0 {
+                return StrictProgress::Pending(self);
+            }
+            if self.lifetime_remaining == 0 {
+                return StrictProgress::Limit {
+                    position: self.position,
+                    trace: self.trace,
+                };
+            }
+            budget.consume(WorkClass::CodecInputBytes, 1).unwrap();
+            self.lifetime_remaining -= 1;
+        }
+
+        // Reaching token EOF for non-empty input is a bounded check owned
         // by the last charged source byte. Valid completion occurs at `"`.
         self.trace.fixed_finalizations += 1;
         StrictProgress::Invalid {
@@ -401,6 +418,9 @@ mod tests {
         Cancelled(usize, Trace),
     }
 
+    type Utf8Pause = (u8, u8);
+    type Utf8Case<'a> = (&'a [u8], &'a [Utf8Pause]);
+
     fn trace_of(progress: &StrictProgress<'_>) -> Trace {
         match progress {
             StrictProgress::Pending(cursor) => cursor.trace(),
@@ -411,7 +431,12 @@ mod tests {
         }
     }
 
-    fn run_strict(input: &[u8], lifetime: u64, allowances: &[u64]) -> OwnedOutcome {
+    fn run_strict_observing_pending(
+        input: &[u8],
+        lifetime: u64,
+        allowances: &[u64],
+        mut observe: impl FnMut(&StrictDateCursor<'_>),
+    ) -> OwnedOutcome {
         assert!(!allowances.is_empty());
         let mut cursor = StrictDateCursor::new(input, lifetime);
         let mut step = 0_usize;
@@ -427,16 +452,15 @@ mod tests {
             let json_delta = after.json_transitions - before.json_transitions;
             let date_delta = after.date_transitions - before.date_transitions;
             let finalize_delta = after.fixed_finalizations - before.fixed_finalizations;
+            let charged_delta = allowance - budget.remaining(WorkClass::CodecInputBytes);
+            let standalone_eof_delta = u64::from(source_delta == 0 && finalize_delta == 1);
 
             assert_eq!(source_delta, json_delta);
-            assert_eq!(
-                source_delta,
-                allowance - budget.remaining(WorkClass::CodecInputBytes)
-            );
+            assert_eq!(charged_delta, source_delta + standalone_eof_delta);
             assert!(source_delta <= allowance);
             assert!(date_delta <= source_delta * 4);
-            assert!(finalize_delta <= source_delta);
-            assert!(json_delta + date_delta + finalize_delta <= source_delta * 6);
+            assert!(finalize_delta <= charged_delta);
+            assert!(json_delta + date_delta + finalize_delta <= charged_delta * 6);
 
             match progress {
                 StrictProgress::Pending(next) => {
@@ -447,6 +471,7 @@ mod tests {
                     } else {
                         assert!(next.position() > before_position);
                     }
+                    observe(&next);
                     cursor = next;
                 }
                 StrictProgress::Complete { value, trace } => {
@@ -467,6 +492,10 @@ mod tests {
             step += 1;
             assert!(step <= input.len().saturating_mul(4).saturating_add(16));
         }
+    }
+
+    fn run_strict(input: &[u8], lifetime: u64, allowances: &[u64]) -> OwnedOutcome {
+        run_strict_observing_pending(input, lifetime, allowances, |_| {})
     }
 
     fn json_oracle(input: &[u8]) -> Result<OffsetDateTime, String> {
@@ -634,6 +663,85 @@ mod tests {
                 OwnedOutcome::Invalid(StrictInvalid::JsonSyntax, _, _)
             ));
         }
+    }
+
+    #[test]
+    fn raw_utf8_pauses_at_each_continuation_and_rejects_malformed_sequences() {
+        let valid: &[Utf8Case<'_>] = &[
+            (b"\"2026-09-09T00:00:00.1\xc2\xa9Z\"", &[(1, 2)]),
+            (b"\"2026-09-09T00:00:00.1\xe2\x82\xacZ\"", &[(1, 3), (2, 3)]),
+            (
+                b"\"2026-09-09T00:00:00.1\xf0\x9f\x98\x80Z\"",
+                &[(1, 4), (2, 4), (3, 4)],
+            ),
+        ];
+        for &(input, expected_pauses) in valid {
+            let mut pauses = Vec::new();
+            let outcome = run_strict_observing_pending(input, input.len() as u64, &[1], |cursor| {
+                if cursor.json_phase == JsonPhase::Utf8 {
+                    pauses.push((cursor.utf8_len, cursor.utf8_expected));
+                }
+            });
+            assert_eq!(pauses.as_slice(), expected_pauses);
+            assert_eq!(strict_date_result(outcome), json_oracle(input));
+        }
+
+        let malformed: &[Utf8Case<'_>] = &[
+            (b"\"2026-09-09T00:00:00.1\xc2Z\"", &[(1, 2)]),
+            (b"\"2026-09-09T00:00:00.1\xe2\x82Z\"", &[(1, 3), (2, 3)]),
+            (
+                b"\"2026-09-09T00:00:00.1\xf0\x9f\x98Z\"",
+                &[(1, 4), (2, 4), (3, 4)],
+            ),
+            (b"\"2026-09-09T00:00:00.1\xe0\x80\x80Z\"", &[(1, 3), (2, 3)]),
+        ];
+        for &(input, expected_pauses) in malformed {
+            assert!(serde_json::from_slice::<String>(input).is_err());
+            let mut pauses = Vec::new();
+            let outcome = run_strict_observing_pending(input, input.len() as u64, &[1], |cursor| {
+                if cursor.json_phase == JsonPhase::Utf8 {
+                    pauses.push((cursor.utf8_len, cursor.utf8_expected));
+                }
+            });
+            assert_eq!(pauses.as_slice(), expected_pauses);
+            assert!(matches!(
+                outcome,
+                OwnedOutcome::Invalid(StrictInvalid::JsonSyntax, _, _)
+            ));
+        }
+    }
+
+    #[test]
+    fn empty_input_eof_transition_obeys_step_and_lifetime_budgets() {
+        let cursor = StrictDateCursor::new(b"", 1);
+        let mut zero = WorkBudget::new();
+        let StrictProgress::Pending(cursor) = cursor.step(&mut zero, false) else {
+            panic!("empty input must not become terminal at zero budget")
+        };
+        assert_eq!(cursor.position(), 0);
+        assert_eq!(cursor.trace(), Trace::default());
+        assert_eq!(cursor.lifetime_remaining(), 1);
+
+        let mut one = WorkBudget::new().with_remaining(WorkClass::CodecInputBytes, 1);
+        assert!(matches!(
+            cursor.step(&mut one, false),
+            StrictProgress::Invalid {
+                cause: StrictInvalid::JsonSyntax,
+                position: 0,
+                trace: Trace {
+                    source_bytes: 0,
+                    json_transitions: 0,
+                    date_transitions: 0,
+                    fixed_finalizations: 1,
+                },
+            }
+        ));
+        assert_eq!(one.remaining(WorkClass::CodecInputBytes), 0);
+
+        assert_eq!(
+            run_strict(b"", 0, &[0, 1]),
+            OwnedOutcome::Limit(0, Trace::default())
+        );
     }
 
     #[test]
