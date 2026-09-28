@@ -43,6 +43,14 @@ unescaped. It does not contain a second date parser, shorten the fraction,
 canonicalize a prefix, or call the old parser after accumulating credit. The
 production parser is compiled beside it solely for differential tests.
 
+The cursor models entry after the outer JSON/field continuation has consumed
+its applicable structural charge and established that at least one token byte
+is present. `StrictDateCursor::new_non_empty` enforces that private precondition.
+Empty or missing input remains an outer-parser structural error and never
+enters this date-token cursor; no `CodecInputBytes` unit is charged without a
+consumed byte. That outer transition remains outside this date-local fixture's
+executable scope.
+
 The differential corpus compares exact `OffsetDateTime` values or exact serde
 error text. It covers the production tests, accepted separator/offset forms,
 fraction widths 1/8/9/10/4,096/65,536, component range failures, error-precedence
@@ -61,30 +69,22 @@ lifetime remainder. Before reading each source byte it requires and consumes:
 1. one current-step `CodecInputBytes` unit; and
 2. one unit from the cursor's lifetime remainder.
 
-An empty input has no charged source byte to own its EOF rejection. That
-standalone EOF transition therefore consumes one `CodecInputBytes` unit from
-the current step and one unit from the lifetime remainder before it returns a
-terminal JSON error. With either unit unavailable it returns `Pending` or
-`Limit` under the normal precedence. A non-empty token's EOF check remains
-fixed work owned by its last charged source byte.
-
 The cursor stores no step credit. A fresh budget therefore cannot pay earlier
-and trigger a later bulk scan. For `w` charged progress units in one step, the
-instrumented implementation consumes at most `w` source bytes, performs
-exactly one JSON transition per source byte, at most `4w` date-byte transitions
-(the maximum UTF-8 expansion of one completed JSON escape/scalar), and at most
-`w` fixed finalizations. Tests assert the conservative bound
-`json + date + finalization <= 6w` after every step. Ordinarily `w` equals the
-number of source bytes; the standalone empty-input EOF transition has `w = 1`
-and no source byte. All inner loops have a fixed maximum of four;
-calendar/time/offset construction is fixed-size work performed while
-processing the charged closing quote.
+and trigger a later bulk scan. For `n` source bytes consumed in one step, the
+instrumented implementation performs exactly `n` JSON transitions, at most
+`4n` date-byte transitions (the maximum UTF-8 expansion of one completed JSON
+escape/scalar), and at most `n` fixed finalizations. Tests assert the
+conservative bound `json + date + finalization <= 6n` after every step. All
+inner loops have a fixed maximum of four; calendar/time/offset construction is
+fixed-size work performed while processing the charged closing quote.
 
 Executable traces cover:
 
 - a valid 65,536-digit fraction with fresh one-byte budgets across every step;
 - 1 through 8 byte allowances over long plain and escaped inputs;
 - zero budget with unchanged position, state, lifetime, and work trace;
+- an enforced non-empty cursor-entry precondition, leaving empty/missing-token
+  detection to the outer parser's applicable charged structural transition;
 - pauses inside `\uXXXX`, surrogate-pair, UTF-8, fraction, delimiter, and offset
   state;
 - every continuation boundary of raw valid two-, three-, and four-byte UTF-8,

@@ -82,7 +82,14 @@ enum StrictProgress<'a> {
 }
 
 impl<'a> StrictDateCursor<'a> {
-    const fn new(input: &'a [u8], lifetime_remaining: u64) -> Self {
+    /// Requires the outer JSON/field transition to have established that at
+    /// least one token byte is present. Empty or missing input is an outer
+    /// structural error and never enters this date-token cursor.
+    const fn new_non_empty(input: &'a [u8], lifetime_remaining: u64) -> Self {
+        assert!(
+            !input.is_empty(),
+            "outer parser must own empty date-token input"
+        );
         Self {
             input,
             position: 0,
@@ -163,24 +170,7 @@ impl<'a> StrictDateCursor<'a> {
             }
         }
 
-        // Empty input has no charged predecessor to own its EOF rejection, so
-        // its fixed transition consumes one standalone unit from both work
-        // budgets before becoming terminal.
-        if self.input.is_empty() {
-            if budget.remaining(WorkClass::CodecInputBytes) == 0 {
-                return StrictProgress::Pending(self);
-            }
-            if self.lifetime_remaining == 0 {
-                return StrictProgress::Limit {
-                    position: self.position,
-                    trace: self.trace,
-                };
-            }
-            budget.consume(WorkClass::CodecInputBytes, 1).unwrap();
-            self.lifetime_remaining -= 1;
-        }
-
-        // Reaching token EOF for non-empty input is a bounded check owned
+        // Reaching token EOF without a closing quote is a bounded check owned
         // by the last charged source byte. Valid completion occurs at `"`.
         self.trace.fixed_finalizations += 1;
         StrictProgress::Invalid {
@@ -438,7 +428,7 @@ mod tests {
         mut observe: impl FnMut(&StrictDateCursor<'_>),
     ) -> OwnedOutcome {
         assert!(!allowances.is_empty());
-        let mut cursor = StrictDateCursor::new(input, lifetime);
+        let mut cursor = StrictDateCursor::new_non_empty(input, lifetime);
         let mut step = 0_usize;
         loop {
             let allowance = allowances[step % allowances.len()];
@@ -453,14 +443,13 @@ mod tests {
             let date_delta = after.date_transitions - before.date_transitions;
             let finalize_delta = after.fixed_finalizations - before.fixed_finalizations;
             let charged_delta = allowance - budget.remaining(WorkClass::CodecInputBytes);
-            let standalone_eof_delta = u64::from(source_delta == 0 && finalize_delta == 1);
 
             assert_eq!(source_delta, json_delta);
-            assert_eq!(charged_delta, source_delta + standalone_eof_delta);
+            assert_eq!(charged_delta, source_delta);
             assert!(source_delta <= allowance);
             assert!(date_delta <= source_delta * 4);
-            assert!(finalize_delta <= charged_delta);
-            assert!(json_delta + date_delta + finalize_delta <= charged_delta * 6);
+            assert!(finalize_delta <= source_delta);
+            assert!(json_delta + date_delta + finalize_delta <= source_delta * 6);
 
             match progress {
                 StrictProgress::Pending(next) => {
@@ -712,42 +701,15 @@ mod tests {
     }
 
     #[test]
-    fn empty_input_eof_transition_obeys_step_and_lifetime_budgets() {
-        let cursor = StrictDateCursor::new(b"", 1);
-        let mut zero = WorkBudget::new();
-        let StrictProgress::Pending(cursor) = cursor.step(&mut zero, false) else {
-            panic!("empty input must not become terminal at zero budget")
-        };
-        assert_eq!(cursor.position(), 0);
-        assert_eq!(cursor.trace(), Trace::default());
-        assert_eq!(cursor.lifetime_remaining(), 1);
-
-        let mut one = WorkBudget::new().with_remaining(WorkClass::CodecInputBytes, 1);
-        assert!(matches!(
-            cursor.step(&mut one, false),
-            StrictProgress::Invalid {
-                cause: StrictInvalid::JsonSyntax,
-                position: 0,
-                trace: Trace {
-                    source_bytes: 0,
-                    json_transitions: 0,
-                    date_transitions: 0,
-                    fixed_finalizations: 1,
-                },
-            }
-        ));
-        assert_eq!(one.remaining(WorkClass::CodecInputBytes), 0);
-
-        assert_eq!(
-            run_strict(b"", 0, &[0, 1]),
-            OwnedOutcome::Limit(0, Trace::default())
-        );
+    #[should_panic(expected = "outer parser must own empty date-token input")]
+    fn empty_input_is_an_outer_parser_precondition() {
+        let _ = run_strict(b"", 0, &[0]);
     }
 
     #[test]
     fn zero_and_tiny_step_budgets_do_not_accumulate_bulk_scan_credit() {
         let token = b"\"2026-09-09T00:00:00.12345678901234567890Z\"";
-        let cursor = StrictDateCursor::new(token, token.len() as u64);
+        let cursor = StrictDateCursor::new_non_empty(token, token.len() as u64);
         let before_size = mem::size_of_val(&cursor);
         let mut zero = WorkBudget::new();
         let StrictProgress::Pending(cursor) = cursor.step(&mut zero, false) else {
@@ -782,7 +744,7 @@ mod tests {
 
         // With no current step allowance, Pending wins without inspecting the
         // already exhausted lifetime. A later paid step observes the Limit.
-        let cursor = StrictDateCursor::new(token, 0);
+        let cursor = StrictDateCursor::new_non_empty(token, 0);
         let mut zero = WorkBudget::new();
         let StrictProgress::Pending(cursor) = cursor.step(&mut zero, false) else {
             panic!("zero current allowance must not perform a lifetime check as work")
@@ -818,7 +780,7 @@ mod tests {
     #[test]
     fn cancellation_at_a_step_boundary_performs_no_more_work() {
         let token = b"\"2026-09-09T00:00:00.123456789Z\"";
-        let cursor = StrictDateCursor::new(token, token.len() as u64);
+        let cursor = StrictDateCursor::new_non_empty(token, token.len() as u64);
         let mut first = WorkBudget::new().with_remaining(WorkClass::CodecInputBytes, 9);
         let StrictProgress::Pending(cursor) = cursor.step(&mut first, false) else {
             panic!("first short step must pause")
@@ -835,7 +797,7 @@ mod tests {
         ));
         assert_eq!(next.remaining(WorkClass::CodecInputBytes), 100);
 
-        let cursor = StrictDateCursor::new(token, token.len() as u64);
+        let cursor = StrictDateCursor::new_non_empty(token, token.len() as u64);
         let mut budget = WorkBudget::new().with_remaining(WorkClass::CodecInputBytes, 100);
         assert!(matches!(
             cursor.step(&mut budget, true),
@@ -858,7 +820,7 @@ mod tests {
         assert!(mem::size_of::<StrictDateCursor<'static>>() <= 256);
 
         let token = b"\"2026-09-09T00:00:00.12345678901234567890Z\"";
-        let cursor = StrictDateCursor::new(token, token.len() as u64);
+        let cursor = StrictDateCursor::new_non_empty(token, token.len() as u64);
         let (progress, allocations) = count_allocations(|| {
             let mut budget =
                 WorkBudget::new().with_remaining(WorkClass::CodecInputBytes, token.len() as u64);
@@ -867,7 +829,7 @@ mod tests {
         assert!(matches!(progress, StrictProgress::Complete { .. }));
         assert_eq!(allocations, 0);
 
-        let cursor = StrictDateCursor::new(token, token.len() as u64);
+        let cursor = StrictDateCursor::new_non_empty(token, token.len() as u64);
         let (_, drop_allocations) = count_allocations(|| {
             let _unfinished_cursor = cursor;
         });
