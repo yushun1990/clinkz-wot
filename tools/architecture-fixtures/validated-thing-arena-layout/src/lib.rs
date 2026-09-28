@@ -89,8 +89,43 @@ impl<T: Copy> Arena<T> {
         unsafe { core::slice::from_raw_parts(self.pointer.as_ptr(), self.length) }
     }
 
+    fn truncate(&mut self, length: usize) {
+        assert!(length <= self.length);
+        self.length = length;
+    }
+
     fn requested_layout(&self) -> Option<Layout> {
         (self.capacity != 0).then(|| Layout::array::<T>(self.capacity).unwrap())
+    }
+}
+
+impl Arena<u8> {
+    fn insert(&mut self, index: usize, bytes: &[u8]) -> Result<(), Error> {
+        assert!(index <= self.length);
+        let new_length = self
+            .length
+            .checked_add(bytes.len())
+            .ok_or(Error::Arithmetic)?;
+        if new_length > self.capacity {
+            return Err(Error::Limit);
+        }
+        // SAFETY: the destination range is within capacity. `copy` supports
+        // overlap while shifting the initialized suffix to the right, and the
+        // inserted source is independent of this arena in the probe's callers.
+        unsafe {
+            ptr::copy(
+                self.pointer.as_ptr().add(index),
+                self.pointer.as_ptr().add(index + bytes.len()),
+                self.length - index,
+            );
+            ptr::copy_nonoverlapping(
+                bytes.as_ptr(),
+                self.pointer.as_ptr().add(index),
+                bytes.len(),
+            );
+        }
+        self.length = new_length;
+        Ok(())
     }
 }
 
@@ -201,6 +236,25 @@ impl Prototype {
     }
     pub fn push_byte(&mut self, value: u8) -> Result<(), Error> {
         self.build_bytes.push(value)
+    }
+    /// Borrows the initialized byte prefix while the prototype is unsealed.
+    /// This lets a producer remove URI dot segments in place without a second
+    /// string or scratch allocation.
+    pub fn build_bytes(&self) -> &[u8] {
+        assert!(!self.sealed);
+        self.build_bytes.as_slice()
+    }
+    /// Rewinds only the initialized byte prefix. Reserved capacity and ledger
+    /// accounting are unchanged because the physical arena remains live.
+    pub fn truncate_build_bytes(&mut self, length: usize) {
+        assert!(!self.sealed);
+        self.build_bytes.truncate(length);
+    }
+    /// Inserts bytes into the initialized prefix without changing the arena's
+    /// physical allocation or ledger charge.
+    pub fn insert_build_bytes(&mut self, index: usize, bytes: &[u8]) -> Result<(), Error> {
+        assert!(!self.sealed);
+        self.build_bytes.insert(index, bytes)
     }
     pub fn push_frame(&mut self, value: TraversalFrame) -> Result<(), Error> {
         self.frames.push(value)
@@ -532,6 +586,31 @@ mod tests {
             0
         );
         assert_eq!(previously_allocated.ledger().live_bytes(), 0);
+    }
+
+    #[test]
+    fn byte_arena_rewind_and_insert_reuse_the_existing_request() {
+        let mut owner = Prototype::new(1_000, 1_000, 2_000, 1_000);
+        owner.grow_bytes(8).unwrap();
+        for byte in b"abc" {
+            owner.push_byte(*byte).unwrap();
+        }
+        let live_before = owner.ledger().live_bytes();
+        let largest_before = owner.ledger().largest_contiguous_allocation();
+
+        owner.truncate_build_bytes(1);
+        owner.insert_build_bytes(1, b"xy").unwrap();
+
+        assert_eq!(owner.build_bytes(), b"axy");
+        assert_eq!(owner.ledger().live_bytes(), live_before);
+        assert_eq!(
+            owner.ledger().largest_contiguous_allocation(),
+            largest_before
+        );
+        let owner = owner.seal().unwrap();
+        assert_eq!(owner.bytes(), b"axy");
+        assert_eq!(owner.footprint().retained_allocation_count, 1);
+        assert_eq!(owner.footprint().retained_requested_bytes, 3);
     }
 
     #[test]

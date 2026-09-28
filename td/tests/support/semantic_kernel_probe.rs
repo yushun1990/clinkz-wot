@@ -10,8 +10,9 @@
 extern crate std;
 
 use super::{
-    ACTION_FORMS, EVENT_FORMS, FORM_OPERATIONS, FORM_SECURITY, Kind, PROPERTY_FORMS,
-    PROPERTY_SCHEMA, ROOT_ACTIONS, ROOT_EVENTS, ROOT_FORMS, ROOT_PROPERTIES, ROOT_SECURITY,
+    ACTION_FORMS, EVENT_FORMS, FORM_CONTENT_CODING, FORM_CONTENT_TYPE, FORM_OPERATIONS,
+    FORM_SCOPES, FORM_SECURITY, FORM_SUBPROTOCOL, Kind, PROPERTY_FORMS, PROPERTY_SCHEMA,
+    ROOT_ACTIONS, ROOT_EVENTS, ROOT_FORMS, ROOT_ID, ROOT_PROPERTIES, ROOT_SECURITY,
     ROOT_SECURITY_DEFINITIONS, SECURITY_CONTEXT_EXTENSIONS, SECURITY_CONTEXT_SCHEME,
     SECURITY_SCHEME_CONTEXT, SECURITY_SCHEME_VARIANT, Snapshot,
 };
@@ -669,6 +670,7 @@ fn operation_from_text(value: &str) -> Option<Operation> {
     })
 }
 
+#[derive(Clone, Copy)]
 enum OperationSource<O> {
     Explicit(O),
     Default(&'static [Operation]),
@@ -1135,6 +1137,358 @@ fn assert_basic_invalid_reference(thing: &Thing, expected: &str) {
     ));
 }
 
+// Frozen-API-shaped borrowed views over the test-only Snapshot. These wrappers
+// deliberately expose no node, edge, byte range, Thing, or semantic adapter.
+#[derive(Clone, Copy)]
+pub(super) struct ValidatedThingView<'a> {
+    snapshot: &'a Snapshot,
+}
+
+#[derive(Clone, Copy)]
+pub(super) struct ValidatedPropertyView<'a> {
+    snapshot: &'a Snapshot,
+    property: SnapshotProperty,
+    ordinal: u32,
+}
+
+#[derive(Clone, Copy)]
+pub(super) struct ValidatedFormView<'a> {
+    snapshot: &'a Snapshot,
+    property: SnapshotProperty,
+    form: u32,
+    original_index: u32,
+}
+
+#[derive(Clone, Copy)]
+pub(super) struct ValidatedSecuritySchemeView<'a> {
+    snapshot: &'a Snapshot,
+    definition: SnapshotSecurityDefinition,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(super) enum ValidatedFormHref<'a> {
+    Reference(&'a str),
+    Template(&'a str),
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(super) enum ValidatedFormHrefError {
+    TemplateBase,
+    Resolution,
+}
+
+#[derive(Clone, Copy)]
+struct PropertyViews<'a> {
+    view: ValidatedThingView<'a>,
+    next: usize,
+}
+
+impl<'a> Iterator for PropertyViews<'a> {
+    type Item = ValidatedPropertyView<'a>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let ordinal = self.next;
+        let property = self.view.snapshot.property_at(ordinal)?;
+        self.next += 1;
+        Some(ValidatedPropertyView {
+            snapshot: self.view.snapshot,
+            property,
+            ordinal: ordinal.try_into().ok()?,
+        })
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        let remaining = self.view.snapshot.property_count() - self.next;
+        (remaining, Some(remaining))
+    }
+}
+
+impl ExactSizeIterator for PropertyViews<'_> {}
+
+#[derive(Clone, Copy)]
+struct FormViews<'a> {
+    property: ValidatedPropertyView<'a>,
+    next: usize,
+}
+
+impl<'a> Iterator for FormViews<'a> {
+    type Item = ValidatedFormView<'a>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let original_index = self.next;
+        let form = self
+            .property
+            .snapshot
+            .property_form_at(self.property.property, original_index)?;
+        self.next += 1;
+        Some(ValidatedFormView {
+            snapshot: self.property.snapshot,
+            property: self.property.property,
+            form,
+            original_index: original_index.try_into().ok()?,
+        })
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        let remaining = self
+            .property
+            .snapshot
+            .property_form_count(self.property.property)
+            - self.next;
+        (remaining, Some(remaining))
+    }
+}
+
+impl ExactSizeIterator for FormViews<'_> {}
+
+#[derive(Clone, Copy)]
+struct TextSequence<'a> {
+    snapshot: &'a Snapshot,
+    sequence: Option<u32>,
+    next: usize,
+    length: usize,
+}
+
+impl<'a> Iterator for TextSequence<'a> {
+    type Item = &'a str;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let sequence = self.sequence?;
+        if self.next == self.length {
+            return None;
+        }
+        let value = self.snapshot.text(self.snapshot.child(sequence, self.next));
+        self.next += 1;
+        Some(value)
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        let remaining = self.length - self.next;
+        (remaining, Some(remaining))
+    }
+}
+
+impl ExactSizeIterator for TextSequence<'_> {}
+
+#[derive(Clone, Copy)]
+enum ViewOperationSource {
+    Explicit(u32),
+    Default(&'static [Operation]),
+}
+
+#[derive(Clone, Copy)]
+struct ViewOperations<'a> {
+    snapshot: &'a Snapshot,
+    source: ViewOperationSource,
+    next: usize,
+    length: usize,
+}
+
+impl Iterator for ViewOperations<'_> {
+    type Item = Operation;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.next == self.length {
+            return None;
+        }
+        let value = match self.source {
+            ViewOperationSource::Explicit(operations) => {
+                self.snapshot.operation_at(operations, self.next)
+            }
+            ViewOperationSource::Default(operations) => operations.get(self.next).copied(),
+        }?;
+        self.next += 1;
+        Some(value)
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        let remaining = self.length - self.next;
+        (remaining, Some(remaining))
+    }
+}
+
+impl ExactSizeIterator for ViewOperations<'_> {}
+
+#[derive(Clone, Copy)]
+struct ViewSecurity<'a> {
+    snapshot: &'a Snapshot,
+    names: SnapshotSecurityNames,
+    next: usize,
+    length: usize,
+}
+
+impl<'a> Iterator for ViewSecurity<'a> {
+    type Item = &'a str;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.next == self.length {
+            return None;
+        }
+        let value = self.snapshot.security_name_at(self.names, self.next)?;
+        self.next += 1;
+        Some(value)
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        let remaining = self.length - self.next;
+        (remaining, Some(remaining))
+    }
+}
+
+impl ExactSizeIterator for ViewSecurity<'_> {}
+
+impl<'a> ValidatedThingView<'a> {
+    fn new(snapshot: &'a Snapshot) -> Self {
+        Self { snapshot }
+    }
+
+    pub(super) fn id(self) -> Option<&'a str> {
+        let id = self.snapshot.child(self.snapshot.root, ROOT_ID);
+        (self.snapshot.kind(id) != Kind::Absent).then(|| self.snapshot.text(id))
+    }
+
+    pub(super) fn property(self, name: &str) -> Option<ValidatedPropertyView<'a>> {
+        self.properties().find(|property| property.name() == name)
+    }
+
+    pub(super) fn properties(
+        self,
+    ) -> impl ExactSizeIterator<Item = ValidatedPropertyView<'a>> + Clone + 'a {
+        PropertyViews {
+            view: self,
+            next: 0,
+        }
+    }
+
+    pub(super) fn security_definition(self, name: &str) -> Option<ValidatedSecuritySchemeView<'a>> {
+        self.snapshot
+            .security_definition_by_name(name)
+            .map(|definition| ValidatedSecuritySchemeView {
+                snapshot: self.snapshot,
+                definition,
+            })
+    }
+}
+
+impl<'a> ValidatedPropertyView<'a> {
+    pub(super) const fn ordinal(self) -> u32 {
+        self.ordinal
+    }
+
+    pub(super) fn name(self) -> &'a str {
+        self.snapshot.property_name(self.property)
+    }
+
+    pub(super) fn form(self, original_index: u32) -> Option<ValidatedFormView<'a>> {
+        let index: usize = original_index.try_into().ok()?;
+        let form = self.snapshot.property_form_at(self.property, index)?;
+        Some(ValidatedFormView {
+            snapshot: self.snapshot,
+            property: self.property,
+            form,
+            original_index,
+        })
+    }
+
+    pub(super) fn forms(self) -> impl ExactSizeIterator<Item = ValidatedFormView<'a>> + Clone + 'a {
+        FormViews {
+            property: self,
+            next: 0,
+        }
+    }
+}
+
+impl<'a> ValidatedFormView<'a> {
+    pub(super) const fn original_index(self) -> u32 {
+        self.original_index
+    }
+
+    pub(super) fn href(self) -> ValidatedFormHref<'a> {
+        match self.snapshot.form_href(self.form) {
+            super::BorrowedHref::Reference(value) => ValidatedFormHref::Reference(value),
+            super::BorrowedHref::Template(value) => ValidatedFormHref::Template(value),
+        }
+    }
+
+    pub(super) fn resolved_href(self) -> Result<ValidatedFormHref<'a>, ValidatedFormHrefError> {
+        match self.snapshot.resolved_form_href(self.form) {
+            Ok(super::BorrowedHref::Reference(value)) => Ok(ValidatedFormHref::Reference(value)),
+            Ok(super::BorrowedHref::Template(value)) => Ok(ValidatedFormHref::Template(value)),
+            Err(super::ResolveIntoError::TemplateBase) => Err(ValidatedFormHrefError::TemplateBase),
+            Err(super::ResolveIntoError::Resolution | super::ResolveIntoError::Capacity) => {
+                Err(ValidatedFormHrefError::Resolution)
+            }
+        }
+    }
+
+    pub(super) fn content_type(self) -> &'a str {
+        self.snapshot
+            .text(self.snapshot.child(self.form, FORM_CONTENT_TYPE))
+    }
+
+    pub(super) fn content_coding(self) -> Option<&'a str> {
+        let value = self.snapshot.child(self.form, FORM_CONTENT_CODING);
+        (self.snapshot.kind(value) != Kind::Absent).then(|| self.snapshot.text(value))
+    }
+
+    pub(super) fn subprotocol(self) -> Option<&'a str> {
+        let value = self.snapshot.child(self.form, FORM_SUBPROTOCOL);
+        (self.snapshot.kind(value) != Kind::Absent).then(|| self.snapshot.text(value))
+    }
+
+    pub(super) fn scopes(self) -> impl ExactSizeIterator<Item = &'a str> + Clone + 'a {
+        let sequence = self
+            .snapshot
+            .optional_sequence(self.snapshot.child(self.form, FORM_SCOPES));
+        let length = sequence.map_or(0, |sequence| self.snapshot.sequence_len(sequence));
+        TextSequence {
+            snapshot: self.snapshot,
+            sequence,
+            next: 0,
+            length,
+        }
+    }
+
+    pub(super) fn effective_operations(
+        self,
+    ) -> impl ExactSizeIterator<Item = Operation> + Clone + 'a {
+        let effective = effective_property_operations(self.snapshot, self.property, self.form);
+        let source = match effective.source {
+            OperationSource::Explicit(operations) => ViewOperationSource::Explicit(operations),
+            OperationSource::Default(operations) => ViewOperationSource::Default(operations),
+        };
+        ViewOperations {
+            snapshot: self.snapshot,
+            source,
+            next: 0,
+            length: effective.len(),
+        }
+    }
+
+    pub(super) fn effective_security(self) -> impl ExactSizeIterator<Item = &'a str> + Clone + 'a {
+        let effective = effective_form_security(self.snapshot, self.form);
+        ViewSecurity {
+            snapshot: self.snapshot,
+            names: effective.names,
+            next: 0,
+            length: effective.len(),
+        }
+    }
+}
+
+impl<'a> ValidatedSecuritySchemeView<'a> {
+    pub(super) fn name(self) -> &'a str {
+        self.snapshot.security_definition_name(self.definition)
+    }
+
+    pub(super) fn scheme(self) -> &'a str {
+        self.snapshot.security_definition_scheme(self.definition)
+    }
+}
+
+#[path = "../../../tools/architecture-fixtures/validated-thing-arena-layout/planning_view_consumer.rs"]
+mod planning_view_consumer;
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 struct PlanningProbe {
     properties: u32,
@@ -1275,7 +1629,7 @@ impl Drop for AllocationCountGuard {
     }
 }
 
-fn count_allocations<T>(operation: impl FnOnce() -> T) -> (T, usize) {
+pub(super) fn count_allocations<T>(operation: impl FnOnce() -> T) -> (T, usize) {
     ALLOCATION_COUNT.with(|count| count.set(0));
     COUNT_ALLOCATIONS
         .with(|enabled| assert!(!enabled.replace(true), "allocation counting must not nest"));
@@ -1540,4 +1894,41 @@ fn semantic_kernel_queries_and_planning_probe_allocate_nothing() {
             non_first_coordinate: Some((1, 1)),
         }
     );
+}
+
+#[test]
+fn frozen_borrowed_view_supplies_all_property_read_planning_queries_without_allocation() {
+    let mut thing = super::typed_corpus_shared::typed_corpus();
+    zeta_form_mut(&mut thing, 1).op = None;
+    let (snapshot, preprocessing_allocations) = count_allocations(|| Snapshot::normalize(&thing));
+    assert_eq!(preprocessing_allocations, 6);
+    assert_eq!(snapshot.uri_cache_cost.derived_bytes, 284);
+    assert_eq!(snapshot.uri_cache_cost.retained_requested_bytes(), 496);
+    assert_eq!(snapshot.arena.footprint().retained_allocation_count, 3);
+
+    let view = ValidatedThingView::new(&snapshot);
+    let (selection, query_allocations) =
+        count_allocations(|| planning_view_consumer::query_non_first_property_form(view));
+
+    assert_eq!(query_allocations, 0);
+    assert_eq!(selection.thing_id, "urn:example:typed-corpus");
+    assert_eq!(selection.property_count, 2);
+    assert_eq!(selection.property_name, "zeta");
+    assert_eq!(selection.property_ordinal, 1);
+    assert_eq!(selection.form_original_index, 1);
+    assert_eq!(
+        selection.raw_href,
+        ValidatedFormHref::Reference("zeta/second")
+    );
+    assert_eq!(
+        selection.resolved_href,
+        ValidatedFormHref::Reference("https://example.org/things/zeta/second")
+    );
+    assert_eq!(selection.content_type, "application/json");
+    assert_eq!(selection.content_coding, None);
+    assert_eq!(selection.subprotocol, None);
+    assert_eq!(selection.scope_count, 0);
+    assert_eq!(selection.security_name, "none");
+    assert_eq!(selection.security_scheme_name, "none");
+    assert_eq!(selection.security_scheme, "nosec");
 }
