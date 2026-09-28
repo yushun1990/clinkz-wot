@@ -1,8 +1,9 @@
 //! Non-production typed traversal over the shared corpus and nested DataSchema
 //! fixture. Compiled as a child of `context` to inspect private Context entries.
-//! This is storage evidence, not a Basic/default/URI/security rule kernel.
-//! Recursive prototype calls and fixed arena headroom do not prove the future
-//! resumable traversal, exact sizing, or supported feature matrix.
+//! This is storage evidence plus test-only shared default/security/URI slices,
+//! not a production semantic kernel. Recursive prototype calls and fixed arena
+//! headroom do not prove the future resumable traversal, exact sizing, work
+//! charging, or supported feature matrix.
 
 use super::ContextEntry;
 use crate as td_crate;
@@ -32,12 +33,24 @@ mod typed_corpus_shared;
 #[path = "semantic_kernel_probe.rs"]
 mod semantic_kernel_probe;
 
+#[path = "uri_semantic_kernel_probe.rs"]
+mod uri_semantic_kernel_probe;
+use uri_semantic_kernel_probe::{
+    BorrowedBase, BorrowedHref, ResolveInto, ResolveIntoError, UriOutput, resolve_form_href_into,
+};
+
 #[repr(u32)]
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum Kind {
     Root,
     Context,
     Uri,
+    FormHrefReference,
+    FormHrefTemplate,
+    BaseAbsolute,
+    BaseTemplate,
+    UriTemplateBaseError,
+    UriResolutionError,
     Str,
     Absent,
     Array,
@@ -106,16 +119,17 @@ const ROOT_MODIFIED: usize = 22;
 const ROOT_FIELD_COUNT: usize = 23;
 
 const FORM_HREF: usize = 0;
-const FORM_CONTENT_TYPE: usize = 1;
-const FORM_CONTENT_CODING: usize = 2;
-const FORM_SECURITY: usize = 3;
-const FORM_SCOPES: usize = 4;
-const FORM_RESPONSE: usize = 5;
-const FORM_ADDITIONAL_RESPONSES: usize = 6;
-const FORM_SUBPROTOCOL: usize = 7;
-const FORM_OPERATIONS: usize = 8;
-const FORM_EXTENSIONS: usize = 9;
-const FORM_FIELD_COUNT: usize = 10;
+const FORM_RESOLVED_HREF: usize = 1;
+const FORM_CONTENT_TYPE: usize = 2;
+const FORM_CONTENT_CODING: usize = 3;
+const FORM_SECURITY: usize = 4;
+const FORM_SCOPES: usize = 5;
+const FORM_RESPONSE: usize = 6;
+const FORM_ADDITIONAL_RESPONSES: usize = 7;
+const FORM_SUBPROTOCOL: usize = 8;
+const FORM_OPERATIONS: usize = 9;
+const FORM_EXTENSIONS: usize = 10;
+const FORM_FIELD_COUNT: usize = 11;
 
 const PROPERTY_SCHEMA: usize = 0;
 const PROPERTY_FORMS: usize = 1;
@@ -180,15 +194,86 @@ const EMPTY_EDGE: RetainedEdge = RetainedEdge {
     original_index: 0,
 };
 
-struct Build {
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+struct UriCacheCost {
+    form_edges: u32,
+    derived_nodes: u32,
+    derived_bytes: u32,
+}
+
+impl UriCacheCost {
+    fn retained_requested_bytes(self) -> usize {
+        self.form_edges as usize * core::mem::size_of::<RetainedEdge>()
+            + self.derived_nodes as usize * core::mem::size_of::<RetainedNode>()
+            + self.derived_bytes as usize
+    }
+}
+
+struct ArenaUriOutput<'a> {
+    arena: &'a mut Prototype,
+    length: &'a mut u32,
+}
+
+impl UriOutput for ArenaUriOutput<'_> {
+    fn len(&self) -> usize {
+        *self.length as usize
+    }
+
+    fn bytes(&self) -> &[u8] {
+        self.arena.build_bytes()
+    }
+
+    fn push_str(&mut self, value: &str) -> Result<(), ResolveIntoError> {
+        for &byte in value.as_bytes() {
+            self.push_byte(byte)?;
+        }
+        Ok(())
+    }
+
+    fn push_byte(&mut self, value: u8) -> Result<(), ResolveIntoError> {
+        self.arena
+            .push_byte(value)
+            .map_err(|_| ResolveIntoError::Capacity)?;
+        *self.length = self
+            .length
+            .checked_add(1)
+            .ok_or(ResolveIntoError::Capacity)?;
+        Ok(())
+    }
+
+    fn truncate(&mut self, length: usize) {
+        self.arena.truncate_build_bytes(length);
+        *self.length = length.try_into().unwrap();
+    }
+
+    fn insert_str(&mut self, index: usize, value: &str) -> Result<(), ResolveIntoError> {
+        self.arena
+            .insert_build_bytes(index, value.as_bytes())
+            .map_err(|_| ResolveIntoError::Capacity)?;
+        *self.length = self
+            .length
+            .checked_add(
+                value
+                    .len()
+                    .try_into()
+                    .map_err(|_| ResolveIntoError::Capacity)?,
+            )
+            .ok_or(ResolveIntoError::Capacity)?;
+        Ok(())
+    }
+}
+
+struct Build<'a> {
     arena: Prototype,
     nodes: u32,
     edges: u32,
     bytes: u32,
+    base: Option<BorrowedBase<'a>>,
+    uri_cache_cost: UriCacheCost,
 }
 
-impl Build {
-    fn new() -> Self {
+impl<'a> Build<'a> {
+    fn new(base: Option<&'a td_crate::data_type::BaseUri>) -> Self {
         let mut arena = Prototype::new(1_000_000, 1_000_000, 2_000_000, 1_000_000);
         // Fixed headroom keeps this slice focused on semantic storage. The
         // arena fixture separately proves checked growth/seal accounting.
@@ -200,6 +285,8 @@ impl Build {
             nodes: 0,
             edges: 0,
             bytes: 0,
+            base: base.map(BorrowedBase::from_typed),
+            uri_cache_cost: UriCacheCost::default(),
         }
     }
 
@@ -237,6 +324,21 @@ impl Build {
                 edge_count: 0,
                 first_byte: first,
                 byte_count: self.bytes - first,
+            })
+            .unwrap();
+        self.nodes += 1;
+        id
+    }
+
+    fn text_range(&mut self, kind: Kind, first: u32, byte_count: u32) -> u32 {
+        let id = self.nodes;
+        self.arena
+            .push_node(RetainedNode {
+                kind: kind as u32,
+                first_edge: self.edges,
+                edge_count: 0,
+                first_byte: first,
+                byte_count,
             })
             .unwrap();
         self.nodes += 1;
@@ -679,8 +781,41 @@ impl Build {
     fn form(&mut self, form: &Form) -> u32 {
         let id = self.node(Kind::Form, FORM_FIELD_COUNT);
         let first = self.node_at(id).first_edge;
-        let href = self.text(Kind::Uri, form.href.as_str());
+        let borrowed_href = BorrowedHref::from_typed(&form.href);
+        let href_kind = match borrowed_href {
+            BorrowedHref::Reference(_) => Kind::FormHrefReference,
+            BorrowedHref::Template(_) => Kind::FormHrefTemplate,
+        };
+        let href = self.text(href_kind, borrowed_href.as_str());
         self.put(first, FORM_HREF, href);
+        self.uri_cache_cost.form_edges += 1;
+        let resolved_first = self.bytes;
+        let result = {
+            let mut output = ArenaUriOutput {
+                arena: &mut self.arena,
+                length: &mut self.bytes,
+            };
+            resolve_form_href_into(self.base, borrowed_href, &mut output)
+        };
+        let resolved = match result {
+            Ok(ResolveInto::AliasRaw) => href,
+            Ok(ResolveInto::Written) => {
+                let byte_count = self.bytes - resolved_first;
+                self.uri_cache_cost.derived_nodes += 1;
+                self.uri_cache_cost.derived_bytes += byte_count;
+                self.text_range(Kind::Uri, resolved_first, byte_count)
+            }
+            Err(ResolveIntoError::TemplateBase) => {
+                self.uri_cache_cost.derived_nodes += 1;
+                self.node(Kind::UriTemplateBaseError, 0)
+            }
+            Err(ResolveIntoError::Resolution) => {
+                self.uri_cache_cost.derived_nodes += 1;
+                self.node(Kind::UriResolutionError, 0)
+            }
+            Err(ResolveIntoError::Capacity) => panic!("fixed URI byte-arena headroom exhausted"),
+        };
+        self.put(first, FORM_RESOLVED_HREF, resolved);
         let content_type = self.text(Kind::Str, &form.content_type);
         self.put(first, FORM_CONTENT_TYPE, content_type);
         let coding = self.absent_or_text(form.content_coding.as_deref(), Kind::Str);
@@ -1009,7 +1144,15 @@ impl Build {
         self.put(first, ROOT_TITLES, titles);
         let value = self.absent_or_text(thing.support.as_ref().map(|v| v.as_str()), Kind::Uri);
         self.put(first, ROOT_SUPPORT, value);
-        let value = self.absent_or_text(thing.base.as_ref().map(|v| v.as_str()), Kind::Uri);
+        let value = match thing.base.as_ref() {
+            None => self.node(Kind::Absent, 0),
+            Some(td_crate::data_type::BaseUri::Absolute(base)) => {
+                self.text(Kind::BaseAbsolute, base.as_str())
+            }
+            Some(td_crate::data_type::BaseUri::Template(base)) => {
+                self.text(Kind::BaseTemplate, base)
+            }
+        };
         self.put(first, ROOT_BASE, value);
         let security = self.node(Kind::Array, thing.security.len());
         let security_first = self.node_at(security).first_edge;
@@ -1136,17 +1279,24 @@ impl Build {
 struct Snapshot {
     arena: Prototype,
     root: u32,
+    uri_cache_cost: UriCacheCost,
 }
 
 impl Snapshot {
     fn normalize(thing: &Thing) -> Self {
         // The shared corpus builder calls today's TD Basic before entry. A
-        // storage-neutral Basic kernel is not present, so this probe neither
-        // validates a snapshot nor reimplements any Basic/default/URI rule.
-        let mut build = Build::new();
+        // storage-neutral Basic kernel is not present, so this probe does not
+        // validate a snapshot. Default/security and URI slices remain
+        // test-only feasibility kernels rather than a complete Basic path.
+        let mut build = Build::new(thing.base.as_ref());
         let root = build.thing(thing);
+        let uri_cache_cost = build.uri_cache_cost;
         let arena = build.arena.seal().unwrap();
-        Self { arena, root }
+        Self {
+            arena,
+            root,
+            uri_cache_cost,
+        }
     }
     fn node(&self, id: u32) -> &RetainedNode {
         &self.arena.nodes()[id as usize]
@@ -1156,6 +1306,12 @@ impl Snapshot {
             x if x == Kind::Root as u32 => Kind::Root,
             x if x == Kind::Context as u32 => Kind::Context,
             x if x == Kind::Uri as u32 => Kind::Uri,
+            x if x == Kind::FormHrefReference as u32 => Kind::FormHrefReference,
+            x if x == Kind::FormHrefTemplate as u32 => Kind::FormHrefTemplate,
+            x if x == Kind::BaseAbsolute as u32 => Kind::BaseAbsolute,
+            x if x == Kind::BaseTemplate as u32 => Kind::BaseTemplate,
+            x if x == Kind::UriTemplateBaseError as u32 => Kind::UriTemplateBaseError,
+            x if x == Kind::UriResolutionError as u32 => Kind::UriResolutionError,
             x if x == Kind::Str as u32 => Kind::Str,
             x if x == Kind::Absent as u32 => Kind::Absent,
             x if x == Kind::Array as u32 => Kind::Array,
@@ -1213,6 +1369,33 @@ impl Snapshot {
                 [node.first_byte as usize..(node.first_byte + node.byte_count) as usize],
         )
         .unwrap()
+    }
+    fn base(&self) -> Option<BorrowedBase<'_>> {
+        let base = self.child(self.root, ROOT_BASE);
+        match self.kind(base) {
+            Kind::Absent => None,
+            Kind::BaseAbsolute => Some(BorrowedBase::Absolute(self.text(base))),
+            Kind::BaseTemplate => Some(BorrowedBase::Template(self.text(base))),
+            _ => panic!("invalid stored base kind"),
+        }
+    }
+    fn form_href(&self, form: u32) -> BorrowedHref<'_> {
+        let href = self.child(form, FORM_HREF);
+        match self.kind(href) {
+            Kind::FormHrefReference => BorrowedHref::Reference(self.text(href)),
+            Kind::FormHrefTemplate => BorrowedHref::Template(self.text(href)),
+            _ => panic!("invalid stored form href kind"),
+        }
+    }
+    fn resolved_form_href(&self, form: u32) -> Result<BorrowedHref<'_>, ResolveIntoError> {
+        let resolved = self.child(form, FORM_RESOLVED_HREF);
+        match self.kind(resolved) {
+            Kind::Uri | Kind::FormHrefReference => Ok(BorrowedHref::Reference(self.text(resolved))),
+            Kind::FormHrefTemplate => Ok(BorrowedHref::Template(self.text(resolved))),
+            Kind::UriTemplateBaseError => Err(ResolveIntoError::TemplateBase),
+            Kind::UriResolutionError => Err(ResolveIntoError::Resolution),
+            _ => panic!("invalid stored resolved href kind"),
+        }
     }
     fn map_get(&self, id: u32, key: &str) -> Option<u32> {
         let node = self.node(id);
@@ -1508,7 +1691,14 @@ impl Snapshot {
     }
     fn assert_form(&self, id: u32, source: &Form) {
         assert_eq!(self.kind(id), Kind::Form);
-        assert_eq!(self.kind(self.child(id, FORM_HREF)), Kind::Uri);
+        assert_eq!(
+            self.kind(self.child(id, FORM_HREF)),
+            if source.href.is_template() {
+                Kind::FormHrefTemplate
+            } else {
+                Kind::FormHrefReference
+            }
+        );
         assert_eq!(self.text(self.child(id, FORM_HREF)), source.href.as_str());
         assert_eq!(
             self.text(self.child(id, FORM_CONTENT_TYPE)),

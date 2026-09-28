@@ -66,12 +66,14 @@ seal, contiguous-request rejection, and checked `Layout` overflow.
 This demonstrates that the frozen allocation catalog can be implemented using
 the current Foundation ledger without treating an aggregate as one physical
 request. It does not prove the complete TD `Thing` traversal fits that catalog.
-In particular, typed-field decoding, map ordering, URI resolution, Basic
-semantic sharing beyond the narrow default/security slice below, all
+In particular, typed-field decoding, map ordering, complete URI parsing and
+work charging, Basic semantic sharing beyond the narrow slices below, all
 structural/work charges, and real-target allocator observations remain
-separate pre-readmission obligations. A required fifth temporary allocation
-category or fourth retained category in the full conversion still returns the
-tranche to impact review.
+separate pre-readmission obligations. The URI slice below demonstrates a
+direct-to-byte-arena resolution path but does not implement its resumable
+production cursor. A required fifth temporary allocation category or fourth
+retained category in the full conversion still returns the tranche to impact
+review.
 
 ## Typed corpus storage slice
 
@@ -93,10 +95,10 @@ The test-only placement allows inspection of private `Context.entries`
 without expanding the production Context or ValidatedThing API. The fixed
 headroom and recursive call stack are prototype mechanics; the full bounded
 cursor, traversal-frame use, all known fields/variants, allocation growth,
-work charging, URI queries, and complete storage-neutral Basic validation
-remain open. Existing Basic is used while constructing the fixed typed input
-and as the oracle for the narrow shared semantic slice. This is partial item-3
-evidence, not readmission or item-3 completion.
+work charging, complete URI input classification, and complete storage-neutral
+Basic validation remain open. Existing Basic is used while constructing the
+fixed typed input and as the oracle for the narrow shared semantic slices.
+This is partial item-3 evidence, not readmission or item-3 completion.
 
 ## Remaining Thing root-field slice
 
@@ -149,8 +151,8 @@ Tests read both Forms back field by field, retain their original indices, and
 show that content, ordered lists, response/additional-response content,
 subprotocol, extensions, and absent-versus-present-empty distinctions affect
 the sealed snapshot. The test-only semantic slice below additionally exercises
-Property operation defaults and inherited/overridden security. Resolved URI
-and response-content defaults remain outside the probe.
+Property operation defaults, inherited/overridden security, and raw/resolved
+URI queries. Response-content defaults remain outside the probe.
 
 ## Complete PropertyAffordance typed-storage slice
 
@@ -165,8 +167,8 @@ Tests read both Properties back field by field, distinguish the observable
 flag, preserve URI-variable key/schema associations, ignore BTreeMap insertion
 history, and distinguish absent from present-empty URI-variable maps. The
 narrow semantic slice below now covers effective Property operations and
-security; URI template expansion and other shared semantic queries remain
-outside the prototype.
+security. The URI slice below additionally covers raw and resolved Property
+Form targets; URI-template expansion remains a later Planning/runtime concern.
 
 ## Shared Property/default/security semantic-kernel slice
 
@@ -212,22 +214,116 @@ Run the focused proof with:
 cargo test --locked -p clinkz-wot-td --lib semantic_kernel
 ```
 
-The following remain explicitly unresolved and are not implemented by this
-slice:
+The following remain explicitly unresolved across these slices:
 
 - complete Basic validation, including schema/affordance/security-scheme
   constraints and complete first-error/diagnostic parity;
-- Form URI parsing and `base` resolution;
+- strict-entry URI classification and a resumable, exactly charged production
+  implementation of the URI kernel below;
 - strict JSON decoding, strict-entry validation, and typed/direct decode
   agreement;
 - resumable progress, work charging, lifetime/step budgets, cancellation, and
   bounded rollback; and
-- the required external Planning fixture using the frozen public
-  `ValidatedThingView`. The local generic probe checks shape and information
-  sufficiency only; it cannot complete item 4.
+- the required external Planning crate fixture using the future public
+  `ValidatedThingView`. The source-isolated consumer below checks the frozen
+  method shape and information sufficiency, but the public type does not exist
+  in production and this probe cannot complete item 4.
 
 No production source, public API, allocation catalog, admission/status record,
 or prior evidence conclusion is changed.
+
+## Shared URI and borrowed Planning-view slice
+
+`td/tests/support/uri_semantic_kernel_probe.rs` adds one test-only borrowed URI
+kernel. Typed `Thing` and sealed Snapshot adapters provide only the already
+classified concrete/template base and reference/template href plus borrowed
+text. Both call the same kernel. Concrete URI parsing still uses
+`fluent_uri`; relative resolution writes directly into a caller-supplied sink,
+including path merging, percent-encoded dot-segment removal, query replacement
+or inheritance, and fragment handling. The Snapshot sink is its existing
+mutable byte arena. It creates no temporary `String`, URI owner, vector, map,
+or additional arena.
+
+The differential corpus compares both adapters with today's production
+`resolve_form_href` result for:
+
+- absolute targets, relative references, no base, network-path references,
+  and opaque bases;
+- template href preservation, template-base rejection, and an absolute href
+  that bypasses a template base;
+- merged and absolute path normalization, including encoded dot segments;
+- inherited and replaced queries, fragments, query-plus-fragment references,
+  base-fragment failure, and the RFC 3986 normal/abnormal reference matrix.
+
+The production helper remains the oracle in this PR; it is not modified. A
+future production implementation must move the existing owned helper and the
+Snapshot builder onto one shared sink-based TD kernel. Keeping this test copy
+as a second production rule implementation would not satisfy the evidence.
+
+### Why the frozen borrow requires retained derived bytes
+
+For base `https://base.example/a/b/c/` and href
+`../d/./e?mode=full#part`, the result is
+`https://base.example/a/b/d/e?mode=full#part`. That result combines both inputs
+and removes path segments; it is not a contiguous slice of either input. A
+query-local parser or fixed buffer therefore cannot return the frozen
+`ValidatedFormHref::Reference(&'a str)` with the owner's lifetime.
+
+The evaluated alternatives are:
+
+| Strategy | Query allocation | Frozen API/lifetime | Disposition |
+| --- | ---: | --- | --- |
+| call today's owned `resolve_form_href` during each query | nonzero in the measured composite case | returns a new owner, not `&'a str` | incompatible |
+| parse into query-local fixed scratch | zero | result dies with the query | incompatible |
+| return segments or accept caller scratch | zero | changes the frozen API | requires authority review |
+| retain parsed URI owner objects | query can be zero | adds nested owners/allocation responsibility | outside the frozen catalog |
+| emit resolved bytes during normalization | zero | returned text borrows the Snapshot byte arena | compatible prototype |
+
+The compatible prototype does not require retained parsed objects. Template,
+absolute, and no-base results alias the raw href node. Only a composite result
+adds one URI node and its bytes; an error adds one scalar error node. Every
+Form adds one edge for the cached result. These remain node, edge, and byte
+arena contents, not new allocation sites.
+
+For the fixed corpus, the exact incremental retained request is 496 bytes:
+9 Form edges × 8 bytes, 7 derived URI/error nodes × 20 bytes, and 284 resolved
+URI bytes. The lifetime is exactly the sealed Snapshot lifetime. Physical
+responsibility remains the existing three retained arenas and four temporary
+arenas. Semantic work remains `UriBytes` for source/output bytes plus
+`CodecOutputBytes` for retained output and `DocumentNodes` for emitted
+node/edge work; physical bytes remain subject to the frozen source, temporary,
+peak-live, and largest-request limits. The prototype adds no WorkClass, limit
+row, ledger account, or allocation category.
+
+The Host allocator probe separates intervals:
+
+- constructing and sealing the nonempty Snapshot observes six allocation
+  calls: the three existing build arenas and the three exact retained arenas;
+- today's owned composite resolution observes a nonzero query allocation;
+- direct resolution into an inline/arena sink observes zero allocations; and
+- the completed borrowed Planning query observes zero allocations after the
+  Snapshot exists.
+
+`planning_view_consumer.rs` is a source-isolated consumer of test-only wrappers
+with the exact frozen method set. It can receive only `ValidatedThingView` and
+related views. It enumerates Properties, selects ordinal 1 / original Form
+index 1, reads raw and resolved URI plus content metadata, verifies effective
+`ReadProperty`, resolves inherited security to NoSec, and returns only borrows
+and scalars. It has no `Thing`, Snapshot/arena handle, URI resolver, or copied
+default/security rule. The complete interval observes zero Host allocation
+calls.
+
+Run the focused proof with:
+
+```sh
+cargo test --locked -p clinkz-wot-td --lib semantic_kernel
+```
+
+This is feasibility evidence only. It does not change the frozen View API,
+allocation catalog, resource authority, work-package state, or admission
+status. Exact `UriBytes`/`CodecOutputBytes` charging, resumability,
+cancellation, strict-entry classification, rollback, actual thumb execution,
+and an external crate consuming the eventual public View remain open.
 
 ## Complete ActionAffordance typed-storage slice
 
@@ -326,5 +422,5 @@ the no-default graph. The separate feature-boundary matrix checks Host
 base/order/AP/combined requests and actual resolved serde features; base and
 order without the validated capability remain ordinary TD/Basic graphs and do
 not run the AP-dependent snapshot probe. Exact work charging, bounded
-resumable sorting, complete Basic/URI/strict-decode equivalence, the external
-Planning fixture, and complete item-3 equivalence remain open.
+resumable sorting, complete Basic/URI/strict-decode equivalence, the public
+external Planning fixture, and complete item-3 equivalence remain open.
