@@ -6,6 +6,12 @@ item 6 (typed/direct decode progress) in
 [`WP-100-CONSUMER-VALIDATED-THING`](../../../docs/work-packages/WP-100-consumer-validated-thing-admission.md).
 The tranche remains `planned` / `candidate` / `current`.
 
+The follow-up
+[`validated-thing-rfc3339-resumable`](../validated-thing-rfc3339-resumable/README.md)
+fixture supplies non-production partial evidence for the amended shared-decoder
+boundary. It does not change this counterexample's production observation or
+complete readmission item 6.
+
 Historical scope: the finding below describes the source boundary at
 github-pr:79. [Impact review 0066](../../../workspace/0066-shared-rfc3339-decode-impact.md)
 subsequently amends the permitted future paths and shared decoder contract in

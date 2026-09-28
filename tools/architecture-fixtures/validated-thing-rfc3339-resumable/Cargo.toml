@@ -1,0 +1,16 @@
+[package]
+name = "validated-thing-rfc3339-resumable-probe"
+version = "0.0.0"
+edition = "2024"
+publish = false
+build = "build.rs"
+
+[workspace]
+
+[dependencies]
+clinkz-wot-foundation = { path = "../../../foundation", default-features = false }
+serde = { version = "1.0", default-features = false, features = ["alloc"] }
+time = { version = "0.3", default-features = false, features = ["alloc"] }
+
+[dev-dependencies]
+serde_json = "1.0"
