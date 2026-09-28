@@ -103,8 +103,14 @@ borrowed compatibility Thing or strict project-owned JSON builder/decoder
   -> completed all-bounds-before-start barrier
   -> sequential compiler start and eager compilation
   -> Planning-owned sealed TD-free aggregate draft
-  -> Servient source-account reclassification and atomic publication with one
-     normalized ValidatedThing owner and one registration owner
+  -> end every ValidatedThingView borrow
+  -> prove the complete draft owns every runtime fact and survives Snapshot drop
+  -> Servient final identity/resource/cancellation/publication-slot checks
+  -> close cancellation with one private publication permit
+  -> destroy the ValidatedThing, deallocate its arenas, and release child charges
+  -> release the matching parent/global source allowance
+  -> atomic publication with plans, one complete registration, and runtime
+     lifecycle/resource records only
 
 read_property(name, options)
   -> lease the published plan set
@@ -117,9 +123,10 @@ read_property(name, options)
 The compatibility entry leaves the caller's opaque `Thing` graph outside the
 engine's absolute memory claim and accounts the exact additional project-owned
 conversion peak. The strict builder/decoder accounts engine-owned storage from
-its first allocation through retention. Both produce the same normalized
+its first allocation through build completion. Both produce the same normalized
 snapshot, semantic view, Basic/default/security results, counts, and terminal
-outcomes. No successful owner retains or reconstructs a raw `Thing`.
+outcomes. No successful owner retains or reconstructs a raw `Thing`, and the
+Published record retains neither the normalized Snapshot nor a TD view.
 
 The TD view supplies deterministic Property iteration/lookup, Property
 ordinal, original Form index, raw and resolved URI, content metadata, effective
@@ -127,15 +134,20 @@ operations/security, and security-definition scheme lookup. Planning neither
 parses retained storage nor repeats Basic/default/security rules. The snapshot
 has exact-length node, edge, and byte arenas; allocation count, total requested
 bytes, largest actual request, temporary peak, and additional conversion peak
-remain distinct through Servient handoff. Aggregate capacity is not a physical
-contiguous allocation.
+remain distinct through the last Planning borrow and Servient release.
+Aggregate capacity is not a physical contiguous allocation. The peak includes
+simultaneous Snapshot and complete plan/artifact residency; releasing the
+Snapshot before publication does not erase that observed peak.
 
 Any validation, security, ledger, materialization, bounds, compilation,
-reconciliation, cancellation, or seal failure terminates the unpublished
-generation. In particular, materialization or bounds failure releases every
-still-uncommitted reservation and causes zero compiler `start` calls. The
-slice publishes neither a partial property/Form subset nor a handle whose
-lookup is incomplete.
+reconciliation, cancellation, independence, final-check, or seal failure
+terminates the unpublished generation. In particular, materialization or bounds
+failure releases every still-uncommitted reservation and causes zero compiler
+`start` calls. The private publication permit is issued only after every
+fallible check and makes Snapshot release followed by registry installation a
+non-yielding, allocation-free, callback-free, non-fallible sequence. The slice
+publishes neither a partial property/Form subset nor a handle whose lookup is
+incomplete.
 
 ADR-0017 permits fallback only before security commit and binding input:
 side-effect-free security inapplicability or an exact deterministic lazy

@@ -108,7 +108,7 @@ policy MUST remain visible in immutable diagnostics.
 
 Planning starts from a TD-owned validated semantic view or produced-Thing draft
 plus immutable policy and registration snapshots. For the normalized Consumer
-retained-source path that view is `ValidatedThingView`; Planning never receives
+build-Snapshot path that view is `ValidatedThingView`; Planning never receives
 the private snapshot or a reconstructed `Thing`. It ends with an admitted
 immutable plan set.
 The following invariants apply to every profile:
@@ -1212,6 +1212,14 @@ evaluate each compiler's pure `bounds` operation exactly once. The preflight
 and draft borrow no raw `Thing`, snapshot arena, or storage offset; owned output
 remains usable after the validated owner and view are gone.
 
+After draft sealing, every `ValidatedThingView` and nested view borrow ends.
+The draft must then pass a source-independent use boundary: its lookup, plans,
+candidates, artifacts, identities, diagnostics, and `PlanFootprint` are usable
+after `ValidatedThing` is dropped. No final check or Published selection may
+recover a TD fact from an artifact, registration callback, raw range, or hidden
+lifetime. Servient retains the complete registration as a separate owner and
+joins it to the draft only by the checked registration identity and generation.
+
 Every bound must declare only `WorkClass::BindingPolls`, with a nonzero total
 no greater than the existing `plan_compile_work_units_per_step_max`. All
 coordinate bounds must succeed and a completed all-bounds barrier must exist
@@ -1353,8 +1361,13 @@ before that linearization remains valid until released.
 ### Consumer timing
 
 `consume` performs `Building -> Frozen -> Published` without transport side
-effects. Returning a consumed handle proves that its plan set is Published. A
-failed consume publishes neither a handle nor a partial registry entry.
+effects. For the first Consumer Property Read aggregate, Frozen planning output
+is complete and TD-lifetime-free before Servient's last fallible checks. A
+private permit then closes cancellation, the build Snapshot/source charge is
+released, and the already allocated record is atomically installed without an
+allocation, callback, yield, or further failure point. Returning a consumed
+handle proves that its plan set is Published. A failed consume publishes neither
+a handle nor a partial registry entry.
 
 ### Producer timing
 
@@ -1449,6 +1462,11 @@ record. Publication is a single registry transition; readers observe either no
 generation or the complete immutable generation. They never observe Building,
 partially populated indexes, provisional artifacts, or a mixture of old and
 new generation fields.
+
+For the first Consumer Property Read record, that immutable generation contains
+the execution plans and lookup, the complete binding registration owner, and
+runtime lifecycle/resource records. It contains no `ValidatedThing`, TD view,
+Snapshot arena, source charge, or Snapshot persistent-document charge.
 
 Consumers of plan data are restricted as follows:
 

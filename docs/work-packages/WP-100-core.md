@@ -279,9 +279,9 @@ is forbidden until a separate independent readmission and admission-only
 transition.
 
 The replacement boundary retains `Thing` as the public authoring/interchange
-value but makes successful `ValidatedThing` own only a private normalized
-snapshot. The snapshot has exact-length node, edge/range, and byte arenas; no
-completed owner retains `Thing`, BTreeMap/serde allocation state, caller spare
+value but makes successful `ValidatedThing` own only a private normalized,
+build-scoped snapshot. The snapshot has exact-length node, edge/range, and byte
+arenas; no completed owner retains `Thing`, BTreeMap/serde allocation state, caller spare
 capacity, or an input borrow. Its structured footprint distinguishes retained
 requested bytes, retained allocation count, largest actual allocation request,
 temporary peak, and additional conversion peak. Every ledger reservation maps
@@ -332,6 +332,16 @@ duplicated semantic rules. This updates the future WP-200 aggregate input
 contract without changing existing exact-coordinate source, evidence, or
 status.
 
+The first Consumer runtime does not retain this owner. After Planning seals a
+complete TD-lifetime-free draft, every view borrow ends and Servient performs
+all fallible identity/resource/cancellation/publication-slot checks. A private
+permit then closes cancellation, exact Snapshot/source charges are released,
+and an allocation-free non-fallible atomic install publishes only plans, one
+complete registration, and runtime lifecycle/resource records. The structured
+`footprint()` remains required for build reconciliation; the redundant
+`retained_source_bytes()` alias and both Snapshot-specific source-to-persistent-
+document reclassification methods are target old-API removals.
+
 The existing WorkClass prefix and all twelve current discriminants stay
 unchanged. `DocumentNodes` covers generic validation/normalization/equivalence
 and allocation-free map-sort work; schema, strict input bytes, URI, security,
@@ -366,7 +376,8 @@ not compatibility authority.
 
 The admission record is the sole detailed owner of exact signatures, the
 three-retained/four-temporary allocation-site catalog, normalization/build/seal
-ordering, permitted future TD paths, pre-readmission evidence, and post-code
+ordering, build-only handoff/release, permitted future TD paths,
+pre-readmission evidence, and post-code
 completion evidence. That evidence key is
 `consumer-normalized-validated-thing`; it claims no aggregate Planning,
 Servient runtime, Consumer gate, successor operation, or broad WP-100

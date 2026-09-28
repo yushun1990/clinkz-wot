@@ -142,6 +142,7 @@ authoritative_artifacts = [
     "docs/api-ownership.csv",
     "docs/architecture/10-primary-data-flows.md",
     "docs/architecture/20-module-boundaries.md",
+    "docs/architecture/30-compiled-plan-lifecycle.md",
     "docs/architecture/50-servient-runtime-lifecycle.md",
     "docs/requirements.csv",
     "docs/resource-limits.csv",
@@ -158,7 +159,6 @@ authoritative_artifacts = [
 api_items = [
     "WorkClass",
     "AdmissionLedger",
-    "admission_ledger_reclassify_source_to_persistent_document",
     "ValidatedThing",
     "ValidatedThingCursor",
     "ValidatedThingBuilder",
@@ -190,8 +190,6 @@ api_items = [
     "validated_thing_builder_step",
     "validated_thing_view",
     "validated_thing_footprint",
-    "validated_thing_reclassify_source_to_persistent_document",
-    "validated_thing_retained_source_bytes",
     "validated_thing_property_count",
     "validated_thing_readable_property_form_count",
     "validated_thing_invalid_kind",
@@ -235,15 +233,20 @@ resource_changes = [
     "Append number_lexeme_bytes_max as one Consumer +validated-thing per-Number document-byte ResourceKind at stable index 195; provisional named-profile values gateway 256, directory-client NA, benchmark-static-reference 64; require the sole opaque TD configuration projection over only the fields consumed by ValidatedThing admission before either direct entry, leave complete role/execution-cell applicability with the resource-profile owner, reject missing admission fields or implementation-unsupported limits as configuration errors outside progress, then reject valid configured_limit + 1 input including zero-disabled; target cycle/stack characterization is separate from generic readmission",
     "No new WorkClass or ledger account: numeric projection precharges existing CodecInputBytes against the current step budget and the shared non-resettable lifetime remainder before one bounded atomic projection",
     "Each Foundation ledger reservation still corresponds to one actual checked allocation Layout; aggregate retained or peak footprints are sums/observations and are never submitted as a physical contiguous allocation",
+    "The first Consumer path keeps the completed Snapshot in source accounting only through complete independent plan construction and every fallible final check, includes simultaneous Snapshot/runtime-plan residency in live peak, then deallocates the arenas and releases exact child source charges before releasing the matching parent/global allowance and atomically publishing; it performs no Snapshot source-to-persistent-document reclassification and Published retains only independently committed runtime accounts",
 ]
 old_api_removals = [
+    "admission_ledger_reclassify_source_to_persistent_document",
     "validated_thing_cursor_new",
     "ValidatedThingStep",
     "validated_thing_thing",
+    "validated_thing_reclassify_source_to_persistent_document",
+    "validated_thing_retained_source_bytes",
 ]
 performance_workloads = []
 implementation_paths = [
     "foundation/build.rs",
+    "foundation/src/resource.rs",
     "td/Cargo.toml",
     "td/src/validated.rs",
     "td/src/validate.rs",

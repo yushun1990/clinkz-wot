@@ -136,26 +136,34 @@ numeric coincidence or global uniqueness, proves which record may resolve an
 artifact.
 
 For this aggregate, Planning borrows only `ValidatedThingView`, emits the sealed
-TD-free aggregate draft, and neither owns nor reconstructs the source. The
-published Servient record retains the one move-only normalized
-`ValidatedThing` owner, including its private exact-length node/edge/byte
-snapshot, structured footprint, counts, and admission ledger, together with
-the sealed aggregate and one finalized complete Consumer registration. After
-the destination-capacity check, Servient reclassifies exactly the snapshot's
-requested allocation bytes from source to persistent-document accounting;
-this changes neither the physical allocations nor the distinct footprint
-facts. Host records share ownership of the registration; application-static
-roots retain it directly. Neither representation creates a general
-registration snapshot, per-plan registration pin, or runtime binding scan for
-this slice.
+TD-free aggregate draft, and neither owns nor reconstructs the source. Every
+nested view borrow ends before Servient proves that the draft owns all runtime
+facts and remains usable after `ValidatedThing` destruction. Servient then
+performs every fallible identity, generation, footprint, publication-slot, and
+final cancellation check while the Snapshot is still live. Success yields a
+private single-use publication permit that closes cancellation for the
+non-yielding commit sequence.
+
+Servient next destroys `ValidatedThing`, deallocating its private exact-length
+node/edge/byte arenas and releasing child-ledger source charges. Only after
+those physical bytes are no longer live does it release the exact parent/global
+source allowance. It performs no source-to-persistent-document
+reclassification. The permit then atomically installs an already allocated
+record containing the sealed aggregate, one finalized complete Consumer
+registration, and runtime lifecycle/resource records only. No allocation,
+callback, semantic query, compiler work, or fallible operation occurs between
+Snapshot release and registry publication. Host records share ownership of the
+registration; application-static roots retain it directly. Neither
+representation creates a general registration snapshot, per-plan registration
+pin, or runtime binding scan for this slice.
 
 Starting close prevents new plan-set leases and binding calls. Existing calls,
 leases, and cleanup owners retain the record until terminal settlement.
 Reclamation begins only after all of them are terminal and advances
 monotonically under `WorkClass::PlanningItems` plus the existing
 `plan_reclaim_bytes_per_step_max`; only then may the plan set, registration
-owner, and normalized `ValidatedThing` owner be released, reclaiming its fixed
-sealed-arena allocation set and ledger charge.
+owner, and runtime lifecycle/resource storage be released. No Snapshot or TD
+source charge survives to this phase.
 
 ## Hot-path contract
 

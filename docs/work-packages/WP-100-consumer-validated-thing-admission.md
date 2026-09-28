@@ -467,11 +467,12 @@ both checks succeed does the coordinator separately commit the applicable
 parent/global allowance, construct the child ledger from the same limits, and
 call one direct entry constructor. The moved ledger owns the per-owner/per-
 admission physical accounts. The outer owner remains paired with the cursor,
-reconciles from `ValidatedThingFootprint` on `Complete`, and releases on every
-other terminal or cursor drop. TD never treats the child ledger as a global
-aggregator. The future Servient implementation owns this pairing; external pre-
-code fixtures must provide an equivalent parent owner. This docs migration does
-not implement or admit that Servient work.
+reconciles from `ValidatedThingFootprint` on `Complete`, remains paired with the
+build-scoped owner through Planning, and releases on every failure, cursor drop,
+or successful post-plan Snapshot destruction. TD never treats the child ledger
+as a global aggregator. The future Servient implementation owns this pairing;
+external pre-code fixtures must provide an equivalent parent owner. This docs
+migration does not implement or admit that Servient work.
 
 `from_thing` is the compatibility entry. The input remains immutably borrowed
 until terminal progress and is never retained by `ValidatedThing`. Its resource
@@ -480,11 +481,12 @@ it cannot bound the caller's already allocated `Thing` graph.
 
 `from_json` is the strict project-owned builder/decoder entry. The borrowed
 input bytes are checked against `document_bytes_max`; all project-owned decode,
-normalization, validation, diagnostic, rollback, and retained allocations are
-charged from the first controlled allocation. It therefore provides absolute
-engine-owned input-processing-through-retention admission. Caller-owned input
-buffer memory remains caller responsibility. The decoder shares TD's typed
-field-decoding and semantic kernel; it is not a second TD interpretation.
+normalization, validation, diagnostic, rollback, and completed-Snapshot
+allocations are charged from the first controlled allocation. It therefore
+provides absolute engine-owned input-processing-through-build-Snapshot
+admission. Caller-owned input buffer memory remains caller responsibility. The
+decoder shares TD's typed field-decoding and semantic kernel; it is not a second
+TD interpretation.
 
 The strict entry is the only direct builder/decoder source admitted here.
 Adding a second strict format or a field-by-field public builder requires its
@@ -595,10 +597,8 @@ pub struct ValidatedThingFootprint {
 impl ValidatedThing {
     pub fn view(&self) -> ValidatedThingView<'_>;
     pub const fn footprint(&self) -> ValidatedThingFootprint;
-    pub const fn retained_source_bytes(&self) -> u64;
     pub const fn property_count(&self) -> u64;
     pub const fn readable_property_form_count(&self) -> u64;
-    pub fn reclassify_source_to_persistent_document(&mut self) -> bool;
 }
 
 impl ValidatedThingFootprint {
@@ -614,27 +614,61 @@ impl ValidatedThingFootprint {
 node, edge, and byte arenas. `retained_allocation_count` is the number of those
 non-empty arenas. `largest_allocation_request_bytes` is the largest actual
 single project allocation request across build, grow, resolve, seal, and final
-retention. `peak_temporary_requested_bytes` is the maximum simultaneously live
-temporary allocation total. `additional_conversion_peak_bytes` is the maximum
-simultaneously live project-owned source plus temporary allocation total above
-the selected entry's baseline, including old/new grow or seal overlap.
+Snapshot storage. `peak_temporary_requested_bytes` is the maximum
+simultaneously live temporary allocation total.
+`additional_conversion_peak_bytes` is the maximum simultaneously live project-
+owned source plus temporary allocation total above the selected entry's
+baseline, including old/new grow or seal overlap.
 
-`retained_source_bytes()` is a compatibility alias for
-`footprint().retained_requested_bytes()`. Inline `ValidatedThing` and Servient
-record bytes are not allocation requests and are charged by their owning slot
-or runtime-record capacity, not folded into an invented contiguous request.
-Allocator headers, bins, and rounding are outside the portable footprint; a
-profile that governs them owns an explicit allocator-specific surcharge.
+Inline `ValidatedThing` and Servient record bytes are not allocation requests
+and are charged by their owning slot or runtime-record capacity, not folded into
+an invented contiguous request. Allocator headers, bins, and rounding are
+outside the portable footprint; a profile that governs them owns an explicit
+allocator-specific surcharge. The structured `footprint()` is the sole public
+byte handoff; the redundant `retained_source_bytes()` alias is removed.
 
 Every `AdmissionLedger::try_reserve_source` or `try_reserve_temporary` call in
 this tranche corresponds to one actual checked `Layout` request. The ledger is
 never given an aggregate footprint as if it were one physical allocation.
 Consequently its largest-contiguous observation is the maximum actual request,
 while account usage and live/peak observations are sums. The completed owner
-keeps the ledger. `reclassify_source_to_persistent_document()` delegates the
-existing Foundation operation for exactly `retained_requested_bytes`; it
-changes account classification only and changes no physical allocation,
-allocation count, live total, conversion peak, or largest request.
+keeps the child ledger only for its build lifetime. Destroying it after complete
+independent plan construction deallocates each arena and releases each exact
+child source charge; only then does the paired coordinator release the
+reconciled parent/global source allowance. No Snapshot byte is converted to
+persistent-document accounting.
+
+The frozen target API therefore has no
+`ValidatedThing::reclassify_source_to_persistent_document`. The existing
+Foundation `AdmissionLedger::reclassify_source_to_persistent_document` has no
+other admitted caller and is recorded as an old-API removal for the future
+source tranche. Generic account reserve/release operations remain unchanged.
+
+The first Consumer path uses `ValidatedThing` only as a build proof. The last
+`ValidatedThingView` and every nested view end after the complete owned Planning
+draft is sealed. Servient copies the footprint, proves that the draft and
+separately owned complete registration contain every runtime fact, and performs
+all fallible identity, resource, cancellation, and publication-slot checks
+while the Snapshot remains live. Only then may a private publication permit
+close cancellation. Destruction of `ValidatedThing` and exact source release
+precedes the allocation-free, callback-free, non-yielding, non-fallible atomic
+install. Published owns plans, the complete registration, and runtime lifecycle
+and resource records only.
+
+This shorter lifetime does not change the current exact-length seal contract.
+Exact-length node, edge, and byte arenas remain the accepted basis for an
+immutable allocation-free view, deterministic requested-byte accounting, and a
+fixed bounded drop set during Planning. A future charged-capacity build-only
+representation would require a separate review of allocation, view, progress,
+cleanup, and resource proofs; this migration neither selects nor admits it.
+
+The merged three-arena allocation/equivalence prototypes and shared TD semantic
+kernel remain valid non-production evidence for this build-scoped owner. PR
+#111's URI and borrowed Planning-view prototypes likewise remain relevant only
+while Planning holds the build view. They do not prove owned aggregate use after
+Snapshot drop, the final resource release, or the no-fallible-gap publication
+boundary, and therefore do not complete readmission item 4 or later WP-400
+evidence.
 
 The storage-independent borrowed Planning view is:
 
@@ -785,10 +819,16 @@ Both paths use one monotonic cursor and these ordered phases:
    equivalence proof. Final counts and footprint are checked, temporary storage
    is released, and only then may `Complete` expose `ValidatedThing`.
 
-The final source arenas remain in the source ledger account until the later
-Servient owner successfully reclassifies exactly their requested bytes after
-its persistent destination check. Aggregate preflight reservations are logical
-capacity and must never be reported as a physical contiguous allocation.
+The final source arenas remain in the source ledger account through the last
+Planning borrow and every fallible Servient final check. Complete plan/artifact
+storage is simultaneously charged, so that overlap remains part of live and
+peak accounting. After the private publication permit closes cancellation,
+Servient destroys `ValidatedThing`, deallocates every arena and releases each
+exact child source charge, then releases the matching parent/global allowance,
+and only then performs the non-fallible atomic install. The
+persistent-document account remains zero for the Snapshot. Aggregate preflight
+reservations are logical capacity and must never be reported as a physical
+contiguous allocation.
 
 ## Terminal ownership, rollback, and cleanup
 
@@ -809,9 +849,10 @@ bypass the work contract through `Vec`/map/JSON recursive destruction.
 
 The compatibility input is borrowed, so its destruction remains with the
 caller and outside the additional-peak claim. The strict JSON input is also
-borrowed and owns no nested TD graph. Dropping an unfinished cursor invokes only
-the same prepaid fixed-allocation rollback; it cannot publish, leak a ledger
-charge, run semantic work, or recursively destroy caller input. A future change
+borrowed and owns no nested TD graph. Dropping an unfinished cursor or a
+completed build-scoped `ValidatedThing` invokes only the same prepaid fixed-
+allocation release; it cannot publish, leak a ledger charge, run semantic work,
+or recursively destroy caller input. A future change
 that requires fallible or unbounded destructor work must introduce an explicit
 cleanup owner through architecture review rather than hide it in `Drop`.
 
@@ -952,8 +993,10 @@ An independent exact-head review must accept all of the following before any
 `candidate -> admitted` transition:
 
 1. Compile-only proof of every frozen public signature and compile-fail proof
-   of the removed `new(Thing)`, `ValidatedThingStep`, `thing()`, mutable/raw
-   storage, and unchecked-construction surfaces. It must prove that neither
+   of the removed `new(Thing)`, `ValidatedThingStep`, `thing()`,
+   `retained_source_bytes()`, both source-to-persistent-document
+   reclassification methods, mutable/raw storage, and unchecked-construction
+   surfaces. It must prove that neither
    direct entry accepts `&ResourceLimits`, that
    `ValidatedThingAdmissionConfig::try_from_limits` is the only public
    projection constructor, and that no configuration error can be injected into
@@ -978,7 +1021,11 @@ An independent exact-head review must accept all of the following before any
    `ValidatedThingView` to enumerate a non-first Property/Form coordinate,
    inspect raw/resolved URI and content metadata, apply effective operations,
    resolve effective security to NoSec, and retain original Form indices,
-   without `&Thing`, snapshot parsing, allocation, or copied TD rules.
+   without `&Thing`, snapshot parsing, allocation, or copied TD rules. It must
+   then seal owned Planning output, end every nested view borrow, drop
+   `ValidatedThing`, and continue selecting from that output without a hidden TD
+   lifetime or registration borrow. PR #111 remains valid build-time prototype
+   evidence for the borrowed query but does not by itself complete this item.
 5. Compile full prototypes for the entire capability off/on matrix above,
    including actual thumb target, serde-only downstream and sibling-capability
    unification, and negative public-surface fixtures. Repeat source-access
@@ -1011,16 +1058,26 @@ An independent exact-head review must accept all of the following before any
    physical M4 cycle/stack measurements are required only for a separately
    declared target or product claim.
 7. A resource proof mapping source, temporary, peak, actual contiguous request,
-   diagnostics, cleanup, reclassification, the new per-Number lexical limit,
-   and inline Servient-owner capacity to authority without treating aggregate
-   capacity as one allocation. It must derive the selected implementation's
-   supported `M` from representable input/work and bounded temporary resources
-   rather than silently restoring 256 as a project-wide maximum.
-8. Reaffirmation that github-pr:69 Foundation behavior, github-pr:70's Context
-   seam, the active resource schema plus the one appended Number field,
+   diagnostics, cleanup, exact post-plan source release, the new per-Number
+   lexical limit, and inline Servient-owner capacity to authority without
+   treating aggregate capacity as one allocation. It must include simultaneous
+   Snapshot and complete plan/artifact residency, prove zero Snapshot source and
+   persistent-document charge in Published, and prove that no reclassification
+   is needed. It must derive the selected implementation's supported `M` from
+   representable input/work and bounded temporary resources rather than
+   silently restoring 256 as a project-wide maximum.
+8. Reaffirmation that github-pr:69 Foundation work classes and general ledger
+   behavior remain valid while its orphaned narrow reclassification method is
+   explicitly removed by the future admitted source change; github-pr:70's
+   Context seam, the active resource schema plus the one appended Number field,
    completed WP-200/WP-300 evidence, and the passed Producer Property Read gate
    remain unchanged by the future source boundary; any falsified evidence must
    be reopened by its owner.
+
+Items 1, 4, 7, and 8 have the lifecycle deltas above. Items 2, 3, 5, and 6
+retain their existing proof boundary. All eight remain required and incomplete
+as a set; this docs-only migration completes none of them and does not change
+the tranche's `planned` / `candidate` admission state.
 
 The readmission change is docs-only and separate from this authority migration
 and from production implementation.
@@ -1068,9 +1125,10 @@ It must prove:
    numeric projection.
 9. Execution of the Host and real `no_std + alloc` matrix, including allocator
    tracing on the constrained target rather than a compile-only parity claim.
-10. The external allocation-free Planning-view consumer, normal locked
-    workspace/authority checks, and every registered Producer Property Read
-    gate command at the exact implementation head.
+10. The external allocation-free Planning-view consumer, including owned output
+    that remains usable after `ValidatedThing` drop, normal locked workspace/
+    authority checks, and every registered Producer Property Read gate command
+    at the exact implementation head.
 
 This evidence must not readmit the tranche, enter WP-200/WP-400, register or
 pass the Consumer gate, claim another operation family, or claim broad WP-100

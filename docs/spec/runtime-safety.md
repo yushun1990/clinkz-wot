@@ -59,8 +59,8 @@ releases reservations idempotently. Cancellation is checked at bounded work
 intervals and before publication.
 
 For the first v5.1 Consumer Property Read admission, successful construction
-owns one move-only TD `ValidatedThing` whose physical source is a private,
-immutable, project-controlled normalized snapshot. It owns no caller `Thing`,
+owns one move-only, build-scoped TD `ValidatedThing` whose physical source is a
+private, immutable, project-controlled normalized snapshot. It owns no caller `Thing`,
 opaque standard/serde container, caller spare capacity, or input borrow. It
 proves complete `ValidationLevel::Basic`, typed fieldwise semantic equivalence
 for the compatibility entry, checked structural counts, and an exhaustive
@@ -69,9 +69,9 @@ view, raw arena, or storage offset is public.
 
 Compatibility conversion borrows a typed `Thing` and provides an exact
 additional project-owned peak over the pre-existing caller baseline. The
-strict project-owned JSON builder/decoder charges every engine-owned
-allocation from first input processing through retained completion and provides
-the absolute engine-owned admission path required by application-static users.
+strict project-owned JSON builder/decoder charges every engine-owned allocation
+from first input processing through build-Snapshot completion and provides the
+absolute engine-owned admission path required by application-static users.
 Both drive the same bounded cursor, normalized representation, TD semantic
 kernel, terminal model, and view; Host may drive it synchronously while a
 static caller resumes it.
@@ -84,7 +84,7 @@ MUST NOT serialize and deserialize the `Thing`, use serialized length as the
 equivalence oracle, or reject a Basic-valid typed value because a serializer is
 stricter than Basic validation.
 
-The retained snapshot has exactly three possible exact-length allocations: a
+The build Snapshot has exactly three possible exact-length allocations: a
 typed node arena, an edge/range arena, and a byte arena. Its nodes own no nested
 allocation. Build storage is limited to mutable node/edge/byte arenas and one
 traversal arena; grow and seal overlap is explicit and charged. Therefore
@@ -118,7 +118,8 @@ free `ValidatedThingView` exposes identity, deterministic Property iteration
 and lookup, Property ordinal, original Form index, raw and resolved URI,
 content metadata, effective operations/security, and security-definition
 scheme lookup. Planning MUST NOT reconstruct a `Thing`, parse the snapshot, or
-copy those rules.
+copy those rules. Every such borrow MUST end before final publication checks;
+the owned aggregate must remain usable after `ValidatedThing` is destroyed.
 
 The planned Consumer boundary amends only Basic's five numeric schema-extension
 predicates (`minimum`, `exclusiveMinimum`, `maximum`, `exclusiveMaximum`, and
@@ -165,11 +166,16 @@ belong to the WP-100 validated-Thing admission record and
 `docs/amendments/WP-100-bounded-atomic-number-v1.md`; current production Rust
 has not implemented it.
 
-The normalized `ValidatedThing` remains the one retained application/source
-owner after publication. Source-to-persistent-document reclassification moves
-only the sealed arenas' total requested bytes and preserves physical storage,
-allocation count, live/peak truth, and largest actual request. Aggregate
-capacity reservation is never treated as a contiguous physical allocation. A
+The normalized `ValidatedThing` is retained only through complete aggregate
+construction and every fallible final publication check. Its sealed arenas stay
+in source accounting while plans and artifacts are simultaneously live, so the
+overlap remains part of live/peak truth. After the last view borrow, Servient
+proves the aggregate owns every runtime fact, performs final identity/resource/
+cancellation/publication-slot checks, closes cancellation with a private permit,
+then destroys the Snapshot and releases its child source charges before
+releasing the matching parent/global allowance. No Snapshot byte is
+reclassified to persistent-document accounting. Aggregate capacity reservation
+is never treated as a contiguous physical allocation. A
 Basic-valid semantic value without an ID is rejected by Consumer preflight
 before persistent-capacity reservation, materialization, compiler bounds, or
 compiler start; the slice does not synthesize identity or strengthen Basic
@@ -178,7 +184,8 @@ validation.
 Input inspection, Basic validation, normalization, seal, semantic-equivalence
 comparison, Planning preflight, conservative persistent-capacity reservation,
 materialization, the all-coordinate bounds barrier, compilation,
-reconciliation, and the final cancellation check are unpublished phases.
+reconciliation, TD-lifetime independence proof, and the final cancellation and
+publication-slot checks are unpublished phases.
 Cancellation is observed before work and callbacks and at bounded intervals.
 Invalid, limit, cancellation, and conversion failure first enter the registered
 normalization rollback state. The first cause remains immutable; no terminal is
@@ -187,7 +194,11 @@ released. Precharged fixed-allocation cursor drop is the only implicit cleanup
 and performs no recursive semantic destruction. Later aggregate failure starts
 no new compiler work, aborts the one live pure cursor at most once, releases all
 still-uncommitted reservations idempotently, spends the reserved generation,
-and publishes neither a handle nor a partial lookup.
+and publishes neither a handle nor a partial lookup. Permit issuance is the
+last fallible/cancellable boundary. Snapshot release followed by atomic install
+is allocation-free, callback-free, non-yielding, and non-fallible; Published
+owns only execution plans, the complete registration, and runtime lifecycle and
+resource records.
 
 The normalization terminal never owns the existing allocation-bearing,
 recursive `ValidateError`. It stores a fixed inline invalid category, cause

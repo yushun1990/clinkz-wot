@@ -2,6 +2,12 @@
 
 Status: MIGRATED
 
+Lifecycle supersession: topic 0072 preserves this topic's normalized Snapshot,
+three-arena accounting, semantic-equivalence, and borrowed-view conclusions but
+supersedes its downstream conclusion that Servient retains `ValidatedThing`
+after publication. The prior rationale remains historical; current lifetime
+authority is the migrated 0072 projection.
+
 Kind: ADR-0013 implementation-impact review and retained-representation
 architecture decision
 

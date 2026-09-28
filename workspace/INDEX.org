@@ -40,6 +40,7 @@ Topics are retained after migration as decision history.
 
 ** MIGRATED
 
+- [[file:0072-consumer-validated-thing-build-lifetime.md][0072 Consumer ValidatedThing Build Lifetime]]
 - [[file:0071-constrained-resource-authority-and-target-characterization.md][0071 Constrained Resource Authority and Target Characterization]]
 - [[file:0066-shared-rfc3339-decode-impact.md][0066 Shared RFC3339 Decode Impact]]
 - [[file:0065-liballoc-btreemap-retained-representation-impact.md][0065 liballoc BTreeMap Retained Representation Impact]]

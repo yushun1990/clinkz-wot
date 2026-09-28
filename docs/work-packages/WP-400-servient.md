@@ -151,27 +151,35 @@ enter `index.toml` only when the reopened
 
 The tranche owns Host and application-static Consumer admission/runtime
 composition: conservative persistent-capacity reservation after Planning
-preflight and before materialization, source-to-persistent ledger transfer,
-independent Thing-slot and plan-set generations, one normalized
-`ValidatedThing` and one complete registration, final reconciliation/
-cancellation seal, atomic publication, plan-set leases, name-free request
-construction, Core-sealed execution, drain, and monotonic reclaim. The retained
-owner carries TD's structured source footprint and ledger. Servient
-reclassifies only exact sealed-arena requested bytes after the destination
-check; it does not turn an aggregate capacity reservation into a contiguous
-allocation observation or discard allocation-count/temporary/conversion-peak
-facts. It must not interpret TD semantics, reconstruct `Thing`, parse snapshot
-storage, rebuild Planning lookup material, expose raw client authoring SPIs, or
-merge the physical Host/static containers.
+preflight and before materialization, independent Thing-slot and plan-set
+generations, build-scoped ownership of one normalized `ValidatedThing`, one
+complete registration owner, final independence/identity/resource/cancellation/
+publication-slot checks, exact Snapshot/source release, atomic publication,
+plan-set leases, name-free request construction, Core-sealed execution, drain,
+and monotonic reclaim. Servient preserves TD's structured footprint through
+build reconciliation but performs no source-to-persistent-document transfer. It
+does not turn an aggregate capacity reservation into a contiguous allocation
+observation or discard allocation-count/temporary/conversion-peak facts. It
+must not interpret TD semantics, reconstruct `Thing`, parse snapshot storage,
+rebuild Planning lookup material, expose raw client authoring SPIs, or merge the
+physical Host/static containers.
 
 Before either TD entry, the future admission coordinator reserves the
 applicable parent/global source, temporary, and live-peak allowance and caps the
 child `AdmissionLedger` from the same immutable profile. That outer owner stays
 paired with the normalization cursor: every invalid/limit/cancel/conversion or
 drop path releases it, while `Complete` reconciles it to the structured
-footprint and transfers the retained-source allowance with `ValidatedThing`.
-This authority migration freezes that later WP-400 obligation without changing
-this work package's status, paths, evidence, or admission.
+footprint and retains the exact source allowance only through complete Planning
+and every fallible final check. After all view borrows end, Servient proves the
+draft is TD-lifetime-free, verifies the separate complete registration and all
+runtime charges, and performs the final cancellation/publication-slot check.
+Success yields a private single-use permit that closes cancellation. Servient
+then destroys `ValidatedThing`, deallocates every arena and releases exact child
+source charges, releases the matching parent/global allowance only after those
+bytes are no longer live, and consumes the permit in an allocation-free,
+callback-free, non-yielding, non-fallible atomic install. This authority
+migration freezes that later WP-400 obligation without changing this work
+package's status, paths, evidence, or admission.
 
 Permitted product and cross-package fixture paths are exactly:
 
@@ -189,26 +197,35 @@ Those new fixture packages are completion evidence produced by this tranche;
 they are not created later by gate registration. Host retains shared ownership
 of one complete registration and transfers the plan-set lease with any call or
 cleanup owner. The static caller-owned root retains the typed registration,
-aggregate, progress, and request slots directly. Both forms must produce equal
+aggregate, lifecycle/resource records, progress, and request slots directly;
+neither Published form retains `ValidatedThing`, a TD view, Snapshot arenas, or
+Snapshot source/persistent-document charges. Both forms must produce equal
 plans, selections, name-free requests, failures, sealing outcomes, drain, and
 reclaim semantics without requiring equal public progress APIs.
 
-Every prepublication failure releases all uncommitted reservations and returns
-no handle or partial lookup. Normalization invalid/limit/cancel/conversion
+Every failure before private permit issuance releases all uncommitted
+reservations, the Snapshot, and its exact source allowances and returns no
+handle or partial lookup. After permit issuance no fallible operation,
+allocation, callback, yield, cancellation observation, or retry remains between
+Snapshot release and atomic install. Normalization invalid/limit/cancel/conversion
 terminals have already completed TD-owned rollback before this future tranche
 can receive them. Close rejects new leases/calls before draining accepted work;
-normalized source/registration/aggregate storage is reclaimed only after every
-call, lease, and cleanup owner is terminal. The runtime uses only the complete
-registration's sealed `start_consumer_property_read` path.
+registration/aggregate runtime storage is reclaimed only after every call,
+lease, and cleanup owner is terminal; normalized source has already been
+released before publication. The runtime uses only the complete registration's
+sealed `start_consumer_property_read` path.
 
 The future completion evidence key is
 `consumer-property-read-runtime`, at
 `docs/evidence/WP-400-consumer-property-read-runtime.toml`. It must name the
 exact Host/static fixture source and cover admission order, rollback at every
-unpublished phase, independent generation allocators, lookup without TD or
-registration scans, absence of request names, complete-registration no-bypass,
-normal/cancellation-late response sealing, cleanup/lease transfer, drain, and
-zero retained source/plan/artifact/registration bytes after reclamation. It
+unpublished phase, last-view termination, owned-draft use after
+`ValidatedThing` destruction, exact source release, zero Snapshot source and
+persistent-document charge in Published, the no-fallible-gap permit boundary,
+independent generation allocators, lookup without TD or registration scans,
+absence of request names, complete-registration no-bypass, normal/cancellation-
+late response sealing, cleanup/lease transfer, drain, and zero plan/artifact/
+registration/runtime-record bytes after reclamation. It
 does not register or pass the Consumer architecture gate, and it is not real
 Zenoh production evidence.
 

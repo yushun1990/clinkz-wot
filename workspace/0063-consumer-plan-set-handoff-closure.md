@@ -2,6 +2,12 @@
 
 Status: MIGRATED
 
+Lifecycle supersession: topic 0072 keeps this topic's complete-plan and
+registration handoff but supersedes retention of `ValidatedThing` and its
+source-to-persistent-document conversion in the Published Consumer record.
+The text below is preserved as the rationale and migration history that led to
+the earlier projection; current authority is the migrated 0072 projection.
+
 Kind: architecture decision and executable migration/admission-path correction
 
 Reassessment baseline: `a1029ae04fd24e1d38d58e0dc8378af192a8dd98`
