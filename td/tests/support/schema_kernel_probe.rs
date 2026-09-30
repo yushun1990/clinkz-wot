@@ -10,16 +10,16 @@ use alloc::{format, string::String, vec::Vec};
 use clinkz_wot_foundation::{WorkBudget, WorkClass};
 
 #[path = "../../../tools/architecture-fixtures/validated-thing-schema-kernel/src/kernel.rs"]
-mod schema_kernel;
+pub(super) mod schema_kernel;
 #[path = "../../../tools/architecture-fixtures/validated-thing-schema-kernel/src/typed_access.rs"]
-mod typed_access;
+pub(super) mod typed_access;
 use schema_kernel::{
     ChildSite, Field, InlineInvalid, InlineSink, NumericCursor, Rule, SchemaAccess, SchemaKind,
     projection_step::{self, ProjectionProgress},
 };
 use typed_access::TypedAccess;
 
-struct SnapshotAccess<'a>(&'a Snapshot);
+pub(super) struct SnapshotAccess<'a>(pub(super) &'a Snapshot);
 
 impl SnapshotAccess<'_> {
     fn context(&self, node: u32, field: &str) -> u32 {

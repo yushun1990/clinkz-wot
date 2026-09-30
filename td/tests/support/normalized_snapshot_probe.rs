@@ -36,6 +36,9 @@ mod semantic_kernel_probe;
 #[path = "schema_kernel_probe.rs"]
 mod schema_kernel_probe;
 
+#[path = "basic_kernel_probe.rs"]
+mod basic_kernel_probe;
+
 #[path = "uri_semantic_kernel_probe.rs"]
 mod uri_semantic_kernel_probe;
 use uri_semantic_kernel_probe::{

@@ -76,7 +76,7 @@ jobs:
           cargo test --locked --manifest-path tools/architecture-fixtures/validated-thing-rfc3339-resumable/Cargo.toml
           cargo check --locked --target thumbv7em-none-eabihf --manifest-path tools/architecture-fixtures/validated-thing-rfc3339-resumable/Cargo.toml
 
-      - name: Check shared DataSchema Basic source projection
+      - name: Check shared Thing and DataSchema Basic source projection
         run: |
           schema_fixture_manifest=tools/architecture-fixtures/validated-thing-schema-kernel/Cargo.toml
           cargo test --locked --manifest-path "$schema_fixture_manifest"
