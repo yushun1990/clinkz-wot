@@ -12,10 +12,12 @@ pub enum OwnerKind {
     Event,
 }
 
+// Synchronous public Basic has no admission resource ceiling. Internal indices
+// therefore use usize; a future bounded adapter checks its own u32 envelope.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct Owner {
     pub kind: OwnerKind,
-    pub ordinal: u32,
+    pub ordinal: usize,
 }
 
 pub const ROOT: Owner = Owner {
@@ -79,9 +81,9 @@ pub struct Site {
     pub owner: Owner,
     pub field: Field,
     /// Schema-map or original Form index, depending on the field.
-    pub index: u32,
+    pub index: usize,
     /// Reference/operation index within its ordered sequence.
-    pub member: u32,
+    pub member: usize,
 }
 
 impl Site {
@@ -168,10 +170,10 @@ pub fn first_undefined<'a>(
     count: usize,
     name_at: impl Fn(usize) -> &'a str,
     exists: impl Fn(&str) -> bool,
-) -> Option<(u32, &'a str)> {
+) -> Option<(usize, &'a str)> {
     (0..count).find_map(|index| {
         let name = name_at(index);
-        (!exists(name)).then(|| (index.try_into().unwrap(), name))
+        (!exists(name)).then_some((index, name))
     })
 }
 
@@ -328,7 +330,7 @@ pub fn validate_security_scheme<'a, A: BasicAccess<'a>, S: DiagnosticSink<'a, A>
                 for index in 0..count {
                     if access.name_at(names, index).is_empty() {
                         let mut site = Site::new(owner, field);
-                        site.member = index.try_into().unwrap();
+                        site.member = index;
                         return Err(sink.reject_basic(access, site, Rule::ComboEmpty));
                     }
                 }
@@ -373,7 +375,7 @@ fn schema_map<'a, A: BasicAccess<'a>, S: DiagnosticSink<'a, A>>(
     if let Some(map) = map {
         for index in 0..access.schema_count(map) {
             let mut site = Site::new(owner, field);
-            site.index = index.try_into().unwrap();
+            site.index = index;
             schema_kernel::validate(access.schemas(), access.schema_at(map, index), sink).map_err(
                 |error| sink.schema_site(access, site, Some(access.schema_name(map, index)), error),
             )?;
@@ -424,8 +426,8 @@ fn operations<'a, A: BasicAccess<'a>, S: DiagnosticSink<'a, A>>(
                             Site {
                                 owner,
                                 field: Field::FormOperation,
-                                index: index.try_into().unwrap(),
-                                member: member.try_into().unwrap(),
+                                index,
+                                member,
                             },
                             Rule::Operation(op),
                         ));
@@ -487,7 +489,7 @@ fn form_security<'a, A: BasicAccess<'a>, S: DiagnosticSink<'a, A>>(
         for index in 0..access.form_count(forms) {
             if let Some(names) = access.form_security(access.form_at(forms, index)) {
                 let mut site = Site::new(owner, Field::FormSecurity);
-                site.index = index.try_into().unwrap();
+                site.index = index;
                 references(access, names, site, sink)?;
             }
         }
@@ -509,7 +511,7 @@ pub fn validate<'a, A: BasicAccess<'a>, S: DiagnosticSink<'a, A>>(
     for index in 0..access.definition_count() {
         let owner = Owner {
             kind: OwnerKind::SecurityDefinition,
-            ordinal: index.try_into().unwrap(),
+            ordinal: index,
         };
         let definition = access.definition_at(index);
         validate_security_scheme(access, definition, owner, sink)?;
@@ -529,7 +531,7 @@ pub fn validate<'a, A: BasicAccess<'a>, S: DiagnosticSink<'a, A>>(
         for index in 0..access.affordance_count(kind) {
             let owner = Owner {
                 kind,
-                ordinal: index.try_into().unwrap(),
+                ordinal: index,
             };
             let affordance = access.affordance_at(kind, index);
             validate_affordance(access, affordance, owner, sink)?;

@@ -190,7 +190,7 @@ impl<'a> BasicAccess<'a> for SnapshotAccess<'a> {
         }
     }
     fn affordance_name(&self, owner: Owner) -> &'a str {
-        self.schema_name(self.map(owner.kind), owner.ordinal as usize)
+        self.schema_name(self.map(owner.kind), owner.ordinal)
     }
     fn uri_variables(&self, affordance: StoredAffordance) -> Option<u32> {
         self.optional(self.snapshot.child(

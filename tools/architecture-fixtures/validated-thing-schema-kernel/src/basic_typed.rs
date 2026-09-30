@@ -211,7 +211,7 @@ impl<'a> BasicAccess<'a> for TypedBasicAccess<'a> {
     }
     fn affordance_name(&self, owner: Owner) -> &'a str {
         let thing = self.0.unwrap();
-        let index = owner.ordinal as usize;
+        let index = owner.ordinal;
         match owner.kind {
             OwnerKind::Property => thing
                 .properties

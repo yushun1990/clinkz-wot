@@ -20,7 +20,7 @@ fn owner_name<'a, A: BasicAccess<'a>>(access: &A, owner: Owner) -> String {
         OwnerKind::Thing => "Thing.forms".into(),
         OwnerKind::SecurityDefinition => format!(
             "securityDefinitions.{}",
-            access.definition_name(owner.ordinal as usize)
+            access.definition_name(owner.ordinal)
         ),
         kind => format!("{} '{}'", kind_name(kind), access.affordance_name(owner)),
     }

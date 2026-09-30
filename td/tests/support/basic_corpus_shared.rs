@@ -12,10 +12,10 @@ use alloc::{collections::BTreeMap, format, string::String, vec, vec::Vec};
 
 pub struct First {
     pub owner: &'static str,
-    pub ordinal: u32,
+    pub ordinal: usize,
     pub field: &'static str,
-    pub index: u32,
-    pub member: u32,
+    pub index: usize,
+    pub member: usize,
 }
 
 pub struct Case {

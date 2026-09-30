@@ -125,7 +125,10 @@ forms and compare public errors directly with the unchanged validator.
 The numeric amendment participates in whole-document precedence: title and
 root security still precede a schema Number's failed projection. The inline
 coordinate is a prototype locator, not the future document-node ordinal or
-public ValidatedThingInvalid API. Neither sink chooses checks or traversal.
+public ValidatedThingInvalid API. Internal coordinates use machine-width
+indices so the public synchronous Basic candidate acquires no admission-only
+u32 ceiling. A future bounded adapter must check its own normalized-coordinate
+envelope. Neither sink chooses checks or traversal.
 
 ## Number projection and bounded continuation
 
