@@ -111,20 +111,28 @@ Each interaction, call, or subscription pins the consumed plan generation. A
 handle drop prevents new selection, cancels or transfers outstanding operations,
 and releases the plan set only after every lease and cleanup owner is terminal.
 
-The first v5.1 Consumer Property Read runtime contains one normalized
+The first v5.1 Consumer Property Read build temporarily contains one normalized
 `ValidatedThing`, one sealed all-readable aggregate, and one complete Consumer-
-capable Property Read registration. The validated owner contains only its
-private exact-length node/edge/byte snapshot, structured footprint, counts, and
-admission ledger; it retains no caller `Thing` or input borrow. Planning
-preflight borrows its allocation-free TD semantic view and precedes Servient's
-conservative persistent-capacity reservation; that reservation precedes
-Planning materialization and the all-bounds-before-start barrier. Servient
-reclassifies exactly the snapshot's requested allocation bytes only after the
-destination check. Aggregate reservation, allocation count, largest actual
-request, temporary peak, and conversion peak retain their distinct meanings.
-Servient alone owns the final cancellation/seal check and the
-`BuildingPlans -> Published` linearization. Failure before it releases all
-unpublished reservations and returns no handle or partial lookup.
+capable Property Read registration. Planning preflight borrows the allocation-
+free TD semantic view and precedes Servient's conservative persistent-capacity
+reservation; that reservation precedes Planning materialization and the all-
+bounds-before-start barrier. The last view borrow ends after the aggregate is
+complete. Servient proves the aggregate is TD-lifetime-free and performs final
+identity, resource, cancellation, and publication-slot checks before issuing a
+private publication permit.
+
+Servient then destroys `ValidatedThing`, deallocates its arenas and releases the
+child source charges, and only afterward releases the exact parent/global source
+allowance; it does not reclassify Snapshot bytes to persistent-document
+accounting. The permit immediately performs the allocation-free, callback-free,
+non-yielding `BuildingPlans -> Published` install. The Published runtime contains
+only the execution plans and lookup, one complete registration, and runtime
+generation/lease/drain/cleanup/resource records. Aggregate reservation,
+allocation count, largest actual request, temporary peak, and conversion peak
+retain their distinct build-time meanings, including simultaneous Snapshot and
+plan residency. Failure before permit issuance releases all unpublished
+reservations and returns no handle or partial lookup; no fallible path exists
+after Snapshot release.
 
 Host and application-static forms share these semantics but not a physical
 container or progress API. Host startup and every live consumed record retain
@@ -137,7 +145,7 @@ mutable registration pin, or erased Host container is required.
 
 Both forms resolve one eager artifact and call only the complete registration's
 sealed `start_consumer_property_read` path. The runtime keeps Thing/property
-names in API, normalized retained source, plan, or diagnostics, never in
+names in API, plan, or diagnostics, never in
 `OutboundRequest`. Close rejects new leases/calls, drains existing calls and
 cleanup owners, and starts monotonic reclamation only after terminal ownership
 is proved.

@@ -257,7 +257,8 @@ sequential eager compilation, the sealed TD-free
 `ConsumerPropertyReadDraft`, deterministic property/Form lookup, exact
 `PlanFootprint`, and monotonic `PlanningItems` work/reclamation projections. It
 does not own persistent-capacity reservation, publication, the retained
-registration owner, call execution, or plan-set lifecycle state.
+registration owner, `ValidatedThing` lifetime after handoff, call execution, or
+plan-set lifecycle state.
 
 Workspace topic 0065 changes this future aggregate's input authority without
 advancing or admitting it. It must borrow TD's storage-independent
@@ -269,6 +270,14 @@ storage, or copy Basic/default/URI/security rules. The already completed exact-
 coordinate `PropertyReadPlanCompiler` behavior and evidence remain regression
 authority; adapting that leaf to the view belongs to this future aggregate
 tranche and changes no current WP-200 status.
+
+Every `ValidatedThingView` and nested Property/Form/security view borrow ends
+after the complete draft is sealed. The draft's public type carries no TD-
+derived lifetime or raw arena range and must remain usable after
+`ValidatedThing` is dropped. The complete registration owner remains separate;
+the draft carries only checked registration identity/generation and owned
+artifacts. This strengthens the future aggregate boundary without changing the
+completed exact-coordinate tranche or its evidence.
 
 Permitted production paths are exactly:
 
@@ -306,7 +315,9 @@ cover deterministic multi-property/multi-Form ordering, empty-vs-missing
 lookup, all-coordinate NoSec admission, every materialization/bounds negative
 with zero compiler starts and complete rollback, non-resettable compiler and
 Planning work, exact-coordinate regression, draft independence from TD and
-compiler inputs, Host/static parity, and the three Planning feature cells. It
+compiler inputs, an external drop-order proof that ends every view borrow and
+uses the draft after `ValidatedThing` destruction, Host/static parity, and the
+three Planning feature cells. It
 claims no WP-400 publication/execution or Consumer architecture gate.
 
 ## Requirements

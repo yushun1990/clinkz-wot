@@ -74,12 +74,13 @@ does not receive authority to reinterpret W3C defaults, choose a different
 operation, or access credentials.
 
 For the first Consumer Property Read aggregate, TD owns both legal entries into
-one move-only `ValidatedThing`: a borrowed typed-`Thing` compatibility cursor
-with an additional-peak guarantee and a strict project-owned JSON
-builder/decoder with an absolute engine-owned input-through-retention
-guarantee. TD owns the single Basic/default/URI/security semantic kernel, typed
-fieldwise equivalence, the private normalized node/edge/byte snapshot, its
-structured allocation footprint, and terminal normalization rollback.
+one move-only, build-scoped `ValidatedThing`: a borrowed typed-`Thing`
+compatibility cursor with an additional-peak guarantee and a strict project-
+owned JSON builder/decoder with an absolute engine-owned input-through-build-
+Snapshot guarantee. TD owns the single Basic/default/URI/security semantic
+kernel, typed fieldwise equivalence, the private normalized node/edge/byte
+snapshot, its structured allocation footprint, and terminal normalization
+rollback.
 
 The future validated surface requires opt-in TD `validated-thing`; its
 dependency boundary and supported graphs belong to the WP-100 validated-Thing
@@ -87,15 +88,17 @@ admission record. Ordinary TD APIs and amended synchronous Basic remain
 available without it. Future Planning/Servient users of the surface must
 request the capability explicitly in their own admitted manifest changes.
 
-Planning borrows only `ValidatedThingView`. It receives deterministic Property
-iteration/lookup, Property ordinal, original Form indices, raw and resolved URI,
-content metadata, effective operations/security, and security-definition scheme
-lookup. It does not receive `&Thing`, parse a snapshot, reconstruct a TD, or
-duplicate Basic/default/security rules. Planning owns deterministic preflight,
-complete plan/candidate materialization, evaluation of every compiler bound,
-the all-bounds-before-start barrier, sequential compilation, lookup sealing,
-and the TD-free aggregate draft. Planning never reserves Servient storage or
-publishes a runtime record.
+Planning borrows only `ValidatedThingView` while building. It receives
+deterministic Property iteration/lookup, Property ordinal, original Form
+indices, raw and resolved URI, content metadata, effective operations/security,
+and security-definition scheme lookup. It does not receive `&Thing`, parse a
+snapshot, reconstruct a TD, or duplicate Basic/default/security rules. Planning
+owns deterministic preflight, complete plan/candidate materialization,
+evaluation of every compiler bound, the all-bounds-before-start barrier,
+sequential compilation, lookup sealing, and the TD-free aggregate draft. That
+owned draft has no TD-derived lifetime, raw Snapshot range, or storage offset
+and remains usable after `ValidatedThing` is destroyed. Planning never reserves
+Servient storage or publishes a runtime record.
 
 ## Servient boundaries
 
@@ -114,14 +117,19 @@ It schedules binding SPI progress but does not implement protocol I/O.
 
 In that same first Consumer slice, Servient owns the conservative persistent-
 capacity reservation between Planning preflight and materialization, the
-source-to-persistent-document ledger reclassification of exact sealed-arena
-requested bytes, the independent Thing-slot and plan-set generation
-allocators, retention of the one normalized `ValidatedThing` and complete
-registration, the final cancellation/seal check, atomic publication, plan-set
-leases, drain, and reclamation. It preserves the structured footprint and does
-not reinterpret aggregate capacity as a contiguous allocation. It does not
-rescan or reconstruct the TD, repeat semantic/default/security work, rebuild
-the lookup, or copy target names into the binding request.
+independent Thing-slot and plan-set generation allocators, one complete
+registration owner, final independence/identity/resource/cancellation checks,
+exact Snapshot/source-account release, atomic publication, plan-set leases,
+drain, and reclamation. It preserves the structured footprint through build
+reconciliation and does not reinterpret aggregate capacity as a contiguous
+allocation. After the last view borrow, every fallible check completes before a
+private publication permit closes cancellation; Servient then drops the
+`ValidatedThing`, deallocates every arena and releases its child source charges,
+then releases the matching parent/global allowance before the permit performs
+the non-fallible atomic install. The Published record owns only execution plans,
+the complete registration, and runtime lifecycle/resource records. Servient
+does not rescan or reconstruct the TD, repeat semantic/default/security work,
+rebuild the lookup, or copy target names into the binding request.
 
 ## Binding boundaries
 

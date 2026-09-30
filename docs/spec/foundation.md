@@ -186,13 +186,13 @@ caller-provided capacity is charged. Verification records which representation
 is measured. Rollback metadata MUST NOT duplicate the resources it protects.
 
 For the first v5.1 Consumer Property Read aggregate, TD constructs a normalized
-retained snapshot with three possible exact-length allocations: node, edge,
+build Snapshot with three possible exact-length allocations: node, edge,
 and byte arenas. Its structured footprint keeps five values distinct:
 
 - total requested bytes of the live sealed arenas;
 - count of their non-empty allocations;
-- largest actual single allocation request across build, grow, seal, and final
-  retention;
+- largest actual single allocation request across build, grow, seal, and the
+  completed Snapshot;
 - peak simultaneously live temporary requested bytes; and
 - peak simultaneously live project-owned bytes added by conversion over the
   selected entry baseline, including old/new grow or seal overlap.
@@ -214,9 +214,10 @@ account; it records local live, peak, and largest-request facts but is not by
 itself the concurrent global aggregator. The admission coordinator owns the
 corresponding parent/global allowances under existing `ResourceAccount` and
 Servient resource-account authority. It caps the child operation before TD
-entry, retains that outer reservation while the cursor is live, reconciles it
-from the exact footprint on `Complete`, and releases it on every other terminal
-or cursor abandonment. No callback or allocation occurs between outer
+entry, retains that outer reservation while the cursor and completed build
+Snapshot are live, reconciles it from the exact footprint on `Complete`, and
+releases it on every failure, cursor abandonment, or successful post-plan
+Snapshot destruction. No callback or allocation occurs between outer
 reservation and child-ledger ownership transfer. Implementing that coordinator
 belongs to the later Servient tranche; this migration changes its contract but
 does not advance it.
@@ -226,10 +227,10 @@ Foundation can guarantee only the additional project-owned conversion peak
 over that entry baseline; it cannot retroactively charge caller allocation
 history. The strict project-owned JSON builder/decoder begins accounting at its
 first controlled allocation and provides an absolute engine-owned input-
-processing-through-retention bound. Its borrowed input buffer remains caller
-capacity but its length and processing work are bounded. The two entries use
-the same source/temporary accounts and snapshot representation; this guarantee
-difference is not hidden by one ambiguous peak scalar.
+processing-through-build-Snapshot bound. Its borrowed input buffer remains
+caller capacity but its length and processing work are bounded. The two entries
+use the same source/temporary accounts and snapshot representation; this
+guarantee difference is not hidden by one ambiguous peak scalar.
 
 Inline `ValidatedThing` and Servient record capacity is not an allocation
 request and remains in its owning slot/runtime capacity. It is not folded into
@@ -237,14 +238,22 @@ largest-contiguous. Allocator-private headers, bins, and rounding require a
 separate allocator-specific surcharge if a profile chooses to govern them.
 
 After TD-owned Basic validation, normalization, semantic-equivalence checking,
-and exact-length seal, the completed owner keeps one `AdmissionLedger`. The
-existing checked reclassification operation moves exactly the snapshot's total
-requested bytes from source to persistent-document accounting after checking
-destination capacity. Success changes no physical allocation, allocation
-count, total live bytes, conversion peak, or largest actual request. Failure
-leaves the source charge and normalized owner intact for rollback. It is an
-account-classification transfer, not a second reservation, clone, or arena
-allocation.
+and exact-length seal, the completed build owner keeps one `AdmissionLedger`.
+The sealed arenas remain charged to source while Planning borrows the view and
+while the complete plan/artifact material is simultaneously live. That overlap
+contributes to the admission and global live peaks. After every fallible final
+check has succeeded and the private publication permit has closed cancellation,
+destroying the build owner deallocates each arena and releases each exact child
+source charge; only then does the coordinator release the reconciled parent/
+global source allowance. No byte is reclassified to persistent-document
+accounting for this Snapshot. The Published record carries only its
+independently reserved compiled-runtime, registration, lifecycle, diagnostic,
+and cleanup charges.
+
+`AdmissionLedger::reclassify_source_to_persistent_document` has no independent
+admitted caller after this correction and is a target old-API removal. Generic
+source, temporary, persistent-document, and persistent-runtime reserve/release
+accounts remain unchanged for other lifecycles.
 
 Normalization reserves in this order: check structural and lifetime-work
 bounds; charge each work/byte unit before processing; check final or current
