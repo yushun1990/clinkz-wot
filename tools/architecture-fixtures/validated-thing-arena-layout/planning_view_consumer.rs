@@ -7,7 +7,7 @@
 use super::{Operation, ValidatedFormHref, ValidatedThingView};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub(super) struct PlanningSelection<'a> {
+pub struct PlanningSelection<'a> {
     pub thing_id: &'a str,
     pub property_count: usize,
     pub property_name: &'a str,
@@ -24,7 +24,7 @@ pub(super) struct PlanningSelection<'a> {
     pub security_scheme: &'a str,
 }
 
-pub(super) fn query_non_first_property_form(view: ValidatedThingView<'_>) -> PlanningSelection<'_> {
+pub fn query_non_first_property_form(view: ValidatedThingView<'_>) -> PlanningSelection<'_> {
     let properties = view.properties();
     let property_count = properties.len();
     assert_eq!(properties.clone().count(), property_count);

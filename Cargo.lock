@@ -443,6 +443,7 @@ dependencies = [
  "serde_json",
  "serde_with",
  "time",
+ "validated-thing-planning-handoff-probe",
 ]
 
 [[package]]
@@ -3171,6 +3172,17 @@ dependencies = [
  "getrandom 0.4.2",
  "js-sys",
  "wasm-bindgen",
+]
+
+[[package]]
+name = "validated-thing-planning-handoff-probe"
+version = "0.0.0"
+dependencies = [
+ "clinkz-wot-core",
+ "clinkz-wot-foundation",
+ "clinkz-wot-planning",
+ "clinkz-wot-property-read-binding-fixture",
+ "clinkz-wot-td",
 ]
 
 [[package]]

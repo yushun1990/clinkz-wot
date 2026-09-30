@@ -1489,6 +1489,9 @@ impl<'a> ValidatedSecuritySchemeView<'a> {
 #[path = "../../../tools/architecture-fixtures/validated-thing-arena-layout/planning_view_consumer.rs"]
 mod planning_view_consumer;
 
+#[path = "planning_handoff_probe.rs"]
+mod planning_handoff_probe;
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 struct PlanningProbe {
     properties: u32,
@@ -1576,45 +1579,109 @@ fn semantic_fingerprint<'a, A: SemanticAccess<'a> + ?Sized>(access: &'a A) -> u6
 
 thread_local! {
     static COUNT_ALLOCATIONS: Cell<bool> = const { Cell::new(false) };
-    static ALLOCATION_COUNT: Cell<usize> = const { Cell::new(0) };
+    static ALLOCATION_TRACE: Cell<AllocationTrace> = const { Cell::new(AllocationTrace::EMPTY) };
+    static WATCHED_ALLOCATIONS: Cell<[usize; 3]> = const { Cell::new([0; 3]) };
+}
+
+#[derive(Clone, Copy, Debug)]
+struct AllocationTrace {
+    allocation_calls: usize,
+    deallocation_calls: usize,
+    deallocated_bytes: usize,
+    live_change: i64,
+    peak_additional_bytes: usize,
+    watched_deallocations: [usize; 3],
+}
+
+impl AllocationTrace {
+    const EMPTY: Self = Self {
+        allocation_calls: 0,
+        deallocation_calls: 0,
+        deallocated_bytes: 0,
+        live_change: 0,
+        peak_additional_bytes: 0,
+        watched_deallocations: [0; 3],
+    };
+}
+
+fn record_allocation(bytes: usize, previous: Option<usize>, succeeded: bool) {
+    COUNT_ALLOCATIONS.with(|enabled| {
+        if enabled.get() {
+            ALLOCATION_TRACE.with(|trace| {
+                let mut value = trace.get();
+                value.allocation_calls += 1;
+                if succeeded {
+                    value.live_change += bytes as i64 - previous.unwrap_or(0) as i64;
+                }
+                value.peak_additional_bytes = value
+                    .peak_additional_bytes
+                    .max(value.live_change.max(0) as usize);
+                trace.set(value);
+            });
+        }
+    });
+}
+
+fn record_deallocation(bytes: usize) {
+    COUNT_ALLOCATIONS.with(|enabled| {
+        if enabled.get() {
+            ALLOCATION_TRACE.with(|trace| {
+                let mut value = trace.get();
+                value.deallocation_calls += 1;
+                value.deallocated_bytes += bytes;
+                value.live_change -= bytes as i64;
+                trace.set(value);
+            });
+        }
+    });
 }
 
 struct ThreadCountingAllocator;
 
 unsafe impl GlobalAlloc for ThreadCountingAllocator {
     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
-        COUNT_ALLOCATIONS.with(|enabled| {
-            if enabled.get() {
-                ALLOCATION_COUNT.with(|count| count.set(count.get() + 1));
-            }
-        });
         // SAFETY: forwarding the caller-provided layout to the system allocator.
-        unsafe { System.alloc(layout) }
+        let pointer = unsafe { System.alloc(layout) };
+        record_allocation(layout.size(), None, !pointer.is_null());
+        pointer
     }
 
     unsafe fn alloc_zeroed(&self, layout: Layout) -> *mut u8 {
-        COUNT_ALLOCATIONS.with(|enabled| {
-            if enabled.get() {
-                ALLOCATION_COUNT.with(|count| count.set(count.get() + 1));
-            }
-        });
         // SAFETY: forwarding the caller-provided layout to the system allocator.
-        unsafe { System.alloc_zeroed(layout) }
+        let pointer = unsafe { System.alloc_zeroed(layout) };
+        record_allocation(layout.size(), None, !pointer.is_null());
+        pointer
     }
 
     unsafe fn dealloc(&self, pointer: *mut u8, layout: Layout) {
+        record_deallocation(layout.size());
+        COUNT_ALLOCATIONS.with(|enabled| {
+            if enabled.get() {
+                WATCHED_ALLOCATIONS.with(|sites| {
+                    ALLOCATION_TRACE.with(|trace| {
+                        let mut value = trace.get();
+                        for (index, site) in sites.get().into_iter().enumerate() {
+                            if site != 0 && site == pointer as usize {
+                                value.watched_deallocations[index] += 1;
+                            }
+                        }
+                        trace.set(value);
+                    });
+                });
+            }
+        });
         // SAFETY: `pointer` and `layout` came from the forwarded system allocation.
         unsafe { System.dealloc(pointer, layout) }
     }
 
     unsafe fn realloc(&self, pointer: *mut u8, layout: Layout, new_size: usize) -> *mut u8 {
-        COUNT_ALLOCATIONS.with(|enabled| {
-            if enabled.get() {
-                ALLOCATION_COUNT.with(|count| count.set(count.get() + 1));
-            }
-        });
         // SAFETY: forwarding the original allocation and requested size.
-        unsafe { System.realloc(pointer, layout, new_size) }
+        let replacement = unsafe { System.realloc(pointer, layout, new_size) };
+        // A failed realloc leaves the old request live. A successful realloc
+        // changes its requested size at this API boundary; allocator-internal
+        // storage/overlap is outside this portable observation.
+        record_allocation(new_size, Some(layout.size()), !replacement.is_null());
+        replacement
     }
 }
 
@@ -1630,14 +1697,27 @@ impl Drop for AllocationCountGuard {
 }
 
 pub(super) fn count_allocations<T>(operation: impl FnOnce() -> T) -> (T, usize) {
-    ALLOCATION_COUNT.with(|count| count.set(0));
+    let (output, trace) = trace_allocations(operation);
+    (output, trace.allocation_calls)
+}
+
+fn trace_allocations<T>(operation: impl FnOnce() -> T) -> (T, AllocationTrace) {
+    trace_allocations_watching([0; 3], operation)
+}
+
+fn trace_allocations_watching<T>(
+    sites: [usize; 3],
+    operation: impl FnOnce() -> T,
+) -> (T, AllocationTrace) {
+    ALLOCATION_TRACE.with(|trace| trace.set(AllocationTrace::EMPTY));
+    WATCHED_ALLOCATIONS.with(|watched| watched.set(sites));
     COUNT_ALLOCATIONS
         .with(|enabled| assert!(!enabled.replace(true), "allocation counting must not nest"));
     let guard = AllocationCountGuard;
     let output = operation();
     drop(guard);
-    let count = ALLOCATION_COUNT.with(Cell::get);
-    (output, count)
+    let trace = ALLOCATION_TRACE.with(Cell::get);
+    (output, trace)
 }
 
 #[test]

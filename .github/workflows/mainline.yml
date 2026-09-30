@@ -60,10 +60,11 @@ jobs:
           cargo test --locked --manifest-path tools/architecture-fixtures/bounded-atomic-number/Cargo.toml
           cargo build --release --locked --target thumbv7em-none-eabihf --manifest-path tools/architecture-fixtures/bounded-atomic-number/Cargo.toml
 
-      - name: Check ValidatedThing arena layout prototype
+      - name: Check ValidatedThing arena and Planning handoff prototypes
         run: |
           cargo test --locked --manifest-path tools/architecture-fixtures/validated-thing-arena-layout/Cargo.toml
           cargo check --locked --target thumbv7em-none-eabihf --manifest-path tools/architecture-fixtures/validated-thing-arena-layout/Cargo.toml
+          cargo check --locked --target thumbv7em-none-eabihf -p validated-thing-planning-handoff-probe
 
       - name: Check strict ValidatedThing Number lexeme boundary
         run: |

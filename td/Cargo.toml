@@ -45,3 +45,4 @@ td2-preview = []
 
 [dev-dependencies]
 serde_json = { workspace = true, features = ["arbitrary_precision"] }
+validated-thing-planning-handoff-probe = { path = "../tools/architecture-fixtures/validated-thing-planning-handoff" }
