@@ -1,29 +1,31 @@
-# Shared DataSchema Basic convergence prototype
+# Shared Thing Basic convergence prototype
 
 Non-production evidence for
 [`WP-100-CONSUMER-VALIDATED-THING`](../../../docs/work-packages/WP-100-consumer-validated-thing-admission.md#evidence-required-before-separate-readmission),
 primarily items 3 and 6. The tranche remains `planned` / `candidate`.
 
-The existing typed corpus and three-arena Snapshot already retain every schema
-variant, nested schema, typed scalar, and extension Number. Their storage
-readback does not establish that those two representations accept the same
-schemas. The [default/security probe](../../../td/tests/support/semantic_kernel_probe.rs)
-and URI probe answer different semantic questions; the
-[post-drop Planning witness](../validated-thing-planning-handoff/README.md)
-answers an ownership question. None supplies DataSchema Basic validation.
+The full Basic semantic composition is now exercised by one storage-neutral
+rule source over the existing typed Thing and three-arena Snapshot. It combines
+the DataSchema and numeric predicate proof from #114 with root, affordance,
+security-scheme/reference checks and the default/security seam from #110.
+No field-storage slice, production ValidatedThing, or admission builder is added.
 
-This fixture connects the existing representations to one rule source and
-connects its numeric predicates to the existing atomic precharge mechanism.
-Another field-storage slice would not falsify that missing connection. Full
-Thing Basic, direct JSON construction, and whole-admission resource/progress
-proof remain separate obligations.
+The uncertainty addressed here is whether a future admission cursor must invent
+another Basic rule set or error precedence while combining those local proofs.
+The candidate uses shared component predicates and shared whole-Thing order;
+its adapters contain only borrowed representation facts. Strict JSON
+construction, charged nonrecursive traversal, and whole-admission resource and
+terminal ownership remain separate obligations. The existing
+[URI query proof](../validated-thing-arena-layout/README.md#shared-uri-and-borrowed-planning-view-slice)
+and [post-drop Planning witness](../validated-thing-planning-handoff/README.md)
+remain reusable; Basic introduces no URI-resolution acceptance predicate.
 
 ## Reproduce
 
 From the repository root:
 
 ```sh
-cargo test --locked -p clinkz-wot-td --lib schema_kernel
+cargo test --locked -p clinkz-wot-td --lib normalized_snapshot_probe
 cargo test --locked --manifest-path tools/architecture-fixtures/validated-thing-schema-kernel/Cargo.toml
 cargo test --locked --manifest-path tools/architecture-fixtures/validated-thing-schema-kernel/Cargo.toml --features validated-thing
 cargo check --locked --target thumbv7em-none-eabihf --manifest-path tools/architecture-fixtures/validated-thing-schema-kernel/Cargo.toml --no-default-features --features validated-thing
@@ -61,22 +63,72 @@ sink control over acceptance or first-error order. The inline result contains
 only a rule and deterministic schema-local traversal ordinal. It is not yet
 the full document's frozen `ValidatedThingInvalid` coordinate.
 
-`build.rs` copies the current TD source into Cargo's build directory. It
-replaces only the final private DataSchema validation region with an adapter
-to this kernel, leaving the real public Thing/component validators, builders,
-deserializers, field layout, and remaining semantics in that candidate. The
-unchanged production TD crate is compiled beside it as the independent oracle.
-No generated source is committed, and the production crate never uses it.
-The candidate is a normal library plus the explicit public integration test;
-upstream TD unit-test harnesses are run in the repository's real crate instead.
+`src/basic_kernel.rs` composes that same schema visitor with every existing
+Thing Basic check. Its order is:
 
-The public-source tests compare unaffected acceptance and exact public error
-text, exercise the existing rich/nested/serializer-failure corpus in graphs
-where its typed inputs are constructible (the nested corpus needs AP), and check
-the five-predicate delta at root schemaDefinitions/uriVariables, Property
-schemas and URI variables, nested oneOf/items/object children, Action
-input/output/URI variables, and every Event schema/URI-variable location.
-Minimal still bypasses Basic. No production public behavior is changed.
+1. Required title, nonempty root security, and ordered root security references.
+2. Each security definition in key order: local scheme constraints, then its
+   combo oneOf/allOf references. The complete local shape is checked before
+   any reference, while an earlier definition's references precede a later
+   definition's shape.
+3. Root schemaDefinitions, then root uriVariables, each in key order.
+4. Properties in key order: Property schema, interaction URI variables, all
+   explicit operations, then all Form security references. Actions visit URI
+   variables, input, output, operations, then Form security; Events visit URI
+   variables, subscription, data, dataResponse, cancellation, operations, then
+   Form security. Each whole affordance precedes the next affordance.
+5. All Thing Form security references, then all Thing Form operations.
+
+The API-key/OAuth/combo predicates dispatch from the mutable scheme string.
+Typed API-key name, typed OAuth flow/endpoints, and typed combo members retain
+precedence over similarly named extension fields. Other variants use the
+existing string/filtering fallback. Combo duplicates and self-references remain
+accepted; no graph-cycle or security-policy requirement is added. Missing and
+explicit-empty operations remain accepted; operations are checked against the
+form's owning context, without validating inferred defaults or adding a
+readOnly/observable eligibility rule. Basic still does not require an ID,
+standard WoT context, interaction presence, or resolvable additional-response
+schema references. Typed URI parsing remains the URI shape boundary.
+
+`src/basic_typed.rs` and TD's test-only `basic_kernel_probe.rs` supply the two
+adapters. The latter reuses #114's Snapshot schema adapter and #110's borrowed
+security-name/definition/operation access. The existing query witness and the
+public-source candidate now also call the same Property-default, explicit-empty
+security inheritance, required-root-security, combo-dispatch, and undefined-name
+helpers; the old focused reference witness is not a full Basic validator.
+
+`build.rs` copies the current TD source into Cargo's build directory. It projects
+the private DataSchema, affordance, security-scheme and default/security seams
+onto these rules, and delegates the public Thing Basic entry to the composition.
+Unreachable extracted component helpers are removed from the candidate.
+Profile/Full retain their existing enclosing checks; Minimal still bypasses
+validation. Real fields, builders, serde decoding, and URI behavior are retained.
+The unchanged production TD crate compiles alongside it as the independent
+oracle; no generated source is committed or consumed by production TD.
+
+`tests/thing_basic.rs` compiles the same fixed mutation corpus against both
+independent TD Rust models, without converting either through serialization.
+More than 170 positive/negative cases pin acceptance, public error taxonomy,
+complete payloads and exact Display text at every validation level, including
+standalone component APIs and public default/security queries. A 24-stage
+multi-fault suffix corpus removes one earlier fault at a time, pinning every
+cross-phase first error and original Form/reference/operation indices. The
+existing #114 nested/schema/numeric corpus is retained, not duplicated.
+Existing rich typed/nested/serializer-failure Things now also pass whole Basic
+through both storage adapters.
+
+`src/basic_diagnostics.rs` formats the established public error, including the
+existing Thing.forms.forms[index].security context. The fixed inline sink holds
+only a Basic/schema rule, owner/field/map-or-Form/member coordinates, and an
+optional schema-local ordinal. TD tests compare both sinks over both storage
+forms and compare public errors directly with the unchanged validator.
+The numeric amendment participates in whole-document precedence: title and
+root security still precede a schema Number's failed projection. The inline
+coordinate is a prototype locator, not the future document-node ordinal or
+public ValidatedThingInvalid API. Internal coordinates use machine-width
+indices so the public synchronous Basic candidate acquires no admission-only
+u32 ceiling. A future bounded adapter must check its own normalized-coordinate
+envelope. Neither sink chooses checks or traversal.
 
 ## Number projection and bounded continuation
 
@@ -126,18 +178,20 @@ decode and its typed-field spelling agreement remain open.
 
 ## Resource and progress boundary
 
-The semantic and projection intervals observe zero Host heap allocations.
+The inline semantic and projection intervals observe zero Host heap allocations.
 The Snapshot retains the same three arenas, and the new adapters/sinks add no
 temporary or retained allocation category. Host tests bound NumericCursor at
-128 bytes and its inline diagnostic at 16 bytes, with neither requiring drop.
+128 bytes and its schema-only diagnostic at 16 bytes. The complete Basic
+inline diagnostic is at most 64 Host bytes and requires no drop.
 These are local state bounds, not builder/Servient inline-owner capacity or
 target stack measurements. The scalar Number continuation needs no arena of
 its own; future nested traversal must use the already authorized frame arena.
 
-The complete schema visitor is intentionally synchronous and recursive.
-Schema-node, map/key lookup, unsigned extension projection, byte comparison,
-and nested traversal charging,
-nonrecursive continuation, global document ordinals, depth handling, complete
+The complete Basic visitor and nested schema visitor are intentionally
+synchronous; schema recursion and index-based map/sequence lookup are not
+resumable or budgeted. Schema-node, map/key lookup, unsigned extension
+projection, byte comparison, nested traversal charging, nonrecursive
+continuation, global document ordinals, depth handling, complete
 first-cause/rollback ownership, and prepaid cursor destruction are **not**
 proved. A numeric Limit/Cancelled result belongs to the future outer rollback
 owner; this local helper does not implement that owner. Full admission still
@@ -155,13 +209,13 @@ future public entry. No cycle/stack or slow-parser-path coverage claim is made.
 | ---: | --- |
 | 1 | None. Full frozen API/configuration and removed-surface positive/negative fixtures remain required. |
 | 2 | Both semantic adapters use existing Snapshot storage and no extra allocation site. Full charged traversal/sort/construction and frame-arena integration remain required. |
-| 3 | One complete DataSchema Basic rule body, typed/Snapshot parity, public-source candidate call graph, unaffected first-error text, numeric amendment and opaque storage. Full Thing Basic/security/affordance rules and direct strict entry remain required. |
+| 3 | Complete Thing Basic rule composition, shared DataSchema/numeric predicates, root/affordance/security checks, typed/Snapshot parity, whole-document first-error order and public taxonomy/text. Existing fieldwise/nested/lossless/serializer-failure corpus is reused. Strict direct-entry construction/equivalence and admitted public integration remain required. |
 | 4 | Existing URI/default/security and post-drop Planning proofs remain usable; this fixture adds no Planning claim. Eventual public View/construction still must repeat them. |
-| 5 | Public-source candidate compiles/runs across the described cells; Snapshot tests execute their existing AP graphs. Complete API/construction/sibling/downstream and target execution remain required. |
-| 6 | The existing atomic numeric precharge now drives shared schema predicates in both representations. Whole schema/admission progress, configuration, sorting, URI, seal, cancellation/rollback/drop remain required. |
-| 7 | Allocation-free local rule/projection intervals and fixed scalar state; no new category. Complete supported M, source/temporary/peak/contiguous accounting, parent/global release, Published and owner capacity remain required. |
+| 5 | Full Basic public-source candidate reuses the existing 13 Host runtime / 8 actual thumb compile cells; Snapshot executes the existing four AP graphs. Full frozen API/construction/sibling/downstream and target runtime evidence remain required. |
+| 6 | Whole Basic first-error/diagnostic selection is shared; existing atomic numeric progress evidence still drives the same schema predicates. Whole document/schema work charging, opaque complete configuration, direct decode, sorting, URI, seal, cancellation/rollback/prepaid drop remain required. |
+| 7 | Complete inline Basic validation observes zero local Host allocations in both representations; fixed diagnostics and the same three retained arenas introduce no category. Complete supported M, source/temporary/peak/contiguous accounting, simultaneous Snapshot/plan residency, source release, Published and owner capacity remain required. |
 | 8 | No authority, resource schema, Foundation/Context implementation, completed successor evidence, or gate status changes. Full impact reaffirmation and the future admitted Foundation method removal remain required. |
 
-This fixture closes a schema-semantic composition gap at prototype level. It
+This fixture closes the full Basic semantic-composition gap at prototype level. It
 does not complete any readmission item as a whole, perform an admission
 transition, implement production normalization, or register a Consumer gate.

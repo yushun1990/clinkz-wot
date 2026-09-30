@@ -8,11 +8,11 @@ tranche nor implements production typed TD conversion. The prototype
 deliberately does not claim complete semantic equivalence, work charging,
 cleanup prepayment, or a validated admission configuration.
 
-The separate [DataSchema Basic convergence probe](../validated-thing-schema-kernel/README.md)
-now reuses this exact Snapshot and typed schema storage. It supplies one shared
-schema rule source, a public-TD-source candidate, fixed diagnostics, and the
-existing numeric precharge composition; it does not turn this arena prototype
-into complete Thing validation or a bounded admission cursor.
+The separate [complete Basic convergence probe](../validated-thing-schema-kernel/README.md)
+reuses this exact Snapshot, typed/schema corpus, and default/security seam.
+Its README owns the complete semantic-composition evidence and remaining
+readmission boundaries. This arena fixture remains storage evidence and does
+not implement a bounded admission cursor.
 
 ## Reproduce
 
@@ -101,9 +101,9 @@ The test-only placement allows inspection of private `Context.entries`
 without expanding the production Context or ValidatedThing API. The fixed
 headroom and recursive call stack are prototype mechanics; the full bounded
 cursor, traversal-frame use, all known fields/variants, allocation growth,
-work charging, complete URI input classification, and complete storage-neutral
-Basic validation remain open. Existing Basic is used while constructing the
-fixed typed input and as the oracle for the narrow shared semantic slices.
+work charging, and complete URI input classification remain open. Complete
+storage-neutral Basic prototype evidence belongs to the linked convergence
+probe. Existing Basic remains the unchanged typed-input oracle.
 This is partial item-3 evidence, not readmission or item-3 completion.
 
 ## Remaining Thing root-field slice
@@ -140,8 +140,9 @@ owner, or new allocation category is introduced.
 
 This section remains typed-storage evidence. The test-only semantic slice below
 adds root/Form/combo name-reference checks, effective Thing/Form inheritance,
-and Planning-shaped scheme lookup. Complete SecurityScheme Basic validation,
-exact work charging, resumability, and the strict builder remain outside it.
+and Planning-shaped scheme lookup. Complete SecurityScheme Basic prototype
+validation belongs to the linked convergence probe; exact work charging,
+resumability, and the strict builder remain outside this storage slice.
 
 ## Complete Form typed-storage slice
 
@@ -182,7 +183,8 @@ Form targets; URI-template expansion remains a later Planning/runtime concern.
 snapshot test module. It defines one private borrowed semantic-access contract,
 one adapter for the current typed `Thing`, and one adapter for the sealed
 node/edge/byte Snapshot. Adapter methods expose storage facts only. One shared
-rule implementation owns:
+rule implementation supplies the query/reference witness below, reusing the
+complete Basic probe's Property-default, inheritance and reference helpers:
 
 - Property default operations for all `readOnly`/`writeOnly` combinations,
   including the current neutral fallback for the Basic-invalid both-true case;
@@ -222,8 +224,8 @@ cargo test --locked -p clinkz-wot-td --lib semantic_kernel
 
 The following remain explicitly unresolved across these slices:
 
-- complete Thing Basic validation, including remaining affordance/security-
-  scheme constraints and complete document first-error/diagnostic parity;
+- bounded/resumable integration of the linked complete Basic prototype,
+  including charged traversal and global document-node diagnostics;
 - strict-entry URI classification and a resumable, exactly charged production
   implementation of the URI kernel below;
 - strict JSON decoding, strict-entry validation, and typed/direct decode

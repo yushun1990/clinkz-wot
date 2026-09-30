@@ -9,6 +9,7 @@
 
 extern crate std;
 
+use super::basic_kernel_probe::basic_kernel;
 use super::{
     ACTION_FORMS, EVENT_FORMS, FORM_CONTENT_CODING, FORM_CONTENT_TYPE, FORM_OPERATIONS,
     FORM_SCOPES, FORM_SECURITY, FORM_SUBPROTOCOL, Kind, PROPERTY_FORMS, PROPERTY_SCHEMA,
@@ -34,13 +35,14 @@ use core::{
 use std::{alloc::System, thread_local};
 
 const NO_OPERATIONS: &[Operation] = &[];
+// Independent expected vectors used only by the existing mutation test.
 const PROPERTY_READ_WRITE_OPERATIONS: &[Operation] =
     &[Operation::ReadProperty, Operation::WriteProperty];
 const PROPERTY_READ_OPERATIONS: &[Operation] = &[Operation::ReadProperty];
 const PROPERTY_WRITE_OPERATIONS: &[Operation] = &[Operation::WriteProperty];
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-enum FormOwner {
+pub(super) enum FormOwner {
     Property(u32),
     Action(u32),
     Event(u32),
@@ -48,20 +50,20 @@ enum FormOwner {
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-struct FormSite {
+pub(super) struct FormSite {
     owner: FormOwner,
     original_index: u32,
 }
 
 #[derive(Clone, Copy)]
-struct LocatedForm<F> {
+pub(super) struct LocatedForm<F> {
     form: F,
     site: FormSite,
 }
 
 /// Storage facts required by this semantic slice. No method decides defaults,
 /// inheritance, reference validity, or Planning eligibility.
-trait SemanticAccess<'a> {
+pub(super) trait SemanticAccess<'a> {
     type Property: Copy;
     type Form: Copy;
     type Operations: Copy;
@@ -105,19 +107,19 @@ trait SemanticAccess<'a> {
 }
 
 #[derive(Clone, Copy)]
-struct ThingProperty<'a> {
+pub(super) struct ThingProperty<'a> {
     name: &'a str,
     property: &'a PropertyAffordance,
 }
 
 #[derive(Clone, Copy)]
-struct ThingSecurityDefinition<'a> {
+pub(super) struct ThingSecurityDefinition<'a> {
     name: &'a str,
     definition: &'a SecurityScheme,
 }
 
 #[derive(Clone, Copy)]
-enum ThingSecurityNames<'a> {
+pub(super) enum ThingSecurityNames<'a> {
     Strings(&'a [String]),
     JsonArray(&'a [serde_json::Value]),
     JsonString(&'a str),
@@ -356,19 +358,19 @@ impl<'a> SemanticAccess<'a> for Thing {
 }
 
 #[derive(Clone, Copy)]
-struct SnapshotProperty {
+pub(super) struct SnapshotProperty {
     name: u32,
     property: u32,
 }
 
 #[derive(Clone, Copy)]
-struct SnapshotSecurityDefinition {
-    name: u32,
-    definition: u32,
+pub(super) struct SnapshotSecurityDefinition {
+    pub(super) name: u32,
+    pub(super) definition: u32,
 }
 
 #[derive(Clone, Copy)]
-enum SnapshotSecurityNames {
+pub(super) enum SnapshotSecurityNames {
     Array(u32),
     String(u32),
     Empty,
@@ -396,7 +398,7 @@ impl Snapshot {
         }
     }
 
-    fn map_pair(&self, map: u32, index: usize) -> Option<(u32, u32)> {
+    pub(super) fn map_pair(&self, map: u32, index: usize) -> Option<(u32, u32)> {
         if self.kind(map) != Kind::Map || index >= self.node(map).edge_count as usize {
             return None;
         }
@@ -751,12 +753,7 @@ fn effective_property_operations<'a, A: SemanticAccess<'a> + ?Sized>(
         };
     }
 
-    let (read_only, write_only) = access.property_flags(property);
-    let defaults = match (read_only, write_only) {
-        (true, false) => PROPERTY_READ_OPERATIONS,
-        (false, true) => PROPERTY_WRITE_OPERATIONS,
-        (true, true) | (false, false) => PROPERTY_READ_WRITE_OPERATIONS,
-    };
+    let defaults = basic_kernel::default_property_operations(access.property_flags(property));
     EffectiveOperations {
         access,
         source: OperationSource::Default(defaults),
@@ -825,17 +822,14 @@ fn effective_form_security<'a, A: SemanticAccess<'a> + ?Sized>(
     access: &'a A,
     form: A::Form,
 ) -> EffectiveSecurity<'a, A> {
-    match access.explicit_form_security(form) {
-        Some(names) => EffectiveSecurity {
-            access,
-            names,
-            inherited: false,
-        },
-        None => EffectiveSecurity {
-            access,
-            names: access.thing_security(),
-            inherited: true,
-        },
+    let (names, inherited) = basic_kernel::inherited_security(
+        access.thing_security(),
+        access.explicit_form_security(form),
+    );
+    EffectiveSecurity {
+        access,
+        names,
+        inherited,
     }
 }
 
@@ -869,11 +863,12 @@ fn validate_name_sequence<'a, A: SemanticAccess<'a> + ?Sized>(
     names: A::SecurityNames,
     site: SecurityReferenceSite,
 ) -> Result<(), SecurityRuleError<'a>> {
-    for index in 0..access.security_name_count(names) {
-        let reference = access.security_name_at(names, index).unwrap();
-        if access.security_definition_by_name(reference).is_none() {
-            return Err(SecurityRuleError::Undefined { site, reference });
-        }
+    if let Some((_, reference)) = basic_kernel::first_undefined(
+        access.security_name_count(names),
+        |index| access.security_name_at(names, index).unwrap(),
+        |reference| access.security_definition_by_name(reference).is_some(),
+    ) {
+        return Err(SecurityRuleError::Undefined { site, reference });
     }
     Ok(())
 }
@@ -882,36 +877,32 @@ fn validate_security_references<'a, A: SemanticAccess<'a> + ?Sized>(
     access: &'a A,
 ) -> Result<(), SecurityRuleError<'a>> {
     let root = access.thing_security();
-    if access.security_name_count(root) == 0 {
-        return Err(SecurityRuleError::MissingThingSecurity);
-    }
+    basic_kernel::required_security(access.security_name_count(root))
+        .map_err(|_| SecurityRuleError::MissingThingSecurity)?;
     validate_name_sequence(access, root, SecurityReferenceSite::Thing)?;
 
     for index in 0..access.security_definition_count() {
         let definition = access.security_definition_at(index).unwrap();
-        if access.security_definition_scheme(definition) != "combo" {
-            continue;
-        }
         let ordinal = index.try_into().unwrap();
-        if let Some(one_of) = access.security_definition_one_of(definition) {
-            validate_name_sequence(
-                access,
-                one_of,
-                SecurityReferenceSite::SecurityDefinition {
-                    ordinal,
-                    group: DefinitionGroup::OneOf,
-                },
-            )?;
-        }
-        if let Some(all_of) = access.security_definition_all_of(definition) {
-            validate_name_sequence(
-                access,
-                all_of,
-                SecurityReferenceSite::SecurityDefinition {
-                    ordinal,
-                    group: DefinitionGroup::AllOf,
-                },
-            )?;
+        for field in basic_kernel::combo_groups(access.security_definition_scheme(definition)) {
+            let (names, group) = match field {
+                basic_kernel::Field::OneOf => (
+                    access.security_definition_one_of(definition),
+                    DefinitionGroup::OneOf,
+                ),
+                basic_kernel::Field::AllOf => (
+                    access.security_definition_all_of(definition),
+                    DefinitionGroup::AllOf,
+                ),
+                _ => unreachable!(),
+            };
+            if let Some(names) = names {
+                validate_name_sequence(
+                    access,
+                    names,
+                    SecurityReferenceSite::SecurityDefinition { ordinal, group },
+                )?;
+            }
         }
     }
 
