@@ -928,6 +928,11 @@ capacity remain non-semantic; retained Number content remains lossless.
 After a separate accepted readmission, production implementation may change
 only:
 
+- `foundation/build.rs` (only generated resource-schema plumbing for
+  `number_lexeme_bytes_max`);
+- `foundation/src/resource.rs` (only removal of
+  `AdmissionLedger::reclassify_source_to_persistent_document` and its
+  method-specific tests);
 - `td/Cargo.toml` (only the explicit capability edge and semver API floor
   above; no default/std change, exact-version pin, fork or unrelated feature);
 - `td/src/validated.rs` (new normalized owner, cursor, builder, view, footprint,
@@ -950,9 +955,10 @@ only:
 - `td/src/core/data_type/uri.rs`; and
 - `td/src/core/data_type/version.rs`.
 
-Apart from the explicit manifest boundary and capability-gated exports,
-changes outside `td/src/validated.rs` may only extract storage-neutral semantic
-access/decoding used by both `Thing` behavior and the normalized snapshot,
+Within the permitted TD paths, apart from the explicit manifest boundary and
+capability-gated exports, changes outside `td/src/validated.rs` may only extract
+storage-neutral semantic access/decoding used by both `Thing` behavior and the
+normalized snapshot,
 plus the explicitly amended bounded-binary64 Basic predicates in the existing
 TD semantic owner. They may not change public `Thing` fields, builders,
 serialization, deserialization, other Basic-valid input sets, defaults, or
@@ -964,9 +970,10 @@ required production change outside this list returns the tranche to impact
 review.
 
 Foundation implementation may add only the generated/resource-schema plumbing
-for `number_lexeme_bytes_max`; no new account or WorkClass is authorized. Any
-other Foundation public-method or ownership change stops implementation for
-architecture review.
+for `number_lexeme_bytes_max` and remove
+`AdmissionLedger::reclassify_source_to_persistent_document` with its
+method-specific tests. No other Foundation public method, account, WorkClass,
+or ownership behavior may change without architecture review.
 
 ## Explicit exclusions
 
