@@ -1,0 +1,31 @@
+[package]
+name = "validated-thing-schema-kernel-probe"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[workspace]
+
+[lib]
+test = false
+doctest = false
+
+[dependencies]
+clinkz-wot-foundation = { path = "../../../foundation", default-features = false }
+fluent-uri = { version = "0.4", default-features = false, features = ["alloc", "serde"] }
+time = { version = "0.3", default-features = false, features = ["alloc"] }
+serde = { version = "1.0", default-features = false, features = ["derive", "alloc"] }
+serde_json = { version = "1.0.149", default-features = false, features = ["alloc", "raw_value"] }
+serde_with = { version = "3.18", default-features = false, features = ["macros", "alloc"] }
+
+[dev-dependencies]
+clinkz-wot-td = { path = "../../../td", default-features = false }
+
+[features]
+default = ["std"]
+std = ["clinkz-wot-foundation/std", "fluent-uri/std", "time/std", "serde/std", "serde_json/std", "serde_with/std", "clinkz-wot-td/std"]
+async = ["clinkz-wot-foundation/async"]
+validated-thing = ["serde_json/arbitrary_precision"]
+ap = ["serde_json/arbitrary_precision"]
+order = ["serde_json/preserve_order"]
+td2-preview = ["clinkz-wot-td/td2-preview"]

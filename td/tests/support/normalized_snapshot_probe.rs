@@ -1,7 +1,7 @@
 //! Non-production typed traversal over the shared corpus and nested DataSchema
 //! fixture. Compiled as a child of `context` to inspect private Context entries.
-//! This is storage evidence plus test-only shared default/security/URI slices,
-//! not a production semantic kernel. Recursive prototype calls and fixed arena
+//! This is storage evidence plus test-only shared schema/default/security/URI
+//! slices, not a production semantic kernel. Recursive calls and fixed arena
 //! headroom do not prove the future resumable traversal, exact sizing, work
 //! charging, or supported feature matrix.
 
@@ -32,6 +32,9 @@ mod typed_corpus_shared;
 
 #[path = "semantic_kernel_probe.rs"]
 mod semantic_kernel_probe;
+
+#[path = "schema_kernel_probe.rs"]
+mod schema_kernel_probe;
 
 #[path = "uri_semantic_kernel_probe.rs"]
 mod uri_semantic_kernel_probe;
@@ -1285,9 +1288,9 @@ struct Snapshot {
 impl Snapshot {
     fn normalize(thing: &Thing) -> Self {
         // The shared corpus builder calls today's TD Basic before entry. A
-        // storage-neutral Basic kernel is not present, so this probe does not
-        // validate a snapshot. Default/security and URI slices remain
-        // test-only feasibility kernels rather than a complete Basic path.
+        // complete Thing Basic kernel is not present, so normalization does
+        // not validate a snapshot. The separate shared DataSchema,
+        // default/security and URI probes remain non-production evidence.
         let mut build = Build::new(thing.base.as_ref());
         let root = build.thing(thing);
         let uri_cache_cost = build.uri_cache_cost;

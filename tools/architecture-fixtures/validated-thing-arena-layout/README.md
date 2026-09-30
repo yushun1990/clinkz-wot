@@ -8,6 +8,12 @@ tranche nor implements production typed TD conversion. The prototype
 deliberately does not claim complete semantic equivalence, work charging,
 cleanup prepayment, or a validated admission configuration.
 
+The separate [DataSchema Basic convergence probe](../validated-thing-schema-kernel/README.md)
+now reuses this exact Snapshot and typed schema storage. It supplies one shared
+schema rule source, a public-TD-source candidate, fixed diagnostics, and the
+existing numeric precharge composition; it does not turn this arena prototype
+into complete Thing validation or a bounded admission cursor.
+
 ## Reproduce
 
 From the repository root:
@@ -216,8 +222,8 @@ cargo test --locked -p clinkz-wot-td --lib semantic_kernel
 
 The following remain explicitly unresolved across these slices:
 
-- complete Basic validation, including schema/affordance/security-scheme
-  constraints and complete first-error/diagnostic parity;
+- complete Thing Basic validation, including remaining affordance/security-
+  scheme constraints and complete document first-error/diagnostic parity;
 - strict-entry URI classification and a resumable, exactly charged production
   implementation of the URI kernel below;
 - strict JSON decoding, strict-entry validation, and typed/direct decode

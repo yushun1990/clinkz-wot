@@ -26,6 +26,9 @@ pub fn predicate_number(value: Option<&Value>) -> PredicateNumber {
 // Dependency AP alone cannot expose this module. This is not a mock of the
 // full frozen ValidatedThing public API.
 #[cfg(feature = "validated-thing")]
+mod projection_step;
+
+#[cfg(feature = "validated-thing")]
 pub mod bounded {
     use clinkz_wot_foundation::{ResourceKind, ResourceLimits, WorkBudget, WorkClass};
     use serde_json::Number;
@@ -46,13 +49,7 @@ pub mod bounded {
 
     /// One precharged projection witness, not a production admission cursor.
     /// The caller must have already identified a Number used by a predicate.
-    #[derive(Clone, Copy, Debug, PartialEq)]
-    pub enum ProjectionProgress {
-        Pending,
-        Limit,
-        Cancelled,
-        Complete(PredicateNumber),
-    }
+    pub type ProjectionProgress = super::projection_step::ProjectionProgress<PredicateNumber>;
 
     /// Narrow Number-step witness. The eventual admission configuration must
     /// also validate the other fields consumed by the complete TD conversion.
@@ -118,33 +115,19 @@ pub mod bounded {
         config: &NumberStepConfig,
         budget: &mut WorkBudget,
         lifetime: &mut u64,
-        mut cancelled: impl FnMut() -> bool,
+        cancelled: impl FnMut() -> bool,
     ) -> ProjectionProgress {
-        let length = decimal(number).len();
-        if length > config.ceiling {
-            return ProjectionProgress::Limit;
-        }
-        let charge = length as u64;
-        if budget.remaining(WorkClass::CodecInputBytes) < charge {
-            return ProjectionProgress::Pending;
-        }
-        if *lifetime < charge {
-            return ProjectionProgress::Limit;
-        }
-        if cancelled() {
-            return ProjectionProgress::Cancelled;
-        }
-        budget.consume(WorkClass::CodecInputBytes, charge).unwrap();
-        *lifetime -= charge;
-        let result = match number.as_f64().filter(|value| value.is_finite()) {
-            Some(value) => PredicateNumber::Finite(value),
-            None => PredicateNumber::Invalid,
-        };
-        if cancelled() {
-            ProjectionProgress::Cancelled
-        } else {
-            ProjectionProgress::Complete(result)
-        }
+        super::projection_step::project(
+            decimal(number),
+            config.ceiling,
+            budget,
+            lifetime,
+            cancelled,
+            || match number.as_f64().filter(|value| value.is_finite()) {
+                Some(value) => PredicateNumber::Finite(value),
+                None => PredicateNumber::Invalid,
+            },
+        )
     }
 
     /// Source-access witness, not a comparator or admission cursor.
