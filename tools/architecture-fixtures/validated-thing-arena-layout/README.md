@@ -325,6 +325,13 @@ status. Exact `UriBytes`/`CodecOutputBytes` charging, resumability,
 cancellation, strict-entry classification, rollback, actual thumb execution,
 and an external crate consuming the eventual public View remain open.
 
+The separate [post-Planning handoff witness](../validated-thing-planning-handoff/README.md)
+reuses this borrowed query and Snapshot to prove a concretely owned output can
+survive physical Snapshot release without a TD or registration borrow. It
+supplies the prototype post-drop part of item 4 after the build-scoped lifecycle
+migration; the eventual public View and complete resource/publication proof
+remain required.
+
 ## Complete ActionAffordance typed-storage slice
 
 The shared corpus now contains a rich Action and a minimal Action. The sealed
