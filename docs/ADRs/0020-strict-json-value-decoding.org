@@ -1,0 +1,89 @@
+#+title: ADR-0020: Strict JSON Value Decoding
+#+date: 2026-10-01
+#+status: Accepted
+
+* Context
+
+The planned WP-100 Consumer =ValidatedThing= has two inputs: an already typed
+=Thing= with an additional-allocation guarantee, and borrowed JSON bytes with
+an absolute engine-owned decode-through-Snapshot guarantee. Both need one TD
+field/Basic/default/URI/security authority. The strict path also needs charged,
+resumable construction and cleanup in three retained/four temporary arenas,
+without an intermediate owned Thing or serde graph.
+
+PR #116 established that public TD decoding does not preserve literal JSON
+kinds unconditionally. Value/RawValue representation handling can parse string
+payloads again, create Numbers and structure, or reject depending on member
+order and repeated field conversion. These are real current behavior, including
+with AP off; private-looking member names are neither W3C nor project vocabulary.
+Early sorting or literal copying cannot silently claim wire parity.
+
+The independent investigation in workspace 0073 compared this finding with
+the project's extension preservation, ordinary API compatibility, bounded
+progress and simple ownership goals. Its initial preference was not authority.
+The subsequent public-API probes also show that generic Visitor events for an
+AP Number token and a literal object can be identical, collisions reach known
+fields, null policy is field-specific, and AP decoded Number spelling can grow.
+None of these observations is a complete decoder or an impossibility proof.
+
+* Decision
+
+Strict =from_json= uses project-owned literal JSON value kinds. An object is
+an object for every member spelling and position; string content never opens
+another JSON document. TD field interpretation is shared above that boundary.
+The detailed value, duplicate, null, Number-content, ordering, agreement and
+construction contract has one owner:
+[[file:../work-packages/WP-100-consumer-validated-thing-admission.md][WP-100 Consumer Validated Thing Admission]],
+section "Strict JSON value-decoding contract".
+
+Ordinary serde deserialization remains unchanged. Compatibility normalization
+preserves its supplied typed Thing exactly and does not replay wire decoding.
+The strict entry may therefore differ from ordinary serde where dependency
+representation-driven Value/RawValue interpretation supplies different logical
+values or rejects. This is an explicit wire contract, not a reserved-name
+blacklist, permission to duplicate TD rules, or permission to weaken Basic.
+Unchanged logical values must retain field and semantic parity.
+
+This supersedes the prior unconditional strict/serde wire-equivalence
+interpretation and qualifies the raw extension-round-trip assumption for the
+same Value/RawValue cases; unaffected ordinary extension round trips remain
+required. The normalized owner, public signatures, AP capability, typed
+compatibility, allocation catalog, WorkClasses, configuration, lifetime work,
+rollback and build-scoped Planning handoff remain binding. The revision is a
+docs-only authority candidate requiring independent exact-head acceptance;
+WP-100 remains planned/candidate and no gate or source admission changes.
+
+* Alternatives
+
+| Alternative | Assessment |
+|-------------+------------|
+| Preserve all ordinary serde wire behavior in strict | A constructive project lexer plus resumable replay could in principle preserve it. Public serde calls themselves are synchronous and provide no continuation for budget suspension; a complete precharged Thing/Value decode still violates the selected ownership and resumability boundary. No conforming full path is demonstrated. Retaining private collision semantics adds order-sensitive repeated/embedded interpretation without a project usage need. |
+| One generic custom public Visitor that treats every map literally | AP Numbers also arrive as map events. The new experiment defeats this shortcut; retaining independent token provenance is necessary. It does not disprove every public-API approach. |
+| Switch both ordinary serde and strict to literal values | Creates a coherent uniform wire rule, but changes existing ordinary callers and feature graphs outside bounded admission. The new explicit entry can supply the bounded rule without that migration cost. No current goal requires a global compatibility break. |
+| Reject a private-looking key namespace | Narrows legitimate extension data, ties input policy to dependency-private spelling and needs escaped-key inspection. It has no useful invariant beyond avoiding the underlying question. |
+| Clone private dispatch, pin/fork dependencies, or disable AP/raw_value | Private dispatch violates the dependency boundary; pinning does not make recursive synchronous work resumable. Removing AP breaks borrowed lossless Number access, while removing RawValue disrupts current schema/security decoding. |
+| Literal strict values, unchanged ordinary serde and typed compatibility, shared TD field policies | Selected. Keeps each established input's useful responsibility, preserves arbitrary extension data and gives construction one explicit value algebra. Its cost is an intentional, narrowly explained wire difference. |
+
+* Consequences and falsification
+
+The unresolved value algebra blocked complete pre-readmission construction,
+wire equivalence and resource/progress evidence; more already-typed storage or
+Basic evidence could not resolve it. This revision fixes that authority
+question rather than claiming more of those local proofs. Disjoint signature
+and typed-ownership work remained possible but did not remove this earlier
+dependency.
+
+All #116 behavior remains an oracle for ordinary serde/typed compatibility.
+Prior typed Snapshot, Basic, arena, date, query and owned-handoff proofs retain
+their limited scope. Extrapolations to unconditional wire equality are replaced,
+not silently counted as complete. Foundation/Context, resource rows, completed
+successor packages and the Producer gate require no reopening from this
+decision; future admitted implementation must still reaffirm them.
+
+Before readmission the complete field extraction and bounded construction must
+classify the existing adversarial corpus, preserve every unaffected field
+policy and Number content, and demonstrate the full allocation/work/terminal
+contract in the supported cells. If that construction needs another owning
+category or diverges for equal logical field values, it falsifies this candidate
+and returns to impact review. Green local probes or authority checks supply
+neither independent acceptance nor the separate admission-only transition.

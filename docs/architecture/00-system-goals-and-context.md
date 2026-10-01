@@ -14,7 +14,10 @@ authority.
 ## Compatibility baseline
 
 - W3C WoT Thing Description 1.1 is the default compliance target.
-- Unknown extension members survive deserialize/serialize round trips.
+- Unknown extension associations survive ordinary round trips outside the
+  Value/RawValue re-interpretation cases defined by
+  [ADR-0020](../ADRs/0020-strict-json-value-decoding.org). Strict input uses
+  literal values; typed normalization preserves supplied typed associations.
 - `base` and relative form `href` values are resolved by one shared planner.
 - Clinkz-specific metadata uses a Clinkz JSON-LD namespace and never masquerades
   as W3C vocabulary.

@@ -10,6 +10,13 @@ Decision review: github-pr:76.
 
 Authority migration review: github-pr:78.
 
+JSON value-decoding decision: [ADR-0020](../ADRs/0020-strict-json-value-decoding.org),
+investigated in [workspace topic 0073](../../workspace/0073-shared-json-value-decode-boundary.md).
+The strict value contract below replaces unconditional wire equivalence with
+ordinary serde; it preserves typed compatibility and shared TD field rules.
+This authority revision requires independent exact-head review and supplies
+no readmission or complete construction proof.
+
 Shared RFC3339 decode amendment: [workspace impact review 0066](../../workspace/0066-shared-rfc3339-decode-impact.md),
 based on github-pr:79. The frozen decoder contract below and its permitted
 future source path amend the migrated boundary without readmitting it.
@@ -485,13 +492,149 @@ normalization, validation, diagnostic, rollback, and completed-Snapshot
 allocations are charged from the first controlled allocation. It therefore
 provides absolute engine-owned input-processing-through-build-Snapshot
 admission. Caller-owned input buffer memory remains caller responsibility. The
-decoder shares TD's typed field-decoding and semantic kernel; it is not a second
-TD interpretation.
+decoder shares TD's field policies above the explicit JSON value boundary below
+and the Basic/default/URI/security kernel. It does not replay serde's implicit
+Value/RawValue interpretation as a second strict wire pass.
 
 The strict entry is the only direct builder/decoder source admitted here.
 Adding a second strict format or a field-by-field public builder requires its
 own impact review. Host callers may use either entry. Application-static
 callers requiring an absolute engine-owned bound use `from_json`.
+
+## Strict JSON value-decoding contract
+
+This section is the sole detailed owner of the direct entry's value semantics
+and its agreement with ordinary serde. ADR-0020 owns the rationale. The
+compatibility cursor continues to preserve the **already typed** `Thing`
+fieldwise, including literal objects manually constructed by a caller and
+Numbers produced by ordinary serde's string/Value conversions. It neither
+re-decodes that value nor attempts to recover its original JSON.
+
+### Literal values and field interpretation
+
+Strict input is one complete UTF-8 JSON object, with JSON token, escape, string,
+array and object grammar. Trailing non-whitespace, invalid escapes, malformed
+UTF-8 or invalid Unicode scalar decoding are `Invalid`; configured structural,
+byte and work limits remain `Limit`. There is no embedded JSON format. Before
+TD field interpretation, values have the JSON kinds Null, Boolean, String,
+Number, Array and Object:
+
+- Every object member name is a decoded string. No spelling, prefix, escaped
+  spelling or member position makes an object a scalar or opens another input
+  document. There is no reserved serde-key namespace or collision blacklist.
+- A JSON string remains string content. Text resembling JSON inside it is not
+  parsed again. This applies recursively, including `const`, `default`, `enum`
+  and every extension value, and inside known-field objects.
+- Arrays retain element order. Objects retain decoded key/value associations.
+  Duplicate decoded names use the **last source occurrence**, matching current
+  public Thing map buffering. An earlier occurrence is still syntax-checked
+  and charged, but cannot determine a field type, default, discriminator or
+  Basic result after it has been overwritten. Escaped and plain equal names
+  are duplicates. Rejecting all duplicate keys is not authorized.
+- A Number originates only from a JSON Number token. Its logical lossless
+  content agrees with public AP `serde_json::Number` decoding of that token in
+  the resolved supported graph; original-token byte identity is not promised.
+  For example, in the selected lock `-0` yields `0`, `1E0` yields `1e+0`, and
+  `1.00` remains `1.00`. This is the existing typed Number-content boundary,
+  not permission to extract private dependency code or allocate an opaque
+  Number as strict build state.
+
+TD then interprets those literal values through **one shared field-policy
+source**, used by ordinary serde adapters and the strict arena adapter. Shared
+policy includes field ownership and flattened composition, required/optional
+presence, field-specific null handling, one-or-many conversion, flexible
+booleans, defaults, DataSchema/security dispatch, scalar conversion, RFC3339,
+and URI types. Strict may not invent a cleaner TD vocabulary or replace
+current accepted field behavior. The ordinary adapter retains its existing
+Value/RawValue representation conversions around that policy; the strict
+adapter supplies literal arena values and performs no such re-interpretation.
+An intermediate serde graph, JSON round-trip, or separately copied field rule
+table is not the shared extraction.
+
+In particular, absent and null are not universally interchangeable:
+DataSchema `const: null` is `Some(Null)` while absent `const` is `None`;
+metadata `title: null` and `profile: null` are `None`; `id: null`,
+`properties: null`, schema `unit: null`, `observable: null`, and Form
+`contentType: null` reject. Absent Form content type defaults to
+`application/json`; null Form `op` and `security` use their existing optional
+list behavior. Missing/unrecognized schema type follows existing Object
+dispatch, preserving the type field; Basic still decides its validity.
+Recognized schema types and security schemes use their existing variants.
+This contract changes no field predicate, default or Basic acceptance rule.
+
+Source order is retained until duplicate resolution and the applicable field
+decisions are fixed. Only then may object storage be sorted by semantic key.
+Neither a first member nor a later sorted-map replay decides a value's kind.
+The sealed Snapshot's deterministic maps and all ordered sequence/Form indices
+retain the existing contract. Decoder failures use the frozen inline
+diagnostics; serde error-string identity is not a strict-entry guarantee.
+
+### Agreement and deliberate wire differences
+
+For the same decoded logical field values, both adapters must produce the same
+typed field decisions, and both admission entries must produce fieldwise equal
+Snapshots and identical Basic/default/URI/security results, subject to their
+separate source/resource observations. Ordinary serde and strict input need
+not have equal raw Number lengths or equal resource limits. Compatibility is
+always measured against its supplied typed value, including serializer-failing
+Basic-valid values.
+
+Unconditional `from_json(bytes) == normalize(serde(bytes))` is superseded.
+The permitted semantic difference is precisely **literal JSON kinds versus
+serde Value/RawValue representation-driven re-interpretation**, including its
+propagation through repeated field composition. It is not a blanket exception
+for any input containing a suspect key. A field, null, default, variant, scalar
+or Basic mismatch when the adapters receive the same logical values remains
+a defect. No runtime collision detector or private-token list is required.
+
+The #116 corpus is classified as follows; the private-looking names below are
+test input, not parser dispatch vocabulary:
+
+| Wire value/context | Strict result before shared TD policy | Ordinary serde / compatibility |
+| --- | --- | --- |
+| One-member RawValue/Number-looking object with a string payload | Object with that string member, even when payload text is invalid JSON | Keep current graph-specific Boolean/Array/Number result or decode rejection; normalize a successfully supplied typed value exactly |
+| The same object with an ordinary second member, in either order or with escaped spelling | Same associations after duplicate resolution; root extension and Property `const` retain Object | Keep current first-key and repeated-composition/order-backend observations |
+| Three wrappers or a string containing a 257-element array | Objects and strings; no semantic children are created from string content | Keep current embedded parsing; typed normalization counts and bounds the resulting typed graph |
+| Such an object in generic schema `minimum` or `multipleOf` | Non-Number; the unchanged shared predicate treats it as absent | A decoded Number reaches the same predicate, including invalid bound/positivity or amended failed-projection results |
+| Such an object supplied to a known string/list/bool/numeric field | Apply the existing field's Object-kind handling, usually decode rejection | Keep any current acceptance caused by conversion to the expected kind |
+| An actual Number token, plain string, ordinary object, or unaffected known field | Existing logical scalar/field result | Equality is required wherever the decoded logical values agree |
+
+The apparent Basic difference for a wrapper is therefore a wire-value
+difference, not another Basic rule. Direct `minimum: 2` with `maximum: 1`,
+`multipleOf: 0`, and an actual predicate Number `1e309` still reach the existing
+shared/amended rules. A literal wrapper carrying `1e309` has no Number and
+does not invoke numeric projection.
+
+### Construction and resource obligations
+
+The strict decoder must construct the literal values and typed field results
+directly in the three mutable build arenas, with continuations in the existing
+traversal arena and fixed scalar state. Shared ordinary field adapters may
+remain synchronous and allocate their established graphs; they cannot be
+called as a bounded strict shortcut. The complete strict path remains
+nonrecursive, charged and resumable, including unescaping, duplicate handling,
+field dispatch, sorting, all byte comparisons/copies and repeated inspection.
+Discarding overwritten values must release only catalog storage and cannot
+hide recursive cleanup. No additional allocation category is authorized.
+
+`number_lexeme_bytes_max` bounds both raw Number-token length and the decoded
+Number content retained or projected. The existing lexer stops at raw byte
+`L + 1` before copy or a finishing scan. Decoded content can be longer (`1e0`
+has three wire bytes but four public AP content bytes); that length must also
+be checked before over-limit output/copy or projection. All scans and emitted
+bytes pay their existing classes and the same lifetime remainder. Configuration
+must account for this transformation in its supported work/temporary-resource
+envelope. In strict input, wrapper strings pay string/document limits rather
+than Number limits. In compatibility input, a Number produced from a string
+by ordinary serde still undergoes the borrowed Number-length guard first.
+
+This selects a precise semantic boundary; it does not demonstrate the
+complete implementation. Before readmission, one public-source field-policy
+extraction and one charged arena construction must exercise this contract,
+classify all #116 counterexamples, prove unaffected field parity and public AP
+Number-content agreement, and integrate configuration, diagnostics and
+terminal ownership. A test-only synchronous literal reference proves only the
+selected value algebra, not those construction/resource/progress obligations.
 
 ## Shared resumable RFC3339 decode
 
@@ -949,6 +1092,7 @@ only:
 - `td/src/components/form.rs`;
 - `td/src/components/link.rs`;
 - `td/src/components/security_scheme.rs`;
+- `td/src/components/util.rs` (shared existing flexible-bool field policy);
 - `td/src/core/data_type.rs`;
 - `td/src/core/data_type/metadata.rs`;
 - `td/src/core/data_type/response.rs`;
@@ -961,8 +1105,8 @@ storage-neutral semantic access/decoding used by both `Thing` behavior and the
 normalized snapshot,
 plus the explicitly amended bounded-binary64 Basic predicates in the existing
 TD semantic owner. They may not change public `Thing` fields, builders,
-serialization, deserialization, other Basic-valid input sets, defaults, or
-URI/security semantics. The five numeric extension predicates are the sole
+serialization, ordinary deserialization, other Basic-valid input sets,
+defaults, or URI/security semantics. The five numeric extension predicates are the sole
 authorized Basic acceptance change and must reach the public Thing adapter and
 both admission entries together. Tests, external compile fixtures, and the
 registered future evidence file may be added outside those production paths. A
@@ -1014,6 +1158,13 @@ An independent exact-head review must accept all of the following before any
 3. A fixed typed-semantic equivalence corpus covering all known fields,
    optional distinctions, Context order, Form original indices, map-key
    associations, nested extension values, long strings, and lossless numbers.
+   Add the strict value-decoding contract's fixed differential wire corpus,
+   with a real shared field-policy extraction and arena construction. Classify
+   all #116 collision/order/embedded-string cases at root and nested known/
+   opaque fields; prove duplicate-name, null, default, discriminator and public
+   AP Number-content behavior without a private-key adapter. Deliberate wire
+   differences must have the precise cause defined above; identical logical
+   values must retain field/Basic/query parity.
    It must include a Basic-valid typed `Thing` that cannot complete the chosen
    serializer path and prove compatibility normalization still accepts it.
    For the five amended numeric extension predicates, prove public Thing /
@@ -1055,6 +1206,9 @@ An independent exact-head review must accept all of the following before any
    must cover configured `L - 1`/`L`/`L + 1` thresholds, including 63/64/65 and
    255/256/257, zero-disabled first-byte rejection; strict over-limit stop
    without a finishing scan; typed AP length check before projection/copy;
+   decoded Number-length rejection before output/copy/projection, including
+   a within-wire-limit exponent whose decoded spelling exceeds the limit;
+   charged duplicate resolution and discarded-value cleanup;
    short failed projection; rounding; repeated projection charging; step-budget
    `Pending`; lifetime `Limit`; cancellation immediately before/after one
    projection at the selected finite `L`, with a supported atomic
@@ -1082,8 +1236,9 @@ An independent exact-head review must accept all of the following before any
    be reopened by its owner.
 
 Items 1, 4, 7, and 8 have the lifecycle deltas above. Items 2, 3, 5, and 6
-retain their existing proof boundary. All eight remain required and incomplete
-as a set; this docs-only migration completes none of them and does not change
+retain their whole-construction duties under the explicit value contract.
+All eight remain required and incomplete as a set; this authority migration
+completes none of them and does not change
 the tranche's `planned` / `candidate` admission state.
 
 The readmission change is docs-only and separate from this authority migration
@@ -1113,6 +1268,9 @@ It must prove:
    kernel, ordered sequence/Form-index retention, deterministic map iteration,
    URI resolution, effective operations/security, lossless Numbers, and the
    bounded-binary64 predicate deltas.
+   Repeat the strict differential wire corpus through the admitted public
+   entry and shared field-policy source, including literal collisions,
+   duplicate/null/dispatch behavior and public AP decoded Number content.
 5. Maximum additional live bytes through inspect/build/grow/seal/equivalence,
    including old/new overlap, failure, cancellation, rollback, and cursor drop;
    every observed value and actual largest request fits its reservation.

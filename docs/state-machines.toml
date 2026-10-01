@@ -7453,7 +7453,7 @@ required_events = [
     "Equivalence:drop",
     "Rollback:drop",
 ]
-entry_contract = "The machine is entered only after TD successfully projects the ValidatedThing admission-field subset of raw ResourceLimits through the sole opaque ValidatedThingAdmissionConfig constructor; unrelated Consumer role/execution-cell fields remain the resource-profile owner's responsibility, while missing or implementation-unsupported admission fields fail as pre-entry configuration errors, never as Limit. ValidatedThingCursor then borrows a typed Thing and owns only additional project allocations; ValidatedThingBuilder borrows JSON bytes and owns every controlled decode-through-completed-Snapshot allocation from the first request"
+entry_contract = "The machine is entered only after TD successfully projects the ValidatedThing admission-field subset of raw ResourceLimits through the sole opaque ValidatedThingAdmissionConfig constructor; unrelated Consumer role/execution-cell fields remain the resource-profile owner's responsibility, while missing or implementation-unsupported admission fields fail as pre-entry configuration errors, never as Limit. ValidatedThingCursor then borrows a typed Thing and owns only additional project allocations; ValidatedThingBuilder borrows JSON bytes and owns every controlled decode-through-completed-Snapshot allocation from the first request. ADR-0020 strict literal values feed shared TD field policies; compatibility preserves the supplied typed Thing without wire replay"
 first_cause_contract = "The first invalid, limit, cancellation, conversion, or drop cause is immutable; later observations cannot replace its diagnostic or resource coordinates"
 publication_contract = "Only Complete exposes one move-only build-scoped ValidatedThing after typed semantic equivalence and complete rollback-inapplicability are established. This is a TD completion result, not Servient registry publication; the owner and its source ledger are released after independent plan construction and final checks, before first-Consumer atomic publication"
 resource_contract = "Each actual checked allocation Layout is reserved before allocation; source, temporary, live peak, largest actual request, and diagnostics remain distinct observations/accounts. The completed Snapshot remains source-charged until post-plan destruction and is never reclassified to persistent-document accounting in the first Consumer path"
@@ -7465,7 +7465,7 @@ from = "Input"
 event = "input_complete"
 to = "Validation"
 owner = "TD normalization cursor"
-linearization = "all strict-entry input units are decoded and charged, or the compatibility semantic root is ready"
+linearization = "all strict-entry literal JSON values, duplicate resolution and shared TD field decisions are decoded and charged under the WP-100 value contract, or the compatibility semantic root is ready"
 outcome = "validation-ready"
 retryability = "resume-with-same-cursor"
 
@@ -7501,7 +7501,7 @@ from = "Equivalence"
 event = "semantic_equivalence_complete"
 to = "Complete"
 owner = "TD semantic authority"
-linearization = "fieldwise typed Thing equivalence is established without serialization or deserialization"
+linearization = "fieldwise equivalence with the supplied typed Thing or the strict literal/shared-field result is established without reconstructing or re-decoding a Thing; unconditional equality with ordinary serde of the same bytes is not required"
 outcome = "validated-thing-complete-for-build"
 retryability = "terminal"
 
