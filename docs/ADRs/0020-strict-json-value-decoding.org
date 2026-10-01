@@ -44,8 +44,10 @@ values or rejects. This is an explicit wire contract, not a reserved-name
 blacklist, permission to duplicate TD rules, or permission to weaken Basic.
 Unchanged logical values must retain field and semantic parity.
 
-This supersedes only the prior unconditional strict/serde wire-equivalence
-interpretation. The normalized owner, public signatures, AP capability, typed
+This supersedes the prior unconditional strict/serde wire-equivalence
+interpretation and qualifies the raw extension-round-trip assumption for the
+same Value/RawValue cases; unaffected ordinary extension round trips remain
+required. The normalized owner, public signatures, AP capability, typed
 compatibility, allocation catalog, WorkClasses, configuration, lifetime work,
 rollback and build-scoped Planning handoff remain binding. The revision is a
 docs-only authority candidate requiring independent exact-head acceptance;
