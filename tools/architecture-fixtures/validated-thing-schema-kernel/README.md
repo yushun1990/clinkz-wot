@@ -43,6 +43,23 @@ The standalone lockfile preserves the workspace baseline's relevant versions:
 serde 1.0.228, serde_json 1.0.149, time 0.3.47, and serde_with 3.18.0. It is
 reproducibility evidence, not an exact-version product requirement.
 
+## Shared value-decoding boundary finding
+
+`tests/decode_boundary.rs` compiles one adversarial wire corpus against both
+unchanged production TD and this existing Basic candidate. It exposes a
+shared strict/typed decoding question upstream of Basic: public decoding can
+reinterpret literal extension objects and embedded strings, with graph,
+member-order and repeated-field-conversion effects. The investigation,
+alternatives, authority impact and exact limits belong to
+[workspace topic 0073](../../../workspace/0073-shared-json-value-decode-boundary.md).
+These observations do not make private serde keys a product contract or
+implement a strict decoder. The existing CI matrix automatically executes
+them in its Host cells; thumb library checks do not execute these tests.
+
+Run only the finding with `--test decode_boundary`, with the same feature
+requests as the commands above. The full commands also retain all existing
+schema/whole-Basic evidence.
+
 ## One rule source, two representations, two diagnostic sinks
 
 `src/kernel.rs` owns the DataSchema Basic rules once. It visits explicit type,
