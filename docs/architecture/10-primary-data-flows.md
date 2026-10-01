@@ -123,9 +123,13 @@ read_property(name, options)
 The compatibility entry leaves the caller's opaque `Thing` graph outside the
 engine's absolute memory claim and accounts the exact additional project-owned
 conversion peak. The strict builder/decoder accounts engine-owned storage from
-its first allocation through build completion. Both produce the same normalized
-snapshot, semantic view, Basic/default/security results, counts, and terminal
-outcomes. No successful owner retains or reconstructs a raw `Thing`, and the
+its first allocation through build completion. For equal logical field values,
+both produce fieldwise equal normalized snapshots and the same semantic queries
+and Basic results through one TD authority. ADR-0020 defines literal strict
+JSON values while preserving ordinary serde and typed compatibility; equal
+wire bytes can supply different values through serde representation handling.
+The detailed contract belongs to the WP-100 validated-Thing admission record.
+No successful owner retains or reconstructs a raw `Thing`, and the
 Published record retains neither the normalized Snapshot nor a TD view.
 
 The TD view supplies deterministic Property iteration/lookup, Property

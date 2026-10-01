@@ -298,6 +298,14 @@ Typed semantic equivalence is fieldwise over the `Thing` data model; Thing JSON
 serialize/deserialize round-trip is forbidden because serializer strictness may
 not narrow Basic-valid compatibility input.
 
+ADR-0020 resolves the strict JSON value boundary exposed by workspace 0073:
+strict uses literal kinds and shared TD field policies; ordinary serde remains
+unchanged and compatibility preserves its supplied typed Thing. Equal logical
+values must retain parity, while Value/RawValue wire re-interpretation can cause
+explicitly delimited differences. Duplicate, null, Number-content, sorting and
+decoder-construction obligations are owned by the admission record, not this
+package summary. This migration closes no whole pre-readmission evidence item.
+
 The planned Basic kernel keeps existing typed `NumberSchema` `f64` and
 `IntegerSchema` `i64` behavior unchanged. Only the five numeric
 `serde_json::Value::Number` schema-extension predicates use the amended

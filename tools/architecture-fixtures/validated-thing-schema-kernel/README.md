@@ -52,6 +52,10 @@ reinterpret literal extension objects and embedded strings, with graph,
 member-order and repeated-field-conversion effects. The investigation,
 alternatives, authority impact and exact limits belong to
 [workspace topic 0073](../../../workspace/0073-shared-json-value-decode-boundary.md).
+Its selected strict/ordinary agreement contract is now owned by the
+[WP-100 admission record](../../../docs/work-packages/WP-100-consumer-validated-thing-admission.md#strict-json-value-decoding-contract),
+with rationale in ADR-0020; migrated candidate authority still needs independent
+review and supplies no readmission.
 These observations do not make private serde keys a product contract or
 implement a strict decoder. The existing CI matrix automatically executes
 them in its Host cells; thumb library checks do not execute these tests.
@@ -59,6 +63,17 @@ them in its Host cells; thumb library checks do not execute these tests.
 Run only the finding with `--test decode_boundary`, with the same feature
 requests as the commands above. The full commands also retain all existing
 schema/whole-Basic evidence.
+
+`tests/value_decode_contract.rs` tests the decision's additional discriminators:
+AP Number/map public-event ambiguity, known-field collisions, decoded duplicate
+names, field-specific null/default behavior, and AP Number-content spelling
+and expansion. One synchronous public RawValue/scalar reference classifies
+literal wrappers without special-key dispatch or embedded parsing. It allocates
+a recursive Value graph and implements neither the full TD field decoder nor
+bounded admission; it is a semantic reference only. The production/public-source
+candidate and its generator remain unchanged. Run it with
+`--test value_decode_contract` in the same cells. These are Host executions;
+thumb library checks do not execute either decoding test corpus.
 
 ## One rule source, two representations, two diagnostic sinks
 

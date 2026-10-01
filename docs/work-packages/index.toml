@@ -118,10 +118,10 @@ sequence = 170
 status = "planned"
 admission_status = "candidate"
 impact_status = "current"
-impact_review = "workspace/0071-constrained-resource-authority-and-target-characterization.md"
-impact_disposition = "bounded-atomic-number-authority-migrated-without-readmission"
+impact_review = "workspace/0073-shared-json-value-decode-boundary.md"
+impact_disposition = "literal-json-value-contract-migrated-without-readmission"
 decision_review = "github-pr:76"
-authority_migration_review = "github-pr:92"
+authority_migration_review = "required-exact-head-review-of-json-value-contract"
 depends_on = []
 depends_on_packages = ["WP-000"]
 requirements = [
@@ -138,6 +138,7 @@ feature_cells = ["no-default", "async-no-std", "std"]
 authoritative_artifacts = [
     "docs/ADRs/0013-work-package-scoped-implementation-admission.org",
     "docs/ADRs/0019-consumer-one-shot-authority-entry.org",
+    "docs/ADRs/0020-strict-json-value-decoding.org",
     "docs/amendments/WP-100-bounded-atomic-number-v1.md",
     "docs/api-ownership.csv",
     "docs/architecture/10-primary-data-flows.md",
@@ -261,6 +262,7 @@ implementation_paths = [
     "td/src/components/form.rs",
     "td/src/components/link.rs",
     "td/src/components/security_scheme.rs",
+    "td/src/components/util.rs",
     "td/src/core/data_type.rs",
     "td/src/core/data_type/metadata.rs",
     "td/src/core/data_type/response.rs",

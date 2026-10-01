@@ -71,6 +71,13 @@ rejected by this resource. Typed compatibility admission uses borrowed public
 explicit `td/validated-thing -> serde_json/arbitrary_precision` capability and
 checks `as_str().len() <= L` before projection or lossless copy.
 
+The [strict value contract](../work-packages/WP-100-consumer-validated-thing-admission.md#strict-json-value-decoding-contract)
+also bounds decoded Number content before over-limit output/copy/projection.
+Public AP decoding can lengthen a token's spelling, so checking raw token
+length alone is insufficient. Literal strict wrapper strings are strings;
+ordinary-serde string-origin Numbers supplied to compatibility remain subject
+to the same borrowed Number-length guard. This changes no numeric predicate.
+
 Over-limit Number text is a resource `Limit`, not `InvalidSchema` and not a
 claim that the JSON syntax is invalid.
 

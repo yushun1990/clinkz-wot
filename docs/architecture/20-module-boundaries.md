@@ -82,6 +82,12 @@ kernel, typed fieldwise equivalence, the private normalized node/edge/byte
 snapshot, its structured allocation footprint, and terminal normalization
 rollback.
 
+ADR-0020 places strict literal JSON value decoding and shared TD field policies
+in TD. Ordinary serde keeps its representation conversions; typed compatibility
+preserves its input. Planning and Binding receive the resulting validated
+semantic view and own no wire-parity decision or collision handling. The
+validated-Thing admission record owns the exact agreement contract.
+
 The future validated surface requires opt-in TD `validated-thing`; its
 dependency boundary and supported graphs belong to the WP-100 validated-Thing
 admission record. Ordinary TD APIs and amended synchronous Basic remain

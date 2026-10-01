@@ -76,6 +76,16 @@ Both drive the same bounded cursor, normalized representation, TD semantic
 kernel, terminal model, and view; Host may drive it synchronously while a
 static caller resumes it.
 
+Under [ADR-0020](../ADRs/0020-strict-json-value-decoding.org), strict JSON uses
+literal value kinds and shares TD field policies above that boundary. Ordinary
+serde retains its established Value/RawValue interpretation; compatibility
+preserves the supplied typed Thing. Equality is required for equal logical
+field values, not unconditionally for the same wire bytes. No object member
+spelling invokes embedded JSON parsing or reserves a namespace in strict input.
+The exact differences, duplicate/null/Number-content rules and construction
+evidence belong solely to the validated-Thing admission record. This authority
+candidate still requires independent acceptance and readmission.
+
 Semantic equivalence is defined over the typed `Thing` model: all known fields
 and optional distinctions, ordered sequences and original Form indices, map
 associations, string/URI content, and nested extension values including
@@ -137,7 +147,9 @@ machine exists and cannot appear as its per-input `Limit` terminal. The resource
 applies to Consumer `+validated-thing`;
 Directory-client is `NA`. A configured limit `L` rejects strict input at Number
 byte `L + 1` before copying that byte or finishing the scan; typed input checks
-borrowed length first. Zero disables Number admission, including opaque
+borrowed length first. Strict also bounds decoded Number content before
+over-limit output/copy/projection, since public AP spelling can be longer than
+its token. Zero disables Number admission, including opaque
 Numbers. Over-ceiling Number text is `Limit`; within-ceiling opaque Numbers
 remain losslessly retained even when they cannot project to finite `f64`.
 
