@@ -444,6 +444,7 @@ dependencies = [
  "serde_with",
  "time",
  "validated-thing-planning-handoff-probe",
+ "validated-thing-value-construction-probe",
 ]
 
 [[package]]
@@ -3175,6 +3176,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "validated-thing-arena-layout-probe"
+version = "0.0.0"
+dependencies = [
+ "clinkz-wot-foundation",
+]
+
+[[package]]
 name = "validated-thing-planning-handoff-probe"
 version = "0.0.0"
 dependencies = [
@@ -3183,6 +3191,23 @@ dependencies = [
  "clinkz-wot-planning",
  "clinkz-wot-property-read-binding-fixture",
  "clinkz-wot-td",
+]
+
+[[package]]
+name = "validated-thing-strict-number-lexeme-probe"
+version = "0.0.0"
+dependencies = [
+ "clinkz-wot-foundation",
+]
+
+[[package]]
+name = "validated-thing-value-construction-probe"
+version = "0.0.0"
+dependencies = [
+ "clinkz-wot-foundation",
+ "serde_json",
+ "validated-thing-arena-layout-probe",
+ "validated-thing-strict-number-lexeme-probe",
 ]
 
 [[package]]

@@ -23,12 +23,15 @@ use td_crate::{
 };
 use time::OffsetDateTime;
 #[path = "../../../tools/architecture-fixtures/validated-thing-arena-layout/src/lib.rs"]
-#[allow(unused_attributes)]
+#[allow(unused_attributes, dead_code)]
 mod arena_layout;
 use arena_layout::{Prototype, RetainedEdge, RetainedNode};
 
 #[path = "typed_corpus_shared.rs"]
 mod typed_corpus_shared;
+
+#[path = "value_construction_probe.rs"]
+mod value_construction_probe;
 
 #[path = "semantic_kernel_probe.rs"]
 mod semantic_kernel_probe;

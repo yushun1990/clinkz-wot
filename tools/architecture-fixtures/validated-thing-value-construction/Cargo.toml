@@ -1,0 +1,23 @@
+[package]
+name = "validated-thing-value-construction-probe"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[workspace]
+
+[dependencies]
+clinkz-wot-foundation = { path = "../../../foundation", default-features = false }
+validated-thing-arena-layout-probe = { path = "../validated-thing-arena-layout" }
+validated-thing-strict-number-lexeme-probe = { path = "../validated-thing-strict-number-lexeme" }
+serde_json = { version = "1.0.149", default-features = false, features = ["alloc", "arbitrary_precision"] }
+
+[dev-dependencies]
+serde = { version = "1.0", default-features = false, features = ["alloc"] }
+serde_json = { version = "1.0.149", default-features = false, features = ["alloc", "raw_value", "arbitrary_precision"] }
+
+[features]
+default = ["std"]
+std = ["serde_json/std", "clinkz-wot-foundation/std"]
+order = ["serde_json/preserve_order"]
+async = ["clinkz-wot-foundation/async"]

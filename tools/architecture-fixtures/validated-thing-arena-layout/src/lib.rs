@@ -4,6 +4,8 @@
 
 extern crate alloc;
 
+pub mod staged;
+
 use alloc::alloc::{alloc, dealloc};
 use clinkz_wot_foundation::{AdmissionLedger, Generation, ResourceKind, SlotIndex};
 use core::{
@@ -52,15 +54,19 @@ enum Account {
     Temporary,
 }
 
-struct Arena<T: Copy> {
+struct Arena<T> {
     pointer: NonNull<T>,
     length: usize,
     capacity: usize,
     request_bytes: u64,
 }
 
-impl<T: Copy> Default for Arena<T> {
+impl<T> Default for Arena<T> {
     fn default() -> Self {
+        // Temporary traversal iterators may be non-Copy, but must never own
+        // destructors. Transfers move their initialized representation and
+        // release the old block without visiting elements.
+        assert!(!mem::needs_drop::<T>());
         Self {
             pointer: NonNull::dangling(),
             length: 0,
@@ -70,7 +76,7 @@ impl<T: Copy> Default for Arena<T> {
     }
 }
 
-impl<T: Copy> Arena<T> {
+impl<T> Arena<T> {
     fn push(&mut self, value: T) -> Result<(), Error> {
         if self.length == self.capacity {
             return Err(Error::Limit);
@@ -129,7 +135,7 @@ impl Arena<u8> {
     }
 }
 
-impl<T: Copy> Drop for Arena<T> {
+impl<T> Drop for Arena<T> {
     fn drop(&mut self) {
         if let Some(layout) = self.requested_layout() {
             // SAFETY: pointer came from alloc with this exact checked Layout;
@@ -370,7 +376,7 @@ impl Accounting {
         }
     }
 
-    fn replace<T: Copy>(
+    fn replace<T>(
         &mut self,
         arena: &mut Arena<T>,
         capacity: usize,
@@ -380,6 +386,9 @@ impl Accounting {
             return Ok(());
         }
         let layout = Layout::array::<T>(capacity).map_err(|_| Error::Arithmetic)?;
+        if layout.size() == 0 {
+            return Err(Error::Arithmetic);
+        }
         let bytes = u64::try_from(layout.size()).map_err(|_| Error::Arithmetic)?;
         if bytes > self.contiguous_limit
             || self
@@ -423,7 +432,8 @@ impl Accounting {
         };
         reservation.commit();
         // SAFETY: blocks are distinct; the source initialized prefix fits
-        // both allocations and T is Copy.
+        // both allocations. T is non-dropping, the old representation is
+        // frozen during this move and is deallocated without element drop.
         unsafe { ptr::copy_nonoverlapping(arena.pointer.as_ptr(), pointer.as_ptr(), arena.length) };
         let old = mem::replace(
             arena,
@@ -482,7 +492,7 @@ impl Accounting {
         Ok(())
     }
 
-    fn release<T: Copy>(&mut self, arena: &mut Arena<T>, account: Account) {
+    fn release<T>(&mut self, arena: &mut Arena<T>, account: Account) {
         let old = mem::take(arena);
         let bytes = old.request_bytes;
         drop(old);

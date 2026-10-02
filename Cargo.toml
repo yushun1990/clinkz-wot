@@ -1,5 +1,10 @@
 [workspace]
 resolver = "3"
+exclude = [
+    "tools/architecture-fixtures/validated-thing-arena-layout",
+    "tools/architecture-fixtures/validated-thing-strict-number-lexeme",
+    "tools/architecture-fixtures/validated-thing-value-construction",
+]
 members = [
     "clinkz-wot",
     "codecs/cbor",
