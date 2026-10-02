@@ -111,10 +111,12 @@ pub struct Trace {
     /// Accepted class debits: DocumentNodes, input, output, prepaid cleanup.
     pub work: [u64; 4],
     pub wire_observed: usize,
-    pub grow_copies: usize,
-    pub seal_copies: usize,
-    pub key_bytes: usize,
-    pub discarded_nodes: usize,
+    // Repeated sort/copy work can exceed address width on thumb even though
+    // each input/arena offset fits usize. The lifetime bounds these totals.
+    pub grow_copies: u64,
+    pub seal_copies: u64,
+    pub key_bytes: u64,
+    pub discarded_nodes: u64,
 }
 
 enum Input<'a> {

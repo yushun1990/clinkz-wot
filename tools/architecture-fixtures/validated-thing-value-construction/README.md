@@ -73,6 +73,8 @@ transitions, emitted/copied records and sort moves use `DocumentNodes`; reads
 and emitted/copied bytes use their codec classes. Before each actual allocation
 request, one `CleanupItems` and lifetime unit prepays its fixed release.
 Zero budget observes no input and allocates nothing. No step credit is stored.
+Cumulative sort/copy statistics use `u64`, bounded by that lifetime; repeated
+work can exceed address width even when each thumb arena offset fits `usize`.
 Failure and cancellation expose a fixed first cause only after the same
 idempotent, allocation-free bounded release path has cleared all live charges.
 Abandonment and completed-owner drop use that path too.

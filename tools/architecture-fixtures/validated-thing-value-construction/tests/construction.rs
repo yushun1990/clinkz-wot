@@ -548,7 +548,7 @@ fn long_equal_key_prefixes_are_paid_and_duplicate_cleanup_preserves_associations
     let reference = literal_value_reference::literal(&text).unwrap();
     let value = drive(Cursor::from_json(text.as_bytes(), Limits::default()), 1).unwrap();
     equivalent(value.view(), &reference);
-    assert!(value.trace().key_bytes > 2 * prefix.len());
+    assert!(value.trace().key_bytes > 2 * prefix.len() as u64);
     assert!(value.trace().discarded_nodes > 0);
     let error = drive(
         Cursor::from_json(
