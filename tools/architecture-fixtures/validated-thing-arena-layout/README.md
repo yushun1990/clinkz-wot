@@ -14,6 +14,14 @@ Its README owns the complete semantic-composition evidence and remaining
 readmission boundaries. This arena fixture remains storage evidence and does
 not implement a bounded admission cursor.
 
+The separate [bounded literal value construction](../validated-thing-value-construction/README.md)
+reuses this accounting body through `staged.rs`: empty replacement requests
+are followed by one paid element move at a time, with old/new blocks charged
+until release. Its temporary frames may contain non-Copy borrowed public
+iterators; the internal arena rejects dropping element types and zero-sized
+allocation requests. That JSON value-layer composition does not make this
+original synchronous `Prototype` or the full typed Thing traversal resumable.
+
 ## Reproduce
 
 From the repository root:
@@ -33,7 +41,7 @@ The fixed `Prototype` owns exactly four temporary arena handles: mutable
 `RetainedNode`, `RetainedEdge`, and byte build arrays, plus a traversal-frame
 array. Sealing retains exactly three possible arrays: exact-length node, edge,
 and byte arrays. Empty arrays allocate zero bytes and retain no allocation.
-All element types are explicit `Copy` scalar records with no destructor or
+The `Prototype` element types are explicit `Copy` scalar records with no destructor or
 nested owning value. The prototype calls `alloc` and `dealloc` itself with
 one checked `Layout::array::<T>(capacity)` for each nonempty array.
 
