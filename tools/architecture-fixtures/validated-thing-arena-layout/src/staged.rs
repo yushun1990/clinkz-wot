@@ -22,6 +22,8 @@ enum Transfer<F> {
 
 /// Fixture scaffolding, not a public TD storage API. F must be non-dropping;
 /// it can contain borrowed public iterators, never an owning collection.
+/// All build arenas are frozen during transfer, including frame extraction.
+/// Only transfer completion or whole-storage cleanup can release either copy.
 pub struct Storage<F> {
     accounting: Accounting,
     nodes: Arena<RetainedNode>,
@@ -186,7 +188,15 @@ impl<F> Storage<F> {
         }
     }
 
+    fn assert_not_transferring(&self) {
+        assert!(
+            self.transfer.is_none(),
+            "arena mutation is forbidden during transfer"
+        );
+    }
+
     pub fn release_site(&mut self, site: Site) {
+        self.assert_not_transferring();
         let bytes = match site {
             Site::Nodes => self.nodes.request_bytes,
             Site::Edges => self.edges.request_bytes,
@@ -207,19 +217,24 @@ impl<F> Storage<F> {
     }
 
     pub fn push_node(&mut self, node: RetainedNode) {
+        self.assert_not_transferring();
         self.nodes.push(node).unwrap();
     }
     pub fn push_edge(&mut self, edge: RetainedEdge) {
+        self.assert_not_transferring();
         self.edges.push(edge).unwrap();
     }
     pub fn push_byte(&mut self, byte: u8) {
+        self.assert_not_transferring();
         self.bytes.push(byte).unwrap();
     }
     pub fn push_frame(&mut self, frame: F) {
+        self.assert_not_transferring();
         self.frames.push(frame).unwrap();
     }
 
     pub fn pop_frame(&mut self) -> F {
+        self.assert_not_transferring();
         assert!(self.frames.length != 0);
         self.frames.length -= 1;
         // SAFETY: move out the initialized last element. The shortened prefix
@@ -228,7 +243,8 @@ impl<F> Storage<F> {
     }
 
     pub fn frame_mut(&mut self) -> &mut F {
-        assert!(self.frames.length != 0 && self.transfer.is_none());
+        self.assert_not_transferring();
+        assert!(self.frames.length != 0);
         // SAFETY: unique borrow of the initialized last element.
         unsafe { &mut *self.frames.pointer.as_ptr().add(self.frames.length - 1) }
     }
@@ -244,21 +260,25 @@ impl<F> Storage<F> {
     }
 
     pub fn set_node(&mut self, index: usize, node: RetainedNode) {
+        self.assert_not_transferring();
         assert!(index < self.nodes.length);
         // SAFETY: initialized index, unique owner, non-dropping scalar value.
         unsafe { self.nodes.pointer.as_ptr().add(index).write(node) };
     }
     pub fn set_edge(&mut self, index: usize, edge: RetainedEdge) {
+        self.assert_not_transferring();
         assert!(index < self.edges.length);
         // SAFETY: initialized index, unique owner, non-dropping scalar value.
         unsafe { self.edges.pointer.as_ptr().add(index).write(edge) };
     }
     pub fn set_byte(&mut self, index: usize, byte: u8) {
+        self.assert_not_transferring();
         assert!(index < self.bytes.length);
         // SAFETY: initialized index and unique owner.
         unsafe { self.bytes.pointer.as_ptr().add(index).write(byte) };
     }
     pub fn truncate(&mut self, site: Site, length: usize) {
+        self.assert_not_transferring();
         match site {
             Site::Nodes => self.nodes.truncate(length),
             Site::Edges => self.edges.truncate(length),

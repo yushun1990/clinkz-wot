@@ -1,4 +1,4 @@
-use clinkz_wot_foundation::WorkBudget;
+use clinkz_wot_foundation::{WorkBudget, WorkClass as W};
 use validated_thing_value_construction_probe::{Cause, Cursor, Kind, Limits, Phase, Progress};
 
 #[path = "../../validated-thing-schema-kernel/tests/support/literal_value_reference.rs"]
@@ -564,4 +564,96 @@ fn long_equal_key_prefixes_are_paid_and_duplicate_cleanup_preserves_associations
     .unwrap();
     assert_eq!(error.cause, Cause::Lifetime);
     assert!(error.trace.wire_observed <= text.len());
+}
+
+#[test]
+fn empty_keys_complete_without_input_credit_after_parsing() {
+    for input in [
+        &br#"{"":true,"":false}"#[..],
+        &br#"{"":true,"":false,"":null}"#[..],
+        &br#"{"":{"":true,"":false},"":false}"#[..],
+    ] {
+        let reference =
+            literal_value_reference::literal(core::str::from_utf8(input).unwrap()).unwrap();
+        let baseline = drive(Cursor::from_json(input, Limits::default()), 1).unwrap();
+        let mut cursor = Cursor::from_json(
+            input,
+            Limits {
+                lifetime: baseline.trace().work.iter().sum::<u64>() + 100,
+                ..Limits::default()
+            },
+        );
+        while cursor.phase() == Phase::Input {
+            cursor = match cursor.step(&mut budget(1), false) {
+                Progress::Pending(next) => next,
+                _ => panic!("input did not reach sorting"),
+            };
+        }
+        assert_eq!(cursor.trace().wire_observed, input.len());
+        let input_work = cursor.trace().work[1];
+        let mut complete = false;
+        for _ in 0..1_000 {
+            let mut work = WorkBudget::new()
+                .with_remaining(W::DocumentNodes, 10)
+                .with_remaining(W::CodecOutputBytes, 10)
+                .with_remaining(W::CleanupItems, 10);
+            match cursor.step(&mut work, false) {
+                Progress::Pending(next) => cursor = next,
+                Progress::Complete(value) => {
+                    equivalent(value.view(), &reference);
+                    assert_eq!(value.trace().work[1], input_work);
+                    assert_eq!(value.trace().key_bytes, 0);
+                    assert_eq!(
+                        value.footprint().retained_requested_bytes,
+                        baseline.footprint().retained_requested_bytes
+                    );
+                    complete = true;
+                    break;
+                }
+                Progress::Failed(failure) => panic!("{failure:?}"),
+            }
+        }
+        assert!(complete, "empty keys stalled without byte work");
+    }
+}
+
+#[test]
+fn exhausted_key_prefix_finishes_sort_and_duplicates_without_input_credit() {
+    fn leave_phase(mut cursor: Cursor<'_>, phase: Phase, key_bytes: u64) -> Cursor<'_> {
+        for _ in 0..1_000 {
+            assert_eq!(cursor.trace().key_bytes, key_bytes);
+            if cursor.phase() != phase {
+                return cursor;
+            }
+            let mut work = WorkBudget::new().with_remaining(W::DocumentNodes, 1);
+            cursor = match cursor.step(&mut work, false) {
+                Progress::Pending(next) => next,
+                _ => panic!("comparison did not reach the next phase"),
+            };
+        }
+        panic!("{phase:?} stalled at the end of a paid prefix");
+    }
+    for input in [
+        &br#"{"a":true,"a":false}"#[..],
+        &br#"{"ab":true,"a":false}"#[..],
+        &br#"{"a":true,"ab":false}"#[..],
+    ] {
+        let reference =
+            literal_value_reference::literal(core::str::from_utf8(input).unwrap()).unwrap();
+        let mut cursor = Cursor::from_json(input, Limits::default());
+        for (phase, key_bytes) in [(Phase::Sort, 2), (Phase::Duplicates, 4)] {
+            while cursor.trace().key_bytes < key_bytes {
+                cursor = match cursor.step(&mut budget(1), false) {
+                    Progress::Pending(next) => next,
+                    _ => panic!("comparison finished before reading the prefix"),
+                };
+            }
+            assert_eq!(cursor.phase(), phase);
+            cursor = leave_phase(cursor, phase, key_bytes);
+        }
+        assert_eq!(cursor.phase(), Phase::Reachability);
+        let value = drive(cursor, 1).unwrap();
+        equivalent(value.view(), &reference);
+        assert_eq!(value.trace().key_bytes, 4);
+    }
 }

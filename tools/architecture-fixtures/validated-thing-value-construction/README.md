@@ -51,6 +51,9 @@ contain only scalars/borrowed public iterators; compile-time assertions exclude
 destructors. Grow keeps the old block and one replacement charged, pauses after
 each copied element, then frees/releases the old block. No owning Value, Map,
 String, Number, serializer output, sort buffer or recursive task tree is built.
+All build-arena mutation and frame extraction are rejected while a transfer is
+in flight, including after its last element copy and before completion releases
+the old block. Whole-storage cancellation/abandonment cleanup remains allowed.
 
 Edges initially identify their parent. Stable in-place insertion sorting groups
 them by parent; only Object members additionally compare decoded key bytes.
@@ -58,6 +61,8 @@ Each comparison/move and each compared byte is paid. Equal keys retain source
 order until duplicate resolution removes every earlier occurrence. Every
 overwritten value has already been syntax-checked and charged. No field type,
 null/default or discriminator decision is made by this value-layer fixture.
+Empty keys and exhausted equal prefixes finish comparison with structural
+credit only; input-byte credit is required only for an actual next byte read.
 
 Nonrecursive reachability marks surviving nodes/edges. In-place edge, byte and
 node compaction removes all unreachable occurrences, remaps scalar references,

@@ -194,6 +194,12 @@ struct KeyCompare {
     byte: Option<u8>,
 }
 
+enum CompareStep {
+    Blocked,
+    Advanced,
+    Complete(Ordering),
+}
+
 #[derive(Clone, Copy)]
 struct Sort {
     index: usize,
@@ -491,25 +497,27 @@ impl<'a> Cursor<'a> {
         &mut self,
         compare: &mut KeyCompare,
         budget: &mut WorkBudget,
-    ) -> Result<Option<Ordering>, Cause> {
+    ) -> Result<CompareStep, Cause> {
         let n = compare.index;
         if n == compare.left.byte_count as usize || n == compare.right.byte_count as usize {
-            return Ok(Some(compare.left.byte_count.cmp(&compare.right.byte_count)));
+            return Ok(CompareStep::Complete(
+                compare.left.byte_count.cmp(&compare.right.byte_count),
+            ));
         }
         if !self.pay(budget, &[W::CodecInputBytes])? {
-            return Ok(None);
+            return Ok(CompareStep::Blocked);
         }
         self.trace.key_bytes += 1;
         if let Some(left) = compare.byte.take() {
             let right = self.storage.byte(compare.right.first_byte as usize + n);
             if left != right {
-                return Ok(Some(left.cmp(&right)));
+                return Ok(CompareStep::Complete(left.cmp(&right)));
             }
             compare.index += 1;
         } else {
             compare.byte = Some(self.storage.byte(compare.left.first_byte as usize + n));
         }
-        Ok(None)
+        Ok(CompareStep::Advanced)
     }
 
     fn tick(&mut self, budget: &mut WorkBudget) -> Result<bool, Cause> {
@@ -1557,10 +1565,11 @@ impl<'a> Cursor<'a> {
                                 byte: None,
                             });
                         }
-                        if budget.remaining(W::CodecInputBytes) == 0 {
-                            return Ok((State::Sort(sort), false));
+                        match self.compare(sort.compare.as_mut().unwrap(), budget)? {
+                            CompareStep::Blocked => return Ok((State::Sort(sort), false)),
+                            CompareStep::Advanced => None,
+                            CompareStep::Complete(order) => Some(order),
                         }
-                        self.compare(sort.compare.as_mut().unwrap(), budget)?
                     };
                     if let Some(order) = order {
                         sort.compare = None;
@@ -1603,16 +1612,17 @@ impl<'a> Cursor<'a> {
                         byte: None,
                     });
                 }
-                if budget.remaining(W::CodecInputBytes) == 0 {
-                    return Ok((State::Duplicates(duplicates), false));
-                }
-                if let Some(order) = self.compare(duplicates.compare.as_mut().unwrap(), budget)? {
-                    if order == Ordering::Equal {
-                        duplicates.discard = Some(previous);
+                match self.compare(duplicates.compare.as_mut().unwrap(), budget)? {
+                    CompareStep::Blocked => return Ok((State::Duplicates(duplicates), false)),
+                    CompareStep::Advanced => {}
+                    CompareStep::Complete(order) => {
+                        if order == Ordering::Equal {
+                            duplicates.discard = Some(previous);
+                        }
+                        duplicates.compare = None;
+                        duplicates.previous = Some(current);
+                        duplicates.position += 1;
                     }
-                    duplicates.compare = None;
-                    duplicates.previous = Some(current);
-                    duplicates.position += 1;
                 }
             } else {
                 duplicates.previous = Some(current);
