@@ -42,7 +42,7 @@ fn main() {
             "\n#[path = {path:?}]\n#[allow(dead_code)]\nmod {module};\n"
         ));
     }
-    for module in ["schema_arena", "schema_step"] {
+    for module in ["schema_arena", "schema_step", "schema_tree"] {
         let path = fixture.join("src").join(format!("{module}.rs"));
         println!("cargo:rerun-if-changed={}", path.display());
         lib.push_str(&format!(

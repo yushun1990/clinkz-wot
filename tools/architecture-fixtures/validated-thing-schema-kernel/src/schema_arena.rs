@@ -96,8 +96,27 @@ impl<'a> List<'a> {
 pub struct Extras<'a> {
     pub(crate) object: View<'a>,
     pub(crate) consumed: u64,
+    indexed: Option<[Option<View<'a>>; 9]>,
 }
 impl<'a> Extras<'a> {
+    pub(crate) fn indexed(object: View<'a>, consumed: u64, index: &[Option<View<'a>>; 29]) -> Self {
+        Self {
+            object,
+            consumed,
+            indexed: Some(basic::FIELDS.map(|field| index[policy_field(field) as usize])),
+        }
+    }
+    /// Bounded admission uses only the fixed index prepared by schema_step.
+    /// The synchronous reference retains its established object lookup.
+    pub fn basic_field(self, field: basic::Field) -> Option<View<'a>> {
+        if self.consumed & (1 << policy_field(field) as u8) != 0 {
+            return None;
+        }
+        match self.indexed {
+            Some(index) => index[field as usize],
+            None => self.object.get(field.name()),
+        }
+    }
     pub fn get(self, key: &str) -> Option<View<'a>> {
         if Field::ALL
             .into_iter()
@@ -112,6 +131,19 @@ impl<'a> Extras<'a> {
             let (key, value) = self.object.member(i)?;
             self.get(key).map(|_| (key, value))
         })
+    }
+}
+fn policy_field(field: basic::Field) -> Field {
+    match field {
+        basic::Field::MinItems => Field::MinItems,
+        basic::Field::MaxItems => Field::MaxItems,
+        basic::Field::MinLength => Field::MinLength,
+        basic::Field::MaxLength => Field::MaxLength,
+        basic::Field::Minimum => Field::Minimum,
+        basic::Field::ExclusiveMinimum => Field::ExclusiveMinimum,
+        basic::Field::Maximum => Field::Maximum,
+        basic::Field::ExclusiveMaximum => Field::ExclusiveMaximum,
+        basic::Field::MultipleOf => Field::MultipleOf,
     }
 }
 
@@ -208,6 +240,7 @@ impl<'a> policy::Source for Source<'a> {
         Extras {
             object: self.object,
             consumed: self.consumed,
+            indexed: None,
         }
     }
 }

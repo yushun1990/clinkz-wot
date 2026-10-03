@@ -15,7 +15,7 @@ The uncertainty addressed here is whether a future admission cursor must invent
 another Basic rule set or error precedence while combining those local proofs.
 The candidate uses shared component predicates and shared whole-Thing order;
 its adapters contain only borrowed representation facts. Complete TD
-construction, charged nonrecursive semantic traversal, and whole-admission
+construction, charged whole-Thing semantic traversal, and whole-admission
 resource and terminal ownership remain separate obligations. The existing
 [URI query proof](../validated-thing-arena-layout/README.md#shared-uri-and-borrowed-planning-view-slice)
 and [post-drop Planning witness](../validated-thing-planning-handoff/README.md)
@@ -494,7 +494,8 @@ regressions and additional UTF-8/surrogate tests protect this premise.
   realloc calls in projection, local failure/cancellation and every Pending
   abandonment of its fixed inputs. Source footprint is unchanged. Cursor and
   returned facts need no destructor. On the tested 64-bit Host the field
-  cursor is **1,592 inline bytes**, and the result is **328 bytes**. Policy
+  cursor is **1,592 inline bytes**, and the result is **480 bytes** after the
+  subtree composition's fixed nine-field Basic index below. Policy
   replay also uses fixed local state; these are not target stack, supported-M,
   future Servient owner capacity, or whole-cursor peak claims.
 
@@ -539,3 +540,154 @@ No readmission item is complete as a whole. Admission remains
 admission-only transition still require independent acceptance of the complete
 eight-item evidence set. This slice establishes the bounded field seam before
 widening it or composing a whole admission cursor, not a new production design.
+
+## Charged nested DataSchema decoding and Basic composition
+
+`src/schema_tree.rs` addresses the composition gap left by #121: a complete
+schema subtree must convert every known child, then run the shared Basic rules
+in their existing discovery order, while field work, semantic work and traversal
+storage all consume the actual value owner's remaining resources. The older
+Basic adapter's recursive, repeated extraction is never used by this engine.
+Another isolated field conversion or numeric rule case would not establish this
+boundary. This is non-production pre-readmission evidence, not an admitted
+builder or a typed canonical Snapshot.
+
+### Existing source composed
+
+- #119 supplies the actual immutable literal arenas, checked Accounting/ledger,
+  source footprint, and construction's non-resettable lifetime remainder.
+- #120 supplies the shared metadata/context/variant policy and primitive TD
+  visitors. No field ownership, null/default or discriminator rule is copied.
+- #121 supplies charged indexing, conversion and bounded policy replay. Its
+  `Machine` now accepts a work remainder at each step; the existing borrowing
+  `Cursor` facade uses that **same machine** and retains its original contract.
+  Completed facts carry a fixed nine-field Basic index derived from the paid
+  29-field index and the existing consumed-key mask. Basic does not call
+  `View::get`, `Extras::get`, synchronous `decode`, or an unbudgeted map scan.
+- #114 supplies `NumericCursor` and the atomic projection helper. The same
+  `kernel.rs` now also owns `Walk` and the local checks. The synchronous public
+  candidate and the bounded traversal both use that rule/discovery source.
+  #115's whole-Thing composition continues to use the same schema kernel.
+
+### Work and storage mechanism
+
+The first iterative pass decodes the entire DataSchema subtree, traversing
+ordered `oneOf`, then Array items or Object properties in semantic key order.
+No Basic check runs during this pass. Thus a malformed later child is not hidden
+by a Basic-invalid parent or earlier sibling. The second pass decodes each
+visited node once again and executes shared `Walk`: type, oneOf children, flags,
+unsigned extension bounds, numeric extension predicates, typed constraints,
+and variant children. Both passes pay every field extraction and scalar parse;
+there is no free re-extraction on a Basic accessor. Only the active ancestry's
+field facts are stored, not a second document graph. This deliberate second
+paid pass is a construction witness, not a throughput claim or a production
+choice of decode/seal order.
+
+Each traversal transition pays `DocumentNodes`; each field-machine node entry
+also pays `JsonSchemaNodes`. Short type comparisons copy paid bytes into the
+shared vocabulary's bounded inline buffer. Extension `u64` inspection and
+`f64` projection each use the existing full-lexeme debit and pre/post
+cancellation helper, including failed attempts. Non-Number predicates remain
+absent; opaque values never become schemas or arithmetic predicates. Local rule
+comparisons run under their containing structural debit. Every accepted work
+unit, including cleanup prepayment, consumes the same lifetime scalar as literal
+construction. No step credit is retained.
+
+Traversal frames use the existing fourth temporary site. The sealed arrays are
+grouped privately so an immutable `Sealed` borrow can coexist with mutable
+accounting. `OwnedValue::inspection_parts()` lends that source borrow, its actual
+lifetime and a frame workspace backed by its **actual Accounting and ledger**.
+It does not create a separate allowance or change source classification.
+Each empty replacement is allocated through the original checked Layout and
+reservation body after one prepaid `CleanupItems`/lifetime debit. Old and new
+frame blocks remain simultaneously charged. Each frame copy is a separate paid
+move; mutation/extraction is forbidden during transfer. All frame elements are
+non-dropping. Completion, local failure, cancellation and abandonment release
+at most two frame allocations, with no recursive drop or fallible cleanup.
+
+The local pass borrows the source owner. Its terminal releases frames **before**
+returning and leaves the original source arenas live. The outer value owner
+still owns their release. This establishes the shared child ledger and bounded
+local cleanup, not full admission rollback, parent/global release, publication,
+or installation. The cancellation closure is fixture instrumentation; it does
+not alter the frozen production boolean step parameter.
+
+### Falsifiable witnesses and reproduction
+
+`tests/schema_tree.rs` runs eight tests in each capability-on Host cell:
+
+- 180 comparisons (45 semantic cases across root, oneOf, Array items and
+  Object properties) agree with the generated candidate's real public Basic
+  entry and the existing literal reference, covering all variants, the five
+  extension predicates, finite
+  failure, rounding, underflow, u64-sized bounds and typed integer/Infinity
+  behavior. Separate tests pin malformed child kinds and conversion-before-
+  Basic conflicts, plus exact first-rule/schema-local ordinals after suspension.
+- Small/interleaved and large budgets yield identical complete traces. A
+  seven-node witness pays field projection twice per node, three Basic numeric
+  projections, three frame allocations and three frame moves. Repeated validation
+  pays again; construction plus subtree work at the exact lifetime boundary
+  succeeds, while one unit less fails as resource exhaustion.
+- A Basic Number whose step or lifetime debit is short does not parse or debit.
+  Resume does not repeat a completed predicate. Pre/post cancellation pins the
+  actual parse/debit, and a fixed Basic rejection is not replaced by a later
+  cancellation during cleanup. A size-bound pair rejects before any later pair's
+  scalar conversion; a one-unit witness reaches that rejection despite a later
+  20-byte Number. AP decoded `1e+309` is charged as six bytes.
+- An independent thread-local allocator matches successful frame requests,
+  old/new overlap, peak and largest request against the real source ledger.
+  Every actual frame request is fault-injected. Temporary, actual-contiguous
+  and combined source/frame peak ceilings are tested below/equal/above; rejected
+  requests are not allocated. Terminals have zero temporary charge and exactly
+  the original source charge. Source drop still releases its three exact arenas.
+- Every Pending boundary of a nested witness preserves zero-work state,
+  phase and lifetime; cancellation or abandonment releases all frames, including
+  both sides of an unfinished grow, without allocation or recursive cleanup.
+- A 512-level schema completes with explicit frames, and its first excessive
+  semantic depth is rejected before entering the extra node. Long metadata and
+  literal collision/opaque overflow objects introduce no hidden schema visit,
+  scalar parse or embedded document interpretation.
+
+On the tested 64-bit Host, the subtree cursor is 1,936 inline bytes and one
+frame is 512 bytes. The seven-node witness retains 1,321 source bytes; semantic
+frame requests peak at 3,072 bytes, the largest frame request is 2,048 bytes,
+and their live overlap with source reaches 4,393 bytes. The owner's recorded
+conversion peak is the maximum of construction's prior peak and this new
+overlap, not a reset. These are fixture observations, not profile ceilings,
+target stack bounds or supported-M claims. Instrumented trace/error records
+are fixed inline test records, not the frozen production diagnostics.
+
+```sh
+cargo test --locked --manifest-path tools/architecture-fixtures/validated-thing-schema-kernel/Cargo.toml --features validated-thing --test schema_tree -- --nocapture
+cargo test --locked --manifest-path tools/architecture-fixtures/validated-thing-schema-kernel/Cargo.toml --no-default-features --features async,validated-thing
+cargo check --locked --target thumbv7em-none-eabihf --manifest-path tools/architecture-fixtures/validated-thing-schema-kernel/Cargo.toml --no-default-features --features validated-thing
+```
+
+The unchanged CI matrix executes all original tests plus this source in 13
+Host cells (705 executions, including 56 new-test executions in seven cells)
+and compiles eight thumb cells. Thumb compilation is not constrained execution.
+Existing value construction, typed Snapshot/Basic, Planning handoff and authority
+checks remain required; no checker, manifest, lock or CI orchestration is added.
+
+### Exact pre-readmission advance and remaining boundary
+
+Items 2/3/6 advance from one-node field projection plus isolated recursive Basic
+to a charged, nonrecursive **complete DataSchema subtree**, with actual shared
+lifetime, rule order and first-cause local cleanup. Item 7 gains actual source/
+semantic-frame overlap and request/release observations under the same ledger;
+item 5 covers the composed source in the existing matrix. No item is complete
+as a whole. Items 1/4/8 gain no new surface, Planning or acceptance claim.
+
+Whole Thing/affordance/Form/security field-policy extraction and traversal,
+typed Thing compatibility construction, date/URI/default/security execution,
+typed canonical normalization/seal/equivalence and default-equivalent footprints
+remain. So do complete configuration and derived M, frozen surface negatives,
+global diagnostic coordinates, whole first-cause source rollback, constrained
+execution and target stack evidence, final View/owned Planning repetition,
+and owner/parent/global/publication resource lifecycle. Existing #108 and
+#110–#115 are reusable local dependencies, not proof of these composed duties.
+
+Admission stays `planned / candidate / current`. No production, authority,
+work-package status, PLAN, successor, resource row, WorkClass or gate is changed.
+Independent exact-head acceptance of the complete eight-item set and a separate
+admission-only transition are still required before production implementation.

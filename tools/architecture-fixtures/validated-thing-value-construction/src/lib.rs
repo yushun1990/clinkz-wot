@@ -7,9 +7,11 @@ extern crate alloc;
 use clinkz_wot_foundation::{WorkBudget, WorkClass as W};
 use core::{cmp::Ordering, mem};
 use serde_json::Value;
+pub use validated_thing_arena_layout_probe::Error as FrameError;
+pub use validated_thing_arena_layout_probe::staged::{FrameResources, Frames};
 use validated_thing_arena_layout_probe::{
     Error as ArenaError, Footprint, RetainedEdge as Edge, RetainedNode as Node,
-    staged::{Site, Storage},
+    staged::{Sealed, Site, Storage},
 };
 use validated_thing_strict_number_lexeme_probe::{Feed, NumberLexeme};
 
@@ -1654,7 +1656,7 @@ pub struct OwnedValue {
 impl OwnedValue {
     pub fn view(&self) -> View<'_> {
         View {
-            owner: &self.storage,
+            owner: self.storage.sealed(),
             node: 0,
         }
     }
@@ -1664,11 +1666,17 @@ impl OwnedValue {
     pub fn admission_parts(&mut self) -> (View<'_>, &mut u64) {
         (
             View {
-                owner: &self.storage,
+                owner: self.storage.sealed(),
                 node: 0,
             },
             &mut self.lifetime,
         )
+    }
+    /// Fixture-only disjoint source/work/temporary-frame handoff. The frame
+    /// workspace uses this owner's actual ledger rather than a second allowance.
+    pub fn inspection_parts<F>(&mut self) -> (View<'_>, &mut u64, Frames<'_, F>) {
+        let (owner, frames) = self.storage.inspection_parts();
+        (View { owner, node: 0 }, &mut self.lifetime, frames)
     }
     pub fn lifetime_remaining(&self) -> u64 {
         self.lifetime
@@ -1689,7 +1697,7 @@ impl OwnedValue {
 
 #[derive(Clone, Copy)]
 pub struct View<'a> {
-    owner: &'a Storage<()>,
+    owner: Sealed<'a>,
     node: usize,
 }
 impl<'a> View<'a> {

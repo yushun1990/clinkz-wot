@@ -130,10 +130,7 @@ impl<'a> policy::Source for Source<'a> {
         policy::context(self)
     }
     fn extras(self) -> Extras<'a> {
-        Extras {
-            object: self.object,
-            consumed: self.consumed,
-        }
+        Extras::indexed(self.object, self.consumed, &self.index)
     }
 }
 pub type Fields<'a> = Decoded<Source<'a>>;
@@ -216,12 +213,15 @@ enum State<'a> {
     },
 }
 
-/// Constructor is fixed work. Limits here are fixture scaffolding, NOT the
-/// opaque admission configuration or a complete supported maximum M. The
-/// borrowed remainder can be the actual one handed on by value construction.
+/// Borrowing facade retained for the original one-node witness.
 pub struct Cursor<'a, 'w> {
-    object: View<'a>,
+    machine: Machine<'a>,
     lifetime: &'w mut u64,
+}
+/// Resumable field state without an embedded mutable work borrow. This permits
+/// a containing traversal to lend its ONE lifetime remainder on each step.
+pub struct Machine<'a> {
+    object: View<'a>,
     ceiling: usize,
     index: [Option<View<'a>>; FIELDS],
     cache: [Option<Cached<'a>>; FIELDS],
@@ -231,16 +231,50 @@ pub struct Cursor<'a, 'w> {
 }
 // Boxing would add an unauthorized allocation. Capacity is measured separately.
 #[allow(clippy::large_enum_variant)]
-pub enum Progress<'a, 'w> {
-    Pending(Cursor<'a, 'w>),
+pub enum Outcome<'a, C> {
+    Pending(C),
     Complete { fields: Fields<'a>, trace: Trace },
     Failed(Failure),
 }
+pub type Progress<'a, 'w> = Outcome<'a, Cursor<'a, 'w>>;
+pub type MachineProgress<'a> = Outcome<'a, Machine<'a>>;
 impl<'a, 'w> Cursor<'a, 'w> {
     pub fn new(object: View<'a>, lifetime: &'w mut u64, number_ceiling: usize) -> Self {
         Self {
-            object,
+            machine: Machine::new(object, number_ceiling),
             lifetime,
+        }
+    }
+    pub fn trace(&self) -> Trace {
+        self.machine.trace()
+    }
+    pub fn lifetime_remaining(&self) -> u64 {
+        *self.lifetime
+    }
+    pub fn phase(&self) -> Phase {
+        self.machine.phase()
+    }
+    pub fn step(
+        self,
+        budget: &mut WorkBudget,
+        cancelled: impl FnMut() -> bool,
+    ) -> Progress<'a, 'w> {
+        match self.machine.step(budget, self.lifetime, cancelled) {
+            Outcome::Pending(machine) => Outcome::Pending(Self {
+                machine,
+                lifetime: self.lifetime,
+            }),
+            Outcome::Complete { fields, trace } => Outcome::Complete { fields, trace },
+            Outcome::Failed(failure) => Outcome::Failed(failure),
+        }
+    }
+}
+impl<'a> Machine<'a> {
+    /// Fixed work; these local controls remain fixture scaffolding, not the
+    /// opaque full admission configuration or a supported maximum M.
+    pub fn new(object: View<'a>, number_ceiling: usize) -> Self {
+        Self {
+            object,
             ceiling: number_ceiling,
             index: [None; FIELDS],
             cache: [None; FIELDS],
@@ -251,9 +285,6 @@ impl<'a, 'w> Cursor<'a, 'w> {
     }
     pub fn trace(&self) -> Trace {
         self.trace
-    }
-    pub fn lifetime_remaining(&self) -> u64 {
-        *self.lifetime
     }
     pub fn phase(&self) -> Phase {
         match self.state {
@@ -270,17 +301,18 @@ impl<'a, 'w> Cursor<'a, 'w> {
     pub fn step(
         mut self,
         budget: &mut WorkBudget,
+        lifetime: &mut u64,
         mut cancelled: impl FnMut() -> bool,
-    ) -> Progress<'a, 'w> {
+    ) -> MachineProgress<'a> {
         loop {
             if cancelled() {
                 return self.fail(Cause::Cancelled);
             }
-            match self.tick(budget, &mut cancelled) {
+            match self.tick(budget, lifetime, &mut cancelled) {
                 Ok(Tick::Advanced) => {}
-                Ok(Tick::Blocked) => return Progress::Pending(self),
+                Ok(Tick::Blocked) => return Outcome::Pending(self),
                 Ok(Tick::Complete(fields)) => {
-                    return Progress::Complete {
+                    return Outcome::Complete {
                         fields,
                         trace: self.trace,
                     };
@@ -289,19 +321,24 @@ impl<'a, 'w> Cursor<'a, 'w> {
             }
         }
     }
-    fn fail(self, cause: Cause) -> Progress<'a, 'w> {
+    fn fail(self, cause: Cause) -> MachineProgress<'a> {
         // This pass borrows an already owned value. It owns no allocation or
         // cleanup charge. The outer owner, not this local failure, owns rollback.
-        Progress::Failed(Failure {
+        Outcome::Failed(Failure {
             cause,
             trace: self.trace,
         })
     }
-    fn pay(&mut self, budget: &mut WorkBudget, classes: &[W]) -> Result<bool, Cause> {
+    fn pay(
+        &mut self,
+        budget: &mut WorkBudget,
+        lifetime: &mut u64,
+        classes: &[W],
+    ) -> Result<bool, Cause> {
         if classes.iter().any(|&class| budget.remaining(class) == 0) {
             return Ok(false);
         }
-        if *self.lifetime < classes.len() as u64 {
+        if *lifetime < classes.len() as u64 {
             return Err(Cause::Lifetime);
         }
         for &class in classes {
@@ -313,7 +350,7 @@ impl<'a, 'w> Cursor<'a, 'w> {
                 _ => unreachable!(),
             }] += 1;
         }
-        *self.lifetime -= classes.len() as u64;
+        *lifetime -= classes.len() as u64;
         Ok(true)
     }
     fn cache(&mut self, request: Request<'a>, fact: Fact<'a>) {
@@ -347,11 +384,12 @@ impl<'a, 'w> Cursor<'a, 'w> {
     fn tick(
         &mut self,
         budget: &mut WorkBudget,
+        lifetime: &mut u64,
         cancelled: &mut impl FnMut() -> bool,
     ) -> Result<Tick<'a>, Cause> {
         match self.state {
             State::Start => {
-                if !self.pay(budget, &[W::DocumentNodes, W::JsonSchemaNodes])? {
+                if !self.pay(budget, lifetime, &[W::DocumentNodes, W::JsonSchemaNodes])? {
                     return Ok(Tick::Blocked);
                 }
                 if self.object.kind() != Kind::Object {
@@ -360,7 +398,7 @@ impl<'a, 'w> Cursor<'a, 'w> {
                 self.state = State::Member(0);
             }
             State::Member(member) => {
-                if !self.pay(budget, &[W::DocumentNodes])? {
+                if !self.pay(budget, lifetime, &[W::DocumentNodes])? {
                     return Ok(Tick::Blocked);
                 }
                 if member == self.object.len() {
@@ -394,7 +432,7 @@ impl<'a, 'w> Cursor<'a, 'w> {
                 } else {
                     &[W::DocumentNodes][..]
                 };
-                if !self.pay(budget, classes)? {
+                if !self.pay(budget, lifetime, classes)? {
                     return Ok(Tick::Blocked);
                 }
                 match expected {
@@ -435,7 +473,7 @@ impl<'a, 'w> Cursor<'a, 'w> {
                 }
             }
             State::Dispatch => {
-                if !self.pay(budget, &[W::DocumentNodes])? {
+                if !self.pay(budget, lifetime, &[W::DocumentNodes])? {
                     return Ok(Tick::Blocked);
                 }
                 match self.index[Field::Type as usize] {
@@ -479,14 +517,14 @@ impl<'a, 'w> Cursor<'a, 'w> {
                 mut bytes,
             } => {
                 if position == text.len() {
-                    if !self.pay(budget, &[W::DocumentNodes])? {
+                    if !self.pay(budget, lifetime, &[W::DocumentNodes])? {
                         return Ok(Tick::Blocked);
                     }
                     self.kind =
                         policy::dispatch(Some(core::str::from_utf8(&bytes[..position]).unwrap()));
                     self.state = State::Policy;
                 } else {
-                    if !self.pay(budget, &[W::CodecInputBytes])? {
+                    if !self.pay(budget, lifetime, &[W::CodecInputBytes])? {
                         return Ok(Tick::Blocked);
                     }
                     bytes[position] = text.as_bytes()[position];
@@ -500,7 +538,7 @@ impl<'a, 'w> Cursor<'a, 'w> {
                 }
             }
             State::Policy => {
-                if !self.pay(budget, &[W::DocumentNodes])? {
+                if !self.pay(budget, lifetime, &[W::DocumentNodes])? {
                     return Ok(Tick::Blocked);
                 }
                 self.trace.policy_runs += 1;
@@ -520,7 +558,7 @@ impl<'a, 'w> Cursor<'a, 'w> {
                 }
             }
             State::Convert(request) => {
-                if !self.pay(budget, &[W::DocumentNodes])? {
+                if !self.pay(budget, lifetime, &[W::DocumentNodes])? {
                     return Ok(Tick::Blocked);
                 }
                 let value = request.value;
@@ -626,7 +664,7 @@ impl<'a, 'w> Cursor<'a, 'w> {
                 position,
                 languages,
             } => {
-                if !self.pay(budget, &[W::DocumentNodes])? {
+                if !self.pay(budget, lifetime, &[W::DocumentNodes])? {
                     return Ok(Tick::Blocked);
                 }
                 if position == list.len() {
@@ -663,7 +701,7 @@ impl<'a, 'w> Cursor<'a, 'w> {
                 mut bytes,
             } => {
                 if position == text.len() {
-                    if !self.pay(budget, &[W::DocumentNodes])? {
+                    if !self.pay(budget, lifetime, &[W::DocumentNodes])? {
                         return Ok(Tick::Blocked);
                     }
                     self.scalar(
@@ -671,7 +709,7 @@ impl<'a, 'w> Cursor<'a, 'w> {
                         Primitive::Text(core::str::from_utf8(&bytes[..position]).unwrap()),
                     )?;
                 } else {
-                    if !self.pay(budget, &[W::CodecInputBytes])? {
+                    if !self.pay(budget, lifetime, &[W::CodecInputBytes])? {
                         return Ok(Tick::Blocked);
                     }
                     bytes[position] = text.as_bytes()[position];
@@ -696,13 +734,13 @@ impl<'a, 'w> Cursor<'a, 'w> {
                         ceiling: self.ceiling,
                     });
                 }
-                let before = *self.lifetime;
+                let before = *lifetime;
                 let parses = &mut self.trace.parses;
                 let progress = projection_step::project(
                     text,
                     self.ceiling,
                     budget,
-                    self.lifetime,
+                    lifetime,
                     cancelled,
                     || match parse {
                         Parse::Signed => {
@@ -719,7 +757,7 @@ impl<'a, 'w> Cursor<'a, 'w> {
                         }
                     },
                 );
-                self.trace.work[1] += before - *self.lifetime;
+                self.trace.work[1] += before - *lifetime;
                 match progress {
                     ProjectionProgress::Pending => return Ok(Tick::Blocked),
                     ProjectionProgress::Limit => return Err(Cause::Lifetime),
