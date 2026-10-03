@@ -42,11 +42,13 @@ fn main() {
             "\n#[path = {path:?}]\n#[allow(dead_code)]\nmod {module};\n"
         ));
     }
-    let path = fixture.join("src/schema_arena.rs");
-    println!("cargo:rerun-if-changed={}", path.display());
-    lib.push_str(&format!(
-        "\n#[cfg(feature = \"validated-thing\")]\n#[path = {path:?}]\npub mod schema_arena;\n"
-    ));
+    for module in ["schema_arena", "schema_step"] {
+        let path = fixture.join("src").join(format!("{module}.rs"));
+        println!("cargo:rerun-if-changed={}", path.display());
+        lib.push_str(&format!(
+            "\n#[cfg(feature = \"validated-thing\")]\n#[path = {path:?}]\npub mod {module};\n"
+        ));
+    }
     lib = lib.replace("mod schema_fields;", "pub mod schema_fields;");
     lib = lib.replace("mod schema_kernel;", "pub mod schema_kernel;");
     fs::write(candidate.join("lib.rs"), lib).unwrap();

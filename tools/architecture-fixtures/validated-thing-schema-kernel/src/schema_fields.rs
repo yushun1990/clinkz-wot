@@ -236,16 +236,50 @@ pub fn context<B: Source>(mut source: B) -> Result<Context<B>, B::Error> {
     })
 }
 
-pub fn dispatch(data_type: Option<&str>) -> SchemaKind {
-    match data_type {
-        Some("array") => SchemaKind::Array,
-        Some("boolean") => SchemaKind::Boolean,
-        Some("number") => SchemaKind::Number,
-        Some("integer") => SchemaKind::Integer,
-        Some("string") => SchemaKind::String,
-        Some("null") => SchemaKind::Null,
-        _ => SchemaKind::Object,
+/// Shared literal/indexed orchestration, including the nullable dispatch peek
+/// followed by the context's presence-only type conversion. Ordinary serde
+/// retains its RawValue TypePeek representation boundary around `dispatch`.
+pub fn decode<B: Source>(mut source: B) -> Result<Decoded<B>, B::Error>
+where
+    B::Text: AsRef<str>,
+{
+    let data_type = match source.take(Field::Type) {
+        None => None,
+        Some(value) if B::is_null(&value) => None,
+        Some(value) => Some(source.text(value)?),
+    };
+    let kind = dispatch(data_type.as_ref().map(AsRef::as_ref));
+    variant(source, kind)
+}
+
+const DISPATCH_KINDS: [SchemaKind; 7] = [
+    SchemaKind::Array,
+    SchemaKind::Boolean,
+    SchemaKind::Number,
+    SchemaKind::Integer,
+    SchemaKind::Object,
+    SchemaKind::String,
+    SchemaKind::Null,
+];
+/// Derived from the SAME vocabulary as dispatch, not an input-length limit.
+/// Longer unrecognized strings still survive in the context's type field.
+pub const DISPATCH_BYTES_MAX: usize = {
+    let mut max = 0;
+    let mut i = 0;
+    while i < DISPATCH_KINDS.len() {
+        let len = DISPATCH_KINDS[i].name().len();
+        if len > max {
+            max = len;
+        }
+        i += 1;
     }
+    max
+};
+pub fn dispatch(data_type: Option<&str>) -> SchemaKind {
+    DISPATCH_KINDS
+        .into_iter()
+        .find(|kind| data_type == Some(kind.name()))
+        .unwrap_or(SchemaKind::Object)
 }
 
 pub enum Shape<B: Source> {
