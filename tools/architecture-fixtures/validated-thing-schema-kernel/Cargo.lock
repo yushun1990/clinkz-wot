@@ -494,6 +494,13 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e6e4313cd5fcd3dad5cafa179702e2b244f760991f45397d14d4ebf38247da75"
 
 [[package]]
+name = "validated-thing-arena-layout-probe"
+version = "0.0.0"
+dependencies = [
+ "clinkz-wot-foundation",
+]
+
+[[package]]
 name = "validated-thing-schema-kernel-probe"
 version = "0.0.0"
 dependencies = [
@@ -504,6 +511,24 @@ dependencies = [
  "serde_json",
  "serde_with",
  "time",
+ "validated-thing-value-construction-probe",
+]
+
+[[package]]
+name = "validated-thing-strict-number-lexeme-probe"
+version = "0.0.0"
+dependencies = [
+ "clinkz-wot-foundation",
+]
+
+[[package]]
+name = "validated-thing-value-construction-probe"
+version = "0.0.0"
+dependencies = [
+ "clinkz-wot-foundation",
+ "serde_json",
+ "validated-thing-arena-layout-probe",
+ "validated-thing-strict-number-lexeme-probe",
 ]
 
 [[package]]

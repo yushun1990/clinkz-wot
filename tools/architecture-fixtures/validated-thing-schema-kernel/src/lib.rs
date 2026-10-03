@@ -1,4 +1,4 @@
-//! Non-production projection of the real TD source onto one schema rule kernel.
+//! Non-production TD source projection onto shared field and Basic semantics.
 #![no_std]
 
 include!(concat!(env!("OUT_DIR"), "/candidate/lib.rs"));

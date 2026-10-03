@@ -1,4 +1,4 @@
-# Shared Thing Basic convergence prototype
+# Shared Thing semantics and DataSchema field policy
 
 Non-production evidence for
 [`WP-100-CONSUMER-VALIDATED-THING`](../../../docs/work-packages/WP-100-consumer-validated-thing-admission.md#evidence-required-before-separate-readmission),
@@ -8,14 +8,15 @@ The full Basic semantic composition is now exercised by one storage-neutral
 rule source over the existing typed Thing and three-arena Snapshot. It combines
 the DataSchema and numeric predicate proof from #114 with root, affordance,
 security-scheme/reference checks and the default/security seam from #110.
-No field-storage slice, production ValidatedThing, or admission builder is added.
+The literal arena/field-policy composition below extends that proof. No
+production ValidatedThing or admission builder is added.
 
 The uncertainty addressed here is whether a future admission cursor must invent
 another Basic rule set or error precedence while combining those local proofs.
 The candidate uses shared component predicates and shared whole-Thing order;
-its adapters contain only borrowed representation facts. Strict JSON
-construction, charged nonrecursive traversal, and whole-admission resource and
-terminal ownership remain separate obligations. The existing
+its adapters contain only borrowed representation facts. Complete TD
+construction, charged nonrecursive semantic traversal, and whole-admission
+resource and terminal ownership remain separate obligations. The existing
 [URI query proof](../validated-thing-arena-layout/README.md#shared-uri-and-borrowed-planning-view-slice)
 and [post-drop Planning witness](../validated-thing-planning-handoff/README.md)
 remain reusable; Basic introduces no URI-resolution acceptance predicate.
@@ -237,6 +238,9 @@ future public entry. No cycle/stack or slow-parser-path coverage claim is made.
 
 ## Readmission contribution
 
+The table describes the earlier whole-Basic proof. The additional field-policy
+contribution and its narrower construction limits follow below.
+
 | Item | Contribution and remaining boundary |
 | ---: | --- |
 | 1 | None. Full frozen API/configuration and removed-surface positive/negative fixtures remain required. |
@@ -251,3 +255,132 @@ future public entry. No cycle/stack or slow-parser-path coverage claim is made.
 This fixture closes the full Basic semantic-composition gap at prototype level. It
 does not complete any readmission item as a whole, perform an admission
 transition, implement production normalization, or register a Consumer gate.
+
+## DataSchema field interpretation over literal arenas
+
+The literal value constructor from #119 and the typed Snapshot/Basic evidence
+from #96–#115 were separate paths. A JSON-kind proof cannot decide whether
+flattened field ownership, null, one-or-many, dispatch and scalar conversions
+give the same TD fields. Conversely more typed field readback cannot exercise
+strict field interpretation. This seam is a prerequisite for composing those
+paths into full TD construction.
+
+`src/schema_fields.rs` is one representation-neutral field-policy body for the
+complete DataSchema family: its context, all seven variants, nested `oneOf`,
+Array `items`, Object `properties`, metadata and preserved extensions. The
+metadata rows generate both the candidate's existing serde-derived declaration
+and its literal reader. Variant ownership, metadata flattening, field-specific
+null, absent false flags, one-or-many selection and type dispatch are shared.
+Absent/unrecognized type dispatches to Object and retains the type; Basic still
+decides validity. `const/default: null` retain a value, metadata null is absent,
+and presence-only string/list/numeric fields retain their current rejection.
+Array `items: null` is absent. Variant-specific fields remain extensions on
+other variants.
+
+`src/schema_serde.rs` supplies the current owning representation facts and
+conversions. `build.rs` projects the current public DataSchema deserializers
+onto this body, while keeping RawValue/TypePeek, map buffering, metadata
+draining, per-element `items` conversion and `from_remaining` re-entry. Even
+`const/default` retain their established `from_value::<Value>` conversion.
+Production source remains the independent oracle. No generated source enters
+production TD.
+
+`src/schema_arena.rs` supplies literal kinds and borrowed ranges from #119's
+actual three-arena owner. Its field facts contain only scalars and borrowed
+views. The fixed ownership mask names the 29 policy fields, not source member
+indices; arbitrary extension counts/order cannot change ownership. Primitive
+serde visitors supply the existing integer/f64/flexible-bool conversions without
+an owned Number. The flexible-bool rule body is the actual TD helper. Literal
+objects never become scalars and strings never open documents. Typed numeric
+fields preserve existing integer/binary64 results, including typed Infinity;
+only the already amended extension predicates require a finite projection.
+
+Inspection converts every schema-bearing child before Basic starts, without
+interpreting opaque `const/default/enum` or extension subtrees as schemas.
+The Basic adapter then calls #114's unchanged rule source, not a new validator.
+The completed owner is still a **literal JSON owner**, not the future typed
+normalized Snapshot. Its inline field facts are borrowed semantic projections;
+they do not prove compatibility Thing traversal or equal normalized footprints
+for different wire spellings with equal defaulted TD fields.
+
+### Executable composition
+
+`tests/schema_fields.rs` runs on actual literal construction under 1/17/4096
+work-unit steps for the rich field corpus, rather than a signature mock. Its
+shared fieldwise assertions compile against both unchanged TD and the extracted
+candidate. They inspect every variant/context field, optional distinctions,
+ordered metadata/required/schema lists, map associations, nested values and
+lossless public AP content. No typed Thing/schema serialization is used to
+construct an engine input or prove equivalence.
+
+- 822 conversion cases per public model check acceptance against real serde
+  and compare every field plus unaffected Basic outcomes on success. They
+  include null/kind distinctions, flexible booleans, unsigned/i64 range,
+  fractions/exponents, underflow, overflow and binary64 bits.
+- Twelve rich inputs exercise all variants and nested children under three
+  construction step sizes. The generic sorted-map associations remain ordered
+  independently of input field/member order.
+- Escaped duplicate names and overwritten wrong-kind fields reach real
+  duplicate resolution before policy. The last type/numeric/null decisions
+  agree with both actual **Thing Property** decoders. Standalone DataSchema's
+  ordinary RawValue/TypePeek duplicate behavior is not used as the Thing oracle.
+- The #116/#117 collision family is classified in schema root/nested
+  `const/default/enum`, opaque extensions and numeric predicates, with both
+  member orders, escaped spelling, three wrappers and a 257-item array-looking
+  string. Known string/list/bool/type fields reject literal Objects. Actual
+  Number bounds/zero/overflow still reach the shared Basic rules; wrapper
+  Objects remain non-Numbers.
+- 432 additional ordinary-wire observations compare successful complete typed
+  field Debug values and rejection text between the extracted and unchanged
+  **Thing** models. Both accepted and rejected cases are required. This guards
+  the existing repeated Value/RawValue conversion boundary; the fieldwise
+  literal proof above does not depend on Debug or serialization.
+- An independent fixed thread-local allocator counter observes zero allocation
+  or reallocation calls in field inspection plus Basic, for long-string,
+  success, field-error and Basic-error inputs. Owner footprint is unchanged.
+  The field-fact product has no destructor and occupies 328 bytes on the tested
+  64-bit Host. This is local inline capacity, not target stack or Servient size.
+
+The new dependency is optional behind this fixture's `validated-thing` feature;
+capability-off source graphs do not acquire AP from it. The existing CI matrix
+executes the new tests in its seven capability-on Host cells and retains the
+six off cells; all eight existing thumb library cells include the extracted
+ordinary source, with literal arena access in four on cells. No new fixture
+crate, matrix family, checker, resource row or work class is added.
+
+```sh
+cargo test --locked --manifest-path tools/architecture-fixtures/validated-thing-schema-kernel/Cargo.toml --features validated-thing --test schema_fields
+cargo test --locked --manifest-path tools/architecture-fixtures/validated-thing-schema-kernel/Cargo.toml --features validated-thing,order
+cargo test --locked --manifest-path tools/architecture-fixtures/validated-thing-schema-kernel/Cargo.toml --no-default-features --features async,validated-thing
+```
+
+### Additional contribution and remaining risks
+
+Item 3 advances from separate value and typed semantic witnesses to actual
+shared DataSchema field interpretation and Basic over constructed literal
+arenas. Items 5/6 advance this composed source's existing capability compilation
+and field-conversion-before-Basic traces. Item 7 gains local evidence that the
+semantic seam requires no additional allocation category. None is complete as
+a whole; item 2's complete typed construction is not claimed.
+
+Field lookups/comparisons, list/map inspection, scalar conversion and Basic
+remain **synchronous, recursive and unbudgeted**. Repeated Basic queries repeat
+field extraction. Only the reused literal construction is charged/resumable.
+These adapters cannot be installed into production admission unchanged.
+The fixed error names a schema field only, not the frozen global semantic
+ordinal/input-offset/phase diagnostic. Complete first-cause/rollback ownership
+and prepaid whole-cursor cleanup are not supplied by this semantic pass.
+
+Whole Thing/affordance/Form/security field extraction, Context/RFC3339/URI
+composition, complete typed construction, shared lifetime charging, normalized
+seal/equivalence, opaque full configuration/supported M, target execution,
+final View/owned Planning integration and full owner/parent resource release
+remain required. #93/#108/#110–#115/#119 remain reusable at their documented
+boundaries. Another field-storage witness, another Basic rule proof, API-only
+surface expansion or a complete configuration claim ahead of the missing
+construction/projection envelope would not resolve this field seam.
+
+No authority, admission/completion manifest, gate status or PLAN is changed.
+`WP-100-CONSUMER-VALIDATED-THING` remains `planned / candidate / current` and
+requires fresh independent exact-head acceptance of the complete eight-item
+set before any separate admission-only transition.

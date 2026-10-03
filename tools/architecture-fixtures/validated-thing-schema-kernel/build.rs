@@ -1,5 +1,5 @@
-// Compile the current TD source, changing only its private Basic validation
-// seam. No generated source is committed or used by the production TD crate.
+// Compile current TD source with shared private field and Basic seams.
+// No generated source is committed or used by the production TD crate.
 use std::{env, fs, path::Path};
 
 fn copy_source(source: &Path, target: &Path) {
@@ -33,6 +33,8 @@ fn main() {
         ("basic_kernel", "basic_kernel.rs"),
         ("basic_typed", "basic_typed.rs"),
         ("basic_diagnostics", "basic_diagnostics.rs"),
+        ("schema_fields", "schema_fields.rs"),
+        ("schema_serde", "schema_serde.rs"),
     ] {
         let path = fixture.join("src").join(file);
         println!("cargo:rerun-if-changed={}", path.display());
@@ -40,6 +42,13 @@ fn main() {
             "\n#[path = {path:?}]\n#[allow(dead_code)]\nmod {module};\n"
         ));
     }
+    let path = fixture.join("src/schema_arena.rs");
+    println!("cargo:rerun-if-changed={}", path.display());
+    lib.push_str(&format!(
+        "\n#[cfg(feature = \"validated-thing\")]\n#[path = {path:?}]\npub mod schema_arena;\n"
+    ));
+    lib = lib.replace("mod schema_fields;", "pub mod schema_fields;");
+    lib = lib.replace("mod schema_kernel;", "pub mod schema_kernel;");
     fs::write(candidate.join("lib.rs"), lib).unwrap();
 
     let path = candidate.join("components/data_schema.rs");
@@ -72,6 +81,7 @@ fn main() {
         "BTreeMap, format, string::String",
         "BTreeMap, string::String",
     );
+    project_schema_fields(&mut types_and_builders);
     fs::write(
         &path,
         format!(
@@ -81,6 +91,45 @@ fn main() {
     )
     .unwrap();
     println!("cargo:rerun-if-changed=src/public_adapter.rs");
+
+    // The same declarative metadata rows produce the unchanged owning serde
+    // declaration and the literal arena reader. No second field table.
+    let path = candidate.join("core/data_type/metadata.rs");
+    let mut metadata = fs::read_to_string(&path).unwrap();
+    replace_region(
+        &mut metadata,
+        "#[serde_as]\n#[skip_serializing_none]",
+        "impl Metadata {",
+        r#"
+macro_rules! define_metadata {
+    ($( $name:ident, $field:ident, $wire:literal, $ty:ty, $assoc:ident, $read:ident,
+        [$($attribute:tt)*]; )*) => {
+        #[serde_as]
+        #[skip_serializing_none]
+        #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+        #[serde(rename_all = "camelCase")]
+        pub struct Metadata {
+            $(#[serde(rename = $wire)] $($attribute)* pub $name: Option<$ty>,)*
+        }
+        pub(crate) const METADATA_KEYS: &[&str] = &[$($wire,)*];
+    };
+}
+crate::schema_fields::metadata_fields!(define_metadata);
+
+"#,
+    );
+    fs::write(path, metadata).unwrap();
+
+    let path = candidate.join("flat.rs");
+    let mut flat = fs::read_to_string(&path).unwrap();
+    replace_region(
+        &mut flat,
+        "/// Removes `key` from `map` and deserializes its value into `Option<Vec<T>>`",
+        "/// Removes a required `key`",
+        "",
+    );
+    flat = flat.replace("use alloc::vec::Vec;\n", "");
+    fs::write(path, flat).unwrap();
 
     // The candidate's actual public Basic entry delegates to the same body as
     // the Snapshot. Profile/Full keep their original additional checks.
@@ -186,6 +235,84 @@ fn main() {
         "fn default_property_operations(property: &PropertyAffordance) -> &'static [Operation] {\n    let schema = schema_context(&property._schema);\n    crate::basic_kernel::default_property_operations((schema.read_only, schema.write_only))\n}\n\n",
     );
     fs::write(path, defaults).unwrap();
+}
+
+fn project_schema_fields(source: &mut String) {
+    replace_region(
+        source,
+        "impl<'de> Deserialize<'de> for DataSchemaContext {",
+        "impl Serialize for DataSchemaContext {",
+        r#"impl<'de> Deserialize<'de> for DataSchemaContext {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let map = crate::flat::deserialize_map(deserializer)?;
+        crate::schema_fields::context(crate::schema_serde::Source::new(map))
+            .map(crate::schema_serde::context_into_td).map_err(serde::de::Error::custom)
+    }
+}
+
+"#,
+    );
+    for (name, variant) in [
+        ("ArraySchema", "Array"),
+        ("BooleanSchema", "Boolean"),
+        ("ObjectSchema", "Object"),
+        ("StringSchema", "String"),
+        ("NullSchema", "Null"),
+        ("$name", "$variant"),
+    ] {
+        let start = format!("impl<'de> Deserialize<'de> for {name} {{");
+        let end = format!("impl Serialize for {name} {{");
+        let body = format!(
+            r#"impl<'de> Deserialize<'de> for {name} {{
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {{
+        let map = crate::flat::deserialize_map(deserializer)?;
+        let decoded = crate::schema_fields::variant(crate::schema_serde::Source::new(map), crate::schema_kernel::SchemaKind::{variant})
+            .map_err(serde::de::Error::custom)?;
+        let DataSchema::{variant}(value) = crate::schema_serde::into_td(decoded) else {{ unreachable!() }};
+        Ok(value)
+    }}
+}}
+
+"#
+        );
+        replace_region(source, &start, &end, &body);
+    }
+    // RawValue and TypePeek stay in place, including ordinary conversion and
+    // duplicate handling. Only the variant policy is extracted.
+    source.replace_range(
+        source.find("match peek.r#type.as_deref() {").unwrap()
+            ..source.find("match peek.r#type.as_deref() {").unwrap()
+                + "match peek.r#type.as_deref() {".len(),
+        "match crate::schema_fields::dispatch(peek.r#type.as_deref()) {",
+    );
+    for variant in [
+        "array", "boolean", "number", "integer", "object", "string", "null",
+    ] {
+        let name = format!("{}{}", variant[..1].to_uppercase(), &variant[1..]);
+        *source = source.replace(
+            &format!("Some(\"{variant}\") => serde_json::from_str"),
+            &format!("crate::schema_kernel::SchemaKind::{name} => serde_json::from_str"),
+        );
+    }
+    // Object now also represents the fallback and is exhaustive.
+    replace_region(
+        source,
+        "            // A DataSchema without a recognized",
+        "        }\n        .map_err",
+        "",
+    );
+    // The flexible scalar visitor is still reused by both representations.
+    replace_region(
+        source,
+        "/// Deserialize adapter carrying the flexible-bool",
+        "/// Shared base for every",
+        "",
+    );
+    *source = source.replace("use super::util::deserialize_bool_flexible;\n", "");
+    *source = source.replace(
+        "ExtensionMap, METADATA_KEYS, Metadata",
+        "ExtensionMap, Metadata",
+    );
 }
 
 fn replace_region(source: &mut String, start: &str, end: &str, replacement: &str) {
