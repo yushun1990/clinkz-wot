@@ -363,10 +363,11 @@ and field-conversion-before-Basic traces. Item 7 gains local evidence that the
 semantic seam requires no additional allocation category. None is complete as
 a whole; item 2's complete typed construction is not claimed.
 
-Field lookups/comparisons, list/map inspection, scalar conversion and Basic
-remain **synchronous, recursive and unbudgeted**. Repeated Basic queries repeat
-field extraction. Only the reused literal construction is charged/resumable.
-These adapters cannot be installed into production admission unchanged.
+The original `schema_arena.rs` field lookups/comparisons, list/map inspection,
+scalar conversion and Basic remain **synchronous, recursive and unbudgeted**.
+Repeated Basic queries repeat field extraction. The charged per-node pass below
+addresses field projection only; it does not make these original adapters or
+Basic bounded. Neither path can be installed into production admission unchanged.
 The fixed error names a schema field only, not the frozen global semantic
 ordinal/input-offset/phase diagnostic. Complete first-cause/rollback ownership
 and prepaid whole-cursor cleanup are not supplied by this semantic pass.
@@ -384,3 +385,157 @@ No authority, admission/completion manifest, gate status or PLAN is changed.
 `WP-100-CONSUMER-VALIDATED-THING` remains `planned / candidate / current` and
 requires fresh independent exact-head acceptance of the complete eight-item
 set before any separate admission-only transition.
+
+## Charged one-node DataSchema field projection
+
+`src/schema_step.rs` resolves a different dependency from the earlier field
+parity proof: can **one actual literal schema node** be interpreted through the
+same policy while pausing inside field access and conversion, without another
+owning graph, temporary site, or unbounded helper? Expanding the field table to
+other TD families would not answer that execution question. A whole admission
+cursor would also combine it with recursive traversal, Basic, URI/date work,
+normalization, configuration and lifecycle obligations that remain separate.
+
+This pass reuses #120's `schema_fields.rs` unchanged in its context/variant
+field decisions. Its source adapter has a fixed index and fixed conversion
+cache. The ordinary candidate and synchronous literal reference retain their
+existing behavior. The shared dispatch vocabulary now also derives its maximum
+selector length; there is no separately copied discriminator table.
+
+### Mechanism and work boundary
+
+- A single pass indexes the actual #119 Object's surviving members. Candidate
+  names come from `Field::ALL`/`Field::name()`, not another ownership table.
+  Member/candidate visits pay `DocumentNodes`; each source key byte actually
+  compared pays `CodecInputBytes`. Length mismatch needs no content scan.
+  Arbitrarily many extensions cannot enlarge the 29-slot index.
+- Dispatch copies at most the shared vocabulary's seven-byte maximum into
+  fixed inline state, one paid byte at a time, then uses the existing dispatch
+  function. A longer unrecognized type selects Object without inspecting its
+  content, but its **entire original string remains the context type**. This
+  adds no input length/validity limit.
+- The source executes the existing `variant`/`context`/metadata policy. A
+  conversion without a cached fact yields a private request. The cursor
+  services it under charges, then replays the policy over constant-time facts.
+  Each replay pays one structural unit and has a fixed 29-field bound; there
+  are at most 30 runs per node. No map scan, list loop, scalar parse, or source
+  string comparison occurs during replay. This is bounded local replay, not
+  accumulated credit followed by an externally sized scan.
+- Text and opaque values return validated borrowed ranges. String lists and
+  language maps check one element kind per structural unit. Schema lists/maps
+  return child handles only: they do **not** convert or visit child schemas.
+  Flexible-bool strings of at most five bytes are copied incrementally into
+  fixed state before the real TD visitor runs; longer strings reach that same
+  visitor's fixed-spelling length rejection without a content scan.
+- Numeric scalar conversion preserves #120's public primitive events. Generic
+  conversion may try `i64`, then `u64`, then `f64`; typed floating fields go
+  directly to `f64`. **Each actual attempt**, including a failed attempt, uses
+  #93/#114's existing lexical guard, whole-lexeme step/lifetime debit and
+  pre/post cancellation helper. A resumed stage cannot repeat an earlier
+  parse. A fresh validation must pay again. Primitive conversion then uses
+  the same public serde and TD flexible-bool visitors as the reference.
+  Typed Infinity and integer rejection/precision behavior are unchanged;
+  the five extension Basic predicates are not executed by this pass.
+- A local field/node transition pays `DocumentNodes`; the node entry also pays
+  one `JsonSchemaNodes`. Accepted class units all debit the caller's borrowed
+  lifetime remainder. There is no owned allowance, stored step credit, new
+  WorkClass, cleanup record or heap request in the field cursor.
+
+The value owner's fixture-only `admission_parts()` splits a borrowed arena
+view from its actual unspent construction remainder. Seal no longer discards
+that remainder. Tests drive field projection and repeated inspection through
+that same mutable scalar. This is executable lifetime composition, **not** a
+frozen API/configuration claim; the fixture handoff is not proposed as a public
+production method or an unforgeable coordinator. The cancellation closure is
+fixture instrumentation for pre/post atomic checks, not a replacement for the
+frozen production step's `cancel_requested: bool` or a user callback boundary.
+
+The former `View::text()` called `from_utf8` on the complete range on every
+lookup, hiding an uncharged string-sized scan. It now borrows validated UTF-8
+without revalidation. The safety invariant is owned by the value constructor:
+wire strings are syntax/UTF-8/scalar checked before emission, typed strings
+come from `str`, Number emission is ASCII, compaction moves complete ranges,
+and private sealed storage is immutable. No public unchecked value constructor
+or mutable storage is added. Existing value construction/grammar/allocator
+regressions and additional UTF-8/surrogate tests protect this premise.
+
+### Falsifiable evidence
+
+`tests/schema_step.rs` adds fourteen tests in capability-on graphs:
+
+- The **same** #120 fieldwise corpus compiles against both real public models,
+  now with the charged literal driver: 822 conversion cases per model and all
+  rich variants/context/nested fields. Recursive orchestration in this test
+  support is explicitly outside the one-node engine and its measured interval.
+  Existing ordinary-wire/collision/whole-Basic regressions remain intact.
+- A wide/long input includes 128 opaque members, a 24,576-byte multibyte key,
+  title and unknown type, 512 tags, language metadata and opaque overflow
+  Numbers. One-unit and interleaved class budgets produce the same exact trace
+  as large steps. Byte debits and structural/list work are checked after each
+  step; no field pass scans long text just to borrow it.
+- Numeric traces separately witness all three primitive parse attempts, u64
+  fallback, preserved typed Infinity, per-attempt Pending/lifetime exhaustion,
+  63/64/65 and 255/256/257 limits, zero-disabled conversion and decoded `1e0`
+  content length four. No byte debit or parse occurs on step/lifetime shortage.
+- Zero work and cancellation are checked at **every Pending boundary** of a
+  successful rich input, covering all five local phases. Cancellation before
+  and after an actual parse preserves the exact debit/attempt observations.
+- Actual value construction plus field projection plus repeated projection
+  share one remainder. A lifetime one unit below the combined work completes
+  value construction but fails field projection as resource exhaustion. The
+  outer owner still owns all three source allocations; dropping it releases
+  each once. The local field failure is not represented as whole rollback.
+- Decoded duplicates, last-wins type/numeric/null decisions and literal
+  collision objects reuse actual construction. Opaque Numbers/JSON-looking
+  strings do not become primitive conversion work. A nested-invalid schema
+  test pins the non-recursive boundary rather than accidentally claiming full
+  conversion-before-Basic from a single-node pass.
+- An independent fixed thread-local allocator observes zero alloc/dealloc/
+  realloc calls in projection, local failure/cancellation and every Pending
+  abandonment of its fixed inputs. Source footprint is unchanged. Cursor and
+  returned facts need no destructor. On the tested 64-bit Host the field
+  cursor is **1,592 inline bytes**, and the result is **328 bytes**. Policy
+  replay also uses fixed local state; these are not target stack, supported-M,
+  future Servient owner capacity, or whole-cursor peak claims.
+
+```sh
+cargo test --locked --manifest-path tools/architecture-fixtures/validated-thing-schema-kernel/Cargo.toml --features validated-thing --test schema_step
+cargo test --locked --manifest-path tools/architecture-fixtures/validated-thing-schema-kernel/Cargo.toml --no-default-features --features async,validated-thing
+cargo check --locked --target thumbv7em-none-eabihf --manifest-path tools/architecture-fixtures/validated-thing-schema-kernel/Cargo.toml --no-default-features --features validated-thing
+```
+
+The existing 13 Host / eight thumb matrix automatically includes this source;
+new tests run in its seven capability-on Host cells and the local engine
+compiles in four on thumb cells. The other cells continue to protect ordinary
+source behavior and capability-off dependencies. No matrix, fixture crate,
+manifest, lock, checker or CI orchestration is added.
+
+### Readmission advance and exclusions
+
+| Item | New contribution / remaining boundary |
+| ---: | --- |
+| 1 | None. Full frozen signatures/removals, sole opaque full configuration and negatives remain. |
+| 2 | One schema node's field access/conversion fits fixed non-dropping state and the existing arenas, with no new allocation site. Whole typed TD construction, canonical normalization and frame-based traversal remain. |
+| 3 | Existing field parity now survives actual charged/resumable conversion, preserving all context/variant fields and primitive events. Whole Thing field extraction, compatibility traversal, normalized Snapshot equivalence and whole query parity remain. |
+| 4 | No new Planning claim; #111/#113 remain reusable. |
+| 5 | Existing matrix covers the additional local source; full frozen surface, sibling/downstream construction and constrained execution remain. |
+| 6 | Per-node field indexing/list/selector/scalar traces and actual value-to-field lifetime composition advance. Whole schema/Thing nonrecursive traversal, Basic/date/URI/equivalence, complete configuration, global diagnostics and first-cause rollback remain. |
+| 7 | No local heap/category/drop cost, unchanged actual source footprint and exact shared-work debit; original allocator/accounting proofs remain. Complete M, whole work/stack/owner envelope, Snapshot/plan overlap, parent/global release and Published/permit/install evidence remain. |
+| 8 | Production/authority/resource schema/successor and gate inputs are unchanged. Full independent exact-head reaffirmation and future admitted API removal remain. |
+
+The pass **borrows a completed literal value owner** and returns borrowed field
+facts. It neither constructs a typed canonical Snapshot nor proves equal final
+footprints for different wire spellings with the same defaulted TD fields.
+This staged prototype does not choose production decode/seal ordering. It has
+no recursive schema visitor, charged Basic, RFC3339/URI conversion, whole Thing
+projection, equivalence pass, normalized seal, full configuration or global
+input-offset/node-ordinal diagnostic. The original Basic adapter still repeats
+synchronous extraction and cannot be used as a paid shortcut. Numeric support
+is tested at local ceilings, not derived as the complete supported maximum M;
+no target execution, cycle/stack or parser-internal slow-path claim is made.
+
+No readmission item is complete as a whole. Admission remains
+`planned / candidate / current`; production implementation and the separate
+admission-only transition still require independent acceptance of the complete
+eight-item evidence set. This slice establishes the bounded field seam before
+widening it or composing a whole admission cursor, not a new production design.

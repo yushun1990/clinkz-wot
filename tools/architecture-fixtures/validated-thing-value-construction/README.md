@@ -94,6 +94,16 @@ fractions, signed/zero-padded/very large exponents and negative mantissas.
 This is a public-oracle-tested adapter, not dependency-source extraction or
 private token dispatch. No numeric projection is performed here.
 
+The completed owner preserves the actual unspent lifetime remainder. Its
+fixture-only `admission_parts()` lends a view and that same mutable scalar to
+subsequent semantic work; seal is not an allowance reset. The separate
+[charged schema field pass](../validated-thing-schema-kernel/README.md#charged-one-node-dataschema-field-projection)
+uses this handoff, not a second copied allowance. This scaffolding is not the
+frozen production admission/View API or a complete configuration proof.
+Borrowed text access relies on the constructor's established UTF-8 invariant
+instead of revalidating an entire immutable range per query. Wire emission,
+typed `str` sources and complete-range compaction own that safety premise.
+
 The insertion sort and some cleanup scans have quadratic worst-case work.
 They are charged and resumable; this fixture makes no throughput or final
 production algorithm claim. Its finite `Limits` is test scaffolding, **not**
@@ -120,7 +130,7 @@ For the documented 64-bit Host allocator witness, both entries report:
 | Actual allocation requests | 22 |
 | Maximum simultaneous blocks | at most 5 |
 
-The cursor/progress occupy 840 inline bytes and the completed fixture owner 600
+The cursor/progress occupy 840 inline bytes and the completed fixture owner 608
 on that Host build. These are capacity observations, not heap requests, target
 stack bounds or future Servient owner limits. Allocator metadata is excluded.
 All successful owners leave only their nonempty three exact source arenas;

@@ -2,7 +2,7 @@
 //! #114's unchanged Basic rule body. No Thing/Value/Number/String is constructed.
 //! Field inspection and Basic traversal remain synchronous and recursive.
 use super::{
-    schema_fields::{self as policy, Context, Decoded, Field, Metadata, Shape, Source as _},
+    schema_fields::{self as policy, Context, Decoded, Field, Metadata, Shape},
     schema_kernel::{self as basic, ChildSite, SchemaAccess, SchemaKind},
 };
 use serde::{
@@ -73,8 +73,8 @@ impl<'a> Source<'a> {
 
 #[derive(Clone, Copy)]
 pub struct List<'a> {
-    value: View<'a>,
-    single: bool,
+    pub(crate) value: View<'a>,
+    pub(crate) single: bool,
 }
 impl<'a> List<'a> {
     pub fn len(self) -> usize {
@@ -94,8 +94,8 @@ impl<'a> List<'a> {
 
 #[derive(Clone, Copy)]
 pub struct Extras<'a> {
-    object: View<'a>,
-    consumed: u64,
+    pub(crate) object: View<'a>,
+    pub(crate) consumed: u64,
 }
 impl<'a> Extras<'a> {
     pub fn get(self, key: &str) -> Option<View<'a>> {
@@ -220,19 +220,20 @@ impl<'de> Deserializer<'de> for Scalar<'de> {
     type Error = DecodeError;
     fn deserialize_any<V: Visitor<'de>>(self, visitor: V) -> Result<V::Value, DecodeError> {
         match self.0.kind() {
-            Kind::Null => visitor.visit_unit(),
-            Kind::False => visitor.visit_bool(false),
-            Kind::True => visitor.visit_bool(true),
-            Kind::String => visitor.visit_borrowed_str(self.0.text().unwrap()),
+            Kind::Null => Primitive::Null.deserialize_any(visitor),
+            Kind::False => Primitive::Boolean(false).deserialize_any(visitor),
+            Kind::True => Primitive::Boolean(true).deserialize_any(visitor),
+            Kind::String => Primitive::Text(self.0.text().unwrap()).deserialize_any(visitor),
             Kind::Number => {
                 let text = self.0.text().unwrap();
-                if let Ok(value) = text.parse::<i64>() {
-                    visitor.visit_i64(value)
+                let primitive = if let Ok(value) = text.parse::<i64>() {
+                    Primitive::Signed(value)
                 } else if let Ok(value) = text.parse::<u64>() {
-                    visitor.visit_u64(value)
+                    Primitive::Unsigned(value)
                 } else {
-                    visitor.visit_f64(text.parse().map_err(|_| DecodeError { field: None })?)
-                }
+                    Primitive::Float(text.parse().map_err(|_| DecodeError { field: None })?)
+                };
+                primitive.deserialize_any(visitor)
             }
             _ => Err(DecodeError { field: None }),
         }
@@ -256,14 +257,37 @@ impl<'de> Deserializer<'de> for Scalar<'de> {
     }
 }
 
+/// Already selected public primitive events. Both the synchronous adapter and
+/// charged adapter use the same serde/flexible-bool visitors; the latter pays
+/// each Number parse before constructing an event, instead of parsing again.
+pub(crate) enum Primitive<'a> {
+    Null,
+    Boolean(bool),
+    Text(&'a str),
+    Signed(i64),
+    Unsigned(u64),
+    Float(f64),
+}
+impl<'de> Deserializer<'de> for Primitive<'de> {
+    type Error = DecodeError;
+    fn deserialize_any<V: Visitor<'de>>(self, visitor: V) -> Result<V::Value, DecodeError> {
+        match self {
+            Self::Null => visitor.visit_unit(),
+            Self::Boolean(value) => visitor.visit_bool(value),
+            Self::Text(value) => visitor.visit_borrowed_str(value),
+            Self::Signed(value) => visitor.visit_i64(value),
+            Self::Unsigned(value) => visitor.visit_u64(value),
+            Self::Float(value) => visitor.visit_f64(value),
+        }
+    }
+    serde::forward_to_deserialize_any! {
+        bool i8 i16 i32 i64 u8 u16 u32 u64 f32 f64 char str string bytes byte_buf
+        option unit unit_struct newtype_struct seq tuple tuple_struct map struct enum identifier ignored_any
+    }
+}
+
 pub fn decode(value: View<'_>) -> Result<Decoded<Source<'_>>, DecodeError> {
-    let mut source = Source::new(value)?;
-    let data_type = match source.take(Field::Type) {
-        None => None,
-        Some(value) if value.kind() == Kind::Null => None,
-        Some(value) => Some(source.text(value)?),
-    };
-    policy::variant(source, policy::dispatch(data_type))
+    policy::decode(Source::new(value)?)
 }
 
 /// Match serde's complete field conversion before Basic starts. Traversal only

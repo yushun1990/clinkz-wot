@@ -358,6 +358,7 @@ impl<'a> Cursor<'a> {
                 let value = OwnedValue {
                     storage: self.storage.into_owned(),
                     trace: self.trace,
+                    lifetime: self.lifetime,
                 };
                 return Progress::Complete(value);
             }
@@ -1648,13 +1649,29 @@ fn arena_cause(error: ArenaError) -> Cause {
 pub struct OwnedValue {
     storage: Storage<()>,
     trace: Trace,
+    lifetime: u64,
 }
 impl OwnedValue {
     pub fn view(&self) -> View<'_> {
         View {
-            owner: self,
+            owner: &self.storage,
             node: 0,
         }
+    }
+    /// Fixture-only handoff to subsequent borrowed semantic work. Construction
+    /// and field projection debit this same remainder; sealing does not reset it.
+    /// This is not the frozen production View or admission interface.
+    pub fn admission_parts(&mut self) -> (View<'_>, &mut u64) {
+        (
+            View {
+                owner: &self.storage,
+                node: 0,
+            },
+            &mut self.lifetime,
+        )
+    }
+    pub fn lifetime_remaining(&self) -> u64 {
+        self.lifetime
     }
     pub fn footprint(&self) -> Footprint {
         self.storage.footprint()
@@ -1672,12 +1689,12 @@ impl OwnedValue {
 
 #[derive(Clone, Copy)]
 pub struct View<'a> {
-    owner: &'a OwnedValue,
+    owner: &'a Storage<()>,
     node: usize,
 }
 impl<'a> View<'a> {
     fn record(self) -> Node {
-        self.owner.storage.nodes()[self.node]
+        self.owner.nodes()[self.node]
     }
     pub fn kind(self) -> Kind {
         match self.record().kind {
@@ -1697,11 +1714,15 @@ impl<'a> View<'a> {
             return None;
         }
         let node = self.record();
-        core::str::from_utf8(
-            &self.owner.storage.bytes()
-                [node.first_byte as usize..(node.first_byte + node.byte_count) as usize],
-        )
-        .ok()
+        let bytes = &self.owner.bytes()
+            [node.first_byte as usize..(node.first_byte + node.byte_count) as usize];
+        // SAFETY: only the private constructor can make these arenas. Wire
+        // strings are UTF-8/escape/scalar checked before emission, typed text
+        // (including AP Number content) originates in str, and wire Number
+        // emission is ASCII. Compaction copies
+        // complete ranges; sealed storage has no public mutation. Revalidating
+        // here would hide an input-sized, uncharged scan in every borrowed query.
+        Some(unsafe { core::str::from_utf8_unchecked(bytes) })
     }
     pub fn len(self) -> usize {
         self.record().edge_count as usize
@@ -1714,7 +1735,7 @@ impl<'a> View<'a> {
         if index >= node.edge_count as usize {
             return None;
         }
-        let edge = self.owner.storage.edges()[node.first_edge as usize + index];
+        let edge = self.owner.edges()[node.first_edge as usize + index];
         Some(View {
             owner: self.owner,
             node: edge.target as usize,
