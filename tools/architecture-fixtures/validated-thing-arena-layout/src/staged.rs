@@ -20,6 +20,29 @@ enum Transfer<F> {
     Frames(Arena<F>),
 }
 
+#[derive(Default)]
+struct Retained {
+    nodes: Arena<RetainedNode>,
+    edges: Arena<RetainedEdge>,
+    bytes: Arena<u8>,
+}
+
+/// Compact immutable borrow, disjoint from the owner's accounting. This is
+/// fixture plumbing; it grants no mutation or unchecked construction.
+#[derive(Clone, Copy)]
+pub struct Sealed<'a>(&'a Retained);
+impl<'a> Sealed<'a> {
+    pub fn nodes(self) -> &'a [RetainedNode] {
+        self.0.nodes.as_slice()
+    }
+    pub fn edges(self) -> &'a [RetainedEdge] {
+        self.0.edges.as_slice()
+    }
+    pub fn bytes(self) -> &'a [u8] {
+        self.0.bytes.as_slice()
+    }
+}
+
 /// Fixture scaffolding, not a public TD storage API. F must be non-dropping;
 /// it can contain borrowed public iterators, never an owning collection.
 /// All build arenas are frozen during transfer, including frame extraction.
@@ -30,9 +53,7 @@ pub struct Storage<F> {
     edges: Arena<RetainedEdge>,
     bytes: Arena<u8>,
     frames: Arena<F>,
-    retained_nodes: Arena<RetainedNode>,
-    retained_edges: Arena<RetainedEdge>,
-    retained_bytes: Arena<u8>,
+    retained: Retained,
     transfer: Option<Transfer<F>>,
     copied: usize,
     sealing: bool,
@@ -49,9 +70,7 @@ impl<F> Storage<F> {
             edges: Arena::default(),
             bytes: Arena::default(),
             frames: Arena::default(),
-            retained_nodes: Arena::default(),
-            retained_edges: Arena::default(),
-            retained_bytes: Arena::default(),
+            retained: Retained::default(),
             transfer: None,
             copied: 0,
             sealing: false,
@@ -160,7 +179,7 @@ impl<F> Storage<F> {
             Transfer::Nodes(new) => {
                 self.release_site(Site::Nodes);
                 if self.sealing {
-                    self.retained_nodes = new;
+                    self.retained.nodes = new;
                 } else {
                     self.nodes = new;
                 }
@@ -168,7 +187,7 @@ impl<F> Storage<F> {
             Transfer::Edges(new) => {
                 self.release_site(Site::Edges);
                 if self.sealing {
-                    self.retained_edges = new;
+                    self.retained.edges = new;
                 } else {
                     self.edges = new;
                 }
@@ -176,7 +195,7 @@ impl<F> Storage<F> {
             Transfer::Bytes(new) => {
                 self.release_site(Site::Bytes);
                 if self.sealing {
-                    self.retained_bytes = new;
+                    self.retained.bytes = new;
                 } else {
                     self.bytes = new;
                 }
@@ -298,9 +317,9 @@ impl<F> Storage<F> {
         assert_eq!(self.frames.capacity, 0);
         let mut owned = Storage::new(0, 0, 0, 0);
         owned.accounting = mem::replace(&mut self.accounting, Accounting::new(0, 0, 0, 0));
-        owned.retained_nodes = mem::take(&mut self.retained_nodes);
-        owned.retained_edges = mem::take(&mut self.retained_edges);
-        owned.retained_bytes = mem::take(&mut self.retained_bytes);
+        owned.retained.nodes = mem::take(&mut self.retained.nodes);
+        owned.retained.edges = mem::take(&mut self.retained.edges);
+        owned.retained.bytes = mem::take(&mut self.retained.bytes);
         owned.allocations = self.allocations;
         owned.releases = self.releases;
         owned.sealed = true;
@@ -308,15 +327,37 @@ impl<F> Storage<F> {
     }
     pub fn nodes(&self) -> &[RetainedNode] {
         assert!(self.sealed);
-        self.retained_nodes.as_slice()
+        self.retained.nodes.as_slice()
     }
     pub fn edges(&self) -> &[RetainedEdge] {
         assert!(self.sealed);
-        self.retained_edges.as_slice()
+        self.retained.edges.as_slice()
     }
     pub fn bytes(&self) -> &[u8] {
         assert!(self.sealed);
-        self.retained_bytes.as_slice()
+        self.retained.bytes.as_slice()
+    }
+    pub fn sealed(&self) -> Sealed<'_> {
+        assert!(self.sealed);
+        Sealed(&self.retained)
+    }
+    /// Reuse the already released traversal site for subsequent semantic work.
+    /// Its requests share the actual source owner's Accounting/ledger, including
+    /// live-source overlap. The source arrays remain immutably borrowed.
+    pub fn inspection_parts<G>(&mut self) -> (Sealed<'_>, Frames<'_, G>) {
+        assert!(self.sealed && self.transfer.is_none());
+        assert_eq!(self.frames.capacity, 0);
+        (
+            Sealed(&self.retained),
+            Frames {
+                accounting: &mut self.accounting,
+                allocations: &mut self.allocations,
+                releases: &mut self.releases,
+                arena: Arena::default(),
+                replacement: None,
+                copied: 0,
+            },
+        )
     }
     pub fn live_bytes(&self) -> u64 {
         self.accounting.ledger.live_bytes()
@@ -331,9 +372,9 @@ impl<F> Storage<F> {
         Footprint {
             retained_requested_bytes: self.accounting.source_live,
             retained_allocation_count: [
-                self.retained_nodes.request_bytes,
-                self.retained_edges.request_bytes,
-                self.retained_bytes.request_bytes,
+                self.retained.nodes.request_bytes,
+                self.retained.edges.request_bytes,
+                self.retained.bytes.request_bytes,
             ]
             .iter()
             .filter(|&&n| n != 0)
@@ -362,21 +403,21 @@ impl<F> Storage<F> {
         for site in [Site::Nodes, Site::Edges, Site::Bytes, Site::Frames] {
             self.release_site(site);
         }
-        if self.retained_nodes.request_bytes != 0 {
+        if self.retained.nodes.request_bytes != 0 {
             self.releases += 1;
         }
-        if self.retained_edges.request_bytes != 0 {
+        if self.retained.edges.request_bytes != 0 {
             self.releases += 1;
         }
-        if self.retained_bytes.request_bytes != 0 {
+        if self.retained.bytes.request_bytes != 0 {
             self.releases += 1;
         }
         self.accounting
-            .release(&mut self.retained_nodes, Account::Source);
+            .release(&mut self.retained.nodes, Account::Source);
         self.accounting
-            .release(&mut self.retained_edges, Account::Source);
+            .release(&mut self.retained.edges, Account::Source);
         self.accounting
-            .release(&mut self.retained_bytes, Account::Source);
+            .release(&mut self.retained.bytes, Account::Source);
         assert_eq!(self.live_bytes(), 0);
     }
 
@@ -385,6 +426,117 @@ impl<F> Storage<F> {
             self.releases += 1;
         }
         self.accounting.release(arena, account);
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct FrameResources {
+    pub source_live: u64,
+    pub temporary_live: u64,
+    pub live: u64,
+    pub temporary_peak: u64,
+    pub conversion_peak: u64,
+    pub largest_request: u64,
+}
+
+/// One traversal arena, with at most its old/replacement overlap. G cannot
+/// own a destructor. No element is dropped during failure or abandonment.
+pub struct Frames<'a, G> {
+    accounting: &'a mut Accounting,
+    allocations: &'a mut u64,
+    releases: &'a mut u64,
+    arena: Arena<G>,
+    replacement: Option<Arena<G>>,
+    copied: usize,
+}
+impl<G> Frames<'_, G> {
+    pub fn len(&self) -> usize {
+        self.arena.length
+    }
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+    pub fn capacity(&self) -> usize {
+        self.arena.capacity
+    }
+    /// Caller prepays one CleanupItems/lifetime unit. Allocate an EMPTY
+    /// replacement through the same checked Layout and reservation body.
+    pub fn begin_grow(&mut self, capacity: usize) -> Result<(), Error> {
+        assert!(self.replacement.is_none() && capacity > self.capacity());
+        let mut new = Arena::default();
+        self.accounting
+            .replace(&mut new, capacity, Account::Temporary)?;
+        *self.allocations += 1;
+        self.replacement = Some(new);
+        self.copied = 0;
+        Ok(())
+    }
+    pub fn transferring(&self) -> bool {
+        self.replacement.is_some()
+    }
+    pub fn copy_pending(&self) -> bool {
+        self.transferring() && self.copied < self.len()
+    }
+    /// One already-paid move, or fixed completion/release. Mutation and frame
+    /// extraction remain forbidden until both representations stop coexisting.
+    pub fn copy_one(&mut self) {
+        let new = self.replacement.as_mut().unwrap();
+        if self.copied < self.arena.length {
+            // SAFETY: same initialized/distinct one-element ranges as Storage.
+            unsafe { copy_element(&self.arena, new, self.copied) };
+            self.copied += 1;
+        } else {
+            let new = self.replacement.take().unwrap();
+            self.release_current();
+            self.arena = new;
+        }
+    }
+    pub fn push(&mut self, frame: G) {
+        assert!(!self.transferring());
+        self.arena.push(frame).unwrap();
+    }
+    pub fn last(&self) -> &G {
+        assert!(!self.transferring());
+        self.arena.as_slice().last().unwrap()
+    }
+    pub fn last_mut(&mut self) -> &mut G {
+        assert!(!self.transferring() && !self.is_empty());
+        // SAFETY: unique borrow of the initialized last element.
+        unsafe { &mut *self.arena.pointer.as_ptr().add(self.len() - 1) }
+    }
+    pub fn pop(&mut self) -> G {
+        assert!(!self.transferring() && !self.is_empty());
+        self.arena.length -= 1;
+        // SAFETY: move out one initialized element, shortening the prefix.
+        unsafe { self.arena.pointer.as_ptr().add(self.len()).read() }
+    }
+    pub fn resources(&self) -> FrameResources {
+        FrameResources {
+            source_live: self.accounting.source_live,
+            temporary_live: self.accounting.temporary_live,
+            live: self.accounting.ledger.live_bytes(),
+            temporary_peak: self.accounting.temporary_peak,
+            conversion_peak: self.accounting.ledger.peak_live_bytes(),
+            largest_request: self.accounting.ledger.largest_contiguous_allocation(),
+        }
+    }
+    fn release_current(&mut self) {
+        if self.arena.request_bytes != 0 {
+            *self.releases += 1;
+        }
+        self.accounting.release(&mut self.arena, Account::Temporary);
+    }
+    pub fn clear(&mut self) {
+        if let Some(mut new) = self.replacement.take() {
+            *self.releases += 1;
+            self.accounting.release(&mut new, Account::Temporary);
+        }
+        self.release_current();
+    }
+}
+impl<G> Drop for Frames<'_, G> {
+    fn drop(&mut self) {
+        self.clear();
     }
 }
 

@@ -22,6 +22,14 @@ iterators; the internal arena rejects dropping element types and zero-sized
 allocation requests. That JSON value-layer composition does not make this
 original synchronous `Prototype` or the full typed Thing traversal resumable.
 
+The [nested schema composition](../validated-thing-schema-kernel/README.md#charged-nested-dataschema-decoding-and-basic-composition)
+reuses the released traversal site through `staged::Frames`, with an immutable
+borrow of the sealed arrays disjoint from their actual Accounting. Semantic
+frame growth shares the original source ledger, uses the same empty checked
+replacement requests and paid element moves, and releases at most two frame
+blocks. It adds no retained arena or temporary category; its README owns the
+schema composition's work, overlap observations and exact limits.
+
 ## Reproduce
 
 From the repository root:
