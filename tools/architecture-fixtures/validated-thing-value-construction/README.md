@@ -104,6 +104,13 @@ Borrowed text access relies on the constructor's established UTF-8 invariant
 instead of revalidating an entire immutable range per query. Wire emission,
 typed `str` sources and complete-range compaction own that safety premise.
 
+The separate [nested schema composition](../validated-thing-schema-kernel/README.md#charged-nested-dataschema-decoding-and-basic-composition)
+uses fixture-only `inspection_parts()` to borrow the same source and lifetime
+alongside a temporary frame workspace. That workspace shares this owner's
+actual Accounting/ledger and includes the still-live source in its grow peaks.
+Its local terminals release frames while the original source owner remains
+live; it is not whole admission rollback or typed canonical construction.
+
 The insertion sort and some cleanup scans have quadratic worst-case work.
 They are charged and resumable; this fixture makes no throughput or final
 production algorithm claim. Its finite `Limits` is test scaffolding, **not**

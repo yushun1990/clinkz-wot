@@ -1,6 +1,6 @@
 //! Storage-neutral Basic DataSchema rules, shared only by evidence candidates.
-//! Traversal is synchronous/recursive. Only the Number continuation below is
-//! resumable; this is not the future bounded admission traversal.
+//! Public traversal is synchronous/recursive. Walk supplies the same discovery
+//! and rule order to the bounded subtree witness; it does not charge work.
 
 #[path = "../../validated-thing-feature-boundary/td-boundary/src/projection_step.rs"]
 #[allow(dead_code)]
@@ -33,6 +33,7 @@ impl SchemaKind {
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[repr(u8)]
 pub enum Field {
     MinItems,
     MaxItems,
@@ -44,6 +45,21 @@ pub enum Field {
     ExclusiveMaximum,
     MultipleOf,
 }
+pub const FIELDS: [Field; 9] = [
+    Field::MinItems,
+    Field::MaxItems,
+    Field::MinLength,
+    Field::MaxLength,
+    Field::Minimum,
+    Field::ExclusiveMinimum,
+    Field::Maximum,
+    Field::ExclusiveMaximum,
+    Field::MultipleOf,
+];
+const UNSIGNED_PAIRS: [(Field, Field); 2] = [
+    (Field::MinItems, Field::MaxItems),
+    (Field::MinLength, Field::MaxLength),
+];
 
 impl Field {
     pub const fn name(self) -> &'static str {
@@ -61,7 +77,7 @@ impl Field {
     }
 }
 
-const NUMERIC_FIELDS: [Field; 5] = [
+pub const NUMERIC_FIELDS: [Field; 5] = [
     Field::Minimum,
     Field::ExclusiveMinimum,
     Field::Maximum,
@@ -163,6 +179,88 @@ fn positive<T: PartialOrd + Default>(value: Option<T>) -> Result<(), Rule> {
     }
 }
 
+/// Shared rule/discovery order. Adapters may suspend while servicing an action;
+/// advancing an action is explicit, so a Pending child cannot be skipped.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct Walk {
+    stage: u8,
+    index: usize,
+}
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum Action {
+    Type,
+    OneOf(usize),
+    Flags,
+    Unsigned,
+    Numeric,
+    Typed,
+    Child(usize),
+    Done,
+}
+impl Walk {
+    pub fn action(&mut self, one_of: usize, children: usize) -> Action {
+        if self.stage == 1 && self.index == one_of {
+            self.stage = 2;
+            self.index = 0;
+        }
+        if self.stage == 6 && self.index == children {
+            self.stage = 7;
+        }
+        match self.stage {
+            0 => Action::Type,
+            1 => Action::OneOf(self.index),
+            2 => Action::Flags,
+            3 => Action::Unsigned,
+            4 => Action::Numeric,
+            5 => Action::Typed,
+            6 => Action::Child(self.index),
+            7 => Action::Done,
+            _ => unreachable!(),
+        }
+    }
+    pub fn advance(&mut self) {
+        if matches!(self.stage, 1 | 6) {
+            self.index += 1;
+        } else {
+            self.stage += 1;
+        }
+    }
+}
+pub fn check_type(data_type: Option<&str>, kind: SchemaKind) -> Result<(), Rule> {
+    if data_type.is_some_and(|text| text != kind.name()) {
+        Err(Rule::TypeMismatch)
+    } else {
+        Ok(())
+    }
+}
+pub fn check_flags(flags: (bool, bool)) -> Result<(), Rule> {
+    if flags == (true, true) {
+        Err(Rule::ReadWrite)
+    } else {
+        Ok(())
+    }
+}
+pub fn check_unsigned_pair(pair: usize, values: [Option<u64>; 2]) -> Result<(), Rule> {
+    ordered(values[0], values[1], UNSIGNED_PAIRS[pair])
+}
+pub fn check_typed_unsigned(
+    kind: SchemaKind,
+    min: Option<u32>,
+    max: Option<u32>,
+) -> Result<(), Rule> {
+    let names = if kind == SchemaKind::Array {
+        (Field::MinItems, Field::MaxItems)
+    } else {
+        (Field::MinLength, Field::MaxLength)
+    };
+    ordered(min, max, names)
+}
+pub fn check_typed_numeric<T: Copy + PartialOrd + Default>(
+    values: &[Option<T>; 5],
+) -> Result<(), Rule> {
+    bounds(values).and_then(|()| positive(values[4]))
+}
+
 /// One shared five-predicate continuation. Four bounds are projected before
 /// comparisons, and multipleOf is visited only if those comparisons succeed.
 /// Re-entering Pending never accumulates credit or projects an earlier field.
@@ -238,65 +336,60 @@ fn visit<'a, A: SchemaAccess<'a>, S: DiagnosticSink<'a, A>>(
     let ordinal = *next_ordinal;
     *next_ordinal += 1;
     let reject = |rule| sink.reject(access, node, ordinal, rule);
-    if let Some(data_type) = access.data_type(node)
-        && data_type != access.kind(node).name()
-    {
-        return Err(reject(Rule::TypeMismatch));
-    }
-    for index in 0..access.one_of_count(node) {
-        visit(access, access.one_of(node, index), sink, next_ordinal)
-            .map_err(|error| sink.child(ChildSite::Indexed(index), error))?;
-    }
-    if access.flags(node) == (true, true) {
-        return Err(reject(Rule::ReadWrite));
-    }
-    for (min, max) in [
-        (Field::MinItems, Field::MaxItems),
-        (Field::MinLength, Field::MaxLength),
-    ] {
-        ordered(
-            access.unsigned_extension(node, min),
-            access.unsigned_extension(node, max),
-            (min, max),
-        )
-        .map_err(reject)?;
-    }
-    let mut numeric = NumericCursor::default();
-    let ProjectionProgress::Complete(result) = numeric
-        .step(numeric_inputs(access, node), |number| {
-            ProjectionProgress::Complete(access.project_number(number))
-        })
-    else {
-        unreachable!("synchronous adapter cannot suspend")
-    };
-    result.map_err(reject)?;
-    match access.kind(node) {
-        SchemaKind::Array | SchemaKind::String => {
-            let (min, max) = access.typed_unsigned(node);
-            let names = if access.kind(node) == SchemaKind::Array {
-                (Field::MinItems, Field::MaxItems)
-            } else {
-                (Field::MinLength, Field::MaxLength)
-            };
-            ordered(min, max, names).map_err(reject)?;
+    let mut walk = Walk::default();
+    loop {
+        match walk.action(access.one_of_count(node), access.child_count(node)) {
+            Action::Type => {
+                check_type(access.data_type(node), access.kind(node)).map_err(reject)?
+            }
+            Action::OneOf(index) => {
+                visit(access, access.one_of(node, index), sink, next_ordinal)
+                    .map_err(|error| sink.child(ChildSite::Indexed(index), error))?;
+            }
+            Action::Flags => check_flags(access.flags(node)).map_err(reject)?,
+            Action::Unsigned => {
+                for (pair, (min, max)) in UNSIGNED_PAIRS.into_iter().enumerate() {
+                    check_unsigned_pair(
+                        pair,
+                        [
+                            access.unsigned_extension(node, min),
+                            access.unsigned_extension(node, max),
+                        ],
+                    )
+                    .map_err(reject)?;
+                }
+            }
+            Action::Numeric => {
+                let mut numeric = NumericCursor::default();
+                let ProjectionProgress::Complete(result) = numeric
+                    .step(numeric_inputs(access, node), |number| {
+                        ProjectionProgress::Complete(access.project_number(number))
+                    })
+                else {
+                    unreachable!("synchronous adapter cannot suspend")
+                };
+                result.map_err(reject)?;
+            }
+            Action::Typed => match access.kind(node) {
+                SchemaKind::Array | SchemaKind::String => {
+                    let (min, max) = access.typed_unsigned(node);
+                    check_typed_unsigned(access.kind(node), min, max).map_err(reject)?;
+                }
+                SchemaKind::Number => {
+                    check_typed_numeric(&access.typed_float(node)).map_err(reject)?
+                }
+                SchemaKind::Integer => {
+                    check_typed_numeric(&access.typed_integer(node)).map_err(reject)?
+                }
+                SchemaKind::Object | SchemaKind::Boolean | SchemaKind::Null => {}
+            },
+            Action::Child(index) => {
+                let (site, child) = access.child(node, index);
+                visit(access, child, sink, next_ordinal)
+                    .map_err(|error| sink.child(site, error))?;
+            }
+            Action::Done => return Ok(()),
         }
-        SchemaKind::Number => {
-            let values = access.typed_float(node);
-            bounds(&values)
-                .and_then(|()| positive(values[4]))
-                .map_err(reject)?;
-        }
-        SchemaKind::Integer => {
-            let values = access.typed_integer(node);
-            bounds(&values)
-                .and_then(|()| positive(values[4]))
-                .map_err(reject)?;
-        }
-        SchemaKind::Object | SchemaKind::Boolean | SchemaKind::Null => {}
+        walk.advance();
     }
-    for index in 0..access.child_count(node) {
-        let (site, child) = access.child(node, index);
-        visit(access, child, sink, next_ordinal).map_err(|error| sink.child(site, error))?;
-    }
-    Ok(())
 }
