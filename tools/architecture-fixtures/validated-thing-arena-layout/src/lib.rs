@@ -166,6 +166,8 @@ pub struct Footprint {
     pub largest_request_bytes: u64,
     pub temporary_peak_bytes: u64,
     pub conversion_peak_bytes: u64,
+    /// Logical high water, including reservations whose allocator call failed.
+    pub reservation_peak_bytes: u64,
 }
 
 impl Prototype {
@@ -292,9 +294,10 @@ impl Prototype {
         Footprint {
             retained_requested_bytes: self.accounting.source_live,
             retained_allocation_count: sites.iter().filter(|&&bytes| bytes != 0).count() as u64,
-            largest_request_bytes: self.accounting.ledger.largest_contiguous_allocation(),
+            largest_request_bytes: self.accounting.largest_request,
             temporary_peak_bytes: self.accounting.temporary_peak,
-            conversion_peak_bytes: self.accounting.ledger.peak_live_bytes(),
+            conversion_peak_bytes: self.accounting.conversion_peak,
+            reservation_peak_bytes: self.accounting.ledger.peak_live_bytes(),
         }
     }
 
@@ -346,6 +349,8 @@ struct Accounting {
     source_live: u64,
     temporary_live: u64,
     temporary_peak: u64,
+    conversion_peak: u64,
+    largest_request: u64,
 }
 
 impl Accounting {
@@ -373,17 +378,19 @@ impl Accounting {
             source_live: 0,
             temporary_live: 0,
             temporary_peak: 0,
+            conversion_peak: 0,
+            largest_request: 0,
         }
     }
 
-    fn replace<T>(
-        &mut self,
-        arena: &mut Arena<T>,
+    /// Pure request preflight: no allowance debit, reservation or allocation.
+    fn request<T>(
+        &self,
         capacity: usize,
         account: Account,
-    ) -> Result<(), Error> {
-        if capacity <= arena.capacity {
-            return Ok(());
+    ) -> Result<Option<(Layout, u64)>, Error> {
+        if capacity == 0 {
+            return Ok(None);
         }
         let layout = Layout::array::<T>(capacity).map_err(|_| Error::Arithmetic)?;
         if layout.size() == 0 {
@@ -414,6 +421,19 @@ impl Accounting {
         {
             return Err(Error::Limit);
         }
+        Ok(Some((layout, bytes)))
+    }
+
+    fn replace<T>(
+        &mut self,
+        arena: &mut Arena<T>,
+        capacity: usize,
+        account: Account,
+    ) -> Result<(), Error> {
+        if capacity <= arena.capacity {
+            return Ok(());
+        }
+        let (layout, bytes) = self.request::<T>(capacity, account)?.unwrap();
         // Exactly one reservation for exactly this allocation's checked Layout.
         let reservation = match account {
             Account::Source => self
@@ -424,6 +444,9 @@ impl Accounting {
                 .try_reserve_temporary(ResourceKind::AdmissionTemporaryBytesPerOperationMax, bytes),
         }
         .ok_or(Error::Limit)?;
+        // This request reaches the allocator even if it returns null. A
+        // reservation alone is never physical live storage.
+        self.largest_request = self.largest_request.max(bytes);
         // SAFETY: Layout is checked, nonzero, and aligned for T. The pointer
         // is not dereferenced unless the allocator succeeds.
         let pointer = unsafe { alloc(layout) };
@@ -451,6 +474,9 @@ impl Accounting {
                 self.temporary_peak = self.temporary_peak.max(self.temporary_live);
             }
         }
+        self.conversion_peak = self
+            .conversion_peak
+            .max(self.source_live + self.temporary_live);
         // Keep both blocks charged until the old allocation is deallocated.
         let old_bytes = old.request_bytes;
         drop(old);
@@ -573,6 +599,7 @@ mod tests {
                 largest_request_bytes: 80,
                 temporary_peak_bytes: 120,
                 conversion_peak_bytes: 137,
+                reservation_peak_bytes: 137,
             }
         );
     }

@@ -3,10 +3,6 @@
 // contaminate the allocator interval. These are test records, not diagnostics.
 #![allow(clippy::result_large_err)]
 use clinkz_wot_foundation::{WorkBudget, WorkClass as W};
-use std::{
-    alloc::{GlobalAlloc, Layout, System},
-    cell::Cell,
-};
 use validated_thing_schema_kernel_probe::{
     data_schema::DataSchema,
     schema_arena as reference,
@@ -20,82 +16,9 @@ use validated_thing_value_construction_probe::{Cursor as ValueCursor, Limits, Ow
 #[allow(dead_code)]
 mod construction;
 
-#[derive(Clone, Copy, Debug, Default)]
-struct Observation {
-    attempts: usize,
-    allocations: usize,
-    releases: usize,
-    reallocations: usize,
-    live: i64,
-    peak: usize,
-    largest: usize,
-    fail_at: usize,
-}
-thread_local! { static OBSERVER: Cell<Option<Observation>> = const { Cell::new(None) }; }
-struct Allocator;
-// SAFETY: unchanged pointer/Layout pairs are forwarded. Fixed thread-local
-// scalars track only this test thread; failed requests preserve live truth.
-unsafe impl GlobalAlloc for Allocator {
-    unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
-        let fail = OBSERVER.with(|cell| {
-            let Some(mut record) = cell.get() else {
-                return false;
-            };
-            record.attempts += 1;
-            let fail = record.attempts == record.fail_at;
-            cell.set(Some(record));
-            fail
-        });
-        if fail {
-            return std::ptr::null_mut();
-        }
-        let pointer = unsafe { System.alloc(layout) };
-        if !pointer.is_null() {
-            OBSERVER.with(|cell| {
-                if let Some(mut record) = cell.get() {
-                    record.allocations += 1;
-                    record.live += layout.size() as i64;
-                    record.peak = record.peak.max(record.live.max(0) as usize);
-                    record.largest = record.largest.max(layout.size());
-                    cell.set(Some(record));
-                }
-            });
-        }
-        pointer
-    }
-    unsafe fn dealloc(&self, pointer: *mut u8, layout: Layout) {
-        OBSERVER.with(|cell| {
-            if let Some(mut record) = cell.get() {
-                record.releases += 1;
-                record.live -= layout.size() as i64;
-                cell.set(Some(record));
-            }
-        });
-        unsafe { System.dealloc(pointer, layout) }
-    }
-    unsafe fn realloc(&self, pointer: *mut u8, layout: Layout, size: usize) -> *mut u8 {
-        OBSERVER.with(|cell| {
-            if let Some(mut record) = cell.get() {
-                record.reallocations += 1;
-                cell.set(Some(record));
-            }
-        });
-        unsafe { System.realloc(pointer, layout, size) }
-    }
-}
-#[global_allocator]
-static ALLOCATOR: Allocator = Allocator;
-fn observe<T>(fail_at: usize, operation: impl FnOnce() -> T) -> (T, Observation) {
-    OBSERVER.with(|cell| {
-        assert!(cell.get().is_none());
-        cell.set(Some(Observation {
-            fail_at,
-            ..Observation::default()
-        }));
-    });
-    let result = operation();
-    (result, OBSERVER.with(|cell| cell.replace(None).unwrap()))
-}
+#[path = "support/allocator.rs"]
+mod allocation;
+use allocation::{OBSERVER, observe};
 const CLASSES: [W; 4] = [
     W::DocumentNodes,
     W::CodecInputBytes,
@@ -159,6 +82,60 @@ fn first_cause(input: &str) -> Cause {
     let failure = run(&mut owner, &[[7; 4]]).unwrap_err();
     assert_eq!(failure.trace.resources.unwrap().temporary_live, 0);
     failure.cause
+}
+
+#[test]
+fn impossible_frame_request_precedes_cleanup_step_and_lifetime_shortage() {
+    let mut baseline = literal("{}", Limits::default());
+    let construction_work = spent_construction(&baseline);
+    let Progress::Pending(cursor) =
+        Cursor::new(&mut baseline, 256, 4096).step(&mut budget([4096, 4096, 4096, 0]), || false)
+    else {
+        panic!("waiting for a payable frame request");
+    };
+    assert_eq!(
+        cursor.phase(),
+        Phase::Frames(validated_thing_schema_kernel_probe::schema_tree::Pass::Decode)
+    );
+    let prefix = spent(cursor.trace());
+    drop(cursor);
+    // The literal constructor fits; the semantic frame does not.
+    for lifetime in [Limits::default().lifetime, construction_work + prefix] {
+        for cleanup in [0, 1] {
+            for ceiling in 0..3 {
+                let mut limits = Limits {
+                    lifetime,
+                    ..Limits::default()
+                };
+                match ceiling {
+                    0 => limits.temporary = 511,
+                    1 => limits.contiguous = 511,
+                    2 => limits.peak = baseline.footprint().retained_requested_bytes + 511,
+                    _ => unreachable!(),
+                }
+                let mut owner = literal("{}", limits);
+                let (failure, observed) = observe(0, || {
+                    match Cursor::new(&mut owner, 256, 4096)
+                        .step(&mut budget([4096, 4096, 4096, cleanup]), || false)
+                    {
+                        Progress::Failed(failure) => failure,
+                        _ => panic!("impossible request must reject before Pending"),
+                    }
+                });
+                assert_eq!(failure.cause, Cause::Memory);
+                assert_eq!(failure.trace.work[3], 0);
+                assert_eq!(observed.attempts, 0);
+                assert_eq!(
+                    owner.lifetime_remaining(),
+                    lifetime - construction_work - prefix
+                );
+            }
+        }
+    }
+}
+
+fn spent_construction(owner: &OwnedValue) -> u64 {
+    owner.trace().work.into_iter().sum()
 }
 
 #[test]
@@ -402,6 +379,7 @@ fn every_frame_allocation_failure_and_memory_rejection_leave_only_the_original_s
     for request in 1..=trace.frame_requests as usize {
         let mut owner = literal(RICH, Limits::default());
         let source = owner.footprint().retained_requested_bytes;
+        let prior = owner.footprint();
         let (failure, observed) =
             observe(request, || run(&mut owner, &[[1; 4], [17; 4]]).unwrap_err());
         assert_eq!(failure.cause, Cause::Allocation);
@@ -410,6 +388,12 @@ fn every_frame_allocation_failure_and_memory_rejection_leave_only_the_original_s
         assert_eq!(observed.live, 0);
         assert_eq!(failure.trace.resources.unwrap().temporary_live, 0);
         assert_eq!(failure.trace.resources.unwrap().live, source);
+        assert_eq!(
+            failure.trace.resources.unwrap().conversion_peak,
+            prior
+                .conversion_peak_bytes
+                .max(source + observed.peak as u64)
+        );
     }
     // A deeper semantic stack is larger than the constructor's literal frames.
     let input = format!("{}{{}}{}", r#"{"oneOf":["#.repeat(40), "]}".repeat(40));

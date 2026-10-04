@@ -172,6 +172,19 @@ registration still require the complete independently accepted evidence set.
 
 ## Reproduction
 
+The first observed Number byte now fixes a zero-ceiling rejection in the same
+wire transition, before node-capacity work or another Pending/cancellation
+boundary. Grow and seal preflight use the original checked Layout/limit body
+before cleanup prepayment. Tests combine memory/structural rejection with zero
+cleanup credit and exhausted lifetime in both strict and typed Value entries.
+Failure records retain physical resource observations separately from the
+ledger's reservation high water, including every injected null return.
+
+The [canonical DataSchema transaction](../validated-thing-schema-kernel/README.md#charged-canonical-dataschema-construction-and-owner-transfer)
+reuses this actual owner's source, lifetime and four released temporary sites.
+The new lending rebuild/reseal methods are fixture scaffolding; they are not
+the frozen ValidatedThing API or a typed Thing compatibility entry.
+
 ```sh
 cargo test --locked --manifest-path tools/architecture-fixtures/validated-thing-value-construction/Cargo.toml
 cargo test --locked --manifest-path tools/architecture-fixtures/validated-thing-value-construction/Cargo.toml --features order

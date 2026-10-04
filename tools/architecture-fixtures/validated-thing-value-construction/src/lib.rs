@@ -9,9 +9,10 @@ use core::{cmp::Ordering, mem};
 use serde_json::Value;
 pub use validated_thing_arena_layout_probe::Error as FrameError;
 pub use validated_thing_arena_layout_probe::staged::{FrameResources, Frames};
-use validated_thing_arena_layout_probe::{
-    Error as ArenaError, Footprint, RetainedEdge as Edge, RetainedNode as Node,
-    staged::{Sealed, Site, Storage},
+pub use validated_thing_arena_layout_probe::staged::{Rebuild, Sealed, Site};
+use validated_thing_arena_layout_probe::{Error as ArenaError, staged::Storage};
+pub use validated_thing_arena_layout_probe::{
+    Footprint, RetainedEdge as Edge, RetainedNode as Node,
 };
 use validated_thing_strict_number_lexeme_probe::{Feed, NumberLexeme};
 
@@ -106,6 +107,7 @@ pub struct Failure {
     pub allocations: u64,
     pub releases: u64,
     pub trace: Trace,
+    pub resources: Footprint,
 }
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
@@ -382,6 +384,7 @@ impl<'a> Cursor<'a> {
             allocations: self.storage.allocations(),
             releases: self.storage.releases(),
             trace: self.trace,
+            resources: self.storage.footprint(),
         })
     }
 
@@ -431,6 +434,9 @@ impl<'a> Cursor<'a> {
             .checked_mul(2)
             .ok_or(Cause::Arithmetic)?
             .max(length);
+        self.storage
+            .check_grow(site, capacity)
+            .map_err(arena_cause)?;
         if !self.pay(budget, &[W::CleanupItems])? {
             return Ok(false);
         }
@@ -1310,6 +1316,7 @@ impl<'a> Cursor<'a> {
                     (State::Finished, true)
                 } else {
                     let site = [Site::Nodes, Site::Edges, Site::Bytes][index];
+                    self.storage.check_seal(site).map_err(arena_cause)?;
                     if self.storage.len(site) != 0 && !self.pay(budget, &[W::CleanupItems])? {
                         (State::Seal(index), false)
                     } else {
@@ -1390,7 +1397,12 @@ impl<'a> Cursor<'a> {
                 b'n' => State::Scalar(Kind::Null),
                 b't' => State::Scalar(Kind::True),
                 b'f' => State::Scalar(Kind::False),
-                b'-' | b'0'..=b'9' => State::NewNumber(byte, self.position - 1),
+                b'-' | b'0'..=b'9' => {
+                    if self.limits.number == 0 {
+                        return Err(Cause::RawNumber);
+                    }
+                    State::NewNumber(byte, self.position - 1)
+                }
                 _ => return Err(Cause::Syntax),
             },
             true,
@@ -1693,6 +1705,120 @@ impl OwnedValue {
     pub fn releases(&self) -> u64 {
         self.storage.releases()
     }
+    /// Fixture-only canonical rebuild in the original four temporary sites.
+    pub fn rebuild_parts<F>(&mut self) -> (View<'_>, &mut u64, Rebuild<'_, F>) {
+        let (owner, build) = self.storage.rebuild_parts();
+        (View { owner, node: 0 }, &mut self.lifetime, build)
+    }
+    pub fn reseal(&mut self) -> Reseal<'_> {
+        Reseal {
+            storage: &mut self.storage,
+            lifetime: &mut self.lifetime,
+            index: 0,
+            work: [0; 4],
+        }
+    }
+    pub fn sealed_arenas(&self) -> Sealed<'_> {
+        self.storage.sealed()
+    }
+    pub fn rollback_for_fixture(&mut self) {
+        self.storage.clear();
+    }
+}
+
+/// Local borrowing seal facade; no source view survives its entry. Each
+/// replacement is checked before cleanup prepayment, and each element/byte
+/// transfer is charged. Original literal source releases arena by arena only
+/// after all construction/equivalence borrowers have ended.
+pub struct Reseal<'a> {
+    storage: &'a mut Storage<()>,
+    lifetime: &'a mut u64,
+    index: usize,
+    work: [u64; 4],
+}
+pub enum SealProgress<'a> {
+    Pending(Reseal<'a>),
+    Complete([u64; 4]),
+    Failed { cause: Cause, work: [u64; 4] },
+}
+impl<'a> Reseal<'a> {
+    pub fn work(&self) -> [u64; 4] {
+        self.work
+    }
+    fn pay(&mut self, budget: &mut WorkBudget, classes: &[W]) -> Result<bool, Cause> {
+        if classes.iter().any(|&class| budget.remaining(class) == 0) {
+            return Ok(false);
+        }
+        if *self.lifetime < classes.len() as u64 {
+            return Err(Cause::Lifetime);
+        }
+        for &class in classes {
+            budget.consume(class, 1).unwrap();
+            self.work[match class {
+                W::DocumentNodes => 0,
+                W::CodecInputBytes => 1,
+                W::CodecOutputBytes => 2,
+                W::CleanupItems => 3,
+                _ => unreachable!(),
+            }] += 1;
+        }
+        *self.lifetime -= classes.len() as u64;
+        Ok(true)
+    }
+    pub fn step(mut self, budget: &mut WorkBudget, cancel: bool) -> SealProgress<'a> {
+        if cancel {
+            return SealProgress::Failed {
+                cause: Cause::Cancelled,
+                work: self.work,
+            };
+        }
+        loop {
+            match self.tick(budget) {
+                Ok(Some(true)) => return SealProgress::Complete(self.work),
+                Ok(Some(false)) => {}
+                Ok(None) => return SealProgress::Pending(self),
+                Err(cause) => {
+                    return SealProgress::Failed {
+                        cause,
+                        work: self.work,
+                    };
+                }
+            }
+        }
+    }
+    fn tick(&mut self, budget: &mut WorkBudget) -> Result<Option<bool>, Cause> {
+        if let Some(site) = self.storage.transferring() {
+            let classes = if site == Site::Bytes && self.storage.copy_pending() {
+                &[W::DocumentNodes, W::CodecInputBytes, W::CodecOutputBytes][..]
+            } else {
+                &[W::DocumentNodes][..]
+            };
+            if !self.pay(budget, classes)? {
+                return Ok(None);
+            }
+            self.storage.copy_one();
+        } else if self.index == 3 {
+            if !self.pay(budget, &[W::DocumentNodes])? {
+                return Ok(None);
+            }
+            self.storage.finish();
+            return Ok(Some(true));
+        } else {
+            let site = [Site::Nodes, Site::Edges, Site::Bytes][self.index];
+            self.storage.check_seal(site).map_err(arena_cause)?;
+            let classes = if self.storage.len(site) == 0 {
+                &[W::DocumentNodes][..]
+            } else {
+                &[W::DocumentNodes, W::CleanupItems][..]
+            };
+            if !self.pay(budget, classes)? {
+                return Ok(None);
+            }
+            self.storage.begin_seal(site).map_err(arena_cause)?;
+            self.index += 1;
+        }
+        Ok(Some(false))
+    }
 }
 
 #[derive(Clone, Copy)]
@@ -1701,6 +1827,9 @@ pub struct View<'a> {
     node: usize,
 }
 impl<'a> View<'a> {
+    pub fn same_node(self, other: Self) -> bool {
+        self.node == other.node && core::ptr::eq(self.owner.nodes(), other.owner.nodes())
+    }
     fn record(self) -> Node {
         self.owner.nodes()[self.node]
     }

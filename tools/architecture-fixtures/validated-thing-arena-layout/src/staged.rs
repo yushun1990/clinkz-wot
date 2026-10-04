@@ -98,6 +98,26 @@ impl<F> Storage<F> {
         }
     }
 
+    /// Same checked request as begin_grow, without any accounting mutation.
+    pub fn check_grow(&self, site: Site, capacity: usize) -> Result<(), Error> {
+        assert!(self.transfer.is_none() && !self.sealed);
+        assert!(capacity > self.capacity(site));
+        self.check_request(site, capacity, Account::Temporary)
+    }
+    pub fn check_seal(&self, site: Site) -> Result<(), Error> {
+        assert!(self.transfer.is_none() && !self.sealed && site != Site::Frames);
+        self.check_request(site, self.len(site), Account::Source)
+    }
+    fn check_request(&self, site: Site, capacity: usize, account: Account) -> Result<(), Error> {
+        match site {
+            Site::Nodes => self.accounting.request::<RetainedNode>(capacity, account),
+            Site::Edges => self.accounting.request::<RetainedEdge>(capacity, account),
+            Site::Bytes => self.accounting.request::<u8>(capacity, account),
+            Site::Frames => self.accounting.request::<F>(capacity, account),
+        }
+        .map(|_| ())
+    }
+
     /// Caller prepays one CleanupItems/lifetime unit for this actual request.
     /// Arithmetic and byte limits are checked by the original Accounting body.
     pub fn begin_grow(&mut self, site: Site, capacity: usize) -> Result<(), Error> {
@@ -179,6 +199,7 @@ impl<F> Storage<F> {
             Transfer::Nodes(new) => {
                 self.release_site(Site::Nodes);
                 if self.sealing {
+                    self.release_retained(Site::Nodes);
                     self.retained.nodes = new;
                 } else {
                     self.nodes = new;
@@ -187,6 +208,7 @@ impl<F> Storage<F> {
             Transfer::Edges(new) => {
                 self.release_site(Site::Edges);
                 if self.sealing {
+                    self.release_retained(Site::Edges);
                     self.retained.edges = new;
                 } else {
                     self.edges = new;
@@ -195,6 +217,7 @@ impl<F> Storage<F> {
             Transfer::Bytes(new) => {
                 self.release_site(Site::Bytes);
                 if self.sealing {
+                    self.release_retained(Site::Bytes);
                     self.retained.bytes = new;
                 } else {
                     self.bytes = new;
@@ -212,6 +235,28 @@ impl<F> Storage<F> {
             self.transfer.is_none(),
             "arena mutation is forbidden during transfer"
         );
+    }
+
+    fn release_retained(&mut self, site: Site) {
+        let bytes = match site {
+            Site::Nodes => self.retained.nodes.request_bytes,
+            Site::Edges => self.retained.edges.request_bytes,
+            Site::Bytes => self.retained.bytes.request_bytes,
+            Site::Frames => unreachable!(),
+        };
+        self.releases += u64::from(bytes != 0);
+        match site {
+            Site::Nodes => self
+                .accounting
+                .release(&mut self.retained.nodes, Account::Source),
+            Site::Edges => self
+                .accounting
+                .release(&mut self.retained.edges, Account::Source),
+            Site::Bytes => self
+                .accounting
+                .release(&mut self.retained.bytes, Account::Source),
+            Site::Frames => unreachable!(),
+        }
     }
 
     pub fn release_site(&mut self, site: Site) {
@@ -359,6 +404,33 @@ impl<F> Storage<F> {
             },
         )
     }
+    /// Lend the sealed input and the original three now-empty build sites.
+    /// Both graphs share Accounting; dropping the borrower releases traversal
+    /// state but leaves every output block owned by this rollback owner.
+    pub fn rebuild_parts<G>(&mut self) -> (Sealed<'_>, Rebuild<'_, G>) {
+        assert!(self.sealed && self.transfer.is_none());
+        assert_eq!(self.frames.capacity, 0);
+        assert_eq!(
+            self.nodes.capacity + self.edges.capacity + self.bytes.capacity,
+            0
+        );
+        assert!(!mem::needs_drop::<G>());
+        self.sealed = false;
+        (
+            Sealed(&self.retained),
+            Rebuild {
+                accounting: &mut self.accounting,
+                allocations: &mut self.allocations,
+                releases: &mut self.releases,
+                nodes: &mut self.nodes,
+                edges: &mut self.edges,
+                bytes: &mut self.bytes,
+                frames: Arena::default(),
+                transfer: None,
+                copied: 0,
+            },
+        )
+    }
     pub fn live_bytes(&self) -> u64 {
         self.accounting.ledger.live_bytes()
     }
@@ -379,9 +451,10 @@ impl<F> Storage<F> {
             .iter()
             .filter(|&&n| n != 0)
             .count() as u64,
-            largest_request_bytes: self.accounting.ledger.largest_contiguous_allocation(),
+            largest_request_bytes: self.accounting.largest_request,
             temporary_peak_bytes: self.accounting.temporary_peak,
-            conversion_peak_bytes: self.accounting.ledger.peak_live_bytes(),
+            conversion_peak_bytes: self.accounting.conversion_peak,
+            reservation_peak_bytes: self.accounting.ledger.peak_live_bytes(),
         }
     }
 
@@ -436,6 +509,7 @@ pub struct FrameResources {
     pub live: u64,
     pub temporary_peak: u64,
     pub conversion_peak: u64,
+    pub reservation_peak: u64,
     pub largest_request: u64,
 }
 
@@ -458,6 +532,12 @@ impl<G> Frames<'_, G> {
     }
     pub fn capacity(&self) -> usize {
         self.arena.capacity
+    }
+    pub fn check_grow(&self, capacity: usize) -> Result<(), Error> {
+        assert!(self.replacement.is_none() && capacity > self.capacity());
+        self.accounting
+            .request::<G>(capacity, Account::Temporary)
+            .map(|_| ())
     }
     /// Caller prepays one CleanupItems/lifetime unit. Allocate an EMPTY
     /// replacement through the same checked Layout and reservation body.
@@ -516,8 +596,9 @@ impl<G> Frames<'_, G> {
             temporary_live: self.accounting.temporary_live,
             live: self.accounting.ledger.live_bytes(),
             temporary_peak: self.accounting.temporary_peak,
-            conversion_peak: self.accounting.ledger.peak_live_bytes(),
-            largest_request: self.accounting.ledger.largest_contiguous_allocation(),
+            conversion_peak: self.accounting.conversion_peak,
+            reservation_peak: self.accounting.ledger.peak_live_bytes(),
+            largest_request: self.accounting.largest_request,
         }
     }
     fn release_current(&mut self) {
@@ -537,6 +618,184 @@ impl<G> Frames<'_, G> {
 impl<G> Drop for Frames<'_, G> {
     fn drop(&mut self) {
         self.clear();
+    }
+}
+
+/// Disjoint borrower for canonical construction. This uses the same four
+/// temporary sites as literal construction, never a second ledger/allowance.
+pub struct Rebuild<'a, G> {
+    accounting: &'a mut Accounting,
+    allocations: &'a mut u64,
+    releases: &'a mut u64,
+    nodes: &'a mut Arena<RetainedNode>,
+    edges: &'a mut Arena<RetainedEdge>,
+    bytes: &'a mut Arena<u8>,
+    frames: Arena<G>,
+    transfer: Option<Transfer<G>>,
+    copied: usize,
+}
+impl<G> Rebuild<'_, G> {
+    pub fn edge(&self, index: usize) -> RetainedEdge {
+        self.edges.as_slice()[index]
+    }
+    pub fn byte(&self, index: usize) -> u8 {
+        self.bytes.as_slice()[index]
+    }
+    pub fn len(&self, site: Site) -> usize {
+        match site {
+            Site::Nodes => self.nodes.length,
+            Site::Edges => self.edges.length,
+            Site::Bytes => self.bytes.length,
+            Site::Frames => self.frames.length,
+        }
+    }
+    pub fn capacity(&self, site: Site) -> usize {
+        match site {
+            Site::Nodes => self.nodes.capacity,
+            Site::Edges => self.edges.capacity,
+            Site::Bytes => self.bytes.capacity,
+            Site::Frames => self.frames.capacity,
+        }
+    }
+    pub fn check_grow(&self, site: Site, capacity: usize) -> Result<(), Error> {
+        assert!(self.transfer.is_none() && capacity > self.capacity(site));
+        match site {
+            Site::Nodes => self
+                .accounting
+                .request::<RetainedNode>(capacity, Account::Temporary),
+            Site::Edges => self
+                .accounting
+                .request::<RetainedEdge>(capacity, Account::Temporary),
+            Site::Bytes => self.accounting.request::<u8>(capacity, Account::Temporary),
+            Site::Frames => self.accounting.request::<G>(capacity, Account::Temporary),
+        }
+        .map(|_| ())
+    }
+    pub fn begin_grow(&mut self, site: Site, capacity: usize) -> Result<(), Error> {
+        self.check_grow(site, capacity)?;
+        macro_rules! replacement {
+            ($variant:ident) => {{
+                let mut arena = Arena::default();
+                self.accounting
+                    .replace(&mut arena, capacity, Account::Temporary)?;
+                Transfer::$variant(arena)
+            }};
+        }
+        self.transfer = Some(match site {
+            Site::Nodes => replacement!(Nodes),
+            Site::Edges => replacement!(Edges),
+            Site::Bytes => replacement!(Bytes),
+            Site::Frames => replacement!(Frames),
+        });
+        *self.allocations += 1;
+        self.copied = 0;
+        Ok(())
+    }
+    pub fn transferring(&self) -> Option<Site> {
+        self.transfer.as_ref().map(|transfer| match transfer {
+            Transfer::Nodes(_) => Site::Nodes,
+            Transfer::Edges(_) => Site::Edges,
+            Transfer::Bytes(_) => Site::Bytes,
+            Transfer::Frames(_) => Site::Frames,
+        })
+    }
+    pub fn copy_pending(&self) -> bool {
+        self.transferring()
+            .is_some_and(|site| self.copied < self.len(site))
+    }
+    pub fn copy_one(&mut self) {
+        let site = self.transferring().unwrap();
+        if self.copy_pending() {
+            // SAFETY: checked distinct replacement, initialized old prefix;
+            // all mutation/extraction is forbidden until transfer completes.
+            unsafe {
+                match self.transfer.as_mut().unwrap() {
+                    Transfer::Nodes(new) => copy_element(self.nodes, new, self.copied),
+                    Transfer::Edges(new) => copy_element(self.edges, new, self.copied),
+                    Transfer::Bytes(new) => copy_element(self.bytes, new, self.copied),
+                    Transfer::Frames(new) => copy_element(&self.frames, new, self.copied),
+                }
+            }
+            self.copied += 1;
+        } else {
+            let transfer = self.transfer.take().unwrap();
+            *self.releases += u64::from(self.capacity(site) != 0);
+            match transfer {
+                Transfer::Nodes(new) => {
+                    self.accounting.release(self.nodes, Account::Temporary);
+                    *self.nodes = new;
+                }
+                Transfer::Edges(new) => {
+                    self.accounting.release(self.edges, Account::Temporary);
+                    *self.edges = new;
+                }
+                Transfer::Bytes(new) => {
+                    self.accounting.release(self.bytes, Account::Temporary);
+                    *self.bytes = new;
+                }
+                Transfer::Frames(new) => {
+                    self.accounting
+                        .release(&mut self.frames, Account::Temporary);
+                    self.frames = new;
+                }
+            }
+        }
+    }
+    pub fn push_node(&mut self, node: RetainedNode) {
+        assert!(self.transfer.is_none());
+        self.nodes.push(node).unwrap();
+    }
+    pub fn push_edge(&mut self, edge: RetainedEdge) {
+        assert!(self.transfer.is_none());
+        self.edges.push(edge).unwrap();
+    }
+    pub fn push_byte(&mut self, byte: u8) {
+        assert!(self.transfer.is_none());
+        self.bytes.push(byte).unwrap();
+    }
+    pub fn set_node(&mut self, index: usize, node: RetainedNode) {
+        assert!(self.transfer.is_none() && index < self.nodes.length);
+        // SAFETY: unique initialized non-dropping slot.
+        unsafe { self.nodes.pointer.as_ptr().add(index).write(node) };
+    }
+    pub fn set_edge(&mut self, index: usize, edge: RetainedEdge) {
+        assert!(self.transfer.is_none() && index < self.edges.length);
+        // SAFETY: unique initialized non-dropping slot.
+        unsafe { self.edges.pointer.as_ptr().add(index).write(edge) };
+    }
+    pub fn node(&self, index: usize) -> RetainedNode {
+        self.nodes.as_slice()[index]
+    }
+    pub fn push_frame(&mut self, frame: G) {
+        assert!(self.transfer.is_none());
+        self.frames.push(frame).unwrap();
+    }
+    pub fn frame_mut(&mut self) -> &mut G {
+        assert!(self.transfer.is_none() && self.frames.length != 0);
+        // SAFETY: unique last initialized slot.
+        unsafe { &mut *self.frames.pointer.as_ptr().add(self.frames.length - 1) }
+    }
+    pub fn pop_frame(&mut self) -> G {
+        assert!(self.transfer.is_none() && self.frames.length != 0);
+        self.frames.length -= 1;
+        // SAFETY: initialized last element moved out, prefix shortened.
+        unsafe { self.frames.pointer.as_ptr().add(self.frames.length).read() }
+    }
+}
+impl<G> Drop for Rebuild<'_, G> {
+    fn drop(&mut self) {
+        if let Some(transfer) = self.transfer.take() {
+            *self.releases += 1;
+            match transfer {
+                Transfer::Nodes(mut new) => self.accounting.release(&mut new, Account::Temporary),
+                Transfer::Edges(mut new) => self.accounting.release(&mut new, Account::Temporary),
+                Transfer::Bytes(mut new) => self.accounting.release(&mut new, Account::Temporary),
+                Transfer::Frames(mut new) => self.accounting.release(&mut new, Account::Temporary),
+            }
+        }
+        *self.releases += u64::from(self.frames.capacity != 0);
+        self.accounting
+            .release(&mut self.frames, Account::Temporary);
     }
 }
 

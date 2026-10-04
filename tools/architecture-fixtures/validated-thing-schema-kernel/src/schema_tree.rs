@@ -342,10 +342,6 @@ impl<'a> Cursor<'a> {
                     self.frames.copy_one();
                     self.state = State::Push(frame);
                 } else if self.frames.len() == self.frames.capacity() {
-                    if !self.pay(budget, &[W::CleanupItems])? {
-                        self.state = State::Push(frame);
-                        return Ok(Tick::Blocked);
-                    }
                     let capacity = if self.frames.capacity() == 0 {
                         1
                     } else {
@@ -355,19 +351,12 @@ impl<'a> Cursor<'a> {
                             .ok_or(Cause::Arithmetic)?
                             .min(self.depth_ceiling)
                     };
-                    self.frames
-                        .begin_grow(capacity)
-                        .map_err(|error| match error {
-                            validated_thing_value_construction_probe::FrameError::Arithmetic => {
-                                Cause::Arithmetic
-                            }
-                            validated_thing_value_construction_probe::FrameError::Limit => {
-                                Cause::Memory
-                            }
-                            validated_thing_value_construction_probe::FrameError::Allocation => {
-                                Cause::Allocation
-                            }
-                        })?;
+                    self.frames.check_grow(capacity).map_err(frame_cause)?;
+                    if !self.pay(budget, &[W::CleanupItems])? {
+                        self.state = State::Push(frame);
+                        return Ok(Tick::Blocked);
+                    }
+                    self.frames.begin_grow(capacity).map_err(frame_cause)?;
                     self.trace.frame_requests += 1;
                     self.state = State::Push(frame);
                 } else {
@@ -625,6 +614,13 @@ impl<'a> Cursor<'a> {
             State::Moving => unreachable!(),
         }
         Ok(Tick::Advanced)
+    }
+}
+fn frame_cause(error: validated_thing_value_construction_probe::FrameError) -> Cause {
+    match error {
+        validated_thing_value_construction_probe::FrameError::Arithmetic => Cause::Arithmetic,
+        validated_thing_value_construction_probe::FrameError::Limit => Cause::Memory,
+        validated_thing_value_construction_probe::FrameError::Allocation => Cause::Allocation,
     }
 }
 const _: () = assert!(!mem::needs_drop::<Frame<'static>>());

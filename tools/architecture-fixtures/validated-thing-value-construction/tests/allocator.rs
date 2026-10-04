@@ -142,6 +142,26 @@ fn end() -> Observation {
     })
 }
 
+#[test]
+fn failed_replacement_reservation_is_not_a_physical_conversion_peak() {
+    start(2);
+    let mut storage = Storage::<u64>::new(10_000, 10_000, 10_000, 10_000);
+    storage.begin_grow(Site::Nodes, 2).unwrap();
+    storage.copy_one();
+    assert_eq!(storage.begin_grow(Site::Nodes, 4), Err(Error::Allocation));
+    let report = storage.footprint();
+    let observed = snapshot();
+    assert_eq!(observed.requests, 2);
+    assert_eq!(report.conversion_peak_bytes, observed.peak as u64);
+    assert_eq!(report.reservation_peak_bytes, 120);
+    assert_eq!(report.largest_request_bytes, 80);
+    assert_eq!(storage.live_bytes(), observed.live as u64);
+    drop(storage);
+    assert_eq!(end().live, 0);
+}
+
+// Keep failure resource observations inline inside the allocator interval.
+#[allow(clippy::result_large_err)]
 fn tracked_drive(mut cursor: Cursor<'_>, step: u64) -> Result<OwnedValue, Failure> {
     loop {
         // With one structural unit, a phase transition and a following
@@ -225,10 +245,100 @@ fn observed_layouts_match_the_ledger_and_each_actual_request_can_fail_safely() {
                 assert_eq!(observed.allocations, observed.releases);
                 assert_eq!(failure.allocations as usize, observed.allocations);
                 assert_eq!(failure.releases as usize, observed.releases);
+                assert_eq!(
+                    failure.resources.conversion_peak_bytes,
+                    observed.peak as u64
+                );
+                assert_eq!(
+                    failure.resources.temporary_peak_bytes,
+                    observed.temporary_peak as u64
+                );
+                assert!(
+                    failure.resources.reservation_peak_bytes
+                        >= failure.resources.conversion_peak_bytes
+                );
                 // The rejected allocator request is prepaid too; its reservation
                 // is abandoned before every earlier committed arena is released.
                 assert_eq!(failure.trace.work[3] as usize, observed.requests);
             }
+        }
+    }
+}
+
+#[test]
+fn impossible_literal_grow_or_seal_does_not_prepay_cleanup_even_with_no_lifetime() {
+    let input = br#"{}"#;
+    let typed = serde_json::json!({});
+    for from_typed in [false, true] {
+        for cleanup in [0, 1] {
+            let limits = Limits {
+                contiguous: 0,
+                lifetime: if from_typed { 3 } else { 4 },
+                ..Limits::default()
+            };
+            let cursor = if from_typed {
+                Cursor::from_value(&typed, limits)
+            } else {
+                Cursor::from_json(input, limits)
+            };
+            start(0);
+            let Progress::Failed(failure) = cursor.step(
+                &mut budget(4096)
+                    .with_remaining(clinkz_wot_foundation::WorkClass::CleanupItems, cleanup),
+                false,
+            ) else {
+                panic!("impossible request before Pending");
+            };
+            let observed = end();
+            assert_eq!(failure.cause, Cause::Memory);
+            assert_eq!(failure.trace.work[3], 0);
+            assert_eq!(observed.requests, 0);
+        }
+        let limits = Limits {
+            source: 0,
+            ..Limits::default()
+        };
+        let cursor = if from_typed {
+            Cursor::from_value(&typed, limits)
+        } else {
+            Cursor::from_json(input, limits)
+        };
+        let prefix = drive(cursor, 4096)
+            .err()
+            .unwrap()
+            .trace
+            .work
+            .into_iter()
+            .sum();
+        for cleanup in [0, 1] {
+            let limits = Limits {
+                lifetime: prefix,
+                ..limits
+            };
+            let mut cursor = if from_typed {
+                Cursor::from_value(&typed, limits)
+            } else {
+                Cursor::from_json(input, limits)
+            };
+            start(0);
+            loop {
+                let mut work = budget(1);
+                if cursor.phase() == Phase::Seal {
+                    work = work
+                        .with_remaining(clinkz_wot_foundation::WorkClass::CleanupItems, cleanup);
+                }
+                match cursor.step(&mut work, false) {
+                    Progress::Pending(next) => cursor = next,
+                    Progress::Failed(failure) => {
+                        assert_eq!(failure.cause, Cause::Memory);
+                        assert_eq!(failure.trace.work.into_iter().sum::<u64>(), prefix);
+                        assert_eq!(failure.trace.work[3] as usize, snapshot().requests);
+                        break;
+                    }
+                    Progress::Complete(_) => panic!("source cannot fit"),
+                }
+            }
+            assert_eq!(end().live, 0);
         }
     }
 }

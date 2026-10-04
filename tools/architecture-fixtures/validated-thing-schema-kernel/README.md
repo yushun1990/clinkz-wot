@@ -338,7 +338,7 @@ construct an engine input or prove equivalence.
 - An independent fixed thread-local allocator counter observes zero allocation
   or reallocation calls in field inspection plus Basic, for long-string,
   success, field-error and Basic-error inputs. Owner footprint is unchanged.
-  The field-fact product has no destructor and occupies 328 bytes on the tested
+  The field-fact product has no destructor and occupies 800 bytes on the tested
   64-bit Host. This is local inline capacity, not target stack or Servient size.
 
 The new dependency is optional behind this fixture's `validated-thing` feature;
@@ -494,8 +494,8 @@ regressions and additional UTF-8/surrogate tests protect this premise.
   realloc calls in projection, local failure/cancellation and every Pending
   abandonment of its fixed inputs. Source footprint is unchanged. Cursor and
   returned facts need no destructor. On the tested 64-bit Host the field
-  cursor is **1,592 inline bytes**, and the result is **480 bytes** after the
-  subtree composition's fixed nine-field Basic index below. Policy
+  cursor is **1,592 inline bytes**, and the result is **800 bytes** with the
+  canonical construction's full paid field index below. Policy
   replay also uses fixed local state; these are not target stack, supported-M,
   future Servient owner capacity, or whole-cursor peak claims.
 
@@ -561,8 +561,9 @@ builder or a typed canonical Snapshot.
 - #121 supplies charged indexing, conversion and bounded policy replay. Its
   `Machine` now accepts a work remainder at each step; the existing borrowing
   `Cursor` facade uses that **same machine** and retains its original contract.
-  Completed facts carry a fixed nine-field Basic index derived from the paid
-  29-field index and the existing consumed-key mask. Basic does not call
+  Completed facts retain the fixed paid 29-field index and consumed-key mask.
+  Basic selects its nine fields from that index; canonical emission identifies
+  consumed values by internal node identity without scanning keys again. Basic does not call
   `View::get`, `Extras::get`, synchronous `decode`, or an unbudgeted map scan.
 - #114 supplies `NumericCursor` and the atomic projection helper. The same
   `kernel.rs` now also owns `Walk` and the local checks. The synchronous public
@@ -614,7 +615,7 @@ not alter the frozen production boolean step parameter.
 
 ### Falsifiable witnesses and reproduction
 
-`tests/schema_tree.rs` runs eight tests in each capability-on Host cell:
+`tests/schema_tree.rs` runs nine tests in each capability-on Host cell:
 
 - 180 comparisons (45 semantic cases across root, oneOf, Array items and
   Object properties) agree with the generated candidate's real public Basic
@@ -648,10 +649,10 @@ not alter the frozen production boolean step parameter.
   literal collision/opaque overflow objects introduce no hidden schema visit,
   scalar parse or embedded document interpretation.
 
-On the tested 64-bit Host, the subtree cursor is 1,936 inline bytes and one
-frame is 512 bytes. The seven-node witness retains 1,321 source bytes; semantic
-frame requests peak at 3,072 bytes, the largest frame request is 2,048 bytes,
-and their live overlap with source reaches 4,393 bytes. The owner's recorded
+On the tested 64-bit Host, the subtree cursor is 1,944 inline bytes and one
+frame is 832 bytes. The seven-node witness retains 1,321 source bytes; semantic
+frame requests peak at 4,992 bytes, the largest frame request is 3,328 bytes,
+and their live overlap with source reaches 6,313 bytes. The owner's recorded
 conversion peak is the maximum of construction's prior peak and this new
 overlap, not a reset. These are fixture observations, not profile ceilings,
 target stack bounds or supported-M claims. Instrumented trace/error records
@@ -664,7 +665,7 @@ cargo check --locked --target thumbv7em-none-eabihf --manifest-path tools/archit
 ```
 
 The unchanged CI matrix executes all original tests plus this source in 13
-Host cells (705 executions, including 56 new-test executions in seven cells)
+Host cells, with subtree and canonical tests in seven capability-on cells,
 and compiles eight thumb cells. Thumb compilation is not constrained execution.
 Existing value construction, typed Snapshot/Basic, Planning handoff and authority
 checks remain required; no checker, manifest, lock or CI orchestration is added.
@@ -691,3 +692,119 @@ Admission stays `planned / candidate / current`. No production, authority,
 work-package status, PLAN, successor, resource row, WorkClass or gate is changed.
 Independent exact-head acceptance of the complete eight-item set and a separate
 admission-only transition are still required before production implementation.
+
+## Charged canonical DataSchema construction and owner transfer
+
+`src/schema_build.rs` connects the subtree proof to an actual typed canonical
+result. The prior paths stopped at borrowed literal field facts or used a
+separate recursive, fixed-capacity typed Snapshot. This slice removes that
+DataSchema construction/lifecycle gap before widening Thing/Form/security
+field policy. It adds no production source or authority change.
+
+The fixture driver executes one transaction:
+
+1. Construct the strict literal owner with the established value cursor.
+2. Decode the complete DataSchema subtree and execute shared Basic with the
+   existing charged subtree cursor. Malformed later children still precede
+   earlier Basic invalidity.
+3. Lend that same source, lifetime remainder and Accounting to canonical
+   emission in the original three empty node/edge/byte build sites and fourth
+   traversal site. All input/output/frame/grow overlap remains charged together.
+4. End emission with a second charged equivalence traversal while the complete
+   literal input and canonical build arrays remain live. End every source borrow.
+5. Reseal into exact-length arrays, releasing each old source array and build
+   array with its original charge. Return a typed Schema owner that has no
+   input lifetime. Any failure fixes its cause and releases both graphs through
+   the outer owner; cleanup observes no further cancellation or allocation.
+
+Each schema has one fixed record with 29 optional field slots and an extension
+map slot. Slot identifiers come from the existing shared `Field::ALL`; emission
+reads **decoded typed facts**, not a new field-policy table. Absent slots use a
+checked sentinel. Boolean defaults are materialized, one-or-many sequences
+are canonical arrays, optional empty collections remain distinct from absence,
+and f64/i64/u32 values are exact scalar bits. Text, languages, opaque JSON and
+lossless Number content occupy the same arenas. Maps retain semantic key order;
+sequences retain original indices. No owned Number, serializer, second TD graph
+or recursive emitter is created.
+
+Completed field facts now retain the full paid index, with its consumed mask.
+Extension selection uses internal literal node identity in that fixed index,
+so emitting extensions does not hide another source key scan. This enlarges
+field/frame inline state; the current subtree observations above reflect that
+change. Internal engine identity is not caller pointer/history semantics.
+
+Emission and equivalence each service the unchanged charged field machine;
+every repeated scalar parse and input/output byte is paid again. Equivalence
+regenerates the typed structural stream, comparing every node, edge target,
+original index, absence and byte against the built result, without another
+buffer. A deliberate output corruption rejects as SemanticMismatch. Paid
+element seal moves preserve that compared graph. The post-seal `Access` adapter
+also runs the same synchronous Basic source over the actual canonical result,
+without literal field decoding. That query is an external semantic oracle;
+**a charged Basic traversal over the canonical result is not a constructor
+phase**. The transaction's charged Basic checks precede canonical emission and
+the subsequent equivalence proof.
+
+`from_json` is a fixture driver that services borrowing continuations in lexical
+scopes and returns the owned result. Its budget/cancellation hook is test
+instrumentation, not the frozen owning admission cursor API. No self-reference
+or lifetime erasure is used. Canonical reconstruction directly from a typed
+Thing, including its serializer-incompatible values, is still unimplemented.
+
+### Allocation ordering corrections and falsifiable evidence
+
+Independent regressions against the prior source reproduce three defects:
+zero Number returns Pending after its first byte; an impossible frame request
+yields for cleanup credit before reporting Memory; and a null-returning grow
+reports a 120-byte reservation peak although only 40 bytes ever lived.
+The value cursor now fixes zero rejection in the observing wire transition.
+Grow/seal preflight is pure and precedes cleanup/lifetime debit in both value
+entries, semantic frames and canonical rebuild. Physical peaks advance only
+after successful allocation; actual request maximum and logical reservation
+high water remain separately observable. Foundation ledger semantics are
+unchanged.
+
+`tests/schema_build.rs` covers all context fields and seven variants, exact
+integer/f64 bits including typed Infinity, optional/empty/null/default
+distinctions, nested schema map associations, ordered sequences, opaque
+overflow Numbers and collision Objects, mixed small/large budgets, zero-work
+boundaries, paid/falsifiable equivalence, exact combined lifetime, cancellation
+in every transaction phase, and a 256-level nonrecursive result. Every
+canonical Pending boundary can abandon the whole owner with no allocation and
+at most eight block releases, including unfinished grow overlap.
+
+The independent allocator runs the complete transaction and injects every
+actual request failure. All 65 requests in the rich Host witness are covered,
+including initial construction, semantic frames, canonical build and reseal.
+Each failure releases all source/output storage; physical peaks match actual
+successful requests and logical reservation peaks are distinct. Below/equal/
+above temporary, contiguous and total peak limits execute with actual literal
+and canonical output residency, rather than independent fixture allowances.
+The rich witness retains 4,208 bytes, peaks physically at 18,342 bytes, has a
+6,656-byte largest request, and consumes 27,180 work units under its fixed mixed
+schedule. Its canonical cursor is 2,000 inline Host bytes. These are observed
+fixture costs, not derived M, supported-profile or constrained stack claims.
+
+```sh
+cargo test --locked --manifest-path tools/architecture-fixtures/validated-thing-schema-kernel/Cargo.toml --features validated-thing --test schema_build -- --nocapture
+cargo test --locked --manifest-path tools/architecture-fixtures/validated-thing-schema-kernel/Cargo.toml --features validated-thing,order
+cargo test --locked --manifest-path tools/architecture-fixtures/validated-thing-schema-kernel/Cargo.toml --no-default-features --features async,validated-thing
+cargo check --locked --target thumbv7em-none-eabihf --manifest-path tools/architecture-fixtures/validated-thing-schema-kernel/Cargo.toml --no-default-features --features async,validated-thing
+```
+
+### Eight obligations remain distinct
+
+| Readmission item | Evidence boundary after this slice |
+| ---: | --- |
+| 1 | No complete frozen signature/removal or opaque configuration proof. Fixture APIs are not proposed production surface. |
+| 2 | Actual literal-to-canonical DataSchema build, grow, source/output overlap, equivalence and exact reseal share one ledger/catalog. Whole Thing construction remains. |
+| 3 | Strict DataSchema yields a typed canonical graph with fieldwise public typed parity and shared Basic queries. Typed Thing compatibility, all TD field families and complete differential/query composition remain. |
+| 4 | Existing URI/Planning/post-drop witnesses remain separate. This Schema owner cannot enumerate Thing Property/Form coordinates or prove the final Planning handoff. |
+| 5 | The existing 13 Host/8 thumb source matrix includes this complete local path. Thumb is compile evidence; full frozen surface/downstream/sibling and constrained execution duties remain. |
+| 6 | Whole local schema transaction now owns first-cause rollback across literal construction, Basic, canonical build, equivalence and seal. Whole Thing dates/URI, configuration, canonical-result charged Basic and global diagnostics remain. |
+| 7 | Actual requests, logical reservations and physical peaks are distinguished on every failure; literal/output/frame overlap and local release are executed. Derived M, full owner envelope, complete plan/artifact overlap, parent/global release and permit/install remain. |
+| 8 | Production Foundation/Context, resource schema, successor evidence and Producer gate inputs are unchanged and registered validation remains applicable. Independent exact-head reaffirmation and the future admitted method removal remain required. |
+
+The tranche remains `planned / candidate / current`; none of the eight is
+declared complete as a whole. This constructor produces DataSchema, not a
+ValidatedThing. Local green tests cannot readmit production or accept a gate.
