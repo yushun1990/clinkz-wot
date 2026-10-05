@@ -5,7 +5,8 @@ Non-production evidence for
 primarily items 3 and 6. The tranche remains `planned` / `candidate`.
 
 The full Basic semantic composition is now exercised by one storage-neutral
-rule source over the existing typed Thing and three-arena Snapshot. It combines
+rule source over the existing typed Thing, three-arena Snapshot and actually
+constructed canonical Thing. It combines
 the DataSchema and numeric predicate proof from #114 with root, affordance,
 security-scheme/reference checks and the default/security seam from #110.
 The literal arena/field-policy composition below extends that proof. No
@@ -15,8 +16,9 @@ The uncertainty addressed here is whether a future admission cursor must invent
 another Basic rule set or error precedence while combining those local proofs.
 The candidate uses shared component predicates and shared whole-Thing order;
 its adapters contain only borrowed representation facts. Strict Thing
-construction, charged whole-Thing semantic traversal, and whole-admission
-resource and terminal ownership remain separate obligations. The existing
+construction and whole-admission resource and terminal ownership remain
+separate obligations. The canonical Thing slice below composes paid whole
+Basic with typed construction under the same owner and lifetime. The existing
 [URI query proof](../validated-thing-arena-layout/README.md#shared-uri-and-borrowed-planning-view-slice)
 and [post-drop Planning witness](../validated-thing-planning-handoff/README.md)
 remain reusable; Basic introduces no URI-resolution acceptance predicate.
@@ -874,8 +876,9 @@ not a current capacity guarantee.
 whole-Thing Basic kernel, including its shared schema rules. The existing
 170-plus fault corpus executes on the actually constructed owner and compares
 complete inline first errors with the typed adapter. This oracle is deliberately
-synchronous and external to the construction trace: whole-Thing charged Basic
-and Basic over the strict completed result remain unresolved admission duties.
+synchronous and external to this lower-level construction trace. The paid
+result-Basic slice below includes it in the typed transaction; Basic over the
+strict completed Thing remains an unresolved admission duty.
 The shared default/security helpers also run on this constructed owner.
 
 `tests/thing_build.rs` supplies eleven executable evidence categories:
@@ -934,3 +937,113 @@ Thumb remains compilation evidence.
 All eight remain incomplete as a set. The tranche remains
 `planned / candidate / current`; this slice makes no readmission, production,
 Consumer-gate, successor-package or completion transition.
+
+## Paid whole-Thing Basic in the canonical construction transaction
+
+Constructing the complete typed envelope removes the per-schema owner gap,
+but a synchronous Basic query after construction does not prove an admission
+transaction. It can scan keys, follow references, project Numbers and recurse
+outside that transaction's work and temporary-resource envelope. The next
+composition boundary is therefore Basic on the actual completed Thing owner.
+
+`thing_build::from_thing_basic` now executes:
+
+```text
+borrowed typed Thing -> paid canonical construction -> paid equivalence
+                    -> exact reseal -> paid whole Basic -> owned NormalizedThing
+```
+
+The lower-level `from_thing` remains useful for constructing invalid parity
+inputs. The new path returns only after Basic completes. Both paths retain
+the original Accounting owner, lifetime remainder, three source arenas and
+four temporary categories. Basic failure fixes its cause and coordinates,
+ends all source/frame borrows, then rolls back the complete transaction.
+There is no new ledger, independent per-schema allowance, retained owner,
+scratch vector, recursive task tree or allocation category.
+
+`basic_kernel::Walk` now owns the whole-Thing discovery order for both the
+synchronous reference and `thing_step::Cursor`. Required-field, scheme/flow,
+combo shape, operation and DataSchema rules are shared predicates. The paid
+driver supplies only canonical representation access and continuations:
+
+- Header/continuation discovery pays DocumentNodes. Security name/group
+  traversal also pays SecurityBranches; schema entry also pays JsonSchemaNodes.
+- Discriminator and lookup bytes pay CodecInputBytes before inspection. A
+  reference lookup compares two retained input operands, caching one paid
+  byte before separately paying for the other. Static grammar bytes are not
+  input bytes. Length mismatch does not inspect a payload.
+- Extension-field lookup is resumable instead of delegating to synchronous
+  `Basic`/`SchemaAccess` map searches. Typed fields are constant-size facts.
+  A complete local combo shape precedes its references; a known oneOf shape
+  error returns before allOf lookup/scanning can consume further credit.
+- Schema traversal uses the existing trivially destructible frame category,
+  paid capacity transfers and preflight before cleanup/lifetime prepayment.
+  Frames overlap the actual retained source in the same ledger, persist across
+  schema roots and release physically on completion, failure or Pending drop.
+- Unsigned and five binary64 extension projections use the existing bounded
+  atomic precharge and NumericCursor. The full actual public Number content
+  must fit this poll's byte allowance and remaining lifetime. Cancellation
+  before/after projection and failed finite projection retain their distinct
+  terminal behavior. Opaque Numbers acquire no Basic projection.
+
+`tests/thing_step.rs` adds nine executable categories:
+
+- The fixed 170-plus Basic corpus, including cross-phase faults, mutated
+  discriminators, filtered fallback names and non-first coordinates, runs
+  through construction, equivalence, seal and paid result Basic. Complete
+  inline first errors match the shared typed reference under varied schedules.
+- Basic reads the serializer-failure owner after the caller Thing is dropped;
+  each class debit, zero-budget pause and lifetime remainder is observable.
+- Exact total lifetime and one-less failure span the entire transaction.
+  Repeatedly withholding each class preserves the same complete trace.
+- All 44 actual nested-corpus allocation failures, including Basic frame
+  requests, match an independent allocator's physical peak and largest actual
+  request and release the entire owner. Reservation peak is recorded separately.
+- Every mixed-schedule Basic Pending boundary can cancel or abandon with
+  prepaid temporary release. The enclosing Basic-stage cancellation rolls back
+  source too.
+- 256 nested schemas compose with unsigned and binary64 extension projections;
+  a narrower standalone frame bound fails without recursive Basic traversal.
+- Actual Number contents at 63/64/65 and 255/256/257 exercise standalone Basic
+  thresholds; accepted lengths also run through the complete transaction with
+  that same limit. Zero, non-Number absence, short overflow, repeated projection,
+  partial atomic credit, insufficient projection lifetime and immediate
+  pre/post-projection cancellation are observed. The standalone cursor's
+  narrower-limit tests are not frozen configuration/admission evidence.
+- Singleton oneOf with 0/1/4096 later allOf members preserves the same first
+  error and Basic trace, including with exactly the spent lifetime remaining.
+- 1/128/512-byte security names independently require two input byte units per
+  compared byte, including under one-byte polls, without allocating lookup storage.
+
+The measured 64-bit Host nested corpus spends 107,161 total work units;
+Basic contributes `[1236, 300, 31, 27, 3]` in DocumentNodes, CodecInputBytes,
+JsonSchemaNodes, SecurityBranches and CleanupItems respectively. It visits 31
+schemas and requests three frame blocks. This corpus has no extension Number
+projections; the dedicated numeric/deep cases above cover them. Retained source
+is still 34,220 bytes and whole physical peak is still 62,464 bytes, with a
+20,480-byte largest actual request. The Basic borrowing cursor is 752 inline
+bytes on that Host. These observations establish no supported M, production
+owner capacity, target stack/runtime or complete plan/artifact residency claim.
+
+```sh
+cargo test --locked --manifest-path tools/architecture-fixtures/validated-thing-schema-kernel/Cargo.toml --features validated-thing --test thing_step -- --nocapture
+```
+
+The existing 13 Host runtime and eight thumb library matrix cells discover
+the shared kernel and capability-on driver. Thumb remains compilation evidence.
+No production source, manifest, lockfile, feature default, WorkClass, resource
+row, PLAN, gate or CI orchestration changes.
+
+| Readmission item | Advance / remaining boundary |
+| ---: | --- |
+| 1 | No frozen owning cursor/configuration/removal or negative surface proof. The borrowing fixture cursor and NormalizedThing remain prototype-only. |
+| 2 | Typed build/equivalence/reseal/result-Basic compose within the original catalog/ledger. Complete strict Thing construction and prescribed in-place sorting remain. |
+| 3 | Paid canonical result Basic preserves the fixed typed first-error corpus and numeric rules. Complete strict Thing differential field-policy and resolved URI/query composition remain. |
+| 4 | The same owned canonical result is now Basic checked under budget. The cached URI view and complete owned Planning/artifact handoff remain separate witnesses. |
+| 5 | The current matrix covers this composition. Frozen/downstream/sibling public surface and supported-cell evidence remain incomplete. |
+| 6 | Whole typed construction and paid result Basic share exact work/lifetime, Number progress, failure and prepaid cleanup. Strict Thing decode, frozen configuration, in-place sorting, resumable URI/date handling and global diagnostics remain. |
+| 7 | Basic/source physical overlap, actual failed requests and complete rollback are measured under one ledger. Derived M, full plan/artifact residency and post-plan release, parent/global/Published accounting and owner capacity remain. |
+| 8 | Production authority and accepted predecessor/gate inputs are unchanged. Independent exact-head reaffirmation and future admitted removals remain required. |
+
+All eight remain incomplete as a set. This slice preserves
+`planned / candidate / current`; it supplies no readmission or completion.

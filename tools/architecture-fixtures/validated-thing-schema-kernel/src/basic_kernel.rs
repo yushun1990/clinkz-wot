@@ -151,11 +151,11 @@ pub fn inherited_security<N: Copy>(root: N, explicit: Option<N>) -> (N, bool) {
 }
 
 pub fn required_security(count: usize) -> Result<(), Rule<'static>> {
-    if count == 0 {
-        Err(Rule::Missing)
-    } else {
-        Ok(())
-    }
+    required(count != 0)
+}
+
+pub fn required(present: bool) -> Result<(), Rule<'static>> {
+    if !present { Err(Rule::Missing) } else { Ok(()) }
 }
 
 pub fn combo_groups(scheme: &str) -> &'static [Field] {
@@ -315,52 +315,43 @@ pub fn validate_security_scheme<'a, A: BasicAccess<'a>, S: DiagnosticSink<'a, A>
     sink: &S,
 ) -> Result<(), S::Error> {
     let reject = |field, rule| sink.reject_basic(access, Site::new(owner, field), rule);
-    match access.scheme(definition) {
-        "combo" => {
+    match scheme_kind(access.scheme(definition)).map_err(|rule| reject(Field::Scheme, rule))? {
+        Scheme::Combo => {
             let one = access.combo_names(definition, Field::OneOf);
             let all = access.combo_names(definition, Field::AllOf);
-            if access.names_count(one) == 0 && access.names_count(all) == 0 {
-                return Err(reject(Field::Scheme, Rule::ComboMissing));
-            }
+            combo_present(access.names_count(one), access.names_count(all))
+                .map_err(|rule| reject(Field::Scheme, rule))?;
             for (field, names) in [(Field::OneOf, one), (Field::AllOf, all)] {
                 let count = access.names_count(names);
-                if count == 1 {
-                    return Err(reject(field, Rule::ComboCardinality));
-                }
-                for index in 0..count {
-                    if access.name_at(names, index).is_empty() {
-                        let mut site = Site::new(owner, field);
-                        site.member = index;
-                        return Err(sink.reject_basic(access, site, Rule::ComboEmpty));
-                    }
-                }
+                let empty = (0..count).find(|&i| access.name_at(names, i).is_empty());
+                combo_group(count, empty).map_err(|(member, rule)| {
+                    let mut site = Site::new(owner, field);
+                    site.member = member;
+                    sink.reject_basic(access, site, rule)
+                })?;
             }
         }
-        "apikey" => {
-            if access
-                .security_string(definition, Field::Name)
-                .unwrap_or("")
-                .is_empty()
-            {
-                return Err(reject(Field::Name, Rule::Missing));
-            }
+        Scheme::ApiKey => {
+            required(
+                !access
+                    .security_string(definition, Field::Name)
+                    .unwrap_or("")
+                    .is_empty(),
+            )
+            .map_err(|rule| reject(Field::Name, rule))?;
         }
-        "oauth2" => match access
-            .security_string(definition, Field::Flow)
-            .unwrap_or("")
-        {
-            "code" => {
+        Scheme::OAuth => {
+            let flow = access
+                .security_string(definition, Field::Flow)
+                .unwrap_or("");
+            if flow_requires_endpoints(flow).map_err(|rule| reject(Field::Flow, rule))? {
                 for field in [Field::Authorization, Field::Token] {
-                    if !access.endpoint_present(definition, field) {
-                        return Err(reject(field, Rule::Missing));
-                    }
+                    required(access.endpoint_present(definition, field))
+                        .map_err(|rule| reject(field, rule))?;
                 }
             }
-            "client" | "device" => {}
-            flow => return Err(reject(Field::Flow, Rule::UnsupportedFlow(flow))),
-        },
-        "nosec" | "auto" | "basic" | "digest" | "bearer" | "psk" => {}
-        scheme => return Err(reject(Field::Scheme, Rule::UnsupportedScheme(scheme))),
+        }
+        Scheme::Other => {}
     }
     Ok(())
 }
@@ -384,7 +375,7 @@ fn schema_map<'a, A: BasicAccess<'a>, S: DiagnosticSink<'a, A>>(
     Ok(())
 }
 
-fn allowed(kind: OwnerKind, operation: Operation) -> bool {
+pub(crate) fn allowed(kind: OwnerKind, operation: Operation) -> bool {
     use Operation::*;
     match kind {
         OwnerKind::Property => matches!(
@@ -406,6 +397,160 @@ fn allowed(kind: OwnerKind, operation: Operation) -> bool {
                 | UnsubscribeAllEvents
         ),
         OwnerKind::SecurityDefinition => unreachable!(),
+    }
+}
+
+/// One discovery program for synchronous public Basic and paid canonical
+/// Basic. Actions contain coordinates only; they do not inspect storage.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum Action {
+    Title,
+    RequiredSecurity,
+    RootReferences,
+    Definition(Owner),
+    SchemaMap(Owner, Field),
+    Schema(Owner, Field),
+    Operations(Owner),
+    FormSecurity(Owner),
+    Done,
+}
+#[derive(Clone, Copy, Debug, Default)]
+pub struct Walk {
+    stage: u8,
+    index: usize,
+    kind: usize,
+    component: usize,
+}
+pub fn affordance_fields(kind: OwnerKind) -> &'static [Field] {
+    match kind {
+        OwnerKind::Property => &[],
+        OwnerKind::Action => &[Field::Input, Field::Output],
+        OwnerKind::Event => &[
+            Field::Subscription,
+            Field::Data,
+            Field::DataResponse,
+            Field::Cancellation,
+        ],
+        _ => unreachable!(),
+    }
+}
+impl Walk {
+    pub fn action(&mut self, definitions: usize, affordances: [usize; 3]) -> Action {
+        if self.stage == 3 && self.index == definitions {
+            self.stage = 4;
+            self.index = 0;
+        }
+        while self.stage == 6 && self.kind < 3 && self.index == affordances[self.kind] {
+            self.kind += 1;
+            self.index = 0;
+        }
+        if self.stage == 6 && self.kind == 3 {
+            self.stage = 7;
+        }
+        match self.stage {
+            0 => Action::Title,
+            1 => Action::RequiredSecurity,
+            2 => Action::RootReferences,
+            3 => Action::Definition(Owner {
+                kind: OwnerKind::SecurityDefinition,
+                ordinal: self.index,
+            }),
+            4 => Action::SchemaMap(ROOT, Field::SchemaDefinitions),
+            5 => Action::SchemaMap(ROOT, Field::UriVariables),
+            6 => {
+                let owner = Owner {
+                    kind: [OwnerKind::Property, OwnerKind::Action, OwnerKind::Event][self.kind],
+                    ordinal: self.index,
+                };
+                let fields = affordance_fields(owner.kind);
+                match self.component {
+                    0 => {
+                        if owner.kind == OwnerKind::Property {
+                            Action::Schema(owner, Field::PropertySchema)
+                        } else {
+                            Action::SchemaMap(owner, Field::UriVariables)
+                        }
+                    }
+                    1 if owner.kind == OwnerKind::Property => {
+                        Action::SchemaMap(owner, Field::UriVariables)
+                    }
+                    n if owner.kind != OwnerKind::Property && n <= fields.len() => {
+                        Action::Schema(owner, fields[n - 1])
+                    }
+                    n if n
+                        == fields.len()
+                            + if owner.kind == OwnerKind::Property {
+                                2
+                            } else {
+                                1
+                            } =>
+                    {
+                        Action::Operations(owner)
+                    }
+                    _ => Action::FormSecurity(owner),
+                }
+            }
+            7 => Action::FormSecurity(ROOT),
+            8 => Action::Operations(ROOT),
+            _ => Action::Done,
+        }
+    }
+    pub fn advance(&mut self) {
+        match self.stage {
+            3 => self.index += 1,
+            6 => {
+                let kind = [OwnerKind::Property, OwnerKind::Action, OwnerKind::Event][self.kind];
+                let last =
+                    affordance_fields(kind).len() + if kind == OwnerKind::Property { 3 } else { 2 };
+                if self.component == last {
+                    self.component = 0;
+                    self.index += 1;
+                } else {
+                    self.component += 1;
+                }
+            }
+            _ => self.stage += 1,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum Scheme {
+    Combo,
+    ApiKey,
+    OAuth,
+    Other,
+}
+pub fn scheme_kind(scheme: &str) -> Result<Scheme, Rule<'_>> {
+    Ok(match scheme {
+        "combo" => Scheme::Combo,
+        "apikey" => Scheme::ApiKey,
+        "oauth2" => Scheme::OAuth,
+        "nosec" | "auto" | "basic" | "digest" | "bearer" | "psk" => Scheme::Other,
+        _ => return Err(Rule::UnsupportedScheme(scheme)),
+    })
+}
+pub fn flow_requires_endpoints(flow: &str) -> Result<bool, Rule<'_>> {
+    match flow {
+        "code" => Ok(true),
+        "client" | "device" => Ok(false),
+        _ => Err(Rule::UnsupportedFlow(flow)),
+    }
+}
+pub fn combo_present(one: usize, all: usize) -> Result<(), Rule<'static>> {
+    if one == 0 && all == 0 {
+        Err(Rule::ComboMissing)
+    } else {
+        Ok(())
+    }
+}
+pub fn combo_group(count: usize, first_empty: Option<usize>) -> Result<(), (usize, Rule<'static>)> {
+    if count == 1 {
+        Err((0, Rule::ComboCardinality))
+    } else if let Some(index) = first_empty {
+        Err((index, Rule::ComboEmpty))
+    } else {
+        Ok(())
     }
 }
 
@@ -439,6 +584,9 @@ fn operations<'a, A: BasicAccess<'a>, S: DiagnosticSink<'a, A>>(
     Ok(())
 }
 
+// Standalone public component entry in the source candidate; the Snapshot
+// harness exercises the shared whole-Thing Walk instead.
+#[allow(dead_code)]
 pub fn validate_affordance<'a, A: BasicAccess<'a>, S: DiagnosticSink<'a, A>>(
     access: &A,
     affordance: A::Affordance,
@@ -462,17 +610,7 @@ pub fn validate_affordance<'a, A: BasicAccess<'a>, S: DiagnosticSink<'a, A>>(
         Field::UriVariables,
         sink,
     )?;
-    let fields: &[Field] = match owner.kind {
-        OwnerKind::Property => &[],
-        OwnerKind::Action => &[Field::Input, Field::Output],
-        OwnerKind::Event => &[
-            Field::Subscription,
-            Field::Data,
-            Field::DataResponse,
-            Field::Cancellation,
-        ],
-        _ => unreachable!(),
-    };
+    let fields = affordance_fields(owner.kind);
     for &field in fields {
         schema(field)?;
     }
@@ -501,44 +639,72 @@ pub fn validate<'a, A: BasicAccess<'a>, S: DiagnosticSink<'a, A>>(
     access: &A,
     sink: &S,
 ) -> Result<(), S::Error> {
-    if access.title().unwrap_or("").is_empty() {
-        return Err(sink.reject_basic(access, Site::new(ROOT, Field::Title), Rule::Missing));
-    }
-    let security = access.root_security();
-    required_security(access.names_count(security))
-        .map_err(|rule| sink.reject_basic(access, Site::new(ROOT, Field::Security), rule))?;
-    references(access, security, Site::new(ROOT, Field::Security), sink)?;
-    for index in 0..access.definition_count() {
-        let owner = Owner {
-            kind: OwnerKind::SecurityDefinition,
-            ordinal: index,
-        };
-        let definition = access.definition_at(index);
-        validate_security_scheme(access, definition, owner, sink)?;
-        for &field in combo_groups(access.scheme(definition)) {
-            references(
+    let mut walk = Walk::default();
+    let kinds = [OwnerKind::Property, OwnerKind::Action, OwnerKind::Event];
+    loop {
+        let action = walk.action(
+            access.definition_count(),
+            kinds.map(|kind| access.affordance_count(kind)),
+        );
+        match action {
+            Action::Title => {
+                required(!access.title().unwrap_or("").is_empty()).map_err(|rule| {
+                    sink.reject_basic(access, Site::new(ROOT, Field::Title), rule)
+                })?;
+            }
+            Action::RequiredSecurity => {
+                required_security(access.names_count(access.root_security())).map_err(|rule| {
+                    sink.reject_basic(access, Site::new(ROOT, Field::Security), rule)
+                })?
+            }
+            Action::RootReferences => references(
                 access,
-                access.combo_names(definition, field),
-                Site::new(owner, field),
+                access.root_security(),
+                Site::new(ROOT, Field::Security),
                 sink,
-            )?;
+            )?,
+            Action::Definition(owner) => {
+                let definition = access.definition_at(owner.ordinal);
+                validate_security_scheme(access, definition, owner, sink)?;
+                for &field in combo_groups(access.scheme(definition)) {
+                    references(
+                        access,
+                        access.combo_names(definition, field),
+                        Site::new(owner, field),
+                        sink,
+                    )?;
+                }
+            }
+            Action::SchemaMap(owner, field) => {
+                let map = if owner.kind == OwnerKind::Thing {
+                    access.root_schema_map(field)
+                } else {
+                    access.uri_variables(access.affordance_at(owner.kind, owner.ordinal))
+                };
+                schema_map(access, map, owner, field, sink)?;
+            }
+            Action::Schema(owner, field) => {
+                if let Some(node) =
+                    access.affordance_schema(access.affordance_at(owner.kind, owner.ordinal), field)
+                {
+                    schema_kernel::validate(access.schemas(), node, sink).map_err(|error| {
+                        sink.schema_site(access, Site::new(owner, field), None, error)
+                    })?;
+                }
+            }
+            Action::Operations(owner) | Action::FormSecurity(owner) => {
+                let forms = access.forms(
+                    (owner.kind != OwnerKind::Thing)
+                        .then(|| access.affordance_at(owner.kind, owner.ordinal)),
+                );
+                if matches!(action, Action::Operations(_)) {
+                    operations(access, forms, owner, sink)?;
+                } else {
+                    form_security(access, forms, owner, sink)?;
+                }
+            }
+            Action::Done => return Ok(()),
         }
+        walk.advance();
     }
-    for field in [Field::SchemaDefinitions, Field::UriVariables] {
-        schema_map(access, access.root_schema_map(field), ROOT, field, sink)?;
-    }
-    for kind in [OwnerKind::Property, OwnerKind::Action, OwnerKind::Event] {
-        for index in 0..access.affordance_count(kind) {
-            let owner = Owner {
-                kind,
-                ordinal: index,
-            };
-            let affordance = access.affordance_at(kind, index);
-            validate_affordance(access, affordance, owner, sink)?;
-            form_security(access, access.forms(Some(affordance)), owner, sink)?;
-        }
-    }
-    // Existing Thing Basic checks all root Form references before any root op.
-    form_security(access, access.forms(None), ROOT, sink)?;
-    operations(access, access.forms(None), ROOT, sink)
 }
