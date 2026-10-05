@@ -50,6 +50,85 @@ fn schedule(n: u64) -> impl FnMut(Stage) -> (WorkBudget, bool) {
 }
 
 #[test]
+fn key_comparison_debits_each_operand_before_a_partial_poll_can_read() {
+    for length in [1usize, 128, 512] {
+        let mut thing = Thing::default();
+        let mut map = serde_json::Map::new();
+        for suffix in ['a', 'b'] {
+            map.insert(
+                format!("{}{suffix}", "x".repeat(length - 1)),
+                serde_json::Value::Null,
+            );
+        }
+        thing._extra_fields.insert("ordered".into(), map.into());
+        let mut owner = OwnedValue::empty_for_fixture(Limits::default());
+        {
+            let mut cursor = Cursor::from_thing(&mut owner, &thing, Limits::default());
+            // All other classes have ample credit; only this byte class can block
+            // a key comparison. A one-byte poll must preserve its unused unit.
+            for poll in 0..10000 {
+                let before = cursor.trace();
+                let lifetime = cursor.lifetime_remaining();
+                let mut credit = budget(4096).with_remaining(W::CodecInputBytes, 1);
+                let Progress::Pending(next) = cursor.step(&mut credit, || false) else {
+                    panic!("pair comparison must block with one byte");
+                };
+                let blocked = before == next.trace();
+                if blocked {
+                    assert_eq!(credit.remaining(W::CodecInputBytes), 1);
+                    assert_eq!(credit.remaining(W::DocumentNodes), 4096);
+                    assert_eq!(next.lifetime_remaining(), lifetime);
+                    let mut again = budget(4096).with_remaining(W::CodecInputBytes, 1);
+                    let Progress::Pending(next) = next.step(&mut again, || false) else {
+                        panic!("repeated partial credit");
+                    };
+                    assert_eq!(next.trace(), before);
+                    assert_eq!(next.lifetime_remaining(), lifetime);
+                    assert_eq!(again.remaining(W::CodecInputBytes), 1);
+                    break;
+                }
+                assert!(poll < 9999, "comparison boundary not reached");
+                cursor = next;
+            }
+        }
+        drop(owner);
+        let (normalized, trace) =
+            build::from_thing(&thing, Limits::default(), schedule(7)).unwrap();
+        // Copies, equivalence byte reads and arena moves charge equal input
+        // and output. Only selection adds input-only work: three comparisons
+        // per pass, two passes, TWO key bytes at every compared position.
+        assert_eq!(
+            trace.canonical.work[1] - trace.canonical.work[2],
+            12 * length as u64
+        );
+        let work = total(trace);
+        drop(normalized);
+        let exact = Limits {
+            lifetime: work,
+            ..Limits::default()
+        };
+        assert_eq!(
+            build::from_thing(&thing, exact, schedule(7))
+                .unwrap()
+                .0
+                .lifetime_remaining(),
+            0
+        );
+        assert!(
+            build::from_thing(
+                &thing,
+                Limits {
+                    lifetime: work - 1,
+                    ..exact
+                },
+                schedule(7)
+            )
+            .is_err()
+        );
+    }
+}
+
+#[test]
 fn typed_envelope_fields_equivalence_basic_and_input_drop_compose() {
     for thing in [
         corpus::typed_corpus(),

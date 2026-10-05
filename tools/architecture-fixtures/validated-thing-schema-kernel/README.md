@@ -878,7 +878,7 @@ synchronous and external to the construction trace: whole-Thing charged Basic
 and Basic over the strict completed result remain unresolved admission duties.
 The shared default/security helpers also run on this constructed owner.
 
-`tests/thing_build.rs` supplies ten executable evidence categories:
+`tests/thing_build.rs` supplies eleven executable evidence categories:
 
 - Independent public-field readback of the rich, nested-schema and
   Basic-valid serializer-failure corpora, including every typed field family.
@@ -886,6 +886,9 @@ The shared default/security helpers also run on this constructed owner.
   retain their distinctions, including through shared Basic.
 - Identical complete construction traces under mixed 1/7/4096 allowances;
   exact lifetime, one-less failure and repeated withholding of each class.
+- Independently counted key comparisons charge both input operands before
+  either read. Repeated one-byte polls preserve all credit and lifetime; two
+  equal-length keys require twelve byte units per key byte across both passes.
 - The existing whole-Basic first-error corpus on the constructed canonical
   graph, with no second predicate or diagnostic authority.
 - All 41 rich transaction allocator failures, actual peaks/largest requests,
@@ -904,7 +907,7 @@ The shared default/security helpers also run on this constructed owner.
 
 The rich nested-schema 64-bit Host witness retains 34,220 requested bytes,
 peaks at 62,464 physical bytes, requests at most 20,480 contiguous bytes and
-spends 105,476 construction/equivalence/seal work units. These are fixture
+spends 105,564 construction/equivalence/seal work units. These are fixture
 observations, not supported M, profile ceilings, target runtime/stack evidence,
 complete plan/artifact residency or Servient owner-capacity claims.
 

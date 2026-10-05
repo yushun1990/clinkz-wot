@@ -1065,7 +1065,9 @@ impl<'a> Cursor<'a> {
             }
             State::Select(mut selection, link) => {
                 let classes: &[W] = if selection.reads_byte() {
-                    &[W::DocumentNodes, W::CodecInputBytes]
+                    // Both operands are caller-owned key bytes. Precharge
+                    // the pair before either read, just as URI pairs do.
+                    &[W::DocumentNodes, W::CodecInputBytes, W::CodecInputBytes]
                 } else {
                     &[W::DocumentNodes]
                 };
