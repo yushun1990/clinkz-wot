@@ -28,6 +28,8 @@ pub enum Stage {
     Basic(schema_tree::Phase),
     Canonical(Pass),
     Seal,
+    ThingBasic(super::thing_step::Phase),
+    SchemaBasic(super::thing_step::Phase),
 }
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct ConstructionTrace {
@@ -35,6 +37,8 @@ pub struct ConstructionTrace {
     pub basic: schema_tree::Trace,
     pub canonical: Trace,
     pub seal: [u64; 4],
+    pub thing_basic: super::thing_step::Trace,
+    pub schema_basic: super::thing_step::Trace,
 }
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ConstructionCause {
@@ -42,6 +46,8 @@ pub enum ConstructionCause {
     Basic(schema_tree::Cause),
     Canonical(Cause),
     Seal(ResourceCause),
+    ThingBasic(super::thing_step::Cause),
+    SchemaBasic(super::thing_step::Cause),
 }
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct ConstructionFailure {
@@ -169,6 +175,48 @@ pub fn from_json(
     }
     Ok((Schema::from_resealed(owner), trace))
 }
+/// Compose strict literal decoding and canonical construction with the same
+/// movable result-Basic continuation used for a whole typed Thing. Earlier
+/// construction drivers remain borrowing fixtures, not owning entry proofs.
+#[allow(clippy::result_large_err)]
+pub fn from_json_basic(
+    input: &[u8],
+    limits: Limits,
+    mut control: impl FnMut(Stage) -> (WorkBudget, bool),
+) -> Result<(Schema, ConstructionTrace), ConstructionFailure> {
+    let (schema, mut trace) = from_json(input, limits, &mut control)?;
+    let mut cursor = super::thing_step::OwningCursor::from_schema(schema, limits);
+    loop {
+        let (mut budget, cancel) = control(Stage::SchemaBasic(cursor.phase()));
+        match cursor.step(&mut budget, || cancel) {
+            super::thing_step::OwningProgress::Pending(next) => cursor = next,
+            super::thing_step::OwningProgress::Complete {
+                output,
+                trace: work,
+            } => {
+                trace.schema_basic = work;
+                let super::thing_step::Output::Schema(schema) = output else {
+                    unreachable!()
+                };
+                return Ok((schema, trace));
+            }
+            super::thing_step::OwningProgress::Failed(failure) => {
+                trace.schema_basic = failure.failure.trace;
+                return Err(ConstructionFailure {
+                    cause: ConstructionCause::SchemaBasic(failure.failure.cause),
+                    stage: Stage::SchemaBasic(failure.failure.phase),
+                    trace,
+                    resources: failure.resources,
+                    lifetime_remaining: failure.lifetime_remaining,
+                    live_after_rollback: failure.live_after_rollback,
+                    allocations: failure.allocations,
+                    releases: failure.releases,
+                });
+            }
+        }
+    }
+}
+
 fn rollback(
     mut owner: OwnedValue,
     cause: ConstructionCause,
@@ -194,7 +242,24 @@ fn rollback(
 pub(crate) fn from_typed_thing(
     input: &crate::thing::Thing,
     limits: Limits,
+    control: impl FnMut(Stage) -> (WorkBudget, bool),
+) -> Result<(typed::NormalizedThing, ConstructionTrace), ConstructionFailure> {
+    typed_thing(input, limits, control, false)
+}
+#[allow(clippy::result_large_err)]
+pub(crate) fn from_typed_thing_basic(
+    input: &crate::thing::Thing,
+    limits: Limits,
+    control: impl FnMut(Stage) -> (WorkBudget, bool),
+) -> Result<(typed::NormalizedThing, ConstructionTrace), ConstructionFailure> {
+    typed_thing(input, limits, control, true)
+}
+#[allow(clippy::result_large_err)]
+fn typed_thing(
+    input: &crate::thing::Thing,
+    limits: Limits,
     mut control: impl FnMut(Stage) -> (WorkBudget, bool),
+    with_basic: bool,
 ) -> Result<(typed::NormalizedThing, ConstructionTrace), ConstructionFailure> {
     use validated_thing_value_construction_probe::SealProgress;
     let mut owner = OwnedValue::empty_for_fixture(limits);
@@ -246,6 +311,38 @@ pub(crate) fn from_typed_thing(
             Stage::Seal,
             trace,
         ));
+    }
+    if with_basic {
+        let mut cursor = super::thing_step::OwningCursor::from_owner(owner, limits, false);
+        loop {
+            let (mut budget, cancel) = control(Stage::ThingBasic(cursor.phase()));
+            match cursor.step(&mut budget, || cancel) {
+                super::thing_step::OwningProgress::Pending(next) => cursor = next,
+                super::thing_step::OwningProgress::Complete {
+                    output,
+                    trace: work,
+                } => {
+                    trace.thing_basic = work;
+                    let super::thing_step::Output::Thing(thing) = output else {
+                        unreachable!()
+                    };
+                    return Ok((thing, trace));
+                }
+                super::thing_step::OwningProgress::Failed(failure) => {
+                    trace.thing_basic = failure.failure.trace;
+                    return Err(ConstructionFailure {
+                        cause: ConstructionCause::ThingBasic(failure.failure.cause),
+                        stage: Stage::ThingBasic(failure.failure.phase),
+                        trace,
+                        resources: failure.resources,
+                        lifetime_remaining: failure.lifetime_remaining,
+                        live_after_rollback: failure.live_after_rollback,
+                        allocations: failure.allocations,
+                        releases: failure.releases,
+                    });
+                }
+            }
+        }
     }
     Ok((typed::NormalizedThing::new(owner), trace))
 }
@@ -1232,6 +1329,12 @@ pub struct Schema {
     owner: OwnedValue,
 }
 impl Schema {
+    pub(crate) fn into_owner(self) -> OwnedValue {
+        self.owner
+    }
+    pub(crate) fn from_owner(owner: OwnedValue) -> Self {
+        Self::from_resealed(owner)
+    }
     fn from_resealed(owner: OwnedValue) -> Self {
         let root = View {
             owner: owner.sealed_arenas(),
@@ -1262,6 +1365,17 @@ pub struct View<'a> {
     node: usize,
 }
 impl<'a> View<'a> {
+    pub(crate) fn node_id(self) -> usize {
+        self.node
+    }
+    pub(crate) fn at(owner: Sealed<'a>, node: usize) -> Self {
+        Self { owner, node }
+    }
+    pub(crate) fn text_range(self) -> Option<(usize, usize)> {
+        self.text()?;
+        let node = self.record();
+        Some((node.first_byte as usize, node.byte_count as usize))
+    }
     pub(crate) fn root(owner: Sealed<'a>) -> Self {
         Self { owner, node: 0 }
     }

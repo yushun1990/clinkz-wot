@@ -124,6 +124,9 @@ fn malformed_children_basic_failure_and_cancellation_release_the_whole_source() 
                 Stage::Canonical(Pass::Construction) => phase == 2,
                 Stage::Canonical(Pass::Equivalence) => phase == 3,
                 Stage::Seal => phase == 4,
+                Stage::ThingBasic(_) | Stage::SchemaBasic(_) => {
+                    unreachable!("construction without result Basic")
+                }
             };
             (work(stage).0, cancel)
         })
