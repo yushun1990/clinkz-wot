@@ -1047,3 +1047,110 @@ row, PLAN, gate or CI orchestration changes.
 
 All eight remain incomplete as a set. This slice preserves
 `planned / candidate / current`; it supplies no readmission or completion.
+
+## Owning suspension shared by strict and compatibility results
+
+The post-construction semantic pass must survive moving its source owner across
+`Pending`. The earlier borrowing cursor retained `View`, `&str`, frame-accounting
+and lifetime borrows into a stationary owner. Its synchronous driver ended those
+borrows before returning, so it did not establish an owning admission cursor.
+Pairing that cursor with its source and returning both fails Rust's E0515/E0505
+checks. This is a prerequisite to composing the strict path with the existing
+whole-result evidence, independently of how many Thing fields are decoded.
+
+`thing_step` now uses one discovery/rule driver with private node indices and
+byte ranges in every persistent state and frame. Static grammar references are
+`&'static str`; continuation handles retain no source pointer. There is no
+lifetime erasure, Pin, boxed cursor, second rule body, or per-Pending arena
+traversal. Only a step's transient runner
+binds the handles to immutable arena borrows. It ends all those borrows before
+returning a movable continuation.
+
+The original frame site can now belong to the same movable source/accounting
+owner. `staged::Inspection` owns that workspace, including any old/replacement
+frame overlap, and lends a facade for each step. Ending a loan preserves the
+workspace; destroying its owner releases both frame blocks before the source.
+The existing borrowed facade still owns and releases its workspace. Both use
+the same checked allocation, paid transfer and exact release implementation.
+`OwnedInspection` moves the original lifetime remainder with that same ledger;
+none is recreated or cloned when the cursor is suspended or resumed.
+
+The compatibility construction transaction now actually moves an `OwningCursor`
+through its paid whole-Thing Basic pass. Strict `schema_build::from_json_basic`
+composes literal JSON decoding, duplicate resolution/compaction, shared schema
+field policy, literal Basic, canonical construction/equivalence and exact reseal
+with that same owning result-Basic driver. Schema scope starts at the canonical
+schema root and stops there; Thing scope uses the existing whole-Thing discovery
+program. No typed Thing or serde graph is needed by the strict transaction.
+
+`tests/owning_basic.rs` exercises six categories:
+
+- Both source paths produce a `'static` post-construction cursor after the
+  original input is destroyed. Address-observable inline slots move the complete
+  cursor on every Pending; varied schedules preserve debits, first cause and
+  lifetime. Public typed field readback checks the strict canonical result.
+- Strict construction through owning result Basic uses one lifetime and original
+  allocation owner. Exact total lifetime succeeds; one-less fails in result
+  Basic. An independent allocator checks all 62 observed request failures,
+  physical peaks, largest attempted requests, rollback and the three final
+  source allocations.
+- Every Pending in a nested strict witness can cancel or abandon the whole owner,
+  including an incomplete frame growth. Releases are prepaid, fixed by the
+  arena catalog, and do not visit the nested semantic graph.
+- A 256-level strict schema continues after its input is dropped, including real
+  unsigned and binary64 predicates, frame growth/copies and owner moves.
+- Literal Number/RawValue-looking objects remain Objects through canonical
+  construction and result Basic. JSON-looking strings remain strings. Escaped
+  duplicate field names use the last value for dispatch; malformed overwritten
+  bytes still fail. The ordinary Number-wrapper observation is separately
+  classified as a wire-value difference, not a different Basic rule.
+- Actual Number content at 63/64/65 and 255/256/257 spans strict input limits and
+  the owning result's atomic projection. Repeated partial polls preserve unused
+  credit and lifetime; sufficient credit charges the full lexeme before parse.
+
+The existing nine whole-Thing categories run the owning transaction too,
+including the 170-plus first-error corpus, numeric cancellation and every
+whole-transaction allocation failure. The borrowed inspection tests remain
+useful independent scheduling/resource stresses over the same driver.
+
+On the measured 64-bit Host, the fixed strict witness spends 12,036 total work
+units, retains 2,753 bytes, peaks at 13,249 physical bytes and attempts a largest
+6,656-byte request. Result Basic visits five schemas, projects two unsigned and
+two binary64 values, and contributes `[222, 71, 5, 0, 3]` work units. Its owning
+cursor occupies 1,336 inline bytes; the borrowing runner occupies 752 bytes.
+The original whole-Thing witness retains its 107,161 work, 34,220-byte source,
+62,464-byte peak and 44 requests. These are fixture observations; inline cursor
+bytes remain an owner-capacity duty, not an additional allocation request.
+
+```sh
+cargo test --locked --manifest-path tools/architecture-fixtures/validated-thing-schema-kernel/Cargo.toml --features validated-thing --test owning_basic -- --nocapture
+cargo test --locked --manifest-path tools/architecture-fixtures/validated-thing-schema-kernel/Cargo.toml --no-default-features --features async,validated-thing
+cargo check --locked --target thumbv7em-none-eabihf --manifest-path tools/architecture-fixtures/validated-thing-schema-kernel/Cargo.toml --no-default-features --features async,validated-thing
+```
+
+The registered 13 Host/eight thumb cells include this composition. Thumb remains
+compilation evidence. The unchanged arena and literal-value suites cover the
+borrowed facade and prior catalog responsibilities.
+
+This establishes the common **post-construction** ownership seam only. Earlier
+strict field projection, schema traversal, canonical construction/equivalence
+and reseal still use borrowing drivers. The full frozen owning entries have not
+been assembled, and this post-construction facade is not a proposed production
+API or proof of the authority's complete phase order. Complete strict Thing,
+Form, Context, security, Link and response field policies remain absent.
+Canonical typed-map construction still uses selection rather than the prescribed
+in-place sort. The shared date decoder and URI/default/security query witnesses
+have not been joined to these complete construction owners. The opaque admission
+configuration, derived supported Number maximum M, full diagnostics, complete
+Planning/artifact residency and release, parent/global pairing, publication,
+negative frozen-surface matrix and constrained execution also remain unproved.
+
+This slice advances ownership constructibility in item 1, the shared catalog in
+item 2, strict canonical/result-Basic composition in item 3, feature evidence in
+item 5, movable work/cancellation/drop in item 6 and physical overlap/release in
+item 7. It completes no readmission item as a whole; items 4 and 8 retain their
+separate duties. No fifth temporary category, fourth retained arena, new ledger,
+WorkClass or changed architectural contract was needed at this seam. Earlier
+accepted borrowing evidence remains valid within its stated boundary; its
+extension to a complete owning entry remains unproved. Admission remains
+`planned / candidate / current`, with fresh independent review required.

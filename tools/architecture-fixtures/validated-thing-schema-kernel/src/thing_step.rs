@@ -13,7 +13,7 @@ use super::{
 use clinkz_wot_foundation::{WorkBudget, WorkClass as W};
 use core::mem;
 use validated_thing_value_construction_probe::{
-    FrameError, FrameResources, Frames, Kind, Limits, OwnedValue,
+    FrameError, FrameResources, Frames, Kind, Limits, OwnedInspection, OwnedValue, Sealed,
 };
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -55,49 +55,119 @@ pub struct Failure {
     pub trace: Trace,
 }
 
-struct Frame<'a> {
-    node: View<'a>,
+/// Private relocation handles. They never retain an arena pointer or borrow.
+#[derive(Clone, Copy)]
+struct NodeId(usize);
+impl NodeId {
+    fn bind(self, arenas: Sealed<'_>) -> View<'_> {
+        View::at(arenas, self.0)
+    }
+    fn child(self, arenas: Sealed<'_>, index: usize) -> Option<Self> {
+        self.bind(arenas).child(index).map(|v| Self(v.node_id()))
+    }
+    fn member(self, arenas: Sealed<'_>, index: usize) -> Option<(Text, Self)> {
+        if self.literal_kind(arenas) != Some(Kind::Object) {
+            return None;
+        }
+        let entry = self.child(arenas, index)?;
+        Some((
+            entry.child(arenas, 0)?.text(arenas)?,
+            entry.child(arenas, 1)?,
+        ))
+    }
+    fn kind_for_fixture(self, arenas: Sealed<'_>) -> u32 {
+        self.bind(arenas).kind_for_fixture()
+    }
+    fn literal_kind(self, arenas: Sealed<'_>) -> Option<Kind> {
+        self.bind(arenas).literal_kind()
+    }
+    fn schema_kind(self, arenas: Sealed<'_>) -> Option<schema::SchemaKind> {
+        self.bind(arenas).schema_kind()
+    }
+    fn extras(self, arenas: Sealed<'_>) -> Self {
+        Self(self.bind(arenas).extras().node_id())
+    }
+    fn len(self, arenas: Sealed<'_>) -> usize {
+        self.bind(arenas).len()
+    }
+    fn text(self, arenas: Sealed<'_>) -> Option<Text> {
+        self.bind(arenas)
+            .text_range()
+            .map(|(start, len)| Text::Arena { start, len })
+    }
+}
+#[derive(Clone, Copy)]
+enum Text {
+    Static(&'static str),
+    Arena { start: usize, len: usize },
+}
+impl Text {
+    fn len(self) -> usize {
+        match self {
+            Self::Static(s) => s.len(),
+            Self::Arena { len, .. } => len,
+        }
+    }
+    fn is_empty(self) -> bool {
+        self.len() == 0
+    }
+    fn borrow(self, arenas: Sealed<'_>) -> &str {
+        match self {
+            Self::Static(s) => s,
+            Self::Arena { start, len } => {
+                // SAFETY: private ranges come only from checked literal/typed text
+                // in an immutable canonical owner. Lending does not grow or mutate
+                // source arrays; constructing a slice must not rescan its content.
+                unsafe { core::str::from_utf8_unchecked(&arenas.bytes()[start..start + len]) }
+            }
+        }
+    }
+}
+
+struct Frame {
+    node: NodeId,
     ordinal: u64,
     walk: schema::Walk,
 }
 #[derive(Clone, Copy)]
-struct Forms<'a> {
-    forms: View<'a>,
+struct Forms {
+    forms: NodeId,
     index: usize,
     member: usize,
     owner: Owner,
     security: bool,
 }
 #[derive(Clone, Copy)]
-struct References<'a> {
-    names: Option<View<'a>>,
+struct References {
+    names: Option<NodeId>,
     position: usize,
     member: usize,
     site: Site,
-    next: Resume<'a>,
+    next: Resume,
 }
 #[derive(Clone, Copy)]
-struct Combo<'a> {
-    definition: View<'a>,
+struct Combo {
+    definition: NodeId,
     owner: Owner,
-    names: [Option<View<'a>>; 2],
+    names: [Option<NodeId>; 2],
     counts: [usize; 2],
     empty: [Option<usize>; 2],
     group: usize,
     position: usize,
 }
 #[derive(Clone, Copy)]
-enum Resume<'a> {
+enum Resume {
+    Done,
     Global,
-    Forms(Forms<'a>),
+    Forms(Forms),
     Schema,
     SchemaMap {
-        map: View<'a>,
+        map: NodeId,
         index: usize,
         site: Site,
     },
     ComboAll {
-        names: Option<View<'a>>,
+        names: Option<NodeId>,
         owner: Owner,
     },
 }
@@ -108,18 +178,18 @@ enum Probe {
     SchemaType,
 }
 #[derive(Clone, Copy)]
-enum Purpose<'a> {
+enum Purpose {
     Reference {
-        name: &'a str,
-        references: References<'a>,
+        name: Text,
+        references: References,
     },
-    Combo(Combo<'a>),
+    Combo(Combo),
     Name(Owner),
     Flow {
         owner: Owner,
     },
     Endpoint {
-        definition: View<'a>,
+        definition: NodeId,
         owner: Owner,
         field: Field,
     },
@@ -129,32 +199,32 @@ enum Purpose<'a> {
     },
     Numeric {
         position: usize,
-        numbers: [Option<&'a str>; 5],
+        numbers: [Option<Text>; 5],
     },
 }
-struct Lookup<'a> {
-    map: View<'a>,
-    target: &'a str,
+struct Lookup {
+    map: NodeId,
+    target: Text,
     input_target: bool,
     index: usize,
-    key: Option<&'a str>,
+    key: Option<Text>,
     byte: usize,
     first: Option<u8>,
-    purpose: Purpose<'a>,
+    purpose: Purpose,
 }
-enum State<'a> {
-    Resume(Resume<'a>),
-    References(References<'a>),
-    Lookup(Lookup<'a>),
+enum State {
+    Resume(Resume),
+    References(References),
+    Lookup(Lookup),
     Probe {
-        text: &'a str,
+        text: Text,
         position: usize,
         bytes: [u8; 8],
         probe: Probe,
     },
-    Combo(Combo<'a>),
-    Enter(View<'a>),
-    Push(Frame<'a>),
+    Combo(Combo),
+    Enter(NodeId),
+    Push(Frame),
     Unsigned {
         position: usize,
         values: [Option<u64>; 4],
@@ -162,29 +232,163 @@ enum State<'a> {
     UnsignedNumber {
         position: usize,
         values: [Option<u64>; 4],
-        text: &'a str,
+        text: Text,
     },
     NumericGather {
         position: usize,
-        numbers: [Option<&'a str>; 5],
+        numbers: [Option<Text>; 5],
     },
     Numeric {
         cursor: NumericCursor,
-        numbers: [Option<&'a str>; 5],
+        numbers: [Option<Text>; 5],
     },
     Moving,
 }
 pub struct Cursor<'a> {
-    root: View<'a>,
+    arenas: Sealed<'a>,
+    root: NodeId,
     lifetime: &'a mut u64,
-    frames: Frames<'a, Frame<'a>>,
+    frames: Frames<'a, Frame>,
     limits: Limits,
     walk: basic::Walk,
-    state: State<'a>,
+    state: State,
     schema_site: Site,
-    after_schema: Resume<'a>,
+    after_schema: Resume,
     ordinal: u64,
     trace: Trace,
+}
+
+struct Continuation {
+    walk: basic::Walk,
+    state: State,
+    schema_site: Site,
+    after_schema: Resume,
+    ordinal: u64,
+    trace: Trace,
+}
+impl Continuation {
+    fn new(schema: bool) -> Self {
+        Self {
+            walk: basic::Walk::default(),
+            state: if schema {
+                State::Enter(NodeId(0))
+            } else {
+                State::Resume(Resume::Global)
+            },
+            schema_site: Site::new(basic::ROOT, Field::Title),
+            after_schema: if schema { Resume::Done } else { Resume::Global },
+            ordinal: 0,
+            trace: Trace::default(),
+        }
+    }
+}
+
+/// Non-production owning post-construction pass shared by both input paths.
+/// No stored state or frame contains a borrow of the source/accounting owner.
+pub struct OwningCursor {
+    owner: OwnedInspection<Frame>,
+    continuation: Continuation,
+    limits: Limits,
+    schema: bool,
+}
+pub enum Output {
+    Thing(NormalizedThing),
+    Schema(super::schema_build::Schema),
+}
+#[allow(clippy::large_enum_variant)]
+pub enum OwningProgress {
+    Pending(OwningCursor),
+    Complete { output: Output, trace: Trace },
+    Failed(OwningFailure),
+}
+#[derive(Clone, Copy, Debug)]
+pub struct OwningFailure {
+    pub failure: Failure,
+    pub resources: validated_thing_value_construction_probe::Footprint,
+    pub lifetime_remaining: u64,
+    pub live_after_rollback: u64,
+    pub allocations: u64,
+    pub releases: u64,
+}
+impl OwningCursor {
+    pub fn new(owner: NormalizedThing, limits: Limits) -> Self {
+        Self::from_owner(owner.owner, limits, false)
+    }
+    pub fn from_schema(owner: super::schema_build::Schema, limits: Limits) -> Self {
+        Self::from_owner(owner.into_owner(), limits, true)
+    }
+    pub(crate) fn from_owner(owner: OwnedValue, limits: Limits, schema: bool) -> Self {
+        Self {
+            owner: owner.into_inspection(),
+            continuation: Continuation::new(schema),
+            limits,
+            schema,
+        }
+    }
+    pub fn trace(&self) -> Trace {
+        Trace {
+            resources: Some(self.owner.resources()),
+            ..self.continuation.trace
+        }
+    }
+    pub fn phase(&self) -> Phase {
+        state_phase(&self.continuation.state)
+    }
+    pub fn lifetime_remaining(&self) -> u64 {
+        self.owner.lifetime_remaining()
+    }
+    pub fn frame_transfer(&mut self) -> bool {
+        self.owner.parts().2.transferring()
+    }
+    pub fn step(
+        mut self,
+        budget: &mut WorkBudget,
+        cancelled: impl FnMut() -> bool,
+    ) -> OwningProgress {
+        // Boxing suspension state would introduce another allocation site.
+        #[allow(clippy::large_enum_variant)]
+        enum Step {
+            Pending(Continuation),
+            Complete(Trace),
+            Failed(Failure),
+        }
+        let result = {
+            let (arenas, lifetime, frames) = self.owner.parts();
+            let runner = Cursor::resume(arenas, lifetime, frames, self.limits, self.continuation);
+            match runner.step(budget, cancelled) {
+                Progress::Pending(cursor) => Step::Pending(cursor.suspend()),
+                Progress::Complete(trace) => Step::Complete(trace),
+                Progress::Failed(failure) => Step::Failed(failure),
+            }
+        };
+        match result {
+            Step::Pending(continuation) => {
+                self.continuation = continuation;
+                OwningProgress::Pending(self)
+            }
+            Step::Complete(trace) => {
+                let owner = self.owner.into_value();
+                let output = if self.schema {
+                    Output::Schema(super::schema_build::Schema::from_owner(owner))
+                } else {
+                    Output::Thing(NormalizedThing::new(owner))
+                };
+                OwningProgress::Complete { output, trace }
+            }
+            Step::Failed(failure) => {
+                let mut owner = self.owner.into_value();
+                owner.rollback_for_fixture();
+                OwningProgress::Failed(OwningFailure {
+                    failure,
+                    resources: owner.footprint(),
+                    lifetime_remaining: owner.lifetime_remaining(),
+                    live_after_rollback: owner.footprint().retained_requested_bytes,
+                    allocations: owner.allocations(),
+                    releases: owner.releases(),
+                })
+            }
+        }
+    }
 }
 // A boxed Pending cursor would invent another allocation site.
 #[allow(clippy::large_enum_variant)]
@@ -204,17 +408,37 @@ impl<'a> Cursor<'a> {
     }
     pub(crate) fn from_owner(owner: &'a mut OwnedValue, limits: Limits) -> Self {
         let (arenas, lifetime, frames) = owner.canonical_inspection_parts();
+        Self::resume(arenas, lifetime, frames, limits, Continuation::new(false))
+    }
+    fn resume(
+        arenas: Sealed<'a>,
+        lifetime: &'a mut u64,
+        frames: Frames<'a, Frame>,
+        limits: Limits,
+        continuation: Continuation,
+    ) -> Self {
         Self {
-            root: View::root(arenas),
+            arenas,
+            root: NodeId(0),
             lifetime,
             frames,
             limits,
-            walk: basic::Walk::default(),
-            state: State::Resume(Resume::Global),
-            schema_site: Site::new(basic::ROOT, Field::Title),
-            after_schema: Resume::Global,
-            ordinal: 0,
-            trace: Trace::default(),
+            walk: continuation.walk,
+            state: continuation.state,
+            schema_site: continuation.schema_site,
+            after_schema: continuation.after_schema,
+            ordinal: continuation.ordinal,
+            trace: continuation.trace,
+        }
+    }
+    fn suspend(self) -> Continuation {
+        Continuation {
+            walk: self.walk,
+            state: self.state,
+            schema_site: self.schema_site,
+            after_schema: self.after_schema,
+            ordinal: self.ordinal,
+            trace: self.trace,
         }
     }
     pub fn lifetime_remaining(&self) -> u64 {
@@ -227,17 +451,7 @@ impl<'a> Cursor<'a> {
         }
     }
     pub fn phase(&self) -> Phase {
-        match self.state {
-            State::Lookup(_) => Phase::Lookup,
-            State::Probe { .. } => Phase::Text,
-            State::Enter(_) | State::Resume(Resume::Schema) => Phase::Schema,
-            State::Push(_) => Phase::Frames,
-            State::Unsigned { .. }
-            | State::UnsignedNumber { .. }
-            | State::NumericGather { .. }
-            | State::Numeric { .. } => Phase::Numeric,
-            _ => Phase::Walk,
-        }
+        state_phase(&self.state)
     }
     pub fn step(
         mut self,
@@ -307,30 +521,33 @@ impl<'a> Cursor<'a> {
             })
         })
     }
-    fn definitions(&self) -> View<'a> {
-        self.root.child(14).unwrap()
+    fn definitions(&self) -> NodeId {
+        self.root.child(self.arenas, 14).unwrap()
     }
-    fn affordance(&self, owner: Owner) -> View<'a> {
+    fn affordance(&self, owner: Owner) -> NodeId {
         self.root
-            .child(match owner.kind {
-                OwnerKind::Property => 8,
-                OwnerKind::Action => 9,
-                OwnerKind::Event => 10,
-                _ => unreachable!(),
-            })
+            .child(
+                self.arenas,
+                match owner.kind {
+                    OwnerKind::Property => 8,
+                    OwnerKind::Action => 9,
+                    OwnerKind::Event => 10,
+                    _ => unreachable!(),
+                },
+            )
             .unwrap()
-            .member(owner.ordinal)
+            .member(self.arenas, owner.ordinal)
             .unwrap()
             .1
     }
-    fn forms(&self, owner: Owner) -> Option<View<'a>> {
+    fn forms(&self, owner: Owner) -> Option<NodeId> {
         if owner.kind == OwnerKind::Thing {
-            self.root.child(12)
+            self.root.child(self.arenas, 12)
         } else {
-            self.affordance(owner).child(1)
+            self.affordance(owner).child(self.arenas, 1)
         }
     }
-    fn lookup(&mut self, map: View<'a>, target: &'a str, input_target: bool, purpose: Purpose<'a>) {
+    fn lookup(&mut self, map: NodeId, target: Text, input_target: bool, purpose: Purpose) {
         self.state = State::Lookup(Lookup {
             map,
             target,
@@ -344,12 +561,12 @@ impl<'a> Cursor<'a> {
     }
     fn security_field(
         &mut self,
-        definition: View<'a>,
+        definition: NodeId,
         field: Field,
-        purpose: Purpose<'a>,
+        purpose: Purpose,
     ) -> Result<(), Cause> {
-        let variant = definition.child(1).unwrap();
-        let slot = match (variant.kind_for_fixture(), field) {
+        let variant = definition.child(self.arenas, 1).unwrap();
+        let slot = match (variant.kind_for_fixture(self.arenas), field) {
             (k, Field::Name) if k == typed::SECURITY_VARIANT + 5 => Some(0),
             (k, Field::Flow) if k == typed::SECURITY_VARIANT + 8 => Some(4),
             (k, Field::Authorization) if k == typed::SECURITY_VARIANT + 8 => Some(0),
@@ -359,18 +576,22 @@ impl<'a> Cursor<'a> {
             _ => None,
         };
         if let Some(slot) = slot {
-            self.found(variant.child(slot), purpose)
+            self.found(variant.child(self.arenas, slot), purpose)
         } else {
             self.lookup(
-                definition.child(0).unwrap().child(5).unwrap(),
-                field.name(),
+                definition
+                    .child(self.arenas, 0)
+                    .unwrap()
+                    .child(self.arenas, 5)
+                    .unwrap(),
+                Text::Static(field.name()),
                 false,
                 purpose,
             );
             Ok(())
         }
     }
-    fn probe(&mut self, text: &'a str, probe: Probe) {
+    fn probe(&mut self, text: Text, probe: Probe) {
         self.state = State::Probe {
             text,
             probe,
@@ -381,7 +602,11 @@ impl<'a> Cursor<'a> {
     fn probe_result(&mut self, text: &str, probe: Probe) -> Result<(), Cause> {
         match probe {
             Probe::Scheme { definition, owner } => {
-                let definition = self.definitions().member(definition).unwrap().1;
+                let definition = self
+                    .definitions()
+                    .member(self.arenas, definition)
+                    .unwrap()
+                    .1;
                 match basic::scheme_kind(text)
                     .map_err(|r| Self::invalid(Site::new(owner, Field::Scheme), r))?
                 {
@@ -408,7 +633,11 @@ impl<'a> Cursor<'a> {
                 }
             }
             Probe::Flow { definition, owner } => {
-                let definition = self.definitions().member(definition).unwrap().1;
+                let definition = self
+                    .definitions()
+                    .member(self.arenas, definition)
+                    .unwrap()
+                    .1;
                 if basic::flow_requires_endpoints(text)
                     .map_err(|r| Self::invalid(Site::new(owner, Field::Flow), r))?
                 {
@@ -428,26 +657,29 @@ impl<'a> Cursor<'a> {
             Probe::SchemaType => {
                 self.schema_rule(schema::check_type(
                     Some(text),
-                    self.frames.last().node.schema_kind().unwrap(),
+                    self.frames.last().node.schema_kind(self.arenas).unwrap(),
                 ))?;
                 self.advance_schema();
             }
         }
         Ok(())
     }
-    fn found(&mut self, value: Option<View<'a>>, purpose: Purpose<'a>) -> Result<(), Cause> {
+    fn found(&mut self, value: Option<NodeId>, purpose: Purpose) -> Result<(), Cause> {
         let string = value
-            .filter(|v| v.literal_kind() == Some(Kind::String))
-            .and_then(View::text);
+            .filter(|v| v.literal_kind(self.arenas) == Some(Kind::String))
+            .and_then(|v| v.text(self.arenas));
         let number = value
-            .filter(|v| v.literal_kind() == Some(Kind::Number))
-            .and_then(View::text);
+            .filter(|v| v.literal_kind(self.arenas) == Some(Kind::Number))
+            .and_then(|v| v.text(self.arenas));
         match purpose {
             Purpose::Reference { name, references } => {
                 if value.is_none() {
                     let mut site = references.site;
                     site.member = references.member - 1;
-                    return Err(Self::invalid(site, basic::Rule::Undefined(name)));
+                    return Err(Self::invalid(
+                        site,
+                        basic::Rule::Undefined(name.borrow(self.arenas)),
+                    ));
                 }
                 self.state = State::References(references);
             }
@@ -456,13 +688,13 @@ impl<'a> Cursor<'a> {
                 self.state = State::Combo(combo);
             }
             Purpose::Name(owner) => {
-                basic::required(!string.unwrap_or("").is_empty())
+                basic::required(!string.unwrap_or(Text::Static("")).is_empty())
                     .map_err(|r| Self::invalid(Site::new(owner, Field::Name), r))?;
                 self.state = State::Resume(Resume::Global);
             }
             Purpose::Flow { owner } => {
                 self.probe(
-                    string.unwrap_or(""),
+                    string.unwrap_or(Text::Static("")),
                     Probe::Flow {
                         definition: owner.ordinal,
                         owner,
@@ -474,8 +706,11 @@ impl<'a> Cursor<'a> {
                 owner,
                 field,
             } => {
-                let typed =
-                    definition.child(1).unwrap().kind_for_fixture() == typed::SECURITY_VARIANT + 8;
+                let typed = definition
+                    .child(self.arenas, 1)
+                    .unwrap()
+                    .kind_for_fixture(self.arenas)
+                    == typed::SECURITY_VARIANT + 8;
                 let present = if typed {
                     value.is_some()
                 } else {
@@ -523,7 +758,7 @@ impl<'a> Cursor<'a> {
         }
         Ok(())
     }
-    fn start_schema(&mut self, node: View<'a>, site: Site, next: Resume<'a>) {
+    fn start_schema(&mut self, node: NodeId, site: Site, next: Resume) {
         assert!(self.frames.is_empty());
         self.schema_site = site;
         self.after_schema = next;
@@ -566,10 +801,15 @@ impl<'a> Cursor<'a> {
             return Ok(Tick::Blocked);
         }
         match state {
+            State::Resume(Resume::Done) => return Ok(Tick::Complete),
             State::Resume(Resume::Global) => {
                 let action = self.walk.action(
-                    self.definitions().len(),
-                    [8, 9, 10].map(|slot| self.root.child(slot).map_or(0, View::len)),
+                    self.definitions().len(self.arenas),
+                    [8, 9, 10].map(|slot| {
+                        self.root
+                            .child(self.arenas, slot)
+                            .map_or(0, |v| v.len(self.arenas))
+                    }),
                 );
                 self.walk.advance();
                 self.state = State::Resume(Resume::Global);
@@ -578,22 +818,22 @@ impl<'a> Cursor<'a> {
                         basic::required(
                             !self
                                 .root
-                                .child(2)
+                                .child(self.arenas, 2)
                                 .unwrap()
-                                .child(1)
-                                .and_then(View::text)
-                                .unwrap_or("")
+                                .child(self.arenas, 1)
+                                .and_then(|v| v.text(self.arenas))
+                                .unwrap_or(Text::Static(""))
                                 .is_empty(),
                         )
                         .map_err(|r| Self::invalid(Site::new(basic::ROOT, Field::Title), r))?;
                     }
                     Action::RequiredSecurity => basic::required_security(
-                        self.root.child(13).unwrap().len(),
+                        self.root.child(self.arenas, 13).unwrap().len(self.arenas),
                     )
                     .map_err(|r| Self::invalid(Site::new(basic::ROOT, Field::Security), r))?,
                     Action::RootReferences => {
                         self.state = State::References(References {
-                            names: self.root.child(13),
+                            names: self.root.child(self.arenas, 13),
                             position: 0,
                             member: 0,
                             site: Site::new(basic::ROOT, Field::Security),
@@ -601,14 +841,18 @@ impl<'a> Cursor<'a> {
                         })
                     }
                     Action::Definition(owner) => {
-                        let definition = self.definitions().member(owner.ordinal).unwrap().1;
+                        let definition = self
+                            .definitions()
+                            .member(self.arenas, owner.ordinal)
+                            .unwrap()
+                            .1;
                         self.probe(
                             definition
-                                .child(0)
+                                .child(self.arenas, 0)
                                 .unwrap()
-                                .child(4)
+                                .child(self.arenas, 4)
                                 .unwrap()
-                                .text()
+                                .text(self.arenas)
                                 .unwrap(),
                             Probe::Scheme {
                                 definition: owner.ordinal,
@@ -618,13 +862,16 @@ impl<'a> Cursor<'a> {
                     }
                     Action::SchemaMap(owner, field) => {
                         let map = if owner.kind == OwnerKind::Thing {
-                            self.root.child(if field == Field::SchemaDefinitions {
-                                16
-                            } else {
-                                17
-                            })
+                            self.root.child(
+                                self.arenas,
+                                if field == Field::SchemaDefinitions {
+                                    16
+                                } else {
+                                    17
+                                },
+                            )
                         } else {
-                            self.affordance(owner).child(2)
+                            self.affordance(owner).child(self.arenas, 2)
                         };
                         if let Some(map) = map {
                             self.state = State::Resume(Resume::SchemaMap {
@@ -635,14 +882,17 @@ impl<'a> Cursor<'a> {
                         }
                     }
                     Action::Schema(owner, field) => {
-                        let node = self.affordance(owner).child(match field {
-                            Field::PropertySchema => 0,
-                            Field::Input | Field::Subscription => 3,
-                            Field::Output | Field::Data => 4,
-                            Field::DataResponse => 5,
-                            Field::Cancellation => 6,
-                            _ => unreachable!(),
-                        });
+                        let node = self.affordance(owner).child(
+                            self.arenas,
+                            match field {
+                                Field::PropertySchema => 0,
+                                Field::Input | Field::Subscription => 3,
+                                Field::Output | Field::Data => 4,
+                                Field::DataResponse => 5,
+                                Field::Cancellation => 6,
+                                _ => unreachable!(),
+                            },
+                        );
                         if let Some(node) = node {
                             self.start_schema(node, Site::new(owner, field), Resume::Global);
                         }
@@ -662,24 +912,31 @@ impl<'a> Cursor<'a> {
                 }
             }
             State::Resume(Resume::Forms(mut forms)) => {
-                if forms.index == forms.forms.len() {
+                if forms.index == forms.forms.len(self.arenas) {
                     self.state = State::Resume(Resume::Global);
                 } else {
-                    let form = forms.forms.child(forms.index).unwrap();
+                    let form = forms.forms.child(self.arenas, forms.index).unwrap();
                     if forms.security {
                         let mut site = Site::new(forms.owner, Field::FormSecurity);
                         site.index = forms.index;
                         forms.index += 1;
                         self.state = State::References(References {
-                            names: form.child(3),
+                            names: form.child(self.arenas, 3),
                             position: 0,
                             member: 0,
                             site,
                             next: Resume::Forms(forms),
                         });
-                    } else if let Some(ops) = form.child(8).filter(|v| forms.member < v.len()) {
-                        let op = typed::OPERATIONS
-                            [ops.child(forms.member).unwrap().unsigned().unwrap() as usize];
+                    } else if let Some(ops) = form
+                        .child(self.arenas, 8)
+                        .filter(|v| forms.member < v.len(self.arenas))
+                    {
+                        let op = typed::OPERATIONS[ops
+                            .child(self.arenas, forms.member)
+                            .unwrap()
+                            .bind(self.arenas)
+                            .unsigned()
+                            .unwrap() as usize];
                         if !basic::allowed(forms.owner.kind, op) {
                             return Err(Self::invalid(
                                 Site {
@@ -705,12 +962,12 @@ impl<'a> Cursor<'a> {
                 index,
                 mut site,
             }) => {
-                if index == map.len() {
+                if index == map.len(self.arenas) {
                     self.state = State::Resume(Resume::Global);
                 } else {
                     site.index = index;
                     self.start_schema(
-                        map.member(index).unwrap().1,
+                        map.member(self.arenas, index).unwrap().1,
                         site,
                         Resume::SchemaMap {
                             map,
@@ -730,10 +987,10 @@ impl<'a> Cursor<'a> {
                 })
             }
             State::References(mut refs) => {
-                if refs.position == names_len(refs.names) {
+                if refs.position == names_len(self.arenas, refs.names) {
                     self.state = State::Resume(refs.next);
                 } else {
-                    let name = name_at(refs.names.unwrap(), refs.position);
+                    let name = name_at(self.arenas, refs.names.unwrap(), refs.position);
                     refs.position += 1;
                     if let Some(name) = name {
                         refs.member += 1;
@@ -761,7 +1018,7 @@ impl<'a> Cursor<'a> {
                             return Ok(Tick::Blocked);
                         }
                         complete = true;
-                        found = Some(lookup.map.member(lookup.index).unwrap().1);
+                        found = Some(lookup.map.member(self.arenas, lookup.index).unwrap().1);
                     } else {
                         if !self.pay(budget, &[W::DocumentNodes, W::CodecInputBytes])? {
                             self.state = State::Lookup(lookup);
@@ -769,7 +1026,7 @@ impl<'a> Cursor<'a> {
                         }
                         self.trace.key_bytes += 1;
                         if let Some(left) = lookup.first.take() {
-                            let right = lookup.target.as_bytes()[lookup.byte];
+                            let right = lookup.target.borrow(self.arenas).as_bytes()[lookup.byte];
                             if left == right {
                                 lookup.byte += 1;
                             } else {
@@ -777,10 +1034,12 @@ impl<'a> Cursor<'a> {
                                 lookup.index += 1;
                             }
                         } else {
-                            let left = key.as_bytes()[lookup.byte];
+                            let left = key.borrow(self.arenas).as_bytes()[lookup.byte];
                             if lookup.input_target {
                                 lookup.first = Some(left);
-                            } else if left == lookup.target.as_bytes()[lookup.byte] {
+                            } else if left
+                                == lookup.target.borrow(self.arenas).as_bytes()[lookup.byte]
+                            {
                                 lookup.byte += 1;
                             } else {
                                 lookup.key = None;
@@ -793,10 +1052,10 @@ impl<'a> Cursor<'a> {
                         self.state = State::Lookup(lookup);
                         return Ok(Tick::Blocked);
                     }
-                    if lookup.index == lookup.map.len() {
+                    if lookup.index == lookup.map.len(self.arenas) {
                         complete = true;
                     } else {
-                        let key = lookup.map.member(lookup.index).unwrap().0;
+                        let key = lookup.map.member(self.arenas, lookup.index).unwrap().0;
                         if key.len() == lookup.target.len() {
                             lookup.key = Some(key);
                             lookup.byte = 0;
@@ -819,9 +1078,14 @@ impl<'a> Cursor<'a> {
             } => {
                 if text.len()
                     > match probe {
-                        Probe::SchemaType => {
-                            self.frames.last().node.schema_kind().unwrap().name().len()
-                        }
+                        Probe::SchemaType => self
+                            .frames
+                            .last()
+                            .node
+                            .schema_kind(self.arenas)
+                            .unwrap()
+                            .name()
+                            .len(),
                         _ => 6,
                     }
                 {
@@ -858,7 +1122,7 @@ impl<'a> Cursor<'a> {
                         };
                         return Ok(Tick::Blocked);
                     }
-                    bytes[position] = text.as_bytes()[position];
+                    bytes[position] = text.borrow(self.arenas).as_bytes()[position];
                     position += 1;
                     self.state = State::Probe {
                         text,
@@ -869,8 +1133,12 @@ impl<'a> Cursor<'a> {
                 }
             }
             State::Combo(mut combo) => {
-                if combo.position < names_len(combo.names[combo.group]) {
-                    if let Some(name) = name_at(combo.names[combo.group].unwrap(), combo.position) {
+                if combo.position < names_len(self.arenas, combo.names[combo.group]) {
+                    if let Some(name) = name_at(
+                        self.arenas,
+                        combo.names[combo.group].unwrap(),
+                        combo.position,
+                    ) {
                         if name.is_empty() {
                             combo.empty[combo.group].get_or_insert(combo.counts[combo.group]);
                         }
@@ -969,13 +1237,17 @@ impl<'a> Cursor<'a> {
             }
             State::Resume(Resume::Schema) => {
                 let frame = self.frames.last_mut();
-                let node = frame.node;
+                let id = frame.node;
+                let node = id.bind(self.arenas);
                 match frame
                     .walk
                     .action(Access.one_of_count(node), Access.child_count(node))
                 {
                     schema::Action::Type => {
-                        if let Some(text) = Access.data_type(node) {
+                        if let Some(text) = id
+                            .child(self.arenas, super::schema_fields::Field::Type as usize)
+                            .and_then(|v| v.text(self.arenas))
+                        {
                             self.probe(text, Probe::SchemaType);
                         } else {
                             self.advance_schema();
@@ -993,7 +1265,7 @@ impl<'a> Cursor<'a> {
                             Access.child(node, index).1
                         };
                         frame.walk.advance();
-                        self.state = State::Enter(child);
+                        self.state = State::Enter(NodeId(child.node_id()));
                     }
                     schema::Action::Flags => {
                         self.schema_rule(schema::check_flags(Access.flags(node)))?;
@@ -1047,8 +1319,8 @@ impl<'a> Cursor<'a> {
                     self.advance_schema();
                 } else {
                     self.lookup(
-                        self.frames.last().node.extras(),
-                        schema::FIELDS[position].name(),
+                        self.frames.last().node.extras(self.arenas),
+                        Text::Static(schema::FIELDS[position].name()),
                         false,
                         Purpose::Unsigned { position, values },
                     );
@@ -1059,18 +1331,19 @@ impl<'a> Cursor<'a> {
                 mut values,
                 text,
             } => {
-                self.number_limit(text)?;
+                self.number_limit(text.borrow(self.arenas))?;
+                let value = text.borrow(self.arenas);
                 let before = *self.lifetime;
                 let parses = &mut self.trace.projections[0];
                 let progress = projection_step::project(
-                    text,
+                    value,
                     self.limits.number,
                     budget,
                     self.lifetime,
                     cancelled,
                     || {
                         *parses += 1;
-                        text.parse::<u64>().ok()
+                        value.parse::<u64>().ok()
                     },
                 );
                 self.trace.work[1] += before - *self.lifetime;
@@ -1102,8 +1375,8 @@ impl<'a> Cursor<'a> {
                     };
                 } else {
                     self.lookup(
-                        self.frames.last().node.extras(),
-                        schema::NUMERIC_FIELDS[position].name(),
+                        self.frames.last().node.extras(self.arenas),
+                        Text::Static(schema::NUMERIC_FIELDS[position].name()),
                         false,
                         Purpose::Numeric { position, numbers },
                     );
@@ -1117,26 +1390,27 @@ impl<'a> Cursor<'a> {
                 let ceiling = self.limits.number;
                 let mut lexical = None;
                 let parses = &mut self.trace.projections[1];
-                let progress = cursor.step(numbers, |text| {
-                    if text.len() > ceiling {
-                        lexical = Some(Cause::Number {
-                            observed: text.len(),
+                let progress =
+                    cursor.step(numbers.map(|t| t.map(|t| t.borrow(self.arenas))), |text| {
+                        if text.len() > ceiling {
+                            lexical = Some(Cause::Number {
+                                observed: text.len(),
+                                ceiling,
+                            });
+                            return ProjectionProgress::Limit;
+                        }
+                        projection_step::project(
+                            text,
                             ceiling,
-                        });
-                        return ProjectionProgress::Limit;
-                    }
-                    projection_step::project(
-                        text,
-                        ceiling,
-                        budget,
-                        self.lifetime,
-                        &mut *cancelled,
-                        || {
-                            *parses += 1;
-                            text.parse::<f64>().ok()
-                        },
-                    )
-                });
+                            budget,
+                            self.lifetime,
+                            &mut *cancelled,
+                            || {
+                                *parses += 1;
+                                text.parse::<f64>().ok()
+                            },
+                        )
+                    });
                 self.trace.work[1] += before - *self.lifetime;
                 match progress {
                     ProjectionProgress::Pending => {
@@ -1156,20 +1430,20 @@ impl<'a> Cursor<'a> {
         Ok(Tick::Advanced)
     }
 }
-fn names_len(names: Option<View<'_>>) -> usize {
-    names.map_or(0, |v| match v.literal_kind() {
+fn names_len(arenas: Sealed<'_>, names: Option<NodeId>) -> usize {
+    names.map_or(0, |v| match v.literal_kind(arenas) {
         Some(Kind::String) => 1,
-        Some(Kind::Array) => v.len(),
+        Some(Kind::Array) => v.len(arenas),
         _ => 0,
     })
 }
-fn name_at(names: View<'_>, position: usize) -> Option<&str> {
-    let v = if names.literal_kind() == Some(Kind::String) {
+fn name_at(arenas: Sealed<'_>, names: NodeId, position: usize) -> Option<Text> {
+    let v = if names.literal_kind(arenas) == Some(Kind::String) {
         names
     } else {
-        names.child(position).unwrap()
+        names.child(arenas, position).unwrap()
     };
-    (v.literal_kind() == Some(Kind::String)).then(|| v.text().unwrap())
+    (v.literal_kind(arenas) == Some(Kind::String)).then(|| v.text(arenas).unwrap())
 }
 fn frame_cause(error: FrameError) -> Cause {
     match error {
@@ -1178,4 +1452,19 @@ fn frame_cause(error: FrameError) -> Cause {
         FrameError::Allocation => Cause::Allocation,
     }
 }
-const _: () = assert!(!mem::needs_drop::<Frame<'static>>());
+const _: () = assert!(!mem::needs_drop::<Frame>());
+
+fn state_phase(state: &State) -> Phase {
+    match state {
+        State::Lookup(_) => Phase::Lookup,
+        State::Probe { .. } => Phase::Text,
+        State::Enter(_) | State::Resume(Resume::Schema) => Phase::Schema,
+        State::Push(_) => Phase::Frames,
+        State::Unsigned { .. }
+        | State::UnsignedNumber { .. }
+        | State::NumericGather { .. }
+        | State::Numeric { .. } => Phase::Numeric,
+        _ => Phase::Walk,
+    }
+}
+const _: () = assert!(!mem::needs_drop::<Continuation>());

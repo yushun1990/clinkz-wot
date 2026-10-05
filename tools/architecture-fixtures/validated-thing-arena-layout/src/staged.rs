@@ -3,6 +3,7 @@
 //! each transferred element before `copy_one`; no input-sized memcpy occurs.
 
 use super::{Account, Accounting, Arena, Error, Footprint, RetainedEdge, RetainedNode};
+use core::ops::{Deref, DerefMut};
 use core::{mem, ptr};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -398,9 +399,7 @@ impl<F> Storage<F> {
                 accounting: &mut self.accounting,
                 allocations: &mut self.allocations,
                 releases: &mut self.releases,
-                arena: Arena::default(),
-                replacement: None,
-                copied: 0,
+                workspace: Workspace::Owned(FrameWorkspace::default()),
             },
         )
     }
@@ -519,22 +518,56 @@ pub struct Frames<'a, G> {
     accounting: &'a mut Accounting,
     allocations: &'a mut u64,
     releases: &'a mut u64,
+    workspace: Workspace<'a, G>,
+}
+
+struct FrameWorkspace<G> {
     arena: Arena<G>,
     replacement: Option<Arena<G>>,
     copied: usize,
 }
+impl<G> Default for FrameWorkspace<G> {
+    fn default() -> Self {
+        Self {
+            arena: Arena::default(),
+            replacement: None,
+            copied: 0,
+        }
+    }
+}
+enum Workspace<'a, G> {
+    Owned(FrameWorkspace<G>),
+    Lent(&'a mut FrameWorkspace<G>),
+}
+impl<G> Deref for Workspace<'_, G> {
+    type Target = FrameWorkspace<G>;
+    fn deref(&self) -> &Self::Target {
+        match self {
+            Self::Owned(w) => w,
+            Self::Lent(w) => w,
+        }
+    }
+}
+impl<G> DerefMut for Workspace<'_, G> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        match self {
+            Self::Owned(w) => w,
+            Self::Lent(w) => w,
+        }
+    }
+}
 impl<G> Frames<'_, G> {
     pub fn len(&self) -> usize {
-        self.arena.length
+        self.workspace.arena.length
     }
     pub fn is_empty(&self) -> bool {
         self.len() == 0
     }
     pub fn capacity(&self) -> usize {
-        self.arena.capacity
+        self.workspace.arena.capacity
     }
     pub fn check_grow(&self, capacity: usize) -> Result<(), Error> {
-        assert!(self.replacement.is_none() && capacity > self.capacity());
+        assert!(self.workspace.replacement.is_none() && capacity > self.capacity());
         self.accounting
             .request::<G>(capacity, Account::Temporary)
             .map(|_| ())
@@ -542,53 +575,54 @@ impl<G> Frames<'_, G> {
     /// Caller prepays one CleanupItems/lifetime unit. Allocate an EMPTY
     /// replacement through the same checked Layout and reservation body.
     pub fn begin_grow(&mut self, capacity: usize) -> Result<(), Error> {
-        assert!(self.replacement.is_none() && capacity > self.capacity());
+        assert!(self.workspace.replacement.is_none() && capacity > self.capacity());
         let mut new = Arena::default();
         self.accounting
             .replace(&mut new, capacity, Account::Temporary)?;
         *self.allocations += 1;
-        self.replacement = Some(new);
-        self.copied = 0;
+        self.workspace.replacement = Some(new);
+        self.workspace.copied = 0;
         Ok(())
     }
     pub fn transferring(&self) -> bool {
-        self.replacement.is_some()
+        self.workspace.replacement.is_some()
     }
     pub fn copy_pending(&self) -> bool {
-        self.transferring() && self.copied < self.len()
+        self.transferring() && self.workspace.copied < self.len()
     }
     /// One already-paid move, or fixed completion/release. Mutation and frame
     /// extraction remain forbidden until both representations stop coexisting.
     pub fn copy_one(&mut self) {
-        let new = self.replacement.as_mut().unwrap();
-        if self.copied < self.arena.length {
+        let workspace = &mut *self.workspace;
+        let new = workspace.replacement.as_mut().unwrap();
+        if workspace.copied < workspace.arena.length {
             // SAFETY: same initialized/distinct one-element ranges as Storage.
-            unsafe { copy_element(&self.arena, new, self.copied) };
-            self.copied += 1;
+            unsafe { copy_element(&workspace.arena, new, workspace.copied) };
+            workspace.copied += 1;
         } else {
-            let new = self.replacement.take().unwrap();
+            let new = self.workspace.replacement.take().unwrap();
             self.release_current();
-            self.arena = new;
+            self.workspace.arena = new;
         }
     }
     pub fn push(&mut self, frame: G) {
         assert!(!self.transferring());
-        self.arena.push(frame).unwrap();
+        self.workspace.arena.push(frame).unwrap();
     }
     pub fn last(&self) -> &G {
         assert!(!self.transferring());
-        self.arena.as_slice().last().unwrap()
+        self.workspace.arena.as_slice().last().unwrap()
     }
     pub fn last_mut(&mut self) -> &mut G {
         assert!(!self.transferring() && !self.is_empty());
         // SAFETY: unique borrow of the initialized last element.
-        unsafe { &mut *self.arena.pointer.as_ptr().add(self.len() - 1) }
+        unsafe { &mut *self.workspace.arena.pointer.as_ptr().add(self.len() - 1) }
     }
     pub fn pop(&mut self) -> G {
         assert!(!self.transferring() && !self.is_empty());
-        self.arena.length -= 1;
+        self.workspace.arena.length -= 1;
         // SAFETY: move out one initialized element, shortening the prefix.
-        unsafe { self.arena.pointer.as_ptr().add(self.len()).read() }
+        unsafe { self.workspace.arena.pointer.as_ptr().add(self.len()).read() }
     }
     pub fn resources(&self) -> FrameResources {
         FrameResources {
@@ -602,13 +636,14 @@ impl<G> Frames<'_, G> {
         }
     }
     fn release_current(&mut self) {
-        if self.arena.request_bytes != 0 {
+        if self.workspace.arena.request_bytes != 0 {
             *self.releases += 1;
         }
-        self.accounting.release(&mut self.arena, Account::Temporary);
+        self.accounting
+            .release(&mut self.workspace.arena, Account::Temporary);
     }
     pub fn clear(&mut self) {
-        if let Some(mut new) = self.replacement.take() {
+        if let Some(mut new) = self.workspace.replacement.take() {
             *self.releases += 1;
             self.accounting.release(&mut new, Account::Temporary);
         }
@@ -617,7 +652,72 @@ impl<G> Frames<'_, G> {
 }
 impl<G> Drop for Frames<'_, G> {
     fn drop(&mut self) {
-        self.clear();
+        if matches!(self.workspace, Workspace::Owned(_)) {
+            self.clear();
+        }
+    }
+}
+
+/// One movable accounting/source owner and its existing traversal site.
+/// Suspended G values must contain indices/scalars, never borrows of this owner.
+/// Lending a step facade does not release the workspace; dropping this owner
+/// releases frames before the source, including an unfinished grow overlap.
+pub struct Inspection<G> {
+    storage: Option<Storage<()>>,
+    workspace: FrameWorkspace<G>,
+}
+impl<G> Inspection<G> {
+    pub fn new(storage: Storage<()>) -> Self {
+        assert!(storage.sealed && storage.transfer.is_none());
+        assert_eq!(storage.frames.capacity, 0);
+        Self {
+            storage: Some(storage),
+            workspace: FrameWorkspace::default(),
+        }
+    }
+    pub fn parts(&mut self) -> (Sealed<'_>, Frames<'_, G>) {
+        let storage = self.storage.as_mut().unwrap();
+        (
+            Sealed(&storage.retained),
+            Frames {
+                accounting: &mut storage.accounting,
+                allocations: &mut storage.allocations,
+                releases: &mut storage.releases,
+                workspace: Workspace::Lent(&mut self.workspace),
+            },
+        )
+    }
+    pub fn into_storage(mut self) -> Storage<()> {
+        self.parts().1.clear();
+        self.storage.take().unwrap()
+    }
+    pub fn footprint(&self) -> Footprint {
+        self.storage.as_ref().unwrap().footprint()
+    }
+    pub fn allocations(&self) -> u64 {
+        self.storage.as_ref().unwrap().allocations()
+    }
+    pub fn releases(&self) -> u64 {
+        self.storage.as_ref().unwrap().releases()
+    }
+    pub fn resources(&self) -> FrameResources {
+        let a = &self.storage.as_ref().unwrap().accounting;
+        FrameResources {
+            source_live: a.source_live,
+            temporary_live: a.temporary_live,
+            live: a.ledger.live_bytes(),
+            temporary_peak: a.temporary_peak,
+            conversion_peak: a.conversion_peak,
+            reservation_peak: a.ledger.peak_live_bytes(),
+            largest_request: a.largest_request,
+        }
+    }
+}
+impl<G> Drop for Inspection<G> {
+    fn drop(&mut self) {
+        if self.storage.is_some() {
+            self.parts().1.clear();
+        }
     }
 }
 

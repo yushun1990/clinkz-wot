@@ -8,7 +8,7 @@ use clinkz_wot_foundation::{WorkBudget, WorkClass as W};
 use core::{cmp::Ordering, mem};
 use serde_json::Value;
 pub use validated_thing_arena_layout_probe::Error as FrameError;
-pub use validated_thing_arena_layout_probe::staged::{FrameResources, Frames};
+pub use validated_thing_arena_layout_probe::staged::{FrameResources, Frames, Inspection};
 pub use validated_thing_arena_layout_probe::staged::{Rebuild, Sealed, Site};
 use validated_thing_arena_layout_probe::{Error as ArenaError, staged::Storage};
 pub use validated_thing_arena_layout_probe::{
@@ -1666,6 +1666,13 @@ pub struct OwnedValue {
     lifetime: u64,
 }
 impl OwnedValue {
+    pub fn into_inspection<F>(self) -> OwnedInspection<F> {
+        OwnedInspection {
+            storage: Inspection::new(self.storage),
+            trace: self.trace,
+            lifetime: self.lifetime,
+        }
+    }
     /// Empty transaction for direct typed TD construction. No literal source,
     /// parser, allocation, or second ledger is introduced by this entry.
     pub fn empty_for_fixture(limits: Limits) -> Self {
@@ -1744,6 +1751,43 @@ impl OwnedValue {
     }
     pub fn rollback_for_fixture(&mut self) {
         self.storage.clear();
+    }
+}
+
+/// Fixture-only movable semantic workspace. The original ledger, source and
+/// lifetime are transferred together; a step can borrow them without making
+/// the stored continuation self-referential.
+pub struct OwnedInspection<F> {
+    storage: Inspection<F>,
+    trace: Trace,
+    lifetime: u64,
+}
+impl<F> OwnedInspection<F> {
+    pub fn parts(&mut self) -> (Sealed<'_>, &mut u64, Frames<'_, F>) {
+        let (arenas, frames) = self.storage.parts();
+        (arenas, &mut self.lifetime, frames)
+    }
+    pub fn into_value(self) -> OwnedValue {
+        OwnedValue {
+            storage: self.storage.into_storage(),
+            trace: self.trace,
+            lifetime: self.lifetime,
+        }
+    }
+    pub fn lifetime_remaining(&self) -> u64 {
+        self.lifetime
+    }
+    pub fn footprint(&self) -> Footprint {
+        self.storage.footprint()
+    }
+    pub fn allocations(&self) -> u64 {
+        self.storage.allocations()
+    }
+    pub fn releases(&self) -> u64 {
+        self.storage.releases()
+    }
+    pub fn resources(&self) -> FrameResources {
+        self.storage.resources()
     }
 }
 
