@@ -28,6 +28,7 @@ pub enum Stage {
     Basic(schema_tree::Phase),
     Canonical(Pass),
     Seal,
+    ThingBasic(super::thing_step::Phase),
 }
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct ConstructionTrace {
@@ -35,6 +36,7 @@ pub struct ConstructionTrace {
     pub basic: schema_tree::Trace,
     pub canonical: Trace,
     pub seal: [u64; 4],
+    pub thing_basic: super::thing_step::Trace,
 }
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ConstructionCause {
@@ -42,6 +44,7 @@ pub enum ConstructionCause {
     Basic(schema_tree::Cause),
     Canonical(Cause),
     Seal(ResourceCause),
+    ThingBasic(super::thing_step::Cause),
 }
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct ConstructionFailure {
@@ -194,7 +197,24 @@ fn rollback(
 pub(crate) fn from_typed_thing(
     input: &crate::thing::Thing,
     limits: Limits,
+    control: impl FnMut(Stage) -> (WorkBudget, bool),
+) -> Result<(typed::NormalizedThing, ConstructionTrace), ConstructionFailure> {
+    typed_thing(input, limits, control, false)
+}
+#[allow(clippy::result_large_err)]
+pub(crate) fn from_typed_thing_basic(
+    input: &crate::thing::Thing,
+    limits: Limits,
+    control: impl FnMut(Stage) -> (WorkBudget, bool),
+) -> Result<(typed::NormalizedThing, ConstructionTrace), ConstructionFailure> {
+    typed_thing(input, limits, control, true)
+}
+#[allow(clippy::result_large_err)]
+fn typed_thing(
+    input: &crate::thing::Thing,
+    limits: Limits,
     mut control: impl FnMut(Stage) -> (WorkBudget, bool),
+    with_basic: bool,
 ) -> Result<(typed::NormalizedThing, ConstructionTrace), ConstructionFailure> {
     use validated_thing_value_construction_probe::SealProgress;
     let mut owner = OwnedValue::empty_for_fixture(limits);
@@ -246,6 +266,33 @@ pub(crate) fn from_typed_thing(
             Stage::Seal,
             trace,
         ));
+    }
+    if with_basic {
+        let result = {
+            let mut cursor = super::thing_step::Cursor::from_owner(&mut owner, limits);
+            loop {
+                let (mut budget, cancel) = control(Stage::ThingBasic(cursor.phase()));
+                match cursor.step(&mut budget, || cancel) {
+                    super::thing_step::Progress::Pending(next) => cursor = next,
+                    super::thing_step::Progress::Complete(work) => {
+                        trace.thing_basic = work;
+                        break Ok(());
+                    }
+                    super::thing_step::Progress::Failed(failure) => {
+                        trace.thing_basic = failure.trace;
+                        break Err((failure.cause, failure.phase));
+                    }
+                }
+            }
+        };
+        if let Err((cause, phase)) = result {
+            return Err(rollback(
+                owner,
+                ConstructionCause::ThingBasic(cause),
+                Stage::ThingBasic(phase),
+                trace,
+            ));
+        }
     }
     Ok((typed::NormalizedThing::new(owner), trace))
 }

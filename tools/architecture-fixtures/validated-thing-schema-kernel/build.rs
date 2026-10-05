@@ -48,6 +48,7 @@ fn main() {
         "schema_tree",
         "schema_build",
         "thing_build",
+        "thing_step",
     ] {
         let path = fixture.join("src").join(format!("{module}.rs"));
         println!("cargo:rerun-if-changed={}", path.display());

@@ -1706,6 +1706,11 @@ impl OwnedValue {
         let (owner, frames) = self.storage.inspection_parts();
         (View { owner, node: 0 }, &mut self.lifetime, frames)
     }
+    /// Same disjoint source/work/frame handoff for canonical typed nodes.
+    pub fn canonical_inspection_parts<F>(&mut self) -> (Sealed<'_>, &mut u64, Frames<'_, F>) {
+        let (owner, frames) = self.storage.inspection_parts();
+        (owner, &mut self.lifetime, frames)
+    }
     pub fn lifetime_remaining(&self) -> u64 {
         self.lifetime
     }
