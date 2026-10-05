@@ -6,7 +6,7 @@ use super::{
     schema_fields::{Field, Shape},
     schema_kernel::SchemaKind,
     schema_step::{self, Fields, Machine, Outcome},
-    schema_tree,
+    schema_tree, thing_build as typed,
 };
 use clinkz_wot_foundation::{WorkBudget, WorkClass as W};
 use core::mem;
@@ -188,6 +188,68 @@ fn rollback(
     }
 }
 
+/// Direct typed entry into the same emitter and owning transaction. The
+/// synchronous Basic oracle is intentionally outside this construction proof.
+#[allow(clippy::result_large_err)]
+pub(crate) fn from_typed_thing(
+    input: &crate::thing::Thing,
+    limits: Limits,
+    mut control: impl FnMut(Stage) -> (WorkBudget, bool),
+) -> Result<(typed::NormalizedThing, ConstructionTrace), ConstructionFailure> {
+    use validated_thing_value_construction_probe::SealProgress;
+    let mut owner = OwnedValue::empty_for_fixture(limits);
+    let mut trace = ConstructionTrace::default();
+    let result = {
+        let mut cursor = Cursor::from_thing(&mut owner, input, limits);
+        loop {
+            let (mut budget, cancel) = control(Stage::Canonical(cursor.pass()));
+            match cursor.step(&mut budget, || cancel) {
+                Progress::Pending(next) => cursor = next,
+                Progress::Complete(done) => {
+                    trace.canonical = done;
+                    break Ok(());
+                }
+                Progress::Failed(failure) => {
+                    trace.canonical = failure.trace;
+                    break Err((
+                        ConstructionCause::Canonical(failure.cause),
+                        Stage::Canonical(failure.pass),
+                    ));
+                }
+            }
+        }
+    };
+    if let Err((cause, stage)) = result {
+        return Err(rollback(owner, cause, stage, trace));
+    }
+    let result = {
+        let mut cursor = owner.reseal();
+        loop {
+            let (mut budget, cancel) = control(Stage::Seal);
+            match cursor.step(&mut budget, cancel) {
+                SealProgress::Pending(next) => cursor = next,
+                SealProgress::Complete(work) => {
+                    trace.seal = work;
+                    break Ok(());
+                }
+                SealProgress::Failed { cause, work } => {
+                    trace.seal = work;
+                    break Err(cause);
+                }
+            }
+        }
+    };
+    if let Err(cause) = result {
+        return Err(rollback(
+            owner,
+            ConstructionCause::Seal(cause),
+            Stage::Seal,
+            trace,
+        ));
+    }
+    Ok((typed::NormalizedThing::new(owner), trace))
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Pass {
     Construction,
@@ -201,8 +263,8 @@ pub enum Cause {
 }
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct Trace {
-    /// DocumentNodes, input bytes, output bytes, schema nodes, cleanup.
-    pub work: [u64; 5],
+    /// DocumentNodes, input bytes, output bytes, schema nodes, cleanup, URI bytes.
+    pub work: [u64; 6],
     pub schemas: [u64; 2],
     pub field_parses: [u64; 3],
     pub grow_copies: u64,
@@ -219,6 +281,7 @@ pub struct Failure {
 
 // Boxing the paid field index would introduce an unauthorized fifth site.
 #[allow(clippy::large_enum_variant)]
+#[derive(Clone, Copy)]
 enum Task<'a> {
     Schema(Literal<'a>),
     Literal(Literal<'a>),
@@ -228,6 +291,20 @@ enum Task<'a> {
     Map(Literal<'a>, bool),
     Entry(&'a str, Literal<'a>, bool),
     Extras(Extras<'a>),
+    Typed(typed::Task<'a>),
+}
+#[derive(Clone, Copy)]
+enum Root<'a> {
+    Schema(Literal<'a>),
+    Thing(&'a crate::thing::Thing),
+}
+impl<'a> Root<'a> {
+    fn task(self) -> Task<'a> {
+        match self {
+            Self::Schema(value) => Task::Schema(value),
+            Self::Thing(value) => Task::Typed(typed::Task::Thing(value)),
+        }
+    }
 }
 #[allow(clippy::large_enum_variant)]
 enum Mode<'a> {
@@ -241,6 +318,7 @@ enum Mode<'a> {
     },
     Text(&'a str),
     Leaf,
+    Typed(typed::Children<'a>),
 }
 struct Frame<'a> {
     mode: Mode<'a>,
@@ -252,6 +330,96 @@ struct Frame<'a> {
 struct Link {
     at: usize,
     index: u32,
+}
+/// Selection over a caller JSON map pays each iterator transition and each
+/// compared byte. It keeps only borrowed handles in the existing frame owner;
+/// downstream preserve_order cannot require a sort/key allocation category.
+struct Selection<'a> {
+    iter: serde_json::map::Iter<'a>,
+    previous: Option<&'a str>,
+    best: Option<(&'a str, &'a serde_json::Value)>,
+    candidate: Option<(&'a str, &'a serde_json::Value)>,
+    phase: u8,
+    byte: usize,
+}
+impl<'a> Selection<'a> {
+    fn new(
+        map: &'a serde_json::Map<alloc::string::String, serde_json::Value>,
+        previous: Option<&'a str>,
+    ) -> Self {
+        Self {
+            iter: map.iter(),
+            previous,
+            best: None,
+            candidate: None,
+            phase: 0,
+            byte: 0,
+        }
+    }
+    fn reads_byte(&self) -> bool {
+        if self.phase == 0 {
+            return false;
+        }
+        let left = self.candidate.unwrap().0;
+        let right = if self.phase == 1 {
+            self.previous.unwrap()
+        } else {
+            self.best.unwrap().0
+        };
+        self.byte < left.len().min(right.len())
+    }
+    fn tick(&mut self) -> Option<(&'a str, &'a serde_json::Value)> {
+        use core::cmp::Ordering;
+        if self.phase == 0 {
+            let Some((key, value)) = self.iter.next() else {
+                return Some(self.best.unwrap());
+            };
+            self.candidate = Some((key.as_str(), value));
+            self.byte = 0;
+            if self.previous.is_some() {
+                self.phase = 1;
+            } else if self.best.is_some() {
+                self.phase = 2;
+            } else {
+                self.best = self.candidate;
+            }
+            return None;
+        }
+        let left = self.candidate.unwrap().0;
+        let right = if self.phase == 1 {
+            self.previous.unwrap()
+        } else {
+            self.best.unwrap().0
+        };
+        let ordering = match (
+            left.as_bytes().get(self.byte),
+            right.as_bytes().get(self.byte),
+        ) {
+            (Some(a), Some(b)) if a == b => {
+                self.byte += 1;
+                return None;
+            }
+            (Some(a), Some(b)) => a.cmp(b),
+            (Some(_), None) => Ordering::Greater,
+            (None, Some(_)) => Ordering::Less,
+            (None, None) => Ordering::Equal,
+        };
+        if self.phase == 1 && ordering == Ordering::Greater {
+            if self.best.is_some() {
+                self.phase = 2;
+                self.byte = 0;
+            } else {
+                self.best = self.candidate;
+                self.phase = 0;
+            }
+        } else {
+            if self.phase == 2 && ordering == Ordering::Less {
+                self.best = self.candidate;
+            }
+            self.phase = 0;
+        }
+        None
+    }
 }
 #[allow(clippy::large_enum_variant)]
 enum State<'a> {
@@ -274,10 +442,11 @@ enum State<'a> {
         position: usize,
     },
     Next,
+    Select(Selection<'a>, Link),
     Moving,
 }
 pub struct Cursor<'a> {
-    root: Literal<'a>,
+    root: Root<'a>,
     lifetime: &'a mut u64,
     build: Rebuild<'a, Frame<'a>>,
     limits: Limits,
@@ -300,7 +469,7 @@ impl<'a> Cursor<'a> {
     pub fn new(owner: &'a mut OwnedValue, limits: Limits) -> Self {
         let (root, lifetime, build) = owner.rebuild_parts();
         Self {
-            root,
+            root: Root::Schema(root),
             lifetime,
             build,
             limits,
@@ -311,6 +480,16 @@ impl<'a> Cursor<'a> {
             bytes: 0,
             trace: Trace::default(),
         }
+    }
+    pub fn from_thing(
+        owner: &'a mut OwnedValue,
+        input: &'a crate::thing::Thing,
+        limits: Limits,
+    ) -> Self {
+        let mut cursor = Self::new(owner, limits);
+        cursor.root = Root::Thing(input);
+        cursor.state = State::Enter(cursor.root.task(), None);
+        cursor
     }
     pub fn pass(&self) -> Pass {
         self.pass
@@ -348,7 +527,13 @@ impl<'a> Cursor<'a> {
         })
     }
     fn pay(&mut self, budget: &mut WorkBudget, classes: &[W]) -> Result<bool, Cause> {
-        if classes.iter().any(|&class| budget.remaining(class) == 0) {
+        if classes.iter().any(|&class| {
+            budget.remaining(class)
+                < classes
+                    .iter()
+                    .filter(|&&required| required == class)
+                    .count() as u64
+        }) {
             return Ok(false);
         }
         if *self.lifetime < classes.len() as u64 {
@@ -362,6 +547,7 @@ impl<'a> Cursor<'a> {
                 W::CodecOutputBytes => 2,
                 W::JsonSchemaNodes => 3,
                 W::CleanupItems => 4,
+                W::UriBytes => 5,
                 _ => unreachable!(),
             }] += 1;
         }
@@ -474,15 +660,35 @@ impl<'a> Cursor<'a> {
             }
             _ => None,
         };
-        if let Some(site) = site {
-            if !self.ensure(site, budget)? {
-                return Ok(None);
-            }
+        if let Some(site) = site
+            && !self.ensure(site, budget)?
+        {
+            return Ok(None);
         }
         // The field machine pays its own work. Every other transition checks
         // all its classes together, so a blocked poll spends no partial debit.
         let classes: &[W] = match &self.state {
             State::Project(..) => &[],
+            State::Select(..) => &[],
+            State::Enter(Task::Typed(typed::Task::Schema(_)), _) => {
+                &[W::DocumentNodes, W::JsonSchemaNodes]
+            }
+            State::Text {
+                node,
+                text,
+                position,
+            } if *position < text.len()
+                && (typed::URI..=typed::BASE_TEMPLATE)
+                    .contains(&self.build.node(*node as usize).kind) =>
+            {
+                &[
+                    W::DocumentNodes,
+                    W::CodecInputBytes,
+                    W::CodecOutputBytes,
+                    W::UriBytes,
+                    W::UriBytes,
+                ]
+            }
             State::Text { text, position, .. } if *position < text.len() => {
                 &[W::DocumentNodes, W::CodecInputBytes, W::CodecOutputBytes]
             }
@@ -588,6 +794,29 @@ impl<'a> Cursor<'a> {
             }
             State::Enter(task, link) => {
                 let frame = match task {
+                    Task::Typed(task) => {
+                        let description = typed::describe(task);
+                        if description.kind == Kind::Number as u32
+                            && description.text.unwrap().len() > self.limits.number
+                        {
+                            return Err(Cause::Resource(ResourceCause::DecodedNumber));
+                        }
+                        // The strict source is already u32-bounded; direct
+                        // typed input needs this check before header casts.
+                        u32::try_from(description.count)
+                            .map_err(|_| Cause::Resource(ResourceCause::Arithmetic))?;
+                        if let Some(text) = description.text {
+                            u32::try_from(text.len())
+                                .map_err(|_| Cause::Resource(ResourceCause::Arithmetic))?;
+                        }
+                        if matches!(task, typed::Task::Schema(_)) {
+                            self.trace.schemas[usize::from(self.pass == Pass::Equivalence)] += 1;
+                        }
+                        let mode = description
+                            .text
+                            .map_or(Mode::Typed(description.children), Mode::Text);
+                        self.header(mode, description.kind, description.count, description.bits)
+                    }
                     Task::Text(text, kind) => self.header(Mode::Text(text), kind as u32, 0, None),
                     Task::Scalar(kind, bits) => self.header(Mode::Leaf, kind, 0, Some(bits)),
                     Task::List(list, schemas) => self.header(
@@ -755,7 +984,7 @@ impl<'a> Cursor<'a> {
                     self.nodes = 0;
                     self.edges = 0;
                     self.bytes = 0;
-                    self.state = State::Enter(Task::Schema(self.root), None);
+                    self.state = State::Enter(self.root.task(), None);
                 } else {
                     let frame = self.build.frame_mut();
                     if frame.position == frame.node.edge_count as usize {
@@ -763,7 +992,18 @@ impl<'a> Cursor<'a> {
                         self.state = State::Next;
                     } else {
                         let index = frame.position;
+                        if let Mode::Typed(typed::Children::Json { map, previous }) = &frame.mode {
+                            let selection = Selection::new(map, *previous);
+                            let link = Link {
+                                at: frame.node.first_edge as usize + index,
+                                index: index as u32,
+                            };
+                            frame.position += 1;
+                            self.state = State::Select(selection, link);
+                            return Ok(Some(false));
+                        }
                         let task = match &mut frame.mode {
+                            Mode::Typed(children) => children.next(index).map(Task::Typed),
                             Mode::Schema(fields) => {
                                 if index == Field::ALL.len() {
                                     Some(Task::Extras(fields.context.extras))
@@ -821,6 +1061,33 @@ impl<'a> Cursor<'a> {
                             self.state = State::Next;
                         }
                     }
+                }
+            }
+            State::Select(mut selection, link) => {
+                let classes: &[W] = if selection.reads_byte() {
+                    // Both operands are caller-owned key bytes. Precharge
+                    // the pair before either read, just as URI pairs do.
+                    &[W::DocumentNodes, W::CodecInputBytes, W::CodecInputBytes]
+                } else {
+                    &[W::DocumentNodes]
+                };
+                if !self.pay(budget, classes)? {
+                    self.state = State::Select(selection, link);
+                    return Ok(None);
+                }
+                if let Some((key, value)) = selection.tick() {
+                    let Mode::Typed(typed::Children::Json { previous, .. }) =
+                        &mut self.build.frame_mut().mode
+                    else {
+                        unreachable!()
+                    };
+                    *previous = Some(key);
+                    self.state = State::Enter(
+                        Task::Typed(typed::Task::Entry(key, typed::Atom::Value(value))),
+                        Some(link),
+                    );
+                } else {
+                    self.state = State::Select(selection, link);
                 }
             }
             State::Moving => unreachable!(),
@@ -995,6 +1262,16 @@ pub struct View<'a> {
     node: usize,
 }
 impl<'a> View<'a> {
+    pub(crate) fn root(owner: Sealed<'a>) -> Self {
+        Self { owner, node: 0 }
+    }
+    pub fn kind_for_fixture(self) -> u32 {
+        self.record().kind
+    }
+    pub fn original_index(self, index: usize) -> Option<u32> {
+        (index < self.len())
+            .then(|| self.owner.edges()[self.record().first_edge as usize + index].original_index)
+    }
     fn record(self) -> Node {
         self.owner.nodes()[self.node]
     }
@@ -1058,7 +1335,9 @@ impl<'a> View<'a> {
         Some((entry.child(0)?.text()?, entry.child(1)?))
     }
     pub fn text(self) -> Option<&'a str> {
-        if !matches!(self.literal_kind(), Some(Kind::String | Kind::Number)) {
+        if !matches!(self.literal_kind(), Some(Kind::String | Kind::Number))
+            && !(typed::URI..=typed::BASE_TEMPLATE).contains(&self.record().kind)
+        {
             return None;
         }
         let n = self.record();
