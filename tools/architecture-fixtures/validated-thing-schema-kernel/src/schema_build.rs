@@ -82,7 +82,7 @@ pub fn from_json(
                 trace.literal = failure.trace;
                 return Err(ConstructionFailure {
                     cause: ConstructionCause::Literal(failure.cause),
-                    stage,
+                    stage: Stage::Literal(failure.phase),
                     trace,
                     resources: failure.resources,
                     lifetime_remaining: limits.lifetime
@@ -107,7 +107,10 @@ pub fn from_json(
                 }
                 schema_tree::Progress::Failed(failure) => {
                     trace.basic = failure.trace;
-                    break Err((ConstructionCause::Basic(failure.cause), stage));
+                    break Err((
+                        ConstructionCause::Basic(failure.cause),
+                        Stage::Basic(failure.phase),
+                    ));
                 }
             }
         }
@@ -128,7 +131,10 @@ pub fn from_json(
                 }
                 Progress::Failed(failure) => {
                     trace.canonical = failure.trace;
-                    break Err((ConstructionCause::Canonical(failure.cause), stage));
+                    break Err((
+                        ConstructionCause::Canonical(failure.cause),
+                        Stage::Canonical(failure.pass),
+                    ));
                 }
             }
         }
@@ -394,7 +400,7 @@ impl<'a> Cursor<'a> {
             .max(length)
             .min(ceiling);
         self.build.check_grow(site, capacity).map_err(arena_cause)?;
-        if !self.pay(budget, &[W::CleanupItems])? {
+        if !self.pay(budget, &[W::DocumentNodes, W::CleanupItems])? {
             return Ok(false);
         }
         self.build.begin_grow(site, capacity).map_err(arena_cause)?;
@@ -424,22 +430,66 @@ impl<'a> Cursor<'a> {
         budget: &mut WorkBudget,
         cancelled: &mut impl FnMut() -> bool,
     ) -> Result<Option<bool>, Cause> {
-        // The field machine pays its own structural work. An enclosing debit
-        // here would consume a one-unit step before that machine could run.
-        if !matches!(self.state, State::Project(..)) && !self.pay(budget, &[W::DocumentNodes])? {
-            return Ok(None);
-        }
         if let Some(site) = self.build.transferring() {
             let copying = self.build.copy_pending();
-            if site == Site::Bytes
-                && copying
-                && !self.pay(budget, &[W::CodecInputBytes, W::CodecOutputBytes])?
-            {
+            let classes: &[W] = if site == Site::Bytes && copying {
+                &[W::DocumentNodes, W::CodecInputBytes, W::CodecOutputBytes]
+            } else {
+                &[W::DocumentNodes]
+            };
+            if !self.pay(budget, classes)? {
                 return Ok(None);
             }
             self.build.copy_one();
             self.trace.grow_copies += u64::from(copying);
             return Ok(Some(false));
+        }
+        // Growth is its own transition. Preflight it before debiting either
+        // structural or cleanup credit; a successful request starts transfer.
+        let site = match &self.state {
+            State::Header { reserved: None, .. } if self.pass == Pass::Construction => {
+                Some(Site::Nodes)
+            }
+            State::Header {
+                frame,
+                reserved: Some(reserved),
+                ..
+            } if *reserved < frame.node.edge_count as usize && self.pass == Pass::Construction => {
+                Some(Site::Edges)
+            }
+            State::Header {
+                frame,
+                reserved: Some(reserved),
+                ..
+            } if *reserved == frame.node.edge_count as usize
+                && frame.node.edge_count != 0
+                && !matches!(&frame.mode, Mode::Text(_)) =>
+            {
+                Some(Site::Frames)
+            }
+            State::Text { text, position, .. }
+                if *position < text.len() && self.pass == Pass::Construction =>
+            {
+                Some(Site::Bytes)
+            }
+            _ => None,
+        };
+        if let Some(site) = site {
+            if !self.ensure(site, budget)? {
+                return Ok(None);
+            }
+        }
+        // The field machine pays its own work. Every other transition checks
+        // all its classes together, so a blocked poll spends no partial debit.
+        let classes: &[W] = match &self.state {
+            State::Project(..) => &[],
+            State::Text { text, position, .. } if *position < text.len() => {
+                &[W::DocumentNodes, W::CodecInputBytes, W::CodecOutputBytes]
+            }
+            _ => &[W::DocumentNodes],
+        };
+        if !self.pay(budget, classes)? {
+            return Ok(None);
         }
         let state = mem::replace(&mut self.state, State::Moving);
         match state {
@@ -596,14 +646,6 @@ impl<'a> Cursor<'a> {
                 reserved: None,
             } => {
                 if self.pass == Pass::Construction {
-                    if !self.ensure(Site::Nodes, budget)? {
-                        self.state = State::Header {
-                            frame,
-                            link,
-                            reserved: None,
-                        };
-                        return Ok(None);
-                    }
                     self.build.push_node(frame.node);
                 } else {
                     if self.nodes >= self.build.len(Site::Nodes)
@@ -638,14 +680,6 @@ impl<'a> Cursor<'a> {
             } => {
                 if reserved < frame.node.edge_count as usize {
                     if self.pass == Pass::Construction {
-                        if !self.ensure(Site::Edges, budget)? {
-                            self.state = State::Header {
-                                frame,
-                                link,
-                                reserved: Some(reserved),
-                            };
-                            return Ok(None);
-                        }
                         self.build.push_edge(Edge {
                             target: ABSENT,
                             original_index: reserved as u32,
@@ -671,14 +705,6 @@ impl<'a> Cursor<'a> {
                 } else if frame.node.edge_count == 0 {
                     self.state = State::Next;
                 } else {
-                    if !self.ensure(Site::Frames, budget)? {
-                        self.state = State::Header {
-                            frame,
-                            link,
-                            reserved: Some(reserved),
-                        };
-                        return Ok(None);
-                    }
                     self.build.push_frame(frame);
                     self.state = State::Next;
                 }
@@ -691,22 +717,6 @@ impl<'a> Cursor<'a> {
                 if position == text.len() {
                     self.state = State::Next;
                 } else {
-                    if self.pass == Pass::Construction && !self.ensure(Site::Bytes, budget)? {
-                        self.state = State::Text {
-                            node,
-                            text,
-                            position,
-                        };
-                        return Ok(None);
-                    }
-                    if !self.pay(budget, &[W::CodecInputBytes, W::CodecOutputBytes])? {
-                        self.state = State::Text {
-                            node,
-                            text,
-                            position,
-                        };
-                        return Ok(None);
-                    }
                     let byte = text.as_bytes()[position];
                     if self.pass == Pass::Construction {
                         self.build.push_byte(byte);

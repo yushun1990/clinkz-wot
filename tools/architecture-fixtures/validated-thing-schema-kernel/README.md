@@ -751,7 +751,7 @@ instrumentation, not the frozen owning admission cursor API. No self-reference
 or lifetime erasure is used. Canonical reconstruction directly from a typed
 Thing, including its serializer-incompatible values, is still unimplemented.
 
-### Allocation ordering corrections and falsifiable evidence
+### Allocation and progress ordering corrections and falsifiable evidence
 
 Independent regressions against the prior source reproduce three defects:
 zero Number returns Pending after its first byte; an impossible frame request
@@ -763,6 +763,15 @@ entries, semantic frames and canonical rebuild. Physical peaks advance only
 after successful allocation; actual request maximum and logical reservation
 high water remain separately observable. Foundation ledger semantics are
 unchanged.
+
+Canonical emission, equivalence and grow copies check every required step
+class and the complete lifetime debit together before doing a transition.
+Missing byte or cleanup credit cannot spend a structural/lifetime unit merely
+for polling the blocked state. Growth preflight still precedes both structural
+and cleanup debit. Repeated partial-credit polls retain the same work trace and
+exact transaction lifetime as a sufficient schedule. The wrapper obtains
+terminal phase/pass from each cursor's failure, because one step may cross
+several phases before fixing a cause.
 
 `tests/schema_build.rs` covers all context fields and seven variants, exact
 integer/f64 bits including typed Infinity, optional/empty/null/default

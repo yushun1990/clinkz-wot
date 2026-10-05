@@ -435,6 +435,167 @@ fn all_stages_consume_one_lifetime_and_exact_exhaustion_rolls_back() {
 }
 
 #[test]
+fn blocked_canonical_byte_work_preserves_every_credit_and_lifetime() {
+    let mut owner = construction::drive(
+        LiteralCursor::from_json(br#"{"const":"hello"}"#, Limits::default()),
+        4096,
+    )
+    .unwrap();
+    let mut cursor = build::Cursor::new(&mut owner, Limits::default());
+    for pass in [Pass::Construction, Pass::Equivalence] {
+        while cursor.pass() != pass {
+            let build::Progress::Pending(next) = cursor.step(&mut budget(1), || false) else {
+                panic!("construction must enter equivalence");
+            };
+            cursor = next;
+        }
+        // Finish the bounded structural/allocation prefix without permitting a
+        // text byte to be emitted or compared. Later polls have no payable work.
+        for _ in 0..32 {
+            let build::Progress::Pending(next) = cursor.step(
+                &mut budget(4096).with_remaining(W::CodecOutputBytes, 0),
+                || false,
+            ) else {
+                panic!("text bytes are blocked");
+            };
+            cursor = next;
+        }
+        assert_eq!(cursor.pass(), pass);
+        let trace = cursor.trace();
+        if pass == Pass::Construction {
+            assert_eq!(trace.work[2], 0);
+        } else {
+            assert_eq!(trace.compared_bytes, 0);
+        }
+        let lifetime = cursor.lifetime_remaining();
+        for blocked in [W::CodecInputBytes, W::CodecOutputBytes] {
+            for _ in 0..4 {
+                let mut credit = budget(1).with_remaining(blocked, 0);
+                let before = CLASSES.map(|class| credit.remaining(class));
+                let build::Progress::Pending(next) = cursor.step(&mut credit, || false) else {
+                    panic!("one required byte credit is missing");
+                };
+                assert_eq!(trace, next.trace());
+                assert_eq!(lifetime, next.lifetime_remaining());
+                assert_eq!(before, CLASSES.map(|class| credit.remaining(class)));
+                cursor = next;
+            }
+        }
+    }
+}
+
+#[test]
+fn partial_credit_polls_preserve_the_exact_transaction_lifetime() {
+    let input = br#"{"const":"hello"}"#;
+    let (baseline, trace) =
+        build::from_json(input, Limits::default(), |_| (budget(4096), false)).unwrap();
+    let required = total(trace);
+    assert_eq!(trace.canonical.compared_bytes, 5);
+    assert!(trace.canonical.work[2] > trace.canonical.compared_bytes);
+    for blocked in CLASSES {
+        let mut polls = 0;
+        let (schema, actual) = build::from_json(
+            input,
+            Limits {
+                lifetime: required,
+                ..Limits::default()
+            },
+            |stage| {
+                let mut credit = budget(4096);
+                if matches!(stage, Stage::Canonical(_)) {
+                    polls += 1;
+                    assert!(polls < 4096);
+                    if polls % 5 != 0 {
+                        credit = credit.with_remaining(blocked, 0);
+                    }
+                }
+                (credit, false)
+            },
+        )
+        .unwrap_or_else(|failure| panic!("blocked {blocked:?}: {failure:?}"));
+        assert_eq!(trace, actual, "blocked {blocked:?}");
+        assert_eq!(schema.lifetime_remaining(), 0);
+        assert_eq!(schema.footprint(), baseline.footprint());
+        assert_eq!(schema.view().field(F::Const).unwrap().text(), Some("hello"));
+    }
+}
+
+#[test]
+fn terminal_diagnostics_use_the_failure_phase_after_step_advances() {
+    use validated_thing_schema_kernel_probe::schema_tree::{
+        Pass as BasicPass, Phase as BasicPhase,
+    };
+    use validated_thing_value_construction_probe::Phase as LiteralPhase;
+    for step in [1, 4096] {
+        let failure = build::from_json(
+            b"{}",
+            Limits {
+                source: 0,
+                ..Limits::default()
+            },
+            |_| (budget(step), false),
+        )
+        .err()
+        .unwrap();
+        assert_eq!(failure.cause, ConstructionCause::Literal(Cause::Memory));
+        assert_eq!(failure.stage, Stage::Literal(LiteralPhase::Seal));
+        let failure = build::from_json(
+            br#"{"readOnly":true,"writeOnly":true}"#,
+            Limits::default(),
+            |_| (budget(step), false),
+        )
+        .err()
+        .unwrap();
+        assert_eq!(
+            failure.stage,
+            Stage::Basic(BasicPhase::Walk(BasicPass::Basic))
+        );
+        assert_eq!(failure.live_after_rollback, 0);
+        assert_eq!(failure.allocations, failure.releases);
+    }
+
+    let mut owner =
+        construction::drive(LiteralCursor::from_json(b"{}", Limits::default()), 4096).unwrap();
+    let construction_work = {
+        let mut cursor = build::Cursor::new(&mut owner, Limits::default());
+        loop {
+            let build::Progress::Pending(next) = cursor.step(&mut budget(1), || false) else {
+                panic!("construction must enter equivalence");
+            };
+            if next.pass() == Pass::Equivalence {
+                assert_eq!(next.trace().schemas[1], 0);
+                break next.trace().work.into_iter().sum::<u64>();
+            }
+            cursor = next;
+        }
+    };
+    let (_, baseline) =
+        build::from_json(b"{}", Limits::default(), |_| (budget(4096), false)).unwrap();
+    let lifetime = baseline.literal.work.into_iter().sum::<u64>()
+        + baseline.basic.work.into_iter().sum::<u64>()
+        + construction_work;
+    for step in [1, 4096] {
+        let failure = build::from_json(
+            b"{}",
+            Limits {
+                lifetime,
+                ..Limits::default()
+            },
+            |_| (budget(step), false),
+        )
+        .err()
+        .unwrap();
+        assert_eq!(
+            failure.cause,
+            ConstructionCause::Canonical(build::Cause::Resource(Cause::Lifetime))
+        );
+        assert_eq!(failure.stage, Stage::Canonical(Pass::Equivalence));
+        assert_eq!(failure.live_after_rollback, 0);
+        assert_eq!(failure.allocations, failure.releases);
+    }
+}
+
+#[test]
 fn nonrecursive_canonical_emission_preserves_deep_and_opaque_graphs() {
     let depth = 256;
     let input = format!(
