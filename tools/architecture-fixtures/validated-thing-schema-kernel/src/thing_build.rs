@@ -819,9 +819,9 @@ fn operation_index(v: Operation) -> usize {
 }
 
 /// Owned normalized typed Thing, deliberately not a ValidatedThing admission.
-/// Basic and URI caching are external semantic witnesses in this slice.
+/// from_thing_basic includes paid Basic; URI caching remains external evidence.
 pub struct NormalizedThing {
-    owner: validated_thing_value_construction_probe::OwnedValue,
+    pub(crate) owner: validated_thing_value_construction_probe::OwnedValue,
 }
 impl NormalizedThing {
     pub(crate) fn new(owner: validated_thing_value_construction_probe::OwnedValue) -> Self {
@@ -849,6 +849,17 @@ pub fn from_thing(
     control: impl FnMut(schema_build::Stage) -> (clinkz_wot_foundation::WorkBudget, bool),
 ) -> Result<(NormalizedThing, schema_build::ConstructionTrace), schema_build::ConstructionFailure> {
     schema_build::from_typed_thing(input, limits, control)
+}
+
+/// The same complete construction transaction, including paid whole-Thing
+/// Basic on its sealed result and first-cause rollback of the entire owner.
+#[allow(clippy::result_large_err)]
+pub fn from_thing_basic(
+    input: &Thing,
+    limits: validated_thing_value_construction_probe::Limits,
+    control: impl FnMut(schema_build::Stage) -> (clinkz_wot_foundation::WorkBudget, bool),
+) -> Result<(NormalizedThing, schema_build::ConstructionTrace), schema_build::ConstructionFailure> {
+    schema_build::from_typed_thing_basic(input, limits, control)
 }
 
 /// Borrowed canonical facts for the already shared whole-Thing Basic kernel.
