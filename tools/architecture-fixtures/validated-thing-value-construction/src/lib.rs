@@ -1666,6 +1666,22 @@ pub struct OwnedValue {
     lifetime: u64,
 }
 impl OwnedValue {
+    /// Empty transaction for direct typed TD construction. No literal source,
+    /// parser, allocation, or second ledger is introduced by this entry.
+    pub fn empty_for_fixture(limits: Limits) -> Self {
+        let mut storage = Storage::<()>::new(
+            limits.source,
+            limits.temporary,
+            limits.peak,
+            limits.contiguous,
+        );
+        storage.finish();
+        Self {
+            storage,
+            trace: Trace::default(),
+            lifetime: limits.lifetime,
+        }
+    }
     pub fn view(&self) -> View<'_> {
         View {
             owner: self.storage.sealed(),

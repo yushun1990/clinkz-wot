@@ -42,7 +42,13 @@ fn main() {
             "\n#[path = {path:?}]\n#[allow(dead_code)]\nmod {module};\n"
         ));
     }
-    for module in ["schema_arena", "schema_step", "schema_tree", "schema_build"] {
+    for module in [
+        "schema_arena",
+        "schema_step",
+        "schema_tree",
+        "schema_build",
+        "thing_build",
+    ] {
         let path = fixture.join("src").join(format!("{module}.rs"));
         println!("cargo:rerun-if-changed={}", path.display());
         lib.push_str(&format!(
@@ -51,7 +57,16 @@ fn main() {
     }
     lib = lib.replace("mod schema_fields;", "pub mod schema_fields;");
     lib = lib.replace("mod schema_kernel;", "pub mod schema_kernel;");
+    lib = lib.replace("mod basic_kernel;", "pub mod basic_kernel;");
+    lib = lib.replace("mod basic_typed;", "pub mod basic_typed;");
     fs::write(candidate.join("lib.rs"), lib).unwrap();
+
+    // Borrow the established private Context sequence; serialization is not an
+    // inspection seam (it can reject Basic-valid typed Contexts).
+    let context_path = candidate.join("components/context.rs");
+    let mut context = fs::read_to_string(&context_path).unwrap();
+    context.push_str("\nimpl Context { pub(crate) fn entries_for_construction(&self) -> &[ContextEntry] { &self.entries } }\n");
+    fs::write(context_path, context).unwrap();
 
     let path = candidate.join("components/data_schema.rs");
     let schema = fs::read_to_string(&path).unwrap();

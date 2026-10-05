@@ -14,7 +14,7 @@ production ValidatedThing or admission builder is added.
 The uncertainty addressed here is whether a future admission cursor must invent
 another Basic rule set or error precedence while combining those local proofs.
 The candidate uses shared component predicates and shared whole-Thing order;
-its adapters contain only borrowed representation facts. Complete TD
+its adapters contain only borrowed representation facts. Strict Thing
 construction, charged whole-Thing semantic traversal, and whole-admission
 resource and terminal ownership remain separate obligations. The existing
 [URI query proof](../validated-thing-arena-layout/README.md#shared-uri-and-borrowed-planning-view-slice)
@@ -679,8 +679,8 @@ semantic-frame overlap and request/release observations under the same ledger;
 item 5 covers the composed source in the existing matrix. No item is complete
 as a whole. Items 1/4/8 gain no new surface, Planning or acceptance claim.
 
-Whole Thing/affordance/Form/security field-policy extraction and traversal,
-typed Thing compatibility construction, date/URI/default/security execution,
+The strict Thing/affordance/Form/security field-policy extraction and traversal,
+date/URI/default/security execution,
 typed canonical normalization/seal/equivalence and default-equivalent footprints
 remain. So do complete configuration and derived M, frozen surface negatives,
 global diagnostic coordinates, whole first-cause source rollback, constrained
@@ -806,8 +806,8 @@ cargo check --locked --target thumbv7em-none-eabihf --manifest-path tools/archit
 | Readmission item | Evidence boundary after this slice |
 | ---: | --- |
 | 1 | No complete frozen signature/removal or opaque configuration proof. Fixture APIs are not proposed production surface. |
-| 2 | Actual literal-to-canonical DataSchema build, grow, source/output overlap, equivalence and exact reseal share one ledger/catalog. Whole Thing construction remains. |
-| 3 | Strict DataSchema yields a typed canonical graph with fieldwise public typed parity and shared Basic queries. Typed Thing compatibility, all TD field families and complete differential/query composition remain. |
+| 2 | Actual literal-to-canonical DataSchema build, grow, source/output overlap, equivalence and exact reseal share one ledger/catalog. The typed Thing slice below extends this emitter; strict Thing construction remains. |
+| 3 | Strict DataSchema yields a typed canonical graph with fieldwise public typed parity and shared Basic queries. The typed Thing slice below adds compatibility construction; complete strict differential/query composition remains. |
 | 4 | Existing URI/Planning/post-drop witnesses remain separate. This Schema owner cannot enumerate Thing Property/Form coordinates or prove the final Planning handoff. |
 | 5 | The existing 13 Host/8 thumb source matrix includes this complete local path. Thumb is compile evidence; full frozen surface/downstream/sibling and constrained execution duties remain. |
 | 6 | Whole local schema transaction now owns first-cause rollback across literal construction, Basic, canonical build, equivalence and seal. Whole Thing dates/URI, configuration, canonical-result charged Basic and global diagnostics remain. |
@@ -817,3 +817,117 @@ cargo check --locked --target thumbv7em-none-eabihf --manifest-path tools/archit
 The tranche remains `planned / candidate / current`; none of the eight is
 declared complete as a whole. This constructor produces DataSchema, not a
 ValidatedThing. Local green tests cannot readmit production or accept a gate.
+
+## Direct typed Thing construction envelope
+
+The canonical DataSchema result proved its local storage/ownership boundary,
+but could not construct the Thing owner consumed by the whole-Basic and
+Property/Form query proofs. The new slice composes that missing envelope:
+borrowed typed Thing -> charged canonical emission -> charged fieldwise
+equivalence -> exact reseal -> independently owned `NormalizedThing`.
+It produces construction evidence, not a ValidatedThing admission result.
+
+`src/thing_build.rs` contains borrowed representation facts for every typed
+Thing field, Context entry, Property/Action/Event, Form and both response
+families, Link, Version, date component, security context and all nine security
+variants. All seven DataSchema variants use the established canonical schema
+layout inside that owner. No per-schema allocation or independent child owner
+is introduced. Typed f64/i64 fields retain their exact bits. Absent slots,
+explicit empty collections, opaque nulls, ordered sequences, original Form
+indices, map associations and public AP Number contents remain distinct.
+The generator adds a private Context borrowing seam only to the build-directory
+candidate. The production Context and TD sources are unchanged.
+
+The existing `schema_build::Cursor` supplies the construction/equivalence
+mechanics to both entries. `OwnedValue::empty_for_fixture` starts the typed
+transaction with empty source arenas, zero allocations, one Accounting owner
+and one lifetime remainder. It does not manufacture a literal source or run
+a parser. Each typed scalar/header, schema entry, iterator transition, copied
+or compared byte, frame transfer and arena transfer is charged. Raw typed URI
+copy/comparison pays both source/output `UriBytes` plus codec work; this does
+not execute or prove URI parse/resolution. The fixed two-unit URI debit checks
+the complete class allowance before spending any credit. All cursors borrow
+their source and work owner in lexical scopes; no self-reference, erased input
+lifetime or recursive owning task tree is needed.
+
+Caller BTreeMaps use borrowed iterators. JSON extension maps, including a
+downstream `preserve_order` map, select their next semantic key with a scalar
+continuation that charges each candidate transition and compared byte. They
+emit sorted entries directly without a key/sort-buffer allocation. This local
+prototype uses selection rather than the authority's future in-place sorting
+algorithm; it does **not** discharge that algorithm's construction/progress
+duty. Its quadratic work is bounded by the same non-resettable lifetime, and
+is observable under varied and partial budgets. It is evidence for the common
+storage envelope, not a production algorithm selection or complexity claim.
+
+The sealed result still has exactly three retained allocations, and construction
+still uses only node, edge, byte and frame temporary sites. Grow overlap,
+cleanup prepayment and one checked Layout per reservation remain the existing
+implementation. Every failure is fixed before outer rollback releases the
+whole owner. No aggregate footprint is submitted as a contiguous request.
+The whole-Thing inline cursor is 2,008 bytes on the measured 64-bit Host;
+extending the common cursor also changes the earlier schema-only inline size.
+The older schema witness's 2,000-byte observation describes its earlier layout,
+not a current capacity guarantee.
+
+`thing_build::Basic` reads only canonical typed facts and invokes the existing
+whole-Thing Basic kernel, including its shared schema rules. The existing
+170-plus fault corpus executes on the actually constructed owner and compares
+complete inline first errors with the typed adapter. This oracle is deliberately
+synchronous and external to the construction trace: whole-Thing charged Basic
+and Basic over the strict completed result remain unresolved admission duties.
+The shared default/security helpers also run on this constructed owner.
+
+`tests/thing_build.rs` supplies ten executable evidence categories:
+
+- Independent public-field readback of the rich, nested-schema and
+  Basic-valid serializer-failure corpora, including every typed field family.
+- Sparse envelope fields and explicit-empty maps/sequences/Form overrides
+  retain their distinctions, including through shared Basic.
+- Identical complete construction traces under mixed 1/7/4096 allowances;
+  exact lifetime, one-less failure and repeated withholding of each class.
+- The existing whole-Basic first-error corpus on the constructed canonical
+  graph, with no second predicate or diagnostic authority.
+- All 41 rich transaction allocator failures, actual peaks/largest requests,
+  zero reallocations, and exact three-block completed-owner release.
+- Below/equal/above source, temporary, peak, contiguous, node, edge and byte
+  limits; frame/depth rejection; cancellation at build, equivalence and seal.
+- Paid output-corruption rejection, zero work and every mixed-schedule
+  construction/equivalence Pending abandonment through outer owner cleanup.
+- Public AP lexical ceilings, including opaque overflow content and
+  zero-disabled rejection before Number output/copy.
+- Caller spare capacity, reverse JSON-map insertion and 256-deep opaque
+  values, with identical canonical fields and retained arenas.
+- An external allocation-free non-first Property/Form query after caller
+  Thing drop, with metadata, original index, shared defaults and inherited
+  NoSec, then owned selection facts surviving physical normalized-owner drop.
+
+The rich nested-schema 64-bit Host witness retains 34,220 requested bytes,
+peaks at 62,464 physical bytes, requests at most 20,480 contiguous bytes and
+spends 105,476 construction/equivalence/seal work units. These are fixture
+observations, not supported M, profile ceilings, target runtime/stack evidence,
+complete plan/artifact residency or Servient owner-capacity claims.
+
+```sh
+cargo test --locked --manifest-path tools/architecture-fixtures/validated-thing-schema-kernel/Cargo.toml --features validated-thing --test thing_build -- --nocapture
+```
+
+Existing CI discovers these tests in every capability-on Host invocation and
+compiles the entire library in its capability-on thumb cells. No manifest,
+lockfile, feature default, resource row, WorkClass or CI orchestration is added.
+Thumb remains compilation evidence.
+
+| Readmission item | Contribution / remaining boundary |
+| ---: | --- |
+| 1 | No frozen API/configuration/removal proof; raw fixture readers and `NormalizedThing` are not proposed production surfaces. |
+| 2 | Complete typed envelope and nested schemas construct/grow/compare/reseal under one ledger and the original catalog. Strict Thing decode and the admitted sorting algorithm remain. |
+| 3 | Complete typed-field readback, serializer-failure acceptance, canonical whole-Basic first-error parity and default/security queries now consume actual construction. Strict whole-Thing field-policy/differential corpus and full URI/query composition remain. |
+| 4 | The constructed owner yields non-first Property/Form coordinates and shared queries after input drop; a small owned selection survives its drop. Cached resolved URI and complete independent Planning output remain with the existing separate witnesses. |
+| 5 | The existing matrix compiles/runs this typed envelope. Full frozen surface, downstream/sibling absence and constrained execution remain. |
+| 6 | Typed construction/equivalence/seal have exact shared work, lexical limits, cancellation, rollback and prepaid drop evidence. Charged whole-Basic, strict Thing decode, configuration, resumable URI/date handling and global diagnostics remain. |
+| 7 | Physical complete typed-owner peak, actual requests, source footprint and release replace independent per-schema allowances. Derived M, complete plan/artifact overlap, parent/global release, Published/permit/install and owner capacity remain. |
+| 8 | Production owners, authority and accepted gate inputs are unchanged; independent exact-head reaffirmation and future admitted method removal remain. |
+
+All eight remain incomplete as a set. The tranche remains
+`planned / candidate / current`; this slice makes no readmission, production,
+Consumer-gate, successor-package or completion transition.
