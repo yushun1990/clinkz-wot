@@ -75,13 +75,26 @@ prefix, and releases the build array. This records old/new overlap in both
 the temporary peak (on growth) and conversion peak (on growth and seal).
 
 The sealed footprint uses the sum of the three live source `Layout::size()`
-values, the count of nonempty retained arrays, the ledger's largest actual
-single request, the simultaneous temporary peak, and the ledger's total live
-peak. The worked test has a 40-to-80-byte node grow, a 120-byte temporary
+values, the count of nonempty retained arrays, the largest actual allocator
+request (including null returns), and the physical temporary/conversion peaks.
+`reservation_peak_bytes` separately reports the ledger's logical high water.
+A failed allocator call can raise that reservation high water without creating
+physical live storage. Physical peaks change only after successful allocation,
+while old blocks remain live. The worked test has a 40-to-80-byte node grow, a 120-byte temporary
 overlap peak, a 137-byte conversion peak, and a sealed 39-byte/three-allocation
 footprint. Tests also cover zero and spare-capacity inputs, a rejected grow
 that preserves the old initialized array, source and peak rejection before
 seal, contiguous-request rejection, and checked `Layout` overflow.
+
+The staged interfaces offer pure grow/seal preflight through this same checked
+request body. Drivers reject impossible requests before paying cleanup/lifetime
+or yielding for cleanup step credit; reservations still occur only immediately
+before actual allocator calls. `Rebuild` lends the original three empty build
+sites plus the traversal site while retaining immutable input arrays under the
+same Accounting. Its output remains owned by the outer rollback owner when
+the borrower ends. Reseal replaces/reconciles each old source array explicitly;
+it does not reset peaks or lifetime. The [canonical schema witness](../validated-thing-schema-kernel/README.md#charged-canonical-dataschema-construction-and-owner-transfer)
+owns that composition's executable evidence and limitations.
 
 ## Scope of the evidence
 

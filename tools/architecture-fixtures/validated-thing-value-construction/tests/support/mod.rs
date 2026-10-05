@@ -17,6 +17,9 @@ pub(crate) fn budget(n: u64) -> WorkBudget {
     })
 }
 
+// Allocation observations and terminal diagnostics stay inline; boxing this
+// fixture record would contaminate the measured interval.
+#[allow(clippy::result_large_err)]
 pub(crate) fn drive(
     mut cursor: Cursor<'_>,
     n: u64,

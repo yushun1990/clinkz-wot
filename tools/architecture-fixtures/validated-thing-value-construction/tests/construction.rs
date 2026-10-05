@@ -657,3 +657,65 @@ fn exhausted_key_prefix_finishes_sort_and_duplicates_without_input_credit() {
         assert_eq!(value.trace().key_bytes, 4);
     }
 }
+#[test]
+fn zero_number_fixes_failure_on_the_first_observed_byte_before_capacity_or_cancellation() {
+    let input = br#"{"n":[0]}"#;
+    let mut probe = Cursor::from_json(input, Limits::default());
+    while probe.trace().wire_observed < 7 {
+        let Progress::Pending(next) = probe.step(&mut budget(1), false) else {
+            panic!("prefix");
+        };
+        probe = next;
+    }
+    let prefix_peak = probe.footprint().temporary_peak_bytes;
+    let prefix_work = probe.trace().work.into_iter().sum();
+    drop(probe);
+    for limits in [
+        Limits {
+            number: 0,
+            nodes: 4,
+            ..Limits::default()
+        },
+        Limits {
+            number: 0,
+            temporary: prefix_peak,
+            ..Limits::default()
+        },
+        Limits {
+            number: 0,
+            lifetime: prefix_work,
+            ..Limits::default()
+        },
+        Limits {
+            number: 0,
+            temporary: prefix_peak,
+            lifetime: prefix_work,
+            ..Limits::default()
+        },
+    ] {
+        let mut cursor = Cursor::from_json(input, limits);
+        loop {
+            // No allocation cleanup allowance at the observed Number boundary.
+            let mut work = support::budget(1);
+            if cursor.trace().wire_observed == 6 {
+                work = work.with_remaining(clinkz_wot_foundation::WorkClass::CleanupItems, 0);
+            }
+            match cursor.step(&mut work, false) {
+                Progress::Pending(next) => {
+                    assert!(
+                        next.trace().wire_observed < 7,
+                        "first-byte failure must not yield to later cancellation"
+                    );
+                    cursor = next;
+                }
+                Progress::Failed(failure) => {
+                    assert_eq!(failure.cause, Cause::RawNumber);
+                    assert_eq!(failure.offset, 7);
+                    assert_eq!(failure.trace.wire_observed, 7);
+                    break;
+                }
+                Progress::Complete(_) => panic!("disabled Number"),
+            }
+        }
+    }
+}

@@ -96,14 +96,14 @@ impl<'a> List<'a> {
 pub struct Extras<'a> {
     pub(crate) object: View<'a>,
     pub(crate) consumed: u64,
-    indexed: Option<[Option<View<'a>>; 9]>,
+    indexed: Option<[Option<View<'a>>; 29]>,
 }
 impl<'a> Extras<'a> {
     pub(crate) fn indexed(object: View<'a>, consumed: u64, index: &[Option<View<'a>>; 29]) -> Self {
         Self {
             object,
             consumed,
-            indexed: Some(basic::FIELDS.map(|field| index[policy_field(field) as usize])),
+            indexed: Some(*index),
         }
     }
     /// Bounded admission uses only the fixed index prepared by schema_step.
@@ -113,9 +113,21 @@ impl<'a> Extras<'a> {
             return None;
         }
         match self.indexed {
-            Some(index) => index[field as usize],
+            Some(index) => index[policy_field(field) as usize],
             None => self.object.get(field.name()),
         }
+    }
+    /// Stable literal node identity selects consumed fields from the paid
+    /// index; no second member-name scan is needed during canonical emission.
+    pub(crate) fn consumed_value(self, value: View<'a>) -> bool {
+        self.indexed
+            .expect("charged index required")
+            .into_iter()
+            .enumerate()
+            .any(|(field, candidate)| {
+                self.consumed & (1 << field) != 0
+                    && candidate.is_some_and(|candidate| candidate.same_node(value))
+            })
     }
     pub fn get(self, key: &str) -> Option<View<'a>> {
         if Field::ALL
