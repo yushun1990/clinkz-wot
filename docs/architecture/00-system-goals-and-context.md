@@ -16,9 +16,9 @@ authority.
 - W3C WoT Thing Description 1.1 is the default compliance target.
 - Unknown extension associations survive ordinary round trips outside the
   Value/RawValue re-interpretation cases defined by
-  [ADR-0020](../ADRs/0020-strict-json-value-decoding.org). Strict input uses
-  literal values; typed normalization preserves supplied typed associations.
-- `base` and relative form `href` values are resolved by one shared planner.
+  [ADR-0020](../ADRs/0020-strict-json-value-decoding.org). Future strict ingestion uses
+  literal values; typed admission inspects the supplied immutable value directly.
+- `base` and relative form `href` values are resolved by one TD semantic authority.
 - Clinkz-specific metadata uses a Clinkz JSON-LD namespace and never masquerades
   as W3C vocabulary.
 - TD 2.0 additions remain behind `td2-preview` and do not change TD 1.1 behavior

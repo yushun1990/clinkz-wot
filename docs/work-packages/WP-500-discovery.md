@@ -6,6 +6,14 @@ specifies technical scope and acceptance boundaries.
 
 ## Scope
 
+ADR-0021 separates typed Consumer admission from bounded external JSON ingestion.
+A typed Discovery source may be immutably lent while its owning storage/global
+charges stay live; ordinary parse-and-borrow is not bounded Directory ingestion.
+Before runtime external-input claims, this package must enter its exact deferred
+Directory/ingestion authority and prove ADR-0020 literal/shared-field/date semantics,
+first-allocation source accounting and bounded decode/cancel/release. Its package
+status/dependencies are unchanged; deferral is not removal of that capability.
+
 Replace the current mixed client/backend Discovery implementation with the frozen engine-side
 Directory client contract. The work owns endpoint references, query and publication request
 values, result envelopes, opaque revisions and tokens, portable operation slots, lazy Discovery

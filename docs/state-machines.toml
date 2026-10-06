@@ -1,5 +1,5 @@
 schema_version = 1
-design_revision = "4.9"
+design_revision = "5.1"
 
 [[composition]]
 id = "handler-direct-response"
@@ -593,12 +593,12 @@ ownership = "Before start acceptance BindingInputRejection returns the complete 
 id = "consumer-plan-publication"
 requirements = ["PLAN-SET-001"]
 participants = ["compiled-plan-set", "consumed-handle-registry"]
-trigger = "after complete TD-lifetime-free plan construction, final fallible checks, private permit issuance, and exact Snapshot/source release, a consume transaction atomically publishes one admitted handle generation"
+trigger = "after source-independent complete output, end of all input loans, bounded build cleanup, reconciliation and final checks, a private permit atomically publishes one complete generation"
 publication_policy = "atomic-plan-set-and-consumer-registry"
 atomic_transitions = [
     "compiled-plan-set:Frozen:publish_consumer->Published",
 ]
-ownership = "Servient ends every ValidatedThingView borrow, proves the owned draft and complete registration sufficient, performs every fallible identity/resource/cancellation/publication-slot check while the Snapshot remains live, and issues one private permit that closes cancellation. It then destroys the Snapshot, deallocates its arenas and releases child source charges, releases the matching parent/global allowance only after those bytes are no longer live, and consumes the permit to install the already allocated immutable plan-set generation and consumed-handle registry entry in one allocation-free, callback-free, non-yielding, non-fallible boundary. Published retains plans, the complete registration, and runtime lifecycle/resource records only; no transport operation or partial generation is visible"
+ownership = "Servient consumes all input-bearing build state and finishes bounded scratch cleanup, preserving actual upstream source charges until physical release. It reconciles simultaneous local/parent owners, performs final identity/generation/registration/resource/cancellation/slot checks under exclusive installation authority and issues one private permit closing cancellation. The preallocated complete output/registration/runtime record installs atomically with no allocation, callback, yield, source query, fallible release or new cancellation decision. Readers see absent or complete; no TD loan or partial lookup is Published"
 
 [[composition]]
 id = "producer-plan-serving-publication"
@@ -765,8 +765,8 @@ requirements = ["PLAN-ARTIFACT-001", "PLAN-SET-001"]
 visibility = "cross-crate-servient-contract"
 transition_contract = "exact"
 owner_record = "Servient CompiledPlanSetRecord"
-scope = "Owns one produced or consumed handle generation's build cursor, immutable set material, runtime accounting ledger, publication identity, pins, operation leases, lazy slots, reclaim cursor, and terminal disposition. A first-Consumer build may temporarily pair a TD Snapshot/source ledger with the Frozen draft, but Published never owns that pair"
-publication_contract = "Frozen material becomes selectable only through publish_consumer or publish_producer; each event is atomic with the corresponding complete registry publication. First-Consumer publish_consumer is preceded by a private permit that closes cancellation only after every fallible check, then exact Snapshot/source release; the atomic install performs no allocation, callback, yield, or fallible work"
+scope = "Owns one produced or consumed handle generation's build cursor, immutable set material, runtime accounting ledger, publication identity, pins, operation leases, lazy slots, reclaim cursor, and terminal disposition. A first-Consumer transaction retains an external immutable Thing loan and controlled TD scratch while building; input-bearing state and build cleanup end before permit, and Published owns only source-free runtime material"
+publication_contract = "Frozen material becomes selectable only through publish_consumer or publish_producer; each event is atomic with the corresponding complete registry publication. First-Consumer build loans and cleanup terminate before reconciliation/final checks; a private permit closes cancellation under exclusive installation authority and installs without allocation, callback, yield, fallible work or source query"
 pin_contract = "Pins and operation leases may be acquired only from Published. begin_drain closes both acquisition gates before Draining is observable, while pre-existing generation-checked leases remain valid until release."
 failed_disposition_contract = "Failed is unpublished. PlanSetReclaimOwner releases provisional or frozen plan and artifact storage incrementally only after every Producer route rollback owner is terminal; a bounded diagnostic may outlive the material."
 reclaimed_disposition_contract = "Reclaimed owns no plan, artifact, lazy-slot, cursor, route, cleanup, pin, or operation bytes for the generation"
@@ -790,7 +790,7 @@ from = "Building"
 event = "build_complete"
 to = "Frozen"
 owner = "PlanningBuildOwner"
-linearization = "install complete immutable TD-lifetime-free set material and its exact admitted runtime accounting ledger after every ValidatedThingView borrow has ended"
+linearization = "install complete immutable TD-lifetime-free set material and its exact admitted runtime accounting ledger after input-bearing Planning completion has consumed every TD/derived/config/compiler loan"
 outcome = "Frozen-unpublished"
 retryability = "terminal-for-build-generation"
 
@@ -817,7 +817,7 @@ from = "Frozen"
 event = "publish_consumer"
 to = "Published"
 owner = "Servient"
-linearization = "after private permit issuance and exact build-Snapshot/source release, atomically install the already allocated complete consumed-handle generation and open its plan pin-acquisition gate"
+linearization = "after terminal build cleanup and final checks issue a private permit, then atomically install the already allocated complete consumed-handle generation and open its plan pin-acquisition gate"
 outcome = "Published-consumer"
 retryability = "idempotent-by-generation"
 
@@ -844,7 +844,7 @@ from = "Frozen"
 event = "cancel"
 to = "Failed"
 owner = "PlanSetReclaimOwner"
-linearization = "before a private Consumer publication permit exists, prevent registry publication and retain the independently owned frozen set plus any still-live build Snapshot until admitted rollback ownership terminates"
+linearization = "before a private Consumer publication permit exists, prevent registry publication and retain independently owned frozen output and remaining controlled workspace until admitted bounded rollback terminates; caller input is never destroyed"
 outcome = "Failed-unpublished-cancelled-cleanup-owned"
 retryability = "new-generation-only"
 
@@ -7401,367 +7401,742 @@ linearization = "backend cancellation reaches terminal"
 outcome = "Cancelled"
 retryability = "terminal"
 
+
 [[machine]]
-id = "validated-thing-normalization"
-requirements = [
-    "DOC-RUNTIME-001",
-    "ADMIT-MEM-001",
-    "ADMIT-TXN-001",
-    "CONSTRAINED-WORK-001",
-    "CONSTRAINED-PROGRESS-001",
-    "CONSTRAINED-OWN-001",
-]
-initial = "Input"
-states = [
-    "Input",
-    "Validation",
-    "Normalization",
-    "Seal",
-    "Equivalence",
-    "Rollback",
-    "Complete",
-    "Invalid",
-    "Limit",
-    "Cancelled",
-    "ConversionFailed",
-    "Abandoned",
-]
-terminal = [
-    "Complete",
-    "Invalid",
-    "Limit",
-    "Cancelled",
-    "ConversionFailed",
-    "Abandoned",
-]
-required_events = [
-    "Input:budget_exhausted",
-    "Validation:budget_exhausted",
-    "Normalization:budget_exhausted",
-    "Seal:budget_exhausted",
-    "Equivalence:budget_exhausted",
-    "Rollback:budget_exhausted",
-    "Input:cancel",
-    "Validation:cancel",
-    "Normalization:cancel",
-    "Seal:cancel",
-    "Equivalence:cancel",
-    "Input:drop",
-    "Validation:drop",
-    "Normalization:drop",
-    "Seal:drop",
-    "Equivalence:drop",
-    "Rollback:drop",
-]
-entry_contract = "The machine is entered only after TD successfully projects the ValidatedThing admission-field subset of raw ResourceLimits through the sole opaque ValidatedThingAdmissionConfig constructor; unrelated Consumer role/execution-cell fields remain the resource-profile owner's responsibility, while missing or implementation-unsupported admission fields fail as pre-entry configuration errors, never as Limit. ValidatedThingCursor then borrows a typed Thing and owns only additional project allocations; ValidatedThingBuilder borrows JSON bytes and owns every controlled decode-through-completed-Snapshot allocation from the first request. ADR-0020 strict literal values feed shared TD field policies; compatibility preserves the supplied typed Thing without wire replay"
-first_cause_contract = "The first invalid, limit, cancellation, conversion, or drop cause is immutable; later observations cannot replace its diagnostic or resource coordinates"
-publication_contract = "Only Complete exposes one move-only build-scoped ValidatedThing after typed semantic equivalence and complete rollback-inapplicability are established. This is a TD completion result, not Servient registry publication; the owner and its source ledger are released after independent plan construction and final checks, before first-Consumer atomic publication"
-resource_contract = "Each actual checked allocation Layout is reserved before allocation; source, temporary, live peak, largest actual request, and diagnostics remain distinct observations/accounts. The completed Snapshot remains source-charged until post-plan destruction and is never reclassified to persistent-document accounting in the first Consumer path"
-work_contract = "Input decoding, Basic validation, default/security/operation interpretation, counting, sorting, string/number/URI handling, normalization, seal overlap, fixed diagnostic capture, rollback, and destruction consume their existing WorkClass plus one shared non-resettable document-validation lifetime unit before the corresponding work"
-drop_contract = "Cursor drop executes only prepaid fixed allocation-catalog cleanup over trivially destructible arenas; no nested collection or recursive semantic drop can bypass bounded CleanupItems work"
+id = "consumer-td-validation"
+required_events = ["Inspect:budget_exhausted", "Inspect:drop", "Basic:budget_exhausted", "Basic:drop", "Rollback:budget_exhausted", "Rollback:drop"]
+requirements = ["DOC-RUNTIME-001", "RES-LIMIT-001", "ADMIT-MEM-001", "ADMIT-TXN-001", "CONSTRAINED-WORK-001", "CONSTRAINED-PROGRESS-001", "CONSTRAINED-OWN-001"]
+initial = "Inspect"
+states = ["Inspect", "Basic", "Rollback", "Complete", "Failed", "Abandoned"]
+terminal = ["Complete", "Failed", "Abandoned"]
+entry_contract = "TD checked projection and complete role/cell support precede allowance/input/progress. Caller Thing is external immutable input; controlled TD blocks have capped child and paired parent ownership."
+first_cause_contract = "First fixed invalid/limit/cancel/arithmetic/allocation cause is immutable; cleanup cannot replace it."
+publication_contract = "Complete mints only TD-private ValidatedThing with external input lifetime, checked facts and unchanged remaining TD lifetime allowance; no registry publication."
+resource_contract = "typed-content-v1 and complete structural limits; temporary frame/current scratch actual Layout and overlap accounting, no new source charge; upstream source remains charged."
+work_contract = "Each actual structural/byte/schema/security/URI/native iterator action prepays its class plus the one TD lifetime remainder; whole-debit Pending carries no credit or replay."
+drop_contract = "Only fixed prepaid trivial-block release; never recursive destruction of caller input."
 
 [[machine.transition]]
-from = "Input"
-event = "input_complete"
-to = "Validation"
-owner = "TD normalization cursor"
-linearization = "all strict-entry literal JSON values, duplicate resolution and shared TD field decisions are decoded and charged under the WP-100 value contract, or the compatibility semantic root is ready"
-outcome = "validation-ready"
-retryability = "resume-with-same-cursor"
+from = "Inspect"
+event = "inspection_complete"
+to = "Basic"
+owner = "TD"
+linearization = "All supplied fields/opaque content and counters inspected before Basic begins"
+cancellation = "first-cause-preserved"
+outcome = "progress"
+retryability = "resume-same-owner"
 
 [[machine.transition]]
-from = "Validation"
-event = "basic_valid"
-to = "Normalization"
-owner = "TD Basic semantic authority"
-linearization = "the single storage-neutral Basic/default/security rule kernel accepts the typed semantic input"
-outcome = "normalization-ready"
-retryability = "resume-with-same-cursor"
-
-[[machine.transition]]
-from = "Normalization"
-event = "normalization_complete"
-to = "Seal"
-owner = "TD normalization cursor"
-linearization = "all semantic nodes, edges, bytes, indices, URI values, operations, and security references are charged and emitted"
-outcome = "seal-ready"
-retryability = "resume-with-same-cursor"
-
-[[machine.transition]]
-from = "Seal"
-event = "seal_complete"
-to = "Equivalence"
-owner = "TD normalization cursor"
-linearization = "exact node, edge, and byte arenas replace mutable capacity after reserving old/new overlap"
-outcome = "equivalence-ready"
-retryability = "resume-with-same-cursor"
-
-[[machine.transition]]
-from = "Equivalence"
-event = "semantic_equivalence_complete"
+from = "Basic"
+event = "basic_complete"
 to = "Complete"
-owner = "TD semantic authority"
-linearization = "fieldwise equivalence with the supplied typed Thing or the strict literal/shared-field result is established without reconstructing or re-decoding a Thing; unconditional equality with ordinary serde of the same bytes is not required"
-outcome = "validated-thing-complete-for-build"
+owner = "TD"
+linearization = "Entire shared Basic program succeeds, fixed workspace release complete, proof retains the external loan and remaining work"
+cancellation = "first-cause-preserved"
+outcome = "terminal"
 retryability = "terminal"
 
 [[machine.transition]]
-from = "Input"
+from = "Inspect"
 event = "budget_exhausted"
-to = "Input"
-owner = "TD normalization cursor"
-linearization = "return Pending before input work without its existing-class charge"
-outcome = "pending"
-retryability = "resume-with-same-cursor"
+to = "Inspect"
+owner = "TD"
+linearization = "Suspend before unpaid unit, preserve monotonic position and lifetime"
+cancellation = "first-cause-preserved"
+outcome = "progress"
+retryability = "resume-same-owner"
 
 [[machine.transition]]
-from = "Validation"
-event = "budget_exhausted"
-to = "Validation"
-owner = "TD normalization cursor"
-linearization = "return Pending before semantic validation work without its existing-class charge"
-outcome = "pending"
-retryability = "resume-with-same-cursor"
-
-[[machine.transition]]
-from = "Normalization"
-event = "budget_exhausted"
-to = "Normalization"
-owner = "TD normalization cursor"
-linearization = "return Pending before normalization work without its existing-class charge"
-outcome = "pending"
-retryability = "resume-with-same-cursor"
-
-[[machine.transition]]
-from = "Seal"
-event = "budget_exhausted"
-to = "Seal"
-owner = "TD normalization cursor"
-linearization = "return Pending before seal work without its existing-class charge"
-outcome = "pending"
-retryability = "resume-with-same-cursor"
-
-[[machine.transition]]
-from = "Equivalence"
-event = "budget_exhausted"
-to = "Equivalence"
-owner = "TD normalization cursor"
-linearization = "return Pending before semantic comparison work without its existing-class charge"
-outcome = "pending"
-retryability = "resume-with-same-cursor"
-
-[[machine.transition]]
-from = "Rollback"
-event = "budget_exhausted"
-to = "Rollback"
-owner = "TD rollback cursor"
-linearization = "return Pending before the next charged destruction or reservation-release unit"
-outcome = "rollback-pending"
-retryability = "resume-with-same-cursor"
-
-[[machine.transition]]
-from = "Input"
+from = "Inspect"
 event = "invalid"
 to = "Rollback"
-owner = "TD normalization cursor"
-linearization = "retain the first input diagnostic before cleanup"
-outcome = "rollback-invalid"
-retryability = "cleanup-required"
+owner = "TD"
+linearization = "Fix first cause before releasing controlled blocks; never destroy caller Thing"
+cancellation = "first-cause-preserved"
+outcome = "progress"
+retryability = "resume-same-owner"
 
 [[machine.transition]]
-from = "Validation"
+from = "Inspect"
+event = "limit"
+to = "Rollback"
+owner = "TD"
+linearization = "Fix first cause before releasing controlled blocks; never destroy caller Thing"
+cancellation = "first-cause-preserved"
+outcome = "progress"
+retryability = "resume-same-owner"
+
+[[machine.transition]]
+from = "Inspect"
+event = "cancel"
+to = "Rollback"
+owner = "TD"
+linearization = "Fix first cause before releasing controlled blocks; never destroy caller Thing"
+cancellation = "first-cause-preserved"
+outcome = "progress"
+retryability = "resume-same-owner"
+
+[[machine.transition]]
+from = "Inspect"
+event = "allocation_or_arithmetic_failure"
+to = "Rollback"
+owner = "TD"
+linearization = "Fix first cause before releasing controlled blocks; never destroy caller Thing"
+cancellation = "first-cause-preserved"
+outcome = "progress"
+retryability = "resume-same-owner"
+
+[[machine.transition]]
+from = "Inspect"
+event = "drop"
+to = "Abandoned"
+owner = "TD"
+linearization = "Prepaid fixed block release then paired allowance release; caller retains source"
+cancellation = "first-cause-preserved"
+outcome = "terminal"
+retryability = "terminal"
+
+[[machine.transition]]
+from = "Basic"
+event = "budget_exhausted"
+to = "Basic"
+owner = "TD"
+linearization = "Suspend before unpaid unit, preserve monotonic position and lifetime"
+cancellation = "first-cause-preserved"
+outcome = "progress"
+retryability = "resume-same-owner"
+
+[[machine.transition]]
+from = "Basic"
 event = "invalid"
 to = "Rollback"
-owner = "TD Basic semantic authority"
-linearization = "retain the first Basic diagnostic before cleanup"
-outcome = "rollback-invalid"
-retryability = "cleanup-required"
+owner = "TD"
+linearization = "Fix first cause before releasing controlled blocks; never destroy caller Thing"
+cancellation = "first-cause-preserved"
+outcome = "progress"
+retryability = "resume-same-owner"
 
 [[machine.transition]]
-from = "Equivalence"
-event = "semantic_mismatch"
+from = "Basic"
+event = "limit"
 to = "Rollback"
-owner = "TD semantic authority"
-linearization = "retain SemanticMismatch before cleanup"
-outcome = "rollback-conversion-failure"
-retryability = "cleanup-required"
+owner = "TD"
+linearization = "Fix first cause before releasing controlled blocks; never destroy caller Thing"
+cancellation = "first-cause-preserved"
+outcome = "progress"
+retryability = "resume-same-owner"
 
 [[machine.transition]]
-from = "Input"
-event = "limit_or_conversion_failure"
-to = "Rollback"
-owner = "TD normalization cursor"
-linearization = "retain the first exact resource or conversion cause before cleanup"
-outcome = "rollback-required"
-retryability = "cleanup-required"
-
-[[machine.transition]]
-from = "Validation"
-event = "limit_or_conversion_failure"
-to = "Rollback"
-owner = "TD normalization cursor"
-linearization = "retain the first exact resource or conversion cause before cleanup"
-outcome = "rollback-required"
-retryability = "cleanup-required"
-
-[[machine.transition]]
-from = "Normalization"
-event = "limit_or_conversion_failure"
-to = "Rollback"
-owner = "TD normalization cursor"
-linearization = "retain the first exact resource or conversion cause before cleanup"
-outcome = "rollback-required"
-retryability = "cleanup-required"
-
-[[machine.transition]]
-from = "Seal"
-event = "limit_or_conversion_failure"
-to = "Rollback"
-owner = "TD normalization cursor"
-linearization = "retain the first exact resource or conversion cause before cleanup"
-outcome = "rollback-required"
-retryability = "cleanup-required"
-
-[[machine.transition]]
-from = "Equivalence"
-event = "limit_or_conversion_failure"
-to = "Rollback"
-owner = "TD normalization cursor"
-linearization = "retain the first exact resource or conversion cause before cleanup"
-outcome = "rollback-required"
-retryability = "cleanup-required"
-
-[[machine.transition]]
-from = "Input"
+from = "Basic"
 event = "cancel"
 to = "Rollback"
-owner = "TD normalization cursor"
-linearization = "retain cancellation as first cause before cleanup"
-outcome = "rollback-cancelled"
-retryability = "cleanup-required"
+owner = "TD"
+linearization = "Fix first cause before releasing controlled blocks; never destroy caller Thing"
+cancellation = "first-cause-preserved"
+outcome = "progress"
+retryability = "resume-same-owner"
 
 [[machine.transition]]
-from = "Validation"
-event = "cancel"
+from = "Basic"
+event = "allocation_or_arithmetic_failure"
 to = "Rollback"
-owner = "TD normalization cursor"
-linearization = "retain cancellation as first cause before cleanup"
-outcome = "rollback-cancelled"
-retryability = "cleanup-required"
+owner = "TD"
+linearization = "Fix first cause before releasing controlled blocks; never destroy caller Thing"
+cancellation = "first-cause-preserved"
+outcome = "progress"
+retryability = "resume-same-owner"
 
 [[machine.transition]]
-from = "Normalization"
-event = "cancel"
-to = "Rollback"
-owner = "TD normalization cursor"
-linearization = "retain cancellation as first cause before cleanup"
-outcome = "rollback-cancelled"
-retryability = "cleanup-required"
-
-[[machine.transition]]
-from = "Seal"
-event = "cancel"
-to = "Rollback"
-owner = "TD normalization cursor"
-linearization = "retain cancellation as first cause before cleanup"
-outcome = "rollback-cancelled"
-retryability = "cleanup-required"
-
-[[machine.transition]]
-from = "Equivalence"
-event = "cancel"
-to = "Rollback"
-owner = "TD normalization cursor"
-linearization = "retain cancellation as first cause before cleanup"
-outcome = "rollback-cancelled"
-retryability = "cleanup-required"
-
-[[machine.transition]]
-from = "Rollback"
-event = "finish_invalid"
-to = "Invalid"
-owner = "TD rollback cursor"
-linearization = "all partial storage and reservations are released before exposing the retained invalid cause"
-outcome = "invalid"
+from = "Basic"
+event = "drop"
+to = "Abandoned"
+owner = "TD"
+linearization = "Prepaid fixed block release then paired allowance release; caller retains source"
+cancellation = "first-cause-preserved"
+outcome = "terminal"
 retryability = "terminal"
 
 [[machine.transition]]
 from = "Rollback"
-event = "finish_limit"
-to = "Limit"
-owner = "TD rollback cursor"
-linearization = "all partial storage and reservations are released before exposing exact limit coordinates"
-outcome = "limit"
-retryability = "terminal"
+event = "budget_exhausted"
+to = "Rollback"
+owner = "TD"
+linearization = "Retain fixed first cause until cleanup can terminate"
+cancellation = "first-cause-preserved"
+outcome = "progress"
+retryability = "resume-same-owner"
 
 [[machine.transition]]
 from = "Rollback"
-event = "finish_cancelled"
-to = "Cancelled"
-owner = "TD rollback cursor"
-linearization = "all partial storage and reservations are released before exposing cancellation"
-outcome = "cancelled"
-retryability = "terminal"
-
-[[machine.transition]]
-from = "Rollback"
-event = "finish_conversion_failure"
-to = "ConversionFailed"
-owner = "TD rollback cursor"
-linearization = "all partial storage and reservations are released before exposing the retained conversion cause"
-outcome = "conversion-failed"
-retryability = "terminal"
-
-[[machine.transition]]
-from = "Input"
-event = "drop"
-to = "Abandoned"
-owner = "ValidatedThing cursor Drop"
-linearization = "prepaid fixed allocation-catalog cleanup completes before Drop returns"
-outcome = "abandoned-clean"
-retryability = "terminal"
-
-[[machine.transition]]
-from = "Validation"
-event = "drop"
-to = "Abandoned"
-owner = "ValidatedThing cursor Drop"
-linearization = "prepaid fixed allocation-catalog cleanup completes before Drop returns"
-outcome = "abandoned-clean"
-retryability = "terminal"
-
-[[machine.transition]]
-from = "Normalization"
-event = "drop"
-to = "Abandoned"
-owner = "ValidatedThing cursor Drop"
-linearization = "prepaid fixed allocation-catalog cleanup completes before Drop returns"
-outcome = "abandoned-clean"
-retryability = "terminal"
-
-[[machine.transition]]
-from = "Seal"
-event = "drop"
-to = "Abandoned"
-owner = "ValidatedThing cursor Drop"
-linearization = "prepaid fixed allocation-catalog cleanup completes before Drop returns"
-outcome = "abandoned-clean"
-retryability = "terminal"
-
-[[machine.transition]]
-from = "Equivalence"
-event = "drop"
-to = "Abandoned"
-owner = "ValidatedThing cursor Drop"
-linearization = "prepaid fixed allocation-catalog cleanup completes before Drop returns"
-outcome = "abandoned-clean"
+event = "cleanup_complete"
+to = "Failed"
+owner = "TD"
+linearization = "All owned controlled blocks physically released, child charges released before parent, return original cause"
+cancellation = "first-cause-preserved"
+outcome = "terminal"
 retryability = "terminal"
 
 [[machine.transition]]
 from = "Rollback"
 event = "drop"
 to = "Abandoned"
-owner = "ValidatedThing cursor Drop"
-linearization = "prepaid fixed allocation-catalog cleanup completes before Drop returns without recursive semantic destruction"
-outcome = "abandoned-clean"
+owner = "TD"
+linearization = "Prepaid fixed release completes, preserving original cause; caller source untouched"
+cancellation = "first-cause-preserved"
+outcome = "terminal"
+retryability = "terminal"
+
+[[machine]]
+id = "consumer-td-semantic-lending"
+required_events = ["Discover:budget_exhausted", "Ready:relend", "Ready:acknowledge", "Done:rewind"]
+requirements = ["DOC-RUNTIME-001", "RES-LIMIT-001", "ADMIT-MEM-001", "ADMIT-TXN-001", "CONSTRAINED-WORK-001", "CONSTRAINED-PROGRESS-001", "CONSTRAINED-OWN-001"]
+initial = "Discover"
+states = ["Discover", "Ready", "Done", "Failed", "Released"]
+terminal = ["Released"]
+entry_contract = "Only TD-minted proof can enter; cursor owns proof/debit/current derived state and externally borrowed iterators, never a self-borrow."
+work_contract = "Preflight/materialization each pay shared remaining TD lifetime. Production URI work is byte-resumable. Number/native-iterator atomic envelopes are prechecked."
+ready_contract = "UTF-8 validity, effective security/operations and scope count/byte totals are paid before Ready. Every loan is short; zero/short copy debit relends same event without scan, mutation or carried credit."
+drop_contract = "Prepaid fixed scratch-block release, source remains caller/upstream-owned."
+
+[[machine.transition]]
+from = "Discover"
+event = "semantic_event_complete"
+to = "Ready"
+owner = "TD"
+linearization = "Complete trusted facts and sizing before making one original coordinate available"
+cancellation = "first-cause-preserved"
+outcome = "progress"
+retryability = "resume-same-owner"
+
+[[machine.transition]]
+from = "Discover"
+event = "budget_exhausted"
+to = "Discover"
+owner = "TD"
+linearization = "Retain exact byte/lookup/frame positions before unpaid action"
+cancellation = "first-cause-preserved"
+outcome = "progress"
+retryability = "resume-same-owner"
+
+[[machine.transition]]
+from = "Ready"
+event = "relend"
+to = "Ready"
+owner = "TD"
+linearization = "Only constant completed facts are lent; no new source sizing, URI UTF-8 validation, semantic traversal or copy"
+cancellation = "first-cause-preserved"
+outcome = "progress"
+retryability = "resume-same-owner"
+
+[[machine.transition]]
+from = "Ready"
+event = "acknowledge"
+to = "Discover"
+owner = "TD and Planning"
+linearization = "All event loans ended and Planning copy/credit checks succeeded; scalar transition acknowledges once"
+cancellation = "first-cause-preserved"
+outcome = "progress"
+retryability = "resume-same-owner"
+
+[[machine.transition]]
+from = "Discover"
+event = "pass_complete"
+to = "Done"
+owner = "TD"
+linearization = "Every property/original Form visited monotonically"
+cancellation = "first-cause-preserved"
+outcome = "progress"
+retryability = "resume-same-owner"
+
+[[machine.transition]]
+from = "Done"
+event = "rewind"
+to = "Discover"
+owner = "TD"
+linearization = "Reset pass coordinates only, keep same proof/policy/remaining lifetime"
+cancellation = "first-cause-preserved"
+outcome = "progress"
+retryability = "resume-same-owner"
+
+[[machine.transition]]
+from = "Discover"
+event = "cancel_or_failure"
+to = "Failed"
+owner = "TD"
+linearization = "Fix cause and stop semantic progress; retain scratch until prepaid release"
+cancellation = "first-cause-preserved"
+outcome = "progress"
+retryability = "resume-same-owner"
+
+[[machine.transition]]
+from = "Discover"
+event = "release"
+to = "Released"
+owner = "TD"
+linearization = "End all short loans and prepaid fixed scratch release; no caller input destruction"
+cancellation = "first-cause-preserved"
+outcome = "terminal"
+retryability = "terminal"
+
+[[machine.transition]]
+from = "Ready"
+event = "cancel_or_failure"
+to = "Failed"
+owner = "TD"
+linearization = "Fix cause and stop semantic progress; retain scratch until prepaid release"
+cancellation = "first-cause-preserved"
+outcome = "progress"
+retryability = "resume-same-owner"
+
+[[machine.transition]]
+from = "Ready"
+event = "release"
+to = "Released"
+owner = "TD"
+linearization = "End all short loans and prepaid fixed scratch release; no caller input destruction"
+cancellation = "first-cause-preserved"
+outcome = "terminal"
+retryability = "terminal"
+
+[[machine.transition]]
+from = "Done"
+event = "cancel_or_failure"
+to = "Failed"
+owner = "TD"
+linearization = "Fix cause and stop semantic progress; retain scratch until prepaid release"
+cancellation = "first-cause-preserved"
+outcome = "progress"
+retryability = "resume-same-owner"
+
+[[machine.transition]]
+from = "Done"
+event = "release"
+to = "Released"
+owner = "TD"
+linearization = "End all short loans and prepaid fixed scratch release; no caller input destruction"
+cancellation = "first-cause-preserved"
+outcome = "terminal"
+retryability = "terminal"
+
+[[machine.transition]]
+from = "Failed"
+event = "release"
+to = "Released"
+owner = "TD"
+linearization = "Release remaining fixed blocks without replacing cause"
+cancellation = "first-cause-preserved"
+outcome = "terminal"
+retryability = "terminal"
+
+[[machine]]
+id = "consumer-property-read-admission"
+required_events = ["Bounds:all_bounds_complete", "FinalChecks:final_checks_pass", "Permit:install", "Validate:budget_exhausted", "Validate:drop", "Preflight:budget_exhausted", "Preflight:drop", "ReserveRuntime:budget_exhausted", "ReserveRuntime:drop", "Materialize:budget_exhausted", "Materialize:drop", "Bounds:budget_exhausted", "Bounds:drop", "Compile:budget_exhausted", "Compile:drop", "Frozen:budget_exhausted", "Frozen:drop", "BuildCleanup:budget_exhausted", "BuildCleanup:drop", "FinalChecks:budget_exhausted", "FinalChecks:drop", "Rollback:budget_exhausted"]
+requirements = ["DOC-RUNTIME-001", "RES-LIMIT-001", "ADMIT-MEM-001", "ADMIT-TXN-001", "CONSTRAINED-WORK-001", "CONSTRAINED-PROGRESS-001", "CONSTRAINED-OWN-001"]
+initial = "Validate"
+states = ["Validate", "Preflight", "ReserveRuntime", "Materialize", "Bounds", "Compile", "Frozen", "BuildCleanup", "FinalChecks", "Permit", "Published", "Rollback", "Failed", "Abandoned"]
+terminal = ["Published", "Failed", "Abandoned"]
+entry_contract = "Servient checked policy and complete registration captured with transaction nonce; reserve paired build-owner/scratch/cleanup allowances before any TD work."
+all_bounds_contract = "Complete materialization then every bounds callback succeeds before any compiler start; later failure yields zero starts; one sequential cursor and fixed first cause thereafter."
+compiler_contract = "Callbacks predebit supported cost; cursor/temporary/allocation declarations acquired before start and actual requests enforced; suspended compiler state has no loan into movable owned inputs; abort exactly once."
+publication_contract = "Frozen output owns all runtime facts/concrete artifacts. Input-bearing completion consumes all source/config/compiler loans; variable scratch cleanup and actual-account reconciliation complete before final checks/permit. Permit and preallocated install share exclusive slot authority; after final cancellation check success wins."
+drop_contract = "End caller/config/registration loans and prepaid fixed exactly-once compiler abort before transferring all source-free output/account objects into the pre-reserved cleanup slot; failed transfer keeps an addressable owner. Root shutdown drives it; dropping root is no completion claim."
+
+[[machine.transition]]
+from = "Validate"
+event = "proof_complete"
+to = "Preflight"
+owner = "Servient transaction with TD/Planning phase owner"
+linearization = "Complete typed inspection/Basic, opaque TD proof"
+cancellation = "before-permit-cancellation-wins"
+outcome = "progress"
+retryability = "resume-same-owner"
+
+[[machine.transition]]
+from = "Preflight"
+event = "complete"
+to = "ReserveRuntime"
+owner = "Servient transaction with TD/Planning phase owner"
+linearization = "ID/eligibility/all-row preflight bound to immutable policy/proof/registration/nonce"
+cancellation = "before-permit-cancellation-wins"
+outcome = "progress"
+retryability = "resume-same-owner"
+
+[[machine.transition]]
+from = "ReserveRuntime"
+event = "capacity_reserved"
+to = "Materialize"
+owner = "Servient transaction with TD/Planning phase owner"
+linearization = "Paired runtime/record/slot/rollback logical allowances before output allocation"
+cancellation = "before-permit-cancellation-wins"
+outcome = "progress"
+retryability = "resume-same-owner"
+
+[[machine.transition]]
+from = "Materialize"
+event = "all_owned_inputs_complete"
+to = "Bounds"
+owner = "Servient transaction with TD/Planning phase owner"
+linearization = "Every required row/fact owned; no partial event acknowledged"
+cancellation = "before-permit-cancellation-wins"
+outcome = "progress"
+retryability = "resume-same-owner"
+
+[[machine.transition]]
+from = "Bounds"
+event = "all_bounds_complete"
+to = "Compile"
+owner = "Servient transaction with TD/Planning phase owner"
+linearization = "Every coordinate bound accepted, barrier complete with zero starts so far"
+cancellation = "before-permit-cancellation-wins"
+outcome = "progress"
+retryability = "resume-same-owner"
+
+[[machine.transition]]
+from = "Compile"
+event = "complete_owned_output"
+to = "Frozen"
+owner = "Servient transaction with TD/Planning phase owner"
+linearization = "Sequential artifacts reconciled; source-independent complete draft frozen"
+cancellation = "before-permit-cancellation-wins"
+outcome = "progress"
+retryability = "resume-same-owner"
+
+[[machine.transition]]
+from = "Frozen"
+event = "consume_build_owner"
+to = "BuildCleanup"
+owner = "Servient transaction with TD/Planning phase owner"
+linearization = "Input/derived/config/compiler loans structurally end; source belongs to caller"
+cancellation = "before-permit-cancellation-wins"
+outcome = "progress"
+retryability = "resume-same-owner"
+
+[[machine.transition]]
+from = "BuildCleanup"
+event = "cleanup_and_reconciliation_complete"
+to = "FinalChecks"
+owner = "Servient transaction with TD/Planning phase owner"
+linearization = "All controlled build scratch physically terminal; actual live charges reconciled, upstream sources stay charged if live"
+cancellation = "before-permit-cancellation-wins"
+outcome = "progress"
+retryability = "resume-same-owner"
+
+[[machine.transition]]
+from = "FinalChecks"
+event = "final_checks_pass"
+to = "Permit"
+owner = "Servient transaction with TD/Planning phase owner"
+linearization = "Predebit fixed final-check/permit/install work before exclusive slot/generation/registration/resource/identity and last cancellation checks; issue one move-only permit with no remaining budget request"
+cancellation = "before-permit-cancellation-wins"
+outcome = "progress"
+retryability = "non-yielding-install-next"
+
+[[machine.transition]]
+from = "Permit"
+event = "install"
+to = "Published"
+owner = "Servient transaction with TD/Planning phase owner"
+linearization = "Non-fallible preallocated atomic complete-record install; no allocation/callback/yield/source query/cancellation/retry"
+cancellation = "success-wins-after-permit"
+outcome = "published"
+retryability = "terminal"
+
+[[machine.transition]]
+from = "Validate"
+event = "budget_exhausted"
+to = "Validate"
+owner = "phase owner"
+linearization = "Pending retains same owner/nonce/accounts, no uncharged action or lifetime reset"
+cancellation = "first-cause-preserved"
+outcome = "progress"
+retryability = "resume-same-owner"
+
+[[machine.transition]]
+from = "Validate"
+event = "failure_or_cancel"
+to = "Rollback"
+owner = "Servient and Planning"
+linearization = "Fix first cause; stop starts, abort current cursor once, retain all constructed owners unpublished"
+cancellation = "first-cause-preserved"
+outcome = "progress"
+retryability = "resume-same-owner"
+
+[[machine.transition]]
+from = "Validate"
+event = "drop"
+to = "Rollback"
+owner = "Servient/manual reserved cleanup owner"
+linearization = "End external input loans and perform prepaid fixed abort/TD release, then move all source-free output/accounts into the reserved slot; no allocation or caller destruction"
+cancellation = "first-cause-preserved"
+outcome = "progress"
+retryability = "resume-same-owner"
+
+[[machine.transition]]
+from = "Preflight"
+event = "budget_exhausted"
+to = "Preflight"
+owner = "phase owner"
+linearization = "Pending retains same owner/nonce/accounts, no uncharged action or lifetime reset"
+cancellation = "first-cause-preserved"
+outcome = "progress"
+retryability = "resume-same-owner"
+
+[[machine.transition]]
+from = "Preflight"
+event = "failure_or_cancel"
+to = "Rollback"
+owner = "Servient and Planning"
+linearization = "Fix first cause; stop starts, abort current cursor once, retain all constructed owners unpublished"
+cancellation = "first-cause-preserved"
+outcome = "progress"
+retryability = "resume-same-owner"
+
+[[machine.transition]]
+from = "Preflight"
+event = "drop"
+to = "Rollback"
+owner = "Servient/manual reserved cleanup owner"
+linearization = "End external input loans and perform prepaid fixed abort/TD release, then move all source-free output/accounts into the reserved slot; no allocation or caller destruction"
+cancellation = "first-cause-preserved"
+outcome = "progress"
+retryability = "resume-same-owner"
+
+[[machine.transition]]
+from = "ReserveRuntime"
+event = "budget_exhausted"
+to = "ReserveRuntime"
+owner = "phase owner"
+linearization = "Pending retains same owner/nonce/accounts, no uncharged action or lifetime reset"
+cancellation = "first-cause-preserved"
+outcome = "progress"
+retryability = "resume-same-owner"
+
+[[machine.transition]]
+from = "ReserveRuntime"
+event = "failure_or_cancel"
+to = "Rollback"
+owner = "Servient and Planning"
+linearization = "Fix first cause; stop starts, abort current cursor once, retain all constructed owners unpublished"
+cancellation = "first-cause-preserved"
+outcome = "progress"
+retryability = "resume-same-owner"
+
+[[machine.transition]]
+from = "ReserveRuntime"
+event = "drop"
+to = "Rollback"
+owner = "Servient/manual reserved cleanup owner"
+linearization = "End external input loans and perform prepaid fixed abort/TD release, then move all source-free output/accounts into the reserved slot; no allocation or caller destruction"
+cancellation = "first-cause-preserved"
+outcome = "progress"
+retryability = "resume-same-owner"
+
+[[machine.transition]]
+from = "Materialize"
+event = "budget_exhausted"
+to = "Materialize"
+owner = "phase owner"
+linearization = "Pending retains same owner/nonce/accounts, no uncharged action or lifetime reset"
+cancellation = "first-cause-preserved"
+outcome = "progress"
+retryability = "resume-same-owner"
+
+[[machine.transition]]
+from = "Materialize"
+event = "failure_or_cancel"
+to = "Rollback"
+owner = "Servient and Planning"
+linearization = "Fix first cause; stop starts, abort current cursor once, retain all constructed owners unpublished"
+cancellation = "first-cause-preserved"
+outcome = "progress"
+retryability = "resume-same-owner"
+
+[[machine.transition]]
+from = "Materialize"
+event = "drop"
+to = "Rollback"
+owner = "Servient/manual reserved cleanup owner"
+linearization = "End external input loans and perform prepaid fixed abort/TD release, then move all source-free output/accounts into the reserved slot; no allocation or caller destruction"
+cancellation = "first-cause-preserved"
+outcome = "progress"
+retryability = "resume-same-owner"
+
+[[machine.transition]]
+from = "Bounds"
+event = "budget_exhausted"
+to = "Bounds"
+owner = "phase owner"
+linearization = "Pending retains same owner/nonce/accounts, no uncharged action or lifetime reset"
+cancellation = "first-cause-preserved"
+outcome = "progress"
+retryability = "resume-same-owner"
+
+[[machine.transition]]
+from = "Bounds"
+event = "failure_or_cancel"
+to = "Rollback"
+owner = "Servient and Planning"
+linearization = "Fix first cause; stop starts, abort current cursor once, retain all constructed owners unpublished"
+cancellation = "first-cause-preserved"
+outcome = "progress"
+retryability = "resume-same-owner"
+
+[[machine.transition]]
+from = "Bounds"
+event = "drop"
+to = "Rollback"
+owner = "Servient/manual reserved cleanup owner"
+linearization = "End external input loans and perform prepaid fixed abort/TD release, then move all source-free output/accounts into the reserved slot; no allocation or caller destruction"
+cancellation = "first-cause-preserved"
+outcome = "progress"
+retryability = "resume-same-owner"
+
+[[machine.transition]]
+from = "Compile"
+event = "budget_exhausted"
+to = "Compile"
+owner = "phase owner"
+linearization = "Pending retains same owner/nonce/accounts, no uncharged action or lifetime reset"
+cancellation = "first-cause-preserved"
+outcome = "progress"
+retryability = "resume-same-owner"
+
+[[machine.transition]]
+from = "Compile"
+event = "failure_or_cancel"
+to = "Rollback"
+owner = "Servient and Planning"
+linearization = "Fix first cause; stop starts, abort current cursor once, retain all constructed owners unpublished"
+cancellation = "first-cause-preserved"
+outcome = "progress"
+retryability = "resume-same-owner"
+
+[[machine.transition]]
+from = "Compile"
+event = "drop"
+to = "Rollback"
+owner = "Servient/manual reserved cleanup owner"
+linearization = "End external input loans and perform prepaid fixed abort/TD release, then move all source-free output/accounts into the reserved slot; no allocation or caller destruction"
+cancellation = "first-cause-preserved"
+outcome = "progress"
+retryability = "resume-same-owner"
+
+[[machine.transition]]
+from = "Frozen"
+event = "budget_exhausted"
+to = "Frozen"
+owner = "phase owner"
+linearization = "Pending retains same owner/nonce/accounts, no uncharged action or lifetime reset"
+cancellation = "first-cause-preserved"
+outcome = "progress"
+retryability = "resume-same-owner"
+
+[[machine.transition]]
+from = "Frozen"
+event = "failure_or_cancel"
+to = "Rollback"
+owner = "Servient and Planning"
+linearization = "Fix first cause; stop starts, abort current cursor once, retain all constructed owners unpublished"
+cancellation = "first-cause-preserved"
+outcome = "progress"
+retryability = "resume-same-owner"
+
+[[machine.transition]]
+from = "Frozen"
+event = "drop"
+to = "Rollback"
+owner = "Servient/manual reserved cleanup owner"
+linearization = "End external input loans and perform prepaid fixed abort/TD release, then move all source-free output/accounts into the reserved slot; no allocation or caller destruction"
+cancellation = "first-cause-preserved"
+outcome = "progress"
+retryability = "resume-same-owner"
+
+[[machine.transition]]
+from = "BuildCleanup"
+event = "budget_exhausted"
+to = "BuildCleanup"
+owner = "phase owner"
+linearization = "Pending retains same owner/nonce/accounts, no uncharged action or lifetime reset"
+cancellation = "first-cause-preserved"
+outcome = "progress"
+retryability = "resume-same-owner"
+
+[[machine.transition]]
+from = "BuildCleanup"
+event = "failure_or_cancel"
+to = "Rollback"
+owner = "Servient and Planning"
+linearization = "Fix first cause; stop starts, abort current cursor once, retain all constructed owners unpublished"
+cancellation = "first-cause-preserved"
+outcome = "progress"
+retryability = "resume-same-owner"
+
+[[machine.transition]]
+from = "BuildCleanup"
+event = "drop"
+to = "Rollback"
+owner = "Servient/manual reserved cleanup owner"
+linearization = "End external input loans and perform prepaid fixed abort/TD release, then move all source-free output/accounts into the reserved slot; no allocation or caller destruction"
+cancellation = "first-cause-preserved"
+outcome = "progress"
+retryability = "resume-same-owner"
+
+[[machine.transition]]
+from = "FinalChecks"
+event = "budget_exhausted"
+to = "FinalChecks"
+owner = "phase owner"
+linearization = "Pending retains same owner/nonce/accounts, no uncharged action or lifetime reset"
+cancellation = "first-cause-preserved"
+outcome = "progress"
+retryability = "resume-same-owner"
+
+[[machine.transition]]
+from = "FinalChecks"
+event = "failure_or_cancel"
+to = "Rollback"
+owner = "Servient and Planning"
+linearization = "Fix first cause; stop starts, abort current cursor once, retain all constructed owners unpublished"
+cancellation = "first-cause-preserved"
+outcome = "progress"
+retryability = "resume-same-owner"
+
+[[machine.transition]]
+from = "FinalChecks"
+event = "drop"
+to = "Rollback"
+owner = "Servient/manual reserved cleanup owner"
+linearization = "End external input loans and perform prepaid fixed abort/TD release, then move all source-free output/accounts into the reserved slot; no allocation or caller destruction"
+cancellation = "first-cause-preserved"
+outcome = "progress"
+retryability = "resume-same-owner"
+
+[[machine.transition]]
+from = "Rollback"
+event = "budget_exhausted"
+to = "Rollback"
+owner = "bounded cleanup owner"
+linearization = "Retain first cause/item/byte positions and capacity; no unbounded Vec/artifact destructor"
+cancellation = "first-cause-preserved"
+outcome = "progress"
+retryability = "resume-same-owner"
+
+[[machine.transition]]
+from = "Rollback"
+event = "cleanup_complete"
+to = "Failed"
+owner = "bounded cleanup owner"
+linearization = "All physical child owners and uncommitted reservations terminal before parent release"
+cancellation = "first-cause-preserved"
+outcome = "terminal"
+retryability = "terminal"
+
+[[machine.transition]]
+from = "Rollback"
+event = "abandon_interest"
+to = "Abandoned"
+owner = "reserved cleanup owner"
+linearization = "Only after complete cleanup handoff/terminal disposition, no live owner is lost"
+cancellation = "first-cause-preserved"
+outcome = "terminal"
 retryability = "terminal"

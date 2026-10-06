@@ -13,6 +13,12 @@ change existing Consumer gates.
 
 ## Scope
 
+ADR-0021 replaces mandatory normalized TD ownership with an immutable typed
+loan. This amendment's numeric/AP/work rules remain; strict-token/decoded-spelling
+proof moves with future ingestion. Snapshot site counts and view/footprint
+signatures mentioned in prior migration history are superseded by the TD proof,
+paid lending and controlled-state accounting contract.
+
 This amendment applies only to bounded `ValidatedThing` admission and the
 shared Basic semantics for the five extension predicates that inspect a
 `serde_json::Value::Number` under the keys:
@@ -50,8 +56,8 @@ policy. It does not validate unrelated Consumer role or execution-cell fields;
 that complete applicability check belongs to the resource-profile owner. A
 missing required admission field or `L > M` returns
 `ValidatedThingConfigError` before parent/global reservation,
-child-ledger construction or transfer, input inspection, and normalization
-state-machine entry. The two direct admission constructors accept only a
+child-ledger construction or transfer, input inspection, and validation
+state-machine entry. The typed validation constructor accepts only a
 successful `ValidatedThingAdmissionConfig`; the type has no unchecked public
 constructor, so a caller cannot bypass this validation with raw limits.
 
@@ -83,8 +89,8 @@ claim that the JSON syntax is invalid.
 
 ## Storage domain
 
-Every within-limit Number that belongs in the normalized snapshot is
-retained losslessly in the project-owned byte arena. No finite-`f64` projection
+Every within-limit supplied Number is inspected through its borrowed lossless
+lexeme; no complete copied Number/TD byte arena is required. No finite-`f64` projection
 is required merely to retain a Number.
 
 Consequently values such as an AP-backed `const: 1e309` may be retained when
@@ -92,8 +98,9 @@ Basic performs no arithmetic on that value. `const`, `default`, nested
 extension Numbers, and other opaque JSON values do not become binary64 merely
 because the runtime stores them.
 
-The existing fieldwise semantic-equivalence rule continues to compare retained
-Number content losslessly rather than through floating-point equality.
+Typed admission preserves the supplied Number by borrowing it. Future ingestion
+must preserve shared lossless Number content; floating-point equality is not
+a lexical/content oracle.
 
 ## Computation domain
 
@@ -161,7 +168,7 @@ No replayed scan is free merely because the source is already retained.
 
 The explicit `td/validated-thing -> serde_json/arbitrary_precision` edge from
 topic 0068 remains required for stable borrowed, lossless lexical access in
-bounded admission and for normalized Number retention.
+bounded typed inspection and future controlled Number ingestion.
 
 It is not an arbitrary-precision computation promise. The previous
 Display-driven exact-decimal base-graph comparison path is superseded.
@@ -173,7 +180,7 @@ remain unchanged.
 
 ## Evidence required before readmission
 
-The full WP-100 pre-readmission set remains required. Numeric evidence must now
+The replacement TD readmission set in the admission record remains required. Numeric evidence must now
 include:
 
 - successful configuration projection of the gateway and benchmark static
@@ -183,12 +190,12 @@ include:
   `number_lexeme_bytes_max` is required by this admission surface; and at least
   one finite application-defined `L > M` rejected as
   `ValidatedThingConfigError` before allowance, ledger, input, or progress,
-  with no route through either direct constructor and no conversion to
+  with no route through the typed constructor and no conversion to
   per-input `Limit`;
 - configured `L - 1`/`L`/`L + 1` thresholds for nonzero `L`, including
   63/64/65 and 255/256/257, plus zero-disabled first-byte rejection;
-- over-limit strict input returning `Limit` without finishing an unbounded
-  token scan;
+- future ingestion additionally proves over-limit token/decoded content rejection
+  before copying or finishing an unbounded scan; this is not typed readmission;
 - typed AP-backed length check before projection/copy;
 - opaque within-ceiling non-finite-projecting Numbers retained losslessly;
 - short within-ceiling projection failure such as predicate `1e309` returning
@@ -196,8 +203,8 @@ include:
 - normal binary64 rounding cases, including values beyond exact integer
   precision;
 - unchanged typed `NumberSchema`/`IntegerSchema` behavior;
-- strict/typed/capability parity for the five predicates where the same typed
-  Number is constructible;
+- typed/public Basic/capability parity; future ingestion separately proves
+  strict parity where the same logical Number is constructible;
 - insufficient current step budget -> `Pending` before work;
 - insufficient lifetime remainder -> `Limit` before work;
 - zero-budget no-progress;
@@ -223,12 +230,11 @@ This amendment supersedes the following prior authority wherever it conflicts:
   runtime-safety projection, and WP-100 package projection that requires those
   algorithms.
 
-It preserves all unrelated Basic rules, the normalized three-retained /
-four-temporary arena design, rollback and accounting, storage-independent
-`ValidatedThingView`, public signatures, the explicit AP capability boundary,
-and existing feature/target matrices.
+It preserves all unrelated Basic rules, fixed first-cause/cleanup and actual
+accounting, the explicit AP boundary and existing feature/target matrices.
+ADR-0021 supersedes the Snapshot-specific preservation clauses of prior versions.
 
 The tranche remains `planned` / `candidate` / `current`. Independent exact-head
-authority review, completion and independent acceptance of all eight
-pre-readmission evidence items, and only then a separate docs-only
+authority review, completion and independent acceptance of the replacement TD
+readmission obligations, and only then a separate docs-only
 `candidate -> admitted` transition are required before production implementation.

@@ -42,6 +42,9 @@ fi
 for projection in \
     'docs/design.md|ADR-0018' \
     'docs/design.md|ADR-0019' \
+    'docs/design.md|ADR-0021' \
+    'docs/spec/runtime-safety.md|ADR-0021' \
+    'docs/work-packages/WP-100-consumer-validated-thing-admission.md|ADR-0021' \
     'docs/design.md|ADR-0013' \
     'docs/design.md|ADR-0014' \
     'docs/spec/foundation.md|ADR-0015' \

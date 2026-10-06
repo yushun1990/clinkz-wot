@@ -28,6 +28,7 @@ they do not claim that the current implementation already conforms.
 - [[file:0018-bounded-v5-normative-authority-reset.org][ADR-0018: Bounded v5 normative authority reset]]
 - [[file:0019-consumer-one-shot-authority-entry.org][ADR-0019: Consumer One-Shot Authority Entry]]
 - [[file:0020-strict-json-value-decoding.org][ADR-0020: Strict JSON Value Decoding]]
+- [[file:0021-borrowed-consumer-td-admission.org][ADR-0021: Borrowed Consumer TD Admission]]
 
 * Review record
 

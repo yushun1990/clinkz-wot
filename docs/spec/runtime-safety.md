@@ -1,6 +1,6 @@
 # Runtime Safety and Admission Specification
 
-Status: active v5.0 authority.
+Status: active v5.1 authority; Consumer admission refined by ADR-0021.
 
 This specification owns ten active cross-domain safety requirements:
 `DOC-RUNTIME-001`, `API-SECURITY-001`, `CONSTRAINED-PROGRESS-001`,
@@ -58,170 +58,77 @@ private state is built before one publication transition, and every failure
 releases reservations idempotently. Cancellation is checked at bounded work
 intervals and before publication.
 
-For the first v5.1 Consumer Property Read admission, successful construction
-owns one move-only, build-scoped TD `ValidatedThing` whose physical source is a
-private, immutable, project-controlled normalized snapshot. It owns no caller `Thing`,
-opaque standard/serde container, caller spare capacity, or input borrow. It
-proves complete `ValidationLevel::Basic`, typed fieldwise semantic equivalence
-for the compatibility entry, checked structural counts, and an exhaustive
-requested-allocation footprint. No unchecked constructor, `&Thing`, mutable
-view, raw arena, or storage offset is public.
+For the first Consumer Property Read transaction, [ADR-0021](../ADRs/0021-borrowed-consumer-td-admission.org)
+selects caller-owned immutable typed input, complete bounded TD inspection/Basic,
+a lifetime-bearing TD proof, paid semantic lending, source-independent owned
+Planning output and Servient-owned publication. The exact TD API, byte oracle,
+resource/support/progress and terminal refinements have one owner:
+[the TD admission contract](../work-packages/WP-100-consumer-validated-thing-admission.md).
 
-Compatibility conversion borrows a typed `Thing` and provides an exact
-additional project-owned peak over the pre-existing caller baseline. The
-strict project-owned JSON builder/decoder charges every engine-owned allocation
-from first input processing through build-Snapshot completion and provides the
-absolute engine-owned admission path required by application-static users.
-Both drive the same bounded cursor, normalized representation, TD semantic
-kernel, terminal model, and view; Host may drive it synchronously while a
-static caller resumes it.
+Whole-input structural inspection precedes complete shared Basic, including
+unrelated Actions/Events/security/schemas/opaque fields. No trust proof exists
+before both barriers. Resource Limit is distinct from Basic Invalid; diagnostics
+preserve the shared first semantic cause in fixed inline coordinates. Basic
+still accepts missing ID; Planning rejects it before runtime reservation,
+materialization, bounds or start. Serialization cannot narrow typed validity.
 
-Under [ADR-0020](../ADRs/0020-strict-json-value-decoding.org), strict JSON uses
-literal value kinds and shares TD field policies above that boundary. Ordinary
-serde retains its established Value/RawValue interpretation; compatibility
-preserves the supplied typed Thing. Equality is required for equal logical
-field values, not unconditionally for the same wire bytes. No object member
-spelling invokes embedded JSON parsing or reserves a namespace in strict input.
-The exact differences, duplicate/null/Number-content rules and construction
-evidence belong solely to the validated-Thing admission record. This authority
-candidate still requires independent acceptance and readmission.
+The proof and semantic continuation borrow only external immutable input/config;
+owned scratch uses private coordinates and short step loans. TD derives effective
+operations/security/URI before lending a Ready coordinate. Ready retains completed
+UTF-8 and scope-sizing facts across insufficient copy credit; no unpaid source
+replay occurs. Every declared pass shares the remaining TD lifetime allowance.
+Step/lifetime/multi-class debits complete before work, zero credit makes no hidden
+progress, insufficient atomic credit carries no partial credit, lifetime exhaustion
+is terminal Limit. Number projection keeps the existing bounded-atomic amendment
+and explicit AP capability; production URI work is byte-resumable.
 
-Semantic equivalence is defined over the typed `Thing` model: all known fields
-and optional distinctions, ordered sequences and original Form indices, map
-associations, string/URI content, and nested extension values including
-lossless numbers. The compatibility path traverses typed fields directly. It
-MUST NOT serialize and deserialize the `Thing`, use serialized length as the
-equivalence oracle, or reject a Basic-valid typed value because a serializer is
-stricter than Basic validation.
+The caller keeps Thing immutable/live through Planning; validation Complete does
+not shorten that lifetime. Input history is outside the additional controlled-state
+claim. Engine-owned upstream source remains charged while live. TD frame/current
+scratch, Planning/compiled output, simultaneous compiler/temporary state,
+registration/erasure/record/slot, diagnostics and cleanup capacity all require
+checked actual layout/accounting and paired local/parent allowances. Logical byte
+or allowance totals are neither physical source capacities nor contiguous requests.
 
-The build Snapshot has exactly three possible exact-length allocations: a
-typed node arena, an edge/range arena, and a byte arena. Its nodes own no nested
-allocation. Build storage is limited to mutable node/edge/byte arenas and one
-traversal arena; grow and seal overlap is explicit and charged. Therefore
-terminal cleanup drops a bounded fixed allocation set instead of recursively
-destroying one owned value per input depth.
+Planning preflight and complete materialization produce every property row and
+readable original coordinate; all compiler bounds pass before any start. Only
+one pure compiler cursor progresses at a time, with bounded callbacks and
+exactly-once abort. Concrete artifacts/callbacks and suspended cursors must be
+source-independent, not merely hidden behind a lifetime-free generic wrapper.
+The consumed build owner structurally ends all input-bearing state before
+returning source-free completion. Registration is a separate complete owner.
 
-The future normalized surface requires opt-in `td/validated-thing`, forwarding
-`serde_json/arbitrary_precision`. Every bounded path uses public borrowed
-Number text. Ordinary TD base/default APIs and amended synchronous Basic
-remain available without it; downstream serde features alone do not expose the
-validated surface. The admission record owns the semver API floor and complete
-off/on capability matrix: Host base/order/AP/combined requests, actual thumb
-base/AP requests, and sibling dependency activation. A base-request capability
-cell resolves AP, not scalar serde. Order/combined remain Host-only because
-they enable std. Exact dependency source, rustc, liballoc, target layout,
-private callbacks and allocator behavior are not compatibility authority.
-Default TD feature sets remain unchanged.
+Failure fixes first cause and enters explicit bounded rollback. TD releases only
+prepaid trivial workspace blocks; variable Planning output/artifacts use a
+nonrecursive item/byte-budgeted cleanup owner with pre-reserved transfer capacity.
+Caller input is never dropped by rejection, cancellation or abandonment.
+No observable terminal loses protected live objects or parent allowances.
 
-Every explicit Property Form operation and every normalized map-sort
-comparison advances only after its own `DocumentNodes` charge. Every
-security-expression root or combo child advances only after its own
-`SecurityBranches` charge. String/number/URI bytes and strict JSON input bytes
-are charged before copy, formatting, resolution, or decode. No whole list,
-batch, serializer output, recursive task tree, or sort scratch allocation is
-created first. These progress rules derive the retained readable-Form count and
-normalized storage without duplicating Basic validation.
+All build scratch cleanup and source-loan termination finish before Servient's
+final identity/generation/resource/registration/cancellation/slot checks. A private
+permit then closes cancellation under exclusive registry installation authority;
+preallocated atomic install has no allocation, callback, yield, source query,
+fallible release, new cancellation decision or retry. Readers see absent or
+complete. Published owns only execution output, complete registration and runtime
+lifecycle/resource records. It has no TD proof/view/borrow or Snapshot source
+charge. Leases/drain and bounded child-before-parent reclamation remain required.
 
-One TD-owned storage-neutral semantic kernel is the Basic/default/URI/security
-authority for both `Thing` and normalized snapshot adapters. The allocation-
-free `ValidatedThingView` exposes identity, deterministic Property iteration
-and lookup, Property ordinal, original Form index, raw and resolved URI,
-content metadata, effective operations/security, and security-definition
-scheme lookup. Planning MUST NOT reconstruct a `Thing`, parse the snapshot, or
-copy those rules. Every such borrow MUST end before final publication checks;
-the owned aggregate must remain usable after `ValidatedThing` is destroyed.
+Strict bounded JSON is a separate future ingestion capability. ADR-0020's literal
+value/field/duplicate/null/Number rules, ordinary-serde distinction and shared
+resumable RFC3339 decoding remain binding there. That backend accounts controlled
+source construction from the first allocation, shares TD meaning and proves
+bounded decode/cancel/discard/release. Typed Consumer readmission does not require
+its decoder; ordinary parse-and-borrow cannot claim its guarantee. Directory and
+later external-input claims must enter their exact capability authority first.
 
-The planned Consumer boundary amends only Basic's five numeric schema-extension
-predicates (`minimum`, `exclusiveMinimum`, `maximum`, `exclusiveMaximum`, and
-`multipleOf`) over `serde_json::Value::Number`. Bounded admission first applies
-the named `number_lexeme_bytes_max` resource boundary. Its finite value is
-selected by the resource profile and projected through TD-owned
-`ValidatedThingAdmissionConfig::try_from_limits`, which validates it against
-the chosen projection's atomic work and temporary-resource envelope. This
-operation-local projection checks only fields consumed by `ValidatedThing`
-admission; complete Consumer role and execution-cell applicability remains with
-the resource-profile owner. The two direct admission constructors accept only
-that opaque successful projection; missing required admission fields or
-unsupported values fail as `ValidatedThingConfigError` before the normalization
-machine exists and cannot appear as its per-input `Limit` terminal. The resource
-applies to Consumer `+validated-thing`;
-Directory-client is `NA`. A configured limit `L` rejects strict input at Number
-byte `L + 1` before copying that byte or finishing the scan; typed input checks
-borrowed length first. Strict also bounds decoded Number content before
-over-limit output/copy/projection, since public AP spelling can be longer than
-its token. Zero disables Number admission, including opaque
-Numbers. Over-ceiling Number text is `Limit`; within-ceiling opaque Numbers
-remain losslessly retained even when they cannot project to finite `f64`.
-
-Existing typed `NumberSchema` `f64` behavior and typed `IntegerSchema` `i64`
-behavior remain unchanged. For the five extension predicates only, a Number is
-projected through stable public `Number::as_f64()` semantics; failed or
-non-finite projection is `InvalidSchema` rather than an absent bound, while
-non-Number values remain absent as before. Binary64 rounding is deliberate for
-those predicates. `multipleOf` retains only its current strict-positivity rule.
-The public Thing adapter and both future admission entries share this Basic
-acceptance rule.
-
-JSON lexing and lossless Number-byte capture remain byte-charged/resumable.
-After the lexical ceiling is known, one numeric projection is a bounded atomic
-operation: the cursor debits the Number's complete `CodecInputBytes` cost and
-the same non-resettable lifetime allowance before it starts. Insufficient
-current step budget returns `Pending` with no numeric progress; insufficient
-lifetime allowance returns `Limit`. Cancellation is checked immediately before
-and after the at-most-`L`-byte projection. This core rule does not promise a
-target cycle or stack margin; those require characterization for a named
-target/product profile.
-A repeated projection is charged again. The explicit AP feature remains
-lexical-access authority, not an
-arbitrary-precision arithmetic promise. The detailed rule and readmission proof
-belong to the WP-100 validated-Thing admission record and
-`docs/amendments/WP-100-bounded-atomic-number-v1.md`; current production Rust
-has not implemented it.
-
-The normalized `ValidatedThing` is retained only through complete aggregate
-construction and every fallible final publication check. Its sealed arenas stay
-in source accounting while plans and artifacts are simultaneously live, so the
-overlap remains part of live/peak truth. After the last view borrow, Servient
-proves the aggregate owns every runtime fact, performs final identity/resource/
-cancellation/publication-slot checks, closes cancellation with a private permit,
-then destroys the Snapshot and releases its child source charges before
-releasing the matching parent/global allowance. No Snapshot byte is
-reclassified to persistent-document accounting. Aggregate capacity reservation
-is never treated as a contiguous physical allocation. A
-Basic-valid semantic value without an ID is rejected by Consumer preflight
-before persistent-capacity reservation, materialization, compiler bounds, or
-compiler start; the slice does not synthesize identity or strengthen Basic
-validation.
-
-Input inspection, Basic validation, normalization, seal, semantic-equivalence
-comparison, Planning preflight, conservative persistent-capacity reservation,
-materialization, the all-coordinate bounds barrier, compilation,
-reconciliation, TD-lifetime independence proof, and the final cancellation and
-publication-slot checks are unpublished phases.
-Cancellation is observed before work and callbacks and at bounded intervals.
-Invalid, limit, cancellation, and conversion failure first enter the registered
-normalization rollback state. The first cause remains immutable; no terminal is
-returned until every partial project allocation and ledger reservation is
-released. Precharged fixed-allocation cursor drop is the only implicit cleanup
-and performs no recursive semantic destruction. Later aggregate failure starts
-no new compiler work, aborts the one live pure cursor at most once, releases all
-still-uncommitted reservations idempotently, spends the reserved generation,
-and publishes neither a handle nor a partial lookup. Permit issuance is the
-last fallible/cancellable boundary. Snapshot release followed by atomic install
-is allocation-free, callback-free, non-yielding, and non-fallible; Published
-owns only execution plans, the complete registration, and runtime lifecycle and
-resource records.
-
-The normalization terminal never owns the existing allocation-bearing,
-recursive `ValidateError`. It stores a fixed inline invalid category, cause
-phase, and optional input-byte or semantic-node coordinate. The public
-`Thing::validate_with_level` adapter retains its established error surface, but
-both adapters receive acceptance/rejection from the same TD Basic rule kernel.
-Changing the diagnostic sink cannot narrow or widen the Basic-valid set.
+This migration changes no tranche/gate/production status. Snapshot arena counts,
+exact reseal and whole-TD post-copy equivalence are superseded; active semantic,
+resource, progress, cleanup, complete-output and atomic-publication guarantees
+remain at the replacement boundaries above.
 
 `HANDLE-DROP-001`: An explicit destroy operation is the only handle API that
-reports complete drain and cleanup. Dropping private draft state releases it
-synchronously. Dropping preparing or serving host state requests cancellation
+reports complete drain and cleanup. Dropping fixed private draft state performs only proved prepaid release; variable
+draft state transfers to its pre-reserved bounded rollback owner. Dropping preparing or serving host state requests cancellation
 or draining exactly once and transfers complete cleanup ownership to a
 reserved Servient executor or explicit manual driver without blocking on user
 or network work. Exhausted cleanup capacity returns a structured cleanup/limit

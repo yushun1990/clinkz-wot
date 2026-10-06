@@ -6,6 +6,13 @@ specifies technical scope and acceptance boundaries.
 
 ## Scope
 
+ADR-0021 typed Consumer integration does not establish bounded runtime JSON
+or Directory ingestion. Any release claim using those capabilities requires
+separately admitted strict ingestion evidence, including ADR-0020 shared field/
+Number/date semantics, source accounting and bounded terminal release. Historical
+Snapshot fixtures and compile-only target results cannot substitute for the
+replacement transaction, runtime resource and capability proofs.
+
 Integrate the completed foundation, TD, core, planning, complete binding SPI, Servient, Discovery
 client, zenoh/zenoh-pico, and codec migrations into the application-facing `clinkz-wot` crate.
 Freeze the intentional re-export surface, remove obsolete compatibility APIs, run the complete

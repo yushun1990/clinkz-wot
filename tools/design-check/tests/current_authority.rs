@@ -102,7 +102,10 @@ fn current_authority_projection_is_exact() {
 
     let requirement_rows = requirement_rows(&root);
     let indexed: BTreeSet<_> = requirement_rows.keys().cloned().collect();
-    assert_eq!(indexed, classified, "authority classification and requirements index differ");
+    assert_eq!(
+        indexed, classified,
+        "authority classification and requirements index differ"
+    );
 
     require_metadata(
         &requirement_rows,
@@ -133,6 +136,96 @@ fn current_authority_projection_is_exact() {
         None,
     );
 
+    let consumer_td = manifest
+        .get("consumer_td_admission")
+        .and_then(Item::as_table)
+        .expect("Consumer TD refinement has no registered authority");
+    for (key, value) in [
+        (
+            "decision",
+            "docs/ADRs/0021-borrowed-consumer-td-admission.org",
+        ),
+        (
+            "contract",
+            "docs/work-packages/WP-100-consumer-validated-thing-admission.md",
+        ),
+        ("planning_contract", "docs/spec/planning.md"),
+        (
+            "transaction_contract",
+            "docs/work-packages/WP-400-servient.md",
+        ),
+    ] {
+        assert_eq!(
+            table_string(consumer_td, key, "consumer_td_admission"),
+            value
+        );
+        assert!(
+            root.join(value).is_file(),
+            "missing Consumer authority {value}"
+        );
+    }
+    assert_eq!(
+        table_integer(
+            consumer_td,
+            "resource_interpretation_revision",
+            "consumer_td_admission"
+        ),
+        2
+    );
+    assert_eq!(
+        table_string(
+            consumer_td,
+            "strict_ingestion_scope",
+            "consumer_td_admission"
+        ),
+        "separate-future-capability"
+    );
+    let api_rows = csv_rows(&root, "docs/api-ownership.csv", API_OWNERSHIP_HEADER, 14);
+    for item in [
+        "ValidatedThing",
+        "ValidatedPropertyReadCursor",
+        "ValidatedPropertyReadEvent",
+    ] {
+        let row = api_rows
+            .iter()
+            .find(|row| row[0] == item)
+            .expect("missing TD capability");
+        assert_eq!(row[2], "clinkz-wot-td");
+        assert_eq!(row[13], "frozen");
+        assert!(
+            row[6]
+                .split('|')
+                .all(|cell| cell.ends_with("+validated-thing"))
+        );
+    }
+    for item in [
+        "ValidatedThingBuilder",
+        "ValidatedThingFootprint",
+        "ValidatedThingView",
+    ] {
+        let row = api_rows
+            .iter()
+            .find(|row| row[0] == item)
+            .expect("missing historical API disposition");
+        assert_eq!(row[12], "remove");
+        assert_eq!(
+            row[13], "removed",
+            "Snapshot authority is still frozen for {item}"
+        );
+    }
+    for item in [
+        "ConsumerPropertyReadBuild",
+        "ConsumerPropertyReadRollback",
+        "ConsumerPropertyReadCleanupSlot",
+    ] {
+        let row = api_rows
+            .iter()
+            .find(|row| row[0] == item)
+            .expect("missing Planning owner");
+        assert_eq!(row[2], "clinkz-wot-planning");
+        assert_eq!(row[13], "frozen");
+    }
+
     require_consumer_response_validator_ownership(&root);
 
     let sources = manifest
@@ -148,7 +241,10 @@ fn current_authority_projection_is_exact() {
     for source in sources {
         let path = table_string(source, "path", "active_source");
         assert!(
-            !Path::new(path).is_absolute() && !Path::new(path).components().any(|part| matches!(part, std::path::Component::ParentDir)),
+            !Path::new(path).is_absolute()
+                && !Path::new(path)
+                    .components()
+                    .any(|part| matches!(part, std::path::Component::ParentDir)),
             "invalid active_source path {path}"
         );
         let requirements = table_strings(source, "requirements", &format!("active_source {path}"));
@@ -159,21 +255,33 @@ fn current_authority_projection_is_exact() {
             "active_source {path} expected_count does not match"
         );
         if let Some(exact) = expected_source_counts.get(path) {
-            assert_eq!(expected, *exact, "active_source {path} has wrong v5.1 active count");
+            assert_eq!(
+                expected, *exact,
+                "active_source {path} has wrong v5.1 active count"
+            );
         }
         let text = fs::read_to_string(root.join(path))
             .unwrap_or_else(|error| panic!("cannot read active authority source {path}: {error}"));
         for requirement in requirements {
-            assert!(active.contains(&requirement), "active_source {path} owns inactive requirement {requirement}");
+            assert!(
+                active.contains(&requirement),
+                "active_source {path} owns inactive requirement {requirement}"
+            );
             assert!(
                 sourced.insert(requirement.clone()),
                 "active requirement {requirement} has multiple sources"
             );
             let marker = format!("`{requirement}`:");
-            assert!(text.contains(&marker), "active source {path} does not define {marker}");
+            assert!(
+                text.contains(&marker),
+                "active source {path} does not define {marker}"
+            );
         }
     }
-    assert_eq!(sourced, active, "active classification and active sources differ");
+    assert_eq!(
+        sourced, active,
+        "active classification and active sources differ"
+    );
 
     assert!(
         !root
@@ -198,11 +306,15 @@ fn current_authority_projection_is_exact() {
     }
 
     assert!(
-        !root.join("tools/check-v5.1-authority-candidate.py").exists(),
+        !root
+            .join("tools/check-v5.1-authority-candidate.py")
+            .exists(),
         "candidate authority checker must be removed after activation"
     );
     assert!(
-        !root.join("tools/check-architecture-adrs-candidate.sh").exists(),
+        !root
+            .join("tools/check-architecture-adrs-candidate.sh")
+            .exists(),
         "candidate ADR checker must be removed after activation"
     );
 }
@@ -270,7 +382,10 @@ fn expand_requirement(expression: &str) -> Vec<String> {
         assert!(!expression.is_empty(), "empty requirement expression");
         return vec![expression.to_owned()];
     };
-    assert!(first.len() >= 4 && last.len() == 3, "invalid requirement range {expression}");
+    assert!(
+        first.len() >= 4 && last.len() == 3,
+        "invalid requirement range {expression}"
+    );
     let (prefix, first) = first.split_at(first.len() - 3);
     let first = first
         .parse::<u16>()
@@ -288,12 +403,20 @@ fn csv_rows(root: &Path, relative: &str, header: &str, columns: usize) -> Vec<Ve
     let source = fs::read_to_string(root.join(relative))
         .unwrap_or_else(|error| panic!("cannot read {relative}: {error}"));
     let mut lines = source.lines();
-    assert_eq!(lines.next(), Some(header), "{relative} has an unexpected header");
+    assert_eq!(
+        lines.next(),
+        Some(header),
+        "{relative} has an unexpected header"
+    );
     lines
         .filter(|line| !line.trim().is_empty())
         .map(|line| {
             let fields: Vec<String> = line.split(',').map(str::to_owned).collect();
-            assert_eq!(fields.len(), columns, "{relative} row has an unexpected column count: {line}");
+            assert_eq!(
+                fields.len(),
+                columns,
+                "{relative} row has an unexpected column count: {line}"
+            );
             fields
         })
         .collect()

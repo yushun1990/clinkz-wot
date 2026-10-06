@@ -35,7 +35,7 @@ only the umbrella is expected to compose every selected public crate.
 | Layer | Owns | Produces | Must not own |
 | --- | --- | --- | --- |
 | `clinkz-wot-foundation` | Resource reservations, work budgets, monotonic time, generations, profile-independent accounting | Bounded primitive values | TD vocabulary, interaction semantics, plans, registries, queues, protocol behavior |
-| `clinkz-wot-td` | Lossless TD/TM models, builders, Serde, one Basic/default/security semantic kernel, normalized retained storage and URI values | Validated normalized owners and storage-independent pure views | Form/binding selection, runtime caches, transport behavior |
+| `clinkz-wot-td` | Lossless TD/TM models, builders, Serde, one Basic/default/security semantic kernel, bounded typed inspection, trusted semantic lending and URI values | Lifetime-bearing validation proofs and paid semantic loans | Form/binding selection, runtime caches, transport behavior |
 | `clinkz-wot-core` | Protocol-neutral IDs, errors, payloads, handlers, security/codec contracts, immutable plan values, binding SPI values/traits, lifecycle outcomes | Semantic values and execution contracts | Application handles, plan compiler algorithms, global schedulers, universal subscription queues, protocol I/O |
 | `clinkz-wot-planning` | Candidate/Form selection from TD-owned semantic inputs, capability indexes, logical-plan construction, binding compiler coordination, URI-template compilation | Admitted-plan build output | TD Basic/default/security reinterpretation, binding execution, Servient registries, runtime queues, concrete protocol I/O |
 | `clinkz-wot-servient` | Application facade, registration snapshot, plan-set ownership, admission, handler/security orchestration, route lifecycle, scheduling, cleanup, status | Produced/consumed handles and runtime events | Protocol syntax, transport I/O, TD reparsing, implicit Directory service |
@@ -73,38 +73,26 @@ contain only protocol-specific data that cannot be shared. A binding compiler
 does not receive authority to reinterpret W3C defaults, choose a different
 operation, or access credentials.
 
-For the first Consumer Property Read aggregate, TD owns both legal entries into
-one move-only, build-scoped `ValidatedThing`: a borrowed typed-`Thing`
-compatibility cursor with an additional-peak guarantee and a strict project-
-owned JSON builder/decoder with an absolute engine-owned input-through-build-
-Snapshot guarantee. TD owns the single Basic/default/URI/security semantic
-kernel, typed fieldwise equivalence, the private normalized node/edge/byte
-snapshot, its structured allocation footprint, and terminal normalization
-rollback.
+For the first Consumer Property Read aggregate, TD owns bounded complete typed
+inspection/Basic and an opaque `ValidatedThing<'td>` external loan. Its movable
+semantic cursor lends one paid Property/Form coordinate until acknowledged;
+current derived URI state stays TD-owned and every event loan is short. Shared
+Basic/default/security/URI meaning never moves into Planning. There is no mandatory
+complete normalized TD or unrestricted synchronous semantic view.
 
-ADR-0020 places strict literal JSON value decoding and shared TD field policies
-in TD. Ordinary serde keeps its representation conversions; typed compatibility
-preserves its input. Planning and Binding receive the resulting validated
-semantic view and own no wire-parity decision or collision handling. The
-validated-Thing admission record owns the exact agreement contract.
+Planning owns complete preflight, owned required facts/lookup/candidates, every
+compiler bound before start, sequential eager compilation, exact output footprint
+and a source-independent Frozen draft. It retains no loan/pointer into scratch
+across Pending and consumes input-bearing state before returning the draft.
+Concrete artifacts satisfy owned-lifetime and cleanup eligibility, beyond a generic
+wrapper's appearance. The completed exact-coordinate leaf remains narrower
+regression evidence; its raw `PlanBuildInput<&Thing>` is not an aggregate trust entry.
 
-The future validated surface requires opt-in TD `validated-thing`; its
-dependency boundary and supported graphs belong to the WP-100 validated-Thing
-admission record. Ordinary TD APIs and amended synchronous Basic remain
-available without it. Future Planning/Servient users of the surface must
-request the capability explicitly in their own admitted manifest changes.
-
-Planning borrows only `ValidatedThingView` while building. It receives
-deterministic Property iteration/lookup, Property ordinal, original Form
-indices, raw and resolved URI, content metadata, effective operations/security,
-and security-definition scheme lookup. It does not receive `&Thing`, parse a
-snapshot, reconstruct a TD, or duplicate Basic/default/security rules. Planning
-owns deterministic preflight, complete plan/candidate materialization,
-evaluation of every compiler bound, the all-bounds-before-start barrier,
-sequential compilation, lookup sealing, and the TD-free aggregate draft. That
-owned draft has no TD-derived lifetime, raw Snapshot range, or storage offset
-and remains usable after `ValidatedThing` is destroyed. Planning never reserves
-Servient storage or publishes a runtime record.
+The explicit TD `validated-thing` capability/AP boundary remains as specified by
+[the TD admission record](../work-packages/WP-100-consumer-validated-thing-admission.md).
+Ordinary typed APIs stay available without it. Strict literal JSON and shared field/
+RFC3339 decoding are a separate future TD ingestion capability under ADR-0020;
+its eventual controlled backend lends the same closed semantic program.
 
 ## Servient boundaries
 
@@ -121,21 +109,21 @@ Servient owns the transaction that composes modules. In particular it owns:
 
 It schedules binding SPI progress but does not implement protocol I/O.
 
-In that same first Consumer slice, Servient owns the conservative persistent-
-capacity reservation between Planning preflight and materialization, the
-independent Thing-slot and plan-set generation allocators, one complete
-registration owner, final independence/identity/resource/cancellation checks,
-exact Snapshot/source-account release, atomic publication, plan-set leases,
-drain, and reclamation. It preserves the structured footprint through build
-reconciliation and does not reinterpret aggregate capacity as a contiguous
-allocation. After the last view borrow, every fallible check completes before a
-private publication permit closes cancellation; Servient then drops the
-`ValidatedThing`, deallocates every arena and releases its child source charges,
-then releases the matching parent/global allowance before the permit performs
-the non-fallible atomic install. The Published record owns only execution plans,
-the complete registration, and runtime lifecycle/resource records. Servient
-does not rescan or reconstruct the TD, repeat semantic/default/security work,
-rebuild the lookup, or copy target names into the binding request.
+In the first Consumer slice, Servient owns the transaction and immutable checked
+policy/registration capture, child/parent capacity pairing, runtime reservation
+between preflight and materialization, independent Thing-slot/plan-set generations,
+cleanup transfer, final checks, permit/install, registration retention, leases/drain
+and reclaim. Build scratch and all input/config/compiler loans are terminal before
+final checks and permit. Actual capacity and overlap remain charged until physical
+release; an upstream source keeps its own charge. Aggregate allowances are not
+contiguous allocation observations.
+
+The private permit closes cancellation under exclusive slot mutation authority.
+It installs preallocated complete runtime material without callback, allocation,
+yield, source query or fallible work. Published owns execution output, one complete
+registration and lifecycle/resource records only. Servient does no Basic/default/
+security/URI work, semantic recount, lookup rebuild or TD retention. Legacy by-value
+consume/Arc<Thing> ergonomics cannot define the bounded borrowed facade.
 
 ## Binding boundaries
 

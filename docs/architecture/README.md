@@ -103,3 +103,14 @@ multi-target emission, Directory client progress, additional one-shot
 operations, and Zenoh-family production/parity remain package or integration
 evidence unless new executable counterexamples demonstrate another distinct
 cross-package ownership boundary.
+
+## Consumer TD admission refinement
+
+[ADR-0021](../ADRs/0021-borrowed-consumer-td-admission.org) supersedes the mandatory normalized typed-TD Snapshot with
+caller-owned immutable input, complete bounded TD validation, paid semantic
+lending, owned Planning output and a Servient-owned transaction. The exact
+contracts and resource interpretation revision 2 are registered in
+`docs/spec/v5-authority-reset.toml`. Strict bounded ingestion is a separate
+future capability under ADR-0020. The 65/31/121 requirement dispositions,
+tranche/admission/gate statuses and prior production evidence are unchanged;
+independent authority acceptance and replacement readmission remain required.

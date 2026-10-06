@@ -5,10 +5,10 @@ Status: active v5.1 authority.
 ## Canonical flow
 
 ```text
-TD document or produced-Thing draft
+caller-owned typed Thing or separately ingested TD / produced-Thing draft
         |
         v
-parse + preserve extensions + validate W3C structure
+TD: preserve supplied meaning + bounded complete validation
         |
         v
 capture immutable planning context
@@ -71,10 +71,10 @@ owner for already admitted work.
 
 ## Consumer admission and interaction
 
-1. `consume` captures the TD document, policy snapshot, credential/provider
+1. The Consumer transaction captures the immutable TD loan, policy and credential/provider
    identities, and complete client-binding registration set.
-2. The shared planner applies defaults, resolves targets and security, queries
-   declared capabilities, and builds ordered logical candidates.
+2. TD lends validated effective operations, targets and security; Planning queries
+   declared capabilities and builds ordered logical candidates.
 3. Each candidate's owning binding compiler creates a bounded protocol artifact
    or a bounded lazy-artifact descriptor.
 4. Admission reserves the complete plan-set footprint and publishes one
@@ -92,66 +92,52 @@ The first v5.1 Consumer Property Read aggregate is the narrower executable
 projection of that broad flow:
 
 ```text
-borrowed compatibility Thing or strict project-owned JSON builder/decoder
-  -> TD-owned bounded Basic validation + typed semantic normalization
-  -> move-only ValidatedThing { private sealed snapshot, structured footprint }
-  -> Planning borrows only the allocation-free TD semantic view
-  -> Planning deterministic one-registration/all-readable preflight
-  -> Servient conservative persistent-capacity reservation
-  -> Planning complete plan/candidate materialization
-  -> every compiler bounds evaluation
+caller-owned immutable typed Thing
+  -> Servient checked policy/registration capture + paired build/cleanup capacity
+  -> TD whole-input structural/content inspection + complete shared Basic
+  -> opaque ValidatedThing<'td> proof, retaining external input loan
+  -> TD paid Property/Form semantic lending, one Ready coordinate at a time
+  -> Planning complete one-registration/all-readable preflight
+  -> Servient runtime/record/slot/rollback capacity reservation
+  -> Planning complete owned materialization + every compiler bound
   -> completed all-bounds-before-start barrier
-  -> sequential compiler start and eager compilation
-  -> Planning-owned sealed TD-free aggregate draft
-  -> end every ValidatedThingView borrow
-  -> prove the complete draft owns every runtime fact and survives Snapshot drop
-  -> Servient final identity/resource/cancellation/publication-slot checks
-  -> close cancellation with one private publication permit
-  -> destroy the ValidatedThing, deallocate its arenas, and release child charges
-  -> release the matching parent/global source allowance
-  -> atomic publication with plans, one complete registration, and runtime
-     lifecycle/resource records only
+  -> sequential pure compiler progress + actual footprint reconciliation
+  -> complete source-independent Frozen draft
+  -> consume input-bearing build owner; end every short/input/config/compiler loan
+  -> finish controlled build scratch cleanup + reconcile actual live owners
+  -> Servient final identity/generation/resource/cancellation/slot checks
+  -> private permit under exclusive installation authority
+  -> allocation-free, callback-free, non-yielding, non-fallible atomic install
+  -> Published plans + separate complete registration + runtime records
 
 read_property(name, options)
-  -> lease the published plan set
-  -> resolve the addressed property/Form row and eager artifact
-  -> construct a name-free OutboundRequest
-  -> execute only the Core-sealed complete registration
-  -> settle the call and release the lease
+  -> matching plan-set lease
+  -> owned property lookup + original Form coordinate + eager artifact
+  -> name-free OutboundRequest + Core-sealed complete registration
+  -> response validation + terminal call/lease settlement
 ```
 
-The compatibility entry leaves the caller's opaque `Thing` graph outside the
-engine's absolute memory claim and accounts the exact additional project-owned
-conversion peak. The strict builder/decoder accounts engine-owned storage from
-its first allocation through build completion. For equal logical field values,
-both produce fieldwise equal normalized snapshots and the same semantic queries
-and Basic results through one TD authority. ADR-0020 defines literal strict
-JSON values while preserving ordinary serde and typed compatibility; equal
-wire bytes can supply different values through serde representation handling.
-The detailed contract belongs to the WP-100 validated-Thing admission record.
-No successful owner retains or reconstructs a raw `Thing`, and the
-Published record retains neither the normalized Snapshot nor a TD view.
+[ADR-0021](../ADRs/0021-borrowed-consumer-td-admission.org) supersedes the mandatory
+normalized TD Snapshot. TD owns shared Basic/default/security/URI meaning;
+Planning receives short trusted semantic loans, never raw Thing/storage access.
+Ready UTF-8 and copy-sizing facts are already paid; insufficient credit preserves
+the event without rescanning. Caller Thing lives immutably until the consumed
+build owner ends its loan. Actual controlled workspace/output accounts preserve
+capacity, count, live/peak/largest/overlap truth; engine-owned upstream source
+charges remain live. There is no source census or invented Snapshot release.
 
-The TD view supplies deterministic Property iteration/lookup, Property
-ordinal, original Form index, raw and resolved URI, content metadata, effective
-operations/security, and security-definition scheme lookup. Planning neither
-parses retained storage nor repeats Basic/default/security rules. The snapshot
-has exact-length node, edge, and byte arenas; allocation count, total requested
-bytes, largest actual request, temporary peak, and additional conversion peak
-remain distinct through the last Planning borrow and Servient release.
-Aggregate capacity is not a physical contiguous allocation. The peak includes
-simultaneous Snapshot and complete plan/artifact residency; releasing the
-Snapshot before publication does not erase that observed peak.
+Strict JSON is future ingestion authority, with ADR-0020 semantics and first-
+allocation controlled-source accounting. Ordinary parsing is caller provisioning
+and gives no bounded ingestion guarantee. The detailed TD and ingestion contracts
+belong to the [TD admission record](../work-packages/WP-100-consumer-validated-thing-admission.md).
 
-Any validation, security, ledger, materialization, bounds, compilation,
-reconciliation, cancellation, independence, final-check, or seal failure
-terminates the unpublished generation. In particular, materialization or bounds
-failure releases every still-uncommitted reservation and causes zero compiler
-`start` calls. The private publication permit is issued only after every
-fallible check and makes Snapshot release followed by registry installation a
-non-yielding, allocation-free, callback-free, non-fallible sequence. The slice
-publishes neither a partial property/Form subset nor a handle whose lookup is
-incomplete.
+Every validation/semantic/limit/materialization/bounds/compile/cleanup/reconciliation/
+cancellation/final-check failure rejects the whole unpublished aggregate. Later
+materialization or bounds failure yields zero compiler starts. Output is usable
+after Thing and build-registration destruction; the separately retained complete
+registration supplies execution. All bounded build cleanup finishes before permit.
+Cancellation linearizes at the last check; after permit the successful atomic
+install wins. No partial property/Form lookup becomes visible.
 
 ADR-0017 permits fallback only before security commit and binding input:
 side-effect-free security inapplicability or an exact deterministic lazy
@@ -265,8 +251,9 @@ not contain an `EventBroker` or global dispatcher.
 ## Discovery-to-consume flow
 
 Discovery produces source-bearing TD documents through a client contract. It
-does not host an implicit Directory service. A selected discovery result enters
-the same consume admission path as an application-supplied document; source,
+does not host an implicit Directory service. A selected typed discovery result lends into
+the Consumer transaction while its source owner/charges stay live; bounded wire
+ingestion requires separately admitted capability evidence; source,
 freshness, trust, and redaction evidence is preserved through validation and
 plan construction.
 

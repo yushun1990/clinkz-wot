@@ -104,3 +104,14 @@ The activation checkpoint:
 It does not register `CONSUMER-PROPERTY-READ-ARCHITECTURE`, admit a source
 tranche, or activate any additional deferred identity. Those steps begin only
 after this activation checkpoint is integrated.
+
+## Consumer TD admission refinement
+
+[ADR-0021](../ADRs/0021-borrowed-consumer-td-admission.org) supersedes the mandatory normalized typed-TD Snapshot with
+caller-owned immutable input, complete bounded TD validation, paid semantic
+lending, owned Planning output and a Servient-owned transaction. The exact
+contracts and resource interpretation revision 2 are registered in
+`docs/spec/v5-authority-reset.toml`. Strict bounded ingestion is a separate
+future capability under ADR-0020. The 65/31/121 requirement dispositions,
+tranche/admission/gate statuses and prior production evidence are unchanged;
+independent authority acceptance and replacement readmission remain required.

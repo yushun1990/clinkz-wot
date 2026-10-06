@@ -264,132 +264,29 @@ Property Read architecture gate, or the complete broad WP-100 package.
 
 ### Successor boundary: `WP-100-CONSUMER-VALIDATED-THING`
 
-This document defines the technical boundary for this sequentially admitted
-ADR-0013 tranche; the reviewed admission record is
-[`WP-100-consumer-validated-thing-admission.md`](WP-100-consumer-validated-thing-admission.md),
-which registers the id in `index.toml` and freezes its exact API, storage,
-resource, terminal, supported-cell, permitted-path, readmission, and completion
-evidence contracts. Workspace topic 0065 supersedes the prior exact-caller-
-`Thing` and serde/liballoc representation boundary. Workspace topic 0069,
-`docs/amendments/WP-100-bounded-atomic-number-v1.md`, and migration record 0070
-supersede the affected exact-decimal / byte-resumable Number clauses from 0067
-and 0068 while preserving 0068's AP lexical-access feature boundary. The
-tranche remains `planned` / `candidate` / `current`; production implementation
-is forbidden until a separate independent readmission and admission-only
-transition.
+[The TD admission record](WP-100-consumer-validated-thing-admission.md) is the sole
+owner of exact proof/lending API, typed-content oracle, supported algorithms,
+allocation formulas, permitted paths and replacement readmission/completion
+obligations. ADR-0021 supersedes the normalized-owner direction from 0065 with
+caller-owned immutable Thing, complete bounded inspection/Basic and TD-owned
+paid semantic lending. The proof retains the caller loan through Planning;
+owned draft completion structurally ends it. No complete typed Snapshot, reseal,
+opaque-map sort, post-copy equivalence or source footprint handoff is required.
 
-The replacement boundary retains `Thing` as the public authoring/interchange
-value but makes successful `ValidatedThing` own only a private normalized,
-build-scoped snapshot. The snapshot has exact-length node, edge/range, and byte
-arenas; no completed owner retains `Thing`, BTreeMap/serde allocation state, caller spare
-capacity, or an input borrow. Its structured footprint distinguishes retained
-requested bytes, retained allocation count, largest actual allocation request,
-temporary peak, and additional conversion peak. Every ledger reservation maps
-to one actual checked `Layout`; aggregate capacity is never reported as a
-contiguous allocation.
+The Number amendment/AP feature and Host/thumb/downstream matrix remain. Only
+five extension arithmetic predicates change failed/non-finite projection to
+InvalidSchema; opaque within-limit Numbers remain legal supplied content.
+Finite supported configuration precedes allowance/input/progress; typed-content
+is logical byte accounting, not caller capacity. Every controlled block/output/
+cleanup owner still needs exact work/lifetime/actual-layout/overlap/release proof.
 
-The public compatibility cursor borrows `&Thing` and guarantees the exact
-additional project-owned peak over that caller baseline. The strict public JSON
-builder/decoder accounts all engine-owned allocations from first processing
-through retention and supplies the absolute application-static entry. Both use
-one TD-owned storage-neutral Basic/default/URI/security kernel and the same
-normalization, semantic view, state machine, footprint, and terminal outcomes.
-Typed semantic equivalence is fieldwise over the `Thing` data model; Thing JSON
-serialize/deserialize round-trip is forbidden because serializer strictness may
-not narrow Basic-valid compatibility input.
-
-ADR-0020 resolves the strict JSON value boundary exposed by workspace 0073:
-strict uses literal kinds and shared TD field policies; ordinary serde remains
-unchanged and compatibility preserves its supplied typed Thing. Equal logical
-values must retain parity, while Value/RawValue wire re-interpretation can cause
-explicitly delimited differences. Duplicate, null, Number-content, sorting and
-decoder-construction obligations are owned by the admission record, not this
-package summary. This migration closes no whole pre-readmission evidence item.
-
-The planned Basic kernel keeps existing typed `NumberSchema` `f64` and
-`IntegerSchema` `i64` behavior unchanged. Only the five numeric
-`serde_json::Value::Number` schema-extension predicates use the amended
-bounded-binary64 rule. Bounded admission first applies the append-only
-`number_lexeme_bytes_max` resource with a finite, validated profile value.
-The named gateway 256 and benchmark static reference 64 values are provisional
-profile policy, not a project-wide maximum. Opaque within-limit Numbers remain
-losslessly retained even if they cannot project to finite `f64`. For the five
-predicates, failed/non-finite public float projection is `InvalidSchema` rather
-than an absent bound; binary64 rounding is deliberate. Numeric projection is a
-precharged bounded atomic operation with cancellation before/after it rather
-than byte-resumable exact-decimal arithmetic. The public Thing validator and
-both future admission entries share the Basic acceptance rule; only bounded
-admission exposes the lexical resource `Limit`. The admission record owns the
-exact contract and proof burden.
-
-TD's opaque `ValidatedThingAdmissionConfig::try_from_limits` projection is the
-mandatory pre-entry boundary for both future admission constructors. It rejects
-missing `ValidatedThing` admission-field values and implementation-unsupported
-`L` as `ValidatedThingConfigError` before allowance, ledger, input, or
-progress-state ownership; the constructors do not accept raw `ResourceLimits`.
-This configuration failure is outside the normalization machine and cannot be
-reported as a per-input lexical `Limit`. The projection does not validate
-unrelated Consumer role or execution-cell fields; complete profile
-applicability remains with the resource-profile owner.
-
-The frozen `ValidatedThingView` supplies allocation-free identity, Property
-iteration/lookup and ordinal, original Form indices, raw/resolved URI, content
-metadata, effective operations/security, and security-definition scheme
-lookup. Planning receives that view rather than `&Thing`, a snapshot parser, or
-duplicated semantic rules. This updates the future WP-200 aggregate input
-contract without changing existing exact-coordinate source, evidence, or
-status.
-
-The first Consumer runtime does not retain this owner. After Planning seals a
-complete TD-lifetime-free draft, every view borrow ends and Servient performs
-all fallible identity/resource/cancellation/publication-slot checks. A private
-permit then closes cancellation, exact Snapshot/source charges are released,
-and an allocation-free non-fallible atomic install publishes only plans, one
-complete registration, and runtime lifecycle/resource records. The structured
-`footprint()` remains required for build reconciliation; the redundant
-`retained_source_bytes()` alias and both Snapshot-specific source-to-persistent-
-document reclassification methods are target old-API removals.
-
-The existing WorkClass prefix and all twelve current discriminants stay
-unchanged. `DocumentNodes` covers generic validation/normalization/equivalence
-and allocation-free map-sort work; schema, strict input bytes, URI, security,
-and arena cleanup stay respectively in `JsonSchemaNodes`, `CodecInputBytes`,
-`UriBytes`, `SecurityBranches`, and prepaid `CleanupItems`; normalized byte
-copy/emission uses `CodecOutputBytes`. Existing rows continue to cover source,
-temporary, peak, largest actual request, and fixed cleanup-item capacity. This
-migration adds exactly one append-only per-Number resource row,
-`number_lexeme_bytes_max`; it adds no ledger account or WorkClass. Inline
-first-cause diagnostics and fixed cleanup metadata allocate no bytes, so their
-ledger accounts stay zero.
-
-Invalid, limit, cancellation, and conversion failures fix their first cause and
-enter registered rollback before becoming terminal. Partial arenas contain no
-nested owners and are released as a fixed bounded allocation set. Deep input
-rejection and cursor drop cannot hide a recursive unbudgeted destructor. The
-compatibility input remains caller-owned and borrowed.
-
-Legal serde_json feature unification remains supported under ordinary
-semver/MSRV policy. The future validated surface requires opt-in
-`td/validated-thing`, forwarding AP; ordinary TD defaults stay unchanged. The
-admission record owns the semver API floor and off/on capability matrix for
-Host base/order/AP/combined, actual thumb base/AP, and downstream unification.
-Capability-off graphs retain ordinary TD APIs and amended synchronous Basic;
-they do not expose bounded admission. Capability-on graphs borrow public
-Number text to enforce the lexical resource boundary and retain Numbers
-losslessly. AP is lexical-access authority, not arbitrary-precision arithmetic
-authority. No Display-driven exact-decimal comparison path remains. Order/
-combined remain Host-only because they enable std. Exact dependency source,
-rustc, liballoc, target layout, private callbacks and allocator internals are
-not compatibility authority.
-
-The admission record is the sole detailed owner of exact signatures, the
-three-retained/four-temporary allocation-site catalog, normalization/build/seal
-ordering, build-only handoff/release, permitted future TD paths,
-pre-readmission evidence, and post-code
-completion evidence. That evidence key is
-`consumer-normalized-validated-thing`; it claims no aggregate Planning,
-Servient runtime, Consumer gate, successor operation, or broad WP-100
-completion.
+Strict literal JSON/field/date construction is a separate future ingestion
+capability with ADR-0020 semantics, first-allocation source accounting and its own
+admission/evidence. Existing arena/strict/date/semantic/handoff fixtures remain at
+their narrower boundaries. Foundation/Context and completed WP-100 response,
+WP-200 leaf, WP-300 execution and Producer evidence remain disjoint regression
+requirements. The orphaned source reclassification removal stays a future admitted
+source duty. Status remains `planned` / `candidate` / `current` and no gate changes.
 
 ## Requirements
 
