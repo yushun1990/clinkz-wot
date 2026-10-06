@@ -278,6 +278,12 @@ impl<'td, 'registration> Build<'td, 'registration> {
     pub fn remaining(&self) -> u64 {
         self.remaining
     }
+    pub fn uri_validation_bytes(&self) -> u64 {
+        self.read.as_ref().unwrap().uri_validation_bytes()
+    }
+    pub fn scope_visits(&self) -> u64 {
+        self.read.as_ref().unwrap().scope_visits()
+    }
     fn debit(&mut self, b: &mut WorkBudget, units: u64, cleanup: u64) -> Result<bool, Cause> {
         if b.remaining(W::PlanningItems) < units || b.remaining(W::CleanupItems) < cleanup {
             return Ok(false);
@@ -538,14 +544,16 @@ impl Drop for Build<'_, '_> {
     }
 }
 fn form_bytes(id: &str, f: &Fact<'_>) -> u64 {
+    // String lengths and the already-paid scope total are constant-time facts;
+    // a ready Form retry must not iterate any source sequence before debit.
     (id.len()
         + f.name.len()
         + f.resolved.len()
         + f.content_type.len()
         + f.raw.len()
         + f.subprotocol.map_or(0, str::len)
-        + f.content_coding.map_or(0, str::len)
-        + f.scopes.iter().map(str::len).sum::<usize>()) as u64
+        + f.content_coding.map_or(0, str::len)) as u64
+        + f.scopes.byte_len()
 }
 fn materialize(draft: &mut Draft, id: &str, f: &Fact<'_>) -> Result<(), Cause> {
     let memory = &mut draft.memory;

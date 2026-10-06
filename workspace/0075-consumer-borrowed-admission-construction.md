@@ -433,7 +433,7 @@ not patched.
 | Hidden replay / lookups | Large vs interrupted budgets/moves give identical complete traces. Long common-prefix security names account actual compared bytes; native lookup and `.nth` are absent from the new driver. Full supplied opaque content is traversed. Conservative native-primitive debits remain explicit. |
 | Resource truth / grow / drop | Thread-local allocator instrumentation matches frame allocation count, actual Layout bytes, grow overlap peak, largest request and release. Failure at every observed frame request, rejected layout before allocator entry, cancellation/abandonment during an in-flight grow all release exactly once. |
 | Number islands | Within-limit opaque 1e309 survives; lexical one-over limits reject before projection. A 200-byte numeric predicate suspends on 199 units with no projection, debit or credit accumulation, then projects on a complete debit. Shared numeric semantics are reused. |
-| Borrowed semantic / derived storage | Original non-first Form indices, explicit-empty ops/security, inherited NoSec and relative URI dot-segment/query/fragment resolution join Planning. Ready derived events move and suspend on insufficient copy credit without repeating the query. |
+| Borrowed semantic / derived storage | Original non-first Form indices, explicit-empty ops/security, inherited NoSec and relative URI dot-segment/query/fragment resolution join Planning. UTF-8 validity and total scope bytes are established before readiness inside paid TD projection; scope sizing requires a complete per-item debit. Counters at the UTF-8 check and source iterator verify that ready derived events move and suspend under repeated zero/short copy or cleanup credit without URI revalidation or TD/Planning scope rescans. |
 | Source independence | Concrete Core plan and mock artifact are selected after Thing and complete registration destruction. The registration supplies the actual compiler and captured candidate identity. Original href/content coding/scopes survive in owned output. Artifact targets equal owned resolved plan targets. |
 | Compiler barrier | Later URI/eligibility failure, allocator failure at every checked materialization request, and injected second bounds failure yield zero starts. Materialization failure also yields zero bounds. Every successful bound precedes all starts. No pure compiler progress is confused with transport execution. |
 | Publication | A private one-slot model installs the owned complete draft with no allocator activity after final checks. Identity rejection leaves no published record and releases the draft. This is not concurrent Servient evidence. |
@@ -456,8 +456,8 @@ transfer actions on this local toolchain. The source graph remains caller
 baseline. No comparison against an unrelated Snapshot fixture's maxima is
 reported as a measured saving.
 
-The same Host run reports `size_of` of 1,200 bytes for Validation, 1,088 for Read,
-13,688 for Build and 10,200 for the result owner. Those contain their nested
+The same Host run reports `size_of` of 1,200 bytes for Validation, 1,120 for Read,
+13,720 for Build and 10,200 for the result owner. Those contain their nested
 fields, so summing Build and Draft would
 double-count its inline draft; moving a large result may add stack overlap.
 The fixture's TD memory limit controls frame requests, and its output limit
@@ -598,14 +598,17 @@ cargo test --locked --manifest-path tools/architecture-fixtures/consumer-borrowe
 cargo clippy --locked --manifest-path tools/architecture-fixtures/consumer-borrowed-admission/Cargo.toml --all-targets -- -D warnings
 cargo check --locked --manifest-path tools/architecture-fixtures/consumer-borrowed-admission/Cargo.toml --no-default-features --target thumbv7em-none-eabihf
 cargo test --locked --manifest-path tools/architecture-fixtures/validated-thing-schema-kernel/Cargo.toml --features validated-thing --test thing_basic --test owning_basic
+cargo test --locked -p clinkz-wot-td --lib uri_semantic_kernel_probe
 cargo test --locked -p clinkz-wot-td --lib external_planning
 tools/check-design-artifacts.sh
 ```
 
-Each new-fixture configuration runs fourteen runtime tests and five compile-fail
+Each new-fixture configuration runs sixteen runtime tests and five compile-fail
 doctests, including the shared 180-case Basic corpus. The existing semantic and
 owning-Basic checks run two and six tests; the prior external owned handoff runs
-one. The latter retains an existing unused-constant warning. Authority checks
+one. The shared URI suite runs eight tests, including cache invalidation for
+every buffer mutation and rejection of invalid UTF-8 after a cached loan.
+The prior handoff retains an existing unused-constant warning. Authority checks
 preserve the active requirement/resource/state/DAG projections and all 66
 performance cases. Formatting and diff hygiene pass. The existing mainline
 toolchain is Rust 1.95.0; its workflow gains only this fixture's three Host

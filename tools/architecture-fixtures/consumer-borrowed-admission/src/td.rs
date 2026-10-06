@@ -16,6 +16,7 @@ use alloc::{
     string::String,
 };
 use clinkz_wot_foundation::{WorkBudget, WorkClass as W};
+use core::cell::Cell;
 use serde_json::{Number, Value};
 use validated_thing_arena_layout_probe::staged::{Site, Storage};
 
@@ -1088,6 +1089,8 @@ pub struct Read<'a> {
     scheme: Option<&'a str>,
     uri: crate::borrowed_uri::FixedUriBuffer<512>,
     alias: bool,
+    scope_bytes: u64,
+    scope_visits: Cell<u64>,
 }
 pub enum SecurityFact<'a> {
     Empty,
@@ -1095,7 +1098,7 @@ pub enum SecurityFact<'a> {
     Single { name: &'a str, scheme: &'a str },
 }
 #[derive(Clone, Copy)]
-pub struct TextSequence<'a>(&'a [String]);
+pub struct TextSequence<'a>(&'a [String], u64, &'a Cell<u64>);
 impl<'a> TextSequence<'a> {
     pub fn len(self) -> usize {
         self.0.len()
@@ -1103,8 +1106,15 @@ impl<'a> TextSequence<'a> {
     pub fn is_empty(self) -> bool {
         self.0.is_empty()
     }
+    /// Total source bytes, established by the paid semantic projection.
+    pub fn byte_len(self) -> u64 {
+        self.1
+    }
     pub fn iter(self) -> impl ExactSizeIterator<Item = &'a str> {
-        self.0.iter().map(String::as_str)
+        self.0.iter().map(move |value| {
+            self.2.set(self.2.get() + 1);
+            value.as_str()
+        })
     }
 }
 pub struct Fact<'a> {
@@ -1141,6 +1151,8 @@ impl<'a> Read<'a> {
             scheme: None,
             uri: crate::borrowed_uri::FixedUriBuffer::new(),
             alias: true,
+            scope_bytes: 0,
+            scope_visits: Cell::new(0),
         }
     }
     pub fn trace(&self) -> Trace {
@@ -1148,6 +1160,13 @@ impl<'a> Read<'a> {
     }
     pub fn lifetime_remaining(&self) -> u64 {
         self.proof.lifetime
+    }
+    pub fn uri_validation_bytes(&self) -> u64 {
+        self.uri.validation_bytes()
+    }
+    /// Instrument actual source iteration in both sizing and external copying.
+    pub fn scope_visits(&self) -> u64 {
+        self.scope_visits.get()
     }
     pub fn id(&self) -> Option<&'a str> {
         self.proof.thing.id.as_ref().map(|v| v.as_str())
@@ -1221,7 +1240,11 @@ impl<'a> Read<'a> {
                     content_type: &form.content_type,
                     content_coding: form.content_coding.as_deref(),
                     subprotocol: form.subprotocol.as_deref(),
-                    scopes: TextSequence(form.scopes.as_deref().unwrap_or(&[])),
+                    scopes: TextSequence(
+                        form.scopes.as_deref().unwrap_or(&[]),
+                        self.scope_bytes,
+                        &self.scope_visits,
+                    ),
                     security,
                 }));
             }
@@ -1257,13 +1280,17 @@ impl<'a> Read<'a> {
                             .map_or(0, |b| b.as_str().len());
                     // Explicit fixture-only admitted atomic island. The reused
                     // resolver's reverse path scans can be quadratic; prepay
-                    // them, parsing, output copying and fixed buffer reset.
+                    // them, parsing, output copying, final UTF-8 validation and
+                    // fixed buffer reset. Scope sizing pays before iteration.
                     if n > 256 || n > self.proof.policy.0.text {
                         return Err(Cause::Uri);
                     }
                     [
                         (W::UriBytes, 512 + 16 * (n as u64 + 2).pow(2)),
-                        (W::DocumentNodes, 1),
+                        (
+                            W::DocumentNodes,
+                            1 + form.unwrap().scopes.as_ref().map_or(0, |v| v.len() as u64),
+                        ),
                     ]
                 }
                 _ => [(W::DocumentNodes, 1), (W::CodecInputBytes, 0)],
@@ -1304,6 +1331,7 @@ impl<'a> Read<'a> {
                     self.op = 0;
                     self.readable = false;
                     self.scheme = None;
+                    self.scope_bytes = 0;
                     self.stage = 3;
                 }
                 3 => {
@@ -1361,6 +1389,19 @@ impl<'a> Read<'a> {
                     )
                     .map_err(|_| Cause::Uri)?
                         == ResolveInto::AliasRaw;
+                    if !self.alias {
+                        // Establish UTF-8 validity inside the prepaid URI
+                        // construction. Ready re-loans only read the cache.
+                        let _ = self.uri.as_str();
+                    }
+                    self.scope_bytes = TextSequence(
+                        form.unwrap().scopes.as_deref().unwrap_or(&[]),
+                        0,
+                        &self.scope_visits,
+                    )
+                    .iter()
+                    .map(str::len)
+                    .sum::<usize>() as u64;
                     self.stage = 6;
                 }
                 _ => unreachable!(),

@@ -20,6 +20,9 @@ existing MockCompiler. It uses checked fallible exact-layout string allocations
 and measures that mock's inspected allocation behavior. A ready TD coordinate
 is re-lent until copy credit is available, then acknowledged. The current
 resolved URI buffer stays in TD; no reference into it survives moving TD state.
+UTF-8 validity and the total scope bytes are established during paid TD
+projection before the Form becomes ready. Re-loans use cached validity and
+scalar sizing facts; scope copying starts only after the full Planning debit.
 
 The output has a fixed sixteen-slot catalog; URI input is capped at 256 bytes
 with a 512-byte current buffer and a fully prepaid conservative quadratic query
@@ -48,6 +51,9 @@ publication rejection/install. Compile-fail doctests establish the private
 proof, raw-input exclusion and source/derived lifetime restrictions. Host tests
 also use allocator instrumentation as a test oracle; the library requires no
 global counting allocator or std.
+URI validation-byte and scope-visit counters observe actual scans, including
+external Planning iteration. Regressions with repeated zero/short copy credit
+and insufficient cleanup credit check those counters across cursor moves.
 
 Heap ledgers cover TD frame requests and owned output separately; fixed
 continuation/result sizes are reported as well. These are not full transaction,

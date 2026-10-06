@@ -246,8 +246,113 @@ fn missing_id_explicit_empty_security_and_unrelated_invalidity_do_not_start_a_co
     assert_eq!(calls.starts.get(), 0);
 }
 #[test]
+fn scope_sizing_waits_for_the_complete_semantic_debit() {
+    let mut thing = source();
+    thing
+        .properties
+        .as_mut()
+        .unwrap()
+        .get_mut("zeta")
+        .unwrap()
+        ._interaction
+        .forms[1]
+        .scopes = Some((0..16).map(|n| "é".repeat(n)).collect());
+    let mut read = td::Read::new(validate(&thing));
+    let mut no_uri = budget(100_000);
+    no_uri.set_remaining(W::UriBytes, 0);
+    loop {
+        match read.step(&mut no_uri, false).unwrap() {
+            td::Event::Property { .. } => read.acknowledge(),
+            td::Event::Pending => break,
+            _ => panic!("URI projection must suspend"),
+        }
+    }
+    let before = read.trace();
+    let remaining = read.lifetime_remaining();
+    assert_eq!(read.scope_visits(), 0);
+    assert_eq!(read.uri_validation_bytes(), 0);
+    // One projection action plus sixteen scope-length visits must be paid
+    // together. Short calls cannot accumulate credit or start either scan.
+    for nodes in [0, 16, 16] {
+        let mut short = budget(100_000);
+        short.set_remaining(W::DocumentNodes, nodes);
+        assert!(matches!(
+            read.step(&mut short, false).unwrap(),
+            td::Event::Pending
+        ));
+        assert_eq!(read.scope_visits(), 0);
+        assert_eq!(read.uri_validation_bytes(), 0);
+        assert_eq!(read.trace(), before);
+        assert_eq!(read.lifetime_remaining(), remaining);
+        assert_eq!(short.remaining(W::DocumentNodes), nodes);
+        assert_eq!(short.remaining(W::UriBytes), 100_000);
+    }
+    let mut exact = budget(100_000);
+    exact.set_remaining(W::DocumentNodes, 17);
+    let td::Event::Form(f) = read.step(&mut exact, false).unwrap() else {
+        panic!("a complete debit should produce the Form");
+    };
+    assert_eq!(f.scopes.len(), 16);
+    assert_eq!(f.scopes.byte_len(), 240);
+    assert_eq!(exact.remaining(W::DocumentNodes), 0);
+    assert_eq!(read.scope_visits(), 16);
+    assert!(read.uri_validation_bytes() > 0);
+}
+
+#[test]
+fn ready_uri_lending_does_not_repeat_utf8_validation() {
+    let mut thing = source();
+    let path = "x".repeat(180);
+    thing
+        .properties
+        .as_mut()
+        .unwrap()
+        .get_mut("zeta")
+        .unwrap()
+        ._interaction
+        .forms[1]
+        .href = td_candidate::data_type::FormHref::parse(&format!("../c/./{path}?q=1#f")).unwrap();
+    let expected = format!("https://example.test/a/c/{path}?q=1#f");
+    let mut read = td::Read::new(validate(&thing));
+    loop {
+        match read.step(&mut budget(2_000_000), false).unwrap() {
+            td::Event::Property { .. } => read.acknowledge(),
+            td::Event::Form(f) => {
+                assert_eq!(f.original, 1);
+                assert_eq!(f.resolved, expected);
+                break;
+            }
+            _ => panic!("expected the first readable Form"),
+        }
+    }
+    let scanned = read.uri_validation_bytes();
+    assert_eq!(scanned, expected.len() as u64);
+    let before = read.trace();
+    let remaining = read.lifetime_remaining();
+    for _ in 0..128 {
+        read = *Box::new(read);
+        let td::Event::Form(f) = read.step(&mut WorkBudget::new(), false).unwrap() else {
+            panic!("ready Form was lost");
+        };
+        assert_eq!(f.resolved, expected);
+        assert_eq!(read.uri_validation_bytes(), scanned);
+        assert_eq!(read.trace(), before);
+        assert_eq!(read.lifetime_remaining(), remaining);
+    }
+}
+
+#[test]
 fn ready_derived_event_moves_and_insufficient_copy_credit_do_not_rescan() {
-    let thing = source();
+    let mut thing = source();
+    thing
+        .properties
+        .as_mut()
+        .unwrap()
+        .get_mut("zeta")
+        .unwrap()
+        ._interaction
+        .forms[1]
+        .scopes = Some((0..16).map(|n| "scope".repeat(n)).collect());
     let compiler = MockCompiler::new(candidate().compatibility());
     let calls = Calls::default();
     let mut c = Build::new(
@@ -276,21 +381,45 @@ fn ready_derived_event_moves_and_insufficient_copy_credit_do_not_rescan() {
     ));
     assert_eq!(c.trace(), before);
     assert_eq!(c.remaining(), remaining);
-    // Resume; stop at a Form event by withholding copy work. URI input work
-    // and its inline derived bytes survive the move and are not replayed.
-    assert!(matches!(c.step(&mut budget(100_000), false), Step::Pending));
-    let mut small = budget(100_000);
-    small.set_remaining(W::PlanningItems, 1);
-    assert!(matches!(c.step(&mut small, false), Step::Pending));
+    // Copy each ready Property, then stop at the first derived Form with copy
+    // work withheld. Observe the scans themselves, including Planning access.
+    for _ in 0..8 {
+        assert!(matches!(c.step(&mut budget(100_000), false), Step::Pending));
+        let mut small = budget(100_000);
+        small.set_remaining(W::PlanningItems, 1);
+        assert!(matches!(c.step(&mut small, false), Step::Pending));
+        if c.uri_validation_bytes() > 0 {
+            break;
+        }
+    }
+    assert!(c.uri_validation_bytes() > 0, "never reached a derived Form");
+    assert_eq!(c.phase(), Phase::Materialize);
     let before = c.trace();
     let remaining = c.remaining();
-    c = *Box::new(c);
-    assert!(matches!(
-        c.step(&mut WorkBudget::new(), false),
-        Step::Pending
-    ));
-    assert_eq!(c.trace(), before);
-    assert_eq!(c.remaining(), remaining);
+    let scanned = c.uri_validation_bytes();
+    let visited = c.scope_visits();
+    assert_eq!(visited, 16);
+    for _ in 0..32 {
+        for (planning, cleanup) in [(0, 0), (1, 100_000), (64, 100_000), (100_000, 22)] {
+            c = *Box::new(c);
+            let mut short = budget(100_000);
+            short.set_remaining(W::PlanningItems, planning);
+            short.set_remaining(W::CleanupItems, cleanup);
+            assert!(matches!(c.step(&mut short, false), Step::Pending));
+            assert_eq!(c.scope_visits(), visited);
+            assert_eq!(c.uri_validation_bytes(), scanned);
+            assert_eq!(c.trace(), before);
+            assert_eq!(c.remaining(), remaining);
+            assert_eq!(short.remaining(W::PlanningItems), planning);
+            assert_eq!(short.remaining(W::CleanupItems), cleanup);
+        }
+    }
+    assert!(matches!(c.step(&mut budget(100_000), false), Step::Pending));
+    assert_eq!(
+        c.scope_visits(),
+        visited + 16,
+        "copy visits each scope once"
+    );
     let draft = loop {
         match c.step(&mut budget(100_000), false) {
             Step::Pending => {}
